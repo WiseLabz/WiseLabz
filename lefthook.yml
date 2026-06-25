@@ -1,0 +1,44 @@
+pre-commit:
+  parallel: true
+  commands:
+    gofmt:
+      run: |
+        gofiles=$(find ./backend -name '*.go' -type f)
+        if [ -n "$gofiles" ]; then
+          unformatted=$(gofmt -l $gofiles)
+          if [ -n "$unformatted" ]; then
+            echo "Unformatted Go files:"
+            echo "$unformatted"
+            exit 1
+          fi
+        fi
+    golangci-lint:
+      run: |
+        if [ -n "$(find ./backend -name '*.go' -type f)" ]; then
+          golangci-lint run ./backend/...
+        fi
+    go-test:
+      run: |
+        if [ -n "$(find ./backend -name '*_test.go' -type f)" ]; then
+          go test -short ./backend/...
+        else
+          echo "No test files yet, skipping"
+        fi
+    npm-lint:
+      run: npm --prefix web run lint
+
+commit-msg:
+  commands:
+    conventional-commits:
+      run: |
+        regex='^(feat|fix|docs|chore|refactor|test|ci|perf|revert)(\(.+\))?: .{1,100}'
+        if ! head -1 .git/COMMIT_EDITMSG | grep -qE "$regex"; then
+          echo "ERROR: Commit message does not follow Conventional Commits format."
+          echo ""
+          echo "Format: <type>(<scope>): <short description>"
+          echo "Types: feat, fix, docs, chore, refactor, test, ci, perf, revert"
+          echo ""
+          echo "WiseLabz example:"
+          echo "  feat(connector): add Proxmox VM snapshot support"
+          exit 1
+        fi
