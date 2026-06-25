@@ -29,7 +29,7 @@ jobs:
           cache-dependency-path: backend/go.sum
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@5f8174a2e59fe689c20765289345bed2c7a23e36 # v3.28.14
+        uses: github/codeql-action/init@dd903d2e4f5405488e5ef1422510ee31c8b32357 # v3.36.2
         with:
           languages: go
           queries: security-and-quality
@@ -39,4 +39,4 @@ jobs:
         working-directory: backend
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@5f8174a2e59fe689c20765289345bed2c7a23e36 # v3.28.14
+        uses: github/codeql-action/analyze@dd903d2e4f5405488e5ef1422510ee31c8b32357 # v3.36.2

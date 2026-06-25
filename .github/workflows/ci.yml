@@ -29,7 +29,7 @@ jobs:
 
       - name: Check gofmt
         run: |
-          unformatted=$(gofmt -l ./backend/...)
+          unformatted=$(find ./backend -name '*.go' -exec gofmt -l {} +)
           if [ -n "$unformatted" ]; then
             echo "Files not formatted with gofmt:"
             echo "$unformatted"
@@ -37,7 +37,7 @@ jobs:
           fi
 
       - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@55c2c1448f86bc7e9ff032cd4e8382b5d6e2e4f1 # v7.0.2
+        uses: golangci/golangci-lint-action@9fae48acfc02a90574d7c304a1758ef9895495fa # v7.0.1
         with:
           version: v2.12
           working-directory: backend

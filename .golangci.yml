@@ -6,12 +6,14 @@ run:
 linters:
   enable:
     - errcheck
-    - gosimple
     - govet
     - ineffassign
     - staticcheck
     - unused
-    - gofmt
-    - goimports
     - misspell
     - revive
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
