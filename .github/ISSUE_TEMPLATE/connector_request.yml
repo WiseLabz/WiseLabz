@@ -1,0 +1,70 @@
+name: Connector request
+description: Request support for a new service or platform
+title: "connector: "
+labels: ["connector", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this form to request a connector for a service that WiseLabz doesn't support yet. The more detail you provide about the API, the easier it is for someone to pick up and build it.
+
+  - type: input
+    id: service-name
+    attributes:
+      label: Service name and version
+      description: The service you want to integrate, and the version you run.
+      placeholder: "Truenas SCALE 24.10"
+    validations:
+      required: true
+
+  - type: input
+    id: api-docs
+    attributes:
+      label: Official API documentation URL
+      description: Link to the service's REST API docs, WebSocket spec, or equivalent.
+      placeholder: "https://www.truenas.com/docs/api/rest.html"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: auth-method
+    attributes:
+      label: Authentication method
+      description: How the API handles authentication. Check the docs if unsure.
+      options:
+        - API token (Bearer)
+        - API key (header or query parameter)
+        - Basic auth (username + password)
+        - OAuth 2.0
+        - Certificate / mTLS
+        - Unix socket (no auth)
+        - Other (describe below)
+    validations:
+      required: true
+
+  - type: textarea
+    id: value
+    attributes:
+      label: Why this connector would be valuable
+      description: Tell us what data you'd want WiseLabz to pull from this service and why it matters for home lab documentation.
+      placeholder: "Truenas is the storage backbone of many home labs. Pulling pool health, share configs, and snapshot schedules into generated docs would give a complete picture of the lab's storage layer."
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: willingness
+    attributes:
+      label: Willingness to contribute
+      description: We're a small team. Community-built connectors are how the ecosystem grows.
+      options:
+        - label: I'm willing to implement this connector and open a PR
+        - label: I can help test the connector against a real instance
+        - label: I'm requesting this for someone else to pick up
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional context
+      description: Anything else that helps — example API responses, auth quirks, SDKs, known limitations.
+    validations:
+      required: false

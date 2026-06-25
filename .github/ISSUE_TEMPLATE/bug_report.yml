@@ -1,0 +1,78 @@
+name: Bug report
+description: Something is not working as expected
+title: "bug: "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug report. The more detail you provide, the faster we can reproduce and fix it.
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: What happened?
+      description: A clear, concise description of the bug.
+      placeholder: "I expected the dashboard to show my Proxmox VMs, but it shows an empty state after a successful sync."
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: WiseLabz version
+      description: Run `wiselabz version` or check the Docker image tag you're using.
+      placeholder: "v0.1.0"
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: List the exact steps so we can reproduce the bug.
+      placeholder: |
+        1. Configure a Proxmox connector with valid credentials
+        2. Trigger a sync from the dashboard
+        3. Navigate to the generated docs page
+        4. Observe the empty state
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What should have happened instead.
+      placeholder: "The generated documentation should list all VMs and their status."
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: What actually happened. Include error messages or stack traces if visible.
+      placeholder: "The documentation page renders with a 'No data' placeholder. No errors in the web UI."
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: Paste any log output from the WiseLabz container or backend process. Use `docker compose logs wiselabz` if running via Docker.
+      render: shell
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: "Tell us about where WiseLabz is running."
+      placeholder: |
+        - OS: Ubuntu 24.04
+        - Docker version: 27.1.0
+        - Deployment method: docker compose
+        - Database: SQLite
+    validations:
+      required: true

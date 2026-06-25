@@ -1,0 +1,28 @@
+# CODEOWNERS — WiseLabz
+# Last eligible reviewer is automatically requested for review on matching paths.
+
+# Backend
+backend/                                              @gsaraiva2109 @ChangedRuby
+
+# Frontend
+web/                                                  @gsaraiva2109 @ChangedRuby
+
+# Shared ownership — infra, docs, root config
+deploy/                                               @gsaraiva2109 @ChangedRuby
+docs/                                                 @gsaraiva2109 @ChangedRuby
+Makefile                                              @gsaraiva2109 @ChangedRuby
+docker-compose.yml                                    @gsaraiva2109 @ChangedRuby
+docker-compose*.yml                                   @gsaraiva2109 @ChangedRuby
+Dockerfile                                            @gsaraiva2109 @ChangedRuby
+go.mod                                                @gsaraiva2109 @ChangedRuby
+go.sum                                                @gsaraiva2109 @ChangedRuby
+package.json                                          @gsaraiva2109 @ChangedRuby
+package-lock.json                                     @gsaraiva2109 @ChangedRuby
+lefthook.yml                                          @gsaraiva2109 @ChangedRuby
+.golangci.yml                                         @gsaraiva2109 @ChangedRuby
+tsconfig.json                                         @gsaraiva2109 @ChangedRuby
+vite.config.ts                                        @gsaraiva2109 @ChangedRuby
+tailwind.config.ts                                    @gsaraiva2109 @ChangedRuby
+config.example.yaml                                   @gsaraiva2109 @ChangedRuby
+*.md                                                  @gsaraiva2109 @ChangedRuby
+.github/                                              @gsaraiva2109 @ChangedRuby

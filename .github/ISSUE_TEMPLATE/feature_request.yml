@@ -1,0 +1,45 @@
+name: Feature request
+description: Propose an idea for WiseLabz
+title: "feat: "
+labels: ["enhancement", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        We're glad you want to improve WiseLabz. Please fill out the sections below so we can understand the need and evaluate the approach.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem statement
+      description: What problem are you trying to solve? Describe the pain point or gap.
+      placeholder: "I have 15 services registered and scrolling through the generated documentation to find a specific section is slow. There's no search or table of contents."
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: Describe what you'd like WiseLabz to do. Be as specific as you can.
+      placeholder: "Add a search bar to the dashboard that filters the generated documentation by section heading. A sidebar with a collapsible table of contents would also help navigation."
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: What other approaches have you thought about? Are there existing tools or patterns that solve a similar problem?
+      placeholder: "I could export the docs to a static site and use browser search, but that defeats the purpose of the live dashboard. I looked at how MkDocs handles navigation and think a similar sidebar would work."
+    validations:
+      required: false
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Anything else — screenshots, mockups, links to similar features in other projects.
+      placeholder: "Here's a rough sketch of the sidebar I had in mind..."
+    validations:
+      required: false
