@@ -1,0 +1,5 @@
+# orval-generated API client + MSW handlers — regenerate with `npm run gen:api`
+src/api/generated/
+src/api/model/
+
+# Note: public/mockServiceWorker.js (from `msw init`) IS committed — MSW requires it served as-is.

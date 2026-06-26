@@ -1,0 +1,1467 @@
+openapi: 3.0.3
+info:
+  title: WiseLabz REST API
+  version: 0.1.0
+  description: >
+    Contract-first OpenAPI spec for the WiseLabz frontend. This is the source of
+    truth the frontend generates against (orval) and mocks against (MSW) BEFORE the
+    Go backend exists. The backend implements *to* this spec. Keep this file and
+    docs/WS_CONTRACT.md in sync with docs/FRONTEND_PLAN.md (§1 endpoints, §4 WS).
+servers:
+  - url: /api
+    description: Same-origin API (Vite proxies /api to the Go backend in dev)
+
+tags:
+  - name: auth
+  - name: me
+  - name: users
+  - name: dashboard
+  - name: connectors
+  - name: docs
+  - name: templates
+  - name: changes
+  - name: alerts
+  - name: settings
+  - name: system
+
+security:
+  - bearerAuth: []
+
+paths:
+  # ───────────────────────── auth ─────────────────────────
+  /auth/providers:
+    get:
+      tags: [auth]
+      summary: List enabled auth providers (local + OIDC) for the login screen
+      security: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthProviders' }
+  /auth/login:
+    post:
+      tags: [auth]
+      summary: Local username/password login
+      description: >
+        On success returns a short-lived access token in the body and sets the
+        refresh token as an HttpOnly; Secure; SameSite=Strict cookie (§8.7).
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginRequest' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthSession' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /auth/oidc/callback:
+    post:
+      tags: [auth]
+      summary: Exchange an OIDC authorization code for a WiseLabz session
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/OidcCallbackRequest' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthSession' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /auth/refresh:
+    post:
+      tags: [auth]
+      summary: Silent refresh — mints a new access token from the refresh cookie
+      security: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthSession' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /auth/logout:
+    post:
+      tags: [auth]
+      summary: Invalidate the refresh token and clear the cookie
+      responses:
+        '204': { description: No Content }
+
+  # ───────────────────────── me ─────────────────────────
+  /me:
+    get:
+      tags: [me]
+      summary: Current authenticated user
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    patch:
+      tags: [me]
+      summary: Update own profile (display name, email)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProfileUpdate' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+  /me/password:
+    post:
+      tags: [me]
+      summary: Change own password (local accounts only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PasswordChange' }
+      responses:
+        '204': { description: No Content }
+        '400': { $ref: '#/components/responses/BadRequest' }
+  /me/sessions:
+    get:
+      tags: [me]
+      summary: List own active sessions
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Session' }
+  /me/sessions/{sessionId}:
+    delete:
+      tags: [me]
+      summary: Revoke one of own sessions
+      parameters: [{ $ref: '#/components/parameters/SessionId' }]
+      responses:
+        '204': { description: No Content }
+
+  # ───────────────────────── users (admin) ─────────────────────────
+  /users:
+    get:
+      tags: [users]
+      summary: List users (admin)
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/User' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [users]
+      summary: Create / invite a user (admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UserCreate' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /users/{userId}:
+    parameters: [{ $ref: '#/components/parameters/UserId' }]
+    patch:
+      tags: [users]
+      summary: Update a user's role or status (admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UserUpdate' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    delete:
+      tags: [users]
+      summary: Delete a user (admin)
+      responses:
+        '204': { description: No Content }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /users/{userId}/reset-password:
+    post:
+      tags: [users]
+      summary: Admin-triggered password reset
+      parameters: [{ $ref: '#/components/parameters/UserId' }]
+      responses:
+        '204': { description: No Content }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  # ───────────────────────── dashboard ─────────────────────────
+  /dashboard/overview:
+    get:
+      tags: [dashboard]
+      summary: Aggregate overview (status counts, recent changes, alert summary)
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DashboardOverview' }
+  /dashboard/layout:
+    get:
+      tags: [dashboard]
+      summary: Current user's saved widget layout
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DashboardLayout' }
+    put:
+      tags: [dashboard]
+      summary: Persist current user's widget layout (per-user, §8.5)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DashboardLayout' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DashboardLayout' }
+
+  # ───────────────────────── connectors ─────────────────────────
+  /connectors:
+    get:
+      tags: [connectors]
+      summary: List connectors with live status, grouped client-side by category
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Connector' }
+    post:
+      tags: [connectors]
+      summary: Create a connector (editor+)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ConnectorCreate' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Connector' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /connectors/schema:
+    get:
+      tags: [connectors]
+      summary: Category/type field metadata used to render schema-driven forms
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/ConnectorTypeSchema' }
+  /connectors/{connectorId}:
+    parameters: [{ $ref: '#/components/parameters/ConnectorId' }]
+    get:
+      tags: [connectors]
+      summary: One connector
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Connector' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [connectors]
+      summary: Update a connector (editor+)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ConnectorUpdate' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Connector' }
+    delete:
+      tags: [connectors]
+      summary: Remove a connector (editor+)
+      responses:
+        '204': { description: No Content }
+  /connectors/{connectorId}/data:
+    get:
+      tags: [connectors]
+      summary: Latest fetched service snapshot (live data)
+      parameters: [{ $ref: '#/components/parameters/ConnectorId' }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ServiceSnapshot' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /connectors/{connectorId}/test:
+    post:
+      tags: [connectors]
+      summary: Test connection without saving
+      parameters: [{ $ref: '#/components/parameters/ConnectorId' }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TestResult' }
+  /connectors/{connectorId}/sync:
+    post:
+      tags: [connectors]
+      summary: Trigger a sync for one connector (progress streams over /ws)
+      parameters: [{ $ref: '#/components/parameters/ConnectorId' }]
+      responses:
+        '202':
+          description: Accepted
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SyncJobRef' }
+  /connectors/{connectorId}/enabled:
+    put:
+      tags: [connectors]
+      summary: Enable/disable a connector
+      parameters: [{ $ref: '#/components/parameters/ConnectorId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [enabled]
+              properties:
+                enabled: { type: boolean }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Connector' }
+
+  /sync:
+    post:
+      tags: [connectors]
+      summary: Trigger a global sync of all connectors
+      responses:
+        '202':
+          description: Accepted
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SyncJobRef' }
+
+  # ───────────────────────── docs ─────────────────────────
+  /docs/tree:
+    get:
+      tags: [docs]
+      summary: Hierarchical doc tree (lab root + per-service children)
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DocNode' }
+  /docs/service/{connectorId}:
+    get:
+      tags: [docs]
+      summary: The doc node for a given service
+      parameters: [{ $ref: '#/components/parameters/ConnectorId' }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Doc' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /docs/{docId}:
+    parameters: [{ $ref: '#/components/parameters/DocId' }]
+    get:
+      tags: [docs]
+      summary: Rendered doc node
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Doc' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [docs]
+      summary: Save doc content (creates a new version; editor+)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DocSave' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Doc' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /docs/{docId}/versions:
+    get:
+      tags: [docs]
+      summary: Version history list for a doc node
+      parameters: [{ $ref: '#/components/parameters/DocId' }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/DocVersionMeta' }
+  /docs/{docId}/versions/{rev}:
+    get:
+      tags: [docs]
+      summary: A specific doc revision
+      parameters:
+        - { $ref: '#/components/parameters/DocId' }
+        - { $ref: '#/components/parameters/Rev' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DocVersion' }
+  /docs/{docId}/versions/{rev}/restore:
+    post:
+      tags: [docs]
+      summary: Restore a past revision as a new current version (editor+)
+      parameters:
+        - { $ref: '#/components/parameters/DocId' }
+        - { $ref: '#/components/parameters/Rev' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Doc' }
+  /docs/{docId}/ai-suggest:
+    post:
+      tags: [docs]
+      summary: Request an AI suggestion for the doc (result streams via doc.ai_suggestion WS)
+      description: Only available when the AI module is enabled (§2). Returns a request id to correlate with WS events.
+      parameters: [{ $ref: '#/components/parameters/DocId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AiSuggestRequest' }
+      responses:
+        '202':
+          description: Accepted
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AiSuggestRef' }
+        '409':
+          description: AI module disabled
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  # ───────────────────────── templates ─────────────────────────
+  /templates:
+    get:
+      tags: [templates]
+      summary: List templates
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Template' }
+    post:
+      tags: [templates]
+      summary: Create a template (editor+)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TemplateInput' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Template' }
+  /templates/{templateId}:
+    parameters: [{ $ref: '#/components/parameters/TemplateId' }]
+    get:
+      tags: [templates]
+      summary: One template
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Template' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [templates]
+      summary: Update a template (editor+)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TemplateInput' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Template' }
+    delete:
+      tags: [templates]
+      summary: Delete a template (editor+)
+      responses:
+        '204': { description: No Content }
+  /templates/{templateId}/preview:
+    post:
+      tags: [templates]
+      summary: Test-generate a doc from this template
+      parameters: [{ $ref: '#/components/parameters/TemplateId' }]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                connectorId: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DocVersion' }
+
+  # ───────────────────────── changes ─────────────────────────
+  /changes:
+    get:
+      tags: [changes]
+      summary: Global changelog feed
+      parameters:
+        - { $ref: '#/components/parameters/ServiceIdQuery' }
+        - name: severity
+          in: query
+          required: false
+          schema: { $ref: '#/components/schemas/Severity' }
+        - { $ref: '#/components/parameters/Page' }
+        - { $ref: '#/components/parameters/PageSize' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ChangePage' }
+  /changes/{changeId}:
+    parameters: [{ $ref: '#/components/parameters/ChangeId' }]
+    get:
+      tags: [changes]
+      summary: One change with before/after diff
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ChangeDetail' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /changes/{changeId}/ack:
+    post:
+      tags: [changes]
+      summary: Acknowledge a change
+      parameters: [{ $ref: '#/components/parameters/ChangeId' }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ChangeDetail' }
+  /changes/{changeId}/dismiss:
+    post:
+      tags: [changes]
+      summary: Dismiss a change
+      parameters: [{ $ref: '#/components/parameters/ChangeId' }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ChangeDetail' }
+  /changes/{changeId}/ai-update:
+    post:
+      tags: [changes]
+      summary: Trigger an AI doc update for this change (AI module must be enabled)
+      parameters: [{ $ref: '#/components/parameters/ChangeId' }]
+      responses:
+        '202':
+          description: Accepted
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AiSuggestRef' }
+        '409':
+          description: AI module disabled
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  # ───────────────────────── alerts ─────────────────────────
+  /alerts:
+    get:
+      tags: [alerts]
+      summary: Alert center list
+      parameters:
+        - name: severity
+          in: query
+          required: false
+          schema: { $ref: '#/components/schemas/Severity' }
+        - name: status
+          in: query
+          required: false
+          schema: { $ref: '#/components/schemas/AlertStatus' }
+        - { $ref: '#/components/parameters/Page' }
+        - { $ref: '#/components/parameters/PageSize' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AlertPage' }
+  /alerts/{alertId}:
+    parameters: [{ $ref: '#/components/parameters/AlertId' }]
+    get:
+      tags: [alerts]
+      summary: One alert
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Alert' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /alerts/{alertId}/resolve:
+    post:
+      tags: [alerts]
+      summary: Resolve an alert
+      parameters: [{ $ref: '#/components/parameters/AlertId' }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Alert' }
+  /alerts/{alertId}/dismiss:
+    post:
+      tags: [alerts]
+      summary: Dismiss an alert
+      parameters: [{ $ref: '#/components/parameters/AlertId' }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Alert' }
+  /alerts/{alertId}/snooze:
+    post:
+      tags: [alerts]
+      summary: Snooze an alert
+      parameters: [{ $ref: '#/components/parameters/AlertId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [until]
+              properties:
+                until: { type: string, format: date-time }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Alert' }
+
+  # ───────────────────────── settings ─────────────────────────
+  /auth/config:
+    get:
+      tags: [settings]
+      summary: Auth config — admin (read-only view)
+      description: >
+        OIDC providers are defined entirely in config file / env (decision: hybrid-C
+        strict). This endpoint returns provider metadata for display only — issuer,
+        clientId, and secret are never writable via the API and the secret is never
+        returned (`secretConfigured` reflects presence). Only the toggles below are
+        mutable.
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthConfig' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    put:
+      tags: [settings]
+      summary: Update mutable auth settings — admin (toggles + token TTLs only)
+      description: >
+        Cannot create/edit OIDC providers or touch any credential. Accepts only
+        local-login enablement and token lifetimes.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AuthSettingsUpdate' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthConfig' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /auth/providers/{providerId}/enabled:
+    put:
+      tags: [settings]
+      summary: Enable/disable a file-defined OIDC provider — admin
+      description: >
+        The only per-provider mutation exposed. Persists an enable/disable flag in the
+        app DB; the provider definition itself stays in config/env.
+      parameters:
+        - { name: providerId, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [enabled]
+              properties:
+                enabled: { type: boolean }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OidcProvider' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /ai/config:
+    get:
+      tags: [settings]
+      summary: AI module config — admin
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AiConfig' }
+    put:
+      tags: [settings]
+      summary: Update AI module config — admin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AiConfig' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AiConfig' }
+  /ai/config/test:
+    post:
+      tags: [settings]
+      summary: Test the AI provider connection — admin
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TestResult' }
+  /notifications/config:
+    get:
+      tags: [settings]
+      summary: Notification channels + event×channel routing matrix — admin
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NotificationConfig' }
+    put:
+      tags: [settings]
+      summary: Update notification config — admin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/NotificationConfig' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NotificationConfig' }
+  /notifications/config/test:
+    post:
+      tags: [settings]
+      summary: Send a test notification on a channel — admin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [channel]
+              properties:
+                channel: { $ref: '#/components/schemas/NotificationChannelType' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TestResult' }
+
+  # ───────────────────────── system ─────────────────────────
+  /system/info:
+    get:
+      tags: [system]
+      summary: Instance info (version, sync schedule, integrations) — admin
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SystemInfo' }
+  /health:
+    get:
+      tags: [system]
+      summary: Health of backend + integrations
+      security: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Health' }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: In-memory access token (§8.7). Refresh token rides an HttpOnly cookie.
+
+  parameters:
+    UserId: { name: userId, in: path, required: true, schema: { type: string } }
+    ConnectorId: { name: connectorId, in: path, required: true, schema: { type: string } }
+    DocId: { name: docId, in: path, required: true, schema: { type: string } }
+    Rev: { name: rev, in: path, required: true, schema: { type: integer } }
+    TemplateId: { name: templateId, in: path, required: true, schema: { type: string } }
+    ChangeId: { name: changeId, in: path, required: true, schema: { type: string } }
+    AlertId: { name: alertId, in: path, required: true, schema: { type: string } }
+    SessionId: { name: sessionId, in: path, required: true, schema: { type: string } }
+    ServiceIdQuery: { name: serviceId, in: query, required: false, schema: { type: string } }
+    Page: { name: page, in: query, required: false, schema: { type: integer, default: 1, minimum: 1 } }
+    PageSize: { name: pageSize, in: query, required: false, schema: { type: integer, default: 25, minimum: 1, maximum: 100 } }
+
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Unauthorized:
+      description: Unauthorized
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Forbidden:
+      description: Forbidden (insufficient role)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    NotFound:
+      description: Not found
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+
+  schemas:
+    # ── shared enums ──
+    Role:
+      type: string
+      enum: [admin, editor, viewer]
+    ServiceStatus:
+      type: string
+      enum: [online, degraded, offline, unknown]
+    Severity:
+      type: string
+      enum: [info, warning, critical]
+    AlertStatus:
+      type: string
+      enum: [pending, resolved, dismissed, snoozed]
+    ConnectorCategory:
+      type: string
+      enum: [virtualization, containers_paas, networking]
+    SyncPhase:
+      type: string
+      enum: [queued, fetching, diffing, generating, done, error]
+
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code: { type: string }
+        message: { type: string }
+        details: { type: object, additionalProperties: true }
+
+    # ── auth ──
+    AuthProviders:
+      type: object
+      required: [localEnabled, oidc]
+      properties:
+        localEnabled: { type: boolean }
+        oidc:
+          type: array
+          items:
+            type: object
+            required: [id, displayName, authUrl]
+            properties:
+              id: { type: string }
+              displayName: { type: string }
+              authUrl: { type: string, description: Provider authorize URL to redirect to }
+    LoginRequest:
+      type: object
+      required: [username, password]
+      properties:
+        username: { type: string }
+        password: { type: string, format: password }
+    OidcCallbackRequest:
+      type: object
+      required: [providerId, code, state]
+      properties:
+        providerId: { type: string }
+        code: { type: string }
+        state: { type: string }
+    AuthSession:
+      type: object
+      required: [accessToken, expiresIn, user]
+      properties:
+        accessToken: { type: string }
+        expiresIn: { type: integer, description: Access token TTL in seconds }
+        user: { $ref: '#/components/schemas/User' }
+
+    # ── users ──
+    User:
+      type: object
+      required: [id, username, role, authSource, createdAt]
+      properties:
+        id: { type: string }
+        username: { type: string }
+        displayName: { type: string }
+        email: { type: string, format: email }
+        role: { $ref: '#/components/schemas/Role' }
+        authSource: { type: string, enum: [local, oidc] }
+        disabled: { type: boolean }
+        createdAt: { type: string, format: date-time }
+    UserCreate:
+      type: object
+      required: [username, role]
+      properties:
+        username: { type: string }
+        email: { type: string, format: email }
+        role: { $ref: '#/components/schemas/Role' }
+        password: { type: string, format: password, description: Local accounts only }
+    UserUpdate:
+      type: object
+      properties:
+        role: { $ref: '#/components/schemas/Role' }
+        disabled: { type: boolean }
+        displayName: { type: string }
+    ProfileUpdate:
+      type: object
+      properties:
+        displayName: { type: string }
+        email: { type: string, format: email }
+    PasswordChange:
+      type: object
+      required: [currentPassword, newPassword]
+      properties:
+        currentPassword: { type: string, format: password }
+        newPassword: { type: string, format: password }
+    Session:
+      type: object
+      required: [id, createdAt, lastSeenAt, current]
+      properties:
+        id: { type: string }
+        userAgent: { type: string }
+        ip: { type: string }
+        createdAt: { type: string, format: date-time }
+        lastSeenAt: { type: string, format: date-time }
+        current: { type: boolean }
+
+    # ── dashboard ──
+    DashboardOverview:
+      type: object
+      required: [statusCounts, pendingAlerts, recentChanges, lastSyncAt]
+      properties:
+        statusCounts:
+          type: object
+          properties:
+            online: { type: integer }
+            degraded: { type: integer }
+            offline: { type: integer }
+            unknown: { type: integer }
+        pendingAlerts: { type: integer }
+        recentChanges:
+          type: array
+          items: { $ref: '#/components/schemas/ChangeSummary' }
+        lastSyncAt: { type: string, format: date-time, nullable: true }
+    DashboardLayout:
+      type: object
+      required: [widgets]
+      properties:
+        widgets:
+          type: array
+          items: { $ref: '#/components/schemas/WidgetPlacement' }
+    WidgetPlacement:
+      type: object
+      required: [id, type, x, y, w, h]
+      properties:
+        id: { type: string }
+        type:
+          type: string
+          enum: [service_status, recent_changes, alert_summary, sync_activity, docs_health]
+        x: { type: integer }
+        y: { type: integer }
+        w: { type: integer }
+        h: { type: integer }
+
+    # ── connectors ──
+    Connector:
+      type: object
+      required: [id, name, category, type, enabled, status]
+      properties:
+        id: { type: string }
+        name: { type: string, description: matches ServiceSnapshot.ServiceName }
+        category: { $ref: '#/components/schemas/ConnectorCategory' }
+        type: { type: string, description: 'e.g. proxmox, portainer, pfsense' }
+        enabled: { type: boolean }
+        status: { $ref: '#/components/schemas/ServiceStatus' }
+        url: { type: string }
+        verifyTls: { type: boolean }
+        lastSyncAt: { type: string, format: date-time, nullable: true }
+        statusMessage: { type: string }
+    ConnectorCreate:
+      type: object
+      required: [name, category, type, url, config]
+      properties:
+        name: { type: string }
+        category: { $ref: '#/components/schemas/ConnectorCategory' }
+        type: { type: string }
+        url: { type: string }
+        verifyTls: { type: boolean, default: true }
+        config:
+          type: object
+          additionalProperties: true
+          description: Schema-driven fields incl. secrets; stored encrypted, never in plaintext config (ARCHITECTURE.md)
+    ConnectorUpdate:
+      type: object
+      properties:
+        name: { type: string }
+        url: { type: string }
+        verifyTls: { type: boolean }
+        config:
+          type: object
+          additionalProperties: true
+    ConnectorTypeSchema:
+      type: object
+      required: [category, type, displayName, fields]
+      properties:
+        category: { $ref: '#/components/schemas/ConnectorCategory' }
+        type: { type: string }
+        displayName: { type: string }
+        fields:
+          type: array
+          items: { $ref: '#/components/schemas/SchemaField' }
+    SchemaField:
+      type: object
+      required: [name, label, kind, required]
+      properties:
+        name: { type: string }
+        label: { type: string }
+        kind: { type: string, enum: [string, number, boolean, password, select] }
+        required: { type: boolean }
+        secret: { type: boolean, description: Rendered as password input; write-only }
+        placeholder: { type: string }
+        options:
+          type: array
+          items:
+            type: object
+            properties:
+              value: { type: string }
+              label: { type: string }
+    TestResult:
+      type: object
+      required: [ok]
+      properties:
+        ok: { type: boolean }
+        message: { type: string }
+        latencyMs: { type: integer }
+    SyncJobRef:
+      type: object
+      required: [jobId]
+      properties:
+        jobId: { type: string }
+        serviceId: { type: string, nullable: true }
+    ServiceSnapshot:
+      type: object
+      description: Mirrors backend connector.ServiceSnapshot
+      required: [serviceName, type, sections, fetchedAt]
+      properties:
+        serviceName: { type: string }
+        type: { type: string }
+        sections:
+          type: array
+          items: { $ref: '#/components/schemas/SnapshotSection' }
+        metadata:
+          type: object
+          additionalProperties: { type: string }
+        fetchedAt: { type: string, format: date-time }
+    SnapshotSection:
+      type: object
+      required: [title, content, order]
+      properties:
+        title: { type: string }
+        content: { type: string, description: Markdown }
+        order: { type: integer }
+
+    # ── docs ──
+    DocNode:
+      type: object
+      description: Tree node (recursive)
+      required: [docId, title, kind]
+      properties:
+        docId: { type: string }
+        title: { type: string }
+        kind: { type: string, enum: [lab, service] }
+        serviceId: { type: string, nullable: true }
+        children:
+          type: array
+          items: { $ref: '#/components/schemas/DocNode' }
+    Doc:
+      type: object
+      required: [docId, title, kind, content, currentVersion, updatedAt]
+      properties:
+        docId: { type: string }
+        title: { type: string }
+        kind: { type: string, enum: [lab, service] }
+        serviceId: { type: string, nullable: true }
+        content: { type: string, description: Rendered/markdown body }
+        currentVersion: { type: integer }
+        updatedAt: { type: string, format: date-time }
+    DocSave:
+      type: object
+      required: [content]
+      properties:
+        content: { type: string }
+        baseVersion:
+          type: integer
+          description: 'Version the edit was based on; enables last-write-wins detection (plan §8.3)'
+    DocVersionMeta:
+      type: object
+      required: [rev, createdAt, trigger]
+      properties:
+        rev: { type: integer }
+        createdAt: { type: string, format: date-time }
+        author: { type: string, nullable: true }
+        trigger: { type: string, enum: [ai, template, manual] }
+    DocVersion:
+      allOf:
+        - $ref: '#/components/schemas/DocVersionMeta'
+        - type: object
+          required: [content]
+          properties:
+            content: { type: string }
+    AiSuggestRequest:
+      type: object
+      properties:
+        prompt: { type: string }
+        selection: { type: string, description: Optional selected text to operate on }
+    AiSuggestRef:
+      type: object
+      required: [requestId]
+      properties:
+        requestId: { type: string }
+
+    # ── templates ──
+    Template:
+      type: object
+      required: [id, name, sections]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        description: { type: string }
+        appliesTo:
+          type: object
+          properties:
+            category: { $ref: '#/components/schemas/ConnectorCategory' }
+            type: { type: string }
+        sections:
+          type: array
+          items: { $ref: '#/components/schemas/TemplateSection' }
+    TemplateInput:
+      type: object
+      required: [name, sections]
+      properties:
+        name: { type: string }
+        description: { type: string }
+        appliesTo:
+          type: object
+          properties:
+            category: { $ref: '#/components/schemas/ConnectorCategory' }
+            type: { type: string }
+        sections:
+          type: array
+          items: { $ref: '#/components/schemas/TemplateSection' }
+    TemplateSection:
+      type: object
+      required: [title, order, body]
+      properties:
+        title: { type: string }
+        order: { type: integer }
+        body: { type: string, description: Template body with placeholders }
+
+    # ── changes ──
+    ChangeSummary:
+      type: object
+      required: [id, serviceId, changeType, severity, summary, detectedAt]
+      properties:
+        id: { type: string }
+        serviceId: { type: string }
+        serviceName: { type: string }
+        changeType: { type: string, description: 'e.g. vm.created, firewall.rule.modified' }
+        severity: { $ref: '#/components/schemas/Severity' }
+        summary: { type: string }
+        willTriggerAi: { type: boolean }
+        detectedAt: { type: string, format: date-time }
+    ChangeDetail:
+      allOf:
+        - $ref: '#/components/schemas/ChangeSummary'
+        - type: object
+          required: [diff, status]
+          properties:
+            status: { type: string, enum: [new, acknowledged, dismissed] }
+            diff: { $ref: '#/components/schemas/Diff' }
+            affectedDocIds:
+              type: array
+              items: { type: string }
+    ChangePage:
+      type: object
+      required: [items, total, page, pageSize]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/ChangeSummary' }
+        total: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
+    Diff:
+      type: object
+      description: Generic diff consumed by the unified DiffViewer (§8.2)
+      required: [format, hunks]
+      properties:
+        format: { type: string, enum: [infra, doc], description: Picks the DiffViewer formatter }
+        hunks:
+          type: array
+          items:
+            type: object
+            required: [before, after]
+            properties:
+              path: { type: string }
+              before: { type: string, nullable: true }
+              after: { type: string, nullable: true }
+
+    # ── alerts ──
+    Alert:
+      type: object
+      required: [id, serviceId, severity, title, status, createdAt]
+      properties:
+        id: { type: string }
+        changeId: { type: string, nullable: true }
+        serviceId: { type: string }
+        serviceName: { type: string }
+        severity: { $ref: '#/components/schemas/Severity' }
+        title: { type: string }
+        description: { type: string }
+        status: { $ref: '#/components/schemas/AlertStatus' }
+        createdAt: { type: string, format: date-time }
+        snoozedUntil: { type: string, format: date-time, nullable: true }
+    AlertPage:
+      type: object
+      required: [items, total, page, pageSize]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Alert' }
+        total: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
+
+    # ── settings ──
+    AuthConfig:
+      type: object
+      required: [localEnabled, accessTokenTtl, refreshTokenTtl, oidcProviders]
+      properties:
+        localEnabled: { type: boolean }
+        accessTokenTtl: { type: integer, description: seconds }
+        refreshTokenTtl: { type: integer, description: seconds }
+        oidcProviders:
+          type: array
+          description: Read-only; defined in config/env, not editable via API
+          items: { $ref: '#/components/schemas/OidcProvider' }
+    AuthSettingsUpdate:
+      type: object
+      description: Mutable subset of AuthConfig (no providers, no credentials)
+      properties:
+        localEnabled: { type: boolean }
+        accessTokenTtl: { type: integer, description: seconds }
+        refreshTokenTtl: { type: integer, description: seconds }
+    OidcProvider:
+      type: object
+      description: >
+        File/env-defined provider, surfaced read-only. issuerUrl, clientId, and the
+        secret are never accepted or returned over the API; `secretConfigured` only
+        signals whether the secret is present in config.
+      required: [id, displayName, issuerUrl, clientId, secretConfigured, enabled, source]
+      properties:
+        id: { type: string }
+        displayName: { type: string }
+        issuerUrl: { type: string, readOnly: true }
+        clientId: { type: string, readOnly: true }
+        secretConfigured: { type: boolean, readOnly: true }
+        enabled:
+          type: boolean
+          description: 'The one mutable flag (via PUT /auth/providers/{providerId}/enabled)'
+        source: { type: string, enum: [file, env], readOnly: true }
+        scopes:
+          type: array
+          readOnly: true
+          items: { type: string }
+    AiConfig:
+      type: object
+      required: [enabled, mode]
+      properties:
+        enabled: { type: boolean }
+        provider: { type: string, enum: [anthropic, openai, ollama], nullable: true }
+        model: { type: string }
+        apiKey: { type: string, description: Write-only; omitted in responses }
+        baseUrl: { type: string, description: For Ollama / self-hosted }
+        mode: { type: string, enum: [auto_update, suggest_only], description: How diffs route (§2) }
+    NotificationConfig:
+      type: object
+      required: [channels, routing]
+      properties:
+        channels:
+          type: array
+          items: { $ref: '#/components/schemas/NotificationChannel' }
+        routing:
+          type: array
+          description: Full event×channel matrix (§8.8)
+          items: { $ref: '#/components/schemas/NotificationRoute' }
+    NotificationChannelType:
+      type: string
+      enum: [in_app, smtp, webhook]
+    NotificationChannel:
+      type: object
+      required: [type, enabled]
+      properties:
+        type: { $ref: '#/components/schemas/NotificationChannelType' }
+        enabled: { type: boolean }
+        config:
+          type: object
+          additionalProperties: true
+          description: Channel-specific (SMTP host/port/creds, webhook URL/headers, etc.)
+    NotificationRoute:
+      type: object
+      required: [eventType, channel, enabled]
+      properties:
+        eventType: { type: string, description: 'e.g. alert.created, change.detected, sync.complete' }
+        channel: { $ref: '#/components/schemas/NotificationChannelType' }
+        enabled: { type: boolean }
+        minSeverity: { $ref: '#/components/schemas/Severity' }
+
+    # ── system ──
+    SystemInfo:
+      type: object
+      required: [version, syncSchedule, integrations]
+      properties:
+        version: { type: string }
+        syncSchedule: { type: string, description: cron expression }
+        integrations:
+          type: array
+          items:
+            type: object
+            properties:
+              name: { type: string }
+              status: { type: string, enum: [ok, degraded, down] }
+              detail: { type: string }
+    Health:
+      type: object
+      required: [status, components]
+      properties:
+        status: { type: string, enum: [ok, degraded, down] }
+        components:
+          type: array
+          items:
+            type: object
+            required: [name, status]
+            properties:
+              name: { type: string }
+              status: { type: string, enum: [ok, degraded, down] }
+              detail: { type: string }
