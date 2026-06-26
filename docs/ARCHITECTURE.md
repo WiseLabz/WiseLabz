@@ -69,7 +69,7 @@ WiseLabz/
 ### Backend
 
 | Concern          | Decision                              | Rationale                                                                                                       |
-| ---------------- | ------------------------------------- |-----------------------------------------------------------------------------------------------------------------|
+|------------------|---------------------------------------|-----------------------------------------------------------------------------------------------------------------|
 | Language         | Go                                    | performance, single binary, strong stdlib                                                                       |
 | HTTP router      | `chi`                                 | idiomatic middleware composition, no magic, lightweight                                                         |
 | WebSocket        | `gorilla/websocket`                   | de facto standard in Go, well-maintained                                                                        |
@@ -81,18 +81,18 @@ WiseLabz/
 
 ### Frontend
 
-| Concern          | Decision                          | Rationale                                                       |
-| ---------------- | --------------------------------- |-----------------------------------------------------------------|
-| Framework        | React + Vite                      | mature ecosystem, fast HMR in dev                               |
-| State management | Zustand                           | minimal boilerplate, works cleanly alongside React Query        |
-| Server state     | React Query                       | caching, background refetch, loading/error states for REST data |
-| Styling          | Tailwind CSS                      | productive, dark mode built-in, low barrier for contributors    |
-| API client       | generated via `openapi-generator` | frontend and backend types always in sync                       |
+| Concern          | Decision                                                  | Rationale                                                                                                                                                            |
+|------------------|-----------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Framework        | React + Vite                                              | mature ecosystem, fast HMR in dev                                                                                                                                    |
+| State management | Zustand                                                   | minimal boilerplate, works cleanly alongside React Query                                                                                                             |
+| Server state     | React Query                                               | caching, background refetch, loading/error states for REST data                                                                                                      |
+| Styling          | Tailwind CSS                                              | productive, dark mode built-in, low barrier for contributors                                                                                                         |
+| API client       | generated via `orval` (OpenAPI → typed React Query hooks) | contract-first from `docs/openapi.yaml`; frontend/backend types stay in sync, and MSW mocks generated from the same spec let the frontend build ahead of the backend |
 
 ### Infrastructure
 
 | Concern            | Decision                                        | Rationale                                                      |
-| ------------------ | ----------------------------------------------- | -------------------------------------------------------------- |
+|--------------------|-------------------------------------------------|----------------------------------------------------------------|
 | Deployment         | Docker Compose                                  | `docker compose up` is the entire install story                |
 | Build              | Vite SPA embedded into Go binary via `go:embed` | single binary, single Docker service, no Nginx needed          |
 | Container registry | GHCR (`ghcr.io`)                                | native GitHub integration, free for open-source                |
@@ -121,7 +121,7 @@ requests to the Go backend. The `go:embed` path only activates in the production
 ### Branching
 
 | Prefix      | Use                                   |
-| ----------- | ------------------------------------- |
+|-------------|---------------------------------------|
 | `feat/`     | new features                          |
 | `fix/`      | bug fixes                             |
 | `docs/`     | documentation only                    |
@@ -172,6 +172,25 @@ WiseLabz receives and validates the ID token via `coreos/go-oidc`. The session m
 (JWT issuance, refresh) is identical to local mode.
 
 Switching between modes requires only a config change and restart — no code path diverges.
+
+### OIDC provider configuration (decided 2026-06-25: file-defined, app toggles only)
+
+OIDC providers are defined **entirely in config file / env** — `issuer_url`,
+`client_id`, and `client_secret` never transit the HTTP API, never live in the app
+database, and are never editable through the UI. This is deliberate: an API that could
+rewrite `issuer_url` would be an auth-bypass vector (an attacker repointing the issuer
+to an IdP they control logs in as admin), and storing the secret in the DB only adds an
+exfiltration surface without removing the env secret you need to encrypt it.
+
+The in-app Settings → Auth page is therefore **read-only for providers plus a few safe
+toggles**:
+- View detected providers (issuer, clientId, `secretConfigured: yes/no`) — never the secret.
+- Enable/disable a provider (`PUT /api/auth/providers/{id}/enabled`) — persisted as a DB flag; the definition stays in config.
+- Toggle local login and set access/refresh token TTLs (`PUT /api/auth/config`).
+
+This supersedes the frontend plan's original §8.6 ("add/edit OIDC provider via UI"),
+which has been amended accordingly. Endpoint contract: `docs/openapi.yaml`
+(`/auth/config`, `/auth/providers/{providerId}/enabled`).
 
 ---
 

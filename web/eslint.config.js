@@ -5,7 +5,9 @@ import reactRefresh from 'eslint-plugin-react-refresh';
 
 export default [
   {
-    ignores: ['dist'],
+    // dist = build output; src/api/generated + src/api/model = orval-generated (npm run gen:api);
+    // mockServiceWorker.js = MSW vendor worker (msw init)
+    ignores: ['dist', 'src/api/generated/**', 'src/api/model/**', 'public/mockServiceWorker.js'],
   },
   {
     files: ['**/*.{ts,tsx}'],
@@ -28,6 +30,11 @@ export default [
       'react-refresh/only-export-components': [
         'warn',
         { allowConstantExport: true },
+      ],
+      // Allow intentionally-unused args/vars when prefixed with `_`.
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        { argsIgnorePattern: '^_', varsIgnorePattern: '^_', caughtErrorsIgnorePattern: '^_' },
       ],
     },
   },
