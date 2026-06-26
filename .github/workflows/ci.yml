@@ -125,7 +125,9 @@ jobs:
         working-directory: web
 
       - name: Copy frontend assets
-        run: cp -r web/dist backend/internal/web/dist/
+        run: |
+          mkdir -p backend/internal/web/dist
+          cp -r web/dist/. backend/internal/web/dist/
 
       - name: Build backend binary
         run: go build -o /dev/null ./cmd/server
