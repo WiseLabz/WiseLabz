@@ -3,6 +3,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -45,7 +46,7 @@ func main() {
 		logger.Error("Failed to open database", "error", err)
 		os.Exit(1)
 	}
-	defer db.Close()
+	defer db.Close() //nolint:errcheck
 
 	// Run migrations
 	if err := store.RunMigrations(db, cfg.DB.Driver, logger); err != nil {
@@ -70,7 +71,7 @@ func main() {
 	logger.Info("Store initialized, database ready")
 
 	// Initialize JWT service
-	jwtSvc := auth.NewJWTService(
+	jwtSvc := auth.NewService(
 		cfg.Auth.Secret,
 		cfg.Auth.AccessTokenTTLDuration(),
 		cfg.Auth.RefreshTokenTTLDuration(),
@@ -89,7 +90,7 @@ func main() {
 	notifDispatcher := notifications.NewDispatcher(s, wsHub)
 
 	// Build HTTP router
-	router := api.NewRouter(api.RouterConfig{
+	router := api.NewRouter(api.Config{
 		Store:      s,
 		JWT:        jwtSvc,
 		Config:     cfg,
@@ -106,7 +107,7 @@ func main() {
 
 	go func() {
 		logger.Info("HTTP server listening", "addr", cfg.Server.Addr())
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			logger.Error("HTTP server error", "error", err)
 		}
 	}()
@@ -133,7 +134,7 @@ func main() {
 }
 
 // runAlertExpirer periodically un-snoozes expired alerts.
-func runAlertExpirer(ctx context.Context, s *store.Store, d *notifications.Dispatcher, logger *slog.Logger) {
+func runAlertExpirer(ctx context.Context, s *store.Store, _ *notifications.Dispatcher, logger *slog.Logger) {
 	logger.Info("Alert expirer started")
 	for {
 		select {
@@ -162,7 +163,7 @@ func runAlertExpirer(ctx context.Context, s *store.Store, d *notifications.Dispa
 	}
 }
 
-func newLogger(cfg config.LogConfig) *slog.Logger {
+func newLogger(cfg config.LogSettings) *slog.Logger {
 	var level slog.Level
 	switch cfg.Level {
 	case "debug":

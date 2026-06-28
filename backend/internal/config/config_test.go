@@ -10,8 +10,8 @@ func TestLoadDefaults(t *testing.T) {
 	// Change to a temp directory with no config file
 	dir := t.TempDir()
 	oldDir, _ := os.Getwd()
-	os.Chdir(dir)
-	defer os.Chdir(oldDir)
+	os.Chdir(dir)          //nolint:errcheck
+	defer os.Chdir(oldDir) //nolint:errcheck
 
 	cfg, err := Load()
 	if err != nil {
@@ -77,8 +77,8 @@ log:
 	}
 
 	oldDir, _ := os.Getwd()
-	os.Chdir(dir)
-	defer os.Chdir(oldDir)
+	os.Chdir(dir)          //nolint:errcheck
+	defer os.Chdir(oldDir) //nolint:errcheck
 
 	cfg, err := Load()
 	if err != nil {
@@ -111,8 +111,8 @@ log:
 func TestLoadEnvOverride(t *testing.T) {
 	dir := t.TempDir()
 	oldDir, _ := os.Getwd()
-	os.Chdir(dir)
-	defer os.Chdir(oldDir)
+	os.Chdir(dir)          //nolint:errcheck
+	defer os.Chdir(oldDir) //nolint:errcheck
 
 	t.Setenv("WISELABZ_SERVER_PORT", "7070")
 	t.Setenv("WISELABZ_DB_DRIVER", "postgres")
@@ -135,7 +135,7 @@ func TestLoadEnvOverride(t *testing.T) {
 }
 
 func TestServerAddr(t *testing.T) {
-	s := ServerConfig{Host: "0.0.0.0", Port: 8080}
+	s := Server{Host: "0.0.0.0", Port: 8080}
 	if addr := s.Addr(); addr != "0.0.0.0:8080" {
 		t.Errorf("Addr() = %q, want 0.0.0.0:8080", addr)
 	}

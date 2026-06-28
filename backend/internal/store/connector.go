@@ -4,7 +4,9 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -81,7 +83,7 @@ func (s *Store) GetConnector(ctx context.Context, id string) (*ConnectorRecord, 
 		FROM connectors WHERE id = ?
 	`, id).Scan(&c.ID, &c.Name, &c.Category, &c.Type, &c.URL, &verifyTLS, &c.ConfigData,
 		&enabled, &c.Status, &c.StatusMessage, &lastSyncAt, &c.CreatedAt, &c.UpdatedAt)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
 	if err != nil {
@@ -95,45 +97,49 @@ func (s *Store) GetConnector(ctx context.Context, id string) (*ConnectorRecord, 
 
 // UpdateConnector updates fields on an existing connector.
 func (s *Store) UpdateConnector(ctx context.Context, id string, updates map[string]any) error {
-	query := `UPDATE connectors SET updated_at = ?`
 	now := time.Now().UTC().Format(time.RFC3339)
 	args := []any{now}
+	var parts []string
 
 	for k, v := range updates {
 		switch k {
 		case "name":
-			query += ", name = ?"
+			parts = append(parts, "name = ?")
 			args = append(args, v)
 		case "url":
-			query += ", url = ?"
+			parts = append(parts, "url = ?")
 			args = append(args, v)
 		case "verify_tls":
-			query += ", verify_tls = ?"
+			parts = append(parts, "verify_tls = ?")
 			args = append(args, boolToInt(v.(bool)))
 		case "config_data":
-			query += ", config_data = ?"
+			parts = append(parts, "config_data = ?")
 			args = append(args, v)
 		case "enabled":
-			query += ", enabled = ?"
+			parts = append(parts, "enabled = ?")
 			args = append(args, boolToInt(v.(bool)))
 		case "status":
-			query += ", status = ?"
+			parts = append(parts, "status = ?")
 			args = append(args, v)
 		case "status_message":
-			query += ", status_message = ?"
+			parts = append(parts, "status_message = ?")
 			args = append(args, v)
 		case "last_sync_at":
-			query += ", last_sync_at = ?"
+			parts = append(parts, "last_sync_at = ?")
 			args = append(args, v)
 		case "category":
-			query += ", category = ?"
+			parts = append(parts, "category = ?")
 			args = append(args, v)
 		case "type":
-			query += ", type = ?"
+			parts = append(parts, "type = ?")
 			args = append(args, v)
 		}
 	}
 
+	query := "UPDATE connectors SET updated_at = ?"
+	if len(parts) > 0 {
+		query += ", " + strings.Join(parts, ", ")
+	}
 	query += " WHERE id = ?"
 	args = append(args, id)
 
@@ -141,7 +147,10 @@ func (s *Store) UpdateConnector(ctx context.Context, id string, updates map[stri
 	if err != nil {
 		return fmt.Errorf("update connector: %w", err)
 	}
-	rows, _ := result.RowsAffected()
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("rows affected: %w", err)
+	}
 	if rows == 0 {
 		return ErrNotFound
 	}
@@ -154,7 +163,10 @@ func (s *Store) DeleteConnector(ctx context.Context, id string) error {
 	if err != nil {
 		return fmt.Errorf("delete connector: %w", err)
 	}
-	rows, _ := result.RowsAffected()
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("rows affected: %w", err)
+	}
 	if rows == 0 {
 		return ErrNotFound
 	}
@@ -175,7 +187,7 @@ func (s *Store) ListConnectors(ctx context.Context, offset, limit int) ([]Connec
 	if err != nil {
 		return nil, 0, fmt.Errorf("list connectors: %w", err)
 	}
-	defer rows.Close()
+	defer rows.Close() //nolint:errcheck
 
 	return scanConnectors(rows)
 }
@@ -194,7 +206,7 @@ func (s *Store) ListConnectorsByCategory(ctx context.Context, category string, o
 	if err != nil {
 		return nil, 0, fmt.Errorf("list connectors by category: %w", err)
 	}
-	defer rows.Close()
+	defer rows.Close() //nolint:errcheck
 
 	return scanConnectors(rows)
 }
@@ -208,7 +220,7 @@ func (s *Store) ListAllConnectors(ctx context.Context) ([]ConnectorRecord, error
 	if err != nil {
 		return nil, fmt.Errorf("list all connectors: %w", err)
 	}
-	defer rows.Close()
+	defer rows.Close() //nolint:errcheck
 
 	connectors, _, err := scanConnectors(rows)
 	return connectors, err
@@ -243,7 +255,7 @@ func (s *Store) GetLatestSnapshot(ctx context.Context, connectorID string) (*Sna
 		FROM service_snapshots WHERE connector_id = ?
 		ORDER BY fetched_at DESC LIMIT 1
 	`, connectorID).Scan(&sn.ID, &sn.ConnectorID, &sn.Data, &sn.FetchedAt)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
 	if err != nil {
@@ -262,7 +274,7 @@ func (s *Store) GetSnapshotsByConnector(ctx context.Context, connectorID string,
 	if err != nil {
 		return nil, fmt.Errorf("get snapshots: %w", err)
 	}
-	defer rows.Close()
+	defer rows.Close() //nolint:errcheck
 
 	var snapshots []SnapshotRecord
 	for rows.Next() {

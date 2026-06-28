@@ -43,7 +43,7 @@ func init() {
 				TLSClientConfig: &tls.Config{InsecureSkipVerify: !verifyTLS},
 			},
 		}
-		return &ProxmoxConnector{
+		return &Connector{
 			url:         strings.TrimSuffix(url, "/"),
 			tokenID:     tokenID,
 			tokenSecret: tokenSecret,
@@ -52,8 +52,8 @@ func init() {
 	})
 }
 
-// ProxmoxConnector fetches data from a Proxmox VE API.
-type ProxmoxConnector struct {
+// Connector fetches data from a Proxmox VE API.
+type Connector struct {
 	url         string
 	tokenID     string
 	tokenSecret string
@@ -61,22 +61,22 @@ type ProxmoxConnector struct {
 }
 
 // Name returns the connector display name.
-func (p *ProxmoxConnector) Name() string { return "Proxmox VE" }
+func (p *Connector) Name() string { return "Proxmox VE" }
 
 // Type returns the connector type.
-func (p *ProxmoxConnector) Type() string { return typeName }
+func (p *Connector) Type() string { return typeName }
 
 // Category returns the connector category.
-func (p *ProxmoxConnector) Category() string { return "virtualization" }
+func (p *Connector) Category() string { return "virtualization" }
 
 // Validate tests the connection to the Proxmox API.
-func (p *ProxmoxConnector) Validate(ctx context.Context, config map[string]any) error {
+func (p *Connector) Validate(ctx context.Context, _ map[string]any) error {
 	_, err := p.doRequest(ctx, "GET", "/nodes", nil)
 	return err
 }
 
 // Fetch retrieves the current state of nodes, VMs, containers, and storage.
-func (p *ProxmoxConnector) Fetch(ctx context.Context, config map[string]any) (*connector.ServiceSnapshot, error) {
+func (p *Connector) Fetch(ctx context.Context, _ map[string]any) (*connector.ServiceSnapshot, error) {
 	start := time.Now()
 
 	// Fetch nodes
@@ -136,7 +136,13 @@ func (p *ProxmoxConnector) Fetch(ctx context.Context, config map[string]any) (*c
 				Uptime int64  `json:"uptime"`
 			} `json:"data"`
 		}
-		json.Unmarshal(vmsRaw, &vmsResponse)
+		if err := json.Unmarshal(vmsRaw, &vmsResponse); err != nil {
+			sections = append(sections, connector.SnapshotSection{
+				Title:   node.Node,
+				Content: nodeSection + "_VM decode error: " + err.Error() + "_",
+			})
+			continue
+		}
 
 		if len(vmsResponse.Data) > 0 {
 			nodeSection += "### Virtual Machines\n\n"
@@ -169,7 +175,13 @@ func (p *ProxmoxConnector) Fetch(ctx context.Context, config map[string]any) (*c
 				Uptime int64  `json:"uptime"`
 			} `json:"data"`
 		}
-		json.Unmarshal(ctsRaw, &ctsResponse)
+		if err := json.Unmarshal(ctsRaw, &ctsResponse); err != nil {
+			sections = append(sections, connector.SnapshotSection{
+				Title:   node.Node,
+				Content: nodeSection + "_CT decode error: " + err.Error() + "_",
+			})
+			continue
+		}
 
 		if len(ctsResponse.Data) > 0 {
 			nodeSection += "### Containers\n\n"
@@ -202,7 +214,7 @@ func (p *ProxmoxConnector) Fetch(ctx context.Context, config map[string]any) (*c
 	}, nil
 }
 
-func (p *ProxmoxConnector) doRequest(ctx context.Context, method, path string, body io.Reader) ([]byte, error) {
+func (p *Connector) doRequest(ctx context.Context, method, path string, _ io.Reader) ([]byte, error) {
 	url := p.url + path
 	req, err := http.NewRequestWithContext(ctx, method, url, nil)
 	if err != nil {
@@ -215,7 +227,7 @@ func (p *ProxmoxConnector) doRequest(ctx context.Context, method, path string, b
 	if err != nil {
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck
 
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {

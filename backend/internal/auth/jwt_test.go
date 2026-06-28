@@ -6,7 +6,7 @@ import (
 )
 
 func TestIssueAndValidateAccess(t *testing.T) {
-	svc := NewJWTService("test-secret-key-32-bytes-long!!", 15*time.Minute, 7*24*time.Hour)
+	svc := NewService("test-secret-key-32-bytes-long!!", 15*time.Minute, 7*24*time.Hour)
 
 	pair, err := svc.IssuePair("user-123", "operator")
 	if err != nil {
@@ -36,7 +36,7 @@ func TestIssueAndValidateAccess(t *testing.T) {
 }
 
 func TestValidateRefresh(t *testing.T) {
-	svc := NewJWTService("test-secret", time.Minute, time.Hour)
+	svc := NewService("test-secret", time.Minute, time.Hour)
 
 	pair, err := svc.IssuePair("user-456", "viewer")
 	if err != nil {
@@ -53,7 +53,7 @@ func TestValidateRefresh(t *testing.T) {
 }
 
 func TestExpiredAccessToken(t *testing.T) {
-	svc := NewJWTService("test-secret", -1*time.Second, time.Hour) // access expires immediately
+	svc := NewService("test-secret", -1*time.Second, time.Hour) // access expires immediately
 
 	pair, err := svc.IssuePair("user-789", "viewer")
 	if err != nil {
@@ -67,8 +67,8 @@ func TestExpiredAccessToken(t *testing.T) {
 }
 
 func TestWrongSecret(t *testing.T) {
-	svc1 := NewJWTService("secret-one", time.Minute, time.Hour)
-	svc2 := NewJWTService("secret-two", time.Minute, time.Hour)
+	svc1 := NewService("secret-one", time.Minute, time.Hour)
+	svc2 := NewService("secret-two", time.Minute, time.Hour)
 
 	pair, _ := svc1.IssuePair("user-1", "viewer")
 
@@ -79,7 +79,7 @@ func TestWrongSecret(t *testing.T) {
 }
 
 func TestIssueAndValidateElevation(t *testing.T) {
-	svc := NewJWTService("test-secret", time.Minute, time.Hour)
+	svc := NewService("test-secret", time.Minute, time.Hour)
 
 	elev, err := svc.IssueElevation("user-123", "connector.delete")
 	if err != nil {
@@ -106,7 +106,7 @@ func TestIssueAndValidateElevation(t *testing.T) {
 }
 
 func TestElevationWrongAction(t *testing.T) {
-	svc := NewJWTService("test-secret", time.Minute, time.Hour)
+	svc := NewService("test-secret", time.Minute, time.Hour)
 
 	elev, _ := svc.IssueElevation("user-123", "connector.delete")
 
@@ -117,7 +117,7 @@ func TestElevationWrongAction(t *testing.T) {
 }
 
 func TestElevationExpired(t *testing.T) {
-	svc := NewJWTService("test-secret", time.Minute, time.Hour)
+	svc := NewService("test-secret", time.Minute, time.Hour)
 	svc.elevationTTL = -1 * time.Second // immediately expired
 
 	elev, err := svc.IssueElevation("user-123", "connector.delete")

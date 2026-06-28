@@ -9,14 +9,14 @@ import (
 )
 
 func TestAuthMiddlewareValidToken(t *testing.T) {
-	svc := NewJWTService("test-secret", time.Minute, time.Hour)
+	svc := NewService("test-secret", time.Minute, time.Hour)
 	pair, _ := svc.IssuePair("user-1", "operator")
 
 	handler := AuthMiddleware(svc)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		userID := UserIDFromContext(r.Context())
 		role := RoleFromContext(r.Context())
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(userID + ":" + role))
+		w.Write([]byte(userID + ":" + role)) //nolint:errcheck
 	}))
 
 	req := httptest.NewRequest("GET", "/test", nil)
@@ -34,9 +34,9 @@ func TestAuthMiddlewareValidToken(t *testing.T) {
 }
 
 func TestAuthMiddlewareMissingHeader(t *testing.T) {
-	svc := NewJWTService("test-secret", time.Minute, time.Hour)
+	svc := NewService("test-secret", time.Minute, time.Hour)
 
-	handler := AuthMiddleware(svc)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := AuthMiddleware(svc)(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
 		t.Error("handler should not be called")
 	}))
 
@@ -51,9 +51,9 @@ func TestAuthMiddlewareMissingHeader(t *testing.T) {
 }
 
 func TestAuthMiddlewareInvalidToken(t *testing.T) {
-	svc := NewJWTService("test-secret", time.Minute, time.Hour)
+	svc := NewService("test-secret", time.Minute, time.Hour)
 
-	handler := AuthMiddleware(svc)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := AuthMiddleware(svc)(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
 		t.Error("handler should not be called")
 	}))
 
@@ -69,7 +69,7 @@ func TestAuthMiddlewareInvalidToken(t *testing.T) {
 }
 
 func TestRequireRoleOperator(t *testing.T) {
-	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
 

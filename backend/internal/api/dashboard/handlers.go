@@ -1,3 +1,4 @@
+// Package dashboard provides the dashboard overview API handler.
 package dashboard
 
 import (

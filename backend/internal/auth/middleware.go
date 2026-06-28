@@ -28,7 +28,8 @@ func RoleFromContext(ctx context.Context) string {
 
 // AuthMiddleware validates the JWT access token from the Authorization header
 // and injects userID + role into the request context.
-func AuthMiddleware(jwtSvc *JWTService) func(http.Handler) http.Handler {
+// AuthMiddleware validates JWT tokens and injects user claims into the request context.
+func AuthMiddleware(jwtSvc *Service) func(http.Handler) http.Handler { //nolint:revive
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			token := extractBearerToken(r)

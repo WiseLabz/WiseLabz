@@ -20,7 +20,10 @@ func OpenDB(driver, dsn string) (*sql.DB, error) {
 	}
 
 	if err := db.Ping(); err != nil {
-		db.Close()
+		// Best-effort close on ping failure; the connection pool is not yet healthy.
+		if closeErr := db.Close(); closeErr != nil {
+			err = fmt.Errorf("ping database: %w (close: %w)", err, closeErr)
+		}
 		return nil, fmt.Errorf("ping database: %w", err)
 	}
 

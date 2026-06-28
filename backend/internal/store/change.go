@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 
@@ -37,6 +38,7 @@ type AlertRecord struct {
 
 // --- Change CRUD ---
 
+// CreateChange inserts a new infrastructure change record.
 func (s *Store) CreateChange(ctx context.Context, c *ChangeRecord) error {
 	if c.ID == "" {
 		c.ID = uuid.New().String()
@@ -64,6 +66,7 @@ func (s *Store) CreateChange(ctx context.Context, c *ChangeRecord) error {
 	return nil
 }
 
+// GetChange retrieves a single change record by ID.
 func (s *Store) GetChange(ctx context.Context, id string) (*ChangeRecord, error) {
 	c := &ChangeRecord{}
 	err := s.db.QueryRowContext(ctx, `
@@ -71,7 +74,7 @@ func (s *Store) GetChange(ctx context.Context, id string) (*ChangeRecord, error)
 		FROM changes WHERE id = ?
 	`, id).Scan(&c.ID, &c.ServiceID, &c.ChangeType, &c.Severity, &c.Summary,
 		&c.Diff, &c.Status, &c.DetectedAt, &c.AffectedDocIDs)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
 	if err != nil {
@@ -80,21 +83,26 @@ func (s *Store) GetChange(ctx context.Context, id string) (*ChangeRecord, error)
 	return c, nil
 }
 
+// UpdateChangeStatus updates the status of a change record.
 func (s *Store) UpdateChangeStatus(ctx context.Context, id, status string) error {
 	result, err := s.db.ExecContext(ctx, `UPDATE changes SET status = ? WHERE id = ?`, status, id)
 	if err != nil {
 		return fmt.Errorf("update change status: %w", err)
 	}
-	rows, _ := result.RowsAffected()
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("rows affected: %w", err)
+	}
 	if rows == 0 {
 		return ErrNotFound
 	}
 	return nil
 }
 
+// ListChanges returns a paginated list of change records, optionally filtered by service and severity.
 func (s *Store) ListChanges(ctx context.Context, serviceID, severity string, offset, limit int) ([]ChangeRecord, int, error) {
 	where := "WHERE 1=1"
-	args := []any{}
+	var args []any
 	if serviceID != "" {
 		where += " AND service_id = ?"
 		args = append(args, serviceID)
@@ -106,7 +114,9 @@ func (s *Store) ListChanges(ctx context.Context, serviceID, severity string, off
 
 	var total int
 	countQuery := "SELECT COUNT(*) FROM changes " + where
-	s.db.QueryRowContext(ctx, countQuery, args...).Scan(&total)
+	if err := s.db.QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("count changes: %w", err)
+	}
 
 	query := `SELECT id, service_id, change_type, severity, summary, diff, status, detected_at, affected_doc_ids
 		FROM changes ` + where + ` ORDER BY detected_at DESC LIMIT ? OFFSET ?`
@@ -116,12 +126,14 @@ func (s *Store) ListChanges(ctx context.Context, serviceID, severity string, off
 	if err != nil {
 		return nil, 0, fmt.Errorf("list changes: %w", err)
 	}
-	defer rows.Close()
+	defer rows.Close() //nolint:errcheck
 
 	var changes []ChangeRecord
 	for rows.Next() {
 		var c ChangeRecord
-		rows.Scan(&c.ID, &c.ServiceID, &c.ChangeType, &c.Severity, &c.Summary, &c.Diff, &c.Status, &c.DetectedAt, &c.AffectedDocIDs)
+		if err := rows.Scan(&c.ID, &c.ServiceID, &c.ChangeType, &c.Severity, &c.Summary, &c.Diff, &c.Status, &c.DetectedAt, &c.AffectedDocIDs); err != nil {
+			return nil, 0, fmt.Errorf("scan: %w", err)
+		}
 		changes = append(changes, c)
 	}
 	if changes == nil {
@@ -130,6 +142,7 @@ func (s *Store) ListChanges(ctx context.Context, serviceID, severity string, off
 	return changes, total, nil
 }
 
+// CountChanges returns the total number of change records.
 func (s *Store) CountChanges(ctx context.Context) (int, error) {
 	var count int
 	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM changes`).Scan(&count)
@@ -145,6 +158,7 @@ func (s *Store) CountChangesNew(ctx context.Context) (int, error) {
 
 // --- Alert CRUD ---
 
+// CreateAlert inserts a new alert record.
 func (s *Store) CreateAlert(ctx context.Context, a *AlertRecord) error {
 	if a.ID == "" {
 		a.ID = uuid.New().String()
@@ -167,6 +181,7 @@ func (s *Store) CreateAlert(ctx context.Context, a *AlertRecord) error {
 	return nil
 }
 
+// GetAlert retrieves a single alert record by ID.
 func (s *Store) GetAlert(ctx context.Context, id string) (*AlertRecord, error) {
 	a := &AlertRecord{}
 	var changeID, snoozedUntil sql.NullString
@@ -175,7 +190,7 @@ func (s *Store) GetAlert(ctx context.Context, id string) (*AlertRecord, error) {
 		FROM alerts WHERE id = ?
 	`, id).Scan(&a.ID, &changeID, &a.ServiceID, &a.Severity, &a.Title,
 		&a.Description, &a.Status, &snoozedUntil, &a.CreatedAt)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
 	if err != nil {
@@ -186,9 +201,10 @@ func (s *Store) GetAlert(ctx context.Context, id string) (*AlertRecord, error) {
 	return a, nil
 }
 
+// UpdateAlertStatus updates the status and snooze deadline of an alert.
 func (s *Store) UpdateAlertStatus(ctx context.Context, id, status, snoozedUntil string) error {
-	query := `UPDATE alerts SET status = ?`
 	args := []any{status}
+	query := "UPDATE alerts SET status = ?"
 	if snoozedUntil != "" {
 		query += ", snoozed_until = ?"
 		args = append(args, snoozedUntil)
@@ -200,16 +216,20 @@ func (s *Store) UpdateAlertStatus(ctx context.Context, id, status, snoozedUntil 
 	if err != nil {
 		return fmt.Errorf("update alert: %w", err)
 	}
-	rows, _ := result.RowsAffected()
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("rows affected: %w", err)
+	}
 	if rows == 0 {
 		return ErrNotFound
 	}
 	return nil
 }
 
+// ListAlerts returns a paginated list of alerts, optionally filtered by service, severity, and status.
 func (s *Store) ListAlerts(ctx context.Context, serviceID, severity, status string, offset, limit int) ([]AlertRecord, int, error) {
 	where := "WHERE 1=1"
-	args := []any{}
+	var args []any
 	if serviceID != "" {
 		where += " AND service_id = ?"
 		args = append(args, serviceID)
@@ -225,7 +245,9 @@ func (s *Store) ListAlerts(ctx context.Context, serviceID, severity, status stri
 
 	var total int
 	countQuery := "SELECT COUNT(*) FROM alerts " + where
-	s.db.QueryRowContext(ctx, countQuery, args...).Scan(&total)
+	if err := s.db.QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("count alerts: %w", err)
+	}
 
 	query := `SELECT id, change_id, service_id, severity, title, description, status, snoozed_until, created_at
 		FROM alerts ` + where + ` ORDER BY created_at DESC LIMIT ? OFFSET ?`
@@ -235,14 +257,16 @@ func (s *Store) ListAlerts(ctx context.Context, serviceID, severity, status stri
 	if err != nil {
 		return nil, 0, fmt.Errorf("list alerts: %w", err)
 	}
-	defer rows.Close()
+	defer rows.Close() //nolint:errcheck
 
 	var alerts []AlertRecord
 	for rows.Next() {
 		var a AlertRecord
 		var changeID, snoozedUntil sql.NullString
-		rows.Scan(&a.ID, &changeID, &a.ServiceID, &a.Severity, &a.Title, &a.Description,
-			&a.Status, &snoozedUntil, &a.CreatedAt)
+		if err := rows.Scan(&a.ID, &changeID, &a.ServiceID, &a.Severity, &a.Title, &a.Description,
+			&a.Status, &snoozedUntil, &a.CreatedAt); err != nil {
+			return nil, 0, fmt.Errorf("scan: %w", err)
+		}
 		a.ChangeID = changeID.String
 		a.SnoozedUntil = snoozedUntil.String
 		alerts = append(alerts, a)
@@ -263,14 +287,16 @@ func (s *Store) GetExpiredSnoozedAlerts(ctx context.Context) ([]AlertRecord, err
 	if err != nil {
 		return nil, fmt.Errorf("get expired snoozed: %w", err)
 	}
-	defer rows.Close()
+	defer rows.Close() //nolint:errcheck
 
 	var alerts []AlertRecord
 	for rows.Next() {
 		var a AlertRecord
 		var changeID, snoozedUntil sql.NullString
-		rows.Scan(&a.ID, &changeID, &a.ServiceID, &a.Severity, &a.Title, &a.Description,
-			&a.Status, &snoozedUntil, &a.CreatedAt)
+		if err := rows.Scan(&a.ID, &changeID, &a.ServiceID, &a.Severity, &a.Title, &a.Description,
+			&a.Status, &snoozedUntil, &a.CreatedAt); err != nil {
+			return nil, fmt.Errorf("scan: %w", err)
+		}
 		a.ChangeID = changeID.String
 		a.SnoozedUntil = snoozedUntil.String
 		alerts = append(alerts, a)
@@ -281,6 +307,7 @@ func (s *Store) GetExpiredSnoozedAlerts(ctx context.Context) ([]AlertRecord, err
 	return alerts, nil
 }
 
+// CountAlerts returns the total number of alert records.
 func (s *Store) CountAlerts(ctx context.Context) (int, error) {
 	var count int
 	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM alerts`).Scan(&count)
@@ -303,12 +330,14 @@ func (s *Store) GetLatestChanges(ctx context.Context, n int) ([]ChangeRecord, er
 	if err != nil {
 		return nil, fmt.Errorf("get latest changes: %w", err)
 	}
-	defer rows.Close()
+	defer rows.Close() //nolint:errcheck
 
 	var changes []ChangeRecord
 	for rows.Next() {
 		var c ChangeRecord
-		rows.Scan(&c.ID, &c.ServiceID, &c.ChangeType, &c.Severity, &c.Summary, &c.Diff, &c.Status, &c.DetectedAt, &c.AffectedDocIDs)
+		if err := rows.Scan(&c.ID, &c.ServiceID, &c.ChangeType, &c.Severity, &c.Summary, &c.Diff, &c.Status, &c.DetectedAt, &c.AffectedDocIDs); err != nil {
+			return nil, fmt.Errorf("scan: %w", err)
+		}
 		changes = append(changes, c)
 	}
 	if changes == nil {
@@ -333,12 +362,14 @@ func (s *Store) CountConnectorsByStatus(ctx context.Context) (map[string]int, er
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer rows.Close() //nolint:errcheck
 	counts := map[string]int{"online": 0, "degraded": 0, "offline": 0, "unknown": 0}
 	for rows.Next() {
 		var status string
 		var count int
-		rows.Scan(&status, &count)
+		if err := rows.Scan(&status, &count); err != nil {
+			return nil, fmt.Errorf("scan status count: %w", err)
+		}
 		counts[status] = count
 	}
 	return counts, nil

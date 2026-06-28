@@ -2,6 +2,7 @@
 package notifications
 
 import (
+	"context"
 	"log/slog"
 
 	"github.com/WiseLabz/wiselabz/internal/store"
@@ -43,7 +44,7 @@ func (d *Dispatcher) NotifyAlert(alertID, userID, eventType, title, message stri
 }
 
 func (d *Dispatcher) createInApp(userID, alertID, eventType, title, message string) error {
-	_, err := d.store.DB().ExecContext(nil, `
+	_, err := d.store.DB().ExecContext(context.TODO(), `
 		INSERT INTO in_app_notifications (id, user_id, alert_id, event_type, title, message, read, created_at)
 		VALUES (?, ?, ?, ?, ?, ?, 0, datetime('now'))
 	`, generateID(), userID, alertID, eventType, title, message)

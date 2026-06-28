@@ -40,7 +40,7 @@ func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
 
 // Version responds with build version information.
 // GET /api/version
-func (h *Handler) Version(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) Version(w http.ResponseWriter, _ *http.Request) {
 	info := map[string]string{}
 
 	if buildInfo, ok := debug.ReadBuildInfo(); ok {

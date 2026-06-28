@@ -1,7 +1,9 @@
+// Package templates provides API handlers for template CRUD and preview.
 package templates
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	"github.com/WiseLabz/wiselabz/internal/doc"
@@ -35,7 +37,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	t, err := h.Store.GetTemplate(r.Context(), id)
-	if err == store.ErrNotFound {
+	if errors.Is(err, store.ErrNotFound) {
 		httputil.Error(w, http.StatusNotFound, "not_found", "Template not found")
 		return
 	}
@@ -84,7 +86,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	for _, sec := range req.Sections {
-		h.Store.CreateTemplateSection(r.Context(), &store.TemplateSectionRecord{
+		_ = h.Store.CreateTemplateSection(r.Context(), &store.TemplateSectionRecord{
 			TemplateID: t.ID,
 			Title:      sec.Title,
 			Ord:        sec.Ord,
@@ -132,9 +134,9 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if req.Sections != nil {
-		h.Store.DeleteTemplateSections(r.Context(), id)
+		_ = h.Store.DeleteTemplateSections(r.Context(), id)
 		for _, sec := range *req.Sections {
-			h.Store.CreateTemplateSection(r.Context(), &store.TemplateSectionRecord{
+			_ = h.Store.CreateTemplateSection(r.Context(), &store.TemplateSectionRecord{
 				TemplateID: id,
 				Title:      sec.Title,
 				Ord:        sec.Ord,
@@ -155,7 +157,7 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if err := h.Store.DeleteTemplate(r.Context(), id); err != nil {
-		if err == store.ErrNotFound {
+		if errors.Is(err, store.ErrNotFound) {
 			httputil.Error(w, http.StatusNotFound, "not_found", "Template not found")
 			return
 		}

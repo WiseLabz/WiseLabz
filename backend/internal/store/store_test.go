@@ -13,7 +13,7 @@ func TestNew(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open db: %v", err)
 	}
-	defer db.Close()
+	defer db.Close() //nolint:errcheck
 
 	s := New(db)
 	if s == nil {
@@ -29,7 +29,7 @@ func TestPing(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open db: %v", err)
 	}
-	defer db.Close()
+	defer db.Close() //nolint:errcheck
 
 	s := New(db)
 	if err := s.Ping(context.Background()); err != nil {

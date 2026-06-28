@@ -65,7 +65,7 @@ func (e *Engine) RunSync(ctx context.Context, connectorID string) (*RunResult, e
 	}
 
 	// Update status to fetching
-	e.store.UpdateConnector(ctx, connectorID, map[string]any{
+	_ = e.store.UpdateConnector(ctx, connectorID, map[string]any{
 		"status":         "online",
 		"status_message": "Syncing...",
 	})
@@ -73,7 +73,7 @@ func (e *Engine) RunSync(ctx context.Context, connectorID string) (*RunResult, e
 	// Fetch data
 	sn, err := conn.Fetch(ctx, cfg)
 	if err != nil {
-		e.store.UpdateConnector(ctx, connectorID, map[string]any{
+		_ = e.store.UpdateConnector(ctx, connectorID, map[string]any{
 			"status":         "degraded",
 			"status_message": fmt.Sprintf("Fetch failed: %v", err),
 		})
@@ -137,7 +137,7 @@ func (e *Engine) RunSync(ctx context.Context, connectorID string) (*RunResult, e
 
 	// Update connector status
 	now := time.Now().UTC().Format(time.RFC3339)
-	e.store.UpdateConnector(ctx, connectorID, map[string]any{
+	_ = e.store.UpdateConnector(ctx, connectorID, map[string]any{
 		"status":         "online",
 		"status_message": "Sync successful",
 		"last_sync_at":   now,

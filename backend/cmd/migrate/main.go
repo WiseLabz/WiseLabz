@@ -1,3 +1,4 @@
+// Command migrate runs database migrations (up/down).
 package main
 
 import (
@@ -28,7 +29,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Failed to open database: %v\n", err)
 		os.Exit(1)
 	}
-	defer db.Close()
+	defer db.Close() //nolint:errcheck
 
 	direction := os.Args[1]
 	switch direction {

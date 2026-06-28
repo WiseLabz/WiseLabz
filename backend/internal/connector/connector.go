@@ -30,7 +30,7 @@ type SnapshotSection struct {
 	Content string `json:"content"`
 }
 
-// Metadata returns a string metadata value, or the fallback if not set.
+// MetadataValue Metadata returns a string metadata value, or the fallback if not set.
 func (s *ServiceSnapshot) MetadataValue(key, fallback string) string {
 	if s.Metadata == nil {
 		return fallback

@@ -3,7 +3,9 @@ package store
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -53,6 +55,7 @@ type TemplateSectionRecord struct {
 
 // --- Doc CRUD ---
 
+// CreateDoc inserts a new documentation record.
 func (s *Store) CreateDoc(ctx context.Context, d *DocRecord) error {
 	if d.ID == "" {
 		d.ID = uuid.New().String()
@@ -81,6 +84,7 @@ func (s *Store) CreateDoc(ctx context.Context, d *DocRecord) error {
 	return nil
 }
 
+// GetDoc retrieves a single documentation record by ID.
 func (s *Store) GetDoc(ctx context.Context, id string) (*DocRecord, error) {
 	d := &DocRecord{}
 	var serviceID sql.NullString
@@ -89,7 +93,7 @@ func (s *Store) GetDoc(ctx context.Context, id string) (*DocRecord, error) {
 		FROM docs WHERE id = ?
 	`, id).Scan(&d.ID, &d.Title, &d.Kind, &serviceID, &d.Content,
 		&d.CurrentVersion, &d.CreatedAt, &d.UpdatedAt)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
 	if err != nil {
@@ -99,6 +103,7 @@ func (s *Store) GetDoc(ctx context.Context, id string) (*DocRecord, error) {
 	return d, nil
 }
 
+// UpdateDoc updates the content of a documentation record.
 func (s *Store) UpdateDoc(ctx context.Context, id, content string) error {
 	now := time.Now().UTC().Format(time.RFC3339)
 	result, err := s.db.ExecContext(ctx, `
@@ -107,28 +112,38 @@ func (s *Store) UpdateDoc(ctx context.Context, id, content string) error {
 	if err != nil {
 		return fmt.Errorf("update doc: %w", err)
 	}
-	rows, _ := result.RowsAffected()
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("rows affected: %w", err)
+	}
 	if rows == 0 {
 		return ErrNotFound
 	}
 	return nil
 }
 
+// DeleteDoc removes a documentation record by ID.
 func (s *Store) DeleteDoc(ctx context.Context, id string) error {
 	result, err := s.db.ExecContext(ctx, `DELETE FROM docs WHERE id = ?`, id)
 	if err != nil {
 		return fmt.Errorf("delete doc: %w", err)
 	}
-	rows, _ := result.RowsAffected()
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("rows affected: %w", err)
+	}
 	if rows == 0 {
 		return ErrNotFound
 	}
 	return nil
 }
 
+// ListDocs returns a paginated list of documentation records.
 func (s *Store) ListDocs(ctx context.Context, offset, limit int) ([]DocRecord, int, error) {
 	var total int
-	s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM docs`).Scan(&total)
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM docs`).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("count docs: %w", err)
+	}
 
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, title, kind, service_id, content, current_version, created_at, updated_at
@@ -137,14 +152,16 @@ func (s *Store) ListDocs(ctx context.Context, offset, limit int) ([]DocRecord, i
 	if err != nil {
 		return nil, 0, fmt.Errorf("list docs: %w", err)
 	}
-	defer rows.Close()
+	defer rows.Close() //nolint:errcheck
 
 	var docs []DocRecord
 	for rows.Next() {
 		var d DocRecord
 		var serviceID sql.NullString
-		rows.Scan(&d.ID, &d.Title, &d.Kind, &serviceID, &d.Content,
-			&d.CurrentVersion, &d.CreatedAt, &d.UpdatedAt)
+		if err := rows.Scan(&d.ID, &d.Title, &d.Kind, &serviceID, &d.Content,
+			&d.CurrentVersion, &d.CreatedAt, &d.UpdatedAt); err != nil {
+			return nil, 0, fmt.Errorf("scan: %w", err)
+		}
 		d.ServiceID = serviceID.String
 		docs = append(docs, d)
 	}
@@ -154,6 +171,7 @@ func (s *Store) ListDocs(ctx context.Context, offset, limit int) ([]DocRecord, i
 	return docs, total, nil
 }
 
+// ListDocsByService returns all documentation records for a given service.
 func (s *Store) ListDocsByService(ctx context.Context, serviceID string) ([]DocRecord, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, title, kind, service_id, content, current_version, created_at, updated_at
@@ -162,14 +180,16 @@ func (s *Store) ListDocsByService(ctx context.Context, serviceID string) ([]DocR
 	if err != nil {
 		return nil, fmt.Errorf("list docs by service: %w", err)
 	}
-	defer rows.Close()
+	defer rows.Close() //nolint:errcheck
 
 	var docs []DocRecord
 	for rows.Next() {
 		var d DocRecord
 		var svcID sql.NullString
-		rows.Scan(&d.ID, &d.Title, &d.Kind, &svcID, &d.Content,
-			&d.CurrentVersion, &d.CreatedAt, &d.UpdatedAt)
+		if err := rows.Scan(&d.ID, &d.Title, &d.Kind, &svcID, &d.Content,
+			&d.CurrentVersion, &d.CreatedAt, &d.UpdatedAt); err != nil {
+			return nil, fmt.Errorf("scan: %w", err)
+		}
 		d.ServiceID = svcID.String
 		docs = append(docs, d)
 	}
@@ -181,6 +201,7 @@ func (s *Store) ListDocsByService(ctx context.Context, serviceID string) ([]DocR
 
 // --- Doc versions ---
 
+// CreateDocVersion inserts a new version record for a document.
 func (s *Store) CreateDocVersion(ctx context.Context, v *DocVersionRecord) error {
 	if v.ID == "" {
 		v.ID = uuid.New().String()
@@ -199,6 +220,7 @@ func (s *Store) CreateDocVersion(ctx context.Context, v *DocVersionRecord) error
 	return nil
 }
 
+// GetDocVersions returns all version records for a document, newest first.
 func (s *Store) GetDocVersions(ctx context.Context, docID string) ([]DocVersionRecord, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, doc_id, rev, content, author, trigger, created_at
@@ -207,13 +229,15 @@ func (s *Store) GetDocVersions(ctx context.Context, docID string) ([]DocVersionR
 	if err != nil {
 		return nil, fmt.Errorf("get doc versions: %w", err)
 	}
-	defer rows.Close()
+	defer rows.Close() //nolint:errcheck
 
 	var versions []DocVersionRecord
 	for rows.Next() {
 		var v DocVersionRecord
 		var author sql.NullString
-		rows.Scan(&v.ID, &v.DocID, &v.Rev, &v.Content, &author, &v.Trigger, &v.CreatedAt)
+		if err := rows.Scan(&v.ID, &v.DocID, &v.Rev, &v.Content, &author, &v.Trigger, &v.CreatedAt); err != nil {
+			return nil, fmt.Errorf("scan: %w", err)
+		}
 		v.Author = author.String
 		versions = append(versions, v)
 	}
@@ -225,6 +249,7 @@ func (s *Store) GetDocVersions(ctx context.Context, docID string) ([]DocVersionR
 
 // --- Template CRUD ---
 
+// CreateTemplate inserts a new documentation template.
 func (s *Store) CreateTemplate(ctx context.Context, t *TemplateRecord) error {
 	if t.ID == "" {
 		t.ID = uuid.New().String()
@@ -247,6 +272,7 @@ func (s *Store) CreateTemplate(ctx context.Context, t *TemplateRecord) error {
 	return nil
 }
 
+// GetTemplate retrieves a single template record by ID.
 func (s *Store) GetTemplate(ctx context.Context, id string) (*TemplateRecord, error) {
 	t := &TemplateRecord{}
 	var appliesTo sql.NullString
@@ -254,7 +280,7 @@ func (s *Store) GetTemplate(ctx context.Context, id string) (*TemplateRecord, er
 		SELECT id, name, description, applies_to, created_at, updated_at
 		FROM templates WHERE id = ?
 	`, id).Scan(&t.ID, &t.Name, &t.Description, &appliesTo, &t.CreatedAt, &t.UpdatedAt)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
 	if err != nil {
@@ -264,22 +290,27 @@ func (s *Store) GetTemplate(ctx context.Context, id string) (*TemplateRecord, er
 	return t, nil
 }
 
+// UpdateTemplate updates the name and description of a template.
 func (s *Store) UpdateTemplate(ctx context.Context, id string, updates map[string]any) error {
 	now := time.Now().UTC().Format(time.RFC3339)
-	query := `UPDATE templates SET updated_at = ?`
 	args := []any{now}
+	var parts []string
 	for k, v := range updates {
 		switch k {
 		case "name":
-			query += ", name = ?"
+			parts = append(parts, "name = ?")
 			args = append(args, v)
 		case "description":
-			query += ", description = ?"
+			parts = append(parts, "description = ?")
 			args = append(args, v)
 		case "applies_to":
-			query += ", applies_to = ?"
+			parts = append(parts, "applies_to = ?")
 			args = append(args, v)
 		}
+	}
+	query := "UPDATE templates SET updated_at = ?"
+	if len(parts) > 0 {
+		query += ", " + strings.Join(parts, ", ")
 	}
 	query += " WHERE id = ?"
 	args = append(args, id)
@@ -288,28 +319,38 @@ func (s *Store) UpdateTemplate(ctx context.Context, id string, updates map[strin
 	if err != nil {
 		return fmt.Errorf("update template: %w", err)
 	}
-	rows, _ := result.RowsAffected()
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("rows affected: %w", err)
+	}
 	if rows == 0 {
 		return ErrNotFound
 	}
 	return nil
 }
 
+// DeleteTemplate removes a template record by ID.
 func (s *Store) DeleteTemplate(ctx context.Context, id string) error {
 	result, err := s.db.ExecContext(ctx, `DELETE FROM templates WHERE id = ?`, id)
 	if err != nil {
 		return fmt.Errorf("delete template: %w", err)
 	}
-	rows, _ := result.RowsAffected()
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("rows affected: %w", err)
+	}
 	if rows == 0 {
 		return ErrNotFound
 	}
 	return nil
 }
 
+// ListTemplates returns a paginated list of template records.
 func (s *Store) ListTemplates(ctx context.Context, offset, limit int) ([]TemplateRecord, int, error) {
 	var total int
-	s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM templates`).Scan(&total)
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM templates`).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("count templates: %w", err)
+	}
 
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, name, description, applies_to, created_at, updated_at
@@ -318,13 +359,15 @@ func (s *Store) ListTemplates(ctx context.Context, offset, limit int) ([]Templat
 	if err != nil {
 		return nil, 0, fmt.Errorf("list templates: %w", err)
 	}
-	defer rows.Close()
+	defer rows.Close() //nolint:errcheck
 
 	var templates []TemplateRecord
 	for rows.Next() {
 		var t TemplateRecord
 		var appliesTo sql.NullString
-		rows.Scan(&t.ID, &t.Name, &t.Description, &appliesTo, &t.CreatedAt, &t.UpdatedAt)
+		if err := rows.Scan(&t.ID, &t.Name, &t.Description, &appliesTo, &t.CreatedAt, &t.UpdatedAt); err != nil {
+			return nil, 0, fmt.Errorf("scan: %w", err)
+		}
 		t.AppliesTo = appliesTo.String
 		templates = append(templates, t)
 	}
@@ -336,6 +379,7 @@ func (s *Store) ListTemplates(ctx context.Context, offset, limit int) ([]Templat
 
 // --- Template sections ---
 
+// CreateTemplateSection inserts a new section into a template.
 func (s *Store) CreateTemplateSection(ctx context.Context, sec *TemplateSectionRecord) error {
 	if sec.ID == "" {
 		sec.ID = uuid.New().String()
@@ -350,6 +394,7 @@ func (s *Store) CreateTemplateSection(ctx context.Context, sec *TemplateSectionR
 	return nil
 }
 
+// GetTemplateSections returns all sections for a template, ordered by position.
 func (s *Store) GetTemplateSections(ctx context.Context, templateID string) ([]TemplateSectionRecord, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, template_id, title, ord, body
@@ -358,12 +403,14 @@ func (s *Store) GetTemplateSections(ctx context.Context, templateID string) ([]T
 	if err != nil {
 		return nil, fmt.Errorf("get template sections: %w", err)
 	}
-	defer rows.Close()
+	defer rows.Close() //nolint:errcheck
 
 	var sections []TemplateSectionRecord
 	for rows.Next() {
 		var sec TemplateSectionRecord
-		rows.Scan(&sec.ID, &sec.TemplateID, &sec.Title, &sec.Ord, &sec.Body)
+		if err := rows.Scan(&sec.ID, &sec.TemplateID, &sec.Title, &sec.Ord, &sec.Body); err != nil {
+			return nil, fmt.Errorf("scan: %w", err)
+		}
 		sections = append(sections, sec)
 	}
 	if sections == nil {
@@ -372,6 +419,7 @@ func (s *Store) GetTemplateSections(ctx context.Context, templateID string) ([]T
 	return sections, nil
 }
 
+// DeleteTemplateSections removes all sections belonging to a template.
 func (s *Store) DeleteTemplateSections(ctx context.Context, templateID string) error {
 	_, err := s.db.ExecContext(ctx, `DELETE FROM template_sections WHERE template_id = ?`, templateID)
 	return err

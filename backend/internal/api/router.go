@@ -1,3 +1,4 @@
+// Package api provides the HTTP router, middleware chain, and handler wiring.
 package api
 
 import (
@@ -31,10 +32,10 @@ import (
 	_ "github.com/WiseLabz/wiselabz/internal/connector/proxmox"
 )
 
-// RouterConfig holds all dependencies needed to construct the router.
-type RouterConfig struct {
+// Config holds all dependencies needed to construct the router.
+type Config struct {
 	Store      *store.Store
-	JWT        *auth.JWTService
+	JWT        *auth.Service
 	Config     *config.Config
 	SyncEngine *sync.Engine
 	DocEngine  *doc.Engine
@@ -42,7 +43,7 @@ type RouterConfig struct {
 }
 
 // NewRouter constructs the full chi router with all middleware and route groups.
-func NewRouter(cfg RouterConfig) chi.Router {
+func NewRouter(cfg Config) chi.Router {
 	r := chi.NewRouter()
 
 	// Global middleware chain
@@ -214,6 +215,6 @@ func NewRouter(cfg RouterConfig) chi.Router {
 }
 
 // AuthMiddleware returns chi-compatible auth middleware from the JWT service.
-func (cfg RouterConfig) AuthMiddleware() func(http.Handler) http.Handler {
+func (cfg Config) AuthMiddleware() func(http.Handler) http.Handler {
 	return auth.AuthMiddleware(cfg.JWT)
 }

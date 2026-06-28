@@ -101,10 +101,10 @@ func lineCount(s string) int {
 	return len(strings.Split(s, "\n"))
 }
 
-func severityForChange(old, new string) string {
+func severityForChange(prev, curr string) string {
 	// Simple heuristic: large diffs are more severe
-	oldLines := lineCount(old)
-	newLines := lineCount(new)
+	oldLines := lineCount(prev)
+	newLines := lineCount(curr)
 	diff := oldLines - newLines
 	if diff < 0 {
 		diff = -diff

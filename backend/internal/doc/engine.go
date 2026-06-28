@@ -63,20 +63,20 @@ func (e *Engine) GenerateFromTemplate(ctx context.Context, templateID, connector
 		GeneratedAt: time.Now().UTC().Format(time.RFC3339),
 	}
 
-	buf.WriteString(fmt.Sprintf("# %s\n\n", snap.ServiceName))
+	fmt.Fprintf(&buf, "# %s\n\n", snap.ServiceName)
 	if tmpl.Description != "" {
-		buf.WriteString(fmt.Sprintf("> %s\n\n", tmpl.Description))
+		fmt.Fprintf(&buf, "> %s\n\n", tmpl.Description)
 	}
 
 	for _, sec := range sections {
 		tmpl, err := template.New("section").Parse(sec.Body)
 		if err != nil {
-			buf.WriteString(fmt.Sprintf("## %s\n\n_Template error: %v_\n\n", sec.Title, err))
+			fmt.Fprintf(&buf, "## %s\n\n_Template error: %v_\n\n", sec.Title, err)
 			continue
 		}
-		buf.WriteString(fmt.Sprintf("## %s\n\n", sec.Title))
+		fmt.Fprintf(&buf, "## %s\n\n", sec.Title)
 		if err := tmpl.Execute(&buf, data); err != nil {
-			buf.WriteString(fmt.Sprintf("\n_Template error: %v_\n", err))
+			fmt.Fprintf(&buf, "\n_Template error: %v_\n", err)
 		}
 		buf.WriteString("\n")
 	}
@@ -97,7 +97,7 @@ func (e *Engine) GenerateFromTemplate(ctx context.Context, templateID, connector
 		}
 		// Get updated version
 		doc, _ := e.store.GetDoc(ctx, docID)
-		e.store.CreateDocVersion(ctx, &store.DocVersionRecord{
+		_ = e.store.CreateDocVersion(ctx, &store.DocVersionRecord{
 			DocID:   docID,
 			Rev:     doc.CurrentVersion,
 			Content: content,
@@ -114,7 +114,7 @@ func (e *Engine) GenerateFromTemplate(ctx context.Context, templateID, connector
 			return nil, fmt.Errorf("create doc: %w", err)
 		}
 		docID = doc.ID
-		e.store.CreateDocVersion(ctx, &store.DocVersionRecord{
+		_ = e.store.CreateDocVersion(ctx, &store.DocVersionRecord{
 			DocID:   docID,
 			Rev:     1,
 			Content: content,
@@ -142,9 +142,9 @@ func (e *Engine) GenerateFromSnapshot(ctx context.Context, connectorID string) (
 	}
 
 	var buf bytes.Buffer
-	buf.WriteString(fmt.Sprintf("# %s\n\n", snap.ServiceName))
-	buf.WriteString(fmt.Sprintf("**Type:** %s\n", snap.Type))
-	buf.WriteString(fmt.Sprintf("**Fetched:** %s\n\n", snap.FetchedAt.Format(time.RFC3339)))
+	fmt.Fprintf(&buf, "# %s\n\n", snap.ServiceName)
+	fmt.Fprintf(&buf, "**Type:** %s\n", snap.Type)
+	fmt.Fprintf(&buf, "**Fetched:** %s\n\n", snap.FetchedAt.Format(time.RFC3339))
 
 	for _, sec := range snap.Sections {
 		buf.WriteString(sec.Content)
@@ -163,7 +163,7 @@ func (e *Engine) GenerateFromSnapshot(ctx context.Context, connectorID string) (
 	}
 
 	docID := doc.ID
-	e.store.CreateDocVersion(ctx, &store.DocVersionRecord{
+	_ = e.store.CreateDocVersion(ctx, &store.DocVersionRecord{
 		DocID:   docID,
 		Rev:     1,
 		Content: content,

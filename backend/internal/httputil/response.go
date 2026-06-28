@@ -79,9 +79,12 @@ func WritePaginated(w http.ResponseWriter, data any, page, pageSize, total int) 
 }
 
 const (
-	DefaultPage     = 1
+	// DefaultPage is the fallback page number for paginated endpoints.
+	DefaultPage = 1
+	// DefaultPageSize is the default number of items per page.
 	DefaultPageSize = 20
-	MaxPageSize     = 100
+	// MaxPageSize is the maximum number of items per page.
+	MaxPageSize = 100
 )
 
 // Paginate extracts pagination parameters from the request query string.

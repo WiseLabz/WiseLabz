@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/subtle"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -20,13 +21,13 @@ import (
 // Handler holds dependencies for auth API endpoints.
 type Handler struct {
 	Store    *store.Store
-	JWT      *auth.JWTService
+	JWT      *auth.Service
 	Config   *config.Config
 	oidcProv map[string]*auth.OIDCProvider // initialized on first use
 }
 
 // NewHandler creates a new auth handler.
-func NewHandler(s *store.Store, jwtSvc *auth.JWTService, cfg *config.Config) *Handler {
+func NewHandler(s *store.Store, jwtSvc *auth.Service, cfg *config.Config) *Handler {
 	return &Handler{
 		Store:  s,
 		JWT:    jwtSvc,
@@ -130,11 +131,6 @@ func (h *Handler) OIDCCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Set the redirect URI for this request
-	provCfgCopy := *provCfg
-	provCfgCopy.ClientID = provCfg.ClientID
-	provCfgCopy.ClientSecret = provCfg.ClientSecret
-
 	// Exchange code for claims
 	claims, err := prov.Exchange(r.Context(), req.Code)
 	if err != nil {
@@ -145,7 +141,7 @@ func (h *Handler) OIDCCallback(w http.ResponseWriter, r *http.Request) {
 
 	// Find or create user
 	user, err := h.Store.GetUserByOIDCSubject(r.Context(), claims.Email)
-	if err == store.ErrNotFound {
+	if errors.Is(err, store.ErrNotFound) {
 		// Create new OIDC user
 		displayName := claims.Name
 		if displayName == "" {
@@ -341,7 +337,7 @@ func (h *Handler) Elevate(w http.ResponseWriter, r *http.Request) {
 
 // Providers handles GET /api/auth/providers.
 // Returns OIDC providers merged from config file (secrets hidden) and DB enable flags.
-func (h *Handler) Providers(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) Providers(w http.ResponseWriter, _ *http.Request) {
 	type providerInfo struct {
 		ID               string `json:"id"`
 		DisplayName      string `json:"displayName"`
@@ -559,7 +555,7 @@ func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
 		PasswordHash: hash,
 	}
 	if err := h.Store.CreateUser(r.Context(), user); err != nil {
-		if err == store.ErrConflict {
+		if errors.Is(err, store.ErrConflict) {
 			httputil.Error(w, http.StatusConflict, "conflict", "Username already exists")
 			return
 		}
@@ -617,11 +613,11 @@ func (h *Handler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.Store.UpdateUser(r.Context(), userID, updates); err != nil {
-		if err == store.ErrNotFound {
+		if errors.Is(err, store.ErrNotFound) {
 			httputil.Error(w, http.StatusNotFound, "not_found", "User not found")
 			return
 		}
-		if err == store.ErrConflict {
+		if errors.Is(err, store.ErrConflict) {
 			httputil.Error(w, http.StatusConflict, "conflict", "Username already exists")
 			return
 		}
@@ -648,7 +644,7 @@ func (h *Handler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.Store.DeleteUser(r.Context(), userID); err != nil {
-		if err == store.ErrNotFound {
+		if errors.Is(err, store.ErrNotFound) {
 			httputil.Error(w, http.StatusNotFound, "not_found", "User not found")
 			return
 		}
@@ -688,7 +684,7 @@ func (h *Handler) ResetPassword(w http.ResponseWriter, r *http.Request) {
 	if err := h.Store.UpdateUser(r.Context(), userID, map[string]any{
 		"password_hash": hash,
 	}); err != nil {
-		if err == store.ErrNotFound {
+		if errors.Is(err, store.ErrNotFound) {
 			httputil.Error(w, http.StatusNotFound, "not_found", "User not found")
 			return
 		}
@@ -701,7 +697,7 @@ func (h *Handler) ResetPassword(w http.ResponseWriter, r *http.Request) {
 
 // --- Helpers ---
 
-func (h *Handler) findOIDCProvider(id string) *config.OIDCProviderConfig {
+func (h *Handler) findOIDCProvider(id string) *config.OIDCProvider {
 	for i := range h.Config.Auth.OIDC {
 		if h.Config.Auth.OIDC[i].ID == id {
 			return &h.Config.Auth.OIDC[i]
@@ -710,7 +706,7 @@ func (h *Handler) findOIDCProvider(id string) *config.OIDCProviderConfig {
 	return nil
 }
 
-func (h *Handler) getOrInitOIDCProvider(ctx context.Context, cfg *config.OIDCProviderConfig) *auth.OIDCProvider {
+func (h *Handler) getOrInitOIDCProvider(ctx context.Context, cfg *config.OIDCProvider) *auth.OIDCProvider {
 	if h.oidcProv == nil {
 		h.oidcProv = make(map[string]*auth.OIDCProvider)
 	}

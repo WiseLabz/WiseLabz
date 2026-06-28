@@ -1,6 +1,8 @@
+// Package config loads and holds the WiseLabz server configuration.
 package config
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
@@ -12,22 +14,22 @@ import (
 
 // Config is the top-level configuration structure.
 type Config struct {
-	DB     DBConfig     `mapstructure:"db"`
-	Server ServerConfig `mapstructure:"server"`
-	Auth   AuthConfig   `mapstructure:"auth"`
-	AI     AIConfig     `mapstructure:"ai"`
-	Sync   SyncConfig   `mapstructure:"sync"`
-	Log    LogConfig    `mapstructure:"log"`
+	DB     Database     `mapstructure:"db"`
+	Server Server       `mapstructure:"server"`
+	Auth   AuthSettings `mapstructure:"auth"`
+	AI     AISettings   `mapstructure:"ai"`
+	Sync   SyncSettings `mapstructure:"sync"`
+	Log    LogSettings  `mapstructure:"log"`
 }
 
-// DBConfig holds database connection settings.
-type DBConfig struct {
+// Database holds database connection settings.
+type Database struct {
 	Driver string `mapstructure:"driver"` // "sqlite3" or "postgres"
 	DSN    string `mapstructure:"dsn"`
 }
 
-// ServerConfig holds HTTP server settings.
-type ServerConfig struct {
+// Server holds HTTP server settings.
+type Server struct {
 	Host                   string `mapstructure:"host"`
 	Port                   int    `mapstructure:"port"`
 	Origin                 string `mapstructure:"origin"`                   // CORS origin for production
@@ -38,29 +40,29 @@ type ServerConfig struct {
 }
 
 // Addr returns the listen address for the HTTP server.
-func (s ServerConfig) Addr() string {
+func (s Server) Addr() string {
 	return fmt.Sprintf("%s:%d", s.Host, s.Port)
 }
 
 // ShutdownTimeoutDuration returns the graceful shutdown deadline as a duration.
-func (s ServerConfig) ShutdownTimeoutDuration() time.Duration {
+func (s Server) ShutdownTimeoutDuration() time.Duration {
 	if s.ShutdownTimeoutSeconds <= 0 {
 		return 10 * time.Second
 	}
 	return time.Duration(s.ShutdownTimeoutSeconds) * time.Second
 }
 
-// AuthConfig holds authentication settings.
-type AuthConfig struct {
-	Secret               string               `mapstructure:"secret"`
-	AccessTokenTTL       int                  `mapstructure:"access_token_ttl"`
-	RefreshTokenTTL      int                  `mapstructure:"refresh_token_ttl"`
-	StepUpForDestructive bool                 `mapstructure:"step_up_for_destructive"`
-	OIDC                 []OIDCProviderConfig `mapstructure:"oidc"`
+// AuthSettings holds authentication settings.
+type AuthSettings struct {
+	Secret               string         `mapstructure:"secret"`
+	AccessTokenTTL       int            `mapstructure:"access_token_ttl"`
+	RefreshTokenTTL      int            `mapstructure:"refresh_token_ttl"`
+	StepUpForDestructive bool           `mapstructure:"step_up_for_destructive"`
+	OIDC                 []OIDCProvider `mapstructure:"oidc"`
 }
 
 // AccessTokenTTLDuration returns the access token TTL as a time.Duration.
-func (a AuthConfig) AccessTokenTTLDuration() time.Duration {
+func (a AuthSettings) AccessTokenTTLDuration() time.Duration {
 	if a.AccessTokenTTL <= 0 {
 		return 15 * time.Minute
 	}
@@ -68,15 +70,15 @@ func (a AuthConfig) AccessTokenTTLDuration() time.Duration {
 }
 
 // RefreshTokenTTLDuration returns the refresh token TTL as a time.Duration.
-func (a AuthConfig) RefreshTokenTTLDuration() time.Duration {
+func (a AuthSettings) RefreshTokenTTLDuration() time.Duration {
 	if a.RefreshTokenTTL <= 0 {
 		return 7 * 24 * time.Hour
 	}
 	return time.Duration(a.RefreshTokenTTL) * time.Second
 }
 
-// OIDCProviderConfig defines an OIDC provider from the config file.
-type OIDCProviderConfig struct {
+// OIDCProvider defines an OIDC provider from the config file.
+type OIDCProvider struct {
 	ID           string   `mapstructure:"id"`
 	DisplayName  string   `mapstructure:"display_name"`
 	IssuerURL    string   `mapstructure:"issuer_url"`
@@ -85,8 +87,8 @@ type OIDCProviderConfig struct {
 	Scopes       []string `mapstructure:"scopes"`
 }
 
-// AIConfig holds AI module settings.
-type AIConfig struct {
+// AISettings holds AI module settings.
+type AISettings struct {
 	Enabled  bool   `mapstructure:"enabled"`
 	Provider string `mapstructure:"provider"` // "anthropic", "openai", "ollama"
 	Model    string `mapstructure:"model"`
@@ -95,13 +97,13 @@ type AIConfig struct {
 	Mode     string `mapstructure:"mode"`     // "auto_update" or "suggest_only"
 }
 
-// SyncConfig holds sync engine settings.
-type SyncConfig struct {
+// SyncSettings holds sync engine settings.
+type SyncSettings struct {
 	Schedule string `mapstructure:"schedule"` // cron expression
 }
 
-// LogConfig holds logging settings.
-type LogConfig struct {
+// LogSettings holds logging settings.
+type LogSettings struct {
 	Level  string `mapstructure:"level"`  // "debug", "info", "warn", "error"
 	Format string `mapstructure:"format"` // "text" or "json"
 }
@@ -135,7 +137,7 @@ func Load() (*Config, error) {
 
 	if err := v.ReadInConfig(); err != nil {
 		// Config file is optional — env-only config is valid for PaaS deployments
-		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
+		if _, ok := errors.AsType[viper.ConfigFileNotFoundError](err); !ok {
 			return nil, fmt.Errorf("read config: %w", err)
 		}
 		// Config file not found, continue with env + defaults

@@ -1,6 +1,8 @@
+// Package changes provides API handlers for infrastructure change records.
 package changes
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/WiseLabz/wiselabz/internal/httputil"
@@ -35,7 +37,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	c, err := h.Store.GetChange(r.Context(), id)
-	if err == store.ErrNotFound {
+	if errors.Is(err, store.ErrNotFound) {
 		httputil.Error(w, http.StatusNotFound, "not_found", "Change not found")
 		return
 	}
@@ -50,7 +52,7 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) Acknowledge(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if err := h.Store.UpdateChangeStatus(r.Context(), id, "acknowledged"); err != nil {
-		if err == store.ErrNotFound {
+		if errors.Is(err, store.ErrNotFound) {
 			httputil.Error(w, http.StatusNotFound, "not_found", "Change not found")
 			return
 		}
@@ -64,7 +66,7 @@ func (h *Handler) Acknowledge(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) Dismiss(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if err := h.Store.UpdateChangeStatus(r.Context(), id, "dismissed"); err != nil {
-		if err == store.ErrNotFound {
+		if errors.Is(err, store.ErrNotFound) {
 			httputil.Error(w, http.StatusNotFound, "not_found", "Change not found")
 			return
 		}

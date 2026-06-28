@@ -1,3 +1,4 @@
+// Package auth provides JWT token issuance, validation, and HTTP middleware.
 package auth
 
 import (
@@ -34,17 +35,17 @@ type ElevationToken struct {
 	ExpiresAt time.Time `json:"expiresAt"`
 }
 
-// JWTService handles JWT creation and validation.
-type JWTService struct {
+// Service handles JWT creation and validation.
+type Service struct {
 	secret       []byte
 	accessTTL    time.Duration
 	refreshTTL   time.Duration
 	elevationTTL time.Duration
 }
 
-// NewJWTService creates a new JWTService.
-func NewJWTService(secret string, accessTTL, refreshTTL time.Duration) *JWTService {
-	return &JWTService{
+// NewService creates a new Service.
+func NewService(secret string, accessTTL, refreshTTL time.Duration) *Service {
+	return &Service{
 		secret:       []byte(secret),
 		accessTTL:    accessTTL,
 		refreshTTL:   refreshTTL,
@@ -53,7 +54,7 @@ func NewJWTService(secret string, accessTTL, refreshTTL time.Duration) *JWTServi
 }
 
 // IssuePair creates a new access + refresh token pair.
-func (s *JWTService) IssuePair(userID, role string) (*TokenPair, error) {
+func (s *Service) IssuePair(userID, role string) (*TokenPair, error) {
 	now := time.Now()
 
 	access, err := s.issue(Claims{
@@ -90,17 +91,17 @@ func (s *JWTService) IssuePair(userID, role string) (*TokenPair, error) {
 }
 
 // ValidateAccess validates an access token and returns its claims.
-func (s *JWTService) ValidateAccess(tokenString string) (*Claims, error) {
+func (s *Service) ValidateAccess(tokenString string) (*Claims, error) {
 	return s.validate(tokenString, &Claims{})
 }
 
 // ValidateRefresh validates a refresh token and returns its claims.
-func (s *JWTService) ValidateRefresh(tokenString string) (*Claims, error) {
+func (s *Service) ValidateRefresh(tokenString string) (*Claims, error) {
 	return s.validate(tokenString, &Claims{})
 }
 
 // IssueElevation creates a short-lived elevation token scoped to a single action.
-func (s *JWTService) IssueElevation(userID, action string) (*ElevationToken, error) {
+func (s *Service) IssueElevation(userID, action string) (*ElevationToken, error) {
 	now := time.Now()
 	expiresAt := now.Add(s.elevationTTL)
 
@@ -124,7 +125,7 @@ func (s *JWTService) IssueElevation(userID, action string) (*ElevationToken, err
 }
 
 // ValidateElevation validates an elevation token and checks it matches the required action.
-func (s *JWTService) ValidateElevation(tokenString, action string) (*ElevationClaims, error) {
+func (s *Service) ValidateElevation(tokenString, action string) (*ElevationClaims, error) {
 	claims, err := s.validateElevation(tokenString)
 	if err != nil {
 		return nil, err
@@ -135,12 +136,12 @@ func (s *JWTService) ValidateElevation(tokenString, action string) (*ElevationCl
 	return claims, nil
 }
 
-func (s *JWTService) issue(claims Claims) (string, error) {
+func (s *Service) issue(claims Claims) (string, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString(s.secret)
 }
 
-func (s *JWTService) validate(tokenString string, claims *Claims) (*Claims, error) {
+func (s *Service) validate(tokenString string, claims *Claims) (*Claims, error) {
 	token, err := jwt.ParseWithClaims(tokenString, claims, func(t *jwt.Token) (interface{}, error) {
 		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
@@ -157,12 +158,12 @@ func (s *JWTService) validate(tokenString string, claims *Claims) (*Claims, erro
 	return c, nil
 }
 
-func (s *JWTService) issueElevation(claims ElevationClaims) (string, error) {
+func (s *Service) issueElevation(claims ElevationClaims) (string, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString(s.secret)
 }
 
-func (s *JWTService) validateElevation(tokenString string) (*ElevationClaims, error) {
+func (s *Service) validateElevation(tokenString string) (*ElevationClaims, error) {
 	claims := &ElevationClaims{}
 	token, err := jwt.ParseWithClaims(tokenString, claims, func(t *jwt.Token) (interface{}, error) {
 		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {

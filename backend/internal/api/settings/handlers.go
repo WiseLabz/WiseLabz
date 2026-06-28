@@ -1,10 +1,14 @@
+// Package settings provides API handlers for auth, AI, and notification configuration.
 package settings
 
 import (
 	"encoding/json"
+	"log/slog"
 	"net/http"
+	"strings"
 
 	"github.com/WiseLabz/wiselabz/internal/config"
+	"github.com/WiseLabz/wiselabz/internal/crypto"
 	"github.com/WiseLabz/wiselabz/internal/httputil"
 	"github.com/WiseLabz/wiselabz/internal/store"
 )
@@ -66,9 +70,8 @@ func (h *Handler) UpdateAuth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	query := `UPDATE auth_config SET `
-	args := []any{}
-	parts := []string{}
+	var args []any
+	var parts []string
 
 	if req.LocalEnabled != nil {
 		parts = append(parts, "local_enabled = ?")
@@ -92,14 +95,7 @@ func (h *Handler) UpdateAuth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	for i, p := range parts {
-		if i > 0 {
-			query += ", "
-		}
-		query += p
-	}
-	query += " WHERE id = 1"
-	args = append(args)
+	query := "UPDATE auth_config SET " + strings.Join(parts, ", ") + " WHERE id = 1"
 
 	_, err := h.Store.DB().ExecContext(r.Context(), query, args...)
 	if err != nil {
@@ -174,9 +170,8 @@ func (h *Handler) UpdateAI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	query := `UPDATE ai_config SET `
-	args := []any{}
-	parts := []string{}
+	var args []any
+	var parts []string
 
 	if req.Enabled != nil {
 		parts = append(parts, "enabled = ?")
@@ -191,8 +186,15 @@ func (h *Handler) UpdateAI(w http.ResponseWriter, r *http.Request) {
 		args = append(args, *req.Model)
 	}
 	if req.APIKey != nil {
+		key := crypto.DeriveKey(h.Config.Auth.Secret)
+		encrypted, err := crypto.Encrypt(*req.APIKey, key)
+		if err != nil {
+			slog.Error("Failed to encrypt API key", "error", err)
+			httputil.Error(w, http.StatusInternalServerError, "internal_error", "Failed to encrypt API key")
+			return
+		}
 		parts = append(parts, "api_key_encrypted = ?")
-		args = append(args, *req.APIKey) // TODO: encrypt before storing
+		args = append(args, encrypted)
 	}
 	if req.BaseURL != nil {
 		parts = append(parts, "base_url = ?")
@@ -208,13 +210,7 @@ func (h *Handler) UpdateAI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	for i, p := range parts {
-		if i > 0 {
-			query += ", "
-		}
-		query += p
-	}
-	query += " WHERE id = 1"
+	query := "UPDATE ai_config SET " + strings.Join(parts, ", ") + " WHERE id = 1"
 
 	_, err := h.Store.DB().ExecContext(r.Context(), query, args...)
 	if err != nil {
@@ -223,6 +219,24 @@ func (h *Handler) UpdateAI(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.GetAI(w, r)
+}
+
+// GetDecryptedAPIKey reads the stored encrypted API key and returns it decrypted.
+// Returns an empty string if no key is stored or if decryption fails.
+func (h *Handler) GetDecryptedAPIKey() string {
+	var encrypted string
+	err := h.Store.DB().QueryRow(`SELECT api_key_encrypted FROM ai_config WHERE id = 1`).Scan(&encrypted)
+	if err != nil || encrypted == "" {
+		return ""
+	}
+
+	key := crypto.DeriveKey(h.Config.Auth.Secret)
+	plaintext, err := crypto.Decrypt(encrypted, key)
+	if err != nil {
+		slog.Error("Failed to decrypt stored API key", "error", err)
+		return ""
+	}
+	return plaintext
 }
 
 func boolToInt(b bool) int {

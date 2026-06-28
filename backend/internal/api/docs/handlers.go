@@ -1,7 +1,9 @@
+// Package docs provides API handlers for documentation CRUD and AI suggestions.
 package docs
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	"github.com/WiseLabz/wiselabz/internal/auth"
@@ -82,7 +84,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	d, err := h.Store.GetDoc(r.Context(), id)
-	if err == store.ErrNotFound {
+	if errors.Is(err, store.ErrNotFound) {
 		httputil.Error(w, http.StatusNotFound, "not_found", "Doc not found")
 		return
 	}
@@ -105,7 +107,7 @@ func (h *Handler) Save(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.Store.UpdateDoc(r.Context(), id, req.Content); err != nil {
-		if err == store.ErrNotFound {
+		if errors.Is(err, store.ErrNotFound) {
 			httputil.Error(w, http.StatusNotFound, "not_found", "Doc not found")
 			return
 		}
@@ -117,7 +119,7 @@ func (h *Handler) Save(w http.ResponseWriter, r *http.Request) {
 	d, _ := h.Store.GetDoc(r.Context(), id)
 	userID := auth.UserIDFromContext(r.Context())
 	if d != nil {
-		h.Store.CreateDocVersion(r.Context(), &store.DocVersionRecord{
+		_ = h.Store.CreateDocVersion(r.Context(), &store.DocVersionRecord{
 			DocID:   id,
 			Rev:     d.CurrentVersion,
 			Content: req.Content,
@@ -205,7 +207,7 @@ func (h *Handler) Generate(w http.ResponseWriter, r *http.Request) {
 
 // AISuggest handles POST /api/docs/{id}/ai-suggest.
 // Stub — full implementation in Phase 9.
-func (h *Handler) AISuggest(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) AISuggest(w http.ResponseWriter, _ *http.Request) {
 	httputil.JSON(w, http.StatusAccepted, map[string]any{
 		"message":   "AI suggestion not yet available",
 		"requestId": "ai-placeholder",

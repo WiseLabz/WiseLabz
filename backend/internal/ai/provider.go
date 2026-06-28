@@ -10,8 +10,8 @@ import (
 // Provider is the interface for AI suggestion providers.
 type Provider interface {
 	Name() string
-	Suggest(ctx context.Context, req *SuggestRequest) (string, error)
-	SuggestStream(ctx context.Context, req *SuggestRequest) (<-chan SuggestChunk, error)
+	Suggest(_ context.Context, _ *SuggestRequest) (string, error)
+	SuggestStream(_ context.Context, _ *SuggestRequest) (<-chan SuggestChunk, error)
 }
 
 // SuggestRequest contains the prompt and context for an AI suggestion.
@@ -78,12 +78,12 @@ type StubProvider struct{}
 func (s *StubProvider) Name() string { return "stub" }
 
 // Suggest returns a stub message.
-func (s *StubProvider) Suggest(ctx context.Context, req *SuggestRequest) (string, error) {
+func (s *StubProvider) Suggest(_ context.Context, _ *SuggestRequest) (string, error) {
 	return "AI suggestions are not configured. Please enable an AI provider in settings.", nil
 }
 
 // SuggestStream returns a single chunk with the stub message.
-func (s *StubProvider) SuggestStream(ctx context.Context, req *SuggestRequest) (<-chan SuggestChunk, error) {
+func (s *StubProvider) SuggestStream(_ context.Context, _ *SuggestRequest) (<-chan SuggestChunk, error) {
 	ch := make(chan SuggestChunk, 1)
 	go func() {
 		defer close(ch)

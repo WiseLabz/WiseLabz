@@ -20,23 +20,30 @@ func init() {
 			{Key: "url", Label: "pfSense URL", Type: "text", Required: true, Placeholder: "https://pfsense.example.com"},
 			{Key: "api_key", Label: "API Key", Type: "password", Required: true},
 		},
-	}, func(config map[string]any) (connector.Connector, error) {
-		return &PfSenseConnector{}, nil
+	}, func(_ map[string]any) (connector.Connector, error) {
+		return &Connector{}, nil
 	})
 }
 
-// PfSenseConnector is a mock pfSense connector stub.
-type PfSenseConnector struct{}
+// Connector is a mock pfSense connector stub.
+type Connector struct{}
 
-func (p *PfSenseConnector) Name() string     { return "pfSense" }
-func (p *PfSenseConnector) Type() string     { return typeName }
-func (p *PfSenseConnector) Category() string { return "networking" }
+// Name returns the connector display name.
+func (p *Connector) Name() string { return "pfSense" }
 
-func (p *PfSenseConnector) Validate(ctx context.Context, config map[string]any) error {
+// Type returns the connector type identifier.
+func (p *Connector) Type() string { return typeName }
+
+// Category returns the connector category.
+func (p *Connector) Category() string { return "networking" }
+
+// Validate is a stub that always returns a not-implemented error.
+func (p *Connector) Validate(_ context.Context, _ map[string]any) error {
 	return fmt.Errorf("pfSense connector is a stub — not yet implemented")
 }
 
-func (p *PfSenseConnector) Fetch(ctx context.Context, config map[string]any) (*connector.ServiceSnapshot, error) {
+// Fetch returns a stub snapshot for the pfSense connector.
+func (p *Connector) Fetch(_ context.Context, _ map[string]any) (*connector.ServiceSnapshot, error) {
 	return &connector.ServiceSnapshot{
 		ServiceName: "pfSense (stub)",
 		Type:        typeName,

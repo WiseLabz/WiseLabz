@@ -3,6 +3,7 @@ package store
 import (
 	"database/sql"
 	"embed"
+	"errors"
 	"fmt"
 	"io/fs"
 	"log/slog"
@@ -11,7 +12,7 @@ import (
 	"github.com/golang-migrate/migrate/v4/database/sqlite3"
 	"github.com/golang-migrate/migrate/v4/source/iofs"
 
-	_ "github.com/golang-migrate/migrate/v4/source/file"
+	_ "github.com/golang-migrate/migrate/v4/source/file" // required for file:// migration sources
 )
 
 //go:embed migrations/sqlite/*.sql
@@ -48,12 +49,15 @@ func runSQLiteMigrations(db *sql.DB) error {
 		return fmt.Errorf("create migration driver: %w", err)
 	}
 
+	// golang-migrate's Close() calls database.Close() on the SQLite3 driver instance,
+	// which is owned by the caller. Calling Close here breaks idempotent migration re-runs.
+	//noinspection ALL
 	m, err := migrate.NewWithInstance("iofs", src, "sqlite3", driver)
 	if err != nil {
 		return fmt.Errorf("create migrator: %w", err)
 	}
 
-	if err := m.Up(); err != nil && err != migrate.ErrNoChange {
+	if err := m.Up(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
 		return fmt.Errorf("run migrations: %w", err)
 	}
 

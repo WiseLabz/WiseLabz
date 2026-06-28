@@ -5,7 +5,9 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
+	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -75,7 +77,7 @@ func (s *Store) GetUserByID(ctx context.Context, id string) (*User, error) {
 		FROM users WHERE id = ?
 	`, id).Scan(&u.ID, &u.Username, &u.DisplayName, &u.Email, &u.Role,
 		&u.AuthSource, &u.PasswordHash, &disabled, &u.CreatedAt)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
 	if err != nil {
@@ -94,7 +96,7 @@ func (s *Store) GetUserByUsername(ctx context.Context, username string) (*User, 
 		FROM users WHERE username = ?
 	`, username).Scan(&u.ID, &u.Username, &u.DisplayName, &u.Email, &u.Role,
 		&u.AuthSource, &u.PasswordHash, &disabled, &u.CreatedAt)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
 	if err != nil {
@@ -138,13 +140,7 @@ func (s *Store) UpdateUser(ctx context.Context, id string, updates map[string]an
 		return nil
 	}
 
-	for i, clause := range setClauses {
-		if i > 0 {
-			query += ", "
-		}
-		query += clause
-	}
-	query += " WHERE id = ?"
+	query += strings.Join(setClauses, ", ") + " WHERE id = ?"
 	args = append(args, id)
 
 	result, err := s.db.ExecContext(ctx, query, args...)
@@ -154,7 +150,10 @@ func (s *Store) UpdateUser(ctx context.Context, id string, updates map[string]an
 		}
 		return fmt.Errorf("update user: %w", err)
 	}
-	rows, _ := result.RowsAffected()
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("rows affected: %w", err)
+	}
 	if rows == 0 {
 		return ErrNotFound
 	}
@@ -167,7 +166,10 @@ func (s *Store) DeleteUser(ctx context.Context, id string) error {
 	if err != nil {
 		return fmt.Errorf("delete user: %w", err)
 	}
-	rows, _ := result.RowsAffected()
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("rows affected: %w", err)
+	}
 	if rows == 0 {
 		return ErrNotFound
 	}
@@ -188,7 +190,7 @@ func (s *Store) ListUsers(ctx context.Context, offset, limit int) ([]User, int, 
 	if err != nil {
 		return nil, 0, fmt.Errorf("list users: %w", err)
 	}
-	defer rows.Close()
+	defer rows.Close() //nolint:errcheck
 
 	var users []User
 	for rows.Next() {
@@ -248,7 +250,7 @@ func (s *Store) GetSession(ctx context.Context, id string) (*Session, error) {
 		FROM sessions WHERE id = ?
 	`, id).Scan(&sess.ID, &sess.UserID, &sess.TokenHash, &sess.UserAgent, &sess.IP,
 		&sess.CreatedAt, &sess.LastSeenAt)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
 	if err != nil {
@@ -263,7 +265,10 @@ func (s *Store) DeleteSession(ctx context.Context, id string) error {
 	if err != nil {
 		return fmt.Errorf("delete session: %w", err)
 	}
-	rows, _ := result.RowsAffected()
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("rows affected: %w", err)
+	}
 	if rows == 0 {
 		return ErrNotFound
 	}
@@ -285,7 +290,7 @@ func (s *Store) ListUserSessions(ctx context.Context, userID string) ([]Session,
 	if err != nil {
 		return nil, fmt.Errorf("list sessions: %w", err)
 	}
-	defer rows.Close()
+	defer rows.Close() //nolint:errcheck
 
 	var sessions []Session
 	for rows.Next() {
@@ -321,7 +326,7 @@ func (s *Store) GetUserByOIDCSubject(ctx context.Context, subject string) (*User
 		FROM users WHERE email = ? AND auth_source = 'oidc'
 	`, subject).Scan(&u.ID, &u.Username, &u.DisplayName, &u.Email, &u.Role,
 		&u.AuthSource, &u.PasswordHash, &disabled, &u.CreatedAt)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
 	if err != nil {

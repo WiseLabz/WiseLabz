@@ -1,7 +1,9 @@
+// Package alerts provides API handlers for alert lifecycle management.
 package alerts
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"time"
 
@@ -38,7 +40,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	a, err := h.Store.GetAlert(r.Context(), id)
-	if err == store.ErrNotFound {
+	if errors.Is(err, store.ErrNotFound) {
 		httputil.Error(w, http.StatusNotFound, "not_found", "Alert not found")
 		return
 	}
@@ -53,7 +55,7 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) Resolve(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if err := h.Store.UpdateAlertStatus(r.Context(), id, "resolved", ""); err != nil {
-		if err == store.ErrNotFound {
+		if errors.Is(err, store.ErrNotFound) {
 			httputil.Error(w, http.StatusNotFound, "not_found", "Alert not found")
 			return
 		}
@@ -67,7 +69,7 @@ func (h *Handler) Resolve(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) Dismiss(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if err := h.Store.UpdateAlertStatus(r.Context(), id, "dismissed", ""); err != nil {
-		if err == store.ErrNotFound {
+		if errors.Is(err, store.ErrNotFound) {
 			httputil.Error(w, http.StatusNotFound, "not_found", "Alert not found")
 			return
 		}
@@ -93,7 +95,7 @@ func (h *Handler) Snooze(w http.ResponseWriter, r *http.Request) {
 
 	snoozedUntil := time.Now().UTC().Add(time.Duration(req.DurationMinutes) * time.Minute).Format(time.RFC3339)
 	if err := h.Store.UpdateAlertStatus(r.Context(), id, "snoozed", snoozedUntil); err != nil {
-		if err == store.ErrNotFound {
+		if errors.Is(err, store.ErrNotFound) {
 			httputil.Error(w, http.StatusNotFound, "not_found", "Alert not found")
 			return
 		}

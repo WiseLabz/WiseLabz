@@ -19,23 +19,30 @@ func init() {
 		Fields: []connector.SchemaField{
 			{Key: "host", Label: "Docker Host", Type: "text", Required: true, Placeholder: "unix:///var/run/docker.sock or tcp://host:2375"},
 		},
-	}, func(config map[string]any) (connector.Connector, error) {
-		return &DockerConnector{}, nil
+	}, func(_ map[string]any) (connector.Connector, error) {
+		return &Connector{}, nil
 	})
 }
 
-// DockerConnector is a mock Docker connector stub.
-type DockerConnector struct{}
+// Connector is a mock Docker connector stub.
+type Connector struct{}
 
-func (d *DockerConnector) Name() string     { return "Docker" }
-func (d *DockerConnector) Type() string     { return typeName }
-func (d *DockerConnector) Category() string { return "containers_paas" }
+// Name returns the connector display name.
+func (d *Connector) Name() string { return "Docker" }
 
-func (d *DockerConnector) Validate(ctx context.Context, config map[string]any) error {
-	return fmt.Errorf("Docker connector is a stub — not yet implemented")
+// Type returns the connector type identifier.
+func (d *Connector) Type() string { return typeName }
+
+// Category returns the connector category.
+func (d *Connector) Category() string { return "containers_paas" }
+
+// Validate is a stub that always returns a not-implemented error.
+func (d *Connector) Validate(_ context.Context, _ map[string]any) error {
+	return fmt.Errorf("docker connector is a stub — not yet implemented")
 }
 
-func (d *DockerConnector) Fetch(ctx context.Context, config map[string]any) (*connector.ServiceSnapshot, error) {
+// Fetch returns a stub snapshot for the Docker connector.
+func (d *Connector) Fetch(_ context.Context, _ map[string]any) (*connector.ServiceSnapshot, error) {
 	return &connector.ServiceSnapshot{
 		ServiceName: "Docker (stub)",
 		Type:        typeName,

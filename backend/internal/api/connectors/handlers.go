@@ -3,6 +3,7 @@ package connectors
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -106,7 +107,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	c, err := h.Store.GetConnector(r.Context(), id)
-	if err == store.ErrNotFound {
+	if errors.Is(err, store.ErrNotFound) {
 		httputil.Error(w, http.StatusNotFound, "not_found", "Connector not found")
 		return
 	}
@@ -169,7 +170,7 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.Store.UpdateConnector(r.Context(), id, updates); err != nil {
-		if err == store.ErrNotFound {
+		if errors.Is(err, store.ErrNotFound) {
 			httputil.Error(w, http.StatusNotFound, "not_found", "Connector not found")
 			return
 		}
@@ -198,7 +199,7 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	_ = elevationToken
 
 	if err := h.Store.DeleteConnector(r.Context(), id); err != nil {
-		if err == store.ErrNotFound {
+		if errors.Is(err, store.ErrNotFound) {
 			httputil.Error(w, http.StatusNotFound, "not_found", "Connector not found")
 			return
 		}
@@ -247,7 +248,7 @@ func (h *Handler) RemovalImpact(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 
 	_, err := h.Store.GetConnector(r.Context(), id)
-	if err == store.ErrNotFound {
+	if errors.Is(err, store.ErrNotFound) {
 		httputil.Error(w, http.StatusNotFound, "not_found", "Connector not found")
 		return
 	}
@@ -301,7 +302,7 @@ func (h *Handler) ToggleEnabled(w http.ResponseWriter, r *http.Request) {
 	if err := h.Store.UpdateConnector(r.Context(), id, map[string]any{
 		"enabled": req.Enabled,
 	}); err != nil {
-		if err == store.ErrNotFound {
+		if errors.Is(err, store.ErrNotFound) {
 			httputil.Error(w, http.StatusNotFound, "not_found", "Connector not found")
 			return
 		}
@@ -319,7 +320,7 @@ func (h *Handler) Sync(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 
 	c, err := h.Store.GetConnector(r.Context(), id)
-	if err == store.ErrNotFound {
+	if errors.Is(err, store.ErrNotFound) {
 		httputil.Error(w, http.StatusNotFound, "not_found", "Connector not found")
 		return
 	}
@@ -339,7 +340,7 @@ func (h *Handler) Sync(w http.ResponseWriter, r *http.Request) {
 
 // SyncAll handles POST /api/sync.
 // Triggers a global sync of all enabled connectors.
-func (h *Handler) SyncAll(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) SyncAll(w http.ResponseWriter, _ *http.Request) {
 	// Sync will be implemented in Phase 6
 	slog.Info("global sync triggered")
 
@@ -350,7 +351,7 @@ func (h *Handler) SyncAll(w http.ResponseWriter, r *http.Request) {
 
 // RequireElevation checks for a valid elevation token for destructive actions.
 // This is called by the router middleware before destructive endpoints.
-func RequireElevation(jwtSvc *auth.JWTService, action string) func(http.Handler) http.Handler {
+func RequireElevation(jwtSvc *auth.Service, action string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			token := r.Header.Get("X-Elevation-Token")
