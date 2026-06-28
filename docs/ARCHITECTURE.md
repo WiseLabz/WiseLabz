@@ -192,6 +192,73 @@ This supersedes the frontend plan's original §8.6 ("add/edit OIDC provider via 
 which has been amended accordingly. Endpoint contract: `docs/openapi.yaml`
 (`/auth/config`, `/auth/providers/{providerId}/enabled`).
 
+### Permissions & step-up for mutating actions (decided 2026-06-27)
+
+Two layers gate state-changing actions, on top of the session model above:
+
+**Role-based access.** Two roles: `viewer` (read docs + live state) and `operator`
+(everything viewer can do, plus mutating actions). Role is a property of the user
+record, enforced server-side on every mutating endpoint — the UI hiding a control is
+a convenience, never the security boundary.
+
+**Per-action step-up.** Destructive actions require re-authentication (password, or
+TOTP/2FA when configured) immediately before they execute, even for an operator. The
+server issues a short-lived elevation token scoped to the single action.
+
+Step-up is **scoped to genuinely destructive ops**, not every mutation:
+
+| Action                              | Mutating                        | Step-up              |
+|-------------------------------------|---------------------------------|----------------------|
+| Trigger sync (global / per-service) | yes (WiseLabz-side, reversible) | no                   |
+| Connector enable/disable            | yes (reversible toggle)         | no                   |
+| Connector **add**                   | yes (creates state)             | no                   |
+| Connector **remove**                | yes (cascades, destructive)     | **yes (default on)** |
+
+Gating sync or a toggle behind a password is friction with no payoff and trains
+users to disable step-up wholesale. Step-up therefore defaults **on for connector
+removal** (the one destructive op in v1) and off elsewhere. A Settings toggle lets a
+solo operator disable step-up entirely — honest default, escape hatch for the
+single-admin homelab. As lab-mutating ops (lifecycle, config push) land post-v1,
+each enters this table as `step-up: yes`.
+
+### Destructive-action pattern: confirm + blast radius (decided 2026-06-27)
+
+Destructive actions never fire on a bare click. The server computes and returns the
+**blast radius** — the concrete dependents the action destroys (e.g. removing a
+connector drops N tracked services and M doc sections) — and the UI states it
+exactly before the user commits, then requires type-to-confirm (type the resource
+name) for the highest-risk ops. This is the "machine-honest" principle applied to
+mutation: show what changes and what depends on it, never imply the action is
+smaller than it is.
+
+---
+
+## Manager actions (v1 scope)
+
+WiseLabz is a homelab manager, not only a doc manager (see `PRODUCT.md`). The v1
+manager layer is deliberately narrow and all of it is REST (per the API design
+below — no mutations over WS):
+
+- **Sync** — trigger a sync/refresh globally or per-service.
+- **Connector enable/disable** — a persisted flag; the connector definition is
+  untouched.
+- **Connector add/remove (full CRUD via UI)** — see below.
+
+**Out of scope for v1:** lab-mutating operations (service start/stop/restart,
+config push back to the service). These are desired but deferred; each will require
+its own row in the step-up table and a blast-radius definition before shipping.
+
+### Connector management via UI (decided 2026-06-27)
+
+Service connectors (Proxmox, Docker, pfSense, custom) are full CRUD through the UI —
+distinct from OIDC providers, which remain config-file-only for the auth-bypass
+reasons above. Adding a connector is **a dedicated flow, not a row action**: it
+carries a per-connector-type config schema (each type exposes different fields),
+credential entry, and a connection test (`Connector.Validate()`) before the
+connector is persisted. Removal is the destructive op that drives the blast-radius
+pattern above (it cascades to that connector's snapshots and generated doc
+sections). Credentials are write-only over the API — never returned in reads.
+
 ---
 
 ## Connector interface
@@ -247,6 +314,41 @@ The user can choose their provider (Anthropic, OpenAI, or a local model via Olla
 
 ---
 
+## Frontend shell & theme (decided 2026-06)
+
+**Shell — bottom dock, single variant.** The authenticated frame is `AppShell`
+(`web/src/components/shell/AppShell.tsx`): a slim top bar (brand, ⌘K search,
+global-sync, alerts, account), full-width routed content, and a floating bottom
+nav dock (`ShellDock` + `Dock`). A sidebar variant and a live shell-switch toggle
+were built for comparison and **removed** once the dock was chosen — there is no
+runtime shell switching and no `shell` UI state.
+
+**Theme engine — code default, user-overridable behind Settings.** Palettes and
+fonts are generated from OKLCH builder options in `web/src/theme.ts`. The shipped
+default is `ACTIVE = { palette: 'blueprint', font: 'geist' }` (a first-paint
+fallback is inlined in `web/src/index.css`). Settings → Theme exposes presets,
+font sets, and advanced OKLCH sliders for exploration, but the default is the
+brand, not a neutral starting point. Motion is a user-controlled setting
+(Full / Reduced / Off), seeded by `prefers-reduced-motion` but never silently
+forced.
+
+## Changes / diff contract (decided 2026-06)
+
+The `Diff` schema in `docs/openapi.yaml` carries two shapes keyed by `format`:
+`infra` uses structured key-path `hunks` (config/state drift); `doc` carries the
+**full before/after revisions** (`baseText` / `headText`, with optional
+`baseLabel` / `headLabel` / `language`). The frontend computes the line + word
+diff (`web/src/lib/{linediff,worddiff,docdiffmodel}.ts`) and renders it
+JetBrains-style — whole document with foldable context, intra-line word
+highlighting, unified or side-by-side. Sending full revisions (rather than
+pre-windowed hunks) keeps the contract and the diff engine simple; large-doc
+perf is handled client-side by context-folding.
+
+**Role model amendment.** The two roles `viewer` / `operator` (above) are now the
+contract `Role` enum. For v1's single-admin homelab, the former admin-only
+surfaces (user management, auth/system config) are gated on `operator`; a distinct
+`admin` role can be reintroduced if multi-tenant separation is needed later.
+
 ## ADR index
 
 Architectural Decision Records are stored in `docs/adr/`. Each significant decision that
@@ -255,4 +357,4 @@ This file records the _outcome_ of each decision; the ADRs record the _reasoning
 
 ---
 
-_Last updated: 2026-06-25_
+_Last updated: 2026-06-27_

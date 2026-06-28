@@ -1,0 +1,72 @@
+# WiseLabz — Example Configuration
+# All values can be overridden via WISELABZ_ prefixed environment variables.
+# Copy to config.yaml and edit for your deployment.
+
+# Database connection
+db:
+  # Driver: "sqlite3" (default, zero-setup) or "postgres" (multi-user)
+  driver: sqlite3
+  # SQLite: file path relative to working directory
+  dsn: file:./data/wiselabz.db?cache=shared
+  # PostgreSQL example:
+  # driver: postgres
+  # dsn: postgres://wiselabz:password@localhost:5432/wiselabz?sslmode=disable
+
+# HTTP server
+server:
+  # Listen address
+  host: 0.0.0.0
+  port: 8080
+  # Serve embedded frontend SPA (true in production Docker build)
+  embed: false
+  # CORS origin for production (e.g. https://wiselabz.example.com)
+  # origin: https://wiselabz.example.com
+
+# Authentication
+auth:
+  # JWT signing secret — CHANGE THIS to a random 64-char string
+  secret: change-me-to-a-random-64-character-string
+  # Access token lifetime in seconds (default 15 minutes)
+  access_token_ttl: 900
+  # Refresh token lifetime in seconds (default 7 days)
+  refresh_token_ttl: 604800
+  # Require re-authentication for destructive actions (connector removal)
+  step_up_for_destructive: true
+  # OIDC providers (defined here, enabled/disabled via Settings UI)
+  # oidc:
+  #   - id: authentik
+  #     display_name: Authentik
+  #     issuer_url: https://auth.example.com/application/o/wiselabz/
+  #     client_id: your-client-id
+  #     client_secret: your-client-secret
+  #     scopes:
+  #       - openid
+  #       - profile
+  #       - email
+
+# AI module (opt-in)
+ai:
+  # Enable AI-assisted documentation
+  enabled: false
+  # Provider: "anthropic", "openai", or "ollama"
+  provider: ollama
+  # Model name (depends on provider)
+  model: llama3
+  # API base URL (for Ollama or self-hosted proxies)
+  base_url: http://localhost:11434
+  # API key (Anthropic/OpenAI — omit for Ollama)
+  # api_key: sk-...
+  # Mode: "auto_update" (auto-apply AI changes) or "suggest_only" (human review)
+  mode: suggest_only
+
+# Sync engine
+sync:
+  # Cron expression for automatic sync (default: every 6 hours)
+  schedule: "0 */6 * * *"
+
+# Logging
+log:
+  # Level: "debug", "info", "warn", "error"
+  level: info
+  # Format: "text" (development) or "json" (production)
+  format: text

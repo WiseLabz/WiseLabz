@@ -1,0 +1,16 @@
+DROP TABLE IF EXISTS in_app_notifications;
+DROP TABLE IF EXISTS notification_config;
+DROP TABLE IF EXISTS ai_config;
+DROP TABLE IF EXISTS auth_config;
+DROP TABLE IF EXISTS dashboard_layouts;
+DROP TABLE IF EXISTS alerts;
+DROP TABLE IF EXISTS changes;
+DROP TABLE IF EXISTS template_sections;
+DROP TABLE IF EXISTS templates;
+DROP TABLE IF EXISTS doc_versions;
+DROP TABLE IF EXISTS docs;
+DROP TABLE IF EXISTS service_snapshots;
+DROP TABLE IF EXISTS connectors;
+DROP TABLE IF EXISTS oidc_provider_flags;
+DROP TABLE IF EXISTS sessions;
+DROP TABLE IF EXISTS users;
