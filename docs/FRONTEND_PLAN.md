@@ -51,53 +51,53 @@ hook, **CodeMirror 6** (doc editor), **react-grid-layout** (dashboard grid),
 
 ### Auth & entry
 
-| Route | Purpose | Auth | Primary data source | Key actions |
-|---|---|---|---|---|
-| `/login` | Local username/password login + OIDC provider buttons. | public | `GET /api/auth/providers` (which OIDC enabled), `POST /api/auth/login` | Submit credentials; click an OIDC provider; go to forgot-password (if local). |
-| `/auth/callback` | OIDC redirect landing; exchanges code for JWT, then redirects. | public | `POST /api/auth/oidc/callback` | None (transient); on success → dashboard or onboarding, on failure → login with error. |
+| Route            | Purpose                                                        | Auth   | Primary data source                                                    | Key actions                                                                            |
+|------------------|----------------------------------------------------------------|--------|------------------------------------------------------------------------|----------------------------------------------------------------------------------------|
+| `/login`         | Local username/password login + OIDC provider buttons.         | public | `GET /api/auth/providers` (which OIDC enabled), `POST /api/auth/login` | Submit credentials; click an OIDC provider; go to forgot-password (if local).          |
+| `/auth/callback` | OIDC redirect landing; exchanges code for JWT, then redirects. | public | `POST /api/auth/oidc/callback`                                         | None (transient); on success → dashboard or onboarding, on failure → login with error. |
 
 ### Core app
 
-| Route | Purpose | Auth | Primary data source | Key actions |
-|---|---|---|---|---|
-| `/` → `/dashboard` | Customizable overview of service status, recent changes, alert summary, sync activity. | protected | `GET /api/dashboard/overview`, `GET /api/dashboard/layout`; WS: `service.status`, `sync.progress`, `alert.created` | Add/remove/rearrange widgets; trigger global sync; jump to a service/alert/change. |
-| `/services` | List of all connected services with live status. | protected | `GET /api/connectors` (+ status); WS: `service.status` | Filter/search; open a service; trigger per-service sync; add connector → onboarding/connectors. |
-| `/services/:id` | One service's detail: live data, status, last sync, linked docs. | protected | `GET /api/connectors/:id`, `GET /api/connectors/:id/data`; WS: `service.status`, `sync.progress` (scoped to id) | Trigger sync; open service docs; open service change history; edit/remove connector (role-gated). |
-| `/services/:id/docs` | The service's generated/edited doc (child of lab doc). | protected | `GET /api/docs/service/:id` | View; open editor (editor+); view version history. |
-| `/services/:id/history` | Change history (diffs) scoped to this service. | protected | `GET /api/changes?serviceId=:id` | Inspect a change; view doc diff; resolve/ack alert tied to a change. |
-| `/docs` | Documentation viewer — hierarchical lab doc tree (lab root + per-service children). | protected | `GET /api/docs/tree`, `GET /api/docs/:docId` | Navigate tree/TOC; open editor; view version history; export/print. |
-| `/docs/:docId` | A specific rendered doc node within the tree. | protected | `GET /api/docs/:docId` | Same as `/docs`, focused on node. |
-| `/docs/:docId/edit` | Freehand + AI-assisted editor for a doc node. | editor+ | `GET /api/docs/:docId`, `GET /api/templates` (insertable blocks); WS: `doc.generated`, `doc.ai_suggestion` | Edit markdown/rich; insert template blocks; request AI fill; save (new version); discard; view/restore versions. |
-| `/docs/:docId/history` | Version history + doc-version diff for a node. | protected | `GET /api/docs/:docId/versions`, `GET /api/docs/:docId/versions/:rev` | View a revision; diff two revisions; restore (editor+). |
-| `/templates` | Template / generation config — define what sections/fields docs generate. | editor+ | `GET /api/templates` | Create/edit/delete template; preview; assign template to category/service. |
-| `/templates/:id` | Single template editor. | editor+ | `GET /api/templates/:id` | Edit fields/sections; save; test-generate. |
-| `/connectors` | Manage service connections — add/edit/remove, grouped by category. | editor+ | `GET /api/connectors`, `GET /api/connectors/schema` (category field metadata) | Add connector (category → type → schema-driven form); edit; test connection; remove; enable/disable. |
-| `/connectors/new` | Add-connector flow (category picker → type → credentials form). | editor+ | `GET /api/connectors/schema` | Pick category/type; fill schema-driven fields; test; save. |
-| `/connectors/:id/edit` | Edit an existing connector. | editor+ | `GET /api/connectors/:id` | Edit fields; re-test; rotate credentials; save. |
-| `/changes` | Global diff / changelog feed — every detected infra change. | protected | `GET /api/changes`; WS: `change.detected` | Filter by service/type/date; open a change; view doc diff; ack/dismiss. |
-| `/changes/:id` | Single change detail with before/after diff. | protected | `GET /api/changes/:id` | View diff; trigger AI doc update (if AI on) or apply manual update; ack/dismiss; jump to related alert. |
-| `/alerts` | Alert center — pending items flagged by the diff engine. | protected | `GET /api/alerts`; WS: `alert.created`, `alert.resolved` | Filter by severity/status; resolve/snooze/dismiss; bulk-resolve; open underlying change. |
-| `/alerts/:id` | Single alert detail. | protected | `GET /api/alerts/:id` | Resolve/snooze/dismiss; trigger AI update (if AI on); open change/service. |
-| `/onboarding` | First-run flow when no connectors exist. | protected | `GET /api/connectors` (empty check), `GET /api/connectors/schema` | Add first connector; trigger first sync; finish → dashboard. |
+| Route                   | Purpose                                                                                | Auth      | Primary data source                                                                                                | Key actions                                                                                                      |
+|-------------------------|----------------------------------------------------------------------------------------|-----------|--------------------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------|
+| `/` → `/dashboard`      | Customizable overview of service status, recent changes, alert summary, sync activity. | protected | `GET /api/dashboard/overview`, `GET /api/dashboard/layout`; WS: `service.status`, `sync.progress`, `alert.created` | Add/remove/rearrange widgets; trigger global sync; jump to a service/alert/change.                               |
+| `/services`             | List of all connected services with live status.                                       | protected | `GET /api/connectors` (+ status); WS: `service.status`                                                             | Filter/search; open a service; trigger per-service sync; add connector → onboarding/connectors.                  |
+| `/services/:id`         | One service's detail: live data, status, last sync, linked docs.                       | protected | `GET /api/connectors/:id`, `GET /api/connectors/:id/data`; WS: `service.status`, `sync.progress` (scoped to id)    | Trigger sync; open service docs; open service change history; edit/remove connector (role-gated).                |
+| `/services/:id/docs`    | The service's generated/edited doc (child of lab doc).                                 | protected | `GET /api/docs/service/:id`                                                                                        | View; open editor (editor+); view version history.                                                               |
+| `/services/:id/history` | Change history (diffs) scoped to this service.                                         | protected | `GET /api/changes?serviceId=:id`                                                                                   | Inspect a change; view doc diff; resolve/ack alert tied to a change.                                             |
+| `/docs`                 | Documentation viewer — hierarchical lab doc tree (lab root + per-service children).    | protected | `GET /api/docs/tree`, `GET /api/docs/:docId`                                                                       | Navigate tree/TOC; open editor; view version history; export/print.                                              |
+| `/docs/:docId`          | A specific rendered doc node within the tree.                                          | protected | `GET /api/docs/:docId`                                                                                             | Same as `/docs`, focused on node.                                                                                |
+| `/docs/:docId/edit`     | Freehand + AI-assisted editor for a doc node.                                          | editor+   | `GET /api/docs/:docId`, `GET /api/templates` (insertable blocks); WS: `doc.generated`, `doc.ai_suggestion`         | Edit markdown/rich; insert template blocks; request AI fill; save (new version); discard; view/restore versions. |
+| `/docs/:docId/history`  | Version history + doc-version diff for a node.                                         | protected | `GET /api/docs/:docId/versions`, `GET /api/docs/:docId/versions/:rev`                                              | View a revision; diff two revisions; restore (editor+).                                                          |
+| `/templates`            | Template / generation config — define what sections/fields docs generate.              | editor+   | `GET /api/templates`                                                                                               | Create/edit/delete template; preview; assign template to category/service.                                       |
+| `/templates/:id`        | Single template editor.                                                                | editor+   | `GET /api/templates/:id`                                                                                           | Edit fields/sections; save; test-generate.                                                                       |
+| `/connectors`           | Manage service connections — add/edit/remove, grouped by category.                     | editor+   | `GET /api/connectors`, `GET /api/connectors/schema` (category field metadata)                                      | Add connector (category → type → schema-driven form); edit; test connection; remove; enable/disable.             |
+| `/connectors/new`       | Add-connector flow (category picker → type → credentials form).                        | editor+   | `GET /api/connectors/schema`                                                                                       | Pick category/type; fill schema-driven fields; test; save.                                                       |
+| `/connectors/:id/edit`  | Edit an existing connector.                                                            | editor+   | `GET /api/connectors/:id`                                                                                          | Edit fields; re-test; rotate credentials; save.                                                                  |
+| `/changes`              | Global diff / changelog feed — every detected infra change.                            | protected | `GET /api/changes`; WS: `change.detected`                                                                          | Filter by service/type/date; open a change; view doc diff; ack/dismiss.                                          |
+| `/changes/:id`          | Single change detail with before/after diff.                                           | protected | `GET /api/changes/:id`                                                                                             | View diff; trigger AI doc update (if AI on) or apply manual update; ack/dismiss; jump to related alert.          |
+| `/alerts`               | Alert center — pending items flagged by the diff engine.                               | protected | `GET /api/alerts`; WS: `alert.created`, `alert.resolved`                                                           | Filter by severity/status; resolve/snooze/dismiss; bulk-resolve; open underlying change.                         |
+| `/alerts/:id`           | Single alert detail.                                                                   | protected | `GET /api/alerts/:id`                                                                                              | Resolve/snooze/dismiss; trigger AI update (if AI on); open change/service.                                       |
+| `/onboarding`           | First-run flow when no connectors exist.                                               | protected | `GET /api/connectors` (empty check), `GET /api/connectors/schema`                                                  | Add first connector; trigger first sync; finish → dashboard.                                                     |
 
 ### Settings (nested)
 
-| Route | Purpose | Auth | Primary data source | Key actions |
-|---|---|---|---|---|
-| `/settings` → `/settings/profile` | Settings shell with section nav. | protected | — | Navigate sections. |
-| `/settings/profile` | Current user's profile + password. | protected | `GET /api/me` | Edit display name/email; change password (local accounts); manage own sessions/tokens. |
-| `/settings/users` | User & role management. | admin | `GET /api/users` | Invite/create user; assign role; disable/delete; reset password. |
-| `/settings/auth` | Auth status — local policy + read-only OIDC provider list. | admin | `GET /api/auth/config`; `PUT /api/auth/config` (toggles/TTLs); `PUT /api/auth/providers/:id/enabled` | View file-defined providers (issuer/clientId/`secretConfigured`, never the secret); enable/disable a provider; toggle local login; set token TTLs. No provider create/edit (file-only). |
-| `/settings/ai` | AI module config. | admin | `GET /api/ai/config` | Enable/disable AI; set provider/model/keys; choose default mode (auto-update vs suggest-only); test. |
-| `/settings/notifications` | Notification channels & rules. | admin | `GET /api/notifications/config` | Configure in-app, SMTP, webhook/chat targets; per-event routing; test send. |
-| `/settings/system` *(added)* | Instance/system info — version, WS/health status, sync schedule, integrations health. | admin | `GET /api/system/info`, `GET /api/health`; WS: connection status | View health; set global sync schedule; restart/refresh integrations. |
+| Route                             | Purpose                                                                               | Auth      | Primary data source                                                                                  | Key actions                                                                                                                                                                             |
+|-----------------------------------|---------------------------------------------------------------------------------------|-----------|------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `/settings` → `/settings/profile` | Settings shell with section nav.                                                      | protected | —                                                                                                    | Navigate sections.                                                                                                                                                                      |
+| `/settings/profile`               | Current user's profile + password.                                                    | protected | `GET /api/me`                                                                                        | Edit display name/email; change password (local accounts); manage own sessions/tokens.                                                                                                  |
+| `/settings/users`                 | User & role management.                                                               | admin     | `GET /api/users`                                                                                     | Invite/create user; assign role; disable/delete; reset password.                                                                                                                        |
+| `/settings/auth`                  | Auth status — local policy + read-only OIDC provider list.                            | admin     | `GET /api/auth/config`; `PUT /api/auth/config` (toggles/TTLs); `PUT /api/auth/providers/:id/enabled` | View file-defined providers (issuer/clientId/`secretConfigured`, never the secret); enable/disable a provider; toggle local login; set token TTLs. No provider create/edit (file-only). |
+| `/settings/ai`                    | AI module config.                                                                     | admin     | `GET /api/ai/config`                                                                                 | Enable/disable AI; set provider/model/keys; choose default mode (auto-update vs suggest-only); test.                                                                                    |
+| `/settings/notifications`         | Notification channels & rules.                                                        | admin     | `GET /api/notifications/config`                                                                      | Configure in-app, SMTP, webhook/chat targets; per-event routing; test send.                                                                                                             |
+| `/settings/system` *(added)*      | Instance/system info — version, WS/health status, sync schedule, integrations health. | admin     | `GET /api/system/info`, `GET /api/health`; WS: connection status                                     | View health; set global sync schedule; restart/refresh integrations.                                                                                                                    |
 
 ### Global / utility (added — implied by product)
 
-| Route | Purpose | Auth | Notes |
-|---|---|---|---|
-| `*` (NotFound) | 404 within app shell. | protected/public | Catch-all. |
-| `/forbidden` (403) | Shown when a user lacks the role for a route. | protected | Role-guard landing. |
+| Route              | Purpose                                       | Auth             | Notes               |
+|--------------------|-----------------------------------------------|------------------|---------------------|
+| `*` (NotFound)     | 404 within app shell.                         | protected/public | Catch-all.          |
+| `/forbidden` (403) | Shown when a user lacks the role for a route. | protected        | Role-guard landing. |
 
 **Pages added beyond the brief, with justification:**
 - `/settings/system` & `/health` surface — multi-user self-hosted tool needs an
@@ -265,39 +265,39 @@ OnboardingPage
 
 ### Zustand stores (`src/stores/`)
 
-| Store | Holds | Why global (not local) |
-|---|---|---|
-| `authStore` | JWT/token, current user (`id`, name, **role**), auth status, OIDC provider list, login/logout actions. | Read by router guards, `RoleGate`, axios interceptor, topbar — cross-cutting; must survive navigation. |
-| `wsStore` | WS connection status (`connecting`/`open`/`closed`/`reconnecting`), last event ts. | Many components show liveness; `useWebSocket` writes once, everyone reads. |
-| `alertsStore` | Pending alert count + lightweight pending list (for bell/badge). | Topbar bell, sidebar badge, dashboard summary need a shared real-time count updated by WS independent of which page is open. |
-| `dashboardLayoutStore` | Widget layout (positions/sizes/enabled), edit-mode flag. Persisted (per-user, hydrated from `GET /api/dashboard/layout`, mirrored to localStorage for instant paint). | Customizable dashboard; layout outlives remounts and is user-owned. |
-| `uiStore` | Sidebar collapsed, active modals/drawers, theme hook point, global toasts queue. | Pure cross-page UI ephemeral state. |
-| `syncStore` | In-flight sync jobs keyed by service id + global, progress %. | `sync.progress` WS updates arrive anywhere; services list, detail, dashboard, onboarding all read. |
+| Store                  | Holds                                                                                                                                                                 | Why global (not local)                                                                                                       |
+|------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------|
+| `authStore`            | JWT/token, current user (`id`, name, **role**), auth status, OIDC provider list, login/logout actions.                                                                | Read by router guards, `RoleGate`, axios interceptor, topbar — cross-cutting; must survive navigation.                       |
+| `wsStore`              | WS connection status (`connecting`/`open`/`closed`/`reconnecting`), last event ts.                                                                                    | Many components show liveness; `useWebSocket` writes once, everyone reads.                                                   |
+| `alertsStore`          | Pending alert count + lightweight pending list (for bell/badge).                                                                                                      | Topbar bell, sidebar badge, dashboard summary need a shared real-time count updated by WS independent of which page is open. |
+| `dashboardLayoutStore` | Widget layout (positions/sizes/enabled), edit-mode flag. Persisted (per-user, hydrated from `GET /api/dashboard/layout`, mirrored to localStorage for instant paint). | Customizable dashboard; layout outlives remounts and is user-owned.                                                          |
+| `uiStore`              | Sidebar collapsed, active modals/drawers, theme hook point, global toasts queue.                                                                                      | Pure cross-page UI ephemeral state.                                                                                          |
+| `syncStore`            | In-flight sync jobs keyed by service id + global, progress %.                                                                                                         | `sync.progress` WS updates arrive anywhere; services list, detail, dashboard, onboarding all read.                           |
 
 Server data does **not** go in Zustand — it lives in React Query. Stores hold
 session, UI, real-time-push, and user-owned layout only.
 
 ### React Query keys (`src/api/queries/`)
 
-| Key | Caches | Invalidated by |
-|---|---|---|
-| `['dashboard','overview']` | Dashboard aggregate. | connector add/edit/remove, sync complete, alert resolve. |
-| `['dashboard','layout']` | Saved widget layout. | layout save mutation. |
-| `['connectors']` | Connector list + status. | `POST/PUT/DELETE /connectors`, connector enable/disable. |
-| `['connector', id]` | One connector. | edit/test that connector. |
-| `['connector', id, 'data']` | Live service data. | `sync.complete` for id (WS → invalidate). |
-| `['connectorSchema']` | Category/type field schemas. | rarely; on app load / version change. |
-| `['docs','tree']` | Doc hierarchy. | doc create/delete, connector add/remove, `doc.generated`. |
-| `['doc', docId]` | Rendered doc node. | doc save (new version), `doc.generated` for node. |
-| `['doc', docId, 'versions']` | Version list. | doc save, restore. |
-| `['templates']` / `['template', id]` | Templates. | template create/edit/delete. |
-| `['changes', filters]` | Change feed page. | `change.detected` (WS → invalidate list). |
-| `['change', id]` | Change detail. | ack/dismiss/AI-update. |
-| `['alerts', filters]` | Alert list. | `alert.created`/`alert.resolved` (WS), resolve/dismiss mutations. |
-| `['alert', id]` | Alert detail. | resolve/snooze/dismiss. |
-| `['users']` | User list (admin). | invite/create/role-change/delete. |
-| `['me']` | Current user profile. | profile/password mutation. |
-| `['authConfig']`,`['aiConfig']`,`['notificationsConfig']`,`['systemInfo']`,`['health']` | Settings configs. | their respective save mutations; `health` also via WS status. |
+| Key                                                                                     | Caches                       | Invalidated by                                                    |
+|-----------------------------------------------------------------------------------------|------------------------------|-------------------------------------------------------------------|
+| `['dashboard','overview']`                                                              | Dashboard aggregate.         | connector add/edit/remove, sync complete, alert resolve.          |
+| `['dashboard','layout']`                                                                | Saved widget layout.         | layout save mutation.                                             |
+| `['connectors']`                                                                        | Connector list + status.     | `POST/PUT/DELETE /connectors`, connector enable/disable.          |
+| `['connector', id]`                                                                     | One connector.               | edit/test that connector.                                         |
+| `['connector', id, 'data']`                                                             | Live service data.           | `sync.complete` for id (WS → invalidate).                         |
+| `['connectorSchema']`                                                                   | Category/type field schemas. | rarely; on app load / version change.                             |
+| `['docs','tree']`                                                                       | Doc hierarchy.               | doc create/delete, connector add/remove, `doc.generated`.         |
+| `['doc', docId]`                                                                        | Rendered doc node.           | doc save (new version), `doc.generated` for node.                 |
+| `['doc', docId, 'versions']`                                                            | Version list.                | doc save, restore.                                                |
+| `['templates']` / `['template', id]`                                                    | Templates.                   | template create/edit/delete.                                      |
+| `['changes', filters]`                                                                  | Change feed page.            | `change.detected` (WS → invalidate list).                         |
+| `['change', id]`                                                                        | Change detail.               | ack/dismiss/AI-update.                                            |
+| `['alerts', filters]`                                                                   | Alert list.                  | `alert.created`/`alert.resolved` (WS), resolve/dismiss mutations. |
+| `['alert', id]`                                                                         | Alert detail.                | resolve/snooze/dismiss.                                           |
+| `['users']`                                                                             | User list (admin).           | invite/create/role-change/delete.                                 |
+| `['me']`                                                                                | Current user profile.        | profile/password mutation.                                        |
+| `['authConfig']`,`['aiConfig']`,`['notificationsConfig']`,`['systemInfo']`,`['health']` | Settings configs.            | their respective save mutations; `health` also via WS status.     |
 
 **Invalidation strategy (mutation → invalidates):**
 - Add/edit/remove connector → `['connectors']`, `['dashboard','overview']`,
@@ -560,23 +560,23 @@ dashboard grid lib. Login, dashboard shell, services, alerts stay in the main ch
 
 ## 6. Empty States, Error Boundaries & Loading
 
-| Page/section | Empty state | Error state | Loading |
-|---|---|---|---|
-| Dashboard | No connectors → full-page onboarding CTA (also handled by route gate). Connectors but no data yet → per-widget "waiting for first sync". | Overview fetch fail → page `ErrorState` with retry; per-widget failures isolated to `WidgetFrame` error boundary. | Skeleton widget grid. |
-| Services list | "No services connected" + Add connector CTA (editor+). | `ErrorState` + retry. | Table/card skeletons. |
-| Service detail | Connected but never synced → "Run first sync" prompt. | Not found → 404; data fail → inline `ErrorState`. | Header skeleton + data placeholder. |
-| Docs viewer | "No documentation generated yet" + (editor+) "Generate from template" / "Create doc". | Tree fail → `ErrorState`; node fail → inline. | Tree + content skeleton. |
-| Doc editor | New/empty doc → blank editor with template-insert hint. | Save fail → keep draft, toast error, no data loss; AI error → inline in `AiAssistPanel`. | Editor skeleton; AI "thinking" indicator (streaming). |
-| Doc history | "Only one version" → hide diff, show single revision. | `ErrorState`. | Version list skeleton. |
-| Templates | "No templates — start from default" CTA. | `ErrorState`. | Card skeleton. |
-| Connectors | "No connectors" → category picker CTA. | List fail `ErrorState`; per-connector test errors inline on row. | Row skeletons. |
-| Connector form | — | Test-connection failure shown inline with backend message; save validation inline. | Inline button spinner on test/save. |
-| Changes feed | "No changes detected yet" (explain diff engine runs on sync). | `ErrorState` + retry. | Feed skeleton. |
-| Change detail | — | 404 / fetch fail `ErrorState`. | Diff skeleton. |
-| Alert center | "No pending alerts — all clear". | `ErrorState`. | List skeleton. |
-| Settings/users | "Only you so far" + invite CTA. | `ErrorState`. | Table skeleton. |
-| Settings/auth,ai,notifications | AI: "AI module disabled" toggle-on prompt. Notifications: "No channels configured". | Config fetch/save fail → `ErrorState`/inline; test-send shows result inline. | Form skeleton. |
-| System | — | Health fail → `down` indicator. | Panel skeleton. |
+| Page/section                   | Empty state                                                                                                                              | Error state                                                                                                       | Loading                                               |
+|--------------------------------|------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------|
+| Dashboard                      | No connectors → full-page onboarding CTA (also handled by route gate). Connectors but no data yet → per-widget "waiting for first sync". | Overview fetch fail → page `ErrorState` with retry; per-widget failures isolated to `WidgetFrame` error boundary. | Skeleton widget grid.                                 |
+| Services list                  | "No services connected" + Add connector CTA (editor+).                                                                                   | `ErrorState` + retry.                                                                                             | Table/card skeletons.                                 |
+| Service detail                 | Connected but never synced → "Run first sync" prompt.                                                                                    | Not found → 404; data fail → inline `ErrorState`.                                                                 | Header skeleton + data placeholder.                   |
+| Docs viewer                    | "No documentation generated yet" + (editor+) "Generate from template" / "Create doc".                                                    | Tree fail → `ErrorState`; node fail → inline.                                                                     | Tree + content skeleton.                              |
+| Doc editor                     | New/empty doc → blank editor with template-insert hint.                                                                                  | Save fail → keep draft, toast error, no data loss; AI error → inline in `AiAssistPanel`.                          | Editor skeleton; AI "thinking" indicator (streaming). |
+| Doc history                    | "Only one version" → hide diff, show single revision.                                                                                    | `ErrorState`.                                                                                                     | Version list skeleton.                                |
+| Templates                      | "No templates — start from default" CTA.                                                                                                 | `ErrorState`.                                                                                                     | Card skeleton.                                        |
+| Connectors                     | "No connectors" → category picker CTA.                                                                                                   | List fail `ErrorState`; per-connector test errors inline on row.                                                  | Row skeletons.                                        |
+| Connector form                 | —                                                                                                                                        | Test-connection failure shown inline with backend message; save validation inline.                                | Inline button spinner on test/save.                   |
+| Changes feed                   | "No changes detected yet" (explain diff engine runs on sync).                                                                            | `ErrorState` + retry.                                                                                             | Feed skeleton.                                        |
+| Change detail                  | —                                                                                                                                        | 404 / fetch fail `ErrorState`.                                                                                    | Diff skeleton.                                        |
+| Alert center                   | "No pending alerts — all clear".                                                                                                         | `ErrorState`.                                                                                                     | List skeleton.                                        |
+| Settings/users                 | "Only you so far" + invite CTA.                                                                                                          | `ErrorState`.                                                                                                     | Table skeleton.                                       |
+| Settings/auth,ai,notifications | AI: "AI module disabled" toggle-on prompt. Notifications: "No channels configured".                                                      | Config fetch/save fail → `ErrorState`/inline; test-send shows result inline.                                      | Form skeleton.                                        |
+| System                         | —                                                                                                                                        | Health fail → `down` indicator.                                                                                   | Panel skeleton.                                       |
 
 **Loading strategy overall:** **skeletons** for list/detail/structured content
 (matches layout, avoids spinner jank); **inline button spinners** for mutations
@@ -690,11 +690,11 @@ All questions raised during planning have been answered by the team. These are
 The following are explicitly deferred. **Implementation deliverable:** create
 `docs/v2-features.md` containing this table (the file does not yet exist).
 
-| Feature | Context |
-|---|---|
-| Soft lock on doc editing ("X is currently editing") | Prevents conflicts when multiple editors open the same doc simultaneously. Replaces the v1 last-write-wins approach (decision §8.3). |
-| SSE endpoint for AI suggestions | Alternative to WS streaming if the `/ws` channel becomes too complex to multiplex. Evaluate after v1 AI module is stable (decision §8.4). |
-| Per-user layout with admin-defined default | Extends v1 per-user layout persistence. Admin sets a default that users can override (decision §8.5). |
+| Feature                                             | Context                                                                                                                                   |
+|-----------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------|
+| Soft lock on doc editing ("X is currently editing") | Prevents conflicts when multiple editors open the same doc simultaneously. Replaces the v1 last-write-wins approach (decision §8.3).      |
+| SSE endpoint for AI suggestions                     | Alternative to WS streaming if the `/ws` channel becomes too complex to multiplex. Evaluate after v1 AI module is stable (decision §8.4). |
+| Per-user layout with admin-defined default          | Extends v1 per-user layout persistence. Admin sets a default that users can override (decision §8.5).                                     |
 
 ---
 
@@ -703,17 +703,17 @@ The following are explicitly deferred. **Implementation deliverable:** create
 This is a planning blueprint — no app code is produced here. When implementation
 begins, the foundational order is:
 
-0. Create `docs/v2-features.md` with the v2 backlog table above.
-1. Install deps (locked, §8): `react-router-dom`, `orval`, `codemirror`/CM6 packages,
+1. Create `docs/v2-features.md` with the v2 backlog table above.
+2. Install deps (locked, §8): `react-router-dom`, `orval`, `codemirror`/CM6 packages,
    `react-grid-layout`, `react-i18next` + `i18next`.
-2. Configure orval against the backend OpenAPI schema → generate typed React Query
+3. Configure orval against the backend OpenAPI schema → generate typed React Query
    hooks into `src/api/` (query-key naming aligned to §3); stand up `QueryClient`.
    Wire i18next provider so `t()` is available before any page copy is written.
-3. Build `useWebSocket` + `WebSocketProvider` against the §4 contract (mockable).
-4. Auth: `authStore` (in-memory access token), axios silent-refresh interceptor
+4. Build `useWebSocket` + `WebSocketProvider` against the §4 contract (mockable).
+5. Auth: `authStore` (in-memory access token), axios silent-refresh interceptor
    (§8.7), `RequireAuth`/`RequireRole`, login/OIDC, `system.notice→reauth` handling.
-5. App shell (`ProtectedLayout`, sidebar/topbar) + routing tree (§5).
-6. Pages in dependency order: onboarding → connectors → dashboard → services →
+6. App shell (`ProtectedLayout`, sidebar/topbar) + routing tree (§5).
+7. Pages in dependency order: onboarding → connectors → dashboard → services →
    docs/editor → changes → alerts → settings.
 
 **Verification approach (per slice):**
