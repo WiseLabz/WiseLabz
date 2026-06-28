@@ -2,6 +2,7 @@
  *  and the operator manager actions: sync, enable/disable, and remove. Mutating
  *  controls are hidden for viewers (server still enforces the boundary). */
 import { useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { motion } from 'motion/react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -23,13 +24,8 @@ import { SearchIcon, SyncIcon, PlusIcon, XIcon } from '../../components/icons';
 import { categoryIcon } from '../../components/categoryIcon';
 import type { Connector, ServiceStatus } from '../../api/model';
 
-const CATEGORY_LABEL: Record<string, string> = {
-  virtualization: 'Virtualization',
-  containers_paas: 'Containers',
-  networking: 'Networking',
-};
-
 export function ServicesPage() {
+  const { t } = useTranslation();
   const { data, isLoading, isError, refetch } = useGetConnectors();
   const overrides = useLive((s) => s.statusOverrides);
   const navigate = useNavigate();
@@ -59,9 +55,9 @@ export function ServicesPage() {
     <div className="mx-auto max-w-[1100px] px-6 py-6">
       <header className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight text-[var(--color-ink)]">Services</h1>
+          <h1 className="text-xl font-semibold tracking-tight text-[var(--color-ink)]">{t('services.title')}</h1>
           <p className="text-sm text-[var(--color-ink-muted)]">
-            {data ? `${data.length} connectors` : 'Connected services'}
+            {data ? t('services.countConnectors', { count: data.length }) : t('services.subtitle')}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -70,13 +66,13 @@ export function ServicesPage() {
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="Filter services…"
+              placeholder={t('services.filterPlaceholder')}
               className="w-44 bg-transparent text-sm text-[var(--color-ink)] outline-none placeholder:text-[var(--color-ink-faint)]"
             />
           </div>
           {canMutate && (
             <Button variant="primary" size="md" onClick={() => navigate('/services/new')}>
-              <PlusIcon size={15} /> Add connector
+              <PlusIcon size={15} /> {t('services.addConnector')}
             </Button>
           )}
         </div>
@@ -86,18 +82,18 @@ export function ServicesPage() {
         {isLoading ? (
           <SkeletonRows rows={6} />
         ) : isError || !data ? (
-          <ErrorState description="Couldn't load services." onRetry={() => refetch()} />
+          <ErrorState description={t('services.loadError')} onRetry={() => refetch()} />
         ) : rows.length === 0 ? (
-          <EmptyState title="No matches" description={`Nothing matches “${q}”.`} />
+          <EmptyState title={t('services.noMatchTitle')} description={t('services.noMatchDesc', { query: q })} />
         ) : (
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-[var(--color-line-soft)] text-left text-2xs uppercase tracking-wider text-[var(--color-ink-faint)]">
-                <th className="px-4 py-2.5 font-semibold">Service</th>
-                <th className="hidden px-4 py-2.5 font-semibold sm:table-cell">Category</th>
-                <th className="hidden px-4 py-2.5 font-semibold md:table-cell">Endpoint</th>
-                <th className="px-4 py-2.5 font-semibold">Status</th>
-                <th className="px-4 py-2.5 text-right font-semibold">Last sync</th>
+                <th className="px-4 py-2.5 font-semibold">{t('services.col.service')}</th>
+                <th className="hidden px-4 py-2.5 font-semibold sm:table-cell">{t('services.col.category')}</th>
+                <th className="hidden px-4 py-2.5 font-semibold md:table-cell">{t('services.col.endpoint')}</th>
+                <th className="px-4 py-2.5 font-semibold">{t('services.col.status')}</th>
+                <th className="px-4 py-2.5 text-right font-semibold">{t('services.col.lastSync')}</th>
                 <th className="px-4 py-2.5" />
               </tr>
             </thead>
@@ -122,7 +118,7 @@ export function ServicesPage() {
                             {c.name}
                             {!c.enabled && (
                               <span className="rounded bg-[var(--color-idle-tint)] px-1.5 py-0.5 text-2xs font-medium text-[var(--color-ink-faint)]">
-                                disabled
+                                {t('services.disabledTag')}
                               </span>
                             )}
                           </p>
@@ -131,7 +127,7 @@ export function ServicesPage() {
                       </div>
                     </td>
                     <td className="hidden px-4 py-3 text-[var(--color-ink-muted)] sm:table-cell">
-                      {CATEGORY_LABEL[c.category]}
+                      {t(`services.category.${c.category}`)}
                     </td>
                     <td className="hidden px-4 py-3 font-mono text-2xs text-[var(--color-ink-faint)] md:table-cell">
                       {c.url?.replace(/^https?:\/\//, '')}
@@ -145,13 +141,13 @@ export function ServicesPage() {
                       )}
                     </td>
                     <td className="nums px-4 py-3 text-right font-mono text-2xs text-[var(--color-ink-faint)]">
-                      {relativeTime(c.lastSyncAt)} ago
+                      {t('common.ago', { time: relativeTime(c.lastSyncAt) })}
                     </td>
                     <td className="px-4 py-3 text-right">
                       {canMutate && (
                         <div className="flex items-center justify-end gap-1 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
                           <Button size="sm" variant="ghost" onClick={() => runSync(c.id)} disabled={!c.enabled}>
-                            <SyncIcon size={14} /> Sync
+                            <SyncIcon size={14} /> {t('common.sync')}
                           </Button>
                           <Button
                             size="sm"
@@ -159,10 +155,10 @@ export function ServicesPage() {
                             onClick={() => toggleEnabled.mutate({ id: c.id, enabled: !c.enabled })}
                             disabled={toggleEnabled.isPending}
                           >
-                            {c.enabled ? 'Disable' : 'Enable'}
+                            {c.enabled ? t('common.disable') : t('common.enable')}
                           </Button>
                           <IconButton
-                            label={`Remove ${c.name}`}
+                            label={t('services.removeLabel', { name: c.name })}
                             onClick={() => setRemoving(c)}
                             className="hover:bg-[var(--color-err-tint)] hover:text-[var(--color-err)]"
                           >

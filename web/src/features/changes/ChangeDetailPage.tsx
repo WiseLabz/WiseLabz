@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   useGetChangesChangeId,
@@ -19,6 +20,7 @@ import { fullDate } from '../../lib/time';
 import { ArrowRightIcon, CheckIcon, XIcon, SparklesIcon, FileTextIcon } from '../../components/icons';
 
 export function ChangeDetailPage() {
+  const { t } = useTranslation();
   const { changeId } = useParams<{ changeId: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -50,7 +52,7 @@ export function ChangeDetailPage() {
         className="mb-4 inline-flex items-center gap-1.5 text-xs text-[var(--color-ink-muted)] transition-colors hover:text-[var(--color-ink)]"
       >
         <ArrowRightIcon size={13} className="rotate-180" />
-        Back to changes
+        {t('changes.back')}
       </button>
 
       {isLoading ? (
@@ -60,7 +62,7 @@ export function ChangeDetailPage() {
         </Panel>
       ) : isError || !data ? (
         <Panel className="min-h-[40vh]">
-          <ErrorState description="This change couldn't be loaded." onRetry={() => refetch()} />
+          <ErrorState description={t('changes.detailLoadError')} onRetry={() => refetch()} />
         </Panel>
       ) : (
         <AnimatePresence onExitComplete={() => navigate('/changes')}>
@@ -77,7 +79,7 @@ export function ChangeDetailPage() {
               <span className="font-mono text-2xs text-[var(--color-ink-faint)]">{data.changeType}</span>
               {data.willTriggerAi && (
                 <span className="inline-flex items-center gap-1 rounded bg-[var(--color-signal-tint)] px-1.5 py-0.5 text-2xs font-semibold text-[var(--color-signal)]">
-                  <SparklesIcon size={11} /> AI update queued
+                  <SparklesIcon size={11} /> {t('changes.aiUpdateQueued')}
                 </span>
               )}
             </div>
@@ -85,8 +87,8 @@ export function ChangeDetailPage() {
               {data.summary}
             </h1>
             <p className="mt-1 font-mono text-2xs text-[var(--color-ink-faint)]">
-              <span className="text-[var(--color-signal-bright)]">{data.serviceName}</span> · detected{' '}
-              {fullDate(data.detectedAt)}
+              <span className="text-[var(--color-signal-bright)]">{data.serviceName}</span> ·{' '}
+              {t('changes.detected', { date: fullDate(data.detectedAt) })}
             </p>
           </div>
 
@@ -96,7 +98,7 @@ export function ChangeDetailPage() {
             {data.affectedDocIds && data.affectedDocIds.length > 0 && (
               <div className="mt-4 flex flex-wrap items-center gap-2">
                 <span className="text-2xs uppercase tracking-wider text-[var(--color-ink-faint)]">
-                  Affected docs
+                  {t('changes.affectedDocs')}
                 </span>
                 {data.affectedDocIds.map((id) => (
                   <button
@@ -119,7 +121,7 @@ export function ChangeDetailPage() {
               disabled={pending}
               onClick={() => resolve.mutate('dismiss')}
             >
-              <XIcon size={15} /> Dismiss
+              <XIcon size={15} /> {t('common.dismiss')}
             </Button>
             <Button
               variant="primary"
@@ -127,7 +129,7 @@ export function ChangeDetailPage() {
               disabled={pending}
               onClick={() => resolve.mutate('ack')}
             >
-              <CheckIcon size={15} /> Acknowledge
+              <CheckIcon size={15} /> {t('common.acknowledge')}
             </Button>
           </div>
               </Panel>

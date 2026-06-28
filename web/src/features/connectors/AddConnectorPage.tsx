@@ -7,6 +7,7 @@
  * mutating action gated on the operator role server-side.
  */
 import { useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -24,6 +25,7 @@ import { ArrowRightIcon, CheckIcon } from '../../components/icons';
 type FormValues = Record<string, string | boolean>;
 
 export function AddConnectorPage() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { data: schemas, isLoading, isError, refetch } = useGetConnectorsSchema();
@@ -75,13 +77,13 @@ export function AddConnectorPage() {
         className="mb-4 inline-flex items-center gap-1.5 text-xs text-ink-muted transition-colors hover:text-ink"
       >
         <ArrowRightIcon size={13} className="rotate-180" />
-        Back to services
+        {t('connectors.back')}
       </button>
 
       <header className="mb-5">
-        <h1 className="text-xl font-semibold tracking-tight text-ink">Add connector</h1>
+        <h1 className="text-xl font-semibold tracking-tight text-ink">{t('connectors.title')}</h1>
         <p className="text-sm text-ink-muted">
-          Connect a service so WiseLabz can track and document it.
+          {t('connectors.subtitle')}
         </p>
       </header>
 
@@ -91,13 +93,13 @@ export function AddConnectorPage() {
         </Panel>
       ) : isError || !schemas ? (
         <Panel className="min-h-[30vh]">
-          <ErrorState description="Couldn't load connector types." onRetry={() => refetch()} />
+          <ErrorState description={t('connectors.loadTypesError')} onRetry={() => refetch()} />
         </Panel>
       ) : (
         <div className="space-y-4">
           {/* Step 1 — type */}
           <Panel className="p-5">
-            <p className="mb-3 text-2xs uppercase tracking-wider text-ink-faint">Connector type</p>
+            <p className="mb-3 text-2xs uppercase tracking-wider text-ink-faint">{t('connectors.typeLabel')}</p>
             <div className="grid gap-2 sm:grid-cols-3">
               {schemas.map((s) => (
                 <TypeCard
@@ -117,16 +119,16 @@ export function AddConnectorPage() {
           {schema && (
             <Panel className="p-5">
               <p className="mb-3 text-2xs uppercase tracking-wider text-ink-faint">
-                {schema.displayName} configuration
+                {t('connectors.configLabel', { name: schema.displayName })}
               </p>
               <div className="space-y-3">
                 <Field
                   field={{
                     name: 'name',
-                    label: 'Display name',
+                    label: t('connectors.displayName'),
                     kind: 'string',
                     required: true,
-                    placeholder: 'e.g. pve1',
+                    placeholder: t('connectors.displayNamePlaceholder'),
                   }}
                   value={name}
                   onChange={(v) => setName(String(v))}
@@ -143,13 +145,13 @@ export function AddConnectorPage() {
 
               {create.isError && (
                 <p className="mt-3 text-2xs text-err">
-                  Couldn’t connect with those details. Check the URL and credentials, then retry.
+                  {t('connectors.connectFailed')}
                 </p>
               )}
 
               <div className="mt-5 flex items-center justify-end gap-2">
                 <Button variant="ghost" size="md" onClick={() => navigate('/services')}>
-                  Cancel
+                  {t('common.cancel')}
                 </Button>
                 <Button
                   variant="primary"
@@ -158,7 +160,7 @@ export function AddConnectorPage() {
                   onClick={() => create.mutate()}
                 >
                   <CheckIcon size={15} />
-                  {create.isPending ? 'Testing & saving…' : 'Test & add connector'}
+                  {create.isPending ? t('connectors.submitPending') : t('connectors.submitIdle')}
                 </Button>
               </div>
             </Panel>

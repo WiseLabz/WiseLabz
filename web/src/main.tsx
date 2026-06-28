@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import App from './App'
 import { USE_MOCKS } from './config/env'
 import './index.css'
+import './i18n'
 import { useTheme } from './store/theme'
 
 // Initializing the theme store applies the persisted palette + fonts to :root

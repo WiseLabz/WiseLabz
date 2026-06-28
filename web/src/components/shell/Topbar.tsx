@@ -6,9 +6,11 @@
  */
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { AnimatePresence, motion } from 'motion/react';
 import { useUi } from '../../store/ui';
 import { useLive } from '../../store/live';
+import { useAuth } from '../../store/auth';
 import { useCanMutate } from '../../hooks/useRole';
 import { runSync } from '../../lib/runSync';
 import { Button, IconButton } from '../ui/Button';
@@ -19,24 +21,17 @@ import {
   UserIcon,
   ChevronDownIcon,
 } from '../icons';
-import * as fx from '../../data/fixtures';
-
-const PHASE_LABEL: Record<string, string> = {
-  queued: 'Queued',
-  fetching: 'Fetching',
-  diffing: 'Diffing',
-  generating: 'Generating',
-  done: 'Done',
-  error: 'Error',
-};
 
 export function Topbar() {
   const togglePalette = useUi((s) => s.togglePalette);
   const pending = useLive((s) => s.pendingAlerts);
   const globalJob = useLive((s) => s.jobs.global);
   const canMutate = useCanMutate();
+  const user = useAuth((s) => s.user);
+  const logout = useAuth((s) => s.logout);
   const [menuOpen, setMenuOpen] = useState(false);
   const navigate = useNavigate();
+  const { t } = useTranslation();
 
   const syncing = globalJob && globalJob.phase !== 'done' && globalJob.phase !== 'error';
 
@@ -57,7 +52,7 @@ export function Topbar() {
         className="group flex h-9 w-full max-w-sm items-center gap-2.5 rounded-sm border border-[var(--color-line)] bg-[var(--color-canvas-sunken)] px-3 font-mono text-xs text-[var(--color-ink-faint)] transition-colors hover:border-[var(--color-line-strong)] hover:text-[var(--color-ink-muted)]"
       >
         <SearchIcon size={15} />
-        <span className="flex-1 text-left">search services, docs, changes…</span>
+        <span className="flex-1 text-left">{t('topbar.searchPlaceholder')}</span>
         <kbd className="nums rounded border border-[var(--color-line-strong)] bg-[var(--color-canvas-sunken)] px-1.5 py-0.5 font-mono text-2xs text-[var(--color-ink-faint)]">
           ⌘K
         </kbd>
@@ -80,13 +75,15 @@ export function Topbar() {
               <SyncIcon size={15} />
             </motion.span>
             <span className="nums">
-              {syncing ? `${PHASE_LABEL[globalJob.phase]} ${globalJob.percent}%` : 'Sync all'}
+              {syncing
+                ? `${t(`sync.phase.${globalJob.phase}`)} ${globalJob.percent}%`
+                : t('topbar.syncAll')}
             </span>
           </Button>
         )}
 
         <div className="relative">
-          <IconButton label="Alerts" onClick={() => navigate('/alerts')} className="relative">
+          <IconButton label={t('topbar.alerts')} onClick={() => navigate('/alerts')} className="relative">
             <BellIcon size={18} />
             <AnimatePresence>
               {pending > 0 && (
@@ -114,7 +111,7 @@ export function Topbar() {
               <UserIcon size={16} />
             </span>
             <span className="hidden text-sm font-medium text-[var(--color-ink)] sm:block">
-              {fx.user.displayName}
+              {user?.displayName ?? user?.username}
             </span>
             <ChevronDownIcon size={14} className="text-[var(--color-ink-faint)]" />
           </button>
@@ -131,18 +128,41 @@ export function Topbar() {
                   className="absolute right-0 top-[calc(100%+8px)] z-[var(--z-dropdown)] w-56 overflow-hidden rounded-sm border border-[var(--color-line)] bg-[var(--color-surface-overlay)] shadow-[var(--shadow-pop)]"
                 >
                   <div className="border-b border-[var(--color-line-soft)] px-3 py-2.5">
-                    <p className="text-sm font-medium text-[var(--color-ink)]">{fx.user.displayName}</p>
-                    <p className="text-xs text-[var(--color-ink-faint)]">{fx.user.email}</p>
+                    <p className="text-sm font-medium text-[var(--color-ink)]">
+                      {user?.displayName ?? user?.username}
+                    </p>
+                    {user?.email && (
+                      <p className="text-xs text-[var(--color-ink-faint)]">{user.email}</p>
+                    )}
                   </div>
                   <div className="p-1">
-                    {['Profile', 'Preferences', 'Sign out'].map((item) => (
-                      <button
-                        key={item}
-                        className="w-full rounded-md px-2.5 py-1.5 text-left text-sm text-[var(--color-ink-muted)] transition-colors hover:bg-[var(--color-surface-raised)] hover:text-[var(--color-ink)]"
-                      >
-                        {item}
-                      </button>
-                    ))}
+                    <button
+                      onClick={() => {
+                        setMenuOpen(false);
+                        navigate('/settings');
+                      }}
+                      className="w-full rounded-md px-2.5 py-1.5 text-left text-sm text-[var(--color-ink-muted)] transition-colors hover:bg-[var(--color-surface-raised)] hover:text-[var(--color-ink)]"
+                    >
+                      {t('account.profile')}
+                    </button>
+                    <button
+                      onClick={() => {
+                        setMenuOpen(false);
+                        navigate('/settings');
+                      }}
+                      className="w-full rounded-md px-2.5 py-1.5 text-left text-sm text-[var(--color-ink-muted)] transition-colors hover:bg-[var(--color-surface-raised)] hover:text-[var(--color-ink)]"
+                    >
+                      {t('account.preferences')}
+                    </button>
+                    <button
+                      onClick={() => {
+                        setMenuOpen(false);
+                        void logout().then(() => navigate('/login', { replace: true }));
+                      }}
+                      className="w-full rounded-md px-2.5 py-1.5 text-left text-sm text-[var(--color-ink-muted)] transition-colors hover:bg-[var(--color-surface-raised)] hover:text-[var(--color-ink)]"
+                    >
+                      {t('auth.signOut')}
+                    </button>
                   </div>
                 </motion.div>
               </>

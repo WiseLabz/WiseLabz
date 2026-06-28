@@ -5,6 +5,7 @@
  * springy drag-to-reorder list + enable toggles, persisted per browser.
  */
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { AnimatePresence, motion, Reorder, useDragControls } from 'motion/react';
 import { ErrorBoundary } from 'react-error-boundary';
 import { useDashboard, type WidgetId } from '../../store/dashboard';
@@ -55,6 +56,8 @@ const SPAN_CLASS: Record<number, string> = {
 };
 
 export function DashboardPage() {
+  const { t } = useTranslation();
+  const widgetTitle = (id: WidgetId) => t(`dashboard.widget.${id}`);
   const layout = useDashboard((s) => s.layout);
   const editing = useUi((s) => s.editingDashboard);
   const setEditing = useUi((s) => s.setEditingDashboard);
@@ -76,12 +79,10 @@ export function DashboardPage() {
           <div className="flex items-end gap-x-7 gap-y-3">
             <div className="pr-1">
               <p className="font-mono text-2xs uppercase tracking-[0.2em] text-[var(--color-ink-faint)]">
-                Wiselabz / overview
+                {t('dashboard.kicker')}
               </p>
               <p className="mt-1 max-w-[22ch] text-sm leading-snug text-[var(--color-ink-muted)]">
-                {syncing
-                  ? 'Reconciling fleet against documentation…'
-                  : 'Live state, reconciled against the docs.'}
+                {syncing ? t('dashboard.reconciling') : t('dashboard.reconciled')}
               </p>
             </div>
             <StatusReadout />
@@ -89,7 +90,7 @@ export function DashboardPage() {
 
           <div className="flex items-center gap-4">
             <span className="hidden font-mono text-2xs text-[var(--color-ink-faint)] sm:inline">
-              last sync {lastSync ? `${relativeTime(lastSync)} ago` : '—'}
+              {t('dashboard.lastSync', { time: lastSync ? `${relativeTime(lastSync)} ago` : '—' })}
             </span>
             <Button
               variant={editing ? 'primary' : 'secondary'}
@@ -97,7 +98,7 @@ export function DashboardPage() {
               onClick={() => setEditing(!editing)}
             >
               {editing ? <CheckIcon size={15} /> : <GripIcon size={15} />}
-              {editing ? 'Done' : 'Edit layout'}
+              {editing ? t('common.done') : t('dashboard.editLayout')}
             </Button>
           </div>
         </div>
@@ -130,12 +131,12 @@ export function DashboardPage() {
                 >
                   <ErrorBoundary
                     fallbackRender={({ resetErrorBoundary }) => (
-                      <WidgetFrame title={meta.title} icon={<meta.Icon size={15} />}>
-                        <ErrorState description={`${meta.title} failed.`} onRetry={resetErrorBoundary} />
+                      <WidgetFrame title={widgetTitle(w.id)} icon={<meta.Icon size={15} />}>
+                        <ErrorState description={t('dashboard.widgetFailed', { title: widgetTitle(w.id) })} onRetry={resetErrorBoundary} />
                       </WidgetFrame>
                     )}
                   >
-                    <WidgetFrame title={meta.title} icon={<meta.Icon size={15} />}>
+                    <WidgetFrame title={widgetTitle(w.id)} icon={<meta.Icon size={15} />}>
                       <meta.Component />
                     </WidgetFrame>
                   </ErrorBoundary>
@@ -152,6 +153,7 @@ export function DashboardPage() {
 /* ── Edit mode: reorder + toggle ───────────────────────────────────────── */
 
 function EditMode() {
+  const { t } = useTranslation();
   const layout = useDashboard((s) => s.layout);
   const setOrder = useDashboard((s) => s.setOrder);
   const toggle = useDashboard((s) => s.toggle);
@@ -171,7 +173,7 @@ function EditMode() {
       className="mx-auto max-w-2xl"
     >
       <p className="mb-3 text-sm text-[var(--color-ink-muted)]">
-        Drag to reorder. Toggle widgets on or off. Your layout is saved automatically.
+        {t('dashboard.editHint')}
       </p>
       <Reorder.Group axis="y" values={ids} onReorder={commit} className="flex flex-col gap-2">
         {ids.map((id) => (
@@ -196,6 +198,7 @@ function EditRow({
   enabled: boolean;
   onToggle: () => void;
 }) {
+  const { t } = useTranslation();
   const controls = useDragControls();
   const meta = REGISTRY[id];
   return (
@@ -208,13 +211,13 @@ function EditRow({
     >
       <button
         onPointerDown={(e) => controls.start(e)}
-        aria-label="Drag to reorder"
+        aria-label={t('dashboard.dragReorder')}
         className="cursor-grab text-[var(--color-ink-faint)] active:cursor-grabbing"
       >
         <GripIcon size={16} />
       </button>
       <meta.Icon size={16} className="text-[var(--color-ink-muted)]" />
-      <span className="flex-1 text-sm font-medium text-[var(--color-ink)]">{meta.title}</span>
+      <span className="flex-1 text-sm font-medium text-[var(--color-ink)]">{t(`dashboard.widget.${id}`)}</span>
       <button
         role="switch"
         aria-checked={enabled}
@@ -267,16 +270,17 @@ function SyncSweep({ active }: { active: boolean }) {
 /* ── Status readout: large mono instrument figures ─────────────────────── */
 
 function StatusReadout() {
+  const { t } = useTranslation();
   const { data } = useGetDashboardOverview();
   const c = data?.statusCounts;
   const total = c ? (c.online ?? 0) + (c.degraded ?? 0) + (c.offline ?? 0) + (c.unknown ?? 0) : 0;
 
   const cells: { label: string; value: number; tone: string }[] = [
-    { label: 'services', value: total, tone: 'var(--color-ink)' },
-    { label: 'online', value: c?.online ?? 0, tone: 'var(--color-ok)' },
-    { label: 'degraded', value: c?.degraded ?? 0, tone: 'var(--color-warn)' },
-    { label: 'offline', value: c?.offline ?? 0, tone: 'var(--color-err)' },
-    { label: 'alerts', value: data?.pendingAlerts ?? 0, tone: 'var(--color-signal-bright)' },
+    { label: t('dashboard.readout.services'), value: total, tone: 'var(--color-ink)' },
+    { label: t('dashboard.readout.online'), value: c?.online ?? 0, tone: 'var(--color-ok)' },
+    { label: t('dashboard.readout.degraded'), value: c?.degraded ?? 0, tone: 'var(--color-warn)' },
+    { label: t('dashboard.readout.offline'), value: c?.offline ?? 0, tone: 'var(--color-err)' },
+    { label: t('dashboard.readout.alerts'), value: data?.pendingAlerts ?? 0, tone: 'var(--color-signal-bright)' },
   ];
 
   return (

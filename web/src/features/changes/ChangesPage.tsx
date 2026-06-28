@@ -1,6 +1,7 @@
 /** Global change feed — every detected infra change, newest first. */
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { motion } from 'motion/react';
 import { useGetChanges } from '../../api/generated/changes/changes';
 import { SeverityTag } from '../../components/ui/StatusDot';
@@ -10,14 +11,15 @@ import { relativeTime } from '../../lib/time';
 import { ArrowRightIcon } from '../../components/icons';
 import type { Severity } from '../../api/model';
 
-const FILTERS: { label: string; value: Severity | 'all' }[] = [
-  { label: 'All', value: 'all' },
-  { label: 'Critical', value: 'critical' },
-  { label: 'Warning', value: 'warning' },
-  { label: 'Info', value: 'info' },
+const FILTERS: { key: string; value: Severity | 'all' }[] = [
+  { key: 'changes.filterAll', value: 'all' },
+  { key: 'changes.filterCritical', value: 'critical' },
+  { key: 'changes.filterWarning', value: 'warning' },
+  { key: 'changes.filterInfo', value: 'info' },
 ];
 
 export function ChangesPage() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const { data, isLoading, isError, refetch } = useGetChanges(undefined);
   const [filter, setFilter] = useState<Severity | 'all'>('all');
@@ -28,9 +30,9 @@ export function ChangesPage() {
     <div className="mx-auto max-w-[900px] px-6 py-6">
       <header className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight text-[var(--color-ink)]">Changes</h1>
+          <h1 className="text-xl font-semibold tracking-tight text-[var(--color-ink)]">{t('changes.title')}</h1>
           <p className="text-sm text-[var(--color-ink-muted)]">
-            {data ? `${data.total} detected changes` : 'Detected infrastructure changes'}
+            {data ? t('changes.countDetected', { count: data.total }) : t('changes.subtitle')}
           </p>
         </div>
         <div className="flex items-center gap-1 rounded-lg border border-[var(--color-line-soft)] bg-[var(--color-canvas-sunken)] p-0.5">
@@ -48,7 +50,7 @@ export function ChangesPage() {
                   transition={{ type: 'spring', stiffness: 500, damping: 36 }}
                 />
               )}
-              {f.label}
+              {t(f.key)}
             </button>
           ))}
         </div>
@@ -58,9 +60,9 @@ export function ChangesPage() {
         {isLoading ? (
           <SkeletonRows rows={6} />
         ) : isError || !data ? (
-          <ErrorState description="Couldn't load changes." onRetry={() => refetch()} />
+          <ErrorState description={t('changes.loadError')} onRetry={() => refetch()} />
         ) : items.length === 0 ? (
-          <EmptyState title="Nothing here" description="No changes match this filter." />
+          <EmptyState title={t('changes.emptyTitle')} description={t('changes.emptyDesc')} />
         ) : (
           items.map((c, idx) => (
             <motion.button
@@ -79,12 +81,12 @@ export function ChangesPage() {
                   <span>·</span>
                   <span>{c.changeType}</span>
                   <span>·</span>
-                  <span>{relativeTime(c.detectedAt)} ago</span>
+                  <span>{t('common.ago', { time: relativeTime(c.detectedAt) })}</span>
                 </p>
               </div>
               {c.willTriggerAi && (
                 <span className="hidden rounded bg-[var(--color-signal-tint)] px-1.5 py-0.5 text-2xs font-semibold text-[var(--color-signal)] sm:block">
-                  AI update
+                  {t('changes.aiUpdate')}
                 </span>
               )}
               <ArrowRightIcon

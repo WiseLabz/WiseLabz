@@ -5,6 +5,7 @@
  * choice here wins and persists.
  */
 import { motion } from 'motion/react';
+import { useTranslation } from 'react-i18next';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSettings, type MotionPref } from '../../store/settings';
 import {
@@ -20,24 +21,23 @@ import { SparklesIcon, GaugeIcon, XIcon } from '../../components/icons';
 
 const MOTION_OPTIONS: {
   value: MotionPref;
-  label: string;
-  desc: string;
   Icon: React.ComponentType<{ size?: number }>;
 }[] = [
-  { value: 'full', label: 'Full', desc: 'Every transition and signature moment. The default.', Icon: SparklesIcon },
-  { value: 'reduced', label: 'Reduced', desc: 'Essential feedback only — springs collapse to fades.', Icon: GaugeIcon },
-  { value: 'off', label: 'Off', desc: 'No animation. Instant state changes everywhere.', Icon: XIcon },
+  { value: 'full', Icon: SparklesIcon },
+  { value: 'reduced', Icon: GaugeIcon },
+  { value: 'off', Icon: XIcon },
 ];
 
 export function SettingsPage() {
+  const { t } = useTranslation();
   const motionPref = useSettings((s) => s.motion);
   const setMotion = useSettings((s) => s.setMotion);
 
   return (
     <div className="mx-auto max-w-[760px] px-6 py-6">
       <header className="mb-6">
-        <h1 className="text-xl font-semibold tracking-tight text-[var(--color-ink)]">Settings</h1>
-        <p className="text-sm text-[var(--color-ink-muted)]">Appearance and workspace preferences.</p>
+        <h1 className="text-xl font-semibold tracking-tight text-[var(--color-ink)]">{t('settings.title')}</h1>
+        <p className="text-sm text-[var(--color-ink-muted)]">{t('settings.subtitle')}</p>
       </header>
 
       <div className="mb-4">
@@ -46,14 +46,13 @@ export function SettingsPage() {
 
       <Panel className="p-6">
         <div className="mb-4">
-          <h2 className="text-sm font-semibold text-[var(--color-ink)]">Motion</h2>
+          <h2 className="text-sm font-semibold text-[var(--color-ink)]">{t('settings.motion.heading')}</h2>
           <p className="mt-0.5 text-xs text-[var(--color-ink-muted)]">
-            WiseLabz uses motion to make live state legible. Turn it down here if you prefer a
-            calmer interface — your choice is remembered.
+            {t('settings.motion.desc')}
           </p>
         </div>
 
-        <div role="radiogroup" aria-label="Motion preference" className="grid gap-3 sm:grid-cols-3">
+        <div role="radiogroup" aria-label={t('settings.motion.groupLabel')} className="grid gap-3 sm:grid-cols-3">
           {MOTION_OPTIONS.map((opt) => {
             const active = motionPref === opt.value;
             return (
@@ -78,9 +77,9 @@ export function SettingsPage() {
                 >
                   <opt.Icon size={16} />
                 </span>
-                <span className="text-sm font-medium text-[var(--color-ink)]">{opt.label}</span>
+                <span className="text-sm font-medium text-[var(--color-ink)]">{t(`settings.motion.${opt.value}Label`)}</span>
                 <span className="text-2xs leading-relaxed text-[var(--color-ink-muted)]">
-                  {opt.desc}
+                  {t(`settings.motion.${opt.value}Desc`)}
                 </span>
                 {active && (
                   <motion.span
@@ -97,7 +96,7 @@ export function SettingsPage() {
         {/* Live preview so the choice is tangible */}
         <div className="mt-5 rounded-lg border border-[var(--color-line-soft)] bg-[var(--color-canvas-sunken)] p-4">
           <p className="mb-2 text-2xs uppercase tracking-wider text-[var(--color-ink-faint)]">
-            Preview
+            {t('settings.motion.preview')}
           </p>
           <div className="flex gap-2">
             {[0, 1, 2].map((i) => (
@@ -120,6 +119,7 @@ export function SettingsPage() {
 
 /** Operator-only: the step-up escape hatch for the single-admin homelab. */
 function SecuritySettings() {
+  const { t } = useTranslation();
   const canMutate = useCanMutate();
   const queryClient = useQueryClient();
   const { data } = useGetAuthConfig({ query: { enabled: canMutate } });
@@ -134,26 +134,25 @@ function SecuritySettings() {
   return (
     <Panel className="mt-4 p-6">
       <div className="mb-4">
-        <h2 className="text-sm font-semibold text-[var(--color-ink)]">Security</h2>
+        <h2 className="text-sm font-semibold text-[var(--color-ink)]">{t('settings.security.heading')}</h2>
         <p className="mt-0.5 text-xs text-[var(--color-ink-muted)]">
-          Step-up re-authentication for destructive actions.
+          {t('settings.security.desc')}
         </p>
       </div>
 
       <div className="flex items-start justify-between gap-4 rounded-lg border border-[var(--color-line-soft)] p-3.5">
         <div className="flex-1">
           <p className="text-sm font-medium text-[var(--color-ink)]">
-            Require re-auth before destructive actions
+            {t('settings.security.stepUpTitle')}
           </p>
           <p className="mt-0.5 text-2xs leading-relaxed text-[var(--color-ink-muted)]">
-            Removing a connector asks for your password (or 2FA code) first. Recommended. Turn it
-            off only on a single-admin homelab where the friction outweighs the safety.
+            {t('settings.security.stepUpDesc')}
           </p>
         </div>
         <button
           role="switch"
           aria-checked={enabled}
-          aria-label="Require re-auth before destructive actions"
+          aria-label={t('settings.security.stepUpTitle')}
           disabled={update.isPending}
           onClick={() => update.mutate(!enabled)}
           className="relative mt-0.5 h-5 w-9 shrink-0 rounded-full transition-colors disabled:opacity-50"

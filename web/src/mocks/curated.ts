@@ -32,7 +32,61 @@ const authConfig = {
   oidcProviders: [] as unknown[],
 };
 
+// Mock session state. Login/oidc set it true; refresh succeeds only when set (i.e.
+// a refresh "cookie" exists); logout clears it. Resets on full page reload, which
+// matches the in-memory-token model (no persistent client session).
+let hasSession = false;
+const newSession = () => ({
+  accessToken: `acc-${Math.random().toString(36).slice(2)}`,
+  expiresIn: authConfig.accessTokenTtl,
+  user,
+});
+
 export const curatedHandlers = [
+  http.get('*/auth/providers', async () => {
+    await delay(LATENCY);
+    return HttpResponse.json({
+      localEnabled: authConfig.localEnabled,
+      oidc: [
+        {
+          id: 'authentik',
+          displayName: 'Authentik',
+          authUrl: '/auth/callback?providerId=authentik&code=mock-oidc-code&state=mock-state',
+        },
+      ],
+    });
+  }),
+
+  http.post('*/auth/login', async ({ request }) => {
+    await delay(LATENCY);
+    const body = (await request.json().catch(() => ({}))) as { username?: string; password?: string };
+    if (!body.username || !body.password) {
+      return HttpResponse.json({ code: 'invalid-credentials', message: 'Invalid credentials' }, { status: 401 });
+    }
+    hasSession = true;
+    return HttpResponse.json(newSession());
+  }),
+
+  http.post('*/auth/oidc/callback', async () => {
+    await delay(LATENCY);
+    hasSession = true;
+    return HttpResponse.json(newSession());
+  }),
+
+  http.post('*/auth/refresh', async () => {
+    await delay(LATENCY);
+    if (!hasSession) {
+      return HttpResponse.json({ code: 'no-session', message: 'No active session' }, { status: 401 });
+    }
+    return HttpResponse.json(newSession());
+  }),
+
+  http.post('*/auth/logout', async () => {
+    await delay(LATENCY);
+    hasSession = false;
+    return new HttpResponse(null, { status: 204 });
+  }),
+
   http.get('*/auth/config', async () => {
     await delay(LATENCY);
     return HttpResponse.json(authConfig);

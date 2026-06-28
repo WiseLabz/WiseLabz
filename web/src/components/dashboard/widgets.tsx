@@ -6,6 +6,7 @@
  * sync is a live timeline, docs is a coverage meter.
  */
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { AnimatePresence, motion } from 'motion/react';
 import { useGetConnectors } from '../../api/generated/connectors/connectors';
 import { useGetDashboardOverview } from '../../api/generated/dashboard/dashboard';
@@ -30,18 +31,19 @@ const STATUS_RANK: Record<ServiceStatus, number> = {
 /* ── Service roster (hero) ─────────────────────────────────────────────── */
 
 export function ServiceRosterWidget() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const { data, isLoading, isError, refetch } = useGetConnectors();
   const overrides = useLive((s) => s.statusOverrides);
 
   if (isLoading) return <SkeletonRows rows={6} />;
   if (isError || !data)
-    return <ErrorState description="Couldn't load services." onRetry={() => refetch()} />;
+    return <ErrorState description={t('widgets.loadServicesError')} onRetry={() => refetch()} />;
   if (data.length === 0)
     return (
       <EmptyState
-        title="No services connected"
-        description="Add your first connector to start generating documentation."
+        title={t('widgets.roster.emptyTitle')}
+        description={t('widgets.roster.emptyDesc')}
       />
     );
 
@@ -92,7 +94,7 @@ export function ServiceRosterWidget() {
                   </span>
                   {live && (
                     <span className="rounded bg-signal-tint px-1 text-[10px] font-semibold text-signal-bright">
-                      updated
+                      {t('widgets.roster.updated')}
                     </span>
                   )}
                 </span>
@@ -103,7 +105,7 @@ export function ServiceRosterWidget() {
               <span className="hidden shrink-0 text-right sm:block">
                 <StatusPill status={c.status} />
                 <span className="nums block font-mono text-2xs text-[var(--color-ink-faint)]">
-                  {relativeTime(c.lastSyncAt)} ago
+                  {t('common.ago', { time: relativeTime(c.lastSyncAt) })}
                 </span>
               </span>
               <ArrowRightIcon
@@ -121,21 +123,22 @@ export function ServiceRosterWidget() {
 /* ── Alert summary ─────────────────────────────────────────────────────── */
 
 export function AlertSummaryWidget() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const { data, isLoading, isError, refetch } = useGetAlerts(undefined);
   const pendingLive = useLive((s) => s.pendingAlerts);
 
   if (isLoading) return <SkeletonRows rows={3} />;
   if (isError || !data)
-    return <ErrorState description="Couldn't load alerts." onRetry={() => refetch()} />;
+    return <ErrorState description={t('widgets.loadAlertsError')} onRetry={() => refetch()} />;
 
   const pending = data.items.filter((a) => a.status === 'pending');
   if (pending.length === 0)
     return (
       <EmptyState
         icon={<CheckIcon size={20} />}
-        title="All clear"
-        description="No pending alerts. Drift is documented or acknowledged."
+        title={t('widgets.alerts.allClearTitle')}
+        description={t('widgets.alerts.allClearDesc')}
       />
     );
 
@@ -150,7 +153,7 @@ export function AlertSummaryWidget() {
         >
           {Math.max(pending.length, pendingLive)}
         </motion.span>
-        <span className="text-xs text-[var(--color-ink-muted)]">pending</span>
+        <span className="text-xs text-[var(--color-ink-muted)]">{t('widgets.alerts.pending')}</span>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
         {pending.slice(0, 4).map((a) => (
@@ -176,16 +179,17 @@ export function AlertSummaryWidget() {
 /* ── Recent changes ────────────────────────────────────────────────────── */
 
 export function RecentChangesWidget() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const { data, isLoading, isError, refetch } = useGetDashboardOverview();
 
   if (isLoading) return <SkeletonRows rows={4} />;
   if (isError || !data)
-    return <ErrorState description="Couldn't load changes." onRetry={() => refetch()} />;
+    return <ErrorState description={t('widgets.loadChangesError')} onRetry={() => refetch()} />;
 
   const changes = data.recentChanges ?? [];
   if (changes.length === 0)
-    return <EmptyState icon={<CheckIcon size={20} />} title="No recent changes" description="Your lab matches its docs." />;
+    return <EmptyState icon={<CheckIcon size={20} />} title={t('widgets.changes.emptyTitle')} description={t('widgets.changes.emptyDesc')} />;
 
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">
@@ -208,7 +212,7 @@ export function RecentChangesWidget() {
               <span>{relativeTime(c.detectedAt)}</span>
               {c.willTriggerAi && (
                 <span className="ml-0.5 rounded bg-[var(--color-signal-tint)] px-1 text-[var(--color-signal)]">
-                  AI
+                  {t('widgets.changes.ai')}
                 </span>
               )}
             </span>
@@ -230,6 +234,7 @@ const TONE_KEY: Record<string, keyof typeof toneColor> = {
 };
 
 export function SyncActivityWidget() {
+  const { t } = useTranslation();
   const activity = useLive((s) => s.activity);
   const job = useLive((s) => s.jobs.global);
 
@@ -238,7 +243,7 @@ export function SyncActivityWidget() {
       {job && job.phase !== 'done' && (
         <div className="border-b border-[var(--color-line-soft)] px-4 py-3">
           <div className="mb-1.5 flex items-center justify-between text-xs">
-            <span className="font-medium text-[var(--color-ink)]">Fleet sync · {job.phase}</span>
+            <span className="font-medium text-[var(--color-ink)]">{t('widgets.sync.fleetSync', { phase: job.phase })}</span>
             <span className="nums font-mono text-[var(--color-signal-bright)]">{job.percent}%</span>
           </div>
           <div className="h-1.5 overflow-hidden rounded-full bg-[var(--color-canvas-sunken)]">
@@ -253,7 +258,7 @@ export function SyncActivityWidget() {
 
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-2">
         {activity.length === 0 ? (
-          <EmptyState title="Quiet" description="Sync activity will stream here in real time." />
+          <EmptyState title={t('widgets.sync.quietTitle')} description={t('widgets.sync.quietDesc')} />
         ) : (
           <ol className="relative ml-1 border-l border-[var(--color-line-soft)]">
             <AnimatePresence initial={false}>
@@ -293,13 +298,14 @@ export function SyncActivityWidget() {
 /* ── Docs health ───────────────────────────────────────────────────────── */
 
 export function DocsHealthWidget() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const { data: tree, isLoading, isError, refetch } = useGetDocsTree();
   const { data: connectors } = useGetConnectors();
 
   if (isLoading) return <SkeletonRows rows={3} />;
   if (isError || !tree)
-    return <ErrorState description="Couldn't load docs." onRetry={() => refetch()} />;
+    return <ErrorState description={t('widgets.loadDocsError')} onRetry={() => refetch()} />;
 
   const docNodes = tree.children ?? [];
   const totalServices = connectors?.length ?? docNodes.length;
@@ -312,13 +318,12 @@ export function DocsHealthWidget() {
         <CoverageRing pct={pct} />
         <div>
           <p className="nums text-sm text-[var(--color-ink)]">
-            <span className="text-lg font-semibold">{documented}</span>
-            <span className="text-[var(--color-ink-faint)]"> / {totalServices} services documented</span>
+            {t('widgets.docs.documented', { documented, total: totalServices })}
           </p>
           <p className="text-xs text-[var(--color-ink-muted)]">
             {totalServices - documented > 0
-              ? `${totalServices - documented} awaiting first generation`
-              : 'Every service has live documentation'}
+              ? t('widgets.docs.awaiting', { count: totalServices - documented })
+              : t('widgets.docs.allDocumented')}
           </p>
         </div>
       </div>
@@ -340,7 +345,7 @@ export function DocsHealthWidget() {
         onClick={() => navigate('/docs')}
         className="mt-3 flex items-center justify-center gap-1.5 rounded-md border border-[var(--color-line-soft)] py-2 text-xs font-medium text-[var(--color-ink-muted)] transition-colors hover:bg-[var(--color-surface-raised)] hover:text-[var(--color-ink)]"
       >
-        Open documentation
+        {t('widgets.docs.open')}
         <ArrowRightIcon size={14} />
       </button>
     </div>

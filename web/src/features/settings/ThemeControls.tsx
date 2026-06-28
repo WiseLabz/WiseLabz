@@ -4,6 +4,7 @@
  * slider). Changes apply instantly and persist via the theme store.
  */
 import { motion } from 'motion/react';
+import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../store/theme';
 import {
   FONT_SETS,
@@ -88,6 +89,7 @@ function Segmented<T extends string>({
 }
 
 export function ThemeControls() {
+  const { t } = useTranslation();
   const { font, mode, preset, custom } = useTheme();
   const setFont = useTheme((s) => s.setFont);
   const setMode = useTheme((s) => s.setMode);
@@ -99,11 +101,11 @@ export function ThemeControls() {
   return (
     <Panel>
       <PanelHeader
-        title="Theme"
+        title={t('appearance.theme')}
         icon={<SettingsIcon size={14} />}
         action={
           <Button size="sm" variant="ghost" onClick={reset}>
-            Reset
+            {t('appearance.reset')}
           </Button>
         }
       />
@@ -111,7 +113,7 @@ export function ThemeControls() {
       <div className="flex flex-col gap-6 p-5">
         {/* Font */}
         <section>
-          <Label>Font</Label>
+          <Label>{t('appearance.font')}</Label>
           <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
             {FONT_KEYS.map((k) => {
               const active = font === k;
@@ -144,14 +146,14 @@ export function ThemeControls() {
         {/* Color */}
         <section>
           <div className="flex items-center justify-between">
-            <Label>Color</Label>
+            <Label>{t('appearance.color')}</Label>
             <Segmented
               layoutId="theme-mode"
               value={mode}
               onChange={setMode}
               options={[
-                { value: 'preset', label: 'Basic' },
-                { value: 'custom', label: 'Advanced' },
+                { value: 'preset', label: t('appearance.basic') },
+                { value: 'custom', label: t('appearance.advanced') },
               ]}
             />
           </div>
@@ -207,15 +209,16 @@ function AdvancedControls({
   preset: PaletteName;
   font: FontSetName;
 }) {
+  const { t } = useTranslation();
   const tokens = makePalette(custom);
   return (
     <div className="mt-3 space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="max-w-[42ch] font-mono text-2xs text-[var(--color-ink-faint)]">
-          Every makePalette() knob. Edits apply live. Status colors stay fixed for legibility.
+          {t('appearance.advancedHint')}
         </p>
         <Button size="sm" variant="secondary" onClick={onSeed}>
-          Start from “{PRESETS[preset].label}”
+          {t('appearance.startFrom', { name: PRESETS[preset].label })}
         </Button>
       </div>
 

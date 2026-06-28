@@ -6,6 +6,7 @@
  */
 import { NavLink } from 'react-router-dom';
 import { motion } from 'motion/react';
+import { useTranslation } from 'react-i18next';
 import { cn } from '../../lib/cn';
 import { useLive } from '../../store/live';
 import { NAV, type NavItem } from './nav';
@@ -15,15 +16,16 @@ const DOCK_ITEMS: NavItem[] = [...NAV, { to: '/settings', label: 'Settings', Ico
 
 export function Dock() {
   const pending = useLive((s) => s.pendingAlerts);
+  const { t } = useTranslation();
 
   return (
     <div className="pointer-events-none fixed inset-x-0 bottom-5 z-[var(--z-sticky)] flex justify-center px-4">
       <nav className="pointer-events-auto flex items-center gap-0.5 rounded-[var(--radius-xl)] border border-[var(--color-line)] bg-[color-mix(in_oklch,var(--color-surface-raised)_88%,transparent)] p-1.5 shadow-[var(--shadow-pop)] backdrop-blur-xl">
-        {DOCK_ITEMS.map(({ to, label, Icon, badge }) => (
+        {DOCK_ITEMS.map(({ to, Icon, badge }) => (
           <NavLink
             key={to}
             to={to}
-            title={label}
+            title={t(`nav.${to.replace('/', '')}`)}
             className={({ isActive }) =>
               cn(
                 'group relative flex items-center gap-2 rounded-[var(--radius-md)] px-3 py-2 text-sm transition-colors duration-150',
@@ -56,7 +58,7 @@ export function Dock() {
                     isActive ? 'max-w-[120px] opacity-100' : 'max-w-0 opacity-0 group-hover:max-w-[120px] group-hover:opacity-100',
                   )}
                 >
-                  {label}
+                  {t(`nav.${to.replace('/', '')}`)}
                 </span>
               </>
             )}

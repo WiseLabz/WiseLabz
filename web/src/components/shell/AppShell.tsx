@@ -6,6 +6,7 @@
 import { Suspense } from 'react';
 import { Outlet } from 'react-router-dom';
 import { ErrorBoundary } from 'react-error-boundary';
+import { Toaster } from 'sonner';
 import { ShellDock } from './ShellDock';
 import { CommandPalette } from '../command/CommandPalette';
 import { ErrorState, SkeletonRows } from '../ui/states';
@@ -35,6 +36,21 @@ export function AppShell() {
         <Content />
       </ShellDock>
       <CommandPalette />
+      <Toaster
+        position="top-right"
+        gap={8}
+        toastOptions={{
+          style: {
+            background: 'var(--color-surface-raised)',
+            color: 'var(--color-ink)',
+            border: '1px solid var(--color-line)',
+            borderRadius: 'var(--radius-md)',
+            boxShadow: 'var(--shadow-pop)',
+            fontFamily: 'var(--font-sans)',
+            fontSize: 'var(--text-sm)',
+          },
+        }}
+      />
     </>
   );
 }
