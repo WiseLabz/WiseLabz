@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/WiseLabz/wiselabz/internal/connector"
@@ -28,8 +29,7 @@ func init() {
 			{Key: "headers", Label: "Headers (JSON)", Type: "text", Required: false, Placeholder: `{"Authorization": "Bearer token"}`},
 		},
 	}, func(_ map[string]any) (connector.Connector, error) {
-		client := &http.Client{Timeout: 30 * time.Second}
-		return &Connector{client: client}, nil
+		return &Connector{client: newGuardedClient()}, nil
 	})
 }
 
@@ -145,10 +145,43 @@ func setHeaders(req *http.Request, config map[string]any) {
 	}
 }
 
-// validateCustomURL parses rawURL and rejects URLs that target loopback,
-// link-local, or cloud metadata endpoints. Private IP ranges (10/8, 172.16/12,
-// 192.168/16) are allowed since this is a self-hosted monitoring tool meant to
-// connect to internal infrastructure.
+// newGuardedClient builds an HTTP client whose dialer rejects connections to
+// loopback or link-local addresses at connect time. Enforcing the check in the
+// dialer (rather than pre-resolving with net.LookupIP) closes the DNS-rebinding
+// TOCTOU window: the address actually dialed is the one validated, even if the
+// hostname re-resolves between check and use. Redirects are blocked so a 3xx
+// cannot bounce the request to an internal target.
+func newGuardedClient() *http.Client {
+	dialer := &net.Dialer{
+		Timeout: 30 * time.Second,
+		Control: func(_, address string, _ syscall.RawConn) error {
+			host, _, err := net.SplitHostPort(address)
+			if err != nil {
+				return fmt.Errorf("split address %q: %w", address, err)
+			}
+			ip := net.ParseIP(host)
+			if ip == nil {
+				return fmt.Errorf("unresolvable address %q", host)
+			}
+			if isDangerousIP(ip) {
+				return fmt.Errorf("connection to blocked address %s denied", ip)
+			}
+			return nil
+		},
+	}
+	return &http.Client{
+		Timeout:   30 * time.Second,
+		Transport: &http.Transport{DialContext: dialer.DialContext},
+		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+}
+
+// validateCustomURL parses rawURL and enforces the http/https scheme and a
+// non-empty host. Network-level SSRF protection (loopback/link-local blocking)
+// is enforced at dial time by newGuardedClient, not here, to avoid a
+// DNS-rebinding TOCTOU gap.
 func validateCustomURL(raw string) error {
 	parsed, err := url.Parse(raw)
 	if err != nil {
@@ -160,31 +193,17 @@ func validateCustomURL(raw string) error {
 		return fmt.Errorf("scheme %q not allowed (only http/https)", parsed.Scheme)
 	}
 
-	host := parsed.Hostname()
-	if host == "" {
+	if parsed.Hostname() == "" {
 		return fmt.Errorf("empty host")
-	}
-
-	// Resolve host to IP for network-based checks.
-	ips, err := net.LookupIP(host)
-	if err != nil {
-		// If DNS fails, allow the request — the connector's HTTP client
-		// will surface the real error. Don't block valid URLs on DNS
-		// flakiness.
-		return nil
-	}
-
-	for _, ip := range ips {
-		if isDangerousIP(ip) {
-			return fmt.Errorf("host %q resolves to blocked address %s", host, ip)
-		}
 	}
 
 	return nil
 }
 
-// isDangerousIP returns true for loopback, link-local unicast, and
-// cloud metadata IPs. Private ranges (RFC 1918) are allowed.
+// isDangerousIP returns true for loopback and link-local unicast addresses
+// (the latter covers cloud metadata endpoints like 169.254.169.254). Private
+// ranges (RFC 1918) are allowed since this is a self-hosted monitoring tool
+// meant to connect to internal infrastructure.
 func isDangerousIP(ip net.IP) bool {
 	return ip.IsLoopback() || ip.IsLinkLocalUnicast()
 }
