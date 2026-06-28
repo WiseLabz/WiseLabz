@@ -4,7 +4,7 @@ import Axios, { type AxiosError, type AxiosRequestConfig } from 'axios';
  * Shared axios instance used by every orval-generated call (configured as the
  * `mutator` in orval.config.ts).
  *
- * Implements the auth model from FRONTEND_PLAN.md §8.7:
+ * Implements the auth model:
  *   - access token kept IN MEMORY only (never localStorage),
  *   - refresh token rides an HttpOnly cookie (sent automatically via withCredentials),
  *   - a single silent refresh on 401, then one retry; only if THAT fails do we
@@ -60,7 +60,7 @@ AXIOS_INSTANCE.interceptors.response.use(
       }
     }
     return Promise.reject(error);
-  },
+  }
 );
 
 /**
@@ -69,7 +69,7 @@ AXIOS_INSTANCE.interceptors.response.use(
  */
 export const customInstance = <T>(
   config: AxiosRequestConfig,
-  options?: AxiosRequestConfig,
+  options?: AxiosRequestConfig
 ): Promise<T> => {
   const source = Axios.CancelToken.source();
   const promise = AXIOS_INSTANCE({
