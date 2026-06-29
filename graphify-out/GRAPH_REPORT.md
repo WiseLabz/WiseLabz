@@ -1,11 +1,11 @@
 # Graph Report - WiseLabz  (2026-06-29)
 
 ## Corpus Check
-- 108 files · ~70,933 words
+- 108 files · ~70,460 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 288 nodes · 225 edges · 18 communities detected
+- 287 nodes · 224 edges · 18 communities detected
 - Extraction: 92% EXTRACTED · 8% INFERRED · 0% AMBIGUOUS · INFERRED: 17 edges (avg confidence: 0.8)
 - Token cost: 0 input · 0 output
 
@@ -72,16 +72,16 @@ Cohesion: 0.31
 Nodes (6): buildDocDiff(), fold(), toUnits(), diffStats(), lineDiff(), wordDiff()
 
 ### Community 5 - "Community 5"
-Cohesion: 0.33
-Nodes (5): addSection(), moveSection(), removeSection(), update(), updateSection()
-
-### Community 6 - "Community 6"
 Cohesion: 0.25
 Nodes (3): setAccessToken(), apply(), clear()
 
-### Community 7 - "Community 7"
+### Community 6 - "Community 6"
 Cohesion: 0.36
 Nodes (6): applyTokens(), makePalette(), presetOpts(), commit(), load(), tokensFor()
+
+### Community 7 - "Community 7"
+Cohesion: 0.39
+Nodes (5): addSection(), moveSection(), removeSection(), update(), updateSection()
 
 ### Community 8 - "Community 8"
 Cohesion: 0.29
@@ -92,12 +92,12 @@ Cohesion: 0.62
 Nodes (6): getResponse(), handleRequest(), resolveMainClient(), respondWithMock(), sendToClient(), serializeRequest()
 
 ### Community 10 - "Community 10"
-Cohesion: 0.33
-Nodes (3): enableMocks(), bootstrap(), installMockWebSocket()
-
-### Community 11 - "Community 11"
 Cohesion: 0.4
 Nodes (2): findRoute(), rowSeverity()
+
+### Community 11 - "Community 11"
+Cohesion: 0.33
+Nodes (3): enableMocks(), bootstrap(), installMockWebSocket()
 
 ### Community 12 - "Community 12"
 Cohesion: 0.6
@@ -132,7 +132,7 @@ Nodes (2): apply(), css()
   These have ≤1 connection - possible missing edges or undocumented components.
 - **Thin community `Community 8`** (7 nodes): `clockTime()`, `fullDate()`, `relativeTime()`, `cn()`, `TimeAgo()`, `TimeAgo.tsx`, `time.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 11`** (6 nodes): `eventLabel()`, `findRoute()`, `rowSeverity()`, `setCell()`, `setRowSeverity()`, `EventRoutingTable.tsx`
+- **Thin community `Community 10`** (6 nodes): `eventLabel()`, `findRoute()`, `rowSeverity()`, `setCell()`, `setRowSeverity()`, `EventRoutingTable.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 20`** (4 nodes): `runSync()`, `runSync.ts`, `triggerSync.ts`, `triggerMockSync()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
