@@ -103,10 +103,9 @@ export function TemplateEditorPage() {
     onSuccess: (updated) => {
       queryClient.setQueryData(getGetTemplatesTemplateIdQueryKey(templateId), updated);
       queryClient.invalidateQueries({ queryKey: getGetTemplatesQueryKey() });
-      toast.success(t('templates.toastSaved', { defaultValue: 'Template saved' }));
+      toast.success(t('templates.toastSaved'));
     },
-    onError: () =>
-      toast.error(t('templates.toastSaveError', { defaultValue: 'Could not save template' })),
+    onError: () => toast.error(t('templates.toastSaveError')),
   });
 
   if (isLoading || (!draft && !isError)) {
@@ -123,12 +122,7 @@ export function TemplateEditorPage() {
     return (
       <div className="mx-auto max-w-275 px-6 py-6">
         <Panel className="min-h-[40vh]">
-          <ErrorState
-            description={t('templates.editorLoadError', {
-              defaultValue: 'Could not load this template.',
-            })}
-            onRetry={() => refetch()}
-          />
+          <ErrorState description={t('templates.editorLoadError')} onRetry={() => refetch()} />
         </Panel>
       </div>
     );
@@ -144,7 +138,7 @@ export function TemplateEditorPage() {
       sections: [
         ...draft.sections,
         {
-          title: t('templates.newSectionTitle', { defaultValue: 'New section' }),
+          title: t('templates.newSectionTitle'),
           order: draft.sections.length + 1,
           body: '',
         },
@@ -169,30 +163,26 @@ export function TemplateEditorPage() {
         className="mb-4 inline-flex items-center gap-1.5 text-xs text-ink-muted transition-colors hover:text-ink"
       >
         <ArrowRightIcon size={13} className="rotate-180" />
-        {t('templates.backToList', { defaultValue: 'All templates' })}
+        {t('templates.backToList')}
       </button>
 
       <header className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
           <h1 className="truncate text-xl font-semibold tracking-tight text-ink">
-            {draft.name || t('templates.untitled', { defaultValue: 'Untitled template' })}
+            {draft.name || t('templates.untitled')}
           </h1>
           <p className="font-mono text-2xs text-ink-faint">{data.id}</p>
         </div>
         <RoleGate
           fallback={
-            <span className="font-mono text-2xs text-ink-faint">
-              {t('templates.readOnly', {
-                defaultValue: 'Read-only — operator role required to edit',
-              })}
-            </span>
+            <span className="font-mono text-2xs text-ink-faint">{t('templates.readOnly')}</span>
           }
         >
           <div className="flex items-center gap-2">
             {dirty && (
               <span className="flex items-center gap-1.5 font-mono text-2xs text-warn">
                 <span className="h-1.5 w-1.5 bg-warn" aria-hidden="true" />
-                {t('templates.unsaved', { defaultValue: 'Unsaved changes' })}
+                {t('templates.unsaved')}
               </span>
             )}
             <Button
@@ -202,9 +192,7 @@ export function TemplateEditorPage() {
               onClick={() => save.mutate()}
             >
               <CheckIcon size={15} />
-              {save.isPending
-                ? t('templates.saving', { defaultValue: 'Saving…' })
-                : t('templates.save', { defaultValue: 'Save' })}
+              {save.isPending ? t('templates.saving') : t('templates.save')}
             </Button>
           </div>
         </RoleGate>
@@ -214,26 +202,21 @@ export function TemplateEditorPage() {
         {/* ── Left: edit ─────────────────────────────────────────────── */}
         <div className="space-y-4">
           <Panel>
-            <PanelHeader
-              title={t('templates.detailsHeader', { defaultValue: 'Template' })}
-              icon={<FileTextIcon size={13} />}
-            />
+            <PanelHeader title={t('templates.detailsHeader')} icon={<FileTextIcon size={13} />} />
             <div className="space-y-3 p-4">
-              <Labeled label={t('templates.nameLabel', { defaultValue: 'Name' })} required>
+              <Labeled label={t('templates.nameLabel')} required>
                 <input
                   value={draft.name}
                   onChange={(e) => update({ name: e.target.value })}
                   className={inputCls}
                 />
               </Labeled>
-              <Labeled label={t('templates.descriptionLabel', { defaultValue: 'Description' })}>
+              <Labeled label={t('templates.descriptionLabel')}>
                 <textarea
                   value={draft.description}
                   onChange={(e) => update({ description: e.target.value })}
                   rows={2}
-                  placeholder={t('templates.descriptionPlaceholder', {
-                    defaultValue: 'What this template documents…',
-                  })}
+                  placeholder={t('templates.descriptionPlaceholder')}
                   className={cn(inputCls, 'h-auto resize-y py-2 leading-relaxed')}
                 />
               </Labeled>
@@ -241,27 +224,17 @@ export function TemplateEditorPage() {
           </Panel>
 
           <Panel>
-            <PanelHeader
-              title={t('templates.appliesHeader', { defaultValue: 'Applies to' })}
-              icon={<ArrowRightIcon size={13} />}
-            />
+            <PanelHeader title={t('templates.appliesHeader')} icon={<ArrowRightIcon size={13} />} />
             <div className="space-y-3 p-4">
-              <p className="text-xs leading-relaxed text-ink-muted">
-                {t('templates.appliesHelp', {
-                  defaultValue:
-                    'Which connectors render with this template. Leave category empty to match any service; add a type to narrow it further.',
-                })}
-              </p>
-              <Labeled label={t('templates.categoryLabel', { defaultValue: 'Connector category' })}>
+              <p className="text-xs leading-relaxed text-ink-muted">{t('templates.appliesHelp')}</p>
+              <Labeled label={t('templates.categoryLabel')}>
                 <div className="relative">
                   <select
                     value={draft.category}
                     onChange={(e) => update({ category: e.target.value })}
                     className={cn(inputCls, 'appearance-none pr-8')}
                   >
-                    <option value="">
-                      {t('templates.anyCategory', { defaultValue: 'Any category' })}
-                    </option>
+                    <option value="">{t('templates.anyCategory')}</option>
                     {CATEGORIES.map((c) => (
                       <option key={c} value={c}>
                         {t(`templates.category.${c}`, { defaultValue: c })}
@@ -274,13 +247,11 @@ export function TemplateEditorPage() {
                   />
                 </div>
               </Labeled>
-              <Labeled
-                label={t('templates.typeLabel', { defaultValue: 'Connector type (optional)' })}
-              >
+              <Labeled label={t('templates.typeLabel')}>
                 <input
                   value={draft.type}
                   onChange={(e) => update({ type: e.target.value })}
-                  placeholder={t('templates.typePlaceholder', { defaultValue: 'e.g. proxmox' })}
+                  placeholder={t('templates.typePlaceholder')}
                   className={inputCls}
                 />
               </Labeled>
@@ -289,14 +260,14 @@ export function TemplateEditorPage() {
 
           <Panel>
             <PanelHeader
-              title={t('templates.sectionsHeader', { defaultValue: 'Sections' })}
+              title={t('templates.sectionsHeader')}
               icon={<FileTextIcon size={13} />}
               count={draft.sections.length}
               action={
                 <RoleGate>
                   <Button variant="secondary" size="sm" onClick={addSection}>
                     <PlusIcon size={13} />
-                    {t('templates.addSection', { defaultValue: 'Add section' })}
+                    {t('templates.addSection')}
                   </Button>
                 </RoleGate>
               }
@@ -304,9 +275,7 @@ export function TemplateEditorPage() {
             <div className="space-y-3 p-4">
               {draft.sections.length === 0 && (
                 <p className="py-4 text-center text-xs text-ink-faint">
-                  {t('templates.noSections', {
-                    defaultValue: 'No sections yet — add one to build the doc.',
-                  })}
+                  {t('templates.noSections')}
                 </p>
               )}
               {draft.sections.map((s, idx) => (
@@ -377,13 +346,13 @@ function SectionEditor({
         <input
           value={section.title}
           onChange={(e) => onChange({ title: e.target.value })}
-          aria-label={t('templates.sectionTitleLabel', { defaultValue: 'Section title' })}
+          aria-label={t('templates.sectionTitleLabel')}
           className="h-8 min-w-0 flex-1 rounded-sm border border-line bg-surface px-2.5 text-sm font-medium text-ink outline-none focus-visible:border-signal-soft"
         />
         <RoleGate>
           <div className="flex items-center">
             <IconButton
-              label={t('templates.moveUp', { defaultValue: 'Move section up' })}
+              label={t('templates.moveUp')}
               disabled={index === 0}
               onClick={() => onMove(-1)}
               className="h-7 w-7"
@@ -391,7 +360,7 @@ function SectionEditor({
               <ChevronDownIcon size={14} className="rotate-180" />
             </IconButton>
             <IconButton
-              label={t('templates.moveDown', { defaultValue: 'Move section down' })}
+              label={t('templates.moveDown')}
               disabled={index === count - 1}
               onClick={() => onMove(1)}
               className="h-7 w-7"
@@ -399,7 +368,7 @@ function SectionEditor({
               <ChevronDownIcon size={14} />
             </IconButton>
             <IconButton
-              label={t('templates.removeSection', { defaultValue: 'Remove section' })}
+              label={t('templates.removeSection')}
               onClick={onRemove}
               className="h-7 w-7 hover:text-err"
             >
@@ -412,10 +381,8 @@ function SectionEditor({
         value={section.body}
         onChange={(e) => onChange({ body: e.target.value })}
         rows={4}
-        aria-label={t('templates.sectionBodyLabel', { defaultValue: 'Section body' })}
-        placeholder={t('templates.sectionBodyPlaceholder', {
-          defaultValue: 'Markdown with {{placeholders}} resolved from the synced service…',
-        })}
+        aria-label={t('templates.sectionBodyLabel')}
+        placeholder={t('templates.sectionBodyPlaceholder')}
         className="w-full resize-y rounded-sm border border-line bg-surface px-2.5 py-2 font-mono text-xs leading-relaxed text-ink outline-none placeholder:text-ink-faint focus-visible:border-signal-soft"
       />
     </div>
@@ -459,8 +426,7 @@ function PreviewPanel({
     mutationFn: () =>
       postTemplatesTemplateIdPreview(template.id, connectorId ? { connectorId } : {}),
     onSuccess: (doc) => setResult(doc),
-    onError: () =>
-      toast.error(t('templates.toastPreviewError', { defaultValue: 'Preview failed' })),
+    onError: () => toast.error(t('templates.toastPreviewError')),
   });
 
   const selected = candidates.find((c) => c.id === connectorId) ?? null;
@@ -470,7 +436,7 @@ function PreviewPanel({
   return (
     <Panel className="lg:sticky lg:top-6 lg:self-start">
       <PanelHeader
-        title={t('templates.previewHeader', { defaultValue: 'Preview' })}
+        title={t('templates.previewHeader')}
         icon={<SparklesIcon size={13} />}
         action={
           result && (
@@ -480,14 +446,14 @@ function PreviewPanel({
                 onClick={() => setTab('rendered')}
                 icon={<FileTextIcon size={13} />}
               >
-                {t('templates.previewRendered', { defaultValue: 'Rendered' })}
+                {t('templates.previewRendered')}
               </PreviewTabButton>
               <PreviewTabButton
                 active={tab === 'diff'}
                 onClick={() => setTab('diff')}
                 icon={<DiffIcon size={13} />}
               >
-                {t('templates.previewDiff', { defaultValue: 'Diff' })}
+                {t('templates.previewDiff')}
               </PreviewTabButton>
             </div>
           )
@@ -497,7 +463,7 @@ function PreviewPanel({
         <div className="flex flex-wrap items-end gap-2">
           <label className="min-w-0 flex-1">
             <span className="mb-1 block text-2xs uppercase tracking-wider text-ink-faint">
-              {t('templates.sampleConnector', { defaultValue: 'Sample connector' })}
+              {t('templates.sampleConnector')}
             </span>
             <div className="relative">
               <select
@@ -524,18 +490,13 @@ function PreviewPanel({
             onClick={() => preview.mutate()}
           >
             <SparklesIcon size={14} />
-            {preview.isPending
-              ? t('templates.generating', { defaultValue: 'Generating…' })
-              : t('templates.generate', { defaultValue: 'Generate' })}
+            {preview.isPending ? t('templates.generating') : t('templates.generate')}
           </Button>
         </div>
 
         {dirty && (
           <p className="rounded-md bg-warn-tint px-3 py-2 text-2xs text-warn">
-            {t('templates.previewStale', {
-              defaultValue:
-                'Preview generates from the last saved template. Save to preview your latest edits.',
-            })}
+            {t('templates.previewStale')}
           </p>
         )}
 
@@ -546,14 +507,9 @@ function PreviewPanel({
             <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-surface-raised text-ink-faint">
               <SparklesIcon size={20} />
             </span>
-            <p className="text-sm font-medium text-ink">
-              {t('templates.previewEmptyTitle', { defaultValue: 'Generate a preview' })}
-            </p>
+            <p className="text-sm font-medium text-ink">{t('templates.previewEmptyTitle')}</p>
             <p className="max-w-xs text-xs leading-relaxed text-ink-muted">
-              {t('templates.previewEmptyDesc', {
-                defaultValue:
-                  'Pick a sample connector and generate to see the doc this template produces.',
-              })}
+              {t('templates.previewEmptyDesc')}
             </p>
           </div>
         ) : tab === 'rendered' ? (
@@ -564,9 +520,9 @@ function PreviewPanel({
           <DocDiff
             before={source}
             after={result.content}
-            label={t('templates.diffLabel', { defaultValue: 'template → generated' })}
-            baseLabel={t('templates.diffBase', { defaultValue: 'source' })}
-            headLabel={selected?.name ?? t('templates.diffHead', { defaultValue: 'generated' })}
+            label={t('templates.diffLabel')}
+            baseLabel={t('templates.diffBase')}
+            headLabel={selected?.name ?? t('templates.diffHead')}
           />
         )}
       </div>

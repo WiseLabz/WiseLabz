@@ -69,21 +69,33 @@ function css(p: Prefs): string {
   const rules: string[] = [];
 
   if (p.contrast === 'boost') {
-    // Lift the muted/faint inks so secondary text clears AA more comfortably.
+    // Default ink already clears AA; boost pushes secondary text toward AAA
+    // (muted ≈10.7:1, faint ≈8.2:1) for low-vision / bright-ambient use.
     rules.push(
-      ":root[data-contrast='boost']{--color-ink-muted:oklch(0.84 0.006 250);--color-ink-faint:oklch(0.68 0.008 250);}",
+      ":root[data-contrast='boost']{--color-ink-muted:oklch(0.90 0.006 250);--color-ink-faint:oklch(0.86 0.008 250);}",
     );
   }
   if (p.textSize === 'sm') rules.push(":root[data-text-size='sm']{font-size:15px;}");
   if (p.textSize === 'lg') rules.push(":root[data-text-size='lg']{font-size:17.5px;}");
+  if (p.density === 'compact') {
+    // Tailwind v4 derives every spacing + box-size utility from --spacing
+    // (calc(var(--spacing) * N)). Tightening that one token scales the whole
+    // UI's padding, gaps, and control heights ~12% denser, proportionally.
+    rules.push(":root[data-density='compact']{--spacing:0.22rem;}");
+  }
   if (p.focusRing === 'bold') {
     rules.push(
       ":root[data-focus-ring='bold'] :focus-visible{outline-width:3px !important;outline-offset:3px !important;}",
     );
   }
   if (p.reduceTransparency) {
-    // Solidify modal/scrim backdrops.
-    rules.push(":root[data-reduce-transparency='true'] ::backdrop{background:var(--color-canvas) !important;}");
+    // Solidify the native modal backdrop, and kill every frosted-glass blur
+    // (topbar, dock, scrims) — the blur, not the slight tint, is what hurts
+    // legibility for users who ask to reduce transparency.
+    rules.push(
+      ":root[data-reduce-transparency='true'] ::backdrop{background:var(--color-canvas) !important;}",
+      ":root[data-reduce-transparency='true'] *{backdrop-filter:none !important;-webkit-backdrop-filter:none !important;}",
+    );
   }
   return rules.join('\n');
 }

@@ -27,11 +27,53 @@ export interface SettingsSection {
 }
 
 export const SETTINGS_SECTIONS: SettingsSection[] = [
-  { segment: 'profile', labelKey: 'settings.nav.profile', labelDefault: 'Profile', Icon: UserIcon, operatorOnly: false },
-  { segment: 'users', labelKey: 'settings.nav.users', labelDefault: 'Users', Icon: LayersIcon, operatorOnly: true },
-  { segment: 'auth', labelKey: 'settings.nav.auth', labelDefault: 'Authentication', Icon: ServerIcon, operatorOnly: true },
-  { segment: 'ai', labelKey: 'settings.nav.ai', labelDefault: 'AI', Icon: SparklesIcon, operatorOnly: true },
-  { segment: 'notifications', labelKey: 'settings.nav.notifications', labelDefault: 'Notifications', Icon: BellIcon, operatorOnly: true },
-  { segment: 'system', labelKey: 'settings.nav.system', labelDefault: 'System', Icon: GaugeIcon, operatorOnly: true },
-  { segment: 'appearance', labelKey: 'settings.nav.appearance', labelDefault: 'Appearance', Icon: SettingsIcon, operatorOnly: false },
+  {
+    segment: 'profile',
+    labelKey: 'settings.nav.profile',
+    labelDefault: 'Profile',
+    Icon: UserIcon,
+    operatorOnly: false,
+  },
+  {
+    segment: 'users',
+    labelKey: 'settings.nav.users',
+    labelDefault: 'Users',
+    Icon: LayersIcon,
+    operatorOnly: true,
+  },
+  {
+    segment: 'auth',
+    labelKey: 'settings.nav.auth',
+    labelDefault: 'Authentication',
+    Icon: ServerIcon,
+    operatorOnly: true,
+  },
+  {
+    segment: 'ai',
+    labelKey: 'settings.nav.ai',
+    labelDefault: 'AI',
+    Icon: SparklesIcon,
+    operatorOnly: true,
+  },
+  {
+    segment: 'notifications',
+    labelKey: 'settings.nav.notifications',
+    labelDefault: 'Notifications',
+    Icon: BellIcon,
+    operatorOnly: true,
+  },
+  {
+    segment: 'system',
+    labelKey: 'settings.nav.system',
+    labelDefault: 'System',
+    Icon: GaugeIcon,
+    operatorOnly: true,
+  },
+  {
+    segment: 'appearance',
+    labelKey: 'settings.nav.appearance',
+    labelDefault: 'Appearance',
+    Icon: SettingsIcon,
+    operatorOnly: false,
+  },
 ];

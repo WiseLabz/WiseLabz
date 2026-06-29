@@ -205,7 +205,7 @@ export function Field({
           style={{ backgroundColor: value ? 'var(--color-signal)' : 'var(--color-line-strong)' }}
         >
           <span
-            className="absolute top-0.5 h-4 w-4 rounded-full bg-white transition-[left]"
+            className="absolute top-0.5 h-4 w-4 rounded-full bg-ink transition-[left]"
             style={{ left: value ? '18px' : '2px' }}
           />
         </button>

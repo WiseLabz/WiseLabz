@@ -47,7 +47,7 @@ export function TemplatesPage() {
         appliesTo: {},
         sections: [
           {
-            title: t('templates.defaultSectionTitle', { defaultValue: 'Overview' }),
+            title: t('templates.defaultSectionTitle'),
             order: 1,
             body: '',
           },
@@ -57,11 +57,10 @@ export function TemplatesPage() {
       invalidate();
       setCreating(false);
       setNewName('');
-      toast.success(t('templates.toastCreated', { defaultValue: 'Template created' }));
+      toast.success(t('templates.toastCreated'));
       navigate(`/templates/${tpl.id}`);
     },
-    onError: () =>
-      toast.error(t('templates.toastCreateError', { defaultValue: 'Could not create template' })),
+    onError: () => toast.error(t('templates.toastCreateError')),
   });
 
   const remove = useMutation({
@@ -69,30 +68,22 @@ export function TemplatesPage() {
     onSuccess: () => {
       invalidate();
       setToDelete(null);
-      toast.success(t('templates.toastDeleted', { defaultValue: 'Template deleted' }));
+      toast.success(t('templates.toastDeleted'));
     },
-    onError: () =>
-      toast.error(t('templates.toastDeleteError', { defaultValue: 'Could not delete template' })),
+    onError: () => toast.error(t('templates.toastDeleteError')),
   });
 
   return (
     <div className="mx-auto max-w-225 px-6 py-6">
       <header className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight text-ink">
-            {t('templates.title', { defaultValue: 'Templates' })}
-          </h1>
-          <p className="text-sm text-ink-muted">
-            {t('templates.subtitle', {
-              defaultValue:
-                'How services render into docs. Each template applies to a connector category or type.',
-            })}
-          </p>
+          <h1 className="text-xl font-semibold tracking-tight text-ink">{t('templates.title')}</h1>
+          <p className="text-sm text-ink-muted">{t('templates.subtitle')}</p>
         </div>
         <RoleGate>
           <Button variant="primary" size="md" onClick={() => setCreating(true)}>
             <PlusIcon size={15} />
-            {t('templates.new', { defaultValue: 'New template' })}
+            {t('templates.new')}
           </Button>
         </RoleGate>
       </header>
@@ -101,22 +92,17 @@ export function TemplatesPage() {
         {isLoading ? (
           <SkeletonRows rows={5} />
         ) : isError || !data ? (
-          <ErrorState
-            description={t('templates.loadError', { defaultValue: 'Could not load templates.' })}
-            onRetry={() => refetch()}
-          />
+          <ErrorState description={t('templates.loadError')} onRetry={() => refetch()} />
         ) : data.length === 0 ? (
           <EmptyState
             icon={<LayersIcon size={20} />}
-            title={t('templates.emptyTitle', { defaultValue: 'No templates yet' })}
-            description={t('templates.emptyDesc', {
-              defaultValue: 'Create a template to control how a service renders into its doc.',
-            })}
+            title={t('templates.emptyTitle')}
+            description={t('templates.emptyDesc')}
             action={
               <RoleGate>
                 <Button variant="secondary" size="sm" onClick={() => setCreating(true)}>
                   <PlusIcon size={14} />
-                  {t('templates.new', { defaultValue: 'New template' })}
+                  {t('templates.new')}
                 </Button>
               </RoleGate>
             }
@@ -144,7 +130,6 @@ export function TemplatesPage() {
                     <span>·</span>
                     <span>
                       {t('templates.sectionCount', {
-                        defaultValue: '{{count}} sections',
                         count: tpl.sections.length,
                       })}
                     </span>
@@ -154,7 +139,7 @@ export function TemplatesPage() {
 
               <RoleGate>
                 <IconButton
-                  label={t('templates.deleteLabel', { defaultValue: 'Delete template' })}
+                  label={t('templates.deleteLabel')}
                   onClick={() => setToDelete(tpl)}
                   className="opacity-0 transition-opacity hover:text-err group-hover:opacity-100 focus-visible:opacity-100"
                 >
@@ -174,7 +159,7 @@ export function TemplatesPage() {
       <Dialog
         open={creating}
         onClose={() => setCreating(false)}
-        title={t('templates.createTitle', { defaultValue: 'New template' })}
+        title={t('templates.createTitle')}
         size="sm"
       >
         <form
@@ -185,19 +170,19 @@ export function TemplatesPage() {
         >
           <label className="block">
             <span className="mb-1 block text-2xs uppercase tracking-wider text-ink-faint">
-              {t('templates.nameLabel', { defaultValue: 'Name' })}
+              {t('templates.nameLabel')}
             </span>
             <input
               autoFocus
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
-              placeholder={t('templates.namePlaceholder', { defaultValue: 'e.g. Proxmox Node' })}
+              placeholder={t('templates.namePlaceholder')}
               className="h-9 w-full rounded-sm border border-line bg-surface px-2.5 text-sm text-ink outline-none placeholder:text-ink-faint focus-visible:border-signal-soft"
             />
           </label>
           <div className="mt-5 flex items-center justify-end gap-2">
             <Button type="button" variant="ghost" size="sm" onClick={() => setCreating(false)}>
-              {t('common.cancel', { defaultValue: 'Cancel' })}
+              {t('common.cancel')}
             </Button>
             <Button
               type="submit"
@@ -205,9 +190,7 @@ export function TemplatesPage() {
               size="sm"
               disabled={!newName.trim() || create.isPending}
             >
-              {create.isPending
-                ? t('templates.creating', { defaultValue: 'Creating…' })
-                : t('templates.create', { defaultValue: 'Create' })}
+              {create.isPending ? t('templates.creating') : t('templates.create')}
             </Button>
           </div>
         </form>
@@ -218,18 +201,12 @@ export function TemplatesPage() {
         open={!!toDelete}
         onClose={() => setToDelete(null)}
         onConfirm={() => toDelete && remove.mutate(toDelete.id)}
-        title={t('templates.deleteTitle', { defaultValue: 'Delete template?' })}
+        title={t('templates.deleteTitle')}
         description={t('templates.deleteDesc', {
-          defaultValue:
-            '"{{name}}" will be removed. Docs already generated from it are not affected.',
           name: toDelete?.name ?? '',
         })}
-        confirmLabel={
-          remove.isPending
-            ? t('templates.deleting', { defaultValue: 'Deleting…' })
-            : t('templates.delete', { defaultValue: 'Delete' })
-        }
-        cancelLabel={t('common.cancel', { defaultValue: 'Cancel' })}
+        confirmLabel={remove.isPending ? t('templates.deleting') : t('templates.delete')}
+        cancelLabel={t('common.cancel')}
         tone="danger"
         confirmDisabled={remove.isPending}
       />
@@ -243,13 +220,13 @@ export function AppliesToLabel({ template }: { template: Template }) {
   const cat = template.appliesTo?.category;
   const type = template.appliesTo?.type;
   if (!cat && !type) {
-    return <span>{t('templates.appliesAny', { defaultValue: 'any service' })}</span>;
+    return <span>{t('templates.appliesAny')}</span>;
   }
   return (
     <span className="text-signal-bright">
       {cat
         ? t(`templates.category.${cat}`, { defaultValue: cat })
-        : t('templates.appliesAny', { defaultValue: 'any' })}
+        : t('templates.appliesAnyCategory')}
       {type ? ` / ${type}` : ''}
     </span>
   );

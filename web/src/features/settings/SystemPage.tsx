@@ -36,47 +36,38 @@ export function SystemPage() {
 
   return (
     <div>
-      <SubHeader
-        title={t('settings.system.title', { defaultValue: 'System' })}
-        description={t('settings.system.subtitle', {
-          defaultValue: 'Instance health, connectivity, and version.',
-        })}
-      />
+      <SubHeader title={t('settings.system.title')} description={t('settings.system.subtitle')} />
 
       <div className="mb-4 grid gap-4 sm:grid-cols-3">
         <Stat
           icon={<NetworkIcon size={15} />}
-          label={t('settings.system.wsStatus', { defaultValue: 'WebSocket' })}
+          label={t('settings.system.wsStatus')}
           value={
             <ToneTag
               tone={wsTone[ws]}
-              label={t(`settings.system.ws.${ws}`, {
-                defaultValue:
-                  ws === 'open' ? 'connected' : ws === 'connecting' ? 'connecting' : 'disconnected',
-              })}
+              label={t(`settings.system.ws.${ws}`)}
             />
           }
         />
         <Stat
           icon={<ClockIcon size={15} />}
-          label={t('settings.system.syncSchedule', { defaultValue: 'Sync schedule' })}
+          label={t('settings.system.syncSchedule')}
           value={
             <span className="font-mono text-sm text-ink">{info.data?.syncSchedule ?? '—'}</span>
           }
         />
         <Stat
           icon={<GaugeIcon size={15} />}
-          label={t('settings.system.version', { defaultValue: 'Version' })}
+          label={t('settings.system.version')}
           value={<span className="font-mono text-sm text-ink">v{info.data?.version ?? '—'}</span>}
         />
       </div>
 
       <Section
-        title={t('settings.system.healthTitle', { defaultValue: 'Backend health' })}
+        title={t('settings.system.healthTitle')}
         description={
           health.data
             ? t('settings.system.overall', {
-                defaultValue: 'Overall: {{status}}',
                 status: health.data.status,
               })
             : undefined
@@ -84,9 +75,7 @@ export function SystemPage() {
       >
         {health.isError || !health.data ? (
           <ErrorState
-            description={t('settings.system.healthError', {
-              defaultValue: 'Could not load health.',
-            })}
+            description={t('settings.system.healthError')}
             onRetry={() => health.refetch()}
           />
         ) : (
@@ -109,17 +98,12 @@ export function SystemPage() {
 
       <Panel>
         <PanelHeader
-          title={t('settings.system.integrationsTitle', { defaultValue: 'Integrations' })}
+          title={t('settings.system.integrationsTitle')}
           icon={<ServerIcon size={14} />}
           count={info.data?.integrations.length}
         />
         {info.isError || !info.data ? (
-          <ErrorState
-            description={t('settings.system.infoError', {
-              defaultValue: 'Could not load instance info.',
-            })}
-            onRetry={() => info.refetch()}
-          />
+          <ErrorState description={t('settings.system.infoError')} onRetry={() => info.refetch()} />
         ) : (
           <ul className="divide-y divide-line-soft">
             {info.data.integrations.map((i, idx) => (

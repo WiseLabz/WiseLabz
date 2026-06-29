@@ -17,7 +17,7 @@ import i18n from '../i18n';
 import type { WsEvent } from '../types/ws';
 
 const jump = (to: string) => ({
-  label: i18n.t('notify.view', { defaultValue: 'View' }),
+  label: i18n.t('notify.view'),
   onClick: () => navigateTo(to),
 });
 
@@ -110,7 +110,6 @@ function handle(frame: WsEvent, qc: ReturnType<typeof useQueryClient>) {
       qc.invalidateQueries({ queryKey: getGetChangesQueryKey() });
       {
         const msg = i18n.t('notify.syncComplete', {
-          defaultValue: 'Sync complete — {{changes}} change(s), {{alerts}} alert(s)',
           changes: p.changesDetected,
           alerts: p.alertsRaised,
         });

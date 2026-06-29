@@ -41,36 +41,28 @@ export function AiPage() {
     mutationFn: (body: AiConfig) => putAiConfig(apiKey ? { ...body, apiKey } : body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: getGetAiConfigQueryKey() });
-      toast.success(t('settings.ai.saved', { defaultValue: 'AI settings saved.' }));
+      toast.success(t('settings.ai.saved'));
       setApiKey('');
     },
-    onError: () =>
-      toast.error(t('settings.ai.saveError', { defaultValue: 'Could not save AI settings.' })),
+    onError: () => toast.error(t('settings.ai.saveError')),
   });
 
   const test = useMutation({
     mutationFn: () => postAiConfigTest(),
     onSuccess: (result) => {
       setTestResult(result);
-      if (result.ok)
-        toast.success(t('settings.ai.testOk', { defaultValue: 'AI provider reachable.' }));
-      else
-        toast.error(
-          result.message ?? t('settings.ai.testFail', { defaultValue: 'AI test failed.' })
-        );
+      if (result.ok) toast.success(t('settings.ai.testOk'));
+      else toast.error(result.message ?? t('settings.ai.testFail'));
     },
-    onError: () => toast.error(t('settings.ai.testFail', { defaultValue: 'AI test failed.' })),
+    onError: () => toast.error(t('settings.ai.testFail')),
   });
 
   if (isLoading) return <Loading />;
   if (isError || !data || !form)
     return (
       <div>
-        <SubHeader title={t('settings.ai.title', { defaultValue: 'AI' })} />
-        <ErrorState
-          description={t('settings.ai.loadError', { defaultValue: 'Could not load AI settings.' })}
-          onRetry={() => refetch()}
-        />
+        <SubHeader title={t('settings.ai.title')} />
+        <ErrorState description={t('settings.ai.loadError')} onRetry={() => refetch()} />
       </div>
     );
 
@@ -80,43 +72,33 @@ export function AiPage() {
 
   return (
     <div>
-      <SubHeader
-        title={t('settings.ai.title', { defaultValue: 'AI' })}
-        description={t('settings.ai.subtitle', {
-          defaultValue: 'Opt-in, provider-agnostic AI doc assistance.',
-        })}
-      />
+      <SubHeader title={t('settings.ai.title')} description={t('settings.ai.subtitle')} />
 
-      <Section title={t('settings.ai.moduleTitle', { defaultValue: 'AI module' })}>
+      <Section title={t('settings.ai.moduleTitle')}>
         <ToggleRow
-          title={t('settings.ai.enableTitle', { defaultValue: 'Enable AI doc assistance' })}
-          description={t('settings.ai.enableDesc', {
-            defaultValue: 'When off, the diff engine emits alerts instead of drafting doc updates.',
-          })}
+          title={t('settings.ai.enableTitle')}
+          description={t('settings.ai.enableDesc')}
           checked={form.enabled}
           onChange={(enabled) => set('enabled', enabled)}
         />
       </Section>
 
-      <Section title={t('settings.ai.providerTitle', { defaultValue: 'Provider' })}>
+      <Section title={t('settings.ai.providerTitle')}>
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field
-            label={t('settings.ai.provider', { defaultValue: 'Provider' })}
-            htmlFor="ai-provider"
-          >
+          <Field label={t('settings.ai.provider')} htmlFor="ai-provider">
             <Select
               id="ai-provider"
               value={form.provider ?? ''}
               disabled={!form.enabled}
               onChange={(e) => set('provider', (e.target.value || null) as AiConfig['provider'])}
             >
-              <option value="">{t('common.none', { defaultValue: 'None' })}</option>
+              <option value="">{t('common.none')}</option>
               <option value={AiConfigProvider.anthropic}>Anthropic</option>
               <option value={AiConfigProvider.openai}>OpenAI</option>
               <option value={AiConfigProvider.ollama}>Ollama</option>
             </Select>
           </Field>
-          <Field label={t('settings.ai.model', { defaultValue: 'Model' })} htmlFor="ai-model">
+          <Field label={t('settings.ai.model')} htmlFor="ai-model">
             <TextInput
               id="ai-model"
               value={form.model ?? ''}
@@ -127,11 +109,9 @@ export function AiPage() {
           </Field>
           {isOllama ? (
             <Field
-              label={t('settings.ai.baseUrl', { defaultValue: 'Base URL' })}
+              label={t('settings.ai.baseUrl')}
               htmlFor="ai-baseurl"
-              hint={t('settings.ai.baseUrlHint', {
-                defaultValue: 'For Ollama / self-hosted endpoints.',
-              })}
+              hint={t('settings.ai.baseUrlHint')}
             >
               <TextInput
                 id="ai-baseurl"
@@ -143,11 +123,9 @@ export function AiPage() {
             </Field>
           ) : (
             <Field
-              label={t('settings.ai.apiKey', { defaultValue: 'API key' })}
+              label={t('settings.ai.apiKey')}
               htmlFor="ai-apikey"
-              hint={t('settings.ai.apiKeyHint', {
-                defaultValue: 'Write-only — leave blank to keep the existing key.',
-              })}
+              hint={t('settings.ai.apiKeyHint')}
             >
               <TextInput
                 id="ai-apikey"
@@ -160,25 +138,15 @@ export function AiPage() {
               />
             </Field>
           )}
-          <Field
-            label={t('settings.ai.mode', { defaultValue: 'Update mode' })}
-            htmlFor="ai-mode"
-            hint={t('settings.ai.modeHint', { defaultValue: 'How AI drafts are applied to docs.' })}
-          >
+          <Field label={t('settings.ai.mode')} htmlFor="ai-mode" hint={t('settings.ai.modeHint')}>
             <Select
               id="ai-mode"
               value={form.mode}
               disabled={!form.enabled}
               onChange={(e) => set('mode', e.target.value as AiConfig['mode'])}
             >
-              <option value={AiConfigMode.suggest_only}>
-                {t('settings.ai.modeSuggest', {
-                  defaultValue: 'Suggest only (review before apply)',
-                })}
-              </option>
-              <option value={AiConfigMode.auto_update}>
-                {t('settings.ai.modeAuto', { defaultValue: 'Auto-update doc sections' })}
-              </option>
+              <option value={AiConfigMode.suggest_only}>{t('settings.ai.modeSuggest')}</option>
+              <option value={AiConfigMode.auto_update}>{t('settings.ai.modeAuto')}</option>
             </Select>
           </Field>
         </div>
@@ -191,19 +159,13 @@ export function AiPage() {
               disabled={!form.enabled || test.isPending}
               onClick={() => test.mutate()}
             >
-              {test.isPending
-                ? t('settings.ai.testing', { defaultValue: 'Testing…' })
-                : t('settings.ai.test', { defaultValue: 'Test connection' })}
+              {test.isPending ? t('settings.ai.testing') : t('settings.ai.test')}
             </Button>
             {testResult && (
               <span className="flex items-center gap-2 text-2xs text-ink-muted">
                 <ToneTag
                   tone={testResult.ok ? 'ok' : 'err'}
-                  label={
-                    testResult.ok
-                      ? t('settings.ai.ok', { defaultValue: 'reachable' })
-                      : t('settings.ai.failed', { defaultValue: 'failed' })
-                  }
+                  label={testResult.ok ? t('settings.ai.ok') : t('settings.ai.failed')}
                 />
                 {testResult.latencyMs != null && (
                   <span className="font-mono">{testResult.latencyMs}ms</span>
@@ -217,7 +179,7 @@ export function AiPage() {
             disabled={save.isPending}
             onClick={() => save.mutate(form)}
           >
-            {t('common.save', { defaultValue: 'Save' })}
+            {t('common.save')}
           </Button>
         </div>
       </Section>

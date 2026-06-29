@@ -36,42 +36,42 @@ export function NotificationsPage() {
   const [seeded, setSeeded] = useState<NotificationConfig | null>(null);
   if (data && data !== seeded) {
     setSeeded(data);
-    setDraft({ channels: data.channels.map((c) => ({ ...c })), routing: data.routing.map((r) => ({ ...r })) });
+    setDraft({
+      channels: data.channels.map((c) => ({ ...c })),
+      routing: data.routing.map((r) => ({ ...r })),
+    });
   }
 
   const save = useMutation({
     mutationFn: (body: NotificationConfig) => putNotificationsConfig(body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: getGetNotificationsConfigQueryKey() });
-      toast.success(t('settings.notifications.saved', { defaultValue: 'Notification routing saved.' }));
+      toast.success(t('settings.notifications.saved'));
     },
-    onError: () => toast.error(t('settings.notifications.saveError', { defaultValue: 'Could not save routing.' })),
+    onError: () => toast.error(t('settings.notifications.saveError')),
   });
 
   const test = useMutation({
     mutationFn: (channel: NotificationChannelType) => postNotificationsConfigTest({ channel }),
     onSuccess: (result) => {
-      if (result.ok) toast.success(result.message ?? t('settings.notifications.testOk', { defaultValue: 'Test sent.' }));
-      else toast.error(result.message ?? t('settings.notifications.testFail', { defaultValue: 'Test failed.' }));
+      if (result.ok) toast.success(result.message ?? t('settings.notifications.testOk'));
+      else toast.error(result.message ?? t('settings.notifications.testFail'));
     },
-    onError: () => toast.error(t('settings.notifications.testFail', { defaultValue: 'Test failed.' })),
+    onError: () => toast.error(t('settings.notifications.testFail')),
   });
 
   if (isLoading) return <Loading />;
   if (isError || !data || !draft)
     return (
       <div>
-        <SubHeader title={t('settings.notifications.title', { defaultValue: 'Notifications' })} />
-        <ErrorState
-          description={t('settings.notifications.loadError', { defaultValue: 'Could not load notification settings.' })}
-          onRetry={() => refetch()}
-        />
+        <SubHeader title={t('settings.notifications.title')} />
+        <ErrorState description={t('settings.notifications.loadError')} onRetry={() => refetch()} />
       </div>
     );
 
   const setChannelEnabled = (type: NotificationChannelType, enabled: boolean) =>
     setDraft((d) =>
-      d ? { ...d, channels: d.channels.map((c) => (c.type === type ? { ...c, enabled } : c)) } : d,
+      d ? { ...d, channels: d.channels.map((c) => (c.type === type ? { ...c, enabled } : c)) } : d
     );
 
   const dirty = JSON.stringify(draft) !== JSON.stringify(data);
@@ -79,22 +79,24 @@ export function NotificationsPage() {
   return (
     <div>
       <SubHeader
-        title={t('settings.notifications.title', { defaultValue: 'Notifications' })}
-        description={t('settings.notifications.subtitle', { defaultValue: 'Where events go and at what severity.' })}
+        title={t('settings.notifications.title')}
+        description={t('settings.notifications.subtitle')}
       />
 
-      <Section title={t('settings.notifications.channelsTitle', { defaultValue: 'Channels' })}>
+      <Section title={t('settings.notifications.channelsTitle')}>
         <div className="space-y-3">
           {draft.channels.map((c) => (
             <ToggleRow
               key={c.type}
-              title={t(`settings.notifications.channel.${c.type}`, { defaultValue: CHANNEL_LABELS[c.type] })}
+              title={t(`settings.notifications.channel.${c.type}`, {
+                defaultValue: CHANNEL_LABELS[c.type],
+              })}
               description={
                 c.type === 'in_app'
-                  ? t('settings.notifications.inAppDesc', { defaultValue: 'Live toasts and the activity feed.' })
+                  ? t('settings.notifications.inAppDesc')
                   : c.type === 'smtp'
-                    ? t('settings.notifications.smtpDesc', { defaultValue: 'Email via the configured SMTP server.' })
-                    : t('settings.notifications.webhookDesc', { defaultValue: 'POST events to an external URL.' })
+                    ? t('settings.notifications.smtpDesc')
+                    : t('settings.notifications.webhookDesc')
               }
               checked={c.enabled}
               onChange={(enabled) => setChannelEnabled(c.type, enabled)}
@@ -111,8 +113,9 @@ export function NotificationsPage() {
               onClick={() => test.mutate(c.type)}
             >
               {t('settings.notifications.testChannel', {
-                defaultValue: 'Test {{channel}}',
-                channel: t(`settings.notifications.channel.${c.type}`, { defaultValue: CHANNEL_LABELS[c.type] }),
+                channel: t(`settings.notifications.channel.${c.type}`, {
+                  defaultValue: CHANNEL_LABELS[c.type],
+                }),
               })}
             </Button>
           ))}
@@ -120,10 +123,8 @@ export function NotificationsPage() {
       </Section>
 
       <Section
-        title={t('settings.notifications.routingTitle', { defaultValue: 'Event routing' })}
-        description={t('settings.notifications.routingDesc', {
-          defaultValue: 'Per event, choose which enabled channels fire and the minimum severity that triggers them.',
-        })}
+        title={t('settings.notifications.routingTitle')}
+        description={t('settings.notifications.routingDesc')}
         action={
           <Button
             variant="primary"
@@ -131,7 +132,7 @@ export function NotificationsPage() {
             disabled={!dirty || save.isPending}
             onClick={() => save.mutate(draft)}
           >
-            {t('settings.notifications.saveRouting', { defaultValue: 'Save routing' })}
+            {t('settings.notifications.saveRouting')}
           </Button>
         }
       >

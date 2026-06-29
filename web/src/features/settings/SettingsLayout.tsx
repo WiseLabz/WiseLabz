@@ -19,7 +19,7 @@ export function SettingsLayout() {
     <div className="mx-auto max-w-250 px-6 py-6">
       <div className="flex flex-col gap-6 md:flex-row md:gap-8">
         <nav
-          aria-label={t('settings.nav.label', { defaultValue: 'Settings sections' })}
+          aria-label={t('settings.nav.label')}
           className="flex shrink-0 gap-1 overflow-x-auto md:w-52 md:flex-col md:overflow-visible"
         >
           {sections.map(({ segment, labelKey, labelDefault, Icon }) => (

@@ -229,7 +229,7 @@ function EditRow({
         <motion.span
           layout
           transition={{ type: 'spring', stiffness: 600, damping: 34 }}
-          className="absolute top-0.5 h-4 w-4 rounded-full bg-white"
+          className="absolute top-0.5 h-4 w-4 rounded-full bg-ink"
           style={{ left: enabled ? '18px' : '2px' }}
         />
       </button>

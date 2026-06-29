@@ -90,47 +90,33 @@ export function AppearancePage() {
   return (
     <div>
       <SubHeader
-        title={t('settings.appearance.title', { defaultValue: 'Appearance' })}
-        description={t('settings.appearance.subtitle', {
-          defaultValue: 'Theme, motion, and accessibility preferences.',
-        })}
+        title={t('settings.appearance.title')}
+        description={t('settings.appearance.subtitle')}
       />
 
       <ThemeControls />
 
       <div className="mt-4">
-        <Section
-          title={t('settings.motion.heading', { defaultValue: 'Motion' })}
-          description={t('settings.motion.desc', {
-            defaultValue:
-              'WiseLabz uses motion to make live state legible. Turn it down here if you prefer a calmer interface — your choice is remembered.',
-          })}
-        >
+        <Section title={t('settings.motion.heading')} description={t('settings.motion.desc')}>
           <ChoiceGroup<MotionPref>
-            label={t('settings.motion.groupLabel', { defaultValue: 'Motion preference' })}
+            label={t('settings.motion.groupLabel')}
             value={motionPref}
             onChange={setMotion}
             options={[
               {
                 value: 'full',
-                label: t('settings.motion.fullLabel', { defaultValue: 'Full' }),
-                desc: t('settings.motion.fullDesc', {
-                  defaultValue: 'Every transition and signature moment. The default.',
-                }),
+                label: t('settings.motion.fullLabel'),
+                desc: t('settings.motion.fullDesc'),
               },
               {
                 value: 'reduced',
-                label: t('settings.motion.reducedLabel', { defaultValue: 'Reduced' }),
-                desc: t('settings.motion.reducedDesc', {
-                  defaultValue: 'Essential feedback only — springs collapse to fades.',
-                }),
+                label: t('settings.motion.reducedLabel'),
+                desc: t('settings.motion.reducedDesc'),
               },
               {
                 value: 'off',
-                label: t('settings.motion.offLabel', { defaultValue: 'Off' }),
-                desc: t('settings.motion.offDesc', {
-                  defaultValue: 'No animation. Instant state changes everywhere.',
-                }),
+                label: t('settings.motion.offLabel'),
+                desc: t('settings.motion.offDesc'),
               },
             ]}
           />
@@ -138,50 +124,48 @@ export function AppearancePage() {
       </div>
 
       <Section
-        title={t('settings.appearance.a11yTitle', { defaultValue: 'Accessibility' })}
-        description={t('settings.appearance.a11yDesc', {
-          defaultValue: 'Tune legibility and comfort. Changes apply instantly.',
-        })}
+        title={t('settings.appearance.a11yTitle')}
+        description={t('settings.appearance.a11yDesc')}
       >
         <div className="space-y-5">
           <div>
             <p className="mb-2 font-mono text-2xs uppercase tracking-[0.16em] text-ink-faint">
-              {t('settings.appearance.textSize', { defaultValue: 'Text size' })}
+              {t('settings.appearance.textSize')}
             </p>
             <ChoiceGroup<TextSize>
-              label={t('settings.appearance.textSize', { defaultValue: 'Text size' })}
+              label={t('settings.appearance.textSize')}
               value={textSize}
               onChange={setTextSize}
               options={[
                 {
                   value: 'sm',
-                  label: t('settings.appearance.textSm', { defaultValue: 'Compact' }),
+                  label: t('settings.appearance.textSm'),
                 },
                 {
                   value: 'base',
-                  label: t('settings.appearance.textBase', { defaultValue: 'Default' }),
+                  label: t('settings.appearance.textBase'),
                 },
-                { value: 'lg', label: t('settings.appearance.textLg', { defaultValue: 'Large' }) },
+                { value: 'lg', label: t('settings.appearance.textLg') },
               ]}
             />
           </div>
 
           <div>
             <p className="mb-2 font-mono text-2xs uppercase tracking-[0.16em] text-ink-faint">
-              {t('settings.appearance.density', { defaultValue: 'Density' })}
+              {t('settings.appearance.density')}
             </p>
             <ChoiceGroup<Density>
-              label={t('settings.appearance.density', { defaultValue: 'Density' })}
+              label={t('settings.appearance.density')}
               value={density}
               onChange={setDensity}
               options={[
                 {
                   value: 'comfortable',
-                  label: t('settings.appearance.comfortable', { defaultValue: 'Comfortable' }),
+                  label: t('settings.appearance.comfortable'),
                 },
                 {
                   value: 'compact',
-                  label: t('settings.appearance.compact', { defaultValue: 'Compact' }),
+                  label: t('settings.appearance.compact'),
                 },
               ]}
             />
@@ -189,41 +173,35 @@ export function AppearancePage() {
 
           <div>
             <p className="mb-2 font-mono text-2xs uppercase tracking-[0.16em] text-ink-faint">
-              {t('settings.appearance.focusRing', { defaultValue: 'Focus ring' })}
+              {t('settings.appearance.focusRing')}
             </p>
             <ChoiceGroup<FocusRing>
-              label={t('settings.appearance.focusRing', { defaultValue: 'Focus ring' })}
+              label={t('settings.appearance.focusRing')}
               value={focusRing}
               onChange={setFocusRing}
               options={[
                 {
                   value: 'standard',
-                  label: t('settings.appearance.focusStandard', { defaultValue: 'Standard' }),
+                  label: t('settings.appearance.focusStandard'),
                 },
                 {
                   value: 'bold',
-                  label: t('settings.appearance.focusBold', { defaultValue: 'Bold' }),
+                  label: t('settings.appearance.focusBold'),
                 },
               ]}
             />
           </div>
 
           <ToggleRow
-            title={t('settings.appearance.contrastTitle', { defaultValue: 'Increase contrast' })}
-            description={t('settings.appearance.contrastDesc', {
-              defaultValue: 'Brighten secondary text for easier reading.',
-            })}
+            title={t('settings.appearance.contrastTitle')}
+            description={t('settings.appearance.contrastDesc')}
             checked={contrast === 'boost'}
             onChange={(v) => setContrast((v ? 'boost' : 'normal') as Contrast)}
           />
 
           <ToggleRow
-            title={t('settings.appearance.reduceTransparencyTitle', {
-              defaultValue: 'Reduce transparency',
-            })}
-            description={t('settings.appearance.reduceTransparencyDesc', {
-              defaultValue: 'Make modal and overlay backdrops fully opaque.',
-            })}
+            title={t('settings.appearance.reduceTransparencyTitle')}
+            description={t('settings.appearance.reduceTransparencyDesc')}
             checked={reduceTransparency}
             onChange={setReduceTransparency}
           />

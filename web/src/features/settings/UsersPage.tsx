@@ -41,44 +41,35 @@ export function UsersPage() {
       patchUsersUserId(id, { role, disabled }),
     onSuccess: () => {
       invalidate();
-      toast.success(t('settings.users.updated', { defaultValue: 'User updated.' }));
+      toast.success(t('settings.users.updated'));
     },
-    onError: () =>
-      toast.error(t('settings.users.updateError', { defaultValue: 'Could not update user.' })),
+    onError: () => toast.error(t('settings.users.updateError')),
   });
 
   const remove = useMutation({
     mutationFn: (id: string) => deleteUsersUserId(id),
     onSuccess: () => {
       invalidate();
-      toast.success(t('settings.users.deleted', { defaultValue: 'User deleted.' }));
+      toast.success(t('settings.users.deleted'));
       setToDelete(null);
     },
-    onError: () =>
-      toast.error(t('settings.users.deleteError', { defaultValue: 'Could not delete user.' })),
+    onError: () => toast.error(t('settings.users.deleteError')),
   });
 
   const reset = useMutation({
     mutationFn: (id: string) => postUsersUserIdResetPassword(id),
-    onSuccess: () =>
-      toast.success(t('settings.users.resetSent', { defaultValue: 'Password reset issued.' })),
-    onError: () =>
-      toast.error(t('settings.users.resetError', { defaultValue: 'Could not reset password.' })),
+    onSuccess: () => toast.success(t('settings.users.resetSent')),
+    onError: () => toast.error(t('settings.users.resetError')),
   });
 
   return (
     <div>
-      <SubHeader
-        title={t('settings.users.title', { defaultValue: 'Users' })}
-        description={t('settings.users.subtitle', {
-          defaultValue: 'Manage who can access this instance and what they can do.',
-        })}
-      />
+      <SubHeader title={t('settings.users.title')} description={t('settings.users.subtitle')} />
 
       <div className="mb-4 flex justify-end">
         <Button variant="primary" size="sm" onClick={() => setInviteOpen(true)}>
           <PlusIcon size={15} />
-          {t('settings.users.invite', { defaultValue: 'Invite user' })}
+          {t('settings.users.invite')}
         </Button>
       </div>
 
@@ -86,15 +77,9 @@ export function UsersPage() {
         {isLoading ? (
           <SkeletonRows rows={5} />
         ) : isError || !data ? (
-          <ErrorState
-            description={t('settings.users.loadError', { defaultValue: 'Could not load users.' })}
-            onRetry={() => refetch()}
-          />
+          <ErrorState description={t('settings.users.loadError')} onRetry={() => refetch()} />
         ) : data.length === 0 ? (
-          <EmptyState
-            icon={<LayersIcon size={18} />}
-            title={t('settings.users.emptyTitle', { defaultValue: 'No users yet' })}
-          />
+          <EmptyState icon={<LayersIcon size={18} />} title={t('settings.users.emptyTitle')} />
         ) : (
           <ul className="divide-y divide-line-soft">
             {data.map((u) => {
@@ -105,12 +90,7 @@ export function UsersPage() {
                     <p className="flex items-center gap-2 text-sm text-ink">
                       <span className="truncate font-medium">{u.displayName || u.username}</span>
                       <span className="font-mono text-2xs text-ink-faint">@{u.username}</span>
-                      {u.disabled && (
-                        <ToneTag
-                          tone="idle"
-                          label={t('common.disabled', { defaultValue: 'Disabled' })}
-                        />
-                      )}
+                      {u.disabled && <ToneTag tone="idle" label={t('common.disabled')} />}
                     </p>
                     <p className="mt-0.5 flex items-center gap-1.5 font-mono text-2xs text-ink-faint">
                       <span>{u.email ?? '—'}</span>
@@ -120,18 +100,14 @@ export function UsersPage() {
                   </div>
 
                   <Select
-                    aria-label={t('settings.users.role', { defaultValue: 'Role' })}
+                    aria-label={t('settings.users.role')}
                     value={u.role}
                     disabled={isSelf || patch.isPending}
                     onChange={(e) => patch.mutate({ id: u.id, role: e.target.value as Role })}
                     className="w-32"
                   >
-                    <option value="viewer">
-                      {t('settings.users.roleViewer', { defaultValue: 'viewer' })}
-                    </option>
-                    <option value="operator">
-                      {t('settings.users.roleOperator', { defaultValue: 'operator' })}
-                    </option>
+                    <option value="viewer">{t('settings.users.roleViewer')}</option>
+                    <option value="operator">{t('settings.users.roleOperator')}</option>
                   </Select>
 
                   <div className="flex items-center gap-1.5">
@@ -141,9 +117,7 @@ export function UsersPage() {
                       disabled={patch.isPending || isSelf}
                       onClick={() => patch.mutate({ id: u.id, disabled: !u.disabled })}
                     >
-                      {u.disabled
-                        ? t('common.enable', { defaultValue: 'Enable' })
-                        : t('common.disable', { defaultValue: 'Disable' })}
+                      {u.disabled ? t('common.enable') : t('common.disable')}
                     </Button>
                     {u.authSource === 'local' && (
                       <Button
@@ -152,7 +126,7 @@ export function UsersPage() {
                         disabled={reset.isPending}
                         onClick={() => reset.mutate(u.id)}
                       >
-                        {t('settings.users.reset', { defaultValue: 'Reset password' })}
+                        {t('settings.users.reset')}
                       </Button>
                     )}
                     <Button
@@ -161,7 +135,7 @@ export function UsersPage() {
                       disabled={isSelf || remove.isPending}
                       onClick={() => setToDelete(u)}
                     >
-                      {t('common.delete', { defaultValue: 'Delete' })}
+                      {t('common.delete')}
                     </Button>
                   </div>
                 </li>
@@ -178,12 +152,10 @@ export function UsersPage() {
         onClose={() => setToDelete(null)}
         onConfirm={() => toDelete && remove.mutate(toDelete.id)}
         tone="danger"
-        title={t('settings.users.deleteTitle', { defaultValue: 'Delete user?' })}
-        description={t('settings.users.deleteConfirm', {
-          defaultValue: 'This permanently removes the account and revokes its sessions.',
-        })}
-        confirmLabel={t('common.delete', { defaultValue: 'Delete' })}
-        cancelLabel={t('common.cancel', { defaultValue: 'Cancel' })}
+        title={t('settings.users.deleteTitle')}
+        description={t('settings.users.deleteConfirm')}
+        confirmLabel={t('common.delete')}
+        cancelLabel={t('common.cancel')}
         confirmDisabled={remove.isPending}
       />
     </div>
@@ -208,22 +180,17 @@ function InviteDialog({
     mutationFn: () => postUsers({ username, email: email || undefined, role }),
     onSuccess: () => {
       onCreated();
-      toast.success(t('settings.users.created', { defaultValue: 'User invited.' }));
+      toast.success(t('settings.users.created'));
       setUsername('');
       setEmail('');
       setRole('viewer');
       onClose();
     },
-    onError: () =>
-      toast.error(t('settings.users.createError', { defaultValue: 'Could not create user.' })),
+    onError: () => toast.error(t('settings.users.createError')),
   });
 
   return (
-    <Dialog
-      open={open}
-      onClose={onClose}
-      title={t('settings.users.inviteTitle', { defaultValue: 'Invite user' })}
-    >
+    <Dialog open={open} onClose={onClose} title={t('settings.users.inviteTitle')}>
       <form
         className="space-y-4"
         onSubmit={(e) => {
@@ -231,10 +198,7 @@ function InviteDialog({
           if (username.trim()) create.mutate();
         }}
       >
-        <Field
-          label={t('settings.users.username', { defaultValue: 'Username' })}
-          htmlFor="inv-username"
-        >
+        <Field label={t('settings.users.username')} htmlFor="inv-username">
           <TextInput
             id="inv-username"
             value={username}
@@ -242,7 +206,7 @@ function InviteDialog({
             autoFocus
           />
         </Field>
-        <Field label={t('settings.users.email', { defaultValue: 'Email' })} htmlFor="inv-email">
+        <Field label={t('settings.users.email')} htmlFor="inv-email">
           <TextInput
             id="inv-email"
             type="email"
@@ -250,19 +214,15 @@ function InviteDialog({
             onChange={(e) => setEmail(e.target.value)}
           />
         </Field>
-        <Field label={t('settings.users.role', { defaultValue: 'Role' })} htmlFor="inv-role">
+        <Field label={t('settings.users.role')} htmlFor="inv-role">
           <Select id="inv-role" value={role} onChange={(e) => setRole(e.target.value as Role)}>
-            <option value="viewer">
-              {t('settings.users.roleViewer', { defaultValue: 'viewer' })}
-            </option>
-            <option value="operator">
-              {t('settings.users.roleOperator', { defaultValue: 'operator' })}
-            </option>
+            <option value="viewer">{t('settings.users.roleViewer')}</option>
+            <option value="operator">{t('settings.users.roleOperator')}</option>
           </Select>
         </Field>
         <div className="flex justify-end gap-2 pt-1">
           <Button type="button" variant="ghost" size="sm" onClick={onClose}>
-            {t('common.cancel', { defaultValue: 'Cancel' })}
+            {t('common.cancel')}
           </Button>
           <Button
             type="submit"
@@ -270,7 +230,7 @@ function InviteDialog({
             size="sm"
             disabled={!username.trim() || create.isPending}
           >
-            {t('settings.users.sendInvite', { defaultValue: 'Send invite' })}
+            {t('settings.users.sendInvite')}
           </Button>
         </div>
       </form>

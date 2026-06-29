@@ -127,7 +127,7 @@ export function Toggle({
       <motion.span
         layout
         transition={{ type: 'spring', stiffness: 600, damping: 34 }}
-        className={cn('absolute top-0.5 rounded-full bg-white', knob)}
+        className={cn('absolute top-0.5 rounded-full bg-ink', knob)}
         style={{ left: checked ? travel : '2px' }}
       />
     </button>

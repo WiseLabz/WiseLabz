@@ -62,7 +62,7 @@ export function EventRoutingTable({
         <thead>
           <tr className="border-b border-line-soft">
             <th className="py-2 pr-4 text-left font-mono text-2xs uppercase tracking-[0.16em] text-ink-faint">
-              {t('settings.notifications.event', { defaultValue: 'Event' })}
+              {t('settings.notifications.event')}
             </th>
             {channels.map((c) => (
               <th key={c.type} className="px-3 py-2 text-center">
@@ -79,7 +79,7 @@ export function EventRoutingTable({
               </th>
             ))}
             <th className="px-3 py-2 text-right font-mono text-2xs uppercase tracking-[0.16em] text-ink-faint">
-              {t('settings.notifications.minSeverity', { defaultValue: 'Min severity' })}
+              {t('settings.notifications.minSeverity')}
             </th>
           </tr>
         </thead>
@@ -109,7 +109,6 @@ export function EventRoutingTable({
               <td className="px-3 py-2.5 text-right">
                 <Select
                   aria-label={t('settings.notifications.minSeverityFor', {
-                    defaultValue: 'Minimum severity for {{event}}',
                     event: eventLabel(eventType),
                   })}
                   value={rowSeverity(eventType)}
@@ -117,15 +116,9 @@ export function EventRoutingTable({
                   onChange={(e) => setRowSeverity(eventType, e.target.value as Severity)}
                   className="w-28 py-1.5 text-xs"
                 >
-                  <option value={SeverityEnum.info}>
-                    {t('status.severity.info', { defaultValue: 'info' })}
-                  </option>
-                  <option value={SeverityEnum.warning}>
-                    {t('status.severity.warning', { defaultValue: 'warning' })}
-                  </option>
-                  <option value={SeverityEnum.critical}>
-                    {t('status.severity.critical', { defaultValue: 'critical' })}
-                  </option>
+                  <option value={SeverityEnum.info}>{t('status.severity.info')}</option>
+                  <option value={SeverityEnum.warning}>{t('status.severity.warning')}</option>
+                  <option value={SeverityEnum.critical}>{t('status.severity.critical')}</option>
                 </Select>
               </td>
             </tr>

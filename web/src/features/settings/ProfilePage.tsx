@@ -44,10 +44,9 @@ export function ProfilePage() {
     mutationFn: () => patchMe({ displayName, email }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
-      toast.success(t('settings.profile.saved', { defaultValue: 'Profile updated.' }));
+      toast.success(t('settings.profile.saved'));
     },
-    onError: () =>
-      toast.error(t('settings.profile.saveError', { defaultValue: 'Could not save profile.' })),
+    onError: () => toast.error(t('settings.profile.saveError')),
   });
 
   const isLocal = me?.authSource === 'local';
@@ -55,47 +54,29 @@ export function ProfilePage() {
 
   return (
     <div>
-      <SubHeader
-        title={t('settings.profile.title', { defaultValue: 'Profile' })}
-        description={t('settings.profile.subtitle', {
-          defaultValue: 'Your account details and active sessions.',
-        })}
-      />
+      <SubHeader title={t('settings.profile.title')} description={t('settings.profile.subtitle')} />
 
       <Section
-        title={t('settings.profile.detailsTitle', { defaultValue: 'Account details' })}
-        description={
-          me?.authSource === 'oidc'
-            ? t('settings.profile.oidcNote', {
-                defaultValue:
-                  'Signed in via your identity provider; some fields are managed there.',
-              })
-            : undefined
-        }
+        title={t('settings.profile.detailsTitle')}
+        description={me?.authSource === 'oidc' ? t('settings.profile.oidcNote') : undefined}
       >
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label={t('settings.profile.username', { defaultValue: 'Username' })}>
+          <Field label={t('settings.profile.username')}>
             <TextInput value={me?.username ?? ''} readOnly disabled />
           </Field>
-          <Field label={t('settings.profile.role', { defaultValue: 'Role' })}>
+          <Field label={t('settings.profile.role')}>
             <div className="flex h-9.5 items-center">
               <ToneTag tone={me?.role === 'operator' ? 'signal' : 'idle'} label={me?.role ?? '—'} />
             </div>
           </Field>
-          <Field
-            label={t('settings.profile.displayName', { defaultValue: 'Display name' })}
-            htmlFor="profile-name"
-          >
+          <Field label={t('settings.profile.displayName')} htmlFor="profile-name">
             <TextInput
               id="profile-name"
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
             />
           </Field>
-          <Field
-            label={t('settings.profile.email', { defaultValue: 'Email' })}
-            htmlFor="profile-email"
-          >
+          <Field label={t('settings.profile.email')} htmlFor="profile-email">
             <TextInput
               id="profile-email"
               type="email"
@@ -111,7 +92,7 @@ export function ProfilePage() {
             disabled={!dirty || saveProfile.isPending}
             onClick={() => saveProfile.mutate()}
           >
-            {t('common.save', { defaultValue: 'Save' })}
+            {t('common.save')}
           </Button>
         </div>
       </Section>
@@ -132,15 +113,12 @@ function ChangePassword() {
   const change = useMutation({
     mutationFn: () => postMePassword({ currentPassword: current, newPassword: next }),
     onSuccess: () => {
-      toast.success(t('settings.profile.passwordChanged', { defaultValue: 'Password changed.' }));
+      toast.success(t('settings.profile.passwordChanged'));
       setCurrent('');
       setNext('');
       setConfirm('');
     },
-    onError: () =>
-      toast.error(
-        t('settings.profile.passwordError', { defaultValue: 'Could not change password.' })
-      ),
+    onError: () => toast.error(t('settings.profile.passwordError')),
   });
 
   const mismatch = next.length > 0 && confirm.length > 0 && next !== confirm;
@@ -148,10 +126,8 @@ function ChangePassword() {
 
   return (
     <Section
-      title={t('settings.profile.passwordTitle', { defaultValue: 'Change password' })}
-      description={t('settings.profile.passwordDesc', {
-        defaultValue: 'Use at least 8 characters.',
-      })}
+      title={t('settings.profile.passwordTitle')}
+      description={t('settings.profile.passwordDesc')}
     >
       <form
         className="grid gap-4 sm:grid-cols-3"
@@ -160,10 +136,7 @@ function ChangePassword() {
           if (canSubmit) change.mutate();
         }}
       >
-        <Field
-          label={t('settings.profile.currentPassword', { defaultValue: 'Current password' })}
-          htmlFor="pw-current"
-        >
+        <Field label={t('settings.profile.currentPassword')} htmlFor="pw-current">
           <TextInput
             id="pw-current"
             type="password"
@@ -172,10 +145,7 @@ function ChangePassword() {
             onChange={(e) => setCurrent(e.target.value)}
           />
         </Field>
-        <Field
-          label={t('settings.profile.newPassword', { defaultValue: 'New password' })}
-          htmlFor="pw-new"
-        >
+        <Field label={t('settings.profile.newPassword')} htmlFor="pw-new">
           <TextInput
             id="pw-new"
             type="password"
@@ -185,13 +155,9 @@ function ChangePassword() {
           />
         </Field>
         <Field
-          label={t('settings.profile.confirmPassword', { defaultValue: 'Confirm password' })}
+          label={t('settings.profile.confirmPassword')}
           htmlFor="pw-confirm"
-          hint={
-            mismatch
-              ? t('settings.profile.passwordMismatch', { defaultValue: 'Passwords do not match.' })
-              : undefined
-          }
+          hint={mismatch ? t('settings.profile.passwordMismatch') : undefined}
         >
           <TextInput
             id="pw-confirm"
@@ -203,7 +169,7 @@ function ChangePassword() {
         </Field>
         <div className="sm:col-span-3 flex justify-end">
           <Button type="submit" variant="primary" size="sm" disabled={!canSubmit}>
-            {t('settings.profile.updatePassword', { defaultValue: 'Update password' })}
+            {t('settings.profile.updatePassword')}
           </Button>
         </div>
       </form>
@@ -224,36 +190,23 @@ function SessionsSection() {
     mutationFn: (id: string) => deleteMeSessionsSessionId(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: getGetMeSessionsQueryKey() });
-      toast.success(t('settings.profile.sessionRevoked', { defaultValue: 'Session revoked.' }));
+      toast.success(t('settings.profile.sessionRevoked'));
       setRevoke(null);
     },
-    onError: () =>
-      toast.error(
-        t('settings.profile.sessionRevokeError', { defaultValue: 'Could not revoke session.' })
-      ),
+    onError: () => toast.error(t('settings.profile.sessionRevokeError')),
   });
 
   return (
     <Section
-      title={t('settings.profile.sessionsTitle', { defaultValue: 'Active sessions' })}
-      description={t('settings.profile.sessionsDesc', {
-        defaultValue: 'Devices currently signed in to your account.',
-      })}
+      title={t('settings.profile.sessionsTitle')}
+      description={t('settings.profile.sessionsDesc')}
     >
       {isLoading ? (
         <SkeletonRows rows={3} className="p-0" />
       ) : isError || !data ? (
-        <ErrorState
-          description={t('settings.profile.sessionsError', {
-            defaultValue: 'Could not load sessions.',
-          })}
-          onRetry={() => refetch()}
-        />
+        <ErrorState description={t('settings.profile.sessionsError')} onRetry={() => refetch()} />
       ) : data.length === 0 ? (
-        <EmptyState
-          icon={<UserIcon size={18} />}
-          title={t('settings.profile.noSessions', { defaultValue: 'No active sessions' })}
-        />
+        <EmptyState icon={<UserIcon size={18} />} title={t('settings.profile.noSessions')} />
       ) : (
         <ul className="divide-y divide-line-soft">
           {data.map((s) => (
@@ -261,19 +214,15 @@ function SessionsSection() {
               <div className="min-w-0 flex-1">
                 <p className="flex items-center gap-2 text-sm text-ink">
                   <span className="truncate">
-                    {s.userAgent ??
-                      t('settings.profile.unknownDevice', { defaultValue: 'Unknown device' })}
+                    {s.userAgent ?? t('settings.profile.unknownDevice')}
                   </span>
-                  {s.current && (
-                    <ToneTag tone="ok" label={t('common.current', { defaultValue: 'current' })} />
-                  )}
+                  {s.current && <ToneTag tone="ok" label={t('common.current')} />}
                 </p>
                 <p className="mt-0.5 flex items-center gap-1.5 font-mono text-2xs text-ink-faint">
                   <span>{s.ip ?? '—'}</span>
                   <span>·</span>
                   <span>
-                    {t('settings.profile.lastSeen', { defaultValue: 'last seen' })}{' '}
-                    <TimeAgo at={s.lastSeenAt} />
+                    {t('settings.profile.lastSeen')} <TimeAgo at={s.lastSeenAt} />
                   </span>
                 </p>
               </div>
@@ -284,7 +233,7 @@ function SessionsSection() {
                   disabled={doRevoke.isPending}
                   onClick={() => setRevoke(s)}
                 >
-                  {t('settings.profile.revoke', { defaultValue: 'Revoke' })}
+                  {t('settings.profile.revoke')}
                 </Button>
               )}
             </li>
@@ -297,12 +246,10 @@ function SessionsSection() {
         onClose={() => setRevoke(null)}
         onConfirm={() => revoke && doRevoke.mutate(revoke.id)}
         tone="danger"
-        title={t('settings.profile.revokeTitle', { defaultValue: 'Revoke session?' })}
-        description={t('settings.profile.revokeConfirm', {
-          defaultValue: 'That device will be signed out and need to log in again.',
-        })}
-        confirmLabel={t('settings.profile.revoke', { defaultValue: 'Revoke' })}
-        cancelLabel={t('common.cancel', { defaultValue: 'Cancel' })}
+        title={t('settings.profile.revokeTitle')}
+        description={t('settings.profile.revokeConfirm')}
+        confirmLabel={t('settings.profile.revoke')}
+        cancelLabel={t('common.cancel')}
         confirmDisabled={doRevoke.isPending}
       />
     </Section>
