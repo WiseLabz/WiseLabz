@@ -1,5 +1,6 @@
 /** Alerts — drift the diff engine flagged for a human. Resolve, dismiss, snooze. */
 import { motion } from 'motion/react';
+import { useTranslation } from 'react-i18next';
 import { useGetAlerts } from '../../api/generated/alerts/alerts';
 import { SeverityTag } from '../../components/ui/StatusDot';
 import { Button } from '../../components/ui/Button';
@@ -9,16 +10,15 @@ import { relativeTime } from '../../lib/time';
 import { CheckIcon, XIcon, ClockIcon } from '../../components/icons';
 
 export function AlertsPage() {
+  const { t } = useTranslation();
   const { data, isLoading, isError, refetch } = useGetAlerts(undefined);
   const pending = (data?.items ?? []).filter((a) => a.status === 'pending');
 
   return (
-    <div className="mx-auto max-w-[820px] px-6 py-6">
+    <div className="mx-auto max-w-205 px-6 py-6">
       <header className="mb-5">
-        <h1 className="text-xl font-semibold tracking-tight text-[var(--color-ink)]">Alerts</h1>
-        <p className="text-sm text-[var(--color-ink-muted)]">
-          Drift that needs a decision — accept the change into the docs or dismiss it.
-        </p>
+        <h1 className="text-xl font-semibold tracking-tight text-ink">{t('alerts.title')}</h1>
+        <p className="text-sm text-ink-muted">{t('alerts.subtitle')}</p>
       </header>
 
       {isLoading ? (
@@ -27,14 +27,14 @@ export function AlertsPage() {
         </Panel>
       ) : isError || !data ? (
         <Panel className="min-h-[40vh]">
-          <ErrorState description="Couldn't load alerts." onRetry={() => refetch()} />
+          <ErrorState description={t('alerts.loadError')} onRetry={() => refetch()} />
         </Panel>
       ) : pending.length === 0 ? (
         <Panel className="min-h-[40vh]">
           <EmptyState
             icon={<CheckIcon size={20} />}
-            title="All clear"
-            description="No pending alerts. Every detected change is documented or acknowledged."
+            title={t('alerts.allClearTitle')}
+            description={t('alerts.allClearDesc')}
           />
         </Panel>
       ) : (
@@ -50,27 +50,25 @@ export function AlertsPage() {
                 <div className="flex items-start gap-3">
                   <SeverityTag severity={a.severity} className="mt-0.5" />
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium text-[var(--color-ink)]">{a.title}</p>
+                    <p className="text-sm font-medium text-ink">{a.title}</p>
                     {a.description && (
-                      <p className="mt-1 text-sm leading-relaxed text-[var(--color-ink-muted)]">
-                        {a.description}
-                      </p>
+                      <p className="mt-1 text-sm leading-relaxed text-ink-muted">{a.description}</p>
                     )}
-                    <p className="mt-1.5 font-mono text-2xs text-[var(--color-ink-faint)]">
-                      <span className="text-[var(--color-signal-bright)]">{a.serviceName}</span> ·{' '}
-                      {relativeTime(a.createdAt)} ago
+                    <p className="mt-1.5 font-mono text-2xs text-ink-faint">
+                      <span className="text-signal-bright">{a.serviceName}</span> ·{' '}
+                      {t('common.ago', { time: relativeTime(a.createdAt) })}
                     </p>
                   </div>
                 </div>
-                <div className="mt-3 flex items-center justify-end gap-2 border-t border-[var(--color-line-soft)] pt-3">
+                <div className="mt-3 flex items-center justify-end gap-2 border-t border-line-soft pt-3">
                   <Button variant="ghost" size="sm">
-                    <ClockIcon size={14} /> Snooze
+                    <ClockIcon size={14} /> {t('common.snooze')}
                   </Button>
                   <Button variant="ghost" size="sm">
-                    <XIcon size={14} /> Dismiss
+                    <XIcon size={14} /> {t('common.dismiss')}
                   </Button>
                   <Button variant="primary" size="sm">
-                    <CheckIcon size={14} /> Resolve
+                    <CheckIcon size={14} /> {t('common.resolve')}
                   </Button>
                 </div>
               </Panel>

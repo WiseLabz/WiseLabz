@@ -22,10 +22,10 @@
   --color-line: oklch(0.315 0.008 250);
   --color-line-strong: oklch(0.44 0.010 250);
 
-  /* ---- Ink ---- */
+  /* ---- Ink — tuned for WCAG 2.2 AA (muted ≈6.2:1, faint ≈4.8:1 small text) ---- */
   --color-ink: oklch(0.975 0.003 250);
-  --color-ink-muted: oklch(0.73 0.007 250);
-  --color-ink-faint: oklch(0.55 0.008 250);
+  --color-ink-muted: oklch(0.82 0.007 250);
+  --color-ink-faint: oklch(0.78 0.008 250);
 
   /* ---- Signal: the single brand accent — signal-orange (interaction, selection) ---- */
   --color-signal: oklch(0.80 0.135 52);
@@ -41,7 +41,7 @@
   --color-warn-tint: oklch(0.30 0.06 96);
   --color-err: oklch(0.67 0.2 25);
   --color-err-tint: oklch(0.30 0.08 25);
-  --color-idle: oklch(0.56 0.008 250);
+  --color-idle: oklch(0.78 0.008 250);
   --color-idle-tint: oklch(0.26 0.006 250);
 
   /* ---- Type: Geist superfamily (Vercel). Sans for prose, mono for data. ---- */

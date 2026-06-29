@@ -15,9 +15,9 @@ export function Panel({
   return (
     <div
       className={cn(
-        'flex flex-col overflow-hidden rounded-lg border border-[var(--color-line-soft)]',
-        'bg-[var(--color-surface)] shadow-[var(--shadow-panel)]',
-        className,
+        'flex flex-col overflow-hidden rounded-lg border border-line-soft',
+        'bg-surface shadow-(--shadow-panel)',
+        className
       )}
       {...rest}
     >
@@ -42,17 +42,15 @@ export function PanelHeader({
   return (
     <div
       className={cn(
-        'flex items-center justify-between gap-3 border-b border-[var(--color-line-soft)] px-4 py-2.5',
-        className,
+        'flex items-center justify-between gap-3 border-b border-line-soft px-4 py-2.5',
+        className
       )}
     >
-      <div className="flex items-center gap-2 text-[var(--color-ink-faint)]">
-        <span className="text-[var(--color-signal)]">{icon}</span>
-        <h3 className="font-mono text-2xs uppercase tracking-[0.16em] text-[var(--color-ink-muted)]">
+      <div className="flex items-center gap-2 text-ink-faint">
+        <span className="text-signal">{icon}</span>
+        <h3 className="font-mono text-2xs uppercase tracking-[0.16em] text-ink-muted">
           {title}
-          {count !== undefined && (
-            <span className="ml-1.5 text-[var(--color-ink-faint)]">/ {count}</span>
-          )}
+          {count !== undefined && <span className="ml-1.5 text-ink-faint">/ {count}</span>}
         </h3>
       </div>
       {action}

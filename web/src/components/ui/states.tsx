@@ -6,10 +6,7 @@ import { Button } from './Button';
 export function Skeleton({ className }: { className?: string }) {
   return (
     <div
-      className={cn(
-        'animate-pulse rounded-md bg-[var(--color-surface-raised)]',
-        className,
-      )}
+      className={cn('animate-pulse rounded-md bg-surface-raised', className)}
       style={{ animationDuration: '1.4s' }}
     />
   );
@@ -45,16 +42,14 @@ export function EmptyState({
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 py-12 text-center">
       {icon && (
-        <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[var(--color-surface-raised)] text-[var(--color-ink-faint)]">
+        <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-surface-raised text-ink-faint">
           {icon}
         </div>
       )}
       <div className="space-y-1">
-        <p className="text-sm font-medium text-[var(--color-ink)]">{title}</p>
+        <p className="text-sm font-medium text-ink">{title}</p>
         {description && (
-          <p className="mx-auto max-w-xs text-xs leading-relaxed text-[var(--color-ink-muted)]">
-            {description}
-          </p>
+          <p className="mx-auto max-w-xs text-xs leading-relaxed text-ink-muted">{description}</p>
         )}
       </div>
       {action}
@@ -73,18 +68,26 @@ export function ErrorState({
 }) {
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 py-12 text-center">
-      <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[var(--color-err-tint)] text-[var(--color-err)]">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-err-tint text-err">
+        <svg
+          width="20"
+          height="20"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
           <path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z" />
           <path d="M12 9v4M12 17h.01" />
         </svg>
       </div>
       <div className="space-y-1">
-        <p className="text-sm font-medium text-[var(--color-ink)]">{title}</p>
+        <p className="text-sm font-medium text-ink">{title}</p>
         {description && (
-          <p className="mx-auto max-w-xs text-xs leading-relaxed text-[var(--color-ink-muted)]">
-            {description}
-          </p>
+          <p className="mx-auto max-w-xs text-xs leading-relaxed text-ink-muted">{description}</p>
         )}
       </div>
       {onRetry && (

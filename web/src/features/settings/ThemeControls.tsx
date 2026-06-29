@@ -4,6 +4,7 @@
  * slider). Changes apply instantly and persist via the theme store.
  */
 import { motion } from 'motion/react';
+import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../store/theme';
 import {
   FONT_SETS,
@@ -60,7 +61,7 @@ function Segmented<T extends string>({
   layoutId: string;
 }) {
   return (
-    <div className="inline-flex rounded-sm border border-[var(--color-line-soft)] bg-[var(--color-canvas-sunken)] p-0.5">
+    <div className="inline-flex rounded-sm border border-line-soft bg-canvas-sunken p-0.5">
       {options.map((o) => {
         const active = o.value === value;
         return (
@@ -69,13 +70,13 @@ function Segmented<T extends string>({
             onClick={() => onChange(o.value)}
             className={cn(
               'relative rounded-sm px-3 py-1.5 font-mono text-xs transition-colors',
-              active ? 'text-[var(--color-ink)]' : 'text-[var(--color-ink-muted)] hover:text-[var(--color-ink)]',
+              active ? 'text-ink' : 'text-ink-muted hover:text-ink'
             )}
           >
             {active && (
               <motion.span
                 layoutId={layoutId}
-                className="absolute inset-0 -z-10 rounded-sm bg-[var(--color-surface-raised)]"
+                className="absolute inset-0 -z-10 rounded-sm bg-surface-raised"
                 transition={{ type: 'spring', stiffness: 500, damping: 36 }}
               />
             )}
@@ -88,6 +89,7 @@ function Segmented<T extends string>({
 }
 
 export function ThemeControls() {
+  const { t } = useTranslation();
   const { font, mode, preset, custom } = useTheme();
   const setFont = useTheme((s) => s.setFont);
   const setMode = useTheme((s) => s.setMode);
@@ -99,11 +101,11 @@ export function ThemeControls() {
   return (
     <Panel>
       <PanelHeader
-        title="Theme"
+        title={t('appearance.theme')}
         icon={<SettingsIcon size={14} />}
         action={
           <Button size="sm" variant="ghost" onClick={reset}>
-            Reset
+            {t('appearance.reset')}
           </Button>
         }
       />
@@ -111,7 +113,7 @@ export function ThemeControls() {
       <div className="flex flex-col gap-6 p-5">
         {/* Font */}
         <section>
-          <Label>Font</Label>
+          <Label>{t('appearance.font')}</Label>
           <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
             {FONT_KEYS.map((k) => {
               const active = font === k;
@@ -122,19 +124,17 @@ export function ThemeControls() {
                   className={cn(
                     'flex flex-col items-start gap-1 rounded-sm border px-3 py-2.5 text-left transition-colors',
                     active
-                      ? 'border-[var(--color-signal-soft)] bg-[var(--color-signal-tint)]'
-                      : 'border-[var(--color-line-soft)] hover:border-[var(--color-line-strong)]',
+                      ? 'border-signal-soft bg-signal-tint'
+                      : 'border-line-soft hover:border-line-strong'
                   )}
                 >
                   <span
-                    className="text-base font-semibold text-[var(--color-ink)]"
+                    className="text-base font-semibold text-ink"
                     style={{ fontFamily: FONT_SETS[k].mono.replace(/'/g, '') }}
                   >
                     Ag
                   </span>
-                  <span className="font-mono text-2xs text-[var(--color-ink-muted)]">
-                    {FONT_SETS[k].label}
-                  </span>
+                  <span className="font-mono text-2xs text-ink-muted">{FONT_SETS[k].label}</span>
                 </button>
               );
             })}
@@ -144,14 +144,14 @@ export function ThemeControls() {
         {/* Color */}
         <section>
           <div className="flex items-center justify-between">
-            <Label>Color</Label>
+            <Label>{t('appearance.color')}</Label>
             <Segmented
               layoutId="theme-mode"
               value={mode}
               onChange={setMode}
               options={[
-                { value: 'preset', label: 'Basic' },
-                { value: 'custom', label: 'Advanced' },
+                { value: 'preset', label: t('appearance.basic') },
+                { value: 'custom', label: t('appearance.advanced') },
               ]}
             />
           </div>
@@ -167,18 +167,14 @@ export function ThemeControls() {
                     onClick={() => setPreset(k)}
                     className={cn(
                       'flex flex-col gap-2 rounded-sm border p-2.5 text-left transition-colors',
-                      active
-                        ? 'border-[var(--color-signal-soft)]'
-                        : 'border-[var(--color-line-soft)] hover:border-[var(--color-line-strong)]',
+                      active ? 'border-signal-soft' : 'border-line-soft hover:border-line-strong'
                     )}
                   >
                     <div className="flex items-baseline justify-between">
-                      <span className="font-mono text-xs font-medium text-[var(--color-ink)]">
+                      <span className="font-mono text-xs font-medium text-ink">
                         {PRESETS[k].label}
                       </span>
-                      <span className="font-mono text-2xs text-[var(--color-ink-faint)]">
-                        {PRESETS[k].desc}
-                      </span>
+                      <span className="font-mono text-2xs text-ink-faint">{PRESETS[k].desc}</span>
                     </div>
                     <Swatch tokens={tokens} font={font} />
                   </button>
@@ -186,7 +182,13 @@ export function ThemeControls() {
               })}
             </div>
           ) : (
-            <AdvancedControls custom={custom} setCustomOpt={setCustomOpt} onSeed={forkPresetToCustom} preset={preset} font={font} />
+            <AdvancedControls
+              custom={custom}
+              setCustomOpt={setCustomOpt}
+              onSeed={forkPresetToCustom}
+              preset={preset}
+              font={font}
+            />
           )}
         </section>
       </div>
@@ -207,15 +209,16 @@ function AdvancedControls({
   preset: PaletteName;
   font: FontSetName;
 }) {
+  const { t } = useTranslation();
   const tokens = makePalette(custom);
   return (
     <div className="mt-3 space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="max-w-[42ch] font-mono text-2xs text-[var(--color-ink-faint)]">
-          Every makePalette() knob. Edits apply live. Status colors stay fixed for legibility.
+        <p className="max-w-[42ch] font-mono text-2xs text-ink-faint">
+          {t('appearance.advancedHint')}
         </p>
         <Button size="sm" variant="secondary" onClick={onSeed}>
-          Start from “{PRESETS[preset].label}”
+          {t('appearance.startFrom', { name: PRESETS[preset].label })}
         </Button>
       </div>
 
@@ -225,13 +228,12 @@ function AdvancedControls({
         {OPT_KEYS.map((key) => {
           const meta = OPT_META[key];
           const value = custom[key];
-          const display =
-            meta.step >= 1 ? `${value}°` : value.toFixed(meta.step < 0.01 ? 3 : 2);
+          const display = meta.step >= 1 ? `${value}°` : value.toFixed(meta.step < 0.01 ? 3 : 2);
           return (
             <label key={key} className="block">
               <span className="flex items-baseline justify-between">
-                <span className="font-mono text-xs text-[var(--color-ink)]">{meta.label}</span>
-                <span className="nums font-mono text-2xs text-[var(--color-signal-bright)]">{display}</span>
+                <span className="font-mono text-xs text-ink">{meta.label}</span>
+                <span className="nums font-mono text-2xs text-signal-bright">{display}</span>
               </span>
               <input
                 type="range"
@@ -243,7 +245,7 @@ function AdvancedControls({
                 className="theme-range mt-1.5 w-full"
                 aria-label={meta.label}
               />
-              <span className="font-mono text-2xs text-[var(--color-ink-faint)]">{meta.hint}</span>
+              <span className="font-mono text-2xs text-ink-faint">{meta.hint}</span>
             </label>
           );
         })}
@@ -254,7 +256,7 @@ function AdvancedControls({
 
 function Label({ children }: { children: React.ReactNode }) {
   return (
-    <span className="font-mono text-2xs uppercase tracking-[0.16em] text-[var(--color-ink-faint)]">
+    <span className="font-mono text-2xs uppercase tracking-[0.16em] text-ink-faint">
       {children}
     </span>
   );

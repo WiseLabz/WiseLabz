@@ -5,21 +5,25 @@
  * changed between revisions, the same view the changes feed links into.
  */
 import { useMemo, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { AnimatePresence, motion } from 'motion/react';
 import { useGetDocsTree, useGetDocsDocId } from '../../api/generated/docs/docs';
 import { Panel } from '../../components/ui/Panel';
+import { Button } from '../../components/ui/Button';
+import { RoleGate } from '../../components/ui/RoleGate';
 import { Skeleton, SkeletonRows, ErrorState, EmptyState } from '../../components/ui/states';
 import { Markdown } from '../../components/docs/Markdown';
 import { DocTree } from '../../components/docs/DocTree';
 import { DocHistory } from './DocHistory';
 import { cn } from '../../lib/cn';
 import { relativeTime, fullDate } from '../../lib/time';
-import { FileTextIcon, HistoryIcon, SparklesIcon } from '../../components/icons';
+import { FileTextIcon, HistoryIcon, SparklesIcon, EditIcon } from '../../components/icons';
 
 type Tab = 'read' | 'history';
 
-export function DocsPage() {
+export function DocsPage({ initialTab = 'read' }: { initialTab?: Tab } = {}) {
+  const { t } = useTranslation();
   const { docId } = useParams<{ docId: string }>();
   const tree = useGetDocsTree();
 
@@ -27,14 +31,14 @@ export function DocsPage() {
   const activeId = docId ?? tree.data?.docId;
 
   return (
-    <div className="mx-auto flex max-w-[1320px] gap-6 px-6 py-6">
+    <div className="mx-auto flex max-w-330 gap-6 px-6 py-6">
       {/* Tree */}
       <aside className="hidden w-60 shrink-0 lg:block">
         <Panel className="sticky top-6 p-2">
           {tree.isLoading ? (
             <SkeletonRows rows={6} />
           ) : tree.isError || !tree.data ? (
-            <ErrorState description="Couldn't load the doc tree." onRetry={() => tree.refetch()} />
+            <ErrorState description={t('docs.treeLoadError')} onRetry={() => tree.refetch()} />
           ) : (
             <DocTree tree={tree.data} />
           )}
@@ -45,13 +49,13 @@ export function DocsPage() {
       <section className="min-w-0 flex-1">
         {activeId ? (
           // key by docId so per-doc UI state (active tab) resets on navigation
-          <DocReader key={activeId} docId={activeId} />
+          <DocReader key={activeId} docId={activeId} initialTab={initialTab} />
         ) : (
           <Panel className="min-h-[60vh]">
             <EmptyState
               icon={<FileTextIcon size={20} />}
-              title="Select a document"
-              description="Pick a service from the tree to read its live documentation."
+              title={t('docs.selectTitle')}
+              description={t('docs.selectDesc')}
             />
           </Panel>
         )}
@@ -60,14 +64,16 @@ export function DocsPage() {
   );
 }
 
-function DocReader({ docId }: { docId: string }) {
+function DocReader({ docId, initialTab = 'read' }: { docId: string; initialTab?: Tab }) {
+  const { t } = useTranslation();
+  const navigate = useNavigate();
   const { data, isLoading, isError, refetch } = useGetDocsDocId(docId);
-  const [tab, setTab] = useState<Tab>('read');
+  const [tab, setTab] = useState<Tab>(initialTab);
 
   const triggerLabel = useMemo(() => {
     if (!data) return null;
-    return data.kind === 'lab' ? 'Lab overview' : 'Service doc';
-  }, [data]);
+    return data.kind === 'lab' ? t('docs.labOverview') : t('docs.serviceDoc');
+  }, [data, t]);
 
   if (isLoading)
     return (
@@ -79,35 +85,52 @@ function DocReader({ docId }: { docId: string }) {
   if (isError || !data)
     return (
       <Panel className="min-h-[50vh]">
-        <ErrorState description="This document couldn't be loaded." onRetry={() => refetch()} />
+        <ErrorState description={t('docs.docLoadError')} onRetry={() => refetch()} />
       </Panel>
     );
 
   return (
     <Panel>
       {/* Doc header */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--color-line-soft)] px-6 py-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line-soft px-6 py-4">
         <div className="min-w-0">
           <div className="mb-1 flex items-center gap-2">
-            <span className="rounded bg-[var(--color-signal-tint)] px-1.5 py-0.5 text-2xs font-semibold uppercase tracking-wide text-[var(--color-signal-bright)]">
+            <span className="rounded bg-signal-tint px-1.5 py-0.5 text-2xs font-semibold uppercase tracking-wide text-signal-bright">
               {triggerLabel}
             </span>
-            <span className="nums font-mono text-2xs text-[var(--color-ink-faint)]">
-              v{data.currentVersion} · updated {relativeTime(data.updatedAt)} ago
+            <span className="nums font-mono text-2xs text-ink-faint">
+              {t('docs.versionMeta', {
+                version: data.currentVersion,
+                time: t('common.ago', { time: relativeTime(data.updatedAt) }),
+              })}
             </span>
           </div>
-          <h1 className="truncate text-lg font-semibold tracking-tight text-[var(--color-ink)]">
-            {data.title}
-          </h1>
+          <h1 className="truncate text-lg font-semibold tracking-tight text-ink">{data.title}</h1>
         </div>
 
-        <div className="flex items-center gap-1 rounded-lg border border-[var(--color-line-soft)] bg-[var(--color-canvas-sunken)] p-0.5">
-          <TabButton active={tab === 'read'} onClick={() => setTab('read')} icon={<FileTextIcon size={14} />}>
-            Read
-          </TabButton>
-          <TabButton active={tab === 'history'} onClick={() => setTab('history')} icon={<HistoryIcon size={14} />}>
-            History
-          </TabButton>
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 rounded-lg border border-line-soft bg-canvas-sunken p-0.5">
+            <TabButton
+              active={tab === 'read'}
+              onClick={() => setTab('read')}
+              icon={<FileTextIcon size={14} />}
+            >
+              {t('docs.read')}
+            </TabButton>
+            <TabButton
+              active={tab === 'history'}
+              onClick={() => setTab('history')}
+              icon={<HistoryIcon size={14} />}
+            >
+              {t('docs.history')}
+            </TabButton>
+          </div>
+          <RoleGate>
+            <Button variant="secondary" size="sm" onClick={() => navigate(`/docs/${docId}/edit`)}>
+              <EditIcon size={14} />
+              {t('docs.editAction')}
+            </Button>
+          </RoleGate>
         </div>
       </div>
 
@@ -122,14 +145,14 @@ function DocReader({ docId }: { docId: string }) {
               transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
             >
               {data.kind === 'lab' && (
-                <div className="mb-4 flex items-center gap-2 rounded-md bg-[var(--color-signal-tint)] px-3 py-2 text-xs text-[var(--color-signal)]">
+                <div className="mb-4 flex items-center gap-2 rounded-md bg-signal-tint px-3 py-2 text-xs text-signal">
                   <SparklesIcon size={14} />
-                  Kept current by WiseLabz — open History to see what the last sync changed.
+                  {t('docs.labBanner')}
                 </div>
               )}
               <Markdown source={data.content} />
-              <p className="mt-8 border-t border-[var(--color-line-soft)] pt-3 text-2xs text-[var(--color-ink-faint)]">
-                Last reconciled {fullDate(data.updatedAt)} · generated by WiseLabz
+              <p className="mt-8 border-t border-line-soft pt-3 text-2xs text-ink-faint">
+                {t('docs.reconciledFooter', { date: fullDate(data.updatedAt) })}
               </p>
             </motion.div>
           ) : (
@@ -165,13 +188,13 @@ function TabButton({
       onClick={onClick}
       className={cn(
         'relative flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors',
-        active ? 'text-[var(--color-ink)]' : 'text-[var(--color-ink-muted)] hover:text-[var(--color-ink)]',
+        active ? 'text-ink' : 'text-ink-muted hover:text-ink'
       )}
     >
       {active && (
         <motion.span
           layoutId="doc-tab"
-          className="absolute inset-0 -z-10 rounded-md bg-[var(--color-surface-raised)]"
+          className="absolute inset-0 -z-10 rounded-md bg-surface-raised"
           transition={{ type: 'spring', stiffness: 500, damping: 36 }}
         />
       )}

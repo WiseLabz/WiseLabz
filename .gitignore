@@ -547,3 +547,9 @@ $RECYCLE.BIN/
 *.lnk
 
 # End of https://www.toptal.com/developers/gitignore/api/webstorm,goland,react,go,node,linux,macos,windows,jetbrains,visualstudiocode
+# graphify generated cache (AST cache is regenerated locally; not source)
+graphify-out/cache/
+.impeccable/
+prototypes/
+CLAUDE.md
+

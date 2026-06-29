@@ -9,10 +9,19 @@
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
+import { useTranslation } from 'react-i18next';
 import { AnimatePresence, motion } from 'motion/react';
 import { useUi } from '../../store/ui';
+import { useCanMutate } from '../../hooks/useRole';
 import { triggerMockSync } from '../../ws/triggerSync';
 import { connectors, docTree } from '../../data/fixtures';
+import { useTheme } from '../../store/theme';
+import { PRESETS, type PaletteName } from '../../theme';
+import {
+  putConnectorsConnectorIdEnabled,
+  getGetConnectorsQueryKey,
+} from '../../api/generated/connectors/connectors';
 import { categoryIcon } from '../categoryIcon';
 import {
   GaugeIcon,
@@ -23,51 +32,96 @@ import {
   SettingsIcon,
   SyncIcon,
 } from '../icons';
+import { registeredCommands, type Command, type CommandCtx, type CommandGroup } from './registry';
 
-interface Command {
-  id: string;
-  label: string;
-  hint?: string;
-  group: 'Navigate' | 'Actions' | 'Services' | 'Docs';
-  Icon: React.ComponentType<{ size?: number; className?: string }>;
-  run: (nav: ReturnType<typeof useNavigate>) => void;
+const GROUP_ORDER: CommandGroup[] = ['navigate', 'actions', 'services', 'docs'];
+
+/** Advance the theme palette to the next preset — a quick keyboard-only re-skin. */
+function cycleTheme() {
+  const names = Object.keys(PRESETS) as PaletteName[];
+  const current = useTheme.getState().preset;
+  const next = names[(names.indexOf(current) + 1) % names.length];
+  useTheme.getState().setPreset(next);
 }
 
-function buildCommands(): Command[] {
+function buildCommands(ctx: CommandCtx): Command[] {
+  const { t, canMutate } = ctx;
+
   const nav: Command[] = [
-    { id: 'n-dash', label: 'Dashboard', group: 'Navigate', Icon: GaugeIcon, run: (n) => n('/dashboard') },
-    { id: 'n-svc', label: 'Services', group: 'Navigate', Icon: LayersIcon, run: (n) => n('/services') },
-    { id: 'n-docs', label: 'Docs', group: 'Navigate', Icon: FileTextIcon, run: (n) => n('/docs') },
-    { id: 'n-chg', label: 'Changes', group: 'Navigate', Icon: DiffIcon, run: (n) => n('/changes') },
-    { id: 'n-alerts', label: 'Alerts', group: 'Navigate', Icon: BellIcon, run: (n) => n('/alerts') },
-    { id: 'n-set', label: 'Settings', group: 'Navigate', Icon: SettingsIcon, run: (n) => n('/settings') },
+    { id: 'n-dash', label: t('command.nav.dashboard'), group: 'navigate', Icon: GaugeIcon, run: (c) => c.navigate('/dashboard') },
+    { id: 'n-svc', label: t('command.nav.services'), group: 'navigate', Icon: LayersIcon, run: (c) => c.navigate('/services') },
+    { id: 'n-docs', label: t('command.nav.docs'), group: 'navigate', Icon: FileTextIcon, run: (c) => c.navigate('/docs') },
+    { id: 'n-chg', label: t('command.nav.changes'), group: 'navigate', Icon: DiffIcon, run: (c) => c.navigate('/changes') },
+    { id: 'n-alerts', label: t('command.nav.alerts'), group: 'navigate', Icon: BellIcon, run: (c) => c.navigate('/alerts') },
+    { id: 'n-set', label: t('command.nav.settings'), group: 'navigate', Icon: SettingsIcon, run: (c) => c.navigate('/settings') },
   ];
+
   const actions: Command[] = [
     {
-      id: 'a-sync',
-      label: 'Sync all services',
-      hint: 'Run a full fleet sync',
-      group: 'Actions',
-      Icon: SyncIcon,
-      run: () => triggerMockSync(null),
+      id: 'a-theme',
+      label: t('command.action.cycleTheme'),
+      hint: t('command.action.cycleThemeHint'),
+      group: 'actions',
+      Icon: SettingsIcon,
+      run: cycleTheme,
     },
   ];
-  const services: Command[] = connectors.map((c) => ({
-    id: `s-${c.id}`,
-    label: c.name,
-    hint: c.type,
-    group: 'Services',
-    Icon: categoryIcon[c.category],
-    run: (n) => n('/services'),
-  }));
+  // Mutating actions only surface for operators — the server still enforces it.
+  if (canMutate) {
+    actions.unshift({
+      id: 'a-sync',
+      label: t('command.action.syncAll'),
+      hint: t('command.action.syncAllHint'),
+      group: 'actions',
+      Icon: SyncIcon,
+      run: () => triggerMockSync(null),
+    });
+  }
+
+  const services: Command[] = connectors.flatMap((cn) => {
+    const items: Command[] = [
+      {
+        id: `s-${cn.id}`,
+        label: cn.name,
+        hint: cn.type,
+        group: 'services',
+        Icon: categoryIcon[cn.category],
+        run: (c) => c.navigate(`/services/${cn.id}`),
+      },
+    ];
+    if (canMutate) {
+      items.push(
+        {
+          id: `s-sync-${cn.id}`,
+          label: t('command.action.syncOne', { name: cn.name }),
+          group: 'actions',
+          Icon: SyncIcon,
+          run: () => triggerMockSync(cn.id),
+        },
+        {
+          id: `s-toggle-${cn.id}`,
+          label: t(cn.enabled ? 'command.action.disableOne' : 'command.action.enableOne', { name: cn.name }),
+          group: 'actions',
+          Icon: LayersIcon,
+          run: async (c) => {
+            await putConnectorsConnectorIdEnabled(cn.id, { enabled: !cn.enabled });
+            void c.queryClient.invalidateQueries({ queryKey: getGetConnectorsQueryKey() });
+          },
+        },
+      );
+    }
+    return items;
+  });
+
   const docs: Command[] = (docTree.children ?? []).map((d) => ({
     id: `d-${d.docId}`,
     label: d.title,
-    group: 'Docs',
+    group: 'docs',
     Icon: FileTextIcon,
-    run: (n) => n(`/docs/${d.docId}`),
+    run: (c) => c.navigate(`/docs/${d.docId}`),
   }));
-  return [...nav, ...actions, ...services, ...docs];
+
+  return [...nav, ...actions, ...services, ...docs, ...registeredCommands(ctx)];
 }
 
 export function CommandPalette() {
@@ -91,7 +145,14 @@ export function CommandPalette() {
 function PaletteBody() {
   const setOpen = useUi((s) => s.setPalette);
   const navigate = useNavigate();
-  const commands = useMemo(() => buildCommands(), []);
+  const queryClient = useQueryClient();
+  const canMutate = useCanMutate();
+  const { t } = useTranslation();
+  const ctx = useMemo<CommandCtx>(
+    () => ({ navigate, t, canMutate, queryClient }),
+    [navigate, t, canMutate, queryClient],
+  );
+  const commands = useMemo(() => buildCommands(ctx), [ctx]);
   const [query, setQuery] = useState('');
   const [active, setActive] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -114,18 +175,18 @@ function PaletteBody() {
   const cursor = filtered.length ? Math.min(active, filtered.length - 1) : 0;
 
   const groups = useMemo(() => {
-    const map = new Map<string, Command[]>();
+    const map = new Map<CommandGroup, Command[]>();
     for (const c of filtered) {
       const arr = map.get(c.group) ?? [];
       arr.push(c);
       map.set(c.group, arr);
     }
-    return [...map.entries()];
+    return GROUP_ORDER.filter((g) => map.has(g)).map((g) => [g, map.get(g)!] as const);
   }, [filtered]);
 
   const run = (c: Command) => {
     setOpen(false);
-    c.run(navigate);
+    c.run(ctx);
   };
 
   const onKeyDown = (e: React.KeyboardEvent) => {
@@ -148,8 +209,6 @@ function PaletteBody() {
   useEffect(() => {
     listRef.current?.querySelector('[data-active="true"]')?.scrollIntoView({ block: 'nearest' });
   }, [cursor]);
-
-  let flatIndex = -1;
 
   return (
     <motion.div
@@ -185,7 +244,7 @@ function PaletteBody() {
               setQuery(e.target.value);
               setActive(0);
             }}
-            placeholder="type a command or search…"
+            placeholder={t('command.placeholder')}
             className="h-12 flex-1 bg-transparent font-mono text-sm text-ink outline-none placeholder:text-ink-faint"
           />
           <kbd className="rounded border border-line-strong px-1.5 py-0.5 font-mono text-2xs text-ink-faint">
@@ -196,18 +255,19 @@ function PaletteBody() {
         <div ref={listRef} className="max-h-[52vh] overflow-y-auto p-2">
           {filtered.length === 0 && (
             <p className="px-3 py-8 text-center text-sm text-ink-faint">
-              No matches for “{query}”
+              {t('command.noMatches', { query })}
             </p>
           )}
           {groups.map(([group, items]) => (
             <div key={group} className="mb-1">
               <p className="px-2.5 py-1.5 text-2xs font-semibold uppercase tracking-wider text-ink-faint">
-                {group}
+                {t(`command.group.${group}`)}
               </p>
               {items.map((c) => {
-                flatIndex += 1;
-                const isActive = flatIndex === cursor;
-                const idx = flatIndex;
+                // Index into the flat `filtered` list — the same ordering the
+                // cursor/Enter handlers use — so the highlight always matches.
+                const idx = filtered.indexOf(c);
+                const isActive = idx === cursor;
                 return (
                   <button
                     key={c.id}

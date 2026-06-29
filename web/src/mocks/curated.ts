@@ -17,6 +17,7 @@ import {
   docVersionMeta,
   docs,
   removalImpact,
+  serviceSnapshot,
   user,
 } from '../data/fixtures';
 
@@ -32,7 +33,61 @@ const authConfig = {
   oidcProviders: [] as unknown[],
 };
 
+// Mock session state. Login/oidc set it true; refresh succeeds only when set (i.e.
+// a refresh "cookie" exists); logout clears it. Resets on full page reload, which
+// matches the in-memory-token model (no persistent client session).
+let hasSession = false;
+const newSession = () => ({
+  accessToken: `acc-${Math.random().toString(36).slice(2)}`,
+  expiresIn: authConfig.accessTokenTtl,
+  user,
+});
+
 export const curatedHandlers = [
+  http.get('*/auth/providers', async () => {
+    await delay(LATENCY);
+    return HttpResponse.json({
+      localEnabled: authConfig.localEnabled,
+      oidc: [
+        {
+          id: 'authentik',
+          displayName: 'Authentik',
+          authUrl: '/auth/callback?providerId=authentik&code=mock-oidc-code&state=mock-state',
+        },
+      ],
+    });
+  }),
+
+  http.post('*/auth/login', async ({ request }) => {
+    await delay(LATENCY);
+    const body = (await request.json().catch(() => ({}))) as { username?: string; password?: string };
+    if (!body.username || !body.password) {
+      return HttpResponse.json({ code: 'invalid-credentials', message: 'Invalid credentials' }, { status: 401 });
+    }
+    hasSession = true;
+    return HttpResponse.json(newSession());
+  }),
+
+  http.post('*/auth/oidc/callback', async () => {
+    await delay(LATENCY);
+    hasSession = true;
+    return HttpResponse.json(newSession());
+  }),
+
+  http.post('*/auth/refresh', async () => {
+    await delay(LATENCY);
+    if (!hasSession) {
+      return HttpResponse.json({ code: 'no-session', message: 'No active session' }, { status: 401 });
+    }
+    return HttpResponse.json(newSession());
+  }),
+
+  http.post('*/auth/logout', async () => {
+    await delay(LATENCY);
+    hasSession = false;
+    return new HttpResponse(null, { status: 204 });
+  }),
+
   http.get('*/auth/config', async () => {
     await delay(LATENCY);
     return HttpResponse.json(authConfig);
@@ -124,9 +179,36 @@ export const curatedHandlers = [
     return HttpResponse.json(removalImpact(params.connectorId as string));
   }),
 
+  // Live raw-state snapshot for the service detail page.
+  http.get('*/connectors/:connectorId/data', async ({ params }) => {
+    await delay(LATENCY);
+    const snap = serviceSnapshot(params.connectorId as string);
+    if (!snap) return new HttpResponse(null, { status: 404 });
+    return HttpResponse.json(snap);
+  }),
+
+  http.put('*/connectors/:connectorId', async ({ params, request }) => {
+    await delay(LATENCY);
+    const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
+    const c = connectors.find((x) => x.id === params.connectorId);
+    if (!c) return new HttpResponse(null, { status: 404 });
+    if (typeof body.name === 'string') c.name = body.name;
+    if (typeof body.url === 'string') c.url = body.url;
+    if (typeof body.verifyTls === 'boolean') c.verifyTls = body.verifyTls;
+    return HttpResponse.json(c);
+  }),
+
   http.get('*/connectors', async () => {
     await delay(LATENCY);
     return HttpResponse.json(connectors);
+  }),
+
+  // Single connector — registered AFTER /schema, /removal-impact, /data so those win.
+  http.get('*/connectors/:connectorId', async ({ params }) => {
+    await delay(LATENCY);
+    const c = connectors.find((x) => x.id === params.connectorId);
+    if (!c) return new HttpResponse(null, { status: 404 });
+    return HttpResponse.json(c);
   }),
 
   // Step-up: mint a short-lived elevation token for a single destructive action.
@@ -138,9 +220,13 @@ export const curatedHandlers = [
     });
   }),
 
-  http.get('*/changes', async () => {
+  http.get('*/changes', async ({ request }) => {
     await delay(LATENCY);
-    return HttpResponse.json(changePage());
+    const serviceId = new URL(request.url).searchParams.get('serviceId');
+    const page = changePage();
+    if (!serviceId) return HttpResponse.json(page);
+    const items = page.items.filter((c) => c.serviceId === serviceId);
+    return HttpResponse.json({ ...page, items, total: items.length, pageSize: items.length });
   }),
 
   http.get('*/changes/:changeId', async ({ params }) => {
@@ -171,6 +257,49 @@ export const curatedHandlers = [
   http.get('*/docs/:docId/versions', async ({ params }) => {
     await delay(LATENCY);
     return HttpResponse.json(docVersionMeta[params.docId as string] ?? []);
+  }),
+
+  // Save an edited doc → new version (last-write-wins; records a manual revision).
+  http.put('*/docs/:docId', async ({ params, request }) => {
+    await delay(LATENCY);
+    const id = params.docId as string;
+    const doc = docs[id];
+    if (!doc) return new HttpResponse(null, { status: 404 });
+    const body = (await request.json().catch(() => ({}))) as { content?: string };
+    const rev = doc.currentVersion + 1;
+    const now = new Date().toISOString();
+    doc.content = body.content ?? doc.content;
+    doc.currentVersion = rev;
+    doc.updatedAt = now;
+    const meta = { rev, createdAt: now, author: 'you', trigger: 'manual' as const };
+    (docVersionMeta[id] ??= []).unshift(meta);
+    (docVersionContent[id] ??= {})[rev] = { ...meta, content: doc.content };
+    return HttpResponse.json(doc);
+  }),
+
+  // Batched AI suggestion — returns a ref; the editor renders the proposed revision
+  // as a review-diff (no streaming in v1, per the plan).
+  http.post('*/docs/:docId/ai-suggest', async () => {
+    await delay(LATENCY * 2);
+    return HttpResponse.json({ requestId: `ai-${Math.random().toString(36).slice(2)}` });
+  }),
+
+  // Restore a past revision → creates a new head version with that content.
+  http.post('*/docs/:docId/versions/:rev/restore', async ({ params }) => {
+    await delay(LATENCY);
+    const id = params.docId as string;
+    const doc = docs[id];
+    if (!doc) return new HttpResponse(null, { status: 404 });
+    const from = docVersionContent[id]?.[Number(params.rev)];
+    const rev = doc.currentVersion + 1;
+    const now = new Date().toISOString();
+    doc.content = from?.content ?? doc.content;
+    doc.currentVersion = rev;
+    doc.updatedAt = now;
+    const meta = { rev, createdAt: now, author: 'you', trigger: 'manual' as const };
+    (docVersionMeta[id] ??= []).unshift(meta);
+    (docVersionContent[id] ??= {})[rev] = { ...meta, content: doc.content };
+    return HttpResponse.json(doc);
   }),
 
   http.get('*/docs/:docId', async ({ params }) => {

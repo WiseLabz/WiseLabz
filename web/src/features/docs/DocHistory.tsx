@@ -5,33 +5,59 @@
  * knows whether a sync or a human last touched the doc.
  */
 import { useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   useGetDocsDocIdVersions,
   useGetDocsDocIdVersionsRev,
+  postDocsDocIdVersionsRevRestore,
+  getGetDocsDocIdQueryKey,
+  getGetDocsDocIdVersionsQueryKey,
+  getGetDocsTreeQueryKey,
 } from '../../api/generated/docs/docs';
 import { DocDiff } from '../../components/diff/DiffViewer';
+import { Button } from '../../components/ui/Button';
 import { Skeleton, SkeletonRows, ErrorState, EmptyState } from '../../components/ui/states';
+import { useCanMutate } from '../../hooks/useRole';
+import { toast } from '../../lib/toast';
 import { cn } from '../../lib/cn';
 import { relativeTime } from '../../lib/time';
-import { HistoryIcon, SparklesIcon, FileTextIcon, UserIcon } from '../../components/icons';
+import {
+  HistoryIcon,
+  SparklesIcon,
+  FileTextIcon,
+  UserIcon,
+  HistoryIcon as RestoreIcon,
+} from '../../components/icons';
 import type { DocVersionMetaTrigger } from '../../api/model';
 
-const TRIGGER: Record<DocVersionMetaTrigger, { label: string; Icon: React.ComponentType<{ size?: number }>; tone: string }> = {
-  ai: { label: 'AI', Icon: SparklesIcon, tone: 'var(--color-signal)' },
-  template: { label: 'Template', Icon: FileTextIcon, tone: 'var(--color-signal-bright)' },
-  manual: { label: 'Manual', Icon: UserIcon, tone: 'var(--color-ink-muted)' },
+const TRIGGER: Record<
+  DocVersionMetaTrigger,
+  { Icon: React.ComponentType<{ size?: number }>; tone: string }
+> = {
+  ai: { Icon: SparklesIcon, tone: 'var(--color-signal)' },
+  template: { Icon: FileTextIcon, tone: 'var(--color-signal-bright)' },
+  manual: { Icon: UserIcon, tone: 'var(--color-ink-muted)' },
 };
 
-export function DocHistory({
-  docId,
-  currentVersion,
-}: {
-  docId: string;
-  currentVersion: number;
-}) {
+export function DocHistory({ docId, currentVersion }: { docId: string; currentVersion: number }) {
+  const { t } = useTranslation();
+  const canMutate = useCanMutate();
+  const queryClient = useQueryClient();
   const versions = useGetDocsDocIdVersions(docId);
   // Mounted fresh per doc (DocReader is keyed by docId), so initial = latest rev.
   const [selected, setSelected] = useState<number>(currentVersion);
+
+  const restore = useMutation({
+    mutationFn: () => postDocsDocIdVersionsRevRestore(docId, selected),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: getGetDocsDocIdQueryKey(docId) });
+      queryClient.invalidateQueries({ queryKey: getGetDocsDocIdVersionsQueryKey(docId) });
+      queryClient.invalidateQueries({ queryKey: getGetDocsTreeQueryKey() });
+      toast.success(t('docs.restore.done', { version: selected }));
+    },
+    onError: () => toast.error(t('docs.restore.error')),
+  });
 
   const prevRev = selected - 1;
   const current = useGetDocsDocIdVersionsRev(docId, selected, {
@@ -47,20 +73,19 @@ export function DocHistory({
   const afterText = current.data?.content ?? '';
 
   const ready = !current.isLoading && (prevRev <= 0 || !previous.isFetching);
-  const hasContent = useMemo(
-    () => afterText !== '' || beforeText !== '',
-    [afterText, beforeText],
-  );
+  const hasContent = useMemo(() => afterText !== '' || beforeText !== '', [afterText, beforeText]);
 
   if (versions.isLoading) return <SkeletonRows rows={4} />;
   if (versions.isError)
-    return <ErrorState description="Couldn't load revision history." onRetry={() => versions.refetch()} />;
+    return (
+      <ErrorState description={t('docs.historyLoadError')} onRetry={() => versions.refetch()} />
+    );
   if (metas.length === 0)
     return (
       <EmptyState
         icon={<HistoryIcon size={20} />}
-        title="No prior revisions"
-        description="This document has only its current version. A diff appears here once a sync or an edit creates the next revision."
+        title={t('docs.noRevisionsTitle')}
+        description={t('docs.noRevisionsDesc')}
       />
     );
 
@@ -69,7 +94,7 @@ export function DocHistory({
       {/* Version rail */}
       <ol className="flex flex-col gap-1">
         {metas.map((v) => {
-          const t = TRIGGER[v.trigger];
+          const trig = TRIGGER[v.trigger];
           const active = v.rev === selected;
           return (
             <li key={v.rev}>
@@ -78,27 +103,28 @@ export function DocHistory({
                 className={cn(
                   'flex w-full items-center gap-2.5 rounded-md border px-2.5 py-2 text-left transition-colors',
                   active
-                    ? 'border-[var(--color-signal-soft)] bg-[var(--color-signal-tint)]'
-                    : 'border-transparent hover:bg-[var(--color-surface-raised)]',
+                    ? 'border-signal-soft bg-signal-tint'
+                    : 'border-transparent hover:bg-surface-raised'
                 )}
               >
                 <span
                   className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md"
-                  style={{ color: t.tone, backgroundColor: 'var(--color-canvas-sunken)' }}
+                  style={{ color: trig.tone, backgroundColor: 'var(--color-canvas-sunken)' }}
                 >
-                  <t.Icon size={13} />
+                  <trig.Icon size={13} />
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="nums block text-sm font-medium text-[var(--color-ink)]">
+                  <span className="nums block text-sm font-medium text-ink">
                     v{v.rev}
                     {v.rev === currentVersion && (
-                      <span className="ml-1.5 text-2xs font-normal text-[var(--color-ink-faint)]">
-                        current
+                      <span className="ml-1.5 text-2xs font-normal text-ink-faint">
+                        {t('common.current')}
                       </span>
                     )}
                   </span>
-                  <span className="block text-2xs text-[var(--color-ink-faint)]">
-                    {t.label} · {relativeTime(v.createdAt)} ago
+                  <span className="block text-2xs text-ink-faint">
+                    {t(`docs.trigger.${v.trigger}`)} ·{' '}
+                    {t('common.ago', { time: relativeTime(v.createdAt) })}
                   </span>
                 </span>
               </button>
@@ -109,9 +135,26 @@ export function DocHistory({
 
       {/* Diff */}
       <div className="min-w-0">
-        <p className="nums mb-2.5 font-mono text-2xs text-[var(--color-ink-faint)]">
-          {prevRev > 0 ? `comparing v${prevRev} → v${selected}` : `v${selected} (first revision)`}
-        </p>
+        <div className="mb-2.5 flex items-center justify-between gap-3">
+          <p className="nums font-mono text-2xs text-ink-faint">
+            {prevRev > 0
+              ? t('docs.comparing', { prev: prevRev, current: selected })
+              : t('docs.firstRevision', { current: selected })}
+          </p>
+          {canMutate && selected !== currentVersion && (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => restore.mutate()}
+              disabled={restore.isPending}
+            >
+              <RestoreIcon size={13} />
+              {restore.isPending
+                ? t('docs.restore.pending')
+                : t('docs.restore.action', { version: selected })}
+            </Button>
+          )}
+        </div>
         {!ready ? (
           <div className="space-y-2">
             <Skeleton className="h-4 w-1/2" />
@@ -119,13 +162,17 @@ export function DocHistory({
           </div>
         ) : current.isError ? (
           <ErrorState
-            title="Revision unavailable"
-            description="This revision's content isn't available in the mock dataset. Try v4 → v3 on the pve1 doc to see a full diff."
+            title={t('docs.revisionUnavailableTitle')}
+            description={t('docs.revisionUnavailableDesc')}
           />
         ) : !hasContent ? (
-          <EmptyState title="No textual changes" description="These revisions are identical." />
+          <EmptyState title={t('docs.noTextualTitle')} description={t('docs.noTextualDesc')} />
         ) : (
-          <DocDiff before={beforeText} after={afterText} label={`v${prevRev > 0 ? prevRev : 0} → v${selected}`} />
+          <DocDiff
+            before={beforeText}
+            after={afterText}
+            label={`v${prevRev > 0 ? prevRev : 0} → v${selected}`}
+          />
         )}
       </div>
     </div>

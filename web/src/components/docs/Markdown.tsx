@@ -21,16 +21,16 @@ function inline(text: string, keyBase: string): ReactNode[] {
       nodes.push(
         <code
           key={`${keyBase}-${k++}`}
-          className="rounded bg-[var(--color-canvas-sunken)] px-1.5 py-0.5 font-mono text-[0.85em] text-[var(--color-signal-bright)]"
+          className="rounded bg-canvas-sunken px-1.5 py-0.5 font-mono text-[0.85em] text-signal-bright"
         >
           {tok.slice(1, -1)}
-        </code>,
+        </code>
       );
     } else {
       nodes.push(
-        <strong key={`${keyBase}-${k++}`} className="font-semibold text-[var(--color-ink)]">
+        <strong key={`${keyBase}-${k++}`} className="font-semibold text-ink">
           {tok.slice(2, -2)}
-        </strong>,
+        </strong>
       );
     }
     last = m.index + tok.length;
@@ -63,10 +63,10 @@ export function Markdown({ source }: { source: string }) {
       blocks.push(
         <pre
           key={key++}
-          className="my-3 overflow-x-auto rounded-lg border border-[var(--color-line-soft)] bg-[var(--color-canvas-sunken)] p-3 font-mono text-xs leading-relaxed text-[var(--color-ink-muted)]"
+          className="my-3 overflow-x-auto rounded-lg border border-line-soft bg-canvas-sunken p-3 font-mono text-xs leading-relaxed text-ink-muted"
         >
           <code>{buf.join('\n')}</code>
-        </pre>,
+        </pre>
       );
       continue;
     }
@@ -81,11 +81,11 @@ export function Markdown({ source }: { source: string }) {
           : level === 2
             ? 'mb-2 mt-6 font-mono text-lg font-semibold tracking-tight'
             : 'mb-1.5 mt-5 font-mono text-xs font-semibold uppercase tracking-[0.16em] text-[var(--color-ink-muted)]';
-      const Tag = (`h${level}` as 'h1' | 'h2' | 'h3' | 'h4');
+      const Tag = `h${level}` as 'h1' | 'h2' | 'h3' | 'h4';
       blocks.push(
-        <Tag key={key++} className={`${cls} text-[var(--color-ink)]`}>
+        <Tag key={key++} className={`${cls} text-ink`}>
           {inline(h[2], `h${key}`)}
-        </Tag>,
+        </Tag>
       );
       i++;
       continue;
@@ -101,11 +101,11 @@ export function Markdown({ source }: { source: string }) {
       blocks.push(
         <blockquote
           key={key++}
-          className="my-3 flex gap-2.5 rounded-sm border border-[var(--color-line-soft)] bg-[var(--color-canvas-sunken)] px-4 py-2.5 text-sm text-[var(--color-ink-muted)]"
+          className="my-3 flex gap-2.5 rounded-sm border border-line-soft bg-canvas-sunken px-4 py-2.5 text-sm text-ink-muted"
         >
-          <span className="mt-1.5 h-[6px] w-[6px] shrink-0 bg-[var(--color-signal)]" />
+          <span className="mt-1.5 h-1.5 w-1.5 shrink-0 bg-signal" />
           <span>{inline(buf.join(' '), `q${key}`)}</span>
-        </blockquote>,
+        </blockquote>
       );
       continue;
     }
@@ -120,17 +120,14 @@ export function Markdown({ source }: { source: string }) {
         i++;
       }
       blocks.push(
-        <div
-          key={key++}
-          className="my-3 overflow-x-auto rounded-lg border border-[var(--color-line-soft)]"
-        >
+        <div key={key++} className="my-3 overflow-x-auto rounded-lg border border-line-soft">
           <table className="w-full border-collapse text-sm">
             <thead>
-              <tr className="bg-[var(--color-canvas-sunken)]">
+              <tr className="bg-canvas-sunken">
                 {header.map((c, idx) => (
                   <th
                     key={idx}
-                    className="border-b border-[var(--color-line-soft)] px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-[var(--color-ink-muted)]"
+                    className="border-b border-line-soft px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-ink-muted"
                   >
                     {inline(c, `th${idx}`)}
                   </th>
@@ -139,11 +136,11 @@ export function Markdown({ source }: { source: string }) {
             </thead>
             <tbody>
               {rows.map((r, ri) => (
-                <tr key={ri} className="transition-colors hover:bg-[var(--color-surface-raised)]">
+                <tr key={ri} className="transition-colors hover:bg-surface-raised">
                   {r.map((c, ci) => (
                     <td
                       key={ci}
-                      className="border-b border-[var(--color-line-soft)] px-3 py-2 text-[var(--color-ink)] last:border-0 [tr:last-child_&]:border-0"
+                      className="border-b border-line-soft px-3 py-2 text-ink last:border-0 [tr:last-child_&]:border-0"
                     >
                       {inline(c, `td${ri}-${ci}`)}
                     </td>
@@ -152,7 +149,7 @@ export function Markdown({ source }: { source: string }) {
               ))}
             </tbody>
           </table>
-        </div>,
+        </div>
       );
       continue;
     }
@@ -167,12 +164,12 @@ export function Markdown({ source }: { source: string }) {
       blocks.push(
         <ul key={key++} className="my-3 space-y-1.5 pl-1">
           {items.map((it, idx) => (
-            <li key={idx} className="flex gap-2.5 text-sm text-[var(--color-ink-muted)]">
-              <span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-[var(--color-signal)]" />
+            <li key={idx} className="flex gap-2.5 text-sm text-ink-muted">
+              <span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-signal" />
               <span>{inline(it, `li${idx}`)}</span>
             </li>
           ))}
-        </ul>,
+        </ul>
       );
       continue;
     }
@@ -184,13 +181,19 @@ export function Markdown({ source }: { source: string }) {
       i++;
     }
     blocks.push(
-      <p key={key++} className="my-2.5 text-sm leading-relaxed text-[var(--color-ink-muted)] text-pretty">
+      <p key={key++} className="my-2.5 text-sm leading-relaxed text-ink-muted text-pretty">
         {inline(buf.join(' '), `p${key}`)}
-      </p>,
+      </p>
     );
   }
 
-  return <div className="max-w-[68ch]">{blocks.map((b, idx) => <Fragment key={idx}>{b}</Fragment>)}</div>;
+  return (
+    <div className="max-w-[68ch]">
+      {blocks.map((b, idx) => (
+        <Fragment key={idx}>{b}</Fragment>
+      ))}
+    </div>
+  );
 }
 
 function splitRow(row: string): string[] {

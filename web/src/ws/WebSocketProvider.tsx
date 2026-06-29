@@ -11,7 +11,15 @@ import { getGetChangesQueryKey } from '../api/generated/changes/changes';
 import { getGetAlertsQueryKey } from '../api/generated/alerts/alerts';
 import { getGetDocsTreeQueryKey } from '../api/generated/docs/docs';
 import { useLive } from '../store/live';
+import { toast } from '../lib/toast';
+import { navigateTo } from '../lib/navigation';
+import i18n from '../i18n';
 import type { WsEvent } from '../types/ws';
+
+const jump = (to: string) => ({
+  label: i18n.t('notify.view'),
+  onClick: () => navigateTo(to),
+});
 
 const WS_URL = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`;
 
@@ -100,6 +108,15 @@ function handle(frame: WsEvent, qc: ReturnType<typeof useQueryClient>) {
       });
       qc.invalidateQueries({ queryKey: getGetDashboardOverviewQueryKey() });
       qc.invalidateQueries({ queryKey: getGetChangesQueryKey() });
+      {
+        const msg = i18n.t('notify.syncComplete', {
+          changes: p.changesDetected,
+          alerts: p.alertsRaised,
+        });
+        const opts = p.changesDetected > 0 ? { action: jump('/changes') } : undefined;
+        if (p.alertsRaised > 0) toast.warning(msg, opts);
+        else toast.success(msg, opts);
+      }
       break;
     }
     case 'change.detected': {
@@ -114,6 +131,12 @@ function handle(frame: WsEvent, qc: ReturnType<typeof useQueryClient>) {
       });
       qc.invalidateQueries({ queryKey: getGetChangesQueryKey() });
       qc.invalidateQueries({ queryKey: getGetDashboardOverviewQueryKey() });
+      {
+        const opts = { action: jump(`/changes/${p.changeId}`) };
+        if (p.severity === 'critical') toast.error(p.summary, opts);
+        else if (p.severity === 'warning') toast.warning(p.summary, opts);
+        else toast.info(p.summary, opts);
+      }
       break;
     }
     case 'alert.created': {
@@ -128,6 +151,11 @@ function handle(frame: WsEvent, qc: ReturnType<typeof useQueryClient>) {
         tone: p.severity === 'critical' ? 'err' : 'warn',
       });
       qc.invalidateQueries({ queryKey: getGetAlertsQueryKey() });
+      {
+        const opts = { action: jump('/alerts') };
+        if (p.severity === 'critical') toast.error(p.title, opts);
+        else toast.warning(p.title, opts);
+      }
       break;
     }
     case 'alert.resolved': {

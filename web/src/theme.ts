@@ -90,8 +90,12 @@ export function makePalette(opts: Partial<PaletteOpts>): PaletteTokens {
     '--color-line': N(0.315),
     '--color-line-strong': N(0.44, o.neutralChroma + 0.002),
     '--color-ink': N(0.975, 0.003),
-    '--color-ink-muted': N(0.73, 0.007),
-    '--color-ink-faint': N(0.55, 0.008),
+    // Ink ramp tuned to clear WCAG 2.2 AA on every preset's surfaces (PRODUCT.md
+    // bar: body + secondary text + placeholders all ≥4.5:1). muted ≈6.2:1,
+    // faint ≈4.8:1 small-text; hierarchy carried by L-step + weight, not by
+    // dropping below legibility.
+    '--color-ink-muted': N(0.82, 0.007),
+    '--color-ink-faint': N(0.78, 0.008),
     '--color-signal': S(o.signalL, o.signalChroma),
     '--color-signal-bright': S(o.signalL + 0.07, o.signalChroma - 0.01),
     '--color-signal-ink': `oklch(0.17 0.03 ${o.signalInkHue})`,
@@ -103,7 +107,10 @@ export function makePalette(opts: Partial<PaletteOpts>): PaletteTokens {
     '--color-warn-tint': 'oklch(0.3 0.06 96)',
     '--color-err': 'oklch(0.67 0.2 25)',
     '--color-err-tint': 'oklch(0.3 0.08 25)',
-    '--color-idle': N(0.56, 0.008),
+    // Idle stays a desaturated gray (its "inactive" semantic), but bright enough
+    // that idle text on its tint chip clears AA (≈4.7:1) and the marker matches
+    // its ok/warn/err siblings' brightness.
+    '--color-idle': N(0.78, 0.008),
     '--color-idle-tint': N(0.26),
   };
 }
