@@ -27,15 +27,15 @@ export function ChangesPage() {
   const items = (data?.items ?? []).filter((c) => filter === 'all' || c.severity === filter);
 
   return (
-    <div className="mx-auto max-w-[900px] px-6 py-6">
+    <div className="mx-auto max-w-225 px-6 py-6">
       <header className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight text-[var(--color-ink)]">{t('changes.title')}</h1>
-          <p className="text-sm text-[var(--color-ink-muted)]">
+          <h1 className="text-xl font-semibold tracking-tight text-ink">{t('changes.title')}</h1>
+          <p className="text-sm text-ink-muted">
             {data ? t('changes.countDetected', { count: data.total }) : t('changes.subtitle')}
           </p>
         </div>
-        <div className="flex items-center gap-1 rounded-lg border border-[var(--color-line-soft)] bg-[var(--color-canvas-sunken)] p-0.5">
+        <div className="flex items-center gap-1 rounded-lg border border-line-soft bg-canvas-sunken p-0.5">
           {FILTERS.map((f) => (
             <button
               key={f.value}
@@ -46,7 +46,7 @@ export function ChangesPage() {
               {filter === f.value && (
                 <motion.span
                   layoutId="chg-filter"
-                  className="absolute inset-0 -z-10 rounded-md bg-[var(--color-surface-raised)]"
+                  className="absolute inset-0 -z-10 rounded-md bg-surface-raised"
                   transition={{ type: 'spring', stiffness: 500, damping: 36 }}
                 />
               )}
@@ -71,13 +71,13 @@ export function ChangesPage() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: idx * 0.03, duration: 0.25 }}
               onClick={() => navigate(`/changes/${c.id}`)}
-              className="group flex w-full items-center gap-4 border-b border-[var(--color-line-soft)] px-4 py-3 text-left transition-colors last:border-0 hover:bg-[var(--color-surface-raised)]"
+              className="group flex w-full items-center gap-4 border-b border-line-soft px-4 py-3 text-left transition-colors last:border-0 hover:bg-surface-raised"
             >
               <SeverityTag severity={c.severity} />
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm text-[var(--color-ink)]">{c.summary}</p>
-                <p className="flex items-center gap-1.5 font-mono text-2xs text-[var(--color-ink-faint)]">
-                  <span className="text-[var(--color-signal-bright)]">{c.serviceName}</span>
+                <p className="truncate text-sm text-ink">{c.summary}</p>
+                <p className="flex items-center gap-1.5 font-mono text-2xs text-ink-faint">
+                  <span className="text-signal-bright">{c.serviceName}</span>
                   <span>·</span>
                   <span>{c.changeType}</span>
                   <span>·</span>
@@ -85,13 +85,13 @@ export function ChangesPage() {
                 </p>
               </div>
               {c.willTriggerAi && (
-                <span className="hidden rounded bg-[var(--color-signal-tint)] px-1.5 py-0.5 text-2xs font-semibold text-[var(--color-signal)] sm:block">
+                <span className="hidden rounded bg-signal-tint px-1.5 py-0.5 text-2xs font-semibold text-signal sm:block">
                   {t('changes.aiUpdate')}
                 </span>
               )}
               <ArrowRightIcon
                 size={15}
-                className="shrink-0 text-[var(--color-line-strong)] transition-colors group-hover:text-[var(--color-ink-muted)]"
+                className="shrink-0 text-line-strong transition-colors group-hover:text-ink-muted"
               />
             </motion.button>
           ))

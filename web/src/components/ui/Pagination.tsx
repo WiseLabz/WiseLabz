@@ -49,11 +49,11 @@ export function Pagination({
         <Chevron dir="left" />
       </IconButton>
       <span
-        className="nums px-1 font-mono text-xs text-[var(--color-ink-muted)]"
+        className="nums px-1 font-mono text-xs text-ink-muted"
         aria-live="polite"
         aria-atomic="true"
       >
-        {page} <span className="text-[var(--color-ink-faint)]">/</span> {pageCount}
+        {page} <span className="text-ink-faint">/</span> {pageCount}
       </span>
       <IconButton label={nextLabel} disabled={atEnd} onClick={() => onPage(page + 1)}>
         <Chevron dir="right" />

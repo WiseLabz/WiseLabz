@@ -53,7 +53,7 @@ export function ServiceRosterWidget() {
 
   const counts = merged.reduce(
     (acc, c) => ((acc[c.status] = (acc[c.status] ?? 0) + 1), acc),
-    {} as Record<ServiceStatus, number>,
+    {} as Record<ServiceStatus, number>
   );
 
   return (
@@ -66,9 +66,7 @@ export function ServiceRosterWidget() {
               className="h-1.75 w-1.75"
               style={{ backgroundColor: toneColor[statusMeta[s].tone].fg }}
             />
-            <span className="nums font-mono text-sm font-semibold text-ink">
-              {counts[s] ?? 0}
-            </span>
+            <span className="nums font-mono text-sm font-semibold text-ink">{counts[s] ?? 0}</span>
             <span className="font-mono text-2xs text-ink-faint">{statusMeta[s].label}</span>
           </div>
         ))}
@@ -89,28 +87,26 @@ export function ServiceRosterWidget() {
               </span>
               <span className="min-w-0 flex-1">
                 <span className="flex items-center gap-2">
-                  <span className="truncate text-sm font-medium text-ink">
-                    {c.name}
-                  </span>
+                  <span className="truncate text-sm font-medium text-ink">{c.name}</span>
                   {live && (
                     <span className="rounded bg-signal-tint px-1 text-[10px] font-semibold text-signal-bright">
                       {t('widgets.roster.updated')}
                     </span>
                   )}
                 </span>
-                <span className="block truncate font-mono text-2xs text-[var(--color-ink-faint)]">
+                <span className="block truncate font-mono text-2xs text-ink-faint">
                   {c.type} · {c.url?.replace(/^https?:\/\//, '')}
                 </span>
               </span>
               <span className="hidden shrink-0 text-right sm:block">
                 <StatusPill status={c.status} />
-                <span className="nums block font-mono text-2xs text-[var(--color-ink-faint)]">
+                <span className="nums block font-mono text-2xs text-ink-faint">
                   {t('common.ago', { time: relativeTime(c.lastSyncAt) })}
                 </span>
               </span>
               <ArrowRightIcon
                 size={15}
-                className="shrink-0 text-[var(--color-line-strong)] transition-colors group-hover:text-[var(--color-ink-muted)]"
+                className="shrink-0 text-line-strong transition-colors group-hover:text-ink-muted"
               />
             </button>
           );
@@ -149,26 +145,24 @@ export function AlertSummaryWidget() {
           key={Math.max(pending.length, pendingLive)}
           initial={{ opacity: 0, y: -4 }}
           animate={{ opacity: 1, y: 0 }}
-          className="nums text-2xl font-semibold text-[var(--color-err)]"
+          className="nums text-2xl font-semibold text-err"
         >
           {Math.max(pending.length, pendingLive)}
         </motion.span>
-        <span className="text-xs text-[var(--color-ink-muted)]">{t('widgets.alerts.pending')}</span>
+        <span className="text-xs text-ink-muted">{t('widgets.alerts.pending')}</span>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
         {pending.slice(0, 4).map((a) => (
           <button
             key={a.id}
             onClick={() => navigate('/alerts')}
-            className="flex w-full flex-col gap-1 rounded-md px-2 py-2 text-left transition-colors hover:bg-[var(--color-surface-raised)]"
+            className="flex w-full flex-col gap-1 rounded-md px-2 py-2 text-left transition-colors hover:bg-surface-raised"
           >
             <span className="flex items-center justify-between gap-2">
               <SeverityTag severity={a.severity} />
-              <span className="font-mono text-2xs text-[var(--color-ink-faint)]">
-                {relativeTime(a.createdAt)}
-              </span>
+              <span className="font-mono text-2xs text-ink-faint">{relativeTime(a.createdAt)}</span>
             </span>
-            <span className="line-clamp-2 text-sm text-[var(--color-ink)]">{a.title}</span>
+            <span className="line-clamp-2 text-sm text-ink">{a.title}</span>
           </button>
         ))}
       </div>
@@ -189,7 +183,13 @@ export function RecentChangesWidget() {
 
   const changes = data.recentChanges ?? [];
   if (changes.length === 0)
-    return <EmptyState icon={<CheckIcon size={20} />} title={t('widgets.changes.emptyTitle')} description={t('widgets.changes.emptyDesc')} />;
+    return (
+      <EmptyState
+        icon={<CheckIcon size={20} />}
+        title={t('widgets.changes.emptyTitle')}
+        description={t('widgets.changes.emptyDesc')}
+      />
+    );
 
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">
@@ -197,21 +197,21 @@ export function RecentChangesWidget() {
         <button
           key={c.id}
           onClick={() => navigate(`/changes/${c.id}`)}
-          className="group flex w-full items-start gap-3 border-b border-[var(--color-line-soft)] px-4 py-2.5 text-left transition-colors last:border-0 hover:bg-[var(--color-surface-raised)]"
+          className="group flex w-full items-start gap-3 border-b border-line-soft px-4 py-2.5 text-left transition-colors last:border-0 hover:bg-surface-raised"
         >
           <span className="pt-0.5">
             <SeverityTag severity={c.severity} />
           </span>
           <span className="min-w-0 flex-1">
-            <span className="block truncate text-sm text-[var(--color-ink)]">{c.summary}</span>
-            <span className="flex items-center gap-1.5 font-mono text-2xs text-[var(--color-ink-faint)]">
-              <span className="text-[var(--color-signal-bright)]">{c.serviceName}</span>
+            <span className="block truncate text-sm text-ink">{c.summary}</span>
+            <span className="flex items-center gap-1.5 font-mono text-2xs text-ink-faint">
+              <span className="text-signal-bright">{c.serviceName}</span>
               <span>·</span>
               <span>{c.changeType}</span>
               <span>·</span>
               <span>{relativeTime(c.detectedAt)}</span>
               {c.willTriggerAi && (
-                <span className="ml-0.5 rounded bg-[var(--color-signal-tint)] px-1 text-[var(--color-signal)]">
+                <span className="ml-0.5 rounded bg-signal-tint px-1 text-signal">
                   {t('widgets.changes.ai')}
                 </span>
               )}
@@ -241,14 +241,16 @@ export function SyncActivityWidget() {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       {job && job.phase !== 'done' && (
-        <div className="border-b border-[var(--color-line-soft)] px-4 py-3">
+        <div className="border-b border-line-soft px-4 py-3">
           <div className="mb-1.5 flex items-center justify-between text-xs">
-            <span className="font-medium text-[var(--color-ink)]">{t('widgets.sync.fleetSync', { phase: job.phase })}</span>
-            <span className="nums font-mono text-[var(--color-signal-bright)]">{job.percent}%</span>
+            <span className="font-medium text-ink">
+              {t('widgets.sync.fleetSync', { phase: job.phase })}
+            </span>
+            <span className="nums font-mono text-signal-bright">{job.percent}%</span>
           </div>
-          <div className="h-1.5 overflow-hidden rounded-full bg-[var(--color-canvas-sunken)]">
+          <div className="h-1.5 overflow-hidden rounded-full bg-canvas-sunken">
             <motion.div
-              className="h-full rounded-full bg-[var(--color-signal)]"
+              className="h-full rounded-full bg-signal"
               animate={{ width: `${job.percent}%` }}
               transition={{ ease: [0.16, 1, 0.3, 1], duration: 0.5 }}
             />
@@ -258,9 +260,12 @@ export function SyncActivityWidget() {
 
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-2">
         {activity.length === 0 ? (
-          <EmptyState title={t('widgets.sync.quietTitle')} description={t('widgets.sync.quietDesc')} />
+          <EmptyState
+            title={t('widgets.sync.quietTitle')}
+            description={t('widgets.sync.quietDesc')}
+          />
         ) : (
-          <ol className="relative ml-1 border-l border-[var(--color-line-soft)]">
+          <ol className="relative ml-1 border-l border-line-soft">
             <AnimatePresence initial={false}>
               {activity.slice(0, 12).map((e) => {
                 const fg = toneColor[TONE_KEY[e.tone]].fg;
@@ -275,12 +280,12 @@ export function SyncActivityWidget() {
                     className="relative py-2 pl-4"
                   >
                     <span
-                      className="absolute -left-[5px] top-3 h-2 w-2 rounded-full"
+                      className="absolute -left-1.25 top-3 h-2 w-2 rounded-full"
                       style={{ backgroundColor: fg, boxShadow: `0 0 8px ${fg}` }}
                     />
-                    <p className="text-sm text-[var(--color-ink)]">{e.label}</p>
+                    <p className="text-sm text-ink">{e.label}</p>
                     {e.detail && (
-                      <p className="font-mono text-2xs text-[var(--color-ink-faint)]">
+                      <p className="font-mono text-2xs text-ink-faint">
                         {e.detail} · {relativeTime(e.at)}
                       </p>
                     )}
@@ -317,10 +322,10 @@ export function DocsHealthWidget() {
       <div className="flex items-center gap-4">
         <CoverageRing pct={pct} />
         <div>
-          <p className="nums text-sm text-[var(--color-ink)]">
+          <p className="nums text-sm text-ink">
             {t('widgets.docs.documented', { documented, total: totalServices })}
           </p>
-          <p className="text-xs text-[var(--color-ink-muted)]">
+          <p className="text-xs text-ink-muted">
             {totalServices - documented > 0
               ? t('widgets.docs.awaiting', { count: totalServices - documented })
               : t('widgets.docs.allDocumented')}
@@ -333,7 +338,7 @@ export function DocsHealthWidget() {
           <button
             key={d.docId}
             onClick={() => navigate(`/docs/${d.docId}`)}
-            className="flex items-center gap-1.5 rounded-md border border-[var(--color-line-soft)] bg-[var(--color-canvas-sunken)] px-2 py-1 text-xs text-[var(--color-ink-muted)] transition-colors hover:border-[var(--color-signal-soft)] hover:text-[var(--color-ink)]"
+            className="flex items-center gap-1.5 rounded-md border border-line-soft bg-canvas-sunken px-2 py-1 text-xs text-ink-muted transition-colors hover:border-signal-soft hover:text-ink"
           >
             <FileTextIcon size={13} />
             {d.title.split(' — ')[0]}
@@ -343,7 +348,7 @@ export function DocsHealthWidget() {
 
       <button
         onClick={() => navigate('/docs')}
-        className="mt-3 flex items-center justify-center gap-1.5 rounded-md border border-[var(--color-line-soft)] py-2 text-xs font-medium text-[var(--color-ink-muted)] transition-colors hover:bg-[var(--color-surface-raised)] hover:text-[var(--color-ink)]"
+        className="mt-3 flex items-center justify-center gap-1.5 rounded-md border border-line-soft py-2 text-xs font-medium text-ink-muted transition-colors hover:bg-surface-raised hover:text-ink"
       >
         {t('widgets.docs.open')}
         <ArrowRightIcon size={14} />
@@ -358,7 +363,14 @@ function CoverageRing({ pct }: { pct: number }) {
   return (
     <div className="relative h-16 w-16 shrink-0">
       <svg viewBox="0 0 64 64" className="h-16 w-16 -rotate-90">
-        <circle cx="32" cy="32" r={r} fill="none" stroke="var(--color-canvas-sunken)" strokeWidth="6" />
+        <circle
+          cx="32"
+          cy="32"
+          r={r}
+          fill="none"
+          stroke="var(--color-canvas-sunken)"
+          strokeWidth="6"
+        />
         <motion.circle
           cx="32"
           cy="32"
@@ -373,7 +385,7 @@ function CoverageRing({ pct }: { pct: number }) {
           transition={{ duration: 0.9, ease: [0.16, 1, 0.3, 1] }}
         />
       </svg>
-      <span className="nums absolute inset-0 flex items-center justify-center text-sm font-semibold text-[var(--color-ink)]">
+      <span className="nums absolute inset-0 flex items-center justify-center text-sm font-semibold text-ink">
         {pct}%
       </span>
     </div>

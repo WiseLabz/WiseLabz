@@ -17,9 +17,9 @@ import { Button } from '../../components/ui/Button';
 /** Centered brand splash shown while the session resolves. */
 export function Splash() {
   return (
-    <div className="flex h-screen w-screen items-center justify-center bg-[var(--color-canvas)]">
-      <div className="flex h-11 w-11 items-center justify-center rounded-[var(--radius-lg)] bg-[var(--color-signal)] shadow-[var(--shadow-raised)]">
-        <span className="font-mono text-lg font-bold text-[var(--color-signal-ink)]">W</span>
+    <div className="flex h-screen w-screen items-center justify-center bg-canvas">
+      <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-signal shadow-(--shadow-raised)">
+        <span className="font-mono text-lg font-bold text-signal-ink">W</span>
       </div>
     </div>
   );
@@ -56,7 +56,7 @@ export function RequireOnboarded({ children }: { children: ReactNode }) {
 export function ForbiddenPage() {
   const { t } = useTranslation();
   return (
-    <div className="flex h-screen w-screen items-center justify-center bg-[var(--color-canvas)] p-6">
+    <div className="flex h-screen w-screen items-center justify-center bg-canvas p-6">
       <EmptyState
         title={t('auth.forbiddenTitle')}
         description={t('auth.forbiddenDesc')}

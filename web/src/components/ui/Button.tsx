@@ -40,12 +40,8 @@ const variants: Record<Variant, string> = {
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
   ({ variant = 'secondary', size = 'md', className, ...rest }, ref) => (
-    <button
-      ref={ref}
-      className={cn(base, sizes[size], variants[variant], className)}
-      {...rest}
-    />
-  ),
+    <button ref={ref} className={cn(base, sizes[size], variants[variant], className)} {...rest} />
+  )
 );
 Button.displayName = 'Button';
 
@@ -60,15 +56,15 @@ export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(
       aria-label={label}
       title={label}
       className={cn(
-        'inline-flex h-8 w-8 items-center justify-center rounded-sm text-[var(--color-ink-muted)]',
-        'transition-colors duration-150 hover:bg-[var(--color-surface)] hover:text-[var(--color-ink)]',
+        'inline-flex h-8 w-8 items-center justify-center rounded-sm text-ink-muted',
+        'transition-colors duration-150 hover:bg-surface hover:text-ink',
         'active:translate-y-px disabled:opacity-40',
-        className,
+        className
       )}
       {...rest}
     >
       {children}
     </button>
-  ),
+  )
 );
 IconButton.displayName = 'IconButton';

@@ -68,20 +68,20 @@ export function DashboardPage() {
   const visible = layout.filter((w) => w.enabled);
 
   return (
-    <div className="relative mx-auto max-w-[1320px] px-6 py-7">
+    <div className="relative mx-auto max-w-330 px-6 py-7">
       <SyncSweep active={syncing} />
 
       {/* Instrument readout band — the command surface. Big mono figures on a soft
           raised panel; a faint blueprint grid keeps the identity without the hard edge. */}
-      <header className="relative mb-6 overflow-hidden rounded-xl border border-[var(--color-line-soft)] bg-[var(--color-surface)] shadow-[var(--shadow-raised)]">
+      <header className="relative mb-6 overflow-hidden rounded-xl border border-line-soft bg-surface shadow-(--shadow-raised)">
         <div className="absolute inset-0 bg-blueprint opacity-[0.16]" aria-hidden="true" />
         <div className="relative flex flex-wrap items-end justify-between gap-6 px-5 py-4">
           <div className="flex items-end gap-x-7 gap-y-3">
             <div className="pr-1">
-              <p className="font-mono text-2xs uppercase tracking-[0.2em] text-[var(--color-ink-faint)]">
+              <p className="font-mono text-2xs uppercase tracking-[0.2em] text-ink-faint">
                 {t('dashboard.kicker')}
               </p>
-              <p className="mt-1 max-w-[22ch] text-sm leading-snug text-[var(--color-ink-muted)]">
+              <p className="mt-1 max-w-[22ch] text-sm leading-snug text-ink-muted">
                 {syncing ? t('dashboard.reconciling') : t('dashboard.reconciled')}
               </p>
             </div>
@@ -89,7 +89,7 @@ export function DashboardPage() {
           </div>
 
           <div className="flex items-center gap-4">
-            <span className="hidden font-mono text-2xs text-[var(--color-ink-faint)] sm:inline">
+            <span className="hidden font-mono text-2xs text-ink-faint sm:inline">
               {t('dashboard.lastSync', { time: lastSync ? `${relativeTime(lastSync)} ago` : '—' })}
             </span>
             <Button
@@ -110,7 +110,7 @@ export function DashboardPage() {
         ) : (
           <motion.div
             key="view"
-            className="grid grid-cols-1 gap-px overflow-hidden rounded-xl border border-[var(--color-line-soft)] bg-[var(--color-line-soft)] shadow-[var(--shadow-panel)] lg:grid-cols-6"
+            className="grid grid-cols-1 gap-px overflow-hidden rounded-xl border border-line-soft bg-line-soft shadow-(--shadow-panel) lg:grid-cols-6"
             initial="hidden"
             animate="show"
             variants={{ show: { transition: { staggerChildren: 0.05 } } }}
@@ -126,13 +126,16 @@ export function DashboardPage() {
                     show: { opacity: 1, y: 0 },
                   }}
                   transition={{ type: 'spring', stiffness: 320, damping: 30 }}
-                  className={`${SPAN_CLASS[w.span]} bg-[var(--color-canvas)]`}
+                  className={`${SPAN_CLASS[w.span]} bg-canvas`}
                   style={{ minHeight: meta.minH }}
                 >
                   <ErrorBoundary
                     fallbackRender={({ resetErrorBoundary }) => (
                       <WidgetFrame title={widgetTitle(w.id)} icon={<meta.Icon size={15} />}>
-                        <ErrorState description={t('dashboard.widgetFailed', { title: widgetTitle(w.id) })} onRetry={resetErrorBoundary} />
+                        <ErrorState
+                          description={t('dashboard.widgetFailed', { title: widgetTitle(w.id) })}
+                          onRetry={resetErrorBoundary}
+                        />
                       </WidgetFrame>
                     )}
                   >
@@ -172,9 +175,7 @@ function EditMode() {
       exit={{ opacity: 0 }}
       className="mx-auto max-w-2xl"
     >
-      <p className="mb-3 text-sm text-[var(--color-ink-muted)]">
-        {t('dashboard.editHint')}
-      </p>
+      <p className="mb-3 text-sm text-ink-muted">{t('dashboard.editHint')}</p>
       <Reorder.Group axis="y" values={ids} onReorder={commit} className="flex flex-col gap-2">
         {ids.map((id) => (
           <EditRow
@@ -206,18 +207,18 @@ function EditRow({
       value={id}
       dragListener={false}
       dragControls={controls}
-      className="flex items-center gap-3 rounded-lg border border-[var(--color-line-soft)] bg-[var(--color-surface)] px-3 py-2.5 shadow-[var(--shadow-panel)]"
+      className="flex items-center gap-3 rounded-lg border border-line-soft bg-surface px-3 py-2.5 shadow-(--shadow-panel)"
       whileDrag={{ scale: 1.02, boxShadow: 'var(--shadow-pop)' }}
     >
       <button
         onPointerDown={(e) => controls.start(e)}
         aria-label={t('dashboard.dragReorder')}
-        className="cursor-grab text-[var(--color-ink-faint)] active:cursor-grabbing"
+        className="cursor-grab text-ink-faint active:cursor-grabbing"
       >
         <GripIcon size={16} />
       </button>
-      <meta.Icon size={16} className="text-[var(--color-ink-muted)]" />
-      <span className="flex-1 text-sm font-medium text-[var(--color-ink)]">{t(`dashboard.widget.${id}`)}</span>
+      <meta.Icon size={16} className="text-ink-muted" />
+      <span className="flex-1 text-sm font-medium text-ink">{t(`dashboard.widget.${id}`)}</span>
       <button
         role="switch"
         aria-checked={enabled}
@@ -243,7 +244,7 @@ function SyncSweep({ active }: { active: boolean }) {
     <AnimatePresence>
       {active && (
         <motion.div
-          className="pointer-events-none absolute inset-0 z-[1] overflow-hidden"
+          className="pointer-events-none absolute inset-0 z-1 overflow-hidden"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
@@ -259,7 +260,7 @@ function SyncSweep({ active }: { active: boolean }) {
             animate={{ y: '160%' }}
             transition={{ repeat: Infinity, duration: 1.6, ease: 'linear' }}
           >
-            <span className="absolute bottom-0 left-0 right-0 h-px bg-[var(--color-signal)]" />
+            <span className="absolute bottom-0 left-0 right-0 h-px bg-signal" />
           </motion.div>
         </motion.div>
       )}
@@ -280,7 +281,11 @@ function StatusReadout() {
     { label: t('dashboard.readout.online'), value: c?.online ?? 0, tone: 'var(--color-ok)' },
     { label: t('dashboard.readout.degraded'), value: c?.degraded ?? 0, tone: 'var(--color-warn)' },
     { label: t('dashboard.readout.offline'), value: c?.offline ?? 0, tone: 'var(--color-err)' },
-    { label: t('dashboard.readout.alerts'), value: data?.pendingAlerts ?? 0, tone: 'var(--color-signal-bright)' },
+    {
+      label: t('dashboard.readout.alerts'),
+      value: data?.pendingAlerts ?? 0,
+      tone: 'var(--color-signal-bright)',
+    },
   ];
 
   return (
@@ -293,7 +298,7 @@ function StatusReadout() {
           >
             {String(cell.value).padStart(2, '0')}
           </span>
-          <span className="mt-1.5 font-mono text-2xs uppercase tracking-[0.18em] text-[var(--color-ink-faint)]">
+          <span className="mt-1.5 font-mono text-2xs uppercase tracking-[0.18em] text-ink-faint">
             {cell.label}
           </span>
         </div>

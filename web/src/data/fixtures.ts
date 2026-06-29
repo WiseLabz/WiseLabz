@@ -18,6 +18,7 @@ import type {
   DocVersion,
   DocVersionMeta,
   RemovalImpact,
+  ServiceSnapshot,
   User,
 } from '../api/model';
 
@@ -564,4 +565,58 @@ export const connectorSchemas: ConnectorTypeSchema[] = [
 
 export function alertPage(): AlertPage {
   return { items: alerts, total: alerts.length, page: 1, pageSize: alerts.length };
+}
+
+// Deterministic raw-state snapshots per connector category, rendered on the service
+// detail page. Markdown bodies so the existing renderer shows real structure.
+const snapshotSections: Record<string, { title: string; content: string; order: number }[]> = {
+  virtualization: [
+    {
+      title: 'Nodes',
+      order: 1,
+      content: '| Node | CPU | Memory | Status |\n|---|---|---|---|\n| node-01 | 12% | 38/128 GB | `online` |\n| node-02 | 7% | 22/128 GB | `online` |',
+    },
+    {
+      title: 'Virtual machines',
+      order: 2,
+      content: '- **101** `dns-01` — running, 2 vCPU, 2 GB\n- **102** `web-01` — running, 4 vCPU, 8 GB\n- **110** `backup` — stopped, 1 vCPU, 1 GB',
+    },
+    { title: 'Storage', order: 3, content: '`local-zfs` — 1.2 / 4.0 TB used (30%)' },
+  ],
+  containers_paas: [
+    {
+      title: 'Stacks',
+      order: 1,
+      content: '- **media** — 4 containers, all healthy\n- **monitoring** — 3 containers, all healthy',
+    },
+    {
+      title: 'Containers',
+      order: 2,
+      content: '| Name | Image | State |\n|---|---|---|\n| jellyfin | jellyfin:10.9 | `running` |\n| grafana | grafana:11 | `running` |\n| prometheus | prom:v2.53 | `running` |',
+    },
+  ],
+  networking: [
+    {
+      title: 'Interfaces',
+      order: 1,
+      content: '- **WAN** — up, 1 Gb/s\n- **LAN** — up, 2.5 Gb/s\n- **VLAN20 (iot)** — up',
+    },
+    {
+      title: 'Firewall rules',
+      order: 2,
+      content: '`pass` LAN → any · `block` IOT → LAN · `pass` WAN → web-01:443',
+    },
+    { title: 'DHCP leases', order: 3, content: '42 active leases on LAN, 8 on IOT.' },
+  ],
+};
+
+export function serviceSnapshot(connectorId: string): ServiceSnapshot | null {
+  const c = connectors.find((x) => x.id === connectorId);
+  if (!c) return null;
+  return {
+    serviceName: c.name,
+    type: c.type,
+    sections: snapshotSections[c.category] ?? [],
+    fetchedAt: minsAgo(4),
+  };
 }

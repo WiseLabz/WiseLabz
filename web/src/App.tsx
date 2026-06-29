@@ -9,16 +9,30 @@ import { useAuth } from './store/auth';
 import { PublicLayout } from './features/auth/PublicLayout';
 import { LoginPage } from './features/auth/LoginPage';
 import { AuthCallbackPage } from './features/auth/AuthCallbackPage';
-import { RequireAuth, RequireOnboarded, ForbiddenPage, Splash } from './features/auth/guards';
+import { RequireAuth, RequireRole, RequireOnboarded, ForbiddenPage, Splash } from './features/auth/guards';
 import { OnboardingPage } from './features/onboarding/OnboardingPage';
 import { DashboardPage } from './features/dashboard/DashboardPage';
 import { ServicesPage } from './features/services/ServicesPage';
+import { ServiceDetailPage } from './features/services/ServiceDetailPage';
 import { AddConnectorPage } from './features/connectors/AddConnectorPage';
+import { ConnectorEditPage } from './features/connectors/ConnectorEditPage';
 import { DocsPage } from './features/docs/DocsPage';
+import { DocEditorPage } from './features/docs/DocEditorPage';
 import { ChangesPage } from './features/changes/ChangesPage';
 import { ChangeDetailPage } from './features/changes/ChangeDetailPage';
 import { AlertsPage } from './features/alerts/AlertsPage';
-import { SettingsPage } from './features/settings/SettingsPage';
+import { TemplatesPage } from './features/templates/TemplatesPage';
+import { TemplateEditorPage } from './features/templates/TemplateEditorPage';
+import {
+  SettingsLayout,
+  ProfilePage,
+  UsersPage,
+  AuthPage,
+  AiPage,
+  NotificationsPage,
+  SystemPage,
+  AppearancePage,
+} from './features/settings';
 import { EmptyState } from './components/ui/states';
 import { Button } from './components/ui/Button';
 
@@ -67,12 +81,31 @@ const router = createBrowserRouter([
       { path: 'dashboard', element: <DashboardPage /> },
       { path: 'services', element: <ServicesPage /> },
       { path: 'services/new', element: <AddConnectorPage /> },
+      { path: 'services/:id', element: <ServiceDetailPage /> },
+      { path: 'connectors/:id/edit', element: <RequireRole role="operator"><ConnectorEditPage /></RequireRole> },
       { path: 'docs', element: <DocsPage /> },
       { path: 'docs/:docId', element: <DocsPage /> },
+      { path: 'docs/:docId/edit', element: <RequireRole role="operator"><DocEditorPage /></RequireRole> },
+      { path: 'docs/:docId/history', element: <DocsPage initialTab="history" /> },
       { path: 'changes', element: <ChangesPage /> },
       { path: 'changes/:changeId', element: <ChangeDetailPage /> },
       { path: 'alerts', element: <AlertsPage /> },
-      { path: 'settings', element: <SettingsPage /> },
+      { path: 'templates', element: <RequireRole role="operator"><TemplatesPage /></RequireRole> },
+      { path: 'templates/:id', element: <RequireRole role="operator"><TemplateEditorPage /></RequireRole> },
+      {
+        path: 'settings',
+        element: <SettingsLayout />,
+        children: [
+          { index: true, element: <Navigate to="/settings/profile" replace /> },
+          { path: 'profile', element: <ProfilePage /> },
+          { path: 'users', element: <RequireRole role="operator"><UsersPage /></RequireRole> },
+          { path: 'auth', element: <RequireRole role="operator"><AuthPage /></RequireRole> },
+          { path: 'ai', element: <RequireRole role="operator"><AiPage /></RequireRole> },
+          { path: 'notifications', element: <RequireRole role="operator"><NotificationsPage /></RequireRole> },
+          { path: 'system', element: <RequireRole role="operator"><SystemPage /></RequireRole> },
+          { path: 'appearance', element: <AppearancePage /> },
+        ],
+      },
       { path: '*', element: <NotFound /> },
     ],
   },

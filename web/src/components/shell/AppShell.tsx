@@ -3,13 +3,25 @@
  * the routed content (error boundary + Suspense + the active page) and the
  * command palette (⌘K) live here.
  */
-import { Suspense } from 'react';
-import { Outlet } from 'react-router-dom';
+import { Suspense, useEffect } from 'react';
+import { Outlet, useNavigate } from 'react-router-dom';
 import { ErrorBoundary } from 'react-error-boundary';
 import { Toaster } from 'sonner';
 import { ShellDock } from './ShellDock';
 import { CommandPalette } from '../command/CommandPalette';
 import { ErrorState, SkeletonRows } from '../ui/states';
+import { setAppNavigator } from '../../lib/navigation';
+
+/** Registers react-router's navigate with the navigator singleton so non-React
+ *  code (the WS handler) can drive SPA navigation, e.g. click-to-jump toasts. */
+function NavigatorBridge() {
+  const navigate = useNavigate();
+  useEffect(() => {
+    setAppNavigator((to) => navigate(to));
+    return () => setAppNavigator(null);
+  }, [navigate]);
+  return null;
+}
 
 function Content() {
   return (
@@ -32,6 +44,7 @@ function Content() {
 export function AppShell() {
   return (
     <>
+      <NavigatorBridge />
       <ShellDock>
         <Content />
       </ShellDock>

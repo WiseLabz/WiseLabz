@@ -43,14 +43,14 @@ export function LoginPage() {
   }
 
   return (
-    <div className="overflow-hidden rounded-lg border border-[var(--color-line)] bg-[var(--color-surface)] shadow-[var(--shadow-pop)]">
-      <div className="flex items-center gap-3 border-b border-[var(--color-line-soft)] px-6 py-5">
-        <div className="flex h-9 w-9 items-center justify-center rounded-[var(--radius-md)] bg-[var(--color-signal)] shadow-[var(--shadow-raised)]">
-          <span className="font-mono text-base font-bold text-[var(--color-signal-ink)]">W</span>
+    <div className="overflow-hidden rounded-lg border border-line bg-surface shadow-(--shadow-pop)">
+      <div className="flex items-center gap-3 border-b border-line-soft px-6 py-5">
+        <div className="flex h-9 w-9 items-center justify-center rounded-md bg-signal shadow-(--shadow-raised)">
+          <span className="font-mono text-base font-bold text-signal-ink">W</span>
         </div>
         <div>
-          <p className="text-sm font-semibold text-[var(--color-ink)]">{t('app.name')}</p>
-          <p className="font-mono text-2xs text-[var(--color-ink-faint)]">{t('auth.signInPrompt')}</p>
+          <p className="text-sm font-semibold text-ink">{t('app.name')}</p>
+          <p className="font-mono text-2xs text-ink-faint">{t('auth.signInPrompt')}</p>
         </div>
       </div>
 
@@ -105,11 +105,11 @@ export function LoginPage() {
           <>
             {localEnabled && (
               <div className="my-4 flex items-center gap-3">
-                <span className="h-px flex-1 bg-[var(--color-line-soft)]" />
-                <span className="font-mono text-2xs uppercase tracking-wider text-[var(--color-ink-faint)]">
+                <span className="h-px flex-1 bg-line-soft" />
+                <span className="font-mono text-2xs uppercase tracking-wider text-ink-faint">
                   {t('auth.or')}
                 </span>
-                <span className="h-px flex-1 bg-[var(--color-line-soft)]" />
+                <span className="h-px flex-1 bg-line-soft" />
               </div>
             )}
             <div className="space-y-2">

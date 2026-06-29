@@ -15,12 +15,10 @@ export function AlertsPage() {
   const pending = (data?.items ?? []).filter((a) => a.status === 'pending');
 
   return (
-    <div className="mx-auto max-w-[820px] px-6 py-6">
+    <div className="mx-auto max-w-205 px-6 py-6">
       <header className="mb-5">
-        <h1 className="text-xl font-semibold tracking-tight text-[var(--color-ink)]">{t('alerts.title')}</h1>
-        <p className="text-sm text-[var(--color-ink-muted)]">
-          {t('alerts.subtitle')}
-        </p>
+        <h1 className="text-xl font-semibold tracking-tight text-ink">{t('alerts.title')}</h1>
+        <p className="text-sm text-ink-muted">{t('alerts.subtitle')}</p>
       </header>
 
       {isLoading ? (
@@ -52,19 +50,17 @@ export function AlertsPage() {
                 <div className="flex items-start gap-3">
                   <SeverityTag severity={a.severity} className="mt-0.5" />
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium text-[var(--color-ink)]">{a.title}</p>
+                    <p className="text-sm font-medium text-ink">{a.title}</p>
                     {a.description && (
-                      <p className="mt-1 text-sm leading-relaxed text-[var(--color-ink-muted)]">
-                        {a.description}
-                      </p>
+                      <p className="mt-1 text-sm leading-relaxed text-ink-muted">{a.description}</p>
                     )}
-                    <p className="mt-1.5 font-mono text-2xs text-[var(--color-ink-faint)]">
-                      <span className="text-[var(--color-signal-bright)]">{a.serviceName}</span> ·{' '}
+                    <p className="mt-1.5 font-mono text-2xs text-ink-faint">
+                      <span className="text-signal-bright">{a.serviceName}</span> ·{' '}
                       {t('common.ago', { time: relativeTime(a.createdAt) })}
                     </p>
                   </div>
                 </div>
-                <div className="mt-3 flex items-center justify-end gap-2 border-t border-[var(--color-line-soft)] pt-3">
+                <div className="mt-3 flex items-center justify-end gap-2 border-t border-line-soft pt-3">
                   <Button variant="ghost" size="sm">
                     <ClockIcon size={14} /> {t('common.snooze')}
                   </Button>

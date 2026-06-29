@@ -65,8 +65,8 @@ export function Dialog({ open, onClose, title, children, size = 'md' }: DialogPr
       }}
       className={cn(
         'fixed inset-0 m-0 h-full max-h-none w-full max-w-none bg-transparent p-0',
-        'z-[var(--z-modal)] overflow-y-auto',
-        'backdrop:z-[var(--z-overlay)] backdrop:bg-[var(--color-canvas)]/70',
+        'z-(--z-modal) overflow-y-auto',
+        'backdrop:z-(--z-overlay) backdrop:bg-canvas/70'
       )}
     >
       <div
@@ -84,24 +84,21 @@ export function Dialog({ open, onClose, title, children, size = 'md' }: DialogPr
             }
           }}
           className={cn(
-            'w-full origin-center rounded-lg border border-[var(--color-line-soft)]',
-            'bg-[var(--color-surface)] shadow-[var(--shadow-pop)]',
-            'transition-[opacity,transform] duration-150 ease-[var(--ease-out-quart)]',
+            'w-full origin-center rounded-lg border border-line-soft',
+            'bg-surface shadow-(--shadow-pop)',
+            'transition-[opacity,transform] duration-150 ease-out-quart',
             visible ? 'translate-y-0 scale-100 opacity-100' : 'translate-y-1 scale-95 opacity-0',
-            sizes[size],
+            sizes[size]
           )}
         >
           {title && (
-            <header className="border-b border-[var(--color-line-soft)] px-5 py-3.5">
-              <h2
-                id={titleId}
-                className="font-mono text-sm font-medium text-[var(--color-ink)]"
-              >
+            <header className="border-b border-line-soft px-5 py-3.5">
+              <h2 id={titleId} className="font-mono text-sm font-medium text-ink">
                 {title}
               </h2>
             </header>
           )}
-          <div className="px-5 py-4 text-sm text-[var(--color-ink)]">{children}</div>
+          <div className="px-5 py-4 text-sm text-ink">{children}</div>
         </div>
       </div>
     </dialog>

@@ -11,19 +11,13 @@ function Marker({ tone, live }: { tone: Tone; live?: boolean }) {
   const { fg } = toneColor[tone];
   return (
     <span
-      className={cn('inline-block h-[7px] w-[7px] shrink-0', live && 'motion-safe:animate-pulse')}
+      className={cn('inline-block h-1.75 w-1.75 shrink-0', live && 'motion-safe:animate-pulse')}
       style={{ backgroundColor: fg }}
     />
   );
 }
 
-export function StatusPill({
-  status,
-  className,
-}: {
-  status: ServiceStatus;
-  className?: string;
-}) {
+export function StatusPill({ status, className }: { status: ServiceStatus; className?: string }) {
   const { label, tone } = statusMeta[status];
   return (
     <span
@@ -36,24 +30,18 @@ export function StatusPill({
   );
 }
 
-export function SeverityTag({
-  severity,
-  className,
-}: {
-  severity: Severity;
-  className?: string;
-}) {
+export function SeverityTag({ severity, className }: { severity: Severity; className?: string }) {
   const { label, tone } = severityMeta[severity];
   const { fg, tint } = toneColor[tone];
   return (
     <span
       className={cn(
         'inline-flex items-center gap-1.5 rounded-sm px-1.5 py-0.5 font-mono text-2xs font-medium',
-        className,
+        className
       )}
       style={{ color: fg, backgroundColor: tint }}
     >
-      <span className="h-[6px] w-[6px]" style={{ backgroundColor: fg }} />
+      <span className="h-1.5 w-1.5" style={{ backgroundColor: fg }} />
       {label}
     </span>
   );

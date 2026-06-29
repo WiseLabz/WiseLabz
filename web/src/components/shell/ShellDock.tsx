@@ -9,7 +9,7 @@ import { Dock } from './Dock';
 
 export function ShellDock({ children }: { children: ReactNode }) {
   return (
-    <div className="flex h-screen w-screen flex-col overflow-hidden bg-[var(--color-canvas)] text-[var(--color-ink)]">
+    <div className="flex h-screen w-screen flex-col overflow-hidden bg-canvas text-ink">
       <Topbar />
       <main className="flex-1 overflow-y-auto pb-28">{children}</main>
       <Dock />

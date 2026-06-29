@@ -35,8 +35,8 @@ export function DiffViewer({ diff }: { diff: Diff }) {
 function StatBar({ added, removed }: { added: number; removed: number }) {
   return (
     <span className="nums flex items-center gap-2 font-mono text-2xs">
-      <span className="text-[var(--color-ok)]">+{added}</span>
-      <span className="text-[var(--color-err)]">−{removed}</span>
+      <span className="text-ok">+{added}</span>
+      <span className="text-err">−{removed}</span>
     </span>
   );
 }
@@ -49,17 +49,17 @@ export function InfraDiff({ diff }: { diff: Diff }) {
   const removed = hunks.filter((h) => h.after === null).length;
 
   return (
-    <div className="overflow-hidden rounded-lg border border-[var(--color-line-soft)]">
-      <div className="flex items-center justify-between border-b border-[var(--color-line-soft)] bg-[var(--color-canvas-sunken)] px-3 py-2">
-        <span className="font-mono text-2xs uppercase tracking-wider text-[var(--color-ink-faint)]">
+    <div className="overflow-hidden rounded-lg border border-line-soft">
+      <div className="flex items-center justify-between border-b border-line-soft bg-canvas-sunken px-3 py-2">
+        <span className="font-mono text-2xs uppercase tracking-wider text-ink-faint">
           infrastructure drift
         </span>
         <StatBar added={added} removed={removed} />
       </div>
-      <div className="divide-y divide-[var(--color-line-soft)]">
+      <div className="divide-y divide-line-soft">
         {hunks.map((h, idx) => (
           <div key={idx} className="px-3 py-2.5">
-            <p className="mb-1.5 font-mono text-2xs text-[var(--color-ink-faint)]">{h.path}</p>
+            <p className="mb-1.5 font-mono text-2xs text-ink-faint">{h.path}</p>
             <div className="grid gap-1.5 sm:grid-cols-2">
               <DiffCell value={h.before} kind="before" />
               <DiffCell value={h.after} kind="after" />
@@ -79,10 +79,10 @@ function DiffCell({ value, kind }: { value: string | null; kind: 'before' | 'aft
       className={cn(
         'flex items-start gap-2 rounded-md px-2.5 py-1.5 font-mono text-xs',
         empty
-          ? 'bg-[var(--color-canvas-sunken)] text-[var(--color-ink-faint)]'
+          ? 'bg-canvas-sunken text-ink-faint'
           : isBefore
-            ? 'bg-[var(--color-err-tint)] text-[var(--color-err)]'
-            : 'bg-[var(--color-ok-tint)] text-[var(--color-ok)]'
+            ? 'bg-err-tint text-err'
+            : 'bg-ok-tint text-ok'
       )}
     >
       <span className="select-none font-bold opacity-70">{isBefore ? '−' : '+'}</span>
@@ -134,12 +134,12 @@ export function DocDiff({
   const model = useMemo(() => buildDocDiff(before, after), [before, after]);
 
   return (
-    <div className="overflow-hidden rounded-lg border border-[var(--color-line-soft)]">
-      <div className="flex items-center justify-between gap-3 border-b border-[var(--color-line-soft)] bg-[var(--color-canvas-sunken)] px-3 py-2">
-        <span className="truncate font-mono text-2xs uppercase tracking-wider text-[var(--color-ink-faint)]">
+    <div className="overflow-hidden rounded-lg border border-line-soft">
+      <div className="flex items-center justify-between gap-3 border-b border-line-soft bg-canvas-sunken px-3 py-2">
+        <span className="truncate font-mono text-2xs uppercase tracking-wider text-ink-faint">
           {label ?? 'document diff'}
           {baseLabel && headLabel && (
-            <span className="ml-2 normal-case tracking-normal text-[var(--color-ink-faint)]">
+            <span className="ml-2 normal-case tracking-normal text-ink-faint">
               {baseLabel} → {headLabel}
             </span>
           )}
@@ -166,7 +166,7 @@ function LayoutToggle({
     { value: 'split', label: 'Side-by-side', Icon: ColumnsIcon },
   ];
   return (
-    <div className="flex items-center gap-0.5 rounded-md border border-[var(--color-line-soft)] p-0.5">
+    <div className="flex items-center gap-0.5 rounded-md border border-line-soft p-0.5">
       {opts.map(({ value, label, Icon }) => (
         <button
           key={value}
@@ -176,9 +176,7 @@ function LayoutToggle({
           onClick={() => onChange(value)}
           className={cn(
             'flex h-6 w-6 items-center justify-center rounded transition-colors',
-            layout === value
-              ? 'bg-[var(--color-surface-raised)] text-[var(--color-ink)]'
-              : 'text-[var(--color-ink-faint)] hover:text-[var(--color-ink)]'
+            layout === value ? 'bg-surface-raised text-ink' : 'text-ink-faint hover:text-ink'
           )}
         >
           <Icon size={13} />
@@ -394,9 +392,7 @@ function SplitCell({
         : 'text-[var(--color-ink-muted)]';
   return (
     <>
-      <Gutter className={border ? 'border-l border-[var(--color-line)]' : undefined}>
-        {num ?? ''}
-      </Gutter>
+      <Gutter className={border ? 'border-l border-line' : undefined}>{num ?? ''}</Gutter>
       <td className={cn('w-5 select-none text-center font-bold opacity-70', bg, fg)}>{glyph}</td>
       <td className={cn('whitespace-pre-wrap px-2 py-0.5', bg, fg)} style={{ width: '46%' }}>
         {tone === 'empty' ? (
@@ -417,7 +413,7 @@ function Gutter({ children, className }: { children: React.ReactNode; className?
   return (
     <td
       className={cn(
-        'nums w-10 select-none border-r border-[var(--color-line-soft)] px-2 py-0.5 text-right text-[var(--color-ink-faint)]',
+        'nums w-10 select-none border-r border-line-soft px-2 py-0.5 text-right text-ink-faint',
         className
       )}
     >
@@ -428,12 +424,12 @@ function Gutter({ children, className }: { children: React.ReactNode; className?
 
 function GapRow({ cols, count, onExpand }: { cols: number; count: number; onExpand: () => void }) {
   return (
-    <tr className="bg-[var(--color-canvas-sunken)]">
+    <tr className="bg-canvas-sunken">
       <td colSpan={cols} className="px-2 py-0.5">
         <button
           type="button"
           onClick={onExpand}
-          className="flex w-full items-center gap-2 py-0.5 font-mono text-2xs text-[var(--color-ink-faint)] transition-colors hover:text-[var(--color-signal-bright)]"
+          className="flex w-full items-center gap-2 py-0.5 font-mono text-2xs text-ink-faint transition-colors hover:text-signal-bright"
         >
           <span className="select-none">⋯</span>
           {count} unchanged {count === 1 ? 'line' : 'lines'} — expand

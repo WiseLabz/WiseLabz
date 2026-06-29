@@ -32,9 +32,7 @@ export function ConfirmDialog({
 }: ConfirmDialogProps) {
   return (
     <Dialog open={open} onClose={onClose} title={title} size="sm">
-      {description && (
-        <p className="text-sm leading-relaxed text-[var(--color-ink-muted)]">{description}</p>
-      )}
+      {description && <p className="text-sm leading-relaxed text-ink-muted">{description}</p>}
       <div className="mt-5 flex items-center justify-end gap-2">
         <Button variant="ghost" size="sm" onClick={onClose}>
           {cancelLabel}

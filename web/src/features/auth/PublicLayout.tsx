@@ -6,7 +6,7 @@ import type { ReactNode } from 'react';
 
 export function PublicLayout({ children }: { children: ReactNode }) {
   return (
-    <div className="relative flex min-h-screen w-screen items-center justify-center overflow-hidden bg-[var(--color-canvas)] px-4">
+    <div className="relative flex min-h-screen w-screen items-center justify-center overflow-hidden bg-canvas px-4">
       <div className="bg-blueprint pointer-events-none absolute inset-0 opacity-40" aria-hidden />
       <div className="relative w-full max-w-sm">{children}</div>
     </div>
