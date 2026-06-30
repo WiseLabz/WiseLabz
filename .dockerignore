@@ -1,0 +1,47 @@
+# NOTE: .git is intentionally NOT excluded. The backend builder stage needs
+# it for Go's automatic VCS build-info stamping (surfaced via GET
+# /api/version). It is only ever copied into the intermediate "backend"
+# build stage and is never present in the final distroless image.
+
+# Dependencies — reinstalled fresh inside the image via `npm ci`.
+**/node_modules
+
+# Frontend build output — rebuilt fresh by the frontend stage; shipping the
+# host copy would risk stale/inconsistent assets.
+web/dist
+
+# Local/leftover compiled binaries and Go build artifacts — not needed as
+# build context, the image builds its own binary from source.
+bin/
+backend/migrate
+backend/server
+backend/coverage.out
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+
+# Env files — never bake secrets into the build context.
+.env
+.env.*
+!.env.example
+
+# Embedded SPA placeholder — gets fully overwritten by the real frontend
+# build during the backend stage, so the host copy isn't needed, but it's
+# harmless either way (kept minimal here, matching .gitignore's pattern).
+backend/internal/web/dist/*
+!backend/internal/web/dist/index.html
+
+# Test / coverage / build-cache artifacts
+coverage/
+coverage.out
+*.tsbuildinfo
+.logs/
+**/.logs/
+
+# IDE / editor files
+.idea/
+.vscode/
+
+# Knowledge graph output — large, irrelevant to the Docker build.
+graphify-out/

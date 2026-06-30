@@ -1,0 +1,75 @@
+# WiseLabz — Postgres reference stack
+#
+# WARNING: PostgreSQL support is not yet functional — the app's runtime
+# queries are still SQLite-only (see docs/DEPLOYMENT.md, "Known limitation:
+# PostgreSQL is not yet fully supported"). This stack will build and the
+# containers will start, but the `app` container will crash-loop on first
+# boot. Use docker-compose.sqlite.yml until this is fixed.
+#
+# Primary multi-write-capable reference deployment. Runs the WiseLabz app
+# container backed by a Postgres database, both with named (managed) Docker
+# volumes for persistence.
+#
+# This stack is APP-ONLY: there is no bundled reverse proxy or TLS
+# termination. Put Traefik, Caddy, nginx, or similar in front of the `app`
+# service's published port (8080) to handle TLS and routing. The app's
+# WebSocket endpoint lives at /api/ws on the same port as the rest of the
+# HTTP API, so a reverse proxy that forwards normal HTTP traffic to this
+# service typically just needs standard `Upgrade`/`Connection` header
+# passthrough enabled for that path — no separate service or port required.
+#
+# Quick start:
+#   1. cp .env.example .env
+#   2. edit .env (set WISELABZ_AUTH_SECRET, WISELABZ_ADMIN_PASSWORD, and the
+#      POSTGRES_* / WISELABZ_DB_DSN values)
+#   3. docker compose up -d
+
+services:
+  app:
+    build: .
+    # Alternative: use the published image instead of building locally.
+    # image: ghcr.io/wiselabz/wiselabz:latest
+    env_file:
+      - .env
+    environment:
+      # Points the app at the postgres service defined below. Keep the
+      # user/password/db name in sync with POSTGRES_USER / POSTGRES_PASSWORD
+      # / POSTGRES_DB in .env.
+      WISELABZ_DB_DRIVER: postgres
+      WISELABZ_DB_DSN: "postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable"
+    ports:
+      - "8080:8080"
+    volumes:
+      # Not used for primary data (that lives in Postgres), but kept around
+      # for any local artifacts the app may write (e.g. caches, exports).
+      - wiselabz_data:/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "/wiselabz", "--healthcheck"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - wiselabz_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+volumes:
+  wiselabz_data:
+  wiselabz_postgres_data:

@@ -4,10 +4,11 @@
 
 # Database connection
 db:
-  # Driver: "sqlite3" (default, zero-setup) or "postgres" (multi-user)
-  driver: sqlite3
-  # SQLite: file path relative to working directory
-  dsn: file:./data/wiselabz.db?cache=shared
+  # Driver: "sqlite" (default, zero-setup) or "postgres" (multi-user)
+  driver: sqlite
+  # SQLite: absolute path recommended so it's stable regardless of working directory
+  # (mount a volume at /data for persistence in Docker)
+  dsn: file:/data/wiselabz.db?cache=shared
   # PostgreSQL example:
   # driver: postgres
   # dsn: postgres://wiselabz:password@localhost:5432/wiselabz?sslmode=disable

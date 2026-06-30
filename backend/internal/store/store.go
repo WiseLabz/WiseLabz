@@ -5,6 +5,8 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+
+	"github.com/WiseLabz/wiselabz/internal/auth"
 )
 
 // Store is the central data access layer, holding the database connection
@@ -35,6 +37,11 @@ func (s *Store) Ping(ctx context.Context) error {
 
 // initSingletons ensures singleton config rows exist (auth_config, ai_config, notification_config).
 // Called after migrations run.
+//
+// NOTE: this and every other query in package store use SQLite-only syntax
+// (?  placeholders, INSERT OR IGNORE). PostgreSQL needs $1/$2/... and
+// ON CONFLICT DO NOTHING instead — db.driver: postgres currently migrates
+// schema fine but fails on this first runtime query. See docs/DEPLOYMENT.md.
 func (s *Store) initSingletons(ctx context.Context) error {
 	rows := []string{
 		`INSERT OR IGNORE INTO auth_config (id, local_enabled, access_token_ttl, refresh_token_ttl, step_up_for_destructive)
@@ -65,10 +72,26 @@ func (s *Store) Init(ctx context.Context, adminPassword string) error {
 		return fmt.Errorf("count users: %w", err)
 	}
 
-	if count == 0 && adminPassword != "" {
-		// Seed admin user will be handled in Phase 2 when we have bcrypt
-		// For now, just note that seeding is needed
-		return nil
+	if count == 0 {
+		if adminPassword == "" {
+			return fmt.Errorf("no users exist and WISELABZ_ADMIN_PASSWORD is not set: refusing to start without an admin bootstrap password")
+		}
+
+		hash, err := auth.HashPassword(adminPassword)
+		if err != nil {
+			return fmt.Errorf("hash admin password: %w", err)
+		}
+
+		admin := &User{
+			Username:     "admin",
+			DisplayName:  "Administrator",
+			Role:         "operator",
+			AuthSource:   "local",
+			PasswordHash: hash,
+		}
+		if err := s.CreateUser(ctx, admin); err != nil {
+			return fmt.Errorf("seed admin user: %w", err)
+		}
 	}
 
 	return nil

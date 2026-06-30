@@ -8,6 +8,9 @@ dev-frontend:
 
 build:
 	npm --prefix web run build
+	rm -rf backend/internal/web/dist
+	mkdir -p backend/internal/web/dist
+	cp -r web/dist/. backend/internal/web/dist/
 	(cd backend && go build -o ../bin/wiselabz ./cmd/server)
 
 test:

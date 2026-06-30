@@ -6,7 +6,7 @@ import (
 	"os"
 	"testing"
 
-	_ "github.com/mattn/go-sqlite3"
+	_ "modernc.org/sqlite"
 )
 
 func TestRunMigrations(t *testing.T) {
@@ -16,7 +16,7 @@ func TestRunMigrations(t *testing.T) {
 	dir := t.TempDir()
 	dsn := "file:" + dir + "/test.db?cache=shared"
 
-	db, err := sql.Open("sqlite3", dsn)
+	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		t.Fatalf("open db: %v", err)
 	}
@@ -24,7 +24,7 @@ func TestRunMigrations(t *testing.T) {
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 
-	if err := RunMigrations(db, "sqlite3", logger); err != nil {
+	if err := RunMigrations(db, "sqlite", logger); err != nil {
 		t.Fatalf("RunMigrations() error: %v", err)
 	}
 
@@ -45,13 +45,13 @@ func TestRunMigrations(t *testing.T) {
 	}
 
 	// Verify idempotent — running again should be no-op
-	if err := RunMigrations(db, "sqlite3", logger); err != nil {
+	if err := RunMigrations(db, "sqlite", logger); err != nil {
 		t.Fatalf("RunMigrations() second run error: %v", err)
 	}
 }
 
 func TestRunMigrationsUnsupportedDriver(t *testing.T) {
-	db, err := sql.Open("sqlite3", ":memory:")
+	db, err := sql.Open("sqlite", ":memory:")
 	if err != nil {
 		t.Fatalf("open db: %v", err)
 	}
@@ -59,7 +59,7 @@ func TestRunMigrationsUnsupportedDriver(t *testing.T) {
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 
-	err = RunMigrations(db, "postgres", logger)
+	err = RunMigrations(db, "mysql", logger)
 	if err == nil {
 		t.Error("expected error for unsupported driver, got nil")
 	}

@@ -3,8 +3,10 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"net/http"
 	"os"
@@ -19,10 +21,15 @@ import (
 	"github.com/WiseLabz/wiselabz/internal/notifications"
 	"github.com/WiseLabz/wiselabz/internal/store"
 	"github.com/WiseLabz/wiselabz/internal/sync"
+	"github.com/WiseLabz/wiselabz/internal/web"
 	"github.com/WiseLabz/wiselabz/internal/ws"
 )
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "--healthcheck" {
+		runHealthcheck()
+	}
+
 	// Load configuration
 	cfg, err := config.Load()
 	if err != nil {
@@ -39,6 +46,11 @@ func main() {
 		"port", cfg.Server.Port,
 		"db_driver", cfg.DB.Driver,
 	)
+
+	if len(cfg.Auth.Secret) < 32 {
+		logger.Error("WISELABZ_AUTH_SECRET is missing or too short: refusing to start without a strong JWT signing secret (min 32 chars)")
+		os.Exit(1)
+	}
 
 	// Open database
 	db, err := store.OpenDB(cfg.DB.Driver, cfg.DB.DSN)
@@ -90,14 +102,23 @@ func main() {
 	notifDispatcher := notifications.NewDispatcher(s, wsHub)
 
 	// Build HTTP router
-	router := api.NewRouter(api.Config{
+	routerCfg := api.Config{
 		Store:      s,
 		JWT:        jwtSvc,
 		Config:     cfg,
 		SyncEngine: syncEngine,
 		DocEngine:  docEngine,
 		WSHub:      wsHub,
-	})
+	}
+	if cfg.Server.Embed {
+		spaFiles, err := fs.Sub(web.DistFS, "dist")
+		if err != nil {
+			logger.Error("Failed to load embedded SPA files", "error", err)
+			os.Exit(1)
+		}
+		routerCfg.SPAFiles = spaFiles
+	}
+	router := api.NewRouter(routerCfg)
 
 	// Start HTTP server
 	srv := &http.Server{
@@ -131,6 +152,46 @@ func main() {
 	}
 
 	logger.Info("Shutdown complete")
+}
+
+// runHealthcheck queries this server's own /api/health endpoint and exits 0 if
+// healthy, 1 otherwise. Used as the Docker HEALTHCHECK command since distroless
+// images ship no shell/curl to do this externally. Always terminates the process.
+func runHealthcheck() {
+	cfg, err := config.Load()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "healthcheck: failed to load config: %v\n", err)
+		os.Exit(1)
+	}
+
+	host := cfg.Server.Host
+	if host == "" || host == "0.0.0.0" {
+		host = "127.0.0.1"
+	}
+	url := fmt.Sprintf("http://%s:%d/api/health", host, cfg.Server.Port)
+
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Get(url)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "healthcheck: request failed: %v\n", err)
+		os.Exit(1)
+	}
+	defer resp.Body.Close() //nolint:errcheck
+
+	var body struct {
+		Healthy bool `json:"healthy"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		fmt.Fprintf(os.Stderr, "healthcheck: failed to parse response: %v\n", err)
+		os.Exit(1)
+	}
+
+	if !body.Healthy {
+		fmt.Fprintln(os.Stderr, "healthcheck: server reported unhealthy")
+		os.Exit(1)
+	}
+
+	os.Exit(0)
 }
 
 // runAlertExpirer periodically un-snoozes expired alerts.

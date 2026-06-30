@@ -4,17 +4,29 @@ import (
 	"database/sql"
 	"fmt"
 
-	_ "github.com/mattn/go-sqlite3" // SQLite driver
+	_ "github.com/jackc/pgx/v5/stdlib" // PostgreSQL driver
+	_ "modernc.org/sqlite"             // SQLite driver (pure Go, no CGO)
 )
 
 // OpenDB opens a database connection based on the driver and DSN.
-// Currently supports "sqlite3". PostgreSQL support will be added via build tags.
+// Supports "sqlite" and "postgres".
 func OpenDB(driver, dsn string) (*sql.DB, error) {
 	if driver == "" {
-		driver = "sqlite3"
+		driver = "sqlite"
 	}
 
-	db, err := sql.Open(driver, dsn)
+	// "postgres" (our config-facing driver name) maps to the "pgx" sql.DB
+	// driver registered above. golang-migrate's postgres support package
+	// also transitively blank-imports lib/pq, which separately registers
+	// itself under the name "postgres" — sql.Open("postgres", ...) would
+	// silently use lib/pq instead of the pgx driver we depend on if we
+	// didn't translate the name here.
+	sqlDriver := driver
+	if driver == "postgres" {
+		sqlDriver = "pgx"
+	}
+
+	db, err := sql.Open(sqlDriver, dsn)
 	if err != nil {
 		return nil, fmt.Errorf("open database: %w", err)
 	}
@@ -27,9 +39,15 @@ func OpenDB(driver, dsn string) (*sql.DB, error) {
 		return nil, fmt.Errorf("ping database: %w", err)
 	}
 
-	// Sensible defaults for connection pool
-	db.SetMaxOpenConns(1) // SQLite single-writer. PostgreSQL can override later.
-	db.SetMaxIdleConns(1)
+	if driver == "postgres" {
+		// PostgreSQL supports concurrent writers; size the pool accordingly.
+		db.SetMaxOpenConns(20)
+		db.SetMaxIdleConns(5)
+	} else {
+		// SQLite is single-writer — keep the pool at 1 to avoid SQLITE_BUSY.
+		db.SetMaxOpenConns(1)
+		db.SetMaxIdleConns(1)
+	}
 
 	return db, nil
 }

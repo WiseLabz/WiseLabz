@@ -553,3 +553,15 @@ graphify-out/cache/
 prototypes/
 CLAUDE.md
 
+
+# Stray compiled binaries (accidentally committed previously, now untracked)
+/backend/migrate
+/backend/server
+
+# Embedded SPA build output — placeholder index.html is committed so
+# go:embed compiles before a frontend build runs; everything else is generated.
+# The directory itself must be un-ignored too (line 368's generic `dist` rule
+# excludes the whole dir, which blocks negating a file inside it otherwise).
+!backend/internal/web/dist/
+backend/internal/web/dist/*
+!backend/internal/web/dist/index.html

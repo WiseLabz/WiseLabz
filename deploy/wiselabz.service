@@ -1,0 +1,38 @@
+[Unit]
+Description=WiseLabz
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=wiselabz
+Group=wiselabz
+# Pinned absolute path — avoids the relative-DSN trap (default DSN is now an
+# absolute path, file:/data/wiselabz.db, but config.yaml lookup and any other
+# relative paths still depend on this being stable).
+WorkingDirectory=/opt/wiselabz
+ExecStart=/opt/wiselabz/wiselabz
+Restart=on-failure
+RestartSec=5s
+
+# Secrets (WISELABZ_AUTH_SECRET, WISELABZ_ADMIN_PASSWORD, etc.) live here.
+# Keep this file root:wiselabz, mode 0640 — readable only by the service user:
+#   chown root:wiselabz /etc/wiselabz/wiselabz.env
+#   chmod 0640 /etc/wiselabz/wiselabz.env
+EnvironmentFile=/etc/wiselabz/wiselabz.env
+
+# Default StandardOutput=journal is sufficient — logs go to the journal,
+# inspect with `journalctl -u wiselabz`. No extra logging config needed.
+
+# Give the app at least as long to shut down as Server.ShutdownTimeoutSeconds
+# (default 10s) so systemd doesn't SIGKILL mid-graceful-shutdown.
+TimeoutStopSec=15s
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/wiselabz/data
+
+[Install]
+WantedBy=multi-user.target
