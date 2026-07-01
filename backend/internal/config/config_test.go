@@ -24,8 +24,8 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.Server.Port != 8080 {
 		t.Errorf("server.port = %d, want 8080", cfg.Server.Port)
 	}
-	if cfg.DB.Driver != "sqlite3" {
-		t.Errorf("db.driver = %q, want sqlite3", cfg.DB.Driver)
+	if cfg.DB.Driver != "sqlite" {
+		t.Errorf("db.driver = %q, want sqlite", cfg.DB.Driver)
 	}
 	if cfg.Auth.AccessTokenTTL != 900 {
 		t.Errorf("auth.access_token_ttl = %d, want 900", cfg.Auth.AccessTokenTTL)

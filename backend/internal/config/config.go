@@ -124,8 +124,8 @@ func Load() (*Config, error) {
 	v.SetDefault("server.host", "0.0.0.0")
 	v.SetDefault("server.port", 8080)
 	v.SetDefault("server.embed", false)
-	v.SetDefault("db.driver", "sqlite3")
-	v.SetDefault("db.dsn", "file:./data/wiselabz.db?cache=shared")
+	v.SetDefault("db.driver", "sqlite")
+	v.SetDefault("db.dsn", "file:/data/wiselabz.db?cache=shared")
 	v.SetDefault("auth.access_token_ttl", 900)     // 15 minutes
 	v.SetDefault("auth.refresh_token_ttl", 604800) // 7 days
 	v.SetDefault("auth.step_up_for_destructive", true)

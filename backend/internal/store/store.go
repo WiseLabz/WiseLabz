@@ -5,21 +5,42 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+
+	"github.com/WiseLabz/wiselabz/internal/auth"
 )
+
+// DBTX is the subset of *sql.DB used by the store package and by API
+// handlers that issue raw SQL via Store.DB(). It exists so that a
+// PostgreSQL connection can be wrapped with placeholder rewriting (see
+// pgdb.go) without changing any call site.
+type DBTX interface {
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+	QueryRow(query string, args ...any) *sql.Row
+	PingContext(ctx context.Context) error
+	Close() error
+}
 
 // Store is the central data access layer, holding the database connection
 // and all repository implementations.
 type Store struct {
-	db *sql.DB
+	db DBTX
 }
 
-// New creates a new Store with the given database connection.
-func New(db *sql.DB) *Store {
+// New creates a new Store with the given database connection. driver
+// selects the placeholder dialect: "postgres" wraps db so that `?`
+// placeholders are rewritten to `$1, $2, ...`; any other value (including
+// "sqlite") uses db directly.
+func New(db *sql.DB, driver string) *Store {
+	if driver == "postgres" {
+		return &Store{db: pgPlaceholderDB{db}}
+	}
 	return &Store{db: db}
 }
 
 // DB returns the underlying database connection for direct queries.
-func (s *Store) DB() *sql.DB {
+func (s *Store) DB() DBTX {
 	return s.db
 }
 
@@ -37,12 +58,12 @@ func (s *Store) Ping(ctx context.Context) error {
 // Called after migrations run.
 func (s *Store) initSingletons(ctx context.Context) error {
 	rows := []string{
-		`INSERT OR IGNORE INTO auth_config (id, local_enabled, access_token_ttl, refresh_token_ttl, step_up_for_destructive)
-		 VALUES (1, 1, 900, 604800, 1)`,
-		`INSERT OR IGNORE INTO ai_config (id, enabled, provider, model, api_key_encrypted, base_url, mode)
-		 VALUES (1, 0, NULL, NULL, '', NULL, 'suggest_only')`,
-		`INSERT OR IGNORE INTO notification_config (id, config_json)
-		 VALUES (1, '{}')`,
+		`INSERT INTO auth_config (id, local_enabled, access_token_ttl, refresh_token_ttl, step_up_for_destructive)
+		 VALUES (1, 1, 900, 604800, 1) ON CONFLICT (id) DO NOTHING`,
+		`INSERT INTO ai_config (id, enabled, provider, model, api_key_encrypted, base_url, mode)
+		 VALUES (1, 0, NULL, NULL, '', NULL, 'suggest_only') ON CONFLICT (id) DO NOTHING`,
+		`INSERT INTO notification_config (id, config_json)
+		 VALUES (1, '{}') ON CONFLICT (id) DO NOTHING`,
 	}
 
 	for _, q := range rows {
@@ -65,10 +86,26 @@ func (s *Store) Init(ctx context.Context, adminPassword string) error {
 		return fmt.Errorf("count users: %w", err)
 	}
 
-	if count == 0 && adminPassword != "" {
-		// Seed admin user will be handled in Phase 2 when we have bcrypt
-		// For now, just note that seeding is needed
-		return nil
+	if count == 0 {
+		if adminPassword == "" {
+			return fmt.Errorf("no users exist and WISELABZ_ADMIN_PASSWORD is not set: refusing to start without an admin bootstrap password")
+		}
+
+		hash, err := auth.HashPassword(adminPassword)
+		if err != nil {
+			return fmt.Errorf("hash admin password: %w", err)
+		}
+
+		admin := &User{
+			Username:     "admin",
+			DisplayName:  "Administrator",
+			Role:         "operator",
+			AuthSource:   "local",
+			PasswordHash: hash,
+		}
+		if err := s.CreateUser(ctx, admin); err != nil {
+			return fmt.Errorf("seed admin user: %w", err)
+		}
 	}
 
 	return nil

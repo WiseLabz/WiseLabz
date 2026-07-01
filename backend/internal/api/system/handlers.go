@@ -2,20 +2,20 @@
 package system
 
 import (
-	"database/sql"
 	"net/http"
 	"runtime/debug"
 
 	"github.com/WiseLabz/wiselabz/internal/httputil"
+	"github.com/WiseLabz/wiselabz/internal/store"
 )
 
 // Handler holds dependencies for system endpoints.
 type Handler struct {
-	DB *sql.DB
+	DB store.DBTX
 }
 
 // NewHandler creates a new system handler.
-func NewHandler(db *sql.DB) *Handler {
+func NewHandler(db store.DBTX) *Handler {
 	return &Handler{DB: db}
 }
 

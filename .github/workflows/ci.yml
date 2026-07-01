@@ -132,3 +132,5 @@ jobs:
       - name: Build backend binary
         run: go build -o /dev/null ./cmd/server
         working-directory: backend
+        env:
+          CGO_ENABLED: "0"

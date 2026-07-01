@@ -2,8 +2,10 @@
 package api
 
 import (
+	"io/fs"
 	"log/slog"
 	"net/http"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 
@@ -40,6 +42,8 @@ type Config struct {
 	SyncEngine *sync.Engine
 	DocEngine  *doc.Engine
 	WSHub      *ws.Hub
+	// SPAFiles serves the embedded frontend build. Only used when Config.Server.Embed is true.
+	SPAFiles fs.FS
 }
 
 // NewRouter constructs the full chi router with all middleware and route groups.
@@ -67,22 +71,26 @@ func NewRouter(cfg Config) chi.Router {
 	r.Get("/api/health", sysH.Health)
 	r.Get("/api/version", sysH.Version)
 
-	// --- Public auth routes ---
+	// --- Auth routes (mixed public/protected, single mount point) ---
+	// chi only allows one Mount per exact pattern, so the protected /api/auth
+	// routes (logout, elevate) are nested inside this same Route as an inner
+	// auth-gated group rather than a second top-level r.Route("/api/auth", ...).
 	r.Route("/api/auth", func(r chi.Router) {
 		r.Post("/login", authH.Login)
 		r.Post("/oidc/callback", authH.OIDCCallback)
 		r.Post("/refresh", authH.Refresh)
 		r.Get("/providers", authH.Providers)
+
+		r.Group(func(r chi.Router) {
+			r.Use(cfg.AuthMiddleware())
+			r.Post("/logout", authH.Logout)
+			r.Post("/elevate", authH.Elevate)
+		})
 	})
 
 	// --- Protected routes (authenticated) ---
 	r.Group(func(r chi.Router) {
 		r.Use(cfg.AuthMiddleware())
-
-		r.Route("/api/auth", func(r chi.Router) {
-			r.Post("/logout", authH.Logout)
-			r.Post("/elevate", authH.Elevate)
-		})
 
 		r.Route("/api/me", func(r chi.Router) {
 			r.Get("/", authH.Me)
@@ -92,59 +100,20 @@ func NewRouter(cfg Config) chi.Router {
 			r.Delete("/sessions/{id}", authH.DeleteSession)
 		})
 
-		// --- Read endpoints ---
+		// Each resource mounts at a single path: GET endpoints are open to any
+		// authenticated user, mutating endpoints are nested in an inner
+		// operator-only group. chi panics if the same pattern is r.Route()'d
+		// twice on one mux, so read/write must share one Route block.
+		operatorOnly := auth.RequireRole("operator")
+
 		r.Route("/api/connectors", func(r chi.Router) {
 			r.Get("/", connH.List)
 			r.Get("/schema", connH.Schema)
 			r.Get("/{id}", connH.Get)
 			r.Get("/{id}/removal-impact", connH.RemovalImpact)
-		})
 
-		r.Route("/api/docs", func(r chi.Router) {
-			r.Get("/", docH.List)
-			r.Get("/tree", docH.Tree)
-			r.Get("/{id}", docH.Get)
-			r.Get("/{id}/versions", docH.Versions)
-		})
-
-		r.Route("/api/templates", func(r chi.Router) {
-			r.Get("/", tmplH.List)
-			r.Get("/{id}", tmplH.Get)
-		})
-
-		r.Route("/api/changes", func(r chi.Router) {
-			r.Get("/", changeH.List)
-			r.Get("/{id}", changeH.Get)
-		})
-
-		r.Route("/api/alerts", func(r chi.Router) {
-			r.Get("/", alertH.List)
-			r.Get("/{id}", alertH.Get)
-		})
-
-		r.Route("/api/dashboard", func(r chi.Router) {
-			r.Get("/overview", dashH.Overview)
-			r.Get("/layout", dashH.GetLayout)
-		})
-
-		r.Route("/api/settings", func(r chi.Router) {
-			r.Get("/auth", settingH.GetAuth)
-			r.Get("/ai", settingH.GetAI)
-		})
-
-		// --- Operator-only routes ---
-		r.Group(func(r chi.Router) {
-			r.Use(auth.RequireRole("operator"))
-
-			r.Route("/api/users", func(r chi.Router) {
-				r.Get("/", authH.ListUsers)
-				r.Post("/", authH.CreateUser)
-				r.Patch("/{id}", authH.UpdateUser)
-				r.Delete("/{id}", authH.DeleteUser)
-				r.Post("/{id}/reset-password", authH.ResetPassword)
-			})
-
-			r.Route("/api/connectors", func(r chi.Router) {
+			r.Group(func(r chi.Router) {
+				r.Use(operatorOnly)
 				r.Post("/", connH.Create)
 				r.Post("/test", connH.Test)
 				r.Patch("/{id}", connH.Update)
@@ -152,39 +121,90 @@ func NewRouter(cfg Config) chi.Router {
 				r.Put("/{id}/enabled", connH.ToggleEnabled)
 				r.Post("/{id}/sync", connH.Sync)
 			})
+		})
 
-			r.Route("/api/docs", func(r chi.Router) {
+		r.Route("/api/docs", func(r chi.Router) {
+			r.Get("/", docH.List)
+			r.Get("/tree", docH.Tree)
+			r.Get("/{id}", docH.Get)
+			r.Get("/{id}/versions", docH.Versions)
+
+			r.Group(func(r chi.Router) {
+				r.Use(operatorOnly)
 				r.Post("/generate", docH.Generate)
 				r.Put("/{id}", docH.Save)
 				r.Post("/{id}/restore", docH.Restore)
 				r.Post("/{id}/ai-suggest", docH.AISuggest)
 			})
+		})
 
-			r.Route("/api/templates", func(r chi.Router) {
+		r.Route("/api/templates", func(r chi.Router) {
+			r.Get("/", tmplH.List)
+			r.Get("/{id}", tmplH.Get)
+
+			r.Group(func(r chi.Router) {
+				r.Use(operatorOnly)
 				r.Post("/", tmplH.Create)
 				r.Patch("/{id}", tmplH.Update)
 				r.Delete("/{id}", tmplH.Delete)
 				r.Post("/preview", tmplH.Preview)
 			})
+		})
 
-			r.Route("/api/changes", func(r chi.Router) {
+		r.Route("/api/changes", func(r chi.Router) {
+			r.Get("/", changeH.List)
+			r.Get("/{id}", changeH.Get)
+
+			r.Group(func(r chi.Router) {
+				r.Use(operatorOnly)
 				r.Post("/{id}/acknowledge", changeH.Acknowledge)
 				r.Post("/{id}/dismiss", changeH.Dismiss)
 			})
+		})
 
-			r.Route("/api/alerts", func(r chi.Router) {
+		r.Route("/api/alerts", func(r chi.Router) {
+			r.Get("/", alertH.List)
+			r.Get("/{id}", alertH.Get)
+
+			r.Group(func(r chi.Router) {
+				r.Use(operatorOnly)
 				r.Post("/{id}/resolve", alertH.Resolve)
 				r.Post("/{id}/dismiss", alertH.Dismiss)
 				r.Post("/{id}/snooze", alertH.Snooze)
 			})
+		})
 
-			r.Route("/api/dashboard", func(r chi.Router) {
+		r.Route("/api/dashboard", func(r chi.Router) {
+			r.Get("/overview", dashH.Overview)
+			r.Get("/layout", dashH.GetLayout)
+
+			r.Group(func(r chi.Router) {
+				r.Use(operatorOnly)
 				r.Put("/layout", dashH.SaveLayout)
 			})
+		})
 
-			r.Route("/api/settings", func(r chi.Router) {
+		r.Route("/api/settings", func(r chi.Router) {
+			r.Get("/auth", settingH.GetAuth)
+			r.Get("/ai", settingH.GetAI)
+
+			r.Group(func(r chi.Router) {
+				r.Use(operatorOnly)
 				r.Put("/auth", settingH.UpdateAuth)
 				r.Put("/ai", settingH.UpdateAI)
+			})
+		})
+
+		// --- Operator-only routes ---
+		r.Group(func(r chi.Router) {
+			r.Use(operatorOnly)
+
+			r.Route("/api/users", func(r chi.Router) {
+				r.Get("/", authH.ListUsers)
+				r.Post("/", authH.CreateUser)
+				r.Patch("/{id}", authH.UpdateUser)
+				r.Delete("/{id}", authH.DeleteUser)
+				r.Post("/{id}/reset-password", authH.ResetPassword)
 			})
 
 			r.Post("/api/sync", connH.SyncAll)
@@ -211,7 +231,35 @@ func NewRouter(cfg Config) chi.Router {
 		}
 	})
 
+	if cfg.Config.Server.Embed && cfg.SPAFiles != nil {
+		r.NotFound(spaHandler(cfg.SPAFiles))
+	}
+
 	return r
+}
+
+// spaHandler serves the embedded SPA build, falling back to index.html for
+// client-side routes. It only handles paths chi's router didn't already match,
+// so /api/* routes are never shadowed — unmatched API paths get a JSON 404.
+func spaHandler(files fs.FS) http.HandlerFunc {
+	fileServer := http.FileServer(http.FS(files))
+
+	return func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/api/") {
+			httputil.Error(w, http.StatusNotFound, "not_found", "Resource not found")
+			return
+		}
+
+		path := strings.TrimPrefix(r.URL.Path, "/")
+		if path == "" {
+			path = "index.html"
+		}
+		if info, err := fs.Stat(files, path); err != nil || info.IsDir() {
+			r = r.Clone(r.Context())
+			r.URL.Path = "/"
+		}
+		fileServer.ServeHTTP(w, r)
+	}
 }
 
 // AuthMiddleware returns chi-compatible auth middleware from the JWT service.

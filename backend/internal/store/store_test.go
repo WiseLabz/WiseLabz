@@ -5,17 +5,17 @@ import (
 	"database/sql"
 	"testing"
 
-	_ "github.com/mattn/go-sqlite3"
+	_ "modernc.org/sqlite"
 )
 
 func TestNew(t *testing.T) {
-	db, err := sql.Open("sqlite3", ":memory:")
+	db, err := sql.Open("sqlite", ":memory:")
 	if err != nil {
 		t.Fatalf("open db: %v", err)
 	}
 	defer db.Close() //nolint:errcheck
 
-	s := New(db)
+	s := New(db, "sqlite")
 	if s == nil {
 		t.Fatal("New() returned nil")
 	}
@@ -25,13 +25,13 @@ func TestNew(t *testing.T) {
 }
 
 func TestPing(t *testing.T) {
-	db, err := sql.Open("sqlite3", ":memory:")
+	db, err := sql.Open("sqlite", ":memory:")
 	if err != nil {
 		t.Fatalf("open db: %v", err)
 	}
 	defer db.Close() //nolint:errcheck
 
-	s := New(db)
+	s := New(db, "sqlite")
 	if err := s.Ping(context.Background()); err != nil {
 		t.Fatalf("Ping() error: %v", err)
 	}

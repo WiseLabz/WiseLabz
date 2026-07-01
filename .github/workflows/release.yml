@@ -44,6 +44,7 @@ jobs:
             type=raw,value=latest,enable=${{ !contains(github.ref, '-') }}
 
       - name: Build and push
+        id: build
         uses: docker/build-push-action@0adf9956655fe3d2bba487a0835b9a15aa5ab2bb # v6.15.0
         with:
           context: .
@@ -54,6 +55,31 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Scan image for vulnerabilities (report)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ghcr.io/${{ github.repository_owner }}/wiselabz@${{ steps.build.outputs.digest }}
+          severity: "CRITICAL,HIGH"
+          ignore-unfixed: true
+          exit-code: "0"
+
+      - name: Scan image for vulnerabilities (gate on critical)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ghcr.io/${{ github.repository_owner }}/wiselabz@${{ steps.build.outputs.digest }}
+          severity: "CRITICAL"
+          ignore-unfixed: true
+          exit-code: "1"
+
+      - name: Generate SBOM
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        with:
+          image: ghcr.io/${{ github.repository_owner }}/wiselabz@${{ steps.build.outputs.digest }}
+          format: cyclonedx-json
+          output-file: sbom.cdx.json
+          upload-artifact: true
+          artifact-name: sbom.cdx.json
 
   create-release:
     name: Create GitHub Release
@@ -72,10 +98,16 @@ jobs:
         with:
           args: --latest --strip all --output CHANGELOG.md
 
+      - name: Download SBOM
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: sbom.cdx.json
+
       - name: Create Release
         uses: softprops/action-gh-release@c95fe1489396fe8a9eb87c0abf8aa5b2ef267fda # v2.2.1
         with:
           name: ${{ github.ref_name }}
           body_path: CHANGELOG.md
+          files: sbom.cdx.json
           draft: false
           prerelease: ${{ contains(github.ref_name, '-') }}
