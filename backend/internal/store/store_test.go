@@ -15,7 +15,7 @@ func TestNew(t *testing.T) {
 	}
 	defer db.Close() //nolint:errcheck
 
-	s := New(db)
+	s := New(db, "sqlite")
 	if s == nil {
 		t.Fatal("New() returned nil")
 	}
@@ -31,7 +31,7 @@ func TestPing(t *testing.T) {
 	}
 	defer db.Close() //nolint:errcheck
 
-	s := New(db)
+	s := New(db, "sqlite")
 	if err := s.Ping(context.Background()); err != nil {
 		t.Fatalf("Ping() error: %v", err)
 	}

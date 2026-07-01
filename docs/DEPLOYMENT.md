@@ -6,43 +6,19 @@ single-writer pool and in-process WebSocket hub assume single-instance
 affinity, which contradicts horizontal scaling, and the target scale
 (<50 concurrent users, homelab) gives no justification for it.
 
-## Known limitation: PostgreSQL is not yet fully supported
+## PostgreSQL support
 
-`db.driver: postgres` will run schema migrations successfully (the SQL
-migration files in `backend/internal/store/migrations/postgres/` are
-portable DDL), but **the application's runtime queries will fail
-immediately after**. The entire `backend/internal/store/` query layer
-(`store.go`, `user.go`, `doc.go`, `change.go`, `connector.go` — roughly 800
-call sites) is written against SQLite syntax:
+`db.driver: postgres` runs schema migrations (the SQL migration files in
+`backend/internal/store/migrations/postgres/` are portable DDL) and then
+runs the application's runtime queries normally. The `backend/internal/store/`
+query layer is written using SQLite-style `?` placeholders; when
+`db.driver` is `postgres`, `Store` wraps the connection
+(`backend/internal/store/pgdb.go`) to rewrite `?` placeholders to
+PostgreSQL's `$1, $2, ...` form transparently, so no query code needs to
+differ between drivers.
 
-- `?` positional placeholders, which PostgreSQL drivers (both `pgx` and
-  `lib/pq`) do not accept — PostgreSQL requires `$1, $2, ...`. There is no
-  driver-level translation between the two; this isn't configurable.
-- `INSERT OR IGNORE INTO ...` (3 occurrences in `store.go`), which is
-  SQLite-only syntax. The PostgreSQL equivalent is
-  `INSERT INTO ... ON CONFLICT DO NOTHING`.
-
-This was discovered by actually running the app against a real PostgreSQL
-container: migrations completed, then the very first runtime query
-(`initSingletons`, called during startup) failed with
-`pq: syntax error at or near "OR"`.
-
-**Until this is fixed, treat `db.driver: postgres` as non-functional.**
-SQLite (the default) is the only driver that actually works end-to-end
-today. The `docker-compose.yml` Postgres reference stack in this repo will
-build and the containers will start, but the app container will crash-loop
-on first boot for the same reason — use `docker-compose.sqlite.yml` instead
-until this is resolved.
-
-Fixing this properly means either rewriting every query's placeholders and
-the 3 `INSERT OR IGNORE` statements to portable/driver-aware SQL, or adding
-a query-rewriting layer — both are real engineering work scoped separately
-from deployment packaging, not a quick follow-up.
-
-What *is* already correct and ready for when the query layer is fixed:
-the `postgres` migration files, the `pgx`-backed `OpenDB` connection
-pooling (sized for concurrent writers), and the `RunMigrations` driver
-wiring in `backend/internal/store/migrations.go`.
+Both the `docker-compose.yml` (Postgres) and `docker-compose.sqlite.yml`
+reference stacks are fully functional end-to-end.
 
 ## WebSocket behind a reverse proxy
 
@@ -70,8 +46,8 @@ cron entry on the host (bare-metal/systemd mode):
 0 3 * * * sqlite3 /opt/wiselabz/data/wiselabz.db ".backup /opt/wiselabz/backups/wiselabz-$(date +\%Y\%m\%d).db"
 ```
 
-**PostgreSQL** (once the query-layer limitation above is fixed): standard
-`pg_dump`, e.g. as a cron job against the `postgres` compose service:
+**PostgreSQL**: standard `pg_dump`, e.g. as a cron job against the
+`postgres` compose service:
 ```
 0 3 * * * docker compose exec -T postgres pg_dump -U wiselabz wiselabz | gzip > backups/wiselabz-$(date +\%Y\%m\%d).sql.gz
 ```

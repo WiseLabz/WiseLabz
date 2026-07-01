@@ -1,11 +1,5 @@
 # WiseLabz — Postgres reference stack
 #
-# WARNING: PostgreSQL support is not yet functional — the app's runtime
-# queries are still SQLite-only (see docs/DEPLOYMENT.md, "Known limitation:
-# PostgreSQL is not yet fully supported"). This stack will build and the
-# containers will start, but the `app` container will crash-loop on first
-# boot. Use docker-compose.sqlite.yml until this is fixed.
-#
 # Primary multi-write-capable reference deployment. Runs the WiseLabz app
 # container backed by a Postgres database, both with named (managed) Docker
 # volumes for persistence.

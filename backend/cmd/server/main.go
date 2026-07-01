@@ -67,7 +67,7 @@ func main() {
 	}
 
 	// Initialize store
-	s := store.New(db)
+	s := store.New(db, cfg.DB.Driver)
 
 	// Create root context that cancels on interrupt
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)

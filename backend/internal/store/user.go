@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 // User represents a row in the users table.
@@ -355,9 +356,14 @@ func isUniqueViolation(err error) bool {
 	if err == nil {
 		return false
 	}
-	msg := err.Error()
+
+	if pgErr, ok := errors.AsType[*pgconn.PgError](err); ok {
+		// PostgreSQL: 23505 = unique_violation
+		return pgErr.Code == "23505"
+	}
+
 	// SQLite reports UNIQUE constraint violations this way
-	return contains(msg, "UNIQUE constraint failed")
+	return contains(err.Error(), "UNIQUE constraint failed")
 }
 
 func contains(s, substr string) bool {
