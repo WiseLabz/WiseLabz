@@ -7,8 +7,8 @@ import (
 
 // rewritePlaceholders converts SQLite-style `?` positional placeholders to
 // PostgreSQL-style `$1`, `$2`, ... placeholders. `?` characters inside
-// single-quoted string literals (including `”`-escaped quotes) are left
-// untouched.
+// single-quoted string literals, including SQL's doubled-quote escape for a
+// literal quote character, are left untouched.
 func rewritePlaceholders(query string) string {
 	if !strings.Contains(query, "?") {
 		return query

@@ -254,7 +254,7 @@ func spaHandler(files fs.FS) http.HandlerFunc {
 		if path == "" {
 			path = "index.html"
 		}
-		if _, err := fs.Stat(files, path); err != nil {
+		if info, err := fs.Stat(files, path); err != nil || info.IsDir() {
 			r = r.Clone(r.Context())
 			r.URL.Path = "/"
 		}

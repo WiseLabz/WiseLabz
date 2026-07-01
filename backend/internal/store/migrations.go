@@ -23,7 +23,7 @@ var sqliteMigrations embed.FS
 var postgresMigrations embed.FS
 
 // RunMigrations runs all pending database migrations for the given driver.
-// Supports "sqlite3" and "postgres".
+// Supports "sqlite" and "postgres".
 func RunMigrations(db *sql.DB, driver string, logger *slog.Logger) error {
 	logger.Info("running database migrations")
 

@@ -178,6 +178,11 @@ func runHealthcheck() {
 	}
 	defer resp.Body.Close() //nolint:errcheck
 
+	if resp.StatusCode != http.StatusOK {
+		fmt.Fprintf(os.Stderr, "healthcheck: server returned status %d\n", resp.StatusCode)
+		os.Exit(1)
+	}
+
 	var body struct {
 		Healthy bool `json:"healthy"`
 	}
