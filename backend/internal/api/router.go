@@ -9,6 +9,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/WiseLabz/wiselabz/internal/ai"
 	alerthandler "github.com/WiseLabz/wiselabz/internal/api/alerts"
 	authhandler "github.com/WiseLabz/wiselabz/internal/api/auth"
 	changehandler "github.com/WiseLabz/wiselabz/internal/api/changes"
@@ -28,10 +29,7 @@ import (
 	"github.com/WiseLabz/wiselabz/internal/ws"
 
 	// Register connector implementations
-	_ "github.com/WiseLabz/wiselabz/internal/connector/custom"
-	_ "github.com/WiseLabz/wiselabz/internal/connector/docker"
-	_ "github.com/WiseLabz/wiselabz/internal/connector/pfsense"
-	_ "github.com/WiseLabz/wiselabz/internal/connector/proxmox"
+	_ "github.com/WiseLabz/wiselabz/internal/connector/all"
 )
 
 // Config holds all dependencies needed to construct the router.
@@ -42,6 +40,7 @@ type Config struct {
 	SyncEngine *sync.Engine
 	DocEngine  *doc.Engine
 	WSHub      *ws.Hub
+	AIRegistry *ai.Registry
 	// SPAFiles serves the embedded frontend build. Only used when Config.Server.Embed is true.
 	SPAFiles fs.FS
 }
@@ -57,24 +56,28 @@ func NewRouter(cfg Config) chi.Router {
 	r.Use(middleware.CORS(cfg.Config.Server.Origin))
 
 	// --- Handlers ---
-	sysH := syshandler.NewHandler(cfg.Store.DB())
+	sysH := syshandler.NewHandler(cfg.Store.DB(), cfg.Config)
 	authH := authhandler.NewHandler(cfg.Store, cfg.JWT, cfg.Config)
-	connH := connhandler.NewHandler(cfg.Store)
-	docH := dochandler.NewHandler(cfg.Store, cfg.DocEngine)
+	settingH := settinghandler.NewHandler(cfg.Store, cfg.Config, cfg.AIRegistry)
+	connH := connhandler.NewHandler(cfg.Store, cfg.SyncEngine)
 	tmplH := tmplhandler.NewHandler(cfg.Store, cfg.DocEngine)
-	changeH := changehandler.NewHandler(cfg.Store)
+	changeH := changehandler.NewHandler(cfg.Store, settingH, cfg.AIRegistry, cfg.WSHub)
 	alertH := alerthandler.NewHandler(cfg.Store)
 	dashH := dashhandler.NewHandler(cfg.Store)
-	settingH := settinghandler.NewHandler(cfg.Store, cfg.Config)
+	docH := dochandler.NewHandler(cfg.Store, cfg.DocEngine, settingH, cfg.AIRegistry, cfg.WSHub)
 
 	// --- System endpoints ---
 	r.Get("/api/health", sysH.Health)
 	r.Get("/api/version", sysH.Version)
 
+	// Shared across the top-level /api/auth route below and the protected
+	// group further down.
+	operatorOnly := auth.RequireRole("operator")
+
 	// --- Auth routes (mixed public/protected, single mount point) ---
 	// chi only allows one Mount per exact pattern, so the protected /api/auth
-	// routes (logout, elevate) are nested inside this same Route as an inner
-	// auth-gated group rather than a second top-level r.Route("/api/auth", ...).
+	// routes (logout, elevate, config) are nested inside this same Route as
+	// inner auth-gated groups rather than a second top-level r.Route("/api/auth", ...).
 	r.Route("/api/auth", func(r chi.Router) {
 		r.Post("/login", authH.Login)
 		r.Post("/oidc/callback", authH.OIDCCallback)
@@ -85,6 +88,13 @@ func NewRouter(cfg Config) chi.Router {
 			r.Use(cfg.AuthMiddleware())
 			r.Post("/logout", authH.Logout)
 			r.Post("/elevate", authH.Elevate)
+
+			r.Group(func(r chi.Router) {
+				r.Use(operatorOnly)
+				r.Get("/config", settingH.GetAuthConfig)
+				r.Put("/config", settingH.UpdateAuthConfig)
+				r.Put("/providers/{providerId}/enabled", settingH.UpdateProviderEnabled)
+			})
 		})
 	})
 
@@ -104,7 +114,6 @@ func NewRouter(cfg Config) chi.Router {
 		// authenticated user, mutating endpoints are nested in an inner
 		// operator-only group. chi panics if the same pattern is r.Route()'d
 		// twice on one mux, so read/write must share one Route block.
-		operatorOnly := auth.RequireRole("operator")
 
 		r.Route("/api/connectors", func(r chi.Router) {
 			r.Get("/", connH.List)
@@ -125,6 +134,7 @@ func NewRouter(cfg Config) chi.Router {
 
 		r.Route("/api/docs", func(r chi.Router) {
 			r.Get("/tree", docH.Tree)
+			r.Get("/service/{id}", docH.ByService)
 			r.Get("/{id}", docH.Get)
 			r.Get("/{id}/versions", docH.Versions)
 
@@ -144,9 +154,9 @@ func NewRouter(cfg Config) chi.Router {
 			r.Group(func(r chi.Router) {
 				r.Use(operatorOnly)
 				r.Post("/", tmplH.Create)
-				r.Patch("/{id}", tmplH.Update)
+				r.Put("/{id}", tmplH.Update)
 				r.Delete("/{id}", tmplH.Delete)
-				r.Post("/preview", tmplH.Preview)
+				r.Post("/{id}/preview", tmplH.Preview)
 			})
 		})
 
@@ -183,20 +193,23 @@ func NewRouter(cfg Config) chi.Router {
 			})
 		})
 
-		r.Route("/api/settings", func(r chi.Router) {
-			r.Get("/auth", settingH.GetAuth)
-			r.Get("/ai", settingH.GetAI)
-
-			r.Group(func(r chi.Router) {
-				r.Use(operatorOnly)
-				r.Put("/auth", settingH.UpdateAuth)
-				r.Put("/ai", settingH.UpdateAI)
-			})
-		})
-
 		// --- Operator-only routes ---
 		r.Group(func(r chi.Router) {
 			r.Use(operatorOnly)
+
+			r.Route("/api/ai/config", func(r chi.Router) {
+				r.Get("/", settingH.GetAIConfig)
+				r.Put("/", settingH.UpdateAIConfig)
+				r.Post("/test", settingH.TestAIConfig)
+			})
+
+			r.Route("/api/notifications/config", func(r chi.Router) {
+				r.Get("/", settingH.GetNotificationsConfig)
+				r.Put("/", settingH.UpdateNotificationsConfig)
+				r.Post("/test", settingH.TestNotificationsConfig)
+			})
+
+			r.Get("/api/system/info", sysH.Info)
 
 			r.Route("/api/users", func(r chi.Router) {
 				r.Get("/", authH.ListUsers)

@@ -13,7 +13,7 @@ import (
 
 // DocRecord represents a row in the docs table.
 type DocRecord struct {
-	ID             string `json:"id"`
+	ID             string `json:"docId"`
 	Title          string `json:"title"`
 	Kind           string `json:"kind"`
 	ServiceID      string `json:"serviceId"`
@@ -49,7 +49,7 @@ type TemplateSectionRecord struct {
 	ID         string `json:"id"`
 	TemplateID string `json:"templateId"`
 	Title      string `json:"title"`
-	Ord        int    `json:"ord"`
+	Ord        int    `json:"order"`
 	Body       string `json:"body"`
 }
 
@@ -164,6 +164,48 @@ func (s *Store) ListDocsByService(ctx context.Context, serviceID string) ([]DocR
 		docs = []DocRecord{}
 	}
 	return docs, nil
+}
+
+// ListAllDocs returns a paginated, optionally search-filtered list of all docs.
+func (s *Store) ListAllDocs(ctx context.Context, search string, offset, limit int) ([]DocRecord, int, error) {
+	where := "WHERE 1=1"
+	var args []any
+	if search != "" {
+		where += " AND title LIKE ?"
+		args = append(args, "%"+search+"%")
+	}
+
+	var total int
+	countQuery := "SELECT COUNT(*) FROM docs " + where
+	if err := s.db.QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("count docs: %w", err)
+	}
+
+	query := `SELECT id, title, kind, service_id, content, current_version, created_at, updated_at
+		FROM docs ` + where + ` ORDER BY updated_at DESC LIMIT ? OFFSET ?`
+	args = append(args, limit, offset)
+
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, 0, fmt.Errorf("list all docs: %w", err)
+	}
+	defer rows.Close() //nolint:errcheck
+
+	var docs []DocRecord
+	for rows.Next() {
+		var d DocRecord
+		var svcID sql.NullString
+		if err := rows.Scan(&d.ID, &d.Title, &d.Kind, &svcID, &d.Content,
+			&d.CurrentVersion, &d.CreatedAt, &d.UpdatedAt); err != nil {
+			return nil, 0, fmt.Errorf("scan: %w", err)
+		}
+		d.ServiceID = svcID.String
+		docs = append(docs, d)
+	}
+	if docs == nil {
+		docs = []DocRecord{}
+	}
+	return docs, total, nil
 }
 
 // --- Doc versions ---

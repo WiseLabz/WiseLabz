@@ -1,18 +1,45 @@
 /** Alerts — drift the diff engine flagged for a human. Resolve, dismiss, snooze. */
+import { useState } from 'react';
 import { motion } from 'motion/react';
 import { useTranslation } from 'react-i18next';
-import { useGetAlerts } from '../../api/generated/alerts/alerts';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import {
+  useGetAlerts,
+  getGetAlertsQueryKey,
+  postAlertsAlertIdResolve,
+  postAlertsAlertIdDismiss,
+  postAlertsAlertIdSnooze,
+} from '../../api/generated/alerts/alerts';
 import { SeverityTag } from '../../components/ui/StatusDot';
 import { Button } from '../../components/ui/Button';
 import { Panel } from '../../components/ui/Panel';
+import { Pagination } from '../../components/ui/Pagination';
 import { SkeletonRows, ErrorState, EmptyState } from '../../components/ui/states';
 import { relativeTime } from '../../lib/time';
 import { CheckIcon, XIcon, ClockIcon } from '../../components/icons';
 
 export function AlertsPage() {
   const { t } = useTranslation();
-  const { data, isLoading, isError, refetch } = useGetAlerts(undefined);
+  const [page, setPage] = useState(1);
+  const pageSize = 20;
+  const queryClient = useQueryClient();
+  const { data, isLoading, isError, refetch } = useGetAlerts({ page, pageSize });
   const pending = (data?.items ?? []).filter((a) => a.status === 'pending');
+  const pageCount = data ? Math.max(1, Math.ceil(data.total / data.pageSize)) : 1;
+
+  const resolveAlert = useMutation({
+    mutationFn: (alertId: string) => postAlertsAlertIdResolve(alertId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: getGetAlertsQueryKey() }),
+  });
+  const dismissAlert = useMutation({
+    mutationFn: (alertId: string) => postAlertsAlertIdDismiss(alertId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: getGetAlertsQueryKey() }),
+  });
+  const snoozeAlert = useMutation({
+    mutationFn: (alertId: string) =>
+      postAlertsAlertIdSnooze(alertId, { until: new Date(Date.now() + 60 * 60 * 1000).toISOString() }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: getGetAlertsQueryKey() }),
+  });
 
   return (
     <div className="mx-auto max-w-205 px-6 py-6">
@@ -61,19 +88,37 @@ export function AlertsPage() {
                   </div>
                 </div>
                 <div className="mt-3 flex items-center justify-end gap-2 border-t border-line-soft pt-3">
-                  <Button variant="ghost" size="sm">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={snoozeAlert.isPending}
+                    onClick={() => snoozeAlert.mutate(a.id)}
+                  >
                     <ClockIcon size={14} /> {t('common.snooze')}
                   </Button>
-                  <Button variant="ghost" size="sm">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={dismissAlert.isPending}
+                    onClick={() => dismissAlert.mutate(a.id)}
+                  >
                     <XIcon size={14} /> {t('common.dismiss')}
                   </Button>
-                  <Button variant="primary" size="sm">
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    disabled={resolveAlert.isPending}
+                    onClick={() => resolveAlert.mutate(a.id)}
+                  >
                     <CheckIcon size={14} /> {t('common.resolve')}
                   </Button>
                 </div>
               </Panel>
             </motion.div>
           ))}
+          {data && pageCount > 1 && (
+            <Pagination page={page} pageCount={pageCount} onPage={setPage} className="justify-center pt-1" />
+          )}
         </div>
       )}
     </div>

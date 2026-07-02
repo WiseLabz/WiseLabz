@@ -5,36 +5,40 @@ import (
 	"net/http"
 	"runtime/debug"
 
+	"github.com/WiseLabz/wiselabz/internal/config"
 	"github.com/WiseLabz/wiselabz/internal/httputil"
 	"github.com/WiseLabz/wiselabz/internal/store"
 )
 
 // Handler holds dependencies for system endpoints.
 type Handler struct {
-	DB store.DBTX
+	DB     store.DBTX
+	Config *config.Config
 }
 
 // NewHandler creates a new system handler.
-func NewHandler(db store.DBTX) *Handler {
-	return &Handler{DB: db}
+func NewHandler(db store.DBTX, cfg *config.Config) *Handler {
+	return &Handler{DB: db, Config: cfg}
 }
 
 // Health responds with the server health status.
 // GET /api/health
 func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
-	healthy := true
+	dbStatus := "ok"
 	if err := h.DB.PingContext(r.Context()); err != nil {
-		healthy = false
+		dbStatus = "down"
 	}
 
 	status := "ok"
-	if !healthy {
+	if dbStatus != "ok" {
 		status = "degraded"
 	}
 
 	httputil.JSON(w, http.StatusOK, map[string]any{
-		"status":  status,
-		"healthy": healthy,
+		"status": status,
+		"components": []map[string]any{
+			{"name": "database", "status": dbStatus},
+		},
 	})
 }
 
@@ -61,4 +65,19 @@ func (h *Handler) Version(w http.ResponseWriter, _ *http.Request) {
 	}
 
 	httputil.JSON(w, http.StatusOK, info)
+}
+
+// Info responds with instance info (version, sync schedule, integrations).
+// GET /api/system/info
+func (h *Handler) Info(w http.ResponseWriter, _ *http.Request) {
+	version := "dev"
+	if buildInfo, ok := debug.ReadBuildInfo(); ok && buildInfo.Main.Version != "" {
+		version = buildInfo.Main.Version
+	}
+
+	httputil.JSON(w, http.StatusOK, map[string]any{
+		"version":      version,
+		"syncSchedule": h.Config.Sync.Schedule,
+		"integrations": []map[string]any{},
+	})
 }

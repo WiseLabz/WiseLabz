@@ -320,7 +320,7 @@ const LAB_DOC = `# Home Lab
 
 A two-node Proxmox cluster fronted by an OPNsense firewall, with container
 workloads on Portainer and backups handled by Proxmox Backup Server. This page is
-generated and kept current by WiseLabz — last reconciled against live state on
+generated and kept current by WiseLabz, last reconciled against live state on
 each sync.
 
 ## Topology

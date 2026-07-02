@@ -23,19 +23,34 @@ func NewHandler(s *store.Store) *Handler {
 // Overview handles GET /api/dashboard/overview.
 // Returns aggregated dashboard data.
 func (h *Handler) Overview(w http.ResponseWriter, r *http.Request) {
-	connectors, _ := h.Store.CountConnectorsByStatus(r.Context())
-	alertsPending, _ := h.Store.CountAlertsPending(r.Context())
-	changesNew, _ := h.Store.CountChangesNew(r.Context())
-	docsTotal, _ := h.Store.CountDocs(r.Context())
-	latestChanges, _ := h.Store.GetLatestChanges(r.Context(), 5)
-	lastSync, _ := h.Store.GetLastSyncTimestamp(r.Context())
+	ctx := r.Context()
+	statusCounts, _ := h.Store.CountConnectorsByStatus(ctx)
+	pendingAlerts, _ := h.Store.CountAlertsPending(ctx)
+	latestChanges, _ := h.Store.GetLatestChanges(ctx, 5)
+	lastSync, _ := h.Store.GetLastSyncTimestamp(ctx)
+
+	recentChanges := make([]map[string]any, len(latestChanges))
+	for i, c := range latestChanges {
+		serviceName := ""
+		if conn, err := h.Store.GetConnector(ctx, c.ServiceID); err == nil {
+			serviceName = conn.Name
+		}
+		recentChanges[i] = map[string]any{
+			"id":            c.ID,
+			"serviceId":     c.ServiceID,
+			"serviceName":   serviceName,
+			"changeType":    c.ChangeType,
+			"severity":      c.Severity,
+			"summary":       c.Summary,
+			"willTriggerAi": false,
+			"detectedAt":    c.DetectedAt,
+		}
+	}
 
 	httputil.JSON(w, http.StatusOK, map[string]any{
-		"connectors":    connectors,
-		"alertsPending": alertsPending,
-		"changesNew":    changesNew,
-		"docsTotal":     docsTotal,
-		"latestChanges": latestChanges,
+		"statusCounts":  statusCounts,
+		"pendingAlerts": pendingAlerts,
+		"recentChanges": recentChanges,
 		"lastSyncAt":    lastSync,
 	})
 }
@@ -53,14 +68,12 @@ func (h *Handler) GetLayout(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		// Return empty layout if not found
 		httputil.JSON(w, http.StatusOK, map[string]any{
-			"userId":  userID,
-			"widgets": "[]",
+			"widgets": json.RawMessage("[]"),
 		})
 		return
 	}
 
 	httputil.JSON(w, http.StatusOK, map[string]any{
-		"userId":  userID,
 		"widgets": json.RawMessage(widgets),
 	})
 }
@@ -98,5 +111,7 @@ func (h *Handler) SaveLayout(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	httputil.NoContent(w)
+	httputil.JSON(w, http.StatusOK, map[string]any{
+		"widgets": json.RawMessage(widgets),
+	})
 }

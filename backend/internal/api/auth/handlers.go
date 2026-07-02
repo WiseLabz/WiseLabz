@@ -3,12 +3,17 @@ package auth
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
 	"crypto/subtle"
+	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -104,16 +109,21 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 // and returns a JWT token pair.
 func (h *Handler) OIDCCallback(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		ProviderID  string `json:"providerId"`
-		Code        string `json:"code"`
-		RedirectURI string `json:"redirectUri"`
+		ProviderID string `json:"providerId"`
+		Code       string `json:"code"`
+		State      string `json:"state"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		httputil.Error(w, http.StatusBadRequest, "invalid_request", "Invalid JSON body")
 		return
 	}
-	if req.ProviderID == "" || req.Code == "" {
-		httputil.Error(w, http.StatusBadRequest, "invalid_request", "providerId and code are required")
+	if req.ProviderID == "" || req.Code == "" || req.State == "" {
+		httputil.Error(w, http.StatusBadRequest, "invalid_request", "providerId, code, and state are required")
+		return
+	}
+
+	if !verifyOIDCState(h.Config.Auth.Secret, req.State, req.ProviderID) {
+		httputil.Error(w, http.StatusUnauthorized, "oidc_error", "Invalid or expired state")
 		return
 	}
 
@@ -330,8 +340,8 @@ func (h *Handler) Elevate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	httputil.JSON(w, http.StatusOK, map[string]any{
-		"elevationToken": token.Token,
-		"expiresAt":      token.ExpiresAt.Format(time.RFC3339),
+		"token":     token.Token,
+		"expiresAt": token.ExpiresAt.Format(time.RFC3339),
 	})
 }
 
@@ -359,7 +369,8 @@ func (h *Handler) Providers(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
-		authURL := prov.AuthURL("state-todo", redirectURL)
+		state := signOIDCState(h.Config.Auth.Secret, p.ID)
+		authURL := prov.AuthURL(state, redirectURL)
 		oidc = append(oidc, providerInfo{
 			ID:          p.ID,
 			DisplayName: p.DisplayName,
@@ -477,8 +488,14 @@ func (h *Handler) ListSessions(w http.ResponseWriter, r *http.Request) {
 		httputil.Errorf(w, err)
 		return
 	}
+
+	var currentHash string
+	if cookie, err := r.Cookie("refresh_token"); err == nil {
+		currentHash = store.HashToken(cookie.Value)
+	}
+
 	// Spec: GET /me/sessions returns a bare Session[] (see openapi.yaml).
-	httputil.JSON(w, http.StatusOK, sanitizeSessions(sessions))
+	httputil.JSON(w, http.StatusOK, sanitizeSessions(sessions, currentHash))
 }
 
 // DeleteSession handles DELETE /api/me/sessions/{id}.
@@ -755,7 +772,7 @@ func sanitizeUser(u *store.User) map[string]any {
 	}
 }
 
-func sanitizeSessions(sessions []store.Session) []map[string]any {
+func sanitizeSessions(sessions []store.Session, currentHash string) []map[string]any {
 	out := make([]map[string]any, len(sessions))
 	for i, s := range sessions {
 		out[i] = map[string]any{
@@ -764,6 +781,7 @@ func sanitizeSessions(sessions []store.Session) []map[string]any {
 			"ip":         s.IP,
 			"createdAt":  s.CreatedAt,
 			"lastSeenAt": s.LastSeenAt,
+			"current":    currentHash != "" && s.TokenHash == currentHash,
 		}
 	}
 	return out
@@ -780,6 +798,46 @@ func setRefreshCookie(w http.ResponseWriter, r *http.Request, token string, maxA
 		Secure:   secure,
 		SameSite: http.SameSiteLaxMode,
 	})
+}
+
+// signOIDCState produces a signed, self-contained CSRF state token for the OIDC
+// login flow: no server-side session storage needed, since the provider and
+// expiry are embedded and HMAC-signed with the auth secret.
+func signOIDCState(secret, providerID string) string {
+	expiry := time.Now().Add(5 * time.Minute).Unix()
+	payload := fmt.Sprintf("%s:%d", providerID, expiry)
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write([]byte(payload))
+	sig := hex.EncodeToString(mac.Sum(nil))
+	return base64.RawURLEncoding.EncodeToString([]byte(payload + ":" + sig))
+}
+
+// verifyOIDCState validates a state token produced by signOIDCState: signature,
+// embedded provider ID, and expiry must all check out.
+func verifyOIDCState(secret, state, providerID string) bool {
+	raw, err := base64.RawURLEncoding.DecodeString(state)
+	if err != nil {
+		return false
+	}
+	parts := strings.Split(string(raw), ":")
+	if len(parts) < 3 {
+		return false
+	}
+	sig := parts[len(parts)-1]
+	expiryStr := parts[len(parts)-2]
+	pid := strings.Join(parts[:len(parts)-2], ":")
+	if pid != providerID {
+		return false
+	}
+	expiry, err := strconv.ParseInt(expiryStr, 10, 64)
+	if err != nil || time.Now().Unix() > expiry {
+		return false
+	}
+
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write([]byte(pid + ":" + expiryStr))
+	expectedSig := hex.EncodeToString(mac.Sum(nil))
+	return subtle.ConstantTimeCompare([]byte(sig), []byte(expectedSig)) == 1
 }
 
 func readIP(r *http.Request) string {

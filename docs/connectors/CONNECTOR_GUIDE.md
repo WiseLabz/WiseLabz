@@ -10,7 +10,7 @@ This guide walks you through building one from scratch.
 
 ## The Connector interface
 
-Every connector implements this interface, defined in `backend/connector/connector.go`:
+Every connector implements this interface, defined in `backend/internal/connector/connector.go`:
 
 ```go
 package connector
@@ -18,19 +18,23 @@ package connector
 import "context"
 
 type Connector interface {
-    Name()     string
-    Fetch(ctx context.Context) (ServiceSnapshot, error)
-    Validate() error
+    Name() string
+    Type() string
+    Category() string
+    Fetch(ctx context.Context, config map[string]any) (*ServiceSnapshot, error)
+    Validate(ctx context.Context, config map[string]any) error
 }
 ```
 
-| Method       | Purpose                                                                                                                                                                  |
-|--------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `Name()`     | Return a stable, human-readable name for this connector instance (e.g. `"home-proxmox"`). Used in logs, the dashboard, and generated doc headings.                       |
-| `Fetch(ctx)` | Connect to the service, pull the data you care about, and return a `ServiceSnapshot`. The context carries a deadline — don't ignore it.                                  |
-| `Validate()` | Check that the connector's configuration is usable before we attempt a `Fetch`. Return `nil` if everything looks good, or an error describing what's missing or invalid. |
+| Method                  | Purpose                                                                                                                                                                 |
+|-------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `Name()`                | Display name, e.g. `"Proxmox VE"`.                                                                                                                                      |
+| `Type()`                | Stable type identifier, e.g. `"proxmox"`. Must match the string used during registration.                                                                               |
+| `Category()`            | Grouping label, e.g. `"virtualization"`, `"networking"`.                                                                                                                |
+| `Fetch(ctx, config)`    | Connect to the service, pull the data you care about, and return a `ServiceSnapshot`. The context carries a deadline — don't ignore it.                                 |
+| `Validate(ctx, config)` | Test that the connector's configuration is usable before we attempt a `Fetch`. Return `nil` if everything looks good, or an error describing what's missing or invalid. |
 
-Registration is handled by `init()` — see [Step 4: Register the connector](#4-register-the-connector) below.
+Registration happens via `init()` using `connector.Register()` — see [Step 4: Register the connector](#4-register-the-connector) below.
 
 ## The ServiceSnapshot
 
@@ -40,15 +44,14 @@ Registration is handled by `init()` — see [Step 4: Register the connector](#4-
 type ServiceSnapshot struct {
     ServiceName string            // matches connector Name()
     Type        string            // e.g. "proxmox", "portainer", "pfsense"
-    Sections    []Section         // the documentation sections this service contributes
+    Sections    []SnapshotSection // the documentation sections this service contributes
     Metadata    map[string]string // arbitrary key-value pairs (version, endpoint, etc.)
     FetchedAt   time.Time         // set by the caller, but you can set it if needed
 }
 
-type Section struct {
+type SnapshotSection struct {
     Title   string // section heading in the generated doc
     Content string // markdown body — tables, lists, code fences are all fine
-    Order   int    // sort ordering within the service's doc page
 }
 ```
 
@@ -70,103 +73,128 @@ Guidelines for a good snapshot:
 ### 1. Create the package
 
 ```bash
-mkdir -p backend/connector/mynewservice
-touch backend/connector/mynewservice/mynewservice.go
+mkdir -p backend/internal/connector/mynewservice
+touch backend/internal/connector/mynewservice/mynewservice.go
 ```
 
 The package name should be the service name, lowercased, no hyphens
 (`truenas`, not `true-nas`).
 
-### 2. Define your config struct
+### 2. Define your config schema
+
+Connectors self-describe their config via `connector.TypeSchema`. This is what
+the frontend renders as a form — no separate config struct is required unless
+your connector needs one internally:
 
 ```go
 package mynewservice
 
-type Config struct {
-    Name    string `yaml:"name"`
-    URL     string `yaml:"url"`
-    APIKey  string `yaml:"-"` // never from YAML — always from env
-    VerifyTLS bool  `yaml:"tls_verify"`
+import "github.com/WiseLabz/wiselabz/internal/connector"
+
+const typeName = "mynewservice"
+
+func init() {
+    connector.Register(connector.TypeSchema{
+        Type:     typeName,
+        Category: "infrastructure",   // groups connectors in the UI
+        Name:     "My New Service",
+        Fields: []connector.SchemaField{
+            {Key: "url", Label: "API URL", Type: "text", Required: true, Placeholder: "https://..."},
+            {Key: "api_key", Label: "API Key", Type: "password", Required: true},
+            {Key: "verify_tls", Label: "Verify TLS", Type: "toggle", Default: "true"},
+        },
+    }, func(config map[string]any) (connector.Connector, error) {
+        // The config map contains all field values keyed by their Key above,
+        // plus "url" and "verify_tls" injected automatically from the connector record.
+        return New(config)
+    })
 }
 ```
 
-Use `yaml:"-"` for secrets. WiseLabz passes them via environment variables, not
-plaintext config files. Document every field in a comment, especially which ones
-are required. These comments become the `config.example.yaml` entry for your
-connector.
+Supported field types: `"text"`, `"password"`, `"number"`, `"select"`, `"toggle"`.
+
+Secret fields should use `"password"` — the UI renders a password input and the
+value is stored alongside other config.
 
 ### 3. Implement the interface
 
 ```go
 type Connector struct {
-    cfg    Config
+    url    string
+    apiKey string
     client *http.Client
 }
 
-func New(cfg Config) (*Connector, error) {
-    if cfg.APIKey == "" {
+func New(config map[string]any) (*Connector, error) {
+    url, _ := config["url"].(string)
+    apiKey, _ := config["api_key"].(string)
+    if apiKey == "" {
         return nil, fmt.Errorf("mynewservice: API key is required")
     }
+    verifyTLS := true
+    if v, ok := config["verify_tls"]; ok {
+        if b, ok := v.(bool); ok { verifyTLS = b }
+    }
     return &Connector{
-        cfg: cfg,
+        url:    strings.TrimSuffix(url, "/"),
+        apiKey: apiKey,
         client: &http.Client{
             Timeout: 30 * time.Second,
             Transport: &http.Transport{
-                TLSClientConfig: &tls.Config{
-                    InsecureSkipVerify: !cfg.VerifyTLS,
-                },
+                TLSClientConfig: &tls.Config{InsecureSkipVerify: !verifyTLS},
             },
         },
     }, nil
 }
 
-func (c *Connector) Name() string { return c.cfg.Name }
+func (c *Connector) Name() string     { return "My New Service" }
+func (c *Connector) Type() string     { return typeName }
+func (c *Connector) Category() string { return "infrastructure" }
 
-func (c *Connector) Validate() error {
-    if c.cfg.URL == "" {
+func (c *Connector) Validate(ctx context.Context, _ map[string]any) error {
+    if c.url == "" {
         return fmt.Errorf("mynewservice: URL is required")
     }
-    if c.cfg.APIKey == "" {
+    if c.apiKey == "" {
         return fmt.Errorf("mynewservice: APIKey is required")
     }
     return nil
 }
 
-func (c *Connector) Fetch(ctx context.Context) (connector.ServiceSnapshot, error) {
+func (c *Connector) Fetch(ctx context.Context, _ map[string]any) (*connector.ServiceSnapshot, error) {
     // 1. Build the request
-    req, err := http.NewRequestWithContext(ctx, "GET", c.cfg.URL+"/api/v1/status", nil)
+    req, err := http.NewRequestWithContext(ctx, "GET", c.url+"/api/v1/status", nil)
     if err != nil {
-        return connector.ServiceSnapshot{}, fmt.Errorf("mynewservice: %w", err)
+        return nil, fmt.Errorf("mynewservice: %w", err)
     }
-    req.Header.Set("Authorization", "Bearer "+c.cfg.APIKey)
+    req.Header.Set("Authorization", "Bearer "+c.apiKey)
 
     // 2. Execute
     resp, err := c.client.Do(req)
     if err != nil {
-        return connector.ServiceSnapshot{}, fmt.Errorf("mynewservice: fetch failed: %w", err)
+        return nil, fmt.Errorf("mynewservice: fetch failed: %w", err)
     }
     defer resp.Body.Close()
 
     // 3. Parse into your domain types
     var status MyServiceStatus
     if err := json.NewDecoder(resp.Body).Decode(&status); err != nil {
-        return connector.ServiceSnapshot{}, fmt.Errorf("mynewservice: decode: %w", err)
+        return nil, fmt.Errorf("mynewservice: decode: %w", err)
     }
 
     // 4. Shape into a ServiceSnapshot
-    return connector.ServiceSnapshot{
-        ServiceName: c.cfg.Name,
-        Type:        "mynewservice",
-        Sections: []connector.Section{
+    return &connector.ServiceSnapshot{
+        ServiceName: c.Name(),
+        Type:        typeName,
+        Sections: []connector.SnapshotSection{
             {
                 Title:   "Status",
                 Content: formatStatusSection(status),
-                Order:   1,
             },
         },
         Metadata: map[string]string{
             "version":  status.Version,
-            "endpoint": c.cfg.URL,
+            "endpoint": c.url,
         },
         FetchedAt: time.Now(),
     }, nil
@@ -175,28 +203,32 @@ func (c *Connector) Fetch(ctx context.Context) (connector.ServiceSnapshot, error
 
 ### 4. Register the connector
 
-Create `backend/connector/mynewservice/init.go`:
+Registration is handled in the same file via `init()` — see step 2 above.
+The `connector.Register(schema, factory)` call registers both the config
+schema (used by the frontend form) and the factory (used to construct instances).
+
+### 5. Add the barrel import
+
+In `backend/internal/connector/all/all.go`, add one blank import line:
 
 ```go
-package mynewservice
+package all
 
-import "github.com/WiseLabz/WiseLabz/backend/connector/registry"
-
-func init() {
-    registry.Register("mynewservice", func(cfg map[string]any) (connector.Connector, error) {
-        // cfg is the deserialized YAML block for this service.
-        // Map it into your Config struct.
-        var c Config
-        // ... mapping logic ...
-        return New(c)
-    })
-}
+import (
+    _ "github.com/WiseLabz/wiselabz/internal/connector/custom"
+    _ "github.com/WiseLabz/wiselabz/internal/connector/docker"
+    _ "github.com/WiseLabz/wiselabz/internal/connector/mynewservice" // <-- add this
+    _ "github.com/WiseLabz/wiselabz/internal/connector/opnsense"
+    _ "github.com/WiseLabz/wiselabz/internal/connector/pfsense"
+    _ "github.com/WiseLabz/wiselabz/internal/connector/proxmox"
+)
 ```
 
-The registry calls your factory during startup for each service entry in `config.yaml`
-whose `type` matches the registered string.
+The barrel import triggers `init()` in your package, which calls
+`connector.Register`. The router imports `connector/all` once — no other
+files need to change.
 
-### 5. Write tests
+### 6. Write tests
 
 ```go
 func TestConnector_Fetch(t *testing.T) {
@@ -207,27 +239,22 @@ func TestConnector_Fetch(t *testing.T) {
     }))
     defer srv.Close()
 
-    c, err := New(Config{
-        Name:      "test",
-        URL:       srv.URL,
-        APIKey:    "fake-key",
-        VerifyTLS: false,
-    })
+    c, err := New(map[string]any{"url": srv.URL, "api_key": "fake-key"})
     require.NoError(t, err)
 
-    snap, err := c.Fetch(context.Background())
+    snap, err := c.Fetch(context.Background(), map[string]any{})
     require.NoError(t, err)
-    assert.Equal(t, "test", snap.ServiceName)
+    assert.Equal(t, "My New Service", snap.ServiceName)
     assert.Len(t, snap.Sections, 1)
 }
 
 func TestConnector_Validate(t *testing.T) {
-    _, err := New(Config{})
+    _, err := New(map[string]any{})
     require.Error(t, err)
 }
 ```
 
-### 6. Document config fields
+### 7. Document config fields
 
 Add a commented block to `config.example.yaml` so users know what to set:
 
@@ -239,6 +266,26 @@ Add a commented block to `config.example.yaml` so users know what to set:
 #     tls_verify: false
 #     # WISELABZ_SERVICES_N_APIKEY must be set in the environment
 ```
+
+## Sync flow
+
+When a user creates a connector and triggers sync:
+
+1. **Frontend** calls `POST /api/connectors/{id}/sync` → the handler returns
+   `202` with `{jobId, serviceId}` and spawns a background goroutine.
+2. **Sync engine** runs `Fetch` → diffs against the previous snapshot →
+   creates changes/alerts. Throughout the run it broadcasts WebSocket events:
+   - `sync.progress` at each phase (`queued` → `fetching` → `diffing` →
+     `generating` → `done`) so the UI shows a live progress bar.
+   - `change.detected` for each diff result.
+   - `alert.created` for each alert raised.
+   - `sync.complete` with final counts on completion.
+3. **Frontend** listens via `WebSocketProvider` and dispatches events to the
+   `useLive` Zustand store, which drives the sync progress UI and the
+   dashboard activity feed.
+
+Your connector doesn't need to do anything special for sync — just implement
+`Fetch` and `Validate`. The engine handles the rest.
 
 ## Testing without a real instance
 
@@ -262,14 +309,14 @@ If you don't have the service running, you have three options:
 
 ## Conventions
 
-- **Package location:** `backend/connector/<servicename>/`
+- **Package location:** `backend/internal/connector/<servicename>/`
 - **One connector per package.** Don't bundle multiple connectors in one package.
 - **Wrapping errors:** Use `fmt.Errorf("servicename: %w", err)` so callers can
   trace which connector failed.
 - **Context deadlines:** Don't create a new context inside `Fetch`. Use the one
   passed to you. The caller sets the timeout.
-- **Secrets never in config struct tags.** Use `yaml:"-"` and document the
-  corresponding `WISELABZ_` env var.
+- **Secrets:** Use `"password"` field type in the schema. The frontend renders a
+  password input and the value is stored alongside other config.
 - **Go version and dependencies:** Match the `go.mod` at the repository root.
   Avoid pulling in large dependency trees for simple HTTP calls.
 

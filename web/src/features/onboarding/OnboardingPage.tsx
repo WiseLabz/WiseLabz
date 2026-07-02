@@ -13,7 +13,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useLive } from '../../store/live';
-import { triggerMockSync } from '../../ws/triggerSync';
+import { postConnectorsConnectorIdSync } from '../../api/generated/connectors/connectors';
 import { ConnectorForm } from '../connectors/ConnectorForm';
 import { Button } from '../../components/ui/Button';
 import { CheckIcon, SyncIcon, ArrowRightIcon } from '../../components/icons';
@@ -145,20 +145,23 @@ function SyncStep({
   const { t } = useTranslation();
   const job = useLive((s) => s.jobs[connector.id] ?? s.jobs.global);
 
-  // Auto-trigger the first sync once when this step mounts.
+  // Trigger the first sync on mount — returns 202, progress streams over WS.
   useEffect(() => {
-    triggerMockSync(connector.id);
+    postConnectorsConnectorIdSync(connector.id).catch(() => {
+      // Sync initiation failed, but user can still skip — WS events handle progress.
+    });
   }, [connector.id]);
 
   const done = job?.phase === 'done';
+  const failed = job?.phase === 'error';
   const percent = job?.percent ?? 0;
 
   return (
     <section aria-labelledby="ob-sync-title" className="rounded-lg border border-line bg-surface p-6 shadow-(--shadow-pop)">
       <div className="flex items-center gap-2.5">
-        <SyncIcon size={18} className={done ? 'text-ok' : 'animate-spin text-signal motion-reduce:animate-none'} />
+        <SyncIcon size={18} className={done ? 'text-ok' : failed ? 'text-err' : 'animate-spin text-signal motion-reduce:animate-none'} />
         <h1 id="ob-sync-title" className="text-lg font-semibold tracking-tight text-ink">
-          {done ? t('onboarding.sync.complete') : t('onboarding.sync.title')}
+          {done ? t('onboarding.sync.complete') : failed ? t('onboarding.sync.failed') : t('onboarding.sync.title')}
         </h1>
       </div>
 
@@ -166,15 +169,17 @@ function SyncStep({
         <div className="h-1.5 w-full overflow-hidden rounded-full bg-canvas-sunken" role="progressbar" aria-valuenow={percent} aria-valuemin={0} aria-valuemax={100}>
           <div
             className="h-full rounded-full bg-signal transition-[width] duration-300"
-            style={{ width: `${done ? 100 : percent}%`, backgroundColor: done ? 'var(--color-ok)' : undefined }}
+            style={{ width: `${done ? 100 : percent}%`, backgroundColor: done ? 'var(--color-ok)' : failed ? 'var(--color-err)' : undefined }}
           />
         </div>
         <p className="mt-2 text-sm text-ink-muted" aria-live="polite">
           {done
             ? t('onboarding.sync.completeDetail')
-            : job
-              ? t('onboarding.sync.running', { name: connector.name, phase: job.phase })
-              : t('onboarding.sync.waiting')}
+            : failed
+              ? t('onboarding.sync.errorDetail', { error: job?.message ?? '' })
+              : job
+                ? t('onboarding.sync.running', { name: connector.name, phase: job.phase })
+                : t('onboarding.sync.waiting')}
         </p>
       </div>
 

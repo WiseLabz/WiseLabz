@@ -439,6 +439,23 @@ paths:
               schema: { $ref: '#/components/schemas/SyncJobRef' }
 
   # ───────────────────────── docs ─────────────────────────
+  /docs:
+    get:
+      tags: [docs]
+      summary: Flat searchable list of all docs (any authenticated user)
+      parameters:
+        - name: search
+          in: query
+          required: false
+          schema: { type: string }
+        - { $ref: '#/components/parameters/Page' }
+        - { $ref: '#/components/parameters/PageSize' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DocPage' }
   /docs/tree:
     get:
       tags: [docs]
@@ -1301,6 +1318,16 @@ components:
       required: [requestId]
       properties:
         requestId: { type: string }
+    DocPage:
+      type: object
+      required: [items, total, page, pageSize]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Doc' }
+        total: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
 
     # ── templates ──
     Template:

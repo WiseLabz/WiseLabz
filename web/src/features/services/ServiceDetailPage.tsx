@@ -17,11 +17,11 @@ import {
   getGetConnectorsQueryKey,
 } from '../../api/generated/connectors/connectors';
 import { useGetChanges } from '../../api/generated/changes/changes';
+import { useGetDocsServiceConnectorId } from '../../api/generated/docs/docs';
 import { useLive } from '../../store/live';
 import { useCanMutate } from '../../hooks/useRole';
 import { runSync } from '../../lib/runSync';
 import { relativeTime } from '../../lib/time';
-import { docTree } from '../../data/fixtures';
 import { StatusPill, SeverityTag } from '../../components/ui/StatusDot';
 import { Button } from '../../components/ui/Button';
 import { Panel } from '../../components/ui/Panel';
@@ -75,7 +75,6 @@ export function ServiceDetailPage() {
 
   const c = connector.data;
   const status = (overrides[c.id] ?? c.status) as ServiceStatus;
-  const linkedDoc = docTree.children?.find((d) => d.serviceId === c.id);
 
   return (
     <div className="mx-auto max-w-275 px-6 py-6">
@@ -133,7 +132,7 @@ export function ServiceDetailPage() {
           <ServiceChangesPanel id={c.id} />
         </div>
         <div className="space-y-4">
-          <LinkedDocPanel docId={linkedDoc?.docId} title={linkedDoc?.title} />
+          <LinkedDocPanel connectorId={c.id} />
           <ActivityPanel activity={activity} />
         </div>
       </div>
@@ -247,23 +246,24 @@ function ServiceChangesPanel({ id }: { id: string }) {
   );
 }
 
-function LinkedDocPanel({ docId, title }: { docId?: string; title?: string }) {
+function LinkedDocPanel({ connectorId }: { connectorId: string }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const doc = useGetDocsServiceConnectorId(connectorId);
   return (
     <Panel className="p-5">
       <h2 className="mb-3 text-sm font-semibold text-ink">{t('services.detail.linkedDoc')}</h2>
-      {docId ? (
+      {doc.isError || !doc.data ? (
+        <p className="text-sm text-ink-muted">{t('services.detail.noDoc')}</p>
+      ) : (
         <button
-          onClick={() => navigate(`/docs/${docId}`)}
+          onClick={() => navigate(`/docs/${doc.data.docId}`)}
           className="flex w-full items-center gap-2.5 rounded-md border border-line-soft p-3 text-left transition-colors hover:border-line-strong"
         >
           <FileTextIcon size={16} className="shrink-0 text-signal" />
-          <span className="flex-1 text-sm text-ink">{title}</span>
+          <span className="flex-1 text-sm text-ink">{doc.data.title}</span>
           <ArrowRightIcon size={14} className="text-ink-faint" />
         </button>
-      ) : (
-        <p className="text-sm text-ink-muted">{t('services.detail.noDoc')}</p>
       )}
     </Panel>
   );

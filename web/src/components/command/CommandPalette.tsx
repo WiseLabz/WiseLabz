@@ -15,13 +15,15 @@ import { AnimatePresence, motion } from 'motion/react';
 import { useUi } from '../../store/ui';
 import { useCanMutate } from '../../hooks/useRole';
 import { triggerMockSync } from '../../ws/triggerSync';
-import { connectors, docTree } from '../../data/fixtures';
 import { useTheme } from '../../store/theme';
 import { PRESETS, type PaletteName } from '../../theme';
 import {
+  useGetConnectors,
   putConnectorsConnectorIdEnabled,
   getGetConnectorsQueryKey,
 } from '../../api/generated/connectors/connectors';
+import { useGetDocsTree } from '../../api/generated/docs/docs';
+import type { Connector, DocNode } from '../../api/model';
 import { categoryIcon } from '../categoryIcon';
 import {
   GaugeIcon,
@@ -44,7 +46,7 @@ function cycleTheme() {
   useTheme.getState().setPreset(next);
 }
 
-function buildCommands(ctx: CommandCtx): Command[] {
+function buildCommands(ctx: CommandCtx, connectors: Connector[], docNodes: DocNode[]): Command[] {
   const { t, canMutate } = ctx;
 
   const nav: Command[] = [
@@ -113,7 +115,7 @@ function buildCommands(ctx: CommandCtx): Command[] {
     return items;
   });
 
-  const docs: Command[] = (docTree.children ?? []).map((d) => ({
+  const docs: Command[] = docNodes.map((d) => ({
     id: `d-${d.docId}`,
     label: d.title,
     group: 'docs',
@@ -148,11 +150,16 @@ function PaletteBody() {
   const queryClient = useQueryClient();
   const canMutate = useCanMutate();
   const { t } = useTranslation();
+  const connectorsQuery = useGetConnectors();
+  const docsTreeQuery = useGetDocsTree();
   const ctx = useMemo<CommandCtx>(
     () => ({ navigate, t, canMutate, queryClient }),
     [navigate, t, canMutate, queryClient],
   );
-  const commands = useMemo(() => buildCommands(ctx), [ctx]);
+  const commands = useMemo(
+    () => buildCommands(ctx, connectorsQuery.data ?? [], docsTreeQuery.data?.children ?? []),
+    [ctx, connectorsQuery.data, docsTreeQuery.data],
+  );
   const [query, setQuery] = useState('');
   const [active, setActive] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);

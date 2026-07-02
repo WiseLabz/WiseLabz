@@ -11,16 +11,18 @@ import (
 
 	"github.com/WiseLabz/wiselabz/internal/connector"
 	"github.com/WiseLabz/wiselabz/internal/store"
+	"github.com/WiseLabz/wiselabz/internal/ws"
 )
 
 // Engine runs sync jobs against connectors.
 type Engine struct {
 	store *store.Store
+	hub   *ws.Hub
 }
 
 // NewEngine creates a new sync engine.
-func NewEngine(s *store.Store) *Engine {
-	return &Engine{store: s}
+func NewEngine(s *store.Store, h *ws.Hub) *Engine {
+	return &Engine{store: s, hub: h}
 }
 
 // RunResult holds the outcome of a sync run.
@@ -36,14 +38,37 @@ type RunResult struct {
 
 // RunSync runs a sync for a single connector.
 // Flow: Fetch -> Save Snapshot -> Diff -> Create Changes -> Create Alerts
-func (e *Engine) RunSync(ctx context.Context, connectorID string) (*RunResult, error) {
+func (e *Engine) RunSync(ctx context.Context, connectorID string, jobID string) (*RunResult, error) {
 	start := time.Now()
 	result := &RunResult{ConnectorID: connectorID}
+
+	broadcast := func(phase string, percent int) {
+		if e.hub != nil {
+			e.hub.Broadcast(ws.EventSyncProgress, map[string]any{
+				"serviceId": connectorID,
+				"jobId":     jobID,
+				"phase":     phase,
+				"percent":   percent,
+			})
+		}
+	}
+
+	broadcast("queued", 0)
 
 	// Get connector record
 	rec, err := e.store.GetConnector(ctx, connectorID)
 	if err != nil {
-		return nil, fmt.Errorf("get connector: %w", err)
+		slog.Error("sync get connector failed", "connector", connectorID, "error", err)
+		if e.hub != nil {
+			e.hub.Broadcast(ws.EventSyncProgress, map[string]any{
+				"serviceId": connectorID,
+				"jobId":     jobID,
+				"phase":     "error",
+				"percent":   0,
+				"message":   err.Error(),
+			})
+		}
+		return markError(result, start, fmt.Errorf("get connector: %w", err))
 	}
 
 	if !rec.Enabled {
@@ -52,15 +77,46 @@ func (e *Engine) RunSync(ctx context.Context, connectorID string) (*RunResult, e
 		return result, nil
 	}
 
-	// Parse config
+	// Parse config and inject top-level fields stored in separate columns
+	// so connector factories see url + verify_tls alongside their custom fields.
 	cfg, err := store.ParseConnectorConfig(rec.ConfigData)
 	if err != nil {
-		return nil, fmt.Errorf("parse config: %w", err)
+		slog.Error("sync parse config failed", "connector", connectorID, "error", err)
+		if e.hub != nil {
+			e.hub.Broadcast(ws.EventSyncProgress, map[string]any{
+				"serviceId": connectorID,
+				"jobId":     jobID,
+				"phase":     "error",
+				"percent":   0,
+				"message":   err.Error(),
+			})
+		}
+		return markError(result, start, fmt.Errorf("parse config: %w", err))
 	}
+	cfg["url"] = rec.URL
+	cfg["verify_tls"] = rec.VerifyTLS
 
 	// Get connector implementation
 	conn, err := connector.Get(rec.Type, cfg)
 	if err != nil {
+		slog.Error("sync get connector impl failed", "connector", connectorID, "error", err)
+		if e.hub != nil {
+			e.hub.Broadcast(ws.EventSyncProgress, map[string]any{
+				"serviceId": connectorID,
+				"jobId":     jobID,
+				"phase":     "error",
+				"percent":   0,
+				"message":   err.Error(),
+			})
+			e.hub.Broadcast(ws.EventSyncComplete, map[string]any{
+				"serviceId":       connectorID,
+				"jobId":           jobID,
+				"changesDetected": 0,
+				"alertsRaised":    0,
+				"durationMs":      time.Since(start).Milliseconds(),
+				"error":           err.Error(),
+			})
+		}
 		return markError(result, start, fmt.Errorf("get connector impl: %w", err))
 	}
 
@@ -70,6 +126,8 @@ func (e *Engine) RunSync(ctx context.Context, connectorID string) (*RunResult, e
 		"status_message": "Syncing...",
 	})
 
+	broadcast("fetching", 28)
+
 	// Fetch data
 	sn, err := conn.Fetch(ctx, cfg)
 	if err != nil {
@@ -77,8 +135,28 @@ func (e *Engine) RunSync(ctx context.Context, connectorID string) (*RunResult, e
 			"status":         "degraded",
 			"status_message": fmt.Sprintf("Fetch failed: %v", err),
 		})
+		slog.Error("sync fetch failed", "connector", connectorID, "error", err)
+		if e.hub != nil {
+			e.hub.Broadcast(ws.EventSyncProgress, map[string]any{
+				"serviceId": connectorID,
+				"jobId":     jobID,
+				"phase":     "error",
+				"percent":   0,
+				"message":   err.Error(),
+			})
+			e.hub.Broadcast(ws.EventSyncComplete, map[string]any{
+				"serviceId":       connectorID,
+				"jobId":           jobID,
+				"changesDetected": 0,
+				"alertsRaised":    0,
+				"durationMs":      time.Since(start).Milliseconds(),
+				"error":           err.Error(),
+			})
+		}
 		return markError(result, start, fmt.Errorf("fetch: %w", err))
 	}
+
+	broadcast("diffing", 60)
 
 	// Get previous snapshot for diff
 	prevSn, prevErr := e.store.GetLatestSnapshot(ctx, connectorID)
@@ -91,9 +169,29 @@ func (e *Engine) RunSync(ctx context.Context, connectorID string) (*RunResult, e
 		FetchedAt:   sn.FetchedAt.Format(time.RFC3339),
 	}
 	if err := e.store.CreateSnapshot(ctx, snRec); err != nil {
+		slog.Error("sync save snapshot failed", "connector", connectorID, "error", err)
+		if e.hub != nil {
+			e.hub.Broadcast(ws.EventSyncProgress, map[string]any{
+				"serviceId": connectorID,
+				"jobId":     jobID,
+				"phase":     "error",
+				"percent":   0,
+				"message":   err.Error(),
+			})
+			e.hub.Broadcast(ws.EventSyncComplete, map[string]any{
+				"serviceId":       connectorID,
+				"jobId":           jobID,
+				"changesDetected": 0,
+				"alertsRaised":    0,
+				"durationMs":      time.Since(start).Milliseconds(),
+				"error":           err.Error(),
+			})
+		}
 		return markError(result, start, fmt.Errorf("save snapshot: %w", err))
 	}
 	result.SnapshotID = snRec.ID
+
+	broadcast("generating", 85)
 
 	// Diff against previous snapshot
 	if prevErr == nil {
@@ -116,6 +214,17 @@ func (e *Engine) RunSync(ctx context.Context, connectorID string) (*RunResult, e
 				}
 				result.ChangesCount++
 
+				if e.hub != nil {
+					e.hub.Broadcast(ws.EventChangeDetected, map[string]any{
+						"changeId":      change.ID,
+						"serviceId":     connectorID,
+						"changeType":    d.Type,
+						"severity":      d.Severity,
+						"summary":       d.Summary,
+						"willTriggerAi": false,
+					})
+				}
+
 				// Create alert for non-info changes
 				if d.Severity != "info" {
 					alert := &store.AlertRecord{
@@ -130,6 +239,15 @@ func (e *Engine) RunSync(ctx context.Context, connectorID string) (*RunResult, e
 						continue
 					}
 					result.AlertsCount++
+
+					if e.hub != nil {
+						e.hub.Broadcast(ws.EventAlertCreated, map[string]any{
+							"alertId":   alert.ID,
+							"serviceId": connectorID,
+							"severity":  d.Severity,
+							"title":     d.Summary,
+						})
+					}
 				}
 			}
 		}
@@ -145,11 +263,22 @@ func (e *Engine) RunSync(ctx context.Context, connectorID string) (*RunResult, e
 
 	result.Status = "success"
 	result.Duration = time.Since(start).String()
+
+	if e.hub != nil {
+		e.hub.Broadcast(ws.EventSyncComplete, map[string]any{
+			"serviceId":       connectorID,
+			"jobId":           jobID,
+			"changesDetected": result.ChangesCount,
+			"alertsRaised":    result.AlertsCount,
+			"durationMs":      time.Since(start).Milliseconds(),
+		})
+	}
+
 	return result, nil
 }
 
 // RunSyncAll runs sync for all enabled connectors.
-func (e *Engine) RunSyncAll(ctx context.Context) ([]RunResult, error) {
+func (e *Engine) RunSyncAll(ctx context.Context, jobID string) ([]RunResult, error) {
 	connectors, err := e.store.ListAllConnectors(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("list connectors: %w", err)
@@ -160,7 +289,7 @@ func (e *Engine) RunSyncAll(ctx context.Context) ([]RunResult, error) {
 		if !c.Enabled {
 			continue
 		}
-		result, err := e.RunSync(ctx, c.ID)
+		result, err := e.RunSync(ctx, c.ID, jobID)
 		if err != nil {
 			slog.Error("sync failed", "connector", c.ID, "error", err)
 			continue
