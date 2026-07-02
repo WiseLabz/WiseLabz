@@ -124,7 +124,6 @@ func NewRouter(cfg Config) chi.Router {
 		})
 
 		r.Route("/api/docs", func(r chi.Router) {
-			r.Get("/", docH.List)
 			r.Get("/tree", docH.Tree)
 			r.Get("/{id}", docH.Get)
 			r.Get("/{id}/versions", docH.Versions)

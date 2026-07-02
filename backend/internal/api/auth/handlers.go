@@ -465,9 +465,8 @@ func (h *Handler) ListSessions(w http.ResponseWriter, r *http.Request) {
 		httputil.Errorf(w, err)
 		return
 	}
-	httputil.JSON(w, http.StatusOK, map[string]any{
-		"sessions": sanitizeSessions(sessions),
-	})
+	// Spec: GET /me/sessions returns a bare Session[] (see openapi.yaml).
+	httputil.JSON(w, http.StatusOK, sanitizeSessions(sessions))
 }
 
 // DeleteSession handles DELETE /api/me/sessions/{id}.
@@ -501,8 +500,8 @@ func (h *Handler) DeleteSession(w http.ResponseWriter, r *http.Request) {
 
 // ListUsers handles GET /api/users.
 func (h *Handler) ListUsers(w http.ResponseWriter, r *http.Request) {
-	page, pageSize, offset := httputil.Paginate(r)
-	users, total, err := h.Store.ListUsers(r.Context(), offset, pageSize)
+	_, pageSize, offset := httputil.Paginate(r)
+	users, _, err := h.Store.ListUsers(r.Context(), offset, pageSize)
 	if err != nil {
 		httputil.Errorf(w, err)
 		return
@@ -513,7 +512,8 @@ func (h *Handler) ListUsers(w http.ResponseWriter, r *http.Request) {
 		sanitized[i] = sanitizeUser(&u)
 	}
 
-	httputil.WritePaginated(w, sanitized, page, pageSize, total)
+	// Spec: GET /users returns a bare User[] (see openapi.yaml).
+	httputil.JSON(w, http.StatusOK, sanitized)
 }
 
 // CreateUser handles POST /api/users.

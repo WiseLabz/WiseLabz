@@ -24,13 +24,18 @@ func NewHandler(s *store.Store, eng *doc.Engine) *Handler {
 
 // List handles GET /api/templates.
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
-	page, pageSize, offset := httputil.Paginate(r)
-	templates, total, err := h.Store.ListTemplates(r.Context(), offset, pageSize)
+	_, pageSize, offset := httputil.Paginate(r)
+	templates, _, err := h.Store.ListTemplates(r.Context(), offset, pageSize)
 	if err != nil {
 		httputil.Errorf(w, err)
 		return
 	}
-	httputil.WritePaginated(w, templates, page, pageSize, total)
+	if templates == nil {
+		templates = []store.TemplateRecord{}
+	}
+
+	// Spec: GET /templates returns a bare Template[] (see openapi.yaml).
+	httputil.JSON(w, http.StatusOK, templates)
 }
 
 // Get handles GET /api/templates/{id}.

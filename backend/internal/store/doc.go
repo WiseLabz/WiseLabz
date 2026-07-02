@@ -138,39 +138,6 @@ func (s *Store) DeleteDoc(ctx context.Context, id string) error {
 	return nil
 }
 
-// ListDocs returns a paginated list of documentation records.
-func (s *Store) ListDocs(ctx context.Context, offset, limit int) ([]DocRecord, int, error) {
-	var total int
-	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM docs`).Scan(&total); err != nil {
-		return nil, 0, fmt.Errorf("count docs: %w", err)
-	}
-
-	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, title, kind, service_id, content, current_version, created_at, updated_at
-		FROM docs ORDER BY updated_at DESC LIMIT ? OFFSET ?
-	`, limit, offset)
-	if err != nil {
-		return nil, 0, fmt.Errorf("list docs: %w", err)
-	}
-	defer rows.Close() //nolint:errcheck
-
-	var docs []DocRecord
-	for rows.Next() {
-		var d DocRecord
-		var serviceID sql.NullString
-		if err := rows.Scan(&d.ID, &d.Title, &d.Kind, &serviceID, &d.Content,
-			&d.CurrentVersion, &d.CreatedAt, &d.UpdatedAt); err != nil {
-			return nil, 0, fmt.Errorf("scan: %w", err)
-		}
-		d.ServiceID = serviceID.String
-		docs = append(docs, d)
-	}
-	if docs == nil {
-		docs = []DocRecord{}
-	}
-	return docs, total, nil
-}
-
 // ListDocsByService returns all documentation records for a given service.
 func (s *Store) ListDocsByService(ctx context.Context, serviceID string) ([]DocRecord, error) {
 	rows, err := s.db.QueryContext(ctx, `

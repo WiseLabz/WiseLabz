@@ -69,17 +69,6 @@ func (h *Handler) Tree(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, root)
 }
 
-// List handles GET /api/docs.
-func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
-	page, pageSize, offset := httputil.Paginate(r)
-	docs, total, err := h.Store.ListDocs(r.Context(), offset, pageSize)
-	if err != nil {
-		httputil.Errorf(w, err)
-		return
-	}
-	httputil.WritePaginated(w, docs, page, pageSize, total)
-}
-
 // Get handles GET /api/docs/{id}.
 func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")

@@ -26,24 +26,27 @@ func NewHandler(s *store.Store) *Handler {
 
 // List handles GET /api/connectors.
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
-	page, pageSize, offset := httputil.Paginate(r)
+	_, pageSize, offset := httputil.Paginate(r)
 	category := r.URL.Query().Get("category")
 
 	var connectors []store.ConnectorRecord
-	var total int
 	var err error
 
 	if category != "" {
-		connectors, total, err = h.Store.ListConnectorsByCategory(r.Context(), category, offset, pageSize)
+		connectors, _, err = h.Store.ListConnectorsByCategory(r.Context(), category, offset, pageSize)
 	} else {
-		connectors, total, err = h.Store.ListConnectors(r.Context(), offset, pageSize)
+		connectors, _, err = h.Store.ListConnectors(r.Context(), offset, pageSize)
 	}
 	if err != nil {
 		httputil.Errorf(w, err)
 		return
 	}
+	if connectors == nil {
+		connectors = []store.ConnectorRecord{}
+	}
 
-	httputil.WritePaginated(w, connectors, page, pageSize, total)
+	// Spec: GET /connectors returns a bare Connector[] (see openapi.yaml).
+	httputil.JSON(w, http.StatusOK, connectors)
 }
 
 // Create handles POST /api/connectors.

@@ -47,34 +47,22 @@ func Errorf(w http.ResponseWriter, err error) {
 	Error(w, http.StatusInternalServerError, "internal_error", "An internal error occurred")
 }
 
-// PaginatedResponse wraps a paginated list response.
+// PaginatedResponse wraps a paginated list response. Matches the AlertPage /
+// ChangePage OpenAPI schemas: { items, total, page, pageSize }.
 type PaginatedResponse struct {
-	Data       any        `json:"data"`
-	Pagination Pagination `json:"pagination"`
-}
-
-// Pagination holds pagination metadata.
-type Pagination struct {
-	Page       int `json:"page"`
-	PageSize   int `json:"pageSize"`
-	Total      int `json:"total"`
-	TotalPages int `json:"totalPages"`
+	Items    any `json:"items"`
+	Total    int `json:"total"`
+	Page     int `json:"page"`
+	PageSize int `json:"pageSize"`
 }
 
 // WritePaginated writes a paginated response with pagination metadata.
 func WritePaginated(w http.ResponseWriter, data any, page, pageSize, total int) {
-	totalPages := (total + pageSize - 1) / pageSize
-	if totalPages < 1 {
-		totalPages = 1
-	}
 	JSON(w, http.StatusOK, PaginatedResponse{
-		Data: data,
-		Pagination: Pagination{
-			Page:       page,
-			PageSize:   pageSize,
-			Total:      total,
-			TotalPages: totalPages,
-		},
+		Items:    data,
+		Total:    total,
+		Page:     page,
+		PageSize: pageSize,
 	})
 }
 
