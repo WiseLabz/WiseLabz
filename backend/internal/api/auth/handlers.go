@@ -90,7 +90,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Set refresh token as HTTP-only cookie
-	setRefreshCookie(w, pair.RefreshToken, h.Config.Auth.RefreshTokenTTLDuration(), h.Config.Server.Embed)
+	setRefreshCookie(w, r, pair.RefreshToken, h.Config.Auth.RefreshTokenTTLDuration())
 
 	httputil.JSON(w, http.StatusOK, map[string]any{
 		"accessToken": pair.AccessToken,
@@ -190,7 +190,7 @@ func (h *Handler) OIDCCallback(w http.ResponseWriter, r *http.Request) {
 		slog.Error("failed to create session", "error", err)
 	}
 
-	setRefreshCookie(w, pair.RefreshToken, h.Config.Auth.RefreshTokenTTLDuration(), h.Config.Server.Embed)
+	setRefreshCookie(w, r, pair.RefreshToken, h.Config.Auth.RefreshTokenTTLDuration())
 
 	httputil.JSON(w, http.StatusOK, map[string]any{
 		"accessToken": pair.AccessToken,
@@ -258,7 +258,7 @@ func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	setRefreshCookie(w, pair.RefreshToken, h.Config.Auth.RefreshTokenTTLDuration(), h.Config.Server.Embed)
+	setRefreshCookie(w, r, pair.RefreshToken, h.Config.Auth.RefreshTokenTTLDuration())
 
 	httputil.JSON(w, http.StatusOK, map[string]any{
 		"accessToken": pair.AccessToken,
@@ -337,30 +337,42 @@ func (h *Handler) Elevate(w http.ResponseWriter, r *http.Request) {
 
 // Providers handles GET /api/auth/providers.
 // Returns OIDC providers merged from config file (secrets hidden) and DB enable flags.
-func (h *Handler) Providers(w http.ResponseWriter, _ *http.Request) {
+func (h *Handler) Providers(w http.ResponseWriter, r *http.Request) {
 	type providerInfo struct {
-		ID               string `json:"id"`
-		DisplayName      string `json:"displayName"`
-		Enabled          bool   `json:"enabled"`
-		SecretConfigured bool   `json:"secretConfigured"`
+		ID          string `json:"id"`
+		DisplayName string `json:"displayName"`
+		AuthURL     string `json:"authUrl"`
 	}
 
-	var providers []providerInfo
-	for _, p := range h.Config.Auth.OIDC {
-		providers = append(providers, providerInfo{
-			ID:               p.ID,
-			DisplayName:      p.DisplayName,
-			Enabled:          true, // default enabled; DB flags override later
-			SecretConfigured: p.ClientSecret != "",
+	scheme := "http"
+	if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
+		scheme = "https"
+	}
+	redirectURL := fmt.Sprintf("%s://%s/auth/callback", scheme, r.Host)
+
+	var oidc []providerInfo
+	for i := range h.Config.Auth.OIDC {
+		p := &h.Config.Auth.OIDC[i]
+		prov := h.getOrInitOIDCProvider(r.Context(), p)
+		if prov == nil {
+			slog.Warn("skipping OIDC provider in list due to initialization failure", "id", p.ID)
+			continue
+		}
+
+		authURL := prov.AuthURL("state-todo", redirectURL)
+		oidc = append(oidc, providerInfo{
+			ID:          p.ID,
+			DisplayName: p.DisplayName,
+			AuthURL:     authURL,
 		})
 	}
 
-	if providers == nil {
-		providers = []providerInfo{}
+	if oidc == nil {
+		oidc = []providerInfo{}
 	}
 
 	httputil.JSON(w, http.StatusOK, map[string]any{
-		"providers":    providers,
+		"oidc":         oidc,
 		"localEnabled": true,
 	})
 }
@@ -757,7 +769,8 @@ func sanitizeSessions(sessions []store.Session) []map[string]any {
 	return out
 }
 
-func setRefreshCookie(w http.ResponseWriter, token string, maxAge time.Duration, secure bool) {
+func setRefreshCookie(w http.ResponseWriter, r *http.Request, token string, maxAge time.Duration) {
+	secure := r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https"
 	http.SetCookie(w, &http.Cookie{
 		Name:     "refresh_token",
 		Value:    token,
