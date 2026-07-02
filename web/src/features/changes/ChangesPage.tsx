@@ -6,6 +6,7 @@ import { motion } from 'motion/react';
 import { useGetChanges } from '../../api/generated/changes/changes';
 import { SeverityTag } from '../../components/ui/StatusDot';
 import { Panel } from '../../components/ui/Panel';
+import { Pagination } from '../../components/ui/Pagination';
 import { SkeletonRows, ErrorState, EmptyState } from '../../components/ui/states';
 import { relativeTime } from '../../lib/time';
 import { ArrowRightIcon } from '../../components/icons';
@@ -21,10 +22,13 @@ const FILTERS: { key: string; value: Severity | 'all' }[] = [
 export function ChangesPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const { data, isLoading, isError, refetch } = useGetChanges(undefined);
+  const [page, setPage] = useState(1);
+  const pageSize = 20;
+  const { data, isLoading, isError, refetch } = useGetChanges({ page, pageSize });
   const [filter, setFilter] = useState<Severity | 'all'>('all');
 
   const items = (data?.items ?? []).filter((c) => filter === 'all' || c.severity === filter);
+  const pageCount = data ? Math.max(1, Math.ceil(data.total / data.pageSize)) : 1;
 
   return (
     <div className="mx-auto max-w-225 px-6 py-6">
@@ -97,6 +101,9 @@ export function ChangesPage() {
           ))
         )}
       </Panel>
+      {data && pageCount > 1 && (
+        <Pagination page={page} pageCount={pageCount} onPage={setPage} className="mt-4 justify-center" />
+      )}
     </div>
   );
 }

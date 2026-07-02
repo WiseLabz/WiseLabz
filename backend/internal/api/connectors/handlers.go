@@ -2,48 +2,57 @@
 package connectors
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
+	"time"
+
+	"github.com/google/uuid"
 
 	"github.com/WiseLabz/wiselabz/internal/auth"
 	"github.com/WiseLabz/wiselabz/internal/connector"
 	"github.com/WiseLabz/wiselabz/internal/httputil"
 	"github.com/WiseLabz/wiselabz/internal/store"
+	"github.com/WiseLabz/wiselabz/internal/sync"
 )
 
 // Handler holds dependencies for connector endpoints.
 type Handler struct {
-	Store *store.Store
+	Store      *store.Store
+	SyncEngine *sync.Engine
 }
 
 // NewHandler creates a new connector handler.
-func NewHandler(s *store.Store) *Handler {
-	return &Handler{Store: s}
+func NewHandler(s *store.Store, e *sync.Engine) *Handler {
+	return &Handler{Store: s, SyncEngine: e}
 }
 
 // List handles GET /api/connectors.
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
-	page, pageSize, offset := httputil.Paginate(r)
+	_, pageSize, offset := httputil.Paginate(r)
 	category := r.URL.Query().Get("category")
 
 	var connectors []store.ConnectorRecord
-	var total int
 	var err error
 
 	if category != "" {
-		connectors, total, err = h.Store.ListConnectorsByCategory(r.Context(), category, offset, pageSize)
+		connectors, _, err = h.Store.ListConnectorsByCategory(r.Context(), category, offset, pageSize)
 	} else {
-		connectors, total, err = h.Store.ListConnectors(r.Context(), offset, pageSize)
+		connectors, _, err = h.Store.ListConnectors(r.Context(), offset, pageSize)
 	}
 	if err != nil {
 		httputil.Errorf(w, err)
 		return
 	}
+	if connectors == nil {
+		connectors = []store.ConnectorRecord{}
+	}
 
-	httputil.WritePaginated(w, connectors, page, pageSize, total)
+	// Spec: GET /connectors returns a bare Connector[] (see openapi.yaml).
+	httputil.JSON(w, http.StatusOK, connectors)
 }
 
 // Create handles POST /api/connectors.
@@ -210,35 +219,110 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	httputil.NoContent(w)
 }
 
-// Test handles POST /api/connectors/test.
-// Validates a connector's configuration without saving it.
+// Test handles POST /api/connectors/{id}/test.
+// Validates the connector's saved configuration by attempting a connection.
 func (h *Handler) Test(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Type   string         `json:"type"`
-		Config map[string]any `json:"config"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		httputil.Error(w, http.StatusBadRequest, "invalid_request", "Invalid JSON body")
+	id := r.PathValue("id")
+
+	rec, err := h.Store.GetConnector(r.Context(), id)
+	if errors.Is(err, store.ErrNotFound) {
+		httputil.Error(w, http.StatusNotFound, "not_found", "Connector not found")
 		return
 	}
-
-	c, err := connector.Get(req.Type, req.Config)
 	if err != nil {
-		httputil.Error(w, http.StatusBadRequest, "invalid_request", fmt.Sprintf("Failed to create connector: %v", err))
+		httputil.Errorf(w, err)
 		return
 	}
 
-	if err := c.Validate(r.Context(), req.Config); err != nil {
+	cfg, err := store.ParseConnectorConfig(rec.ConfigData)
+	if err != nil {
+		httputil.Errorf(w, err)
+		return
+	}
+	cfg["url"] = rec.URL
+	cfg["verify_tls"] = rec.VerifyTLS
+
+	c, err := connector.Get(rec.Type, cfg)
+	if err != nil {
 		httputil.JSON(w, http.StatusOK, map[string]any{
-			"success": false,
-			"message": err.Error(),
+			"ok":      false,
+			"message": fmt.Sprintf("Failed to create connector: %v", err),
+		})
+		return
+	}
+
+	start := time.Now()
+	validateErr := c.Validate(r.Context(), cfg)
+	latencyMs := int(time.Since(start).Milliseconds())
+
+	if validateErr != nil {
+		httputil.JSON(w, http.StatusOK, map[string]any{
+			"ok":        false,
+			"message":   validateErr.Error(),
+			"latencyMs": latencyMs,
 		})
 		return
 	}
 
 	httputil.JSON(w, http.StatusOK, map[string]any{
-		"success": true,
-		"message": "Connection successful",
+		"ok":        true,
+		"message":   "Connection successful",
+		"latencyMs": latencyMs,
+	})
+}
+
+// Data handles GET /api/connectors/{id}/data.
+// Returns the latest fetched service snapshot for the connector.
+func (h *Handler) Data(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+
+	if _, err := h.Store.GetConnector(r.Context(), id); err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			httputil.Error(w, http.StatusNotFound, "not_found", "Connector not found")
+			return
+		}
+		httputil.Errorf(w, err)
+		return
+	}
+
+	sn, err := h.Store.GetLatestSnapshot(r.Context(), id)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			// No snapshot yet — return empty data, not an error
+			httputil.JSON(w, http.StatusOK, map[string]any{
+				"serviceName": "",
+				"type":        "",
+				"sections":    []map[string]any{},
+				"metadata":    map[string]string{},
+				"fetchedAt":   "",
+			})
+			return
+		}
+		httputil.Errorf(w, err)
+		return
+	}
+
+	var snap connector.ServiceSnapshot
+	if err := json.Unmarshal([]byte(sn.Data), &snap); err != nil {
+		httputil.Errorf(w, err)
+		return
+	}
+
+	sections := make([]map[string]any, len(snap.Sections))
+	for i, sec := range snap.Sections {
+		sections[i] = map[string]any{
+			"title":   sec.Title,
+			"content": sec.Content,
+			"order":   i,
+		}
+	}
+
+	httputil.JSON(w, http.StatusOK, map[string]any{
+		"serviceName": snap.ServiceName,
+		"type":        snap.Type,
+		"sections":    sections,
+		"metadata":    snap.Metadata,
+		"fetchedAt":   snap.FetchedAt.Format(time.RFC3339),
 	})
 }
 
@@ -258,34 +342,29 @@ func (h *Handler) RemovalImpact(w http.ResponseWriter, r *http.Request) {
 	}
 
 	snapshots, _ := h.Store.CountSnapshotsByConnector(r.Context(), id)
-	docs, _ := h.Store.CountDocsByConnector(r.Context(), id)
-	changes, _ := h.Store.CountChangesByConnector(r.Context(), id)
-	alerts, _ := h.Store.CountAlertsByConnector(r.Context(), id)
+	docSections, _ := h.Store.CountDocsByConnector(r.Context(), id)
+
+	docs, err := h.Store.ListDocsByService(r.Context(), id)
+	if err != nil {
+		httputil.Errorf(w, err)
+		return
+	}
+	items := make([]map[string]string, 0, len(docs))
+	for _, d := range docs {
+		items = append(items, map[string]string{"type": "doc", "name": d.Title})
+	}
 
 	httputil.JSON(w, http.StatusOK, map[string]any{
-		"snapshots": snapshots,
-		"docs":      docs,
-		"changes":   changes,
-		"alerts":    alerts,
-		"hasData":   snapshots+docs+changes+alerts > 0,
+		"trackedServices": 1,
+		"docSections":     docSections,
+		"snapshots":       snapshots,
+		"items":           items,
 	})
 }
 
 // Schema handles GET /api/connectors/schema.
-func (h *Handler) Schema(w http.ResponseWriter, r *http.Request) {
-	typ := r.URL.Query().Get("type")
-	if typ != "" {
-		s, err := connector.GetTypeSchema(typ)
-		if err != nil {
-			httputil.Error(w, http.StatusNotFound, "not_found", "Unknown connector type")
-			return
-		}
-		httputil.JSON(w, http.StatusOK, s)
-		return
-	}
-	httputil.JSON(w, http.StatusOK, map[string]any{
-		"schemas": connector.ListSchemas(),
-	})
+func (h *Handler) Schema(w http.ResponseWriter, _ *http.Request) {
+	httputil.JSON(w, http.StatusOK, connector.ListSchemas())
 }
 
 // ToggleEnabled handles PUT /api/connectors/{id}/enabled.
@@ -315,37 +394,47 @@ func (h *Handler) ToggleEnabled(w http.ResponseWriter, r *http.Request) {
 }
 
 // Sync handles POST /api/connectors/{id}/sync.
-// Triggers a sync for a single connector. Returns 202 with job info.
+// Triggers a sync for a single connector. Returns 202 with job info; the sync
+// itself runs asynchronously and its progress streams over /ws.
 func (h *Handler) Sync(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 
-	c, err := h.Store.GetConnector(r.Context(), id)
-	if errors.Is(err, store.ErrNotFound) {
-		httputil.Error(w, http.StatusNotFound, "not_found", "Connector not found")
-		return
-	}
-	if err != nil {
+	if _, err := h.Store.GetConnector(r.Context(), id); err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			httputil.Error(w, http.StatusNotFound, "not_found", "Connector not found")
+			return
+		}
 		httputil.Errorf(w, err)
 		return
 	}
 
-	// Sync will be implemented in Phase 6
-	slog.Info("sync triggered for connector", "id", id, "name", c.Name)
+	jobID := uuid.New().String()
+	go func() {
+		if _, err := h.SyncEngine.RunSync(context.Background(), id, jobID); err != nil {
+			slog.Error("sync failed", "connector", id, "job", jobID, "error", err)
+		}
+	}()
 
 	httputil.JSON(w, http.StatusAccepted, map[string]any{
-		"message":     "Sync queued",
-		"connectorId": id,
+		"jobId":     jobID,
+		"serviceId": id,
 	})
 }
 
 // SyncAll handles POST /api/sync.
-// Triggers a global sync of all enabled connectors.
+// Triggers a global sync of all enabled connectors. Returns 202 with job info;
+// the sync itself runs asynchronously.
 func (h *Handler) SyncAll(w http.ResponseWriter, _ *http.Request) {
-	// Sync will be implemented in Phase 6
-	slog.Info("global sync triggered")
+	jobID := uuid.New().String()
+	go func() {
+		if _, err := h.SyncEngine.RunSyncAll(context.Background(), jobID); err != nil {
+			slog.Error("global sync failed", "job", jobID, "error", err)
+		}
+	}()
 
 	httputil.JSON(w, http.StatusAccepted, map[string]any{
-		"message": "Global sync queued",
+		"jobId":     jobID,
+		"serviceId": nil,
 	})
 }
 

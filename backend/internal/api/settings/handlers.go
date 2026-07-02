@@ -2,11 +2,15 @@
 package settings
 
 import (
+	"context"
+	"database/sql"
 	"encoding/json"
 	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 
+	"github.com/WiseLabz/wiselabz/internal/ai"
 	"github.com/WiseLabz/wiselabz/internal/config"
 	"github.com/WiseLabz/wiselabz/internal/crypto"
 	"github.com/WiseLabz/wiselabz/internal/httputil"
@@ -17,15 +21,16 @@ import (
 type Handler struct {
 	Store  *store.Store
 	Config *config.Config
+	AI     *ai.Registry
 }
 
 // NewHandler creates a new settings handler.
-func NewHandler(s *store.Store, cfg *config.Config) *Handler {
-	return &Handler{Store: s, Config: cfg}
+func NewHandler(s *store.Store, cfg *config.Config, aiRegistry *ai.Registry) *Handler {
+	return &Handler{Store: s, Config: cfg, AI: aiRegistry}
 }
 
-// GetAuth handles GET /api/settings/auth.
-func (h *Handler) GetAuth(w http.ResponseWriter, r *http.Request) {
+// GetAuthConfig handles GET /api/auth/config.
+func (h *Handler) GetAuthConfig(w http.ResponseWriter, r *http.Request) {
 	var rec struct {
 		LocalEnabled         int
 		AccessTokenTTL       int
@@ -36,33 +41,33 @@ func (h *Handler) GetAuth(w http.ResponseWriter, r *http.Request) {
 		SELECT local_enabled, access_token_ttl, refresh_token_ttl, step_up_for_destructive
 		FROM auth_config WHERE id = 1
 	`).Scan(&rec.LocalEnabled, &rec.AccessTokenTTL, &rec.RefreshTokenTTL, &rec.StepUpForDestructive)
-	if err != nil {
-		// Return defaults from config
-		httputil.JSON(w, http.StatusOK, map[string]any{
-			"localEnabled":         true,
-			"accessTokenTTL":       h.Config.Auth.AccessTokenTTLDuration().Seconds(),
-			"refreshTokenTTL":      h.Config.Auth.RefreshTokenTTLDuration().Seconds(),
-			"stepUpForDestructive": h.Config.Auth.StepUpForDestructive,
-			"oidcProviders":        h.Config.Auth.OIDC,
-		})
-		return
+
+	localEnabled := true
+	accessTTL := int(h.Config.Auth.AccessTokenTTLDuration().Seconds())
+	refreshTTL := int(h.Config.Auth.RefreshTokenTTLDuration().Seconds())
+	stepUp := h.Config.Auth.StepUpForDestructive
+	if err == nil {
+		localEnabled = rec.LocalEnabled != 0
+		accessTTL = rec.AccessTokenTTL
+		refreshTTL = rec.RefreshTokenTTL
+		stepUp = rec.StepUpForDestructive != 0
 	}
 
 	httputil.JSON(w, http.StatusOK, map[string]any{
-		"localEnabled":         rec.LocalEnabled != 0,
-		"accessTokenTTL":       rec.AccessTokenTTL,
-		"refreshTokenTTL":      rec.RefreshTokenTTL,
-		"stepUpForDestructive": rec.StepUpForDestructive != 0,
-		"oidcProviders":        h.Config.Auth.OIDC,
+		"localEnabled":         localEnabled,
+		"accessTokenTtl":       accessTTL,
+		"refreshTokenTtl":      refreshTTL,
+		"stepUpForDestructive": stepUp,
+		"oidcProviders":        h.oidcProviders(r.Context()),
 	})
 }
 
-// UpdateAuth handles PUT /api/settings/auth.
-func (h *Handler) UpdateAuth(w http.ResponseWriter, r *http.Request) {
+// UpdateAuthConfig handles PUT /api/auth/config.
+func (h *Handler) UpdateAuthConfig(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		LocalEnabled         *bool `json:"localEnabled"`
-		AccessTokenTTL       *int  `json:"accessTokenTTL"`
-		RefreshTokenTTL      *int  `json:"refreshTokenTTL"`
+		AccessTokenTTL       *int  `json:"accessTokenTtl"`
+		RefreshTokenTTL      *int  `json:"refreshTokenTtl"`
 		StepUpForDestructive *bool `json:"stepUpForDestructive"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -103,60 +108,117 @@ func (h *Handler) UpdateAuth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.GetAuth(w, r)
+	h.GetAuthConfig(w, r)
 }
 
-// GetAI handles GET /api/settings/ai.
-func (h *Handler) GetAI(w http.ResponseWriter, r *http.Request) {
-	var rec struct {
-		Enabled         int
-		Provider        *string
-		Model           *string
-		APIKeyEncrypted string
-		BaseURL         *string
-		Mode            string
+// UpdateProviderEnabled handles PUT /api/auth/providers/{providerId}/enabled.
+func (h *Handler) UpdateProviderEnabled(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("providerId")
+
+	var found *config.OIDCProvider
+	for i := range h.Config.Auth.OIDC {
+		if h.Config.Auth.OIDC[i].ID == id {
+			found = &h.Config.Auth.OIDC[i]
+			break
+		}
 	}
-	err := h.Store.DB().QueryRowContext(r.Context(), `
-		SELECT enabled, provider, model, api_key_encrypted, base_url, mode
-		FROM ai_config WHERE id = 1
-	`).Scan(&rec.Enabled, &rec.Provider, &rec.Model, &rec.APIKeyEncrypted, &rec.BaseURL, &rec.Mode)
-	if err != nil {
-		httputil.JSON(w, http.StatusOK, map[string]any{
-			"enabled":   h.Config.AI.Enabled,
-			"provider":  h.Config.AI.Provider,
-			"model":     h.Config.AI.Model,
-			"hasApiKey": h.Config.AI.APIKey != "",
-			"baseUrl":   h.Config.AI.BaseURL,
-			"mode":      h.Config.AI.Mode,
-		})
+	if found == nil {
+		httputil.Error(w, http.StatusNotFound, "not_found", "Unknown OIDC provider")
 		return
 	}
 
-	prov := ""
-	if rec.Provider != nil {
-		prov = *rec.Provider
+	var req struct {
+		Enabled bool `json:"enabled"`
 	}
-	model := ""
-	if rec.Model != nil {
-		model = *rec.Model
-	}
-	baseURL := ""
-	if rec.BaseURL != nil {
-		baseURL = *rec.BaseURL
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		httputil.Error(w, http.StatusBadRequest, "invalid_request", "Invalid JSON body")
+		return
 	}
 
+	if err := h.Store.SetOIDCProviderEnabled(r.Context(), id, req.Enabled); err != nil {
+		httputil.Errorf(w, err)
+		return
+	}
+
+	httputil.JSON(w, http.StatusOK, oidcProviderJSON(found, req.Enabled))
+}
+
+func (h *Handler) oidcProviders(ctx context.Context) []map[string]any {
+	flags, _ := h.Store.GetOIDCProviderFlags(ctx)
+	out := make([]map[string]any, 0, len(h.Config.Auth.OIDC))
+	for i := range h.Config.Auth.OIDC {
+		p := &h.Config.Auth.OIDC[i]
+		enabled := true
+		if v, ok := flags[p.ID]; ok {
+			enabled = v
+		}
+		out = append(out, oidcProviderJSON(p, enabled))
+	}
+	return out
+}
+
+func oidcProviderJSON(p *config.OIDCProvider, enabled bool) map[string]any {
+	return map[string]any{
+		"id":               p.ID,
+		"displayName":      p.DisplayName,
+		"issuerUrl":        p.IssuerURL,
+		"clientId":         p.ClientID,
+		"secretConfigured": p.ClientSecret != "",
+		"enabled":          enabled,
+		"source":           "file",
+		"scopes":           p.Scopes,
+	}
+}
+
+// AIConfigValues is the resolved AI configuration (DB row, falling back to
+// static config), including the decrypted API key for provider construction.
+type AIConfigValues struct {
+	Enabled  bool
+	Provider string
+	Model    string
+	BaseURL  string
+	APIKey   string
+	Mode     string
+}
+
+// LoadAIConfig reads the current AI configuration, decrypting the stored API key.
+func (h *Handler) LoadAIConfig(ctx context.Context) AIConfigValues {
+	var rec struct {
+		Enabled  int
+		Provider sql.NullString
+		Model    sql.NullString
+		BaseURL  sql.NullString
+		Mode     string
+	}
+	err := h.Store.DB().QueryRowContext(ctx, `
+		SELECT enabled, provider, model, base_url, mode FROM ai_config WHERE id = 1
+	`).Scan(&rec.Enabled, &rec.Provider, &rec.Model, &rec.BaseURL, &rec.Mode)
+	if err != nil {
+		return AIConfigValues{
+			Enabled: h.Config.AI.Enabled, Provider: h.Config.AI.Provider, Model: h.Config.AI.Model,
+			BaseURL: h.Config.AI.BaseURL, APIKey: h.Config.AI.APIKey, Mode: h.Config.AI.Mode,
+		}
+	}
+	return AIConfigValues{
+		Enabled: rec.Enabled != 0, Provider: rec.Provider.String, Model: rec.Model.String,
+		BaseURL: rec.BaseURL.String, APIKey: h.GetDecryptedAPIKey(), Mode: rec.Mode,
+	}
+}
+
+// GetAIConfig handles GET /api/ai/config.
+func (h *Handler) GetAIConfig(w http.ResponseWriter, r *http.Request) {
+	cfg := h.LoadAIConfig(r.Context())
 	httputil.JSON(w, http.StatusOK, map[string]any{
-		"enabled":   rec.Enabled != 0,
-		"provider":  prov,
-		"model":     model,
-		"hasApiKey": rec.APIKeyEncrypted != "",
-		"baseUrl":   baseURL,
-		"mode":      rec.Mode,
+		"enabled":  cfg.Enabled,
+		"provider": cfg.Provider,
+		"model":    cfg.Model,
+		"baseUrl":  cfg.BaseURL,
+		"mode":     cfg.Mode,
 	})
 }
 
-// UpdateAI handles PUT /api/settings/ai.
-func (h *Handler) UpdateAI(w http.ResponseWriter, r *http.Request) {
+// UpdateAIConfig handles PUT /api/ai/config.
+func (h *Handler) UpdateAIConfig(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Enabled  *bool   `json:"enabled"`
 		Provider *string `json:"provider"`
@@ -218,7 +280,106 @@ func (h *Handler) UpdateAI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.GetAI(w, r)
+	h.GetAIConfig(w, r)
+}
+
+// TestAIConfig handles POST /api/ai/config/test.
+func (h *Handler) TestAIConfig(w http.ResponseWriter, r *http.Request) {
+	cfg := h.LoadAIConfig(r.Context())
+	if !cfg.Enabled || cfg.Provider == "" {
+		httputil.JSON(w, http.StatusOK, map[string]any{"ok": false, "message": "AI module is not enabled"})
+		return
+	}
+
+	provider, err := h.AI.Get(cfg.Provider, map[string]any{
+		"apiKey": cfg.APIKey, "model": cfg.Model, "baseUrl": cfg.BaseURL,
+	})
+	if err != nil {
+		httputil.JSON(w, http.StatusOK, map[string]any{"ok": false, "message": err.Error()})
+		return
+	}
+
+	start := time.Now()
+	_, err = provider.Suggest(r.Context(), &ai.SuggestRequest{
+		SystemPrompt: "Reply with the single word OK.",
+		UserPrompt:   "ping",
+		MaxTokens:    8,
+	})
+	latencyMs := int(time.Since(start).Milliseconds())
+	if err != nil {
+		httputil.JSON(w, http.StatusOK, map[string]any{"ok": false, "message": err.Error(), "latencyMs": latencyMs})
+		return
+	}
+
+	httputil.JSON(w, http.StatusOK, map[string]any{"ok": true, "message": "Connection successful", "latencyMs": latencyMs})
+}
+
+// notificationConfigDoc mirrors the NotificationConfig OpenAPI schema.
+type notificationConfigDoc struct {
+	Channels []map[string]any `json:"channels"`
+	Routing  []map[string]any `json:"routing"`
+}
+
+func (h *Handler) loadNotificationConfig(ctx context.Context) notificationConfigDoc {
+	cfg := notificationConfigDoc{Channels: []map[string]any{}, Routing: []map[string]any{}}
+	var raw string
+	if err := h.Store.DB().QueryRowContext(ctx, `SELECT config_json FROM notification_config WHERE id = 1`).Scan(&raw); err == nil && raw != "" {
+		_ = json.Unmarshal([]byte(raw), &cfg)
+		if cfg.Channels == nil {
+			cfg.Channels = []map[string]any{}
+		}
+		if cfg.Routing == nil {
+			cfg.Routing = []map[string]any{}
+		}
+	}
+	return cfg
+}
+
+// GetNotificationsConfig handles GET /api/notifications/config.
+func (h *Handler) GetNotificationsConfig(w http.ResponseWriter, r *http.Request) {
+	httputil.JSON(w, http.StatusOK, h.loadNotificationConfig(r.Context()))
+}
+
+// UpdateNotificationsConfig handles PUT /api/notifications/config.
+func (h *Handler) UpdateNotificationsConfig(w http.ResponseWriter, r *http.Request) {
+	var cfg notificationConfigDoc
+	if err := json.NewDecoder(r.Body).Decode(&cfg); err != nil {
+		httputil.Error(w, http.StatusBadRequest, "invalid_request", "Invalid JSON body")
+		return
+	}
+	if cfg.Channels == nil {
+		cfg.Channels = []map[string]any{}
+	}
+	if cfg.Routing == nil {
+		cfg.Routing = []map[string]any{}
+	}
+
+	data, err := json.Marshal(cfg)
+	if err != nil {
+		httputil.Errorf(w, err)
+		return
+	}
+	if _, err := h.Store.DB().ExecContext(r.Context(), `UPDATE notification_config SET config_json = ? WHERE id = 1`, string(data)); err != nil {
+		httputil.Errorf(w, err)
+		return
+	}
+
+	httputil.JSON(w, http.StatusOK, cfg)
+}
+
+// TestNotificationsConfig handles POST /api/notifications/config/test.
+// in_app has no external dependency and always succeeds; smtp/webhook are
+// stubs (see internal/notifications.Dispatcher) that log and report success.
+func (h *Handler) TestNotificationsConfig(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Channel string `json:"channel"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Channel == "" {
+		httputil.Error(w, http.StatusBadRequest, "invalid_request", "channel is required")
+		return
+	}
+	slog.Info("test notification requested", "channel", req.Channel)
+	httputil.JSON(w, http.StatusOK, map[string]any{"ok": true, "message": "Test notification sent"})
 }
 
 // GetDecryptedAPIKey reads the stored encrypted API key and returns it decrypted.

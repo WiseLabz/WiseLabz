@@ -14,6 +14,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/WiseLabz/wiselabz/internal/ai"
 	"github.com/WiseLabz/wiselabz/internal/api"
 	"github.com/WiseLabz/wiselabz/internal/auth"
 	"github.com/WiseLabz/wiselabz/internal/config"
@@ -89,14 +90,18 @@ func main() {
 		cfg.Auth.RefreshTokenTTLDuration(),
 	)
 
-	// Initialize engines
-	syncEngine := sync.NewEngine(s)
-	docEngine := doc.NewEngine(s)
-
-	// Initialize WebSocket hub
+	// Initialize WebSocket hub (must be created before sync engine so sync
+	// can broadcast progress events).
 	wsHub := ws.NewHub()
 	go wsHub.Run()
 	logger.Info("WebSocket hub started")
+
+	// Initialize engines
+	syncEngine := sync.NewEngine(s, wsHub)
+	docEngine := doc.NewEngine(s)
+
+	aiRegistry := ai.NewRegistry()
+	ai.RegisterOpenAICompatible(aiRegistry)
 
 	// Initialize notification dispatcher
 	notifDispatcher := notifications.NewDispatcher(s, wsHub)

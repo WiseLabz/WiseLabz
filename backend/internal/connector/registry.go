@@ -12,15 +12,15 @@ type Factory func(config map[string]any) (Connector, error)
 type TypeSchema struct {
 	Type     string        `json:"type"`
 	Category string        `json:"category"`
-	Name     string        `json:"name"`
-	Fields   []SchemaField `json:"fields,omitempty"`
+	Name     string        `json:"displayName"`
+	Fields   []SchemaField `json:"fields"`
 }
 
 // SchemaField describes a single configuration field.
 type SchemaField struct {
-	Key         string `json:"key"`
+	Key         string `json:"name"`
 	Label       string `json:"label"`
-	Type        string `json:"type"` // "text", "password", "number", "select", "toggle"
+	Type        string `json:"kind"` // "text", "password", "number", "select", "toggle"
 	Required    bool   `json:"required"`
 	Default     string `json:"default,omitempty"`
 	Placeholder string `json:"placeholder,omitempty"`

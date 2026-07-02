@@ -52,7 +52,12 @@ AXIOS_INSTANCE.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
     const original = error.config as (AxiosRequestConfig & { _retried?: boolean }) | undefined;
-    if (error.response?.status === 401 && original && !original._retried) {
+    if (
+      error.response?.status === 401 &&
+      original &&
+      !original._retried &&
+      !original.url?.includes('/auth/refresh')
+    ) {
       original._retried = true;
       const refreshed = await refreshHandler();
       if (refreshed) {
