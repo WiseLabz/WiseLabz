@@ -116,7 +116,7 @@ export function AlertsPage() {
               </Panel>
             </motion.div>
           ))}
-          {data && pageCount > 1 && (
+          {pageCount > 1 && (
             <Pagination page={page} pageCount={pageCount} onPage={setPage} className="justify-center pt-1" />
           )}
         </div>
