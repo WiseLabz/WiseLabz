@@ -1,12 +1,12 @@
-# Graph Report - WiseLabz  (2026-07-02)
+# Graph Report - WiseLabz  (2026-07-03)
 
 ## Corpus Check
-- 174 files · ~95,870 words
+- 177 files · ~102,715 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 710 nodes · 1050 edges · 33 communities detected
-- Extraction: 63% EXTRACTED · 37% INFERRED · 0% AMBIGUOUS · INFERRED: 385 edges (avg confidence: 0.8)
+- 756 nodes · 1180 edges · 33 communities detected
+- Extraction: 62% EXTRACTED · 38% INFERRED · 0% AMBIGUOUS · INFERRED: 446 edges (avg confidence: 0.8)
 - Token cost: 0 input · 0 output
 
 ## Community Hubs (Navigation)
@@ -14,7 +14,7 @@
 - [[_COMMUNITY_Community 1|Community 1]]
 - [[_COMMUNITY_Community 2|Community 2]]
 - [[_COMMUNITY_Community 3|Community 3]]
-- [[_COMMUNITY_Community 5|Community 5]]
+- [[_COMMUNITY_Community 4|Community 4]]
 - [[_COMMUNITY_Community 6|Community 6]]
 - [[_COMMUNITY_Community 7|Community 7]]
 - [[_COMMUNITY_Community 8|Community 8]]
@@ -45,90 +45,90 @@
 - [[_COMMUNITY_Community 47|Community 47]]
 
 ## God Nodes (most connected - your core abstractions)
-1. `Errorf()` - 127 edges
-2. `Store` - 66 edges
-3. `Error()` - 57 edges
-4. `JSON()` - 44 edges
-5. `New()` - 25 edges
+1. `Errorf()` - 141 edges
+2. `Store` - 69 edges
+3. `Error()` - 64 edges
+4. `JSON()` - 60 edges
+5. `New()` - 31 edges
 6. `Handler` - 19 edges
-7. `NoContent()` - 14 edges
-8. `main()` - 13 edges
-9. `UserIDFromContext()` - 13 edges
-10. `NewService()` - 12 edges
+7. `main()` - 15 edges
+8. `UserIDFromContext()` - 15 edges
+9. `Handler` - 14 edges
+10. `NoContent()` - 14 edges
 
 ## Surprising Connections (you probably didn't know these)
-- `main()` --calls--> `NewEngine()`  [INFERRED]
-  backend/cmd/server/main.go → backend/internal/sync/engine.go
 - `main()` --calls--> `NewHub()`  [INFERRED]
   backend/cmd/server/main.go → backend/internal/ws/ws.go
+- `main()` --calls--> `NewEngine()`  [INFERRED]
+  backend/cmd/server/main.go → backend/internal/sync/engine.go
+- `main()` --calls--> `NewRegistry()`  [INFERRED]
+  backend/cmd/server/main.go → backend/internal/ai/provider.go
 - `main()` --calls--> `NewDispatcher()`  [INFERRED]
   backend/cmd/server/main.go → backend/internal/notifications/dispatcher.go
 - `RequestID()` --calls--> `New()`  [INFERRED]
   backend/internal/api/middleware/requestid.go → backend/internal/store/store.go
-- `buildDocDiff()` --calls--> `lineDiff()`  [INFERRED]
-  web/src/lib/docdiffmodel.ts → web/src/lib/linediff.ts
 
 ## Communities
 
 ### Community 0 - "Community 0"
 Cohesion: 0.05
-Nodes (25): Handler, Handler, readIP(), sanitizeSessions(), sanitizeUser(), setRefreshCookie(), submit(), UserIDFromContext() (+17 more)
+Nodes (26): Handler, Handler, readIP(), sanitizeSessions(), sanitizeUser(), setRefreshCookie(), signOIDCState(), verifyOIDCState() (+18 more)
 
 ### Community 1 - "Community 1"
 Cohesion: 0.04
 Nodes (23): Engine, Errorf(), MarshalConnectorConfig(), nilToStr(), nullStrToStr(), ParseConnectorConfig(), scanConnectors(), ConnectorRecord (+15 more)
 
 ### Community 2 - "Community 2"
-Cohesion: 0.1
-Nodes (24): NewHandler(), Config, NewRouter(), spaHandler(), contextKey, NewService(), TestElevationExpired(), TestElevationWrongAction() (+16 more)
+Cohesion: 0.06
+Nodes (14): Register(), Connector, init(), isDangerousIP(), newGuardedClient(), setHeaders(), validateCustomURL(), Connector (+6 more)
 
 ### Community 3 - "Community 3"
+Cohesion: 0.1
+Nodes (25): NewHandler(), Config, NewRouter(), spaHandler(), contextKey, NewService(), TestElevationExpired(), TestElevationWrongAction() (+17 more)
+
+### Community 4 - "Community 4"
 Cohesion: 0.09
 Nodes (21): AISettings, AuthSettings, Config, applyEnvOverrides(), boolEnv(), intEnv(), Load(), TestLoadDefaults() (+13 more)
 
-### Community 5 - "Community 5"
-Cohesion: 0.08
-Nodes (7): Register(), Connector, init(), Connector, init(), Connector, init()
-
 ### Community 6 - "Community 6"
-Cohesion: 0.09
-Nodes (9): Provider, StubProvider, SuggestChunk, SuggestRequest, broadcastMsg, Client, Envelope, Hub (+1 more)
+Cohesion: 0.14
+Nodes (15): Decrypt(), DeriveKey(), Encrypt(), TestDecryptTampered(), TestDecryptWrongKey(), TestDeriveKeyDeterministic(), TestDeriveKeyDifferent(), TestEncryptBadKeySize() (+7 more)
 
 ### Community 7 - "Community 7"
-Cohesion: 0.12
-Nodes (14): Registry, Factory, Get(), SchemaField, TypeSchema, Compare(), lineCount(), severityForChange() (+6 more)
+Cohesion: 0.08
+Nodes (14): RegisterOpenAICompatible(), openAICompatibleProvider, Provider, NewRegistry(), Registry, StubProvider, SuggestChunk, SuggestRequest (+6 more)
 
 ### Community 8 - "Community 8"
-Cohesion: 0.12
-Nodes (11): Dispatcher, generateID(), NewDispatcher(), pgPlaceholderDB, rewritePlaceholders(), TestRewritePlaceholders(), Session, User (+3 more)
+Cohesion: 0.1
+Nodes (14): Compare(), lineCount(), severityForChange(), DiffPatch, DiffResult, Engine, markError(), NewEngine() (+6 more)
 
 ### Community 9 - "Community 9"
-Cohesion: 0.2
-Nodes (12): Decrypt(), DeriveKey(), Encrypt(), TestDecryptTampered(), TestDecryptWrongKey(), TestDeriveKeyDeterministic(), TestDeriveKeyDifferent(), TestEncryptBadKeySize() (+4 more)
+Cohesion: 0.09
+Nodes (10): Logger(), Recoverer(), GetRequestID(), RequestID(), requestIDKey, responseWriter, Dispatcher, generateID() (+2 more)
 
 ### Community 10 - "Community 10"
+Cohesion: 0.17
+Nodes (7): pgPlaceholderDB, rewritePlaceholders(), TestRewritePlaceholders(), Session, User, contains(), searchString()
+
+### Community 11 - "Community 11"
 Cohesion: 0.19
 Nodes (6): MockWebSocket, env(), heartbeat(), newId(), startTimeline(), syncProgress()
 
-### Community 11 - "Community 11"
+### Community 12 - "Community 12"
 Cohesion: 0.16
 Nodes (7): getAccessToken(), setAccessToken(), apply(), clear(), handle(), jump(), wsUrl()
 
-### Community 12 - "Community 12"
+### Community 13 - "Community 13"
 Cohesion: 0.2
 Nodes (6): Claims, ElevationClaims, ElevationToken, newTokenID(), Service, TokenPair
-
-### Community 13 - "Community 13"
-Cohesion: 0.26
-Nodes (6): Connector, init(), isDangerousIP(), newGuardedClient(), setHeaders(), validateCustomURL()
 
 ### Community 14 - "Community 14"
 Cohesion: 0.22
 Nodes (3): dashboardOverview(), minsAgo(), serviceSnapshot()
 
 ### Community 15 - "Community 15"
-Cohesion: 0.18
-Nodes (6): Logger(), Recoverer(), GetRequestID(), RequestID(), requestIDKey, responseWriter
+Cohesion: 0.27
+Nodes (4): Connector, buildGatewayTable(), buildInterfaceTable(), buildRuleTable()
 
 ### Community 16 - "Community 16"
 Cohesion: 0.25
@@ -159,12 +159,12 @@ Cohesion: 0.29
 Nodes (2): OIDCClaims, OIDCProvider
 
 ### Community 23 - "Community 23"
-Cohesion: 0.33
-Nodes (3): enableMocks(), bootstrap(), installMockWebSocket()
-
-### Community 24 - "Community 24"
 Cohesion: 0.4
 Nodes (2): findRoute(), rowSeverity()
+
+### Community 24 - "Community 24"
+Cohesion: 0.33
+Nodes (3): enableMocks(), bootstrap(), installMockWebSocket()
 
 ### Community 25 - "Community 25"
 Cohesion: 0.6
@@ -203,13 +203,13 @@ Cohesion: 0.67
 Nodes (2): AlertRecord, ChangeRecord
 
 ## Knowledge Gaps
-- **40 isolated node(s):** `contextKey`, `Claims`, `ElevationClaims`, `TokenPair`, `ElevationToken` (+35 more)
+- **42 isolated node(s):** `contextKey`, `Claims`, `ElevationClaims`, `TokenPair`, `ElevationToken` (+37 more)
   These have ≤1 connection - possible missing edges or undocumented components.
 - **Thin community `Community 20`** (7 nodes): `clockTime()`, `fullDate()`, `relativeTime()`, `cn()`, `TimeAgo()`, `TimeAgo.tsx`, `time.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 22`** (7 nodes): `OIDCClaims`, `OIDCProvider`, `.AuthURL()`, `.Exchange()`, `.Initialize()`, `.IsInitialized()`, `oidc.go`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 24`** (6 nodes): `eventLabel()`, `findRoute()`, `rowSeverity()`, `setCell()`, `setRowSeverity()`, `EventRoutingTable.tsx`
+- **Thin community `Community 23`** (6 nodes): `eventLabel()`, `findRoute()`, `rowSeverity()`, `setCell()`, `setRowSeverity()`, `EventRoutingTable.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 34`** (4 nodes): `runSync()`, `runSync.ts`, `triggerSync.ts`, `triggerMockSync()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
@@ -223,17 +223,17 @@ Nodes (2): AlertRecord, ChangeRecord
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `Errorf()` connect `Community 1` to `Community 0`, `Community 3`, `Community 5`, `Community 7`, `Community 9`, `Community 12`, `Community 13`, `Community 22`?**
-  _High betweenness centrality (0.235) - this node is a cross-community bridge._
-- **Why does `Error()` connect `Community 0` to `Community 1`, `Community 2`, `Community 6`, `Community 7`, `Community 8`, `Community 9`, `Community 15`?**
-  _High betweenness centrality (0.066) - this node is a cross-community bridge._
-- **Why does `Load()` connect `Community 3` to `Community 1`?**
-  _High betweenness centrality (0.040) - this node is a cross-community bridge._
-- **Are the 125 inferred relationships involving `Errorf()` (e.g. with `.IssuePair()` and `.IssueElevation()`) actually correct?**
-  _`Errorf()` has 125 INFERRED edges - model-reasoned connections that need verification._
-- **Are the 54 inferred relationships involving `Error()` (e.g. with `AuthMiddleware()` and `RequireRole()`) actually correct?**
-  _`Error()` has 54 INFERRED edges - model-reasoned connections that need verification._
-- **Are the 41 inferred relationships involving `JSON()` (e.g. with `.List()` and `.Create()`) actually correct?**
-  _`JSON()` has 41 INFERRED edges - model-reasoned connections that need verification._
-- **Are the 24 inferred relationships involving `New()` (e.g. with `main()` and `newLogger()`) actually correct?**
-  _`New()` has 24 INFERRED edges - model-reasoned connections that need verification._
+- **Why does `Errorf()` connect `Community 1` to `Community 0`, `Community 2`, `Community 4`, `Community 6`, `Community 7`, `Community 8`, `Community 13`, `Community 15`, `Community 22`?**
+  _High betweenness centrality (0.246) - this node is a cross-community bridge._
+- **Why does `Error()` connect `Community 0` to `Community 1`, `Community 3`, `Community 6`, `Community 8`, `Community 9`?**
+  _High betweenness centrality (0.058) - this node is a cross-community bridge._
+- **Why does `Load()` connect `Community 4` to `Community 1`?**
+  _High betweenness centrality (0.039) - this node is a cross-community bridge._
+- **Are the 139 inferred relationships involving `Errorf()` (e.g. with `.IssuePair()` and `.IssueElevation()`) actually correct?**
+  _`Errorf()` has 139 INFERRED edges - model-reasoned connections that need verification._
+- **Are the 61 inferred relationships involving `Error()` (e.g. with `AuthMiddleware()` and `RequireRole()`) actually correct?**
+  _`Error()` has 61 INFERRED edges - model-reasoned connections that need verification._
+- **Are the 57 inferred relationships involving `JSON()` (e.g. with `.List()` and `.Create()`) actually correct?**
+  _`JSON()` has 57 INFERRED edges - model-reasoned connections that need verification._
+- **Are the 30 inferred relationships involving `New()` (e.g. with `main()` and `newLogger()`) actually correct?**
+  _`New()` has 30 INFERRED edges - model-reasoned connections that need verification._

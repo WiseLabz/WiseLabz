@@ -12,7 +12,6 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/WiseLabz/wiselabz/internal/auth"
 	"github.com/WiseLabz/wiselabz/internal/connector"
 	"github.com/WiseLabz/wiselabz/internal/httputil"
 	"github.com/WiseLabz/wiselabz/internal/store"
@@ -436,26 +435,4 @@ func (h *Handler) SyncAll(w http.ResponseWriter, _ *http.Request) {
 		"jobId":     jobID,
 		"serviceId": nil,
 	})
-}
-
-// RequireElevation checks for a valid elevation token for destructive actions.
-// This is called by the router middleware before destructive endpoints.
-func RequireElevation(jwtSvc *auth.Service, action string) func(http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			token := r.Header.Get("X-Elevation-Token")
-			if token == "" {
-				httputil.Error(w, http.StatusBadRequest, "elevation_required",
-					fmt.Sprintf("X-Elevation-Token header required for %s", action))
-				return
-			}
-			_, err := jwtSvc.ValidateElevation(token, action)
-			if err != nil {
-				httputil.Error(w, http.StatusUnauthorized, "unauthorized",
-					fmt.Sprintf("Invalid elevation token: %v", err))
-				return
-			}
-			next.ServeHTTP(w, r)
-		})
-	}
 }
