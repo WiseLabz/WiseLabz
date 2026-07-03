@@ -125,7 +125,7 @@ func NewRouter(cfg Config) chi.Router {
 			r.Group(func(r chi.Router) {
 				r.Use(operatorOnly)
 				r.Post("/", connH.Create)
-				r.Post("/test", connH.Test)
+				r.Post("/{id}/test", connH.Test)
 				r.Patch("/{id}", connH.Update)
 				r.Put("/{id}/enabled", connH.ToggleEnabled)
 				r.Post("/{id}/sync", connH.Sync)
@@ -138,6 +138,7 @@ func NewRouter(cfg Config) chi.Router {
 		})
 
 		r.Route("/api/docs", func(r chi.Router) {
+			r.Get("/", docH.List)
 			r.Get("/tree", docH.Tree)
 			r.Get("/service/{id}", docH.ByService)
 			r.Get("/{id}", docH.Get)
@@ -161,8 +162,12 @@ func NewRouter(cfg Config) chi.Router {
 				r.Use(operatorOnly)
 				r.Post("/", tmplH.Create)
 				r.Put("/{id}", tmplH.Update)
-				r.Delete("/{id}", tmplH.Delete)
 				r.Post("/{id}/preview", tmplH.Preview)
+
+				r.Group(func(r chi.Router) {
+					r.Use(auth.RequireElevation(cfg.JWT, "template.delete"))
+					r.Delete("/{id}", tmplH.Delete)
+				})
 			})
 		})
 
@@ -172,8 +177,9 @@ func NewRouter(cfg Config) chi.Router {
 
 			r.Group(func(r chi.Router) {
 				r.Use(operatorOnly)
-				r.Post("/{id}/acknowledge", changeH.Acknowledge)
+				r.Post("/{id}/ack", changeH.Acknowledge)
 				r.Post("/{id}/dismiss", changeH.Dismiss)
+				r.Post("/{id}/ai-update", changeH.AIUpdate)
 			})
 		})
 
@@ -221,8 +227,16 @@ func NewRouter(cfg Config) chi.Router {
 				r.Get("/", authH.ListUsers)
 				r.Post("/", authH.CreateUser)
 				r.Patch("/{id}", authH.UpdateUser)
-				r.Delete("/{id}", authH.DeleteUser)
-				r.Post("/{id}/reset-password", authH.ResetPassword)
+
+				r.Group(func(r chi.Router) {
+					r.Use(auth.RequireElevation(cfg.JWT, "user.delete"))
+					r.Delete("/{id}", authH.DeleteUser)
+				})
+
+				r.Group(func(r chi.Router) {
+					r.Use(auth.RequireElevation(cfg.JWT, "user.resetPassword"))
+					r.Post("/{id}/reset-password", authH.ResetPassword)
+				})
 			})
 
 			r.Post("/api/sync", connH.SyncAll)

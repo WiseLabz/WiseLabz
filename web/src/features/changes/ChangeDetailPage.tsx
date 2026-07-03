@@ -8,6 +8,7 @@ import {
   useGetChangesChangeId,
   postChangesChangeIdAck,
   postChangesChangeIdDismiss,
+  postChangesChangeIdAiUpdate,
   getGetChangesChangeIdQueryKey,
 } from '../../api/generated/changes/changes';
 import { getGetChangesQueryKey } from '../../api/generated/changes/changes';
@@ -50,6 +51,20 @@ export function ChangeDetailPage() {
     },
   });
   const pending = resolve.isPending;
+
+  // Fire-and-forget AI update request; the WS doc.ai_suggestion event and the
+  // backend's willTriggerAi flag are wired separately — this just queues it.
+  const [aiRequested, setAiRequested] = useState(false);
+  const aiUpdate = useMutation({
+    mutationFn: () => postChangesChangeIdAiUpdate(changeId ?? ''),
+    onSuccess: () => {
+      setAiRequested(true);
+      if (changeId) {
+        queryClient.invalidateQueries({ queryKey: getGetChangesChangeIdQueryKey(changeId) });
+      }
+    },
+  });
+  const aiQueued = aiRequested || Boolean(data?.willTriggerAi);
 
   return (
     <div className="mx-auto max-w-210 px-6 py-6">
@@ -121,6 +136,17 @@ export function ChangeDetailPage() {
                 </div>
 
                 <div className="flex items-center justify-end gap-2 border-t border-line-soft px-6 py-4">
+                  {aiQueued && (
+                    <span className="text-2xs text-ink-faint">{t('changes.aiUpdateQueued')}</span>
+                  )}
+                  <Button
+                    variant="ghost"
+                    size="md"
+                    disabled={aiUpdate.isPending || aiQueued}
+                    onClick={() => aiUpdate.mutate()}
+                  >
+                    <SparklesIcon size={15} /> {t('changes.aiUpdate')}
+                  </Button>
                   <Button
                     variant="ghost"
                     size="md"

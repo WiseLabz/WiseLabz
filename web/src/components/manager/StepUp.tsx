@@ -12,14 +12,16 @@ import {Button} from '../ui/Button';
 export function StepUp({
                            onElevated,
                            mode = 'password',
+                           action,
                        }: {
     onElevated: (token: string) => void;
     mode?: 'password' | 'totp';
+    action: string;
 }) {
     const [value, setValue] = useState('');
     const elevate = useMutation({
         mutationFn: () =>
-            postAuthElevate(mode === 'totp' ? {totp: value} : {password: value}),
+            postAuthElevate(mode === 'totp' ? {totp: value, action} : {password: value, action}),
         onSuccess: (res) => onElevated(res.token),
     });
 

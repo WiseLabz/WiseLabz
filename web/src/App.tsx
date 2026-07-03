@@ -17,6 +17,7 @@ import { ServiceDetailPage } from './features/services/ServiceDetailPage';
 import { AddConnectorPage } from './features/connectors/AddConnectorPage';
 import { ConnectorEditPage } from './features/connectors/ConnectorEditPage';
 import { DocsPage } from './features/docs/DocsPage';
+import { AllDocsPage } from './features/docs/AllDocsPage';
 import { DocEditorPage } from './features/docs/DocEditorPage';
 import { ChangesPage } from './features/changes/ChangesPage';
 import { ChangeDetailPage } from './features/changes/ChangeDetailPage';
@@ -84,6 +85,7 @@ const router = createBrowserRouter([
       { path: 'services/:id', element: <ServiceDetailPage /> },
       { path: 'connectors/:id/edit', element: <RequireRole role="operator"><ConnectorEditPage /></RequireRole> },
       { path: 'docs', element: <DocsPage /> },
+      { path: 'docs/all', element: <AllDocsPage /> },
       { path: 'docs/:docId', element: <DocsPage /> },
       { path: 'docs/:docId/edit', element: <RequireRole role="operator"><DocEditorPage /></RequireRole> },
       { path: 'docs/:docId/history', element: <DocsPage initialTab="history" /> },
