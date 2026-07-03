@@ -1,46 +1,44 @@
 /**
- * Confirm-with-blast-radius dialog for the one destructive op in v1 (connector
- * removal). Machine-honest: fetches the server-computed blast radius and states
- * the concrete dependents the action destroys, requires type-to-confirm (the
- * resource name), and — when step-up is enabled — a fresh elevation token before
- * the delete fires.
+ * Confirm-with-step-up dialog for destructive/sensitive user & template ops
+ * (user delete, user reset-password, template delete). Smaller sibling of
+ * ConfirmDestructive: no blast-radius fetch, since users/templates have no
+ * removal-impact endpoint. Requires type-to-confirm (the resource name), plus
+ * — when step-up is enabled — a fresh elevation token before `onConfirm` fires.
  *
  * A modal is the right affordance here: a destructive, focus-demanding decision
  * that must interrupt. Escape and backdrop-click cancel; focus moves into it.
  */
 import {useEffect, useState} from 'react';
 import {AnimatePresence, motion} from 'motion/react';
-import {useMutation, useQueryClient} from '@tanstack/react-query';
-import {
-  deleteConnectorsConnectorId,
-  getGetConnectorsQueryKey,
-  useGetConnectorsConnectorIdRemovalImpact,
-} from '../../api/generated/connectors/connectors';
 import {useGetAuthConfig} from '../../api/generated/settings/settings';
 import {Button} from '../ui/Button';
 import {StepUp} from './StepUp';
 import {AlertTriangleIcon, XIcon} from '../icons';
 
-export function ConfirmDestructive({
-                                       open,
-                                       connectorId,
-                                       connectorName,
-                                       onClose,
-                                       onConfirmed,
-                                   }: {
+export function ElevationConfirm({
+                                      open,
+                                      resourceName,
+                                      action,
+                                      title,
+                                      description,
+                                      confirmLabel = 'Confirm',
+                                      onClose,
+                                      onConfirm,
+                                      isPending = false,
+                                  }: {
     open: boolean;
-    connectorId: string;
-    connectorName: string;
+    resourceName: string;
+    action: string;
+    title: string;
+    description?: string;
+    confirmLabel?: string;
     onClose: () => void;
-    onConfirmed: () => void;
+    onConfirm: (elevationToken: string | null) => Promise<void> | void;
+    isPending?: boolean;
 }) {
-    const queryClient = useQueryClient();
     const [typed, setTyped] = useState('');
     const [token, setToken] = useState<string | null>(null);
 
-    const impact = useGetConnectorsConnectorIdRemovalImpact(connectorId, {
-        query: {enabled: open},
-    });
     const authConfig = useGetAuthConfig({query: {enabled: open}});
     const stepUpRequired = authConfig.data?.stepUpForDestructive ?? true;
 
@@ -54,22 +52,9 @@ export function ConfirmDestructive({
         onClose();
     };
 
-    const remove = useMutation({
-        mutationFn: () =>
-            deleteConnectorsConnectorId(
-                connectorId,
-                token ? {headers: {'X-Elevation-Token': token}} : undefined,
-            ),
-        onSuccess: () => {
-            queryClient.invalidateQueries({queryKey: getGetConnectorsQueryKey()});
-            reset();
-            onConfirmed();
-        },
-    });
-
-    const nameMatches = typed === connectorName;
+    const nameMatches = typed === resourceName;
     const elevationOk = !stepUpRequired || !!token;
-    const canConfirm = nameMatches && elevationOk && !remove.isPending;
+    const canConfirm = nameMatches && elevationOk && !isPending;
 
     // Escape to cancel.
     useEffect(() => {
@@ -99,7 +84,7 @@ export function ConfirmDestructive({
                     <motion.div
                         role="dialog"
                         aria-modal="true"
-                        aria-labelledby="confirm-destructive-title"
+                        aria-labelledby="elevation-confirm-title"
                         initial={{opacity: 0, y: 10, scale: 0.98}}
                         animate={{opacity: 1, y: 0, scale: 1}}
                         exit={{opacity: 0, y: 10, scale: 0.98}}
@@ -113,14 +98,14 @@ export function ConfirmDestructive({
               </span>
                             <div className="flex-1">
                                 <h2
-                                    id="confirm-destructive-title"
+                                    id="elevation-confirm-title"
                                     className="text-sm font-semibold text-ink"
                                 >
-                                    Remove connector “{connectorName}”
+                                    {title}
                                 </h2>
-                                <p className="mt-0.5 text-xs text-ink-muted">
-                                    This cascades and cannot be undone.
-                                </p>
+                                {description && (
+                                    <p className="mt-0.5 text-xs text-ink-muted">{description}</p>
+                                )}
                             </div>
                             <button
                                 onClick={close}
@@ -132,37 +117,17 @@ export function ConfirmDestructive({
                         </div>
 
                         <div className="space-y-4 px-5 py-4">
-                            {/* Blast radius */}
-                            <div>
-                                <p className="mb-2 text-2xs uppercase tracking-wider text-ink-faint">
-                                    What this destroys
-                                </p>
-                                {impact.isLoading ? (
-                                    <p className="text-xs text-ink-faint">Computing blast radius…</p>
-                                ) : impact.data ? (
-                                    <ul className="space-y-1">
-                                        <BlastLine n={impact.data.trackedServices} unit="tracked service"/>
-                                        <BlastLine n={impact.data.docSections} unit="generated doc section"/>
-                                        <BlastLine n={impact.data.snapshots} unit="stored snapshot"/>
-                                    </ul>
-                                ) : (
-                                    <p className="text-xs text-err">
-                                        Couldn’t compute the blast radius — refusing to proceed blind.
-                                    </p>
-                                )}
-                            </div>
-
                             {/* Type-to-confirm */}
                             <div>
                                 <label
-                                    htmlFor="confirm-name"
+                                    htmlFor="elevation-confirm-name"
                                     className="mb-1.5 block text-2xs uppercase tracking-wider text-ink-faint"
                                 >
-                                    Type <span className="font-mono text-ink">{connectorName}</span> to
+                                    Type <span className="font-mono text-ink">{resourceName}</span> to
                                     confirm
                                 </label>
                                 <input
-                                    id="confirm-name"
+                                    id="elevation-confirm-name"
                                     value={typed}
                                     onChange={(e) => setTyped(e.target.value)}
                                     autoComplete="off"
@@ -172,16 +137,10 @@ export function ConfirmDestructive({
 
                             {/* Step-up (only once the name matches, to keep focus ordered) */}
                             {stepUpRequired && nameMatches && !token && (
-                                <StepUp action="connector.delete" onElevated={setToken}/>
+                                <StepUp action={action} onElevated={setToken}/>
                             )}
                             {stepUpRequired && token && (
-                                <p className="text-2xs text-ok">Re-authenticated — ready to remove.</p>
-                            )}
-
-                            {remove.isError && (
-                                <p className="text-2xs text-err">
-                                    Removal failed. The elevation token may have expired — re-authenticate and retry.
-                                </p>
+                                <p className="text-2xs text-ok">Re-authenticated — ready to continue.</p>
                             )}
                         </div>
 
@@ -194,26 +153,14 @@ export function ConfirmDestructive({
                                 variant="danger"
                                 size="md"
                                 disabled={!canConfirm}
-                                onClick={() => remove.mutate()}
+                                onClick={() => onConfirm(token)}
                             >
-                                {remove.isPending ? 'Removing…' : 'Remove connector'}
+                                {isPending ? 'Working…' : confirmLabel}
                             </Button>
                         </div>
                     </motion.div>
                 </motion.div>
             )}
         </AnimatePresence>
-    );
-}
-
-function BlastLine({n, unit}: { n: number; unit: string }) {
-    return (
-        <li className="flex items-baseline gap-2 text-sm text-ink">
-            <span className="nums font-mono font-semibold text-err">{n}</span>
-            <span className="text-ink-muted">
-        {unit}
-                {n === 1 ? '' : 's'}
-      </span>
-        </li>
     );
 }

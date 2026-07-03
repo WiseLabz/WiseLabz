@@ -5,7 +5,7 @@
  * changed between revisions, the same view the changes feed links into.
  */
 import { useMemo, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { Link, useParams, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { AnimatePresence, motion } from 'motion/react';
 import { useGetDocsTree, useGetDocsDocId } from '../../api/generated/docs/docs';
@@ -18,7 +18,7 @@ import { DocTree } from '../../components/docs/DocTree';
 import { DocHistory } from './DocHistory';
 import { cn } from '../../lib/cn';
 import { relativeTime, fullDate } from '../../lib/time';
-import { FileTextIcon, HistoryIcon, SparklesIcon, EditIcon } from '../../components/icons';
+import { FileTextIcon, HistoryIcon, SparklesIcon, EditIcon, SearchIcon } from '../../components/icons';
 
 type Tab = 'read' | 'history';
 
@@ -35,6 +35,13 @@ export function DocsPage({ initialTab = 'read' }: { initialTab?: Tab } = {}) {
       {/* Tree */}
       <aside className="hidden w-60 shrink-0 lg:block">
         <Panel className="sticky top-6 p-2">
+          <Link
+            to="/docs/all"
+            className="mb-1 flex items-center gap-2 rounded-md px-2.5 py-2 text-xs text-ink-muted transition-colors hover:bg-surface-raised hover:text-ink"
+          >
+            <SearchIcon size={14} />
+            {t('docs.searchAllLink')}
+          </Link>
           {tree.isLoading ? (
             <SkeletonRows rows={6} />
           ) : tree.isError || !tree.data ? (

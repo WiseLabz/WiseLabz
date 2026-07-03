@@ -225,17 +225,37 @@ paths:
     delete:
       tags: [users]
       summary: Delete a user (operator)
+      description: >
+        Destructive. When `stepUpForDestructive` is enabled, requires a valid
+        `X-Elevation-Token` from POST /auth/elevate; absent or expired tokens
+        get a 403 `elevation-required`.
+      parameters:
+        - name: X-Elevation-Token
+          in: header
+          required: false
+          schema: { type: string }
+          description: Elevation token from POST /auth/elevate (when step-up is on)
       responses:
         '204': { description: No Content }
-        '403': { $ref: '#/components/responses/Forbidden' }
+        '403': { $ref: '#/components/responses/ElevationRequired' }
   /users/{userId}/reset-password:
     post:
       tags: [users]
       summary: Operator-triggered password reset
-      parameters: [{ $ref: '#/components/parameters/UserId' }]
+      description: >
+        Destructive. When `stepUpForDestructive` is enabled, requires a valid
+        `X-Elevation-Token` from POST /auth/elevate; absent or expired tokens
+        get a 403 `elevation-required`.
+      parameters:
+        - { $ref: '#/components/parameters/UserId' }
+        - name: X-Elevation-Token
+          in: header
+          required: false
+          schema: { type: string }
+          description: Elevation token from POST /auth/elevate (when step-up is on)
       responses:
         '204': { description: No Content }
-        '403': { $ref: '#/components/responses/Forbidden' }
+        '403': { $ref: '#/components/responses/ElevationRequired' }
 
   # ───────────────────────── dashboard ─────────────────────────
   /dashboard/overview:
@@ -566,6 +586,29 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
+  /docs/generate:
+    post:
+      tags: [docs]
+      summary: Generate a doc from a template applied to a connector's live snapshot
+      operationId: postDocsGenerate
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [templateId, connectorId]
+              properties:
+                templateId: { type: string }
+                connectorId: { type: string }
+      responses:
+        '201':
+          description: Doc generated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GenerateResult' }
+        '404': { description: Template or connector not found }
 
   # ───────────────────────── templates ─────────────────────────
   /templates:
@@ -623,8 +666,19 @@ paths:
     delete:
       tags: [templates]
       summary: Delete a template (editor+)
+      description: >
+        Destructive. When `stepUpForDestructive` is enabled, requires a valid
+        `X-Elevation-Token` from POST /auth/elevate; absent or expired tokens
+        get a 403 `elevation-required`.
+      parameters:
+        - name: X-Elevation-Token
+          in: header
+          required: false
+          schema: { type: string }
+          description: Elevation token from POST /auth/elevate (when step-up is on)
       responses:
         '204': { description: No Content }
+        '403': { $ref: '#/components/responses/ElevationRequired' }
   /templates/{templateId}/preview:
     post:
       tags: [templates]
@@ -1328,6 +1382,13 @@ components:
         total: { type: integer }
         page: { type: integer }
         pageSize: { type: integer }
+    GenerateResult:
+      type: object
+      required: [docId, title, content]
+      properties:
+        docId: { type: string }
+        title: { type: string }
+        content: { type: string }
 
     # ── templates ──
     Template:
@@ -1491,7 +1552,11 @@ components:
     ElevationRequest:
       type: object
       description: One of `password` or `totp` proves the operator's identity for step-up.
+      required: [action]
       properties:
+        action:
+          type: string
+          description: The elevation action being requested, e.g. "connector.delete", "user.delete"
         password: { type: string, format: password }
         totp: { type: string, description: 6-digit TOTP code when 2FA is configured }
     ElevationToken:

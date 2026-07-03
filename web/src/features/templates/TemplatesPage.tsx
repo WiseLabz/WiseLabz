@@ -21,7 +21,7 @@ import type { Template } from '../../api/model';
 import { Button, IconButton } from '../../components/ui/Button';
 import { Panel } from '../../components/ui/Panel';
 import { Dialog } from '../../components/ui/Dialog';
-import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
+import { ElevationConfirm } from '../../components/manager/ElevationConfirm';
 import { RoleGate } from '../../components/ui/RoleGate';
 import { SkeletonRows, ErrorState, EmptyState } from '../../components/ui/states';
 import { toast } from '../../lib/toast';
@@ -64,7 +64,8 @@ export function TemplatesPage() {
   });
 
   const remove = useMutation({
-    mutationFn: (id: string) => deleteTemplatesTemplateId(id),
+    mutationFn: ({ id, token }: { id: string; token: string | null }) =>
+      deleteTemplatesTemplateId(id, token ? { headers: { 'X-Elevation-Token': token } } : undefined),
     onSuccess: () => {
       invalidate();
       setToDelete(null);
@@ -197,18 +198,20 @@ export function TemplatesPage() {
       </Dialog>
 
       {/* Delete confirm */}
-      <ConfirmDialog
+      <ElevationConfirm
         open={!!toDelete}
         onClose={() => setToDelete(null)}
-        onConfirm={() => toDelete && remove.mutate(toDelete.id)}
+        resourceName={toDelete?.name ?? ''}
+        action="template.delete"
         title={t('templates.deleteTitle')}
         description={t('templates.deleteDesc', {
           name: toDelete?.name ?? '',
         })}
         confirmLabel={remove.isPending ? t('templates.deleting') : t('templates.delete')}
-        cancelLabel={t('common.cancel')}
-        tone="danger"
-        confirmDisabled={remove.isPending}
+        isPending={remove.isPending}
+        onConfirm={(token) => {
+          if (toDelete) return remove.mutateAsync({ id: toDelete.id, token });
+        }}
       />
     </div>
   );

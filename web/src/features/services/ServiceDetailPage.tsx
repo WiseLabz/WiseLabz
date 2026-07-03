@@ -17,7 +17,12 @@ import {
   getGetConnectorsQueryKey,
 } from '../../api/generated/connectors/connectors';
 import { useGetChanges } from '../../api/generated/changes/changes';
-import { useGetDocsServiceConnectorId } from '../../api/generated/docs/docs';
+import {
+  useGetDocsServiceConnectorId,
+  getGetDocsServiceConnectorIdQueryKey,
+  postDocsGenerate,
+} from '../../api/generated/docs/docs';
+import { useGetTemplates } from '../../api/generated/templates/templates';
 import { useLive } from '../../store/live';
 import { useCanMutate } from '../../hooks/useRole';
 import { runSync } from '../../lib/runSync';
@@ -25,10 +30,18 @@ import { relativeTime } from '../../lib/time';
 import { StatusPill, SeverityTag } from '../../components/ui/StatusDot';
 import { Button } from '../../components/ui/Button';
 import { Panel } from '../../components/ui/Panel';
+import { Dialog } from '../../components/ui/Dialog';
 import { SkeletonRows, ErrorState, EmptyState } from '../../components/ui/states';
 import { Markdown } from '../../components/docs/Markdown';
 import { ConfirmDestructive } from '../../components/manager/ConfirmDestructive';
-import { ArrowRightIcon, SyncIcon, FileTextIcon, DiffIcon } from '../../components/icons';
+import {
+  ArrowRightIcon,
+  SyncIcon,
+  FileTextIcon,
+  DiffIcon,
+  SparklesIcon,
+  ChevronDownIcon,
+} from '../../components/icons';
 import type { ServiceStatus } from '../../api/model';
 
 export function ServiceDetailPage() {
@@ -132,7 +145,7 @@ export function ServiceDetailPage() {
           <ServiceChangesPanel id={c.id} />
         </div>
         <div className="space-y-4">
-          <LinkedDocPanel connectorId={c.id} />
+          <LinkedDocPanel connectorId={c.id} connectorType={c.type} />
           <ActivityPanel activity={activity} />
         </div>
       </div>
@@ -246,15 +259,57 @@ function ServiceChangesPanel({ id }: { id: string }) {
   );
 }
 
-function LinkedDocPanel({ connectorId }: { connectorId: string }) {
+function LinkedDocPanel({
+  connectorId,
+  connectorType,
+}: {
+  connectorId: string;
+  connectorType: string;
+}) {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const canMutate = useCanMutate();
   const doc = useGetDocsServiceConnectorId(connectorId);
+  const templates = useGetTemplates();
+  const [picking, setPicking] = useState(false);
+  const [templateId, setTemplateId] = useState('');
+
+  // Templates with no appliesTo.type apply to any connector; others must match.
+  const candidates = (templates.data ?? []).filter(
+    (tpl) => !tpl.appliesTo?.type || tpl.appliesTo.type === connectorType
+  );
+
+  const generate = useMutation({
+    mutationFn: () => postDocsGenerate({ templateId, connectorId }),
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({
+        queryKey: getGetDocsServiceConnectorIdQueryKey(connectorId),
+      });
+      setPicking(false);
+      navigate(`/docs/${result.docId}`);
+    },
+  });
+
+  const openPicker = () => {
+    generate.reset();
+    setTemplateId(candidates[0]?.id ?? '');
+    setPicking(true);
+  };
+
   return (
     <Panel className="p-5">
       <h2 className="mb-3 text-sm font-semibold text-ink">{t('services.detail.linkedDoc')}</h2>
       {doc.isError || !doc.data ? (
-        <p className="text-sm text-ink-muted">{t('services.detail.noDoc')}</p>
+        <div className="space-y-3">
+          <p className="text-sm text-ink-muted">{t('services.detail.noDoc')}</p>
+          {canMutate && (
+            <Button size="sm" variant="secondary" onClick={openPicker}>
+              <SparklesIcon size={14} />
+              {t('services.detail.generateDoc')}
+            </Button>
+          )}
+        </div>
       ) : (
         <button
           onClick={() => navigate(`/docs/${doc.data.docId}`)}
@@ -265,6 +320,61 @@ function LinkedDocPanel({ connectorId }: { connectorId: string }) {
           <ArrowRightIcon size={14} className="text-ink-faint" />
         </button>
       )}
+
+      <Dialog
+        open={picking}
+        onClose={() => setPicking(false)}
+        title={t('services.detail.generateDocTitle')}
+        size="sm"
+      >
+        <div className="space-y-3">
+          <label className="block">
+            <span className="mb-1 block text-2xs uppercase tracking-wider text-ink-faint">
+              {t('services.detail.templateLabel')}
+            </span>
+            <div className="relative">
+              <select
+                value={templateId}
+                onChange={(e) => setTemplateId(e.target.value)}
+                disabled={candidates.length === 0}
+                className="h-9 w-full appearance-none rounded-sm border border-line bg-surface px-2.5 pr-8 text-sm text-ink outline-none focus-visible:border-signal-soft"
+              >
+                {candidates.length === 0 ? (
+                  <option value="">{t('services.detail.noTemplates')}</option>
+                ) : (
+                  candidates.map((tpl) => (
+                    <option key={tpl.id} value={tpl.id}>
+                      {tpl.name}
+                    </option>
+                  ))
+                )}
+              </select>
+              <ChevronDownIcon
+                size={14}
+                className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-ink-faint"
+              />
+            </div>
+          </label>
+
+          {generate.isError && (
+            <p className="text-xs text-err">{t('services.detail.generateDocError')}</p>
+          )}
+
+          <div className="flex items-center justify-end gap-2">
+            <Button variant="ghost" size="sm" onClick={() => setPicking(false)}>
+              {t('common.cancel')}
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              disabled={!templateId || generate.isPending}
+              onClick={() => generate.mutate()}
+            >
+              {generate.isPending ? t('services.detail.generating') : t('services.detail.generateDoc')}
+            </Button>
+          </div>
+        </div>
+      </Dialog>
     </Panel>
   );
 }

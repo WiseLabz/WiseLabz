@@ -20,7 +20,7 @@ import { Button } from '../../components/ui/Button';
 import { Panel } from '../../components/ui/Panel';
 import { SkeletonRows, ErrorState, EmptyState } from '../../components/ui/states';
 import { Dialog } from '../../components/ui/Dialog';
-import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
+import { ElevationConfirm } from '../../components/manager/ElevationConfirm';
 import { ToneTag } from '../../components/ui/ToneTag';
 import { toast } from '../../lib/toast';
 import { SubHeader, Field, TextInput, Select } from './parts';
@@ -33,6 +33,7 @@ export function UsersPage() {
   const { data, isLoading, isError, refetch } = useGetUsers();
   const [inviteOpen, setInviteOpen] = useState(false);
   const [toDelete, setToDelete] = useState<User | null>(null);
+  const [toReset, setToReset] = useState<User | null>(null);
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: getGetUsersQueryKey() });
 
@@ -47,7 +48,8 @@ export function UsersPage() {
   });
 
   const remove = useMutation({
-    mutationFn: (id: string) => deleteUsersUserId(id),
+    mutationFn: ({ id, token }: { id: string; token: string | null }) =>
+      deleteUsersUserId(id, token ? { headers: { 'X-Elevation-Token': token } } : undefined),
     onSuccess: () => {
       invalidate();
       toast.success(t('settings.users.deleted'));
@@ -57,8 +59,12 @@ export function UsersPage() {
   });
 
   const reset = useMutation({
-    mutationFn: (id: string) => postUsersUserIdResetPassword(id),
-    onSuccess: () => toast.success(t('settings.users.resetSent')),
+    mutationFn: ({ id, token }: { id: string; token: string | null }) =>
+      postUsersUserIdResetPassword(id, token ? { headers: { 'X-Elevation-Token': token } } : undefined),
+    onSuccess: () => {
+      toast.success(t('settings.users.resetSent'));
+      setToReset(null);
+    },
     onError: () => toast.error(t('settings.users.resetError')),
   });
 
@@ -124,7 +130,7 @@ export function UsersPage() {
                         variant="ghost"
                         size="sm"
                         disabled={reset.isPending}
-                        onClick={() => reset.mutate(u.id)}
+                        onClick={() => setToReset(u)}
                       >
                         {t('settings.users.reset')}
                       </Button>
@@ -147,16 +153,32 @@ export function UsersPage() {
 
       <InviteDialog open={inviteOpen} onClose={() => setInviteOpen(false)} onCreated={invalidate} />
 
-      <ConfirmDialog
+      <ElevationConfirm
         open={toDelete !== null}
         onClose={() => setToDelete(null)}
-        onConfirm={() => toDelete && remove.mutate(toDelete.id)}
-        tone="danger"
+        resourceName={toDelete?.username ?? ''}
+        action="user.delete"
         title={t('settings.users.deleteTitle')}
         description={t('settings.users.deleteConfirm')}
         confirmLabel={t('common.delete')}
-        cancelLabel={t('common.cancel')}
-        confirmDisabled={remove.isPending}
+        isPending={remove.isPending}
+        onConfirm={(token) => {
+          if (toDelete) return remove.mutateAsync({ id: toDelete.id, token });
+        }}
+      />
+
+      <ElevationConfirm
+        open={toReset !== null}
+        onClose={() => setToReset(null)}
+        resourceName={toReset?.username ?? ''}
+        action="user.resetPassword"
+        title={t('settings.users.resetTitle')}
+        description={t('settings.users.resetConfirm')}
+        confirmLabel={t('settings.users.reset')}
+        isPending={reset.isPending}
+        onConfirm={(token) => {
+          if (toReset) return reset.mutateAsync({ id: toReset.id, token });
+        }}
       />
     </div>
   );
