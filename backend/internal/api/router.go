@@ -119,6 +119,7 @@ func NewRouter(cfg Config) chi.Router {
 			r.Get("/", connH.List)
 			r.Get("/schema", connH.Schema)
 			r.Get("/{id}", connH.Get)
+			r.Get("/{id}/data", connH.Data)
 			r.Get("/{id}/removal-impact", connH.RemovalImpact)
 
 			r.Group(func(r chi.Router) {
@@ -126,9 +127,13 @@ func NewRouter(cfg Config) chi.Router {
 				r.Post("/", connH.Create)
 				r.Post("/test", connH.Test)
 				r.Patch("/{id}", connH.Update)
-				r.Delete("/{id}", connH.Delete)
 				r.Put("/{id}/enabled", connH.ToggleEnabled)
 				r.Post("/{id}/sync", connH.Sync)
+
+				r.Group(func(r chi.Router) {
+					r.Use(auth.RequireElevation(cfg.JWT, "connector.delete"))
+					r.Delete("/{id}", connH.Delete)
+				})
 			})
 		})
 
@@ -137,12 +142,13 @@ func NewRouter(cfg Config) chi.Router {
 			r.Get("/service/{id}", docH.ByService)
 			r.Get("/{id}", docH.Get)
 			r.Get("/{id}/versions", docH.Versions)
+			r.Get("/{id}/versions/{rev}", docH.Version)
 
 			r.Group(func(r chi.Router) {
 				r.Use(operatorOnly)
 				r.Post("/generate", docH.Generate)
 				r.Put("/{id}", docH.Save)
-				r.Post("/{id}/restore", docH.Restore)
+				r.Post("/{id}/versions/{rev}/restore", docH.Restore)
 				r.Post("/{id}/ai-suggest", docH.AISuggest)
 			})
 		})

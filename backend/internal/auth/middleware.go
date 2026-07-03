@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"strings"
 )
@@ -77,6 +78,36 @@ func roleSatisfies(userRole, requiredRole string) bool {
 		return userRole == "operator"
 	}
 	return false
+}
+
+// RequireElevation checks for a valid elevation token scoped to the given action.
+// Destructive endpoints chain this after RequireRole("operator") for step-up auth.
+func RequireElevation(jwtSvc *Service, action string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			token := r.Header.Get("X-Elevation-Token")
+			if token == "" {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusBadRequest)
+				_ = json.NewEncoder(w).Encode(map[string]string{
+					"code":    "elevation_required",
+					"message": "X-Elevation-Token header required for " + action,
+				})
+				return
+			}
+			_, err := jwtSvc.ValidateElevation(token, action)
+			if err != nil {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusUnauthorized)
+				_ = json.NewEncoder(w).Encode(map[string]string{
+					"code":    "unauthorized",
+					"message": "Invalid elevation token: " + err.Error(),
+				})
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
 }
 
 func extractBearerToken(r *http.Request) string {
