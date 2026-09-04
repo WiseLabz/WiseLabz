@@ -94,6 +94,22 @@ If the pre-commit hook blocks you on a lint issue, run `make lint` to see the fu
 output and `make fmt` to auto-fix formatting. The commit-msg hook will reject
 non-conforming messages — the error tells you exactly what's wrong.
 
+## Frontend testing policy
+
+The frontend (`web/`) has no automated test suite today, and none should be added
+before the planned rewrite (#52). Investing in tests against code that is about
+to be replaced wastes effort and slows the rewrite down. See #12.
+
+Once the rewrite lands, add behavioral coverage for:
+
+- auth guards
+- destructive actions
+- editor conflicts
+- diff rendering
+- WebSocket cache invalidation
+
+Backend tests are unaffected by this policy — keep adding them as usual.
+
 ## Pull request process
 
 1. **Branch from `main`** — create a branch using the naming convention above.
