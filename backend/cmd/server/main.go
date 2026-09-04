@@ -261,3 +261,5 @@ func newLogger(cfg config.LogSettings) *slog.Logger {
 
 	return slog.New(handler)
 }
+
+// ci-test: backend-only, revert
