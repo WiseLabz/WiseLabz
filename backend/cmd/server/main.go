@@ -96,15 +96,16 @@ func main() {
 	go wsHub.Run()
 	logger.Info("WebSocket hub started")
 
+	// Initialize notification dispatcher (must precede sync engine so it can
+	// notify on alert creation)
+	notifDispatcher := notifications.NewDispatcher(s, wsHub)
+
 	// Initialize engines
-	syncEngine := sync.NewEngine(s, wsHub)
+	syncEngine := sync.NewEngine(s, wsHub, notifDispatcher)
 	docEngine := doc.NewEngine(s)
 
 	aiRegistry := ai.NewRegistry()
 	ai.RegisterOpenAICompatible(aiRegistry)
-
-	// Initialize notification dispatcher
-	notifDispatcher := notifications.NewDispatcher(s, wsHub)
 
 	// Build HTTP router
 	routerCfg := api.Config{

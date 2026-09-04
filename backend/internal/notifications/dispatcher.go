@@ -20,6 +20,25 @@ func NewDispatcher(s *store.Store, hub *ws.Hub) *Dispatcher {
 	return &Dispatcher{store: s, hub: hub}
 }
 
+// maxNotifyUsers bounds the single-page user fetch in NotifyAlertCreated.
+// ponytail: fine for a self-hosted ops tool's user count; paginate if that changes.
+const maxNotifyUsers = 1000
+
+// NotifyAlertCreated dispatches a newly created alert to every active user.
+func (d *Dispatcher) NotifyAlertCreated(ctx context.Context, alertID, title, message string) {
+	users, _, err := d.store.ListUsers(ctx, 0, maxNotifyUsers)
+	if err != nil {
+		slog.Error("failed to list users for alert notification", "error", err)
+		return
+	}
+	for _, u := range users {
+		if u.Disabled {
+			continue
+		}
+		d.NotifyAlert(alertID, u.ID, "alert.created", title, message)
+	}
+}
+
 // NotifyAlert dispatches an alert to all configured channels.
 func (d *Dispatcher) NotifyAlert(alertID, userID, eventType, title, message string) {
 	// Always create in-app notification
