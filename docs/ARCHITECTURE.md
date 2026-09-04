@@ -303,6 +303,10 @@ for all env overrides (e.g. `WISELABZ_DB_DSN`, `WISELABZ_DB_DRIVER`).
 `golang-migrate` and run automatically on startup. Both SQLite and PostgreSQL dialects are
 supported.
 
+Operators can roll back the most recently applied migration with the `migrate` CLI
+(`go run ./cmd/migrate down`), which delegates to golang-migrate's `Steps(-1)` and supports
+both SQLite and PostgreSQL.
+
 ---
 
 ## AI module

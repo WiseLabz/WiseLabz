@@ -40,8 +40,11 @@ func main() {
 		}
 		fmt.Println("Migrations complete (up).")
 	case "down":
-		// TODO: implement down migrations using golang-migrate's Down()
-		fmt.Println("Down migrations not yet implemented — drop and recreate manually.")
+		if err := store.RunMigrationsDown(db, cfg.DB.Driver, logger); err != nil {
+			fmt.Fprintf(os.Stderr, "Migration down failed: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Println("Migration rolled back (down).")
 	default:
 		fmt.Fprintf(os.Stderr, "Unknown direction: %s (use 'up' or 'down')\n", direction)
 		os.Exit(1)
