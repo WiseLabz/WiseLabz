@@ -11,9 +11,37 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Filter paths
+        id: filter
+        uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        with:
+          filters: |
+            backend:
+              - 'backend/**'
+              - 'go.work'
+              - 'go.work.sum'
+              - '.github/workflows/ci.yml'
+            frontend:
+              - 'web/**'
+              - '.github/workflows/ci.yml'
+
   lint-backend:
     name: Lint (Backend)
     runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
     timeout-minutes: 5
 
     steps:
@@ -46,6 +74,8 @@ jobs:
   lint-frontend:
     name: Lint (Frontend)
     runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
     timeout-minutes: 5
 
     steps:
@@ -53,14 +83,22 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: "lts/*"
           cache: npm
           cache-dependency-path: web/package-lock.json
 
+      - name: Cache node_modules
+        id: cache-node-modules
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: web/node_modules
+          key: node-modules-${{ runner.os }}-${{ hashFiles('web/package-lock.json') }}
+
       - name: Install dependencies
-        run: npm ci
+        if: steps.cache-node-modules.outputs.cache-hit != 'true'
+        run: npm ci --prefer-offline --no-audit --no-fund
         working-directory: web
 
       - name: Lint
@@ -70,6 +108,8 @@ jobs:
   test-backend:
     name: Test (Backend)
     runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
     timeout-minutes: 10
 
     steps:
@@ -98,18 +138,30 @@ jobs:
     name: Build
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    needs: [lint-backend, lint-frontend, test-backend]
+    needs: [changes, lint-backend, lint-frontend, test-backend]
+    if: |
+      always() &&
+      (needs.changes.outputs.backend == 'true' || needs.changes.outputs.frontend == 'true') &&
+      !contains(needs.*.result, 'failure') &&
+      !contains(needs.*.result, 'cancelled')
 
     steps:
       - name: Checkout
         uses: actions/checkout@v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: "lts/*"
           cache: npm
           cache-dependency-path: web/package-lock.json
+
+      - name: Cache node_modules
+        id: cache-node-modules
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: web/node_modules
+          key: node-modules-${{ runner.os }}-${{ hashFiles('web/package-lock.json') }}
 
       - name: Setup Go
         uses: actions/setup-go@0aaccfd150d50ccaeb58ebd88d36e91967a5f35b # v5.4.0
@@ -118,10 +170,13 @@ jobs:
           cache: true
           cache-dependency-path: backend/go.sum
 
+      - name: Install frontend dependencies
+        if: steps.cache-node-modules.outputs.cache-hit != 'true'
+        run: npm ci --prefer-offline --no-audit --no-fund
+        working-directory: web
+
       - name: Build frontend
-        run: |
-          npm ci
-          npm run build
+        run: npm run build
         working-directory: web
 
       - name: Copy frontend assets
@@ -134,3 +189,19 @@ jobs:
         working-directory: backend
         env:
           CGO_ENABLED: "0"
+
+  ci-status:
+    name: CI Status
+    runs-on: ubuntu-latest
+    needs: [changes, lint-backend, lint-frontend, test-backend, build]
+    if: always()
+    timeout-minutes: 2
+
+    steps:
+      - name: Check overall status
+        run: |
+          if [[ "${{ contains(needs.*.result, 'failure') }}" == "true" ]] || [[ "${{ contains(needs.*.result, 'cancelled') }}" == "true" ]]; then
+            echo "One or more required jobs failed or were cancelled."
+            exit 1
+          fi
+          echo "All required jobs passed (or were correctly skipped by the path filter)."
