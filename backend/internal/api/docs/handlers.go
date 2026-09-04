@@ -166,16 +166,26 @@ func (h *Handler) ByService(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) Save(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	var req struct {
-		Content string `json:"content"`
+		Content     string `json:"content"`
+		BaseVersion *int   `json:"baseVersion"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		httputil.Error(w, http.StatusBadRequest, "invalid_request", "Invalid JSON body")
 		return
 	}
 
-	if err := h.Store.UpdateDoc(r.Context(), id, req.Content); err != nil {
+	if err := h.Store.UpdateDoc(r.Context(), id, req.Content, req.BaseVersion); err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			httputil.Error(w, http.StatusNotFound, "not_found", "Doc not found")
+			return
+		}
+		if errors.Is(err, store.ErrVersionConflict) {
+			current, getErr := h.Store.GetDoc(r.Context(), id)
+			if getErr != nil {
+				httputil.Errorf(w, getErr)
+				return
+			}
+			httputil.JSON(w, http.StatusConflict, current)
 			return
 		}
 		httputil.Errorf(w, err)
@@ -261,7 +271,7 @@ func (h *Handler) Restore(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.Store.UpdateDoc(r.Context(), docID, target.Content); err != nil {
+	if err := h.Store.UpdateDoc(r.Context(), docID, target.Content, nil); err != nil {
 		httputil.Errorf(w, err)
 		return
 	}

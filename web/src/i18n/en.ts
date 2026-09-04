@@ -324,6 +324,8 @@ export const en = {
       saving: 'Saving…',
       saved: 'Saved as v{{version}}',
       saveError: "Couldn't save. Your draft is intact — try again.",
+      saveConflict:
+        'Someone else saved a newer version. Your draft is intact — load the latest below to reconcile.',
       discard: 'Discard',
       unsaved: 'Unsaved',
       aiSuggest: 'Suggest update',
