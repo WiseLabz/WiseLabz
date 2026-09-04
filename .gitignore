@@ -556,6 +556,7 @@ graphify-out/cache/
 .impeccable/
 prototypes/
 CLAUDE.md
+.context.xml
 
 
 # Stray compiled binaries (accidentally committed previously, now untracked)
