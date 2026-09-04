@@ -9,6 +9,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { getGetDashboardOverviewQueryKey } from '../api/generated/dashboard/dashboard';
 import { getGetChangesQueryKey } from '../api/generated/changes/changes';
 import { getGetAlertsQueryKey } from '../api/generated/alerts/alerts';
+import { getGetNotificationsQueryKey } from '../api/generated/notifications/notifications';
 import { getGetDocsTreeQueryKey } from '../api/generated/docs/docs';
 import { useLive } from '../store/live';
 import { toast } from '../lib/toast';
@@ -163,6 +164,7 @@ function handle(frame: WsEvent, qc: ReturnType<typeof useQueryClient>) {
         tone: p.severity === 'critical' ? 'err' : 'warn',
       });
       qc.invalidateQueries({ queryKey: getGetAlertsQueryKey() });
+      qc.invalidateQueries({ queryKey: getGetNotificationsQueryKey() });
       {
         const opts = { action: jump('/alerts') };
         if (p.severity === 'critical') toast.error(p.title, opts);
@@ -173,6 +175,7 @@ function handle(frame: WsEvent, qc: ReturnType<typeof useQueryClient>) {
     case 'alert.resolved': {
       s.bumpAlerts(-1);
       qc.invalidateQueries({ queryKey: getGetAlertsQueryKey() });
+      qc.invalidateQueries({ queryKey: getGetNotificationsQueryKey() });
       break;
     }
     case 'doc.generated': {

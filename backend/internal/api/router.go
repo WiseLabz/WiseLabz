@@ -17,6 +17,7 @@ import (
 	dashhandler "github.com/WiseLabz/wiselabz/internal/api/dashboard"
 	dochandler "github.com/WiseLabz/wiselabz/internal/api/docs"
 	"github.com/WiseLabz/wiselabz/internal/api/middleware"
+	notifhandler "github.com/WiseLabz/wiselabz/internal/api/notifications"
 	settinghandler "github.com/WiseLabz/wiselabz/internal/api/settings"
 	syshandler "github.com/WiseLabz/wiselabz/internal/api/system"
 	tmplhandler "github.com/WiseLabz/wiselabz/internal/api/templates"
@@ -63,6 +64,7 @@ func NewRouter(cfg Config) chi.Router {
 	tmplH := tmplhandler.NewHandler(cfg.Store, cfg.DocEngine)
 	changeH := changehandler.NewHandler(cfg.Store, settingH, cfg.AIRegistry, cfg.WSHub)
 	alertH := alerthandler.NewHandler(cfg.Store)
+	notifH := notifhandler.NewHandler(cfg.Store)
 	dashH := dashhandler.NewHandler(cfg.Store)
 	docH := dochandler.NewHandler(cfg.Store, cfg.DocEngine, settingH, cfg.AIRegistry, cfg.WSHub)
 
@@ -193,6 +195,12 @@ func NewRouter(cfg Config) chi.Router {
 				r.Post("/{id}/dismiss", alertH.Dismiss)
 				r.Post("/{id}/snooze", alertH.Snooze)
 			})
+		})
+
+		r.Route("/api/notifications", func(r chi.Router) {
+			r.Get("/", notifH.List)
+			r.Post("/read-all", notifH.ReadAll)
+			r.Post("/{id}/read", notifH.MarkRead)
 		})
 
 		r.Route("/api/dashboard", func(r chi.Router) {

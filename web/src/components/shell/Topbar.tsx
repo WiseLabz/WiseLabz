@@ -13,12 +13,12 @@ import { useLive } from '../../store/live';
 import { useAuth } from '../../store/auth';
 import { useCanMutate } from '../../hooks/useRole';
 import { runSync } from '../../lib/runSync';
-import { Button, IconButton } from '../ui/Button';
-import { SearchIcon, SyncIcon, BellIcon, UserIcon, ChevronDownIcon } from '../icons';
+import { Button } from '../ui/Button';
+import { SearchIcon, SyncIcon, UserIcon, ChevronDownIcon } from '../icons';
+import { NotificationCenter } from './NotificationCenter';
 
 export function Topbar() {
   const togglePalette = useUi((s) => s.togglePalette);
-  const pending = useLive((s) => s.pendingAlerts);
   const globalJob = useLive((s) => s.jobs.global);
   const canMutate = useCanMutate();
   const user = useAuth((s) => s.user);
@@ -78,28 +78,7 @@ export function Topbar() {
           </Button>
         )}
 
-        <div className="relative">
-          <IconButton
-            label={t('topbar.alerts')}
-            onClick={() => navigate('/alerts')}
-            className="relative"
-          >
-            <BellIcon size={18} />
-            <AnimatePresence>
-              {pending > 0 && (
-                <motion.span
-                  initial={{ scale: 0 }}
-                  animate={{ scale: 1 }}
-                  exit={{ scale: 0 }}
-                  transition={{ type: 'spring', stiffness: 600, damping: 22 }}
-                  className="nums absolute -right-0.5 -top-0.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-err px-1 text-[10px] font-bold text-signal-ink"
-                >
-                  {pending}
-                </motion.span>
-              )}
-            </AnimatePresence>
-          </IconButton>
-        </div>
+        <NotificationCenter />
 
         {/* User menu */}
         <div className="relative">

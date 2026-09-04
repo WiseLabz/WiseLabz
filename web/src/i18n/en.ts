@@ -59,7 +59,11 @@ export const en = {
   topbar: {
     searchPlaceholder: 'search services, docs, changes…',
     syncAll: 'Sync all',
-    alerts: 'Alerts',
+  },
+  notifications: {
+    title: 'Notifications',
+    empty: 'No notifications yet.',
+    markAllRead: 'Mark all read',
   },
   sync: {
     phase: {

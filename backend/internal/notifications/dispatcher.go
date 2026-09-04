@@ -63,14 +63,11 @@ func (d *Dispatcher) NotifyAlert(alertID, userID, eventType, title, message stri
 }
 
 func (d *Dispatcher) createInApp(userID, alertID, eventType, title, message string) error {
-	_, err := d.store.DB().ExecContext(context.TODO(), `
-		INSERT INTO in_app_notifications (id, user_id, alert_id, event_type, title, message, read, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, 0, datetime('now'))
-	`, generateID(), userID, alertID, eventType, title, message)
-	return err
-}
-
-func generateID() string {
-	// Simple ID generation using time
-	return "notif_" + store.HashToken("inapp")
+	return d.store.CreateNotification(context.TODO(), &store.NotificationRecord{
+		UserID:    userID,
+		AlertID:   alertID,
+		EventType: eventType,
+		Title:     title,
+		Message:   message,
+	})
 }
