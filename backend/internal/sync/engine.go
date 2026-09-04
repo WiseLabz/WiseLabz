@@ -14,15 +14,21 @@ import (
 	"github.com/WiseLabz/wiselabz/internal/ws"
 )
 
+// AlertNotifier dispatches notifications for a newly created alert.
+type AlertNotifier interface {
+	NotifyAlertCreated(ctx context.Context, alertID, title, message string)
+}
+
 // Engine runs sync jobs against connectors.
 type Engine struct {
-	store *store.Store
-	hub   *ws.Hub
+	store    *store.Store
+	hub      *ws.Hub
+	notifier AlertNotifier
 }
 
 // NewEngine creates a new sync engine.
-func NewEngine(s *store.Store, h *ws.Hub) *Engine {
-	return &Engine{store: s, hub: h}
+func NewEngine(s *store.Store, h *ws.Hub, notifier AlertNotifier) *Engine {
+	return &Engine{store: s, hub: h, notifier: notifier}
 }
 
 // RunResult holds the outcome of a sync run.
@@ -239,6 +245,10 @@ func (e *Engine) RunSync(ctx context.Context, connectorID string, jobID string) 
 						continue
 					}
 					result.AlertsCount++
+
+					if e.notifier != nil {
+						e.notifier.NotifyAlertCreated(ctx, alert.ID, alert.Title, alert.Description)
+					}
 
 					if e.hub != nil {
 						e.hub.Broadcast(ws.EventAlertCreated, map[string]any{
