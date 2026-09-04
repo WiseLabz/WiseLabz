@@ -14,6 +14,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { isAxiosError } from 'axios';
 import CodeMirror from '@uiw/react-codemirror';
 import { markdown } from '@codemirror/lang-markdown';
 import { EditorView } from '@codemirror/view';
@@ -124,7 +125,17 @@ export function DocEditorPage() {
       toast.success(t('docs.editor.saved', { version: updated.currentVersion }));
       navigate(`/docs/${docId}`);
     },
-    onError: () => toast.error(t('docs.editor.saveError')),
+    onError: (error) => {
+      // Stale baseVersion: server rejected with 409, current doc is untouched.
+      // Refetch so `newerAvailable` flips true and the existing "load latest"
+      // banner (below) becomes the recovery path — the draft stays intact.
+      if (isAxiosError(error) && error.response?.status === 409) {
+        queryClient.invalidateQueries({ queryKey: getGetDocsDocIdQueryKey(docId) });
+        toast.error(t('docs.editor.saveConflict'));
+        return;
+      }
+      toast.error(t('docs.editor.saveError'));
+    },
   });
 
   const suggest = useMutation({

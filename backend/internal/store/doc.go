@@ -103,12 +103,20 @@ func (s *Store) GetDoc(ctx context.Context, id string) (*DocRecord, error) {
 	return d, nil
 }
 
-// UpdateDoc updates the content of a documentation record.
-func (s *Store) UpdateDoc(ctx context.Context, id, content string) error {
+// UpdateDoc updates the content of a documentation record. If expectedVersion
+// is non-nil, the update only applies when current_version matches it
+// (optimistic concurrency); a stale version returns ErrVersionConflict instead
+// of silently overwriting a newer edit.
+func (s *Store) UpdateDoc(ctx context.Context, id, content string, expectedVersion *int) error {
 	now := time.Now().UTC().Format(time.RFC3339)
-	result, err := s.db.ExecContext(ctx, `
-		UPDATE docs SET content = ?, updated_at = ?, current_version = current_version + 1 WHERE id = ?
-	`, content, now, id)
+	query := `UPDATE docs SET content = ?, updated_at = ?, current_version = current_version + 1 WHERE id = ?`
+	args := []any{content, now, id}
+	if expectedVersion != nil {
+		query += ` AND current_version = ?`
+		args = append(args, *expectedVersion)
+	}
+
+	result, err := s.db.ExecContext(ctx, query, args...)
 	if err != nil {
 		return fmt.Errorf("update doc: %w", err)
 	}
@@ -117,6 +125,11 @@ func (s *Store) UpdateDoc(ctx context.Context, id, content string) error {
 		return fmt.Errorf("rows affected: %w", err)
 	}
 	if rows == 0 {
+		if expectedVersion != nil {
+			if _, getErr := s.GetDoc(ctx, id); getErr == nil {
+				return ErrVersionConflict
+			}
+		}
 		return ErrNotFound
 	}
 	return nil

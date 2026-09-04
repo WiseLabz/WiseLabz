@@ -557,7 +557,7 @@ export const getPutDocsDocIdQueryKey = (docId: string, docSave?: BodyType<DocSav
 
 export const getPutDocsDocIdQueryOptions = <
   TData = Awaited<ReturnType<typeof putDocsDocId>>,
-  TError = ErrorType<ForbiddenResponse>,
+  TError = ErrorType<ForbiddenResponse | NotFoundResponse | Doc>,
 >(
   docId: string,
   docSave: BodyType<DocSave>,
@@ -584,11 +584,11 @@ export const getPutDocsDocIdQueryOptions = <
 };
 
 export type PutDocsDocIdQueryResult = NonNullable<Awaited<ReturnType<typeof putDocsDocId>>>;
-export type PutDocsDocIdQueryError = ErrorType<ForbiddenResponse>;
+export type PutDocsDocIdQueryError = ErrorType<ForbiddenResponse | NotFoundResponse | Doc>;
 
 export function usePutDocsDocId<
   TData = Awaited<ReturnType<typeof putDocsDocId>>,
-  TError = ErrorType<ForbiddenResponse>,
+  TError = ErrorType<ForbiddenResponse | NotFoundResponse | Doc>,
 >(
   docId: string,
   docSave: BodyType<DocSave>,
@@ -608,7 +608,7 @@ export function usePutDocsDocId<
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 export function usePutDocsDocId<
   TData = Awaited<ReturnType<typeof putDocsDocId>>,
-  TError = ErrorType<ForbiddenResponse>,
+  TError = ErrorType<ForbiddenResponse | NotFoundResponse | Doc>,
 >(
   docId: string,
   docSave: BodyType<DocSave>,
@@ -628,7 +628,7 @@ export function usePutDocsDocId<
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 export function usePutDocsDocId<
   TData = Awaited<ReturnType<typeof putDocsDocId>>,
-  TError = ErrorType<ForbiddenResponse>,
+  TError = ErrorType<ForbiddenResponse | NotFoundResponse | Doc>,
 >(
   docId: string,
   docSave: BodyType<DocSave>,
@@ -644,7 +644,7 @@ export function usePutDocsDocId<
 
 export function usePutDocsDocId<
   TData = Awaited<ReturnType<typeof putDocsDocId>>,
-  TError = ErrorType<ForbiddenResponse>,
+  TError = ErrorType<ForbiddenResponse | NotFoundResponse | Doc>,
 >(
   docId: string,
   docSave: BodyType<DocSave>,

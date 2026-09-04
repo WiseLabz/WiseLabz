@@ -92,7 +92,7 @@ func (e *Engine) GenerateFromTemplate(ctx context.Context, templateID, connector
 	var docID string
 	if len(existingDocs) > 0 {
 		docID = existingDocs[0].ID
-		if err := e.store.UpdateDoc(ctx, docID, content); err != nil {
+		if err := e.store.UpdateDoc(ctx, docID, content, nil); err != nil {
 			return nil, fmt.Errorf("update doc: %w", err)
 		}
 		// Get updated version

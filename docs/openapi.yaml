@@ -525,6 +525,14 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Doc' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: >
+            Version conflict — baseVersion is stale. Body is the current server-side
+            Doc (content + currentVersion) so the client can reconcile.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Doc' }
   /docs/{docId}/versions:
     get:
       tags: [docs]
