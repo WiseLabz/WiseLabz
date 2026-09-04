@@ -3,8 +3,18 @@ name: CodeQL
 on:
   push:
     branches: [main]
+    paths:
+      - "backend/**"
+      - "go.work"
+      - "go.work.sum"
+      - ".github/workflows/codeql.yml"
   pull_request:
     branches: [main]
+    paths:
+      - "backend/**"
+      - "go.work"
+      - "go.work.sum"
+      - ".github/workflows/codeql.yml"
   schedule:
     - cron: "0 8 * * 1"
 
