@@ -21,6 +21,7 @@ tags:
   - name: templates
   - name: changes
   - name: alerts
+  - name: notifications
   - name: settings
   - name: system
 
@@ -854,6 +855,48 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Alert' }
 
+  # ─────────────────── notification center ────────────────────
+  /notifications:
+    get:
+      tags: [notifications]
+      summary: List the current user's in-app notifications
+      parameters:
+        - name: unread
+          in: query
+          required: false
+          schema: { type: boolean }
+          description: When true, return only unread notifications (total reflects the unread count).
+        - { $ref: '#/components/parameters/Page' }
+        - { $ref: '#/components/parameters/PageSize' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NotificationPage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /notifications/read-all:
+    post:
+      tags: [notifications]
+      summary: Mark all of the current user's notifications as read
+      responses:
+        '204': { description: No Content }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /notifications/{notificationId}/read:
+    post:
+      tags: [notifications]
+      summary: Mark one notification as read
+      parameters:
+        - { name: notificationId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Notification' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
   # ───────────────────────── settings ─────────────────────────
   /auth/config:
     get:
@@ -1528,6 +1571,29 @@ components:
         items:
           type: array
           items: { $ref: '#/components/schemas/Alert' }
+        total: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
+
+    # ── notification center ──
+    Notification:
+      type: object
+      required: [id, eventType, title, message, read, createdAt]
+      properties:
+        id: { type: string }
+        alertId: { type: string, nullable: true, description: 'Deep-link target when set — the affected alert.' }
+        eventType: { type: string, description: 'e.g. alert.created' }
+        title: { type: string }
+        message: { type: string }
+        read: { type: boolean }
+        createdAt: { type: string, format: date-time }
+    NotificationPage:
+      type: object
+      required: [items, total, page, pageSize]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Notification' }
         total: { type: integer }
         page: { type: integer }
         pageSize: { type: integer }
