@@ -48,9 +48,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: ci-test - deliberate failure (revert before merge)
-        run: exit 1
-
       - name: Setup Go
         uses: actions/setup-go@0aaccfd150d50ccaeb58ebd88d36e91967a5f35b # v5.4.0
         with:
