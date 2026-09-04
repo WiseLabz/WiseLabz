@@ -35,6 +35,7 @@ jobs:
               - '.github/workflows/ci.yml'
             frontend:
               - 'web/**'
+              - 'docs/openapi.yaml'
               - '.github/workflows/ci.yml'
 
   lint-backend:
@@ -100,6 +101,20 @@ jobs:
         if: steps.cache-node-modules.outputs.cache-hit != 'true'
         run: npm ci --prefer-offline --no-audit --no-fund
         working-directory: web
+
+      - name: Regenerate API client and mocks
+        run: npm run gen:api
+        working-directory: web
+
+      - name: Fail if generated client/mocks are stale
+        run: |
+          git add -A -- web/src/api/generated web/src/api/model
+          if ! git diff --cached --quiet -- web/src/api/generated web/src/api/model; then
+            echo "::error::web/src/api/generated or web/src/api/model is out of date with docs/openapi.yaml."
+            echo "Run 'npm run gen:api' in web/ and commit the result."
+            git diff --cached --stat -- web/src/api/generated web/src/api/model
+            exit 1
+          fi
 
       - name: Lint
         run: npm run lint

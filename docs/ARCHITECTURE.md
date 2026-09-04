@@ -87,7 +87,7 @@ WiseLabz/
 | State management | Zustand                                                   | minimal boilerplate, works cleanly alongside React Query                                                                                                             |
 | Server state     | React Query                                               | caching, background refetch, loading/error states for REST data                                                                                                      |
 | Styling          | Tailwind CSS                                              | productive, dark mode built-in, low barrier for contributors                                                                                                         |
-| API client       | generated via `orval` (OpenAPI → typed React Query hooks) | contract-first from `docs/openapi.yaml`; frontend/backend types stay in sync, and MSW mocks generated from the same spec let the frontend build ahead of the backend |
+| API client       | generated via `orval` (OpenAPI → typed React Query hooks) | contract-first from `docs/openapi.yaml`; frontend/backend types stay in sync, and MSW mocks generated from the same spec let the frontend build ahead of the backend. Output (`web/src/api/generated`, `web/src/api/model`) is committed; CI regenerates and fails the build if it drifts from the spec, so run `npm run gen:api` after editing `docs/openapi.yaml` and commit the result |
 
 ### Infrastructure
 
