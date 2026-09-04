@@ -1,4 +1,5 @@
 // Package main is the entry point for the WiseLabz server.
+// ci-test: backend-only path filter check, revert before merge
 package main
 
 import (
