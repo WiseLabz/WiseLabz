@@ -93,6 +93,88 @@ func TestRunMigrationsPostgres(t *testing.T) {
 	}
 }
 
+func TestRunMigrationsDown(t *testing.T) {
+	dir := t.TempDir()
+	dsn := "file:" + dir + "/test.db?cache=shared"
+
+	db, err := sql.Open("sqlite", dsn)
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer db.Close() //nolint:errcheck
+
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
+
+	if err := RunMigrations(db, "sqlite", logger); err != nil {
+		t.Fatalf("RunMigrations() error: %v", err)
+	}
+
+	if err := RunMigrationsDown(db, "sqlite", logger); err != nil {
+		t.Fatalf("RunMigrationsDown() error: %v", err)
+	}
+
+	// Tables from the rolled-back migration should be gone.
+	for _, table := range tablesCreatedByMigrations {
+		var count int
+		err := db.QueryRow("SELECT COUNT(*) FROM " + table).Scan(&count)
+		if err == nil {
+			t.Errorf("table %s still exists after RunMigrationsDown()", table)
+		}
+	}
+}
+
+// TestRunMigrationsDownPostgres mirrors TestRunMigrationsPostgres but for the
+// down path. Opt-in via WISELABZ_TEST_POSTGRES_DSN; skipped otherwise.
+func TestRunMigrationsDownPostgres(t *testing.T) {
+	dsn := os.Getenv("WISELABZ_TEST_POSTGRES_DSN")
+	if dsn == "" {
+		t.Skip("WISELABZ_TEST_POSTGRES_DSN not set; skipping postgres migration test")
+	}
+
+	db, err := sql.Open("pgx", dsn)
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer db.Close() //nolint:errcheck
+
+	if err := db.Ping(); err != nil {
+		t.Fatalf("ping db: %v", err)
+	}
+
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
+
+	if err := RunMigrations(db, "postgres", logger); err != nil {
+		t.Fatalf("RunMigrations() error: %v", err)
+	}
+
+	if err := RunMigrationsDown(db, "postgres", logger); err != nil {
+		t.Fatalf("RunMigrationsDown() error: %v", err)
+	}
+
+	for _, table := range tablesCreatedByMigrations {
+		var count int
+		err := db.QueryRow("SELECT COUNT(*) FROM " + table).Scan(&count)
+		if err == nil {
+			t.Errorf("table %s still exists after RunMigrationsDown()", table)
+		}
+	}
+}
+
+func TestRunMigrationsDownUnsupportedDriver(t *testing.T) {
+	db, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer db.Close() //nolint:errcheck
+
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
+
+	err = RunMigrationsDown(db, "mysql", logger)
+	if err == nil {
+		t.Error("expected error for unsupported driver, got nil")
+	}
+}
+
 func TestRunMigrationsUnsupportedDriver(t *testing.T) {
 	db, err := sql.Open("sqlite", ":memory:")
 	if err != nil {
