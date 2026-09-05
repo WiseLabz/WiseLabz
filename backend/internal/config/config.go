@@ -14,12 +14,13 @@ import (
 
 // Config is the top-level configuration structure.
 type Config struct {
-	DB     Database     `mapstructure:"db"`
-	Server Server       `mapstructure:"server"`
-	Auth   AuthSettings `mapstructure:"auth"`
-	AI     AISettings   `mapstructure:"ai"`
-	Sync   SyncSettings `mapstructure:"sync"`
-	Log    LogSettings  `mapstructure:"log"`
+	DB        Database          `mapstructure:"db"`
+	Server    Server            `mapstructure:"server"`
+	Auth      AuthSettings      `mapstructure:"auth"`
+	AI        AISettings        `mapstructure:"ai"`
+	Sync      SyncSettings      `mapstructure:"sync"`
+	Log       LogSettings       `mapstructure:"log"`
+	Retention RetentionSettings `mapstructure:"retention"`
 }
 
 // Database holds database connection settings.
@@ -108,6 +109,17 @@ type LogSettings struct {
 	Format string `mapstructure:"format"` // "text" or "json"
 }
 
+// RetentionSettings holds data retention cleanup settings. Each *Days field
+// bounds how long a category of historical data is kept; 0 disables cleanup
+// for that category (never delete).
+type RetentionSettings struct {
+	SnapshotDays   int `mapstructure:"snapshot_days"`
+	DocVersionDays int `mapstructure:"doc_version_days"`
+	AlertDays      int `mapstructure:"alert_days"`
+	SyncRunDays    int `mapstructure:"sync_run_days"`
+	IntervalHours  int `mapstructure:"interval_hours"`
+}
+
 // Load reads configuration from file and environment, returning a populated Config.
 // It searches for config.yaml in /etc/wiselabz/, ., and ./deploy/.
 // All values can be overridden via WISELABZ_ prefixed environment variables.
@@ -134,6 +146,11 @@ func Load() (*Config, error) {
 	v.SetDefault("sync.schedule", "0 */6 * * *") // every 6 hours
 	v.SetDefault("log.level", "info")
 	v.SetDefault("log.format", "text")
+	v.SetDefault("retention.snapshot_days", 90)
+	v.SetDefault("retention.doc_version_days", 365)
+	v.SetDefault("retention.alert_days", 180)
+	v.SetDefault("retention.sync_run_days", 90)
+	v.SetDefault("retention.interval_hours", 24)
 
 	if err := v.ReadInConfig(); err != nil {
 		// Config file is optional — env-only config is valid for PaaS deployments
@@ -181,6 +198,11 @@ func applyEnvOverrides(cfg *Config) {
 		"SYNC_SCHEDULE":                func(v string) { cfg.Sync.Schedule = v },
 		"LOG_LEVEL":                    func(v string) { cfg.Log.Level = v },
 		"LOG_FORMAT":                   func(v string) { cfg.Log.Format = v },
+		"RETENTION_SNAPSHOT_DAYS":      func(v string) { cfg.Retention.SnapshotDays = intEnv(v) },
+		"RETENTION_DOC_VERSION_DAYS":   func(v string) { cfg.Retention.DocVersionDays = intEnv(v) },
+		"RETENTION_ALERT_DAYS":         func(v string) { cfg.Retention.AlertDays = intEnv(v) },
+		"RETENTION_SYNC_RUN_DAYS":      func(v string) { cfg.Retention.SyncRunDays = intEnv(v) },
+		"RETENTION_INTERVAL_HOURS":     func(v string) { cfg.Retention.IntervalHours = intEnv(v) },
 	}
 
 	prefix := "WISELABZ_"
