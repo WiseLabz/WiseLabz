@@ -36,6 +36,21 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.Log.Level != "info" {
 		t.Errorf("log.level = %q, want info", cfg.Log.Level)
 	}
+	if cfg.Retention.SnapshotDays != 90 {
+		t.Errorf("retention.snapshot_days = %d, want 90", cfg.Retention.SnapshotDays)
+	}
+	if cfg.Retention.DocVersionDays != 365 {
+		t.Errorf("retention.doc_version_days = %d, want 365", cfg.Retention.DocVersionDays)
+	}
+	if cfg.Retention.AlertDays != 180 {
+		t.Errorf("retention.alert_days = %d, want 180", cfg.Retention.AlertDays)
+	}
+	if cfg.Retention.SyncRunDays != 90 {
+		t.Errorf("retention.sync_run_days = %d, want 90", cfg.Retention.SyncRunDays)
+	}
+	if cfg.Retention.IntervalHours != 24 {
+		t.Errorf("retention.interval_hours = %d, want 24", cfg.Retention.IntervalHours)
+	}
 }
 
 func TestLoadFromYAML(t *testing.T) {
@@ -117,6 +132,11 @@ func TestLoadEnvOverride(t *testing.T) {
 	t.Setenv("WISELABZ_SERVER_PORT", "7070")
 	t.Setenv("WISELABZ_DB_DRIVER", "postgres")
 	t.Setenv("WISELABZ_AUTH_SECRET", "env-secret")
+	t.Setenv("WISELABZ_RETENTION_SNAPSHOT_DAYS", "30")
+	t.Setenv("WISELABZ_RETENTION_DOC_VERSION_DAYS", "0")
+	t.Setenv("WISELABZ_RETENTION_ALERT_DAYS", "60")
+	t.Setenv("WISELABZ_RETENTION_SYNC_RUN_DAYS", "14")
+	t.Setenv("WISELABZ_RETENTION_INTERVAL_HOURS", "6")
 
 	cfg, err := Load()
 	if err != nil {
@@ -131,6 +151,21 @@ func TestLoadEnvOverride(t *testing.T) {
 	}
 	if cfg.Auth.Secret != "env-secret" {
 		t.Errorf("auth.secret = %q, want env-secret", cfg.Auth.Secret)
+	}
+	if cfg.Retention.SnapshotDays != 30 {
+		t.Errorf("retention.snapshot_days = %d, want 30", cfg.Retention.SnapshotDays)
+	}
+	if cfg.Retention.DocVersionDays != 0 {
+		t.Errorf("retention.doc_version_days = %d, want 0", cfg.Retention.DocVersionDays)
+	}
+	if cfg.Retention.AlertDays != 60 {
+		t.Errorf("retention.alert_days = %d, want 60", cfg.Retention.AlertDays)
+	}
+	if cfg.Retention.SyncRunDays != 14 {
+		t.Errorf("retention.sync_run_days = %d, want 14", cfg.Retention.SyncRunDays)
+	}
+	if cfg.Retention.IntervalHours != 6 {
+		t.Errorf("retention.interval_hours = %d, want 6", cfg.Retention.IntervalHours)
 	}
 }
 

@@ -32,7 +32,7 @@ commit-msg:
     conventional-commits:
       run: |
         regex='^(feat|fix|docs|chore|refactor|test|ci|perf|revert)(\(.+\))?: .{1,100}'
-        if ! head -1 {1} | grep -qE "$regex"; then
+        if ! head -1 "$(git rev-parse --git-path COMMIT_EDITMSG)" | grep -qE "$regex"; then
           echo "ERROR: Commit message does not follow Conventional Commits format."
           echo ""
           echo "Format: <type>(<scope>): <short description>"
