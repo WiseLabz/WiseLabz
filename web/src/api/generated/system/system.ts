@@ -22,6 +22,7 @@ import type {
 import type {
   BackupBundle,
   BackupImportResult,
+  DiagnosticsBundle,
   Error,
   ForbiddenResponse,
   Health,
@@ -405,6 +406,126 @@ export function usePostSystemBackupImport<
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
   const queryOptions = getPostSystemBackupImportQueryOptions(backupBundle, options);
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+/**
+ * @summary Sanitized diagnostics bundle (health, versions, secret-free config, recent failures) — operator. See docs/DIAGNOSTICS.md.
+ */
+export const getSystemDiagnostics = (
+  options?: SecondParameter<typeof customInstance>,
+  signal?: AbortSignal
+) => {
+  return customInstance<DiagnosticsBundle>(
+    { url: `/system/diagnostics`, method: 'GET', signal },
+    options
+  );
+};
+
+export const getGetSystemDiagnosticsQueryKey = () => {
+  return [`/system/diagnostics`] as const;
+};
+
+export const getGetSystemDiagnosticsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getSystemDiagnostics>>,
+  TError = ErrorType<ForbiddenResponse>,
+>(options?: {
+  query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getSystemDiagnostics>>, TError, TData>>;
+  request?: SecondParameter<typeof customInstance>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetSystemDiagnosticsQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getSystemDiagnostics>>> = ({ signal }) =>
+    getSystemDiagnostics(requestOptions, signal);
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getSystemDiagnostics>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type GetSystemDiagnosticsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getSystemDiagnostics>>
+>;
+export type GetSystemDiagnosticsQueryError = ErrorType<ForbiddenResponse>;
+
+export function useGetSystemDiagnostics<
+  TData = Awaited<ReturnType<typeof getSystemDiagnostics>>,
+  TError = ErrorType<ForbiddenResponse>,
+>(
+  options: {
+    query: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getSystemDiagnostics>>, TError, TData>
+    > &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getSystemDiagnostics>>,
+          TError,
+          Awaited<ReturnType<typeof getSystemDiagnostics>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useGetSystemDiagnostics<
+  TData = Awaited<ReturnType<typeof getSystemDiagnostics>>,
+  TError = ErrorType<ForbiddenResponse>,
+>(
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getSystemDiagnostics>>, TError, TData>
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getSystemDiagnostics>>,
+          TError,
+          Awaited<ReturnType<typeof getSystemDiagnostics>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useGetSystemDiagnostics<
+  TData = Awaited<ReturnType<typeof getSystemDiagnostics>>,
+  TError = ErrorType<ForbiddenResponse>,
+>(
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getSystemDiagnostics>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * @summary Sanitized diagnostics bundle (health, versions, secret-free config, recent failures) — operator. See docs/DIAGNOSTICS.md.
+ */
+
+export function useGetSystemDiagnostics<
+  TData = Awaited<ReturnType<typeof getSystemDiagnostics>>,
+  TError = ErrorType<ForbiddenResponse>,
+>(
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getSystemDiagnostics>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getGetSystemDiagnosticsQueryOptions(options);
 
   const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
     queryKey: DataTag<QueryKey, TData, TError>;
