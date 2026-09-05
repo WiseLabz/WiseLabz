@@ -287,6 +287,26 @@ When a user creates a connector and triggers sync:
 Your connector doesn't need to do anything special for sync — just implement
 `Fetch` and `Validate`. The engine handles the rest.
 
+## Health checks vs. sync
+
+`POST /api/connectors/{id}/health` checks availability without the cost of a
+full sync: it calls only `Validate`, never `Fetch`, so no snapshot, diff,
+change, alert, or doc is produced. The result is classified into one of the
+connector's `online` / `degraded` / `offline` statuses
+(`internal/connector.ClassifyHealth`) and persisted on the connector record —
+`degraded` means `Validate` succeeded but took longer than
+`connector.DegradedLatencyThreshold`; `offline` means it returned an error.
+
+This is distinct from `POST /api/connectors/{id}/test`, which also calls only
+`Validate` but is a preview — its result is never persisted — used when
+adding/editing a connector before it's saved. `/health` is for an
+already-configured connector, checked on demand or on a lighter cadence than a
+full sync, so the dashboard's status reflects current availability even
+between sync runs.
+
+Your connector doesn't need to do anything special for health checks either —
+they call the same `Validate` you already implemented for sync.
+
 ## Testing without a real instance
 
 If you don't have the service running, you have three options:

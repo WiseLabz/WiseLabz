@@ -27,6 +27,7 @@ import type {
   ElevationRequiredResponse,
   ForbiddenResponse,
   GetConnectorsConnectorIdSyncsParams,
+  HealthCheckResult,
   NotFoundResponse,
   PutConnectorsConnectorIdEnabledBody,
   RemovalImpact,
@@ -1248,6 +1249,144 @@ export function usePostConnectorsConnectorIdTest<
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
   const queryOptions = getPostConnectorsConnectorIdTestQueryOptions(connectorId, options);
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+/**
+ * Runs the connector's Validate step only and saves the resulting online/degraded/offline status, independently of running a full sync. Unlike /test, this call updates the connector's persisted status.
+ * @summary Cheap connectivity check (no fetch, no snapshot, no docs); persists status
+ */
+export const postConnectorsConnectorIdHealth = (
+  connectorId: string,
+  options?: SecondParameter<typeof customInstance>,
+  signal?: AbortSignal
+) => {
+  return customInstance<HealthCheckResult>(
+    { url: `/connectors/${connectorId}/health`, method: 'POST', signal },
+    options
+  );
+};
+
+export const getPostConnectorsConnectorIdHealthQueryKey = (connectorId: string) => {
+  return ['POST', `/connectors/${connectorId}/health`] as const;
+};
+
+export const getPostConnectorsConnectorIdHealthQueryOptions = <
+  TData = Awaited<ReturnType<typeof postConnectorsConnectorIdHealth>>,
+  TError = ErrorType<NotFoundResponse>,
+>(
+  connectorId: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof postConnectorsConnectorIdHealth>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  }
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getPostConnectorsConnectorIdHealthQueryKey(connectorId);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof postConnectorsConnectorIdHealth>>> = ({
+    signal,
+  }) => postConnectorsConnectorIdHealth(connectorId, requestOptions, signal);
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: connectorId !== null && connectorId !== undefined,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof postConnectorsConnectorIdHealth>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type PostConnectorsConnectorIdHealthQueryResult = NonNullable<
+  Awaited<ReturnType<typeof postConnectorsConnectorIdHealth>>
+>;
+export type PostConnectorsConnectorIdHealthQueryError = ErrorType<NotFoundResponse>;
+
+export function usePostConnectorsConnectorIdHealth<
+  TData = Awaited<ReturnType<typeof postConnectorsConnectorIdHealth>>,
+  TError = ErrorType<NotFoundResponse>,
+>(
+  connectorId: string,
+  options: {
+    query: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof postConnectorsConnectorIdHealth>>, TError, TData>
+    > &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postConnectorsConnectorIdHealth>>,
+          TError,
+          Awaited<ReturnType<typeof postConnectorsConnectorIdHealth>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function usePostConnectorsConnectorIdHealth<
+  TData = Awaited<ReturnType<typeof postConnectorsConnectorIdHealth>>,
+  TError = ErrorType<NotFoundResponse>,
+>(
+  connectorId: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof postConnectorsConnectorIdHealth>>, TError, TData>
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postConnectorsConnectorIdHealth>>,
+          TError,
+          Awaited<ReturnType<typeof postConnectorsConnectorIdHealth>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function usePostConnectorsConnectorIdHealth<
+  TData = Awaited<ReturnType<typeof postConnectorsConnectorIdHealth>>,
+  TError = ErrorType<NotFoundResponse>,
+>(
+  connectorId: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof postConnectorsConnectorIdHealth>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * @summary Cheap connectivity check (no fetch, no snapshot, no docs); persists status
+ */
+
+export function usePostConnectorsConnectorIdHealth<
+  TData = Awaited<ReturnType<typeof postConnectorsConnectorIdHealth>>,
+  TError = ErrorType<NotFoundResponse>,
+>(
+  connectorId: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof postConnectorsConnectorIdHealth>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getPostConnectorsConnectorIdHealthQueryOptions(connectorId, options);
 
   const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
     queryKey: DataTag<QueryKey, TData, TError>;
