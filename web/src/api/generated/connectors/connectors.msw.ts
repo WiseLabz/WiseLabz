@@ -142,6 +142,7 @@ export const getGetConnectorsSchemaResponseMock = (): ConnectorTypeSchema[] =>
         ]),
       })
     ),
+    stub: faker.datatype.boolean(),
   }));
 
 export const getGetConnectorsConnectorIdResponseMock = (

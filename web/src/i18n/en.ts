@@ -267,6 +267,7 @@ export const en = {
     displayNamePlaceholder: 'e.g. pve1',
     connectFailed:
       'Couldn’t connect with those details. Check the URL and credentials, then retry.',
+    comingSoon: 'Coming soon',
     submitIdle: 'Test & add connector',
     submitPending: 'Testing & saving…',
     edit: {
@@ -279,6 +280,7 @@ export const en = {
       testing: 'Testing…',
       testOk: 'Connection succeeded ({{ms}}ms)',
       testFail: 'Connection failed. Check the URL and credentials.',
+      testUnavailable: 'Not available for this connector type yet.',
       saving: 'Saving…',
       saved: 'Connector updated',
       saveError: "Couldn't save changes.",

@@ -19,6 +19,7 @@ func init() {
 		Fields: []connector.SchemaField{
 			{Key: "host", Label: "Docker Host", Type: "text", Required: true, Placeholder: "unix:///var/run/docker.sock or tcp://host:2375"},
 		},
+		Stub: true,
 	}, func(_ map[string]any) (connector.Connector, error) {
 		return &Connector{}, nil
 	})
