@@ -18,6 +18,7 @@ import (
 	dochandler "github.com/WiseLabz/wiselabz/internal/api/docs"
 	"github.com/WiseLabz/wiselabz/internal/api/middleware"
 	notifhandler "github.com/WiseLabz/wiselabz/internal/api/notifications"
+	savedviewhandler "github.com/WiseLabz/wiselabz/internal/api/savedviews"
 	settinghandler "github.com/WiseLabz/wiselabz/internal/api/settings"
 	syshandler "github.com/WiseLabz/wiselabz/internal/api/system"
 	tmplhandler "github.com/WiseLabz/wiselabz/internal/api/templates"
@@ -67,6 +68,7 @@ func NewRouter(cfg Config) chi.Router {
 	notifH := notifhandler.NewHandler(cfg.Store)
 	dashH := dashhandler.NewHandler(cfg.Store)
 	docH := dochandler.NewHandler(cfg.Store, cfg.DocEngine, settingH, cfg.AIRegistry, cfg.WSHub)
+	savedViewH := savedviewhandler.NewHandler(cfg.Store)
 
 	// --- System endpoints ---
 	r.Get("/api/health", sysH.Health)
@@ -204,6 +206,15 @@ func NewRouter(cfg Config) chi.Router {
 			r.Get("/", notifH.List)
 			r.Post("/read-all", notifH.ReadAll)
 			r.Post("/{id}/read", notifH.MarkRead)
+		})
+
+		// Saved views are a personal resource: any authenticated role (viewer
+		// or operator) may list/create/delete their own, scoped by user_id in
+		// the handler — no operatorOnly gate here.
+		r.Route("/api/saved-views", func(r chi.Router) {
+			r.Get("/", savedViewH.List)
+			r.Post("/", savedViewH.Create)
+			r.Delete("/{id}", savedViewH.Delete)
 		})
 
 		r.Route("/api/dashboard", func(r chi.Router) {

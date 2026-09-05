@@ -12,6 +12,7 @@ import {
 import { SeverityTag } from '../../components/ui/StatusDot';
 import { Panel } from '../../components/ui/Panel';
 import { Pagination } from '../../components/ui/Pagination';
+import { SavedViewsMenu } from '../../components/views/SavedViewsMenu';
 import { Button } from '../../components/ui/Button';
 import { SkeletonRows, ErrorState, EmptyState } from '../../components/ui/states';
 import { relativeTime } from '../../lib/time';
@@ -83,24 +84,31 @@ export function ChangesPage() {
             {data ? t('changes.countDetected', { count: data.total }) : t('changes.subtitle')}
           </p>
         </div>
-        <div className="flex items-center gap-1 rounded-lg border border-line-soft bg-canvas-sunken p-0.5">
-          {FILTERS.map((f) => (
-            <button
-              key={f.value}
-              onClick={() => setFilter(f.value)}
-              className="relative rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors"
-              style={{ color: filter === f.value ? 'var(--color-ink)' : 'var(--color-ink-muted)' }}
-            >
-              {filter === f.value && (
-                <motion.span
-                  layoutId="chg-filter"
-                  className="absolute inset-0 -z-10 rounded-md bg-surface-raised"
-                  transition={{ type: 'spring', stiffness: 500, damping: 36 }}
-                />
-              )}
-              {t(f.key)}
-            </button>
-          ))}
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 rounded-lg border border-line-soft bg-canvas-sunken p-0.5">
+            {FILTERS.map((f) => (
+              <button
+                key={f.value}
+                onClick={() => setFilter(f.value)}
+                className="relative rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors"
+                style={{ color: filter === f.value ? 'var(--color-ink)' : 'var(--color-ink-muted)' }}
+              >
+                {filter === f.value && (
+                  <motion.span
+                    layoutId="chg-filter"
+                    className="absolute inset-0 -z-10 rounded-md bg-surface-raised"
+                    transition={{ type: 'spring', stiffness: 500, damping: 36 }}
+                  />
+                )}
+                {t(f.key)}
+              </button>
+            ))}
+          </div>
+          <SavedViewsMenu
+            surface="changes"
+            filters={{ severity: filter }}
+            onApply={(f) => setFilter(f.severity ?? 'all')}
+          />
         </div>
       </header>
 

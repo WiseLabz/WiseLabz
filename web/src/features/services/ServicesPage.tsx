@@ -16,6 +16,7 @@ import { useCanMutate } from '../../hooks/useRole';
 import { runSync } from '../../lib/runSync';
 import { StatusPill } from '../../components/ui/StatusDot';
 import { Button, IconButton } from '../../components/ui/Button';
+import { SavedViewsMenu } from '../../components/views/SavedViewsMenu';
 import { Panel } from '../../components/ui/Panel';
 import { SkeletonRows, ErrorState, EmptyState } from '../../components/ui/states';
 import { ConfirmDestructive } from '../../components/manager/ConfirmDestructive';
@@ -70,6 +71,7 @@ export function ServicesPage() {
               className="w-44 bg-transparent text-sm text-ink outline-none placeholder:text-ink-faint"
             />
           </div>
+          <SavedViewsMenu surface="services" filters={{ q }} onApply={(f) => setQ(f.q ?? '')} />
           {canMutate && (
             <Button variant="primary" size="md" onClick={() => navigate('/services/new')}>
               <PlusIcon size={15} /> {t('services.addConnector')}
