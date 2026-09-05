@@ -6,14 +6,11 @@
  *
  * OpenAPI spec version: 0.1.0
  */
-import type { TemplateAppliesTo } from './templateAppliesTo';
-import type { TemplateSection } from './templateSection';
 
-export interface Template {
-  id: string;
-  name: string;
-  description?: string;
-  currentVersion?: number;
-  appliesTo?: TemplateAppliesTo;
-  sections: TemplateSection[];
-}
+export type TemplateVersionMetaTrigger =
+  (typeof TemplateVersionMetaTrigger)[keyof typeof TemplateVersionMetaTrigger];
+
+export const TemplateVersionMetaTrigger = {
+  save: 'save',
+  restore: 'restore',
+} as const;

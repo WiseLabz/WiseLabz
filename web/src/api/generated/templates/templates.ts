@@ -20,12 +20,14 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
-  DocVersion,
   ElevationRequiredResponse,
   NotFoundResponse,
   PostTemplatesTemplateIdPreviewBody,
   Template,
   TemplateInput,
+  TemplatePreviewResult,
+  TemplateVersion,
+  TemplateVersionMeta,
 } from '../../model';
 
 import { customInstance } from '../../axios-instance';
@@ -697,7 +699,8 @@ export function useDeleteTemplatesTemplateId<
 }
 
 /**
- * @summary Test-generate a doc from this template
+ * Lists matching connectors and, when connectorId is supplied, renders a detailed preview. This operation does not create or update documents or versions.
+ * @summary Preview this template's impact without persisting changes
  */
 export const postTemplatesTemplateIdPreview = (
   templateId: string,
@@ -705,7 +708,7 @@ export const postTemplatesTemplateIdPreview = (
   options?: SecondParameter<typeof customInstance>,
   signal?: AbortSignal
 ) => {
-  return customInstance<DocVersion>(
+  return customInstance<TemplatePreviewResult>(
     {
       url: `/templates/${templateId}/preview`,
       method: 'POST',
@@ -829,7 +832,7 @@ export function usePostTemplatesTemplateIdPreview<
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
- * @summary Test-generate a doc from this template
+ * @summary Preview this template's impact without persisting changes
  */
 
 export function usePostTemplatesTemplateIdPreview<
@@ -849,6 +852,456 @@ export function usePostTemplatesTemplateIdPreview<
   const queryOptions = getPostTemplatesTemplateIdPreviewQueryOptions(
     templateId,
     postTemplatesTemplateIdPreviewBody,
+    options
+  );
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+/**
+ * @summary Version history list for a template
+ */
+export const getTemplatesTemplateIdVersions = (
+  templateId: string,
+  options?: SecondParameter<typeof customInstance>,
+  signal?: AbortSignal
+) => {
+  return customInstance<TemplateVersionMeta[]>(
+    { url: `/templates/${templateId}/versions`, method: 'GET', signal },
+    options
+  );
+};
+
+export const getGetTemplatesTemplateIdVersionsQueryKey = (templateId: string) => {
+  return [`/templates/${templateId}/versions`] as const;
+};
+
+export const getGetTemplatesTemplateIdVersionsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getTemplatesTemplateIdVersions>>,
+  TError = ErrorType<unknown>,
+>(
+  templateId: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getTemplatesTemplateIdVersions>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  }
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetTemplatesTemplateIdVersionsQueryKey(templateId);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getTemplatesTemplateIdVersions>>> = ({
+    signal,
+  }) => getTemplatesTemplateIdVersions(templateId, requestOptions, signal);
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: templateId !== null && templateId !== undefined,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getTemplatesTemplateIdVersions>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type GetTemplatesTemplateIdVersionsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getTemplatesTemplateIdVersions>>
+>;
+export type GetTemplatesTemplateIdVersionsQueryError = ErrorType<unknown>;
+
+export function useGetTemplatesTemplateIdVersions<
+  TData = Awaited<ReturnType<typeof getTemplatesTemplateIdVersions>>,
+  TError = ErrorType<unknown>,
+>(
+  templateId: string,
+  options: {
+    query: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getTemplatesTemplateIdVersions>>, TError, TData>
+    > &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getTemplatesTemplateIdVersions>>,
+          TError,
+          Awaited<ReturnType<typeof getTemplatesTemplateIdVersions>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useGetTemplatesTemplateIdVersions<
+  TData = Awaited<ReturnType<typeof getTemplatesTemplateIdVersions>>,
+  TError = ErrorType<unknown>,
+>(
+  templateId: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getTemplatesTemplateIdVersions>>, TError, TData>
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getTemplatesTemplateIdVersions>>,
+          TError,
+          Awaited<ReturnType<typeof getTemplatesTemplateIdVersions>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useGetTemplatesTemplateIdVersions<
+  TData = Awaited<ReturnType<typeof getTemplatesTemplateIdVersions>>,
+  TError = ErrorType<unknown>,
+>(
+  templateId: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getTemplatesTemplateIdVersions>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * @summary Version history list for a template
+ */
+
+export function useGetTemplatesTemplateIdVersions<
+  TData = Awaited<ReturnType<typeof getTemplatesTemplateIdVersions>>,
+  TError = ErrorType<unknown>,
+>(
+  templateId: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getTemplatesTemplateIdVersions>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getGetTemplatesTemplateIdVersionsQueryOptions(templateId, options);
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+/**
+ * @summary A specific template revision
+ */
+export const getTemplatesTemplateIdVersionsRev = (
+  templateId: string,
+  rev: number,
+  options?: SecondParameter<typeof customInstance>,
+  signal?: AbortSignal
+) => {
+  return customInstance<TemplateVersion>(
+    { url: `/templates/${templateId}/versions/${rev}`, method: 'GET', signal },
+    options
+  );
+};
+
+export const getGetTemplatesTemplateIdVersionsRevQueryKey = (templateId: string, rev: number) => {
+  return [`/templates/${templateId}/versions/${rev}`] as const;
+};
+
+export const getGetTemplatesTemplateIdVersionsRevQueryOptions = <
+  TData = Awaited<ReturnType<typeof getTemplatesTemplateIdVersionsRev>>,
+  TError = ErrorType<unknown>,
+>(
+  templateId: string,
+  rev: number,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getTemplatesTemplateIdVersionsRev>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  }
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetTemplatesTemplateIdVersionsRevQueryKey(templateId, rev);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getTemplatesTemplateIdVersionsRev>>> = ({
+    signal,
+  }) => getTemplatesTemplateIdVersionsRev(templateId, rev, requestOptions, signal);
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: templateId !== null && templateId !== undefined && rev !== null && rev !== undefined,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getTemplatesTemplateIdVersionsRev>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type GetTemplatesTemplateIdVersionsRevQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getTemplatesTemplateIdVersionsRev>>
+>;
+export type GetTemplatesTemplateIdVersionsRevQueryError = ErrorType<unknown>;
+
+export function useGetTemplatesTemplateIdVersionsRev<
+  TData = Awaited<ReturnType<typeof getTemplatesTemplateIdVersionsRev>>,
+  TError = ErrorType<unknown>,
+>(
+  templateId: string,
+  rev: number,
+  options: {
+    query: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getTemplatesTemplateIdVersionsRev>>, TError, TData>
+    > &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getTemplatesTemplateIdVersionsRev>>,
+          TError,
+          Awaited<ReturnType<typeof getTemplatesTemplateIdVersionsRev>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useGetTemplatesTemplateIdVersionsRev<
+  TData = Awaited<ReturnType<typeof getTemplatesTemplateIdVersionsRev>>,
+  TError = ErrorType<unknown>,
+>(
+  templateId: string,
+  rev: number,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getTemplatesTemplateIdVersionsRev>>, TError, TData>
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getTemplatesTemplateIdVersionsRev>>,
+          TError,
+          Awaited<ReturnType<typeof getTemplatesTemplateIdVersionsRev>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useGetTemplatesTemplateIdVersionsRev<
+  TData = Awaited<ReturnType<typeof getTemplatesTemplateIdVersionsRev>>,
+  TError = ErrorType<unknown>,
+>(
+  templateId: string,
+  rev: number,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getTemplatesTemplateIdVersionsRev>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * @summary A specific template revision
+ */
+
+export function useGetTemplatesTemplateIdVersionsRev<
+  TData = Awaited<ReturnType<typeof getTemplatesTemplateIdVersionsRev>>,
+  TError = ErrorType<unknown>,
+>(
+  templateId: string,
+  rev: number,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getTemplatesTemplateIdVersionsRev>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getGetTemplatesTemplateIdVersionsRevQueryOptions(templateId, rev, options);
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+/**
+ * @summary Restore a past template revision as a new current version (editor+)
+ */
+export const postTemplatesTemplateIdVersionsRevRestore = (
+  templateId: string,
+  rev: number,
+  options?: SecondParameter<typeof customInstance>,
+  signal?: AbortSignal
+) => {
+  return customInstance<Template>(
+    { url: `/templates/${templateId}/versions/${rev}/restore`, method: 'POST', signal },
+    options
+  );
+};
+
+export const getPostTemplatesTemplateIdVersionsRevRestoreQueryKey = (
+  templateId: string,
+  rev: number
+) => {
+  return ['POST', `/templates/${templateId}/versions/${rev}/restore`] as const;
+};
+
+export const getPostTemplatesTemplateIdVersionsRevRestoreQueryOptions = <
+  TData = Awaited<ReturnType<typeof postTemplatesTemplateIdVersionsRevRestore>>,
+  TError = ErrorType<unknown>,
+>(
+  templateId: string,
+  rev: number,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof postTemplatesTemplateIdVersionsRevRestore>>,
+        TError,
+        TData
+      >
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  }
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getPostTemplatesTemplateIdVersionsRevRestoreQueryKey(templateId, rev);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof postTemplatesTemplateIdVersionsRevRestore>>
+  > = ({ signal }) =>
+    postTemplatesTemplateIdVersionsRevRestore(templateId, rev, requestOptions, signal);
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: templateId !== null && templateId !== undefined && rev !== null && rev !== undefined,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof postTemplatesTemplateIdVersionsRevRestore>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type PostTemplatesTemplateIdVersionsRevRestoreQueryResult = NonNullable<
+  Awaited<ReturnType<typeof postTemplatesTemplateIdVersionsRevRestore>>
+>;
+export type PostTemplatesTemplateIdVersionsRevRestoreQueryError = ErrorType<unknown>;
+
+export function usePostTemplatesTemplateIdVersionsRevRestore<
+  TData = Awaited<ReturnType<typeof postTemplatesTemplateIdVersionsRevRestore>>,
+  TError = ErrorType<unknown>,
+>(
+  templateId: string,
+  rev: number,
+  options: {
+    query: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof postTemplatesTemplateIdVersionsRevRestore>>,
+        TError,
+        TData
+      >
+    > &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postTemplatesTemplateIdVersionsRevRestore>>,
+          TError,
+          Awaited<ReturnType<typeof postTemplatesTemplateIdVersionsRevRestore>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function usePostTemplatesTemplateIdVersionsRevRestore<
+  TData = Awaited<ReturnType<typeof postTemplatesTemplateIdVersionsRevRestore>>,
+  TError = ErrorType<unknown>,
+>(
+  templateId: string,
+  rev: number,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof postTemplatesTemplateIdVersionsRevRestore>>,
+        TError,
+        TData
+      >
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postTemplatesTemplateIdVersionsRevRestore>>,
+          TError,
+          Awaited<ReturnType<typeof postTemplatesTemplateIdVersionsRevRestore>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function usePostTemplatesTemplateIdVersionsRevRestore<
+  TData = Awaited<ReturnType<typeof postTemplatesTemplateIdVersionsRevRestore>>,
+  TError = ErrorType<unknown>,
+>(
+  templateId: string,
+  rev: number,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof postTemplatesTemplateIdVersionsRevRestore>>,
+        TError,
+        TData
+      >
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * @summary Restore a past template revision as a new current version (editor+)
+ */
+
+export function usePostTemplatesTemplateIdVersionsRevRestore<
+  TData = Awaited<ReturnType<typeof postTemplatesTemplateIdVersionsRevRestore>>,
+  TError = ErrorType<unknown>,
+>(
+  templateId: string,
+  rev: number,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof postTemplatesTemplateIdVersionsRevRestore>>,
+        TError,
+        TData
+      >
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getPostTemplatesTemplateIdVersionsRevRestoreQueryOptions(
+    templateId,
+    rev,
     options
   );
 

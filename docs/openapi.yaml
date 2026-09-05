@@ -726,7 +726,10 @@ paths:
   /templates/{templateId}/preview:
     post:
       tags: [templates]
-      summary: Test-generate a doc from this template
+      summary: Preview this template's impact without persisting changes
+      description: >
+        Lists matching connectors and, when connectorId is supplied, renders a
+        detailed preview. This operation does not create or update documents or versions.
       parameters: [{ $ref: '#/components/parameters/TemplateId' }]
       requestBody:
         required: false
@@ -741,7 +744,46 @@ paths:
           description: OK
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/DocVersion' }
+              schema: { $ref: '#/components/schemas/TemplatePreviewResult' }
+  /templates/{templateId}/versions:
+    get:
+      tags: [templates]
+      summary: Version history list for a template
+      parameters: [{ $ref: '#/components/parameters/TemplateId' }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/TemplateVersionMeta' }
+  /templates/{templateId}/versions/{rev}:
+    get:
+      tags: [templates]
+      summary: A specific template revision
+      parameters:
+        - { $ref: '#/components/parameters/TemplateId' }
+        - { $ref: '#/components/parameters/Rev' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TemplateVersion' }
+  /templates/{templateId}/versions/{rev}/restore:
+    post:
+      tags: [templates]
+      summary: Restore a past template revision as a new current version (editor+)
+      parameters:
+        - { $ref: '#/components/parameters/TemplateId' }
+        - { $ref: '#/components/parameters/Rev' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Template' }
 
   # ───────────────────────── changes ─────────────────────────
   /changes:
@@ -1703,6 +1745,7 @@ components:
         id: { type: string }
         name: { type: string }
         description: { type: string }
+        currentVersion: { type: integer }
         appliesTo:
           type: object
           properties:
@@ -1732,6 +1775,50 @@ components:
         title: { type: string }
         order: { type: integer }
         body: { type: string, description: Template body with placeholders }
+    TemplateVersionMeta:
+      type: object
+      required: [rev, createdAt, trigger]
+      properties:
+        rev: { type: integer }
+        createdAt: { type: string, format: date-time }
+        author: { type: string, nullable: true }
+        trigger: { type: string, enum: [save, restore] }
+    TemplateVersion:
+      allOf:
+        - $ref: '#/components/schemas/TemplateVersionMeta'
+        - type: object
+          required: [name, sections]
+          properties:
+            name: { type: string }
+            description: { type: string }
+            appliesTo:
+              type: object
+              properties:
+                category: { $ref: '#/components/schemas/ConnectorCategory' }
+                type: { type: string }
+            sections:
+              type: array
+              items: { $ref: '#/components/schemas/TemplateSection' }
+    TemplateAffectedConnector:
+      type: object
+      required: [connectorId, connectorName, hasExistingDoc, wouldChange]
+      properties:
+        connectorId: { type: string }
+        connectorName: { type: string }
+        hasExistingDoc: { type: boolean }
+        wouldChange: { type: boolean }
+        renderError: { type: string, nullable: true }
+    TemplatePreviewResult:
+      type: object
+      required: [affected]
+      properties:
+        affected:
+          type: array
+          items: { $ref: '#/components/schemas/TemplateAffectedConnector' }
+        detail:
+          allOf:
+            - $ref: '#/components/schemas/GenerateResult'
+          nullable: true
 
     # ── changes ──
     ChangeSummary:

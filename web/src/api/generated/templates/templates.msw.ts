@@ -12,7 +12,12 @@ import { HttpResponse, http } from 'msw';
 import type { RequestHandlerOptions } from 'msw';
 
 import { ConnectorCategory } from '../../model';
-import type { DocVersion, Template } from '../../model';
+import type {
+  Template,
+  TemplatePreviewResult,
+  TemplateVersion,
+  TemplateVersionMeta,
+} from '../../model';
 
 export const getGetTemplatesResponseMock = (): Template[] =>
   Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() => ({
@@ -22,6 +27,7 @@ export const getGetTemplatesResponseMock = (): Template[] =>
       faker.string.alpha({ length: { min: 10, max: 20 } }),
       undefined,
     ]),
+    currentVersion: faker.helpers.arrayElement([faker.number.int(), undefined]),
     appliesTo: faker.helpers.arrayElement([
       {
         category: faker.helpers.arrayElement([
@@ -53,6 +59,7 @@ export const getPostTemplatesResponseMock = (
     faker.string.alpha({ length: { min: 10, max: 20 } }),
     undefined,
   ]),
+  currentVersion: faker.helpers.arrayElement([faker.number.int(), undefined]),
   appliesTo: faker.helpers.arrayElement([
     {
       category: faker.helpers.arrayElement([
@@ -85,6 +92,7 @@ export const getGetTemplatesTemplateIdResponseMock = (
     faker.string.alpha({ length: { min: 10, max: 20 } }),
     undefined,
   ]),
+  currentVersion: faker.helpers.arrayElement([faker.number.int(), undefined]),
   appliesTo: faker.helpers.arrayElement([
     {
       category: faker.helpers.arrayElement([
@@ -117,6 +125,7 @@ export const getPutTemplatesTemplateIdResponseMock = (
     faker.string.alpha({ length: { min: 10, max: 20 } }),
     undefined,
   ]),
+  currentVersion: faker.helpers.arrayElement([faker.number.int(), undefined]),
   appliesTo: faker.helpers.arrayElement([
     {
       category: faker.helpers.arrayElement([
@@ -140,7 +149,46 @@ export const getPutTemplatesTemplateIdResponseMock = (
   ...overrideResponse,
 });
 
-export const getPostTemplatesTemplateIdPreviewResponseMock = (): DocVersion => ({
+export const getPostTemplatesTemplateIdPreviewResponseMock = (
+  overrideResponse: Partial<Extract<TemplatePreviewResult, object>> = {}
+): TemplatePreviewResult => ({
+  affected: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(
+    () => ({
+      connectorId: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      connectorName: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      hasExistingDoc: faker.datatype.boolean(),
+      wouldChange: faker.datatype.boolean(),
+      renderError: faker.helpers.arrayElement([
+        faker.helpers.arrayElement([faker.string.alpha({ length: { min: 10, max: 20 } }), null]),
+        undefined,
+      ]),
+    })
+  ),
+  detail: faker.helpers.arrayElement([
+    {
+      ...{
+        docId: faker.string.alpha({ length: { min: 10, max: 20 } }),
+        title: faker.string.alpha({ length: { min: 10, max: 20 } }),
+        content: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      },
+    },
+    null,
+  ]),
+  ...overrideResponse,
+});
+
+export const getGetTemplatesTemplateIdVersionsResponseMock = (): TemplateVersionMeta[] =>
+  Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() => ({
+    rev: faker.number.int(),
+    createdAt: faker.date.past().toISOString().slice(0, 19) + 'Z',
+    author: faker.helpers.arrayElement([
+      faker.helpers.arrayElement([faker.string.alpha({ length: { min: 10, max: 20 } }), null]),
+      undefined,
+    ]),
+    trigger: faker.helpers.arrayElement(['save', 'restore'] as const),
+  }));
+
+export const getGetTemplatesTemplateIdVersionsRevResponseMock = (): TemplateVersion => ({
   ...{
     rev: faker.number.int(),
     createdAt: faker.date.past().toISOString().slice(0, 19) + 'Z',
@@ -148,9 +196,68 @@ export const getPostTemplatesTemplateIdPreviewResponseMock = (): DocVersion => (
       faker.helpers.arrayElement([faker.string.alpha({ length: { min: 10, max: 20 } }), null]),
       undefined,
     ]),
-    trigger: faker.helpers.arrayElement(['ai', 'template', 'manual'] as const),
+    trigger: faker.helpers.arrayElement(['save', 'restore'] as const),
   },
-  ...{ content: faker.string.alpha({ length: { min: 10, max: 20 } }) },
+  ...{
+    name: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    description: faker.helpers.arrayElement([
+      faker.string.alpha({ length: { min: 10, max: 20 } }),
+      undefined,
+    ]),
+    appliesTo: faker.helpers.arrayElement([
+      {
+        category: faker.helpers.arrayElement([
+          faker.helpers.arrayElement(Object.values(ConnectorCategory)),
+          undefined,
+        ]),
+        type: faker.helpers.arrayElement([
+          faker.string.alpha({ length: { min: 10, max: 20 } }),
+          undefined,
+        ]),
+      },
+      undefined,
+    ]),
+    sections: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(
+      () => ({
+        title: faker.string.alpha({ length: { min: 10, max: 20 } }),
+        order: faker.number.int(),
+        body: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      })
+    ),
+  },
+});
+
+export const getPostTemplatesTemplateIdVersionsRevRestoreResponseMock = (
+  overrideResponse: Partial<Extract<Template, object>> = {}
+): Template => ({
+  id: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  name: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  description: faker.helpers.arrayElement([
+    faker.string.alpha({ length: { min: 10, max: 20 } }),
+    undefined,
+  ]),
+  currentVersion: faker.helpers.arrayElement([faker.number.int(), undefined]),
+  appliesTo: faker.helpers.arrayElement([
+    {
+      category: faker.helpers.arrayElement([
+        faker.helpers.arrayElement(Object.values(ConnectorCategory)),
+        undefined,
+      ]),
+      type: faker.helpers.arrayElement([
+        faker.string.alpha({ length: { min: 10, max: 20 } }),
+        undefined,
+      ]),
+    },
+    undefined,
+  ]),
+  sections: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(
+    () => ({
+      title: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      order: faker.number.int(),
+      body: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    })
+  ),
+  ...overrideResponse,
 });
 
 export const getGetTemplatesMockHandler = (
@@ -262,8 +369,10 @@ export const getDeleteTemplatesTemplateIdMockHandler = (
 
 export const getPostTemplatesTemplateIdPreviewMockHandler = (
   overrideResponse?:
-    | DocVersion
-    | ((info: Parameters<Parameters<typeof http.post>[1]>[0]) => Promise<DocVersion> | DocVersion),
+    | TemplatePreviewResult
+    | ((
+        info: Parameters<Parameters<typeof http.post>[1]>[0]
+      ) => Promise<TemplatePreviewResult> | TemplatePreviewResult),
   options?: RequestHandlerOptions
 ) => {
   return http.post(
@@ -281,6 +390,76 @@ export const getPostTemplatesTemplateIdPreviewMockHandler = (
     options
   );
 };
+
+export const getGetTemplatesTemplateIdVersionsMockHandler = (
+  overrideResponse?:
+    | TemplateVersionMeta[]
+    | ((
+        info: Parameters<Parameters<typeof http.get>[1]>[0]
+      ) => Promise<TemplateVersionMeta[]> | TemplateVersionMeta[]),
+  options?: RequestHandlerOptions
+) => {
+  return http.get(
+    '*/templates/:templateId/versions',
+    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+      return HttpResponse.json(
+        overrideResponse !== undefined
+          ? typeof overrideResponse === 'function'
+            ? await overrideResponse(info)
+            : overrideResponse
+          : getGetTemplatesTemplateIdVersionsResponseMock(),
+        { status: 200 }
+      );
+    },
+    options
+  );
+};
+
+export const getGetTemplatesTemplateIdVersionsRevMockHandler = (
+  overrideResponse?:
+    | TemplateVersion
+    | ((
+        info: Parameters<Parameters<typeof http.get>[1]>[0]
+      ) => Promise<TemplateVersion> | TemplateVersion),
+  options?: RequestHandlerOptions
+) => {
+  return http.get(
+    '*/templates/:templateId/versions/:rev',
+    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+      return HttpResponse.json(
+        overrideResponse !== undefined
+          ? typeof overrideResponse === 'function'
+            ? await overrideResponse(info)
+            : overrideResponse
+          : getGetTemplatesTemplateIdVersionsRevResponseMock(),
+        { status: 200 }
+      );
+    },
+    options
+  );
+};
+
+export const getPostTemplatesTemplateIdVersionsRevRestoreMockHandler = (
+  overrideResponse?:
+    | Template
+    | ((info: Parameters<Parameters<typeof http.post>[1]>[0]) => Promise<Template> | Template),
+  options?: RequestHandlerOptions
+) => {
+  return http.post(
+    '*/templates/:templateId/versions/:rev/restore',
+    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+      return HttpResponse.json(
+        overrideResponse !== undefined
+          ? typeof overrideResponse === 'function'
+            ? await overrideResponse(info)
+            : overrideResponse
+          : getPostTemplatesTemplateIdVersionsRevRestoreResponseMock(),
+        { status: 200 }
+      );
+    },
+    options
+  );
+};
 export const getTemplatesMock = () => [
   getGetTemplatesMockHandler(),
   getPostTemplatesMockHandler(),
@@ -288,4 +467,7 @@ export const getTemplatesMock = () => [
   getPutTemplatesTemplateIdMockHandler(),
   getDeleteTemplatesTemplateIdMockHandler(),
   getPostTemplatesTemplateIdPreviewMockHandler(),
+  getGetTemplatesTemplateIdVersionsMockHandler(),
+  getGetTemplatesTemplateIdVersionsRevMockHandler(),
+  getPostTemplatesTemplateIdVersionsRevRestoreMockHandler(),
 ];

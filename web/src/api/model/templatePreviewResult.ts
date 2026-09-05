@@ -6,14 +6,10 @@
  *
  * OpenAPI spec version: 0.1.0
  */
-import type { TemplateAppliesTo } from './templateAppliesTo';
-import type { TemplateSection } from './templateSection';
+import type { GenerateResult } from './generateResult';
+import type { TemplateAffectedConnector } from './templateAffectedConnector';
 
-export interface Template {
-  id: string;
-  name: string;
-  description?: string;
-  currentVersion?: number;
-  appliesTo?: TemplateAppliesTo;
-  sections: TemplateSection[];
+export interface TemplatePreviewResult {
+  affected: TemplateAffectedConnector[];
+  detail?: GenerateResult | null;
 }
