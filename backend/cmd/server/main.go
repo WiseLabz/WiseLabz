@@ -20,6 +20,7 @@ import (
 	"github.com/WiseLabz/wiselabz/internal/config"
 	"github.com/WiseLabz/wiselabz/internal/doc"
 	"github.com/WiseLabz/wiselabz/internal/notifications"
+	"github.com/WiseLabz/wiselabz/internal/retention"
 	"github.com/WiseLabz/wiselabz/internal/store"
 	"github.com/WiseLabz/wiselabz/internal/sync"
 	"github.com/WiseLabz/wiselabz/internal/web"
@@ -143,6 +144,7 @@ func main() {
 	go runAlertExpirer(ctx, s, notifDispatcher, logger)
 	go notifications.RunDeliveryRetries(ctx, notifDispatcher, logger)
 	go sync.RunScheduler(ctx, syncEngine, logger)
+	go retention.RunScheduler(ctx, s, cfg.Retention, logger)
 
 	// Wait for shutdown signal
 	<-ctx.Done()

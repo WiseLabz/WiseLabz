@@ -309,6 +309,30 @@ both SQLite and PostgreSQL.
 
 ---
 
+## Data retention (decided 2026-09-05)
+
+A background job (`internal/retention`, started as a bare goroutine in
+`cmd/server/main.go` alongside the sync scheduler and alert expirer) bounds
+the growth of historical data: `service_snapshots`, `doc_versions`, `alerts`,
+and `sync_runs`. Each category has an independent, configurable retention
+window (`retention.*_days` in `config.yaml` / `WISELABZ_RETENTION_*_DAYS` env
+vars); a value of `0` disables cleanup for that category entirely.
+
+The job always protects records an active workflow depends on, regardless of
+age: a connector's latest snapshot (what `GetLatestSnapshot` serves as
+"current data"), a doc's current revision (`docs.current_version`), and any
+`pending` or `snoozed` (non-terminal) alert. Only `resolved`/`dismissed`
+alerts are purged, and `sync_runs` has no such guard — a connector's
+last-sync status lives on the `connectors` row itself, not derived from
+`sync_runs` history.
+
+The job runs on a configurable interval (`retention.interval_hours`, default
+24h) and is idempotent: each pass deletes only rows newly past that
+category's cutoff, so running it repeatedly (or after downtime) is safe and
+produces no duplicate effects.
+
+---
+
 ## AI module
 
 The AI doc generation feature is **opt-in and provider-agnostic**. When enabled, the diff
