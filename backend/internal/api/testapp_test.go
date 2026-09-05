@@ -19,6 +19,7 @@ import (
 	"github.com/WiseLabz/wiselabz/internal/api"
 	"github.com/WiseLabz/wiselabz/internal/auth"
 	"github.com/WiseLabz/wiselabz/internal/config"
+	"github.com/WiseLabz/wiselabz/internal/doc"
 	"github.com/WiseLabz/wiselabz/internal/store"
 )
 
@@ -60,9 +61,10 @@ func newTestApp(t *testing.T) *testApp {
 	}
 
 	router := api.NewRouter(api.Config{
-		Store:  s,
-		JWT:    jwtSvc,
-		Config: cfg,
+		Store:     s,
+		JWT:       jwtSvc,
+		Config:    cfg,
+		DocEngine: doc.NewEngine(s),
 	})
 
 	return &testApp{Router: router, Store: s, JWT: jwtSvc}
