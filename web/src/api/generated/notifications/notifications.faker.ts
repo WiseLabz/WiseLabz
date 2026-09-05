@@ -8,7 +8,8 @@
  */
 import { faker } from '@faker-js/faker';
 
-import type { Notification, NotificationPage } from '../../model';
+import { NotificationChannelType } from '../../model';
+import type { Notification, NotificationDeliveryPage, NotificationPage } from '../../model';
 
 export const getGetNotificationsResponseMock = (
   overrideResponse: Partial<Extract<NotificationPage, object>> = {}
@@ -44,5 +45,31 @@ export const getPostNotificationsNotificationIdReadResponseMock = (
   message: faker.string.alpha({ length: { min: 10, max: 20 } }),
   read: faker.datatype.boolean(),
   createdAt: faker.date.past().toISOString().slice(0, 19) + 'Z',
+  ...overrideResponse,
+});
+
+export const getGetNotificationsDeliveriesResponseMock = (
+  overrideResponse: Partial<Extract<NotificationDeliveryPage, object>> = {}
+): NotificationDeliveryPage => ({
+  items: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() => ({
+    id: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    notificationId: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    channel: faker.helpers.arrayElement(Object.values(NotificationChannelType)),
+    status: faker.helpers.arrayElement(['pending', 'sent', 'failed'] as const),
+    attempts: faker.number.int(),
+    lastError: faker.helpers.arrayElement([
+      faker.string.alpha({ length: { min: 10, max: 20 } }),
+      undefined,
+    ]),
+    nextAttemptAt: faker.helpers.arrayElement([
+      faker.date.past().toISOString().slice(0, 19) + 'Z',
+      undefined,
+    ]),
+    createdAt: faker.date.past().toISOString().slice(0, 19) + 'Z',
+    updatedAt: faker.date.past().toISOString().slice(0, 19) + 'Z',
+  })),
+  total: faker.number.int(),
+  page: faker.number.int(),
+  pageSize: faker.number.int(),
   ...overrideResponse,
 });

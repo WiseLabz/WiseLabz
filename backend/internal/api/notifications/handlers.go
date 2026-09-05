@@ -51,6 +51,20 @@ func (h *Handler) MarkRead(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, n)
 }
 
+// ListDeliveries handles GET /api/notifications/deliveries (operator-only).
+// Optional ?status= filter (pending|sent|failed).
+func (h *Handler) ListDeliveries(w http.ResponseWriter, r *http.Request) {
+	page, pageSize, offset := httputil.Paginate(r)
+	status := r.URL.Query().Get("status")
+
+	deliveries, total, err := h.Store.ListDeliveries(r.Context(), status, offset, pageSize)
+	if err != nil {
+		httputil.Errorf(w, err)
+		return
+	}
+	httputil.WritePaginated(w, deliveries, page, pageSize, total)
+}
+
 // ReadAll handles POST /api/notifications/read-all.
 func (h *Handler) ReadAll(w http.ResponseWriter, r *http.Request) {
 	userID := auth.UserIDFromContext(r.Context())

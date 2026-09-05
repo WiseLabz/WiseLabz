@@ -229,6 +229,8 @@ func NewRouter(cfg Config) chi.Router {
 				r.Post("/test", settingH.TestNotificationsConfig)
 			})
 
+			r.Get("/api/notifications/deliveries", notifH.ListDeliveries)
+
 			r.Get("/api/system/info", sysH.Info)
 
 			r.Route("/api/users", func(r chi.Router) {

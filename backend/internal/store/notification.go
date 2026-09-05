@@ -121,6 +121,20 @@ func (s *Store) MarkAllNotificationsRead(ctx context.Context, userID string) err
 	return nil
 }
 
+// GetNotificationByID returns a notification by id, unscoped by user (for
+// internal/background use like delivery retries).
+func (s *Store) GetNotificationByID(ctx context.Context, id string) (*NotificationRecord, error) {
+	row := s.db.QueryRowContext(ctx, `
+		SELECT id, user_id, alert_id, event_type, title, message, read, created_at
+		FROM in_app_notifications WHERE id = ?
+	`, id)
+	n, err := scanNotification(row)
+	if err != nil {
+		return nil, fmt.Errorf("get notification: %w", err)
+	}
+	return &n, nil
+}
+
 // rowScanner abstracts *sql.Row and *sql.Rows so scanNotification serves both
 // the single-row (mark-read) and multi-row (list) query paths.
 type rowScanner interface {
