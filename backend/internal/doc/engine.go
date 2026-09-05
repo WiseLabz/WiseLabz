@@ -109,48 +109,45 @@ func (e *Engine) GenerateFromTemplate(ctx context.Context, templateID, connector
 		return nil, err
 	}
 
-	existingDocs, err := e.store.ListDocsByService(ctx, connectorID)
-	if err != nil {
-		return nil, fmt.Errorf("list existing docs: %w", err)
-	}
-
 	var docID string
-	if len(existingDocs) > 0 {
-		docID = existingDocs[0].ID
-		if err := e.store.UpdateDoc(ctx, docID, rendered.Content, nil); err != nil {
-			return nil, fmt.Errorf("update doc: %w", err)
-		}
-		doc, err := e.store.GetDoc(ctx, docID)
+	if err := e.store.WithinTransaction(ctx, func(tx *store.Store) error {
+		existingDocs, err := tx.ListDocsByService(ctx, connectorID)
 		if err != nil {
-			return nil, fmt.Errorf("get updated doc: %w", err)
+			return fmt.Errorf("list existing docs: %w", err)
 		}
-		if err := e.store.CreateDocVersion(ctx, &store.DocVersionRecord{
-			DocID:   docID,
-			Rev:     doc.CurrentVersion,
-			Content: rendered.Content,
-			Trigger: "template",
-		}); err != nil {
-			return nil, fmt.Errorf("create doc version: %w", err)
+
+		if len(existingDocs) > 0 {
+			docID = existingDocs[0].ID
+			if err := tx.UpdateDoc(ctx, docID, rendered.Content, nil); err != nil {
+				return fmt.Errorf("update doc: %w", err)
+			}
+			doc, err := tx.GetDoc(ctx, docID)
+			if err != nil {
+				return fmt.Errorf("get updated doc: %w", err)
+			}
+			if err := tx.CreateDocVersion(ctx, &store.DocVersionRecord{
+				DocID: docID, Rev: doc.CurrentVersion, Content: rendered.Content, Trigger: "template",
+			}); err != nil {
+				return fmt.Errorf("create doc version: %w", err)
+			}
+			return nil
 		}
-	} else {
+
 		doc := &store.DocRecord{
-			Title:     rendered.Title,
-			Kind:      "service",
-			ServiceID: connectorID,
-			Content:   rendered.Content,
+			Title: rendered.Title, Kind: "service", ServiceID: connectorID, Content: rendered.Content,
 		}
-		if err := e.store.CreateDoc(ctx, doc); err != nil {
-			return nil, fmt.Errorf("create doc: %w", err)
+		if err := tx.CreateDoc(ctx, doc); err != nil {
+			return fmt.Errorf("create doc: %w", err)
 		}
 		docID = doc.ID
-		if err := e.store.CreateDocVersion(ctx, &store.DocVersionRecord{
-			DocID:   docID,
-			Rev:     1,
-			Content: rendered.Content,
-			Trigger: "template",
+		if err := tx.CreateDocVersion(ctx, &store.DocVersionRecord{
+			DocID: docID, Rev: 1, Content: rendered.Content, Trigger: "template",
 		}); err != nil {
-			return nil, fmt.Errorf("create doc version: %w", err)
+			return fmt.Errorf("create doc version: %w", err)
 		}
+		return nil
+	}); err != nil {
+		return nil, err
 	}
 
 	return &GenerateResult{

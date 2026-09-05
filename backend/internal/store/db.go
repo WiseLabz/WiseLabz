@@ -3,6 +3,7 @@ package store
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 
 	_ "github.com/jackc/pgx/v5/stdlib" // PostgreSQL driver
 	_ "modernc.org/sqlite"             // SQLite driver (pure Go, no CGO)
@@ -24,6 +25,12 @@ func OpenDB(driver, dsn string) (*sql.DB, error) {
 	sqlDriver := driver
 	if driver == "postgres" {
 		sqlDriver = "pgx"
+	} else if !strings.Contains(dsn, "_pragma=foreign_keys") {
+		separator := "?"
+		if strings.Contains(dsn, "?") {
+			separator = "&"
+		}
+		dsn += separator + "_pragma=foreign_keys(1)"
 	}
 
 	db, err := sql.Open(sqlDriver, dsn)

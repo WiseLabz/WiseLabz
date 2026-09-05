@@ -199,6 +199,13 @@ func TestGenerateFromTemplateReturnsVersionPersistenceError(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "create doc version") {
 		t.Fatalf("second GenerateFromTemplate() error = %v, want create doc version error", err)
 	}
+	doc, err := s.GetDoc(ctx, first.DocID)
+	if err != nil {
+		t.Fatalf("GetDoc() after failed generation: %v", err)
+	}
+	if doc.CurrentVersion != 1 {
+		t.Fatalf("CurrentVersion after failed generation = %d, want 1", doc.CurrentVersion)
+	}
 }
 
 func TestMatchingConnectorsFiltersByCategoryAndType(t *testing.T) {

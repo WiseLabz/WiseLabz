@@ -78,8 +78,9 @@ func versionSections(sections []store.TemplateSectionRecord) []store.TemplateVer
 	return result
 }
 
-func (h *Handler) createVersion(
+func createVersion(
 	ctx context.Context,
+	s *store.Store,
 	t *store.TemplateRecord,
 	sections []store.TemplateSectionRecord,
 	trigger string,
@@ -88,7 +89,7 @@ func (h *Handler) createVersion(
 	if err != nil {
 		return err
 	}
-	return h.Store.CreateTemplateVersion(ctx, &store.TemplateVersionRecord{
+	return s.CreateTemplateVersion(ctx, &store.TemplateVersionRecord{
 		TemplateID:  t.ID,
 		Rev:         t.CurrentVersion,
 		Name:        t.Name,
@@ -174,26 +175,22 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		Description: req.Description,
 		AppliesTo:   string(req.AppliesTo),
 	}
-	if err := h.Store.CreateTemplate(r.Context(), t); err != nil {
-		httputil.Errorf(w, err)
-		return
-	}
-
 	sections := make([]store.TemplateSectionRecord, 0, len(req.Sections))
-	for _, sec := range req.Sections {
-		rec := store.TemplateSectionRecord{
-			TemplateID: t.ID,
-			Title:      sec.Title,
-			Ord:        sec.Order,
-			Body:       sec.Body,
+	if err := h.Store.WithinTransaction(r.Context(), func(tx *store.Store) error {
+		if err := tx.CreateTemplate(r.Context(), t); err != nil {
+			return err
 		}
-		if err := h.Store.CreateTemplateSection(r.Context(), &rec); err != nil {
-			httputil.Errorf(w, err)
-			return
+		for _, sec := range req.Sections {
+			rec := store.TemplateSectionRecord{
+				TemplateID: t.ID, Title: sec.Title, Ord: sec.Order, Body: sec.Body,
+			}
+			if err := tx.CreateTemplateSection(r.Context(), &rec); err != nil {
+				return err
+			}
+			sections = append(sections, rec)
 		}
-		sections = append(sections, rec)
-	}
-	if err := h.createVersion(r.Context(), t, sections, "save"); err != nil {
+		return createVersion(r.Context(), tx, t, sections, "save")
+	}); err != nil {
 		httputil.Errorf(w, err)
 		return
 	}
@@ -233,7 +230,40 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	if req.AppliesTo != nil {
 		updates["applies_to"] = string(*req.AppliesTo)
 	}
-	if err := h.Store.UpdateTemplate(r.Context(), id, updates); err != nil {
+	var (
+		t        *store.TemplateRecord
+		sections []store.TemplateSectionRecord
+	)
+	err := h.Store.WithinTransaction(r.Context(), func(tx *store.Store) error {
+		if err := tx.UpdateTemplate(r.Context(), id, updates); err != nil {
+			return err
+		}
+
+		if req.Sections != nil {
+			if err := tx.DeleteTemplateSections(r.Context(), id); err != nil {
+				return err
+			}
+			for _, sec := range *req.Sections {
+				if err := tx.CreateTemplateSection(r.Context(), &store.TemplateSectionRecord{
+					TemplateID: id, Title: sec.Title, Ord: sec.Order, Body: sec.Body,
+				}); err != nil {
+					return err
+				}
+			}
+		}
+
+		var err error
+		t, err = tx.GetTemplate(r.Context(), id)
+		if err != nil {
+			return err
+		}
+		sections, err = tx.GetTemplateSections(r.Context(), id)
+		if err != nil {
+			return err
+		}
+		return createVersion(r.Context(), tx, t, sections, "save")
+	})
+	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			httputil.Error(w, http.StatusNotFound, "not_found", "Template not found")
 			return
@@ -242,42 +272,6 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.Sections != nil {
-		if err := h.Store.DeleteTemplateSections(r.Context(), id); err != nil {
-			httputil.Errorf(w, err)
-			return
-		}
-		for _, sec := range *req.Sections {
-			if err := h.Store.CreateTemplateSection(r.Context(), &store.TemplateSectionRecord{
-				TemplateID: id,
-				Title:      sec.Title,
-				Ord:        sec.Order,
-				Body:       sec.Body,
-			}); err != nil {
-				httputil.Errorf(w, err)
-				return
-			}
-		}
-	}
-
-	t, err := h.Store.GetTemplate(r.Context(), id)
-	if errors.Is(err, store.ErrNotFound) {
-		httputil.Error(w, http.StatusNotFound, "not_found", "Template not found")
-		return
-	}
-	if err != nil {
-		httputil.Errorf(w, err)
-		return
-	}
-	sections, err := h.Store.GetTemplateSections(r.Context(), id)
-	if err != nil {
-		httputil.Errorf(w, err)
-		return
-	}
-	if err := h.createVersion(r.Context(), t, sections, "save"); err != nil {
-		httputil.Errorf(w, err)
-		return
-	}
 	httputil.JSON(w, http.StatusOK, templateResponse(t, sections))
 }
 
@@ -380,35 +374,37 @@ func (h *Handler) Restore(w http.ResponseWriter, r *http.Request) {
 		httputil.Errorf(w, err)
 		return
 	}
-	if err := h.Store.UpdateTemplate(r.Context(), id, map[string]any{
-		"name": target.Name, "description": target.Description, "applies_to": target.AppliesTo,
-	}); err != nil {
-		httputil.Errorf(w, err)
-		return
-	}
-	if err := h.Store.DeleteTemplateSections(r.Context(), id); err != nil {
-		httputil.Errorf(w, err)
-		return
-	}
-	for _, section := range sections {
-		if err := h.Store.CreateTemplateSection(r.Context(), &store.TemplateSectionRecord{
-			TemplateID: id, Title: section.Title, Ord: section.Order, Body: section.Body,
+	var (
+		t            *store.TemplateRecord
+		liveSections []store.TemplateSectionRecord
+	)
+	if err := h.Store.WithinTransaction(r.Context(), func(tx *store.Store) error {
+		if err := tx.UpdateTemplate(r.Context(), id, map[string]any{
+			"name": target.Name, "description": target.Description, "applies_to": target.AppliesTo,
 		}); err != nil {
-			httputil.Errorf(w, err)
-			return
+			return err
 		}
-	}
-	t, err := h.Store.GetTemplate(r.Context(), id)
-	if err != nil {
-		httputil.Errorf(w, err)
-		return
-	}
-	liveSections, err := h.Store.GetTemplateSections(r.Context(), id)
-	if err != nil {
-		httputil.Errorf(w, err)
-		return
-	}
-	if err := h.createVersion(r.Context(), t, liveSections, "restore"); err != nil {
+		if err := tx.DeleteTemplateSections(r.Context(), id); err != nil {
+			return err
+		}
+		for _, section := range sections {
+			if err := tx.CreateTemplateSection(r.Context(), &store.TemplateSectionRecord{
+				TemplateID: id, Title: section.Title, Ord: section.Order, Body: section.Body,
+			}); err != nil {
+				return err
+			}
+		}
+		var err error
+		t, err = tx.GetTemplate(r.Context(), id)
+		if err != nil {
+			return err
+		}
+		liveSections, err = tx.GetTemplateSections(r.Context(), id)
+		if err != nil {
+			return err
+		}
+		return createVersion(r.Context(), tx, t, liveSections, "restore")
+	}); err != nil {
 		httputil.Errorf(w, err)
 		return
 	}

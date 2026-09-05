@@ -80,6 +80,10 @@ func TestTemplatesPreviewDoesNotCreateDoc(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("preview status = %d, want 200; body = %s", rec.Code, rec.Body)
 	}
+	if opRec := app.req(t, http.MethodPost, "/api/templates/"+template.ID+"/preview",
+		map[string]any{"connectorId": connectorID}, opToken); opRec.Code != http.StatusOK {
+		t.Fatalf("operator preview status = %d, want 200; body = %s", opRec.Code, opRec.Body)
+	}
 	after, err := app.Store.CountDocs(context.Background())
 	if err != nil {
 		t.Fatalf("count docs after: %v", err)
@@ -266,6 +270,9 @@ func TestTemplatesVersionsListAndGetRoleBoundary(t *testing.T) {
 	if list.Code != http.StatusOK {
 		t.Fatalf("list status = %d, want 200; body = %s", list.Code, list.Body)
 	}
+	if opList := app.req(t, http.MethodGet, "/api/templates/"+template.ID+"/versions", nil, opToken); opList.Code != http.StatusOK {
+		t.Fatalf("operator list status = %d, want 200; body = %s", opList.Code, opList.Body)
+	}
 	var metas []struct {
 		Rev int `json:"rev"`
 	}
@@ -279,6 +286,9 @@ func TestTemplatesVersionsListAndGetRoleBoundary(t *testing.T) {
 	get := app.req(t, http.MethodGet, "/api/templates/"+template.ID+"/versions/1", nil, viewerToken)
 	if get.Code != http.StatusOK {
 		t.Fatalf("get status = %d, want 200; body = %s", get.Code, get.Body)
+	}
+	if opGet := app.req(t, http.MethodGet, "/api/templates/"+template.ID+"/versions/1", nil, opToken); opGet.Code != http.StatusOK {
+		t.Fatalf("operator get status = %d, want 200; body = %s", opGet.Code, opGet.Body)
 	}
 	var version struct {
 		Rev      int `json:"rev"`
