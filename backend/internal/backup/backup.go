@@ -80,7 +80,7 @@ func Export(ctx context.Context, s *store.Store) (*Bundle, error) {
 		return nil, fmt.Errorf("export connectors: %w", err)
 	}
 	for i := range connectors {
-		redacted, err := redactConnectorConfig(connectors[i].Type, connectors[i].ConfigData)
+		redacted, err := RedactConnectorConfig(connectors[i].Type, connectors[i].ConfigData)
 		if err != nil {
 			// ponytail: unknown/unregistered connector type — no known secret
 			// fields to strip, so export the config as-is rather than failing
@@ -129,14 +129,16 @@ func Export(ctx context.Context, s *store.Store) (*Bundle, error) {
 		DocVersions:      docVersions,
 		Templates:        templates,
 		TemplateSections: sections,
-		AIConfig:         loadAIConfigSummary(ctx, s),
+		AIConfig:         LoadAIConfigSummary(ctx, s),
 	}, nil
 }
 
-// redactConnectorConfig removes every field the connector's TypeSchema marks
+// RedactConnectorConfig removes every field the connector's TypeSchema marks
 // as "password" from configData (a JSON-encoded map). Returns an error only
-// when configData itself fails to parse.
-func redactConnectorConfig(connType, configData string) (string, error) {
+// when configData itself fails to parse. Exported for reuse by other
+// read-only export features (e.g. internal/diagnostics) that need the same
+// secret-stripping behavior.
+func RedactConnectorConfig(connType, configData string) (string, error) {
 	cfg, err := store.ParseConnectorConfig(configData)
 	if err != nil {
 		return "", err
@@ -153,10 +155,11 @@ func redactConnectorConfig(connType, configData string) (string, error) {
 	return store.MarshalConnectorConfig(cfg)
 }
 
-// loadAIConfigSummary reads the AI config row directly (never selecting
+// LoadAIConfigSummary reads the AI config row directly (never selecting
 // api_key_encrypted), following the same query style as
 // api/settings.Handler.LoadAIConfig. Returns nil if the row can't be read.
-func loadAIConfigSummary(ctx context.Context, s *store.Store) *AIConfigSummary {
+// Exported for reuse by internal/diagnostics.
+func LoadAIConfigSummary(ctx context.Context, s *store.Store) *AIConfigSummary {
 	var rec struct {
 		Enabled  int
 		Provider sql.NullString
