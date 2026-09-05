@@ -1376,6 +1376,13 @@ components:
         fields:
           type: array
           items: { $ref: '#/components/schemas/SchemaField' }
+        stub:
+          type: boolean
+          default: false
+          description: >-
+            True for connector types with no real implementation yet (Fetch/Validate always
+            fail). The UI should mark the type as coming soon and hide/disable
+            Test connection, Sync, and data-viewing actions for it.
     SchemaField:
       type: object
       required: [name, label, kind, required]
