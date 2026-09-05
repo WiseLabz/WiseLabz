@@ -165,13 +165,15 @@ function TypeCard({
   active: boolean;
   onPick: () => void;
 }) {
+  const { t } = useTranslation();
   const Icon = categoryIcon[schema.category];
   return (
     <button
       onClick={onPick}
+      disabled={schema.stub}
       aria-pressed={active}
       className={
-        'flex items-center gap-2.5 rounded-lg border p-3 text-left transition-colors ' +
+        'flex items-center gap-2.5 rounded-lg border p-3 text-left transition-colors disabled:pointer-events-none disabled:opacity-40 ' +
         (active ? 'border-signal-soft bg-signal-tint' : 'border-line-soft hover:border-line-strong')
       }
     >
@@ -179,6 +181,11 @@ function TypeCard({
         <Icon size={16} />
       </span>
       <span className="text-sm font-medium text-ink">{schema.displayName}</span>
+      {schema.stub && (
+        <span className="ml-auto rounded-sm bg-warn-tint px-1.5 py-0.5 font-mono text-2xs text-warn">
+          {t('connectors.comingSoon')}
+        </span>
+      )}
     </button>
   );
 }

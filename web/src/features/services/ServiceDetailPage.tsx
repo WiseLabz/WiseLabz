@@ -6,7 +6,7 @@
  * are inline and role-gated; the destructive remove runs the full blast-radius +
  * step-up + type-to-confirm flow via <ConfirmDestructive/>.
  */
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -14,6 +14,7 @@ import {
   useGetConnectorsConnectorId,
   useGetConnectorsConnectorIdData,
   useGetConnectorsConnectorIdSyncs,
+  useGetConnectorsSchema,
   putConnectorsConnectorIdEnabled,
   putConnectorsConnectorId,
   getGetConnectorsQueryKey,
@@ -66,6 +67,11 @@ export function ServiceDetailPage() {
   const canMutate = useCanMutate();
 
   const connector = useGetConnectorsConnectorId(id);
+  const { data: schemas } = useGetConnectorsSchema();
+  const schema = useMemo(
+    () => schemas?.find((s) => s.type === connector.data?.type) ?? null,
+    [schemas, connector.data?.type],
+  );
   const overrides = useLive((s) => s.statusOverrides);
   const activity = useLive((s) => s.activity);
   const [removing, setRemoving] = useState(false);
@@ -180,7 +186,8 @@ export function ServiceDetailPage() {
               size="sm"
               variant="secondary"
               onClick={() => runSync(c.id)}
-              disabled={!c.enabled}
+              disabled={!c.enabled || schema?.stub}
+              title={schema?.stub ? t('connectors.edit.testUnavailable') : undefined}
             >
               <SyncIcon size={14} /> {t('common.sync')}
             </Button>

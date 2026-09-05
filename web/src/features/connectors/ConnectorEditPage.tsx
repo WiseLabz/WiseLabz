@@ -136,7 +136,13 @@ export function ConnectorEditPage() {
         </div>
 
         <div className="mt-5 flex items-center justify-between gap-2">
-          <Button variant="secondary" size="md" onClick={() => test.mutate()} disabled={test.isPending}>
+          <Button
+            variant="secondary"
+            size="md"
+            onClick={() => test.mutate()}
+            disabled={test.isPending || schema?.stub}
+            title={schema?.stub ? t('connectors.edit.testUnavailable') : undefined}
+          >
             {test.isPending ? t('connectors.edit.testing') : t('connectors.edit.test')}
           </Button>
           <div className="flex items-center gap-2">

@@ -14,4 +14,6 @@ export interface ConnectorTypeSchema {
   type: string;
   displayName: string;
   fields: SchemaField[];
+  /** True for connector types with no real implementation yet (Fetch/Validate always fail). The UI should mark the type as coming soon and hide/disable Test connection, Sync, and data-viewing actions for it. */
+  stub?: boolean;
 }

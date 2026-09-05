@@ -28,6 +28,36 @@ func TestConnectorsListSuccess(t *testing.T) {
 	}
 }
 
+func TestConnectorsSchemaMarksStubTypes(t *testing.T) {
+	app := newTestApp(t)
+	_, viewerToken := app.user(t, "viewer")
+
+	rec := app.req(t, http.MethodGet, "/api/connectors/schema", nil, viewerToken)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body = %s", rec.Code, rec.Body)
+	}
+
+	var schemas []struct {
+		Type string `json:"type"`
+		Stub bool   `json:"stub"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &schemas); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+
+	byType := make(map[string]bool)
+	for _, s := range schemas {
+		byType[s.Type] = s.Stub
+	}
+
+	if stub, ok := byType["docker"]; !ok || !stub {
+		t.Errorf("docker.stub = %v (present=%v), want true", stub, ok)
+	}
+	if stub, ok := byType["proxmox"]; !ok || stub {
+		t.Errorf("proxmox.stub = %v (present=%v), want false", stub, ok)
+	}
+}
+
 func TestConnectorsCreateRoleBoundary(t *testing.T) {
 	app := newTestApp(t)
 	_, viewerToken := app.user(t, "viewer")

@@ -20,6 +20,7 @@ func init() {
 			{Key: "url", Label: "pfSense URL", Type: "text", Required: true, Placeholder: "https://pfsense.example.com"},
 			{Key: "api_key", Label: "API Key", Type: "password", Required: true},
 		},
+		Stub: true,
 	}, func(_ map[string]any) (connector.Connector, error) {
 		return &Connector{}, nil
 	})

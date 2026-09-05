@@ -14,6 +14,10 @@ type TypeSchema struct {
 	Category string        `json:"category"`
 	Name     string        `json:"displayName"`
 	Fields   []SchemaField `json:"fields"`
+	// Stub is true for connector types with no real implementation yet
+	// (Fetch/Validate always fail). The UI hides/disables Test, Sync, and
+	// data-viewing actions for these.
+	Stub bool `json:"stub,omitempty"`
 }
 
 // SchemaField describes a single configuration field.
