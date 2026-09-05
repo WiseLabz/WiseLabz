@@ -19,10 +19,17 @@ import type {
   UseQueryResult,
 } from '@tanstack/react-query';
 
-import type { Health, SystemInfo } from '../../model';
+import type {
+  BackupBundle,
+  BackupImportResult,
+  Error,
+  ForbiddenResponse,
+  Health,
+  SystemInfo,
+} from '../../model';
 
 import { customInstance } from '../../axios-instance';
-import type { ErrorType } from '../../axios-instance';
+import type { ErrorType, BodyType } from '../../axios-instance';
 
 type SecondParameter<T extends (...args: never) => unknown> = Parameters<T>[1];
 
@@ -140,6 +147,264 @@ export function useGetSystemInfo<
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
   const queryOptions = getGetSystemInfoQueryOptions(options);
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+/**
+ * @summary Export a portable backup bundle (connectors, docs+versions, templates+sections, an informational AI config summary) — operator. Connector secret fields and the AI API key are never included; see docs/BACKUP.md.
+ */
+export const getSystemBackupExport = (
+  options?: SecondParameter<typeof customInstance>,
+  signal?: AbortSignal
+) => {
+  return customInstance<BackupBundle>(
+    { url: `/system/backup/export`, method: 'GET', signal },
+    options
+  );
+};
+
+export const getGetSystemBackupExportQueryKey = () => {
+  return [`/system/backup/export`] as const;
+};
+
+export const getGetSystemBackupExportQueryOptions = <
+  TData = Awaited<ReturnType<typeof getSystemBackupExport>>,
+  TError = ErrorType<ForbiddenResponse>,
+>(options?: {
+  query?: Partial<
+    UseQueryOptions<Awaited<ReturnType<typeof getSystemBackupExport>>, TError, TData>
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetSystemBackupExportQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getSystemBackupExport>>> = ({ signal }) =>
+    getSystemBackupExport(requestOptions, signal);
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getSystemBackupExport>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type GetSystemBackupExportQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getSystemBackupExport>>
+>;
+export type GetSystemBackupExportQueryError = ErrorType<ForbiddenResponse>;
+
+export function useGetSystemBackupExport<
+  TData = Awaited<ReturnType<typeof getSystemBackupExport>>,
+  TError = ErrorType<ForbiddenResponse>,
+>(
+  options: {
+    query: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getSystemBackupExport>>, TError, TData>
+    > &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getSystemBackupExport>>,
+          TError,
+          Awaited<ReturnType<typeof getSystemBackupExport>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useGetSystemBackupExport<
+  TData = Awaited<ReturnType<typeof getSystemBackupExport>>,
+  TError = ErrorType<ForbiddenResponse>,
+>(
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getSystemBackupExport>>, TError, TData>
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getSystemBackupExport>>,
+          TError,
+          Awaited<ReturnType<typeof getSystemBackupExport>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useGetSystemBackupExport<
+  TData = Awaited<ReturnType<typeof getSystemBackupExport>>,
+  TError = ErrorType<ForbiddenResponse>,
+>(
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getSystemBackupExport>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * @summary Export a portable backup bundle (connectors, docs+versions, templates+sections, an informational AI config summary) — operator. Connector secret fields and the AI API key are never included; see docs/BACKUP.md.
+ */
+
+export function useGetSystemBackupExport<
+  TData = Awaited<ReturnType<typeof getSystemBackupExport>>,
+  TError = ErrorType<ForbiddenResponse>,
+>(
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getSystemBackupExport>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getGetSystemBackupExportQueryOptions(options);
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+/**
+ * @summary Import a backup bundle — operator. Validates referential integrity and format version before writing anything; existing records (by ID) are left untouched and counted as skipped. The AI config summary, if present, is never applied.
+ */
+export const postSystemBackupImport = (
+  backupBundle: BodyType<BackupBundle>,
+  options?: SecondParameter<typeof customInstance>,
+  signal?: AbortSignal
+) => {
+  return customInstance<BackupImportResult>(
+    {
+      url: `/system/backup/import`,
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      data: backupBundle,
+      signal,
+    },
+    options
+  );
+};
+
+export const getPostSystemBackupImportQueryKey = (backupBundle?: BodyType<BackupBundle>) => {
+  return ['POST', `/system/backup/import`, backupBundle] as const;
+};
+
+export const getPostSystemBackupImportQueryOptions = <
+  TData = Awaited<ReturnType<typeof postSystemBackupImport>>,
+  TError = ErrorType<Error | ForbiddenResponse>,
+>(
+  backupBundle: BodyType<BackupBundle>,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof postSystemBackupImport>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  }
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getPostSystemBackupImportQueryKey(backupBundle);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof postSystemBackupImport>>> = ({ signal }) =>
+    postSystemBackupImport(backupBundle, requestOptions, signal);
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof postSystemBackupImport>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type PostSystemBackupImportQueryResult = NonNullable<
+  Awaited<ReturnType<typeof postSystemBackupImport>>
+>;
+export type PostSystemBackupImportQueryError = ErrorType<Error | ForbiddenResponse>;
+
+export function usePostSystemBackupImport<
+  TData = Awaited<ReturnType<typeof postSystemBackupImport>>,
+  TError = ErrorType<Error | ForbiddenResponse>,
+>(
+  backupBundle: BodyType<BackupBundle>,
+  options: {
+    query: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof postSystemBackupImport>>, TError, TData>
+    > &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postSystemBackupImport>>,
+          TError,
+          Awaited<ReturnType<typeof postSystemBackupImport>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function usePostSystemBackupImport<
+  TData = Awaited<ReturnType<typeof postSystemBackupImport>>,
+  TError = ErrorType<Error | ForbiddenResponse>,
+>(
+  backupBundle: BodyType<BackupBundle>,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof postSystemBackupImport>>, TError, TData>
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postSystemBackupImport>>,
+          TError,
+          Awaited<ReturnType<typeof postSystemBackupImport>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function usePostSystemBackupImport<
+  TData = Awaited<ReturnType<typeof postSystemBackupImport>>,
+  TError = ErrorType<Error | ForbiddenResponse>,
+>(
+  backupBundle: BodyType<BackupBundle>,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof postSystemBackupImport>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * @summary Import a backup bundle — operator. Validates referential integrity and format version before writing anything; existing records (by ID) are left untouched and counted as skipped. The AI config summary, if present, is never applied.
+ */
+
+export function usePostSystemBackupImport<
+  TData = Awaited<ReturnType<typeof postSystemBackupImport>>,
+  TError = ErrorType<Error | ForbiddenResponse>,
+>(
+  backupBundle: BodyType<BackupBundle>,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof postSystemBackupImport>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getPostSystemBackupImportQueryOptions(backupBundle, options);
 
   const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
     queryKey: DataTag<QueryKey, TData, TError>;

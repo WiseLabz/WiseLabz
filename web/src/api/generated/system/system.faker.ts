@@ -8,7 +8,8 @@
  */
 import { faker } from '@faker-js/faker';
 
-import type { Health, SystemInfo } from '../../model';
+import { ConnectorCategory, ServiceStatus } from '../../model';
+import type { BackupBundle, BackupImportResult, Health, SystemInfo } from '../../model';
 
 export const getGetSystemInfoResponseMock = (
   overrideResponse: Partial<Extract<SystemInfo, object>> = {}
@@ -31,6 +32,163 @@ export const getGetSystemInfoResponseMock = (
       ]),
     })
   ),
+  ...overrideResponse,
+});
+
+export const getGetSystemBackupExportResponseMock = (
+  overrideResponse: Partial<Extract<BackupBundle, object>> = {}
+): BackupBundle => ({
+  version: faker.number.int(),
+  exportedAt: faker.date.past().toISOString().slice(0, 19) + 'Z',
+  connectors: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(
+    () => ({
+      id: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      name: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      category: faker.helpers.arrayElement(Object.values(ConnectorCategory)),
+      type: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      enabled: faker.datatype.boolean(),
+      status: faker.helpers.arrayElement(Object.values(ServiceStatus)),
+      url: faker.helpers.arrayElement([
+        faker.string.alpha({ length: { min: 10, max: 20 } }),
+        undefined,
+      ]),
+      verifyTls: faker.helpers.arrayElement([faker.datatype.boolean(), undefined]),
+      lastSyncAt: faker.helpers.arrayElement([
+        faker.helpers.arrayElement([faker.date.past().toISOString().slice(0, 19) + 'Z', null]),
+        undefined,
+      ]),
+      statusMessage: faker.helpers.arrayElement([
+        faker.string.alpha({ length: { min: 10, max: 20 } }),
+        undefined,
+      ]),
+      scheduleSeconds: faker.helpers.arrayElement([
+        faker.helpers.arrayElement([faker.number.int(), null]),
+        undefined,
+      ]),
+      nextRunAt: faker.helpers.arrayElement([
+        faker.helpers.arrayElement([faker.date.past().toISOString().slice(0, 19) + 'Z', null]),
+        undefined,
+      ]),
+      lastSyncDurationMs: faker.helpers.arrayElement([
+        faker.helpers.arrayElement([faker.number.int(), null]),
+        undefined,
+      ]),
+      lastSyncError: faker.helpers.arrayElement([
+        faker.string.alpha({ length: { min: 10, max: 20 } }),
+        undefined,
+      ]),
+      retryCount: faker.helpers.arrayElement([faker.number.int(), undefined]),
+    })
+  ),
+  docs: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() => ({
+    docId: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    title: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    kind: faker.helpers.arrayElement(['lab', 'service'] as const),
+    serviceId: faker.helpers.arrayElement([
+      faker.helpers.arrayElement([faker.string.alpha({ length: { min: 10, max: 20 } }), null]),
+      undefined,
+    ]),
+    content: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    currentVersion: faker.number.int(),
+    updatedAt: faker.date.past().toISOString().slice(0, 19) + 'Z',
+  })),
+  docVersions: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(
+    () => ({
+      ...{
+        rev: faker.number.int(),
+        createdAt: faker.date.past().toISOString().slice(0, 19) + 'Z',
+        author: faker.helpers.arrayElement([
+          faker.helpers.arrayElement([faker.string.alpha({ length: { min: 10, max: 20 } }), null]),
+          undefined,
+        ]),
+        trigger: faker.helpers.arrayElement(['ai', 'template', 'manual'] as const),
+      },
+      ...{ content: faker.string.alpha({ length: { min: 10, max: 20 } }) },
+    })
+  ),
+  templates: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(
+    () => ({
+      id: faker.helpers.arrayElement([
+        faker.string.alpha({ length: { min: 10, max: 20 } }),
+        undefined,
+      ]),
+      name: faker.helpers.arrayElement([
+        faker.string.alpha({ length: { min: 10, max: 20 } }),
+        undefined,
+      ]),
+      description: faker.helpers.arrayElement([
+        faker.string.alpha({ length: { min: 10, max: 20 } }),
+        undefined,
+      ]),
+      appliesTo: faker.helpers.arrayElement([
+        faker.string.alpha({ length: { min: 10, max: 20 } }),
+        undefined,
+      ]),
+      createdAt: faker.helpers.arrayElement([
+        faker.date.past().toISOString().slice(0, 19) + 'Z',
+        undefined,
+      ]),
+      updatedAt: faker.helpers.arrayElement([
+        faker.date.past().toISOString().slice(0, 19) + 'Z',
+        undefined,
+      ]),
+    })
+  ),
+  templateSections: Array.from(
+    { length: faker.number.int({ min: 1, max: 4 }) },
+    (_, i) => i + 1
+  ).map(() => ({
+    id: faker.helpers.arrayElement([
+      faker.string.alpha({ length: { min: 10, max: 20 } }),
+      undefined,
+    ]),
+    templateId: faker.helpers.arrayElement([
+      faker.string.alpha({ length: { min: 10, max: 20 } }),
+      undefined,
+    ]),
+    title: faker.helpers.arrayElement([
+      faker.string.alpha({ length: { min: 10, max: 20 } }),
+      undefined,
+    ]),
+    order: faker.helpers.arrayElement([faker.number.int(), undefined]),
+    body: faker.helpers.arrayElement([
+      faker.string.alpha({ length: { min: 10, max: 20 } }),
+      undefined,
+    ]),
+  })),
+  aiConfig: faker.helpers.arrayElement([
+    {
+      enabled: faker.helpers.arrayElement([faker.datatype.boolean(), undefined]),
+      provider: faker.helpers.arrayElement([
+        faker.string.alpha({ length: { min: 10, max: 20 } }),
+        undefined,
+      ]),
+      model: faker.helpers.arrayElement([
+        faker.string.alpha({ length: { min: 10, max: 20 } }),
+        undefined,
+      ]),
+      baseUrl: faker.helpers.arrayElement([
+        faker.string.alpha({ length: { min: 10, max: 20 } }),
+        undefined,
+      ]),
+      mode: faker.helpers.arrayElement([
+        faker.string.alpha({ length: { min: 10, max: 20 } }),
+        undefined,
+      ]),
+    },
+    undefined,
+  ]),
+  ...overrideResponse,
+});
+
+export const getPostSystemBackupImportResponseMock = (
+  overrideResponse: Partial<Extract<BackupImportResult, object>> = {}
+): BackupImportResult => ({
+  connectors: { imported: faker.number.int(), skipped: faker.number.int() },
+  docs: { imported: faker.number.int(), skipped: faker.number.int() },
+  docVersions: { imported: faker.number.int(), skipped: faker.number.int() },
+  templates: { imported: faker.number.int(), skipped: faker.number.int() },
+  templateSections: { imported: faker.number.int(), skipped: faker.number.int() },
   ...overrideResponse,
 });
 
