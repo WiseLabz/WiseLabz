@@ -21,6 +21,9 @@ import type {
 
 import type {
   AiSuggestRef,
+  BadRequestResponse,
+  BulkResolveRequest,
+  BulkResolveResponse,
   ChangeDetail,
   ChangePage,
   Error,
@@ -29,7 +32,7 @@ import type {
 } from '../../model';
 
 import { customInstance } from '../../axios-instance';
-import type { ErrorType } from '../../axios-instance';
+import type { ErrorType, BodyType } from '../../axios-instance';
 
 type SecondParameter<T extends (...args: never) => unknown> = Parameters<T>[1];
 
@@ -547,6 +550,145 @@ export function usePostChangesChangeIdDismiss<
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
   const queryOptions = getPostChangesChangeIdDismissQueryOptions(changeId, options);
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+/**
+ * Bulk review action for low-risk changes (issue #27). The caller must supply an explicit list of change IDs — there is no "all matching the current filter" option, by design. "Low-risk" is enforced server-side as severity != critical; the client's selection is never trusted. Each ID is independently verified (exists, not critical) and resolved on its own — one bad ID never aborts the batch. The response reports a per-item outcome, and one audit record is written per successfully-resolved item.
+ * @summary Acknowledge or dismiss an explicit list of changes in one request
+ */
+export const postChangesBulkResolve = (
+  bulkResolveRequest: BodyType<BulkResolveRequest>,
+  options?: SecondParameter<typeof customInstance>,
+  signal?: AbortSignal
+) => {
+  return customInstance<BulkResolveResponse>(
+    {
+      url: `/changes/bulk-resolve`,
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      data: bulkResolveRequest,
+      signal,
+    },
+    options
+  );
+};
+
+export const getPostChangesBulkResolveQueryKey = (
+  bulkResolveRequest?: BodyType<BulkResolveRequest>
+) => {
+  return ['POST', `/changes/bulk-resolve`, bulkResolveRequest] as const;
+};
+
+export const getPostChangesBulkResolveQueryOptions = <
+  TData = Awaited<ReturnType<typeof postChangesBulkResolve>>,
+  TError = ErrorType<BadRequestResponse>,
+>(
+  bulkResolveRequest: BodyType<BulkResolveRequest>,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof postChangesBulkResolve>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  }
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getPostChangesBulkResolveQueryKey(bulkResolveRequest);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof postChangesBulkResolve>>> = ({ signal }) =>
+    postChangesBulkResolve(bulkResolveRequest, requestOptions, signal);
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof postChangesBulkResolve>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type PostChangesBulkResolveQueryResult = NonNullable<
+  Awaited<ReturnType<typeof postChangesBulkResolve>>
+>;
+export type PostChangesBulkResolveQueryError = ErrorType<BadRequestResponse>;
+
+export function usePostChangesBulkResolve<
+  TData = Awaited<ReturnType<typeof postChangesBulkResolve>>,
+  TError = ErrorType<BadRequestResponse>,
+>(
+  bulkResolveRequest: BodyType<BulkResolveRequest>,
+  options: {
+    query: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof postChangesBulkResolve>>, TError, TData>
+    > &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postChangesBulkResolve>>,
+          TError,
+          Awaited<ReturnType<typeof postChangesBulkResolve>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function usePostChangesBulkResolve<
+  TData = Awaited<ReturnType<typeof postChangesBulkResolve>>,
+  TError = ErrorType<BadRequestResponse>,
+>(
+  bulkResolveRequest: BodyType<BulkResolveRequest>,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof postChangesBulkResolve>>, TError, TData>
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postChangesBulkResolve>>,
+          TError,
+          Awaited<ReturnType<typeof postChangesBulkResolve>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function usePostChangesBulkResolve<
+  TData = Awaited<ReturnType<typeof postChangesBulkResolve>>,
+  TError = ErrorType<BadRequestResponse>,
+>(
+  bulkResolveRequest: BodyType<BulkResolveRequest>,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof postChangesBulkResolve>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * @summary Acknowledge or dismiss an explicit list of changes in one request
+ */
+
+export function usePostChangesBulkResolve<
+  TData = Awaited<ReturnType<typeof postChangesBulkResolve>>,
+  TError = ErrorType<BadRequestResponse>,
+>(
+  bulkResolveRequest: BodyType<BulkResolveRequest>,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof postChangesBulkResolve>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getPostChangesBulkResolveQueryOptions(bulkResolveRequest, options);
 
   const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
     queryKey: DataTag<QueryKey, TData, TError>;

@@ -795,6 +795,31 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ChangeDetail' }
+  /changes/bulk-resolve:
+    post:
+      tags: [changes]
+      summary: Acknowledge or dismiss an explicit list of changes in one request
+      description: >
+        Bulk review action for low-risk changes (issue #27). The caller must
+        supply an explicit list of change IDs — there is no "all matching
+        the current filter" option, by design. "Low-risk" is enforced
+        server-side as severity != critical; the client's selection is never
+        trusted. Each ID is independently verified (exists, not critical)
+        and resolved on its own — one bad ID never aborts the batch. The
+        response reports a per-item outcome, and one audit record is written
+        per successfully-resolved item.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BulkResolveRequest' }
+      responses:
+        '200':
+          description: OK — per-item outcomes (individual items may still have failed)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BulkResolveResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
   /changes/{changeId}/ai-update:
     post:
       tags: [changes]
@@ -1693,6 +1718,34 @@ components:
         total: { type: integer }
         page: { type: integer }
         pageSize: { type: integer }
+    BulkResolveRequest:
+      type: object
+      required: [ids, status]
+      properties:
+        ids:
+          type: array
+          minItems: 1
+          items: { type: string }
+          description: Explicit change IDs to resolve — never "all matching the current filter".
+        status:
+          type: string
+          enum: [acknowledged, dismissed]
+    BulkResolveItemResult:
+      type: object
+      required: [id, status]
+      properties:
+        id: { type: string }
+        status: { type: string, enum: [success, error] }
+        reason:
+          type: string
+          description: 'Present when status is error, e.g. not_found, not_low_risk, internal_error.'
+    BulkResolveResponse:
+      type: object
+      required: [results]
+      properties:
+        results:
+          type: array
+          items: { $ref: '#/components/schemas/BulkResolveItemResult' }
     Diff:
       type: object
       description: >
