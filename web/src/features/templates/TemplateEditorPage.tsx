@@ -1,13 +1,13 @@
 /**
  * Template editor (Phase 7). Edit a template's identity, what it applies to
  * (connector category / type), and its ordered sections — then preview-generate:
- * resolve the `{{placeholder}}` tokens against a sample connector's last synced
+ * resolve the `{{placeholder}}` tokens against a matching connector's last synced
  * snapshot and render the result, either as the finished doc (Markdown) or as a
  * diff (source → resolved) so it's obvious what each placeholder filled in.
  *
  * Edits are local until Save (PUT). Preview runs against the last *saved*
  * template, so a "save to preview" hint shows while there are unsaved changes.
- * Mutations are role-gated in the UI and the route is operator-gated in App.tsx.
+ * Template mutations are role-gated; preview and history remain available to viewers.
  */
 import { useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -16,19 +16,20 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   getGetTemplatesQueryKey,
   getGetTemplatesTemplateIdQueryKey,
-  postTemplatesTemplateIdPreview,
   putTemplatesTemplateId,
+  postTemplatesTemplateIdPreview,
   useGetTemplatesTemplateId,
 } from '../../api/generated/templates/templates';
 import { ConnectorCategory } from '../../api/model';
-import type { DocVersion, Template, TemplateInput, TemplateSection } from '../../api/model';
-import { renderTemplate, previewConnectors } from '../../data/templates.fixtures';
+import type { Template, TemplateInput, TemplateSection } from '../../api/model';
+import { renderTemplate } from '../../data/templates.fixtures';
 import { Button, IconButton } from '../../components/ui/Button';
 import { Panel, PanelHeader } from '../../components/ui/Panel';
 import { Skeleton, SkeletonRows, ErrorState } from '../../components/ui/states';
 import { RoleGate } from '../../components/ui/RoleGate';
 import { Markdown } from '../../components/docs/Markdown';
 import { DocDiff } from '../../components/diff/DiffViewer';
+import { TemplateHistory } from './TemplateHistory';
 import { toast } from '../../lib/toast';
 import { cn } from '../../lib/cn';
 import {
@@ -40,9 +41,11 @@ import {
   SparklesIcon,
   XIcon,
   DiffIcon,
+  HistoryIcon,
 } from '../../components/icons';
 
 const CATEGORIES = Object.values(ConnectorCategory);
+type Tab = 'read' | 'history';
 
 type Draft = {
   name: string;
@@ -83,6 +86,7 @@ export function TemplateEditorPage() {
   const { data, isLoading, isError, refetch } = useGetTemplatesTemplateId(templateId);
 
   const [draft, setDraft] = useState<Draft | null>(null);
+  const [tab, setTab] = useState<Tab>('read');
 
   // Seed the editable draft once the template loads (and re-seed if it changes).
   // Adjusting state during render is the React-blessed alternative to an effect:
@@ -173,129 +177,160 @@ export function TemplateEditorPage() {
           </h1>
           <p className="font-mono text-2xs text-ink-faint">{data.id}</p>
         </div>
-        <RoleGate
-          fallback={
-            <span className="font-mono text-2xs text-ink-faint">{t('templates.readOnly')}</span>
-          }
-        >
-          <div className="flex items-center gap-2">
-            {dirty && (
-              <span className="flex items-center gap-1.5 font-mono text-2xs text-warn">
-                <span className="h-1.5 w-1.5 bg-warn" aria-hidden="true" />
-                {t('templates.unsaved')}
-              </span>
-            )}
-            <Button
-              variant="primary"
-              size="md"
-              disabled={!dirty || !draft.name.trim() || save.isPending}
-              onClick={() => save.mutate()}
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-0.5 rounded-md border border-line-soft p-0.5">
+            <PreviewTabButton
+              active={tab === 'read'}
+              onClick={() => setTab('read')}
+              icon={<FileTextIcon size={13} />}
             >
-              <CheckIcon size={15} />
-              {save.isPending ? t('templates.saving') : t('templates.save')}
-            </Button>
+              {t('docs.read')}
+            </PreviewTabButton>
+            <PreviewTabButton
+              active={tab === 'history'}
+              onClick={() => setTab('history')}
+              icon={<HistoryIcon size={13} />}
+            >
+              {t('docs.history')}
+            </PreviewTabButton>
           </div>
-        </RoleGate>
+          {tab === 'read' && (
+            <RoleGate
+              fallback={
+                <span className="font-mono text-2xs text-ink-faint">{t('templates.readOnly')}</span>
+              }
+            >
+              <div className="flex items-center gap-2">
+                {dirty && (
+                  <span className="flex items-center gap-1.5 font-mono text-2xs text-warn">
+                    <span className="h-1.5 w-1.5 bg-warn" aria-hidden="true" />
+                    {t('templates.unsaved')}
+                  </span>
+                )}
+                <Button
+                  variant="primary"
+                  size="md"
+                  disabled={!dirty || !draft.name.trim() || save.isPending}
+                  onClick={() => save.mutate()}
+                >
+                  <CheckIcon size={15} />
+                  {save.isPending ? t('templates.saving') : t('templates.save')}
+                </Button>
+              </div>
+            </RoleGate>
+          )}
+        </div>
       </header>
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-        {/* ── Left: edit ─────────────────────────────────────────────── */}
-        <div className="space-y-4">
-          <Panel>
-            <PanelHeader title={t('templates.detailsHeader')} icon={<FileTextIcon size={13} />} />
-            <div className="space-y-3 p-4">
-              <Labeled label={t('templates.nameLabel')} required>
-                <input
-                  value={draft.name}
-                  onChange={(e) => update({ name: e.target.value })}
-                  className={inputCls}
-                />
-              </Labeled>
-              <Labeled label={t('templates.descriptionLabel')}>
-                <textarea
-                  value={draft.description}
-                  onChange={(e) => update({ description: e.target.value })}
-                  rows={2}
-                  placeholder={t('templates.descriptionPlaceholder')}
-                  className={cn(inputCls, 'h-auto resize-y py-2 leading-relaxed')}
-                />
-              </Labeled>
-            </div>
-          </Panel>
-
-          <Panel>
-            <PanelHeader title={t('templates.appliesHeader')} icon={<ArrowRightIcon size={13} />} />
-            <div className="space-y-3 p-4">
-              <p className="text-xs leading-relaxed text-ink-muted">{t('templates.appliesHelp')}</p>
-              <Labeled label={t('templates.categoryLabel')}>
-                <div className="relative">
-                  <select
-                    value={draft.category}
-                    onChange={(e) => update({ category: e.target.value })}
-                    className={cn(inputCls, 'appearance-none pr-8')}
-                  >
-                    <option value="">{t('templates.anyCategory')}</option>
-                    {CATEGORIES.map((c) => (
-                      <option key={c} value={c}>
-                        {t(`templates.category.${c}`, { defaultValue: c })}
-                      </option>
-                    ))}
-                  </select>
-                  <ChevronDownIcon
-                    size={14}
-                    className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-ink-faint"
+      {tab === 'history' ? (
+        <Panel className="p-4">
+          <TemplateHistory templateId={templateId} currentVersion={data.currentVersion} />
+        </Panel>
+      ) : (
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+          {/* ── Left: edit ─────────────────────────────────────────────── */}
+          <div className="space-y-4">
+            <Panel>
+              <PanelHeader title={t('templates.detailsHeader')} icon={<FileTextIcon size={13} />} />
+              <div className="space-y-3 p-4">
+                <Labeled label={t('templates.nameLabel')} required>
+                  <input
+                    value={draft.name}
+                    onChange={(e) => update({ name: e.target.value })}
+                    className={inputCls}
                   />
-                </div>
-              </Labeled>
-              <Labeled label={t('templates.typeLabel')}>
-                <input
-                  value={draft.type}
-                  onChange={(e) => update({ type: e.target.value })}
-                  placeholder={t('templates.typePlaceholder')}
-                  className={inputCls}
-                />
-              </Labeled>
-            </div>
-          </Panel>
+                </Labeled>
+                <Labeled label={t('templates.descriptionLabel')}>
+                  <textarea
+                    value={draft.description}
+                    onChange={(e) => update({ description: e.target.value })}
+                    rows={2}
+                    placeholder={t('templates.descriptionPlaceholder')}
+                    className={cn(inputCls, 'h-auto resize-y py-2 leading-relaxed')}
+                  />
+                </Labeled>
+              </div>
+            </Panel>
 
-          <Panel>
-            <PanelHeader
-              title={t('templates.sectionsHeader')}
-              icon={<FileTextIcon size={13} />}
-              count={draft.sections.length}
-              action={
-                <RoleGate>
-                  <Button variant="secondary" size="sm" onClick={addSection}>
-                    <PlusIcon size={13} />
-                    {t('templates.addSection')}
-                  </Button>
-                </RoleGate>
-              }
-            />
-            <div className="space-y-3 p-4">
-              {draft.sections.length === 0 && (
-                <p className="py-4 text-center text-xs text-ink-faint">
-                  {t('templates.noSections')}
+            <Panel>
+              <PanelHeader
+                title={t('templates.appliesHeader')}
+                icon={<ArrowRightIcon size={13} />}
+              />
+              <div className="space-y-3 p-4">
+                <p className="text-xs leading-relaxed text-ink-muted">
+                  {t('templates.appliesHelp')}
                 </p>
-              )}
-              {draft.sections.map((s, idx) => (
-                <SectionEditor
-                  key={idx}
-                  section={s}
-                  index={idx}
-                  count={draft.sections.length}
-                  onChange={(patch) => updateSection(idx, patch)}
-                  onMove={(dir) => moveSection(idx, dir)}
-                  onRemove={() => removeSection(idx)}
-                />
-              ))}
-            </div>
-          </Panel>
-        </div>
+                <Labeled label={t('templates.categoryLabel')}>
+                  <div className="relative">
+                    <select
+                      value={draft.category}
+                      onChange={(e) => update({ category: e.target.value })}
+                      className={cn(inputCls, 'appearance-none pr-8')}
+                    >
+                      <option value="">{t('templates.anyCategory')}</option>
+                      {CATEGORIES.map((c) => (
+                        <option key={c} value={c}>
+                          {t(`templates.category.${c}`, { defaultValue: c })}
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDownIcon
+                      size={14}
+                      className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-ink-faint"
+                    />
+                  </div>
+                </Labeled>
+                <Labeled label={t('templates.typeLabel')}>
+                  <input
+                    value={draft.type}
+                    onChange={(e) => update({ type: e.target.value })}
+                    placeholder={t('templates.typePlaceholder')}
+                    className={inputCls}
+                  />
+                </Labeled>
+              </div>
+            </Panel>
 
-        {/* ── Right: preview ─────────────────────────────────────────── */}
-        <PreviewPanel template={data} type={draft.type} dirty={dirty} />
-      </div>
+            <Panel>
+              <PanelHeader
+                title={t('templates.sectionsHeader')}
+                icon={<FileTextIcon size={13} />}
+                count={draft.sections.length}
+                action={
+                  <RoleGate>
+                    <Button variant="secondary" size="sm" onClick={addSection}>
+                      <PlusIcon size={13} />
+                      {t('templates.addSection')}
+                    </Button>
+                  </RoleGate>
+                }
+              />
+              <div className="space-y-3 p-4">
+                {draft.sections.length === 0 && (
+                  <p className="py-4 text-center text-xs text-ink-faint">
+                    {t('templates.noSections')}
+                  </p>
+                )}
+                {draft.sections.map((s, idx) => (
+                  <SectionEditor
+                    key={idx}
+                    section={s}
+                    index={idx}
+                    count={draft.sections.length}
+                    onChange={(patch) => updateSection(idx, patch)}
+                    onMove={(dir) => moveSection(idx, dir)}
+                    onRemove={() => removeSection(idx)}
+                  />
+                ))}
+              </div>
+            </Panel>
+          </div>
+
+          {/* ── Right: preview ─────────────────────────────────────────── */}
+          <PreviewPanel template={data} dirty={dirty} />
+        </div>
+      )}
     </div>
   );
 }
@@ -391,47 +426,20 @@ function SectionEditor({
 
 type PreviewTab = 'rendered' | 'diff';
 
-function PreviewPanel({
-  template,
-  type,
-  dirty,
-}: {
-  template: Template;
-  type: string;
-  dirty: boolean;
-}) {
+function PreviewPanel({ template, dirty }: { template: Template; dirty: boolean }) {
   const { t } = useTranslation();
-
-  // Offer connectors that match the (draft) appliesTo scope, else all samples.
-  const candidates = useMemo(() => {
-    const matches = previewConnectors.filter((c) => {
-      return !(type.trim() && c.type !== type.trim());
-    });
-    return matches.length ? matches : previewConnectors;
-  }, [type]);
-
-  const [connectorId, setConnectorId] = useState<string>(candidates[0]?.id ?? '');
+  const [connectorId, setConnectorId] = useState('');
   const [tab, setTab] = useState<PreviewTab>('rendered');
-  const [result, setResult] = useState<DocVersion | null>(null);
-
-  // Keep the selection valid as the candidate set narrows with the type filter.
-  // Adjust during render rather than in an effect (setting to the same value is a
-  // no-op, so this cannot loop).
-  if (!candidates.some((c) => c.id === connectorId)) {
-    const next = candidates[0]?.id ?? '';
-    if (next !== connectorId) setConnectorId(next);
-  }
-
   const preview = useMutation({
-    mutationFn: () =>
-      postTemplatesTemplateIdPreview(template.id, connectorId ? { connectorId } : {}),
-    onSuccess: (doc) => setResult(doc),
-    onError: () => toast.error(t('templates.toastPreviewError')),
+    mutationFn: (id?: string) =>
+      postTemplatesTemplateIdPreview(template.id, id ? { connectorId: id } : {}),
   });
+  const candidates = preview.data?.affected ?? [];
+  const selected = candidates.find((c) => c.connectorId === connectorId) ?? null;
+  const result = preview.data?.detail;
 
-  const selected = candidates.find((c) => c.id === connectorId) ?? null;
   // Left side of the diff: the raw template source (placeholders intact).
-  const source = useMemo(() => renderTemplate(template, selected, false), [template, selected]);
+  const source = useMemo(() => renderTemplate(template, null, false), [template]);
 
   return (
     <Panel className="lg:sticky lg:top-6 lg:self-start">
@@ -460,6 +468,55 @@ function PreviewPanel({
         }
       />
       <div className="space-y-3 p-4">
+        {candidates.length > 0 && (
+          <div>
+            <p className="mb-1 text-2xs uppercase tracking-wider text-ink-faint">
+              {t('templates.affectedConnectors')}
+            </p>
+            <div className="space-y-1">
+              {candidates.map((connector) => (
+                <button
+                  key={connector.connectorId}
+                  onClick={() => {
+                    setConnectorId(connector.connectorId);
+                    preview.mutate(connector.connectorId);
+                  }}
+                  className={cn(
+                    'flex w-full items-center justify-between gap-2 rounded-md border px-2.5 py-2 text-left text-xs transition-colors',
+                    connector.connectorId === connectorId
+                      ? 'border-signal-soft bg-signal-tint'
+                      : 'border-line-soft hover:bg-surface-raised'
+                  )}
+                >
+                  <span className="min-w-0 truncate text-ink">{connector.connectorName}</span>
+                  {connector.renderError ? (
+                    <span className="max-w-48 shrink-0 truncate text-err" title={connector.renderError}>
+                      {connector.renderError}
+                    </span>
+                  ) : (
+                    <span className="flex shrink-0 items-center gap-1">
+                      <span className={connector.wouldChange ? 'text-warn' : 'text-ink-faint'}>
+                        {t(
+                          connector.wouldChange
+                            ? 'templates.previewWouldChange'
+                            : 'templates.previewUnchanged'
+                        )}
+                      </span>
+                      <span className="text-ink-faint">
+                        ·{' '}
+                        {t(
+                          connector.hasExistingDoc
+                            ? 'templates.previewExistingDoc'
+                            : 'templates.previewNewDoc'
+                        )}
+                      </span>
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         <div className="flex flex-wrap items-end gap-2">
           <label className="min-w-0 flex-1">
             <span className="mb-1 block text-2xs uppercase tracking-wider text-ink-faint">
@@ -468,12 +525,18 @@ function PreviewPanel({
             <div className="relative">
               <select
                 value={connectorId}
-                onChange={(e) => setConnectorId(e.target.value)}
+                onChange={(e) => {
+                  setConnectorId(e.target.value);
+                  preview.mutate(e.target.value);
+                }}
                 className={cn(inputCls, 'appearance-none pr-8')}
               >
+                <option value="" disabled>
+                  {t('templates.sampleConnector')}
+                </option>
                 {candidates.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name} ({c.type})
+                  <option key={c.connectorId} value={c.connectorId}>
+                    {c.connectorName}
                   </option>
                 ))}
               </select>
@@ -487,7 +550,7 @@ function PreviewPanel({
             variant="secondary"
             size="md"
             disabled={preview.isPending}
-            onClick={() => preview.mutate()}
+            onClick={() => preview.mutate(connectorId || undefined)}
           >
             <SparklesIcon size={14} />
             {preview.isPending ? t('templates.generating') : t('templates.generate')}
@@ -502,6 +565,11 @@ function PreviewPanel({
 
         {preview.isPending ? (
           <SkeletonRows rows={6} />
+        ) : preview.isError ? (
+          <ErrorState
+            description={t('templates.toastPreviewError')}
+            onRetry={() => preview.mutate(connectorId || undefined)}
+          />
         ) : !result ? (
           <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-line-soft px-6 py-12 text-center">
             <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-surface-raised text-ink-faint">
@@ -522,7 +590,7 @@ function PreviewPanel({
             after={result.content}
             label={t('templates.diffLabel')}
             baseLabel={t('templates.diffBase')}
-            headLabel={selected?.name ?? t('templates.diffHead')}
+            headLabel={selected?.connectorName ?? t('templates.diffHead')}
           />
         )}
       </div>

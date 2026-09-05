@@ -6,14 +6,13 @@
  *
  * OpenAPI spec version: 0.1.0
  */
-import type { TemplateAppliesTo } from './templateAppliesTo';
 import type { TemplateSection } from './templateSection';
+import type { TemplateVersionAppliesTo } from './templateVersionAppliesTo';
+import type { TemplateVersionMeta } from './templateVersionMeta';
 
-export interface Template {
-  id: string;
+export type TemplateVersion = TemplateVersionMeta & {
   name: string;
   description?: string;
-  currentVersion: number;
-  appliesTo?: TemplateAppliesTo;
+  appliesTo?: TemplateVersionAppliesTo;
   sections: TemplateSection[];
-}
+};

@@ -113,15 +113,20 @@ func TestRunMigrationsDown(t *testing.T) {
 		t.Fatalf("RunMigrationsDown() error: %v", err)
 	}
 
-	// RunMigrationsDown rolls back only the most recently applied migration
-	// (000003_saved_views), so saved_views should be gone but everything
-	// 000001_init/000002_audit_log created should still be there.
+	// RunMigrationsDown rolls back only 000004_template_versions.
 	var count int
-	if err := db.QueryRow("SELECT COUNT(*) FROM saved_views").Scan(&count); err == nil {
-		t.Error("table saved_views still exists after RunMigrationsDown()")
+	if err := db.QueryRow("SELECT COUNT(*) FROM template_versions").Scan(&count); err == nil {
+		t.Error("table template_versions still exists after RunMigrationsDown()")
+	}
+	if rows, err := db.Query("SELECT current_version FROM templates"); err == nil {
+		_ = rows.Close()
+		t.Error("templates.current_version still exists after RunMigrationsDown()")
 	}
 	if err := db.QueryRow("SELECT COUNT(*) FROM audit_log").Scan(&count); err != nil {
 		t.Errorf("table audit_log should still exist after rolling back only the last migration: %v", err)
+	}
+	if err := db.QueryRow("SELECT COUNT(*) FROM saved_views").Scan(&count); err != nil {
+		t.Errorf("table saved_views should still exist after rolling back only the last migration: %v", err)
 	}
 	for _, table := range tablesCreatedByMigrations {
 		if err := db.QueryRow("SELECT COUNT(*) FROM " + table).Scan(&count); err != nil {
@@ -159,8 +164,18 @@ func TestRunMigrationsDownPostgres(t *testing.T) {
 	}
 
 	var count int
-	if err := db.QueryRow("SELECT COUNT(*) FROM audit_log").Scan(&count); err == nil {
-		t.Error("table audit_log still exists after RunMigrationsDown()")
+	if err := db.QueryRow("SELECT COUNT(*) FROM template_versions").Scan(&count); err == nil {
+		t.Error("table template_versions still exists after RunMigrationsDown()")
+	}
+	if rows, err := db.Query("SELECT current_version FROM templates"); err == nil {
+		_ = rows.Close()
+		t.Error("templates.current_version still exists after RunMigrationsDown()")
+	}
+	if err := db.QueryRow("SELECT COUNT(*) FROM audit_log").Scan(&count); err != nil {
+		t.Errorf("table audit_log should still exist after rolling back only the last migration: %v", err)
+	}
+	if err := db.QueryRow("SELECT COUNT(*) FROM saved_views").Scan(&count); err != nil {
+		t.Errorf("table saved_views should still exist after rolling back only the last migration: %v", err)
 	}
 	for _, table := range tablesCreatedByMigrations {
 		if err := db.QueryRow("SELECT COUNT(*) FROM " + table).Scan(&count); err != nil {

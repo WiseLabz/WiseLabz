@@ -309,6 +309,17 @@ both SQLite and PostgreSQL.
 
 ---
 
+## Template history and read-only preview (decided 2026-09-05)
+
+Templates retain immutable save and restore snapshots, mirroring document history.
+Restoring an older template creates a new current revision instead of rewriting history.
+
+`POST /templates/{templateId}/preview` is read-only: it renders each matching connector
+sequentially, reports whether its document would change, and optionally returns one detailed
+render without creating or updating `docs` or `doc_versions`.
+
+---
+
 ## Data retention (decided 2026-09-05)
 
 A background job (`internal/retention`, started as a bare goroutine in

@@ -28,6 +28,39 @@ type Store struct {
 	db DBTX
 }
 
+type transactionDB struct {
+	*sql.Tx
+}
+
+func (t transactionDB) PingContext(ctx context.Context) error {
+	var one int
+	return t.QueryRowContext(ctx, "SELECT 1").Scan(&one)
+}
+
+func (t transactionDB) Close() error {
+	return t.Rollback()
+}
+
+type pgTransactionDB struct {
+	transactionDB
+}
+
+func (p pgTransactionDB) ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error) {
+	return p.Tx.ExecContext(ctx, rewritePlaceholders(query), args...)
+}
+
+func (p pgTransactionDB) QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error) {
+	return p.Tx.QueryContext(ctx, rewritePlaceholders(query), args...)
+}
+
+func (p pgTransactionDB) QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row {
+	return p.Tx.QueryRowContext(ctx, rewritePlaceholders(query), args...)
+}
+
+func (p pgTransactionDB) QueryRow(query string, args ...any) *sql.Row {
+	return p.Tx.QueryRow(rewritePlaceholders(query), args...)
+}
+
 // New creates a new Store with the given database connection. driver
 // selects the placeholder dialect: "postgres" wraps db so that `?`
 // placeholders are rewritten to `$1, $2, ...`; any other value (including
@@ -37,6 +70,41 @@ func New(db *sql.DB, driver string) *Store {
 		return &Store{db: pgPlaceholderDB{db}}
 	}
 	return &Store{db: db}
+}
+
+// WithinTransaction runs fn against a transaction-bound Store and commits only on success.
+func (s *Store) WithinTransaction(ctx context.Context, fn func(*Store) error) error {
+	var (
+		tx       *sql.Tx
+		storeDB  DBTX
+		err      error
+		postgres bool
+	)
+	switch db := s.db.(type) {
+	case *sql.DB:
+		tx, err = db.BeginTx(ctx, nil)
+	case pgPlaceholderDB:
+		postgres = true
+		tx, err = db.BeginTx(ctx, nil)
+	default:
+		return fmt.Errorf("begin transaction: unsupported database wrapper %T", s.db)
+	}
+	if err != nil {
+		return fmt.Errorf("begin transaction: %w", err)
+	}
+	defer tx.Rollback() //nolint:errcheck
+
+	storeDB = transactionDB{Tx: tx}
+	if postgres {
+		storeDB = pgTransactionDB{transactionDB{Tx: tx}}
+	}
+	if err := fn(&Store{db: storeDB}); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit transaction: %w", err)
+	}
+	return nil
 }
 
 // DB returns the underlying database connection for direct queries.

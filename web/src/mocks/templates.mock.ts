@@ -27,6 +27,7 @@ export const templatesHandlers = [
     const body = (await request.json().catch(() => ({}))) as Partial<TemplateInput>;
     const created: Template = {
       id: nextId(),
+      currentVersion: 1,
       name: body.name?.trim() || 'Untitled template',
       description: body.description ?? '',
       appliesTo: body.appliesTo ?? {},
@@ -54,6 +55,7 @@ export const templatesHandlers = [
     const body = (await request.json().catch(() => ({}))) as Partial<TemplateInput>;
     const updated: Template = {
       id: templates[idx].id,
+      currentVersion: templates[idx].currentVersion + 1,
       name: body.name?.trim() || templates[idx].name,
       description: body.description ?? '',
       appliesTo: body.appliesTo ?? {},

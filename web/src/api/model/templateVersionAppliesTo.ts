@@ -6,14 +6,9 @@
  *
  * OpenAPI spec version: 0.1.0
  */
-import type { TemplateAppliesTo } from './templateAppliesTo';
-import type { TemplateSection } from './templateSection';
+import type { ConnectorCategory } from './connectorCategory';
 
-export interface Template {
-  id: string;
-  name: string;
-  description?: string;
-  currentVersion: number;
-  appliesTo?: TemplateAppliesTo;
-  sections: TemplateSection[];
-}
+export type TemplateVersionAppliesTo = {
+  category?: ConnectorCategory;
+  type?: string;
+};

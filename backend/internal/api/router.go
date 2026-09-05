@@ -163,12 +163,15 @@ func NewRouter(cfg Config) chi.Router {
 		r.Route("/api/templates", func(r chi.Router) {
 			r.Get("/", tmplH.List)
 			r.Get("/{id}", tmplH.Get)
+			r.Get("/{id}/versions", tmplH.Versions)
+			r.Get("/{id}/versions/{rev}", tmplH.Version)
+			r.Post("/{id}/preview", tmplH.Preview)
 
 			r.Group(func(r chi.Router) {
 				r.Use(operatorOnly)
 				r.Post("/", tmplH.Create)
 				r.Put("/{id}", tmplH.Update)
-				r.Post("/{id}/preview", tmplH.Preview)
+				r.Post("/{id}/versions/{rev}/restore", tmplH.Restore)
 
 				r.Group(func(r chi.Router) {
 					r.Use(auth.RequireElevation(cfg.JWT, "template.delete"))

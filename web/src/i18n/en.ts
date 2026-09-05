@@ -679,7 +679,12 @@ export const en = {
     previewStale:
       'Preview generates from the last saved template. Save to preview your latest edits.',
     previewEmptyTitle: 'Generate a preview',
-    previewEmptyDesc: 'Pick a sample connector and generate to see the doc this template produces.',
+    previewEmptyDesc: 'Pick an affected connector to see the doc this template would produce.',
+    affectedConnectors: 'Affected connectors',
+    previewWouldChange: 'Would change',
+    previewUnchanged: 'No change',
+    previewExistingDoc: 'Existing doc',
+    previewNewDoc: 'New doc',
     diffLabel: 'template → generated',
     diffBase: 'source',
     diffHead: 'generated',
@@ -707,6 +712,23 @@ export const en = {
     delete: 'Delete',
     appliesAny: 'any service',
     appliesAnyCategory: 'any',
+    historyLoadError: "Couldn't load template revision history.",
+    noRevisionsTitle: 'No prior revisions',
+    noRevisionsDesc: 'Save this template again to create another revision.',
+    revisionUnavailableTitle: 'Revision unavailable',
+    revisionUnavailableDesc: "This template revision couldn't be loaded.",
+    noTextualTitle: 'No template changes',
+    noTextualDesc: 'These revisions are identical.',
+    trigger: {
+      save: 'Save',
+      restore: 'Restore',
+    },
+    restore: {
+      action: 'Restore v{{version}}',
+      pending: 'Restoring…',
+      done: 'Restored v{{version}} as the current template',
+      error: "Couldn't restore that revision.",
+    },
   },
 } as const;
 
