@@ -46,6 +46,11 @@ CREATE TABLE connectors (
     status          TEXT NOT NULL DEFAULT 'unknown' CHECK(status IN ('online','degraded','offline','unknown')),
     status_message  TEXT NOT NULL DEFAULT '',
     last_sync_at    TEXT,
+    schedule_seconds       INTEGER,
+    next_run_at            TEXT,
+    last_sync_duration_ms  INTEGER,
+    last_sync_error        TEXT NOT NULL DEFAULT '',
+    retry_count            INTEGER NOT NULL DEFAULT 0,
     created_at      TEXT NOT NULL,
     updated_at      TEXT NOT NULL
 );
@@ -58,6 +63,20 @@ CREATE TABLE service_snapshots (
     fetched_at      TEXT NOT NULL
 );
 CREATE INDEX idx_snapshots_connector ON service_snapshots(connector_id, fetched_at DESC);
+
+CREATE TABLE sync_runs (
+    id              TEXT PRIMARY KEY,
+    connector_id    TEXT NOT NULL REFERENCES connectors(id) ON DELETE CASCADE,
+    started_at      TEXT NOT NULL,
+    finished_at     TEXT,
+    duration_ms     INTEGER,
+    status          TEXT NOT NULL CHECK(status IN ('success','error','skipped')),
+    error           TEXT NOT NULL DEFAULT '',
+    attempt         INTEGER NOT NULL DEFAULT 1,
+    changes_count   INTEGER NOT NULL DEFAULT 0,
+    alerts_count    INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX idx_sync_runs_connector ON sync_runs(connector_id, started_at DESC);
 
 CREATE TABLE docs (
     id              TEXT PRIMARY KEY,

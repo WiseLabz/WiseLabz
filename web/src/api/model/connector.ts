@@ -23,4 +23,16 @@ export interface Connector {
   /** @nullable */
   lastSyncAt?: string | null;
   statusMessage?: string;
+  /**
+   * Auto-sync cadence in seconds; null disables scheduled sync (manual only)
+   * @nullable
+   */
+  scheduleSeconds?: number | null;
+  /** @nullable */
+  nextRunAt?: string | null;
+  /** @nullable */
+  lastSyncDurationMs?: number | null;
+  lastSyncError?: string;
+  /** Consecutive sync failures since the last success; resets to 0 on success */
+  retryCount?: number;
 }

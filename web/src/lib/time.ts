@@ -11,12 +11,24 @@ export function relativeTime(iso: string | null | undefined, now = Date.now()): 
   if (!iso) return 'never';
   const t = new Date(iso).getTime();
   if (Number.isNaN(t)) return '—';
-  const delta = now - t;
+  // abs() so this also reads future timestamps (e.g. a scheduled next-run) correctly,
+  // not just the past ones ("ago") it was originally written for.
+  const delta = Math.abs(now - t);
   if (delta < 5000) return 'now';
   for (const [limit, div, suffix] of UNITS) {
     if (delta < limit) return `${Math.floor(delta / div)}${suffix}`;
   }
   return `${Math.floor(delta / 2_592_000_000)}mo`;
+}
+
+/** Humanize a duration in ms ("340ms", "1.2s", "3m 5s"). */
+export function durationLabel(ms: number | null | undefined): string {
+  if (ms == null || Number.isNaN(ms)) return '—';
+  if (ms < 1000) return `${ms}ms`;
+  if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`;
+  const m = Math.floor(ms / 60_000);
+  const s = Math.round((ms % 60_000) / 1000);
+  return `${m}m ${s}s`;
 }
 
 export function clockTime(iso: string): string {

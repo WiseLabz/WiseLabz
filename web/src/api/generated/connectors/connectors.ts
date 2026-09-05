@@ -26,11 +26,13 @@ import type {
   ConnectorUpdate,
   ElevationRequiredResponse,
   ForbiddenResponse,
+  GetConnectorsConnectorIdSyncsParams,
   NotFoundResponse,
   PutConnectorsConnectorIdEnabledBody,
   RemovalImpact,
   ServiceSnapshot,
   SyncJobRef,
+  SyncRun,
   TestResult,
 } from '../../model';
 
@@ -1380,6 +1382,150 @@ export function usePostConnectorsConnectorIdSync<
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
   const queryOptions = getPostConnectorsConnectorIdSyncQueryOptions(connectorId, options);
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+/**
+ * @summary Recent sync run history for one connector (newest first)
+ */
+export const getConnectorsConnectorIdSyncs = (
+  connectorId: string,
+  params?: GetConnectorsConnectorIdSyncsParams,
+  options?: SecondParameter<typeof customInstance>,
+  signal?: AbortSignal
+) => {
+  return customInstance<SyncRun[]>(
+    { url: `/connectors/${connectorId}/syncs`, method: 'GET', params, signal },
+    options
+  );
+};
+
+export const getGetConnectorsConnectorIdSyncsQueryKey = (
+  connectorId: string,
+  params?: GetConnectorsConnectorIdSyncsParams
+) => {
+  return [`/connectors/${connectorId}/syncs`, ...(params ? [params] : [])] as const;
+};
+
+export const getGetConnectorsConnectorIdSyncsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getConnectorsConnectorIdSyncs>>,
+  TError = ErrorType<unknown>,
+>(
+  connectorId: string,
+  params?: GetConnectorsConnectorIdSyncsParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getConnectorsConnectorIdSyncs>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  }
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetConnectorsConnectorIdSyncsQueryKey(connectorId, params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getConnectorsConnectorIdSyncs>>> = ({
+    signal,
+  }) => getConnectorsConnectorIdSyncs(connectorId, params, requestOptions, signal);
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: connectorId !== null && connectorId !== undefined,
+    ...queryOptions,
+  } as UseQueryOptions<Awaited<ReturnType<typeof getConnectorsConnectorIdSyncs>>, TError, TData> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+};
+
+export type GetConnectorsConnectorIdSyncsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getConnectorsConnectorIdSyncs>>
+>;
+export type GetConnectorsConnectorIdSyncsQueryError = ErrorType<unknown>;
+
+export function useGetConnectorsConnectorIdSyncs<
+  TData = Awaited<ReturnType<typeof getConnectorsConnectorIdSyncs>>,
+  TError = ErrorType<unknown>,
+>(
+  connectorId: string,
+  params: undefined | GetConnectorsConnectorIdSyncsParams,
+  options: {
+    query: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getConnectorsConnectorIdSyncs>>, TError, TData>
+    > &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getConnectorsConnectorIdSyncs>>,
+          TError,
+          Awaited<ReturnType<typeof getConnectorsConnectorIdSyncs>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useGetConnectorsConnectorIdSyncs<
+  TData = Awaited<ReturnType<typeof getConnectorsConnectorIdSyncs>>,
+  TError = ErrorType<unknown>,
+>(
+  connectorId: string,
+  params?: GetConnectorsConnectorIdSyncsParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getConnectorsConnectorIdSyncs>>, TError, TData>
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getConnectorsConnectorIdSyncs>>,
+          TError,
+          Awaited<ReturnType<typeof getConnectorsConnectorIdSyncs>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useGetConnectorsConnectorIdSyncs<
+  TData = Awaited<ReturnType<typeof getConnectorsConnectorIdSyncs>>,
+  TError = ErrorType<unknown>,
+>(
+  connectorId: string,
+  params?: GetConnectorsConnectorIdSyncsParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getConnectorsConnectorIdSyncs>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * @summary Recent sync run history for one connector (newest first)
+ */
+
+export function useGetConnectorsConnectorIdSyncs<
+  TData = Awaited<ReturnType<typeof getConnectorsConnectorIdSyncs>>,
+  TError = ErrorType<unknown>,
+>(
+  connectorId: string,
+  params?: GetConnectorsConnectorIdSyncsParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getConnectorsConnectorIdSyncs>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getGetConnectorsConnectorIdSyncsQueryOptions(connectorId, params, options);
 
   const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
     queryKey: DataTag<QueryKey, TData, TError>;

@@ -427,6 +427,24 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/SyncJobRef' }
+  /connectors/{connectorId}/syncs:
+    get:
+      tags: [connectors]
+      summary: Recent sync run history for one connector (newest first)
+      parameters:
+        - { $ref: '#/components/parameters/ConnectorId' }
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, default: 20, maximum: 100 }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/SyncRun' }
   /connectors/{connectorId}/enabled:
     put:
       tags: [connectors]
@@ -1301,6 +1319,13 @@ components:
         verifyTls: { type: boolean }
         lastSyncAt: { type: string, format: date-time, nullable: true }
         statusMessage: { type: string }
+        scheduleSeconds:
+          { type: integer, nullable: true, description: 'Auto-sync cadence in seconds; null disables scheduled sync (manual only)' }
+        nextRunAt: { type: string, format: date-time, nullable: true }
+        lastSyncDurationMs: { type: integer, nullable: true }
+        lastSyncError: { type: string }
+        retryCount:
+          { type: integer, description: Consecutive sync failures since the last success; resets to 0 on success }
     ConnectorCreate:
       type: object
       required: [name, category, type, url, config]
@@ -1323,6 +1348,8 @@ components:
         config:
           type: object
           additionalProperties: true
+        scheduleSeconds:
+          { type: integer, nullable: true, description: 'Auto-sync cadence in seconds; null disables scheduled sync (manual only)' }
     ConnectorTypeSchema:
       type: object
       required: [category, type, displayName, fields]
@@ -1363,6 +1390,22 @@ components:
       properties:
         jobId: { type: string }
         serviceId: { type: string, nullable: true }
+    SyncRun:
+      type: object
+      description: One historical sync attempt for a connector (manual or scheduled)
+      required: [id, connectorId, startedAt, status, attempt]
+      properties:
+        id: { type: string }
+        connectorId: { type: string }
+        startedAt: { type: string, format: date-time }
+        finishedAt: { type: string, format: date-time, nullable: true }
+        durationMs: { type: integer, nullable: true }
+        status: { type: string, enum: [success, error, skipped] }
+        error: { type: string }
+        attempt:
+          { type: integer, description: Retry attempt number for this run; 1 for the first try }
+        changesCount: { type: integer }
+        alertsCount: { type: integer }
     ServiceSnapshot:
       type: object
       description: Mirrors backend connector.ServiceSnapshot

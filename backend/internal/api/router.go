@@ -122,6 +122,7 @@ func NewRouter(cfg Config) chi.Router {
 			r.Get("/schema", connH.Schema)
 			r.Get("/{id}", connH.Get)
 			r.Get("/{id}/data", connH.Data)
+			r.Get("/{id}/syncs", connH.Syncs)
 			r.Get("/{id}/removal-impact", connH.RemovalImpact)
 
 			r.Group(func(r chi.Router) {
