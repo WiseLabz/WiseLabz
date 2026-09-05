@@ -16,6 +16,7 @@ import type { DocVersion, Template } from '../api/model';
 export const templates: Template[] = [
   {
     id: 'tpl-proxmox-node',
+    currentVersion: 1,
     name: 'Proxmox Node',
     description:
       'Standard documentation for a Proxmox VE hypervisor: node specs and the virtual machine roster.',
@@ -40,6 +41,7 @@ export const templates: Template[] = [
   },
   {
     id: 'tpl-network-appliance',
+    currentVersion: 1,
     name: 'Network Appliance',
     description:
       'Firewall / router documentation: interface map and the active rule set, for any networking connector.',
@@ -64,6 +66,7 @@ export const templates: Template[] = [
   },
   {
     id: 'tpl-container-host',
+    currentVersion: 1,
     name: 'Container Host',
     description:
       'Container platform documentation: deployed stacks and the running container inventory.',

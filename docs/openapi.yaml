@@ -1740,7 +1740,7 @@ components:
     # ── templates ──
     Template:
       type: object
-      required: [id, name, sections]
+      required: [id, name, currentVersion, sections]
       properties:
         id: { type: string }
         name: { type: string }

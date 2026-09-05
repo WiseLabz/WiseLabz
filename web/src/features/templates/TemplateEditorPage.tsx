@@ -17,8 +17,8 @@ import {
   getGetTemplatesQueryKey,
   getGetTemplatesTemplateIdQueryKey,
   putTemplatesTemplateId,
+  postTemplatesTemplateIdPreview,
   useGetTemplatesTemplateId,
-  usePostTemplatesTemplateIdPreview,
 } from '../../api/generated/templates/templates';
 import { ConnectorCategory } from '../../api/model';
 import type { Template, TemplateInput, TemplateSection } from '../../api/model';
@@ -224,7 +224,7 @@ export function TemplateEditorPage() {
 
       {tab === 'history' ? (
         <Panel className="p-4">
-          <TemplateHistory templateId={templateId} currentVersion={data.currentVersion ?? 0} />
+          <TemplateHistory templateId={templateId} currentVersion={data.currentVersion} />
         </Panel>
       ) : (
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
@@ -430,15 +430,13 @@ function PreviewPanel({ template, dirty }: { template: Template; dirty: boolean 
   const { t } = useTranslation();
   const [connectorId, setConnectorId] = useState('');
   const [tab, setTab] = useState<PreviewTab>('rendered');
-  const preview = usePostTemplatesTemplateIdPreview(
-    template.id,
-    connectorId ? { connectorId } : {}
-  );
+  const preview = useMutation({
+    mutationFn: (id?: string) =>
+      postTemplatesTemplateIdPreview(template.id, id ? { connectorId: id } : {}),
+  });
   const candidates = preview.data?.affected ?? [];
   const selected = candidates.find((c) => c.connectorId === connectorId) ?? null;
   const result = preview.data?.detail;
-
-  if (candidates.length && !selected) setConnectorId(candidates[0].connectorId);
 
   // Left side of the diff: the raw template source (placeholders intact).
   const source = useMemo(() => renderTemplate(template, null, false), [template]);
@@ -479,7 +477,10 @@ function PreviewPanel({ template, dirty }: { template: Template; dirty: boolean 
               {candidates.map((connector) => (
                 <button
                   key={connector.connectorId}
-                  onClick={() => setConnectorId(connector.connectorId)}
+                  onClick={() => {
+                    setConnectorId(connector.connectorId);
+                    preview.mutate(connector.connectorId);
+                  }}
                   className={cn(
                     'flex w-full items-center justify-between gap-2 rounded-md border px-2.5 py-2 text-left text-xs transition-colors',
                     connector.connectorId === connectorId
@@ -488,23 +489,29 @@ function PreviewPanel({ template, dirty }: { template: Template; dirty: boolean 
                   )}
                 >
                   <span className="min-w-0 truncate text-ink">{connector.connectorName}</span>
-                  <span className="flex shrink-0 items-center gap-1">
-                    <span className={connector.wouldChange ? 'text-warn' : 'text-ink-faint'}>
-                      {t(
-                        connector.wouldChange
-                          ? 'templates.previewWouldChange'
-                          : 'templates.previewUnchanged'
-                      )}
+                  {connector.renderError ? (
+                    <span className="max-w-48 shrink-0 truncate text-err" title={connector.renderError}>
+                      {connector.renderError}
                     </span>
-                    <span className="text-ink-faint">
-                      ·{' '}
-                      {t(
-                        connector.hasExistingDoc
-                          ? 'templates.previewExistingDoc'
-                          : 'templates.previewNewDoc'
-                      )}
+                  ) : (
+                    <span className="flex shrink-0 items-center gap-1">
+                      <span className={connector.wouldChange ? 'text-warn' : 'text-ink-faint'}>
+                        {t(
+                          connector.wouldChange
+                            ? 'templates.previewWouldChange'
+                            : 'templates.previewUnchanged'
+                        )}
+                      </span>
+                      <span className="text-ink-faint">
+                        ·{' '}
+                        {t(
+                          connector.hasExistingDoc
+                            ? 'templates.previewExistingDoc'
+                            : 'templates.previewNewDoc'
+                        )}
+                      </span>
                     </span>
-                  </span>
+                  )}
                 </button>
               ))}
             </div>
@@ -518,9 +525,15 @@ function PreviewPanel({ template, dirty }: { template: Template; dirty: boolean 
             <div className="relative">
               <select
                 value={connectorId}
-                onChange={(e) => setConnectorId(e.target.value)}
+                onChange={(e) => {
+                  setConnectorId(e.target.value);
+                  preview.mutate(e.target.value);
+                }}
                 className={cn(inputCls, 'appearance-none pr-8')}
               >
+                <option value="" disabled>
+                  {t('templates.sampleConnector')}
+                </option>
                 {candidates.map((c) => (
                   <option key={c.connectorId} value={c.connectorId}>
                     {c.connectorName}
@@ -536,11 +549,11 @@ function PreviewPanel({ template, dirty }: { template: Template; dirty: boolean 
           <Button
             variant="secondary"
             size="md"
-            disabled={!connectorId || preview.isFetching}
-            onClick={() => preview.refetch()}
+            disabled={preview.isPending}
+            onClick={() => preview.mutate(connectorId || undefined)}
           >
             <SparklesIcon size={14} />
-            {preview.isFetching ? t('templates.generating') : t('templates.generate')}
+            {preview.isPending ? t('templates.generating') : t('templates.generate')}
           </Button>
         </div>
 
@@ -550,12 +563,12 @@ function PreviewPanel({ template, dirty }: { template: Template; dirty: boolean 
           </p>
         )}
 
-        {preview.isFetching ? (
+        {preview.isPending ? (
           <SkeletonRows rows={6} />
         ) : preview.isError ? (
           <ErrorState
             description={t('templates.toastPreviewError')}
-            onRetry={() => preview.refetch()}
+            onRetry={() => preview.mutate(connectorId || undefined)}
           />
         ) : !result ? (
           <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-line-soft px-6 py-12 text-center">

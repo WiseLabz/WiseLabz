@@ -48,7 +48,9 @@ export function TemplateHistory({
 
   const restore = useMutation({
     mutationFn: () => postTemplatesTemplateIdVersionsRevRestore(templateId, selected),
-    onSuccess: () => {
+    onSuccess: (updated) => {
+      setSelected(updated.currentVersion);
+      queryClient.setQueryData(getGetTemplatesTemplateIdQueryKey(templateId), updated);
       queryClient.invalidateQueries({ queryKey: getGetTemplatesTemplateIdQueryKey(templateId) });
       queryClient.invalidateQueries({
         queryKey: getGetTemplatesTemplateIdVersionsQueryKey(templateId),

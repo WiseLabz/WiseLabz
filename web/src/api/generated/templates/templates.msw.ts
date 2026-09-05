@@ -27,7 +27,7 @@ export const getGetTemplatesResponseMock = (): Template[] =>
       faker.string.alpha({ length: { min: 10, max: 20 } }),
       undefined,
     ]),
-    currentVersion: faker.helpers.arrayElement([faker.number.int(), undefined]),
+    currentVersion: faker.number.int(),
     appliesTo: faker.helpers.arrayElement([
       {
         category: faker.helpers.arrayElement([
@@ -59,7 +59,7 @@ export const getPostTemplatesResponseMock = (
     faker.string.alpha({ length: { min: 10, max: 20 } }),
     undefined,
   ]),
-  currentVersion: faker.helpers.arrayElement([faker.number.int(), undefined]),
+  currentVersion: faker.number.int(),
   appliesTo: faker.helpers.arrayElement([
     {
       category: faker.helpers.arrayElement([
@@ -92,7 +92,7 @@ export const getGetTemplatesTemplateIdResponseMock = (
     faker.string.alpha({ length: { min: 10, max: 20 } }),
     undefined,
   ]),
-  currentVersion: faker.helpers.arrayElement([faker.number.int(), undefined]),
+  currentVersion: faker.number.int(),
   appliesTo: faker.helpers.arrayElement([
     {
       category: faker.helpers.arrayElement([
@@ -125,7 +125,7 @@ export const getPutTemplatesTemplateIdResponseMock = (
     faker.string.alpha({ length: { min: 10, max: 20 } }),
     undefined,
   ]),
-  currentVersion: faker.helpers.arrayElement([faker.number.int(), undefined]),
+  currentVersion: faker.number.int(),
   appliesTo: faker.helpers.arrayElement([
     {
       category: faker.helpers.arrayElement([
@@ -236,7 +236,7 @@ export const getPostTemplatesTemplateIdVersionsRevRestoreResponseMock = (
     faker.string.alpha({ length: { min: 10, max: 20 } }),
     undefined,
   ]),
-  currentVersion: faker.helpers.arrayElement([faker.number.int(), undefined]),
+  currentVersion: faker.number.int(),
   appliesTo: faker.helpers.arrayElement([
     {
       category: faker.helpers.arrayElement([

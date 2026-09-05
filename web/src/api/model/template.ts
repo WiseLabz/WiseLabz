@@ -13,7 +13,7 @@ export interface Template {
   id: string;
   name: string;
   description?: string;
-  currentVersion?: number;
+  currentVersion: number;
   appliesTo?: TemplateAppliesTo;
   sections: TemplateSection[];
 }
