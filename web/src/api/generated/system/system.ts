@@ -20,10 +20,12 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  AuditPage,
   BackupBundle,
   BackupImportResult,
   Error,
   ForbiddenResponse,
+  GetSystemAuditParams,
   Health,
   SystemInfo,
 } from '../../model';
@@ -147,6 +149,124 @@ export function useGetSystemInfo<
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
   const queryOptions = getGetSystemInfoQueryOptions(options);
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+/**
+ * @summary Audit trail (docs/AUDIT.md) — operator. Covers connector changes and syncs, elevation, auth settings changes, and document restores; written only after the action succeeds.
+ */
+export const getSystemAudit = (
+  params?: GetSystemAuditParams,
+  options?: SecondParameter<typeof customInstance>,
+  signal?: AbortSignal
+) => {
+  return customInstance<AuditPage>(
+    { url: `/system/audit`, method: 'GET', params, signal },
+    options
+  );
+};
+
+export const getGetSystemAuditQueryKey = (params?: GetSystemAuditParams) => {
+  return [`/system/audit`, ...(params ? [params] : [])] as const;
+};
+
+export const getGetSystemAuditQueryOptions = <
+  TData = Awaited<ReturnType<typeof getSystemAudit>>,
+  TError = ErrorType<ForbiddenResponse>,
+>(
+  params?: GetSystemAuditParams,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getSystemAudit>>, TError, TData>>;
+    request?: SecondParameter<typeof customInstance>;
+  }
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetSystemAuditQueryKey(params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getSystemAudit>>> = ({ signal }) =>
+    getSystemAudit(params, requestOptions, signal);
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getSystemAudit>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type GetSystemAuditQueryResult = NonNullable<Awaited<ReturnType<typeof getSystemAudit>>>;
+export type GetSystemAuditQueryError = ErrorType<ForbiddenResponse>;
+
+export function useGetSystemAudit<
+  TData = Awaited<ReturnType<typeof getSystemAudit>>,
+  TError = ErrorType<ForbiddenResponse>,
+>(
+  params: undefined | GetSystemAuditParams,
+  options: {
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof getSystemAudit>>, TError, TData>> &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getSystemAudit>>,
+          TError,
+          Awaited<ReturnType<typeof getSystemAudit>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useGetSystemAudit<
+  TData = Awaited<ReturnType<typeof getSystemAudit>>,
+  TError = ErrorType<ForbiddenResponse>,
+>(
+  params?: GetSystemAuditParams,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getSystemAudit>>, TError, TData>> &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getSystemAudit>>,
+          TError,
+          Awaited<ReturnType<typeof getSystemAudit>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useGetSystemAudit<
+  TData = Awaited<ReturnType<typeof getSystemAudit>>,
+  TError = ErrorType<ForbiddenResponse>,
+>(
+  params?: GetSystemAuditParams,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getSystemAudit>>, TError, TData>>;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * @summary Audit trail (docs/AUDIT.md) — operator. Covers connector changes and syncs, elevation, auth settings changes, and document restores; written only after the action succeeds.
+ */
+
+export function useGetSystemAudit<
+  TData = Awaited<ReturnType<typeof getSystemAudit>>,
+  TError = ErrorType<ForbiddenResponse>,
+>(
+  params?: GetSystemAuditParams,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getSystemAudit>>, TError, TData>>;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getGetSystemAuditQueryOptions(params, options);
 
   const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
     queryKey: DataTag<QueryKey, TData, TError>;
