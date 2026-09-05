@@ -30,9 +30,13 @@ type GenerateResult struct {
 	Content string `json:"content"`
 }
 
-// GenerateFromTemplate generates a document using a template and a snapshot.
-func (e *Engine) GenerateFromTemplate(ctx context.Context, templateID, connectorID string) (*GenerateResult, error) {
-	// Get template and its sections
+type renderResult struct {
+	Title   string
+	Content string
+}
+
+// render executes a template against a connector's latest snapshot without persisting it.
+func (e *Engine) render(ctx context.Context, templateID, connectorID string) (*renderResult, error) {
 	tmpl, err := e.store.GetTemplate(ctx, templateID)
 	if err != nil {
 		return nil, fmt.Errorf("get template: %w", err)
@@ -42,7 +46,6 @@ func (e *Engine) GenerateFromTemplate(ctx context.Context, templateID, connector
 		return nil, fmt.Errorf("get template sections: %w", err)
 	}
 
-	// Get latest snapshot
 	sn, err := e.store.GetLatestSnapshot(ctx, connectorID)
 	if err != nil {
 		return nil, fmt.Errorf("get snapshot: %w", err)
@@ -53,7 +56,6 @@ func (e *Engine) GenerateFromTemplate(ctx context.Context, templateID, connector
 		return nil, fmt.Errorf("unmarshal snapshot: %w", err)
 	}
 
-	// Render template
 	var buf bytes.Buffer
 	data := templateData{
 		ServiceName: snap.ServiceName,
@@ -69,21 +71,44 @@ func (e *Engine) GenerateFromTemplate(ctx context.Context, templateID, connector
 	}
 
 	for _, sec := range sections {
-		tmpl, err := template.New("section").Parse(sec.Body)
+		sectionTemplate, err := template.New("section").Parse(sec.Body)
 		if err != nil {
 			fmt.Fprintf(&buf, "## %s\n\n_Template error: %v_\n\n", sec.Title, err)
 			continue
 		}
 		fmt.Fprintf(&buf, "## %s\n\n", sec.Title)
-		if err := tmpl.Execute(&buf, data); err != nil {
+		if err := sectionTemplate.Execute(&buf, data); err != nil {
 			fmt.Fprintf(&buf, "\n_Template error: %v_\n", err)
 		}
 		buf.WriteString("\n")
 	}
 
-	content := buf.String()
+	return &renderResult{
+		Title:   snap.ServiceName,
+		Content: buf.String(),
+	}, nil
+}
 
-	// Create or update doc
+// PreviewFromTemplate renders a document without persisting it.
+func (e *Engine) PreviewFromTemplate(ctx context.Context, templateID, connectorID string) (*GenerateResult, error) {
+	rendered, err := e.render(ctx, templateID, connectorID)
+	if err != nil {
+		return nil, err
+	}
+
+	return &GenerateResult{
+		Title:   rendered.Title,
+		Content: rendered.Content,
+	}, nil
+}
+
+// GenerateFromTemplate generates and persists a document using a template and a snapshot.
+func (e *Engine) GenerateFromTemplate(ctx context.Context, templateID, connectorID string) (*GenerateResult, error) {
+	rendered, err := e.render(ctx, templateID, connectorID)
+	if err != nil {
+		return nil, err
+	}
+
 	existingDocs, err := e.store.ListDocsByService(ctx, connectorID)
 	if err != nil {
 		return nil, fmt.Errorf("list existing docs: %w", err)
@@ -92,41 +117,83 @@ func (e *Engine) GenerateFromTemplate(ctx context.Context, templateID, connector
 	var docID string
 	if len(existingDocs) > 0 {
 		docID = existingDocs[0].ID
-		if err := e.store.UpdateDoc(ctx, docID, content, nil); err != nil {
+		if err := e.store.UpdateDoc(ctx, docID, rendered.Content, nil); err != nil {
 			return nil, fmt.Errorf("update doc: %w", err)
 		}
-		// Get updated version
-		doc, _ := e.store.GetDoc(ctx, docID)
-		_ = e.store.CreateDocVersion(ctx, &store.DocVersionRecord{
+		doc, err := e.store.GetDoc(ctx, docID)
+		if err != nil {
+			return nil, fmt.Errorf("get updated doc: %w", err)
+		}
+		if err := e.store.CreateDocVersion(ctx, &store.DocVersionRecord{
 			DocID:   docID,
 			Rev:     doc.CurrentVersion,
-			Content: content,
+			Content: rendered.Content,
 			Trigger: "template",
-		})
+		}); err != nil {
+			return nil, fmt.Errorf("create doc version: %w", err)
+		}
 	} else {
 		doc := &store.DocRecord{
-			Title:     snap.ServiceName,
+			Title:     rendered.Title,
 			Kind:      "service",
 			ServiceID: connectorID,
-			Content:   content,
+			Content:   rendered.Content,
 		}
 		if err := e.store.CreateDoc(ctx, doc); err != nil {
 			return nil, fmt.Errorf("create doc: %w", err)
 		}
 		docID = doc.ID
-		_ = e.store.CreateDocVersion(ctx, &store.DocVersionRecord{
+		if err := e.store.CreateDocVersion(ctx, &store.DocVersionRecord{
 			DocID:   docID,
 			Rev:     1,
-			Content: content,
+			Content: rendered.Content,
 			Trigger: "template",
-		})
+		}); err != nil {
+			return nil, fmt.Errorf("create doc version: %w", err)
+		}
 	}
 
 	return &GenerateResult{
 		DocID:   docID,
-		Title:   snap.ServiceName,
-		Content: content,
+		Title:   rendered.Title,
+		Content: rendered.Content,
 	}, nil
+}
+
+// MatchingConnectors returns connectors covered by a template's applicability scope.
+func (e *Engine) MatchingConnectors(ctx context.Context, templateID string) ([]store.ConnectorRecord, error) {
+	tmpl, err := e.store.GetTemplate(ctx, templateID)
+	if err != nil {
+		return nil, fmt.Errorf("get template: %w", err)
+	}
+
+	var appliesTo struct {
+		Category string `json:"category"`
+		Type     string `json:"type"`
+	}
+	if tmpl.AppliesTo != "" {
+		if err := json.Unmarshal([]byte(tmpl.AppliesTo), &appliesTo); err != nil {
+			return nil, fmt.Errorf("unmarshal template applies_to: %w", err)
+		}
+	}
+
+	connectors, err := e.store.ListAllConnectors(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list connectors: %w", err)
+	}
+
+	matches := make([]store.ConnectorRecord, 0, len(connectors))
+	for _, candidate := range connectors {
+		if appliesTo.Category != "" && candidate.Category != appliesTo.Category {
+			continue
+		}
+		if appliesTo.Type != "" && candidate.Type != appliesTo.Type {
+			continue
+		}
+		matches = append(matches, candidate)
+	}
+
+	return matches, nil
 }
 
 // GenerateFromSnapshot generates a raw document from a snapshot without a template.
