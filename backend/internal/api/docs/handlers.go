@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strconv"
 
@@ -274,6 +275,12 @@ func (h *Handler) Restore(w http.ResponseWriter, r *http.Request) {
 	if err := h.Store.UpdateDoc(r.Context(), docID, target.Content, nil); err != nil {
 		httputil.Errorf(w, err)
 		return
+	}
+
+	if err := h.Store.RecordAuditFromContext(r.Context(), "doc.restore", "doc", docID, map[string]any{
+		"rev": rev,
+	}); err != nil {
+		slog.Error("failed to record audit", "action", "doc.restore", "error", err)
 	}
 
 	d, _ := h.Store.GetDoc(r.Context(), docID)

@@ -108,6 +108,18 @@ func (h *Handler) UpdateAuthConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Fields only, not values — TTLs and toggles aren't secret, but this
+	// keeps the shape consistent with other config-mutating audit entries.
+	fields := make([]string, len(parts))
+	for i, p := range parts {
+		fields[i] = strings.SplitN(p, " = ", 2)[0]
+	}
+	if err := h.Store.RecordAuditFromContext(r.Context(), "auth.config.update", "auth_config", "", map[string]any{
+		"fields": fields,
+	}); err != nil {
+		slog.Error("failed to record audit", "action", "auth.config.update", "error", err)
+	}
+
 	h.GetAuthConfig(w, r)
 }
 
@@ -138,6 +150,12 @@ func (h *Handler) UpdateProviderEnabled(w http.ResponseWriter, r *http.Request) 
 	if err := h.Store.SetOIDCProviderEnabled(r.Context(), id, req.Enabled); err != nil {
 		httputil.Errorf(w, err)
 		return
+	}
+
+	if err := h.Store.RecordAuditFromContext(r.Context(), "auth.provider.enabled", "oidc_provider", id, map[string]any{
+		"enabled": req.Enabled,
+	}); err != nil {
+		slog.Error("failed to record audit", "action", "auth.provider.enabled", "error", err)
 	}
 
 	httputil.JSON(w, http.StatusOK, oidcProviderJSON(found, req.Enabled))

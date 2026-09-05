@@ -1101,6 +1101,33 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/SystemInfo' }
+  /system/audit:
+    get:
+      tags: [system]
+      summary: >-
+        Audit trail (docs/AUDIT.md) — operator. Covers connector changes and
+        syncs, elevation, auth settings changes, and document restores;
+        written only after the action succeeds.
+      parameters:
+        - name: action
+          in: query
+          required: false
+          schema: { type: string }
+          description: Exact match, e.g. `connector.create`
+        - name: targetType
+          in: query
+          required: false
+          schema: { type: string }
+          description: Exact match, e.g. `connector`, `doc`
+        - { $ref: '#/components/parameters/Page' }
+        - { $ref: '#/components/parameters/PageSize' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuditPage' }
+        '403': { $ref: '#/components/responses/Forbidden' }
   /system/backup/export:
     get:
       tags: [system]
@@ -1909,6 +1936,33 @@ components:
               name: { type: string }
               status: { type: string, enum: [ok, degraded, down] }
               detail: { type: string }
+
+    # ── audit ──
+    AuditRecord:
+      type: object
+      description: One audit trail entry (docs/AUDIT.md). Written only after the audited action succeeds.
+      required: [id, actorUserId, actorRole, action, targetType, targetId, detail, createdAt]
+      properties:
+        id: { type: string }
+        actorUserId: { type: string }
+        actorRole: { $ref: '#/components/schemas/Role' }
+        action: { type: string, description: 'e.g. connector.create, doc.restore' }
+        targetType: { type: string, description: 'e.g. connector, doc; empty when the action has no single target' }
+        targetId: { type: string }
+        detail:
+          type: string
+          description: Small JSON object, action-specific; never carries secret values (e.g. changed field names, not their values)
+        createdAt: { type: string, format: date-time }
+    AuditPage:
+      type: object
+      required: [items, total, page, pageSize]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/AuditRecord' }
+        total: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
 
     # ── backup ──
     BackupBundle:

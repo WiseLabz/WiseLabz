@@ -234,6 +234,7 @@ func NewRouter(cfg Config) chi.Router {
 			r.Get("/api/notifications/deliveries", notifH.ListDeliveries)
 
 			r.Get("/api/system/info", sysH.Info)
+			r.Get("/api/system/audit", sysH.ListAudit)
 
 			r.Route("/api/system/backup", func(r chi.Router) {
 				r.Get("/export", sysH.ExportBackup)

@@ -109,6 +109,12 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if err := h.Store.RecordAuditFromContext(r.Context(), "connector.create", "connector", c.ID, map[string]any{
+		"name": c.Name, "category": c.Category, "type": c.Type,
+	}); err != nil {
+		slog.Error("failed to record audit", "action", "connector.create", "error", err)
+	}
+
 	httputil.JSON(w, http.StatusCreated, c)
 }
 
@@ -199,6 +205,18 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Record only which fields changed, not their values — config_data can
+	// carry connector credentials and must never land in the audit log.
+	fields := make([]string, 0, len(updates))
+	for k := range updates {
+		fields = append(fields, k)
+	}
+	if err := h.Store.RecordAuditFromContext(r.Context(), "connector.update", "connector", id, map[string]any{
+		"fields": fields,
+	}); err != nil {
+		slog.Error("failed to record audit", "action", "connector.update", "error", err)
+	}
+
 	c, _ := h.Store.GetConnector(r.Context(), id)
 	httputil.JSON(w, http.StatusOK, c)
 }
@@ -226,6 +244,10 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 		}
 		httputil.Errorf(w, err)
 		return
+	}
+
+	if err := h.Store.RecordAuditFromContext(r.Context(), "connector.delete", "connector", id, nil); err != nil {
+		slog.Error("failed to record audit", "action", "connector.delete", "error", err)
 	}
 
 	httputil.NoContent(w)
@@ -490,6 +512,12 @@ func (h *Handler) ToggleEnabled(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if err := h.Store.RecordAuditFromContext(r.Context(), "connector.toggle_enabled", "connector", id, map[string]any{
+		"enabled": req.Enabled,
+	}); err != nil {
+		slog.Error("failed to record audit", "action", "connector.toggle_enabled", "error", err)
+	}
+
 	c, _ := h.Store.GetConnector(r.Context(), id)
 	httputil.JSON(w, http.StatusOK, c)
 }
@@ -516,6 +544,12 @@ func (h *Handler) Sync(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
+	if err := h.Store.RecordAuditFromContext(r.Context(), "connector.sync", "connector", id, map[string]any{
+		"jobId": jobID,
+	}); err != nil {
+		slog.Error("failed to record audit", "action", "connector.sync", "error", err)
+	}
+
 	httputil.JSON(w, http.StatusAccepted, map[string]any{
 		"jobId":     jobID,
 		"serviceId": id,
@@ -525,13 +559,19 @@ func (h *Handler) Sync(w http.ResponseWriter, r *http.Request) {
 // SyncAll handles POST /api/sync.
 // Triggers a global sync of all enabled connectors. Returns 202 with job info;
 // the sync itself runs asynchronously.
-func (h *Handler) SyncAll(w http.ResponseWriter, _ *http.Request) {
+func (h *Handler) SyncAll(w http.ResponseWriter, r *http.Request) {
 	jobID := uuid.New().String()
 	go func() {
 		if _, err := h.SyncEngine.RunSyncAll(context.Background(), jobID); err != nil {
 			slog.Error("global sync failed", "job", jobID, "error", err)
 		}
 	}()
+
+	if err := h.Store.RecordAuditFromContext(r.Context(), "connector.sync_all", "connector", "", map[string]any{
+		"jobId": jobID,
+	}); err != nil {
+		slog.Error("failed to record audit", "action", "connector.sync_all", "error", err)
+	}
 
 	httputil.JSON(w, http.StatusAccepted, map[string]any{
 		"jobId":     jobID,

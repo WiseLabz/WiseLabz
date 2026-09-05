@@ -113,12 +113,16 @@ func TestRunMigrationsDown(t *testing.T) {
 		t.Fatalf("RunMigrationsDown() error: %v", err)
 	}
 
-	// Tables from the rolled-back migration should be gone.
+	// RunMigrationsDown rolls back only the most recently applied migration
+	// (000002_audit_log), so audit_log should be gone but everything
+	// 000001_init created should still be there.
+	var count int
+	if err := db.QueryRow("SELECT COUNT(*) FROM audit_log").Scan(&count); err == nil {
+		t.Error("table audit_log still exists after RunMigrationsDown()")
+	}
 	for _, table := range tablesCreatedByMigrations {
-		var count int
-		err := db.QueryRow("SELECT COUNT(*) FROM " + table).Scan(&count)
-		if err == nil {
-			t.Errorf("table %s still exists after RunMigrationsDown()", table)
+		if err := db.QueryRow("SELECT COUNT(*) FROM " + table).Scan(&count); err != nil {
+			t.Errorf("table %s should still exist after rolling back only the last migration: %v", table, err)
 		}
 	}
 }
@@ -151,11 +155,13 @@ func TestRunMigrationsDownPostgres(t *testing.T) {
 		t.Fatalf("RunMigrationsDown() error: %v", err)
 	}
 
+	var count int
+	if err := db.QueryRow("SELECT COUNT(*) FROM audit_log").Scan(&count); err == nil {
+		t.Error("table audit_log still exists after RunMigrationsDown()")
+	}
 	for _, table := range tablesCreatedByMigrations {
-		var count int
-		err := db.QueryRow("SELECT COUNT(*) FROM " + table).Scan(&count)
-		if err == nil {
-			t.Errorf("table %s still exists after RunMigrationsDown()", table)
+		if err := db.QueryRow("SELECT COUNT(*) FROM " + table).Scan(&count); err != nil {
+			t.Errorf("table %s should still exist after rolling back only the last migration: %v", table, err)
 		}
 	}
 }
