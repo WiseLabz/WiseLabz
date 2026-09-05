@@ -3,9 +3,12 @@ package store
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"os"
+	"strings"
+	"sync"
 	"testing"
 
 	_ "modernc.org/sqlite"
@@ -26,6 +29,7 @@ func newDocTestStore(t *testing.T) *Store {
 	if err := RunMigrations(db, "sqlite", logger); err != nil {
 		t.Fatalf("RunMigrations() error: %v", err)
 	}
+	db.SetMaxOpenConns(1)
 
 	return New(db, "sqlite")
 }
@@ -88,5 +92,241 @@ func TestUpdateDocOptimisticConcurrency(t *testing.T) {
 	someVersion := 1
 	if err := s.UpdateDoc(ctx, "missing-id", "x", &someVersion); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("UpdateDoc() on missing doc (with version) error = %v, want ErrNotFound", err)
+	}
+}
+
+func TestTemplateVersions(t *testing.T) {
+	ctx := context.Background()
+	s := newDocTestStore(t)
+
+	tmpl := &TemplateRecord{
+		Name:        "Runbook",
+		Description: "Initial",
+		AppliesTo:   `["docker"]`,
+	}
+	if err := s.CreateTemplate(ctx, tmpl); err != nil {
+		t.Fatalf("CreateTemplate() error: %v", err)
+	}
+	if tmpl.CurrentVersion != 1 {
+		t.Fatalf("CreateTemplate() CurrentVersion = %d, want 1", tmpl.CurrentVersion)
+	}
+
+	gotTemplate, err := s.GetTemplate(ctx, tmpl.ID)
+	if err != nil {
+		t.Fatalf("GetTemplate() error: %v", err)
+	}
+	if gotTemplate.CurrentVersion != 1 {
+		t.Fatalf("GetTemplate() CurrentVersion = %d, want 1", gotTemplate.CurrentVersion)
+	}
+	templates, total, err := s.ListTemplates(ctx, 0, 10)
+	if err != nil {
+		t.Fatalf("ListTemplates() error: %v", err)
+	}
+	if total != 1 || len(templates) != 1 || templates[0].CurrentVersion != 1 {
+		t.Fatalf("ListTemplates() = total %d, templates %#v; want one template at version 1", total, templates)
+	}
+
+	sectionsJSON, err := json.Marshal([]TemplateVersionSection{
+		{Title: "Instalação 🚀", Order: 2, Body: "linha 1\nlinha 2"},
+		{Title: "Overview", Order: 1, Body: "{{service.name}}"},
+	})
+	if err != nil {
+		t.Fatalf("Marshal() error: %v", err)
+	}
+	v1 := &TemplateVersionRecord{
+		TemplateID:  tmpl.ID,
+		Rev:         1,
+		Name:        tmpl.Name,
+		Description: tmpl.Description,
+		AppliesTo:   tmpl.AppliesTo,
+		Sections:    string(sectionsJSON),
+		Author:      "operator-1",
+		Trigger:     "save",
+	}
+	if err := s.CreateTemplateVersion(ctx, v1); err != nil {
+		t.Fatalf("CreateTemplateVersion(v1) error: %v", err)
+	}
+	if v1.ID == "" || v1.CreatedAt == "" {
+		t.Fatalf("CreateTemplateVersion(v1) did not populate identity fields: %#v", v1)
+	}
+
+	if err := s.UpdateTemplate(ctx, tmpl.ID, map[string]any{"description": "Restored"}); err != nil {
+		t.Fatalf("UpdateTemplate() error: %v", err)
+	}
+	v2 := &TemplateVersionRecord{
+		TemplateID:  tmpl.ID,
+		Rev:         2,
+		Name:        tmpl.Name,
+		Description: "Restored",
+		Sections:    "[]",
+		Trigger:     "restore",
+	}
+	if err := s.CreateTemplateVersion(ctx, v2); err != nil {
+		t.Fatalf("CreateTemplateVersion(v2) error: %v", err)
+	}
+
+	versions, err := s.GetTemplateVersions(ctx, tmpl.ID)
+	if err != nil {
+		t.Fatalf("GetTemplateVersions() error: %v", err)
+	}
+	if len(versions) != 2 || versions[0].Rev != 2 || versions[1].Rev != 1 {
+		t.Fatalf("GetTemplateVersions() revisions = %#v, want [2, 1]", versions)
+	}
+	if versions[0].AppliesTo != "" || versions[0].Author != "" {
+		t.Fatalf("nullable strings = appliesTo %q, author %q; want empty", versions[0].AppliesTo, versions[0].Author)
+	}
+	var sections []TemplateVersionSection
+	if err := json.Unmarshal([]byte(versions[1].Sections), &sections); err != nil {
+		t.Fatalf("Unmarshal(stored sections) error: %v", err)
+	}
+	if len(sections) != 2 || sections[0].Title != "Instalação 🚀" || sections[0].Body != "linha 1\nlinha 2" {
+		t.Fatalf("stored sections = %#v, want lossless JSON round trip", sections)
+	}
+
+	gotTemplate, err = s.GetTemplate(ctx, tmpl.ID)
+	if err != nil {
+		t.Fatalf("GetTemplate() after update error: %v", err)
+	}
+	if gotTemplate.CurrentVersion != 2 {
+		t.Fatalf("GetTemplate() CurrentVersion = %d, want 2", gotTemplate.CurrentVersion)
+	}
+}
+
+func TestTemplateVersionConstraintsAndRawJSON(t *testing.T) {
+	ctx := context.Background()
+	s := newDocTestStore(t)
+
+	tmpl := &TemplateRecord{Name: "Runbook"}
+	if err := s.CreateTemplate(ctx, tmpl); err != nil {
+		t.Fatalf("CreateTemplate() error: %v", err)
+	}
+	base := TemplateVersionRecord{
+		TemplateID: tmpl.ID,
+		Rev:        1,
+		Name:       tmpl.Name,
+		AppliesTo:  "not-json",
+		Sections:   "not-json",
+		Trigger:    "save",
+	}
+	if err := s.CreateTemplateVersion(ctx, &base); err != nil {
+		t.Fatalf("CreateTemplateVersion(raw JSON) error: %v", err)
+	}
+	versions, err := s.GetTemplateVersions(ctx, tmpl.ID)
+	if err != nil {
+		t.Fatalf("GetTemplateVersions() error: %v", err)
+	}
+	if len(versions) != 1 || versions[0].AppliesTo != "not-json" || versions[0].Sections != "not-json" {
+		t.Fatalf("GetTemplateVersions() = %#v, want malformed JSON preserved for boundary validation", versions)
+	}
+
+	duplicate := base
+	duplicate.ID = ""
+	if err := s.CreateTemplateVersion(ctx, &duplicate); err == nil {
+		t.Fatal("CreateTemplateVersion(duplicate rev) error = nil, want unique constraint error")
+	}
+	invalidTrigger := base
+	invalidTrigger.ID = ""
+	invalidTrigger.Rev = 2
+	invalidTrigger.Trigger = "manual"
+	if err := s.CreateTemplateVersion(ctx, &invalidTrigger); err == nil {
+		t.Fatal("CreateTemplateVersion(invalid trigger) error = nil, want check constraint error")
+	}
+
+	empty, err := s.GetTemplateVersions(ctx, "missing-template")
+	if err != nil {
+		t.Fatalf("GetTemplateVersions(missing) error: %v", err)
+	}
+	if empty == nil || len(empty) != 0 {
+		t.Fatalf("GetTemplateVersions(missing) = %#v, want non-nil empty slice", empty)
+	}
+}
+
+func TestUpdateTemplateConcurrentVersionBumps(t *testing.T) {
+	ctx := context.Background()
+	s := newDocTestStore(t)
+
+	tmpl := &TemplateRecord{Name: "Runbook"}
+	if err := s.CreateTemplate(ctx, tmpl); err != nil {
+		t.Fatalf("CreateTemplate() error: %v", err)
+	}
+
+	const updates = 8
+	start := make(chan struct{})
+	errs := make(chan error, updates)
+	var wg sync.WaitGroup
+	for range updates {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			errs <- s.UpdateTemplate(ctx, tmpl.ID, map[string]any{})
+		}()
+	}
+	close(start)
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Fatalf("concurrent UpdateTemplate() error: %v", err)
+		}
+	}
+
+	got, err := s.GetTemplate(ctx, tmpl.ID)
+	if err != nil {
+		t.Fatalf("GetTemplate() error: %v", err)
+	}
+	if got.CurrentVersion != 1+updates {
+		t.Fatalf("CurrentVersion = %d, want %d", got.CurrentVersion, 1+updates)
+	}
+}
+
+func TestTemplateVersionIndexAndCascade(t *testing.T) {
+	ctx := context.Background()
+	s := newDocTestStore(t)
+	tmpl := &TemplateRecord{Name: "Runbook"}
+	if err := s.CreateTemplate(ctx, tmpl); err != nil {
+		t.Fatalf("CreateTemplate() error: %v", err)
+	}
+	if err := s.CreateTemplateVersion(ctx, &TemplateVersionRecord{
+		TemplateID: tmpl.ID, Rev: 1, Name: tmpl.Name, Sections: "[]", Trigger: "save",
+	}); err != nil {
+		t.Fatalf("CreateTemplateVersion() error: %v", err)
+	}
+
+	rows, err := s.db.QueryContext(ctx, `EXPLAIN QUERY PLAN
+		SELECT id, template_id, rev, name, description, applies_to, sections, author, trigger, created_at
+		FROM template_versions WHERE template_id = ? ORDER BY rev DESC`, tmpl.ID)
+	if err != nil {
+		t.Fatalf("EXPLAIN QUERY PLAN error: %v", err)
+	}
+	defer rows.Close() //nolint:errcheck
+	var plan strings.Builder
+	for rows.Next() {
+		var id, parent, unused int
+		var detail string
+		if err := rows.Scan(&id, &parent, &unused, &detail); err != nil {
+			t.Fatalf("scan query plan: %v", err)
+		}
+		plan.WriteString(detail)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("iterate query plan: %v", err)
+	}
+	if !strings.Contains(plan.String(), "idx_template_versions_tmpl_rev") {
+		t.Fatalf("query plan %q does not use template version index", plan.String())
+	}
+
+	if _, err := s.db.ExecContext(ctx, "PRAGMA foreign_keys = ON"); err != nil {
+		t.Fatalf("enable foreign keys: %v", err)
+	}
+	if err := s.DeleteTemplate(ctx, tmpl.ID); err != nil {
+		t.Fatalf("DeleteTemplate() error: %v", err)
+	}
+	versions, err := s.GetTemplateVersions(ctx, tmpl.ID)
+	if err != nil {
+		t.Fatalf("GetTemplateVersions() after delete error: %v", err)
+	}
+	if len(versions) != 0 {
+		t.Fatalf("versions after template delete = %#v, want empty", versions)
 	}
 }

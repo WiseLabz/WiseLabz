@@ -36,12 +36,34 @@ type DocVersionRecord struct {
 
 // TemplateRecord represents a row in the templates table.
 type TemplateRecord struct {
+	ID             string `json:"id"`
+	Name           string `json:"name"`
+	Description    string `json:"description"`
+	AppliesTo      string `json:"appliesTo"`
+	CurrentVersion int    `json:"currentVersion"`
+	CreatedAt      string `json:"createdAt"`
+	UpdatedAt      string `json:"updatedAt"`
+}
+
+// TemplateVersionRecord represents a versioned snapshot of a template.
+type TemplateVersionRecord struct {
 	ID          string `json:"id"`
+	TemplateID  string `json:"templateId"`
+	Rev         int    `json:"rev"`
 	Name        string `json:"name"`
 	Description string `json:"description"`
 	AppliesTo   string `json:"appliesTo"`
+	Sections    string `json:"sections"`
+	Author      string `json:"author"`
+	Trigger     string `json:"trigger"`
 	CreatedAt   string `json:"createdAt"`
-	UpdatedAt   string `json:"updatedAt"`
+}
+
+// TemplateVersionSection is a section stored in a template version snapshot.
+type TemplateVersionSection struct {
+	Title string `json:"title"`
+	Order int    `json:"order"`
+	Body  string `json:"body"`
 }
 
 // TemplateSectionRecord represents a row in the template_sections table.
@@ -283,6 +305,7 @@ func (s *Store) CreateTemplate(ctx context.Context, t *TemplateRecord) error {
 	if t.UpdatedAt == "" {
 		t.UpdatedAt = now
 	}
+	t.CurrentVersion = 1
 
 	_, err := s.db.ExecContext(ctx, `
 		INSERT INTO templates (id, name, description, applies_to, created_at, updated_at)
@@ -299,9 +322,9 @@ func (s *Store) GetTemplate(ctx context.Context, id string) (*TemplateRecord, er
 	t := &TemplateRecord{}
 	var appliesTo sql.NullString
 	err := s.db.QueryRowContext(ctx, `
-		SELECT id, name, description, applies_to, created_at, updated_at
+		SELECT id, name, description, applies_to, current_version, created_at, updated_at
 		FROM templates WHERE id = ?
-	`, id).Scan(&t.ID, &t.Name, &t.Description, &appliesTo, &t.CreatedAt, &t.UpdatedAt)
+	`, id).Scan(&t.ID, &t.Name, &t.Description, &appliesTo, &t.CurrentVersion, &t.CreatedAt, &t.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -330,7 +353,7 @@ func (s *Store) UpdateTemplate(ctx context.Context, id string, updates map[strin
 			args = append(args, v)
 		}
 	}
-	query := "UPDATE templates SET updated_at = ?"
+	query := "UPDATE templates SET updated_at = ?, current_version = current_version + 1"
 	if len(parts) > 0 {
 		query += ", " + strings.Join(parts, ", ")
 	}
@@ -375,7 +398,7 @@ func (s *Store) ListTemplates(ctx context.Context, offset, limit int) ([]Templat
 	}
 
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, name, description, applies_to, created_at, updated_at
+		SELECT id, name, description, applies_to, current_version, created_at, updated_at
 		FROM templates ORDER BY created_at DESC LIMIT ? OFFSET ?
 	`, limit, offset)
 	if err != nil {
@@ -387,7 +410,8 @@ func (s *Store) ListTemplates(ctx context.Context, offset, limit int) ([]Templat
 	for rows.Next() {
 		var t TemplateRecord
 		var appliesTo sql.NullString
-		if err := rows.Scan(&t.ID, &t.Name, &t.Description, &appliesTo, &t.CreatedAt, &t.UpdatedAt); err != nil {
+		if err := rows.Scan(&t.ID, &t.Name, &t.Description, &appliesTo, &t.CurrentVersion,
+			&t.CreatedAt, &t.UpdatedAt); err != nil {
 			return nil, 0, fmt.Errorf("scan: %w", err)
 		}
 		t.AppliesTo = appliesTo.String
@@ -397,6 +421,61 @@ func (s *Store) ListTemplates(ctx context.Context, offset, limit int) ([]Templat
 		templates = []TemplateRecord{}
 	}
 	return templates, total, nil
+}
+
+// --- Template versions ---
+
+// CreateTemplateVersion inserts a new version record for a template.
+func (s *Store) CreateTemplateVersion(ctx context.Context, v *TemplateVersionRecord) error {
+	if v.ID == "" {
+		v.ID = uuid.New().String()
+	}
+	if v.CreatedAt == "" {
+		v.CreatedAt = time.Now().UTC().Format(time.RFC3339)
+	}
+
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO template_versions
+			(id, template_id, rev, name, description, applies_to, sections, author, trigger, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, v.ID, v.TemplateID, v.Rev, v.Name, v.Description, nilToStr(v.AppliesTo),
+		v.Sections, nilToStr(v.Author), v.Trigger, v.CreatedAt)
+	if err != nil {
+		return fmt.Errorf("create template version: %w", err)
+	}
+	return nil
+}
+
+// GetTemplateVersions returns all version records for a template, newest first.
+func (s *Store) GetTemplateVersions(ctx context.Context, templateID string) ([]TemplateVersionRecord, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT id, template_id, rev, name, description, applies_to, sections, author, trigger, created_at
+		FROM template_versions WHERE template_id = ? ORDER BY rev DESC
+	`, templateID)
+	if err != nil {
+		return nil, fmt.Errorf("get template versions: %w", err)
+	}
+	defer rows.Close() //nolint:errcheck
+
+	var versions []TemplateVersionRecord
+	for rows.Next() {
+		var v TemplateVersionRecord
+		var appliesTo, author sql.NullString
+		if err := rows.Scan(&v.ID, &v.TemplateID, &v.Rev, &v.Name, &v.Description,
+			&appliesTo, &v.Sections, &author, &v.Trigger, &v.CreatedAt); err != nil {
+			return nil, fmt.Errorf("scan: %w", err)
+		}
+		v.AppliesTo = appliesTo.String
+		v.Author = author.String
+		versions = append(versions, v)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate template versions: %w", err)
+	}
+	if versions == nil {
+		versions = []TemplateVersionRecord{}
+	}
+	return versions, nil
 }
 
 // --- Template sections ---
