@@ -303,6 +303,11 @@ export const en = {
     detailLoadError: "This change couldn't be loaded.",
     detected: 'detected {{date}}',
     affectedDocs: 'Affected docs',
+    bulkSelectedCount: '{{count}} selected',
+    bulkNotLowRisk: 'Critical changes must be reviewed individually',
+    bulkAllSucceeded: '{{count}} change(s) resolved',
+    bulkPartial: '{{succeeded}} succeeded, {{failed}} failed: {{reason}}',
+    bulkError: 'Bulk action failed',
   },
   alerts: {
     title: 'Alerts',

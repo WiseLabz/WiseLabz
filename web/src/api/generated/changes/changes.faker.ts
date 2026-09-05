@@ -9,7 +9,7 @@
 import { faker } from '@faker-js/faker';
 
 import { Severity } from '../../model';
-import type { AiSuggestRef, ChangeDetail, ChangePage } from '../../model';
+import type { AiSuggestRef, BulkResolveResponse, ChangeDetail, ChangePage } from '../../model';
 
 export const getGetChangesResponseMock = (
   overrideResponse: Partial<Extract<ChangePage, object>> = {}
@@ -226,6 +226,22 @@ export const getPostChangesChangeIdDismissResponseMock = (): ChangeDetail => ({
       undefined,
     ]),
   },
+});
+
+export const getPostChangesBulkResolveResponseMock = (
+  overrideResponse: Partial<Extract<BulkResolveResponse, object>> = {}
+): BulkResolveResponse => ({
+  results: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(
+    () => ({
+      id: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      status: faker.helpers.arrayElement(['success', 'error'] as const),
+      reason: faker.helpers.arrayElement([
+        faker.string.alpha({ length: { min: 10, max: 20 } }),
+        undefined,
+      ]),
+    })
+  ),
+  ...overrideResponse,
 });
 
 export const getPostChangesChangeIdAiUpdateResponseMock = (

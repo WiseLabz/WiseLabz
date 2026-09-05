@@ -33,6 +33,10 @@ object, action-specific), and `createdAt`.
 | `auth.config.update` | `PUT /api/auth/config` | auth_config / (none) |
 | `auth.provider.enabled` | `PUT /api/auth/providers/{id}/enabled` | oidc_provider / provider id |
 | `doc.restore` | `POST /api/docs/{id}/versions/{rev}/restore` | doc / doc id |
+| `change.ack` | `POST /api/changes/{id}/ack` | change / id |
+| `change.dismiss` | `POST /api/changes/{id}/dismiss` | change / id |
+| `change.bulk_ack` | `POST /api/changes/bulk-resolve` (`status: acknowledged`) | change / id — one record per resolved item |
+| `change.bulk_dismiss` | `POST /api/changes/bulk-resolve` (`status: dismissed`) | change / id — one record per resolved item |
 
 `detail` never carries secret values. `connector.update` and
 `auth.config.update` record which *fields* changed (a name list), not
