@@ -1,0 +1,58 @@
+# Audit Trail
+
+A record of who did what, and when, for the operator actions sensitive
+enough to need attribution — connector changes and syncs, elevation,
+auth settings changes, and document restores.
+
+## Endpoint
+
+`GET /api/system/audit` — operator-only (403 for `viewer`), paginated
+newest-first like other list endpoints (`page`, `pageSize`; see
+`docs/openapi.yaml`'s `Page`/`PageSize` parameters). Optional filters:
+
+- `action` — exact match, e.g. `connector.create`.
+- `targetType` — exact match, e.g. `connector`, `doc`.
+
+Response shape mirrors `ChangePage`/`AlertPage`: `{ items, total, page, pageSize }`.
+
+## What's recorded
+
+Each entry (`AuditRecord` in `docs/openapi.yaml`) has: `actorUserId`,
+`actorRole`, `action`, `targetType`, `targetId`, `detail` (a small JSON
+object, action-specific), and `createdAt`.
+
+| Action | Trigger | targetType / targetId |
+|---|---|---|
+| `connector.create` | `POST /api/connectors` | connector / new ID |
+| `connector.update` | `PATCH /api/connectors/{id}` | connector / id |
+| `connector.delete` | `DELETE /api/connectors/{id}` | connector / id |
+| `connector.toggle_enabled` | `PUT /api/connectors/{id}/enabled` | connector / id |
+| `connector.sync` | `POST /api/connectors/{id}/sync` | connector / id |
+| `connector.sync_all` | `POST /api/sync` | connector / (none) |
+| `auth.elevate` | `POST /api/auth/elevate` | action / the elevated action name |
+| `auth.config.update` | `PUT /api/auth/config` | auth_config / (none) |
+| `auth.provider.enabled` | `PUT /api/auth/providers/{id}/enabled` | oidc_provider / provider id |
+| `doc.restore` | `POST /api/docs/{id}/versions/{rev}/restore` | doc / doc id |
+
+`detail` never carries secret values. `connector.update` and
+`auth.config.update` record which *fields* changed (a name list), not
+their values — connector config can hold credentials, and this keeps the
+audit log safe to expose to any operator without redaction logic.
+
+## What's not recorded
+
+- **Failed attempts.** An audit entry is written only after the action
+  itself succeeds. A failed create/update/delete never reaches the
+  audit log — this is a deliberate scope cut: this endpoint answers "what
+  happened," not "what was attempted." Add failure logging separately
+  (e.g. to the request logger) if that becomes a need.
+- **Reads.** Listing or viewing a resource is not an audited action.
+- A write to the audit log failing is logged (`slog.Error`) but never
+  fails the request — the audited action has already gone through by
+  that point, so refusing the response would be misleading.
+
+## Retention
+
+Audit rows are not touched by the retention policies in
+`backend/internal/store/retention.go` — they're kept indefinitely, since
+their purpose is historical accountability rather than operational data.

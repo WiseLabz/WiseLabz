@@ -339,6 +339,10 @@ func (h *Handler) Elevate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if err := h.Store.RecordAuditFromContext(r.Context(), "auth.elevate", "action", req.Action, nil); err != nil {
+		slog.Error("failed to record audit", "action", "auth.elevate", "error", err)
+	}
+
 	httputil.JSON(w, http.StatusOK, map[string]any{
 		"token":     token.Token,
 		"expiresAt": token.ExpiresAt.Format(time.RFC3339),

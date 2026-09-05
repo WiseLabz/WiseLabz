@@ -11,8 +11,9 @@ import { faker } from '@faker-js/faker';
 import { HttpResponse, http } from 'msw';
 import type { RequestHandlerOptions } from 'msw';
 
-import { ConnectorCategory, ServiceStatus } from '../../model';
+import { ConnectorCategory, Role, ServiceStatus } from '../../model';
 import type {
+  AuditPage,
   BackupBundle,
   BackupImportResult,
   DiagnosticsBundle,
@@ -41,6 +42,25 @@ export const getGetSystemInfoResponseMock = (
       ]),
     })
   ),
+  ...overrideResponse,
+});
+
+export const getGetSystemAuditResponseMock = (
+  overrideResponse: Partial<Extract<AuditPage, object>> = {}
+): AuditPage => ({
+  items: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() => ({
+    id: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    actorUserId: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    actorRole: faker.helpers.arrayElement(Object.values(Role)),
+    action: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    targetType: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    targetId: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    detail: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    createdAt: faker.date.past().toISOString().slice(0, 19) + 'Z',
+  })),
+  total: faker.number.int(),
+  page: faker.number.int(),
+  pageSize: faker.number.int(),
   ...overrideResponse,
 });
 
@@ -412,6 +432,28 @@ export const getGetSystemInfoMockHandler = (
   );
 };
 
+export const getGetSystemAuditMockHandler = (
+  overrideResponse?:
+    | AuditPage
+    | ((info: Parameters<Parameters<typeof http.get>[1]>[0]) => Promise<AuditPage> | AuditPage),
+  options?: RequestHandlerOptions
+) => {
+  return http.get(
+    '*/system/audit',
+    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+      return HttpResponse.json(
+        overrideResponse !== undefined
+          ? typeof overrideResponse === 'function'
+            ? await overrideResponse(info)
+            : overrideResponse
+          : getGetSystemAuditResponseMock(),
+        { status: 200 }
+      );
+    },
+    options
+  );
+};
+
 export const getGetSystemBackupExportMockHandler = (
   overrideResponse?:
     | BackupBundle
@@ -507,6 +549,7 @@ export const getGetHealthMockHandler = (
 };
 export const getSystemMock = () => [
   getGetSystemInfoMockHandler(),
+  getGetSystemAuditMockHandler(),
   getGetSystemBackupExportMockHandler(),
   getPostSystemBackupImportMockHandler(),
   getGetSystemDiagnosticsMockHandler(),

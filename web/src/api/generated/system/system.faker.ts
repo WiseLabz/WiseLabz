@@ -8,8 +8,9 @@
  */
 import { faker } from '@faker-js/faker';
 
-import { ConnectorCategory, ServiceStatus } from '../../model';
+import { ConnectorCategory, Role, ServiceStatus } from '../../model';
 import type {
+  AuditPage,
   BackupBundle,
   BackupImportResult,
   DiagnosticsBundle,
@@ -38,6 +39,25 @@ export const getGetSystemInfoResponseMock = (
       ]),
     })
   ),
+  ...overrideResponse,
+});
+
+export const getGetSystemAuditResponseMock = (
+  overrideResponse: Partial<Extract<AuditPage, object>> = {}
+): AuditPage => ({
+  items: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() => ({
+    id: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    actorUserId: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    actorRole: faker.helpers.arrayElement(Object.values(Role)),
+    action: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    targetType: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    targetId: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    detail: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    createdAt: faker.date.past().toISOString().slice(0, 19) + 'Z',
+  })),
+  total: faker.number.int(),
+  page: faker.number.int(),
+  pageSize: faker.number.int(),
   ...overrideResponse,
 });
 
