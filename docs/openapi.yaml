@@ -1101,6 +1101,50 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/SystemInfo' }
+  /system/backup/export:
+    get:
+      tags: [system]
+      summary: >-
+        Export a portable backup bundle (connectors, docs+versions,
+        templates+sections, an informational AI config summary) — operator.
+        Connector secret fields and the AI API key are never included; see
+        docs/BACKUP.md.
+      responses:
+        '200':
+          description: OK
+          headers:
+            Content-Disposition:
+              schema: { type: string }
+              description: 'attachment; filename="wiselabz-backup-<timestamp>.json"'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BackupBundle' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /system/backup/import:
+    post:
+      tags: [system]
+      summary: >-
+        Import a backup bundle — operator. Validates referential integrity
+        and format version before writing anything; existing records (by ID)
+        are left untouched and counted as skipped. The AI config summary, if
+        present, is never applied.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BackupBundle' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BackupImportResult' }
+        '400':
+          description: Invalid JSON body, or the bundle failed validation (code `invalid_backup`)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '403': { $ref: '#/components/responses/Forbidden' }
   /health:
     get:
       tags: [system]
@@ -1865,3 +1909,71 @@ components:
               name: { type: string }
               status: { type: string, enum: [ok, degraded, down] }
               detail: { type: string }
+
+    # ── backup ──
+    BackupBundle:
+      type: object
+      description: >-
+        Portable backup format (docs/BACKUP.md). Connector secret fields
+        (per each connector type's schema) are redacted from `configData`;
+        `aiConfig` never includes the provider API key; notification channel
+        config is not included at all.
+      required: [version, exportedAt, connectors, docs, docVersions, templates, templateSections]
+      properties:
+        version: { type: integer, description: Backup format version; import rejects a mismatch }
+        exportedAt: { type: string, format: date-time }
+        connectors:
+          type: array
+          items: { $ref: '#/components/schemas/Connector' }
+        docs:
+          type: array
+          items: { $ref: '#/components/schemas/Doc' }
+        docVersions:
+          type: array
+          items: { $ref: '#/components/schemas/DocVersion' }
+        templates:
+          type: array
+          items:
+            type: object
+            description: Flat template record (id, name, description, appliesTo, timestamps) — not the nested Template schema used elsewhere
+            properties:
+              id: { type: string }
+              name: { type: string }
+              description: { type: string }
+              appliesTo: { type: string }
+              createdAt: { type: string, format: date-time }
+              updatedAt: { type: string, format: date-time }
+        templateSections:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string }
+              templateId: { type: string }
+              title: { type: string }
+              order: { type: integer }
+              body: { type: string }
+        aiConfig:
+          type: object
+          description: Informational only; never applied on import — the encrypted API key can't be restored from a backup
+          properties:
+            enabled: { type: boolean }
+            provider: { type: string }
+            model: { type: string }
+            baseUrl: { type: string }
+            mode: { type: string }
+    BackupCounts:
+      type: object
+      required: [imported, skipped]
+      properties:
+        imported: { type: integer }
+        skipped: { type: integer, description: Existing record with the same ID was left untouched }
+    BackupImportResult:
+      type: object
+      required: [connectors, docs, docVersions, templates, templateSections]
+      properties:
+        connectors: { $ref: '#/components/schemas/BackupCounts' }
+        docs: { $ref: '#/components/schemas/BackupCounts' }
+        docVersions: { $ref: '#/components/schemas/BackupCounts' }
+        templates: { $ref: '#/components/schemas/BackupCounts' }
+        templateSections: { $ref: '#/components/schemas/BackupCounts' }

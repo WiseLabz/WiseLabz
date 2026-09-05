@@ -14,11 +14,12 @@ import (
 type Handler struct {
 	DB     store.DBTX
 	Config *config.Config
+	Store  *store.Store
 }
 
 // NewHandler creates a new system handler.
-func NewHandler(db store.DBTX, cfg *config.Config) *Handler {
-	return &Handler{DB: db, Config: cfg}
+func NewHandler(db store.DBTX, cfg *config.Config, s *store.Store) *Handler {
+	return &Handler{DB: db, Config: cfg, Store: s}
 }
 
 // Health responds with the server health status.

@@ -57,7 +57,7 @@ func NewRouter(cfg Config) chi.Router {
 	r.Use(middleware.CORS(cfg.Config.Server.Origin))
 
 	// --- Handlers ---
-	sysH := syshandler.NewHandler(cfg.Store.DB(), cfg.Config)
+	sysH := syshandler.NewHandler(cfg.Store.DB(), cfg.Config, cfg.Store)
 	authH := authhandler.NewHandler(cfg.Store, cfg.JWT, cfg.Config)
 	settingH := settinghandler.NewHandler(cfg.Store, cfg.Config, cfg.AIRegistry)
 	connH := connhandler.NewHandler(cfg.Store, cfg.SyncEngine)
@@ -234,6 +234,11 @@ func NewRouter(cfg Config) chi.Router {
 			r.Get("/api/notifications/deliveries", notifH.ListDeliveries)
 
 			r.Get("/api/system/info", sysH.Info)
+
+			r.Route("/api/system/backup", func(r chi.Router) {
+				r.Get("/export", sysH.ExportBackup)
+				r.Post("/import", sysH.ImportBackup)
+			})
 
 			r.Route("/api/users", func(r chi.Router) {
 				r.Get("/", authH.ListUsers)
