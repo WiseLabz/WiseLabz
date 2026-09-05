@@ -20,9 +20,11 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  GetNotificationsDeliveriesParams,
   GetNotificationsParams,
   NotFoundResponse,
   Notification,
+  NotificationDeliveryPage,
   NotificationPage,
   UnauthorizedResponse,
 } from '../../model';
@@ -436,6 +438,139 @@ export function usePostNotificationsNotificationIdRead<
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
   const queryOptions = getPostNotificationsNotificationIdReadQueryOptions(notificationId, options);
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+/**
+ * @summary List per-channel notification delivery attempts — operator
+ */
+export const getNotificationsDeliveries = (
+  params?: GetNotificationsDeliveriesParams,
+  options?: SecondParameter<typeof customInstance>,
+  signal?: AbortSignal
+) => {
+  return customInstance<NotificationDeliveryPage>(
+    { url: `/notifications/deliveries`, method: 'GET', params, signal },
+    options
+  );
+};
+
+export const getGetNotificationsDeliveriesQueryKey = (
+  params?: GetNotificationsDeliveriesParams
+) => {
+  return [`/notifications/deliveries`, ...(params ? [params] : [])] as const;
+};
+
+export const getGetNotificationsDeliveriesQueryOptions = <
+  TData = Awaited<ReturnType<typeof getNotificationsDeliveries>>,
+  TError = ErrorType<UnauthorizedResponse>,
+>(
+  params?: GetNotificationsDeliveriesParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getNotificationsDeliveries>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  }
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetNotificationsDeliveriesQueryKey(params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getNotificationsDeliveries>>> = ({
+    signal,
+  }) => getNotificationsDeliveries(params, requestOptions, signal);
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getNotificationsDeliveries>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type GetNotificationsDeliveriesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getNotificationsDeliveries>>
+>;
+export type GetNotificationsDeliveriesQueryError = ErrorType<UnauthorizedResponse>;
+
+export function useGetNotificationsDeliveries<
+  TData = Awaited<ReturnType<typeof getNotificationsDeliveries>>,
+  TError = ErrorType<UnauthorizedResponse>,
+>(
+  params: undefined | GetNotificationsDeliveriesParams,
+  options: {
+    query: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getNotificationsDeliveries>>, TError, TData>
+    > &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getNotificationsDeliveries>>,
+          TError,
+          Awaited<ReturnType<typeof getNotificationsDeliveries>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useGetNotificationsDeliveries<
+  TData = Awaited<ReturnType<typeof getNotificationsDeliveries>>,
+  TError = ErrorType<UnauthorizedResponse>,
+>(
+  params?: GetNotificationsDeliveriesParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getNotificationsDeliveries>>, TError, TData>
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getNotificationsDeliveries>>,
+          TError,
+          Awaited<ReturnType<typeof getNotificationsDeliveries>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useGetNotificationsDeliveries<
+  TData = Awaited<ReturnType<typeof getNotificationsDeliveries>>,
+  TError = ErrorType<UnauthorizedResponse>,
+>(
+  params?: GetNotificationsDeliveriesParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getNotificationsDeliveries>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * @summary List per-channel notification delivery attempts — operator
+ */
+
+export function useGetNotificationsDeliveries<
+  TData = Awaited<ReturnType<typeof getNotificationsDeliveries>>,
+  TError = ErrorType<UnauthorizedResponse>,
+>(
+  params?: GetNotificationsDeliveriesParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getNotificationsDeliveries>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getGetNotificationsDeliveriesQueryOptions(params, options);
 
   const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
     queryKey: DataTag<QueryKey, TData, TError>;

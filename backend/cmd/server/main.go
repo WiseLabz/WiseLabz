@@ -141,6 +141,7 @@ func main() {
 
 	// Start snoozed alert expiration goroutine
 	go runAlertExpirer(ctx, s, notifDispatcher, logger)
+	go notifications.RunDeliveryRetries(ctx, notifDispatcher, logger)
 
 	// Wait for shutdown signal
 	<-ctx.Done()

@@ -896,6 +896,25 @@ paths:
               schema: { $ref: '#/components/schemas/Notification' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
+  /notifications/deliveries:
+    get:
+      tags: [notifications]
+      summary: List per-channel notification delivery attempts — operator
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema: { type: string, enum: [pending, sent, failed] }
+          description: Filter by delivery status.
+        - { $ref: '#/components/parameters/Page' }
+        - { $ref: '#/components/parameters/PageSize' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NotificationDeliveryPage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
 
   # ───────────────────────── settings ─────────────────────────
   /auth/config:
@@ -1594,6 +1613,30 @@ components:
         items:
           type: array
           items: { $ref: '#/components/schemas/Notification' }
+        total: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
+    NotificationDelivery:
+      type: object
+      description: One channel delivery attempt for a notification (operator visibility into failures/retries).
+      required: [id, notificationId, channel, status, attempts, createdAt, updatedAt]
+      properties:
+        id: { type: string }
+        notificationId: { type: string }
+        channel: { $ref: '#/components/schemas/NotificationChannelType' }
+        status: { type: string, enum: [pending, sent, failed] }
+        attempts: { type: integer }
+        lastError: { type: string }
+        nextAttemptAt: { type: string, format: date-time }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    NotificationDeliveryPage:
+      type: object
+      required: [items, total, page, pageSize]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/NotificationDelivery' }
         total: { type: integer }
         page: { type: integer }
         pageSize: { type: integer }

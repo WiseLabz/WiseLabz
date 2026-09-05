@@ -168,3 +168,17 @@ CREATE TABLE in_app_notifications (
     created_at      TEXT NOT NULL
 );
 CREATE INDEX idx_inapp_user ON in_app_notifications(user_id, created_at DESC);
+
+CREATE TABLE notification_deliveries (
+    id              TEXT PRIMARY KEY,
+    notification_id TEXT NOT NULL REFERENCES in_app_notifications(id) ON DELETE CASCADE,
+    channel         TEXT NOT NULL CHECK(channel IN ('in_app','smtp','webhook')),
+    status          TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','sent','failed')),
+    attempts        INTEGER NOT NULL DEFAULT 0,
+    last_error      TEXT NOT NULL DEFAULT '',
+    next_attempt_at TEXT,
+    created_at      TEXT NOT NULL,
+    updated_at      TEXT NOT NULL
+);
+CREATE INDEX idx_deliveries_notification ON notification_deliveries(notification_id);
+CREATE INDEX idx_deliveries_retry ON notification_deliveries(status, next_attempt_at);
