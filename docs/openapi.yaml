@@ -22,6 +22,7 @@ tags:
   - name: changes
   - name: alerts
   - name: notifications
+  - name: saved-views
   - name: settings
   - name: system
 
@@ -950,6 +951,54 @@ paths:
               schema: { $ref: '#/components/schemas/NotificationDeliveryPage' }
         '401': { $ref: '#/components/responses/Unauthorized' }
 
+  # ───────────────────────── saved views ─────────────────────────
+  /saved-views:
+    get:
+      tags: [saved-views]
+      summary: List the current user's saved views for one list surface (docs/SAVED_VIEWS.md)
+      parameters:
+        - name: surface
+          in: query
+          required: true
+          schema: { $ref: '#/components/schemas/SavedViewSurface' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/SavedView' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      tags: [saved-views]
+      summary: Save the current filter state of a list surface under a name
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SavedViewCreate' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SavedView' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /saved-views/{savedViewId}:
+    delete:
+      tags: [saved-views]
+      summary: Delete one of the current user's saved views
+      parameters:
+        - { name: savedViewId, in: path, required: true, schema: { type: string } }
+      responses:
+        '204': { description: No Content }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
   # ───────────────────────── settings ─────────────────────────
   /auth/config:
     get:
@@ -1801,6 +1850,33 @@ components:
         total: { type: integer }
         page: { type: integer }
         pageSize: { type: integer }
+
+    # ── saved views ──
+    SavedViewSurface:
+      type: string
+      enum: [services, changes, alerts]
+    SavedView:
+      type: object
+      description: A user's named, reusable filter set for one list surface (docs/SAVED_VIEWS.md).
+      required: [id, userId, surface, name, filters, createdAt]
+      properties:
+        id: { type: string }
+        userId: { type: string }
+        surface: { $ref: '#/components/schemas/SavedViewSurface' }
+        name: { type: string }
+        filters:
+          type: string
+          description: Opaque JSON blob; the backend never inspects its shape — each frontend list surface owns it.
+        createdAt: { type: string, format: date-time }
+    SavedViewCreate:
+      type: object
+      required: [surface, name]
+      properties:
+        surface: { $ref: '#/components/schemas/SavedViewSurface' }
+        name: { type: string }
+        filters:
+          type: object
+          description: The current filter state of the surface, as a JSON object. Stored opaquely.
 
     # ── settings ──
     AuthConfig:

@@ -114,11 +114,14 @@ func TestRunMigrationsDown(t *testing.T) {
 	}
 
 	// RunMigrationsDown rolls back only the most recently applied migration
-	// (000002_audit_log), so audit_log should be gone but everything
-	// 000001_init created should still be there.
+	// (000003_saved_views), so saved_views should be gone but everything
+	// 000001_init/000002_audit_log created should still be there.
 	var count int
-	if err := db.QueryRow("SELECT COUNT(*) FROM audit_log").Scan(&count); err == nil {
-		t.Error("table audit_log still exists after RunMigrationsDown()")
+	if err := db.QueryRow("SELECT COUNT(*) FROM saved_views").Scan(&count); err == nil {
+		t.Error("table saved_views still exists after RunMigrationsDown()")
+	}
+	if err := db.QueryRow("SELECT COUNT(*) FROM audit_log").Scan(&count); err != nil {
+		t.Errorf("table audit_log should still exist after rolling back only the last migration: %v", err)
 	}
 	for _, table := range tablesCreatedByMigrations {
 		if err := db.QueryRow("SELECT COUNT(*) FROM " + table).Scan(&count); err != nil {

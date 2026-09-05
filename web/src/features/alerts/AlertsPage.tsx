@@ -15,16 +15,28 @@ import { Button } from '../../components/ui/Button';
 import { Panel } from '../../components/ui/Panel';
 import { Pagination } from '../../components/ui/Pagination';
 import { SkeletonRows, ErrorState, EmptyState } from '../../components/ui/states';
+import { SavedViewsMenu } from '../../components/views/SavedViewsMenu';
 import { relativeTime } from '../../lib/time';
 import { CheckIcon, XIcon, ClockIcon } from '../../components/icons';
+import type { Severity } from '../../api/model';
+
+const FILTERS: { key: string; value: Severity | 'all' }[] = [
+  { key: 'alerts.filterAll', value: 'all' },
+  { key: 'alerts.filterCritical', value: 'critical' },
+  { key: 'alerts.filterWarning', value: 'warning' },
+  { key: 'alerts.filterInfo', value: 'info' },
+];
 
 export function AlertsPage() {
   const { t } = useTranslation();
   const [page, setPage] = useState(1);
+  const [severity, setSeverity] = useState<Severity | 'all'>('all');
   const pageSize = 20;
   const queryClient = useQueryClient();
   const { data, isLoading, isError, refetch } = useGetAlerts({ page, pageSize });
-  const pending = (data?.items ?? []).filter((a) => a.status === 'pending');
+  const pending = (data?.items ?? []).filter(
+    (a) => a.status === 'pending' && (severity === 'all' || a.severity === severity)
+  );
   const pageCount = data ? Math.max(1, Math.ceil(data.total / data.pageSize)) : 1;
 
   const resolveAlert = useMutation({
@@ -43,9 +55,39 @@ export function AlertsPage() {
 
   return (
     <div className="mx-auto max-w-205 px-6 py-6">
-      <header className="mb-5">
-        <h1 className="text-xl font-semibold tracking-tight text-ink">{t('alerts.title')}</h1>
-        <p className="text-sm text-ink-muted">{t('alerts.subtitle')}</p>
+      <header className="mb-5 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-semibold tracking-tight text-ink">{t('alerts.title')}</h1>
+          <p className="text-sm text-ink-muted">{t('alerts.subtitle')}</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 rounded-lg border border-line-soft bg-canvas-sunken p-0.5">
+            {FILTERS.map((f) => (
+              <button
+                key={f.value}
+                onClick={() => setSeverity(f.value)}
+                className="relative rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors"
+                style={{
+                  color: severity === f.value ? 'var(--color-ink)' : 'var(--color-ink-muted)',
+                }}
+              >
+                {severity === f.value && (
+                  <motion.span
+                    layoutId="alert-filter"
+                    className="absolute inset-0 -z-10 rounded-md bg-surface-raised"
+                    transition={{ type: 'spring', stiffness: 500, damping: 36 }}
+                  />
+                )}
+                {t(f.key)}
+              </button>
+            ))}
+          </div>
+          <SavedViewsMenu
+            surface="alerts"
+            filters={{ severity }}
+            onApply={(f) => setSeverity(f.severity ?? 'all')}
+          />
+        </div>
       </header>
 
       {isLoading ? (

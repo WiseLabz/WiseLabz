@@ -310,6 +310,17 @@ export const en = {
     loadError: "Couldn't load alerts.",
     allClearTitle: 'All clear',
     allClearDesc: 'No pending alerts. Every detected change is documented or acknowledged.',
+    filterAll: 'All',
+    filterCritical: 'Critical',
+    filterWarning: 'Warning',
+    filterInfo: 'Info',
+  },
+  savedViews: {
+    title: 'Views',
+    empty: 'No saved views yet.',
+    namePlaceholder: 'Name this view…',
+    save: 'Save current filters',
+    delete: 'Delete "{{name}}"',
   },
   docs: {
     selectTitle: 'Select a document',
