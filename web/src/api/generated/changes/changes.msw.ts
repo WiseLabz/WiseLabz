@@ -12,7 +12,7 @@ import { HttpResponse, http } from 'msw';
 import type { RequestHandlerOptions } from 'msw';
 
 import { Severity } from '../../model';
-import type { AiSuggestRef, ChangeDetail, ChangePage } from '../../model';
+import type { AiSuggestRef, BulkResolveResponse, ChangeDetail, ChangePage } from '../../model';
 
 export const getGetChangesResponseMock = (
   overrideResponse: Partial<Extract<ChangePage, object>> = {}
@@ -231,6 +231,22 @@ export const getPostChangesChangeIdDismissResponseMock = (): ChangeDetail => ({
   },
 });
 
+export const getPostChangesBulkResolveResponseMock = (
+  overrideResponse: Partial<Extract<BulkResolveResponse, object>> = {}
+): BulkResolveResponse => ({
+  results: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(
+    () => ({
+      id: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      status: faker.helpers.arrayElement(['success', 'error'] as const),
+      reason: faker.helpers.arrayElement([
+        faker.string.alpha({ length: { min: 10, max: 20 } }),
+        undefined,
+      ]),
+    })
+  ),
+  ...overrideResponse,
+});
+
 export const getPostChangesChangeIdAiUpdateResponseMock = (
   overrideResponse: Partial<Extract<AiSuggestRef, object>> = {}
 ): AiSuggestRef => ({
@@ -332,6 +348,30 @@ export const getPostChangesChangeIdDismissMockHandler = (
   );
 };
 
+export const getPostChangesBulkResolveMockHandler = (
+  overrideResponse?:
+    | BulkResolveResponse
+    | ((
+        info: Parameters<Parameters<typeof http.post>[1]>[0]
+      ) => Promise<BulkResolveResponse> | BulkResolveResponse),
+  options?: RequestHandlerOptions
+) => {
+  return http.post(
+    '*/changes/bulk-resolve',
+    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+      return HttpResponse.json(
+        overrideResponse !== undefined
+          ? typeof overrideResponse === 'function'
+            ? await overrideResponse(info)
+            : overrideResponse
+          : getPostChangesBulkResolveResponseMock(),
+        { status: 200 }
+      );
+    },
+    options
+  );
+};
+
 export const getPostChangesChangeIdAiUpdateMockHandler = (
   overrideResponse?:
     | AiSuggestRef
@@ -360,5 +400,6 @@ export const getChangesMock = () => [
   getGetChangesChangeIdMockHandler(),
   getPostChangesChangeIdAckMockHandler(),
   getPostChangesChangeIdDismissMockHandler(),
+  getPostChangesBulkResolveMockHandler(),
   getPostChangesChangeIdAiUpdateMockHandler(),
 ];

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 
 	"github.com/google/uuid"
@@ -131,6 +132,9 @@ func (h *Handler) Acknowledge(w http.ResponseWriter, r *http.Request) {
 		httputil.Errorf(w, err)
 		return
 	}
+	if err := h.Store.RecordAuditFromContext(r.Context(), "change.ack", "change", id, nil); err != nil {
+		slog.Error("failed to record audit", "action", "change.ack", "error", err)
+	}
 	detail, err := h.changeDetail(r.Context(), id)
 	if err != nil {
 		httputil.Errorf(w, err)
@@ -150,12 +154,92 @@ func (h *Handler) Dismiss(w http.ResponseWriter, r *http.Request) {
 		httputil.Errorf(w, err)
 		return
 	}
+	if err := h.Store.RecordAuditFromContext(r.Context(), "change.dismiss", "change", id, nil); err != nil {
+		slog.Error("failed to record audit", "action", "change.dismiss", "error", err)
+	}
 	detail, err := h.changeDetail(r.Context(), id)
 	if err != nil {
 		httputil.Errorf(w, err)
 		return
 	}
 	httputil.JSON(w, http.StatusOK, detail)
+}
+
+// lowRiskBulkStatuses maps the bulk-resolve request's target status to the
+// audit action name recorded per successfully-resolved item.
+var lowRiskBulkStatuses = map[string]string{
+	"acknowledged": "change.bulk_ack",
+	"dismissed":    "change.bulk_dismiss",
+}
+
+// bulkResolveRequest is the body of POST /api/changes/bulk-resolve.
+type bulkResolveRequest struct {
+	IDs    []string `json:"ids"`
+	Status string   `json:"status"`
+}
+
+// bulkResolveItemResult is the per-item outcome in the bulk-resolve response.
+type bulkResolveItemResult struct {
+	ID     string `json:"id"`
+	Status string `json:"status"` // "success" | "error"
+	Reason string `json:"reason,omitempty"`
+}
+
+// BulkResolve handles POST /api/changes/bulk-resolve. It acknowledges or
+// dismisses an explicit, caller-supplied list of change IDs in one request.
+//
+// Design decision (issue #27): "low-risk" is defined server-side as
+// severity != critical (info and warning qualify). The client's selection is
+// never trusted — each ID is independently re-checked for existence and
+// severity here, since this is a safety-relevant control. One bad ID never
+// aborts the batch: every item gets its own success/error outcome, and one
+// audit record is written per successfully-resolved item (not one for the
+// whole batch) so provenance stays per-change.
+func (h *Handler) BulkResolve(w http.ResponseWriter, r *http.Request) {
+	var req bulkResolveRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		httputil.Error(w, http.StatusBadRequest, "invalid_request", "Invalid JSON body")
+		return
+	}
+	auditAction, ok := lowRiskBulkStatuses[req.Status]
+	if !ok {
+		httputil.Error(w, http.StatusBadRequest, "invalid_request", "status must be acknowledged or dismissed")
+		return
+	}
+	if len(req.IDs) == 0 {
+		httputil.Error(w, http.StatusBadRequest, "invalid_request", "ids must be a non-empty array")
+		return
+	}
+
+	results := make([]bulkResolveItemResult, 0, len(req.IDs))
+	for _, id := range req.IDs {
+		c, err := h.Store.GetChange(r.Context(), id)
+		if errors.Is(err, store.ErrNotFound) {
+			results = append(results, bulkResolveItemResult{ID: id, Status: "error", Reason: "not_found"})
+			continue
+		}
+		if err != nil {
+			results = append(results, bulkResolveItemResult{ID: id, Status: "error", Reason: "internal_error"})
+			continue
+		}
+		if c.Severity == "critical" {
+			results = append(results, bulkResolveItemResult{ID: id, Status: "error", Reason: "not_low_risk"})
+			continue
+		}
+
+		if err := h.Store.UpdateChangeStatus(r.Context(), id, req.Status); err != nil {
+			results = append(results, bulkResolveItemResult{ID: id, Status: "error", Reason: "internal_error"})
+			continue
+		}
+		if err := h.Store.RecordAuditFromContext(r.Context(), auditAction, "change", id, map[string]any{
+			"severity": c.Severity,
+		}); err != nil {
+			slog.Error("failed to record audit", "action", auditAction, "error", err)
+		}
+		results = append(results, bulkResolveItemResult{ID: id, Status: "success"})
+	}
+
+	httputil.JSON(w, http.StatusOK, map[string]any{"results": results})
 }
 
 // AIUpdate handles POST /api/changes/{id}/ai-update.
