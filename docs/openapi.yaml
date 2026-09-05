@@ -1172,6 +1172,23 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
         '403': { $ref: '#/components/responses/Forbidden' }
+  /system/diagnostics:
+    get:
+      tags: [system]
+      summary: >-
+        Sanitized diagnostics bundle (health, versions, secret-free config,
+        recent failures) — operator. See docs/DIAGNOSTICS.md.
+      responses:
+        '200':
+          description: OK
+          headers:
+            Content-Disposition:
+              schema: { type: string }
+              description: 'attachment; filename="wiselabz-diagnostics-<timestamp>.json"'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DiagnosticsBundle' }
+        '403': { $ref: '#/components/responses/Forbidden' }
   /health:
     get:
       tags: [system]
@@ -2031,3 +2048,85 @@ components:
         docVersions: { $ref: '#/components/schemas/BackupCounts' }
         templates: { $ref: '#/components/schemas/BackupCounts' }
         templateSections: { $ref: '#/components/schemas/BackupCounts' }
+
+    # ── diagnostics ──
+    DiagnosticsBundle:
+      type: object
+      description: >-
+        Sanitized support bundle (docs/DIAGNOSTICS.md). Connector secret
+        fields are redacted the same way as the backup bundle; notification
+        channel config, OIDC client secrets, and the AI provider API key are
+        never included.
+      required: [generatedAt, health, versions, sanitizedConfig, recentFailures]
+      properties:
+        generatedAt: { type: string, format: date-time }
+        health: { $ref: '#/components/schemas/Health' }
+        versions:
+          type: object
+          properties:
+            goVersion: { type: string }
+            version: { type: string }
+            commit: { type: string }
+            buildTime: { type: string }
+        sanitizedConfig:
+          type: object
+          properties:
+            connectors:
+              type: array
+              items:
+                type: object
+                properties:
+                  id: { type: string }
+                  name: { type: string }
+                  type: { type: string }
+                  category: { type: string }
+                  enabled: { type: boolean }
+                  configData: { type: string, description: JSON-encoded config with password fields redacted }
+            syncSchedule: { type: string, description: cron expression }
+            authProviders:
+              type: object
+              properties:
+                local: { type: boolean }
+                oidc:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      id: { type: string }
+                      displayName: { type: string }
+            aiConfig:
+              type: object
+              description: Same shape as BackupBundle.aiConfig
+              properties:
+                enabled: { type: boolean }
+                provider: { type: string }
+                model: { type: string }
+                baseUrl: { type: string }
+                mode: { type: string }
+        recentFailures:
+          type: object
+          properties:
+            syncRuns:
+              type: array
+              items:
+                type: object
+                properties:
+                  connectorId: { type: string }
+                  connectorName: { type: string }
+                  startedAt: { type: string, format: date-time }
+                  error: { type: string }
+            deliveries:
+              type: array
+              items:
+                type: object
+                description: Delivery attempt record only — never the channel's own config
+                properties:
+                  id: { type: string }
+                  notificationId: { type: string }
+                  channel: { type: string, enum: [in_app, smtp, webhook] }
+                  status: { type: string, enum: [pending, sent, failed] }
+                  attempts: { type: integer }
+                  lastError: { type: string }
+                  nextAttemptAt: { type: string, format: date-time }
+                  createdAt: { type: string, format: date-time }
+                  updatedAt: { type: string, format: date-time }

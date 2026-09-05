@@ -12,7 +12,14 @@ import { HttpResponse, http } from 'msw';
 import type { RequestHandlerOptions } from 'msw';
 
 import { ConnectorCategory, Role, ServiceStatus } from '../../model';
-import type { AuditPage, BackupBundle, BackupImportResult, Health, SystemInfo } from '../../model';
+import type {
+  AuditPage,
+  BackupBundle,
+  BackupImportResult,
+  DiagnosticsBundle,
+  Health,
+  SystemInfo,
+} from '../../model';
 
 export const getGetSystemInfoResponseMock = (
   overrideResponse: Partial<Extract<SystemInfo, object>> = {}
@@ -214,6 +221,178 @@ export const getPostSystemBackupImportResponseMock = (
   ...overrideResponse,
 });
 
+export const getGetSystemDiagnosticsResponseMock = (
+  overrideResponse: Partial<Extract<DiagnosticsBundle, object>> = {}
+): DiagnosticsBundle => ({
+  generatedAt: faker.date.past().toISOString().slice(0, 19) + 'Z',
+  health: {
+    status: faker.helpers.arrayElement(['ok', 'degraded', 'down'] as const),
+    components: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(
+      () => ({
+        name: faker.string.alpha({ length: { min: 10, max: 20 } }),
+        status: faker.helpers.arrayElement(['ok', 'degraded', 'down'] as const),
+        detail: faker.helpers.arrayElement([
+          faker.string.alpha({ length: { min: 10, max: 20 } }),
+          undefined,
+        ]),
+      })
+    ),
+  },
+  versions: {
+    goVersion: faker.helpers.arrayElement([
+      faker.string.alpha({ length: { min: 10, max: 20 } }),
+      undefined,
+    ]),
+    version: faker.helpers.arrayElement([
+      faker.string.alpha({ length: { min: 10, max: 20 } }),
+      undefined,
+    ]),
+    commit: faker.helpers.arrayElement([
+      faker.string.alpha({ length: { min: 10, max: 20 } }),
+      undefined,
+    ]),
+    buildTime: faker.helpers.arrayElement([
+      faker.string.alpha({ length: { min: 10, max: 20 } }),
+      undefined,
+    ]),
+  },
+  sanitizedConfig: {
+    connectors: faker.helpers.arrayElement([
+      Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() => ({
+        id: faker.helpers.arrayElement([
+          faker.string.alpha({ length: { min: 10, max: 20 } }),
+          undefined,
+        ]),
+        name: faker.helpers.arrayElement([
+          faker.string.alpha({ length: { min: 10, max: 20 } }),
+          undefined,
+        ]),
+        type: faker.helpers.arrayElement([
+          faker.string.alpha({ length: { min: 10, max: 20 } }),
+          undefined,
+        ]),
+        category: faker.helpers.arrayElement([
+          faker.string.alpha({ length: { min: 10, max: 20 } }),
+          undefined,
+        ]),
+        enabled: faker.helpers.arrayElement([faker.datatype.boolean(), undefined]),
+        configData: faker.helpers.arrayElement([
+          faker.string.alpha({ length: { min: 10, max: 20 } }),
+          undefined,
+        ]),
+      })),
+      undefined,
+    ]),
+    syncSchedule: faker.helpers.arrayElement([
+      faker.string.alpha({ length: { min: 10, max: 20 } }),
+      undefined,
+    ]),
+    authProviders: faker.helpers.arrayElement([
+      {
+        local: faker.helpers.arrayElement([faker.datatype.boolean(), undefined]),
+        oidc: faker.helpers.arrayElement([
+          Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() => ({
+            id: faker.helpers.arrayElement([
+              faker.string.alpha({ length: { min: 10, max: 20 } }),
+              undefined,
+            ]),
+            displayName: faker.helpers.arrayElement([
+              faker.string.alpha({ length: { min: 10, max: 20 } }),
+              undefined,
+            ]),
+          })),
+          undefined,
+        ]),
+      },
+      undefined,
+    ]),
+    aiConfig: faker.helpers.arrayElement([
+      {
+        enabled: faker.helpers.arrayElement([faker.datatype.boolean(), undefined]),
+        provider: faker.helpers.arrayElement([
+          faker.string.alpha({ length: { min: 10, max: 20 } }),
+          undefined,
+        ]),
+        model: faker.helpers.arrayElement([
+          faker.string.alpha({ length: { min: 10, max: 20 } }),
+          undefined,
+        ]),
+        baseUrl: faker.helpers.arrayElement([
+          faker.string.alpha({ length: { min: 10, max: 20 } }),
+          undefined,
+        ]),
+        mode: faker.helpers.arrayElement([
+          faker.string.alpha({ length: { min: 10, max: 20 } }),
+          undefined,
+        ]),
+      },
+      undefined,
+    ]),
+  },
+  recentFailures: {
+    syncRuns: faker.helpers.arrayElement([
+      Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() => ({
+        connectorId: faker.helpers.arrayElement([
+          faker.string.alpha({ length: { min: 10, max: 20 } }),
+          undefined,
+        ]),
+        connectorName: faker.helpers.arrayElement([
+          faker.string.alpha({ length: { min: 10, max: 20 } }),
+          undefined,
+        ]),
+        startedAt: faker.helpers.arrayElement([
+          faker.date.past().toISOString().slice(0, 19) + 'Z',
+          undefined,
+        ]),
+        error: faker.helpers.arrayElement([
+          faker.string.alpha({ length: { min: 10, max: 20 } }),
+          undefined,
+        ]),
+      })),
+      undefined,
+    ]),
+    deliveries: faker.helpers.arrayElement([
+      Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() => ({
+        id: faker.helpers.arrayElement([
+          faker.string.alpha({ length: { min: 10, max: 20 } }),
+          undefined,
+        ]),
+        notificationId: faker.helpers.arrayElement([
+          faker.string.alpha({ length: { min: 10, max: 20 } }),
+          undefined,
+        ]),
+        channel: faker.helpers.arrayElement([
+          faker.helpers.arrayElement(['in_app', 'smtp', 'webhook'] as const),
+          undefined,
+        ]),
+        status: faker.helpers.arrayElement([
+          faker.helpers.arrayElement(['pending', 'sent', 'failed'] as const),
+          undefined,
+        ]),
+        attempts: faker.helpers.arrayElement([faker.number.int(), undefined]),
+        lastError: faker.helpers.arrayElement([
+          faker.string.alpha({ length: { min: 10, max: 20 } }),
+          undefined,
+        ]),
+        nextAttemptAt: faker.helpers.arrayElement([
+          faker.date.past().toISOString().slice(0, 19) + 'Z',
+          undefined,
+        ]),
+        createdAt: faker.helpers.arrayElement([
+          faker.date.past().toISOString().slice(0, 19) + 'Z',
+          undefined,
+        ]),
+        updatedAt: faker.helpers.arrayElement([
+          faker.date.past().toISOString().slice(0, 19) + 'Z',
+          undefined,
+        ]),
+      })),
+      undefined,
+    ]),
+  },
+  ...overrideResponse,
+});
+
 export const getGetHealthResponseMock = (
   overrideResponse: Partial<Extract<Health, object>> = {}
 ): Health => ({
@@ -323,6 +502,30 @@ export const getPostSystemBackupImportMockHandler = (
   );
 };
 
+export const getGetSystemDiagnosticsMockHandler = (
+  overrideResponse?:
+    | DiagnosticsBundle
+    | ((
+        info: Parameters<Parameters<typeof http.get>[1]>[0]
+      ) => Promise<DiagnosticsBundle> | DiagnosticsBundle),
+  options?: RequestHandlerOptions
+) => {
+  return http.get(
+    '*/system/diagnostics',
+    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+      return HttpResponse.json(
+        overrideResponse !== undefined
+          ? typeof overrideResponse === 'function'
+            ? await overrideResponse(info)
+            : overrideResponse
+          : getGetSystemDiagnosticsResponseMock(),
+        { status: 200 }
+      );
+    },
+    options
+  );
+};
+
 export const getGetHealthMockHandler = (
   overrideResponse?:
     | Health
@@ -349,5 +552,6 @@ export const getSystemMock = () => [
   getGetSystemAuditMockHandler(),
   getGetSystemBackupExportMockHandler(),
   getPostSystemBackupImportMockHandler(),
+  getGetSystemDiagnosticsMockHandler(),
   getGetHealthMockHandler(),
 ];

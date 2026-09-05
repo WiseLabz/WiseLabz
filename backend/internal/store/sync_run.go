@@ -82,6 +82,42 @@ func (s *Store) ListSyncRunsByConnector(ctx context.Context, connectorID string,
 	return runs, nil
 }
 
+// FailedSyncRun is one failed sync run enriched with its connector's name
+// (sync_runs only stores connector_id), for cross-connector diagnostics
+// views.
+type FailedSyncRun struct {
+	ConnectorID   string `json:"connectorId"`
+	ConnectorName string `json:"connectorName"`
+	StartedAt     string `json:"startedAt"`
+	Error         string `json:"error"`
+}
+
+// ListRecentFailedSyncRuns returns the most recent failed sync runs across
+// all connectors, newest first. Never returns a nil slice.
+func (s *Store) ListRecentFailedSyncRuns(ctx context.Context, limit int) ([]FailedSyncRun, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT sr.connector_id, c.name, sr.started_at, sr.error
+		FROM sync_runs sr
+		JOIN connectors c ON c.id = sr.connector_id
+		WHERE sr.status = 'error'
+		ORDER BY sr.started_at DESC LIMIT ?
+	`, limit)
+	if err != nil {
+		return nil, fmt.Errorf("list recent failed sync runs: %w", err)
+	}
+	defer rows.Close() //nolint:errcheck
+
+	runs := []FailedSyncRun{}
+	for rows.Next() {
+		var r FailedSyncRun
+		if err := rows.Scan(&r.ConnectorID, &r.ConnectorName, &r.StartedAt, &r.Error); err != nil {
+			return nil, fmt.Errorf("scan: %w", err)
+		}
+		runs = append(runs, r)
+	}
+	return runs, nil
+}
+
 func scanSyncRun(row rowScanner) (SyncRunRecord, error) {
 	var r SyncRunRecord
 	var finishedAt sql.NullString

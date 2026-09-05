@@ -241,6 +241,8 @@ func NewRouter(cfg Config) chi.Router {
 				r.Post("/import", sysH.ImportBackup)
 			})
 
+			r.Get("/api/system/diagnostics", sysH.Diagnostics)
+
 			r.Route("/api/users", func(r chi.Router) {
 				r.Get("/", authH.ListUsers)
 				r.Post("/", authH.CreateUser)
