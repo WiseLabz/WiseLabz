@@ -12,6 +12,7 @@ import { ConnectorCategory, ServiceStatus } from '../../model';
 import type {
   Connector,
   ConnectorTypeSchema,
+  HealthCheckResult,
   RemovalImpact,
   ServiceSnapshot,
   SyncJobRef,
@@ -263,6 +264,18 @@ export const getPostConnectorsConnectorIdTestResponseMock = (
   overrideResponse: Partial<Extract<TestResult, object>> = {}
 ): TestResult => ({
   ok: faker.datatype.boolean(),
+  message: faker.helpers.arrayElement([
+    faker.string.alpha({ length: { min: 10, max: 20 } }),
+    undefined,
+  ]),
+  latencyMs: faker.helpers.arrayElement([faker.number.int(), undefined]),
+  ...overrideResponse,
+});
+
+export const getPostConnectorsConnectorIdHealthResponseMock = (
+  overrideResponse: Partial<Extract<HealthCheckResult, object>> = {}
+): HealthCheckResult => ({
+  status: faker.helpers.arrayElement(Object.values(ServiceStatus)),
   message: faker.helpers.arrayElement([
     faker.string.alpha({ length: { min: 10, max: 20 } }),
     undefined,

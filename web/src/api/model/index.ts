@@ -63,6 +63,7 @@ export * from './getNotificationsDeliveriesParams';
 export * from './getNotificationsDeliveriesStatus';
 export * from './getNotificationsParams';
 export * from './health';
+export * from './healthCheckResult';
 export * from './healthComponentsItem';
 export * from './healthComponentsItemStatus';
 export * from './healthStatus';

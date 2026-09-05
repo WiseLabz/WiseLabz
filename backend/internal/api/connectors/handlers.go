@@ -283,6 +283,55 @@ func (h *Handler) Test(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// Health handles POST /api/connectors/{id}/health.
+// Runs a cheap connectivity check (Validate only — no Fetch, no snapshot, no
+// docs) and persists the resulting status, so availability can be tracked
+// independently of, and between, full sync runs.
+func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+
+	rec, err := h.Store.GetConnector(r.Context(), id)
+	if errors.Is(err, store.ErrNotFound) {
+		httputil.Error(w, http.StatusNotFound, "not_found", "Connector not found")
+		return
+	}
+	if err != nil {
+		httputil.Errorf(w, err)
+		return
+	}
+
+	cfg, err := store.ParseConnectorConfig(rec.ConfigData)
+	if err != nil {
+		httputil.Errorf(w, err)
+		return
+	}
+	cfg["url"] = rec.URL
+	cfg["verify_tls"] = rec.VerifyTLS
+
+	start := time.Now()
+	c, connErr := connector.Get(rec.Type, cfg)
+	validateErr := connErr
+	if connErr == nil {
+		validateErr = c.Validate(r.Context(), cfg)
+	}
+	latency := time.Since(start)
+
+	status, message := connector.ClassifyHealth(validateErr, latency)
+	if err := h.Store.UpdateConnector(r.Context(), id, map[string]any{
+		"status":         status,
+		"status_message": message,
+	}); err != nil {
+		httputil.Errorf(w, err)
+		return
+	}
+
+	httputil.JSON(w, http.StatusOK, map[string]any{
+		"status":    status,
+		"message":   message,
+		"latencyMs": int(latency.Milliseconds()),
+	})
+}
+
 // Data handles GET /api/connectors/{id}/data.
 // Returns the latest fetched service snapshot for the connector.
 func (h *Handler) Data(w http.ResponseWriter, r *http.Request) {

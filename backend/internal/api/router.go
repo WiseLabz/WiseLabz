@@ -129,6 +129,7 @@ func NewRouter(cfg Config) chi.Router {
 				r.Use(operatorOnly)
 				r.Post("/", connH.Create)
 				r.Post("/{id}/test", connH.Test)
+				r.Post("/{id}/health", connH.Health)
 				r.Patch("/{id}", connH.Update)
 				r.Put("/{id}/enabled", connH.ToggleEnabled)
 				r.Post("/{id}/sync", connH.Sync)

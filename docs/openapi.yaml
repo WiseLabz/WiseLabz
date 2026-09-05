@@ -416,6 +416,22 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/TestResult' }
+  /connectors/{connectorId}/health:
+    post:
+      tags: [connectors]
+      summary: Cheap connectivity check (no fetch, no snapshot, no docs); persists status
+      description: >
+        Runs the connector's Validate step only and saves the resulting
+        online/degraded/offline status, independently of running a full sync.
+        Unlike /test, this call updates the connector's persisted status.
+      parameters: [{ $ref: '#/components/parameters/ConnectorId' }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HealthCheckResult' }
+        '404': { $ref: '#/components/responses/NotFound' }
   /connectors/{connectorId}/sync:
     post:
       tags: [connectors]
@@ -1382,6 +1398,13 @@ components:
       required: [ok]
       properties:
         ok: { type: boolean }
+        message: { type: string }
+        latencyMs: { type: integer }
+    HealthCheckResult:
+      type: object
+      required: [status]
+      properties:
+        status: { $ref: '#/components/schemas/ServiceStatus' }
         message: { type: string }
         latencyMs: { type: integer }
     SyncJobRef:

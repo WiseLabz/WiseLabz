@@ -15,6 +15,7 @@ import { ConnectorCategory, ServiceStatus } from '../../model';
 import type {
   Connector,
   ConnectorTypeSchema,
+  HealthCheckResult,
   RemovalImpact,
   ServiceSnapshot,
   SyncJobRef,
@@ -266,6 +267,18 @@ export const getPostConnectorsConnectorIdTestResponseMock = (
   overrideResponse: Partial<Extract<TestResult, object>> = {}
 ): TestResult => ({
   ok: faker.datatype.boolean(),
+  message: faker.helpers.arrayElement([
+    faker.string.alpha({ length: { min: 10, max: 20 } }),
+    undefined,
+  ]),
+  latencyMs: faker.helpers.arrayElement([faker.number.int(), undefined]),
+  ...overrideResponse,
+});
+
+export const getPostConnectorsConnectorIdHealthResponseMock = (
+  overrideResponse: Partial<Extract<HealthCheckResult, object>> = {}
+): HealthCheckResult => ({
+  status: faker.helpers.arrayElement(Object.values(ServiceStatus)),
   message: faker.helpers.arrayElement([
     faker.string.alpha({ length: { min: 10, max: 20 } }),
     undefined,
@@ -562,6 +575,30 @@ export const getPostConnectorsConnectorIdTestMockHandler = (
   );
 };
 
+export const getPostConnectorsConnectorIdHealthMockHandler = (
+  overrideResponse?:
+    | HealthCheckResult
+    | ((
+        info: Parameters<Parameters<typeof http.post>[1]>[0]
+      ) => Promise<HealthCheckResult> | HealthCheckResult),
+  options?: RequestHandlerOptions
+) => {
+  return http.post(
+    '*/connectors/:connectorId/health',
+    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+      return HttpResponse.json(
+        overrideResponse !== undefined
+          ? typeof overrideResponse === 'function'
+            ? await overrideResponse(info)
+            : overrideResponse
+          : getPostConnectorsConnectorIdHealthResponseMock(),
+        { status: 200 }
+      );
+    },
+    options
+  );
+};
+
 export const getPostConnectorsConnectorIdSyncMockHandler = (
   overrideResponse?:
     | SyncJobRef
@@ -659,6 +696,7 @@ export const getConnectorsMock = () => [
   getGetConnectorsConnectorIdRemovalImpactMockHandler(),
   getGetConnectorsConnectorIdDataMockHandler(),
   getPostConnectorsConnectorIdTestMockHandler(),
+  getPostConnectorsConnectorIdHealthMockHandler(),
   getPostConnectorsConnectorIdSyncMockHandler(),
   getGetConnectorsConnectorIdSyncsMockHandler(),
   getPutConnectorsConnectorIdEnabledMockHandler(),
