@@ -13,7 +13,9 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   useGetConnectorsConnectorId,
   useGetConnectorsConnectorIdData,
+  useGetConnectorsConnectorIdSyncs,
   putConnectorsConnectorIdEnabled,
+  putConnectorsConnectorId,
   getGetConnectorsQueryKey,
 } from '../../api/generated/connectors/connectors';
 import { useGetChanges } from '../../api/generated/changes/changes';
@@ -26,8 +28,9 @@ import { useGetTemplates } from '../../api/generated/templates/templates';
 import { useLive } from '../../store/live';
 import { useCanMutate } from '../../hooks/useRole';
 import { runSync } from '../../lib/runSync';
-import { relativeTime } from '../../lib/time';
+import { relativeTime, durationLabel } from '../../lib/time';
 import { StatusPill, SeverityTag } from '../../components/ui/StatusDot';
+import { toneColor, type Tone } from '../../components/ui/status';
 import { Button } from '../../components/ui/Button';
 import { Panel } from '../../components/ui/Panel';
 import { Dialog } from '../../components/ui/Dialog';
@@ -42,7 +45,18 @@ import {
   SparklesIcon,
   ChevronDownIcon,
 } from '../../components/icons';
-import type { ServiceStatus } from '../../api/model';
+import type { ServiceStatus, SyncRunStatus } from '../../api/model';
+
+/** Schedule cadence options (seconds); null = manual only. */
+const SCHEDULE_OPTIONS: { value: number | null; labelKey: string }[] = [
+  { value: null, labelKey: 'services.detail.scheduleOff' },
+  { value: 900, labelKey: 'services.detail.schedule15m' },
+  { value: 1800, labelKey: 'services.detail.schedule30m' },
+  { value: 3600, labelKey: 'services.detail.schedule1h' },
+  { value: 21600, labelKey: 'services.detail.schedule6h' },
+  { value: 43200, labelKey: 'services.detail.schedule12h' },
+  { value: 86400, labelKey: 'services.detail.schedule24h' },
+];
 
 export function ServiceDetailPage() {
   const { t } = useTranslation();
@@ -58,6 +72,14 @@ export function ServiceDetailPage() {
 
   const toggleEnabled = useMutation({
     mutationFn: (enabled: boolean) => putConnectorsConnectorIdEnabled(id, { enabled }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: getGetConnectorsQueryKey() });
+      void connector.refetch();
+    },
+  });
+
+  const updateSchedule = useMutation({
+    mutationFn: (scheduleSeconds: number | null) => putConnectorsConnectorId(id, { scheduleSeconds }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: getGetConnectorsQueryKey() });
       void connector.refetch();
@@ -110,9 +132,50 @@ export function ServiceDetailPage() {
             {c.type} · {c.url?.replace(/^https?:\/\//, '')} ·{' '}
             {t('services.detail.lastSync', { time: relativeTime(c.lastSyncAt) })}
           </p>
+          <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-2xs text-ink-faint">
+            <span>
+              {c.scheduleSeconds == null
+                ? t('services.detail.scheduleManual')
+                : t('services.detail.nextRun', { time: relativeTime(c.nextRunAt) })}
+            </span>
+            {c.lastSyncDurationMs != null && (
+              <span>
+                {t('services.detail.lastDuration', { duration: durationLabel(c.lastSyncDurationMs) })}
+              </span>
+            )}
+            {(c.retryCount ?? 0) > 0 && (
+              <span className="rounded-sm bg-warn-tint px-1.5 py-0.5 text-warn">
+                {t('services.detail.retrying', { attempt: c.retryCount })}
+              </span>
+            )}
+          </p>
+          {c.lastSyncError && <p className="mt-1 text-2xs text-err">{c.lastSyncError}</p>}
         </div>
         {canMutate && (
           <div className="flex items-center gap-2">
+            <label className="flex items-center gap-1.5 text-2xs text-ink-faint">
+              {t('services.detail.scheduleLabel')}
+              <div className="relative">
+                <select
+                  value={c.scheduleSeconds == null ? '' : String(c.scheduleSeconds)}
+                  onChange={(e) =>
+                    updateSchedule.mutate(e.target.value === '' ? null : Number(e.target.value))
+                  }
+                  disabled={updateSchedule.isPending}
+                  className="h-8 appearance-none rounded-sm border border-line bg-surface pl-2.5 pr-7 text-xs text-ink outline-none focus-visible:border-signal-soft"
+                >
+                  {SCHEDULE_OPTIONS.map((opt) => (
+                    <option key={opt.value ?? 'off'} value={opt.value ?? ''}>
+                      {t(opt.labelKey)}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDownIcon
+                  size={12}
+                  className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-ink-faint"
+                />
+              </div>
+            </label>
             <Button
               size="sm"
               variant="secondary"
@@ -147,6 +210,7 @@ export function ServiceDetailPage() {
         <div className="space-y-4">
           <LinkedDocPanel connectorId={c.id} connectorType={c.type} />
           <ActivityPanel activity={activity} />
+          <SyncHistoryPanel id={c.id} />
         </div>
       </div>
 
@@ -400,6 +464,73 @@ function ActivityPanel({
                 {a.detail && <span className="text-2xs text-ink-faint">{a.detail}</span>}
               </span>
               <span className="font-mono text-2xs text-ink-faint">{relativeTime(a.at)}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Panel>
+  );
+}
+
+const syncStatusMeta: Record<SyncRunStatus, { label: string; tone: Tone }> = {
+  success: { label: 'success', tone: 'ok' },
+  error: { label: 'error', tone: 'err' },
+  skipped: { label: 'skipped', tone: 'idle' },
+};
+
+function SyncStatusTag({ status }: { status: SyncRunStatus }) {
+  const { label, tone } = syncStatusMeta[status];
+  const { fg, tint } = toneColor[tone];
+  return (
+    <span
+      className="inline-flex items-center gap-1.5 rounded-sm px-1.5 py-0.5 font-mono text-2xs font-medium"
+      style={{ color: fg, backgroundColor: tint }}
+    >
+      <span className="h-1.5 w-1.5" style={{ backgroundColor: fg }} />
+      {label}
+    </span>
+  );
+}
+
+function SyncHistoryPanel({ id }: { id: string }) {
+  const { t } = useTranslation();
+  const syncs = useGetConnectorsConnectorIdSyncs(id, { limit: 10 });
+
+  return (
+    <Panel className="p-5">
+      <h2 className="mb-3 text-sm font-semibold text-ink">{t('services.detail.syncHistory')}</h2>
+      {syncs.isLoading ? (
+        <SkeletonRows rows={3} />
+      ) : syncs.isError ? (
+        <ErrorState
+          description={t('services.detail.syncHistoryError')}
+          onRetry={() => syncs.refetch()}
+        />
+      ) : !syncs.data || syncs.data.length === 0 ? (
+        <EmptyState
+          title={t('services.detail.noSyncsTitle')}
+          description={t('services.detail.noSyncsDesc')}
+        />
+      ) : (
+        <ul className="divide-y divide-line-soft">
+          {syncs.data.map((run) => (
+            <li key={run.id} className="py-2.5">
+              <div className="flex items-center gap-2.5">
+                <SyncStatusTag status={run.status} />
+                <span className="flex-1 font-mono text-2xs text-ink-faint">
+                  {relativeTime(run.startedAt)} · {durationLabel(run.durationMs)} ·{' '}
+                  {t('services.detail.attempt', { n: run.attempt })}
+                </span>
+              </div>
+              <p className="mt-1 pl-5 font-mono text-2xs text-ink-faint">
+                {t('services.detail.syncCounts', {
+                  changes: run.changesCount ?? 0,
+                  alerts: run.alertsCount ?? 0,
+                })}
+              </p>
+              {run.status === 'error' && run.error && (
+                <p className="mt-1 pl-5 text-2xs text-err">{run.error}</p>
+              )}
             </li>
           ))}
         </ul>

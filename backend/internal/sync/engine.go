@@ -14,6 +14,51 @@ import (
 	"github.com/WiseLabz/wiselabz/internal/ws"
 )
 
+// retrySchedule is the backoff delay before each retry attempt (index 0 =
+// delay before the 2nd consecutive attempt, etc), mirroring
+// notifications.retrySchedule.
+// ponytail: fixed schedule, not exponential-from-config; add jitter/config if a real deployment needs it.
+var retrySchedule = []time.Duration{time.Minute, 5 * time.Minute, 15 * time.Minute, 30 * time.Minute, time.Hour}
+
+// computeNextRun decides a connector's next scheduled run time and updated
+// retry count after one sync attempt. Unlike notification delivery retries
+// (which give up after a fixed number of attempts), a scheduled connector
+// must keep trying forever: once retryCount exceeds the backoff schedule, it
+// keeps retrying at the schedule's last (longest) step. The retry delay is
+// also never allowed to exceed the connector's own scheduleSeconds cadence,
+// so a short-cadence connector doesn't end up waiting an hour to recover.
+//
+// scheduleSeconds nil means manual-only: nextRunAt is always nil, but
+// retryCount is still tracked for display purposes. retryCount is the
+// connector's consecutive-failure count *before* this attempt.
+func computeNextRun(scheduleSeconds *int, retryCount int, success bool, now time.Time) (nextRunAt *time.Time, newRetryCount int) {
+	if success {
+		newRetryCount = 0
+	} else {
+		newRetryCount = retryCount + 1
+	}
+
+	if scheduleSeconds == nil {
+		return nil, newRetryCount
+	}
+	cadence := time.Duration(*scheduleSeconds) * time.Second
+
+	delay := cadence
+	if !success {
+		idx := newRetryCount - 1
+		if idx >= len(retrySchedule) {
+			idx = len(retrySchedule) - 1
+		}
+		delay = retrySchedule[idx]
+		if cadence < delay {
+			delay = cadence
+		}
+	}
+
+	next := now.Add(delay)
+	return &next, newRetryCount
+}
+
 // AlertNotifier dispatches notifications for a newly created alert.
 type AlertNotifier interface {
 	NotifyAlertCreated(ctx context.Context, alertID, title, message string)
@@ -77,9 +122,67 @@ func (e *Engine) RunSync(ctx context.Context, connectorID string, jobID string) 
 		return markError(result, start, fmt.Errorf("get connector: %w", err))
 	}
 
+	attempt := rec.RetryCount + 1
+
+	// finish records this run's outcome as a sync_runs history row and, for
+	// non-skipped runs, persists the resulting retry/backoff + next_run_at
+	// schedule state on the connector (see computeNextRun). Called from every
+	// exit path below once rec has been loaded.
+	finish := func(status string, runErr error) {
+		durationMs := int(time.Since(start).Milliseconds())
+		errMsg := ""
+		if runErr != nil {
+			errMsg = runErr.Error()
+		}
+		runStatus := store.SyncRunStatusSuccess
+		switch status {
+		case "error":
+			runStatus = store.SyncRunStatusError
+		case "skipped":
+			runStatus = store.SyncRunStatusSkipped
+		}
+		if err := e.store.CreateSyncRun(ctx, &store.SyncRunRecord{
+			ConnectorID:  connectorID,
+			StartedAt:    start.UTC().Format(time.RFC3339),
+			FinishedAt:   time.Now().UTC().Format(time.RFC3339),
+			DurationMs:   &durationMs,
+			Status:       runStatus,
+			Error:        errMsg,
+			Attempt:      attempt,
+			ChangesCount: result.ChangesCount,
+			AlertsCount:  result.AlertsCount,
+		}); err != nil {
+			slog.Error("record sync run failed", "connector", connectorID, "error", err)
+		}
+
+		// Skipped (disabled connector) runs aren't real attempts: leave the
+		// existing retry/schedule state untouched. ListDueConnectors also
+		// filters on enabled=1, so a disabled connector's schedule is moot
+		// until it's re-enabled anyway.
+		if status == "skipped" {
+			return
+		}
+
+		nextRunAt, newRetryCount := computeNextRun(rec.ScheduleSeconds, rec.RetryCount, status == "success", time.Now())
+		updates := map[string]any{
+			"last_sync_duration_ms": durationMs,
+			"last_sync_error":       errMsg,
+			"retry_count":           newRetryCount,
+		}
+		if nextRunAt != nil {
+			updates["next_run_at"] = nextRunAt.UTC().Format(time.RFC3339)
+		} else {
+			updates["next_run_at"] = nil
+		}
+		if err := e.store.UpdateConnector(ctx, connectorID, updates); err != nil {
+			slog.Error("update connector schedule failed", "connector", connectorID, "error", err)
+		}
+	}
+
 	if !rec.Enabled {
 		result.Status = "skipped"
 		result.Duration = time.Since(start).String()
+		finish("skipped", nil)
 		return result, nil
 	}
 
@@ -97,6 +200,7 @@ func (e *Engine) RunSync(ctx context.Context, connectorID string, jobID string) 
 				"message":   err.Error(),
 			})
 		}
+		finish("error", err)
 		return markError(result, start, fmt.Errorf("parse config: %w", err))
 	}
 	cfg["url"] = rec.URL
@@ -123,6 +227,7 @@ func (e *Engine) RunSync(ctx context.Context, connectorID string, jobID string) 
 				"error":           err.Error(),
 			})
 		}
+		finish("error", err)
 		return markError(result, start, fmt.Errorf("get connector impl: %w", err))
 	}
 
@@ -159,6 +264,7 @@ func (e *Engine) RunSync(ctx context.Context, connectorID string, jobID string) 
 				"error":           err.Error(),
 			})
 		}
+		finish("error", err)
 		return markError(result, start, fmt.Errorf("fetch: %w", err))
 	}
 
@@ -193,6 +299,7 @@ func (e *Engine) RunSync(ctx context.Context, connectorID string, jobID string) 
 				"error":           err.Error(),
 			})
 		}
+		finish("error", err)
 		return markError(result, start, fmt.Errorf("save snapshot: %w", err))
 	}
 	result.SnapshotID = snRec.ID
@@ -273,6 +380,7 @@ func (e *Engine) RunSync(ctx context.Context, connectorID string, jobID string) 
 
 	result.Status = "success"
 	result.Duration = time.Since(start).String()
+	finish("success", nil)
 
 	if e.hub != nil {
 		e.hub.Broadcast(ws.EventSyncComplete, map[string]any{

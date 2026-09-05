@@ -18,6 +18,7 @@ import {
   docs,
   removalImpact,
   serviceSnapshot,
+  syncRunsFor,
   user,
 } from '../data/fixtures';
 
@@ -195,7 +196,16 @@ export const curatedHandlers = [
     if (typeof body.name === 'string') c.name = body.name;
     if (typeof body.url === 'string') c.url = body.url;
     if (typeof body.verifyTls === 'boolean') c.verifyTls = body.verifyTls;
+    if ('scheduleSeconds' in body) c.scheduleSeconds = body.scheduleSeconds as number | null;
     return HttpResponse.json(c);
+  }),
+
+  // Recent sync history for the service detail page's sync-history panel.
+  http.get('*/connectors/:connectorId/syncs', async ({ params, request }) => {
+    await delay(LATENCY);
+    const limit = Number(new URL(request.url).searchParams.get('limit')) || undefined;
+    const runs = syncRunsFor(params.connectorId as string);
+    return HttpResponse.json(limit ? runs.slice(0, limit) : runs);
   }),
 
   http.get('*/connectors', async () => {

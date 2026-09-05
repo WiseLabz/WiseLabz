@@ -15,6 +15,7 @@ import type {
   RemovalImpact,
   ServiceSnapshot,
   SyncJobRef,
+  SyncRun,
   TestResult,
 } from '../../model';
 
@@ -39,6 +40,23 @@ export const getGetConnectorsResponseMock = (): Connector[] =>
       faker.string.alpha({ length: { min: 10, max: 20 } }),
       undefined,
     ]),
+    scheduleSeconds: faker.helpers.arrayElement([
+      faker.helpers.arrayElement([faker.number.int(), null]),
+      undefined,
+    ]),
+    nextRunAt: faker.helpers.arrayElement([
+      faker.helpers.arrayElement([faker.date.past().toISOString().slice(0, 19) + 'Z', null]),
+      undefined,
+    ]),
+    lastSyncDurationMs: faker.helpers.arrayElement([
+      faker.helpers.arrayElement([faker.number.int(), null]),
+      undefined,
+    ]),
+    lastSyncError: faker.helpers.arrayElement([
+      faker.string.alpha({ length: { min: 10, max: 20 } }),
+      undefined,
+    ]),
+    retryCount: faker.helpers.arrayElement([faker.number.int(), undefined]),
   }));
 
 export const getPostConnectorsResponseMock = (
@@ -63,6 +81,23 @@ export const getPostConnectorsResponseMock = (
     faker.string.alpha({ length: { min: 10, max: 20 } }),
     undefined,
   ]),
+  scheduleSeconds: faker.helpers.arrayElement([
+    faker.helpers.arrayElement([faker.number.int(), null]),
+    undefined,
+  ]),
+  nextRunAt: faker.helpers.arrayElement([
+    faker.helpers.arrayElement([faker.date.past().toISOString().slice(0, 19) + 'Z', null]),
+    undefined,
+  ]),
+  lastSyncDurationMs: faker.helpers.arrayElement([
+    faker.helpers.arrayElement([faker.number.int(), null]),
+    undefined,
+  ]),
+  lastSyncError: faker.helpers.arrayElement([
+    faker.string.alpha({ length: { min: 10, max: 20 } }),
+    undefined,
+  ]),
+  retryCount: faker.helpers.arrayElement([faker.number.int(), undefined]),
   ...overrideResponse,
 });
 
@@ -127,6 +162,23 @@ export const getGetConnectorsConnectorIdResponseMock = (
     faker.string.alpha({ length: { min: 10, max: 20 } }),
     undefined,
   ]),
+  scheduleSeconds: faker.helpers.arrayElement([
+    faker.helpers.arrayElement([faker.number.int(), null]),
+    undefined,
+  ]),
+  nextRunAt: faker.helpers.arrayElement([
+    faker.helpers.arrayElement([faker.date.past().toISOString().slice(0, 19) + 'Z', null]),
+    undefined,
+  ]),
+  lastSyncDurationMs: faker.helpers.arrayElement([
+    faker.helpers.arrayElement([faker.number.int(), null]),
+    undefined,
+  ]),
+  lastSyncError: faker.helpers.arrayElement([
+    faker.string.alpha({ length: { min: 10, max: 20 } }),
+    undefined,
+  ]),
+  retryCount: faker.helpers.arrayElement([faker.number.int(), undefined]),
   ...overrideResponse,
 });
 
@@ -152,6 +204,23 @@ export const getPutConnectorsConnectorIdResponseMock = (
     faker.string.alpha({ length: { min: 10, max: 20 } }),
     undefined,
   ]),
+  scheduleSeconds: faker.helpers.arrayElement([
+    faker.helpers.arrayElement([faker.number.int(), null]),
+    undefined,
+  ]),
+  nextRunAt: faker.helpers.arrayElement([
+    faker.helpers.arrayElement([faker.date.past().toISOString().slice(0, 19) + 'Z', null]),
+    undefined,
+  ]),
+  lastSyncDurationMs: faker.helpers.arrayElement([
+    faker.helpers.arrayElement([faker.number.int(), null]),
+    undefined,
+  ]),
+  lastSyncError: faker.helpers.arrayElement([
+    faker.string.alpha({ length: { min: 10, max: 20 } }),
+    undefined,
+  ]),
+  retryCount: faker.helpers.arrayElement([faker.number.int(), undefined]),
   ...overrideResponse,
 });
 
@@ -213,6 +282,29 @@ export const getPostConnectorsConnectorIdSyncResponseMock = (
   ...overrideResponse,
 });
 
+export const getGetConnectorsConnectorIdSyncsResponseMock = (): SyncRun[] =>
+  Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() => ({
+    id: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    connectorId: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    startedAt: faker.date.past().toISOString().slice(0, 19) + 'Z',
+    finishedAt: faker.helpers.arrayElement([
+      faker.helpers.arrayElement([faker.date.past().toISOString().slice(0, 19) + 'Z', null]),
+      undefined,
+    ]),
+    durationMs: faker.helpers.arrayElement([
+      faker.helpers.arrayElement([faker.number.int(), null]),
+      undefined,
+    ]),
+    status: faker.helpers.arrayElement(['success', 'error', 'skipped'] as const),
+    error: faker.helpers.arrayElement([
+      faker.string.alpha({ length: { min: 10, max: 20 } }),
+      undefined,
+    ]),
+    attempt: faker.number.int(),
+    changesCount: faker.helpers.arrayElement([faker.number.int(), undefined]),
+    alertsCount: faker.helpers.arrayElement([faker.number.int(), undefined]),
+  }));
+
 export const getPutConnectorsConnectorIdEnabledResponseMock = (
   overrideResponse: Partial<Extract<Connector, object>> = {}
 ): Connector => ({
@@ -235,6 +327,23 @@ export const getPutConnectorsConnectorIdEnabledResponseMock = (
     faker.string.alpha({ length: { min: 10, max: 20 } }),
     undefined,
   ]),
+  scheduleSeconds: faker.helpers.arrayElement([
+    faker.helpers.arrayElement([faker.number.int(), null]),
+    undefined,
+  ]),
+  nextRunAt: faker.helpers.arrayElement([
+    faker.helpers.arrayElement([faker.date.past().toISOString().slice(0, 19) + 'Z', null]),
+    undefined,
+  ]),
+  lastSyncDurationMs: faker.helpers.arrayElement([
+    faker.helpers.arrayElement([faker.number.int(), null]),
+    undefined,
+  ]),
+  lastSyncError: faker.helpers.arrayElement([
+    faker.string.alpha({ length: { min: 10, max: 20 } }),
+    undefined,
+  ]),
+  retryCount: faker.helpers.arrayElement([faker.number.int(), undefined]),
   ...overrideResponse,
 });
 

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/google/uuid"
@@ -138,6 +139,10 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		Enabled   *bool          `json:"enabled"`
 		Category  *string        `json:"category"`
 		Type      *string        `json:"type"`
+		// ScheduleSeconds is raw JSON so absence (leave unchanged) can be told
+		// apart from an explicit `null` (clear to manual-only): a **int decodes
+		// both to a nil outer pointer, losing that distinction.
+		ScheduleSeconds json.RawMessage `json:"scheduleSeconds"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		httputil.Error(w, http.StatusBadRequest, "invalid_request", "Invalid JSON body")
@@ -145,6 +150,14 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	updates := make(map[string]any)
+	if req.ScheduleSeconds != nil {
+		var scheduleSeconds *int
+		if err := json.Unmarshal(req.ScheduleSeconds, &scheduleSeconds); err != nil {
+			httputil.Error(w, http.StatusBadRequest, "invalid_request", "Invalid scheduleSeconds")
+			return
+		}
+		updates["schedule_seconds"] = scheduleSeconds
+	}
 	if req.Name != nil {
 		updates["name"] = *req.Name
 	}
@@ -323,6 +336,46 @@ func (h *Handler) Data(w http.ResponseWriter, r *http.Request) {
 		"metadata":    snap.Metadata,
 		"fetchedAt":   snap.FetchedAt.Format(time.RFC3339),
 	})
+}
+
+// syncsDefaultLimit and syncsMaxLimit mirror httputil.DefaultPageSize/MaxPageSize,
+// per the /connectors/{connectorId}/syncs OpenAPI spec (limit default 20, max 100).
+const (
+	syncsDefaultLimit = httputil.DefaultPageSize
+	syncsMaxLimit     = httputil.MaxPageSize
+)
+
+// Syncs handles GET /api/connectors/{id}/syncs (OpenAPI's connectorId path param).
+// Returns recent sync run history for a connector, newest first.
+func (h *Handler) Syncs(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+
+	if _, err := h.Store.GetConnector(r.Context(), id); err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			httputil.Error(w, http.StatusNotFound, "not_found", "Connector not found")
+			return
+		}
+		httputil.Errorf(w, err)
+		return
+	}
+
+	limit := syncsDefaultLimit
+	if v := r.URL.Query().Get("limit"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			limit = n
+		}
+	}
+	if limit > syncsMaxLimit {
+		limit = syncsMaxLimit
+	}
+
+	runs, err := h.Store.ListSyncRunsByConnector(r.Context(), id, limit)
+	if err != nil {
+		httputil.Errorf(w, err)
+		return
+	}
+
+	httputil.JSON(w, http.StatusOK, runs)
 }
 
 // RemovalImpact handles GET /api/connectors/{id}/removal-impact.

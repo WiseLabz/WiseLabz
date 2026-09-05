@@ -19,12 +19,14 @@ import type {
   DocVersionMeta,
   RemovalImpact,
   ServiceSnapshot,
+  SyncRun,
   User,
 } from '../api/model';
 
 const minsAgo = (m: number) => new Date(Date.now() - m * 60_000).toISOString();
 const hrsAgo = (h: number) => new Date(Date.now() - h * 3_600_000).toISOString();
 const daysAgo = (d: number) => new Date(Date.now() - d * 86_400_000).toISOString();
+const minsFromNow = (m: number) => new Date(Date.now() + m * 60_000).toISOString();
 
 export const user: User = {
   id: 'usr-1',
@@ -47,6 +49,10 @@ export const connectors: Connector[] = [
     url: 'https://10.0.0.11:8006',
     verifyTls: false,
     lastSyncAt: minsAgo(4),
+    scheduleSeconds: 900,
+    nextRunAt: minsFromNow(11),
+    lastSyncDurationMs: 1240,
+    retryCount: 0,
   },
   {
     id: 'svc-pve2',
@@ -58,6 +64,10 @@ export const connectors: Connector[] = [
     url: 'https://10.0.0.12:8006',
     verifyTls: false,
     lastSyncAt: minsAgo(6),
+    scheduleSeconds: null,
+    nextRunAt: null,
+    lastSyncDurationMs: 980,
+    retryCount: 0,
   },
   {
     id: 'svc-opnsense',
@@ -69,6 +79,10 @@ export const connectors: Connector[] = [
     url: 'https://10.0.0.1',
     verifyTls: true,
     lastSyncAt: minsAgo(4),
+    scheduleSeconds: 3600,
+    nextRunAt: minsFromNow(56),
+    lastSyncDurationMs: 610,
+    retryCount: 0,
   },
   {
     id: 'svc-portainer',
@@ -81,6 +95,11 @@ export const connectors: Connector[] = [
     verifyTls: false,
     lastSyncAt: minsAgo(11),
     statusMessage: '1 stack unhealthy — media (sonarr exited)',
+    scheduleSeconds: 1800,
+    nextRunAt: minsFromNow(19),
+    lastSyncDurationMs: 5230,
+    lastSyncError: 'stack health check timed out after 5s',
+    retryCount: 2,
   },
   {
     id: 'svc-pbs',
@@ -92,6 +111,10 @@ export const connectors: Connector[] = [
     url: 'https://10.0.0.13:8007',
     verifyTls: false,
     lastSyncAt: hrsAgo(1),
+    scheduleSeconds: 86400,
+    nextRunAt: minsFromNow(1380),
+    lastSyncDurationMs: 2100,
+    retryCount: 0,
   },
   {
     id: 'svc-docker-nas',
@@ -104,6 +127,11 @@ export const connectors: Connector[] = [
     verifyTls: false,
     lastSyncAt: hrsAgo(2),
     statusMessage: 'connection refused — host unreachable',
+    scheduleSeconds: 900,
+    nextRunAt: minsFromNow(3),
+    lastSyncDurationMs: null,
+    lastSyncError: 'connection refused — host unreachable',
+    retryCount: 4,
   },
 ];
 
@@ -619,4 +647,39 @@ export function serviceSnapshot(connectorId: string): ServiceSnapshot | null {
     sections: snapshotSections[c.category] ?? [],
     fetchedAt: minsAgo(4),
   };
+}
+
+/** Recent sync run history per connector, newest first — for the service detail page. */
+export function syncRunsFor(connectorId: string): SyncRun[] {
+  const c = connectors.find((x) => x.id === connectorId);
+  if (!c) return [];
+  const runs: SyncRun[] = [];
+  // Most recent run mirrors the connector's own lastSync* fields so the two stay
+  // consistent; older runs behind it are synthesized as clean successes.
+  runs.push({
+    id: `sync-${c.id}-1`,
+    connectorId: c.id,
+    startedAt: c.lastSyncAt ?? minsAgo(4),
+    finishedAt: c.lastSyncAt ?? minsAgo(4),
+    durationMs: c.lastSyncDurationMs ?? null,
+    status: c.lastSyncError ? 'error' : 'success',
+    error: c.lastSyncError,
+    attempt: (c.retryCount ?? 0) + 1,
+    changesCount: c.lastSyncError ? 0 : 2,
+    alertsCount: c.lastSyncError ? 1 : 0,
+  });
+  for (let i = 2; i <= 4; i++) {
+    runs.push({
+      id: `sync-${c.id}-${i}`,
+      connectorId: c.id,
+      startedAt: minsAgo(4 + i * (c.scheduleSeconds ? c.scheduleSeconds / 60 : 30)),
+      finishedAt: minsAgo(4 + i * (c.scheduleSeconds ? c.scheduleSeconds / 60 : 30)),
+      durationMs: 800 + i * 120,
+      status: 'success',
+      attempt: 1,
+      changesCount: i === 2 ? 1 : 0,
+      alertsCount: 0,
+    });
+  }
+  return runs;
 }

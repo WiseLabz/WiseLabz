@@ -6,16 +6,11 @@
  *
  * OpenAPI spec version: 0.1.0
  */
-import type { ConnectorUpdateConfig } from './connectorUpdateConfig';
 
-export interface ConnectorUpdate {
-  name?: string;
-  url?: string;
-  verifyTls?: boolean;
-  config?: ConnectorUpdateConfig;
-  /**
-   * Auto-sync cadence in seconds; null disables scheduled sync (manual only)
-   * @nullable
-   */
-  scheduleSeconds?: number | null;
-}
+export type SyncRunStatus = (typeof SyncRunStatus)[keyof typeof SyncRunStatus];
+
+export const SyncRunStatus = {
+  success: 'success',
+  error: 'error',
+  skipped: 'skipped',
+} as const;

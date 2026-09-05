@@ -25,9 +25,22 @@ type ConnectorRecord struct {
 	Status        string `json:"status"`
 	StatusMessage string `json:"statusMessage"`
 	LastSyncAt    string `json:"lastSyncAt"`
+	// ScheduleSeconds is the auto-sync cadence; nil means manual-only (never
+	// scheduled). LastSyncDurationMs is nil until the first sync completes.
+	ScheduleSeconds    *int `json:"scheduleSeconds"`
+	LastSyncDurationMs *int `json:"lastSyncDurationMs"`
+	// NextRunAt is "" when there is no scheduled next run, mirroring LastSyncAt's
+	// empty-string-means-null convention rather than a pointer.
+	NextRunAt     string `json:"nextRunAt"`
+	LastSyncError string `json:"lastSyncError"`
+	RetryCount    int    `json:"retryCount"`
 	CreatedAt     string `json:"createdAt"`
 	UpdatedAt     string `json:"updatedAt"`
 }
+
+// connectorColumns is the shared column list for every connector SELECT.
+const connectorColumns = `id, name, category, type, url, verify_tls, config_data, enabled, status, status_message,
+	last_sync_at, schedule_seconds, next_run_at, last_sync_duration_ms, last_sync_error, retry_count, created_at, updated_at`
 
 // SnapshotRecord represents a row in the service_snapshots table.
 type SnapshotRecord struct {
@@ -59,10 +72,13 @@ func (s *Store) CreateConnector(ctx context.Context, c *ConnectorRecord) error {
 	}
 
 	_, err := s.db.ExecContext(ctx, `
-		INSERT INTO connectors (id, name, category, type, url, verify_tls, config_data, enabled, status, status_message, last_sync_at, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO connectors (id, name, category, type, url, verify_tls, config_data, enabled, status, status_message, last_sync_at,
+			schedule_seconds, next_run_at, last_sync_duration_ms, last_sync_error, retry_count, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`, c.ID, c.Name, c.Category, c.Type, c.URL, boolToInt(c.VerifyTLS), c.ConfigData,
 		boolToInt(c.Enabled), c.Status, c.StatusMessage, nilToStr(c.LastSyncAt),
+		// database/sql converts a nil *int argument to SQL NULL automatically.
+		c.ScheduleSeconds, nilToStr(c.NextRunAt), c.LastSyncDurationMs, c.LastSyncError, c.RetryCount,
 		c.CreatedAt, c.UpdatedAt)
 	if err != nil {
 		if isUniqueViolation(err) {
@@ -77,12 +93,13 @@ func (s *Store) CreateConnector(ctx context.Context, c *ConnectorRecord) error {
 func (s *Store) GetConnector(ctx context.Context, id string) (*ConnectorRecord, error) {
 	c := &ConnectorRecord{}
 	var verifyTLS, enabled int
-	var lastSyncAt sql.NullString
-	err := s.db.QueryRowContext(ctx, `
-		SELECT id, name, category, type, url, verify_tls, config_data, enabled, status, status_message, last_sync_at, created_at, updated_at
-		FROM connectors WHERE id = ?
+	var lastSyncAt, nextRunAt, lastSyncError sql.NullString
+	var scheduleSeconds, lastSyncDurationMs sql.NullInt64
+	err := s.db.QueryRowContext(ctx, `SELECT `+connectorColumns+` FROM connectors WHERE id = ?
 	`, id).Scan(&c.ID, &c.Name, &c.Category, &c.Type, &c.URL, &verifyTLS, &c.ConfigData,
-		&enabled, &c.Status, &c.StatusMessage, &lastSyncAt, &c.CreatedAt, &c.UpdatedAt)
+		&enabled, &c.Status, &c.StatusMessage, &lastSyncAt,
+		&scheduleSeconds, &nextRunAt, &lastSyncDurationMs, &lastSyncError, &c.RetryCount,
+		&c.CreatedAt, &c.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -92,6 +109,10 @@ func (s *Store) GetConnector(ctx context.Context, id string) (*ConnectorRecord, 
 	c.VerifyTLS = verifyTLS != 0
 	c.Enabled = enabled != 0
 	c.LastSyncAt = nullStrToStr(lastSyncAt)
+	c.NextRunAt = nullStrToStr(nextRunAt)
+	c.LastSyncError = nullStrToStr(lastSyncError)
+	c.ScheduleSeconds = nullInt64ToIntPtr(scheduleSeconds)
+	c.LastSyncDurationMs = nullInt64ToIntPtr(lastSyncDurationMs)
 	return c, nil
 }
 
@@ -132,6 +153,21 @@ func (s *Store) UpdateConnector(ctx context.Context, id string, updates map[stri
 			args = append(args, v)
 		case "type":
 			parts = append(parts, "type = ?")
+			args = append(args, v)
+		case "schedule_seconds":
+			parts = append(parts, "schedule_seconds = ?")
+			args = append(args, v)
+		case "next_run_at":
+			parts = append(parts, "next_run_at = ?")
+			args = append(args, v)
+		case "last_sync_duration_ms":
+			parts = append(parts, "last_sync_duration_ms = ?")
+			args = append(args, v)
+		case "last_sync_error":
+			parts = append(parts, "last_sync_error = ?")
+			args = append(args, v)
+		case "retry_count":
+			parts = append(parts, "retry_count = ?")
 			args = append(args, v)
 		}
 	}
@@ -180,8 +216,7 @@ func (s *Store) ListConnectors(ctx context.Context, offset, limit int) ([]Connec
 		return nil, 0, fmt.Errorf("count connectors: %w", err)
 	}
 
-	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, name, category, type, url, verify_tls, config_data, enabled, status, status_message, last_sync_at, created_at, updated_at
+	rows, err := s.db.QueryContext(ctx, `SELECT `+connectorColumns+`
 		FROM connectors ORDER BY created_at DESC LIMIT ? OFFSET ?
 	`, limit, offset)
 	if err != nil {
@@ -199,8 +234,7 @@ func (s *Store) ListConnectorsByCategory(ctx context.Context, category string, o
 		return nil, 0, fmt.Errorf("count connectors by category: %w", err)
 	}
 
-	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, name, category, type, url, verify_tls, config_data, enabled, status, status_message, last_sync_at, created_at, updated_at
+	rows, err := s.db.QueryContext(ctx, `SELECT `+connectorColumns+`
 		FROM connectors WHERE category = ? ORDER BY created_at DESC LIMIT ? OFFSET ?
 	`, category, limit, offset)
 	if err != nil {
@@ -213,12 +247,29 @@ func (s *Store) ListConnectorsByCategory(ctx context.Context, category string, o
 
 // ListAllConnectors returns all connectors (no pagination).
 func (s *Store) ListAllConnectors(ctx context.Context) ([]ConnectorRecord, error) {
-	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, name, category, type, url, verify_tls, config_data, enabled, status, status_message, last_sync_at, created_at, updated_at
+	rows, err := s.db.QueryContext(ctx, `SELECT `+connectorColumns+`
 		FROM connectors ORDER BY created_at DESC
 	`)
 	if err != nil {
 		return nil, fmt.Errorf("list all connectors: %w", err)
+	}
+	defer rows.Close() //nolint:errcheck
+
+	connectors, _, err := scanConnectors(rows)
+	return connectors, err
+}
+
+// ListDueConnectors returns enabled connectors with a schedule whose next run
+// is due (next_run_at <= now, or unset — e.g. right after schedule was first
+// configured). Ordered soonest-first. Never returns a nil slice.
+func (s *Store) ListDueConnectors(ctx context.Context, now string, limit int) ([]ConnectorRecord, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT `+connectorColumns+`
+		FROM connectors
+		WHERE enabled = 1 AND schedule_seconds IS NOT NULL AND (next_run_at IS NULL OR next_run_at <= ?)
+		ORDER BY next_run_at ASC LIMIT ?
+	`, now, limit)
+	if err != nil {
+		return nil, fmt.Errorf("list due connectors: %w", err)
 	}
 	defer rows.Close() //nolint:errcheck
 
@@ -325,20 +376,36 @@ func scanConnectors(rows *sql.Rows) ([]ConnectorRecord, int, error) {
 	for rows.Next() {
 		var c ConnectorRecord
 		var verifyTLS, enabled int
-		var lastSyncAt sql.NullString
+		var lastSyncAt, nextRunAt, lastSyncError sql.NullString
+		var scheduleSeconds, lastSyncDurationMs sql.NullInt64
 		if err := rows.Scan(&c.ID, &c.Name, &c.Category, &c.Type, &c.URL, &verifyTLS, &c.ConfigData,
-			&enabled, &c.Status, &c.StatusMessage, &lastSyncAt, &c.CreatedAt, &c.UpdatedAt); err != nil {
+			&enabled, &c.Status, &c.StatusMessage, &lastSyncAt,
+			&scheduleSeconds, &nextRunAt, &lastSyncDurationMs, &lastSyncError, &c.RetryCount,
+			&c.CreatedAt, &c.UpdatedAt); err != nil {
 			return nil, 0, fmt.Errorf("scan connector: %w", err)
 		}
 		c.VerifyTLS = verifyTLS != 0
 		c.Enabled = enabled != 0
 		c.LastSyncAt = nullStrToStr(lastSyncAt)
+		c.NextRunAt = nullStrToStr(nextRunAt)
+		c.LastSyncError = nullStrToStr(lastSyncError)
+		c.ScheduleSeconds = nullInt64ToIntPtr(scheduleSeconds)
+		c.LastSyncDurationMs = nullInt64ToIntPtr(lastSyncDurationMs)
 		connectors = append(connectors, c)
 	}
 	if connectors == nil {
 		connectors = []ConnectorRecord{}
 	}
 	return connectors, len(connectors), nil
+}
+
+// nullInt64ToIntPtr converts a nullable DB integer to *int (nil when NULL).
+func nullInt64ToIntPtr(n sql.NullInt64) *int {
+	if !n.Valid {
+		return nil
+	}
+	v := int(n.Int64)
+	return &v
 }
 
 func nullStrToStr(ns sql.NullString) string {

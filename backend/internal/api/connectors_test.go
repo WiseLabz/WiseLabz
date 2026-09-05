@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/WiseLabz/wiselabz/internal/store"
 )
@@ -99,6 +100,117 @@ func TestConnectorsUpdateRoleBoundary(t *testing.T) {
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("status = %d, want 403; body = %s", rec.Code, rec.Body)
 	}
+}
+
+func TestConnectorsUpdateScheduleSeconds(t *testing.T) {
+	app := newTestApp(t)
+	_, opToken := app.user(t, "operator")
+
+	conn := &store.ConnectorRecord{Name: "svc", Category: "virtualization", Type: "proxmox", URL: "https://example.com"}
+	if err := app.Store.CreateConnector(context.Background(), conn); err != nil {
+		t.Fatalf("seed connector: %v", err)
+	}
+
+	t.Run("absent leaves schedule unchanged", func(t *testing.T) {
+		rec := app.req(t, http.MethodPatch, "/api/connectors/"+conn.ID, map[string]any{"name": "svc2"}, opToken)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200; body = %s", rec.Code, rec.Body)
+		}
+		got, err := app.Store.GetConnector(context.Background(), conn.ID)
+		if err != nil {
+			t.Fatalf("GetConnector: %v", err)
+		}
+		if got.ScheduleSeconds != nil {
+			t.Fatalf("ScheduleSeconds = %v, want still nil (field absent from request)", got.ScheduleSeconds)
+		}
+	})
+
+	t.Run("sets schedule", func(t *testing.T) {
+		rec := app.req(t, http.MethodPatch, "/api/connectors/"+conn.ID, map[string]any{"scheduleSeconds": 1800}, opToken)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200; body = %s", rec.Code, rec.Body)
+		}
+		var got store.ConnectorRecord
+		if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+			t.Fatalf("decode body: %v", err)
+		}
+		if got.ScheduleSeconds == nil || *got.ScheduleSeconds != 1800 {
+			t.Fatalf("ScheduleSeconds = %v, want 1800", got.ScheduleSeconds)
+		}
+	})
+
+	t.Run("explicit null clears schedule to manual-only", func(t *testing.T) {
+		rec := app.req(t, http.MethodPatch, "/api/connectors/"+conn.ID, map[string]any{"scheduleSeconds": nil}, opToken)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200; body = %s", rec.Code, rec.Body)
+		}
+		got, err := app.Store.GetConnector(context.Background(), conn.ID)
+		if err != nil {
+			t.Fatalf("GetConnector: %v", err)
+		}
+		if got.ScheduleSeconds != nil {
+			t.Fatalf("ScheduleSeconds = %v, want nil after explicit null", got.ScheduleSeconds)
+		}
+	})
+}
+
+func TestConnectorsSyncsHistory(t *testing.T) {
+	app := newTestApp(t)
+	_, viewerToken := app.user(t, "viewer")
+
+	conn := &store.ConnectorRecord{Name: "svc", Category: "virtualization", Type: "proxmox", URL: "https://example.com"}
+	if err := app.Store.CreateConnector(context.Background(), conn); err != nil {
+		t.Fatalf("seed connector: %v", err)
+	}
+
+	older := time.Now().Add(-time.Hour).Format(time.RFC3339)
+	newer := time.Now().Format(time.RFC3339)
+	if err := app.Store.CreateSyncRun(context.Background(), &store.SyncRunRecord{
+		ConnectorID: conn.ID, StartedAt: older, Status: store.SyncRunStatusError, Error: "boom", Attempt: 1,
+	}); err != nil {
+		t.Fatalf("seed sync run 1: %v", err)
+	}
+	if err := app.Store.CreateSyncRun(context.Background(), &store.SyncRunRecord{
+		ConnectorID: conn.ID, StartedAt: newer, Status: store.SyncRunStatusSuccess, Attempt: 2, ChangesCount: 2,
+	}); err != nil {
+		t.Fatalf("seed sync run 2: %v", err)
+	}
+
+	rec := app.req(t, http.MethodGet, "/api/connectors/"+conn.ID+"/syncs", nil, viewerToken)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body = %s", rec.Code, rec.Body)
+	}
+	var got []store.SyncRunRecord
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("len(got) = %d, want 2", len(got))
+	}
+	if got[0].Status != store.SyncRunStatusSuccess || got[1].Status != store.SyncRunStatusError {
+		t.Fatalf("got = %+v, want newest (success) first", got)
+	}
+
+	t.Run("limit query param is respected", func(t *testing.T) {
+		rec := app.req(t, http.MethodGet, "/api/connectors/"+conn.ID+"/syncs?limit=1", nil, viewerToken)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200; body = %s", rec.Code, rec.Body)
+		}
+		var got []store.SyncRunRecord
+		if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+			t.Fatalf("decode body: %v", err)
+		}
+		if len(got) != 1 {
+			t.Fatalf("len(got) = %d, want 1", len(got))
+		}
+	})
+
+	t.Run("unknown connector 404s", func(t *testing.T) {
+		rec := app.req(t, http.MethodGet, "/api/connectors/does-not-exist/syncs", nil, viewerToken)
+		if rec.Code != http.StatusNotFound {
+			t.Fatalf("status = %d, want 404; body = %s", rec.Code, rec.Body)
+		}
+	})
 }
 
 func TestConnectorsDeleteElevationBoundary(t *testing.T) {
