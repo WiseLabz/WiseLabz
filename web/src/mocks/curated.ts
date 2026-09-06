@@ -298,13 +298,16 @@ export const curatedHandlers = [
     return HttpResponse.json(docVersionMeta[params.docId as string] ?? []);
   }),
 
-  // Save an edited doc → new version (last-write-wins; records a manual revision).
+  // Save an edited doc → new version, rejecting a stale editor base version.
   http.put('*/docs/:docId', async ({ params, request }) => {
     await delay(LATENCY);
     const id = params.docId as string;
     const doc = docs[id];
     if (!doc) return new HttpResponse(null, { status: 404 });
-    const body = (await request.json().catch(() => ({}))) as { content?: string };
+    const body = (await request.json().catch(() => ({}))) as { content?: string; baseVersion?: number };
+    if (body.baseVersion !== undefined && body.baseVersion !== doc.currentVersion) {
+      return HttpResponse.json(doc, { status: 409 });
+    }
     const rev = doc.currentVersion + 1;
     const now = new Date().toISOString();
     doc.content = body.content ?? doc.content;
