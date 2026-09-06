@@ -3,6 +3,7 @@ package sync
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"log/slog"
 	"os"
 	"sync"
@@ -18,6 +19,25 @@ import (
 type fakeNotifier struct {
 	mu    sync.Mutex
 	calls []string // alert IDs
+}
+
+type fakeQualityChecker struct {
+	mu    sync.Mutex
+	calls []string
+	err   error
+}
+
+func (f *fakeQualityChecker) RunForConnector(_ context.Context, connectorID string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.calls = append(f.calls, connectorID)
+	return f.err
+}
+
+func (f *fakeQualityChecker) count() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return len(f.calls)
 }
 
 func (f *fakeNotifier) NotifyAlertCreated(_ context.Context, alertID, _, _ string) {
@@ -96,7 +116,7 @@ func TestRunSync_NotifiesOnEligibleAlert(t *testing.T) {
 	}
 
 	notifier := &fakeNotifier{}
-	engine := NewEngine(s, nil, notifier)
+	engine := NewEngine(s, nil, notifier, nil)
 
 	result, err := engine.RunSync(ctx, conn.ID, "job1")
 	if err != nil {
@@ -144,7 +164,7 @@ func TestRunSync_NoNotifyOnInfoOnlyChange(t *testing.T) {
 	}
 
 	notifier := &fakeNotifier{}
-	engine := NewEngine(s, nil, notifier)
+	engine := NewEngine(s, nil, notifier, nil)
 
 	result, err := engine.RunSync(ctx, conn.ID, "job1")
 	if err != nil {
@@ -155,5 +175,66 @@ func TestRunSync_NoNotifyOnInfoOnlyChange(t *testing.T) {
 	}
 	if got := notifier.count(); got != 0 {
 		t.Fatalf("expected notifier not called, got %d", got)
+	}
+}
+
+func TestRunSyncInvokesQualityChecker(t *testing.T) {
+	connector.Register(
+		connector.TypeSchema{Type: "sync_test_quality", Category: "test", Name: "Quality"},
+		func(_ map[string]any) (connector.Connector, error) {
+			return &fakeConnector{snapshot: &connector.ServiceSnapshot{ServiceName: "svc", FetchedAt: time.Now()}}, nil
+		},
+	)
+
+	tests := []struct {
+		name       string
+		connector  store.ConnectorRecord
+		wantCalls  int
+		wantRunErr bool
+	}{
+		{name: "success", connector: store.ConnectorRecord{Name: "success", Category: "networking", Type: "sync_test_quality", Enabled: true}, wantCalls: 1},
+		{name: "error", connector: store.ConnectorRecord{Name: "error", Category: "networking", Type: "missing_quality_connector", Enabled: true}, wantCalls: 1, wantRunErr: true},
+		{name: "skipped", connector: store.ConnectorRecord{Name: "skipped", Category: "networking", Type: "sync_test_quality", Enabled: false}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := newTestStore(t)
+			ctx := context.Background()
+			if err := s.CreateConnector(ctx, &tt.connector); err != nil {
+				t.Fatalf("CreateConnector: %v", err)
+			}
+
+			checker := &fakeQualityChecker{}
+			_, err := NewEngine(s, nil, nil, checker).RunSync(ctx, tt.connector.ID, "quality-job")
+			if (err != nil) != tt.wantRunErr {
+				t.Fatalf("RunSync error = %v, want error %v", err, tt.wantRunErr)
+			}
+			if got := checker.count(); got != tt.wantCalls {
+				t.Fatalf("quality checker calls = %d, want %d", got, tt.wantCalls)
+			}
+		})
+	}
+}
+
+func TestRunSyncQualityCheckerErrorIsNonFatal(t *testing.T) {
+	connector.Register(
+		connector.TypeSchema{Type: "sync_test_quality_error", Category: "test", Name: "Quality error"},
+		func(_ map[string]any) (connector.Connector, error) {
+			return &fakeConnector{snapshot: &connector.ServiceSnapshot{ServiceName: "svc", FetchedAt: time.Now()}}, nil
+		},
+	)
+	s := newTestStore(t)
+	record := &store.ConnectorRecord{Name: "quality error", Category: "networking", Type: "sync_test_quality_error", Enabled: true}
+	if err := s.CreateConnector(context.Background(), record); err != nil {
+		t.Fatalf("CreateConnector: %v", err)
+	}
+	checker := &fakeQualityChecker{err: errors.New("quality unavailable")}
+	result, err := NewEngine(s, nil, nil, checker).RunSync(context.Background(), record.ID, "quality-error-job")
+	if err != nil || result.Status != "success" {
+		t.Fatalf("RunSync() = (%+v, %v), want successful sync", result, err)
+	}
+	if checker.count() != 1 {
+		t.Fatalf("quality checker calls = %d, want 1", checker.count())
 	}
 }

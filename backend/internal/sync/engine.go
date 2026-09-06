@@ -64,16 +64,22 @@ type AlertNotifier interface {
 	NotifyAlertCreated(ctx context.Context, alertID, title, message string)
 }
 
+// QualityChecker evaluates documentation quality after a sync attempt.
+type QualityChecker interface {
+	RunForConnector(ctx context.Context, connectorID string) error
+}
+
 // Engine runs sync jobs against connectors.
 type Engine struct {
-	store    *store.Store
-	hub      *ws.Hub
-	notifier AlertNotifier
+	store          *store.Store
+	hub            *ws.Hub
+	notifier       AlertNotifier
+	qualityChecker QualityChecker
 }
 
 // NewEngine creates a new sync engine.
-func NewEngine(s *store.Store, h *ws.Hub, notifier AlertNotifier) *Engine {
-	return &Engine{store: s, hub: h, notifier: notifier}
+func NewEngine(s *store.Store, h *ws.Hub, notifier AlertNotifier, qualityChecker QualityChecker) *Engine {
+	return &Engine{store: s, hub: h, notifier: notifier, qualityChecker: qualityChecker}
 }
 
 // RunResult holds the outcome of a sync run.
@@ -143,8 +149,8 @@ func (e *Engine) RunSync(ctx context.Context, connectorID string, jobID string) 
 		}
 		if err := e.store.CreateSyncRun(ctx, &store.SyncRunRecord{
 			ConnectorID:  connectorID,
-			StartedAt:    start.UTC().Format(time.RFC3339),
-			FinishedAt:   time.Now().UTC().Format(time.RFC3339),
+			StartedAt:    start.UTC().Format(time.RFC3339Nano),
+			FinishedAt:   time.Now().UTC().Format(time.RFC3339Nano),
 			DurationMs:   &durationMs,
 			Status:       runStatus,
 			Error:        errMsg,
@@ -176,6 +182,11 @@ func (e *Engine) RunSync(ctx context.Context, connectorID string, jobID string) 
 		}
 		if err := e.store.UpdateConnector(ctx, connectorID, updates); err != nil {
 			slog.Error("update connector schedule failed", "connector", connectorID, "error", err)
+		}
+		if e.qualityChecker != nil {
+			if err := e.qualityChecker.RunForConnector(ctx, connectorID); err != nil {
+				slog.Error("quality check failed", "connector", connectorID, "error", err)
+			}
 		}
 	}
 

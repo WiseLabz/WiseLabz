@@ -21,16 +21,18 @@ var upgrader = websocket.Upgrader{
 
 // Event types sent over WebSocket.
 const (
-	EventServiceStatus   = "service.status"
-	EventSyncProgress    = "sync.progress"
-	EventSyncComplete    = "sync.complete"
-	EventChangeDetected  = "change.detected"
-	EventAlertCreated    = "alert.created"
-	EventAlertResolved   = "alert.resolved"
-	EventDocGenerated    = "doc.generated"
-	EventDocAISuggestion = "doc.ai_suggestion"
-	EventSystemHealth    = "system.health"
-	EventSystemNotice    = "system.notice"
+	EventServiceStatus          = "service.status"
+	EventSyncProgress           = "sync.progress"
+	EventSyncComplete           = "sync.complete"
+	EventChangeDetected         = "change.detected"
+	EventAlertCreated           = "alert.created"
+	EventAlertResolved          = "alert.resolved"
+	EventQualityFindingCreated  = "quality.finding.created"
+	EventQualityFindingsChanged = "quality.findings.changed"
+	EventDocGenerated           = "doc.generated"
+	EventDocAISuggestion        = "doc.ai_suggestion"
+	EventSystemHealth           = "system.health"
+	EventSystemNotice           = "system.notice"
 )
 
 // Envelope wraps all WebSocket messages.
