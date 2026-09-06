@@ -49,8 +49,8 @@
   --font-sans: 'Geist Variable', ui-sans-serif, system-ui, -apple-system, sans-serif;
 
   /* Fixed rem scale, instrument-large at the top end */
-  --text-2xs: 0.6875rem;
-  --text-2xs--line-height: 1rem;
+  --text-2xs: 0.75rem;
+  --text-2xs--line-height: 1.05rem;
   --text-xs: 0.75rem;
   --text-xs--line-height: 1.15rem;
   --text-sm: 0.8125rem;

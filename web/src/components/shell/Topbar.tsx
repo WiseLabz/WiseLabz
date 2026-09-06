@@ -4,7 +4,7 @@
  * count, and the user menu. The sync button is the entry point to the dashboard's
  * signature sweep.
  */
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { AnimatePresence, motion } from 'motion/react';
@@ -24,8 +24,23 @@ export function Topbar() {
   const user = useAuth((s) => s.user);
   const logout = useAuth((s) => s.logout);
   const [menuOpen, setMenuOpen] = useState(false);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
+  const firstMenuItemRef = useRef<HTMLButtonElement>(null);
   const navigate = useNavigate();
   const { t } = useTranslation();
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    firstMenuItemRef.current?.focus();
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setMenuOpen(false);
+        menuButtonRef.current?.focus();
+      }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [menuOpen]);
 
   const syncing = globalJob && globalJob.phase !== 'done' && globalJob.phase !== 'error';
 
@@ -43,11 +58,12 @@ export function Topbar() {
       {/* Search / command palette trigger */}
       <button
         onClick={togglePalette}
-        className="group flex h-9 w-full max-w-sm items-center gap-2.5 rounded-sm border border-line bg-canvas-sunken px-3 font-mono text-xs text-ink-faint transition-colors hover:border-line-strong hover:text-ink-muted"
+        aria-label={t('topbar.searchPlaceholder')}
+        className="group flex h-9 w-9 shrink-0 items-center justify-center rounded-sm border border-line bg-canvas-sunken font-mono text-xs text-ink-faint transition-colors hover:border-line-strong hover:text-ink-muted sm:w-full sm:max-w-sm sm:justify-start sm:gap-2.5 sm:px-3"
       >
         <SearchIcon size={15} />
-        <span className="flex-1 text-left">{t('topbar.searchPlaceholder')}</span>
-        <kbd className="nums rounded border border-line-strong bg-canvas-sunken px-1.5 py-0.5 font-mono text-2xs text-ink-faint">
+        <span className="hidden flex-1 text-left sm:block">{t('topbar.searchPlaceholder')}</span>
+        <kbd className="nums hidden rounded border border-line-strong bg-canvas-sunken px-1.5 py-0.5 font-mono text-2xs text-ink-faint sm:block">
           ⌘K
         </kbd>
       </button>
@@ -59,7 +75,8 @@ export function Topbar() {
             size="sm"
             onClick={() => runSync(null)}
             disabled={syncing}
-            className="min-w-28"
+            aria-label={syncing ? undefined : t('topbar.syncAll')}
+            className="sm:min-w-28"
           >
             <motion.span
               animate={syncing ? { rotate: 360 } : { rotate: 0 }}
@@ -70,7 +87,7 @@ export function Topbar() {
             >
               <SyncIcon size={15} />
             </motion.span>
-            <span className="nums">
+            <span className="nums hidden sm:inline">
               {syncing
                 ? `${t(`sync.phase.${globalJob.phase}`)} ${globalJob.percent}%`
                 : t('topbar.syncAll')}
@@ -83,7 +100,10 @@ export function Topbar() {
         {/* User menu */}
         <div className="relative">
           <button
+            ref={menuButtonRef}
             onClick={() => setMenuOpen((v) => !v)}
+            aria-haspopup="menu"
+            aria-expanded={menuOpen}
             className="flex items-center gap-2 rounded-md py-1 pl-1 pr-2 transition-colors hover:bg-surface-raised"
           >
             <span className="flex h-7 w-7 items-center justify-center rounded-sm bg-signal-tint text-signal-bright">
@@ -103,6 +123,8 @@ export function Topbar() {
                   onClick={() => setMenuOpen(false)}
                 />
                 <motion.div
+                  role="menu"
+                  aria-label={t('account.profile')}
                   initial={{ opacity: 0, y: -6, scale: 0.98 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: -6, scale: 0.98 }}
@@ -117,24 +139,28 @@ export function Topbar() {
                   </div>
                   <div className="p-1">
                     <button
+                      ref={firstMenuItemRef}
+                      role="menuitem"
                       onClick={() => {
                         setMenuOpen(false);
-                        navigate('/settings');
+                        navigate('/settings/profile');
                       }}
                       className="w-full rounded-md px-2.5 py-1.5 text-left text-sm text-ink-muted transition-colors hover:bg-surface-raised hover:text-ink"
                     >
                       {t('account.profile')}
                     </button>
                     <button
+                      role="menuitem"
                       onClick={() => {
                         setMenuOpen(false);
-                        navigate('/settings');
+                        navigate('/settings/appearance');
                       }}
                       className="w-full rounded-md px-2.5 py-1.5 text-left text-sm text-ink-muted transition-colors hover:bg-surface-raised hover:text-ink"
                     >
                       {t('account.preferences')}
                     </button>
                     <button
+                      role="menuitem"
                       onClick={() => {
                         setMenuOpen(false);
                         void logout().then(() => navigate('/login', { replace: true }));

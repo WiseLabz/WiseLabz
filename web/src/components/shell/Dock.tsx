@@ -21,13 +21,16 @@ export function Dock() {
   const { t } = useTranslation();
 
   return (
-    <div className="pointer-events-none fixed inset-x-0 bottom-5 z-(--z-sticky) flex justify-center px-4">
+    <div
+      className="pointer-events-none fixed inset-x-0 z-(--z-sticky) flex justify-center px-4"
+      style={{ bottom: 'calc(1.25rem + env(safe-area-inset-bottom))' }}
+    >
       <nav className="pointer-events-auto flex items-center gap-0.5 rounded-(--radius-xl) border border-line bg-[color-mix(in_oklch,var(--color-surface-raised)_88%,transparent)] p-1.5 shadow-(--shadow-pop) backdrop-blur-xl">
         {DOCK_ITEMS.map(({ to, Icon, badge, badgeSource }) => (
           <NavLink
             key={to}
             to={to}
-            title={t(`nav.${to.replace('/', '')}`)}
+            aria-label={t(`nav.${to.replace('/', '')}`)}
             className={({ isActive }) =>
               cn(
                 'group relative flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors duration-150',
@@ -53,11 +56,12 @@ export function Dock() {
                   )}
                 </span>
                 <span
+                  aria-hidden="true"
                   className={cn(
-                    'overflow-hidden whitespace-nowrap font-medium transition-all duration-200',
+                    'overflow-hidden whitespace-nowrap font-medium transition-[max-width,opacity] duration-200',
                     isActive
                       ? 'max-w-30 opacity-100'
-                      : 'max-w-0 opacity-0 group-hover:max-w-30 group-hover:opacity-100'
+                      : 'max-w-0 opacity-0 group-hover:max-w-30 group-hover:opacity-100 group-focus-visible:max-w-30 group-focus-visible:opacity-100 max-sm:max-w-30 max-sm:opacity-100'
                   )}
                 >
                   {t(`nav.${to.replace('/', '')}`)}

@@ -31,6 +31,7 @@ import {
   FileTextIcon,
   GripIcon,
   CheckIcon,
+  ChevronDownIcon,
 } from '../../components/icons';
 
 interface WidgetMeta {
@@ -70,13 +71,14 @@ export function DashboardPage() {
   return (
     <div className="relative mx-auto max-w-330 px-6 py-7">
       <SyncSweep active={syncing} />
+      <h1 className="sr-only">{t('nav.dashboard')}</h1>
 
       {/* Instrument readout band — the command surface. Big mono figures on a soft
           raised panel; a faint blueprint grid keeps the identity without the hard edge. */}
       <header className="relative mb-6 overflow-hidden rounded-xl border border-line-soft bg-surface shadow-(--shadow-raised)">
         <div className="absolute inset-0 bg-blueprint opacity-[0.16]" aria-hidden="true" />
         <div className="relative flex flex-wrap items-end justify-between gap-6 px-5 py-4">
-          <div className="flex items-end gap-x-7 gap-y-3">
+          <div className="flex flex-wrap items-end gap-x-7 gap-y-3">
             <div className="pr-1">
               <p className="font-mono text-2xs uppercase tracking-[0.2em] text-ink-faint">
                 {t('dashboard.kicker')}
@@ -167,6 +169,14 @@ function EditMode() {
     setOrder(next);
   };
 
+  const move = (index: number, dir: -1 | 1) => {
+    const next = [...ids];
+    const target = index + dir;
+    if (target < 0 || target >= next.length) return;
+    [next[index], next[target]] = [next[target], next[index]];
+    commit(next);
+  };
+
   return (
     <motion.div
       key="edit"
@@ -177,12 +187,16 @@ function EditMode() {
     >
       <p className="mb-3 text-sm text-ink-muted">{t('dashboard.editHint')}</p>
       <Reorder.Group axis="y" values={ids} onReorder={commit} className="flex flex-col gap-2">
-        {ids.map((id) => (
+        {ids.map((id, index) => (
           <EditRow
             key={id}
             id={id}
             enabled={layout.find((w) => w.id === id)?.enabled ?? true}
             onToggle={() => toggle(id)}
+            onMoveUp={() => move(index, -1)}
+            onMoveDown={() => move(index, 1)}
+            canMoveUp={index > 0}
+            canMoveDown={index < ids.length - 1}
           />
         ))}
       </Reorder.Group>
@@ -194,10 +208,18 @@ function EditRow({
   id,
   enabled,
   onToggle,
+  onMoveUp,
+  onMoveDown,
+  canMoveUp,
+  canMoveDown,
 }: {
   id: WidgetId;
   enabled: boolean;
   onToggle: () => void;
+  onMoveUp: () => void;
+  onMoveDown: () => void;
+  canMoveUp: boolean;
+  canMoveDown: boolean;
 }) {
   const { t } = useTranslation();
   const controls = useDragControls();
@@ -217,6 +239,24 @@ function EditRow({
       >
         <GripIcon size={16} />
       </button>
+      <div className="flex flex-col">
+        <button
+          onClick={onMoveUp}
+          disabled={!canMoveUp}
+          aria-label={t('dashboard.moveUp', { title: t(`dashboard.widget.${id}`) })}
+          className="text-ink-faint transition-colors hover:text-ink disabled:pointer-events-none disabled:opacity-30"
+        >
+          <ChevronDownIcon size={14} className="rotate-180" />
+        </button>
+        <button
+          onClick={onMoveDown}
+          disabled={!canMoveDown}
+          aria-label={t('dashboard.moveDown', { title: t(`dashboard.widget.${id}`) })}
+          className="text-ink-faint transition-colors hover:text-ink disabled:pointer-events-none disabled:opacity-30"
+        >
+          <ChevronDownIcon size={14} />
+        </button>
+      </div>
       <meta.Icon size={16} className="text-ink-muted" />
       <span className="flex-1 text-sm font-medium text-ink">{t(`dashboard.widget.${id}`)}</span>
       <button
@@ -289,7 +329,7 @@ function StatusReadout() {
   ];
 
   return (
-    <div className="flex items-end gap-x-6 gap-y-2">
+    <div className="flex flex-wrap items-end gap-x-6 gap-y-2">
       {cells.map((cell) => (
         <div key={cell.label} className="flex flex-col">
           <span

@@ -1,6 +1,6 @@
 /** Global change feed — every detected infra change, newest first. */
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'motion/react';
@@ -39,11 +39,29 @@ export function ChangesPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const canMutate = useCanMutate();
-  const [page, setPage] = useState(1);
+  const [searchParams, setSearchParams] = useSearchParams();
   const pageSize = 20;
+  const page = Math.max(1, Number(searchParams.get('page')) || 1);
+  const filter = (searchParams.get('severity') as Severity | 'all' | null) ?? 'all';
   const { data, isLoading, isError, refetch } = useGetChanges({ page, pageSize });
-  const [filter, setFilter] = useState<Severity | 'all'>('all');
   const [selected, setSelected] = useState<Set<string>>(new Set());
+
+  const setFilter = (next: Severity | 'all') =>
+    setSearchParams((prev) => {
+      const params = new URLSearchParams(prev);
+      if (next === 'all') params.delete('severity');
+      else params.set('severity', next);
+      params.delete('page');
+      return params;
+    });
+
+  const setPage = (next: number) =>
+    setSearchParams((prev) => {
+      const params = new URLSearchParams(prev);
+      if (next <= 1) params.delete('page');
+      else params.set('page', String(next));
+      return params;
+    });
 
   const items = (data?.items ?? []).filter((c) => filter === 'all' || c.severity === filter);
   const pageCount = data ? Math.max(1, Math.ceil(data.total / data.pageSize)) : 1;
@@ -85,10 +103,15 @@ export function ChangesPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1 rounded-lg border border-line-soft bg-canvas-sunken p-0.5">
+          <div
+            role="tablist"
+            className="flex items-center gap-1 rounded-lg border border-line-soft bg-canvas-sunken p-0.5"
+          >
             {FILTERS.map((f) => (
               <button
                 key={f.value}
+                role="tab"
+                aria-selected={filter === f.value}
                 onClick={() => setFilter(f.value)}
                 className="relative rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors"
                 style={{ color: filter === f.value ? 'var(--color-ink)' : 'var(--color-ink-muted)' }}
@@ -157,6 +180,7 @@ export function ChangesPage() {
               {canMutate && (
                 <input
                   type="checkbox"
+                  aria-label={t('changes.bulkSelectLabel', { summary: c.summary })}
                   checked={selected.has(c.id)}
                   disabled={!isLowRisk(c.severity)}
                   onChange={() => toggleSelected(c.id)}
