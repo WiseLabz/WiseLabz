@@ -24,6 +24,10 @@ export const getGetConnectorsResponseMock = (): Connector[] =>
   Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() => ({
     id: faker.string.alpha({ length: { min: 10, max: 20 } }),
     name: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    owner: faker.helpers.arrayElement([
+      faker.helpers.arrayElement([faker.string.alpha({ length: { min: 10, max: 20 } }), null]),
+      undefined,
+    ]),
     category: faker.helpers.arrayElement(Object.values(ConnectorCategory)),
     type: faker.string.alpha({ length: { min: 10, max: 20 } }),
     enabled: faker.datatype.boolean(),
@@ -65,6 +69,10 @@ export const getPostConnectorsResponseMock = (
 ): Connector => ({
   id: faker.string.alpha({ length: { min: 10, max: 20 } }),
   name: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  owner: faker.helpers.arrayElement([
+    faker.helpers.arrayElement([faker.string.alpha({ length: { min: 10, max: 20 } }), null]),
+    undefined,
+  ]),
   category: faker.helpers.arrayElement(Object.values(ConnectorCategory)),
   type: faker.string.alpha({ length: { min: 10, max: 20 } }),
   enabled: faker.datatype.boolean(),
@@ -147,6 +155,10 @@ export const getGetConnectorsConnectorIdResponseMock = (
 ): Connector => ({
   id: faker.string.alpha({ length: { min: 10, max: 20 } }),
   name: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  owner: faker.helpers.arrayElement([
+    faker.helpers.arrayElement([faker.string.alpha({ length: { min: 10, max: 20 } }), null]),
+    undefined,
+  ]),
   category: faker.helpers.arrayElement(Object.values(ConnectorCategory)),
   type: faker.string.alpha({ length: { min: 10, max: 20 } }),
   enabled: faker.datatype.boolean(),
@@ -189,6 +201,10 @@ export const getPutConnectorsConnectorIdResponseMock = (
 ): Connector => ({
   id: faker.string.alpha({ length: { min: 10, max: 20 } }),
   name: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  owner: faker.helpers.arrayElement([
+    faker.helpers.arrayElement([faker.string.alpha({ length: { min: 10, max: 20 } }), null]),
+    undefined,
+  ]),
   category: faker.helpers.arrayElement(Object.values(ConnectorCategory)),
   type: faker.string.alpha({ length: { min: 10, max: 20 } }),
   enabled: faker.datatype.boolean(),
@@ -324,6 +340,10 @@ export const getPutConnectorsConnectorIdEnabledResponseMock = (
 ): Connector => ({
   id: faker.string.alpha({ length: { min: 10, max: 20 } }),
   name: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  owner: faker.helpers.arrayElement([
+    faker.helpers.arrayElement([faker.string.alpha({ length: { min: 10, max: 20 } }), null]),
+    undefined,
+  ]),
   category: faker.helpers.arrayElement(Object.values(ConnectorCategory)),
   type: faker.string.alpha({ length: { min: 10, max: 20 } }),
   enabled: faker.datatype.boolean(),

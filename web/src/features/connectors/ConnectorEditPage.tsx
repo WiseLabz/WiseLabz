@@ -40,9 +40,11 @@ export function ConnectorEditPage() {
   );
 
   const [name, setName] = useState<string | null>(null);
+  const [owner, setOwner] = useState<string | null>(null);
   const [values, setValues] = useState<FormValues>({});
   // Prefilled values fall back to the connector read until the user edits a field.
   const nameValue = name ?? connector.data?.name ?? '';
+  const ownerValue = owner ?? connector.data?.owner ?? '';
 
   const test = useMutation({
     mutationFn: () => postConnectorsConnectorIdTest(id),
@@ -60,6 +62,7 @@ export function ConnectorEditPage() {
       }
       return putConnectorsConnectorId(id, {
         name: nameValue,
+        owner: ownerValue,
         url: values.url !== undefined ? String(values.url) : connector.data?.url,
         verifyTls: values.verifyTls !== undefined ? Boolean(values.verifyTls) : connector.data?.verifyTls,
         config,
@@ -115,6 +118,11 @@ export function ConnectorEditPage() {
             field={{ name: 'name', label: t('connectors.displayName'), kind: 'string', required: true }}
             value={nameValue}
             onChange={(v) => setName(String(v))}
+          />
+          <Field
+            field={{ name: 'owner', label: t('connectors.owner'), kind: 'string', required: false }}
+            value={ownerValue}
+            onChange={(v) => setOwner(String(v))}
           />
           {schema?.fields.map((f) => (
             <Field

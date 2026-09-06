@@ -9,6 +9,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { getGetDashboardOverviewQueryKey } from '../api/generated/dashboard/dashboard';
 import { getGetChangesQueryKey } from '../api/generated/changes/changes';
 import { getGetAlertsQueryKey } from '../api/generated/alerts/alerts';
+import { getGetFindingsQueryKey } from '../api/generated/findings/findings';
 import { getGetNotificationsQueryKey } from '../api/generated/notifications/notifications';
 import { getGetDocsTreeQueryKey } from '../api/generated/docs/docs';
 import { useLive } from '../store/live';
@@ -176,6 +177,11 @@ function handle(frame: WsEvent, qc: ReturnType<typeof useQueryClient>) {
       s.bumpAlerts(-1);
       qc.invalidateQueries({ queryKey: getGetAlertsQueryKey() });
       qc.invalidateQueries({ queryKey: getGetNotificationsQueryKey() });
+      break;
+    }
+    case 'quality.finding.created':
+    case 'quality.findings.changed': {
+      qc.invalidateQueries({ queryKey: getGetFindingsQueryKey() });
       break;
     }
     case 'doc.generated': {

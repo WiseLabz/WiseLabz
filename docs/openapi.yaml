@@ -21,6 +21,7 @@ tags:
   - name: templates
   - name: changes
   - name: alerts
+  - name: findings
   - name: notifications
   - name: saved-views
   - name: settings
@@ -957,6 +958,58 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Alert' }
 
+  # ───────────────────────── quality findings ─────────────────────────
+  /findings:
+    get:
+      tags: [findings]
+      summary: Documentation quality findings
+      parameters:
+        - name: connectorId
+          in: query
+          required: false
+          schema: { type: string }
+        - name: checkType
+          in: query
+          required: false
+          schema: { $ref: '#/components/schemas/QualityCheckType' }
+        - name: status
+          in: query
+          required: false
+          schema: { $ref: '#/components/schemas/QualityFindingStatus' }
+        - { $ref: '#/components/parameters/Page' }
+        - { $ref: '#/components/parameters/PageSize' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/QualityFindingPage' }
+  /findings/{findingId}:
+    parameters: [{ $ref: '#/components/parameters/FindingId' }]
+    get:
+      tags: [findings]
+      summary: One documentation quality finding
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/QualityFinding' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /findings/{findingId}/resolve:
+    post:
+      tags: [findings]
+      summary: Resolve a documentation quality finding (operator)
+      parameters: [{ $ref: '#/components/parameters/FindingId' }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/QualityFinding' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
   # ─────────────────── notification center ────────────────────
   /notifications:
     get:
@@ -1333,6 +1386,7 @@ components:
     TemplateId: { name: templateId, in: path, required: true, schema: { type: string } }
     ChangeId: { name: changeId, in: path, required: true, schema: { type: string } }
     AlertId: { name: alertId, in: path, required: true, schema: { type: string } }
+    FindingId: { name: findingId, in: path, required: true, schema: { type: string } }
     SessionId: { name: sessionId, in: path, required: true, schema: { type: string } }
     ServiceIdQuery: { name: serviceId, in: query, required: false, schema: { type: string } }
     Page: { name: page, in: query, required: false, schema: { type: integer, default: 1, minimum: 1 } }
@@ -1387,6 +1441,12 @@ components:
     AlertStatus:
       type: string
       enum: [pending, resolved, dismissed, snoozed]
+    QualityCheckType:
+      type: string
+      enum: [stale, empty, failing, ownership_incomplete]
+    QualityFindingStatus:
+      type: string
+      enum: [open, resolved]
     ConnectorCategory:
       type: string
       enum: [virtualization, containers_paas, networking]
@@ -1531,6 +1591,7 @@ components:
       properties:
         id: { type: string }
         name: { type: string, description: matches ServiceSnapshot.ServiceName }
+        owner: { type: string, nullable: true }
         category: { $ref: '#/components/schemas/ConnectorCategory' }
         type: { type: string, description: 'e.g. proxmox, portainer, pfsense' }
         enabled: { type: boolean }
@@ -1551,6 +1612,7 @@ components:
       required: [name, category, type, url, config]
       properties:
         name: { type: string }
+        owner: { type: string, nullable: true }
         category: { $ref: '#/components/schemas/ConnectorCategory' }
         type: { type: string }
         url: { type: string }
@@ -1563,6 +1625,7 @@ components:
       type: object
       properties:
         name: { type: string }
+        owner: { type: string, nullable: true }
         url: { type: string }
         verifyTls: { type: boolean }
         config:
@@ -1940,6 +2003,37 @@ components:
         items:
           type: array
           items: { $ref: '#/components/schemas/Alert' }
+        total: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
+
+    # ── documentation quality findings ──
+    QualityFinding:
+      type: object
+      required:
+        [id, connectorId, connectorName, docId, checkType, severity, title, description, remediationLink, status, detectedCount, firstDetectedAt, lastSeenAt, resolvedAt]
+      properties:
+        id: { type: string }
+        connectorId: { type: string }
+        connectorName: { type: string }
+        docId: { type: string, nullable: true }
+        checkType: { $ref: '#/components/schemas/QualityCheckType' }
+        severity: { $ref: '#/components/schemas/Severity' }
+        title: { type: string }
+        description: { type: string }
+        remediationLink: { type: string }
+        status: { $ref: '#/components/schemas/QualityFindingStatus' }
+        detectedCount: { type: integer, minimum: 1 }
+        firstDetectedAt: { type: string, format: date-time }
+        lastSeenAt: { type: string, format: date-time }
+        resolvedAt: { type: string, format: date-time, nullable: true }
+    QualityFindingPage:
+      type: object
+      required: [items, total, page, pageSize]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/QualityFinding' }
         total: { type: integer }
         page: { type: integer }
         pageSize: { type: integer }

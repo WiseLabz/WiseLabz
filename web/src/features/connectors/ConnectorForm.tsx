@@ -39,6 +39,7 @@ export function ConnectorForm({
 
   const [typeKey, setTypeKey] = useState<string | null>(null);
   const [name, setName] = useState('');
+  const [owner, setOwner] = useState('');
   const [values, setValues] = useState<FormValues>({});
 
   const schema = useMemo(
@@ -56,7 +57,7 @@ export function ConnectorForm({
         if (f.name === 'url' || f.name === 'verifyTls') continue;
         config[f.name] = values[f.name] ?? '';
       }
-      return postConnectors({ name, category: schema.category, type: schema.type, url, verifyTls, config });
+      return postConnectors({ name, owner: owner || undefined, category: schema.category, type: schema.type, url, verifyTls, config });
     },
     onSuccess: (created) => {
       queryClient.invalidateQueries({ queryKey: getGetConnectorsQueryKey() });
@@ -121,6 +122,11 @@ export function ConnectorForm({
               }}
               value={name}
               onChange={(v) => setName(String(v))}
+            />
+            <Field
+              field={{ name: 'owner', label: t('connectors.owner'), kind: 'string', required: false }}
+              value={owner}
+              onChange={(v) => setOwner(String(v))}
             />
             {schema.fields.map((f) => (
               <Field

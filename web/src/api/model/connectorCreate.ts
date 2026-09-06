@@ -11,6 +11,8 @@ import type { ConnectorCreateConfig } from './connectorCreateConfig';
 
 export interface ConnectorCreate {
   name: string;
+  /** @nullable */
+  owner?: string | null;
   category: ConnectorCategory;
   type: string;
   url: string;
