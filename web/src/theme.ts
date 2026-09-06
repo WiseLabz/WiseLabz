@@ -176,14 +176,6 @@ export function makePalette(opts: Partial<PaletteOpts>): PaletteTokens {
     '--color-accent-secondary-bright': S(o.accentSecondaryL + 0.07, o.accentSecondaryChroma - 0.01),
     '--color-accent-secondary-soft': S(0.46, o.accentSecondaryChroma * 0.62),
     '--color-accent-secondary-tint': S(0.27, o.accentSecondaryChroma * 0.32),
-    // ponytail: deprecated aliases so anything outside this round's touched
-    // files (still reading --color-signal*) doesn't break before the
-    // follow-up round retargets it. Drop once tracking issue closes.
-    '--color-signal': P(o.accentPrimaryL, o.accentPrimaryChroma),
-    '--color-signal-bright': P(o.accentPrimaryL + 0.07, o.accentPrimaryChroma - 0.01),
-    '--color-signal-ink': `oklch(0.17 0.03 ${o.accentPrimaryInkHue})`,
-    '--color-signal-soft': P(0.46, o.accentPrimaryChroma * 0.62),
-    '--color-signal-tint': P(0.27, o.accentPrimaryChroma * 0.32),
     '--color-ok': 'oklch(0.8 0.12 145)',
     '--color-ok-tint': 'oklch(0.27 0.05 145)',
     '--color-warn': 'oklch(0.84 0.14 80)',
