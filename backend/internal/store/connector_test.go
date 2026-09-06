@@ -6,6 +6,32 @@ import (
 	"time"
 )
 
+func TestConnectorOwnerRoundTrip(t *testing.T) {
+	ctx := context.Background()
+	s := newDocTestStore(t)
+	c := &ConnectorRecord{Name: "svc", Category: "virtualization", Type: "proxmox", URL: "https://example.com", Owner: "Platform"}
+	if err := s.CreateConnector(ctx, c); err != nil {
+		t.Fatalf("CreateConnector() error: %v", err)
+	}
+	got, err := s.GetConnector(ctx, c.ID)
+	if err != nil {
+		t.Fatalf("GetConnector() error: %v", err)
+	}
+	if got.Owner != "Platform" {
+		t.Fatalf("Owner = %q, want Platform", got.Owner)
+	}
+	if err := s.UpdateConnector(ctx, c.ID, map[string]any{"owner": "Operations"}); err != nil {
+		t.Fatalf("UpdateConnector() error: %v", err)
+	}
+	got, err = s.GetConnector(ctx, c.ID)
+	if err != nil {
+		t.Fatalf("GetConnector() after update error: %v", err)
+	}
+	if got.Owner != "Operations" {
+		t.Fatalf("Owner = %q, want Operations", got.Owner)
+	}
+}
+
 func TestConnectorScheduleFieldsDefaultNull(t *testing.T) {
 	ctx := context.Background()
 	s := newDocTestStore(t)

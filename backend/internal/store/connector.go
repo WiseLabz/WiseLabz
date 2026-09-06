@@ -19,6 +19,7 @@ type ConnectorRecord struct {
 	Category      string `json:"category"`
 	Type          string `json:"type"`
 	URL           string `json:"url"`
+	Owner         string `json:"owner"`
 	VerifyTLS     bool   `json:"verifyTls"`
 	ConfigData    string `json:"configData"`
 	Enabled       bool   `json:"enabled"`
@@ -39,7 +40,7 @@ type ConnectorRecord struct {
 }
 
 // connectorColumns is the shared column list for every connector SELECT.
-const connectorColumns = `id, name, category, type, url, verify_tls, config_data, enabled, status, status_message,
+const connectorColumns = `id, name, category, type, url, owner, verify_tls, config_data, enabled, status, status_message,
 	last_sync_at, schedule_seconds, next_run_at, last_sync_duration_ms, last_sync_error, retry_count, created_at, updated_at`
 
 // SnapshotRecord represents a row in the service_snapshots table.
@@ -72,10 +73,10 @@ func (s *Store) CreateConnector(ctx context.Context, c *ConnectorRecord) error {
 	}
 
 	_, err := s.db.ExecContext(ctx, `
-		INSERT INTO connectors (id, name, category, type, url, verify_tls, config_data, enabled, status, status_message, last_sync_at,
+		INSERT INTO connectors (id, name, category, type, url, owner, verify_tls, config_data, enabled, status, status_message, last_sync_at,
 			schedule_seconds, next_run_at, last_sync_duration_ms, last_sync_error, retry_count, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, c.ID, c.Name, c.Category, c.Type, c.URL, boolToInt(c.VerifyTLS), c.ConfigData,
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, c.ID, c.Name, c.Category, c.Type, c.URL, nilToStr(c.Owner), boolToInt(c.VerifyTLS), c.ConfigData,
 		boolToInt(c.Enabled), c.Status, c.StatusMessage, nilToStr(c.LastSyncAt),
 		// database/sql converts a nil *int argument to SQL NULL automatically.
 		c.ScheduleSeconds, nilToStr(c.NextRunAt), c.LastSyncDurationMs, c.LastSyncError, c.RetryCount,
@@ -93,10 +94,10 @@ func (s *Store) CreateConnector(ctx context.Context, c *ConnectorRecord) error {
 func (s *Store) GetConnector(ctx context.Context, id string) (*ConnectorRecord, error) {
 	c := &ConnectorRecord{}
 	var verifyTLS, enabled int
-	var lastSyncAt, nextRunAt, lastSyncError sql.NullString
+	var owner, lastSyncAt, nextRunAt, lastSyncError sql.NullString
 	var scheduleSeconds, lastSyncDurationMs sql.NullInt64
 	err := s.db.QueryRowContext(ctx, `SELECT `+connectorColumns+` FROM connectors WHERE id = ?
-	`, id).Scan(&c.ID, &c.Name, &c.Category, &c.Type, &c.URL, &verifyTLS, &c.ConfigData,
+	`, id).Scan(&c.ID, &c.Name, &c.Category, &c.Type, &c.URL, &owner, &verifyTLS, &c.ConfigData,
 		&enabled, &c.Status, &c.StatusMessage, &lastSyncAt,
 		&scheduleSeconds, &nextRunAt, &lastSyncDurationMs, &lastSyncError, &c.RetryCount,
 		&c.CreatedAt, &c.UpdatedAt)
@@ -107,6 +108,7 @@ func (s *Store) GetConnector(ctx context.Context, id string) (*ConnectorRecord, 
 		return nil, fmt.Errorf("get connector: %w", err)
 	}
 	c.VerifyTLS = verifyTLS != 0
+	c.Owner = nullStrToStr(owner)
 	c.Enabled = enabled != 0
 	c.LastSyncAt = nullStrToStr(lastSyncAt)
 	c.NextRunAt = nullStrToStr(nextRunAt)
@@ -129,6 +131,9 @@ func (s *Store) UpdateConnector(ctx context.Context, id string, updates map[stri
 			args = append(args, v)
 		case "url":
 			parts = append(parts, "url = ?")
+			args = append(args, v)
+		case "owner":
+			parts = append(parts, "owner = ?")
 			args = append(args, v)
 		case "verify_tls":
 			parts = append(parts, "verify_tls = ?")
@@ -376,15 +381,16 @@ func scanConnectors(rows *sql.Rows) ([]ConnectorRecord, int, error) {
 	for rows.Next() {
 		var c ConnectorRecord
 		var verifyTLS, enabled int
-		var lastSyncAt, nextRunAt, lastSyncError sql.NullString
+		var owner, lastSyncAt, nextRunAt, lastSyncError sql.NullString
 		var scheduleSeconds, lastSyncDurationMs sql.NullInt64
-		if err := rows.Scan(&c.ID, &c.Name, &c.Category, &c.Type, &c.URL, &verifyTLS, &c.ConfigData,
+		if err := rows.Scan(&c.ID, &c.Name, &c.Category, &c.Type, &c.URL, &owner, &verifyTLS, &c.ConfigData,
 			&enabled, &c.Status, &c.StatusMessage, &lastSyncAt,
 			&scheduleSeconds, &nextRunAt, &lastSyncDurationMs, &lastSyncError, &c.RetryCount,
 			&c.CreatedAt, &c.UpdatedAt); err != nil {
 			return nil, 0, fmt.Errorf("scan connector: %w", err)
 		}
 		c.VerifyTLS = verifyTLS != 0
+		c.Owner = nullStrToStr(owner)
 		c.Enabled = enabled != 0
 		c.LastSyncAt = nullStrToStr(lastSyncAt)
 		c.NextRunAt = nullStrToStr(nextRunAt)

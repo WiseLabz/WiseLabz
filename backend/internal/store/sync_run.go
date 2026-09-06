@@ -64,7 +64,7 @@ func (s *Store) ListSyncRunsByConnector(ctx context.Context, connectorID string,
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, connector_id, started_at, finished_at, duration_ms, status, error, attempt, changes_count, alerts_count
 		FROM sync_runs WHERE connector_id = ?
-		ORDER BY started_at DESC LIMIT ?
+		ORDER BY started_at DESC, finished_at DESC, id DESC LIMIT ?
 	`, connectorID, limit)
 	if err != nil {
 		return nil, fmt.Errorf("list sync runs: %w", err)
