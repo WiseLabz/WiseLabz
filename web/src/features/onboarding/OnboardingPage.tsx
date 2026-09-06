@@ -86,7 +86,7 @@ function Stepper({ current }: { current: Step }) {
               className={
                 'flex h-5 items-center gap-1.5 rounded-full px-2 text-2xs font-medium ' +
                 (state === 'current'
-                  ? 'bg-signal-tint text-signal'
+                  ? 'bg-accent-primary-tint text-accent-primary'
                   : state === 'done'
                     ? 'text-ok'
                     : 'text-ink-faint')
@@ -106,8 +106,8 @@ function Stepper({ current }: { current: Step }) {
 function WelcomeStep({ onStart }: { onStart: () => void }) {
   const { t } = useTranslation();
   return (
-    <section aria-labelledby="ob-welcome-title" className="rounded-lg border border-line bg-surface p-6 shadow-(--shadow-pop)">
-      <p className="font-mono text-2xs uppercase tracking-wider text-signal">{t('onboarding.welcomeKicker')}</p>
+    <section aria-labelledby="ob-welcome-title" className="rounded-lg border border-line bg-surface p-6">
+      <p className="font-mono text-2xs text-accent-primary">{t('onboarding.welcomeKicker')}</p>
       <h1 id="ob-welcome-title" className="mt-2 text-2xl font-semibold tracking-tight text-ink">
         {t('onboarding.title')}
       </h1>
@@ -115,7 +115,7 @@ function WelcomeStep({ onStart }: { onStart: () => void }) {
       <ul className="mt-5 space-y-2.5">
         {['point1', 'point2', 'point3'].map((p) => (
           <li key={p} className="flex items-start gap-2.5 text-sm text-ink">
-            <CheckIcon size={15} className="mt-0.5 shrink-0 text-signal" />
+            <CheckIcon size={15} className="mt-0.5 shrink-0 text-accent-primary" />
             {t(`onboarding.welcome.${p}`)}
           </li>
         ))}
@@ -157,9 +157,9 @@ function SyncStep({
   const percent = job?.percent ?? 0;
 
   return (
-    <section aria-labelledby="ob-sync-title" className="rounded-lg border border-line bg-surface p-6 shadow-(--shadow-pop)">
+    <section aria-labelledby="ob-sync-title" className="rounded-lg border border-line bg-surface p-6">
       <div className="flex items-center gap-2.5">
-        <SyncIcon size={18} className={done ? 'text-ok' : failed ? 'text-err' : 'animate-spin text-signal motion-reduce:animate-none'} />
+        <SyncIcon size={18} className={done ? 'text-ok' : failed ? 'text-err' : 'animate-spin text-accent-primary motion-reduce:animate-none'} />
         <h1 id="ob-sync-title" className="text-lg font-semibold tracking-tight text-ink">
           {done ? t('onboarding.sync.complete') : failed ? t('onboarding.sync.failed') : t('onboarding.sync.title')}
         </h1>
@@ -168,7 +168,7 @@ function SyncStep({
       <div className="mt-4">
         <div className="h-1.5 w-full overflow-hidden rounded-full bg-canvas-sunken" role="progressbar" aria-valuenow={percent} aria-valuemin={0} aria-valuemax={100}>
           <div
-            className="h-full rounded-full bg-signal transition-[width] duration-300"
+            className="h-full rounded-full bg-accent-primary transition-[width] duration-300"
             style={{ width: `${done ? 100 : percent}%`, backgroundColor: done ? 'var(--color-ok)' : failed ? 'var(--color-err)' : undefined }}
           />
         </div>
@@ -199,7 +199,7 @@ function SyncStep({
 function DoneStep({ onDashboard, onAddAnother }: { onDashboard: () => void; onAddAnother: () => void }) {
   const { t } = useTranslation();
   return (
-    <section aria-labelledby="ob-done-title" className="rounded-lg border border-line bg-surface p-6 shadow-(--shadow-pop)">
+    <section aria-labelledby="ob-done-title" className="rounded-lg border border-line bg-surface p-6">
       <span className="flex h-9 w-9 items-center justify-center rounded-full bg-ok-tint text-ok">
         <CheckIcon size={18} />
       </span>

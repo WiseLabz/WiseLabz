@@ -136,8 +136,8 @@ function Stat({
 }) {
   return (
     <Panel className="p-4">
-      <p className="mb-2 flex items-center gap-1.5 font-mono text-2xs uppercase tracking-[0.16em] text-ink-faint">
-        <span className="text-signal">{icon}</span>
+      <p className="mb-2 flex items-center gap-1.5 font-mono text-2xs text-ink-faint">
+        <span className="text-accent-primary">{icon}</span>
         {label}
       </p>
       {value}

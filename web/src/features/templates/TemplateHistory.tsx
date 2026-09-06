@@ -23,8 +23,8 @@ const TRIGGER: Record<
   TemplateVersionMetaTrigger,
   { Icon: React.ComponentType<{ size?: number }>; tone: string }
 > = {
-  save: { Icon: CheckIcon, tone: 'var(--color-signal)' },
-  restore: { Icon: RestoreIcon, tone: 'var(--color-signal-bright)' },
+  save: { Icon: CheckIcon, tone: 'var(--color-accent-primary)' },
+  restore: { Icon: RestoreIcon, tone: 'var(--color-accent-secondary-bright)' },
 };
 
 function versionContent(version?: TemplateVersion): string {
@@ -104,7 +104,7 @@ export function TemplateHistory({
                 className={cn(
                   'flex w-full items-center gap-2.5 rounded-md border px-2.5 py-2 text-left transition-colors',
                   active
-                    ? 'border-signal-soft bg-signal-tint'
+                    ? 'border-accent-primary-soft bg-accent-primary-tint'
                     : 'border-transparent hover:bg-surface-raised'
                 )}
               >

@@ -18,12 +18,12 @@ export function DocTree({ tree }: { tree: DocNode }) {
           cn(
             'flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm font-medium transition-colors',
             isActive
-              ? 'bg-signal-tint text-ink'
+              ? 'bg-accent-primary-tint text-ink'
               : 'text-ink-muted hover:bg-surface-raised hover:text-ink'
           )
         }
       >
-        <LayersIcon size={16} className="text-signal-bright" />
+        <LayersIcon size={16} className="text-accent-primary-bright" />
         {tree.title}
       </NavLink>
 
@@ -36,7 +36,7 @@ export function DocTree({ tree }: { tree: DocNode }) {
               cn(
                 'group flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm transition-colors',
                 isActive
-                  ? 'bg-signal-tint text-ink'
+                  ? 'bg-accent-primary-tint text-ink'
                   : 'text-ink-muted hover:bg-surface-raised hover:text-ink'
               )
             }

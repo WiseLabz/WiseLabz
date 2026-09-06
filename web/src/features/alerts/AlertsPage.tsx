@@ -124,7 +124,7 @@ export function AlertsPage() {
                       <p className="mt-1 text-sm leading-relaxed text-ink-muted">{a.description}</p>
                     )}
                     <p className="mt-1.5 font-mono text-2xs text-ink-faint">
-                      <span className="text-signal-bright">{a.serviceName}</span> ·{' '}
+                      <span className="text-accent-secondary-bright">{a.serviceName}</span> ·{' '}
                       {t('common.ago', { time: relativeTime(a.createdAt) })}
                     </p>
                   </div>

@@ -99,7 +99,7 @@ export function ChangeDetailPage() {
                     <SeverityTag severity={data.severity} />
                     <span className="font-mono text-2xs text-ink-faint">{data.changeType}</span>
                     {data.willTriggerAi && (
-                      <span className="inline-flex items-center gap-1 rounded bg-signal-tint px-1.5 py-0.5 text-2xs font-semibold text-signal">
+                      <span className="inline-flex items-center gap-1 rounded bg-accent-primary-tint px-1.5 py-0.5 text-2xs font-medium text-accent-primary">
                         <SparklesIcon size={11} /> {t('changes.aiUpdateQueued')}
                       </span>
                     )}
@@ -108,7 +108,7 @@ export function ChangeDetailPage() {
                     {data.summary}
                   </h1>
                   <p className="mt-1 font-mono text-2xs text-ink-faint">
-                    <span className="text-signal-bright">{data.serviceName}</span> ·{' '}
+                    <span className="text-accent-secondary-bright">{data.serviceName}</span> ·{' '}
                     {t('changes.detected', { date: fullDate(data.detectedAt) })}
                   </p>
                 </div>
@@ -118,14 +118,14 @@ export function ChangeDetailPage() {
 
                   {data.affectedDocIds && data.affectedDocIds.length > 0 && (
                     <div className="mt-4 flex flex-wrap items-center gap-2">
-                      <span className="text-2xs uppercase tracking-wider text-ink-faint">
+                      <span className="text-2xs text-ink-faint">
                         {t('changes.affectedDocs')}
                       </span>
                       {data.affectedDocIds.map((id) => (
                         <button
                           key={id}
                           onClick={() => navigate(`/docs/${id}`)}
-                          className="inline-flex items-center gap-1.5 rounded-md border border-line-soft bg-canvas-sunken px-2 py-1 text-xs text-ink-muted transition-colors hover:border-signal-soft hover:text-ink"
+                          className="inline-flex items-center gap-1.5 rounded-md border border-line-soft bg-canvas-sunken px-2 py-1 text-xs text-ink-muted transition-colors hover:border-accent-secondary-soft hover:text-accent-secondary-bright"
                         >
                           <FileTextIcon size={13} />
                           {id}

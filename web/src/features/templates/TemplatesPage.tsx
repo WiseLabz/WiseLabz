@@ -170,7 +170,7 @@ export function TemplatesPage() {
           }}
         >
           <label className="block">
-            <span className="mb-1 block text-2xs uppercase tracking-wider text-ink-faint">
+            <span className="mb-1 block text-xs text-ink-muted">
               {t('templates.nameLabel')}
             </span>
             <input
@@ -178,7 +178,7 @@ export function TemplatesPage() {
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
               placeholder={t('templates.namePlaceholder')}
-              className="h-9 w-full rounded-sm border border-line bg-surface px-2.5 text-sm text-ink outline-none placeholder:text-ink-faint focus-visible:border-signal-soft"
+              className="h-9 w-full rounded-sm border border-line bg-surface px-2.5 text-sm text-ink outline-none placeholder:text-ink-faint focus-visible:border-accent-primary-soft"
             />
           </label>
           <div className="mt-5 flex items-center justify-end gap-2">
@@ -226,7 +226,7 @@ export function AppliesToLabel({ template }: { template: Template }) {
     return <span>{t('templates.appliesAny')}</span>;
   }
   return (
-    <span className="text-signal-bright">
+    <span className="text-accent-secondary-bright">
       {cat
         ? t(`templates.category.${cat}`, { defaultValue: cat })
         : t('templates.appliesAnyCategory')}

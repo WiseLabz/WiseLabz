@@ -89,7 +89,7 @@ export function ConnectorForm({
     <div className="space-y-4">
       {/* Step 1 — type */}
       <Panel className="p-5">
-        <p className="mb-3 text-2xs uppercase tracking-wider text-ink-faint">{t('connectors.typeLabel')}</p>
+        <p className="mb-3 text-2xs text-ink-faint">{t('connectors.typeLabel')}</p>
         <div className="grid gap-2 sm:grid-cols-3">
           {schemas.map((s) => (
             <TypeCard
@@ -108,7 +108,7 @@ export function ConnectorForm({
       {/* Step 2 — config */}
       {schema && (
         <Panel className="p-5">
-          <p className="mb-3 text-2xs uppercase tracking-wider text-ink-faint">
+          <p className="mb-3 text-2xs text-ink-faint">
             {t('connectors.configLabel', { name: schema.displayName })}
           </p>
           <div className="space-y-3">
@@ -180,7 +180,7 @@ function TypeCard({
       aria-pressed={active}
       className={
         'flex items-center gap-2.5 rounded-lg border p-3 text-left transition-colors disabled:pointer-events-none disabled:opacity-40 ' +
-        (active ? 'border-signal-soft bg-signal-tint' : 'border-line-soft hover:border-line-strong')
+        (active ? 'border-accent-primary-soft bg-accent-primary-tint' : 'border-line-soft hover:border-line-strong')
       }
     >
       <span className="flex h-8 w-8 items-center justify-center rounded-md bg-canvas-sunken text-ink-faint">
@@ -215,7 +215,7 @@ export function Field({
           aria-checked={!!value}
           onClick={() => onChange(!value)}
           className="relative h-5 w-9 rounded-full transition-colors"
-          style={{ backgroundColor: value ? 'var(--color-signal)' : 'var(--color-line-strong)' }}
+          style={{ backgroundColor: value ? 'var(--color-accent-primary)' : 'var(--color-line-strong)' }}
         >
           <span
             className="absolute top-0.5 h-4 w-4 rounded-full bg-ink transition-[left]"
@@ -233,7 +233,7 @@ export function Field({
         : 'text';
   return (
     <label className="block">
-      <span className="mb-1 block text-2xs uppercase tracking-wider text-ink-faint">
+      <span className="mb-1 block text-2xs text-ink-faint">
         {field.label}
         {field.required && <span className="text-err"> *</span>}
       </span>
@@ -243,7 +243,7 @@ export function Field({
         placeholder={field.placeholder}
         autoComplete={type === 'password' ? 'new-password' : 'off'}
         onChange={(e) => onChange(e.target.value)}
-        className="h-9 w-full rounded-sm border border-line bg-surface px-2.5 text-sm text-ink outline-none placeholder:text-ink-faint focus-visible:border-signal-soft"
+        className="h-9 w-full rounded-sm border border-line bg-surface px-2.5 text-sm text-ink outline-none placeholder:text-ink-faint focus-visible:border-accent-primary-soft"
       />
     </label>
   );

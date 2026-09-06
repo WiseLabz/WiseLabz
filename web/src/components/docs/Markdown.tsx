@@ -26,7 +26,7 @@ const components: Components = {
   strong: ({ children }) => <strong className="font-semibold text-ink">{children}</strong>,
   blockquote: ({ children }) => (
     <blockquote className="my-3 flex gap-2.5 rounded-sm border border-line-soft bg-canvas-sunken px-4 py-2.5 text-sm text-ink-muted">
-      <span className="mt-1.5 h-1.5 w-1.5 shrink-0 bg-signal" />
+      <span className="mt-1.5 h-1.5 w-1.5 shrink-0 bg-accent-primary" />
       <div>{children}</div>
     </blockquote>
   ),
@@ -40,7 +40,7 @@ const components: Components = {
     }
     return (
       <li className="flex gap-2.5 text-sm text-ink-muted">
-        <span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-signal" />
+        <span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-accent-primary" />
         <span>{children}</span>
       </li>
     );
@@ -51,7 +51,7 @@ const components: Components = {
     </pre>
   ),
   code: ({ children }) => (
-    <code className="rounded bg-canvas-sunken px-1.5 py-0.5 font-mono text-[0.85em] text-signal-bright [pre_&]:rounded-none [pre_&]:bg-transparent [pre_&]:px-0 [pre_&]:py-0 [pre_&]:text-[1em] [pre_&]:text-inherit">
+    <code className="rounded bg-canvas-sunken px-1.5 py-0.5 font-mono text-[0.85em] text-accent-primary-bright [pre_&]:rounded-none [pre_&]:bg-transparent [pre_&]:px-0 [pre_&]:py-0 [pre_&]:text-[1em] [pre_&]:text-inherit">
       {children}
     </code>
   ),

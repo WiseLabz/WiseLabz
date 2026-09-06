@@ -185,7 +185,7 @@ export function ChangesPage() {
                   disabled={!isLowRisk(c.severity)}
                   onChange={() => toggleSelected(c.id)}
                   title={isLowRisk(c.severity) ? undefined : t('changes.bulkNotLowRisk')}
-                  className="size-3.5 shrink-0 accent-[var(--color-signal)] disabled:opacity-30"
+                  className="size-3.5 shrink-0 accent-[var(--color-accent-primary)] disabled:opacity-30"
                 />
               )}
               <button
@@ -196,7 +196,7 @@ export function ChangesPage() {
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm text-ink">{c.summary}</p>
                   <p className="flex items-center gap-1.5 font-mono text-2xs text-ink-faint">
-                    <span className="text-signal-bright">{c.serviceName}</span>
+                    <span className="text-accent-secondary-bright">{c.serviceName}</span>
                     <span>·</span>
                     <span>{c.changeType}</span>
                     <span>·</span>
@@ -204,7 +204,7 @@ export function ChangesPage() {
                   </p>
                 </div>
                 {c.willTriggerAi && (
-                  <span className="hidden rounded bg-signal-tint px-1.5 py-0.5 text-2xs font-semibold text-signal sm:block">
+                  <span className="hidden rounded bg-accent-primary-tint px-1.5 py-0.5 text-2xs font-medium text-accent-primary sm:block">
                     {t('changes.aiUpdate')}
                   </span>
                 )}

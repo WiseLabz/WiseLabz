@@ -61,7 +61,7 @@ export function EventRoutingTable({
       <table className="w-full border-collapse text-sm">
         <thead>
           <tr className="border-b border-line-soft">
-            <th className="py-2 pr-4 text-left font-mono text-2xs uppercase tracking-[0.16em] text-ink-faint">
+            <th className="py-2 pr-4 text-left font-mono text-2xs text-ink-faint">
               {t('settings.notifications.event')}
             </th>
             {channels.map((c) => (
@@ -78,7 +78,7 @@ export function EventRoutingTable({
                 </span>
               </th>
             ))}
-            <th className="px-3 py-2 text-right font-mono text-2xs uppercase tracking-[0.16em] text-ink-faint">
+            <th className="px-3 py-2 text-right font-mono text-2xs text-ink-faint">
               {t('settings.notifications.minSeverity')}
             </th>
           </tr>

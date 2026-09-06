@@ -17,9 +17,9 @@ import { Button } from '../../components/ui/Button';
 /** Centered brand splash shown while the session resolves. */
 export function Splash() {
   return (
-    <div className="flex h-screen w-screen items-center justify-center bg-canvas">
-      <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-signal shadow-(--shadow-raised)">
-        <span className="font-mono text-lg font-bold text-signal-ink">W</span>
+    <div className="flex min-h-dvh w-screen items-center justify-center bg-canvas">
+      <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-accent-primary shadow-(--shadow-raised)">
+        <span className="font-mono text-lg font-bold text-accent-primary-ink">W</span>
       </div>
     </div>
   );

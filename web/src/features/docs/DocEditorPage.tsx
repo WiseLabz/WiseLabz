@@ -46,7 +46,7 @@ import {
 const cmTheme = EditorView.theme(
   {
     '&': { backgroundColor: 'transparent', color: 'var(--color-ink)', fontSize: '13px' },
-    '.cm-content': { fontFamily: 'var(--font-mono, monospace)', caretColor: 'var(--color-signal)' },
+    '.cm-content': { fontFamily: 'var(--font-mono, monospace)', caretColor: 'var(--color-accent-primary)' },
     '.cm-gutters': {
       backgroundColor: 'transparent',
       color: 'var(--color-ink-faint)',
@@ -55,7 +55,7 @@ const cmTheme = EditorView.theme(
     '.cm-activeLine': { backgroundColor: 'var(--color-surface-raised)' },
     '.cm-activeLineGutter': { backgroundColor: 'var(--color-surface-raised)' },
     '&.cm-focused': { outline: 'none' },
-    '.cm-selectionBackground, ::selection': { backgroundColor: 'var(--color-signal-tint)' },
+    '.cm-selectionBackground, ::selection': { backgroundColor: 'var(--color-accent-primary-tint)' },
   },
   { dark: true }
 );
@@ -181,10 +181,10 @@ export function DocEditorPage() {
       {/* Toolbar */}
       <header className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2.5">
-          <FileTextIcon size={18} className="text-signal" />
+          <FileTextIcon size={18} className="text-accent-primary" />
           <h1 className="text-lg font-semibold tracking-tight text-ink">{doc.data.title}</h1>
           {provenance === 'ai-draft' && (
-            <span className="inline-flex items-center gap-1 rounded bg-signal-tint px-1.5 py-0.5 text-2xs font-medium text-signal">
+            <span className="inline-flex items-center gap-1 rounded bg-accent-primary-tint px-1.5 py-0.5 text-2xs font-medium text-accent-primary">
               <SparklesIcon size={11} /> {t('docs.editor.aiDrafted')}
             </span>
           )}
@@ -249,7 +249,7 @@ export function DocEditorPage() {
         <Panel className="mb-4 p-4">
           <div className="mb-3 flex items-center justify-between">
             <span className="flex items-center gap-2 text-sm font-semibold text-ink">
-              <SparklesIcon size={15} className="text-signal" />
+              <SparklesIcon size={15} className="text-accent-primary" />
               {t('docs.editor.aiReviewTitle')}
             </span>
             <div className="flex items-center gap-2">
@@ -283,7 +283,7 @@ export function DocEditorPage() {
       {/* Editor + preview */}
       <div className="grid gap-4 lg:grid-cols-2">
         <Panel className="overflow-hidden">
-          <div className="border-b border-line-soft px-3 py-2 text-2xs uppercase tracking-wider text-ink-faint">
+          <div className="border-b border-line-soft px-3 py-2 text-2xs text-ink-faint">
             {t('docs.editor.markdownLabel')}
           </div>
           <CodeMirror
@@ -296,7 +296,7 @@ export function DocEditorPage() {
           />
         </Panel>
         <Panel className="overflow-hidden">
-          <div className="border-b border-line-soft px-3 py-2 text-2xs uppercase tracking-wider text-ink-faint">
+          <div className="border-b border-line-soft px-3 py-2 text-2xs text-ink-faint">
             {t('docs.editor.previewLabel')}
           </div>
           <div className="max-h-[70vh] overflow-y-auto px-5 py-4">

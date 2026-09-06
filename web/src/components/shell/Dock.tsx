@@ -34,7 +34,7 @@ export function Dock() {
             className={({ isActive }) =>
               cn(
                 'group relative flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors duration-150',
-                isActive ? 'text-signal-ink' : 'text-ink-muted hover:bg-surface hover:text-ink'
+                isActive ? 'text-accent-primary-ink' : 'text-ink-muted hover:bg-surface hover:text-ink'
               )
             }
           >
@@ -43,7 +43,7 @@ export function Dock() {
                 {isActive && (
                   <motion.span
                     layoutId="dock-pill"
-                    className="absolute inset-0 -z-10 rounded-md bg-signal shadow-(--shadow-raised)"
+                    className="absolute inset-0 -z-10 rounded-md bg-accent-primary shadow-(--shadow-raised)"
                     transition={{ type: 'spring', stiffness: 500, damping: 38 }}
                   />
                 )}

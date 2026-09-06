@@ -168,7 +168,7 @@ export function ServiceDetailPage() {
                     updateSchedule.mutate(e.target.value === '' ? null : Number(e.target.value))
                   }
                   disabled={updateSchedule.isPending}
-                  className="h-8 appearance-none rounded-sm border border-line bg-surface pl-2.5 pr-7 text-xs text-ink outline-none focus-visible:border-signal-soft"
+                  className="h-8 appearance-none rounded-sm border border-line bg-surface pl-2.5 pr-7 text-xs text-ink outline-none focus-visible:border-accent-primary-soft"
                 >
                   {SCHEDULE_OPTIONS.map((opt) => (
                     <option key={opt.value ?? 'off'} value={opt.value ?? ''}>
@@ -386,7 +386,7 @@ function LinkedDocPanel({
           onClick={() => navigate(`/docs/${doc.data.docId}`)}
           className="flex w-full items-center gap-2.5 rounded-md border border-line-soft p-3 text-left transition-colors hover:border-line-strong"
         >
-          <FileTextIcon size={16} className="shrink-0 text-signal" />
+          <FileTextIcon size={16} className="shrink-0 text-accent-secondary" />
           <span className="flex-1 text-sm text-ink">{doc.data.title}</span>
           <ArrowRightIcon size={14} className="text-ink-faint" />
         </button>
@@ -400,7 +400,7 @@ function LinkedDocPanel({
       >
         <div className="space-y-3">
           <label className="block">
-            <span className="mb-1 block text-2xs uppercase tracking-wider text-ink-faint">
+            <span className="mb-1 block text-2xs text-ink-faint">
               {t('services.detail.templateLabel')}
             </span>
             <div className="relative">
@@ -408,7 +408,7 @@ function LinkedDocPanel({
                 value={templateId}
                 onChange={(e) => setTemplateId(e.target.value)}
                 disabled={candidates.length === 0}
-                className="h-9 w-full appearance-none rounded-sm border border-line bg-surface px-2.5 pr-8 text-sm text-ink outline-none focus-visible:border-signal-soft"
+                className="h-9 w-full appearance-none rounded-sm border border-line bg-surface px-2.5 pr-8 text-sm text-ink outline-none focus-visible:border-accent-primary-soft"
               >
                 {candidates.length === 0 ? (
                   <option value="">{t('services.detail.noTemplates')}</option>
@@ -465,7 +465,7 @@ function ActivityPanel({
         <ul className="space-y-2.5">
           {activity.slice(0, 8).map((a) => (
             <li key={a.id} className="flex items-start gap-2.5">
-              <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-signal" aria-hidden />
+              <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-accent-primary" aria-hidden />
               <span className="flex-1">
                 <span className="block text-xs text-ink">{a.label}</span>
                 {a.detail && <span className="text-2xs text-ink-faint">{a.detail}</span>}

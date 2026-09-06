@@ -97,7 +97,7 @@ export function ServicesPage() {
           <div className="overflow-x-auto">
           <table className="w-full min-w-140 text-sm">
             <thead>
-              <tr className="border-b border-line-soft text-left text-2xs uppercase tracking-wider text-ink-faint">
+              <tr className="border-b border-line-soft text-left text-2xs text-ink-faint">
                 <th className="px-4 py-2.5 font-semibold">{t('services.col.service')}</th>
                 <th className="hidden px-4 py-2.5 font-semibold sm:table-cell">
                   {t('services.col.category')}
@@ -132,7 +132,7 @@ export function ServicesPage() {
                           <p className="flex items-center gap-2 font-medium text-ink">
                             <button
                               onClick={() => navigate(`/services/${c.id}`)}
-                              className="rounded-sm text-left transition-colors hover:text-signal focus-visible:outline focus-visible:outline-signal-soft"
+                              className="rounded-sm text-left transition-colors hover:text-accent-secondary focus-visible:outline focus-visible:outline-accent-primary-soft"
                             >
                               {c.name}
                             </button>

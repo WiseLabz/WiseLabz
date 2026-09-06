@@ -34,7 +34,7 @@ export function StepUp({
             }}
             className="rounded-md border border-line-soft bg-canvas-sunken p-3"
         >
-            <label className="mb-1.5 block text-2xs uppercase tracking-wider text-ink-faint">
+            <label className="mb-1.5 block text-2xs text-ink-faint">
                 {label}
             </label>
             <div className="flex items-center gap-2">
@@ -45,7 +45,7 @@ export function StepUp({
                     value={value}
                     onChange={(e) => setValue(e.target.value)}
                     autoFocus
-                    className="h-9 flex-1 rounded-sm border border-line bg-surface px-2.5 text-sm text-ink outline-none focus-visible:border-signal-soft"
+                    className="h-9 flex-1 rounded-sm border border-line bg-surface px-2.5 text-sm text-ink outline-none focus-visible:border-accent-primary-soft"
                 />
                 <Button type="submit" variant="secondary" size="md" disabled={!value || elevate.isPending}>
                     {elevate.isPending ? 'Verifying…' : 'Verify'}

@@ -14,7 +14,7 @@ export function ShellDock({ children }: { children: ReactNode }) {
     <div className="flex h-dvh w-full flex-col overflow-hidden bg-canvas text-ink">
       <a
         href="#main-content"
-        className="sr-only focus-visible:not-sr-only focus-visible:fixed focus-visible:left-3 focus-visible:top-3 focus-visible:z-(--z-toast) focus-visible:rounded-md focus-visible:bg-signal focus-visible:px-3 focus-visible:py-2 focus-visible:text-sm focus-visible:font-medium focus-visible:text-signal-ink"
+        className="sr-only focus-visible:not-sr-only focus-visible:fixed focus-visible:left-3 focus-visible:top-3 focus-visible:z-(--z-toast) focus-visible:rounded-md focus-visible:bg-accent-primary focus-visible:px-3 focus-visible:py-2 focus-visible:text-sm focus-visible:font-medium focus-visible:text-accent-primary-ink"
       >
         {t('a11y.skipToContent')}
       </a>
