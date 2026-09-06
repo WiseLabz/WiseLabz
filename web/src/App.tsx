@@ -89,7 +89,7 @@ const router = createBrowserRouter([
       { path: 'docs/all', element: <AllDocsPage /> },
       { path: 'docs/:docId', element: <DocsPage /> },
       { path: 'docs/:docId/edit', element: <RequireRole role="operator"><DocEditorPage /></RequireRole> },
-      { path: 'docs/:docId/history', element: <DocsPage initialTab="history" /> },
+      { path: 'docs/:docId/history', element: <DocsPage /> },
       { path: 'changes', element: <ChangesPage /> },
       { path: 'changes/:changeId', element: <ChangeDetailPage /> },
       { path: 'alerts', element: <AlertsPage /> },

@@ -4,13 +4,14 @@
  * diff. The diff is the payoff — it shows exactly what a sync (or an editor)
  * changed between revisions, the same view the changes feed links into.
  */
-import { useMemo, useState } from 'react';
-import { Link, useParams, useNavigate } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
+import { Link, useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { AnimatePresence, motion } from 'motion/react';
 import { useGetDocsTree, useGetDocsDocId } from '../../api/generated/docs/docs';
 import { Panel } from '../../components/ui/Panel';
 import { Button } from '../../components/ui/Button';
+import { IconButton } from '../../components/ui/Button';
 import { RoleGate } from '../../components/ui/RoleGate';
 import { Skeleton, SkeletonRows, ErrorState, EmptyState } from '../../components/ui/states';
 import { Markdown } from '../../components/docs/Markdown';
@@ -18,21 +19,47 @@ import { DocTree } from '../../components/docs/DocTree';
 import { DocHistory } from './DocHistory';
 import { cn } from '../../lib/cn';
 import { relativeTime, fullDate } from '../../lib/time';
-import { FileTextIcon, HistoryIcon, SparklesIcon, EditIcon, SearchIcon } from '../../components/icons';
+import {
+  FileTextIcon,
+  HistoryIcon,
+  SparklesIcon,
+  EditIcon,
+  SearchIcon,
+  MenuIcon,
+  XIcon,
+} from '../../components/icons';
 
 type Tab = 'read' | 'history';
 
-export function DocsPage({ initialTab = 'read' }: { initialTab?: Tab } = {}) {
+export function DocsPage() {
   const { t } = useTranslation();
   const { docId } = useParams<{ docId: string }>();
   const tree = useGetDocsTree();
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   // Default to the lab root when no doc is selected in the URL.
   const activeId = docId ?? tree.data?.docId;
 
+  useEffect(() => {
+    if (!drawerOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setDrawerOpen(false);
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [drawerOpen]);
+
+  const treeContent = tree.isLoading ? (
+    <SkeletonRows rows={6} />
+  ) : tree.isError || !tree.data ? (
+    <ErrorState description={t('docs.treeLoadError')} onRetry={() => tree.refetch()} />
+  ) : (
+    <DocTree tree={tree.data} />
+  );
+
   return (
     <div className="mx-auto flex max-w-330 gap-6 px-6 py-6">
-      {/* Tree */}
+      {/* Tree — desktop */}
       <aside className="hidden w-60 shrink-0 lg:block">
         <Panel className="sticky top-6 p-2">
           <Link
@@ -42,21 +69,61 @@ export function DocsPage({ initialTab = 'read' }: { initialTab?: Tab } = {}) {
             <SearchIcon size={14} />
             {t('docs.searchAllLink')}
           </Link>
-          {tree.isLoading ? (
-            <SkeletonRows rows={6} />
-          ) : tree.isError || !tree.data ? (
-            <ErrorState description={t('docs.treeLoadError')} onRetry={() => tree.refetch()} />
-          ) : (
-            <DocTree tree={tree.data} />
-          )}
+          {treeContent}
         </Panel>
       </aside>
+
+      {/* Tree — mobile drawer */}
+      <button
+        onClick={() => setDrawerOpen(true)}
+        aria-label={t('docs.browseDocs')}
+        className="fixed bottom-30 right-4 z-(--z-sticky) flex h-11 w-11 items-center justify-center rounded-full border border-line bg-surface-raised text-ink shadow-(--shadow-pop) lg:hidden"
+      >
+        <MenuIcon size={18} />
+      </button>
+      <AnimatePresence>
+        {drawerOpen && (
+          <>
+            <motion.div
+              className="fixed inset-0 z-(--z-overlay) bg-canvas/70 lg:hidden"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setDrawerOpen(false)}
+            />
+            <motion.div
+              role="dialog"
+              aria-modal="true"
+              aria-label={t('docs.browseDocs')}
+              className="fixed inset-y-0 left-0 z-(--z-overlay) w-72 max-w-[85vw] overflow-y-auto bg-surface-overlay p-2 shadow-(--shadow-pop) lg:hidden"
+              initial={{ x: '-100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '-100%' }}
+              transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+            >
+              <div className="mb-1 flex items-center justify-between px-1 py-1">
+                <Link
+                  to="/docs/all"
+                  onClick={() => setDrawerOpen(false)}
+                  className="flex items-center gap-2 rounded-md px-2.5 py-2 text-xs text-ink-muted transition-colors hover:bg-surface-raised hover:text-ink"
+                >
+                  <SearchIcon size={14} />
+                  {t('docs.searchAllLink')}
+                </Link>
+                <IconButton label={t('docs.closeDocTree')} onClick={() => setDrawerOpen(false)}>
+                  <XIcon size={16} />
+                </IconButton>
+              </div>
+              <div onClick={() => setDrawerOpen(false)}>{treeContent}</div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
 
       {/* Content */}
       <section className="min-w-0 flex-1">
         {activeId ? (
-          // key by docId so per-doc UI state (active tab) resets on navigation
-          <DocReader key={activeId} docId={activeId} initialTab={initialTab} />
+          <DocReader key={activeId} docId={activeId} />
         ) : (
           <Panel className="min-h-[60vh]">
             <EmptyState
@@ -71,11 +138,12 @@ export function DocsPage({ initialTab = 'read' }: { initialTab?: Tab } = {}) {
   );
 }
 
-function DocReader({ docId, initialTab = 'read' }: { docId: string; initialTab?: Tab }) {
+function DocReader({ docId }: { docId: string }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const location = useLocation();
   const { data, isLoading, isError, refetch } = useGetDocsDocId(docId);
-  const [tab, setTab] = useState<Tab>(initialTab);
+  const tab: Tab = location.pathname.endsWith('/history') ? 'history' : 'read';
 
   const triggerLabel = useMemo(() => {
     if (!data) return null;
@@ -116,17 +184,20 @@ function DocReader({ docId, initialTab = 'read' }: { docId: string; initialTab?:
         </div>
 
         <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1 rounded-lg border border-line-soft bg-canvas-sunken p-0.5">
+          <div
+            role="tablist"
+            className="flex items-center gap-1 rounded-lg border border-line-soft bg-canvas-sunken p-0.5"
+          >
             <TabButton
               active={tab === 'read'}
-              onClick={() => setTab('read')}
+              onClick={() => navigate(`/docs/${docId}`)}
               icon={<FileTextIcon size={14} />}
             >
               {t('docs.read')}
             </TabButton>
             <TabButton
               active={tab === 'history'}
-              onClick={() => setTab('history')}
+              onClick={() => navigate(`/docs/${docId}/history`)}
               icon={<HistoryIcon size={14} />}
             >
               {t('docs.history')}
@@ -192,6 +263,8 @@ function TabButton({
 }) {
   return (
     <button
+      role="tab"
+      aria-selected={active}
       onClick={onClick}
       className={cn(
         'relative flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors',

@@ -64,11 +64,17 @@ export function ServicesPage() {
         <div className="flex items-center gap-2">
           <div className="flex h-9 items-center gap-2 rounded-md border border-line-soft bg-surface px-2.5">
             <SearchIcon size={15} className="text-ink-faint" />
+            <label htmlFor="services-filter" className="sr-only">
+              {t('services.filterPlaceholder')}
+            </label>
             <input
+              id="services-filter"
+              name="services-filter"
+              autoComplete="off"
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder={t('services.filterPlaceholder')}
-              className="w-44 bg-transparent text-sm text-ink outline-none placeholder:text-ink-faint"
+              className="w-36 bg-transparent text-sm text-ink placeholder:text-ink-faint sm:w-44"
             />
           </div>
           <SavedViewsMenu surface="services" filters={{ q }} onApply={(f) => setQ(f.q ?? '')} />
@@ -91,7 +97,8 @@ export function ServicesPage() {
             description={t('services.noMatchDesc', { query: q })}
           />
         ) : (
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-140 text-sm">
             <thead>
               <tr className="border-b border-line-soft text-left text-2xs uppercase tracking-wider text-ink-faint">
                 <th className="px-4 py-2.5 font-semibold">{t('services.col.service')}</th>
@@ -161,7 +168,7 @@ export function ServicesPage() {
                     </td>
                     <td className="px-4 py-3 text-right">
                       {canMutate && (
-                        <div className="flex items-center justify-end gap-1 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+                        <div className="flex items-center justify-end gap-1 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:focus-within:opacity-100">
                           <Button
                             size="sm"
                             variant="ghost"
@@ -193,6 +200,7 @@ export function ServicesPage() {
               })}
             </tbody>
           </table>
+          </div>
         )}
       </Panel>
 

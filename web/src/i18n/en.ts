@@ -8,6 +8,9 @@ export const en = {
     name: 'WiseLabz',
     tagline: 'Wise homelab documentation',
   },
+  a11y: {
+    skipToContent: 'Skip to content',
+  },
   common: {
     save: 'Save',
     cancel: 'Cancel',
@@ -143,6 +146,8 @@ export const en = {
     editLayout: 'Edit layout',
     editHint: 'Drag to reorder. Toggle widgets on or off. Your layout is saved automatically.',
     dragReorder: 'Drag to reorder',
+    moveUp: 'Move {{title}} up',
+    moveDown: 'Move {{title}} down',
     widgetFailed: '{{title}} failed.',
     readout: {
       services: 'services',
@@ -306,6 +311,7 @@ export const en = {
     detected: 'detected {{date}}',
     affectedDocs: 'Affected docs',
     bulkSelectedCount: '{{count}} selected',
+    bulkSelectLabel: 'Select change: {{summary}}',
     bulkNotLowRisk: 'Critical changes must be reviewed individually',
     bulkAllSucceeded: '{{count}} change(s) resolved',
     bulkPartial: '{{succeeded}} succeeded, {{failed}} failed: {{reason}}',
@@ -410,6 +416,8 @@ export const en = {
       error: "Couldn't restore that revision.",
     },
     searchAllLink: 'Search all docs',
+    browseDocs: 'Browse docs',
+    closeDocTree: 'Close doc list',
     allDocs: {
       title: 'All docs',
       subtitle: 'Search every document in your lab.',

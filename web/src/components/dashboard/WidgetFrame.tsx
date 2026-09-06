@@ -32,9 +32,9 @@ export function WidgetFrame({
       <div className="flex items-center justify-between gap-3 border-b border-line-soft px-4 py-2.5">
         <div className="flex items-center gap-2 text-ink-faint">
           <span className="text-signal">{icon}</span>
-          <h3 className="font-mono text-2xs uppercase tracking-[0.16em] text-ink-muted">
+          <h2 className="font-mono text-2xs uppercase tracking-[0.16em] text-ink-muted">
             {title}
-          </h3>
+          </h2>
         </div>
         {editing ? (
           <div className="flex items-center gap-0.5">
