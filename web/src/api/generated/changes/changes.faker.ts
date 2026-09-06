@@ -95,6 +95,17 @@ export const getGetChangesChangeIdResponseMock = (): ChangeDetail => ({
       ),
       undefined,
     ]),
+    provenance: faker.helpers.arrayElement([
+      Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() => ({
+        snapshotPath: faker.string.alpha({ length: { min: 10, max: 20 } }),
+        templateSection: faker.string.alpha({ length: { min: 10, max: 20 } }),
+        diffLines: Array.from(
+          { length: faker.number.int({ min: 1, max: 4 }) },
+          (_, i) => i + 1
+        ).map(() => faker.number.int({ min: 1 })),
+      })),
+      undefined,
+    ]),
   },
 });
 
@@ -160,6 +171,17 @@ export const getPostChangesChangeIdAckResponseMock = (): ChangeDetail => ({
       ),
       undefined,
     ]),
+    provenance: faker.helpers.arrayElement([
+      Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() => ({
+        snapshotPath: faker.string.alpha({ length: { min: 10, max: 20 } }),
+        templateSection: faker.string.alpha({ length: { min: 10, max: 20 } }),
+        diffLines: Array.from(
+          { length: faker.number.int({ min: 1, max: 4 }) },
+          (_, i) => i + 1
+        ).map(() => faker.number.int({ min: 1 })),
+      })),
+      undefined,
+    ]),
   },
 });
 
@@ -223,6 +245,17 @@ export const getPostChangesChangeIdDismissResponseMock = (): ChangeDetail => ({
       Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() =>
         faker.string.alpha({ length: { min: 10, max: 20 } })
       ),
+      undefined,
+    ]),
+    provenance: faker.helpers.arrayElement([
+      Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() => ({
+        snapshotPath: faker.string.alpha({ length: { min: 10, max: 20 } }),
+        templateSection: faker.string.alpha({ length: { min: 10, max: 20 } }),
+        diffLines: Array.from(
+          { length: faker.number.int({ min: 1, max: 4 }) },
+          (_, i) => i + 1
+        ).map(() => faker.number.int({ min: 1 })),
+      })),
       undefined,
     ]),
   },

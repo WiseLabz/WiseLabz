@@ -70,6 +70,7 @@ export * from './docNode';
 export * from './docNodeKind';
 export * from './docPage';
 export * from './docSave';
+export * from './documentDiffProvenance';
 export * from './docVersion';
 export * from './docVersionMeta';
 export * from './docVersionMetaTrigger';

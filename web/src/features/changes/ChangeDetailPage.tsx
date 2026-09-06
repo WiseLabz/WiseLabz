@@ -116,6 +116,30 @@ export function ChangeDetailPage() {
                 <div className="px-6 py-5">
                   <DiffViewer diff={data.diff} />
 
+                  {data.diff.format === 'doc' && data.provenance && data.provenance.length > 0 && (
+                    <section className="mt-4 rounded-lg border border-line-soft bg-canvas-sunken p-3" aria-labelledby="provenance-heading">
+                      <h2 id="provenance-heading" className="text-xs font-medium text-ink">
+                        Change provenance
+                      </h2>
+                      <ul className="mt-2 space-y-2">
+                        {data.provenance.map((entry, index) => (
+                          <li key={`${entry.snapshotPath}-${entry.templateSection}-${index}`} className="text-xs text-ink-muted">
+                            <code className="text-accent-secondary-bright">{entry.snapshotPath}</code>
+                            <span> → {entry.templateSection} → </span>
+                            {entry.diffLines.map((line, lineIndex) => (
+                              <span key={line}>
+                                {lineIndex > 0 && ', '}
+                                <a className="text-accent-secondary-bright underline underline-offset-2" href={`#diff-line-${line}`}>
+                                  line {line}
+                                </a>
+                              </span>
+                            ))}
+                          </li>
+                        ))}
+                      </ul>
+                    </section>
+                  )}
+
                   {data.affectedDocIds && data.affectedDocIds.length > 0 && (
                     <div className="mt-4 flex flex-wrap items-center gap-2">
                       <span className="text-2xs text-ink-faint">

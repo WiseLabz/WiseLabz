@@ -299,7 +299,7 @@ function UnifiedLine({
         ? 'text-[var(--color-accent-primary)]'
         : 'text-[var(--color-ink-muted)]';
   return (
-    <tr className={bg}>
+    <tr id={after ? `diff-line-${after}` : undefined} className={bg}>
       <Gutter>{before ?? ''}</Gutter>
       <Gutter>{after ?? ''}</Gutter>
       <td className={cn('w-5 select-none px-2 py-0.5 text-center font-bold opacity-70', fg)}>
@@ -339,7 +339,7 @@ function SplitRow({ u }: { u: DiffRowUnit }) {
   const leftTone = u.type === 'same' ? 'same' : u.left ? 'del' : 'empty';
   const rightTone = u.type === 'same' ? 'same' : u.right ? 'add' : 'empty';
   return (
-    <tr className="align-top">
+    <tr id={u.right?.after ? `diff-line-${u.right.after}` : undefined} className="align-top">
       <SplitCell
         tone={leftTone}
         num={u.left?.before}

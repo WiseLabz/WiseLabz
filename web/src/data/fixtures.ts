@@ -275,6 +275,13 @@ export function changeDetail(id: string): ChangeDetail | null {
         baseText: PVE1_DOC_V3,
         headText: PVE1_DOC,
       },
+      provenance: [
+        {
+          snapshotPath: 'nodes.pve1.vms[112]',
+          templateSection: 'Virtual machines',
+          diffLines: [11, 12, 13],
+        },
+      ],
     };
   }
   const summary = changes.find((c) => c.id === id);

@@ -9,9 +9,12 @@
 import type { ChangeDetailStatus } from './changeDetailStatus';
 import type { ChangeSummary } from './changeSummary';
 import type { Diff } from './diff';
+import type { DocumentDiffProvenance } from './documentDiffProvenance';
 
 export type ChangeDetail = ChangeSummary & {
   status: ChangeDetailStatus;
   diff: Diff;
   affectedDocIds?: string[];
+  /** Document-diff provenance. Each entry identifies the changed snapshot field, the template section that rendered it, and the resulting lines in the head revision. Present only when a document diff has source data. */
+  provenance?: DocumentDiffProvenance[];
 };

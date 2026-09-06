@@ -39,4 +39,10 @@ describe('DocDiff', () => {
     expect(screen.getByText('+2')).toBeInTheDocument();
     expect(screen.getByText('−2')).toBeInTheDocument();
   });
+
+  it('anchors head-revision lines for provenance links', () => {
+    render(<DocDiff before={'stable\nold value'} after={'stable\nnew value'} />);
+
+    expect(document.getElementById('diff-line-2')).toContainElement(line('new value'));
+  });
 });
