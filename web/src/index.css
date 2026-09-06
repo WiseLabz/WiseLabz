@@ -1,54 +1,69 @@
 @import 'tailwindcss';
 
 /* =============================================================================
-   WiseLabz — "Blueprint" identity, soft-dark chrome.
-   Cool-slate near-black with layered surfaces + real depth, ONE signal accent
-   (signal-orange), restrained color, rounded but tight. Status colors stay
-   distinct data markers (dot + word), never chrome.
+   WiseLabz — "Rack Panel" identity, soft-dark chrome.
+   Warm dark steel with layered surfaces, TWO independently-authored accents
+   (caution-orange primary + cable-blue secondary), restrained color, rounded
+   but tight. Status colors stay distinct data markers (dot + word), never
+   chrome, never collapsed into either accent.
    NOTE: the live colors here are overridden at runtime by the theme engine
-   (src/theme.ts, default = preset 'blueprint' + Geist); these @theme values are
-   the first-paint fallback and mirror that preset.
+   (src/theme.ts, default = preset 'rack' + Rack fonts); these @theme values
+   are the first-paint fallback and mirror that preset.
    ========================================================================== */
 @theme {
-  /* ---- Surfaces: cool near-black, layered. Depth comes from steps + shadow. ---- */
-  --color-canvas: oklch(0.135 0.008 250);
-  --color-canvas-sunken: oklch(0.108 0.008 250);
-  --color-surface: oklch(0.163 0.009 250);
-  --color-surface-raised: oklch(0.193 0.010 250);
-  --color-surface-overlay: oklch(0.185 0.010 250);
+  /* ---- Surfaces: warm near-black steel, layered. Depth from steps + shadow. ---- */
+  --color-canvas: oklch(0.16 0.006 85);
+  --color-canvas-sunken: oklch(0.133 0.006 85);
+  --color-surface: oklch(0.188 0.007 85);
+  --color-surface-raised: oklch(0.218 0.008 85);
+  --color-surface-overlay: oklch(0.21 0.008 85);
 
   /* ---- Lines ---- */
-  --color-line-soft: oklch(0.255 0.008 250);
-  --color-line: oklch(0.315 0.008 250);
-  --color-line-strong: oklch(0.44 0.010 250);
+  --color-line-soft: oklch(0.255 0.006 85);
+  --color-line: oklch(0.315 0.006 85);
+  --color-line-strong: oklch(0.44 0.008 85);
 
   /* ---- Ink — tuned for WCAG 2.2 AA (muted ≈6.2:1, faint ≈4.8:1 small text) ---- */
-  --color-ink: oklch(0.975 0.003 250);
-  --color-ink-muted: oklch(0.82 0.007 250);
-  --color-ink-faint: oklch(0.78 0.008 250);
+  --color-ink: oklch(0.975 0.003 85);
+  --color-ink-muted: oklch(0.82 0.007 85);
+  --color-ink-faint: oklch(0.78 0.008 85);
 
-  /* ---- Signal: the single brand accent — signal-orange (interaction, selection) ---- */
-  --color-signal: oklch(0.80 0.135 52);
-  --color-signal-bright: oklch(0.87 0.125 52);
-  --color-signal-ink: oklch(0.17 0.03 70);
-  --color-signal-soft: oklch(0.46 0.084 52);
-  --color-signal-tint: oklch(0.27 0.043 52);
+  /* ---- Accent primary: caution-orange (primary actions, selection) ---- */
+  --color-accent-primary: oklch(0.74 0.18 45);
+  --color-accent-primary-bright: oklch(0.81 0.17 45);
+  --color-accent-primary-ink: oklch(0.17 0.03 55);
+  --color-accent-primary-soft: oklch(0.46 0.112 45);
+  --color-accent-primary-tint: oklch(0.27 0.058 45);
 
-  /* ---- Status: data, not decoration. Lemon warn kept distinct from orange. ---- */
-  --color-ok: oklch(0.80 0.12 168);
-  --color-ok-tint: oklch(0.27 0.05 168);
-  --color-warn: oklch(0.86 0.135 96);
-  --color-warn-tint: oklch(0.30 0.06 96);
+  /* ---- Accent secondary: cable-blue (secondary emphasis, links, info) ---- */
+  --color-accent-secondary: oklch(0.64 0.11 240);
+  --color-accent-secondary-bright: oklch(0.71 0.1 240);
+  --color-accent-secondary-soft: oklch(0.46 0.068 240);
+  --color-accent-secondary-tint: oklch(0.27 0.035 240);
+
+  /* ponytail: deprecated aliases — drop once every surface reads accent-primary
+     directly (tracked in the "Roll Rack Panel..." follow-up issue). */
+  --color-signal: oklch(0.74 0.18 45);
+  --color-signal-bright: oklch(0.81 0.17 45);
+  --color-signal-ink: oklch(0.17 0.03 55);
+  --color-signal-soft: oklch(0.46 0.112 45);
+  --color-signal-tint: oklch(0.27 0.058 45);
+
+  /* ---- Status: data, not decoration. Distinct from both accents. ---- */
+  --color-ok: oklch(0.80 0.12 145);
+  --color-ok-tint: oklch(0.27 0.05 145);
+  --color-warn: oklch(0.84 0.14 80);
+  --color-warn-tint: oklch(0.30 0.06 80);
   --color-err: oklch(0.67 0.2 25);
   --color-err-tint: oklch(0.30 0.08 25);
-  --color-idle: oklch(0.78 0.008 250);
-  --color-idle-tint: oklch(0.26 0.006 250);
+  --color-idle: oklch(0.78 0.008 85);
+  --color-idle-tint: oklch(0.26 0.006 85);
 
-  /* ---- Type: Geist superfamily (Vercel). Sans for prose, mono for data. ---- */
-  --font-mono: 'Geist Mono Variable', ui-monospace, 'SF Mono', Menlo, monospace;
-  --font-sans: 'Geist Variable', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  /* ---- Type: Big Shoulders Text (industrial condensed) + Martian Mono (telemetry). ---- */
+  --font-mono: 'Martian Mono Variable', ui-monospace, 'SF Mono', Menlo, monospace;
+  --font-sans: 'Big Shoulders Text Variable', ui-sans-serif, system-ui, -apple-system, sans-serif;
 
-  /* Fixed rem scale, instrument-large at the top end */
+  /* Fixed rem scale, tightened to a ~1.125–1.2 ratio per step */
   --text-2xs: 0.75rem;
   --text-2xs--line-height: 1.05rem;
   --text-xs: 0.75rem;
@@ -59,14 +74,14 @@
   --text-base--line-height: 1.5rem;
   --text-lg: 1.0625rem;
   --text-lg--line-height: 1.55rem;
-  --text-xl: 1.375rem;
-  --text-xl--line-height: 1.6rem;
-  --text-2xl: 1.875rem;
-  --text-2xl--line-height: 2rem;
-  --text-3xl: 2.75rem;
-  --text-3xl--line-height: 2.75rem;
-  --text-4xl: 4rem;
-  --text-4xl--line-height: 3.9rem;
+  --text-xl: 1.25rem;
+  --text-xl--line-height: 1.55rem;
+  --text-2xl: 1.5rem;
+  --text-2xl--line-height: 1.85rem;
+  --text-3xl: 1.75rem;
+  --text-3xl--line-height: 2.05rem;
+  --text-4xl: 2.0625rem;
+  --text-4xl--line-height: 2.35rem;
 
   /* ---- Radii: rounded but tight. Soft-dark, not pill-everything. ---- */
   --radius-sm: 6px;

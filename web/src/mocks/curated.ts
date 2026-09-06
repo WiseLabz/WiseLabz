@@ -16,11 +16,15 @@ import {
   docVersionContent,
   docVersionMeta,
   docs,
+  findingPage,
+  findings,
   removalImpact,
+  resolveFinding,
   serviceSnapshot,
   syncRunsFor,
   user,
 } from '../data/fixtures';
+import type { QualityCheckType, QualityFindingStatus } from '../api/model';
 
 // Small artificial latency so loading skeletons are actually exercised on first paint.
 const LATENCY = 280;
@@ -249,6 +253,31 @@ export const curatedHandlers = [
   http.get('*/alerts', async () => {
     await delay(LATENCY);
     return HttpResponse.json(alertPage());
+  }),
+
+  http.get('*/findings/:findingId', async ({ params }) => {
+    await delay(LATENCY);
+    const finding = findings.find((f) => f.id === params.findingId);
+    if (!finding) return new HttpResponse(null, { status: 404 });
+    return HttpResponse.json(finding);
+  }),
+
+  http.post('*/findings/:findingId/resolve', async ({ params }) => {
+    await delay(LATENCY);
+    const finding = resolveFinding(params.findingId as string);
+    if (!finding) return new HttpResponse(null, { status: 404 });
+    return HttpResponse.json(finding);
+  }),
+
+  http.get('*/findings', async ({ request }) => {
+    await delay(LATENCY);
+    const url = new URL(request.url);
+    const status = (url.searchParams.get('status') as QualityFindingStatus | null) ?? undefined;
+    const checkType = (url.searchParams.get('checkType') as QualityCheckType | null) ?? undefined;
+    const connectorId = url.searchParams.get('connectorId') ?? undefined;
+    const page = Number(url.searchParams.get('page')) || undefined;
+    const pageSize = Number(url.searchParams.get('pageSize')) || undefined;
+    return HttpResponse.json(findingPage({ status, checkType, connectorId, page, pageSize }));
   }),
 
   http.get('*/docs/tree', async () => {

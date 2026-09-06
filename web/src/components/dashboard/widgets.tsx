@@ -121,7 +121,7 @@ export function ServiceRosterWidget() {
 export function AlertSummaryWidget() {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const { data, isLoading, isError, refetch } = useGetAlerts(undefined);
+  const { data, isLoading, isError, refetch } = useGetAlerts();
   const pendingLive = useLive((s) => s.pendingAlerts);
 
   if (isLoading) return <SkeletonRows rows={3} />;
@@ -357,7 +357,7 @@ export function DocsHealthWidget() {
   );
 }
 
-function CoverageRing({ pct }: { pct: number }) {
+function CoverageRing({ pct }: Readonly<{ pct: number }>) {
   const r = 26;
   const c = 2 * Math.PI * r;
   return (

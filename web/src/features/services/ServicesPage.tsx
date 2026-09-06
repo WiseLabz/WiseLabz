@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next';
 import { motion } from 'motion/react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { matchSorter } from 'match-sorter';
 import {
   useGetConnectors,
   putConnectorsConnectorIdEnabled,
@@ -43,13 +44,9 @@ export function ServicesPage() {
 
   const rows = useMemo(() => {
     if (!data) return [];
-    return data
-      .map((c) => ({ ...c, status: overrides[c.id] ?? c.status }) as Connector)
-      .filter(
-        (c) =>
-          c.name.toLowerCase().includes(q.toLowerCase()) ||
-          c.type.toLowerCase().includes(q.toLowerCase())
-      );
+    const withStatus = data.map((c) => ({ ...c, status: overrides[c.id] ?? c.status }) as Connector);
+    const query = q.trim();
+    return query ? matchSorter(withStatus, query, { keys: ['name', 'type'] }) : withStatus;
   }, [data, overrides, q]);
 
   return (

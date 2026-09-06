@@ -1,7 +1,8 @@
 /**
- * A framed region in the soft-dark register: a raised surface with a soft hairline
- * and a layered depth shadow (rounded-but-tight, 12px). Replaces the flat
- * sharp-Blueprint panel. Header stays a quiet mono label, optionally with a Swiss
+ * A framed region in the soft-dark register: a hairline border at rest
+ * (rounded-but-tight, 12px), no shadow — depth is reserved for genuinely
+ * raised/floating surfaces (dialogs, dropdowns). Header stays a quiet
+ * sentence-case mono label, optionally with a rack-unit tag and a Swiss
  * `/ NN` count, never an uppercase marketing eyebrow.
  */
 import type { ReactNode } from 'react';
@@ -16,7 +17,7 @@ export function Panel({
     <div
       className={cn(
         'flex flex-col overflow-hidden rounded-lg border border-line-soft',
-        'bg-surface shadow-(--shadow-panel)',
+        'bg-surface',
         className
       )}
       {...rest}
@@ -29,12 +30,15 @@ export function Panel({
 export function PanelHeader({
   title,
   icon,
+  unit,
   count,
   action,
   className,
 }: {
   title: string;
   icon?: ReactNode;
+  /** Rack-unit tag (e.g. "U1", "U2") shown before the title. */
+  unit?: string;
   count?: number | string;
   action?: ReactNode;
   className?: string;
@@ -47,8 +51,9 @@ export function PanelHeader({
       )}
     >
       <div className="flex items-center gap-2 text-ink-faint">
-        <span className="text-signal">{icon}</span>
-        <h3 className="font-mono text-2xs uppercase tracking-[0.16em] text-ink-muted">
+        <span className="text-accent-primary">{icon}</span>
+        <h3 className="font-mono text-sm text-ink-muted">
+          {unit && <span className="mr-1.5 text-accent-secondary">{unit}</span>}
           {title}
           {count !== undefined && <span className="ml-1.5 text-ink-faint">/ {count}</span>}
         </h3>

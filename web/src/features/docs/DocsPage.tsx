@@ -170,7 +170,7 @@ function DocReader({ docId }: { docId: string }) {
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line-soft px-6 py-4">
         <div className="min-w-0">
           <div className="mb-1 flex items-center gap-2">
-            <span className="rounded bg-signal-tint px-1.5 py-0.5 text-2xs font-semibold uppercase tracking-wide text-signal-bright">
+            <span className="rounded bg-accent-secondary-tint px-1.5 py-0.5 text-2xs font-medium text-accent-secondary-bright">
               {triggerLabel}
             </span>
             <span className="nums font-mono text-2xs text-ink-faint">
@@ -223,7 +223,7 @@ function DocReader({ docId }: { docId: string }) {
               transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
             >
               {data.kind === 'lab' && (
-                <div className="mb-4 flex items-center gap-2 rounded-md bg-signal-tint px-3 py-2 text-xs text-signal">
+                <div className="mb-4 flex items-center gap-2 rounded-md bg-accent-primary-tint px-3 py-2 text-xs text-accent-primary">
                   <SparklesIcon size={14} />
                   {t('docs.labBanner')}
                 </div>

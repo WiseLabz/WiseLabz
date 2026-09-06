@@ -1,5 +1,6 @@
-/** Status + severity mapping. Signal-orange is brand-only; status uses its own
- *  restrained data palette (ok/warn/err/idle), always paired with a word. */
+/** Status + severity mapping. Accent-primary (caution-orange) is brand-only;
+ *  status uses its own restrained data palette (ok/warn/err/idle), always
+ *  paired with a word. */
 import type { ServiceStatus, Severity } from '../../api/model';
 
 export type Tone = 'ok' | 'warn' | 'err' | 'signal' | 'idle';
@@ -21,6 +22,6 @@ export const toneColor: Record<Tone, { fg: string; tint: string }> = {
   ok: { fg: 'var(--color-ok)', tint: 'var(--color-ok-tint)' },
   warn: { fg: 'var(--color-warn)', tint: 'var(--color-warn-tint)' },
   err: { fg: 'var(--color-err)', tint: 'var(--color-err-tint)' },
-  signal: { fg: 'var(--color-signal-bright)', tint: 'var(--color-signal-tint)' },
+  signal: { fg: 'var(--color-accent-primary-bright)', tint: 'var(--color-accent-primary-tint)' },
   idle: { fg: 'var(--color-idle)', tint: 'var(--color-idle-tint)' },
 };

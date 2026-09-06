@@ -80,7 +80,7 @@ export function DashboardPage() {
         <div className="relative flex flex-wrap items-end justify-between gap-6 px-5 py-4">
           <div className="flex flex-wrap items-end gap-x-7 gap-y-3">
             <div className="pr-1">
-              <p className="font-mono text-2xs uppercase tracking-[0.2em] text-ink-faint">
+              <p className="font-mono text-2xs text-ink-faint">
                 {t('dashboard.kicker')}
               </p>
               <p className="mt-1 max-w-[22ch] text-sm leading-snug text-ink-muted">
@@ -324,7 +324,7 @@ function StatusReadout() {
     {
       label: t('dashboard.readout.alerts'),
       value: data?.pendingAlerts ?? 0,
-      tone: 'var(--color-signal-bright)',
+      tone: 'var(--color-accent-primary-bright)',
     },
   ];
 
@@ -333,14 +333,12 @@ function StatusReadout() {
       {cells.map((cell) => (
         <div key={cell.label} className="flex flex-col">
           <span
-            className="nums font-mono text-3xl font-semibold leading-none tabular-nums"
+            className="nums font-mono text-lg font-medium leading-none tabular-nums"
             style={{ color: cell.tone }}
           >
             {String(cell.value).padStart(2, '0')}
           </span>
-          <span className="mt-1.5 font-mono text-2xs uppercase tracking-[0.18em] text-ink-faint">
-            {cell.label}
-          </span>
+          <span className="mt-1.5 font-mono text-2xs text-ink-faint">{cell.label}</span>
         </div>
       ))}
     </div>
