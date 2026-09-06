@@ -1,11 +1,9 @@
-/** Tiny className joiner — drops falsy values, joins with spaces. */
-export type ClassValue = string | number | false | null | undefined;
+/** className joiner with Tailwind conflict resolution (last wins). */
+import { type ClassValue, clsx } from 'clsx';
+import { twMerge } from 'tailwind-merge';
+
+export type { ClassValue };
 
 export function cn(...parts: ClassValue[]): string {
-  let out = '';
-  for (const p of parts) {
-    if (!p && p !== 0) continue;
-    out += (out ? ' ' : '') + p;
-  }
-  return out;
+  return twMerge(clsx(parts));
 }

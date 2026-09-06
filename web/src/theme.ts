@@ -25,13 +25,20 @@ import '@fontsource/space-mono/400.css';
 import '@fontsource/space-mono/700.css';
 import '@fontsource-variable/geist';
 import '@fontsource-variable/geist-mono';
+import '@fontsource-variable/big-shoulders-text';
+import '@fontsource-variable/martian-mono';
 
 /* ===========================================================================
  *  FONT SETS  —  { mono, sans }.  Mono is the dominant UI voice; sans is prose.
  * ======================================================================== */
 export const FONT_SETS = {
+  rack: { label: 'Rack', mono: "'Martian Mono Variable'", sans: "'Big Shoulders Text Variable'" },
   plex: { label: 'IBM Plex', mono: "'IBM Plex Mono'", sans: "'IBM Plex Sans'" },
-  jetbrains: { label: 'JetBrains', mono: "'JetBrains Mono Variable'", sans: "'Inter Tight Variable'" },
+  jetbrains: {
+    label: 'JetBrains',
+    mono: "'JetBrains Mono Variable'",
+    sans: "'Inter Tight Variable'",
+  },
   space: { label: 'Space', mono: "'Space Mono'", sans: "'Space Grotesk Variable'" },
   geist: { label: 'Geist', mono: "'Geist Mono Variable'", sans: "'Geist Variable'" },
 } as const;
@@ -44,40 +51,101 @@ export type FontSetName = keyof typeof FONT_SETS;
 export type PaletteTokens = Record<string, string>;
 
 export interface PaletteOpts {
-  neutralHue: number; // hue of the near-black canvas & grays (250 = cool slate)
+  neutralHue: number; // hue of the near-black canvas & grays (85 = warm steel)
   neutralChroma: number; // how tinted the neutrals are (0 = pure gray)
   canvasL: number; // page background lightness (0.14 dark … 0.20 lighter)
-  signalHue: number; // brand accent hue (52 orange · 152 green · 286 violet)
-  signalChroma: number; // accent vividness (0.12 muted … 0.19 vivid)
-  signalL: number; // accent lightness
-  signalInkHue: number; // hue of text placed ON the accent
+  accentPrimaryHue: number; // primary accent hue (45 = safety-orange)
+  accentPrimaryChroma: number; // primary accent vividness (0.12 muted … 0.19 vivid)
+  accentPrimaryL: number; // primary accent lightness
+  accentPrimaryInkHue: number; // hue of text placed ON the primary accent
+  accentSecondaryHue: number; // secondary accent hue (240 = cable-blue)
+  accentSecondaryChroma: number; // secondary accent vividness
+  accentSecondaryL: number; // secondary accent lightness
 }
 
 export const DEFAULT_OPTS: PaletteOpts = {
-  neutralHue: 255,
-  neutralChroma: 0.008,
-  canvasL: 0.165,
-  signalHue: 78,
-  signalChroma: 0.135,
-  signalL: 0.80,
-  signalInkHue: 70,
+  neutralHue: 85,
+  neutralChroma: 0.006,
+  canvasL: 0.16,
+  accentPrimaryHue: 45,
+  accentPrimaryChroma: 0.18,
+  accentPrimaryL: 0.74,
+  accentPrimaryInkHue: 55,
+  accentSecondaryHue: 240,
+  accentSecondaryChroma: 0.11,
+  accentSecondaryL: 0.64,
 };
 
 /** Editable ranges for the advanced UI sliders. */
-export const OPT_META: Record<keyof PaletteOpts, { label: string; min: number; max: number; step: number; hint: string }> = {
+export const OPT_META: Record<
+  keyof PaletteOpts,
+  { label: string; min: number; max: number; step: number; hint: string }
+> = {
   neutralHue: { label: 'Neutral hue', min: 0, max: 360, step: 1, hint: 'tint of the dark base' },
   neutralChroma: { label: 'Neutral chroma', min: 0, max: 0.03, step: 0.001, hint: '0 = pure gray' },
-  canvasL: { label: 'Background lightness', min: 0.1, max: 0.22, step: 0.005, hint: 'darker ← → lighter' },
-  signalHue: { label: 'Accent hue', min: 0, max: 360, step: 1, hint: 'the brand color angle' },
-  signalChroma: { label: 'Accent chroma', min: 0.05, max: 0.2, step: 0.005, hint: 'muted ← → vivid' },
-  signalL: { label: 'Accent lightness', min: 0.5, max: 0.88, step: 0.01, hint: 'darker ← → brighter' },
-  signalInkHue: { label: 'Accent-text hue', min: 0, max: 360, step: 1, hint: 'text drawn on the accent' },
+  canvasL: {
+    label: 'Background lightness',
+    min: 0.1,
+    max: 0.22,
+    step: 0.005,
+    hint: 'darker ← → lighter',
+  },
+  accentPrimaryHue: {
+    label: 'Primary accent hue',
+    min: 0,
+    max: 360,
+    step: 1,
+    hint: 'main action / selection color',
+  },
+  accentPrimaryChroma: {
+    label: 'Primary accent chroma',
+    min: 0.05,
+    max: 0.2,
+    step: 0.005,
+    hint: 'muted ← → vivid',
+  },
+  accentPrimaryL: {
+    label: 'Primary accent lightness',
+    min: 0.5,
+    max: 0.88,
+    step: 0.01,
+    hint: 'darker ← → brighter',
+  },
+  accentPrimaryInkHue: {
+    label: 'Primary-accent-text hue',
+    min: 0,
+    max: 360,
+    step: 1,
+    hint: 'text drawn on the primary accent',
+  },
+  accentSecondaryHue: {
+    label: 'Secondary accent hue',
+    min: 0,
+    max: 360,
+    step: 1,
+    hint: 'links / secondary emphasis color',
+  },
+  accentSecondaryChroma: {
+    label: 'Secondary accent chroma',
+    min: 0.05,
+    max: 0.2,
+    step: 0.005,
+    hint: 'muted ← → vivid',
+  },
+  accentSecondaryL: {
+    label: 'Secondary accent lightness',
+    min: 0.5,
+    max: 0.88,
+    step: 0.01,
+    hint: 'darker ← → brighter',
+  },
 };
 
 export function makePalette(opts: Partial<PaletteOpts>): PaletteTokens {
   const o = { ...DEFAULT_OPTS, ...opts };
   const N = (l: number, c = o.neutralChroma) => `oklch(${l} ${c} ${o.neutralHue})`;
-  const S = (l: number, c: number) => `oklch(${l} ${c} ${o.signalHue})`;
+  const P = (l: number, c: number) => `oklch(${l} ${c} ${o.accentPrimaryHue})`;
+  const S = (l: number, c: number) => `oklch(${l} ${c} ${o.accentSecondaryHue})`;
   const cL = o.canvasL;
 
   return {
@@ -96,15 +164,30 @@ export function makePalette(opts: Partial<PaletteOpts>): PaletteTokens {
     // dropping below legibility.
     '--color-ink-muted': N(0.82, 0.007),
     '--color-ink-faint': N(0.78, 0.008),
-    '--color-signal': S(o.signalL, o.signalChroma),
-    '--color-signal-bright': S(o.signalL + 0.07, o.signalChroma - 0.01),
-    '--color-signal-ink': `oklch(0.17 0.03 ${o.signalInkHue})`,
-    '--color-signal-soft': S(0.46, o.signalChroma * 0.62),
-    '--color-signal-tint': S(0.27, o.signalChroma * 0.32),
-    '--color-ok': 'oklch(0.8 0.12 168)',
-    '--color-ok-tint': 'oklch(0.27 0.05 168)',
-    '--color-warn': 'oklch(0.86 0.135 96)',
-    '--color-warn-tint': 'oklch(0.3 0.06 96)',
+    // Primary accent — safety-orange. Drives primary actions / selection.
+    '--color-accent-primary': P(o.accentPrimaryL, o.accentPrimaryChroma),
+    '--color-accent-primary-bright': P(o.accentPrimaryL + 0.07, o.accentPrimaryChroma - 0.01),
+    '--color-accent-primary-ink': `oklch(0.17 0.03 ${o.accentPrimaryInkHue})`,
+    '--color-accent-primary-soft': P(0.46, o.accentPrimaryChroma * 0.62),
+    '--color-accent-primary-tint': P(0.27, o.accentPrimaryChroma * 0.32),
+    // Secondary accent — cable-blue. Secondary emphasis / links / info, never
+    // collapsed into the primary accent or into a status color.
+    '--color-accent-secondary': S(o.accentSecondaryL, o.accentSecondaryChroma),
+    '--color-accent-secondary-bright': S(o.accentSecondaryL + 0.07, o.accentSecondaryChroma - 0.01),
+    '--color-accent-secondary-soft': S(0.46, o.accentSecondaryChroma * 0.62),
+    '--color-accent-secondary-tint': S(0.27, o.accentSecondaryChroma * 0.32),
+    // ponytail: deprecated aliases so anything outside this round's touched
+    // files (still reading --color-signal*) doesn't break before the
+    // follow-up round retargets it. Drop once tracking issue closes.
+    '--color-signal': P(o.accentPrimaryL, o.accentPrimaryChroma),
+    '--color-signal-bright': P(o.accentPrimaryL + 0.07, o.accentPrimaryChroma - 0.01),
+    '--color-signal-ink': `oklch(0.17 0.03 ${o.accentPrimaryInkHue})`,
+    '--color-signal-soft': P(0.46, o.accentPrimaryChroma * 0.62),
+    '--color-signal-tint': P(0.27, o.accentPrimaryChroma * 0.32),
+    '--color-ok': 'oklch(0.8 0.12 145)',
+    '--color-ok-tint': 'oklch(0.27 0.05 145)',
+    '--color-warn': 'oklch(0.84 0.14 80)',
+    '--color-warn-tint': 'oklch(0.3 0.06 80)',
     '--color-err': 'oklch(0.67 0.2 25)',
     '--color-err-tint': 'oklch(0.3 0.08 25)',
     // Idle stays a desaturated gray (its "inactive" semantic), but bright enough
@@ -120,13 +203,38 @@ export function makePalette(opts: Partial<PaletteOpts>): PaletteTokens {
  *  Selecting one in the UI also seeds Advanced mode with these exact opts.
  * ======================================================================== */
 export const PRESETS = {
-  wise: { label: 'Wise', desc: 'amber · cool slate', opts: {} },
-  blueprint: { label: 'Blueprint', desc: 'orange · cool slate', opts: { neutralHue: 250, signalHue: 52, canvasL: 0.135 } },
-  oxide: { label: 'Oxide', desc: 'copper · warm charcoal', opts: { neutralHue: 58, neutralChroma: 0.012, canvasL: 0.16, signalHue: 42, signalChroma: 0.15 } },
-  viridian: { label: 'Viridian', desc: 'terminal green', opts: { neutralHue: 200, neutralChroma: 0.004, signalHue: 152, signalChroma: 0.15, signalL: 0.78 } },
-  arctic: { label: 'Arctic', desc: 'ice blue', opts: { neutralHue: 244, signalHue: 232, signalChroma: 0.14, signalL: 0.74 } },
-  ultraviolet: { label: 'Ultraviolet', desc: 'violet · graphite', opts: { neutralHue: 285, signalHue: 286, signalChroma: 0.17 } },
-  noir: { label: 'Noir', desc: 'magenta · true black', opts: { neutralHue: 0, neutralChroma: 0, canvasL: 0.145, signalHue: 350, signalChroma: 0.17 } },
+  rack: { label: 'Rack', desc: 'safety-orange + cable-blue · warm steel', opts: {} },
+  phosphor: {
+    label: 'Phosphor',
+    desc: 'terminal green + amber · true black',
+    opts: {
+      neutralHue: 140,
+      neutralChroma: 0.004,
+      canvasL: 0.135,
+      accentPrimaryHue: 145,
+      accentPrimaryChroma: 0.16,
+      accentPrimaryL: 0.8,
+      accentSecondaryHue: 80,
+      accentSecondaryChroma: 0.13,
+      accentSecondaryL: 0.78,
+    },
+  },
+  'blueprint-classic': {
+    label: 'Blueprint (classic)',
+    desc: 'orange · cool slate — the original identity',
+    opts: {
+      neutralHue: 250,
+      neutralChroma: 0.008,
+      canvasL: 0.135,
+      accentPrimaryHue: 52,
+      accentPrimaryChroma: 0.135,
+      accentPrimaryL: 0.8,
+      accentPrimaryInkHue: 70,
+      accentSecondaryHue: 232,
+      accentSecondaryChroma: 0.14,
+      accentSecondaryL: 0.74,
+    },
+  },
 } satisfies Record<string, { label: string; desc: string; opts: Partial<PaletteOpts> }>;
 
 export type PaletteName = keyof typeof PRESETS;
@@ -150,6 +258,6 @@ export function applyTokens(tokens: PaletteTokens, font: FontSetName, paletteNam
  *  ▼▼▼  CODE DEFAULT  ▼▼▼  used on first load before the user picks anything.
  * ======================================================================== */
 export const ACTIVE: { palette: PaletteName; font: FontSetName } = {
-  palette: 'blueprint',
-  font: 'geist',
+  palette: 'rack',
+  font: 'space',
 };

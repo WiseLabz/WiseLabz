@@ -56,9 +56,12 @@ enforcement and build details live in `docs/ARCHITECTURE.md`.
    provenance marker (drafted / human-confirmed / synced-raw); structural changes
    route through the Changes accept/reject loop. Nothing implies more confidence
    than the sync actually has.
-4. **Blueprint is *the* identity, not one theme among many.** Swiss instrument
-   panel — mono-forward, hairline grid over cards, sharp corners, one signal accent,
-   status as shape + word. Ships with light/dark only; no theme playground.
+4. **Rack Panel is *the* identity, not one theme among many.** Industrial
+   instrument panel — mono-forward, hairline grid, rounded-but-tight radii, a
+   two-accent system (caution-orange for primary action/selection, cable-blue
+   for secondary emphasis), status as shape + word. Dark-only; theme
+   playground exists behind Settings → Theme for exploration but the default
+   is the brand, not a menu of equal options.
 5. **Motion is a meaning-bound differentiator.** Four moments earn animation: diff
    reveal, sync pulse (live heartbeat), drift surfacing, and state transitions
    (a row resolving on accept/reject). Everything else is plain state feedback; no
@@ -68,7 +71,7 @@ enforcement and build details live in `docs/ARCHITECTURE.md`.
 control (lifecycle, config push) is desired but deferred — it changes the risk
 profile and is gated on the permission/confirmation model in `docs/ARCHITECTURE.md`.
 
-## Locked frontend direction (planning session, 2026-06)
+## Locked frontend direction (planning session, 2026-06; revised 2026-09)
 
 Refines the decisions above; supersedes the "sharp corners / light-dark only"
 specifics of decision 4. Shell architecture and the theme flag live in
@@ -77,12 +80,16 @@ specifics of decision 4. Shell architecture and the theme flag live in
 1. **Navigation — bottom dock.** A floating, centered, soft-dark dock (solid, not
    glass); one amber pill slides under the active item. A sidebar variant was built
    and rejected in comparison. The dock is the single shell; no shell switching.
-2. **Identity — Blueprint palette + Geist, in soft-dark chrome.** Signal-orange on
-   cool-slate, rounded-but-tight radii (6–16px), real layered depth shadows. This
-   replaces the original sharp/flat Blueprint chrome while keeping the Swiss
-   instrument-panel discipline (mono-forward, one signal accent, status as shape +
-   word). Status colors stay distinct (green/lemon/red), never collapsed into the
-   accent.
+2. **Identity — Rack Panel palette + Big Shoulders Text / Martian Mono, in
+   soft-dark chrome.** Caution-orange (primary) and cable-blue (secondary) on
+   warm dark steel, rounded-but-tight radii (6–16px), shadow reserved for
+   genuinely raised/floating surfaces (not every resting panel). Replaces the
+   OKLCH neutral-ramp-plus-single-accent generator (and the
+   Geist/Inter-Tight/Space-Grotesk font pool) that, despite being consciously
+   chosen to avoid genericness, had converged on the same archetype as
+   Linear/Vercel/Cursor-adjacent AI-coding tools. Status colors stay distinct
+   (green/lemon/red), never collapsed into either accent. Section headers use
+   sentence-case labels, never uppercase-tracked eyebrows.
 3. **Theme engine ships behind Settings → Theme** (presets / fonts / OKLCH sliders)
    for exploration, defaulting to the locked Blueprint + Geist combo. It is a power
    surface, not a marketing theme playground; the default is the brand.
@@ -94,8 +101,11 @@ specifics of decision 4. Shell architecture and the theme flag live in
 
 ## Brand Personality
 
-**Precise, technical, calm.** Confident expert tooling in the Linear/Vercel
-register: restrained, machine-honest, never shouting. Voice is direct and
+**Precise, technical, calm.** Confident expert tooling grounded in real
+homelab hardware — rack panels, patch cables, nameplates — rather than in a
+generic SaaS-dashboard register (Linear/Vercel-adjacent, now itself an
+oversaturated "AI tool" look). Restrained, machine-honest, never shouting.
+Voice is direct and
 unpadded — it states facts (status, counts, timestamps, diffs) plainly and
 trusts the user to read them. No marketing gloss, no fake enthusiasm, no
 hand-holding. The interface should feel like a well-built instrument: dense
@@ -106,6 +116,10 @@ where density earns its keep, quiet everywhere else.
 - **Generic AI dashboard slop** — identical card grids, the big-number hero-metric
   template, gradient accents, tiny uppercase tracked eyebrows over every section.
   (The v1 prototype was rejected for exactly this.)
+- **The neutral-ramp-plus-single-accent-hue OKLCH generator itself**, and the
+  Geist/Inter/Space-Grotesk font pool — not just card-grid/eyebrow symptoms of
+  genericness but the underlying formula that produces them across most
+  current AI-assisted dashboard tools.
 - **Heavy enterprise consoles (Grafana / Datadog)** — chart-soup, cluttered chrome,
   gray-on-gray density with no hierarchy, the legacy ops-console feel.
 - **Bootstrap / Material defaults** — off-the-shelf component-kit look with no identity.

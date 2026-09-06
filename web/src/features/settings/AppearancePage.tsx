@@ -45,7 +45,7 @@ function ChoiceGroup<T extends string>({
             className={cn(
               'relative rounded-lg border p-3 text-left transition-colors',
               active
-                ? 'border-signal-soft bg-signal-tint'
+                ? 'border-accent-primary-soft bg-accent-primary-tint'
                 : 'border-line-soft hover:border-line-strong'
             )}
           >
@@ -58,7 +58,7 @@ function ChoiceGroup<T extends string>({
             {active && (
               <motion.span
                 layoutId={`choice-${label}`}
-                className="absolute right-2.5 top-2.5 h-2 w-2 rounded-full bg-signal-bright"
+                className="absolute right-2.5 top-2.5 h-2 w-2 rounded-full bg-accent-primary-bright"
                 transition={{ type: 'spring', stiffness: 500, damping: 32 }}
               />
             )}
@@ -129,7 +129,7 @@ export function AppearancePage() {
       >
         <div className="space-y-5">
           <div>
-            <p className="mb-2 font-mono text-2xs uppercase tracking-[0.16em] text-ink-faint">
+            <p className="mb-2 font-mono text-2xs text-ink-faint">
               {t('settings.appearance.textSize')}
             </p>
             <ChoiceGroup<TextSize>
@@ -151,7 +151,7 @@ export function AppearancePage() {
           </div>
 
           <div>
-            <p className="mb-2 font-mono text-2xs uppercase tracking-[0.16em] text-ink-faint">
+            <p className="mb-2 font-mono text-2xs text-ink-faint">
               {t('settings.appearance.density')}
             </p>
             <ChoiceGroup<Density>
@@ -172,7 +172,7 @@ export function AppearancePage() {
           </div>
 
           <div>
-            <p className="mb-2 font-mono text-2xs uppercase tracking-[0.16em] text-ink-faint">
+            <p className="mb-2 font-mono text-2xs text-ink-faint">
               {t('settings.appearance.focusRing')}
             </p>
             <ChoiceGroup<FocusRing>

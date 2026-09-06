@@ -17,6 +17,10 @@ import type {
   DocNode,
   DocVersion,
   DocVersionMeta,
+  QualityCheckType,
+  QualityFinding,
+  QualityFindingPage,
+  QualityFindingStatus,
   RemovalImpact,
   ServiceSnapshot,
   SyncRun,
@@ -593,6 +597,102 @@ export const connectorSchemas: ConnectorTypeSchema[] = [
 
 export function alertPage(): AlertPage {
   return { items: alerts, total: alerts.length, page: 1, pageSize: alerts.length };
+}
+
+// ─── Quality findings ───────────────────────────────────────────────────────
+
+export const findings: QualityFinding[] = [
+  {
+    id: 'find-1',
+    connectorId: 'svc-pve1',
+    connectorName: 'pve1',
+    docId: 'doc-pve1',
+    checkType: 'stale',
+    severity: 'info',
+    title: 'Doc not reconciled after last sync',
+    description: 'k8s-worker-03 was added 8 months ago but the pve1 doc still lists only two worker nodes.',
+    remediationLink: '/docs/doc-pve1',
+    status: 'open',
+    detectedCount: 4,
+    firstDetectedAt: daysAgo(240),
+    lastSeenAt: daysAgo(240),
+    resolvedAt: null,
+  },
+  {
+    id: 'find-2',
+    connectorId: 'svc-opnsense',
+    connectorName: 'opnsense',
+    docId: 'doc-opnsense',
+    checkType: 'ownership_incomplete',
+    severity: 'critical',
+    title: 'WAN firewall rule has no documented owner',
+    description: 'The permissive WAN rule flagged in alerts has no linked runbook or owning team in the opnsense doc.',
+    remediationLink: '/docs/doc-opnsense',
+    status: 'open',
+    detectedCount: 12,
+    firstDetectedAt: daysAgo(180),
+    lastSeenAt: daysAgo(180),
+    resolvedAt: null,
+  },
+  {
+    id: 'find-3',
+    connectorId: 'svc-portainer',
+    connectorName: 'portainer',
+    docId: 'doc-portainer',
+    checkType: 'failing',
+    severity: 'info',
+    title: 'Container restart loop undocumented',
+    description: 'sonarr in stack media has been restarting repeatedly with no incident note in the portainer doc.',
+    remediationLink: '/docs/doc-portainer',
+    status: 'open',
+    detectedCount: 3,
+    firstDetectedAt: daysAgo(90),
+    lastSeenAt: daysAgo(90),
+    resolvedAt: null,
+  },
+  {
+    id: 'find-4',
+    connectorId: 'svc-pbs',
+    connectorName: 'pbs',
+    docId: 'doc-pbs',
+    checkType: 'empty',
+    severity: 'info',
+    title: 'Backup retention policy section is empty',
+    description: 'The pbs doc has a "Retention policy" heading with no content underneath it.',
+    remediationLink: '/docs/doc-pbs',
+    status: 'open',
+    detectedCount: 6,
+    firstDetectedAt: daysAgo(150),
+    lastSeenAt: daysAgo(150),
+    resolvedAt: null,
+  },
+];
+
+export function findingPage(opts: {
+  status?: QualityFindingStatus;
+  checkType?: QualityCheckType;
+  connectorId?: string;
+  page?: number;
+  pageSize?: number;
+}): QualityFindingPage {
+  const page = opts.page ?? 1;
+  const pageSize = opts.pageSize ?? 20;
+  const items = findings.filter(
+    (f) =>
+      (!opts.status || f.status === opts.status) &&
+      (!opts.checkType || f.checkType === opts.checkType) &&
+      (!opts.connectorId || f.connectorId === opts.connectorId),
+  );
+  const start = (page - 1) * pageSize;
+  return { items: items.slice(start, start + pageSize), total: items.length, page, pageSize };
+}
+
+export function resolveFinding(findingId: string): QualityFinding | null {
+  const finding = findings.find((f) => f.id === findingId);
+  if (!finding) return null;
+  finding.status = 'resolved';
+  finding.resolvedAt = new Date().toISOString();
+  return finding;
 }
 
 // Deterministic raw-state snapshots per connector category, rendered on the service

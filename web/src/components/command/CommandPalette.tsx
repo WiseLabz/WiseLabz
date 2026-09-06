@@ -12,6 +12,7 @@ import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { AnimatePresence, motion } from 'motion/react';
+import { matchSorter } from 'match-sorter';
 import { useUi } from '../../store/ui';
 import { useCanMutate } from '../../hooks/useRole';
 import { triggerMockSync } from '../../ws/triggerSync';
@@ -171,11 +172,9 @@ function PaletteBody() {
   }, []);
 
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
+    const q = query.trim();
     if (!q) return commands;
-    return commands.filter(
-      (c) => c.label.toLowerCase().includes(q) || c.hint?.toLowerCase().includes(q),
-    );
+    return matchSorter(commands, q, { keys: ['label', 'hint'] });
   }, [commands, query]);
 
   // Clamp the cursor at render time instead of in an effect.

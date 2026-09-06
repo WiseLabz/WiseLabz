@@ -20,13 +20,14 @@ import { Panel, PanelHeader } from '../../components/ui/Panel';
 import { Button } from '../../components/ui/Button';
 import { cn } from '../../lib/cn';
 import { SettingsIcon } from '../../components/icons';
+import * as React from 'react';
 
 const FONT_KEYS = Object.keys(FONT_SETS) as FontSetName[];
 const PRESET_KEYS = Object.keys(PRESETS) as PaletteName[];
 const OPT_KEYS = Object.keys(OPT_META) as (keyof PaletteOpts)[];
 
 /** Small color preview built from a token set. */
-function Swatch({ tokens, font }: { tokens: PaletteTokens; font?: FontSetName }) {
+function Swatch({ tokens, font }: Readonly<{ tokens: PaletteTokens; font?: FontSetName }>) {
   return (
     <div
       className="flex items-center gap-2 rounded-sm border px-2.5 py-2"
@@ -36,7 +37,16 @@ function Swatch({ tokens, font }: { tokens: PaletteTokens; font?: FontSetName })
         fontFamily: font ? FONT_SETS[font].mono.replace(/'/g, '') : undefined,
       }}
     >
-      <span className="h-4 w-4 rounded-sm" style={{ backgroundColor: tokens['--color-signal'] }} />
+      <span className="flex gap-1">
+        <span
+          className="h-4 w-4 rounded-sm"
+          style={{ backgroundColor: tokens['--color-accent-primary'] }}
+        />
+        <span
+          className="h-4 w-4 rounded-sm"
+          style={{ backgroundColor: tokens['--color-accent-secondary'] }}
+        />
+      </span>
       <span className="flex gap-1">
         <span className="h-4 w-1.5" style={{ backgroundColor: tokens['--color-ok'] }} />
         <span className="h-4 w-1.5" style={{ backgroundColor: tokens['--color-warn'] }} />
@@ -54,12 +64,12 @@ function Segmented<T extends string>({
   value,
   onChange,
   layoutId,
-}: {
+}: Readonly<{
   options: { value: T; label: string }[];
   value: T;
   onChange: (v: T) => void;
   layoutId: string;
-}) {
+}>) {
   return (
     <div className="inline-flex rounded-sm border border-line-soft bg-canvas-sunken p-0.5">
       {options.map((o) => {
@@ -124,7 +134,7 @@ export function ThemeControls() {
                   className={cn(
                     'flex flex-col items-start gap-1 rounded-sm border px-3 py-2.5 text-left transition-colors',
                     active
-                      ? 'border-signal-soft bg-signal-tint'
+                      ? 'border-accent-primary-soft bg-accent-primary-tint'
                       : 'border-line-soft hover:border-line-strong'
                   )}
                 >
@@ -167,7 +177,9 @@ export function ThemeControls() {
                     onClick={() => setPreset(k)}
                     className={cn(
                       'flex flex-col gap-2 rounded-sm border p-2.5 text-left transition-colors',
-                      active ? 'border-signal-soft' : 'border-line-soft hover:border-line-strong'
+                      active
+                        ? 'border-accent-primary-soft'
+                        : 'border-line-soft hover:border-line-strong'
                     )}
                   >
                     <div className="flex items-baseline justify-between">
@@ -202,13 +214,13 @@ function AdvancedControls({
   onSeed,
   preset,
   font,
-}: {
+}: Readonly<{
   custom: PaletteOpts;
   setCustomOpt: <K extends keyof PaletteOpts>(k: K, v: PaletteOpts[K]) => void;
   onSeed: () => void;
   preset: PaletteName;
   font: FontSetName;
-}) {
+}>) {
   const { t } = useTranslation();
   const tokens = makePalette(custom);
   return (
@@ -233,7 +245,9 @@ function AdvancedControls({
             <label key={key} className="block">
               <span className="flex items-baseline justify-between">
                 <span className="font-mono text-xs text-ink">{meta.label}</span>
-                <span className="nums font-mono text-2xs text-signal-bright">{display}</span>
+                <span className="nums font-mono text-2xs text-accent-primary-bright">
+                  {display}
+                </span>
               </span>
               <input
                 type="range"
@@ -254,10 +268,6 @@ function AdvancedControls({
   );
 }
 
-function Label({ children }: { children: React.ReactNode }) {
-  return (
-    <span className="font-mono text-2xs uppercase tracking-[0.16em] text-ink-faint">
-      {children}
-    </span>
-  );
+function Label({ children }: Readonly<{ children: React.ReactNode }>) {
+  return <span className="font-mono text-2xs text-ink-faint">{children}</span>;
 }

@@ -27,10 +27,10 @@ const sizes: Record<Size, string> = {
 
 const variants: Record<Variant, string> = {
   primary:
-    'bg-[var(--color-signal)] text-[var(--color-signal-ink)] hover:bg-[var(--color-signal-bright)]',
+    'bg-[var(--color-accent-primary)] text-[var(--color-accent-primary-ink)] hover:bg-[var(--color-accent-primary-bright)]',
   secondary:
     'bg-transparent text-[var(--color-ink)] border border-[var(--color-line-strong)] ' +
-    'hover:border-[var(--color-signal-soft)] hover:bg-[var(--color-surface)]',
+    'hover:border-[var(--color-accent-primary-soft)] hover:bg-[var(--color-surface)]',
   ghost:
     'text-[var(--color-ink-muted)] hover:text-[var(--color-ink)] hover:bg-[var(--color-surface)]',
   danger:

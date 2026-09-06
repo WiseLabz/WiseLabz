@@ -35,8 +35,8 @@ const TRIGGER: Record<
   DocVersionMetaTrigger,
   { Icon: React.ComponentType<{ size?: number }>; tone: string }
 > = {
-  ai: { Icon: SparklesIcon, tone: 'var(--color-signal)' },
-  template: { Icon: FileTextIcon, tone: 'var(--color-signal-bright)' },
+  ai: { Icon: SparklesIcon, tone: 'var(--color-accent-primary)' },
+  template: { Icon: FileTextIcon, tone: 'var(--color-accent-primary-bright)' },
   manual: { Icon: UserIcon, tone: 'var(--color-ink-muted)' },
 };
 
@@ -103,7 +103,7 @@ export function DocHistory({ docId, currentVersion }: { docId: string; currentVe
                 className={cn(
                   'flex w-full items-center gap-2.5 rounded-md border px-2.5 py-2 text-left transition-colors',
                   active
-                    ? 'border-signal-soft bg-signal-tint'
+                    ? 'border-accent-primary-soft bg-accent-primary-tint'
                     : 'border-transparent hover:bg-surface-raised'
                 )}
               >

@@ -7,6 +7,7 @@ import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { motion, useDragControls } from 'motion/react';
 import { IconButton } from '../ui/Button';
+import { PanelHeader } from '../ui/Panel';
 import { GripIcon, XIcon } from '../icons';
 
 export function WidgetFrame({
@@ -28,31 +29,29 @@ export function WidgetFrame({
 }) {
   const { t } = useTranslation();
   return (
-    <div className="flex h-full flex-col  bg-canvas">
-      <div className="flex items-center justify-between gap-3 border-b border-line-soft px-4 py-2.5">
-        <div className="flex items-center gap-2 text-ink-faint">
-          <span className="text-signal">{icon}</span>
-          <h2 className="font-mono text-2xs uppercase tracking-[0.16em] text-ink-muted">
-            {title}
-          </h2>
-        </div>
-        {editing ? (
-          <div className="flex items-center gap-0.5">
-            <button
-              aria-label={t('dashboard.dragReorder')}
-              onPointerDown={(e) => dragControls?.start(e)}
-              className="flex h-8 w-8 cursor-grab items-center justify-center rounded-sm text-ink-faint hover:bg-surface-raised active:cursor-grabbing"
-            >
-              <GripIcon size={16} />
-            </button>
-            <IconButton label={`${t('common.remove')} ${title}`} onClick={onRemove}>
-              <XIcon size={15} />
-            </IconButton>
-          </div>
-        ) : (
-          action
-        )}
-      </div>
+    <div className="flex h-full flex-col bg-canvas">
+      <PanelHeader
+        title={title}
+        icon={icon}
+        action={
+          editing ? (
+            <div className="flex items-center gap-0.5">
+              <button
+                aria-label={t('dashboard.dragReorder')}
+                onPointerDown={(e) => dragControls?.start(e)}
+                className="flex h-8 w-8 cursor-grab items-center justify-center rounded-sm text-ink-faint hover:bg-surface-raised active:cursor-grabbing"
+              >
+                <GripIcon size={16} />
+              </button>
+              <IconButton label={`${t('common.remove')} ${title}`} onClick={onRemove}>
+                <XIcon size={15} />
+              </IconButton>
+            </div>
+          ) : (
+            action
+          )
+        }
+      />
       <motion.div layout="position" className="flex min-h-0 flex-1 flex-col">
         {children}
       </motion.div>
