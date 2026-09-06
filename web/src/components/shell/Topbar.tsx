@@ -47,8 +47,8 @@ export function Topbar() {
   return (
     <header className="flex h-14 shrink-0 items-center gap-3 border-b border-line-soft bg-canvas/80 px-4 backdrop-blur-md">
       <div className="flex items-center gap-2.5 pr-1">
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-signal shadow-(--shadow-raised)">
-          <span className="font-mono text-sm font-bold text-signal-ink">W</span>
+        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent-primary shadow-(--shadow-raised)">
+          <span className="font-mono text-sm font-bold text-accent-primary-ink">W</span>
         </div>
         <span className="hidden text-sm font-semibold tracking-tight text-ink sm:block">
           WiseLabz
@@ -106,7 +106,7 @@ export function Topbar() {
             aria-expanded={menuOpen}
             className="flex items-center gap-2 rounded-md py-1 pl-1 pr-2 transition-colors hover:bg-surface-raised"
           >
-            <span className="flex h-7 w-7 items-center justify-center rounded-sm bg-signal-tint text-signal-bright">
+            <span className="flex h-7 w-7 items-center justify-center rounded-sm bg-accent-primary-tint text-accent-primary-bright">
               <UserIcon size={16} />
             </span>
             <span className="hidden text-sm font-medium text-ink sm:block">

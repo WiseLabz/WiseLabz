@@ -264,7 +264,7 @@ function EditRow({
         aria-checked={enabled}
         onClick={onToggle}
         className="relative h-5 w-9 rounded-full transition-colors"
-        style={{ backgroundColor: enabled ? 'var(--color-signal)' : 'var(--color-line-strong)' }}
+        style={{ backgroundColor: enabled ? 'var(--color-accent-primary)' : 'var(--color-line-strong)' }}
       >
         <motion.span
           layout
@@ -294,13 +294,13 @@ function SyncSweep({ active }: { active: boolean }) {
             className="absolute inset-x-0 h-24"
             style={{
               background:
-                'linear-gradient(to bottom, transparent, var(--color-signal-tint), transparent)',
+                'linear-gradient(to bottom, transparent, var(--color-accent-primary-tint), transparent)',
             }}
             initial={{ y: '-30%' }}
             animate={{ y: '160%' }}
             transition={{ repeat: Infinity, duration: 1.6, ease: 'linear' }}
           >
-            <span className="absolute bottom-0 left-0 right-0 h-px bg-signal" />
+            <span className="absolute bottom-0 left-0 right-0 h-px bg-accent-primary" />
           </motion.div>
         </motion.div>
       )}

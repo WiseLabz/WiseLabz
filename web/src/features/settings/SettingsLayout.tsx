@@ -30,7 +30,7 @@ export function SettingsLayout() {
                 cn(
                   'group flex items-center gap-2.5 whitespace-nowrap rounded-md px-3 py-2 text-sm transition-colors',
                   isActive
-                    ? 'bg-signal-tint text-ink'
+                    ? 'bg-accent-primary-tint text-ink'
                     : 'text-ink-muted hover:bg-surface hover:text-ink'
                 )
               }
@@ -40,7 +40,7 @@ export function SettingsLayout() {
                   <span
                     className={cn(
                       'transition-colors',
-                      isActive ? 'text-signal-bright' : 'text-ink-faint group-hover:text-ink-muted'
+                      isActive ? 'text-accent-primary-bright' : 'text-ink-faint group-hover:text-ink-muted'
                     )}
                   >
                     <Icon size={16} />

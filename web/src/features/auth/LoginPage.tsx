@@ -12,8 +12,8 @@ import { Button } from '../../components/ui/Button';
 import { toast } from '../../lib/toast';
 
 const inputClass =
-  'h-10 w-full rounded-sm border border-[var(--color-line)] bg-[var(--color-canvas-sunken)] px-3 text-sm text-[var(--color-ink)] outline-none transition-colors focus-visible:border-[var(--color-signal-soft)]';
-const labelClass = 'mb-1.5 block text-2xs uppercase tracking-wider text-[var(--color-ink-faint)]';
+  'h-10 w-full rounded-sm border border-[var(--color-line)] bg-[var(--color-canvas-sunken)] px-3 text-sm text-[var(--color-ink)] outline-none transition-colors focus-visible:border-[var(--color-accent-primary-soft)]';
+const labelClass = 'mb-1.5 block text-2xs text-[var(--color-ink-faint)]';
 
 export function LoginPage() {
   const { t } = useTranslation();
@@ -45,8 +45,8 @@ export function LoginPage() {
   return (
     <div className="overflow-hidden rounded-lg border border-line bg-surface shadow-(--shadow-pop)">
       <div className="flex items-center gap-3 border-b border-line-soft px-6 py-5">
-        <div className="flex h-9 w-9 items-center justify-center rounded-md bg-signal shadow-(--shadow-raised)">
-          <span className="font-mono text-base font-bold text-signal-ink">W</span>
+        <div className="flex h-9 w-9 items-center justify-center rounded-md bg-accent-primary shadow-(--shadow-raised)">
+          <span className="font-mono text-base font-bold text-accent-primary-ink">W</span>
         </div>
         <div>
           <p className="text-sm font-semibold text-ink">{t('app.name')}</p>
@@ -106,7 +106,7 @@ export function LoginPage() {
             {localEnabled && (
               <div className="my-4 flex items-center gap-3">
                 <span className="h-px flex-1 bg-line-soft" />
-                <span className="font-mono text-2xs uppercase tracking-wider text-ink-faint">
+                <span className="font-mono text-2xs text-ink-faint">
                   {t('auth.or')}
                 </span>
                 <span className="h-px flex-1 bg-line-soft" />

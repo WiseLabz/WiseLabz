@@ -121,7 +121,7 @@ export function ElevationConfirm({
                             <div>
                                 <label
                                     htmlFor="elevation-confirm-name"
-                                    className="mb-1.5 block text-2xs uppercase tracking-wider text-ink-faint"
+                                    className="mb-1.5 block text-2xs text-ink-faint"
                                 >
                                     Type <span className="font-mono text-ink">{resourceName}</span> to
                                     confirm
@@ -131,7 +131,7 @@ export function ElevationConfirm({
                                     value={typed}
                                     onChange={(e) => setTyped(e.target.value)}
                                     autoComplete="off"
-                                    className="h-9 w-full rounded-sm border border-line bg-surface px-2.5 font-mono text-sm text-ink outline-none focus-visible:border-signal-soft"
+                                    className="h-9 w-full rounded-sm border border-line bg-surface px-2.5 font-mono text-sm text-ink outline-none focus-visible:border-accent-primary-soft"
                                 />
                             </div>
 

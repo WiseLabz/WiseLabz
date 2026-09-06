@@ -82,14 +82,14 @@ export function ServiceRosterWidget() {
               onClick={() => navigate('/services')}
               className="group flex w-full items-center gap-3 border-b border-line-soft px-4 py-2.5 text-left transition-colors last:border-0 hover:bg-surface-raised"
             >
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-canvas-sunken text-ink-faint group-hover:text-signal-bright">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-canvas-sunken text-ink-faint group-hover:text-accent-primary-bright">
                 <Icon size={16} />
               </span>
               <span className="min-w-0 flex-1">
                 <span className="flex items-center gap-2">
                   <span className="truncate text-sm font-medium text-ink">{c.name}</span>
                   {live && (
-                    <span className="rounded bg-signal-tint px-1 text-[10px] font-semibold text-signal-bright">
+                    <span className="rounded bg-accent-primary-tint px-1 text-[10px] font-semibold text-accent-primary-bright">
                       {t('widgets.roster.updated')}
                     </span>
                   )}
@@ -205,13 +205,13 @@ export function RecentChangesWidget() {
           <span className="min-w-0 flex-1">
             <span className="block truncate text-sm text-ink">{c.summary}</span>
             <span className="flex items-center gap-1.5 font-mono text-2xs text-ink-faint">
-              <span className="text-signal-bright">{c.serviceName}</span>
+              <span className="text-accent-primary-bright">{c.serviceName}</span>
               <span>·</span>
               <span>{c.changeType}</span>
               <span>·</span>
               <span>{relativeTime(c.detectedAt)}</span>
               {c.willTriggerAi && (
-                <span className="ml-0.5 rounded bg-signal-tint px-1 text-signal">
+                <span className="ml-0.5 rounded bg-accent-primary-tint px-1 text-accent-primary">
                   {t('widgets.changes.ai')}
                 </span>
               )}
@@ -246,11 +246,11 @@ export function SyncActivityWidget() {
             <span className="font-medium text-ink">
               {t('widgets.sync.fleetSync', { phase: job.phase })}
             </span>
-            <span className="nums font-mono text-signal-bright">{job.percent}%</span>
+            <span className="nums font-mono text-accent-primary-bright">{job.percent}%</span>
           </div>
           <div className="h-1.5 overflow-hidden rounded-full bg-canvas-sunken">
             <motion.div
-              className="h-full rounded-full bg-signal"
+              className="h-full rounded-full bg-accent-primary"
               animate={{ width: `${job.percent}%` }}
               transition={{ ease: [0.16, 1, 0.3, 1], duration: 0.5 }}
             />
@@ -338,7 +338,7 @@ export function DocsHealthWidget() {
           <button
             key={d.docId}
             onClick={() => navigate(`/docs/${d.docId}`)}
-            className="flex items-center gap-1.5 rounded-md border border-line-soft bg-canvas-sunken px-2 py-1 text-xs text-ink-muted transition-colors hover:border-signal-soft hover:text-ink"
+            className="flex items-center gap-1.5 rounded-md border border-line-soft bg-canvas-sunken px-2 py-1 text-xs text-ink-muted transition-colors hover:border-accent-primary-soft hover:text-ink"
           >
             <FileTextIcon size={13} />
             {d.title.split(' — ')[0]}
@@ -376,7 +376,7 @@ function CoverageRing({ pct }: Readonly<{ pct: number }>) {
           cy="32"
           r={r}
           fill="none"
-          stroke="var(--color-signal)"
+          stroke="var(--color-accent-primary)"
           strokeWidth="6"
           strokeLinecap="round"
           strokeDasharray={c}

@@ -1,7 +1,7 @@
 /**
  * Shared building blocks for the Settings sub-pages — kept here so every sub-page
  * has one consistent field / toggle / section vocabulary that matches DESIGN.md
- * (mono labels, hairline inputs, signal only for the active toggle, status as
+ * (mono labels, hairline inputs, primary accent only for the active toggle, status as
  * shape+word). No new global primitives; these are local compositions.
  */
 import { forwardRef } from 'react';
@@ -66,7 +66,7 @@ export function Field({
 }) {
   return (
     <label htmlFor={htmlFor} className={cn('block', className)}>
-      <span className="mb-1.5 block font-mono text-2xs uppercase tracking-[0.16em] text-ink-faint">
+      <span className="mb-1.5 block font-mono text-2xs text-ink-faint">
         {label}
       </span>
       {children}
@@ -122,7 +122,7 @@ export function Toggle({
       disabled={disabled}
       onClick={() => onChange(!checked)}
       className={cn('relative shrink-0 rounded-full transition-colors disabled:opacity-50', w)}
-      style={{ backgroundColor: checked ? 'var(--color-signal)' : 'var(--color-line-strong)' }}
+      style={{ backgroundColor: checked ? 'var(--color-accent-primary)' : 'var(--color-line-strong)' }}
     >
       <motion.span
         layout

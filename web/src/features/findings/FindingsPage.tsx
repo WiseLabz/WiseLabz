@@ -57,7 +57,7 @@ export function FindingsPage() {
           <p className="text-sm text-ink-muted">{t('findings.subtitle')}</p>
         </div>
         <div className="flex flex-wrap items-end gap-2">
-          <label className="text-2xs uppercase tracking-wider text-ink-faint">
+          <label className="text-xs text-ink-muted">
             {t('findings.checkType')}
             <select
               value={checkType}
@@ -65,14 +65,14 @@ export function FindingsPage() {
                 setCheckType(event.target.value as QualityCheckType | 'all');
                 setPage(1);
               }}
-              className="mt-1 block h-9 rounded-sm border border-line bg-surface px-2.5 text-sm normal-case tracking-normal text-ink outline-none focus-visible:border-signal-soft"
+              className="mt-1 block h-9 rounded-sm border border-line bg-surface px-2.5 text-sm text-ink outline-none focus-visible:border-accent-primary-soft"
             >
               {CHECK_TYPES.map((option) => (
                 <option key={option.value} value={option.value}>{t(option.label)}</option>
               ))}
             </select>
           </label>
-          <label className="text-2xs uppercase tracking-wider text-ink-faint">
+          <label className="text-xs text-ink-muted">
             {t('findings.status')}
             <select
               value={status}
@@ -80,7 +80,7 @@ export function FindingsPage() {
                 setStatus(event.target.value as QualityFindingStatus);
                 setPage(1);
               }}
-              className="mt-1 block h-9 rounded-sm border border-line bg-surface px-2.5 text-sm normal-case tracking-normal text-ink outline-none focus-visible:border-signal-soft"
+              className="mt-1 block h-9 rounded-sm border border-line bg-surface px-2.5 text-sm text-ink outline-none focus-visible:border-accent-primary-soft"
             >
               <option value="open">{t('findings.open')}</option>
               <option value="resolved">{t('findings.resolved')}</option>
@@ -115,7 +115,7 @@ export function FindingsPage() {
                     <p className="text-sm font-medium text-ink">{finding.title}</p>
                     <p className="mt-1 text-sm leading-relaxed text-ink-muted">{finding.description}</p>
                     <p className="mt-1.5 font-mono text-2xs text-ink-faint">
-                      <span className="text-signal-bright">{finding.connectorName}</span> ·{' '}
+                      <span className="text-accent-secondary-bright">{finding.connectorName}</span> ·{' '}
                       {t('findings.detected', { count: finding.detectedCount })} ·{' '}
                       {t('common.ago', { time: relativeTime(finding.lastSeenAt) })}
                     </p>
@@ -124,7 +124,7 @@ export function FindingsPage() {
                 <div className="mt-3 flex items-center justify-end gap-2 border-t border-line-soft pt-3">
                   <Link
                     to={finding.remediationLink}
-                    className="inline-flex h-7 items-center justify-center gap-2 rounded-sm px-2.5 font-mono text-xs font-medium text-ink-muted transition-colors hover:bg-surface hover:text-ink"
+                    className="inline-flex h-7 items-center justify-center gap-2 rounded-sm px-2.5 font-mono text-xs font-medium text-accent-secondary transition-colors hover:bg-surface hover:text-accent-secondary-bright"
                   >
                     {t('findings.remediate')} <ArrowRightIcon size={14} />
                   </Link>

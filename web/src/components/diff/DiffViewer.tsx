@@ -4,7 +4,7 @@
  *   - doc:   two full document revisions rendered JetBrains-IDE style — whole
  *            document with context, line + word-level highlighting, foldable
  *            unchanged regions, and a unified ↔ side-by-side toggle.
- * Removed content is tinted err, added ok — but each line is also marked with a
+ * Removed content is orange and added content cable-blue — but each line is also marked with a
  * −/+ gutter glyph, so the diff reads without relying on color alone.
  */
 import { useMemo, useState } from 'react';
@@ -35,8 +35,8 @@ export function DiffViewer({ diff }: { diff: Diff }) {
 function StatBar({ added, removed }: { added: number; removed: number }) {
   return (
     <span className="nums flex items-center gap-2 font-mono text-2xs">
-      <span className="text-ok">+{added}</span>
-      <span className="text-err">−{removed}</span>
+      <span className="text-accent-secondary">+{added}</span>
+      <span className="text-accent-primary">−{removed}</span>
     </span>
   );
 }
@@ -51,7 +51,7 @@ export function InfraDiff({ diff }: { diff: Diff }) {
   return (
     <div className="overflow-hidden rounded-lg border border-line-soft">
       <div className="flex items-center justify-between border-b border-line-soft bg-canvas-sunken px-3 py-2">
-        <span className="font-mono text-2xs uppercase tracking-wider text-ink-faint">
+        <span className="font-mono text-2xs text-ink-faint">
           infrastructure drift
         </span>
         <StatBar added={added} removed={removed} />
@@ -81,8 +81,8 @@ function DiffCell({ value, kind }: { value: string | null; kind: 'before' | 'aft
         empty
           ? 'bg-canvas-sunken text-ink-faint'
           : isBefore
-            ? 'bg-err-tint text-err'
-            : 'bg-ok-tint text-ok'
+            ? 'bg-accent-primary-tint text-accent-primary'
+            : 'bg-accent-secondary-tint text-accent-secondary'
       )}
     >
       <span className="select-none font-bold opacity-70">{isBefore ? '−' : '+'}</span>
@@ -94,8 +94,8 @@ function DiffCell({ value, kind }: { value: string | null; kind: 'before' | 'aft
 /* ── Doc format (JetBrains-style revision diff) ────────────────────────── */
 
 const WORD_HL: Record<'del' | 'add', string> = {
-  del: 'color-mix(in oklch, var(--color-err) 30%, transparent)',
-  add: 'color-mix(in oklch, var(--color-ok) 30%, transparent)',
+  del: 'color-mix(in oklch, var(--color-accent-primary) 30%, transparent)',
+  add: 'color-mix(in oklch, var(--color-accent-secondary) 30%, transparent)',
 };
 
 /** Render a line's text, highlighting the words that actually changed. */
@@ -136,7 +136,7 @@ export function DocDiff({
   return (
     <div className="overflow-hidden rounded-lg border border-line-soft">
       <div className="flex items-center justify-between gap-3 border-b border-line-soft bg-canvas-sunken px-3 py-2">
-        <span className="truncate font-mono text-2xs uppercase tracking-wider text-ink-faint">
+        <span className="truncate font-mono text-2xs text-ink-faint">
           {label ?? 'document diff'}
           {baseLabel && headLabel && (
             <span className="ml-2 normal-case tracking-normal text-ink-faint">
@@ -176,7 +176,9 @@ function LayoutToggle({
           onClick={() => onChange(value)}
           className={cn(
             'flex h-6 w-6 items-center justify-center rounded transition-colors',
-            layout === value ? 'bg-surface-raised text-ink' : 'text-ink-faint hover:text-ink'
+            layout === value
+              ? 'bg-accent-primary-tint text-accent-primary'
+              : 'text-ink-faint hover:text-ink'
           )}
         >
           <Icon size={13} />
@@ -286,15 +288,15 @@ function UnifiedLine({
 }) {
   const bg =
     tone === 'add'
-      ? 'bg-[var(--color-ok-tint)]'
+      ? 'bg-[var(--color-accent-secondary-tint)]'
       : tone === 'del'
-        ? 'bg-[var(--color-err-tint)]'
+        ? 'bg-[var(--color-accent-primary-tint)]'
         : '';
   const fg =
     tone === 'add'
-      ? 'text-[var(--color-ok)]'
+      ? 'text-[var(--color-accent-secondary)]'
       : tone === 'del'
-        ? 'text-[var(--color-err)]'
+        ? 'text-[var(--color-accent-primary)]'
         : 'text-[var(--color-ink-muted)]';
   return (
     <tr className={bg}>
@@ -378,17 +380,17 @@ function SplitCell({
 }) {
   const bg =
     tone === 'add'
-      ? 'bg-[var(--color-ok-tint)]'
+      ? 'bg-[var(--color-accent-secondary-tint)]'
       : tone === 'del'
-        ? 'bg-[var(--color-err-tint)]'
+        ? 'bg-[var(--color-accent-primary-tint)]'
         : tone === 'empty'
           ? 'bg-[var(--color-canvas-sunken)]'
           : '';
   const fg =
     tone === 'add'
-      ? 'text-[var(--color-ok)]'
+      ? 'text-[var(--color-accent-secondary)]'
       : tone === 'del'
-        ? 'text-[var(--color-err)]'
+        ? 'text-[var(--color-accent-primary)]'
         : 'text-[var(--color-ink-muted)]';
   return (
     <>
@@ -429,7 +431,7 @@ function GapRow({ cols, count, onExpand }: { cols: number; count: number; onExpa
         <button
           type="button"
           onClick={onExpand}
-          className="flex w-full items-center gap-2 py-0.5 font-mono text-2xs text-ink-faint transition-colors hover:text-signal-bright"
+          className="flex w-full items-center gap-2 py-0.5 font-mono text-2xs text-ink-faint transition-colors hover:text-accent-secondary-bright"
         >
           <span className="select-none">⋯</span>
           {count} unchanged {count === 1 ? 'line' : 'lines'} — expand

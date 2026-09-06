@@ -336,7 +336,7 @@ export function TemplateEditorPage() {
 }
 
 const inputCls =
-  'h-9 w-full rounded-sm border border-[var(--color-line)] bg-[var(--color-surface)] px-2.5 text-sm text-[var(--color-ink)] outline-none placeholder:text-[var(--color-ink-faint)] focus-visible:border-[var(--color-signal-soft)]';
+  'h-9 w-full rounded-sm border border-[var(--color-line)] bg-[var(--color-surface)] px-2.5 text-sm text-[var(--color-ink)] outline-none placeholder:text-[var(--color-ink-faint)] focus-visible:border-[var(--color-accent-primary-soft)]';
 
 function Labeled({
   label,
@@ -349,7 +349,7 @@ function Labeled({
 }) {
   return (
     <label className="block">
-      <span className="mb-1 block text-2xs uppercase tracking-wider text-ink-faint">
+      <span className="mb-1 block text-xs text-ink-muted">
         {label}
         {required && <span className="text-err"> *</span>}
       </span>
@@ -382,7 +382,7 @@ function SectionEditor({
           value={section.title}
           onChange={(e) => onChange({ title: e.target.value })}
           aria-label={t('templates.sectionTitleLabel')}
-          className="h-8 min-w-0 flex-1 rounded-sm border border-line bg-surface px-2.5 text-sm font-medium text-ink outline-none focus-visible:border-signal-soft"
+          className="h-8 min-w-0 flex-1 rounded-sm border border-line bg-surface px-2.5 text-sm font-medium text-ink outline-none focus-visible:border-accent-primary-soft"
         />
         <RoleGate>
           <div className="flex items-center">
@@ -418,7 +418,7 @@ function SectionEditor({
         rows={4}
         aria-label={t('templates.sectionBodyLabel')}
         placeholder={t('templates.sectionBodyPlaceholder')}
-        className="w-full resize-y rounded-sm border border-line bg-surface px-2.5 py-2 font-mono text-xs leading-relaxed text-ink outline-none placeholder:text-ink-faint focus-visible:border-signal-soft"
+        className="w-full resize-y rounded-sm border border-line bg-surface px-2.5 py-2 font-mono text-xs leading-relaxed text-ink outline-none placeholder:text-ink-faint focus-visible:border-accent-primary-soft"
       />
     </div>
   );
@@ -470,7 +470,7 @@ function PreviewPanel({ template, dirty }: { template: Template; dirty: boolean 
       <div className="space-y-3 p-4">
         {candidates.length > 0 && (
           <div>
-            <p className="mb-1 text-2xs uppercase tracking-wider text-ink-faint">
+            <p className="mb-1 text-xs text-ink-muted">
               {t('templates.affectedConnectors')}
             </p>
             <div className="space-y-1">
@@ -484,7 +484,7 @@ function PreviewPanel({ template, dirty }: { template: Template; dirty: boolean 
                   className={cn(
                     'flex w-full items-center justify-between gap-2 rounded-md border px-2.5 py-2 text-left text-xs transition-colors',
                     connector.connectorId === connectorId
-                      ? 'border-signal-soft bg-signal-tint'
+                      ? 'border-accent-primary-soft bg-accent-primary-tint'
                       : 'border-line-soft hover:bg-surface-raised'
                   )}
                 >
@@ -519,7 +519,7 @@ function PreviewPanel({ template, dirty }: { template: Template; dirty: boolean 
         )}
         <div className="flex flex-wrap items-end gap-2">
           <label className="min-w-0 flex-1">
-            <span className="mb-1 block text-2xs uppercase tracking-wider text-ink-faint">
+            <span className="mb-1 block text-xs text-ink-muted">
               {t('templates.sampleConnector')}
             </span>
             <div className="relative">

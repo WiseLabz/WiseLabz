@@ -69,7 +69,7 @@ export function NotificationCenter() {
               animate={{ scale: 1 }}
               exit={{ scale: 0 }}
               transition={{ type: 'spring', stiffness: 600, damping: 22 }}
-              className="nums absolute -right-0.5 -top-0.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-err px-1 text-[10px] font-bold text-signal-ink"
+              className="nums absolute -right-0.5 -top-0.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-err px-1 text-[10px] font-bold text-accent-primary-ink"
             >
               {unreadCount}
             </motion.span>
@@ -113,11 +113,11 @@ export function NotificationCenter() {
                     onClick={() => void markRead(n)}
                     className={cn(
                       'flex w-full flex-col items-start gap-0.5 rounded-md px-2.5 py-2 text-left transition-colors hover:bg-surface-raised',
-                      !n.read && 'bg-signal-tint/40',
+                      !n.read && 'bg-accent-primary-tint/40',
                     )}
                   >
                     <div className="flex w-full items-center gap-1.5">
-                      {!n.read && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-signal" />}
+                      {!n.read && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-accent-primary" />}
                       <span
                         className={cn(
                           'flex-1 truncate text-sm',

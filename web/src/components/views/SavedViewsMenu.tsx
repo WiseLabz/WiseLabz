@@ -136,7 +136,7 @@ export function SavedViewsMenu<TFilters>({
                     label={t('savedViews.save')}
                     disabled={!name.trim() || save.isPending}
                     onClick={() => save.mutate()}
-                    className="shrink-0 hover:bg-signal-tint hover:text-signal"
+                    className="shrink-0 hover:bg-accent-primary-tint hover:text-accent-primary"
                   >
                     <PlusIcon size={14} />
                   </IconButton>

@@ -266,7 +266,7 @@ function PaletteBody() {
           )}
           {groups.map(([group, items]) => (
             <div key={group} className="mb-1">
-              <p className="px-2.5 py-1.5 text-2xs font-semibold uppercase tracking-wider text-ink-faint">
+              <p className="px-2.5 py-1.5 text-2xs font-semibold text-ink-faint">
                 {t(`command.group.${group}`)}
               </p>
               {items.map((c) => {
@@ -282,7 +282,7 @@ function PaletteBody() {
                     onClick={() => run(c)}
                     className="flex w-full items-center gap-3 rounded-sm px-2.5 py-2 text-left font-mono text-sm transition-colors"
                     style={{
-                      backgroundColor: isActive ? 'var(--color-signal-tint)' : 'transparent',
+                      backgroundColor: isActive ? 'var(--color-accent-primary-tint)' : 'transparent',
                       color: isActive ? 'var(--color-ink)' : 'var(--color-ink-muted)',
                     }}
                   >

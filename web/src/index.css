@@ -41,14 +41,6 @@
   --color-accent-secondary-soft: oklch(0.46 0.068 240);
   --color-accent-secondary-tint: oklch(0.27 0.035 240);
 
-  /* ponytail: deprecated aliases — drop once every surface reads accent-primary
-     directly (tracked in the "Roll Rack Panel..." follow-up issue). */
-  --color-signal: oklch(0.74 0.18 45);
-  --color-signal-bright: oklch(0.81 0.17 45);
-  --color-signal-ink: oklch(0.17 0.03 55);
-  --color-signal-soft: oklch(0.46 0.112 45);
-  --color-signal-tint: oklch(0.27 0.058 45);
-
   /* ---- Status: data, not decoration. Distinct from both accents. ---- */
   --color-ok: oklch(0.80 0.12 145);
   --color-ok-tint: oklch(0.27 0.05 145);
@@ -139,13 +131,13 @@
   }
 
   ::selection {
-    background-color: var(--color-signal-soft);
+    background-color: var(--color-accent-primary-soft);
     color: var(--color-ink);
   }
 
   /* Focus: the signal color, square-ish to match the instrument language */
   :focus-visible {
-    outline: 2px solid var(--color-signal-bright);
+    outline: 2px solid var(--color-accent-primary-bright);
     outline-offset: 2px;
     border-radius: var(--radius-sm);
   }
@@ -196,18 +188,18 @@
   width: 14px;
   height: 14px;
   border-radius: 2px;
-  background: var(--color-signal);
+  background: var(--color-accent-primary);
   border: 2px solid var(--color-canvas);
 }
 .theme-range::-moz-range-thumb {
   width: 14px;
   height: 14px;
   border-radius: 2px;
-  background: var(--color-signal);
+  background: var(--color-accent-primary);
   border: 2px solid var(--color-canvas);
 }
 .theme-range:focus-visible {
-  outline: 2px solid var(--color-signal-bright);
+  outline: 2px solid var(--color-accent-primary-bright);
   outline-offset: 4px;
 }
 
