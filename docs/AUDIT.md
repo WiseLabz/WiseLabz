@@ -24,7 +24,7 @@ object, action-specific), and `createdAt`.
 | Action | Trigger | targetType / targetId |
 |---|---|---|
 | `connector.create` | `POST /api/connectors` | connector / new ID |
-| `connector.update` | `PATCH /api/connectors/{id}` | connector / id |
+| `connector.update` | `PUT /api/connectors/{id}` | connector / id |
 | `connector.delete` | `DELETE /api/connectors/{id}` | connector / id |
 | `connector.toggle_enabled` | `PUT /api/connectors/{id}/enabled` | connector / id |
 | `connector.sync` | `POST /api/connectors/{id}/sync` | connector / id |

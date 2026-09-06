@@ -257,7 +257,8 @@ carries a per-connector-type config schema (each type exposes different fields),
 credential entry, and a connection test (`Connector.Validate()`) before the
 connector is persisted. Removal is the destructive op that drives the blast-radius
 pattern above (it cascades to that connector's snapshots and generated doc
-sections). Credentials are write-only over the API — never returned in reads.
+sections). Connectors also have an optional `owner` field used by documentation
+quality checks. Credentials are write-only over the API — never returned in reads.
 
 ---
 
@@ -341,6 +342,24 @@ The job runs on a configurable interval (`retention.interval_hours`, default
 24h) and is idempotent: each pass deletes only rows newly past that
 category's cutoff, so running it repeatedly (or after downtime) is safe and
 produces no duplicate effects.
+
+---
+
+## Documentation quality findings (decided 2026-09-05)
+
+WiseLabz records actionable findings when documentation is stale, effectively
+empty, backed by three consecutive failed syncs, or attached to a connector with
+no owner. Only one open finding exists per connector and check type: repeated
+detections atomically update its last-seen time and count, while fixing the
+condition auto-resolves it. A later recurrence creates a new finding.
+
+All four checks run after each non-skipped sync. A daily sweep checks staleness
+for every connector as well, including connectors that have stopped syncing.
+Findings appear on their own authenticated API and navigation page; operators can
+resolve them, remediation links point to the affected document or connector, and
+WebSocket events refresh the badge. This v1 path is intentionally separate from
+Alerts and the notification dispatcher, so it does not fan out to webhook or
+email channels. Retention pruning and configurable thresholds remain follow-ups.
 
 ---
 
