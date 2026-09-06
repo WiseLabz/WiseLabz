@@ -22,6 +22,7 @@ import { DocEditorPage } from './features/docs/DocEditorPage';
 import { ChangesPage } from './features/changes/ChangesPage';
 import { ChangeDetailPage } from './features/changes/ChangeDetailPage';
 import { AlertsPage } from './features/alerts/AlertsPage';
+import { FindingsPage } from './features/findings/FindingsPage';
 import { TemplatesPage } from './features/templates/TemplatesPage';
 import { TemplateEditorPage } from './features/templates/TemplateEditorPage';
 import {
@@ -92,6 +93,7 @@ const router = createBrowserRouter([
       { path: 'changes', element: <ChangesPage /> },
       { path: 'changes/:changeId', element: <ChangeDetailPage /> },
       { path: 'alerts', element: <AlertsPage /> },
+      { path: 'findings', element: <FindingsPage /> },
       { path: 'templates', element: <RequireRole role="operator"><TemplatesPage /></RequireRole> },
       { path: 'templates/:id', element: <RequireRole role="operator"><TemplateEditorPage /></RequireRole> },
       {

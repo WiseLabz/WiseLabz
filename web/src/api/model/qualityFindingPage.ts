@@ -6,18 +6,11 @@
  *
  * OpenAPI spec version: 0.1.0
  */
-import type { ConnectorUpdateConfig } from './connectorUpdateConfig';
+import type { QualityFinding } from './qualityFinding';
 
-export interface ConnectorUpdate {
-  name?: string;
-  /** @nullable */
-  owner?: string | null;
-  url?: string;
-  verifyTls?: boolean;
-  config?: ConnectorUpdateConfig;
-  /**
-   * Auto-sync cadence in seconds; null disables scheduled sync (manual only)
-   * @nullable
-   */
-  scheduleSeconds?: number | null;
+export interface QualityFindingPage {
+  items: QualityFinding[];
+  total: number;
+  page: number;
+  pageSize: number;
 }

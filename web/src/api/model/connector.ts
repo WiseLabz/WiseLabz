@@ -13,6 +13,8 @@ export interface Connector {
   id: string;
   /** matches ServiceSnapshot.ServiceName */
   name: string;
+  /** @nullable */
+  owner?: string | null;
   category: ConnectorCategory;
   /** e.g. proxmox, portainer, pfsense */
   type: string;

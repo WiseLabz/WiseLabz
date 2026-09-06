@@ -6,18 +6,12 @@
  *
  * OpenAPI spec version: 0.1.0
  */
-import type { ConnectorUpdateConfig } from './connectorUpdateConfig';
 
-export interface ConnectorUpdate {
-  name?: string;
-  /** @nullable */
-  owner?: string | null;
-  url?: string;
-  verifyTls?: boolean;
-  config?: ConnectorUpdateConfig;
-  /**
-   * Auto-sync cadence in seconds; null disables scheduled sync (manual only)
-   * @nullable
-   */
-  scheduleSeconds?: number | null;
-}
+export type QualityCheckType = (typeof QualityCheckType)[keyof typeof QualityCheckType];
+
+export const QualityCheckType = {
+  stale: 'stale',
+  empty: 'empty',
+  failing: 'failing',
+  ownership_incomplete: 'ownership_incomplete',
+} as const;

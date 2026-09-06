@@ -16,6 +16,7 @@ var tablesCreatedByMigrations = []string{
 	"service_snapshots", "docs", "doc_versions", "templates",
 	"template_sections", "changes", "alerts", "dashboard_layouts",
 	"auth_config", "ai_config", "notification_config", "in_app_notifications",
+	"quality_findings",
 }
 
 func TestRunMigrations(t *testing.T) {
@@ -113,14 +114,14 @@ func TestRunMigrationsDown(t *testing.T) {
 		t.Fatalf("RunMigrationsDown() error: %v", err)
 	}
 
-	// RunMigrationsDown rolls back only 000004_template_versions.
+	// RunMigrationsDown rolls back only 000005_quality_findings.
 	var count int
-	if err := db.QueryRow("SELECT COUNT(*) FROM template_versions").Scan(&count); err == nil {
-		t.Error("table template_versions still exists after RunMigrationsDown()")
+	if err := db.QueryRow("SELECT COUNT(*) FROM quality_findings").Scan(&count); err == nil {
+		t.Error("table quality_findings still exists after RunMigrationsDown()")
 	}
-	if rows, err := db.Query("SELECT current_version FROM templates"); err == nil {
+	if rows, err := db.Query("SELECT owner FROM connectors"); err == nil {
 		_ = rows.Close()
-		t.Error("templates.current_version still exists after RunMigrationsDown()")
+		t.Error("connectors.owner still exists after RunMigrationsDown()")
 	}
 	if err := db.QueryRow("SELECT COUNT(*) FROM audit_log").Scan(&count); err != nil {
 		t.Errorf("table audit_log should still exist after rolling back only the last migration: %v", err)
@@ -129,6 +130,9 @@ func TestRunMigrationsDown(t *testing.T) {
 		t.Errorf("table saved_views should still exist after rolling back only the last migration: %v", err)
 	}
 	for _, table := range tablesCreatedByMigrations {
+		if table == "quality_findings" {
+			continue
+		}
 		if err := db.QueryRow("SELECT COUNT(*) FROM " + table).Scan(&count); err != nil {
 			t.Errorf("table %s should still exist after rolling back only the last migration: %v", table, err)
 		}
@@ -164,12 +168,12 @@ func TestRunMigrationsDownPostgres(t *testing.T) {
 	}
 
 	var count int
-	if err := db.QueryRow("SELECT COUNT(*) FROM template_versions").Scan(&count); err == nil {
-		t.Error("table template_versions still exists after RunMigrationsDown()")
+	if err := db.QueryRow("SELECT COUNT(*) FROM quality_findings").Scan(&count); err == nil {
+		t.Error("table quality_findings still exists after RunMigrationsDown()")
 	}
-	if rows, err := db.Query("SELECT current_version FROM templates"); err == nil {
+	if rows, err := db.Query("SELECT owner FROM connectors"); err == nil {
 		_ = rows.Close()
-		t.Error("templates.current_version still exists after RunMigrationsDown()")
+		t.Error("connectors.owner still exists after RunMigrationsDown()")
 	}
 	if err := db.QueryRow("SELECT COUNT(*) FROM audit_log").Scan(&count); err != nil {
 		t.Errorf("table audit_log should still exist after rolling back only the last migration: %v", err)
@@ -178,6 +182,9 @@ func TestRunMigrationsDownPostgres(t *testing.T) {
 		t.Errorf("table saved_views should still exist after rolling back only the last migration: %v", err)
 	}
 	for _, table := range tablesCreatedByMigrations {
+		if table == "quality_findings" {
+			continue
+		}
 		if err := db.QueryRow("SELECT COUNT(*) FROM " + table).Scan(&count); err != nil {
 			t.Errorf("table %s should still exist after rolling back only the last migration: %v", table, err)
 		}

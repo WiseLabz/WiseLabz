@@ -73,6 +73,10 @@ export const getGetSystemBackupExportResponseMock = (
     () => ({
       id: faker.string.alpha({ length: { min: 10, max: 20 } }),
       name: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      owner: faker.helpers.arrayElement([
+        faker.helpers.arrayElement([faker.string.alpha({ length: { min: 10, max: 20 } }), null]),
+        undefined,
+      ]),
       category: faker.helpers.arrayElement(Object.values(ConnectorCategory)),
       type: faker.string.alpha({ length: { min: 10, max: 20 } }),
       enabled: faker.datatype.boolean(),

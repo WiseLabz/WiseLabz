@@ -15,6 +15,8 @@ export type WsEventType =
   | 'change.detected'
   | 'alert.created'
   | 'alert.resolved'
+  | 'quality.finding.created'
+  | 'quality.findings.changed'
   | 'doc.generated'
   | 'doc.ai_suggestion'
   | 'system.health'
@@ -84,6 +86,17 @@ export interface AlertResolvedPayload {
   resolution: 'resolved' | 'dismissed' | 'snoozed';
 }
 
+export interface QualityFindingCreatedPayload {
+  findingId: string;
+  connectorId: string;
+  checkType: string;
+  severity: Severity;
+}
+
+export interface QualityFindingsChangedPayload {
+  connectorId: string;
+}
+
 export interface DocGeneratedPayload {
   docId: string;
   serviceId?: string;
@@ -119,6 +132,8 @@ export interface WsEventMap {
   'change.detected': ChangeDetectedPayload;
   'alert.created': AlertCreatedPayload;
   'alert.resolved': AlertResolvedPayload;
+  'quality.finding.created': QualityFindingCreatedPayload;
+  'quality.findings.changed': QualityFindingsChangedPayload;
   'doc.generated': DocGeneratedPayload;
   'doc.ai_suggestion': DocAiSuggestionPayload;
   'system.health': SystemHealthPayload;

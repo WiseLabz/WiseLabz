@@ -11,17 +11,19 @@ import { cn } from '../../lib/cn';
 import { useLive } from '../../store/live';
 import { NAV, type NavItem } from './nav';
 import { SettingsIcon } from '../icons';
+import { useGetFindings } from '../../api/generated/findings/findings';
 
 const DOCK_ITEMS: NavItem[] = [...NAV, { to: '/settings', label: 'Settings', Icon: SettingsIcon }];
 
 export function Dock() {
   const pending = useLive((s) => s.pendingAlerts);
+  const findings = useGetFindings({ status: 'open', pageSize: 1 });
   const { t } = useTranslation();
 
   return (
     <div className="pointer-events-none fixed inset-x-0 bottom-5 z-(--z-sticky) flex justify-center px-4">
       <nav className="pointer-events-auto flex items-center gap-0.5 rounded-(--radius-xl) border border-line bg-[color-mix(in_oklch,var(--color-surface-raised)_88%,transparent)] p-1.5 shadow-(--shadow-pop) backdrop-blur-xl">
-        {DOCK_ITEMS.map(({ to, Icon, badge }) => (
+        {DOCK_ITEMS.map(({ to, Icon, badge, badgeSource }) => (
           <NavLink
             key={to}
             to={to}
@@ -44,9 +46,9 @@ export function Dock() {
                 )}
                 <span className="relative">
                   <Icon size={18} className="shrink-0" />
-                  {badge && pending > 0 && (
+                  {badge && (badgeSource === 'findings' ? (findings.data?.total ?? 0) : pending) > 0 && (
                     <span className="nums absolute -right-1.5 -top-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-err px-1 text-[10px] font-bold text-canvas">
-                      {pending}
+                      {badgeSource === 'findings' ? findings.data?.total : pending}
                     </span>
                   )}
                 </span>

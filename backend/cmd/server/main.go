@@ -20,6 +20,7 @@ import (
 	"github.com/WiseLabz/wiselabz/internal/config"
 	"github.com/WiseLabz/wiselabz/internal/doc"
 	"github.com/WiseLabz/wiselabz/internal/notifications"
+	"github.com/WiseLabz/wiselabz/internal/quality"
 	"github.com/WiseLabz/wiselabz/internal/retention"
 	"github.com/WiseLabz/wiselabz/internal/store"
 	"github.com/WiseLabz/wiselabz/internal/sync"
@@ -102,7 +103,8 @@ func main() {
 	notifDispatcher := notifications.NewDispatcher(s, wsHub)
 
 	// Initialize engines
-	syncEngine := sync.NewEngine(s, wsHub, notifDispatcher)
+	qualityChecker := quality.NewChecker(s, wsHub)
+	syncEngine := sync.NewEngine(s, wsHub, notifDispatcher, qualityChecker)
 	docEngine := doc.NewEngine(s)
 
 	aiRegistry := ai.NewRegistry()
@@ -143,6 +145,7 @@ func main() {
 	// Start snoozed alert expiration goroutine
 	go runAlertExpirer(ctx, s, notifDispatcher, logger)
 	go notifications.RunDeliveryRetries(ctx, notifDispatcher, logger)
+	go quality.RunStaleSweep(ctx, s, wsHub, 24*time.Hour, logger)
 	go sync.RunScheduler(ctx, syncEngine, logger)
 	go retention.RunScheduler(ctx, s, cfg.Retention, logger)
 

@@ -16,6 +16,7 @@ import (
 	connhandler "github.com/WiseLabz/wiselabz/internal/api/connectors"
 	dashhandler "github.com/WiseLabz/wiselabz/internal/api/dashboard"
 	dochandler "github.com/WiseLabz/wiselabz/internal/api/docs"
+	findinghandler "github.com/WiseLabz/wiselabz/internal/api/findings"
 	"github.com/WiseLabz/wiselabz/internal/api/middleware"
 	notifhandler "github.com/WiseLabz/wiselabz/internal/api/notifications"
 	savedviewhandler "github.com/WiseLabz/wiselabz/internal/api/savedviews"
@@ -65,6 +66,7 @@ func NewRouter(cfg Config) chi.Router {
 	tmplH := tmplhandler.NewHandler(cfg.Store, cfg.DocEngine)
 	changeH := changehandler.NewHandler(cfg.Store, settingH, cfg.AIRegistry, cfg.WSHub)
 	alertH := alerthandler.NewHandler(cfg.Store)
+	findingH := findinghandler.NewHandler(cfg.Store)
 	notifH := notifhandler.NewHandler(cfg.Store)
 	dashH := dashhandler.NewHandler(cfg.Store)
 	docH := dochandler.NewHandler(cfg.Store, cfg.DocEngine, settingH, cfg.AIRegistry, cfg.WSHub)
@@ -132,7 +134,8 @@ func NewRouter(cfg Config) chi.Router {
 				r.Post("/", connH.Create)
 				r.Post("/{id}/test", connH.Test)
 				r.Post("/{id}/health", connH.Health)
-				r.Patch("/{id}", connH.Update)
+				r.Patch("/{id}", connH.Update) // compatibility for clients predating the OpenAPI PUT contract
+				r.Put("/{id}", connH.Update)
 				r.Put("/{id}/enabled", connH.ToggleEnabled)
 				r.Post("/{id}/sync", connH.Sync)
 
@@ -202,6 +205,16 @@ func NewRouter(cfg Config) chi.Router {
 				r.Post("/{id}/resolve", alertH.Resolve)
 				r.Post("/{id}/dismiss", alertH.Dismiss)
 				r.Post("/{id}/snooze", alertH.Snooze)
+			})
+		})
+
+		r.Route("/api/findings", func(r chi.Router) {
+			r.Get("/", findingH.List)
+			r.Get("/{id}", findingH.Get)
+
+			r.Group(func(r chi.Router) {
+				r.Use(operatorOnly)
+				r.Post("/{id}/resolve", findingH.Resolve)
 			})
 		})
 

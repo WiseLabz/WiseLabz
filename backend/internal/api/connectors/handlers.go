@@ -62,6 +62,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		Category  string         `json:"category"`
 		Type      string         `json:"type"`
 		URL       string         `json:"url"`
+		Owner     string         `json:"owner"`
 		VerifyTLS *bool          `json:"verifyTls"`
 		Config    map[string]any `json:"config"`
 		Enabled   *bool          `json:"enabled"`
@@ -99,6 +100,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		Category:   req.Category,
 		Type:       req.Type,
 		URL:        req.URL,
+		Owner:      req.Owner,
 		VerifyTLS:  verifyTLS,
 		ConfigData: configData,
 		Enabled:    enabled,
@@ -133,13 +135,14 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, c)
 }
 
-// Update handles PATCH /api/connectors/{id}.
+// Update handles PUT or PATCH /api/connectors/{id}.
 func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 
 	var req struct {
 		Name      *string        `json:"name"`
 		URL       *string        `json:"url"`
+		Owner     *string        `json:"owner"`
 		VerifyTLS *bool          `json:"verifyTls"`
 		Config    map[string]any `json:"config"`
 		Enabled   *bool          `json:"enabled"`
@@ -169,6 +172,9 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.URL != nil {
 		updates["url"] = *req.URL
+	}
+	if req.Owner != nil {
+		updates["owner"] = *req.Owner
 	}
 	if req.VerifyTLS != nil {
 		updates["verify_tls"] = *req.VerifyTLS
