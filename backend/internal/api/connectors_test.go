@@ -98,7 +98,7 @@ func TestConnectorsCreateSuccess(t *testing.T) {
 	_, opToken := app.user(t, "operator")
 
 	rec := app.req(t, http.MethodPost, "/api/connectors", map[string]any{
-		"name": "svc", "category": "virtualization", "type": "proxmox", "url": "https://example.com",
+		"name": "svc", "category": "virtualization", "type": "proxmox", "url": "https://example.com", "owner": "Platform",
 	}, opToken)
 
 	if rec.Code != http.StatusCreated {
@@ -116,8 +116,28 @@ func TestConnectorsCreateSuccess(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetConnector: %v", err)
 	}
-	if got.Name != "svc" {
-		t.Errorf("Name = %q, want svc", got.Name)
+	if got.Name != "svc" || got.Owner != "Platform" {
+		t.Errorf("connector = %+v, want name svc and owner Platform", got)
+	}
+}
+
+func TestConnectorsUpdateOwner(t *testing.T) {
+	app := newTestApp(t)
+	_, opToken := app.user(t, "operator")
+	c := &store.ConnectorRecord{Name: "svc", Category: "virtualization", Type: "proxmox", URL: "https://example.com", Owner: "Platform"}
+	if err := app.Store.CreateConnector(context.Background(), c); err != nil {
+		t.Fatalf("seed connector: %v", err)
+	}
+	rec := app.req(t, http.MethodPut, "/api/connectors/"+c.ID, map[string]any{"owner": ""}, opToken)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body = %s", rec.Code, rec.Body)
+	}
+	got, err := app.Store.GetConnector(context.Background(), c.ID)
+	if err != nil {
+		t.Fatalf("GetConnector: %v", err)
+	}
+	if got.Owner != "" {
+		t.Fatalf("Owner = %q, want blank", got.Owner)
 	}
 }
 
@@ -125,7 +145,7 @@ func TestConnectorsUpdateRoleBoundary(t *testing.T) {
 	app := newTestApp(t)
 	_, viewerToken := app.user(t, "viewer")
 
-	rec := app.req(t, http.MethodPatch, "/api/connectors/some-id", map[string]any{"name": "x"}, viewerToken)
+	rec := app.req(t, http.MethodPut, "/api/connectors/some-id", map[string]any{"name": "x"}, viewerToken)
 
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("status = %d, want 403; body = %s", rec.Code, rec.Body)
@@ -156,7 +176,7 @@ func TestConnectorsUpdateScheduleSeconds(t *testing.T) {
 	})
 
 	t.Run("sets schedule", func(t *testing.T) {
-		rec := app.req(t, http.MethodPatch, "/api/connectors/"+conn.ID, map[string]any{"scheduleSeconds": 1800}, opToken)
+		rec := app.req(t, http.MethodPut, "/api/connectors/"+conn.ID, map[string]any{"scheduleSeconds": 1800}, opToken)
 		if rec.Code != http.StatusOK {
 			t.Fatalf("status = %d, want 200; body = %s", rec.Code, rec.Body)
 		}
@@ -170,7 +190,7 @@ func TestConnectorsUpdateScheduleSeconds(t *testing.T) {
 	})
 
 	t.Run("explicit null clears schedule to manual-only", func(t *testing.T) {
-		rec := app.req(t, http.MethodPatch, "/api/connectors/"+conn.ID, map[string]any{"scheduleSeconds": nil}, opToken)
+		rec := app.req(t, http.MethodPut, "/api/connectors/"+conn.ID, map[string]any{"scheduleSeconds": nil}, opToken)
 		if rec.Code != http.StatusOK {
 			t.Fatalf("status = %d, want 200; body = %s", rec.Code, rec.Body)
 		}
