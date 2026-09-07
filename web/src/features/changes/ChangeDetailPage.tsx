@@ -13,6 +13,7 @@ import {
 } from '../../api/generated/changes/changes';
 import { getGetChangesQueryKey } from '../../api/generated/changes/changes';
 import { DiffViewer } from '../../components/diff/DiffViewer';
+import { RunbookPanel } from '../../components/runbook/RunbookPanel';
 import { SeverityTag } from '../../components/ui/StatusDot';
 import { Button } from '../../components/ui/Button';
 import { Panel } from '../../components/ui/Panel';
@@ -157,6 +158,8 @@ export function ChangeDetailPage() {
                       ))}
                     </div>
                   )}
+
+                  <RunbookPanel changeType={data.changeType} />
                 </div>
 
                 <div className="flex items-center justify-end gap-2 border-t border-line-soft px-6 py-4">

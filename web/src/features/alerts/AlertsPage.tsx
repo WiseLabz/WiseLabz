@@ -16,6 +16,7 @@ import { Panel } from '../../components/ui/Panel';
 import { Pagination } from '../../components/ui/Pagination';
 import { SkeletonRows, ErrorState, EmptyState } from '../../components/ui/states';
 import { SavedViewsMenu } from '../../components/views/SavedViewsMenu';
+import { RunbookPanel } from '../../components/runbook/RunbookPanel';
 import { relativeTime } from '../../lib/time';
 import { CheckIcon, XIcon, ClockIcon } from '../../components/icons';
 import type { Severity } from '../../api/model';
@@ -129,6 +130,7 @@ export function AlertsPage() {
                     </p>
                   </div>
                 </div>
+                <RunbookPanel alertSeverity={a.severity} />
                 <div className="mt-3 flex items-center justify-end gap-2 border-t border-line-soft pt-3">
                   <Button
                     variant="ghost"
