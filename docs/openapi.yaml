@@ -1907,6 +1907,28 @@ components:
             affectedDocIds:
               type: array
               items: { type: string }
+            provenance:
+              type: array
+              description: >
+                Document-diff provenance. Each entry identifies the changed snapshot
+                field, the template section that rendered it, and the resulting lines
+                in the head revision. Present only when a document diff has source data.
+              items: { $ref: '#/components/schemas/DocumentDiffProvenance' }
+    DocumentDiffProvenance:
+      type: object
+      required: [snapshotPath, templateSection, diffLines]
+      properties:
+        snapshotPath:
+          type: string
+          description: JSON-style path of the snapshot field that changed.
+        templateSection:
+          type: string
+          description: Title of the template section that rendered the field.
+        diffLines:
+          type: array
+          minItems: 1
+          items: { type: integer, minimum: 1 }
+          description: Changed line numbers in Diff.headText.
     ChangePage:
       type: object
       required: [items, total, page, pageSize]
