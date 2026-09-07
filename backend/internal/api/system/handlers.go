@@ -44,31 +44,6 @@ func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// Version responds with build version information.
-// GET /api/version
-func (h *Handler) Version(w http.ResponseWriter, _ *http.Request) {
-	info := map[string]string{}
-
-	if buildInfo, ok := debug.ReadBuildInfo(); ok {
-		info["go_version"] = buildInfo.GoVersion
-		info["version"] = buildInfo.Main.Version
-		for _, s := range buildInfo.Settings {
-			switch s.Key {
-			case "vcs.revision":
-				info["commit"] = s.Value
-			case "vcs.time":
-				info["build_time"] = s.Value
-			}
-		}
-	}
-
-	if _, ok := info["version"]; !ok {
-		info["version"] = "dev"
-	}
-
-	httputil.JSON(w, http.StatusOK, info)
-}
-
 // Info responds with instance info (version, sync schedule, integrations).
 // GET /api/system/info
 func (h *Handler) Info(w http.ResponseWriter, _ *http.Request) {

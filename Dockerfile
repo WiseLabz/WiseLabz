@@ -23,7 +23,7 @@ RUN npm run build
 FROM golang:1.26-alpine AS backend
 
 # git is required for `go build`'s automatic VCS stamping (debug.ReadBuildInfo,
-# surfaced via GET /api/version) — the alpine golang image ships without it.
+# included in the operator diagnostics bundle) — the alpine golang image ships without it.
 # ca-certificates is required for TLS to the Go module proxy during download.
 RUN apk add --no-cache git ca-certificates
 

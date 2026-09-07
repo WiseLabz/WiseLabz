@@ -39,7 +39,7 @@ type Component struct {
 	Status string `json:"status"`
 }
 
-// Versions mirrors system.Handler.Version's response shape.
+// Versions is the build metadata included in a diagnostics bundle.
 type Versions struct {
 	GoVersion string `json:"goVersion,omitempty"`
 	Version   string `json:"version"`
@@ -158,7 +158,7 @@ func collectHealth(ctx context.Context, db store.DBTX) Health {
 	return Health{Status: status, Components: []Component{{Name: "database", Status: dbStatus}}}
 }
 
-// collectVersions mirrors system.Handler.Version's build-info logic.
+// collectVersions reads build metadata for the diagnostics bundle.
 func collectVersions() Versions {
 	v := Versions{Version: "dev"}
 	if buildInfo, ok := debug.ReadBuildInfo(); ok {
