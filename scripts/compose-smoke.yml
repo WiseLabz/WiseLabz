@@ -1,0 +1,6 @@
+services:
+  app:
+    env_file: !override
+      - ${COMPOSE_SMOKE_ENV_FILE:?COMPOSE_SMOKE_ENV_FILE is required}
+    ports: !override
+      - "127.0.0.1:${COMPOSE_SMOKE_PORT:-18080}:8080"

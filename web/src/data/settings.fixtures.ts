@@ -174,6 +174,7 @@ export const settingsSystemInfo: SystemInfo = {
 
 export const settingsHealth: Health = {
   status: 'degraded',
+  healthy: false,
   components: [
     { name: 'api', status: 'ok', detail: 'p95 38ms' },
     { name: 'database', status: 'ok' },

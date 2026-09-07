@@ -36,7 +36,8 @@ func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
 	}
 
 	httputil.JSON(w, http.StatusOK, map[string]any{
-		"status": status,
+		"status":  status,
+		"healthy": dbStatus == "ok",
 		"components": []map[string]any{
 			{"name": "database", "status": dbStatus},
 		},
