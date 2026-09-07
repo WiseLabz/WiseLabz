@@ -228,6 +228,7 @@ export const getGetSystemDiagnosticsResponseMock = (
   generatedAt: faker.date.past().toISOString().slice(0, 19) + 'Z',
   health: {
     status: faker.helpers.arrayElement(['ok', 'degraded', 'down'] as const),
+    healthy: faker.datatype.boolean(),
     components: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(
       () => ({
         name: faker.string.alpha({ length: { min: 10, max: 20 } }),
@@ -398,6 +399,7 @@ export const getGetHealthResponseMock = (
   overrideResponse: Partial<Extract<Health, object>> = {}
 ): Health => ({
   status: faker.helpers.arrayElement(['ok', 'degraded', 'down'] as const),
+  healthy: faker.datatype.boolean(),
   components: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(
     () => ({
       name: faker.string.alpha({ length: { min: 10, max: 20 } }),

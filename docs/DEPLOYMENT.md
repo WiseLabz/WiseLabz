@@ -20,6 +20,13 @@ differ between drivers.
 Both the `docker-compose.yml` (Postgres) and `docker-compose.sqlite.yml`
 reference stacks are fully functional end-to-end.
 
+The Postgres reference stack is smoke-tested in CI with
+`scripts/compose-smoke.sh`: it starts with an empty database, waits for the
+application health check, authenticates the bootstrap operator, and creates
+then lists a connector. Run that script locally when changing Compose or
+container startup behavior; it uses an isolated environment, port, and
+temporary Compose volumes that it removes on exit.
+
 ## WebSocket behind a reverse proxy
 
 `/api/ws` shares the same port and origin as the rest of the HTTP API — no

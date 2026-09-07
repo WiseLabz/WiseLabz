@@ -11,5 +11,7 @@ import type { HealthStatus } from './healthStatus';
 
 export interface Health {
   status: HealthStatus;
+  /** True when every required component is healthy. */
+  healthy: boolean;
   components: HealthComponentsItem[];
 }

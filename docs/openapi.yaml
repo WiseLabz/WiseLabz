@@ -2273,9 +2273,10 @@ components:
               detail: { type: string }
     Health:
       type: object
-      required: [status, components]
+      required: [status, healthy, components]
       properties:
         status: { type: string, enum: [ok, degraded, down] }
+        healthy: { type: boolean, description: True when every required component is healthy. }
         components:
           type: array
           items:
