@@ -7,9 +7,12 @@
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { useGetRunbooks } from '../../api/generated/runbooks/runbooks';
+import type { Severity } from '../../api/model/severity';
 import { FileTextIcon } from '../icons';
 
-type RunbookPanelProps = { changeType: string; alertSeverity?: never } | { alertSeverity: string; changeType?: never };
+type RunbookPanelProps =
+  | { changeType: string; alertSeverity?: never }
+  | { alertSeverity: Severity; changeType?: never };
 
 export function RunbookPanel(props: RunbookPanelProps) {
   const { t } = useTranslation();
