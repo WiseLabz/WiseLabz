@@ -67,9 +67,11 @@ enforcement and build details live in `docs/ARCHITECTURE.md`.
    (a row resolving on accept/reject). Everything else is plain state feedback; no
    page-load choreography.
 
-**Open (decide during planning): how far "manager" goes past v1.** Lab-mutating
-control (lifecycle, config push) is desired but deferred — it changes the risk
-profile and is gated on the permission/confirmation model in `docs/ARCHITECTURE.md`.
+**Resolved by ADR: how far "manager" goes past v1.** Lab-mutating control
+(lifecycle, config push) is desired but deferred. The permission/confirmation
+model for the first such operation (`service.restart`) is defined in
+`docs/adr/0001-lab-mutating-operation-boundaries.md`; config-push and
+start/stop remain open, pending their own follow-up ADRs.
 
 ## Locked frontend direction (planning session, 2026-06; revised 2026-09)
 
