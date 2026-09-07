@@ -305,6 +305,48 @@ func TestPreviewFromTemplateWithZeroSections(t *testing.T) {
 	}
 }
 
+func TestGenerateFromSnapshotIncludesDependencies(t *testing.T) {
+	ctx := context.Background()
+	s := newEngineTestStore(t)
+	record := &store.ConnectorRecord{Name: "Node one", Category: "virtualization", Type: "proxmox", URL: "https://example.test"}
+	if err := s.CreateConnector(ctx, record); err != nil {
+		t.Fatalf("create connector: %v", err)
+	}
+
+	data, err := json.Marshal(connector.ServiceSnapshot{
+		ServiceName: "Node one",
+		Type:        "proxmox",
+		Sections: []connector.SnapshotSection{
+			{Title: "Status", Content: "healthy"},
+		},
+		Dependencies: []connector.ServiceDependency{
+			{Kind: "host", Name: "nodeA"},
+			{Kind: "upstream_service", Name: "auth-api", Ref: "svc-123"},
+		},
+		FetchedAt: time.Date(2026, time.September, 5, 12, 0, 0, 0, time.UTC),
+	})
+	if err != nil {
+		t.Fatalf("marshal snapshot: %v", err)
+	}
+	if err := s.CreateSnapshot(ctx, &store.SnapshotRecord{ConnectorID: record.ID, Data: string(data)}); err != nil {
+		t.Fatalf("create snapshot: %v", err)
+	}
+
+	result, err := NewEngine(s).GenerateFromSnapshot(ctx, record.ID)
+	if err != nil {
+		t.Fatalf("GenerateFromSnapshot() error: %v", err)
+	}
+	if !strings.Contains(result.Content, "## Dependencies") {
+		t.Fatalf("GenerateFromSnapshot() content = %q, want Dependencies heading", result.Content)
+	}
+	if !strings.Contains(result.Content, "- **host**: nodeA") {
+		t.Fatalf("GenerateFromSnapshot() content = %q, want host dependency bullet", result.Content)
+	}
+	if !strings.Contains(result.Content, "- **upstream_service**: auth-api (svc-123)") {
+		t.Fatalf("GenerateFromSnapshot() content = %q, want upstream_service dependency bullet with ref", result.Content)
+	}
+}
+
 func TestPreviewFromTemplateWithoutSnapshotReturnsRenderError(t *testing.T) {
 	ctx := context.Background()
 	s := newEngineTestStore(t)

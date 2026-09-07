@@ -42,16 +42,23 @@ Registration happens via `init()` using `connector.Register()` — see [Step 4: 
 
 ```go
 type ServiceSnapshot struct {
-    ServiceName string            // matches connector Name()
-    Type        string            // e.g. "proxmox", "portainer", "pfsense"
-    Sections    []SnapshotSection // the documentation sections this service contributes
-    Metadata    map[string]string // arbitrary key-value pairs (version, endpoint, etc.)
-    FetchedAt   time.Time         // set by the caller, but you can set it if needed
+    ServiceName  string               // matches connector Name()
+    Type         string               // e.g. "proxmox", "portainer", "pfsense"
+    Sections     []SnapshotSection    // the documentation sections this service contributes
+    Metadata     map[string]string    // arbitrary key-value pairs (version, endpoint, etc.)
+    Dependencies []ServiceDependency  // operational dependencies this service relies on
+    FetchedAt    time.Time            // set by the caller, but you can set it if needed
 }
 
 type SnapshotSection struct {
     Title   string // section heading in the generated doc
     Content string // markdown body — tables, lists, code fences are all fine
+}
+
+type ServiceDependency struct {
+    Kind string // host | network | storage | upstream_service
+    Name string
+    Ref  string // optional connector/service ID if known
 }
 ```
 
@@ -67,6 +74,30 @@ Guidelines for a good snapshot:
   bloating the generated doc.
 - **Keep it read-only by design.** WiseLabz connectors never mutate the
   target service. If your `Fetch` changes state, it's wrong.
+
+### Dependencies
+
+`Dependencies` is for the operational dependencies a service relies on to run
+— not its own configuration or state, which belong in `Sections`/`Metadata`.
+Populate it when your connector knows (or can infer) what the service sits
+on top of or calls out to. Each entry has a `Kind`:
+
+- **`host`** — the physical or virtual host the service runs on.
+- **`network`** — a network or VLAN it's reachable through.
+- **`storage`** — a volume, datastore, or share it consumes.
+- **`upstream_service`** — another service it calls (e.g. a database, an API).
+
+Set `Ref` when you know the connector/service ID for the dependency — it lets
+the dashboard link the two together instead of showing a plain label.
+
+```go
+Dependencies: []connector.ServiceDependency{
+    {Kind: "host", Name: "pve-node-01"},
+    {Kind: "network", Name: "vmbr0"},
+    {Kind: "storage", Name: "local-zfs"},
+    {Kind: "upstream_service", Name: "Postgres", Ref: "postgres-primary"},
+},
+```
 
 ## Step by step
 

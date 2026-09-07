@@ -58,11 +58,12 @@ func (e *Engine) render(ctx context.Context, templateID, connectorID string) (*r
 
 	var buf bytes.Buffer
 	data := templateData{
-		ServiceName: snap.ServiceName,
-		Type:        snap.Type,
-		Sections:    snap.Sections,
-		Metadata:    snap.Metadata,
-		GeneratedAt: time.Now().UTC().Format(time.RFC3339),
+		ServiceName:  snap.ServiceName,
+		Type:         snap.Type,
+		Sections:     snap.Sections,
+		Dependencies: snap.Dependencies,
+		Metadata:     snap.Metadata,
+		GeneratedAt:  time.Now().UTC().Format(time.RFC3339),
 	}
 
 	fmt.Fprintf(&buf, "# %s\n\n", snap.ServiceName)
@@ -215,6 +216,18 @@ func (e *Engine) GenerateFromSnapshot(ctx context.Context, connectorID string) (
 		buf.WriteString("\n")
 	}
 
+	if len(snap.Dependencies) > 0 {
+		buf.WriteString("## Dependencies\n\n")
+		for _, dep := range snap.Dependencies {
+			fmt.Fprintf(&buf, "- **%s**: %s", dep.Kind, dep.Name)
+			if dep.Ref != "" {
+				fmt.Fprintf(&buf, " (%s)", dep.Ref)
+			}
+			buf.WriteString("\n")
+		}
+		buf.WriteString("\n")
+	}
+
 	content := buf.String()
 	doc := &store.DocRecord{
 		Title:     snap.ServiceName,
@@ -242,9 +255,10 @@ func (e *Engine) GenerateFromSnapshot(ctx context.Context, connectorID string) (
 }
 
 type templateData struct {
-	ServiceName string
-	Type        string
-	Sections    []connector.SnapshotSection
-	Metadata    map[string]string
-	GeneratedAt string
+	ServiceName  string
+	Type         string
+	Sections     []connector.SnapshotSection
+	Dependencies []connector.ServiceDependency
+	Metadata     map[string]string
+	GeneratedAt  string
 }
