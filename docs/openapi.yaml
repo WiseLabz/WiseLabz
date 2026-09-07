@@ -21,6 +21,7 @@ tags:
   - name: templates
   - name: changes
   - name: alerts
+  - name: runbooks
   - name: findings
   - name: notifications
   - name: saved-views
@@ -958,6 +959,95 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Alert' }
 
+  # ───────────────────────── runbooks ─────────────────────────
+  /runbooks:
+    get:
+      tags: [runbooks]
+      summary: List runbooks, optionally filtered by change type or alert severity
+      description: >
+        `changeType` and `alertSeverity` are mutually exclusive filters — pass
+        at most one. `changeType` matches target_type=change_type /
+        target_value=<changeType>; `alertSeverity` matches
+        target_type=alert_severity / target_value=<alertSeverity>. With
+        neither given, returns all runbooks.
+      parameters:
+        - name: changeType
+          in: query
+          required: false
+          schema: { type: string }
+          description: 'Filter to runbooks targeting this change type, e.g. vm.created. Mutually exclusive with alertSeverity.'
+        - name: alertSeverity
+          in: query
+          required: false
+          schema: { $ref: '#/components/schemas/Severity' }
+          description: Filter to runbooks targeting this alert severity. Mutually exclusive with changeType.
+        - { $ref: '#/components/parameters/Page' }
+        - { $ref: '#/components/parameters/PageSize' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RunbookPage' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      tags: [runbooks]
+      summary: Create a runbook (operator)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RunbookCreate' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Runbook' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /runbooks/{runbookId}:
+    parameters: [{ $ref: '#/components/parameters/RunbookId' }]
+    get:
+      tags: [runbooks]
+      summary: One runbook
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Runbook' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [runbooks]
+      summary: Update a runbook (operator)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RunbookUpdate' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Runbook' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [runbooks]
+      summary: Delete a runbook (operator)
+      responses:
+        '204': { description: No Content }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
   # ───────────────────────── quality findings ─────────────────────────
   /findings:
     get:
@@ -1386,6 +1476,7 @@ components:
     TemplateId: { name: templateId, in: path, required: true, schema: { type: string } }
     ChangeId: { name: changeId, in: path, required: true, schema: { type: string } }
     AlertId: { name: alertId, in: path, required: true, schema: { type: string } }
+    RunbookId: { name: runbookId, in: path, required: true, schema: { type: string } }
     FindingId: { name: findingId, in: path, required: true, schema: { type: string } }
     SessionId: { name: sessionId, in: path, required: true, schema: { type: string } }
     ServiceIdQuery: { name: serviceId, in: query, required: false, schema: { type: string } }
@@ -2028,6 +2119,57 @@ components:
         total: { type: integer }
         page: { type: integer }
         pageSize: { type: integer }
+
+    # ── runbooks ──
+    RunbookTargetType:
+      type: string
+      enum: [change_type, alert_severity]
+    Runbook:
+      type: object
+      required: [id, title, body, targetType, targetValue, createdAt, updatedAt]
+      properties:
+        id: { type: string }
+        title: { type: string }
+        body: { type: string }
+        targetType: { $ref: '#/components/schemas/RunbookTargetType' }
+        targetValue:
+          type: string
+          description: >
+            A changeType value (e.g. vm.created) when targetType=change_type,
+            or a Severity value when targetType=alert_severity.
+        snapshotId: { type: string, nullable: true, description: "Known-good ServiceSnapshot to point at, if any" }
+        docId: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    RunbookPage:
+      type: object
+      required: [items, total, page, pageSize]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Runbook' }
+        total: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
+    RunbookCreate:
+      type: object
+      required: [title, targetType, targetValue]
+      properties:
+        title: { type: string }
+        body: { type: string, default: '' }
+        targetType: { $ref: '#/components/schemas/RunbookTargetType' }
+        targetValue: { type: string }
+        snapshotId: { type: string, nullable: true }
+        docId: { type: string, nullable: true }
+    RunbookUpdate:
+      type: object
+      properties:
+        title: { type: string }
+        body: { type: string }
+        targetType: { $ref: '#/components/schemas/RunbookTargetType' }
+        targetValue: { type: string }
+        snapshotId: { type: string, nullable: true }
+        docId: { type: string, nullable: true }
 
     # ── documentation quality findings ──
     QualityFinding:

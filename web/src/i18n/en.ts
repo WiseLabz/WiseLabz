@@ -328,6 +328,10 @@ export const en = {
     filterWarning: 'Warning',
     filterInfo: 'Info',
   },
+  runbooks: {
+    heading: 'Runbook',
+    snapshotRef: 'Linked to known-good snapshot {{snapshotId}}',
+  },
   findings: {
     title: 'Quality findings',
     subtitle: 'Documentation gaps detected during connector syncs.',

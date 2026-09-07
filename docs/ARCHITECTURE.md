@@ -279,6 +279,11 @@ Each connector lives in its own package under `internal/connector/`. Contributor
 new integration only need to implement this interface and register the connector — no changes
 to the core sync or doc engine are required.
 
+A `ServiceSnapshot` can also carry `Dependencies` — the hosts, networks, storage, and
+upstream services a connector's service relies on. When present, generated documentation
+renders a "Dependencies" section, so docs can describe a service's operational context, not
+just its isolated state.
+
 ---
 
 ## API design
@@ -407,11 +412,26 @@ contract `Role` enum. For v1's single-admin homelab, the former admin-only
 surfaces (user management, auth/system config) are gated on `operator`; a distinct
 `admin` role can be reintroduced if multi-tenant separation is needed later.
 
+**Runbook bindings.** A `runbooks` row attaches actionable guidance to a change
+type or an alert severity (`target_type` / `target_value`), not to a specific
+change or alert instance. Each runbook carries free-text `title`/`body` plus
+optional `snapshot_id` and `doc_id` pointers, letting operators jump from "this
+kind of change" or "this severity" to a known-good historical snapshot or a
+relevant doc. Like the diff and retention models above, the binding is purely
+a read-only reference: `snapshot_id`/`doc_id` are inert lookups with no
+restore or apply path, and the CRUD surface (`GET`/`POST`/`PUT`/`DELETE
+/api/runbooks`, viewer-read/operator-write) only ever manages the guidance
+record itself, never the target it points at.
+
 ## ADR index
 
 Architectural Decision Records are stored in `docs/adr/`. Each significant decision that
 required evaluation of alternatives gets its own numbered ADR file (e.g. `0001-monorepo.md`).
 This file records the _outcome_ of each decision; the ADRs record the _reasoning_.
+
+- [`0001-lab-mutating-operation-boundaries.md`](adr/0001-lab-mutating-operation-boundaries.md) —
+  permission, step-up, audit, dry-run, and rollback model for the first lab-mutating
+  operation (`service.restart`), ahead of implementation.
 
 ---
 

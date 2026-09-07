@@ -14,7 +14,7 @@ growing the current phase. Promote to a real plan when it's time.
 | SSE endpoint for AI suggestions                                    | V1 AI is a batched single-request review-diff (no streaming). SSE only matters if/when streaming is reintroduced.   |
 | AI-suggestion token *streaming* (inline live paint)                | Dropped deliberately for the cheaper batched review-diff pattern. Revisit if real-time feel is wanted.              |
 | Per-user dashboard layout with admin-defined default               | V1 is per-user layout only. Admin default-then-override is a v2 extension.                                          |
-| Lab-mutating manager ops (service start/stop/restart, config push) | Out of v1 manager scope per PRODUCT.md; gated on the permission/confirmation model.                                 |
+| Lab-mutating manager ops (service start/stop/restart, config push) | Out of v1 manager scope per PRODUCT.md; permission/confirmation model defined in `docs/adr/0001-lab-mutating-operation-boundaries.md`. |
 
 ## Suggested-later (raised in build, not yet planned)
 

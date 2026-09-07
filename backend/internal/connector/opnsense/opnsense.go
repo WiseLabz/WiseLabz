@@ -78,6 +78,7 @@ func (c *Connector) Validate(ctx context.Context, _ map[string]any) error {
 func (c *Connector) Fetch(ctx context.Context, _ map[string]any) (*connector.ServiceSnapshot, error) {
 	start := time.Now()
 	var sections []connector.SnapshotSection
+	var dependencies []connector.ServiceDependency
 	metadata := map[string]string{"opnsense_url": c.url}
 
 	// --- System info ---
@@ -108,6 +109,9 @@ func (c *Connector) Fetch(ctx context.Context, _ map[string]any) (*connector.Ser
 			Title:   "Interfaces",
 			Content: content,
 		})
+		if wan := wanInterfaceName(raw); wan != "" {
+			dependencies = append(dependencies, connector.ServiceDependency{Kind: "network", Name: wan})
+		}
 	} else {
 		sections = append(sections, connector.SnapshotSection{
 			Title:   "Interfaces",
@@ -136,6 +140,9 @@ func (c *Connector) Fetch(ctx context.Context, _ map[string]any) (*connector.Ser
 			Title:   "Gateways",
 			Content: content,
 		})
+		if upstream := primaryGatewayName(raw); upstream != "" {
+			dependencies = append(dependencies, connector.ServiceDependency{Kind: "upstream_service", Name: upstream})
+		}
 	} else {
 		sections = append(sections, connector.SnapshotSection{
 			Title:   "Gateways",
@@ -144,11 +151,12 @@ func (c *Connector) Fetch(ctx context.Context, _ map[string]any) (*connector.Ser
 	}
 
 	return &connector.ServiceSnapshot{
-		ServiceName: "OPNSense",
-		Type:        typeName,
-		Sections:    sections,
-		Metadata:    metadata,
-		FetchedAt:   start,
+		ServiceName:  "OPNSense",
+		Type:         typeName,
+		Sections:     sections,
+		Dependencies: dependencies,
+		Metadata:     metadata,
+		FetchedAt:    start,
 	}, nil
 }
 
@@ -206,6 +214,49 @@ func buildInterfaceTable(raw []byte) string {
 		}
 	}
 	return b.String()
+}
+
+// wanInterfaceName returns the device name of the interface identified as
+// "wan" in the interfaces response, reusing data already fetched for the
+// Interfaces section. Falls back to the first interface if none is
+// explicitly identified as WAN.
+// ponytail: identifier-based match with a first-row fallback; revisit if
+// multi-WAN setups need every WAN link surfaced.
+func wanInterfaceName(raw []byte) string {
+	var resp struct {
+		Rows []struct {
+			Identifier string `json:"identifier"`
+			Device     string `json:"device"`
+		} `json:"rows"`
+	}
+	if err := json.Unmarshal(raw, &resp); err != nil || len(resp.Rows) == 0 {
+		return ""
+	}
+	for _, iface := range resp.Rows {
+		if strings.EqualFold(iface.Identifier, "wan") {
+			return iface.Device
+		}
+	}
+	return resp.Rows[0].Device
+}
+
+// primaryGatewayName returns the name (or address, if unnamed) of the first
+// configured gateway, reusing data already fetched for the Gateways
+// section, to surface as the upstream dependency.
+func primaryGatewayName(raw []byte) string {
+	var resp struct {
+		Items []struct {
+			Name    string `json:"name"`
+			Address string `json:"address"`
+		} `json:"items"`
+	}
+	if err := json.Unmarshal(raw, &resp); err != nil || len(resp.Items) == 0 {
+		return ""
+	}
+	if resp.Items[0].Name != "" {
+		return resp.Items[0].Name
+	}
+	return resp.Items[0].Address
 }
 
 func buildRuleTable(raw []byte) string {

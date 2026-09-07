@@ -102,13 +102,15 @@ func (p *Connector) Fetch(ctx context.Context, _ map[string]any) (*connector.Ser
 	}
 
 	var sections []connector.SnapshotSection
+	var dependencies []connector.ServiceDependency
 	metadata := map[string]string{
 		"node_count": fmt.Sprintf("%d", len(nodesResponse.Data)),
 	}
 
-	// For each node, fetch VMs and containers
+	// For each node, fetch VMs, containers, and storage
 	totalVMs := 0
 	totalCTs := 0
+	totalStorage := 0
 
 	for _, node := range nodesResponse.Data {
 		nodeSection := fmt.Sprintf("## Node: %s\n\n", node.Node)
@@ -116,6 +118,8 @@ func (p *Connector) Fetch(ctx context.Context, _ map[string]any) (*connector.Ser
 		nodeSection += fmt.Sprintf("- **Uptime**: %d seconds\n", node.Uptime)
 		nodeSection += fmt.Sprintf("- **CPU**: %.2f%%\n", node.CPU*100)
 		nodeSection += fmt.Sprintf("- **Memory**: %d / %d bytes\n\n", node.Memory.Used, node.Memory.Total)
+
+		dependencies = append(dependencies, connector.ServiceDependency{Kind: "host", Name: node.Node})
 
 		// Fetch VMs
 		vmsRaw, err := p.doRequest(ctx, "GET", "/nodes/"+node.Node+"/qemu", nil)
@@ -195,6 +199,45 @@ func (p *Connector) Fetch(ctx context.Context, _ map[string]any) (*connector.Ser
 			totalCTs += len(ctsResponse.Data)
 		}
 
+		// Fetch storage
+		storageRaw, err := p.doRequest(ctx, "GET", "/nodes/"+node.Node+"/storage", nil)
+		if err != nil {
+			sections = append(sections, connector.SnapshotSection{
+				Title:   node.Node,
+				Content: nodeSection + "_Storage fetch error: " + err.Error() + "_",
+			})
+			continue
+		}
+		var storageResponse struct {
+			Data []struct {
+				Storage string `json:"storage"`
+				Type    string `json:"type"`
+				Used    int64  `json:"used"`
+				Total   int64  `json:"total"`
+				Avail   int64  `json:"avail"`
+			} `json:"data"`
+		}
+		if err := json.Unmarshal(storageRaw, &storageResponse); err != nil {
+			sections = append(sections, connector.SnapshotSection{
+				Title:   node.Node,
+				Content: nodeSection + "_Storage decode error: " + err.Error() + "_",
+			})
+			continue
+		}
+
+		if len(storageResponse.Data) > 0 {
+			nodeSection += "### Storage\n\n"
+			nodeSection += "| Storage | Type | Used (bytes) | Total (bytes) | Avail (bytes) |\n"
+			nodeSection += "|---------|------|---------------|----------------|----------------|\n"
+			for _, st := range storageResponse.Data {
+				nodeSection += fmt.Sprintf("| %s | %s | %d | %d | %d |\n",
+					st.Storage, st.Type, st.Used, st.Total, st.Avail)
+				dependencies = append(dependencies, connector.ServiceDependency{Kind: "storage", Name: st.Storage})
+			}
+			nodeSection += "\n"
+			totalStorage += len(storageResponse.Data)
+		}
+
 		sections = append(sections, connector.SnapshotSection{
 			Title:   node.Node,
 			Content: nodeSection,
@@ -203,14 +246,16 @@ func (p *Connector) Fetch(ctx context.Context, _ map[string]any) (*connector.Ser
 
 	metadata["total_vms"] = fmt.Sprintf("%d", totalVMs)
 	metadata["total_cts"] = fmt.Sprintf("%d", totalCTs)
+	metadata["total_storage"] = fmt.Sprintf("%d", totalStorage)
 	metadata["proxmox_url"] = p.url
 
 	return &connector.ServiceSnapshot{
-		ServiceName: "Proxmox VE",
-		Type:        typeName,
-		Sections:    sections,
-		Metadata:    metadata,
-		FetchedAt:   start,
+		ServiceName:  "Proxmox VE",
+		Type:         typeName,
+		Sections:     sections,
+		Dependencies: dependencies,
+		Metadata:     metadata,
+		FetchedAt:    start,
 	}, nil
 }
 

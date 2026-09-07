@@ -19,6 +19,7 @@ import (
 	findinghandler "github.com/WiseLabz/wiselabz/internal/api/findings"
 	"github.com/WiseLabz/wiselabz/internal/api/middleware"
 	notifhandler "github.com/WiseLabz/wiselabz/internal/api/notifications"
+	runbookhandler "github.com/WiseLabz/wiselabz/internal/api/runbooks"
 	savedviewhandler "github.com/WiseLabz/wiselabz/internal/api/savedviews"
 	settinghandler "github.com/WiseLabz/wiselabz/internal/api/settings"
 	syshandler "github.com/WiseLabz/wiselabz/internal/api/system"
@@ -68,6 +69,7 @@ func NewRouter(cfg Config) chi.Router {
 	alertH := alerthandler.NewHandler(cfg.Store)
 	findingH := findinghandler.NewHandler(cfg.Store)
 	notifH := notifhandler.NewHandler(cfg.Store)
+	runbookH := runbookhandler.NewHandler(cfg.Store)
 	dashH := dashhandler.NewHandler(cfg.Store)
 	docH := dochandler.NewHandler(cfg.Store, cfg.DocEngine, settingH, cfg.AIRegistry, cfg.WSHub)
 	savedViewH := savedviewhandler.NewHandler(cfg.Store)
@@ -204,6 +206,18 @@ func NewRouter(cfg Config) chi.Router {
 				r.Post("/{id}/resolve", alertH.Resolve)
 				r.Post("/{id}/dismiss", alertH.Dismiss)
 				r.Post("/{id}/snooze", alertH.Snooze)
+			})
+		})
+
+		r.Route("/api/runbooks", func(r chi.Router) {
+			r.Get("/", runbookH.List)
+			r.Get("/{id}", runbookH.Get)
+
+			r.Group(func(r chi.Router) {
+				r.Use(operatorOnly)
+				r.Post("/", runbookH.Create)
+				r.Put("/{id}", runbookH.Update)
+				r.Delete("/{id}", runbookH.Delete)
 			})
 		})
 
