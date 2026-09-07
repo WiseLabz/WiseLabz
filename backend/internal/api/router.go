@@ -74,7 +74,6 @@ func NewRouter(cfg Config) chi.Router {
 
 	// --- System endpoints ---
 	r.Get("/api/health", sysH.Health)
-	r.Get("/api/version", sysH.Version)
 
 	// Shared across the top-level /api/auth route below and the protected
 	// group further down.

@@ -23,3 +23,11 @@ func TestHealthReportsHealthy(t *testing.T) {
 		t.Error("healthy = false, want true")
 	}
 }
+
+func TestVersionRouteIsNotExposed(t *testing.T) {
+	app := newTestApp(t)
+	rec := app.req(t, http.MethodGet, "/api/version", nil, "")
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404; body = %s", rec.Code, rec.Body)
+	}
+}

@@ -1,7 +1,7 @@
 # Graph Report - WiseLabz  (2026-09-06)
 
 ## Corpus Check
-- 269 files · ~150,648 words
+- 269 files · ~150,572 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
@@ -97,9 +97,9 @@
 ## God Nodes (most connected - your core abstractions)
 1. `Errorf()` - 200 edges
 2. `Store` - 102 edges
-3. `newTestApp()` - 86 edges
+3. `newTestApp()` - 87 edges
 4. `Error()` - 77 edges
-5. `JSON()` - 75 edges
+5. `JSON()` - 74 edges
 6. `New()` - 64 edges
 7. `newDocTestStore()` - 38 edges
 8. `UserIDFromContext()` - 23 edges
@@ -135,7 +135,7 @@ Nodes (29): renderAuthGuard(), renderRoleGuard(), Engine, Errorf(), renderDialog
 
 ### Community 2 - "Community 2"
 Cohesion: 0.04
-Nodes (92): seedAlert(), TestAlertsListSuccess(), TestAlertsResolveRoleBoundary(), TestAlertsResolveSuccess(), TestAlertsSnoozeSuccess(), TestAlertsSnoozeValidation(), TestAuditListFiltersByAction(), TestAuditListRoleBoundary() (+84 more)
+Nodes (93): seedAlert(), TestAlertsListSuccess(), TestAlertsResolveRoleBoundary(), TestAlertsResolveSuccess(), TestAlertsSnoozeSuccess(), TestAlertsSnoozeValidation(), TestAuditListFiltersByAction(), TestAuditListRoleBoundary() (+85 more)
 
 ### Community 3 - "Community 3"
 Cohesion: 0.05
@@ -158,12 +158,12 @@ Cohesion: 0.08
 Nodes (34): NewHandler(), Config, NewRouter(), spaHandler(), testApp, contextKey, NewService(), TestElevationExpired() (+26 more)
 
 ### Community 8 - "Community 8"
-Cohesion: 0.07
-Nodes (28): AIConfigSummary, Export(), Import(), LoadAIConfigSummary(), newTestStore(), TestExportRedactsConnectorSecrets(), TestImportIsIdempotent(), TestValidateBundleRejectsOrphanDocVersion() (+20 more)
+Cohesion: 0.08
+Nodes (22): AlertNotifier, TestComputeNextRun_BackoffNeverExceedsScheduleCadence(), TestComputeNextRun_FailureUsesBackoffSchedule(), TestComputeNextRun_ManualOnlyNeverSchedules(), TestComputeNextRun_SuccessSchedulesAtCadenceAndResetsRetries(), Compare(), lineCount(), severityForChange() (+14 more)
 
 ### Community 9 - "Community 9"
 Cohesion: 0.08
-Nodes (22): AlertNotifier, TestComputeNextRun_BackoffNeverExceedsScheduleCadence(), TestComputeNextRun_FailureUsesBackoffSchedule(), TestComputeNextRun_ManualOnlyNeverSchedules(), TestComputeNextRun_SuccessSchedulesAtCadenceAndResetsRetries(), Compare(), lineCount(), severityForChange() (+14 more)
+Nodes (28): AIConfigSummary, Export(), Import(), LoadAIConfigSummary(), newTestStore(), TestExportRedactsConnectorSecrets(), TestImportIsIdempotent(), TestValidateBundleRejectsOrphanDocVersion() (+20 more)
 
 ### Community 10 - "Community 10"
 Cohesion: 0.14
@@ -539,12 +539,12 @@ _Questions this graph is uniquely positioned to answer:_
 - **What is the exact relationship between `Topbar Notification Center (deferred from V1)` and `NotificationDelivery Schema (per-channel delivery/retry)`?**
   _Edge tagged AMBIGUOUS (relation: conceptually_related_to) - confidence is low._
 - **Why does `Errorf()` connect `Community 1` to `Community 0`, `Community 35`, `Community 4`, `Community 3`, `Community 6`, `Community 5`, `Community 8`, `Community 9`, `Community 10`, `Community 12`, `Community 13`, `Community 21`?**
-  _High betweenness centrality (0.186) - this node is a cross-community bridge._
+  _High betweenness centrality (0.191) - this node is a cross-community bridge._
 - **Why does `newTestApp()` connect `Community 2` to `Community 1`, `Community 3`, `Community 4`, `Community 7`?**
-  _High betweenness centrality (0.113) - this node is a cross-community bridge._
-- **Why does `New()` connect `Community 1` to `Community 0`, `Community 32`, `Community 2`, `Community 3`, `Community 4`, `Community 6`, `Community 7`, `Community 38`, `Community 8`, `Community 12`, `Community 13`, `Community 14`, `Community 24`, `Community 56`?**
-  _High betweenness centrality (0.087) - this node is a cross-community bridge._
+  _High betweenness centrality (0.114) - this node is a cross-community bridge._
+- **Why does `New()` connect `Community 1` to `Community 0`, `Community 32`, `Community 2`, `Community 3`, `Community 4`, `Community 6`, `Community 7`, `Community 38`, `Community 9`, `Community 12`, `Community 13`, `Community 14`, `Community 24`, `Community 56`?**
+  _High betweenness centrality (0.089) - this node is a cross-community bridge._
 - **Are the 198 inferred relationships involving `Errorf()` (e.g. with `.IssuePair()` and `.IssueElevation()`) actually correct?**
   _`Errorf()` has 198 INFERRED edges - model-reasoned connections that need verification._
-- **Are the 85 inferred relationships involving `newTestApp()` (e.g. with `TestAlertsListSuccess()` and `TestAlertsResolveRoleBoundary()`) actually correct?**
-  _`newTestApp()` has 85 INFERRED edges - model-reasoned connections that need verification._
+- **Are the 86 inferred relationships involving `newTestApp()` (e.g. with `TestAlertsListSuccess()` and `TestAlertsResolveRoleBoundary()`) actually correct?**
+  _`newTestApp()` has 86 INFERRED edges - model-reasoned connections that need verification._
