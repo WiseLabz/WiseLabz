@@ -199,6 +199,21 @@ function handle(frame: WsEvent, qc: ReturnType<typeof useQueryClient>) {
       qc.invalidateQueries({ queryKey: getGetDocsTreeQueryKey() });
       break;
     }
+    case 'doc.lock.acquired': {
+      const p = frame.payload;
+      s.setDocLock(p.docId, { userId: p.userId, expiresAt: p.expiresAt });
+      break;
+    }
+    case 'doc.lock.released': {
+      const p = frame.payload;
+      s.setDocLock(p.docId, undefined);
+      break;
+    }
+    case 'doc.lock.expired': {
+      const p = frame.payload;
+      s.setDocLock(p.docId, undefined);
+      break;
+    }
     default:
       break;
   }

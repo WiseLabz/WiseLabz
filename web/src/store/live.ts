@@ -40,6 +40,10 @@ interface LiveState {
   statusOverrides: Record<string, ServiceStatus>;
   setStatus: (serviceId: string, status: ServiceStatus) => void;
 
+  /** advisory doc edit locks keyed by docId */
+  docLocks: Record<string, { userId: string; expiresAt: string } | undefined>;
+  setDocLock: (docId: string, lock: { userId: string; expiresAt: string } | undefined) => void;
+
   pendingAlerts: number;
   setPendingAlerts: (n: number) => void;
   bumpAlerts: (delta: number) => void;
@@ -67,6 +71,10 @@ export const useLive = create<LiveState>((set) => ({
   statusOverrides: {},
   setStatus: (serviceId, status) =>
     set((s) => ({ statusOverrides: { ...s.statusOverrides, [serviceId]: status } })),
+
+  docLocks: {},
+  setDocLock: (docId, lock) =>
+    set((s) => ({ docLocks: { ...s.docLocks, [docId]: lock } })),
 
   pendingAlerts: 0,
   setPendingAlerts: (pendingAlerts) => set({ pendingAlerts }),

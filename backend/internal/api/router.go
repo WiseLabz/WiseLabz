@@ -156,6 +156,7 @@ func NewRouter(cfg Config) chi.Router {
 			r.Get("/{id}", docH.Get)
 			r.Get("/{id}/versions", docH.Versions)
 			r.Get("/{id}/versions/{rev}", docH.Version)
+			r.Get("/{id}/lock", docH.GetLock)
 
 			r.Group(func(r chi.Router) {
 				r.Use(operatorOnly)
@@ -163,6 +164,8 @@ func NewRouter(cfg Config) chi.Router {
 				r.Put("/{id}", docH.Save)
 				r.Post("/{id}/versions/{rev}/restore", docH.Restore)
 				r.Post("/{id}/ai-suggest", docH.AISuggest)
+				r.Post("/{id}/lock", docH.AcquireLock)
+				r.Post("/{id}/lock/release", docH.ReleaseLock)
 			})
 		})
 

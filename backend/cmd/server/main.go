@@ -146,6 +146,7 @@ func main() {
 	go runAlertExpirer(ctx, s, notifDispatcher, logger)
 	go notifications.RunDeliveryRetries(ctx, notifDispatcher, logger)
 	go quality.RunStaleSweep(ctx, s, wsHub, 24*time.Hour, logger)
+	go store.RunDocLockSweep(ctx, s, wsHub, store.DocLockHeartbeat, logger)
 	go sync.RunScheduler(ctx, syncEngine, logger)
 	go retention.RunScheduler(ctx, s, cfg.Retention, logger)
 

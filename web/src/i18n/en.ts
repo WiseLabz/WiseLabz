@@ -420,6 +420,7 @@ export const en = {
       aiDiffProposed: 'proposed',
       newerBanner: 'A newer version (v{{version}}) was generated while you were editing.',
       loadLatest: 'Load latest',
+      lockBanner: '{{userId}} is currently editing this doc.',
     },
     restore: {
       action: 'Restore v{{version}}',

@@ -16,7 +16,7 @@ var tablesCreatedByMigrations = []string{
 	"service_snapshots", "docs", "doc_versions", "templates",
 	"template_sections", "changes", "alerts", "dashboard_layouts",
 	"auth_config", "ai_config", "notification_config", "in_app_notifications",
-	"quality_findings", "runbooks", "oidc_identities",
+	"quality_findings", "runbooks", "oidc_identities", "doc_locks",
 }
 
 func TestRunMigrations(t *testing.T) {

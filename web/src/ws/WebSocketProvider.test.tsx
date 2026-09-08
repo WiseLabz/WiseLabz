@@ -154,4 +154,84 @@ describe('WebSocketProvider', () => {
     expect(TestWebSocket.urls[0]).toMatch(/\/api\/ws$/);
     expect(TestWebSocket.urls[0]).not.toContain('?');
   });
+
+  it('updates docLocks store on doc lock events', async () => {
+    window.WebSocket = TestWebSocket as unknown as typeof WebSocket;
+    useAuth.setState({ status: 'authenticated' });
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <WebSocketProvider>
+          <div />
+        </WebSocketProvider>
+      </QueryClientProvider>
+    );
+    await waitFor(() => expect(TestWebSocket.last).toBeDefined());
+
+    act(() =>
+      TestWebSocket.last?.onmessage?.(
+        new MessageEvent('message', {
+          data: JSON.stringify({
+            type: 'doc.lock.acquired',
+            ts: '2026-09-06T12:00:00Z',
+            payload: {
+              docId: 'doc-1',
+              userId: 'user-1',
+              acquiredAt: '2026-09-06T12:00:00Z',
+              expiresAt: '2026-09-06T12:05:00Z',
+            },
+          }),
+        })
+      )
+    );
+
+    expect(useLive.getState().docLocks['doc-1']).toEqual({
+      userId: 'user-1',
+      expiresAt: '2026-09-06T12:05:00Z',
+    });
+
+    act(() =>
+      TestWebSocket.last?.onmessage?.(
+        new MessageEvent('message', {
+          data: JSON.stringify({
+            type: 'doc.lock.released',
+            ts: '2026-09-06T12:01:00Z',
+            payload: { docId: 'doc-1', userId: 'user-1' },
+          }),
+        })
+      )
+    );
+
+    expect(useLive.getState().docLocks['doc-1']).toBeUndefined();
+
+    act(() =>
+      TestWebSocket.last?.onmessage?.(
+        new MessageEvent('message', {
+          data: JSON.stringify({
+            type: 'doc.lock.acquired',
+            ts: '2026-09-06T12:02:00Z',
+            payload: {
+              docId: 'doc-2',
+              userId: 'user-2',
+              acquiredAt: '2026-09-06T12:02:00Z',
+              expiresAt: '2026-09-06T12:07:00Z',
+            },
+          }),
+        })
+      )
+    );
+
+    act(() =>
+      TestWebSocket.last?.onmessage?.(
+        new MessageEvent('message', {
+          data: JSON.stringify({
+            type: 'doc.lock.expired',
+            ts: '2026-09-06T12:07:30Z',
+            payload: { docId: 'doc-2', userId: 'user-2' },
+          }),
+        })
+      )
+    );
+
+    expect(useLive.getState().docLocks['doc-2']).toBeUndefined();
+  });
 });
