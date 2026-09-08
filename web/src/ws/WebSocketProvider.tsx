@@ -112,8 +112,11 @@ function handle(frame: WsEvent, qc: ReturnType<typeof useQueryClient>) {
       s.pushActivity({
         id: frame.id ?? crypto.randomUUID(),
         kind: 'sync',
-        label: 'Sync complete',
-        detail: `${p.changesDetected} change${p.changesDetected === 1 ? '' : 's'} · ${p.alertsRaised} alert${p.alertsRaised === 1 ? '' : 's'}`,
+        label: i18n.t('notify.syncCompleteTitle'),
+        detail: i18n.t('notify.syncCompleteDetail', {
+          changes: p.changesDetected,
+          alerts: p.alertsRaised,
+        }),
         at: frame.ts,
         tone: p.alertsRaised > 0 ? 'warn' : 'ok',
       });
@@ -157,7 +160,7 @@ function handle(frame: WsEvent, qc: ReturnType<typeof useQueryClient>) {
         id: p.alertId,
         kind: 'alert',
         label: p.title,
-        detail: 'New alert',
+        detail: i18n.t('notify.newAlert'),
         at: frame.ts,
         tone: p.severity === 'critical' ? 'err' : 'warn',
       });
@@ -185,8 +188,11 @@ function handle(frame: WsEvent, qc: ReturnType<typeof useQueryClient>) {
       s.pushActivity({
         id: frame.id ?? crypto.randomUUID(),
         kind: 'doc',
-        label: 'Documentation regenerated',
-        detail: `${frame.payload.trigger} · v${frame.payload.newVersion}`,
+        label: i18n.t('notify.documentationRegenerated'),
+        detail: i18n.t('notify.documentationRegeneratedDetail', {
+          trigger: frame.payload.trigger,
+          version: frame.payload.newVersion,
+        }),
         at: frame.ts,
         tone: 'signal',
       });

@@ -24,6 +24,8 @@ import (
 // any bundle whose Version doesn't match.
 const BundleVersion = 1
 
+const exportPageSize = 1000
+
 // validCategories mirrors the connectors.category CHECK constraint in
 // migrations/sqlite/000001_init.up.sql.
 var validCategories = map[string]bool{
@@ -91,11 +93,7 @@ func Export(ctx context.Context, s *store.Store) (*Bundle, error) {
 		connectors[i].ConfigData = redacted
 	}
 
-	// ponytail: unpaginated page-through via the existing paginated list
-	// methods (large limit) rather than adding new store methods — mirrors
-	// what ListAllConnectors already gives us for connectors.
-	const maxPage = 100000
-	docs, _, err := s.ListAllDocs(ctx, "", 0, maxPage)
+	docs, err := exportDocs(ctx, s)
 	if err != nil {
 		return nil, fmt.Errorf("export docs: %w", err)
 	}
@@ -108,7 +106,7 @@ func Export(ctx context.Context, s *store.Store) (*Bundle, error) {
 		docVersions = append(docVersions, versions...)
 	}
 
-	templates, _, err := s.ListTemplates(ctx, 0, maxPage)
+	templates, err := exportTemplates(ctx, s)
 	if err != nil {
 		return nil, fmt.Errorf("export templates: %w", err)
 	}
@@ -226,7 +224,46 @@ func Import(ctx context.Context, s *store.Store, b *Bundle) (Result, error) {
 	if err := ValidateBundle(b); err != nil {
 		return res, err
 	}
+	if err := s.WithinTransaction(ctx, func(tx *store.Store) error {
+		var err error
+		res, err = importBundle(ctx, tx, b)
+		return err
+	}); err != nil {
+		return res, err
+	}
+	return res, nil
+}
 
+func exportDocs(ctx context.Context, s *store.Store) ([]store.DocRecord, error) {
+	docs := []store.DocRecord{}
+	for offset := 0; ; offset += exportPageSize {
+		page, total, err := s.ListAllDocs(ctx, "", offset, exportPageSize)
+		if err != nil {
+			return nil, err
+		}
+		docs = append(docs, page...)
+		if len(docs) >= total {
+			return docs, nil
+		}
+	}
+}
+
+func exportTemplates(ctx context.Context, s *store.Store) ([]store.TemplateRecord, error) {
+	templates := []store.TemplateRecord{}
+	for offset := 0; ; offset += exportPageSize {
+		page, total, err := s.ListTemplates(ctx, offset, exportPageSize)
+		if err != nil {
+			return nil, err
+		}
+		templates = append(templates, page...)
+		if len(templates) >= total {
+			return templates, nil
+		}
+	}
+}
+
+func importBundle(ctx context.Context, s *store.Store, b *Bundle) (Result, error) {
+	var res Result
 	for _, c := range b.Connectors {
 		if _, err := s.GetConnector(ctx, c.ID); err == nil {
 			res.Connectors.Skipped++

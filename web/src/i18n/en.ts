@@ -670,6 +670,11 @@ export const en = {
   notify: {
     view: 'View',
     syncComplete: 'Sync complete — {{changes}} change(s), {{alerts}} alert(s)',
+    syncCompleteTitle: 'Sync complete',
+    syncCompleteDetail: '{{changes}} change(s) · {{alerts}} alert(s)',
+    newAlert: 'New alert',
+    documentationRegenerated: 'Documentation regenerated',
+    documentationRegeneratedDetail: '{{trigger}} · v{{version}}',
   },
   templates: {
     toastSaved: 'Template saved',

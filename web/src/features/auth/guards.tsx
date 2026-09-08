@@ -5,14 +5,13 @@
  * real boundary — these guards are navigation, not security.
  */
 import type { ReactNode } from 'react';
-import { Navigate, useLocation } from 'react-router-dom';
+import { Link, Navigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../store/auth';
 import { useRole } from '../../hooks/useRole';
 import { useGetConnectors } from '../../api/generated/connectors/connectors';
 import type { Role } from '../../api/model';
 import { EmptyState, SkeletonRows } from '../../components/ui/states';
-import { Button } from '../../components/ui/Button';
 
 /** Centered brand splash shown while the session resolves. */
 export function Splash() {
@@ -61,11 +60,12 @@ export function ForbiddenPage() {
         title={t('auth.forbiddenTitle')}
         description={t('auth.forbiddenDesc')}
         action={
-          <a href="/dashboard">
-            <Button variant="secondary" size="sm">
-              {t('nav.dashboard')}
-            </Button>
-          </a>
+          <Link
+            to="/dashboard"
+            className="inline-flex h-7 items-center rounded-sm border border-line-strong px-2.5 font-mono text-xs text-ink hover:bg-surface"
+          >
+            {t('nav.dashboard')}
+          </Link>
         }
       />
     </div>

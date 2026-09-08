@@ -51,12 +51,48 @@ function buildCommands(ctx: CommandCtx, connectors: Connector[], docNodes: DocNo
   const { t, canMutate } = ctx;
 
   const nav: Command[] = [
-    { id: 'n-dash', label: t('command.nav.dashboard'), group: 'navigate', Icon: GaugeIcon, run: (c) => c.navigate('/dashboard') },
-    { id: 'n-svc', label: t('command.nav.services'), group: 'navigate', Icon: LayersIcon, run: (c) => c.navigate('/services') },
-    { id: 'n-docs', label: t('command.nav.docs'), group: 'navigate', Icon: FileTextIcon, run: (c) => c.navigate('/docs') },
-    { id: 'n-chg', label: t('command.nav.changes'), group: 'navigate', Icon: DiffIcon, run: (c) => c.navigate('/changes') },
-    { id: 'n-alerts', label: t('command.nav.alerts'), group: 'navigate', Icon: BellIcon, run: (c) => c.navigate('/alerts') },
-    { id: 'n-set', label: t('command.nav.settings'), group: 'navigate', Icon: SettingsIcon, run: (c) => c.navigate('/settings') },
+    {
+      id: 'n-dash',
+      label: t('command.nav.dashboard'),
+      group: 'navigate',
+      Icon: GaugeIcon,
+      run: (c) => c.navigate('/dashboard'),
+    },
+    {
+      id: 'n-svc',
+      label: t('command.nav.services'),
+      group: 'navigate',
+      Icon: LayersIcon,
+      run: (c) => c.navigate('/services'),
+    },
+    {
+      id: 'n-docs',
+      label: t('command.nav.docs'),
+      group: 'navigate',
+      Icon: FileTextIcon,
+      run: (c) => c.navigate('/docs'),
+    },
+    {
+      id: 'n-chg',
+      label: t('command.nav.changes'),
+      group: 'navigate',
+      Icon: DiffIcon,
+      run: (c) => c.navigate('/changes'),
+    },
+    {
+      id: 'n-alerts',
+      label: t('command.nav.alerts'),
+      group: 'navigate',
+      Icon: BellIcon,
+      run: (c) => c.navigate('/alerts'),
+    },
+    {
+      id: 'n-set',
+      label: t('command.nav.settings'),
+      group: 'navigate',
+      Icon: SettingsIcon,
+      run: (c) => c.navigate('/settings'),
+    },
   ];
 
   const actions: Command[] = [
@@ -103,14 +139,16 @@ function buildCommands(ctx: CommandCtx, connectors: Connector[], docNodes: DocNo
         },
         {
           id: `s-toggle-${cn.id}`,
-          label: t(cn.enabled ? 'command.action.disableOne' : 'command.action.enableOne', { name: cn.name }),
+          label: t(cn.enabled ? 'command.action.disableOne' : 'command.action.enableOne', {
+            name: cn.name,
+          }),
           group: 'actions',
           Icon: LayersIcon,
           run: async (c) => {
             await putConnectorsConnectorIdEnabled(cn.id, { enabled: !cn.enabled });
             void c.queryClient.invalidateQueries({ queryKey: getGetConnectorsQueryKey() });
           },
-        },
+        }
       );
     }
     return items;
@@ -155,11 +193,11 @@ function PaletteBody() {
   const docsTreeQuery = useGetDocsTree();
   const ctx = useMemo<CommandCtx>(
     () => ({ navigate, t, canMutate, queryClient }),
-    [navigate, t, canMutate, queryClient],
+    [navigate, t, canMutate, queryClient]
   );
   const commands = useMemo(
     () => buildCommands(ctx, connectorsQuery.data ?? [], docsTreeQuery.data?.children ?? []),
-    [ctx, connectorsQuery.data, docsTreeQuery.data],
+    [ctx, connectorsQuery.data, docsTreeQuery.data]
   );
   const [query, setQuery] = useState('');
   const [active, setActive] = useState(0);
@@ -198,10 +236,10 @@ function PaletteBody() {
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'ArrowDown') {
       e.preventDefault();
-      setActive((cursor + 1) % filtered.length);
+      if (filtered.length) setActive((cursor + 1) % filtered.length);
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
-      setActive((cursor - 1 + filtered.length) % filtered.length);
+      if (filtered.length) setActive((cursor - 1 + filtered.length) % filtered.length);
     } else if (e.key === 'Enter') {
       e.preventDefault();
       const c = filtered[cursor];
@@ -239,7 +277,18 @@ function PaletteBody() {
         onKeyDown={onKeyDown}
       >
         <div className="flex items-center gap-3 border-b border-line-soft px-4">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-ink-faint" aria-hidden="true">
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="text-ink-faint"
+            aria-hidden="true"
+          >
             <circle cx="11" cy="11" r="7" />
             <path d="m21 21-4.3-4.3" />
           </svg>
@@ -282,15 +331,15 @@ function PaletteBody() {
                     onClick={() => run(c)}
                     className="flex w-full items-center gap-3 rounded-sm px-2.5 py-2 text-left font-mono text-sm transition-colors"
                     style={{
-                      backgroundColor: isActive ? 'var(--color-accent-primary-tint)' : 'transparent',
+                      backgroundColor: isActive
+                        ? 'var(--color-accent-primary-tint)'
+                        : 'transparent',
                       color: isActive ? 'var(--color-ink)' : 'var(--color-ink-muted)',
                     }}
                   >
                     <c.Icon size={16} className="shrink-0 opacity-80" />
                     <span className="flex-1">{c.label}</span>
-                    {c.hint && (
-                      <span className="font-mono text-2xs text-ink-faint">{c.hint}</span>
-                    )}
+                    {c.hint && <span className="font-mono text-2xs text-ink-faint">{c.hint}</span>}
                   </button>
                 );
               })}
