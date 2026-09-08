@@ -16,7 +16,7 @@ var tablesCreatedByMigrations = []string{
 	"service_snapshots", "docs", "doc_versions", "templates",
 	"template_sections", "changes", "alerts", "dashboard_layouts",
 	"auth_config", "ai_config", "notification_config", "in_app_notifications",
-	"quality_findings", "runbooks", "oidc_identities",
+	"quality_findings", "runbooks", "oidc_identities", "doc_locks",
 }
 
 func TestRunMigrations(t *testing.T) {
@@ -114,10 +114,13 @@ func TestRunMigrationsDown(t *testing.T) {
 		t.Fatalf("RunMigrationsDown() error: %v", err)
 	}
 
-	// RunMigrationsDown rolls back only 000007_oidc_identities.
+	// RunMigrationsDown rolls back only 000008_doc_locks.
 	var count int
-	if err := db.QueryRow("SELECT COUNT(*) FROM oidc_identities").Scan(&count); err == nil {
-		t.Error("table oidc_identities still exists after RunMigrationsDown()")
+	if err := db.QueryRow("SELECT COUNT(*) FROM doc_locks").Scan(&count); err == nil {
+		t.Error("table doc_locks still exists after RunMigrationsDown()")
+	}
+	if err := db.QueryRow("SELECT COUNT(*) FROM oidc_identities").Scan(&count); err != nil {
+		t.Errorf("table oidc_identities should still exist after rolling back only the last migration: %v", err)
 	}
 	if err := db.QueryRow("SELECT COUNT(*) FROM quality_findings").Scan(&count); err != nil {
 		t.Errorf("table quality_findings should still exist after rolling back only the last migration: %v", err)
@@ -134,7 +137,7 @@ func TestRunMigrationsDown(t *testing.T) {
 		t.Errorf("table saved_views should still exist after rolling back only the last migration: %v", err)
 	}
 	for _, table := range tablesCreatedByMigrations {
-		if table == "oidc_identities" {
+		if table == "doc_locks" {
 			continue
 		}
 		if err := db.QueryRow("SELECT COUNT(*) FROM " + table).Scan(&count); err != nil {

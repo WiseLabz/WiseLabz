@@ -205,7 +205,46 @@ interface DocAiSuggestionPayload {
   enable accept/insert; on `error` show inline error. Ignored if no editor open for
   that `docId`.
 
-### 10. `system.health`
+### 10. `doc.lock.acquired`
+An advisory edit lock was acquired on a doc by a user (presence signalling).
+
+```ts
+interface DocLockAcquiredPayload {
+  docId: string;
+  userId: string;
+  acquiredAt: string;  // ISO
+  expiresAt: string;   // ISO
+}
+```
+- **Consumers:** `DocEditorPage`, presence banner.
+- **Reaction:** update `useLive.docLocks[docId]` with holder info; show/update presence
+  banner (e.g. "X is editing this doc"). Lock expires after 5 minutes of inactivity.
+
+### 11. `doc.lock.released`
+An advisory edit lock was explicitly released by its holder.
+
+```ts
+interface DocLockReleasedPayload {
+  docId: string;
+  userId: string;
+}
+```
+- **Consumers:** `DocEditorPage`, presence banner.
+- **Reaction:** clear `useLive.docLocks[docId]`; hide presence banner.
+
+### 12. `doc.lock.expired`
+An advisory edit lock expired (no renewal/heartbeat for 5 minutes).
+
+```ts
+interface DocLockExpiredPayload {
+  docId: string;
+  userId: string;
+}
+```
+- **Consumers:** `DocEditorPage`, presence banner.
+- **Reaction:** clear `useLive.docLocks[docId]`; hide presence banner (lazy cleanup).
+
+### 13. `system.health`
 Backend/integration health + diff-engine heartbeat.
 
 ```ts
@@ -217,7 +256,7 @@ interface SystemHealthPayload {
 - **Consumers:** `SystemSettings` `HealthPanel`, `WsStatusDot` (indirect).
 - **Reaction:** `setQueryData(['health'])`; `degraded`/`down` → admin toast + dot color.
 
-### 11. `system.notice`
+### 14. `system.notice`
 Server-pushed broadcast (maintenance, forced logout, config change affecting sessions).
 
 ```ts

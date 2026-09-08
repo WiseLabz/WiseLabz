@@ -2,6 +2,7 @@ package api_test
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"testing"
 
@@ -71,5 +72,97 @@ func TestDocsSaveSuccess(t *testing.T) {
 	}
 	if got.Content != "updated content" {
 		t.Errorf("Content = %q, want %q", got.Content, "updated content")
+	}
+}
+
+func TestDocLockRoleBoundary(t *testing.T) {
+	app := newTestApp(t)
+	_, viewerToken := app.user(t, "viewer")
+	d := seedDoc(t, app)
+
+	rec := app.req(t, http.MethodPost, "/api/docs/"+d.ID+"/lock", nil, viewerToken)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("acquire status = %d, want 403; body = %s", rec.Code, rec.Body)
+	}
+
+	rec = app.req(t, http.MethodPost, "/api/docs/"+d.ID+"/lock/release", nil, viewerToken)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("release status = %d, want 403; body = %s", rec.Code, rec.Body)
+	}
+}
+
+func TestDocLockHappyPath(t *testing.T) {
+	app := newTestApp(t)
+	_, opToken := app.user(t, "operator")
+	d := seedDoc(t, app)
+
+	rec := app.req(t, http.MethodGet, "/api/docs/"+d.ID+"/lock", nil, opToken)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("get (unlocked) status = %d, want 200; body = %s", rec.Code, rec.Body)
+	}
+	var emptyLock map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &emptyLock); err != nil {
+		t.Fatalf("unmarshal empty lock: %v", err)
+	}
+	if len(emptyLock) != 0 {
+		t.Fatalf("empty lock = %v, want {}", emptyLock)
+	}
+
+	rec = app.req(t, http.MethodPost, "/api/docs/"+d.ID+"/lock", nil, opToken)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("acquire status = %d, want 200; body = %s", rec.Code, rec.Body)
+	}
+	var acquired store.DocLockRecord
+	if err := json.Unmarshal(rec.Body.Bytes(), &acquired); err != nil {
+		t.Fatalf("unmarshal acquired lock: %v", err)
+	}
+	if acquired.DocID != d.ID {
+		t.Errorf("acquired.DocID = %q, want %q", acquired.DocID, d.ID)
+	}
+
+	rec = app.req(t, http.MethodGet, "/api/docs/"+d.ID+"/lock", nil, opToken)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("get (locked) status = %d, want 200; body = %s", rec.Code, rec.Body)
+	}
+
+	rec = app.req(t, http.MethodPost, "/api/docs/"+d.ID+"/lock/release", nil, opToken)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("release status = %d, want 200; body = %s", rec.Code, rec.Body)
+	}
+
+	rec = app.req(t, http.MethodGet, "/api/docs/"+d.ID+"/lock", nil, opToken)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("get (after release) status = %d, want 200; body = %s", rec.Code, rec.Body)
+	}
+	var releasedLock map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &releasedLock); err != nil {
+		t.Fatalf("unmarshal released lock: %v", err)
+	}
+	if len(releasedLock) != 0 {
+		t.Fatalf("released lock = %v, want {}", releasedLock)
+	}
+}
+
+func TestDocLockConflict(t *testing.T) {
+	app := newTestApp(t)
+	user1, op1Token := app.user(t, "operator")
+	_, op2Token := app.user(t, "operator")
+	d := seedDoc(t, app)
+
+	rec := app.req(t, http.MethodPost, "/api/docs/"+d.ID+"/lock", nil, op1Token)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("user1 acquire status = %d, want 200; body = %s", rec.Code, rec.Body)
+	}
+
+	rec = app.req(t, http.MethodPost, "/api/docs/"+d.ID+"/lock", nil, op2Token)
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("user2 acquire status = %d, want 409; body = %s", rec.Code, rec.Body)
+	}
+	var conflict store.DocLockRecord
+	if err := json.Unmarshal(rec.Body.Bytes(), &conflict); err != nil {
+		t.Fatalf("unmarshal conflict response: %v", err)
+	}
+	if conflict.UserID != user1 {
+		t.Errorf("conflict holder = %q, want %q", conflict.UserID, user1)
 	}
 }
