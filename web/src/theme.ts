@@ -10,23 +10,10 @@
  *    L 0..1 (dark→light) · C 0..~0.37 (gray→vivid) · H 0..360 (the hue angle)
  * ========================================================================== */
 
-/* ---- Font files (bundled so any set can be selected at runtime) ------------ */
-import '@fontsource/ibm-plex-mono/400.css';
-import '@fontsource/ibm-plex-mono/500.css';
-import '@fontsource/ibm-plex-mono/600.css';
-import '@fontsource/ibm-plex-mono/700.css';
-import '@fontsource/ibm-plex-sans/400.css';
-import '@fontsource/ibm-plex-sans/500.css';
-import '@fontsource/ibm-plex-sans/600.css';
-import '@fontsource-variable/jetbrains-mono';
-import '@fontsource-variable/inter-tight';
+/* ---- Default font files ---------------------------------------------------- */
 import '@fontsource-variable/space-grotesk';
 import '@fontsource/space-mono/400.css';
 import '@fontsource/space-mono/700.css';
-import '@fontsource-variable/geist';
-import '@fontsource-variable/geist-mono';
-import '@fontsource-variable/big-shoulders-text';
-import '@fontsource-variable/martian-mono';
 
 /* ===========================================================================
  *  FONT SETS  —  { mono, sans }.  Mono is the dominant UI voice; sans is prose.
@@ -44,6 +31,26 @@ export const FONT_SETS = {
 } as const;
 
 export type FontSetName = keyof typeof FONT_SETS;
+
+const fontLoaders: Record<Exclude<FontSetName, 'space'>, () => Promise<unknown>> = {
+  rack: () => import('./fonts/rack'),
+  plex: () => import('./fonts/plex'),
+  jetbrains: () => import('./fonts/jetbrains'),
+  geist: () => import('./fonts/geist'),
+};
+
+const loadedFonts = new Map<FontSetName, Promise<unknown>>();
+
+// loadFont keeps optional families out of the initial bundle. The default Space
+// face is imported above so first paint never waits on a font chunk.
+export function loadFont(font: FontSetName): Promise<unknown> {
+  if (font === 'space') return Promise.resolve();
+  const loaded = loadedFonts.get(font);
+  if (loaded) return loaded;
+  const pending = fontLoaders[font]();
+  loadedFonts.set(font, pending);
+  return pending;
+}
 
 /* ===========================================================================
  *  PALETTE BUILDER  —  a neutral ramp + ONE signal accent + a status set.

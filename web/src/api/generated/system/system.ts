@@ -399,7 +399,7 @@ export function useGetSystemBackupExport<
 }
 
 /**
- * @summary Import a backup bundle — operator. Validates referential integrity and format version before writing anything; existing records (by ID) are left untouched and counted as skipped. The AI config summary, if present, is never applied.
+ * @summary Import a backup bundle — operator. Validates referential integrity and format version before writing anything; existing records (by ID) are left untouched and counted as skipped. The AI config summary, if present, is never applied. Requests are limited to 10 MiB.
  */
 export const postSystemBackupImport = (
   backupBundle: BodyType<BackupBundle>,
@@ -509,7 +509,7 @@ export function usePostSystemBackupImport<
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
- * @summary Import a backup bundle — operator. Validates referential integrity and format version before writing anything; existing records (by ID) are left untouched and counted as skipped. The AI config summary, if present, is never applied.
+ * @summary Import a backup bundle — operator. Validates referential integrity and format version before writing anything; existing records (by ID) are left untouched and counted as skipped. The AI config summary, if present, is never applied. Requests are limited to 10 MiB.
  */
 
 export function usePostSystemBackupImport<

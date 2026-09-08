@@ -2,6 +2,7 @@ package system
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -9,6 +10,10 @@ import (
 	"github.com/WiseLabz/wiselabz/internal/backup"
 	"github.com/WiseLabz/wiselabz/internal/httputil"
 )
+
+// MaxImportBytes bounds a backup upload before decoding to prevent a single
+// request from consuming unbounded server memory.
+const MaxImportBytes = 10 << 20
 
 // ExportBackup handles GET /api/system/backup/export. Operator-only.
 func (h *Handler) ExportBackup(w http.ResponseWriter, r *http.Request) {
@@ -26,7 +31,13 @@ func (h *Handler) ExportBackup(w http.ResponseWriter, r *http.Request) {
 // ImportBackup handles POST /api/system/backup/import. Operator-only.
 func (h *Handler) ImportBackup(w http.ResponseWriter, r *http.Request) {
 	var b backup.Bundle
-	if err := json.NewDecoder(r.Body).Decode(&b); err != nil {
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, MaxImportBytes))
+	if err := decoder.Decode(&b); err != nil {
+		var maxBytesErr *http.MaxBytesError
+		if errors.As(err, &maxBytesErr) {
+			httputil.Error(w, http.StatusRequestEntityTooLarge, "request_too_large", "Backup upload exceeds the 10 MiB limit")
+			return
+		}
 		httputil.Error(w, http.StatusBadRequest, "invalid_request", "Invalid JSON body")
 		return
 	}

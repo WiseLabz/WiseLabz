@@ -4,7 +4,7 @@
  * diff. The diff is the payoff — it shows exactly what a sync (or an editor)
  * changed between revisions, the same view the changes feed links into.
  */
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { AnimatePresence, motion } from 'motion/react';
@@ -36,17 +36,56 @@ export function DocsPage() {
   const { docId } = useParams<{ docId: string }>();
   const tree = useGetDocsTree();
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const drawerTriggerRef = useRef<HTMLButtonElement>(null);
+  const drawerRef = useRef<HTMLDivElement>(null);
 
   // Default to the lab root when no doc is selected in the URL.
   const activeId = docId ?? tree.data?.docId;
 
   useEffect(() => {
     if (!drawerOpen) return;
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setDrawerOpen(false);
+    const trigger = drawerTriggerRef.current;
+    const drawer = drawerRef.current;
+    if (!drawer) return;
+
+    const focusable = () =>
+      Array.from(
+        drawer.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        )
+      ).filter((element) => element.tabIndex >= 0);
+
+    const focusFrame = requestAnimationFrame(() => (focusable()[0] ?? drawer).focus());
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setDrawerOpen(false);
+        return;
+      }
+      if (event.key !== 'Tab') return;
+
+      const elements = focusable();
+      if (elements.length === 0) {
+        event.preventDefault();
+        drawer.focus();
+        return;
+      }
+
+      const first = elements[0];
+      const last = elements[elements.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
     };
     document.addEventListener('keydown', onKeyDown);
-    return () => document.removeEventListener('keydown', onKeyDown);
+    return () => {
+      cancelAnimationFrame(focusFrame);
+      document.removeEventListener('keydown', onKeyDown);
+      if (trigger && document.contains(trigger)) trigger.focus();
+    };
   }, [drawerOpen]);
 
   const treeContent = tree.isLoading ? (
@@ -75,6 +114,7 @@ export function DocsPage() {
 
       {/* Tree — mobile drawer */}
       <button
+        ref={drawerTriggerRef}
         onClick={() => setDrawerOpen(true)}
         aria-label={t('docs.browseDocs')}
         className="fixed bottom-30 right-4 z-(--z-sticky) flex h-11 w-11 items-center justify-center rounded-full border border-line bg-surface-raised text-ink shadow-(--shadow-pop) lg:hidden"
@@ -92,9 +132,11 @@ export function DocsPage() {
               onClick={() => setDrawerOpen(false)}
             />
             <motion.div
+              ref={drawerRef}
               role="dialog"
               aria-modal="true"
               aria-label={t('docs.browseDocs')}
+              tabIndex={-1}
               className="fixed inset-y-0 left-0 z-(--z-overlay) w-72 max-w-[85vw] overflow-y-auto bg-surface-overlay p-2 shadow-(--shadow-pop) lg:hidden"
               initial={{ x: '-100%' }}
               animate={{ x: 0 }}

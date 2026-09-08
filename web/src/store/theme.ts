@@ -14,6 +14,7 @@ import {
   PaletteOpts,
   PRESETS,
   applyTokens,
+  loadFont,
   makePalette,
   presetOpts,
 } from '../theme';
@@ -63,13 +64,20 @@ function load(): Persisted {
 }
 
 // tiny guard set so a stale localStorage font name can't break the app
-const PRESETS_FONTS: Record<string, true> = { plex: true, jetbrains: true, space: true, geist: true };
+const PRESETS_FONTS: Record<FontSetName, true> = {
+  rack: true,
+  plex: true,
+  jetbrains: true,
+  space: true,
+  geist: true,
+};
 
 function tokensFor(s: Persisted) {
   return s.mode === 'custom' ? makePalette(s.custom) : makePalette(PRESETS[s.preset].opts);
 }
 
 function commit(s: Persisted) {
+  void loadFont(s.font);
   applyTokens(tokensFor(s), s.font, s.mode === 'custom' ? 'custom' : s.preset);
   if (typeof window !== 'undefined') {
     const persisted: Persisted = { font: s.font, mode: s.mode, preset: s.preset, custom: s.custom };

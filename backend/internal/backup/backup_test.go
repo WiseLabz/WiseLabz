@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"os"
 	"strings"
@@ -205,5 +206,49 @@ func TestImportIsIdempotent(t *testing.T) {
 		second.DocVersions.Skipped != 1 || second.Templates.Skipped != 1 ||
 		second.TemplateSections.Skipped != 1 {
 		t.Fatalf("expected everything skipped on second run, got %+v", second)
+	}
+}
+
+func TestImportRollsBackOnLateFailure(t *testing.T) {
+	ctx := context.Background()
+	s := newTestStore(t)
+	b := &backup.Bundle{
+		Version: backup.BundleVersion,
+		Docs:    []store.DocRecord{{ID: "doc-transaction", Title: "Transaction test", Kind: "lab"}},
+		DocVersions: []store.DocVersionRecord{
+			{ID: "version-one", DocID: "doc-transaction", Rev: 1, Content: "first", Trigger: "manual"},
+			{ID: "version-two", DocID: "doc-transaction", Rev: 1, Content: "duplicate", Trigger: "manual"},
+		},
+	}
+
+	if _, err := backup.Import(ctx, s, b); err == nil {
+		t.Fatal("Import() error = nil, want late duplicate version failure")
+	}
+	if _, err := s.GetDoc(ctx, "doc-transaction"); err == nil {
+		t.Fatal("imported doc remained after failed transaction")
+	}
+}
+
+func TestExportIncludesRecordsBeyondAPage(t *testing.T) {
+	ctx := context.Background()
+	s := newTestStore(t)
+
+	for i := range 1001 {
+		if err := s.CreateDoc(ctx, &store.DocRecord{
+			ID:      fmt.Sprintf("doc-%04d", i),
+			Title:   fmt.Sprintf("Document %04d", i),
+			Kind:    "lab",
+			Content: "content",
+		}); err != nil {
+			t.Fatalf("create doc %d: %v", i, err)
+		}
+	}
+
+	b, err := backup.Export(ctx, s)
+	if err != nil {
+		t.Fatalf("Export() error: %v", err)
+	}
+	if got := len(b.Docs); got != 1001 {
+		t.Fatalf("exported docs = %d, want 1001", got)
 	}
 }

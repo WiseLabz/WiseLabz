@@ -1,12 +1,15 @@
 package api_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
+	"github.com/WiseLabz/wiselabz/internal/api/system"
 	"github.com/WiseLabz/wiselabz/internal/backup"
 	"github.com/WiseLabz/wiselabz/internal/store"
 )
@@ -57,6 +60,18 @@ func TestBackupImportBadVersion(t *testing.T) {
 	rec := app.req(t, http.MethodPost, "/api/system/backup/import", map[string]any{"version": 9999}, opToken)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400; body = %s", rec.Code, rec.Body)
+	}
+}
+
+func TestBackupImportRejectsOversizedBody(t *testing.T) {
+	app := newTestApp(t)
+	_, opToken := app.user(t, "operator")
+	body := bytes.Repeat([]byte(" "), system.MaxImportBytes+1)
+	req := httptest.NewRequest(http.MethodPost, "/api/system/backup/import", bytes.NewReader(body))
+	req.Header.Set("Authorization", "Bearer "+opToken)
+	rec := app.serve(req)
+	if rec.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("status = %d, want 413; body = %s", rec.Code, rec.Body)
 	}
 }
 

@@ -1413,7 +1413,7 @@ paths:
         Import a backup bundle — operator. Validates referential integrity
         and format version before writing anything; existing records (by ID)
         are left untouched and counted as skipped. The AI config summary, if
-        present, is never applied.
+        present, is never applied. Requests are limited to 10 MiB.
       requestBody:
         required: true
         content:
@@ -1427,6 +1427,11 @@ paths:
               schema: { $ref: '#/components/schemas/BackupImportResult' }
         '400':
           description: Invalid JSON body, or the bundle failed validation (code `invalid_backup`)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '413':
+          description: Backup upload exceeds the 10 MiB request limit
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
