@@ -133,6 +133,10 @@ func (h *Handler) OIDCCallback(w http.ResponseWriter, r *http.Request) {
 		httputil.Error(w, http.StatusBadRequest, "invalid_provider", "Unknown OIDC provider")
 		return
 	}
+	if !h.oidcProviderEnabled(r.Context(), req.ProviderID) {
+		httputil.Error(w, http.StatusForbidden, "oidc_error", "OIDC provider is disabled")
+		return
+	}
 
 	// Initialize provider if needed
 	prov := h.getOrInitOIDCProvider(r.Context(), provCfg)
@@ -148,9 +152,13 @@ func (h *Handler) OIDCCallback(w http.ResponseWriter, r *http.Request) {
 		httputil.Error(w, http.StatusUnauthorized, "oidc_error", "Failed to authenticate with provider")
 		return
 	}
+	if claims.Subject == "" || claims.Issuer == "" || !claims.EmailVerified {
+		httputil.Error(w, http.StatusUnauthorized, "oidc_error", "OIDC identity requires a verified email")
+		return
+	}
 
 	// Find or create user
-	user, err := h.Store.GetUserByOIDCSubject(r.Context(), claims.Email)
+	user, err := h.Store.GetUserByOIDCIdentity(r.Context(), claims.Issuer, claims.Subject)
 	if errors.Is(err, store.ErrNotFound) {
 		// Create new OIDC user
 		displayName := claims.Name
@@ -160,7 +168,8 @@ func (h *Handler) OIDCCallback(w http.ResponseWriter, r *http.Request) {
 		if displayName == "" {
 			displayName = claims.Email
 		}
-		username := "oidc_" + claims.Email
+		identityHash := sha256.Sum256([]byte(claims.Issuer + "\x00" + claims.Subject))
+		username := fmt.Sprintf("oidc_%x", identityHash[:])
 		user = &store.User{
 			Username:    username,
 			DisplayName: displayName,
@@ -168,7 +177,7 @@ func (h *Handler) OIDCCallback(w http.ResponseWriter, r *http.Request) {
 			Role:        "viewer", // default role for OIDC users
 			AuthSource:  "oidc",
 		}
-		if err := h.Store.CreateUser(r.Context(), user); err != nil {
+		if err := h.Store.CreateOIDCUser(r.Context(), user, claims.Issuer, claims.Subject); err != nil {
 			httputil.Errorf(w, err)
 			return
 		}
@@ -214,38 +223,24 @@ func (h *Handler) OIDCCallback(w http.ResponseWriter, r *http.Request) {
 // Reads the refresh token from an HTTP-only cookie and issues a new access token.
 func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) {
 	cookie, err := r.Cookie("refresh_token")
+	token := ""
 	if err != nil {
 		// Also check body for backwards compat
 		var req struct {
 			RefreshToken string `json:"refreshToken"`
 		}
 		if json.NewDecoder(r.Body).Decode(&req) == nil && req.RefreshToken != "" {
-			claims, err := h.JWT.ValidateRefresh(req.RefreshToken)
-			if err != nil {
-				httputil.Error(w, http.StatusUnauthorized, "unauthorized", "Invalid or expired refresh token")
-				return
-			}
-			user, err := h.Store.GetUserByID(r.Context(), claims.UserID)
-			if err != nil {
-				httputil.Error(w, http.StatusUnauthorized, "unauthorized", "User not found")
-				return
-			}
-			if user.Disabled {
-				httputil.Error(w, http.StatusForbidden, "forbidden", "Account is disabled")
-				return
-			}
-			pair, _ := h.JWT.IssuePair(user.ID, user.Role)
-			httputil.JSON(w, http.StatusOK, map[string]any{
-				"accessToken": pair.AccessToken,
-				"expiresIn":   pair.ExpiresIn,
-			})
+			token = req.RefreshToken
+		}
+		if token == "" {
+			httputil.Error(w, http.StatusUnauthorized, "unauthorized", "Missing refresh token")
 			return
 		}
-		httputil.Error(w, http.StatusUnauthorized, "unauthorized", "Missing refresh token")
-		return
+	} else {
+		token = cookie.Value
 	}
 
-	claims, err := h.JWT.ValidateRefresh(cookie.Value)
+	claims, err := h.JWT.ValidateRefresh(token)
 	if err != nil {
 		httputil.Error(w, http.StatusUnauthorized, "unauthorized", "Invalid or expired refresh token")
 		return
@@ -265,6 +260,10 @@ func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) {
 	pair, err := h.JWT.IssuePair(user.ID, user.Role)
 	if err != nil {
 		httputil.Errorf(w, err)
+		return
+	}
+	if err := h.Store.RotateSessionToken(r.Context(), user.ID, store.HashToken(token), store.HashToken(pair.RefreshToken)); err != nil {
+		httputil.Error(w, http.StatusUnauthorized, "unauthorized", "Refresh token is no longer active")
 		return
 	}
 
@@ -287,7 +286,7 @@ func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 		http.SetCookie(w, &http.Cookie{
 			Name:     "refresh_token",
 			Value:    "",
-			Path:     "/api/auth",
+			Path:     "/",
 			Expires:  time.Unix(0, 0),
 			MaxAge:   -1,
 			HttpOnly: true,
@@ -367,6 +366,9 @@ func (h *Handler) Providers(w http.ResponseWriter, r *http.Request) {
 	var oidc []providerInfo
 	for i := range h.Config.Auth.OIDC {
 		p := &h.Config.Auth.OIDC[i]
+		if !h.oidcProviderEnabled(r.Context(), p.ID) {
+			continue
+		}
 		prov := h.getOrInitOIDCProvider(r.Context(), p)
 		if prov == nil {
 			slog.Warn("skipping OIDC provider in list due to initialization failure", "id", p.ID)
@@ -796,12 +798,22 @@ func setRefreshCookie(w http.ResponseWriter, r *http.Request, token string, maxA
 	http.SetCookie(w, &http.Cookie{
 		Name:     "refresh_token",
 		Value:    token,
-		Path:     "/api/auth",
+		Path:     "/",
 		MaxAge:   int(maxAge.Seconds()),
 		HttpOnly: true,
 		Secure:   secure,
 		SameSite: http.SameSiteLaxMode,
 	})
+}
+
+func (h *Handler) oidcProviderEnabled(ctx context.Context, providerID string) bool {
+	flags, err := h.Store.GetOIDCProviderFlags(ctx)
+	if err != nil {
+		slog.Error("failed to get OIDC provider flags", "error", err)
+		return false
+	}
+	enabled, configured := flags[providerID]
+	return !configured || enabled
 }
 
 // signOIDCState produces a signed, self-contained CSRF state token for the OIDC

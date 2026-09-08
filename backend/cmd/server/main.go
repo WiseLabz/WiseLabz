@@ -94,7 +94,7 @@ func main() {
 
 	// Initialize WebSocket hub (must be created before sync engine so sync
 	// can broadcast progress events).
-	wsHub := ws.NewHub()
+	wsHub := ws.NewHub(cfg.Server.Origin)
 	go wsHub.Run()
 	logger.Info("WebSocket hub started")
 

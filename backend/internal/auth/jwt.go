@@ -8,6 +8,12 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
+const (
+	tokenAudienceAccess    = "access"
+	tokenAudienceRefresh   = "refresh"
+	tokenAudienceElevation = "elevation"
+)
+
 // Claims represents the JWT claims for access and refresh tokens.
 type Claims struct {
 	jwt.RegisteredClaims
@@ -59,6 +65,7 @@ func (s *Service) IssuePair(userID, role string) (*TokenPair, error) {
 
 	access, err := s.issue(Claims{
 		RegisteredClaims: jwt.RegisteredClaims{
+			Audience:  jwt.ClaimStrings{tokenAudienceAccess},
 			IssuedAt:  jwt.NewNumericDate(now),
 			ExpiresAt: jwt.NewNumericDate(now.Add(s.accessTTL)),
 			ID:        newTokenID(),
@@ -72,6 +79,7 @@ func (s *Service) IssuePair(userID, role string) (*TokenPair, error) {
 
 	refresh, err := s.issue(Claims{
 		RegisteredClaims: jwt.RegisteredClaims{
+			Audience:  jwt.ClaimStrings{tokenAudienceRefresh},
 			IssuedAt:  jwt.NewNumericDate(now),
 			ExpiresAt: jwt.NewNumericDate(now.Add(s.refreshTTL)),
 			ID:        newTokenID(),
@@ -92,12 +100,12 @@ func (s *Service) IssuePair(userID, role string) (*TokenPair, error) {
 
 // ValidateAccess validates an access token and returns its claims.
 func (s *Service) ValidateAccess(tokenString string) (*Claims, error) {
-	return s.validate(tokenString, &Claims{})
+	return s.validate(tokenString, tokenAudienceAccess)
 }
 
 // ValidateRefresh validates a refresh token and returns its claims.
 func (s *Service) ValidateRefresh(tokenString string) (*Claims, error) {
-	return s.validate(tokenString, &Claims{})
+	return s.validate(tokenString, tokenAudienceRefresh)
 }
 
 // IssueElevation creates a short-lived elevation token scoped to a single action.
@@ -107,6 +115,7 @@ func (s *Service) IssueElevation(userID, action string) (*ElevationToken, error)
 
 	token, err := s.issueElevation(ElevationClaims{
 		RegisteredClaims: jwt.RegisteredClaims{
+			Audience:  jwt.ClaimStrings{tokenAudienceElevation},
 			IssuedAt:  jwt.NewNumericDate(now),
 			ExpiresAt: jwt.NewNumericDate(expiresAt),
 			ID:        newTokenID(),
@@ -125,13 +134,16 @@ func (s *Service) IssueElevation(userID, action string) (*ElevationToken, error)
 }
 
 // ValidateElevation validates an elevation token and checks it matches the required action.
-func (s *Service) ValidateElevation(tokenString, action string) (*ElevationClaims, error) {
+func (s *Service) ValidateElevation(tokenString, action, userID string) (*ElevationClaims, error) {
 	claims, err := s.validateElevation(tokenString)
 	if err != nil {
 		return nil, err
 	}
 	if claims.Action != action {
 		return nil, fmt.Errorf("elevation token is for action %q, not %q", claims.Action, action)
+	}
+	if claims.UserID != userID {
+		return nil, fmt.Errorf("elevation token belongs to a different user")
 	}
 	return claims, nil
 }
@@ -141,7 +153,8 @@ func (s *Service) issue(claims Claims) (string, error) {
 	return token.SignedString(s.secret)
 }
 
-func (s *Service) validate(tokenString string, claims *Claims) (*Claims, error) {
+func (s *Service) validate(tokenString, audience string) (*Claims, error) {
+	claims := &Claims{}
 	token, err := jwt.ParseWithClaims(tokenString, claims, func(t *jwt.Token) (interface{}, error) {
 		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
@@ -154,6 +167,9 @@ func (s *Service) validate(tokenString string, claims *Claims) (*Claims, error) 
 	c, ok := token.Claims.(*Claims)
 	if !ok || !token.Valid {
 		return nil, fmt.Errorf("invalid token")
+	}
+	if !hasAudience(c.Audience, audience) {
+		return nil, fmt.Errorf("token is not for %s", audience)
 	}
 	return c, nil
 }
@@ -178,7 +194,19 @@ func (s *Service) validateElevation(tokenString string) (*ElevationClaims, error
 	if !ok || !token.Valid {
 		return nil, fmt.Errorf("invalid elevation token")
 	}
+	if !hasAudience(c.Audience, tokenAudienceElevation) {
+		return nil, fmt.Errorf("token is not an elevation token")
+	}
 	return c, nil
+}
+
+func hasAudience(audiences jwt.ClaimStrings, audience string) bool {
+	for _, value := range audiences {
+		if value == audience {
+			return true
+		}
+	}
+	return false
 }
 
 // newTokenID generates a simple unique ID. In production, use UUID.

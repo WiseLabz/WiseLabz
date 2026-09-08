@@ -8,11 +8,13 @@ import { WebSocketProvider } from './WebSocketProvider';
 
 class TestWebSocket {
   static last: TestWebSocket | undefined;
+  static urls: string[] = [];
   onopen: ((event: Event) => void) | null = null;
   onclose: ((event: Event) => void) | null = null;
   onmessage: ((event: MessageEvent) => void) | null = null;
 
-  constructor(_url: string) {
+  constructor(url: string) {
+	TestWebSocket.urls.push(url);
     TestWebSocket.last = this;
     queueMicrotask(() => this.onopen?.(new Event('open')));
   }
@@ -29,6 +31,7 @@ describe('WebSocketProvider', () => {
     window.WebSocket = originalWebSocket;
     useAuth.setState({ status: 'unknown', user: null });
     TestWebSocket.last = undefined;
+    TestWebSocket.urls = [];
   });
 
   it('invalidates the dashboard and changes caches after a completed sync', async () => {
@@ -55,5 +58,14 @@ describe('WebSocketProvider', () => {
 
     expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: getGetDashboardOverviewQueryKey() });
     expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: getGetChangesQueryKey() });
+  });
+
+  it('never puts the access token in the WebSocket URL', async () => {
+    window.WebSocket = TestWebSocket as unknown as typeof WebSocket;
+    useAuth.setState({ status: 'authenticated' });
+    render(<QueryClientProvider client={new QueryClient()}><WebSocketProvider><div /></WebSocketProvider></QueryClientProvider>);
+    await waitFor(() => expect(TestWebSocket.urls).toHaveLength(1));
+    expect(TestWebSocket.urls[0]).toMatch(/\/api\/ws$/);
+    expect(TestWebSocket.urls[0]).not.toContain('?');
   });
 });

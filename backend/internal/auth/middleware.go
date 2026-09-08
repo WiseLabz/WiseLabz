@@ -95,7 +95,7 @@ func RequireElevation(jwtSvc *Service, action string) func(http.Handler) http.Ha
 				})
 				return
 			}
-			_, err := jwtSvc.ValidateElevation(token, action)
+			_, err := jwtSvc.ValidateElevation(token, action, UserIDFromContext(r.Context()))
 			if err != nil {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusUnauthorized)

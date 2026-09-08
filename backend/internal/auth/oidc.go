@@ -23,6 +23,7 @@ type OIDCProvider struct {
 
 // OIDCClaims represents the claims extracted from an OIDC ID token.
 type OIDCClaims struct {
+	Issuer        string `json:"iss"`
 	Subject       string `json:"sub"`
 	Email         string `json:"email"`
 	EmailVerified bool   `json:"email_verified"`
@@ -85,6 +86,7 @@ func (p *OIDCProvider) Exchange(ctx context.Context, code string) (*OIDCClaims, 
 		return nil, fmt.Errorf("parse claims: %w", err)
 	}
 
+	claims.Issuer = idToken.Issuer
 	return &claims, nil
 }
 

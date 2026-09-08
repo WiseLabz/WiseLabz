@@ -52,6 +52,31 @@ func TestValidateRefresh(t *testing.T) {
 	}
 }
 
+func TestTokenPurposesCannotBeExchanged(t *testing.T) {
+	svc := NewService("test-secret", time.Minute, time.Hour)
+	pair, err := svc.IssuePair("user-456", "viewer")
+	if err != nil {
+		t.Fatalf("IssuePair() error: %v", err)
+	}
+	if _, err := svc.ValidateAccess(pair.RefreshToken); err == nil {
+		t.Error("refresh token validated as access token")
+	}
+	if _, err := svc.ValidateRefresh(pair.AccessToken); err == nil {
+		t.Error("access token validated as refresh token")
+	}
+}
+
+func TestElevationRequiresOwner(t *testing.T) {
+	svc := NewService("test-secret", time.Minute, time.Hour)
+	elev, err := svc.IssueElevation("owner", "connector.delete")
+	if err != nil {
+		t.Fatalf("IssueElevation() error: %v", err)
+	}
+	if _, err := svc.ValidateElevation(elev.Token, "connector.delete", "other"); err == nil {
+		t.Error("elevation token validated for another user")
+	}
+}
+
 func TestExpiredAccessToken(t *testing.T) {
 	svc := NewService("test-secret", -1*time.Second, time.Hour) // access expires immediately
 
@@ -93,7 +118,7 @@ func TestIssueAndValidateElevation(t *testing.T) {
 		t.Error("elevation token already expired")
 	}
 
-	claims, err := svc.ValidateElevation(elev.Token, "connector.delete")
+	claims, err := svc.ValidateElevation(elev.Token, "connector.delete", "user-123")
 	if err != nil {
 		t.Fatalf("ValidateElevation() error: %v", err)
 	}
@@ -110,7 +135,7 @@ func TestElevationWrongAction(t *testing.T) {
 
 	elev, _ := svc.IssueElevation("user-123", "connector.delete")
 
-	_, err := svc.ValidateElevation(elev.Token, "user.delete")
+	_, err := svc.ValidateElevation(elev.Token, "user.delete", "user-123")
 	if err == nil {
 		t.Error("expected error for wrong action on elevation token")
 	}
@@ -125,7 +150,7 @@ func TestElevationExpired(t *testing.T) {
 		t.Fatalf("IssueElevation() error: %v", err)
 	}
 
-	_, err = svc.ValidateElevation(elev.Token, "connector.delete")
+	_, err = svc.ValidateElevation(elev.Token, "connector.delete", "user-123")
 	if err == nil {
 		t.Error("expected error for expired elevation token")
 	}
