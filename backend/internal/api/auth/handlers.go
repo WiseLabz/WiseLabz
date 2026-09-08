@@ -91,7 +91,8 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		IP:        readIP(r),
 	}
 	if err := h.Store.CreateSession(r.Context(), session); err != nil {
-		slog.Error("failed to create session", "error", err)
+		httputil.Errorf(w, err)
+		return
 	}
 
 	// Set refresh token as HTTP-only cookie
@@ -206,7 +207,8 @@ func (h *Handler) OIDCCallback(w http.ResponseWriter, r *http.Request) {
 		IP:        readIP(r),
 	}
 	if err := h.Store.CreateSession(r.Context(), session); err != nil {
-		slog.Error("failed to create session", "error", err)
+		httputil.Errorf(w, err)
+		return
 	}
 
 	setRefreshCookie(w, r, pair.RefreshToken, h.Config.Auth.RefreshTokenTTLDuration())
@@ -282,17 +284,18 @@ func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 
 	cookie, _ := r.Cookie("refresh_token")
 	if cookie != nil {
-		// Clear cookie
-		http.SetCookie(w, &http.Cookie{
-			Name:     "refresh_token",
-			Value:    "",
-			Path:     "/",
-			Expires:  time.Unix(0, 0),
-			MaxAge:   -1,
-			HttpOnly: true,
-			Secure:   h.Config.Server.Embed,
-			SameSite: http.SameSiteLaxMode,
-		})
+		for _, path := range []string{"/", "/api/auth"} {
+			http.SetCookie(w, &http.Cookie{
+				Name:     "refresh_token",
+				Value:    "",
+				Path:     path,
+				Expires:  time.Unix(0, 0),
+				MaxAge:   -1,
+				HttpOnly: true,
+				Secure:   h.Config.Server.Embed,
+				SameSite: http.SameSiteLaxMode,
+			})
+		}
 	}
 
 	// Delete all sessions for user
@@ -795,6 +798,8 @@ func sanitizeSessions(sessions []store.Session, currentHash string) []map[string
 
 func setRefreshCookie(w http.ResponseWriter, r *http.Request, token string, maxAge time.Duration) {
 	secure := r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https"
+	// Remove the pre-#83 path-scoped cookie so a browser cannot replay it first.
+	http.SetCookie(w, &http.Cookie{Name: "refresh_token", Value: "", Path: "/api/auth", MaxAge: -1, HttpOnly: true, Secure: secure, SameSite: http.SameSiteLaxMode})
 	http.SetCookie(w, &http.Cookie{
 		Name:     "refresh_token",
 		Value:    token,

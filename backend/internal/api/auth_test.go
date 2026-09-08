@@ -16,12 +16,25 @@ func loginRefreshCookie(t *testing.T, app *testApp, username string) *http.Cooki
 		t.Fatalf("login status = %d: %s", rec.Code, rec.Body)
 	}
 	for _, cookie := range rec.Result().Cookies() {
-		if cookie.Name == "refresh_token" {
+		if cookie.Name == "refresh_token" && cookie.Path == "/" {
 			return cookie
 		}
 	}
 	t.Fatal("login did not set refresh token cookie")
 	return nil
+}
+
+func TestLoginExpiresLegacyRefreshCookiePath(t *testing.T) {
+	app := newTestApp(t)
+	seedLocalUser(t, app, "alice", "correct-password", "viewer")
+	rec := app.req(t, http.MethodPost, "/api/auth/login", map[string]any{"username": "alice", "password": "correct-password"}, "")
+	var legacyExpired bool
+	for _, cookie := range rec.Result().Cookies() {
+		legacyExpired = legacyExpired || (cookie.Name == "refresh_token" && cookie.Path == "/api/auth" && cookie.MaxAge < 0)
+	}
+	if !legacyExpired {
+		t.Fatal("login did not expire legacy /api/auth refresh cookie")
+	}
 }
 
 func seedLocalUser(t *testing.T, app *testApp, username, password, role string) *store.User {
