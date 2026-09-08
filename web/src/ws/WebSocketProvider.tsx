@@ -17,7 +17,6 @@ import { toast } from '../lib/toast';
 import { navigateTo } from '../lib/navigation';
 import i18n from '../i18n';
 import { useAuth } from '../store/auth';
-import { getAccessToken } from '../api/axios-instance';
 import type { WsEvent } from '../types/ws';
 
 const jump = (to: string) => ({
@@ -26,9 +25,7 @@ const jump = (to: string) => ({
 });
 
 const wsUrl = () => {
-  const base = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/api/ws`;
-  const token = getAccessToken();
-  return token ? `${base}?access_token=${encodeURIComponent(token)}` : base;
+  return `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/api/ws`;
 };
 
 export function WebSocketProvider({ children }: { children: React.ReactNode }) {

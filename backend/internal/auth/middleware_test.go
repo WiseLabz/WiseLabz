@@ -68,6 +68,19 @@ func TestAuthMiddlewareInvalidToken(t *testing.T) {
 	}
 }
 
+func TestAuthMiddlewareRejectsRefreshToken(t *testing.T) {
+	svc := NewService("test-secret", time.Minute, time.Hour)
+	pair, _ := svc.IssuePair("user-1", "viewer")
+	handler := AuthMiddleware(svc)(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) { t.Error("handler should not be called") }))
+	req := httptest.NewRequest("GET", "/test", nil)
+	req.Header.Set("Authorization", "Bearer "+pair.RefreshToken)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusUnauthorized {
+		t.Errorf("status = %d, want 401", rec.Code)
+	}
+}
+
 func TestRequireRoleOperator(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)

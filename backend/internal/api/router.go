@@ -306,15 +306,24 @@ func NewRouter(cfg Config) chi.Router {
 
 	// --- WebSocket endpoint ---
 	r.Get("/api/ws", func(w http.ResponseWriter, r *http.Request) {
-		// Auth via query param for WebSocket
-		token := r.URL.Query().Get("access_token")
-		if token == "" {
-			httputil.Error(w, http.StatusUnauthorized, "unauthorized", "Missing access_token query parameter")
+		cookie, err := r.Cookie("refresh_token")
+		if err != nil {
+			httputil.Error(w, http.StatusUnauthorized, "unauthorized", "Missing refresh token")
 			return
 		}
-		claims, err := cfg.JWT.ValidateAccess(token)
+		claims, err := cfg.JWT.ValidateRefresh(cookie.Value)
 		if err != nil {
 			httputil.Error(w, http.StatusUnauthorized, "unauthorized", "Invalid access token")
+			return
+		}
+		active, err := cfg.Store.HasSessionTokenHash(r.Context(), claims.UserID, store.HashToken(cookie.Value))
+		if err != nil || !active {
+			httputil.Error(w, http.StatusUnauthorized, "unauthorized", "Refresh token is no longer active")
+			return
+		}
+		user, err := cfg.Store.GetUserByID(r.Context(), claims.UserID)
+		if err != nil || user.Disabled {
+			httputil.Error(w, http.StatusUnauthorized, "unauthorized", "User not found or disabled")
 			return
 		}
 		if cfg.WSHub != nil {

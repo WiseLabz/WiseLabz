@@ -11,14 +11,6 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-var upgrader = websocket.Upgrader{
-	ReadBufferSize:  1024,
-	WriteBufferSize: 1024,
-	CheckOrigin: func(_ *http.Request) bool {
-		return true // validated by auth middleware on upgrade
-	},
-}
-
 // Event types sent over WebSocket.
 const (
 	EventServiceStatus          = "service.status"
@@ -52,6 +44,7 @@ type Client struct {
 
 // Hub maintains the set of active clients and broadcasts messages.
 type Hub struct {
+	upgrader   websocket.Upgrader
 	mu         sync.RWMutex
 	clients    map[*Client]bool
 	broadcast  chan broadcastMsg
@@ -65,12 +58,17 @@ type broadcastMsg struct {
 }
 
 // NewHub creates a new WebSocket hub and starts its run loop.
-func NewHub() *Hub {
+func NewHub(origins ...string) *Hub {
 	h := &Hub{
+		upgrader:   websocket.Upgrader{ReadBufferSize: 1024, WriteBufferSize: 1024},
 		clients:    make(map[*Client]bool),
 		broadcast:  make(chan broadcastMsg, 256),
 		register:   make(chan *Client),
 		unregister: make(chan *Client),
+	}
+	if len(origins) > 0 && origins[0] != "" {
+		origin := origins[0]
+		h.upgrader.CheckOrigin = func(r *http.Request) bool { return r.Header.Get("Origin") == origin }
 	}
 	return h
 }
@@ -163,7 +161,7 @@ func (h *Hub) ClientCount() int {
 // UpgradeHandler upgrades an HTTP connection to WebSocket.
 // Caller must authenticate before upgrading.
 func (h *Hub) UpgradeHandler(w http.ResponseWriter, r *http.Request, userID, role string) error {
-	conn, err := upgrader.Upgrade(w, r, nil)
+	conn, err := h.upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		return err
 	}

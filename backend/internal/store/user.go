@@ -282,6 +282,35 @@ func (s *Store) DeleteUserSessions(ctx context.Context, userID string) error {
 	return err
 }
 
+// RotateSessionToken atomically replaces the current refresh-token hash.
+func (s *Store) RotateSessionToken(ctx context.Context, userID, oldHash, newHash string) error {
+	result, err := s.db.ExecContext(ctx, `UPDATE sessions SET token_hash = ?, last_seen_at = ? WHERE user_id = ? AND token_hash = ?`, newHash, time.Now().UTC().Format(time.RFC3339), userID, oldHash)
+	if err != nil {
+		return fmt.Errorf("rotate session token: %w", err)
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("rotate session token rows affected: %w", err)
+	}
+	if rows == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// HasSessionTokenHash reports whether an active session owns a refresh token.
+func (s *Store) HasSessionTokenHash(ctx context.Context, userID, tokenHash string) (bool, error) {
+	var found int
+	err := s.db.QueryRowContext(ctx, `SELECT 1 FROM sessions WHERE user_id = ? AND token_hash = ?`, userID, tokenHash).Scan(&found)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("find session token: %w", err)
+	}
+	return true, nil
+}
+
 // ListUserSessions returns all active sessions for a user.
 func (s *Store) ListUserSessions(ctx context.Context, userID string) ([]Session, error) {
 	rows, err := s.db.QueryContext(ctx, `
@@ -317,24 +346,51 @@ func (s *Store) UpdateSessionLastSeen(ctx context.Context, id string) error {
 
 // --- OIDC operations ---
 
-// GetUserByOIDCSubject finds a user by their OIDC subject (stored in email or username).
-func (s *Store) GetUserByOIDCSubject(ctx context.Context, subject string) (*User, error) {
-	// Look up by auth_source='oidc' and email matches the subject
+// GetUserByOIDCIdentity finds a user by the issuer and subject verified by OIDC.
+func (s *Store) GetUserByOIDCIdentity(ctx context.Context, issuer, subject string) (*User, error) {
 	u := &User{}
 	var disabled int
 	err := s.db.QueryRowContext(ctx, `
 		SELECT id, username, display_name, email, role, auth_source, password_hash, disabled, created_at
-		FROM users WHERE email = ? AND auth_source = 'oidc'
-	`, subject).Scan(&u.ID, &u.Username, &u.DisplayName, &u.Email, &u.Role,
+		FROM users JOIN oidc_identities ON oidc_identities.user_id = users.id
+		WHERE oidc_identities.issuer = ? AND oidc_identities.subject = ?
+	`, issuer, subject).Scan(&u.ID, &u.Username, &u.DisplayName, &u.Email, &u.Role,
 		&u.AuthSource, &u.PasswordHash, &disabled, &u.CreatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
 	if err != nil {
-		return nil, fmt.Errorf("get user by oidc subject: %w", err)
+		return nil, fmt.Errorf("get user by oidc identity: %w", err)
 	}
 	u.Disabled = disabled != 0
 	return u, nil
+}
+
+// CreateOIDCUser creates an OIDC user and its verified identity atomically.
+func (s *Store) CreateOIDCUser(ctx context.Context, user *User, issuer, subject string) error {
+	if user.ID == "" {
+		user.ID = uuid.New().String()
+	}
+	if user.CreatedAt == "" {
+		user.CreatedAt = time.Now().UTC().Format(time.RFC3339)
+	}
+	if user.Role == "" {
+		user.Role = "viewer"
+	}
+	user.AuthSource = "oidc"
+	return s.WithinTransaction(ctx, func(tx *Store) error {
+		_, err := tx.db.ExecContext(ctx, `INSERT INTO users (id, username, display_name, email, role, auth_source, password_hash, disabled, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`, user.ID, user.Username, user.DisplayName, user.Email, user.Role, user.AuthSource, user.PasswordHash, boolToInt(user.Disabled), user.CreatedAt)
+		if err == nil {
+			_, err = tx.db.ExecContext(ctx, `INSERT INTO oidc_identities (issuer, subject, user_id) VALUES (?, ?, ?)`, issuer, subject, user.ID)
+		}
+		if isUniqueViolation(err) {
+			return ErrConflict
+		}
+		if err != nil {
+			return fmt.Errorf("create oidc user: %w", err)
+		}
+		return nil
+	})
 }
 
 // --- Helpers ---

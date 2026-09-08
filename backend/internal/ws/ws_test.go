@@ -2,9 +2,24 @@ package ws
 
 import (
 	"encoding/json"
+	"net/http/httptest"
 	"testing"
 	"time"
 )
+
+func TestHubConfiguredOrigin(t *testing.T) {
+	hub := NewHub("https://app.example.com")
+	allowed := httptest.NewRequest("GET", "/api/ws", nil)
+	allowed.Header.Set("Origin", "https://app.example.com")
+	if !hub.upgrader.CheckOrigin(allowed) {
+		t.Fatal("configured origin was rejected")
+	}
+	rejected := httptest.NewRequest("GET", "/api/ws", nil)
+	rejected.Header.Set("Origin", "https://evil.example.com")
+	if hub.upgrader.CheckOrigin(rejected) {
+		t.Fatal("cross-origin request was accepted")
+	}
+}
 
 func TestHubBroadcastRouting(t *testing.T) {
 	hub := NewHub()

@@ -9,6 +9,34 @@ import (
 	"github.com/WiseLabz/wiselabz/internal/store"
 )
 
+func loginRefreshCookie(t *testing.T, app *testApp, username string) *http.Cookie {
+	t.Helper()
+	rec := app.req(t, http.MethodPost, "/api/auth/login", map[string]any{"username": username, "password": "correct-password"}, "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("login status = %d: %s", rec.Code, rec.Body)
+	}
+	for _, cookie := range rec.Result().Cookies() {
+		if cookie.Name == "refresh_token" && cookie.Path == "/" {
+			return cookie
+		}
+	}
+	t.Fatal("login did not set refresh token cookie")
+	return nil
+}
+
+func TestLoginExpiresLegacyRefreshCookiePath(t *testing.T) {
+	app := newTestApp(t)
+	seedLocalUser(t, app, "alice", "correct-password", "viewer")
+	rec := app.req(t, http.MethodPost, "/api/auth/login", map[string]any{"username": "alice", "password": "correct-password"}, "")
+	var legacyExpired bool
+	for _, cookie := range rec.Result().Cookies() {
+		legacyExpired = legacyExpired || (cookie.Name == "refresh_token" && cookie.Path == "/api/auth" && cookie.MaxAge < 0)
+	}
+	if !legacyExpired {
+		t.Fatal("login did not expire legacy /api/auth refresh cookie")
+	}
+}
+
 func seedLocalUser(t *testing.T, app *testApp, username, password, role string) *store.User {
 	t.Helper()
 	hash, err := auth.HashPassword(password)
@@ -59,6 +87,47 @@ func TestLoginSuccess(t *testing.T) {
 	rec := app.req(t, http.MethodPost, "/api/auth/login", map[string]any{"username": "alice", "password": "correct-password"}, "")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body = %s", rec.Code, rec.Body)
+	}
+}
+
+func TestRefreshRotatesOnlyActiveSession(t *testing.T) {
+	app := newTestApp(t)
+	seedLocalUser(t, app, "alice", "correct-password", "viewer")
+	first := loginRefreshCookie(t, app, "alice")
+	if first.Path != "/" {
+		t.Fatalf("cookie path = %q, want /", first.Path)
+	}
+	request := app.newRequest(t, http.MethodPost, "/api/auth/refresh", nil, "")
+	request.AddCookie(first)
+	rotated := app.serve(request)
+	if rotated.Code != http.StatusOK {
+		t.Fatalf("refresh status = %d: %s", rotated.Code, rotated.Body)
+	}
+	replay := app.newRequest(t, http.MethodPost, "/api/auth/refresh", nil, "")
+	replay.AddCookie(first)
+	if rec := app.serve(replay); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("replay status = %d, want 401", rec.Code)
+	}
+}
+
+func TestRefreshRejectsAccessToken(t *testing.T) {
+	app := newTestApp(t)
+	_, access := app.user(t, "viewer")
+	rec := app.req(t, http.MethodPost, "/api/auth/refresh", map[string]any{"refreshToken": access}, "")
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401", rec.Code)
+	}
+}
+
+func TestElevationCannotCrossOperators(t *testing.T) {
+	app := newTestApp(t)
+	ownerID, _ := app.user(t, "operator")
+	_, otherToken := app.user(t, "operator")
+	targetID, _ := app.user(t, "viewer")
+	req := app.newRequest(t, http.MethodDelete, "/api/users/"+targetID, nil, otherToken)
+	req.Header.Set("X-Elevation-Token", app.elevationToken(t, ownerID, "user.delete"))
+	if rec := app.serve(req); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401", rec.Code)
 	}
 }
 
