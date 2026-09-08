@@ -23,6 +23,7 @@ import type {
   AiSuggestRef,
   AiSuggestRequest,
   Doc,
+  DocLock,
   DocNode,
   DocPage,
   DocSave,
@@ -1220,6 +1221,378 @@ export function usePostDocsDocIdAiSuggest<
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
   const queryOptions = getPostDocsDocIdAiSuggestQueryOptions(docId, aiSuggestRequest, options);
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+/**
+ * @summary Current advisory edit lock on the doc, if any (any authenticated user)
+ */
+export const getDocsDocIdLock = (
+  docId: string,
+  options?: SecondParameter<typeof customInstance>,
+  signal?: AbortSignal
+) => {
+  return customInstance<DocLock>({ url: `/docs/${docId}/lock`, method: 'GET', signal }, options);
+};
+
+export const getGetDocsDocIdLockQueryKey = (docId: string) => {
+  return [`/docs/${docId}/lock`] as const;
+};
+
+export const getGetDocsDocIdLockQueryOptions = <
+  TData = Awaited<ReturnType<typeof getDocsDocIdLock>>,
+  TError = ErrorType<unknown>,
+>(
+  docId: string,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getDocsDocIdLock>>, TError, TData>>;
+    request?: SecondParameter<typeof customInstance>;
+  }
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetDocsDocIdLockQueryKey(docId);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getDocsDocIdLock>>> = ({ signal }) =>
+    getDocsDocIdLock(docId, requestOptions, signal);
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: docId !== null && docId !== undefined,
+    ...queryOptions,
+  } as UseQueryOptions<Awaited<ReturnType<typeof getDocsDocIdLock>>, TError, TData> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+};
+
+export type GetDocsDocIdLockQueryResult = NonNullable<Awaited<ReturnType<typeof getDocsDocIdLock>>>;
+export type GetDocsDocIdLockQueryError = ErrorType<unknown>;
+
+export function useGetDocsDocIdLock<
+  TData = Awaited<ReturnType<typeof getDocsDocIdLock>>,
+  TError = ErrorType<unknown>,
+>(
+  docId: string,
+  options: {
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof getDocsDocIdLock>>, TError, TData>> &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getDocsDocIdLock>>,
+          TError,
+          Awaited<ReturnType<typeof getDocsDocIdLock>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useGetDocsDocIdLock<
+  TData = Awaited<ReturnType<typeof getDocsDocIdLock>>,
+  TError = ErrorType<unknown>,
+>(
+  docId: string,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getDocsDocIdLock>>, TError, TData>> &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getDocsDocIdLock>>,
+          TError,
+          Awaited<ReturnType<typeof getDocsDocIdLock>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useGetDocsDocIdLock<
+  TData = Awaited<ReturnType<typeof getDocsDocIdLock>>,
+  TError = ErrorType<unknown>,
+>(
+  docId: string,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getDocsDocIdLock>>, TError, TData>>;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * @summary Current advisory edit lock on the doc, if any (any authenticated user)
+ */
+
+export function useGetDocsDocIdLock<
+  TData = Awaited<ReturnType<typeof getDocsDocIdLock>>,
+  TError = ErrorType<unknown>,
+>(
+  docId: string,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getDocsDocIdLock>>, TError, TData>>;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getGetDocsDocIdLockQueryOptions(docId, options);
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+/**
+ * @summary Acquire or renew the advisory edit lock (editor+). Advisory only — never blocks Save.
+ */
+export const postDocsDocIdLock = (
+  docId: string,
+  options?: SecondParameter<typeof customInstance>,
+  signal?: AbortSignal
+) => {
+  return customInstance<DocLock>({ url: `/docs/${docId}/lock`, method: 'POST', signal }, options);
+};
+
+export const getPostDocsDocIdLockQueryKey = (docId: string) => {
+  return ['POST', `/docs/${docId}/lock`] as const;
+};
+
+export const getPostDocsDocIdLockQueryOptions = <
+  TData = Awaited<ReturnType<typeof postDocsDocIdLock>>,
+  TError = ErrorType<DocLock>,
+>(
+  docId: string,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof postDocsDocIdLock>>, TError, TData>>;
+    request?: SecondParameter<typeof customInstance>;
+  }
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getPostDocsDocIdLockQueryKey(docId);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof postDocsDocIdLock>>> = ({ signal }) =>
+    postDocsDocIdLock(docId, requestOptions, signal);
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: docId !== null && docId !== undefined,
+    ...queryOptions,
+  } as UseQueryOptions<Awaited<ReturnType<typeof postDocsDocIdLock>>, TError, TData> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+};
+
+export type PostDocsDocIdLockQueryResult = NonNullable<
+  Awaited<ReturnType<typeof postDocsDocIdLock>>
+>;
+export type PostDocsDocIdLockQueryError = ErrorType<DocLock>;
+
+export function usePostDocsDocIdLock<
+  TData = Awaited<ReturnType<typeof postDocsDocIdLock>>,
+  TError = ErrorType<DocLock>,
+>(
+  docId: string,
+  options: {
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof postDocsDocIdLock>>, TError, TData>> &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postDocsDocIdLock>>,
+          TError,
+          Awaited<ReturnType<typeof postDocsDocIdLock>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function usePostDocsDocIdLock<
+  TData = Awaited<ReturnType<typeof postDocsDocIdLock>>,
+  TError = ErrorType<DocLock>,
+>(
+  docId: string,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof postDocsDocIdLock>>, TError, TData>> &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postDocsDocIdLock>>,
+          TError,
+          Awaited<ReturnType<typeof postDocsDocIdLock>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function usePostDocsDocIdLock<
+  TData = Awaited<ReturnType<typeof postDocsDocIdLock>>,
+  TError = ErrorType<DocLock>,
+>(
+  docId: string,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof postDocsDocIdLock>>, TError, TData>>;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * @summary Acquire or renew the advisory edit lock (editor+). Advisory only — never blocks Save.
+ */
+
+export function usePostDocsDocIdLock<
+  TData = Awaited<ReturnType<typeof postDocsDocIdLock>>,
+  TError = ErrorType<DocLock>,
+>(
+  docId: string,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof postDocsDocIdLock>>, TError, TData>>;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getPostDocsDocIdLockQueryOptions(docId, options);
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+/**
+ * @summary Release the advisory edit lock if held by the caller (editor+)
+ */
+export const postDocsDocIdLockRelease = (
+  docId: string,
+  options?: SecondParameter<typeof customInstance>,
+  signal?: AbortSignal
+) => {
+  return customInstance<void>(
+    { url: `/docs/${docId}/lock/release`, method: 'POST', signal },
+    options
+  );
+};
+
+export const getPostDocsDocIdLockReleaseQueryKey = (docId: string) => {
+  return ['POST', `/docs/${docId}/lock/release`] as const;
+};
+
+export const getPostDocsDocIdLockReleaseQueryOptions = <
+  TData = Awaited<ReturnType<typeof postDocsDocIdLockRelease>>,
+  TError = ErrorType<unknown>,
+>(
+  docId: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof postDocsDocIdLockRelease>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  }
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getPostDocsDocIdLockReleaseQueryKey(docId);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof postDocsDocIdLockRelease>>> = ({
+    signal,
+  }) => postDocsDocIdLockRelease(docId, requestOptions, signal);
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: docId !== null && docId !== undefined,
+    ...queryOptions,
+  } as UseQueryOptions<Awaited<ReturnType<typeof postDocsDocIdLockRelease>>, TError, TData> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+};
+
+export type PostDocsDocIdLockReleaseQueryResult = NonNullable<
+  Awaited<ReturnType<typeof postDocsDocIdLockRelease>>
+>;
+export type PostDocsDocIdLockReleaseQueryError = ErrorType<unknown>;
+
+export function usePostDocsDocIdLockRelease<
+  TData = Awaited<ReturnType<typeof postDocsDocIdLockRelease>>,
+  TError = ErrorType<unknown>,
+>(
+  docId: string,
+  options: {
+    query: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof postDocsDocIdLockRelease>>, TError, TData>
+    > &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postDocsDocIdLockRelease>>,
+          TError,
+          Awaited<ReturnType<typeof postDocsDocIdLockRelease>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function usePostDocsDocIdLockRelease<
+  TData = Awaited<ReturnType<typeof postDocsDocIdLockRelease>>,
+  TError = ErrorType<unknown>,
+>(
+  docId: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof postDocsDocIdLockRelease>>, TError, TData>
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postDocsDocIdLockRelease>>,
+          TError,
+          Awaited<ReturnType<typeof postDocsDocIdLockRelease>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function usePostDocsDocIdLockRelease<
+  TData = Awaited<ReturnType<typeof postDocsDocIdLockRelease>>,
+  TError = ErrorType<unknown>,
+>(
+  docId: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof postDocsDocIdLockRelease>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * @summary Release the advisory edit lock if held by the caller (editor+)
+ */
+
+export function usePostDocsDocIdLockRelease<
+  TData = Awaited<ReturnType<typeof postDocsDocIdLockRelease>>,
+  TError = ErrorType<unknown>,
+>(
+  docId: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof postDocsDocIdLockRelease>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getPostDocsDocIdLockReleaseQueryOptions(docId, options);
 
   const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
     queryKey: DataTag<QueryKey, TData, TError>;

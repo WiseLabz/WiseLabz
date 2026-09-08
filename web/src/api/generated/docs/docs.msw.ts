@@ -14,6 +14,7 @@ import type { RequestHandlerOptions } from 'msw';
 import type {
   AiSuggestRef,
   Doc,
+  DocLock,
   DocNode,
   DocPage,
   DocVersion,
@@ -160,6 +161,50 @@ export const getPostDocsDocIdAiSuggestResponseMock = (
   overrideResponse: Partial<Extract<AiSuggestRef, object>> = {}
 ): AiSuggestRef => ({
   requestId: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  ...overrideResponse,
+});
+
+export const getGetDocsDocIdLockResponseMock = (
+  overrideResponse: Partial<Extract<DocLock, object>> = {}
+): DocLock => ({
+  docId: faker.helpers.arrayElement([
+    faker.string.alpha({ length: { min: 10, max: 20 } }),
+    undefined,
+  ]),
+  userId: faker.helpers.arrayElement([
+    faker.string.alpha({ length: { min: 10, max: 20 } }),
+    undefined,
+  ]),
+  acquiredAt: faker.helpers.arrayElement([
+    faker.date.past().toISOString().slice(0, 19) + 'Z',
+    undefined,
+  ]),
+  expiresAt: faker.helpers.arrayElement([
+    faker.date.past().toISOString().slice(0, 19) + 'Z',
+    undefined,
+  ]),
+  ...overrideResponse,
+});
+
+export const getPostDocsDocIdLockResponseMock = (
+  overrideResponse: Partial<Extract<DocLock, object>> = {}
+): DocLock => ({
+  docId: faker.helpers.arrayElement([
+    faker.string.alpha({ length: { min: 10, max: 20 } }),
+    undefined,
+  ]),
+  userId: faker.helpers.arrayElement([
+    faker.string.alpha({ length: { min: 10, max: 20 } }),
+    undefined,
+  ]),
+  acquiredAt: faker.helpers.arrayElement([
+    faker.date.past().toISOString().slice(0, 19) + 'Z',
+    undefined,
+  ]),
+  expiresAt: faker.helpers.arrayElement([
+    faker.date.past().toISOString().slice(0, 19) + 'Z',
+    undefined,
+  ]),
   ...overrideResponse,
 });
 
@@ -374,6 +419,69 @@ export const getPostDocsDocIdAiSuggestMockHandler = (
   );
 };
 
+export const getGetDocsDocIdLockMockHandler = (
+  overrideResponse?:
+    | DocLock
+    | ((info: Parameters<Parameters<typeof http.get>[1]>[0]) => Promise<DocLock> | DocLock),
+  options?: RequestHandlerOptions
+) => {
+  return http.get(
+    '*/docs/:docId/lock',
+    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+      return HttpResponse.json(
+        overrideResponse !== undefined
+          ? typeof overrideResponse === 'function'
+            ? await overrideResponse(info)
+            : overrideResponse
+          : getGetDocsDocIdLockResponseMock(),
+        { status: 200 }
+      );
+    },
+    options
+  );
+};
+
+export const getPostDocsDocIdLockMockHandler = (
+  overrideResponse?:
+    | DocLock
+    | ((info: Parameters<Parameters<typeof http.post>[1]>[0]) => Promise<DocLock> | DocLock),
+  options?: RequestHandlerOptions
+) => {
+  return http.post(
+    '*/docs/:docId/lock',
+    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+      return HttpResponse.json(
+        overrideResponse !== undefined
+          ? typeof overrideResponse === 'function'
+            ? await overrideResponse(info)
+            : overrideResponse
+          : getPostDocsDocIdLockResponseMock(),
+        { status: 200 }
+      );
+    },
+    options
+  );
+};
+
+export const getPostDocsDocIdLockReleaseMockHandler = (
+  overrideResponse?:
+    | void
+    | ((info: Parameters<Parameters<typeof http.post>[1]>[0]) => Promise<void> | void),
+  options?: RequestHandlerOptions
+) => {
+  return http.post(
+    '*/docs/:docId/lock/release',
+    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+      if (typeof overrideResponse === 'function') {
+        await overrideResponse(info);
+      }
+
+      return new HttpResponse(null, { status: 200 });
+    },
+    options
+  );
+};
+
 export const getPostDocsGenerateMockHandler = (
   overrideResponse?:
     | GenerateResult
@@ -407,5 +515,8 @@ export const getDocsMock = () => [
   getGetDocsDocIdVersionsRevMockHandler(),
   getPostDocsDocIdVersionsRevRestoreMockHandler(),
   getPostDocsDocIdAiSuggestMockHandler(),
+  getGetDocsDocIdLockMockHandler(),
+  getPostDocsDocIdLockMockHandler(),
+  getPostDocsDocIdLockReleaseMockHandler(),
   getPostDocsGenerateMockHandler(),
 ];

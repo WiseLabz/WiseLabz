@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	_ "modernc.org/sqlite"
 )
@@ -328,5 +329,120 @@ func TestTemplateVersionIndexAndCascade(t *testing.T) {
 	}
 	if len(versions) != 0 {
 		t.Fatalf("versions after template delete = %#v, want empty", versions)
+	}
+}
+
+func TestDocLockConflict(t *testing.T) {
+	ctx := context.Background()
+	s := newDocTestStore(t)
+	d := &DocRecord{Title: "Test Doc", Content: "v1"}
+	if err := s.CreateDoc(ctx, d); err != nil {
+		t.Fatalf("CreateDoc() error: %v", err)
+	}
+
+	lock1, err := s.AcquireDocLock(ctx, d.ID, "user-1")
+	if err != nil {
+		t.Fatalf("AcquireDocLock(user-1) error: %v", err)
+	}
+	if lock1.UserID != "user-1" {
+		t.Fatalf("lock1.UserID = %q, want user-1", lock1.UserID)
+	}
+
+	lock2, err := s.AcquireDocLock(ctx, d.ID, "user-2")
+	if !errors.Is(err, ErrLockHeldByOther) {
+		t.Fatalf("AcquireDocLock(user-2) error = %v, want ErrLockHeldByOther", err)
+	}
+	if lock2.UserID != "user-1" {
+		t.Fatalf("returned lock.UserID = %q, want user-1", lock2.UserID)
+	}
+}
+
+func TestDocLockRenewalByHolder(t *testing.T) {
+	ctx := context.Background()
+	s := newDocTestStore(t)
+	d := &DocRecord{Title: "Test Doc", Content: "v1"}
+	if err := s.CreateDoc(ctx, d); err != nil {
+		t.Fatalf("CreateDoc() error: %v", err)
+	}
+
+	lock1, err := s.AcquireDocLock(ctx, d.ID, "user-1")
+	if err != nil {
+		t.Fatalf("first AcquireDocLock() error: %v", err)
+	}
+	first := lock1.ExpiresAt
+
+	time.Sleep(1100 * time.Millisecond)
+
+	lock2, err := s.AcquireDocLock(ctx, d.ID, "user-1")
+	if err != nil {
+		t.Fatalf("second AcquireDocLock() (renewal) error: %v", err)
+	}
+	if lock2.UserID != "user-1" {
+		t.Fatalf("renewal: lock.UserID = %q, want user-1", lock2.UserID)
+	}
+	if lock2.ExpiresAt <= first {
+		t.Fatalf("renewal: ExpiresAt did not advance: old %q, new %q", first, lock2.ExpiresAt)
+	}
+}
+
+func TestDocLockAcquireAfterExpiry(t *testing.T) {
+	ctx := context.Background()
+	s := newDocTestStore(t)
+	d := &DocRecord{Title: "Test Doc", Content: "v1"}
+	if err := s.CreateDoc(ctx, d); err != nil {
+		t.Fatalf("CreateDoc() error: %v", err)
+	}
+
+	_, err := s.AcquireDocLock(ctx, d.ID, "user-1")
+	if err != nil {
+		t.Fatalf("AcquireDocLock(user-1) error: %v", err)
+	}
+
+	past := time.Now().UTC().Add(-1 * time.Hour).Format(time.RFC3339)
+	if _, err := s.db.ExecContext(ctx, `UPDATE doc_locks SET expires_at = ? WHERE doc_id = ?`, past, d.ID); err != nil {
+		t.Fatalf("update expires_at: %v", err)
+	}
+
+	lock2, err := s.AcquireDocLock(ctx, d.ID, "user-2")
+	if err != nil {
+		t.Fatalf("AcquireDocLock(user-2) after expiry error: %v", err)
+	}
+	if lock2.UserID != "user-2" {
+		t.Fatalf("after expiry: lock.UserID = %q, want user-2", lock2.UserID)
+	}
+}
+
+func TestDocLockReleaseOnlyByHolder(t *testing.T) {
+	ctx := context.Background()
+	s := newDocTestStore(t)
+	d := &DocRecord{Title: "Test Doc", Content: "v1"}
+	if err := s.CreateDoc(ctx, d); err != nil {
+		t.Fatalf("CreateDoc() error: %v", err)
+	}
+
+	_, err := s.AcquireDocLock(ctx, d.ID, "user-1")
+	if err != nil {
+		t.Fatalf("AcquireDocLock() error: %v", err)
+	}
+
+	if err := s.ReleaseDocLock(ctx, d.ID, "user-2"); err != nil {
+		t.Fatalf("ReleaseDocLock(user-2) error: %v", err)
+	}
+
+	got, err := s.GetDocLock(ctx, d.ID)
+	if err != nil {
+		t.Fatalf("GetDocLock() after non-holder release error: %v", err)
+	}
+	if got.UserID != "user-1" {
+		t.Fatalf("after non-holder release: lock.UserID = %q, want user-1 (unchanged)", got.UserID)
+	}
+
+	if err := s.ReleaseDocLock(ctx, d.ID, "user-1"); err != nil {
+		t.Fatalf("ReleaseDocLock(user-1) error: %v", err)
+	}
+
+	_, err = s.GetDocLock(ctx, d.ID)
+	if !errors.Is(err, ErrNotFound) {
+		t.Fatalf("GetDocLock() after holder release error = %v, want ErrNotFound", err)
 	}
 }

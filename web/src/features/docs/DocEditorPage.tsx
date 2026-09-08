@@ -10,7 +10,7 @@
  * to the editor and marks the draft as AI-drafted (provenance); Reject discards it.
  * Operator-gated (the route guards, and the save button respects role too).
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -22,11 +22,15 @@ import {
   useGetDocsDocId,
   putDocsDocId,
   postDocsDocIdAiSuggest,
+  postDocsDocIdLock,
+  postDocsDocIdLockRelease,
   getGetDocsDocIdQueryKey,
   getGetDocsDocIdVersionsQueryKey,
   getGetDocsTreeQueryKey,
 } from '../../api/generated/docs/docs';
 import { useCanMutate } from '../../hooks/useRole';
+import { useAuth } from '../../store/auth';
+import { useLive } from '../../store/live';
 import { Button } from '../../components/ui/Button';
 import { Panel } from '../../components/ui/Panel';
 import { Skeleton, SkeletonRows, ErrorState } from '../../components/ui/states';
@@ -83,6 +87,9 @@ export function DocEditorPage() {
   const queryClient = useQueryClient();
   const canMutate = useCanMutate();
 
+  const userId = useAuth((s) => s.user?.id);
+  const docLock = useLive((s) => s.docLocks[docId]);
+
   const doc = useGetDocsDocId(docId);
 
   const [draft, setDraft] = useState<string | null>(null);
@@ -91,6 +98,7 @@ export function DocEditorPage() {
   // State (not refs) so `newerAvailable` can derive from them during render.
   const [baseVersion, setBaseVersion] = useState<number | null>(null);
   const [justSaved, setJustSaved] = useState(false);
+  const lockAcquiredRef = useRef(false);
 
   // Seed the draft once the doc loads; capture the version the edit is based on.
   // Adjusting state during render is the React-blessed alternative to an effect.
@@ -103,15 +111,24 @@ export function DocEditorPage() {
 
   const dirty = draft !== null && doc.data != null && draft !== doc.data.content;
 
-  // Warn on tab close with unsaved edits.
+  // Warn on tab close with unsaved edits; release lock on unload.
   useEffect(() => {
-    if (!dirty) return;
     const onBeforeUnload = (e: BeforeUnloadEvent) => {
-      e.preventDefault();
+      if (dirty) {
+        e.preventDefault();
+      }
+      if (lockAcquiredRef.current) {
+        postDocsDocIdLockRelease(docId).catch(() => {});
+      }
     };
     window.addEventListener('beforeunload', onBeforeUnload);
-    return () => window.removeEventListener('beforeunload', onBeforeUnload);
-  }, [dirty]);
+    return () => {
+      window.removeEventListener('beforeunload', onBeforeUnload);
+      if (lockAcquiredRef.current) {
+        postDocsDocIdLockRelease(docId).catch(() => {});
+      }
+    };
+  }, [dirty, docId]);
 
   const save = useMutation({
     mutationFn: () =>
@@ -119,6 +136,10 @@ export function DocEditorPage() {
     onSuccess: (updated) => {
       setJustSaved(true);
       setBaseVersion(updated.currentVersion);
+      if (lockAcquiredRef.current) {
+        postDocsDocIdLockRelease(docId).catch(() => {});
+        lockAcquiredRef.current = false;
+      }
       queryClient.invalidateQueries({ queryKey: getGetDocsDocIdQueryKey(docId) });
       queryClient.invalidateQueries({ queryKey: getGetDocsDocIdVersionsQueryKey(docId) });
       queryClient.invalidateQueries({ queryKey: getGetDocsTreeQueryKey() });
@@ -147,6 +168,29 @@ export function DocEditorPage() {
   // A newer version landed (e.g. a regen) while editing and it isn't our own save.
   const newerAvailable =
     doc.data != null && baseVersion != null && doc.data.currentVersion > baseVersion && !justSaved;
+
+  // Acquire and maintain lock while editing.
+  useEffect(() => {
+    if (!dirty) {
+      lockAcquiredRef.current = false;
+      return;
+    }
+
+    let heartbeat: ReturnType<typeof setInterval> | undefined;
+
+    // Acquire lock on first edit
+    postDocsDocIdLock(docId).catch(() => {});
+    lockAcquiredRef.current = true;
+
+    // Renew lock every 30 seconds
+    heartbeat = setInterval(() => {
+      postDocsDocIdLock(docId).catch(() => {});
+    }, 30000);
+
+    return () => {
+      if (heartbeat) clearInterval(heartbeat);
+    };
+  }, [dirty, docId]);
 
   if (doc.isLoading) {
     return (
@@ -241,6 +285,12 @@ export function DocEditorPage() {
           >
             {t('docs.editor.loadLatest')}
           </button>
+        </div>
+      )}
+
+      {docLock && docLock.userId !== userId && (
+        <div className="mb-4 rounded-md border border-info bg-info-tint px-3 py-2 text-xs text-info">
+          <span>{t('docs.editor.lockBanner', { userId: docLock.userId })}</span>
         </div>
       )}
 

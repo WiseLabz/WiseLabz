@@ -19,6 +19,9 @@ export type WsEventType =
   | 'quality.findings.changed'
   | 'doc.generated'
   | 'doc.ai_suggestion'
+  | 'doc.lock.acquired'
+  | 'doc.lock.released'
+  | 'doc.lock.expired'
   | 'system.health'
   | 'system.notice';
 
@@ -113,6 +116,23 @@ export interface DocAiSuggestionPayload {
   error?: string;
 }
 
+export interface DocLockAcquiredPayload {
+  docId: string;
+  userId: string;
+  acquiredAt: string;
+  expiresAt: string;
+}
+
+export interface DocLockReleasedPayload {
+  docId: string;
+  userId: string;
+}
+
+export interface DocLockExpiredPayload {
+  docId: string;
+  userId: string;
+}
+
 export interface SystemHealthPayload {
   status: 'ok' | 'degraded' | 'down';
   components: { name: string; status: 'ok' | 'degraded' | 'down'; detail?: string }[];
@@ -136,6 +156,9 @@ export interface WsEventMap {
   'quality.findings.changed': QualityFindingsChangedPayload;
   'doc.generated': DocGeneratedPayload;
   'doc.ai_suggestion': DocAiSuggestionPayload;
+  'doc.lock.acquired': DocLockAcquiredPayload;
+  'doc.lock.released': DocLockReleasedPayload;
+  'doc.lock.expired': DocLockExpiredPayload;
   'system.health': SystemHealthPayload;
   'system.notice': SystemNoticePayload;
 }

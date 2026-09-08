@@ -11,6 +11,7 @@ import { faker } from '@faker-js/faker';
 import type {
   AiSuggestRef,
   Doc,
+  DocLock,
   DocNode,
   DocPage,
   DocVersion,
@@ -157,6 +158,50 @@ export const getPostDocsDocIdAiSuggestResponseMock = (
   overrideResponse: Partial<Extract<AiSuggestRef, object>> = {}
 ): AiSuggestRef => ({
   requestId: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  ...overrideResponse,
+});
+
+export const getGetDocsDocIdLockResponseMock = (
+  overrideResponse: Partial<Extract<DocLock, object>> = {}
+): DocLock => ({
+  docId: faker.helpers.arrayElement([
+    faker.string.alpha({ length: { min: 10, max: 20 } }),
+    undefined,
+  ]),
+  userId: faker.helpers.arrayElement([
+    faker.string.alpha({ length: { min: 10, max: 20 } }),
+    undefined,
+  ]),
+  acquiredAt: faker.helpers.arrayElement([
+    faker.date.past().toISOString().slice(0, 19) + 'Z',
+    undefined,
+  ]),
+  expiresAt: faker.helpers.arrayElement([
+    faker.date.past().toISOString().slice(0, 19) + 'Z',
+    undefined,
+  ]),
+  ...overrideResponse,
+});
+
+export const getPostDocsDocIdLockResponseMock = (
+  overrideResponse: Partial<Extract<DocLock, object>> = {}
+): DocLock => ({
+  docId: faker.helpers.arrayElement([
+    faker.string.alpha({ length: { min: 10, max: 20 } }),
+    undefined,
+  ]),
+  userId: faker.helpers.arrayElement([
+    faker.string.alpha({ length: { min: 10, max: 20 } }),
+    undefined,
+  ]),
+  acquiredAt: faker.helpers.arrayElement([
+    faker.date.past().toISOString().slice(0, 19) + 'Z',
+    undefined,
+  ]),
+  expiresAt: faker.helpers.arrayElement([
+    faker.date.past().toISOString().slice(0, 19) + 'Z',
+    undefined,
+  ]),
   ...overrideResponse,
 });
 

@@ -632,6 +632,39 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
+  /docs/{docId}/lock:
+    parameters: [{ $ref: '#/components/parameters/DocId' }]
+    get:
+      tags: [docs]
+      summary: Current advisory edit lock on the doc, if any (any authenticated user)
+      responses:
+        '200':
+          description: OK — empty object if unlocked/expired
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DocLock' }
+    post:
+      tags: [docs]
+      summary: Acquire or renew the advisory edit lock (editor+). Advisory only — never blocks Save.
+      responses:
+        '200':
+          description: Lock acquired or renewed
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DocLock' }
+        '409':
+          description: Lock held by another user
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DocLock' }
+  /docs/{docId}/lock/release:
+    post:
+      tags: [docs]
+      summary: Release the advisory edit lock if held by the caller (editor+)
+      parameters: [{ $ref: '#/components/parameters/DocId' }]
+      responses:
+        '200':
+          description: OK
   /docs/generate:
     post:
       tags: [docs]
@@ -1845,6 +1878,14 @@ components:
         content: { type: string, description: Rendered/markdown body }
         currentVersion: { type: integer }
         updatedAt: { type: string, format: date-time }
+    DocLock:
+      type: object
+      description: Advisory editing lock on a doc. Empty object means unlocked/expired.
+      properties:
+        docId: { type: string }
+        userId: { type: string }
+        acquiredAt: { type: string, format: date-time }
+        expiresAt: { type: string, format: date-time }
     DocSave:
       type: object
       required: [content]

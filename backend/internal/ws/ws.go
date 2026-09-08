@@ -23,6 +23,9 @@ const (
 	EventQualityFindingsChanged = "quality.findings.changed"
 	EventDocGenerated           = "doc.generated"
 	EventDocAISuggestion        = "doc.ai_suggestion"
+	EventDocLockAcquired        = "doc.lock.acquired"
+	EventDocLockReleased        = "doc.lock.released"
+	EventDocLockExpired         = "doc.lock.expired"
 	EventSystemHealth           = "system.health"
 	EventSystemNotice           = "system.notice"
 )

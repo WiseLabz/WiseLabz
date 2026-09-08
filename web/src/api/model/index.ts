@@ -66,6 +66,7 @@ export * from './diffHunksItem';
 export * from './diffLanguage';
 export * from './doc';
 export * from './docKind';
+export * from './docLock';
 export * from './docNode';
 export * from './docNodeKind';
 export * from './docPage';
