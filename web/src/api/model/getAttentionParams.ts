@@ -6,11 +6,17 @@
  *
  * OpenAPI spec version: 0.1.0
  */
+import type { PageParameter } from './pageParameter';
+import type { PageSizeParameter } from './pageSizeParameter';
 
-export type RunbookTargetType = (typeof RunbookTargetType)[keyof typeof RunbookTargetType];
-
-export const RunbookTargetType = {
-  change_type: 'change_type',
-  alert_severity: 'alert_severity',
-  finding_check_type: 'finding_check_type',
-} as const;
+export type GetAttentionParams = {
+  /**
+   * @minimum 1
+   */
+  page?: PageParameter;
+  /**
+   * @minimum 1
+   * @maximum 100
+   */
+  pageSize?: PageSizeParameter;
+};

@@ -45,6 +45,7 @@ export const en = {
     services: 'Services',
     docs: 'Docs',
     changes: 'Changes',
+    attention: 'Attention',
     alerts: 'Alerts',
     findings: 'Findings',
     settings: 'Settings',
@@ -350,6 +351,13 @@ export const en = {
     detected: 'detected {{count}} time',
     detected_other: 'detected {{count}} times',
     remediate: 'Open remediation',
+  },
+  attention: {
+    title: 'Attention',
+    subtitle: 'Open alerts and quality findings that need action.',
+    loadError: "Couldn't load the attention queue.",
+    emptyTitle: 'Nothing needs attention',
+    emptyDesc: 'All alerts and quality findings are resolved.',
   },
   savedViews: {
     title: 'Views',

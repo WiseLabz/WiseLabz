@@ -114,32 +114,11 @@ func TestRunMigrationsDown(t *testing.T) {
 		t.Fatalf("RunMigrationsDown() error: %v", err)
 	}
 
-	// RunMigrationsDown rolls back only 000008_doc_locks.
+	// RunMigrationsDown rolls back only 000009_runbook_finding_target.
+	// Since 000009 doesn't create/drop tables (only modifies constraint),
+	// all tables should still exist after rolling back.
 	var count int
-	if err := db.QueryRow("SELECT COUNT(*) FROM doc_locks").Scan(&count); err == nil {
-		t.Error("table doc_locks still exists after RunMigrationsDown()")
-	}
-	if err := db.QueryRow("SELECT COUNT(*) FROM oidc_identities").Scan(&count); err != nil {
-		t.Errorf("table oidc_identities should still exist after rolling back only the last migration: %v", err)
-	}
-	if err := db.QueryRow("SELECT COUNT(*) FROM quality_findings").Scan(&count); err != nil {
-		t.Errorf("table quality_findings should still exist after rolling back only the last migration: %v", err)
-	}
-	if rows, err := db.Query("SELECT owner FROM connectors"); err != nil {
-		t.Errorf("connectors.owner should still exist after rolling back only the last migration: %v", err)
-	} else {
-		_ = rows.Close()
-	}
-	if err := db.QueryRow("SELECT COUNT(*) FROM audit_log").Scan(&count); err != nil {
-		t.Errorf("table audit_log should still exist after rolling back only the last migration: %v", err)
-	}
-	if err := db.QueryRow("SELECT COUNT(*) FROM saved_views").Scan(&count); err != nil {
-		t.Errorf("table saved_views should still exist after rolling back only the last migration: %v", err)
-	}
 	for _, table := range tablesCreatedByMigrations {
-		if table == "doc_locks" {
-			continue
-		}
 		if err := db.QueryRow("SELECT COUNT(*) FROM " + table).Scan(&count); err != nil {
 			t.Errorf("table %s should still exist after rolling back only the last migration: %v", table, err)
 		}
@@ -175,27 +154,10 @@ func TestRunMigrationsDownPostgres(t *testing.T) {
 	}
 
 	var count int
-	if err := db.QueryRow("SELECT COUNT(*) FROM runbooks").Scan(&count); err == nil {
-		t.Error("table runbooks still exists after RunMigrationsDown()")
-	}
-	if err := db.QueryRow("SELECT COUNT(*) FROM quality_findings").Scan(&count); err != nil {
-		t.Errorf("table quality_findings should still exist after rolling back only the last migration: %v", err)
-	}
-	if rows, err := db.Query("SELECT owner FROM connectors"); err != nil {
-		t.Errorf("connectors.owner should still exist after rolling back only the last migration: %v", err)
-	} else {
-		_ = rows.Close()
-	}
-	if err := db.QueryRow("SELECT COUNT(*) FROM audit_log").Scan(&count); err != nil {
-		t.Errorf("table audit_log should still exist after rolling back only the last migration: %v", err)
-	}
-	if err := db.QueryRow("SELECT COUNT(*) FROM saved_views").Scan(&count); err != nil {
-		t.Errorf("table saved_views should still exist after rolling back only the last migration: %v", err)
-	}
+	// RunMigrationsDown rolls back only 000009_runbook_finding_target.
+	// Since 000009 doesn't create/drop tables (only modifies constraint),
+	// all tables should still exist after rolling back.
 	for _, table := range tablesCreatedByMigrations {
-		if table == "runbooks" {
-			continue
-		}
 		if err := db.QueryRow("SELECT COUNT(*) FROM " + table).Scan(&count); err != nil {
 			t.Errorf("table %s should still exist after rolling back only the last migration: %v", table, err)
 		}

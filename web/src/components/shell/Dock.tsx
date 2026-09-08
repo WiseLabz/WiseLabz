@@ -12,12 +12,14 @@ import { useLive } from '../../store/live';
 import { NAV, type NavItem } from './nav';
 import { SettingsIcon } from '../icons';
 import { useGetFindings } from '../../api/generated/findings/findings';
+import { useGetAttention } from '../../api/generated/attention/attention';
 
 const DOCK_ITEMS: NavItem[] = [...NAV, { to: '/settings', label: 'Settings', Icon: SettingsIcon }];
 
 export function Dock() {
   const pending = useLive((s) => s.pendingAlerts);
   const findings = useGetFindings({ status: 'open', pageSize: 1 });
+  const attention = useGetAttention({ page: 1, pageSize: 1 });
   const { t } = useTranslation();
 
   return (
@@ -49,9 +51,15 @@ export function Dock() {
                 )}
                 <span className="relative">
                   <Icon size={18} className="shrink-0" />
-                  {badge && (badgeSource === 'findings' ? (findings.data?.total ?? 0) : pending) > 0 && (
+                  {badge && (
+                    badgeSource === 'findings' ? (findings.data?.total ?? 0) :
+                    badgeSource === 'attention' ? (attention.data?.total ?? 0) :
+                    pending
+                  ) > 0 && (
                     <span className="nums absolute -right-1.5 -top-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-err px-1 text-[10px] font-bold text-canvas">
-                      {badgeSource === 'findings' ? findings.data?.total : pending}
+                      {badgeSource === 'findings' ? findings.data?.total :
+                       badgeSource === 'attention' ? attention.data?.total :
+                       pending}
                     </span>
                   )}
                 </span>

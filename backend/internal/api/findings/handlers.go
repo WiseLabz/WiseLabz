@@ -4,6 +4,7 @@ package findings
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"net/http"
 
 	"github.com/WiseLabz/wiselabz/internal/httputil"
@@ -112,6 +113,9 @@ func (h *Handler) Resolve(w http.ResponseWriter, r *http.Request) {
 		}
 		httputil.Errorf(w, err)
 		return
+	}
+	if err := h.Store.RecordAuditFromContext(r.Context(), "finding.resolve", "finding", id, nil); err != nil {
+		slog.Error("failed to record audit", "action", "finding.resolve", "error", err)
 	}
 	finding, err := h.Store.GetQualityFinding(r.Context(), id)
 	if err != nil {

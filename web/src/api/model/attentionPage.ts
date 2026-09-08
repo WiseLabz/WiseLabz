@@ -6,11 +6,11 @@
  *
  * OpenAPI spec version: 0.1.0
  */
+import type { AttentionItem } from './attentionItem';
 
-export type RunbookTargetType = (typeof RunbookTargetType)[keyof typeof RunbookTargetType];
-
-export const RunbookTargetType = {
-  change_type: 'change_type',
-  alert_severity: 'alert_severity',
-  finding_check_type: 'finding_check_type',
-} as const;
+export interface AttentionPage {
+  data: AttentionItem[];
+  total: number;
+  page: number;
+  pageSize: number;
+}

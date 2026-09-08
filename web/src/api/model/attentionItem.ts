@@ -6,11 +6,20 @@
  *
  * OpenAPI spec version: 0.1.0
  */
+import type { AttentionItemKind } from './attentionItemKind';
+import type { Severity } from './severity';
 
-export type RunbookTargetType = (typeof RunbookTargetType)[keyof typeof RunbookTargetType];
-
-export const RunbookTargetType = {
-  change_type: 'change_type',
-  alert_severity: 'alert_severity',
-  finding_check_type: 'finding_check_type',
-} as const;
+export interface AttentionItem {
+  id: string;
+  kind: AttentionItemKind;
+  severity: Severity;
+  title: string;
+  connectorId: string;
+  detectedAt: string;
+  /** @nullable */
+  changeId?: string | null;
+  /** @nullable */
+  checkType?: string | null;
+  /** @nullable */
+  runbookId?: string | null;
+}

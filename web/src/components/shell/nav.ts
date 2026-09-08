@@ -6,6 +6,7 @@ import {
   DiffIcon,
   BellIcon,
   AlertTriangleIcon,
+  SparklesIcon,
 } from '../icons';
 
 export interface NavItem {
@@ -14,7 +15,7 @@ export interface NavItem {
   Icon: React.ComponentType<{ size?: number; className?: string }>;
   /** show the live pending-alerts badge on this item */
   badge?: boolean;
-  badgeSource?: 'alerts' | 'findings';
+  badgeSource?: 'alerts' | 'findings' | 'attention';
 }
 
 export const NAV: NavItem[] = [
@@ -22,6 +23,7 @@ export const NAV: NavItem[] = [
   { to: '/services', label: 'Services', Icon: LayersIcon },
   { to: '/docs', label: 'Docs', Icon: FileTextIcon },
   { to: '/changes', label: 'Changes', Icon: DiffIcon },
+  { to: '/attention', label: 'Attention', Icon: SparklesIcon, badge: true, badgeSource: 'attention' },
   { to: '/alerts', label: 'Alerts', Icon: BellIcon, badge: true },
   { to: '/findings', label: 'Findings', Icon: AlertTriangleIcon, badge: true, badgeSource: 'findings' },
 ];

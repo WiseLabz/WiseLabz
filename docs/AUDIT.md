@@ -37,6 +37,10 @@ object, action-specific), and `createdAt`.
 | `change.dismiss` | `POST /api/changes/{id}/dismiss` | change / id |
 | `change.bulk_ack` | `POST /api/changes/bulk-resolve` (`status: acknowledged`) | change / id — one record per resolved item |
 | `change.bulk_dismiss` | `POST /api/changes/bulk-resolve` (`status: dismissed`) | change / id — one record per resolved item |
+| `alert.resolve` | `POST /api/alerts/{id}/resolve` | alert / id |
+| `alert.dismiss` | `POST /api/alerts/{id}/dismiss` | alert / id |
+| `alert.snooze` | `POST /api/alerts/{id}/snooze` | alert / id |
+| `finding.resolve` | `POST /api/findings/{id}/resolve` | finding / id |
 
 `detail` never carries secret values. `connector.update` and
 `auth.config.update` record which *fields* changed (a name list), not

@@ -6,23 +6,32 @@
  */
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
-import { useGetRunbooks } from '../../api/generated/runbooks/runbooks';
+import { useGetRunbooks, useGetRunbooksRunbookId } from '../../api/generated/runbooks/runbooks';
 import type { Severity } from '../../api/model/severity';
 import { FileTextIcon } from '../icons';
 
 type RunbookPanelProps =
-  | { changeType: string; alertSeverity?: never }
-  | { alertSeverity: Severity; changeType?: never };
+  | { changeType: string; alertSeverity?: never; runbookId?: never }
+  | { alertSeverity: Severity; changeType?: never; runbookId?: never }
+  | { runbookId: string; changeType?: never; alertSeverity?: never };
 
 export function RunbookPanel(props: RunbookPanelProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const { data, isLoading } = useGetRunbooks(
+  const byTarget = useGetRunbooks(
     'changeType' in props && props.changeType
       ? { changeType: props.changeType }
-      : { alertSeverity: props.alertSeverity }
+      : 'alertSeverity' in props && props.alertSeverity
+        ? { alertSeverity: props.alertSeverity }
+        : undefined,
+    { query: { enabled: !('runbookId' in props && props.runbookId) } }
   );
-  const runbook = data?.items[0];
+  const byId = useGetRunbooksRunbookId('runbookId' in props ? (props.runbookId ?? '') : '', {
+    query: { enabled: Boolean('runbookId' in props && props.runbookId) },
+  });
+
+  const isLoading = 'runbookId' in props && props.runbookId ? byId.isLoading : byTarget.isLoading;
+  const runbook = 'runbookId' in props && props.runbookId ? byId.data : byTarget.data?.items[0];
 
   if (isLoading || !runbook) return null;
 
