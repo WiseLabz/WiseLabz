@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -97,6 +98,9 @@ func (h *Handler) Resolve(w http.ResponseWriter, r *http.Request) {
 		httputil.Errorf(w, err)
 		return
 	}
+	if err := h.Store.RecordAuditFromContext(r.Context(), "alert.resolve", "alert", id, nil); err != nil {
+		slog.Error("failed to record audit", "action", "alert.resolve", "error", err)
+	}
 	resp, err := h.alertResponse(r.Context(), id)
 	if err != nil {
 		httputil.Errorf(w, err)
@@ -115,6 +119,9 @@ func (h *Handler) Dismiss(w http.ResponseWriter, r *http.Request) {
 		}
 		httputil.Errorf(w, err)
 		return
+	}
+	if err := h.Store.RecordAuditFromContext(r.Context(), "alert.dismiss", "alert", id, nil); err != nil {
+		slog.Error("failed to record audit", "action", "alert.dismiss", "error", err)
 	}
 	resp, err := h.alertResponse(r.Context(), id)
 	if err != nil {
@@ -150,6 +157,9 @@ func (h *Handler) Snooze(w http.ResponseWriter, r *http.Request) {
 		}
 		httputil.Errorf(w, err)
 		return
+	}
+	if err := h.Store.RecordAuditFromContext(r.Context(), "alert.snooze", "alert", id, nil); err != nil {
+		slog.Error("failed to record audit", "action", "alert.snooze", "error", err)
 	}
 	resp, err := h.alertResponse(r.Context(), id)
 	if err != nil {

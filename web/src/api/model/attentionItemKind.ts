@@ -7,10 +7,9 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export type RunbookTargetType = (typeof RunbookTargetType)[keyof typeof RunbookTargetType];
+export type AttentionItemKind = (typeof AttentionItemKind)[keyof typeof AttentionItemKind];
 
-export const RunbookTargetType = {
-  change_type: 'change_type',
-  alert_severity: 'alert_severity',
-  finding_check_type: 'finding_check_type',
+export const AttentionItemKind = {
+  alert: 'alert',
+  finding: 'finding',
 } as const;

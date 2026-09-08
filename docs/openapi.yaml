@@ -20,6 +20,7 @@ tags:
   - name: docs
   - name: templates
   - name: changes
+  - name: attention
   - name: alerts
   - name: runbooks
   - name: findings
@@ -958,6 +959,24 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Alert' }
+
+  # ───────────────────────── attention queue ─────────────────────────
+  /attention:
+    get:
+      tags: [attention]
+      summary: Recovery book attention queue — merged alerts and findings
+      description: >
+        Aggregates open alerts and findings, sorted by severity then age.
+        Each item can be resolved via the alert or finding resolution endpoints.
+      parameters:
+        - { $ref: '#/components/parameters/Page' }
+        - { $ref: '#/components/parameters/PageSize' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AttentionPage' }
 
   # ───────────────────────── runbooks ─────────────────────────
   /runbooks:
@@ -2125,10 +2144,35 @@ components:
         page: { type: integer }
         pageSize: { type: integer }
 
+    # ── attention queue ──
+    AttentionItem:
+      type: object
+      required: [id, kind, severity, title, connectorId, detectedAt]
+      properties:
+        id: { type: string }
+        kind: { type: string, enum: [alert, finding] }
+        severity: { $ref: '#/components/schemas/Severity' }
+        title: { type: string }
+        connectorId: { type: string }
+        detectedAt: { type: string, format: date-time }
+        changeId: { type: string, nullable: true }
+        checkType: { type: string, nullable: true }
+        runbookId: { type: string, nullable: true }
+    AttentionPage:
+      type: object
+      required: [data, total, page, pageSize]
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/AttentionItem' }
+        total: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
+
     # ── runbooks ──
     RunbookTargetType:
       type: string
-      enum: [change_type, alert_severity]
+      enum: [change_type, alert_severity, finding_check_type]
     Runbook:
       type: object
       required: [id, title, body, targetType, targetValue, createdAt, updatedAt]

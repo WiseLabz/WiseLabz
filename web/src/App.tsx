@@ -70,6 +70,9 @@ const ChangeDetailPage = lazy(() =>
     default: ChangeDetailPage,
   }))
 );
+const AttentionPage = lazy(() =>
+  import('./features/attention/AttentionPage').then(({ AttentionPage }) => ({ default: AttentionPage }))
+);
 const AlertsPage = lazy(() =>
   import('./features/alerts/AlertsPage').then(({ AlertsPage }) => ({ default: AlertsPage }))
 );
@@ -187,6 +190,7 @@ const router = createBrowserRouter([
       { path: 'docs/:docId/history', element: <DocsPage /> },
       { path: 'changes', element: <ChangesPage /> },
       { path: 'changes/:changeId', element: <ChangeDetailPage /> },
+      { path: 'attention', element: <AttentionPage /> },
       { path: 'alerts', element: <AlertsPage /> },
       { path: 'findings', element: <FindingsPage /> },
       {

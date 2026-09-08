@@ -11,6 +11,7 @@ import (
 
 	"github.com/WiseLabz/wiselabz/internal/ai"
 	alerthandler "github.com/WiseLabz/wiselabz/internal/api/alerts"
+	attentionhandler "github.com/WiseLabz/wiselabz/internal/api/attention"
 	authhandler "github.com/WiseLabz/wiselabz/internal/api/auth"
 	changehandler "github.com/WiseLabz/wiselabz/internal/api/changes"
 	connhandler "github.com/WiseLabz/wiselabz/internal/api/connectors"
@@ -67,6 +68,7 @@ func NewRouter(cfg Config) chi.Router {
 	tmplH := tmplhandler.NewHandler(cfg.Store, cfg.DocEngine)
 	changeH := changehandler.NewHandler(cfg.Store, settingH, cfg.AIRegistry, cfg.WSHub)
 	alertH := alerthandler.NewHandler(cfg.Store)
+	attentionH := attentionhandler.NewHandler(cfg.Store)
 	findingH := findinghandler.NewHandler(cfg.Store)
 	notifH := notifhandler.NewHandler(cfg.Store)
 	runbookH := runbookhandler.NewHandler(cfg.Store)
@@ -207,6 +209,10 @@ func NewRouter(cfg Config) chi.Router {
 				r.Post("/{id}/dismiss", alertH.Dismiss)
 				r.Post("/{id}/snooze", alertH.Snooze)
 			})
+		})
+
+		r.Route("/api/attention", func(r chi.Router) {
+			r.Get("/", attentionH.List)
 		})
 
 		r.Route("/api/runbooks", func(r chi.Router) {

@@ -103,3 +103,179 @@ func TestAuditListFiltersByAction(t *testing.T) {
 		}
 	}
 }
+
+func TestAlertResolveProducesAuditRecord(t *testing.T) {
+	app := newTestApp(t)
+	opUserID, opToken := app.user(t, "operator")
+	a := seedAlert(t, app)
+
+	rec := app.req(t, http.MethodPost, "/api/alerts/"+a.ID+"/resolve", nil, opToken)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("resolve status = %d, want 200; body = %s", rec.Code, rec.Body)
+	}
+
+	auditRec := app.req(t, http.MethodGet, "/api/system/audit", nil, opToken)
+	if auditRec.Code != http.StatusOK {
+		t.Fatalf("audit list status = %d, want 200; body = %s", auditRec.Code, auditRec.Body)
+	}
+
+	var page struct {
+		Items []store.AuditRecord `json:"items"`
+		Total int                 `json:"total"`
+	}
+	if err := json.Unmarshal(auditRec.Body.Bytes(), &page); err != nil {
+		t.Fatalf("decode audit body: %v", err)
+	}
+
+	var found *store.AuditRecord
+	for i := range page.Items {
+		if page.Items[i].Action == "alert.resolve" && page.Items[i].TargetID == a.ID {
+			found = &page.Items[i]
+			break
+		}
+	}
+	if found == nil {
+		t.Fatalf("no audit record for alert.resolve/%s", a.ID)
+	}
+	if found.TargetType != "alert" {
+		t.Errorf("TargetType = %q, want alert", found.TargetType)
+	}
+	if found.ActorUserID != opUserID {
+		t.Errorf("ActorUserID = %q, want %q", found.ActorUserID, opUserID)
+	}
+	if found.ActorRole != "operator" {
+		t.Errorf("ActorRole = %q, want operator", found.ActorRole)
+	}
+}
+
+func TestAlertDismissProducesAuditRecord(t *testing.T) {
+	app := newTestApp(t)
+	opUserID, opToken := app.user(t, "operator")
+	a := seedAlert(t, app)
+
+	rec := app.req(t, http.MethodPost, "/api/alerts/"+a.ID+"/dismiss", nil, opToken)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("dismiss status = %d, want 200; body = %s", rec.Code, rec.Body)
+	}
+
+	auditRec := app.req(t, http.MethodGet, "/api/system/audit", nil, opToken)
+	if auditRec.Code != http.StatusOK {
+		t.Fatalf("audit list status = %d, want 200; body = %s", auditRec.Code, auditRec.Body)
+	}
+
+	var page struct {
+		Items []store.AuditRecord `json:"items"`
+		Total int                 `json:"total"`
+	}
+	if err := json.Unmarshal(auditRec.Body.Bytes(), &page); err != nil {
+		t.Fatalf("decode audit body: %v", err)
+	}
+
+	var found *store.AuditRecord
+	for i := range page.Items {
+		if page.Items[i].Action == "alert.dismiss" && page.Items[i].TargetID == a.ID {
+			found = &page.Items[i]
+			break
+		}
+	}
+	if found == nil {
+		t.Fatalf("no audit record for alert.dismiss/%s", a.ID)
+	}
+	if found.TargetType != "alert" {
+		t.Errorf("TargetType = %q, want alert", found.TargetType)
+	}
+	if found.ActorUserID != opUserID {
+		t.Errorf("ActorUserID = %q, want %q", found.ActorUserID, opUserID)
+	}
+	if found.ActorRole != "operator" {
+		t.Errorf("ActorRole = %q, want operator", found.ActorRole)
+	}
+}
+
+func TestAlertSnoozeProducesAuditRecord(t *testing.T) {
+	app := newTestApp(t)
+	opUserID, opToken := app.user(t, "operator")
+	a := seedAlert(t, app)
+
+	rec := app.req(t, http.MethodPost, "/api/alerts/"+a.ID+"/snooze", map[string]any{"until": "2099-01-01T00:00:00Z"}, opToken)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("snooze status = %d, want 200; body = %s", rec.Code, rec.Body)
+	}
+
+	auditRec := app.req(t, http.MethodGet, "/api/system/audit", nil, opToken)
+	if auditRec.Code != http.StatusOK {
+		t.Fatalf("audit list status = %d, want 200; body = %s", auditRec.Code, auditRec.Body)
+	}
+
+	var page struct {
+		Items []store.AuditRecord `json:"items"`
+		Total int                 `json:"total"`
+	}
+	if err := json.Unmarshal(auditRec.Body.Bytes(), &page); err != nil {
+		t.Fatalf("decode audit body: %v", err)
+	}
+
+	var found *store.AuditRecord
+	for i := range page.Items {
+		if page.Items[i].Action == "alert.snooze" && page.Items[i].TargetID == a.ID {
+			found = &page.Items[i]
+			break
+		}
+	}
+	if found == nil {
+		t.Fatalf("no audit record for alert.snooze/%s", a.ID)
+	}
+	if found.TargetType != "alert" {
+		t.Errorf("TargetType = %q, want alert", found.TargetType)
+	}
+	if found.ActorUserID != opUserID {
+		t.Errorf("ActorUserID = %q, want %q", found.ActorUserID, opUserID)
+	}
+	if found.ActorRole != "operator" {
+		t.Errorf("ActorRole = %q, want operator", found.ActorRole)
+	}
+}
+
+func TestFindingResolveProducesAuditRecord(t *testing.T) {
+	app := newTestApp(t)
+	opUserID, opToken := app.user(t, "operator")
+	finding := seedQualityFinding(t, app)
+
+	rec := app.req(t, http.MethodPost, "/api/findings/"+finding.ID+"/resolve", nil, opToken)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("resolve status = %d, want 200; body = %s", rec.Code, rec.Body)
+	}
+
+	auditRec := app.req(t, http.MethodGet, "/api/system/audit", nil, opToken)
+	if auditRec.Code != http.StatusOK {
+		t.Fatalf("audit list status = %d, want 200; body = %s", auditRec.Code, auditRec.Body)
+	}
+
+	var page struct {
+		Items []store.AuditRecord `json:"items"`
+		Total int                 `json:"total"`
+	}
+	if err := json.Unmarshal(auditRec.Body.Bytes(), &page); err != nil {
+		t.Fatalf("decode audit body: %v", err)
+	}
+
+	var found *store.AuditRecord
+	for i := range page.Items {
+		if page.Items[i].Action == "finding.resolve" && page.Items[i].TargetID == finding.ID {
+			found = &page.Items[i]
+			break
+		}
+	}
+	if found == nil {
+		t.Fatalf("no audit record for finding.resolve/%s", finding.ID)
+	}
+	if found.TargetType != "finding" {
+		t.Errorf("TargetType = %q, want finding", found.TargetType)
+	}
+	if found.ActorUserID != opUserID {
+		t.Errorf("ActorUserID = %q, want %q", found.ActorUserID, opUserID)
+	}
+	if found.ActorRole != "operator" {
+		t.Errorf("ActorRole = %q, want operator", found.ActorRole)
+	}
+}
