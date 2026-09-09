@@ -212,6 +212,9 @@ func (s *Store) ListUsers(ctx context.Context, offset, limit int) ([]User, int, 
 		u.CanManageDashboardDefaults = canManageDashboardDefaults != 0
 		users = append(users, u)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, fmt.Errorf("iterate users: %w", err)
+	}
 	if users == nil {
 		users = []User{}
 	}
@@ -371,6 +374,9 @@ func (s *Store) ListUserSessions(ctx context.Context, userID string) ([]Session,
 		}
 		sessions = append(sessions, s)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate sessions: %w", err)
+	}
 	if sessions == nil {
 		sessions = []Session{}
 	}
@@ -408,7 +414,8 @@ func (s *Store) GetUserByOIDCIdentity(ctx context.Context, issuer, subject strin
 }
 
 // CreateOIDCUser creates an OIDC user and its verified identity atomically.
-func (s *Store) CreateOIDCUser(ctx context.Context, user *User, issuer, subject string) error {
+// Returns true if a new user was created, false if it already existed (conflict).
+func (s *Store) CreateOIDCUser(ctx context.Context, user *User, issuer, subject string) (bool, error) {
 	if user.ID == "" {
 		user.ID = uuid.New().String()
 	}
@@ -419,7 +426,7 @@ func (s *Store) CreateOIDCUser(ctx context.Context, user *User, issuer, subject 
 		user.Role = "viewer"
 	}
 	user.AuthSource = "oidc"
-	return s.WithinTransaction(ctx, func(tx *Store) error {
+	err := s.WithinTransaction(ctx, func(tx *Store) error {
 		_, err := tx.db.ExecContext(ctx, `INSERT INTO users (id, username, display_name, email, role, auth_source, password_hash, disabled, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`, user.ID, user.Username, user.DisplayName, user.Email, user.Role, user.AuthSource, user.PasswordHash, boolToInt(user.Disabled), user.CreatedAt)
 		if err == nil {
 			_, err = tx.db.ExecContext(ctx, `INSERT INTO oidc_identities (issuer, subject, user_id) VALUES (?, ?, ?)`, issuer, subject, user.ID)
@@ -432,6 +439,7 @@ func (s *Store) CreateOIDCUser(ctx context.Context, user *User, issuer, subject 
 		}
 		return nil
 	})
+	return err == nil, err
 }
 
 // --- Helpers ---

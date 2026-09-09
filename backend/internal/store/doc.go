@@ -219,6 +219,9 @@ func (s *Store) ListDocsByService(ctx context.Context, serviceID string) ([]DocR
 		d.ServiceID = svcID.String
 		docs = append(docs, d)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate docs: %w", err)
+	}
 	if docs == nil {
 		docs = []DocRecord{}
 	}
@@ -260,6 +263,9 @@ func (s *Store) ListAllDocs(ctx context.Context, search string, offset, limit in
 		}
 		d.ServiceID = svcID.String
 		docs = append(docs, d)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, fmt.Errorf("iterate docs: %w", err)
 	}
 	if docs == nil {
 		docs = []DocRecord{}
@@ -308,6 +314,9 @@ func (s *Store) GetDocVersions(ctx context.Context, docID string) ([]DocVersionR
 		}
 		v.Author = author.String
 		versions = append(versions, v)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate doc versions: %w", err)
 	}
 	if versions == nil {
 		versions = []DocVersionRecord{}
@@ -441,6 +450,9 @@ func (s *Store) ListTemplates(ctx context.Context, offset, limit int) ([]Templat
 		t.AppliesTo = appliesTo.String
 		templates = append(templates, t)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, fmt.Errorf("iterate templates: %w", err)
+	}
 	if templates == nil {
 		templates = []TemplateRecord{}
 	}
@@ -537,6 +549,9 @@ func (s *Store) GetTemplateSections(ctx context.Context, templateID string) ([]T
 			return nil, fmt.Errorf("scan: %w", err)
 		}
 		sections = append(sections, sec)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate template sections: %w", err)
 	}
 	if sections == nil {
 		sections = []TemplateSectionRecord{}

@@ -13,19 +13,28 @@ func TestOIDCIdentityUsesIssuerAndSubject(t *testing.T) {
 	s := newDocTestStore(t)
 	ctx := context.Background()
 	first := &User{Username: "oidc-first", Email: "same@example.com"}
-	if err := s.CreateOIDCUser(ctx, first, "https://issuer-one", "subject"); err != nil {
+	created, err := s.CreateOIDCUser(ctx, first, "https://issuer-one", "subject")
+	if err != nil {
 		t.Fatalf("CreateOIDCUser() error: %v", err)
 	}
+	if !created {
+		t.Fatalf("CreateOIDCUser() should return true for new user")
+	}
 	second := &User{Username: "oidc-second", Email: "same@example.com"}
-	if err := s.CreateOIDCUser(ctx, second, "https://issuer-two", "subject"); err != nil {
+	created, err = s.CreateOIDCUser(ctx, second, "https://issuer-two", "subject")
+	if err != nil {
 		t.Fatalf("CreateOIDCUser() second issuer error: %v", err)
+	}
+	if !created {
+		t.Fatalf("CreateOIDCUser() should return true for new user")
 	}
 	found, err := s.GetUserByOIDCIdentity(ctx, "https://issuer-one", "subject")
 	if err != nil || found.ID != first.ID {
 		t.Fatalf("GetUserByOIDCIdentity() = %#v, %v; want %q", found, err, first.ID)
 	}
-	if err := s.CreateOIDCUser(ctx, &User{Username: "duplicate"}, "https://issuer-one", "subject"); !errors.Is(err, ErrConflict) {
-		t.Fatalf("duplicate identity error = %v, want ErrConflict", err)
+	created, err = s.CreateOIDCUser(ctx, &User{Username: "duplicate"}, "https://issuer-one", "subject")
+	if !errors.Is(err, ErrConflict) || created {
+		t.Fatalf("duplicate identity error = %v, created = %v; want ErrConflict, false", err, created)
 	}
 }
 
