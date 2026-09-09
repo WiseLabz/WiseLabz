@@ -229,8 +229,8 @@ func TestRunForConnectorContinuesAfterCheckError(t *testing.T) {
 	}
 }
 
-func TestRunStaleSweepCoversConnectorsWithNoRecentSync(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
+func TestRunStaleSweepOnceCoversConnectorsWithNoRecentSync(t *testing.T) {
+	ctx := context.Background()
 	s := newTestStore(t)
 	connector := createConnector(t, s, "platform-team")
 	if err := s.CreateDoc(ctx, &store.DocRecord{
@@ -242,26 +242,11 @@ func TestRunStaleSweepCoversConnectorsWithNoRecentSync(t *testing.T) {
 		t.Fatalf("CreateDoc() error: %v", err)
 	}
 
-	done := make(chan struct{})
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-	go func() {
-		RunStaleSweep(ctx, s, nil, time.Hour, logger)
-		close(done)
-	}()
+	RunStaleSweepOnce(ctx, s, nil, logger)
 
-	deadline := time.Now().Add(2 * time.Second)
-	for len(findings(t, s, connector.ID, "stale", "open")) == 0 && time.Now().Before(deadline) {
-		time.Sleep(time.Millisecond)
-	}
 	if got := findings(t, s, connector.ID, "stale", "open"); len(got) != 1 {
-		cancel()
 		t.Fatalf("open stale findings = %d, want 1", len(got))
-	}
-	cancel()
-	select {
-	case <-done:
-	case <-time.After(time.Second):
-		t.Fatal("RunStaleSweep did not stop after context cancellation")
 	}
 }
 

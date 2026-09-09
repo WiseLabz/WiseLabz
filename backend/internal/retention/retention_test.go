@@ -65,10 +65,10 @@ func TestRunCleanupSkipsDisabledCategories(t *testing.T) {
 		DocVersionDays: 0,
 		AlertDays:      0, // disabled
 		SyncRunDays:    30,
-		IntervalHours:  24,
+		CronExpr:       "0 0 * * *",
 	}
 
-	runCleanup(ctx, s, cfg, testLogger())
+	RunCleanupOnce(ctx, s, cfg, testLogger())
 
 	runs, err := s.ListSyncRunsByConnector(ctx, c.ID, 20)
 	if err != nil {
@@ -98,10 +98,10 @@ func TestRunCleanupIdempotent(t *testing.T) {
 		t.Fatalf("CreateSyncRun() error: %v", err)
 	}
 
-	cfg := config.RetentionSettings{SyncRunDays: 30, IntervalHours: 24}
+	cfg := config.RetentionSettings{SyncRunDays: 30, CronExpr: "@daily"}
 
-	runCleanup(ctx, s, cfg, testLogger())
-	runCleanup(ctx, s, cfg, testLogger()) // must not error or panic on an already-clean table
+	RunCleanupOnce(ctx, s, cfg, testLogger())
+	RunCleanupOnce(ctx, s, cfg, testLogger()) // must not error or panic on an already-clean table
 
 	runs, err := s.ListSyncRunsByConnector(ctx, c.ID, 20)
 	if err != nil {

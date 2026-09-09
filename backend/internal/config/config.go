@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/robfig/cron/v3"
 	"github.com/spf13/viper"
 )
 
@@ -19,6 +20,7 @@ type Config struct {
 	Auth      AuthSettings      `mapstructure:"auth"`
 	AI        AISettings        `mapstructure:"ai"`
 	Sync      SyncSettings      `mapstructure:"sync"`
+	Quality   QualitySettings   `mapstructure:"quality"`
 	Log       LogSettings       `mapstructure:"log"`
 	Retention RetentionSettings `mapstructure:"retention"`
 }
@@ -100,7 +102,13 @@ type AISettings struct {
 
 // SyncSettings holds sync engine settings.
 type SyncSettings struct {
-	Schedule string `mapstructure:"schedule"` // cron expression
+	Schedule     string `mapstructure:"schedule"`       // cron expression (legacy, for API trigger scheduling)
+	PollCronExpr string `mapstructure:"poll_cron_expr"` // cron expression for periodic connector polling
+}
+
+// QualitySettings holds documentation quality check settings.
+type QualitySettings struct {
+	CronExpr string `mapstructure:"cron_expr"` // cron expression for quality checks
 }
 
 // LogSettings holds logging settings.
@@ -111,13 +119,14 @@ type LogSettings struct {
 
 // RetentionSettings holds data retention cleanup settings. Each *Days field
 // bounds how long a category of historical data is kept; 0 disables cleanup
-// for that category (never delete).
+// for that category (never delete). CronExpr defines the schedule for running
+// retention cleanup jobs.
 type RetentionSettings struct {
-	SnapshotDays   int `mapstructure:"snapshot_days"`
-	DocVersionDays int `mapstructure:"doc_version_days"`
-	AlertDays      int `mapstructure:"alert_days"`
-	SyncRunDays    int `mapstructure:"sync_run_days"`
-	IntervalHours  int `mapstructure:"interval_hours"`
+	SnapshotDays   int    `mapstructure:"snapshot_days"`
+	DocVersionDays int    `mapstructure:"doc_version_days"`
+	AlertDays      int    `mapstructure:"alert_days"`
+	SyncRunDays    int    `mapstructure:"sync_run_days"`
+	CronExpr       string `mapstructure:"cron_expr"` // cron expression for cleanup schedule
 }
 
 // Load reads configuration from file and environment, returning a populated Config.
@@ -143,14 +152,16 @@ func Load() (*Config, error) {
 	v.SetDefault("auth.step_up_for_destructive", true)
 	v.SetDefault("ai.enabled", false)
 	v.SetDefault("ai.mode", "suggest_only")
-	v.SetDefault("sync.schedule", "0 */6 * * *") // every 6 hours
+	v.SetDefault("sync.schedule", "0 */6 * * *")          // every 6 hours
+	v.SetDefault("sync.poll_cron_expr", "*/30 * * * * *") // every 30 seconds
+	v.SetDefault("quality.cron_expr", "0 0 * * *")        // daily quality checks at midnight
 	v.SetDefault("log.level", "info")
 	v.SetDefault("log.format", "text")
 	v.SetDefault("retention.snapshot_days", 90)
 	v.SetDefault("retention.doc_version_days", 365)
 	v.SetDefault("retention.alert_days", 180)
 	v.SetDefault("retention.sync_run_days", 90)
-	v.SetDefault("retention.interval_hours", 24)
+	v.SetDefault("retention.cron_expr", "0 0 * * *") // daily retention cleanup at midnight
 
 	if err := v.ReadInConfig(); err != nil {
 		// Config file is optional — env-only config is valid for PaaS deployments
@@ -170,6 +181,11 @@ func Load() (*Config, error) {
 	// viper's AutomaticEnv + Unmarshal has inconsistent env resolution;
 	// this explicit pass guarantees env vars always take precedence.
 	applyEnvOverrides(&cfg)
+
+	// Validate cron expressions
+	if err := cfg.validateCronExpressions(); err != nil {
+		return nil, err
+	}
 
 	return &cfg, nil
 }
@@ -196,13 +212,15 @@ func applyEnvOverrides(cfg *Config) {
 		"AI_BASE_URL":                  func(v string) { cfg.AI.BaseURL = v },
 		"AI_MODE":                      func(v string) { cfg.AI.Mode = v },
 		"SYNC_SCHEDULE":                func(v string) { cfg.Sync.Schedule = v },
+		"SYNC_POLL_CRON_EXPR":          func(v string) { cfg.Sync.PollCronExpr = v },
+		"QUALITY_CRON_EXPR":            func(v string) { cfg.Quality.CronExpr = v },
 		"LOG_LEVEL":                    func(v string) { cfg.Log.Level = v },
 		"LOG_FORMAT":                   func(v string) { cfg.Log.Format = v },
 		"RETENTION_SNAPSHOT_DAYS":      func(v string) { cfg.Retention.SnapshotDays = intEnv(v) },
 		"RETENTION_DOC_VERSION_DAYS":   func(v string) { cfg.Retention.DocVersionDays = intEnv(v) },
 		"RETENTION_ALERT_DAYS":         func(v string) { cfg.Retention.AlertDays = intEnv(v) },
 		"RETENTION_SYNC_RUN_DAYS":      func(v string) { cfg.Retention.SyncRunDays = intEnv(v) },
-		"RETENTION_INTERVAL_HOURS":     func(v string) { cfg.Retention.IntervalHours = intEnv(v) },
+		"RETENTION_CRON_EXPR":          func(v string) { cfg.Retention.CronExpr = v },
 	}
 
 	prefix := "WISELABZ_"
@@ -229,4 +247,33 @@ func intEnv(v string) int {
 
 func boolEnv(v string) bool {
 	return v == "1" || strings.EqualFold(v, "true")
+}
+
+// validateCronExpressions validates all cron expressions in the config.
+// Uses the same parser configuration as the Cron instance.
+func (c *Config) validateCronExpressions() error {
+	// Try to parse each expression with both 5-field and 6-field parsers
+	// to support both formats.
+	parser5Field := cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow)
+	parser6Field := cron.NewParser(cron.Second | cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow)
+
+	cronExprs := map[string]string{
+		"retention.cron_expr": c.Retention.CronExpr,
+		"quality.cron_expr":   c.Quality.CronExpr,
+		"sync.poll_cron_expr": c.Sync.PollCronExpr,
+	}
+
+	for name, expr := range cronExprs {
+		if expr == "" {
+			return fmt.Errorf("cron expression %q must not be empty", name)
+		}
+		// Try 6-field first (seconds), then 5-field (minutes)
+		_, err6 := parser6Field.Parse(expr)
+		_, err5 := parser5Field.Parse(expr)
+		if err6 != nil && err5 != nil {
+			return fmt.Errorf("invalid cron expression %q (value=%q): must be valid 5-field or 6-field cron format", name, expr)
+		}
+	}
+
+	return nil
 }
