@@ -480,6 +480,29 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/RemovalImpact' }
         '404': { $ref: '#/components/responses/NotFound' }
+  /connectors/{connectorId}/restart:
+    post:
+      tags: [connectors]
+      summary: Preview a future service restart (dry-run only)
+      description: >
+        Returns a restart preview from the latest stored service snapshot.
+        The mutating restart action is not implemented; `dryRun=true` is required.
+      parameters:
+        - { $ref: '#/components/parameters/ConnectorId' }
+        - name: dryRun
+          in: query
+          required: true
+          schema: { type: boolean, enum: [true] }
+          description: Must be true; only the non-mutating preview is available.
+      responses:
+        '200':
+          description: Restart preview
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RestartPreview' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
   /connectors/{connectorId}/data:
     get:
       tags: [connectors]
@@ -2669,6 +2692,22 @@ components:
             properties:
               type: { type: string, description: 'e.g. service, doc-section, snapshot' }
               name: { type: string }
+    RestartPreview:
+      type: object
+      description: Non-mutating preview of the future service.restart action.
+      required: [targetService, estimatedDowntimeSeconds, dependentServices]
+      properties:
+        targetService: { type: string }
+        estimatedDowntimeSeconds: { type: integer, minimum: 0, example: 30 }
+        dependentServices:
+          type: array
+          items:
+            type: object
+            required: [kind, name]
+            properties:
+              kind: { type: string, description: 'e.g. host, network, storage, upstream_service' }
+              name: { type: string }
+              ref: { type: string }
     OidcProvider:
       type: object
       description: >

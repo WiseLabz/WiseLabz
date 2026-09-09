@@ -20,6 +20,7 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  BadRequestResponse,
   Connector,
   ConnectorCreate,
   ConnectorTypeSchema,
@@ -29,9 +30,11 @@ import type {
   GetConnectorsConnectorIdSyncsParams,
   HealthCheckResult,
   NotFoundResponse,
+  PostConnectorsConnectorIdRestartParams,
   PostConnectorsConnectorIdSyncBody,
   PutConnectorsConnectorIdEnabledBody,
   RemovalImpact,
+  RestartPreview,
   ServiceSnapshot,
   SyncJobRef,
   SyncRun,
@@ -982,6 +985,159 @@ export function useGetConnectorsConnectorIdRemovalImpact<
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
   const queryOptions = getGetConnectorsConnectorIdRemovalImpactQueryOptions(connectorId, options);
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+/**
+ * Returns a restart preview from the latest stored service snapshot. The mutating restart action is not implemented; `dryRun=true` is required.
+ * @summary Preview a future service restart (dry-run only)
+ */
+export const postConnectorsConnectorIdRestart = (
+  connectorId: string,
+  params: PostConnectorsConnectorIdRestartParams,
+  options?: SecondParameter<typeof customInstance>,
+  signal?: AbortSignal
+) => {
+  return customInstance<RestartPreview>(
+    { url: `/connectors/${connectorId}/restart`, method: 'POST', params, signal },
+    options
+  );
+};
+
+export const getPostConnectorsConnectorIdRestartQueryKey = (
+  connectorId: string,
+  params?: PostConnectorsConnectorIdRestartParams
+) => {
+  return ['POST', `/connectors/${connectorId}/restart`, ...(params ? [params] : [])] as const;
+};
+
+export const getPostConnectorsConnectorIdRestartQueryOptions = <
+  TData = Awaited<ReturnType<typeof postConnectorsConnectorIdRestart>>,
+  TError = ErrorType<BadRequestResponse | ForbiddenResponse | NotFoundResponse>,
+>(
+  connectorId: string,
+  params: PostConnectorsConnectorIdRestartParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof postConnectorsConnectorIdRestart>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  }
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getPostConnectorsConnectorIdRestartQueryKey(connectorId, params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof postConnectorsConnectorIdRestart>>> = ({
+    signal,
+  }) => postConnectorsConnectorIdRestart(connectorId, params, requestOptions, signal);
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: connectorId !== null && connectorId !== undefined,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof postConnectorsConnectorIdRestart>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type PostConnectorsConnectorIdRestartQueryResult = NonNullable<
+  Awaited<ReturnType<typeof postConnectorsConnectorIdRestart>>
+>;
+export type PostConnectorsConnectorIdRestartQueryError = ErrorType<
+  BadRequestResponse | ForbiddenResponse | NotFoundResponse
+>;
+
+export function usePostConnectorsConnectorIdRestart<
+  TData = Awaited<ReturnType<typeof postConnectorsConnectorIdRestart>>,
+  TError = ErrorType<BadRequestResponse | ForbiddenResponse | NotFoundResponse>,
+>(
+  connectorId: string,
+  params: PostConnectorsConnectorIdRestartParams,
+  options: {
+    query: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof postConnectorsConnectorIdRestart>>, TError, TData>
+    > &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postConnectorsConnectorIdRestart>>,
+          TError,
+          Awaited<ReturnType<typeof postConnectorsConnectorIdRestart>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function usePostConnectorsConnectorIdRestart<
+  TData = Awaited<ReturnType<typeof postConnectorsConnectorIdRestart>>,
+  TError = ErrorType<BadRequestResponse | ForbiddenResponse | NotFoundResponse>,
+>(
+  connectorId: string,
+  params: PostConnectorsConnectorIdRestartParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof postConnectorsConnectorIdRestart>>, TError, TData>
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postConnectorsConnectorIdRestart>>,
+          TError,
+          Awaited<ReturnType<typeof postConnectorsConnectorIdRestart>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function usePostConnectorsConnectorIdRestart<
+  TData = Awaited<ReturnType<typeof postConnectorsConnectorIdRestart>>,
+  TError = ErrorType<BadRequestResponse | ForbiddenResponse | NotFoundResponse>,
+>(
+  connectorId: string,
+  params: PostConnectorsConnectorIdRestartParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof postConnectorsConnectorIdRestart>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * @summary Preview a future service restart (dry-run only)
+ */
+
+export function usePostConnectorsConnectorIdRestart<
+  TData = Awaited<ReturnType<typeof postConnectorsConnectorIdRestart>>,
+  TError = ErrorType<BadRequestResponse | ForbiddenResponse | NotFoundResponse>,
+>(
+  connectorId: string,
+  params: PostConnectorsConnectorIdRestartParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof postConnectorsConnectorIdRestart>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getPostConnectorsConnectorIdRestartQueryOptions(
+    connectorId,
+    params,
+    options
+  );
 
   const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
     queryKey: DataTag<QueryKey, TData, TError>;

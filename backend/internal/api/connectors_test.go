@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"reflect"
 	"testing"
 	"time"
 
+	"github.com/WiseLabz/wiselabz/internal/connector"
 	"github.com/WiseLabz/wiselabz/internal/store"
 )
 
@@ -259,6 +261,213 @@ func TestConnectorsSyncsHistory(t *testing.T) {
 		rec := app.req(t, http.MethodGet, "/api/connectors/does-not-exist/syncs", nil, viewerToken)
 		if rec.Code != http.StatusNotFound {
 			t.Fatalf("status = %d, want 404; body = %s", rec.Code, rec.Body)
+		}
+	})
+}
+
+func TestConnectorRestartPreview(t *testing.T) {
+	app := newTestApp(t)
+	_, opToken := app.user(t, "operator")
+	_, viewerToken := app.user(t, "viewer")
+
+	conn := &store.ConnectorRecord{
+		Name: "svc", Category: "virtualization", Type: "unregistered", URL: "https://example.com",
+	}
+	if err := app.Store.CreateConnector(context.Background(), conn); err != nil {
+		t.Fatalf("seed connector: %v", err)
+	}
+	snapshot, err := json.Marshal(connector.ServiceSnapshot{
+		ServiceName: "service-a",
+		Dependencies: []connector.ServiceDependency{
+			{Kind: "host", Name: "node-a", Ref: "host-1"},
+			{Kind: "upstream_service", Name: "database"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal snapshot: %v", err)
+	}
+	if err := app.Store.CreateSnapshot(context.Background(), &store.SnapshotRecord{
+		ConnectorID: conn.ID,
+		Data:        string(snapshot),
+	}); err != nil {
+		t.Fatalf("seed snapshot: %v", err)
+	}
+
+	t.Run("preview uses latest stored snapshot", func(t *testing.T) {
+		beforeConnector, err := app.Store.GetConnector(context.Background(), conn.ID)
+		if err != nil {
+			t.Fatalf("get connector before preview: %v", err)
+		}
+		beforeSnapshots, err := app.Store.CountSnapshotsByConnector(context.Background(), conn.ID)
+		if err != nil {
+			t.Fatalf("count snapshots before preview: %v", err)
+		}
+		_, beforeAudits, err := app.Store.ListAuditRecords(context.Background(), "", "", 0, 100)
+		if err != nil {
+			t.Fatalf("count audits before preview: %v", err)
+		}
+
+		rec := app.req(t, http.MethodPost, "/api/connectors/"+conn.ID+"/restart?dryRun=true", nil, opToken)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200; body = %s", rec.Code, rec.Body)
+		}
+
+		var got struct {
+			TargetService            string `json:"targetService"`
+			EstimatedDowntimeSeconds int    `json:"estimatedDowntimeSeconds"`
+			DependentServices        []struct {
+				Kind string `json:"kind"`
+				Name string `json:"name"`
+				Ref  string `json:"ref"`
+			} `json:"dependentServices"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+			t.Fatalf("decode body: %v", err)
+		}
+		if got.TargetService != "service-a" || got.EstimatedDowntimeSeconds != 30 {
+			t.Fatalf("preview = %+v, want service-a and 30 seconds", got)
+		}
+		if len(got.DependentServices) != 2 || got.DependentServices[0].Ref != "host-1" {
+			t.Fatalf("dependent services = %+v, want stored dependencies", got.DependentServices)
+		}
+		if got.DependentServices[1].Ref != "" {
+			t.Fatalf("empty dependency ref = %q, want empty", got.DependentServices[1].Ref)
+		}
+
+		var shape struct {
+			DependentServices []map[string]json.RawMessage `json:"dependentServices"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &shape); err != nil {
+			t.Fatalf("decode response shape: %v", err)
+		}
+		first := shape.DependentServices[0]
+		firstHasExpectedFields := len(first) == 3 && first["kind"] != nil && first["name"] != nil && first["ref"] != nil
+		if !firstHasExpectedFields {
+			t.Fatalf("first dependency fields = %v, want exactly kind, name, ref", first)
+		}
+		second := shape.DependentServices[1]
+		secondHasExpectedFields := len(second) == 2 && second["kind"] != nil && second["name"] != nil && second["ref"] == nil
+		if !secondHasExpectedFields {
+			t.Fatalf("second dependency fields = %v, want kind and name with unknown ref omitted", second)
+		}
+
+		afterConnector, err := app.Store.GetConnector(context.Background(), conn.ID)
+		if err != nil {
+			t.Fatalf("get connector after preview: %v", err)
+		}
+		if !reflect.DeepEqual(afterConnector, beforeConnector) {
+			t.Fatalf("connector changed during preview: before=%+v after=%+v", beforeConnector, afterConnector)
+		}
+		afterSnapshots, err := app.Store.CountSnapshotsByConnector(context.Background(), conn.ID)
+		if err != nil {
+			t.Fatalf("count snapshots after preview: %v", err)
+		}
+		if afterSnapshots != beforeSnapshots {
+			t.Fatalf("snapshot count = %d after preview, want %d", afterSnapshots, beforeSnapshots)
+		}
+		_, afterAudits, err := app.Store.ListAuditRecords(context.Background(), "", "", 0, 100)
+		if err != nil {
+			t.Fatalf("count audits after preview: %v", err)
+		}
+		if afterAudits != beforeAudits {
+			t.Fatalf("audit count = %d after preview, want %d", afterAudits, beforeAudits)
+		}
+	})
+
+	t.Run("empty dependencies encode as an empty array", func(t *testing.T) {
+		emptySnapshot, err := json.Marshal(connector.ServiceSnapshot{ServiceName: "service-b"})
+		if err != nil {
+			t.Fatalf("marshal empty snapshot: %v", err)
+		}
+		if err := app.Store.CreateSnapshot(context.Background(), &store.SnapshotRecord{
+			ConnectorID: conn.ID,
+			Data:        string(emptySnapshot),
+			FetchedAt:   time.Now().UTC().Add(time.Minute).Format(time.RFC3339),
+		}); err != nil {
+			t.Fatalf("seed empty snapshot: %v", err)
+		}
+
+		rec := app.req(t, http.MethodPost, "/api/connectors/"+conn.ID+"/restart?dryRun=true", nil, opToken)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200; body = %s", rec.Code, rec.Body)
+		}
+		var got struct {
+			TargetService     string            `json:"targetService"`
+			DependentServices []json.RawMessage `json:"dependentServices"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+			t.Fatalf("decode body: %v", err)
+		}
+		if got.TargetService != "service-b" || got.DependentServices == nil || len(got.DependentServices) != 0 {
+			t.Fatalf("preview = %+v, want service-b with a non-null empty dependency array", got)
+		}
+	})
+
+	t.Run("viewer is forbidden", func(t *testing.T) {
+		rec := app.req(t, http.MethodPost, "/api/connectors/"+conn.ID+"/restart?dryRun=true", nil, viewerToken)
+		if rec.Code != http.StatusForbidden {
+			t.Fatalf("status = %d, want 403; body = %s", rec.Code, rec.Body)
+		}
+	})
+}
+
+func TestConnectorRestartPreviewRejectsNonDryRun(t *testing.T) {
+	app := newTestApp(t)
+	_, opToken := app.user(t, "operator")
+
+	for _, suffix := range []string{"", "?dryRun=false", "?dryRun=", "?dryRun=True", "?dryRun=true&dryRun=false"} {
+		t.Run(suffix, func(t *testing.T) {
+			rec := app.req(t, http.MethodPost, "/api/connectors/unknown/restart"+suffix, nil, opToken)
+			if rec.Code != http.StatusBadRequest {
+				t.Fatalf("status = %d, want 400; body = %s", rec.Code, rec.Body)
+			}
+			var body struct {
+				Message string `json:"message"`
+			}
+			if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+				t.Fatalf("decode body: %v", err)
+			}
+			const want = "restart is not yet implemented, only dry-run preview is available"
+			if body.Message != want {
+				t.Fatalf("message = %q, want %q", body.Message, want)
+			}
+		})
+	}
+}
+
+func TestConnectorRestartPreviewSnapshotErrors(t *testing.T) {
+	app := newTestApp(t)
+	_, opToken := app.user(t, "operator")
+
+	conn := &store.ConnectorRecord{Name: "svc", Category: "virtualization", Type: "proxmox", URL: "https://example.com"}
+	if err := app.Store.CreateConnector(context.Background(), conn); err != nil {
+		t.Fatalf("seed connector: %v", err)
+	}
+
+	t.Run("missing snapshot", func(t *testing.T) {
+		rec := app.req(t, http.MethodPost, "/api/connectors/"+conn.ID+"/restart?dryRun=true", nil, opToken)
+		if rec.Code != http.StatusNotFound {
+			t.Fatalf("status = %d, want 404; body = %s", rec.Code, rec.Body)
+		}
+	})
+
+	t.Run("unknown connector", func(t *testing.T) {
+		rec := app.req(t, http.MethodPost, "/api/connectors/unknown/restart?dryRun=true", nil, opToken)
+		if rec.Code != http.StatusNotFound {
+			t.Fatalf("status = %d, want 404; body = %s", rec.Code, rec.Body)
+		}
+	})
+
+	if err := app.Store.CreateSnapshot(context.Background(), &store.SnapshotRecord{
+		ConnectorID: conn.ID,
+		Data:        "not-json",
+	}); err != nil {
+		t.Fatalf("seed malformed snapshot: %v", err)
+	}
+	t.Run("malformed snapshot", func(t *testing.T) {
+		rec := app.req(t, http.MethodPost, "/api/connectors/"+conn.ID+"/restart?dryRun=true", nil, opToken)
+		if rec.Code != http.StatusInternalServerError {
+			t.Fatalf("status = %d, want 500; body = %s", rec.Code, rec.Body)
 		}
 	})
 }
