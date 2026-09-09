@@ -332,7 +332,7 @@ func (e *Engine) RunSyncFields(ctx context.Context, connectorID string, jobID st
 			"status":         "degraded",
 			"status_message": fmt.Sprintf("Fetch failed: %v", err),
 		})
-		slog.Error("sync fetch failed", "connector", logsafe.Sanitize(connectorID), "error", err)
+		slog.Error("sync fetch failed", "connector", logsafe.Sanitize(connectorID), "error", logsafe.Sanitize(err.Error()))
 		if e.hub != nil {
 			e.hub.Broadcast(ws.EventSyncProgress, map[string]any{
 				"serviceId": connectorID,

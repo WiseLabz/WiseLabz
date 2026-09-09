@@ -665,7 +665,7 @@ func (h *Handler) Sync(w http.ResponseWriter, r *http.Request) {
 	jobID := uuid.New().String()
 	go func() {
 		if _, err := h.SyncEngine.RunSyncFields(context.Background(), id, jobID, req.Fields); err != nil {
-			slog.Error("sync failed", "connector", logsafe.Sanitize(id), "job", jobID, "error", err)
+			slog.Error("sync failed", "connector", logsafe.Sanitize(id), "job", jobID, "error", logsafe.Sanitize(err.Error()))
 		}
 	}()
 
