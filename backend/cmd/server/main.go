@@ -22,6 +22,7 @@ import (
 	"github.com/WiseLabz/wiselabz/internal/notifications"
 	"github.com/WiseLabz/wiselabz/internal/quality"
 	"github.com/WiseLabz/wiselabz/internal/retention"
+	"github.com/WiseLabz/wiselabz/internal/scheduler"
 	"github.com/WiseLabz/wiselabz/internal/store"
 	"github.com/WiseLabz/wiselabz/internal/sync"
 	"github.com/WiseLabz/wiselabz/internal/web"
@@ -146,10 +147,29 @@ func main() {
 	// Start snoozed alert expiration goroutine
 	go runAlertExpirer(ctx, s, notifDispatcher, logger)
 	go notifications.RunDeliveryRetries(ctx, notifDispatcher, logger)
-	go quality.RunStaleSweep(ctx, s, wsHub, 24*time.Hour, logger)
 	go store.RunDocLockSweep(ctx, s, wsHub, store.DocLockHeartbeat, logger)
-	go sync.RunScheduler(ctx, syncEngine, logger)
-	go retention.RunScheduler(ctx, s, cfg.Retention, logger)
+
+	// Start scheduler for retention, quality, and sync jobs
+	jobRunner := scheduler.New(logger)
+	if _, err := jobRunner.AddJob("retention", cfg.Retention.CronExpr, func(jobCtx context.Context) {
+		retention.RunCleanupOnce(jobCtx, s, cfg.Retention, logger)
+	}); err != nil {
+		logger.Error("Failed to add retention job", "error", err)
+		os.Exit(1)
+	}
+	if _, err := jobRunner.AddJob("quality", cfg.Quality.CronExpr, func(jobCtx context.Context) {
+		quality.RunStaleSweepOnce(jobCtx, s, wsHub, logger)
+	}); err != nil {
+		logger.Error("Failed to add quality job", "error", err)
+		os.Exit(1)
+	}
+	if _, err := jobRunner.AddJob("sync", cfg.Sync.PollCronExpr, func(jobCtx context.Context) {
+		syncEngine.RunDueSyncs(jobCtx, logger)
+	}); err != nil {
+		logger.Error("Failed to add sync job", "error", err)
+		os.Exit(1)
+	}
+	jobRunner.Start(ctx)
 
 	// Wait for shutdown signal
 	<-ctx.Done()

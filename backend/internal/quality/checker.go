@@ -206,26 +206,9 @@ func (c *Checker) upsert(ctx context.Context, finding *store.QualityFindingRecor
 	return finding, nil
 }
 
-// RunStaleSweep periodically checks every connector for stale documentation.
-func RunStaleSweep(ctx context.Context, s *store.Store, hub *ws.Hub, interval time.Duration, logger *slog.Logger) {
-	logger.Info("Quality stale sweep started")
+// RunStaleSweepOnce performs one pass of stale documentation checks for all connectors.
+func RunStaleSweepOnce(ctx context.Context, s *store.Store, hub *ws.Hub, logger *slog.Logger) {
 	checker := NewChecker(s, hub)
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		default:
-		}
-		runStaleSweep(ctx, checker, logger)
-		select {
-		case <-ctx.Done():
-			return
-		case <-time.After(interval):
-		}
-	}
-}
-
-func runStaleSweep(ctx context.Context, checker *Checker, logger *slog.Logger) {
 	connectors, err := checker.store.ListAllConnectors(ctx)
 	if err != nil {
 		logger.Error("list connectors for stale sweep", "error", err)

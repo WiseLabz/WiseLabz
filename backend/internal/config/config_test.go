@@ -48,8 +48,14 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.Retention.SyncRunDays != 90 {
 		t.Errorf("retention.sync_run_days = %d, want 90", cfg.Retention.SyncRunDays)
 	}
-	if cfg.Retention.IntervalHours != 24 {
-		t.Errorf("retention.interval_hours = %d, want 24", cfg.Retention.IntervalHours)
+	if cfg.Retention.CronExpr != "0 0 * * *" {
+		t.Errorf("retention.cron_expr = %q, want 0 0 * * *", cfg.Retention.CronExpr)
+	}
+	if cfg.Quality.CronExpr != "0 0 * * *" {
+		t.Errorf("quality.cron_expr = %q, want 0 0 * * *", cfg.Quality.CronExpr)
+	}
+	if cfg.Sync.PollCronExpr != "*/30 * * * * *" {
+		t.Errorf("sync.poll_cron_expr = %q, want */30 * * * * *", cfg.Sync.PollCronExpr)
 	}
 }
 
@@ -136,7 +142,7 @@ func TestLoadEnvOverride(t *testing.T) {
 	t.Setenv("WISELABZ_RETENTION_DOC_VERSION_DAYS", "0")
 	t.Setenv("WISELABZ_RETENTION_ALERT_DAYS", "60")
 	t.Setenv("WISELABZ_RETENTION_SYNC_RUN_DAYS", "14")
-	t.Setenv("WISELABZ_RETENTION_INTERVAL_HOURS", "6")
+	t.Setenv("WISELABZ_RETENTION_CRON_EXPR", "0 2 * * *")
 
 	cfg, err := Load()
 	if err != nil {
@@ -164,8 +170,36 @@ func TestLoadEnvOverride(t *testing.T) {
 	if cfg.Retention.SyncRunDays != 14 {
 		t.Errorf("retention.sync_run_days = %d, want 14", cfg.Retention.SyncRunDays)
 	}
-	if cfg.Retention.IntervalHours != 6 {
-		t.Errorf("retention.interval_hours = %d, want 6", cfg.Retention.IntervalHours)
+	if cfg.Retention.CronExpr != "0 2 * * *" {
+		t.Errorf("retention.cron_expr = %q, want 0 2 * * *", cfg.Retention.CronExpr)
+	}
+}
+
+func TestLoadRejectsInvalidCronExpr(t *testing.T) {
+	dir := t.TempDir()
+	oldDir, _ := os.Getwd()
+	os.Chdir(dir)          //nolint:errcheck
+	defer os.Chdir(oldDir) //nolint:errcheck
+
+	t.Setenv("WISELABZ_AUTH_SECRET", "env-secret")
+	t.Setenv("WISELABZ_RETENTION_CRON_EXPR", "not a cron expression")
+
+	if _, err := Load(); err == nil {
+		t.Fatal("Load() error = nil, want error for invalid retention.cron_expr")
+	}
+}
+
+func TestLoadRejectsEmptyCronExpr(t *testing.T) {
+	dir := t.TempDir()
+	oldDir, _ := os.Getwd()
+	os.Chdir(dir)          //nolint:errcheck
+	defer os.Chdir(oldDir) //nolint:errcheck
+
+	t.Setenv("WISELABZ_AUTH_SECRET", "env-secret")
+	t.Setenv("WISELABZ_RETENTION_CRON_EXPR", "")
+
+	if _, err := Load(); err == nil {
+		t.Fatal("Load() error = nil, want error for empty retention.cron_expr")
 	}
 }
 

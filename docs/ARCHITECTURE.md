@@ -328,10 +328,11 @@ render without creating or updating `docs` or `doc_versions`.
 
 ## Data retention (decided 2026-09-05)
 
-A background job (`internal/retention`, started as a bare goroutine in
-`cmd/server/main.go` alongside the sync scheduler and alert expirer) bounds
-the growth of historical data: `service_snapshots`, `doc_versions`, `alerts`,
-and `sync_runs`. Each category has an independent, configurable retention
+A background job (`internal/retention`, registered with the shared cron
+scheduler in `cmd/server/main.go` alongside the quality stale-sweep and sync
+poll jobs — see `internal/scheduler`) bounds the growth of historical data:
+`service_snapshots`, `doc_versions`, `alerts`, and `sync_runs`. Each category
+has an independent, configurable retention
 window (`retention.*_days` in `config.yaml` / `WISELABZ_RETENTION_*_DAYS` env
 vars); a value of `0` disables cleanup for that category entirely.
 
@@ -343,10 +344,10 @@ alerts are purged, and `sync_runs` has no such guard — a connector's
 last-sync status lives on the `connectors` row itself, not derived from
 `sync_runs` history.
 
-The job runs on a configurable interval (`retention.interval_hours`, default
-24h) and is idempotent: each pass deletes only rows newly past that
-category's cutoff, so running it repeatedly (or after downtime) is safe and
-produces no duplicate effects.
+The job runs on a configurable cron schedule (`retention.cron_expr`, default
+`0 0 * * *` — daily at midnight) and is idempotent: each pass deletes only
+rows newly past that category's cutoff, so running it repeatedly (or after
+downtime) is safe and produces no duplicate effects.
 
 ---
 
