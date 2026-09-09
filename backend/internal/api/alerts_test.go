@@ -2,6 +2,7 @@ package api_test
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"testing"
 
@@ -91,5 +92,116 @@ func TestAlertsSnoozeSuccess(t *testing.T) {
 	rec := app.req(t, http.MethodPost, "/api/alerts/"+a.ID+"/snooze", map[string]any{"until": "2099-01-01T00:00:00Z"}, opToken)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body = %s", rec.Code, rec.Body)
+	}
+}
+
+func TestAlertsBulkSnoozeRoleBoundary(t *testing.T) {
+	app := newTestApp(t)
+	_, viewerToken := app.user(t, "viewer")
+	a := seedAlert(t, app)
+
+	rec := app.req(t, http.MethodPost, "/api/alerts/bulk-snooze",
+		map[string]any{"ids": []string{a.ID}, "until": "2099-01-01T00:00:00Z"}, viewerToken)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403; body = %s", rec.Code, rec.Body)
+	}
+}
+
+func TestAlertsBulkSnoozeValidation(t *testing.T) {
+	app := newTestApp(t)
+	_, opToken := app.user(t, "operator")
+	a := seedAlert(t, app)
+
+	tests := []struct {
+		name string
+		body any
+	}{
+		{"missing until", map[string]any{"ids": []string{a.ID}}},
+		{"non-RFC3339 until", map[string]any{"ids": []string{a.ID}, "until": "tomorrow"}},
+		{"empty ids", map[string]any{"ids": []string{}, "until": "2099-01-01T00:00:00Z"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rec := app.req(t, http.MethodPost, "/api/alerts/bulk-snooze", tt.body, opToken)
+			if rec.Code != http.StatusBadRequest {
+				t.Fatalf("status = %d, want 400; body = %s", rec.Code, rec.Body)
+			}
+		})
+	}
+}
+
+// TestAlertsBulkSnoozePartialFailure mirrors
+// TestChangesBulkResolvePartialFailure: a mixed batch (a real seeded alert
+// and a nonexistent id) must not abort — each item gets its own outcome, and
+// only the successful item is snoozed and audited.
+func TestAlertsBulkSnoozePartialFailure(t *testing.T) {
+	app := newTestApp(t)
+	opUserID, opToken := app.user(t, "operator")
+
+	a := seedAlert(t, app)
+	const missingID = "does-not-exist"
+
+	rec := app.req(t, http.MethodPost, "/api/alerts/bulk-snooze", map[string]any{
+		"ids":   []string{a.ID, missingID},
+		"until": "2099-01-01T00:00:00Z",
+	}, opToken)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body = %s", rec.Code, rec.Body)
+	}
+
+	var body struct {
+		Results []struct {
+			ID     string `json:"id"`
+			Status string `json:"status"`
+			Reason string `json:"reason"`
+		} `json:"results"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	if len(body.Results) != 2 {
+		t.Fatalf("got %d results, want 2: %+v", len(body.Results), body.Results)
+	}
+
+	outcomes := map[string]struct{ status, reason string }{}
+	for _, r := range body.Results {
+		outcomes[r.ID] = struct{ status, reason string }{r.Status, r.Reason}
+	}
+
+	if o := outcomes[a.ID]; o.status != "success" {
+		t.Errorf("seeded alert outcome = %+v, want success", o)
+	}
+	if o := outcomes[missingID]; o.status != "error" || o.reason != "not_found" {
+		t.Errorf("missing outcome = %+v, want error/not_found", o)
+	}
+
+	got, err := app.Store.GetAlert(context.Background(), a.ID)
+	if err != nil {
+		t.Fatalf("GetAlert: %v", err)
+	}
+	if got.Status != "snoozed" {
+		t.Errorf("Status = %q, want snoozed", got.Status)
+	}
+
+	auditRec := app.req(t, http.MethodGet, "/api/system/audit?action=alert.bulk_snooze", nil, opToken)
+	if auditRec.Code != http.StatusOK {
+		t.Fatalf("audit list status = %d, want 200; body = %s", auditRec.Code, auditRec.Body)
+	}
+	var page struct {
+		Items []store.AuditRecord `json:"items"`
+		Total int                 `json:"total"`
+	}
+	if err := json.Unmarshal(auditRec.Body.Bytes(), &page); err != nil {
+		t.Fatalf("decode audit body: %v", err)
+	}
+	if page.Total != 1 {
+		t.Fatalf("audit Total = %d, want 1: %+v", page.Total, page.Items)
+	}
+	if page.Items[0].TargetID != a.ID {
+		t.Errorf("audit TargetID = %q, want %q", page.Items[0].TargetID, a.ID)
+	}
+	if page.Items[0].ActorUserID != opUserID {
+		t.Errorf("audit ActorUserID = %q, want %q", page.Items[0].ActorUserID, opUserID)
 	}
 }

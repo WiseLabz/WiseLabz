@@ -229,6 +229,7 @@ func NewRouter(cfg Config) chi.Router {
 				r.Post("/{id}/resolve", alertH.Resolve)
 				r.Post("/{id}/dismiss", alertH.Dismiss)
 				r.Post("/{id}/snooze", alertH.Snooze)
+				r.Post("/bulk-snooze", alertH.BulkSnooze)
 			})
 		})
 

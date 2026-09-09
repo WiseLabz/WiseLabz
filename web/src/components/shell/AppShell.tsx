@@ -9,6 +9,7 @@ import { ErrorBoundary } from 'react-error-boundary';
 import { Toaster } from 'sonner';
 import { ShellDock } from './ShellDock';
 import { CommandPalette } from '../command/CommandPalette';
+import { ShortcutsModal } from '../command/ShortcutsModal';
 import { ErrorState, SkeletonRows } from '../ui/states';
 import { setAppNavigator } from '../../lib/navigation';
 
@@ -49,6 +50,7 @@ export function AppShell() {
         <Content />
       </ShellDock>
       <CommandPalette />
+      <ShortcutsModal />
       <Toaster
         position="top-right"
         gap={8}

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -165,5 +166,75 @@ func TestDashboardResetRestoresAdminDefault(t *testing.T) {
 		if w["id"] == "custom-widget" {
 			t.Fatalf("layout after reset still has the custom widget: %+v", afterLayout)
 		}
+	}
+}
+
+func TestDashboardOverviewDaysWindow(t *testing.T) {
+	app := newTestApp(t)
+	_, viewerToken := app.user(t, "viewer")
+
+	recent := &store.ChangeRecord{
+		ServiceID: "svc-1", ChangeType: "config", Severity: "info",
+		Summary: "recent change", Diff: "[]", AffectedDocIDs: "[]",
+		DetectedAt: time.Now().UTC().Format(time.RFC3339),
+	}
+	if err := app.Store.CreateChange(context.Background(), recent); err != nil {
+		t.Fatalf("seed recent change: %v", err)
+	}
+
+	old := &store.ChangeRecord{
+		ServiceID: "svc-1", ChangeType: "config", Severity: "info",
+		Summary: "old change", Diff: "[]", AffectedDocIDs: "[]",
+		DetectedAt: time.Now().UTC().AddDate(0, 0, -30).Format(time.RFC3339),
+	}
+	if err := app.Store.CreateChange(context.Background(), old); err != nil {
+		t.Fatalf("seed old change: %v", err)
+	}
+
+	type overviewResp struct {
+		RecentChanges []struct {
+			ID string `json:"id"`
+		} `json:"recentChanges"`
+	}
+
+	narrowRec := app.req(t, http.MethodGet, "/api/dashboard/overview?days=1", nil, viewerToken)
+	if narrowRec.Code != http.StatusOK {
+		t.Fatalf("days=1 status = %d, want 200; body = %s", narrowRec.Code, narrowRec.Body)
+	}
+	var narrow overviewResp
+	if err := json.Unmarshal(narrowRec.Body.Bytes(), &narrow); err != nil {
+		t.Fatalf("decode days=1 body: %v", err)
+	}
+	for _, c := range narrow.RecentChanges {
+		if c.ID == old.ID {
+			t.Errorf("days=1 recentChanges included the old change: %+v", narrow.RecentChanges)
+		}
+	}
+	foundRecent := false
+	for _, c := range narrow.RecentChanges {
+		if c.ID == recent.ID {
+			foundRecent = true
+		}
+	}
+	if !foundRecent {
+		t.Errorf("days=1 recentChanges missing the recent change: %+v", narrow.RecentChanges)
+	}
+
+	wideRec := app.req(t, http.MethodGet, "/api/dashboard/overview?days=90", nil, viewerToken)
+	if wideRec.Code != http.StatusOK {
+		t.Fatalf("days=90 status = %d, want 200; body = %s", wideRec.Code, wideRec.Body)
+	}
+	var wide overviewResp
+	if err := json.Unmarshal(wideRec.Body.Bytes(), &wide); err != nil {
+		t.Fatalf("decode days=90 body: %v", err)
+	}
+	foundOld := false
+	for _, c := range wide.RecentChanges {
+		if c.ID == old.ID {
+			foundOld = true
+		}
+	}
+	if !foundOld {
+		t.Errorf("days=90 recentChanges missing the old change: %+v", wide.RecentChanges)
 	}
 }

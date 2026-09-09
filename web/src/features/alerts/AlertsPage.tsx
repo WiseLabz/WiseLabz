@@ -9,6 +9,7 @@ import {
   postAlertsAlertIdResolve,
   postAlertsAlertIdDismiss,
   postAlertsAlertIdSnooze,
+  postAlertsBulkSnooze,
 } from '../../api/generated/alerts/alerts';
 import { SeverityTag } from '../../components/ui/StatusDot';
 import { Button } from '../../components/ui/Button';
@@ -18,6 +19,8 @@ import { SkeletonRows, ErrorState, EmptyState } from '../../components/ui/states
 import { SavedViewsMenu } from '../../components/views/SavedViewsMenu';
 import { RunbookPanel } from '../../components/runbook/RunbookPanel';
 import { relativeTime } from '../../lib/time';
+import { toast } from '../../lib/toast';
+import { useCanMutate } from '../../hooks/useRole';
 import { CheckIcon, XIcon, ClockIcon } from '../../components/icons';
 import type { Severity } from '../../api/model';
 
@@ -28,17 +31,51 @@ const FILTERS: { key: string; value: Severity | 'all' }[] = [
   { key: 'alerts.filterInfo', value: 'info' },
 ];
 
+// datetime-local wants "YYYY-MM-DDTHH:mm" in local time, not the ISO string Date#toISOString gives.
+const toLocalInputValue = (d: Date) =>
+  new Date(d.getTime() - d.getTimezoneOffset() * 60 * 1000).toISOString().slice(0, 16);
+
 export function AlertsPage() {
   const { t } = useTranslation();
   const [page, setPage] = useState(1);
   const [severity, setSeverity] = useState<Severity | 'all'>('all');
   const pageSize = 20;
   const queryClient = useQueryClient();
+  const canMutate = useCanMutate();
   const { data, isLoading, isError, refetch } = useGetAlerts({ page, pageSize });
   const pending = (data?.items ?? []).filter(
     (a) => a.status === 'pending' && (severity === 'all' || a.severity === severity)
   );
   const pageCount = data ? Math.max(1, Math.ceil(data.total / data.pageSize)) : 1;
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkUntil, setBulkUntil] = useState(() => toLocalInputValue(new Date(Date.now() + 60 * 60 * 1000)));
+
+  const toggleSelected = (id: string) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  const bulkSnooze = useMutation({
+    mutationFn: () =>
+      postAlertsBulkSnooze({ ids: Array.from(selected), until: new Date(bulkUntil).toISOString() }),
+    onSuccess: (res) => {
+      const succeeded = res.results.filter((r) => r.status === 'success').length;
+      const failed = res.results.filter((r) => r.status === 'error');
+      if (failed.length === 0) {
+        toast.success(t('alerts.bulkAllSucceeded', { count: succeeded }));
+      } else {
+        toast.warning(
+          t('alerts.bulkPartial', { succeeded, failed: failed.length, reason: failed[0].reason })
+        );
+      }
+      setSelected(new Set());
+      queryClient.invalidateQueries({ queryKey: getGetAlertsQueryKey() });
+    },
+    onError: () => toast.error(t('alerts.bulkError')),
+  });
 
   const resolveAlert = useMutation({
     mutationFn: (alertId: string) => postAlertsAlertIdResolve(alertId),
@@ -91,6 +128,30 @@ export function AlertsPage() {
         </div>
       </header>
 
+      {canMutate && selected.size > 0 && (
+        <div className="mb-3 flex items-center justify-between gap-3 rounded-lg border border-line-soft bg-canvas-sunken px-4 py-2.5">
+          <span className="text-xs text-ink-muted">
+            {t('alerts.bulkSelectedCount', { count: selected.size })}
+          </span>
+          <div className="flex items-center gap-2">
+            <input
+              type="datetime-local"
+              value={bulkUntil}
+              onChange={(e) => setBulkUntil(e.target.value)}
+              className="rounded-md border border-line-soft bg-canvas px-2 py-1 text-xs text-ink"
+            />
+            <Button
+              variant="primary"
+              size="sm"
+              disabled={bulkSnooze.isPending}
+              onClick={() => bulkSnooze.mutate()}
+            >
+              <ClockIcon size={13} /> {t('alerts.bulkSnooze')}
+            </Button>
+          </div>
+        </div>
+      )}
+
       {isLoading ? (
         <Panel>
           <SkeletonRows rows={4} />
@@ -118,6 +179,15 @@ export function AlertsPage() {
             >
               <Panel className="p-4">
                 <div className="flex items-start gap-3">
+                  {canMutate && (
+                    <input
+                      type="checkbox"
+                      aria-label={t('alerts.bulkSelectLabel', { title: a.title })}
+                      checked={selected.has(a.id)}
+                      onChange={() => toggleSelected(a.id)}
+                      className="mt-1 size-3.5 shrink-0 accent-[var(--color-accent-primary)]"
+                    />
+                  )}
                   <SeverityTag severity={a.severity} className="mt-0.5" />
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-medium text-ink">{a.title}</p>

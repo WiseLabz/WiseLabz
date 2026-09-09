@@ -5,11 +5,15 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strconv"
+	"time"
 
 	"github.com/WiseLabz/wiselabz/internal/auth"
 	"github.com/WiseLabz/wiselabz/internal/httputil"
 	"github.com/WiseLabz/wiselabz/internal/store"
 )
+
+const overviewDefaultDays = 7
 
 // Handler holds dependencies for dashboard endpoints.
 type Handler struct {
@@ -25,9 +29,18 @@ func NewHandler(s *store.Store) *Handler {
 // Returns aggregated dashboard data.
 func (h *Handler) Overview(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+
+	days := overviewDefaultDays
+	if v := r.URL.Query().Get("days"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			days = n
+		}
+	}
+	since := time.Now().UTC().AddDate(0, 0, -days).Format(time.RFC3339)
+
 	statusCounts, _ := h.Store.CountConnectorsByStatus(ctx)
 	pendingAlerts, _ := h.Store.CountAlertsPending(ctx)
-	latestChanges, _ := h.Store.GetLatestChanges(ctx, 5)
+	latestChanges, _ := h.Store.GetLatestChanges(ctx, 5, since)
 	lastSync, _ := h.Store.GetLastSyncTimestamp(ctx)
 
 	recentChanges := make([]map[string]any, len(latestChanges))

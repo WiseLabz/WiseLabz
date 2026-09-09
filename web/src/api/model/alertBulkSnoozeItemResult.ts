@@ -6,14 +6,11 @@
  *
  * OpenAPI spec version: 0.1.0
  */
+import type { AlertBulkSnoozeItemResultStatus } from './alertBulkSnoozeItemResultStatus';
 
-export type WidgetPlacementType = (typeof WidgetPlacementType)[keyof typeof WidgetPlacementType];
-
-export const WidgetPlacementType = {
-  service_status: 'service_status',
-  recent_changes: 'recent_changes',
-  alert_summary: 'alert_summary',
-  sync_activity: 'sync_activity',
-  docs_health: 'docs_health',
-  attention: 'attention',
-} as const;
+export interface AlertBulkSnoozeItemResult {
+  id: string;
+  status: AlertBulkSnoozeItemResultStatus;
+  /** Present when status is error, e.g. not_found, internal_error. */
+  reason?: string;
+}

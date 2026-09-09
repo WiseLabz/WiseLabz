@@ -366,12 +366,14 @@ func (s *Store) CountAlertsPending(ctx context.Context) (int, error) {
 	return count, err
 }
 
-// GetLatestChanges returns the most recent N changes.
-func (s *Store) GetLatestChanges(ctx context.Context, n int) ([]ChangeRecord, error) {
+// GetLatestChanges returns the most recent N changes detected at or after
+// since (RFC3339, matching the stored detected_at format). An empty since
+// applies no lower bound.
+func (s *Store) GetLatestChanges(ctx context.Context, n int, since string) ([]ChangeRecord, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT `+changeColumns+`
-		FROM changes ORDER BY detected_at DESC LIMIT ?
-	`, n)
+		FROM changes WHERE detected_at >= ? ORDER BY detected_at DESC LIMIT ?
+	`, since, n)
 	if err != nil {
 		return nil, fmt.Errorf("get latest changes: %w", err)
 	}

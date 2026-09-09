@@ -180,6 +180,21 @@ export function CommandPalette() {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
+  // `?` toggles the shortcuts cheat sheet — same text-field guard as ⌘K.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== '?') return;
+      const el = document.activeElement as HTMLElement | null;
+      const isTyping =
+        el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable);
+      if (isTyping) return;
+      e.preventDefault();
+      useUi.getState().toggleShortcuts();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
   return <AnimatePresence>{open && <PaletteBody />}</AnimatePresence>;
 }
 
