@@ -30,6 +30,8 @@ export interface Diff {
   baseLabel?: string;
   /** doc format — label for the after revision, e.g. "rev 12" */
   headLabel?: string;
+  /** doc format — provenance of the head revision, e.g. "manual", "ai:claude-sonnet-5", "template" */
+  headTrigger?: string;
   /** doc format — content hint; raw-text render for v1 */
   language?: DiffLanguage;
 }

@@ -87,6 +87,10 @@ export const getGetChangesChangeIdResponseMock = (): ChangeDetail => ({
         faker.string.alpha({ length: { min: 10, max: 20 } }),
         undefined,
       ]),
+      headTrigger: faker.helpers.arrayElement([
+        faker.string.alpha({ length: { min: 10, max: 20 } }),
+        undefined,
+      ]),
       language: faker.helpers.arrayElement([
         faker.helpers.arrayElement(['md', 'yaml', 'text'] as const),
         undefined,
@@ -163,6 +167,10 @@ export const getPostChangesChangeIdAckResponseMock = (): ChangeDetail => ({
         faker.string.alpha({ length: { min: 10, max: 20 } }),
         undefined,
       ]),
+      headTrigger: faker.helpers.arrayElement([
+        faker.string.alpha({ length: { min: 10, max: 20 } }),
+        undefined,
+      ]),
       language: faker.helpers.arrayElement([
         faker.helpers.arrayElement(['md', 'yaml', 'text'] as const),
         undefined,
@@ -236,6 +244,10 @@ export const getPostChangesChangeIdDismissResponseMock = (): ChangeDetail => ({
         undefined,
       ]),
       headLabel: faker.helpers.arrayElement([
+        faker.string.alpha({ length: { min: 10, max: 20 } }),
+        undefined,
+      ]),
+      headTrigger: faker.helpers.arrayElement([
         faker.string.alpha({ length: { min: 10, max: 20 } }),
         undefined,
       ]),

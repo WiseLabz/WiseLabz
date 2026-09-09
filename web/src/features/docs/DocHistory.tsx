@@ -68,6 +68,7 @@ export function DocHistory({ docId, currentVersion }: { docId: string; currentVe
   });
 
   const metas = versions.data ?? [];
+  const selectedTrigger = metas.find((v) => v.rev === selected)?.trigger;
 
   const beforeText = previous.data?.content ?? '';
   const afterText = current.data?.content ?? '';
@@ -172,6 +173,7 @@ export function DocHistory({ docId, currentVersion }: { docId: string; currentVe
             before={beforeText}
             after={afterText}
             label={`v${prevRev > 0 ? prevRev : 0} → v${selected}`}
+            headTrigger={selectedTrigger}
           />
         )}
       </div>
