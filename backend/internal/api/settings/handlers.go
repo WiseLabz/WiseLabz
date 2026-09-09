@@ -152,9 +152,19 @@ func (h *Handler) UpdateProviderEnabled(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	if err := h.Store.RecordAuditFromContext(r.Context(), "auth.provider.enabled", "oidc_provider", id, map[string]any{
+	detail := map[string]any{
 		"enabled": req.Enabled,
-	}); err != nil {
+	}
+	if !req.Enabled {
+		revoked, err := h.Store.RevokeSessionsByAuthSource(r.Context(), id)
+		if err != nil {
+			httputil.Errorf(w, err)
+			return
+		}
+		detail["revokedSessions"] = revoked
+	}
+
+	if err := h.Store.RecordAuditFromContext(r.Context(), "auth.provider.enabled", "oidc_provider", id, detail); err != nil {
 		slog.Error("failed to record audit", "action", "auth.provider.enabled", "error", err)
 	}
 

@@ -30,6 +30,8 @@ object, action-specific), and `createdAt`.
 | `connector.sync` | `POST /api/connectors/{id}/sync` | connector / id |
 | `connector.sync_all` | `POST /api/sync` | connector / (none) |
 | `auth.elevate` | `POST /api/auth/elevate` | action / the elevated action name |
+| `auth.elevation_requested` | Any step-up-gated endpoint receiving `X-Elevation-Token` | action / the required action name |
+| `auth.elevation_denied` | Failed elevation-token validation on a step-up-gated endpoint | action / the required action name |
 | `auth.config.update` | `PUT /api/auth/config` | auth_config / (none) |
 | `auth.provider.enabled` | `PUT /api/auth/providers/{id}/enabled` | oidc_provider / provider id |
 | `doc.restore` | `POST /api/docs/{id}/versions/{rev}/restore` | doc / doc id |
@@ -49,11 +51,11 @@ audit log safe to expose to any operator without redaction logic.
 
 ## What's not recorded
 
-- **Failed attempts.** An audit entry is written only after the action
-  itself succeeds. A failed create/update/delete never reaches the
-  audit log — this is a deliberate scope cut: this endpoint answers "what
-  happened," not "what was attempted." Add failure logging separately
-  (e.g. to the request logger) if that becomes a need.
+- **Failed attempts, except elevation denials.** An audit entry is written
+  only after the action itself succeeds. A failed create/update/delete never
+  reaches the audit log — this is a deliberate scope cut: this endpoint
+  answers "what happened," not "what was attempted." Elevation-token denials
+  are the exception because they are security-relevant attempts.
 - **Reads.** Listing or viewing a resource is not an audited action.
 - A write to the audit log failing is logged (`slog.Error`) but never
   fails the request — the audited action has already gone through by
@@ -63,4 +65,5 @@ audit log safe to expose to any operator without redaction logic.
 
 Audit rows are not touched by the retention policies in
 `backend/internal/store/retention.go` — they're kept indefinitely, since
-their purpose is historical accountability rather than operational data.
+their purpose is historical accountability rather than operational data. The
+elevation request/denial rows inherit the same exemption through `audit_log`.

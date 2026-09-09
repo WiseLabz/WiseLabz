@@ -214,10 +214,11 @@ func (h *Handler) OIDCCallback(w http.ResponseWriter, r *http.Request) {
 
 	// Create session
 	session := &store.Session{
-		UserID:    user.ID,
-		TokenHash: store.HashToken(pair.RefreshToken),
-		UserAgent: r.UserAgent(),
-		IP:        readIP(r),
+		UserID:         user.ID,
+		TokenHash:      store.HashToken(pair.RefreshToken),
+		AuthProviderID: req.ProviderID,
+		UserAgent:      r.UserAgent(),
+		IP:             readIP(r),
 	}
 	if err := h.Store.CreateSession(r.Context(), session); err != nil {
 		httputil.Errorf(w, err)
