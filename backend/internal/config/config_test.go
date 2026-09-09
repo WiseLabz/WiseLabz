@@ -80,6 +80,11 @@ auth:
       scopes:
         - openid
         - profile
+      groups_claim: groups
+      group_role_mapping:
+        admins: operator
+      email_domain_allowlist:
+        - example.com
 ai:
   enabled: true
   provider: ollama
@@ -120,6 +125,9 @@ log:
 	}
 	if cfg.Auth.OIDC[0].ID != "authentik" {
 		t.Errorf("auth.oidc[0].id = %q, want authentik", cfg.Auth.OIDC[0].ID)
+	}
+	if cfg.Auth.OIDC[0].GroupsClaim != "groups" || cfg.Auth.OIDC[0].GroupRoleMapping["admins"] != "operator" || len(cfg.Auth.OIDC[0].EmailDomainAllowlist) != 1 {
+		t.Errorf("auth.oidc[0] claim mapping = %#v", cfg.Auth.OIDC[0])
 	}
 	if !cfg.AI.Enabled {
 		t.Error("ai.enabled = false, want true")

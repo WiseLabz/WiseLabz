@@ -21,6 +21,16 @@ type Claims struct {
 	Role   string `json:"role"`
 }
 
+// APIKeyClaims represents the identity and lifecycle fields needed to
+// authenticate an opaque API key.
+type APIKeyClaims struct {
+	KeyID     string
+	UserID    string
+	Role      string
+	ExpiresAt string
+	RevokedAt string
+}
+
 // ElevationClaims represents a short-lived step-up token for destructive actions.
 type ElevationClaims struct {
 	jwt.RegisteredClaims

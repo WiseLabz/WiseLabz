@@ -9,7 +9,13 @@
 import { faker } from '@faker-js/faker';
 
 import { Role } from '../../model';
-import type { AuthProviders, AuthSession, ElevationToken } from '../../model';
+import type {
+  ApiKey,
+  ApiKeyCreated,
+  AuthProviders,
+  AuthSession,
+  ElevationToken,
+} from '../../model';
 
 export const getGetAuthProvidersResponseMock = (
   overrideResponse: Partial<Extract<AuthProviders, object>> = {}
@@ -95,4 +101,46 @@ export const getPostAuthElevateResponseMock = (
   token: faker.string.alpha({ length: { min: 10, max: 20 } }),
   expiresAt: faker.date.past().toISOString().slice(0, 19) + 'Z',
   ...overrideResponse,
+});
+
+export const getGetAuthApiKeysResponseMock = (): ApiKey[] =>
+  Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() => ({
+    id: faker.string.uuid(),
+    name: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    role: faker.helpers.arrayElement(Object.values(Role)),
+    createdAt: faker.date.past().toISOString().slice(0, 19) + 'Z',
+    expiresAt: faker.helpers.arrayElement([
+      faker.date.past().toISOString().slice(0, 19) + 'Z',
+      null,
+    ]),
+    lastUsedAt: faker.helpers.arrayElement([
+      faker.date.past().toISOString().slice(0, 19) + 'Z',
+      null,
+    ]),
+    revokedAt: faker.helpers.arrayElement([
+      faker.date.past().toISOString().slice(0, 19) + 'Z',
+      null,
+    ]),
+  }));
+
+export const getPostAuthApiKeysResponseMock = (): ApiKeyCreated => ({
+  ...{
+    id: faker.string.uuid(),
+    name: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    role: faker.helpers.arrayElement(Object.values(Role)),
+    createdAt: faker.date.past().toISOString().slice(0, 19) + 'Z',
+    expiresAt: faker.helpers.arrayElement([
+      faker.date.past().toISOString().slice(0, 19) + 'Z',
+      null,
+    ]),
+    lastUsedAt: faker.helpers.arrayElement([
+      faker.date.past().toISOString().slice(0, 19) + 'Z',
+      null,
+    ]),
+    revokedAt: faker.helpers.arrayElement([
+      faker.date.past().toISOString().slice(0, 19) + 'Z',
+      null,
+    ]),
+  },
+  ...{ token: faker.string.alpha({ length: { min: 10, max: 20 } }) },
 });

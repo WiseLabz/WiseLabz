@@ -20,11 +20,17 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  ApiKey,
+  ApiKeyCreate,
+  ApiKeyCreated,
   AuthProviders,
   AuthSession,
+  BadRequestResponse,
   ElevationRequest,
   ElevationToken,
+  ForbiddenResponse,
   LoginRequest,
+  NotFoundResponse,
   OidcCallbackRequest,
   UnauthorizedResponse,
 } from '../../model';
@@ -750,6 +756,368 @@ export function usePostAuthElevate<
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
   const queryOptions = getPostAuthElevateQueryOptions(elevationRequest, options);
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+/**
+ * @summary List the current user's API keys
+ */
+export const getAuthApiKeys = (
+  options?: SecondParameter<typeof customInstance>,
+  signal?: AbortSignal
+) => {
+  return customInstance<ApiKey[]>({ url: `/auth/api-keys`, method: 'GET', signal }, options);
+};
+
+export const getGetAuthApiKeysQueryKey = () => {
+  return [`/auth/api-keys`] as const;
+};
+
+export const getGetAuthApiKeysQueryOptions = <
+  TData = Awaited<ReturnType<typeof getAuthApiKeys>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getAuthApiKeys>>, TError, TData>>;
+  request?: SecondParameter<typeof customInstance>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetAuthApiKeysQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getAuthApiKeys>>> = ({ signal }) =>
+    getAuthApiKeys(requestOptions, signal);
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getAuthApiKeys>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type GetAuthApiKeysQueryResult = NonNullable<Awaited<ReturnType<typeof getAuthApiKeys>>>;
+export type GetAuthApiKeysQueryError = ErrorType<unknown>;
+
+export function useGetAuthApiKeys<
+  TData = Awaited<ReturnType<typeof getAuthApiKeys>>,
+  TError = ErrorType<unknown>,
+>(
+  options: {
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof getAuthApiKeys>>, TError, TData>> &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getAuthApiKeys>>,
+          TError,
+          Awaited<ReturnType<typeof getAuthApiKeys>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useGetAuthApiKeys<
+  TData = Awaited<ReturnType<typeof getAuthApiKeys>>,
+  TError = ErrorType<unknown>,
+>(
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getAuthApiKeys>>, TError, TData>> &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getAuthApiKeys>>,
+          TError,
+          Awaited<ReturnType<typeof getAuthApiKeys>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useGetAuthApiKeys<
+  TData = Awaited<ReturnType<typeof getAuthApiKeys>>,
+  TError = ErrorType<unknown>,
+>(
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getAuthApiKeys>>, TError, TData>>;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * @summary List the current user's API keys
+ */
+
+export function useGetAuthApiKeys<
+  TData = Awaited<ReturnType<typeof getAuthApiKeys>>,
+  TError = ErrorType<unknown>,
+>(
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getAuthApiKeys>>, TError, TData>>;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getGetAuthApiKeysQueryOptions(options);
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+/**
+ * The opaque token is returned once and cannot be retrieved again.
+ * @summary Create an API key for the current user
+ */
+export const postAuthApiKeys = (
+  apiKeyCreate: BodyType<ApiKeyCreate>,
+  options?: SecondParameter<typeof customInstance>,
+  signal?: AbortSignal
+) => {
+  return customInstance<ApiKeyCreated>(
+    {
+      url: `/auth/api-keys`,
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      data: apiKeyCreate,
+      signal,
+    },
+    options
+  );
+};
+
+export const getPostAuthApiKeysQueryKey = (apiKeyCreate?: BodyType<ApiKeyCreate>) => {
+  return ['POST', `/auth/api-keys`, apiKeyCreate] as const;
+};
+
+export const getPostAuthApiKeysQueryOptions = <
+  TData = Awaited<ReturnType<typeof postAuthApiKeys>>,
+  TError = ErrorType<BadRequestResponse>,
+>(
+  apiKeyCreate: BodyType<ApiKeyCreate>,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof postAuthApiKeys>>, TError, TData>>;
+    request?: SecondParameter<typeof customInstance>;
+  }
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getPostAuthApiKeysQueryKey(apiKeyCreate);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof postAuthApiKeys>>> = ({ signal }) =>
+    postAuthApiKeys(apiKeyCreate, requestOptions, signal);
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof postAuthApiKeys>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type PostAuthApiKeysQueryResult = NonNullable<Awaited<ReturnType<typeof postAuthApiKeys>>>;
+export type PostAuthApiKeysQueryError = ErrorType<BadRequestResponse>;
+
+export function usePostAuthApiKeys<
+  TData = Awaited<ReturnType<typeof postAuthApiKeys>>,
+  TError = ErrorType<BadRequestResponse>,
+>(
+  apiKeyCreate: BodyType<ApiKeyCreate>,
+  options: {
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof postAuthApiKeys>>, TError, TData>> &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postAuthApiKeys>>,
+          TError,
+          Awaited<ReturnType<typeof postAuthApiKeys>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function usePostAuthApiKeys<
+  TData = Awaited<ReturnType<typeof postAuthApiKeys>>,
+  TError = ErrorType<BadRequestResponse>,
+>(
+  apiKeyCreate: BodyType<ApiKeyCreate>,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof postAuthApiKeys>>, TError, TData>> &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postAuthApiKeys>>,
+          TError,
+          Awaited<ReturnType<typeof postAuthApiKeys>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function usePostAuthApiKeys<
+  TData = Awaited<ReturnType<typeof postAuthApiKeys>>,
+  TError = ErrorType<BadRequestResponse>,
+>(
+  apiKeyCreate: BodyType<ApiKeyCreate>,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof postAuthApiKeys>>, TError, TData>>;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * @summary Create an API key for the current user
+ */
+
+export function usePostAuthApiKeys<
+  TData = Awaited<ReturnType<typeof postAuthApiKeys>>,
+  TError = ErrorType<BadRequestResponse>,
+>(
+  apiKeyCreate: BodyType<ApiKeyCreate>,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof postAuthApiKeys>>, TError, TData>>;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getPostAuthApiKeysQueryOptions(apiKeyCreate, options);
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+/**
+ * @summary Revoke one of the current user's API keys
+ */
+export const deleteAuthApiKeysId = (
+  id: string,
+  options?: SecondParameter<typeof customInstance>,
+  signal?: AbortSignal
+) => {
+  return customInstance<void>({ url: `/auth/api-keys/${id}`, method: 'DELETE', signal }, options);
+};
+
+export const getDeleteAuthApiKeysIdQueryKey = (id: string) => {
+  return ['DELETE', `/auth/api-keys/${id}`] as const;
+};
+
+export const getDeleteAuthApiKeysIdQueryOptions = <
+  TData = Awaited<ReturnType<typeof deleteAuthApiKeysId>>,
+  TError = ErrorType<ForbiddenResponse | NotFoundResponse>,
+>(
+  id: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof deleteAuthApiKeysId>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  }
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getDeleteAuthApiKeysIdQueryKey(id);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof deleteAuthApiKeysId>>> = ({ signal }) =>
+    deleteAuthApiKeysId(id, requestOptions, signal);
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: id !== null && id !== undefined,
+    ...queryOptions,
+  } as UseQueryOptions<Awaited<ReturnType<typeof deleteAuthApiKeysId>>, TError, TData> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+};
+
+export type DeleteAuthApiKeysIdQueryResult = NonNullable<
+  Awaited<ReturnType<typeof deleteAuthApiKeysId>>
+>;
+export type DeleteAuthApiKeysIdQueryError = ErrorType<ForbiddenResponse | NotFoundResponse>;
+
+export function useDeleteAuthApiKeysId<
+  TData = Awaited<ReturnType<typeof deleteAuthApiKeysId>>,
+  TError = ErrorType<ForbiddenResponse | NotFoundResponse>,
+>(
+  id: string,
+  options: {
+    query: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof deleteAuthApiKeysId>>, TError, TData>
+    > &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof deleteAuthApiKeysId>>,
+          TError,
+          Awaited<ReturnType<typeof deleteAuthApiKeysId>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useDeleteAuthApiKeysId<
+  TData = Awaited<ReturnType<typeof deleteAuthApiKeysId>>,
+  TError = ErrorType<ForbiddenResponse | NotFoundResponse>,
+>(
+  id: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof deleteAuthApiKeysId>>, TError, TData>
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof deleteAuthApiKeysId>>,
+          TError,
+          Awaited<ReturnType<typeof deleteAuthApiKeysId>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useDeleteAuthApiKeysId<
+  TData = Awaited<ReturnType<typeof deleteAuthApiKeysId>>,
+  TError = ErrorType<ForbiddenResponse | NotFoundResponse>,
+>(
+  id: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof deleteAuthApiKeysId>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * @summary Revoke one of the current user's API keys
+ */
+
+export function useDeleteAuthApiKeysId<
+  TData = Awaited<ReturnType<typeof deleteAuthApiKeysId>>,
+  TError = ErrorType<ForbiddenResponse | NotFoundResponse>,
+>(
+  id: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof deleteAuthApiKeysId>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getDeleteAuthApiKeysIdQueryOptions(id, options);
 
   const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
     queryKey: DataTag<QueryKey, TData, TError>;

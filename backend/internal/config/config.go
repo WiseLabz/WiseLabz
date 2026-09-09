@@ -83,12 +83,15 @@ func (a AuthSettings) RefreshTokenTTLDuration() time.Duration {
 
 // OIDCProvider defines an OIDC provider from the config file.
 type OIDCProvider struct {
-	ID           string   `mapstructure:"id"`
-	DisplayName  string   `mapstructure:"display_name"`
-	IssuerURL    string   `mapstructure:"issuer_url"`
-	ClientID     string   `mapstructure:"client_id"`
-	ClientSecret string   `mapstructure:"client_secret"`
-	Scopes       []string `mapstructure:"scopes"`
+	ID                   string            `mapstructure:"id"`
+	DisplayName          string            `mapstructure:"display_name"`
+	IssuerURL            string            `mapstructure:"issuer_url"`
+	ClientID             string            `mapstructure:"client_id"`
+	ClientSecret         string            `mapstructure:"client_secret"`
+	Scopes               []string          `mapstructure:"scopes"`
+	GroupsClaim          string            `mapstructure:"groups_claim"`
+	GroupRoleMapping     map[string]string `mapstructure:"group_role_mapping"`
+	EmailDomainAllowlist []string          `mapstructure:"email_domain_allowlist"`
 }
 
 // AISettings holds AI module settings.

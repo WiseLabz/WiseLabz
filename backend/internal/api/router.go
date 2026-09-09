@@ -12,6 +12,7 @@ import (
 
 	"github.com/WiseLabz/wiselabz/internal/ai"
 	alerthandler "github.com/WiseLabz/wiselabz/internal/api/alerts"
+	apikeyhandler "github.com/WiseLabz/wiselabz/internal/api/apikeys"
 	attentionhandler "github.com/WiseLabz/wiselabz/internal/api/attention"
 	authhandler "github.com/WiseLabz/wiselabz/internal/api/auth"
 	changehandler "github.com/WiseLabz/wiselabz/internal/api/changes"
@@ -71,6 +72,7 @@ func NewRouter(cfg Config) chi.Router {
 	// can remove/replace it instead of stacking duplicate jobs.
 	sysH.InitBackupJob(context.Background())
 	authH := authhandler.NewHandler(cfg.Store, cfg.JWT, cfg.Config)
+	apiKeyH := apikeyhandler.NewHandler(cfg.Store)
 	settingH := settinghandler.NewHandler(cfg.Store, cfg.Config, cfg.AIRegistry)
 	connH := connhandler.NewHandler(cfg.Store, cfg.SyncEngine)
 	tmplH := tmplhandler.NewHandler(cfg.Store, cfg.DocEngine)
@@ -106,6 +108,11 @@ func NewRouter(cfg Config) chi.Router {
 			r.Use(cfg.AuthMiddleware())
 			r.Post("/logout", authH.Logout)
 			r.Post("/elevate", authH.Elevate)
+			r.Route("/api-keys", func(r chi.Router) {
+				r.Get("/", apiKeyH.List)
+				r.Post("/", apiKeyH.Create)
+				r.Delete("/{id}", apiKeyH.Revoke)
+			})
 
 			r.Group(func(r chi.Router) {
 				r.Use(operatorOnly)
@@ -395,5 +402,5 @@ func spaHandler(files fs.FS) http.HandlerFunc {
 
 // AuthMiddleware returns chi-compatible auth middleware from the JWT service.
 func (cfg Config) AuthMiddleware() func(http.Handler) http.Handler {
-	return auth.AuthMiddleware(cfg.JWT)
+	return auth.AuthMiddleware(cfg.JWT, cfg.Store)
 }

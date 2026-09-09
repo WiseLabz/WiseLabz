@@ -2,9 +2,13 @@ package auth
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 )
 
 type contextKey string
@@ -27,10 +31,22 @@ func RoleFromContext(ctx context.Context) string {
 	return role
 }
 
-// AuthMiddleware validates the JWT access token from the Authorization header
-// and injects userID + role into the request context.
-// AuthMiddleware validates JWT tokens and injects user claims into the request context.
-func AuthMiddleware(jwtSvc *Service) func(http.Handler) http.Handler { //nolint:revive
+// APIKeyChecker looks up opaque API keys without coupling auth to the store
+// package. The store adapts its APIKey model to APIKeyClaims.
+type APIKeyChecker interface {
+	LookupAPIKey(ctx context.Context, tokenHash string) (*APIKeyClaims, error)
+	TouchAPIKeyLastUsed(ctx context.Context, keyID string) error
+}
+
+// AuthMiddleware validates JWT access tokens and opaque API keys, then injects
+// userID + role into the request context. The variadic checker preserves the
+// lightweight JWT-only call shape used by auth package tests and callers that
+// do not have API-key storage.
+func AuthMiddleware(jwtSvc *Service, checkers ...APIKeyChecker) func(http.Handler) http.Handler { //nolint:revive
+	var checker APIKeyChecker
+	if len(checkers) > 0 {
+		checker = checkers[0]
+	}
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			token := extractBearerToken(r)
@@ -40,17 +56,49 @@ func AuthMiddleware(jwtSvc *Service) func(http.Handler) http.Handler { //nolint:
 			}
 
 			claims, err := jwtSvc.ValidateAccess(token)
-			if err != nil {
-				http.Error(w, `{"code":"unauthorized","message":"invalid or expired token"}`, http.StatusUnauthorized)
+			if err == nil {
+				ctx := context.WithValue(r.Context(), ctxUserID, claims.UserID)
+				ctx = context.WithValue(ctx, ctxRole, claims.Role)
+				ctx = context.WithValue(ctx, ctxClaims, claims)
+				next.ServeHTTP(w, r.WithContext(ctx))
 				return
 			}
 
-			ctx := context.WithValue(r.Context(), ctxUserID, claims.UserID)
-			ctx = context.WithValue(ctx, ctxRole, claims.Role)
-			ctx = context.WithValue(ctx, ctxClaims, claims)
-			next.ServeHTTP(w, r.WithContext(ctx))
+			if checker != nil {
+				keyClaims, lookupErr := checker.LookupAPIKey(r.Context(), hashToken(token))
+				if lookupErr == nil && validAPIKey(keyClaims) {
+					if touchErr := checker.TouchAPIKeyLastUsed(r.Context(), keyClaims.KeyID); touchErr != nil {
+						slog.Error("failed to update API key last-used timestamp", "key_id", keyClaims.KeyID, "error", touchErr)
+					}
+					ctx := context.WithValue(r.Context(), ctxUserID, keyClaims.UserID)
+					ctx = context.WithValue(ctx, ctxRole, keyClaims.Role)
+					ctx = context.WithValue(ctx, ctxClaims, keyClaims)
+					next.ServeHTTP(w, r.WithContext(ctx))
+					return
+				}
+			}
+
+			http.Error(w, `{"code":"unauthorized","message":"invalid or expired token"}`, http.StatusUnauthorized)
 		})
 	}
+}
+
+func hashToken(token string) string {
+	// Keep hashing in auth so the middleware stays independent of store.
+	// SHA-256 is also the repository's established token-hash convention.
+	h := sha256.Sum256([]byte(token))
+	return hex.EncodeToString(h[:])
+}
+
+func validAPIKey(claims *APIKeyClaims) bool {
+	if claims == nil || claims.KeyID == "" || claims.UserID == "" || !roleSatisfies(claims.Role, "viewer") || claims.RevokedAt != "" {
+		return false
+	}
+	if claims.ExpiresAt == "" {
+		return true
+	}
+	expiresAt, err := time.Parse(time.RFC3339, claims.ExpiresAt)
+	return err == nil && time.Now().UTC().Before(expiresAt)
 }
 
 // RequireRole returns middleware that checks the user's role meets a minimum level.
