@@ -12,9 +12,14 @@ package backup
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"log/slog"
+	"os"
+	"path/filepath"
 	"time"
+
+	"github.com/google/uuid"
 
 	"github.com/WiseLabz/wiselabz/internal/connector"
 	"github.com/WiseLabz/wiselabz/internal/store"
@@ -343,4 +348,56 @@ func importBundle(ctx context.Context, s *store.Store, b *Bundle) (Result, error
 	}
 
 	return res, nil
+}
+
+// Run describes one backup that was created (stored in the database for
+// scheduling history and retrieval).
+type Run struct {
+	ID          string `json:"id"`
+	TriggeredBy string `json:"triggeredBy"` // "schedule" or "manual"
+	FilePath    string `json:"filePath"`
+	SizeBytes   int64  `json:"sizeBytes"`
+	CreatedAt   string `json:"createdAt"`
+}
+
+// ExportToFile calls Export, marshals the bundle to JSON, writes it to
+// {dir}/wiselabz-backup-{RFC3339 timestamp}.json, and returns metadata about
+// the created file. The directory is created if it does not exist (0o755).
+func ExportToFile(ctx context.Context, s *store.Store, dir string) (Run, error) {
+	var run Run
+	run.ID = uuid.New().String()
+	run.TriggeredBy = "schedule" // default; caller may override
+
+	// Export the bundle
+	bundle, err := Export(ctx, s)
+	if err != nil {
+		return run, fmt.Errorf("export bundle: %w", err)
+	}
+
+	// Create directory if it doesn't exist
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return run, fmt.Errorf("create backup directory: %w", err)
+	}
+
+	// Marshal to JSON
+	data, err := json.MarshalIndent(bundle, "", "  ")
+	if err != nil {
+		return run, fmt.Errorf("marshal bundle: %w", err)
+	}
+
+	// Write to file with RFC3339 timestamp (using format safe for filenames)
+	timestamp := time.Now().UTC().Format("20060102-150405")
+	filename := fmt.Sprintf("wiselabz-backup-%s.json", timestamp)
+	path := filepath.Join(dir, filename)
+
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		return run, fmt.Errorf("write backup file: %w", err)
+	}
+
+	// Populate run metadata
+	run.FilePath = path
+	run.SizeBytes = int64(len(data))
+	run.CreatedAt = time.Now().UTC().Format(time.RFC3339)
+
+	return run, nil
 }

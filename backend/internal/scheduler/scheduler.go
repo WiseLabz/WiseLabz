@@ -69,6 +69,13 @@ func (r *Runner) RemoveJob(id cron.EntryID) {
 	r.logger.Debug("job removed", "entry_id", id)
 }
 
+// EntryCount returns the number of currently registered jobs. Exported
+// mainly for tests that need to assert a re-registration replaced a job
+// instead of stacking a duplicate alongside it.
+func (r *Runner) EntryCount() int {
+	return len(r.c.Entries())
+}
+
 // jobContext returns the context most recently passed to Start, so job
 // bodies can observe cancellation from the server shutdown context.
 func (r *Runner) jobContext() context.Context {

@@ -2,6 +2,7 @@
 package api
 
 import (
+	"context"
 	"io/fs"
 	"log/slog"
 	"net/http"
@@ -29,6 +30,7 @@ import (
 	"github.com/WiseLabz/wiselabz/internal/config"
 	"github.com/WiseLabz/wiselabz/internal/doc"
 	"github.com/WiseLabz/wiselabz/internal/httputil"
+	"github.com/WiseLabz/wiselabz/internal/scheduler"
 	"github.com/WiseLabz/wiselabz/internal/store"
 	"github.com/WiseLabz/wiselabz/internal/sync"
 	"github.com/WiseLabz/wiselabz/internal/ws"
@@ -46,6 +48,8 @@ type Config struct {
 	DocEngine  *doc.Engine
 	WSHub      *ws.Hub
 	AIRegistry *ai.Registry
+	Scheduler  *scheduler.Runner // for backup job scheduling
+	BackupDir  string            // directory where backups are written
 	// SPAFiles serves the embedded frontend build. Only used when Config.Server.Embed is true.
 	SPAFiles fs.FS
 }
@@ -61,7 +65,11 @@ func NewRouter(cfg Config) chi.Router {
 	r.Use(middleware.CORS(cfg.Config.Server.Origin))
 
 	// --- Handlers ---
-	sysH := syshandler.NewHandler(cfg.Store.DB(), cfg.Config, cfg.Store)
+	sysH := syshandler.NewHandler(cfg.Store.DB(), cfg.Config, cfg.Store, cfg.Scheduler, cfg.BackupDir)
+	// Register the backup cron job through the handler (not directly against
+	// cfg.Scheduler) so its entry ID is tracked and later PUT /schedule calls
+	// can remove/replace it instead of stacking duplicate jobs.
+	sysH.InitBackupJob(context.Background())
 	authH := authhandler.NewHandler(cfg.Store, cfg.JWT, cfg.Config)
 	settingH := settinghandler.NewHandler(cfg.Store, cfg.Config, cfg.AIRegistry)
 	connH := connhandler.NewHandler(cfg.Store, cfg.SyncEngine)
@@ -297,6 +305,10 @@ func NewRouter(cfg Config) chi.Router {
 			r.Route("/api/system/backup", func(r chi.Router) {
 				r.Get("/export", sysH.ExportBackup)
 				r.Post("/import", sysH.ImportBackup)
+				r.Get("/schedule", sysH.GetBackupSchedule)
+				r.Put("/schedule", sysH.UpdateBackupSchedule)
+				r.Get("/runs", sysH.ListBackupRuns)
+				r.Post("/run", sysH.CreateBackupRun)
 			})
 
 			r.Get("/api/system/diagnostics", sysH.Diagnostics)

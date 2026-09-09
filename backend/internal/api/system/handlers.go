@@ -4,22 +4,36 @@ package system
 import (
 	"net/http"
 	"runtime/debug"
+	"sync"
+
+	"github.com/robfig/cron/v3"
 
 	"github.com/WiseLabz/wiselabz/internal/config"
 	"github.com/WiseLabz/wiselabz/internal/httputil"
+	"github.com/WiseLabz/wiselabz/internal/scheduler"
 	"github.com/WiseLabz/wiselabz/internal/store"
 )
 
 // Handler holds dependencies for system endpoints.
 type Handler struct {
-	DB     store.DBTX
-	Config *config.Config
-	Store  *store.Store
+	DB            store.DBTX
+	Config        *config.Config
+	Store         *store.Store
+	Scheduler     *scheduler.Runner // for re-registering backup jobs
+	BackupDir     string            // directory where backups are written
+	BackupJobIDMu sync.Mutex        // protects BackupJobID
+	BackupJobID   cron.EntryID      // current backup job entry ID (0 if not registered)
 }
 
 // NewHandler creates a new system handler.
-func NewHandler(db store.DBTX, cfg *config.Config, s *store.Store) *Handler {
-	return &Handler{DB: db, Config: cfg, Store: s}
+func NewHandler(db store.DBTX, cfg *config.Config, s *store.Store, scheduler *scheduler.Runner, backupDir string) *Handler {
+	return &Handler{
+		DB:        db,
+		Config:    cfg,
+		Store:     s,
+		Scheduler: scheduler,
+		BackupDir: backupDir,
+	}
 }
 
 // Health responds with the server health status.
