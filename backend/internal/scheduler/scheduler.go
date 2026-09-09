@@ -19,11 +19,12 @@ type Runner struct {
 	ctx    context.Context
 }
 
-// New creates a new Runner with support for sub-minute scheduling (6-field cron format).
+// New creates a new Runner with support for both standard 5-field cron
+// expressions and 6-field expressions with a leading seconds field (needed
+// for sub-minute cadence), matching config.validateCronExpressions.
 func New(logger *slog.Logger) *Runner {
-	// Use 6-field parser (with seconds) for scheduling
 	parser := cron.NewParser(
-		cron.Second | cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow,
+		cron.SecondOptional | cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow,
 	)
 	return &Runner{
 		c:      cron.New(cron.WithParser(parser)),
