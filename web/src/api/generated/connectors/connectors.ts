@@ -29,6 +29,7 @@ import type {
   GetConnectorsConnectorIdSyncsParams,
   HealthCheckResult,
   NotFoundResponse,
+  PostConnectorsConnectorIdSyncBody,
   PutConnectorsConnectorIdEnabledBody,
   RemovalImpact,
   ServiceSnapshot,
@@ -1400,17 +1401,27 @@ export function usePostConnectorsConnectorIdHealth<
  */
 export const postConnectorsConnectorIdSync = (
   connectorId: string,
+  postConnectorsConnectorIdSyncBody?: BodyType<PostConnectorsConnectorIdSyncBody>,
   options?: SecondParameter<typeof customInstance>,
   signal?: AbortSignal
 ) => {
   return customInstance<SyncJobRef>(
-    { url: `/connectors/${connectorId}/sync`, method: 'POST', signal },
+    {
+      url: `/connectors/${connectorId}/sync`,
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      data: postConnectorsConnectorIdSyncBody,
+      signal,
+    },
     options
   );
 };
 
-export const getPostConnectorsConnectorIdSyncQueryKey = (connectorId: string) => {
-  return ['POST', `/connectors/${connectorId}/sync`] as const;
+export const getPostConnectorsConnectorIdSyncQueryKey = (
+  connectorId: string,
+  postConnectorsConnectorIdSyncBody?: BodyType<PostConnectorsConnectorIdSyncBody>
+) => {
+  return ['POST', `/connectors/${connectorId}/sync`, postConnectorsConnectorIdSyncBody] as const;
 };
 
 export const getPostConnectorsConnectorIdSyncQueryOptions = <
@@ -1418,6 +1429,7 @@ export const getPostConnectorsConnectorIdSyncQueryOptions = <
   TError = ErrorType<unknown>,
 >(
   connectorId: string,
+  postConnectorsConnectorIdSyncBody?: BodyType<PostConnectorsConnectorIdSyncBody>,
   options?: {
     query?: Partial<
       UseQueryOptions<Awaited<ReturnType<typeof postConnectorsConnectorIdSync>>, TError, TData>
@@ -1427,11 +1439,19 @@ export const getPostConnectorsConnectorIdSyncQueryOptions = <
 ) => {
   const { query: queryOptions, request: requestOptions } = options ?? {};
 
-  const queryKey = queryOptions?.queryKey ?? getPostConnectorsConnectorIdSyncQueryKey(connectorId);
+  const queryKey =
+    queryOptions?.queryKey ??
+    getPostConnectorsConnectorIdSyncQueryKey(connectorId, postConnectorsConnectorIdSyncBody);
 
   const queryFn: QueryFunction<Awaited<ReturnType<typeof postConnectorsConnectorIdSync>>> = ({
     signal,
-  }) => postConnectorsConnectorIdSync(connectorId, requestOptions, signal);
+  }) =>
+    postConnectorsConnectorIdSync(
+      connectorId,
+      postConnectorsConnectorIdSyncBody,
+      requestOptions,
+      signal
+    );
 
   return {
     queryKey,
@@ -1453,6 +1473,7 @@ export function usePostConnectorsConnectorIdSync<
   TError = ErrorType<unknown>,
 >(
   connectorId: string,
+  postConnectorsConnectorIdSyncBody: undefined | BodyType<PostConnectorsConnectorIdSyncBody>,
   options: {
     query: Partial<
       UseQueryOptions<Awaited<ReturnType<typeof postConnectorsConnectorIdSync>>, TError, TData>
@@ -1474,6 +1495,7 @@ export function usePostConnectorsConnectorIdSync<
   TError = ErrorType<unknown>,
 >(
   connectorId: string,
+  postConnectorsConnectorIdSyncBody?: BodyType<PostConnectorsConnectorIdSyncBody>,
   options?: {
     query?: Partial<
       UseQueryOptions<Awaited<ReturnType<typeof postConnectorsConnectorIdSync>>, TError, TData>
@@ -1495,6 +1517,7 @@ export function usePostConnectorsConnectorIdSync<
   TError = ErrorType<unknown>,
 >(
   connectorId: string,
+  postConnectorsConnectorIdSyncBody?: BodyType<PostConnectorsConnectorIdSyncBody>,
   options?: {
     query?: Partial<
       UseQueryOptions<Awaited<ReturnType<typeof postConnectorsConnectorIdSync>>, TError, TData>
@@ -1512,6 +1535,7 @@ export function usePostConnectorsConnectorIdSync<
   TError = ErrorType<unknown>,
 >(
   connectorId: string,
+  postConnectorsConnectorIdSyncBody?: BodyType<PostConnectorsConnectorIdSyncBody>,
   options?: {
     query?: Partial<
       UseQueryOptions<Awaited<ReturnType<typeof postConnectorsConnectorIdSync>>, TError, TData>
@@ -1520,7 +1544,11 @@ export function usePostConnectorsConnectorIdSync<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getPostConnectorsConnectorIdSyncQueryOptions(connectorId, options);
+  const queryOptions = getPostConnectorsConnectorIdSyncQueryOptions(
+    connectorId,
+    postConnectorsConnectorIdSyncBody,
+    options
+  );
 
   const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
     queryKey: DataTag<QueryKey, TData, TError>;

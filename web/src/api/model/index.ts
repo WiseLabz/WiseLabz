@@ -121,6 +121,7 @@ export * from './pageParameter';
 export * from './pageSizeParameter';
 export * from './passwordChange';
 export * from './postAlertsAlertIdSnoozeBody';
+export * from './postConnectorsConnectorIdSyncBody';
 export * from './postDocsGenerateBody';
 export * from './postNotificationsConfigTestBody';
 export * from './postTemplatesTemplateIdPreviewBody';

@@ -16,4 +16,6 @@ export interface ConnectorTypeSchema {
   fields: SchemaField[];
   /** True for connector types with no real implementation yet (Fetch/Validate always fail). The UI should mark the type as coming soon and hide/disable Test connection, Sync, and data-viewing actions for it. */
   stub?: boolean;
+  /** Health-check latency (ms) above which this connector type reports "degraded" instead of "online". Omitted/zero means use the server's global default. */
+  degradedLatencyThresholdMs?: number;
 }

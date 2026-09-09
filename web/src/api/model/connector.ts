@@ -37,4 +37,9 @@ export interface Connector {
   lastSyncError?: string;
   /** Consecutive sync failures since the last success; resets to 0 on success */
   retryCount?: number;
+  /**
+   * Null when credentials have no known expiry
+   * @nullable
+   */
+  credentialExpiresAt?: string | null;
 }

@@ -65,6 +65,10 @@ export const getGetConnectorsResponseMock = (): Connector[] =>
       undefined,
     ]),
     retryCount: faker.helpers.arrayElement([faker.number.int(), undefined]),
+    credentialExpiresAt: faker.helpers.arrayElement([
+      faker.helpers.arrayElement([faker.date.past().toISOString().slice(0, 19) + 'Z', null]),
+      undefined,
+    ]),
   }));
 
 export const getPostConnectorsResponseMock = (
@@ -110,6 +114,10 @@ export const getPostConnectorsResponseMock = (
     undefined,
   ]),
   retryCount: faker.helpers.arrayElement([faker.number.int(), undefined]),
+  credentialExpiresAt: faker.helpers.arrayElement([
+    faker.helpers.arrayElement([faker.date.past().toISOString().slice(0, 19) + 'Z', null]),
+    undefined,
+  ]),
   ...overrideResponse,
 });
 
@@ -135,6 +143,16 @@ export const getGetConnectorsSchemaResponseMock = (): ConnectorTypeSchema[] =>
           faker.string.alpha({ length: { min: 10, max: 20 } }),
           undefined,
         ]),
+        description: faker.helpers.arrayElement([
+          faker.string.alpha({ length: { min: 10, max: 20 } }),
+          undefined,
+        ]),
+        pattern: faker.helpers.arrayElement([
+          faker.string.alpha({ length: { min: 10, max: 20 } }),
+          undefined,
+        ]),
+        minLength: faker.helpers.arrayElement([faker.number.int(), undefined]),
+        maxLength: faker.helpers.arrayElement([faker.number.int(), undefined]),
         options: faker.helpers.arrayElement([
           Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() => ({
             value: faker.helpers.arrayElement([
@@ -151,6 +169,7 @@ export const getGetConnectorsSchemaResponseMock = (): ConnectorTypeSchema[] =>
       })
     ),
     stub: faker.datatype.boolean(),
+    degradedLatencyThresholdMs: faker.helpers.arrayElement([faker.number.int(), undefined]),
   }));
 
 export const getGetConnectorsConnectorIdResponseMock = (
@@ -196,6 +215,10 @@ export const getGetConnectorsConnectorIdResponseMock = (
     undefined,
   ]),
   retryCount: faker.helpers.arrayElement([faker.number.int(), undefined]),
+  credentialExpiresAt: faker.helpers.arrayElement([
+    faker.helpers.arrayElement([faker.date.past().toISOString().slice(0, 19) + 'Z', null]),
+    undefined,
+  ]),
   ...overrideResponse,
 });
 
@@ -242,6 +265,10 @@ export const getPutConnectorsConnectorIdResponseMock = (
     undefined,
   ]),
   retryCount: faker.helpers.arrayElement([faker.number.int(), undefined]),
+  credentialExpiresAt: faker.helpers.arrayElement([
+    faker.helpers.arrayElement([faker.date.past().toISOString().slice(0, 19) + 'Z', null]),
+    undefined,
+  ]),
   ...overrideResponse,
 });
 
@@ -381,6 +408,10 @@ export const getPutConnectorsConnectorIdEnabledResponseMock = (
     undefined,
   ]),
   retryCount: faker.helpers.arrayElement([faker.number.int(), undefined]),
+  credentialExpiresAt: faker.helpers.arrayElement([
+    faker.helpers.arrayElement([faker.date.past().toISOString().slice(0, 19) + 'Z', null]),
+    undefined,
+  ]),
   ...overrideResponse,
 });
 
