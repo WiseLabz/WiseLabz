@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -116,6 +117,179 @@ func TestRequireRoleOperator(t *testing.T) {
 	}
 }
 
+func TestRequireElevationAuditsHeaderAttempts(t *testing.T) {
+	svc := NewService("test-secret", time.Minute, time.Hour)
+	userID := "user-1"
+	action := "connector.delete"
+
+	t.Run("missing header is not audited", func(t *testing.T) {
+		recorder := &testAuditRecorder{}
+		handler := RequireElevation(svc, recorder, action)(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+			t.Fatal("handler should not be called")
+		}))
+		req := requestWithUser(userID)
+		rec := httptest.NewRecorder()
+
+		handler.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("status = %d, want 400", rec.Code)
+		}
+		if len(recorder.calls) != 0 {
+			t.Fatalf("audit calls = %v, want none", recorder.calls)
+		}
+	})
+
+	t.Run("invalid token records request and denial", func(t *testing.T) {
+		recorder := &testAuditRecorder{}
+		handler := RequireElevation(svc, recorder, action)(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+			t.Fatal("handler should not be called")
+		}))
+		req := requestWithUser(userID)
+		req.Header.Set("X-Elevation-Token", "garbage")
+		rec := httptest.NewRecorder()
+
+		handler.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusUnauthorized {
+			t.Fatalf("status = %d, want 401", rec.Code)
+		}
+		assertElevationAuditCalls(t, recorder.calls, action, "invalid")
+	})
+
+	t.Run("expired token records safe reason", func(t *testing.T) {
+		expiring := NewService("test-secret", time.Minute, time.Hour)
+		expiring.elevationTTL = -time.Second
+		tok, err := expiring.IssueElevation(userID, action)
+		if err != nil {
+			t.Fatalf("IssueElevation() error: %v", err)
+		}
+		recorder := &testAuditRecorder{}
+		handler := RequireElevation(expiring, recorder, action)(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+			t.Fatal("handler should not be called")
+		}))
+		req := requestWithUser(userID)
+		req.Header.Set("X-Elevation-Token", tok.Token)
+		rec := httptest.NewRecorder()
+
+		handler.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusUnauthorized {
+			t.Fatalf("status = %d, want 401", rec.Code)
+		}
+		assertElevationAuditCalls(t, recorder.calls, action, "expired")
+	})
+
+	t.Run("valid token records only request", func(t *testing.T) {
+		tok, err := svc.IssueElevation(userID, action)
+		if err != nil {
+			t.Fatalf("IssueElevation() error: %v", err)
+		}
+		recorder := &testAuditRecorder{}
+		handler := RequireElevation(svc, recorder, action)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusNoContent)
+		}))
+		req := requestWithUser(userID)
+		req.Header.Set("X-Elevation-Token", tok.Token)
+		rec := httptest.NewRecorder()
+
+		handler.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusNoContent {
+			t.Fatalf("status = %d, want 204", rec.Code)
+		}
+		if len(recorder.calls) != 1 {
+			t.Fatalf("audit calls = %v, want one", recorder.calls)
+		}
+		if recorder.calls[0].action != "auth.elevation_requested" || recorder.calls[0].targetID != action {
+			t.Fatalf("audit call = %+v, want requested/%s", recorder.calls[0], action)
+		}
+	})
+}
+
+func TestRequireElevationAuditRecorderErrorDoesNotAlterDecision(t *testing.T) {
+	svc := NewService("test-secret", time.Minute, time.Hour)
+	userID := "user-1"
+	action := "connector.delete"
+	tok, err := svc.IssueElevation(userID, action)
+	if err != nil {
+		t.Fatalf("IssueElevation() error: %v", err)
+	}
+
+	for _, tt := range []struct {
+		name       string
+		token      string
+		wantStatus int
+	}{
+		{name: "valid token still passes", token: tok.Token, wantStatus: http.StatusNoContent},
+		{name: "invalid token still fails", token: "garbage", wantStatus: http.StatusUnauthorized},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			recorder := &testAuditRecorder{err: errors.New("audit unavailable")}
+			handler := RequireElevation(svc, recorder, action)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(http.StatusNoContent)
+			}))
+			req := requestWithUser(userID)
+			req.Header.Set("X-Elevation-Token", tt.token)
+			rec := httptest.NewRecorder()
+
+			handler.ServeHTTP(rec, req)
+
+			if rec.Code != tt.wantStatus {
+				t.Fatalf("status = %d, want %d", rec.Code, tt.wantStatus)
+			}
+		})
+	}
+}
+
 func contextWithRole(ctx context.Context, role string) context.Context {
 	return context.WithValue(ctx, ctxRole, role)
+}
+
+type testAuditCall struct {
+	action     string
+	targetType string
+	targetID   string
+	detail     any
+}
+
+type testAuditRecorder struct {
+	err   error
+	calls []testAuditCall
+}
+
+func (r *testAuditRecorder) RecordAuditFromContext(_ context.Context, action, targetType, targetID string, detail any) error {
+	r.calls = append(r.calls, testAuditCall{
+		action:     action,
+		targetType: targetType,
+		targetID:   targetID,
+		detail:     detail,
+	})
+	return r.err
+}
+
+func requestWithUser(userID string) *http.Request {
+	req := httptest.NewRequest(http.MethodDelete, "/test", nil)
+	ctx := context.WithValue(req.Context(), ctxUserID, userID)
+	return req.WithContext(context.WithValue(ctx, ctxRole, "operator"))
+}
+
+func assertElevationAuditCalls(t *testing.T, calls []testAuditCall, action, reason string) {
+	t.Helper()
+	if len(calls) != 2 {
+		t.Fatalf("audit calls = %v, want requested and denied", calls)
+	}
+	if calls[0].action != "auth.elevation_requested" || calls[0].targetType != "action" || calls[0].targetID != action {
+		t.Fatalf("requested audit call = %+v, want requested action/%s", calls[0], action)
+	}
+	if calls[1].action != "auth.elevation_denied" || calls[1].targetType != "action" || calls[1].targetID != action {
+		t.Fatalf("denied audit call = %+v, want denied action/%s", calls[1], action)
+	}
+	detail, ok := calls[1].detail.(map[string]any)
+	if !ok {
+		t.Fatalf("denied detail = %#v, want map", calls[1].detail)
+	}
+	if detail["action"] != action || detail["reason"] != reason {
+		t.Fatalf("denied detail = %#v, want action %q reason %q", detail, action, reason)
+	}
 }

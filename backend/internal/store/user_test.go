@@ -51,6 +51,85 @@ func TestRotateSessionTokenRequiresCurrentHash(t *testing.T) {
 	}
 }
 
+func TestRevokeSessionsByAuthSource(t *testing.T) {
+	s := newDocTestStore(t)
+	ctx := context.Background()
+	u := &User{Username: "session-source-user"}
+	if err := s.CreateUser(ctx, u); err != nil {
+		t.Fatalf("CreateUser() error: %v", err)
+	}
+	for _, sess := range []Session{
+		{UserID: u.ID, TokenHash: "local"},
+		{UserID: u.ID, TokenHash: "authentik-1", AuthProviderID: "authentik"},
+		{UserID: u.ID, TokenHash: "authentik-2", AuthProviderID: "authentik"},
+		{UserID: u.ID, TokenHash: "google", AuthProviderID: "google"},
+	} {
+		if err := s.CreateSession(ctx, &sess); err != nil {
+			t.Fatalf("CreateSession(%q) error: %v", sess.TokenHash, err)
+		}
+	}
+
+	revoked, err := s.RevokeSessionsByAuthSource(ctx, "authentik")
+	if err != nil {
+		t.Fatalf("RevokeSessionsByAuthSource() error: %v", err)
+	}
+	if revoked != 2 {
+		t.Fatalf("revoked = %d, want 2", revoked)
+	}
+	for _, tokenHash := range []string{"local", "google"} {
+		active, err := s.HasSessionTokenHash(ctx, u.ID, tokenHash)
+		if err != nil || !active {
+			t.Fatalf("HasSessionTokenHash(%q) = %v, %v; want true, nil", tokenHash, active, err)
+		}
+	}
+	active, err := s.HasSessionTokenHash(ctx, u.ID, "authentik-1")
+	if err != nil || active {
+		t.Fatalf("HasSessionTokenHash(authentik-1) = %v, %v; want false, nil", active, err)
+	}
+}
+
+func TestRevokeSessionsByAuthSourceEmptyDoesNothing(t *testing.T) {
+	s := newDocTestStore(t)
+	ctx := context.Background()
+	u := &User{Username: "local-session-user"}
+	if err := s.CreateUser(ctx, u); err != nil {
+		t.Fatalf("CreateUser() error: %v", err)
+	}
+	if err := s.CreateSession(ctx, &Session{UserID: u.ID, TokenHash: "local"}); err != nil {
+		t.Fatalf("CreateSession(local) error: %v", err)
+	}
+	if err := s.CreateSession(ctx, &Session{UserID: u.ID, TokenHash: "oidc", AuthProviderID: "authentik"}); err != nil {
+		t.Fatalf("CreateSession(oidc) error: %v", err)
+	}
+
+	revoked, err := s.RevokeSessionsByAuthSource(ctx, "")
+	if err != nil {
+		t.Fatalf("RevokeSessionsByAuthSource(empty) error: %v", err)
+	}
+	if revoked != 0 {
+		t.Fatalf("revoked = %d, want 0", revoked)
+	}
+	active, err := s.HasSessionTokenHash(ctx, u.ID, "local")
+	if err != nil || !active {
+		t.Fatalf("HasSessionTokenHash(local) = %v, %v; want true, nil", active, err)
+	}
+	active, err = s.HasSessionTokenHash(ctx, u.ID, "oidc")
+	if err != nil || !active {
+		t.Fatalf("HasSessionTokenHash(oidc) = %v, %v; want true, nil", active, err)
+	}
+}
+
+func TestRevokeSessionsByAuthSourceReturnsError(t *testing.T) {
+	s := newDocTestStore(t)
+	if err := s.Close(); err != nil {
+		t.Fatalf("Close() error: %v", err)
+	}
+
+	if _, err := s.RevokeSessionsByAuthSource(context.Background(), "authentik"); err == nil {
+		t.Fatal("RevokeSessionsByAuthSource() error = nil, want error")
+	}
+}
+
 func TestIsUniqueViolation(t *testing.T) {
 	cases := []struct {
 		name string

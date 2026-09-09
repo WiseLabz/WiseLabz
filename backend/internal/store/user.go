@@ -30,13 +30,14 @@ type User struct {
 
 // Session represents a row in the sessions table.
 type Session struct {
-	ID         string `json:"id"`
-	UserID     string `json:"userId"`
-	TokenHash  string `json:"-"`
-	UserAgent  string `json:"userAgent"`
-	IP         string `json:"ip"`
-	CreatedAt  string `json:"createdAt"`
-	LastSeenAt string `json:"lastSeenAt"`
+	ID             string `json:"id"`
+	UserID         string `json:"userId"`
+	TokenHash      string `json:"-"`
+	AuthProviderID string `json:"authProviderId"`
+	UserAgent      string `json:"userAgent"`
+	IP             string `json:"ip"`
+	CreatedAt      string `json:"createdAt"`
+	LastSeenAt     string `json:"lastSeenAt"`
 }
 
 // --- User operations ---
@@ -260,9 +261,9 @@ func (s *Store) CreateSession(ctx context.Context, session *Session) error {
 	}
 
 	_, err := s.db.ExecContext(ctx, `
-		INSERT INTO sessions (id, user_id, token_hash, user_agent, ip, created_at, last_seen_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?)
-	`, session.ID, session.UserID, session.TokenHash, session.UserAgent, session.IP,
+		INSERT INTO sessions (id, user_id, token_hash, auth_provider_id, user_agent, ip, created_at, last_seen_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+	`, session.ID, session.UserID, session.TokenHash, session.AuthProviderID, session.UserAgent, session.IP,
 		session.CreatedAt, session.LastSeenAt)
 	if err != nil {
 		return fmt.Errorf("create session: %w", err)
@@ -274,9 +275,9 @@ func (s *Store) CreateSession(ctx context.Context, session *Session) error {
 func (s *Store) GetSession(ctx context.Context, id string) (*Session, error) {
 	sess := &Session{}
 	err := s.db.QueryRowContext(ctx, `
-		SELECT id, user_id, token_hash, user_agent, ip, created_at, last_seen_at
+		SELECT id, user_id, token_hash, auth_provider_id, user_agent, ip, created_at, last_seen_at
 		FROM sessions WHERE id = ?
-	`, id).Scan(&sess.ID, &sess.UserID, &sess.TokenHash, &sess.UserAgent, &sess.IP,
+	`, id).Scan(&sess.ID, &sess.UserID, &sess.TokenHash, &sess.AuthProviderID, &sess.UserAgent, &sess.IP,
 		&sess.CreatedAt, &sess.LastSeenAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
@@ -307,6 +308,18 @@ func (s *Store) DeleteSession(ctx context.Context, id string) error {
 func (s *Store) DeleteUserSessions(ctx context.Context, userID string) error {
 	_, err := s.db.ExecContext(ctx, `DELETE FROM sessions WHERE user_id = ?`, userID)
 	return err
+}
+
+// RevokeSessionsByAuthSource deletes all sessions created by an OIDC provider.
+func (s *Store) RevokeSessionsByAuthSource(ctx context.Context, providerID string) (int64, error) {
+	if providerID == "" {
+		return 0, nil
+	}
+	result, err := s.db.ExecContext(ctx, `DELETE FROM sessions WHERE auth_provider_id = ?`, providerID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 // RotateSessionToken atomically replaces the current refresh-token hash.
@@ -341,7 +354,7 @@ func (s *Store) HasSessionTokenHash(ctx context.Context, userID, tokenHash strin
 // ListUserSessions returns all active sessions for a user.
 func (s *Store) ListUserSessions(ctx context.Context, userID string) ([]Session, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, user_id, token_hash, user_agent, ip, created_at, last_seen_at
+		SELECT id, user_id, token_hash, auth_provider_id, user_agent, ip, created_at, last_seen_at
 		FROM sessions WHERE user_id = ? ORDER BY last_seen_at DESC
 	`, userID)
 	if err != nil {
@@ -352,7 +365,7 @@ func (s *Store) ListUserSessions(ctx context.Context, userID string) ([]Session,
 	var sessions []Session
 	for rows.Next() {
 		var s Session
-		if err := rows.Scan(&s.ID, &s.UserID, &s.TokenHash, &s.UserAgent, &s.IP,
+		if err := rows.Scan(&s.ID, &s.UserID, &s.TokenHash, &s.AuthProviderID, &s.UserAgent, &s.IP,
 			&s.CreatedAt, &s.LastSeenAt); err != nil {
 			return nil, fmt.Errorf("scan session: %w", err)
 		}

@@ -1,6 +1,7 @@
 package api_test
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"testing"
@@ -101,6 +102,65 @@ func TestAuditListFiltersByAction(t *testing.T) {
 		if r.Action != "connector.create" {
 			t.Errorf("item action = %q, want connector.create", r.Action)
 		}
+	}
+}
+
+func TestElevationAttemptAuditThroughHTTPRoutes(t *testing.T) {
+	app := newTestApp(t)
+	_, opToken := app.user(t, "operator")
+
+	conn := &store.ConnectorRecord{Name: "svc", Category: "virtualization", Type: "proxmox", URL: "https://example.com"}
+	if err := app.Store.CreateConnector(context.Background(), conn); err != nil {
+		t.Fatalf("CreateConnector() error: %v", err)
+	}
+
+	missing := app.req(t, http.MethodDelete, "/api/connectors/"+conn.ID, nil, opToken)
+	if missing.Code != http.StatusBadRequest {
+		t.Fatalf("missing status = %d, want 400; body = %s", missing.Code, missing.Body)
+	}
+
+	req := app.newRequest(t, http.MethodDelete, "/api/connectors/"+conn.ID, nil, opToken)
+	req.Header.Set("X-Elevation-Token", "garbage")
+	invalid := app.serve(req)
+	if invalid.Code != http.StatusUnauthorized {
+		t.Fatalf("invalid status = %d, want 401; body = %s", invalid.Code, invalid.Body)
+	}
+
+	listRec := app.req(t, http.MethodGet, "/api/system/audit", nil, opToken)
+	if listRec.Code != http.StatusOK {
+		t.Fatalf("audit list status = %d, want 200; body = %s", listRec.Code, listRec.Body)
+	}
+	var page struct {
+		Items []store.AuditRecord `json:"items"`
+	}
+	if err := json.Unmarshal(listRec.Body.Bytes(), &page); err != nil {
+		t.Fatalf("decode list body: %v", err)
+	}
+
+	var requested, denied *store.AuditRecord
+	for i := range page.Items {
+		switch page.Items[i].Action {
+		case "auth.elevation_requested":
+			requested = &page.Items[i]
+		case "auth.elevation_denied":
+			denied = &page.Items[i]
+		}
+	}
+	if requested == nil {
+		t.Fatal("no auth.elevation_requested audit record")
+	}
+	if denied == nil {
+		t.Fatal("no auth.elevation_denied audit record")
+	}
+	if requested.TargetType != "action" || requested.TargetID != "connector.delete" {
+		t.Fatalf("requested target = %s/%s, want action/connector.delete", requested.TargetType, requested.TargetID)
+	}
+	var detail map[string]any
+	if err := json.Unmarshal([]byte(denied.Detail), &detail); err != nil {
+		t.Fatalf("unmarshal denied detail: %v", err)
+	}
+	if detail["action"] != "connector.delete" || detail["reason"] != "invalid" {
+		t.Fatalf("denied detail = %#v, want action connector.delete reason invalid", detail)
 	}
 }
 

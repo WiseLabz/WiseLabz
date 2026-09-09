@@ -135,6 +135,12 @@ type PermissionChecker interface {
 	UserHasPermission(ctx context.Context, userID, permission string) (bool, error)
 }
 
+// AuditRecorder records security-sensitive auth events without coupling this
+// package to store.
+type AuditRecorder interface {
+	RecordAuditFromContext(ctx context.Context, action, targetType, targetID string, detail any) error
+}
+
 // RequirePermission returns middleware requiring operator role AND a named
 // per-user boolean permission flag (e.g. "can_manage_dashboard_defaults").
 func RequirePermission(checker PermissionChecker, permission string) func(http.Handler) http.Handler {
@@ -156,11 +162,11 @@ func RequirePermission(checker PermissionChecker, permission string) func(http.H
 
 // RequireElevation checks for a valid elevation token scoped to the given action.
 // Destructive endpoints chain this after RequireRole("operator") for step-up auth.
-func RequireElevation(jwtSvc *Service, action string) func(http.Handler) http.Handler {
+func RequireElevation(jwtSvc *Service, recorder AuditRecorder, action string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			token := r.Header.Get("X-Elevation-Token")
-			if token == "" {
+			values, ok := r.Header["X-Elevation-Token"]
+			if !ok {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusBadRequest)
 				_ = json.NewEncoder(w).Encode(map[string]string{
@@ -169,8 +175,17 @@ func RequireElevation(jwtSvc *Service, action string) func(http.Handler) http.Ha
 				})
 				return
 			}
+			token := ""
+			if len(values) > 0 {
+				token = values[0]
+			}
+			recordElevationAudit(r.Context(), recorder, "auth.elevation_requested", action, nil)
 			_, err := jwtSvc.ValidateElevation(token, action, UserIDFromContext(r.Context()))
 			if err != nil {
+				recordElevationAudit(r.Context(), recorder, "auth.elevation_denied", action, map[string]any{
+					"action": action,
+					"reason": elevationFailureReason(err),
+				})
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusUnauthorized)
 				_ = json.NewEncoder(w).Encode(map[string]string{
@@ -181,6 +196,31 @@ func RequireElevation(jwtSvc *Service, action string) func(http.Handler) http.Ha
 			}
 			next.ServeHTTP(w, r)
 		})
+	}
+}
+
+func recordElevationAudit(ctx context.Context, recorder AuditRecorder, event, action string, detail any) {
+	if recorder == nil {
+		return
+	}
+	if err := recorder.RecordAuditFromContext(ctx, event, "action", action, detail); err != nil {
+		slog.Error("failed to record audit", "action", event, "error", err)
+	}
+}
+
+func elevationFailureReason(err error) string {
+	msg := err.Error()
+	switch {
+	case strings.Contains(msg, "expired"):
+		return "expired"
+	case strings.Contains(msg, "different user"):
+		return "wrong_user"
+	case strings.Contains(msg, "not an elevation token"):
+		return "wrong_token_type"
+	case strings.Contains(msg, "is for action"):
+		return "wrong_action"
+	default:
+		return "invalid"
 	}
 }
 

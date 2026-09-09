@@ -51,10 +51,10 @@ func (s *Store) CreateAuditRecord(ctx context.Context, a *AuditRecord) error {
 // action succeeds: it marshals detail to JSON (nil -> "{}") and pulls the
 // actor from the request context (set by auth.AuthMiddleware).
 //
-// Called only on success — a failed attempt isn't accountability-worthy the
-// way a completed one is. Call sites treat a returned error as non-fatal
-// (slog.Error and continue) since the audited action has already gone
-// through; see docs/AUDIT.md.
+// Called by handlers for audited actions; most call sites record only after
+// success, with security-relevant elevation denials as the documented
+// exception. Call sites treat a returned error as non-fatal (slog.Error and
+// continue); see docs/AUDIT.md.
 func (s *Store) RecordAuditFromContext(ctx context.Context, action, targetType, targetID string, detail any) error {
 	detailJSON := ""
 	if detail != nil {

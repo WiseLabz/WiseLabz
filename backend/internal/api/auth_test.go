@@ -91,6 +91,31 @@ func TestLoginSuccess(t *testing.T) {
 	}
 }
 
+func TestLoginCreatesLocalSessionWithEmptyAuthProvider(t *testing.T) {
+	app := newTestApp(t)
+	user := seedLocalUser(t, app, "alice", "correct-password", "viewer")
+
+	rec := app.req(t, http.MethodPost, "/api/auth/login", map[string]any{
+		"username":   "alice",
+		"password":   "correct-password",
+		"providerId": "authentik",
+	}, "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body = %s", rec.Code, rec.Body)
+	}
+
+	sessions, err := app.Store.ListUserSessions(context.Background(), user.ID)
+	if err != nil {
+		t.Fatalf("ListUserSessions() error: %v", err)
+	}
+	if len(sessions) != 1 {
+		t.Fatalf("len(sessions) = %d, want 1", len(sessions))
+	}
+	if sessions[0].AuthProviderID != "" {
+		t.Fatalf("AuthProviderID = %q, want empty local auth source", sessions[0].AuthProviderID)
+	}
+}
+
 func TestRefreshRotatesOnlyActiveSession(t *testing.T) {
 	app := newTestApp(t)
 	seedLocalUser(t, app, "alice", "correct-password", "viewer")

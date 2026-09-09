@@ -32,6 +32,7 @@ type testApp struct {
 	Router    http.Handler
 	Store     *store.Store
 	JWT       *auth.Service
+	Config    *config.Config
 	Scheduler *scheduler.Runner
 	BackupDir string
 }
@@ -94,7 +95,7 @@ func newTestAppWithBackupDir(t *testing.T, backupDir string) *testApp {
 		BackupDir:  backupDir,
 	})
 
-	return &testApp{Router: router, Store: s, JWT: jwtSvc, Scheduler: jobRunner, BackupDir: backupDir}
+	return &testApp{Router: router, Store: s, JWT: jwtSvc, Config: cfg, Scheduler: jobRunner, BackupDir: backupDir}
 }
 
 // user seeds a local user with the given role and returns its ID and a valid access token.

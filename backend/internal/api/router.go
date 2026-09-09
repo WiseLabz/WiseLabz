@@ -159,7 +159,7 @@ func NewRouter(cfg Config) chi.Router {
 				r.Post("/{id}/sync", connH.Sync)
 
 				r.Group(func(r chi.Router) {
-					r.Use(auth.RequireElevation(cfg.JWT, "connector.delete"))
+					r.Use(auth.RequireElevation(cfg.JWT, cfg.Store, "connector.delete"))
 					r.Delete("/{id}", connH.Delete)
 				})
 			})
@@ -200,7 +200,7 @@ func NewRouter(cfg Config) chi.Router {
 				r.Post("/{id}/versions/{rev}/restore", tmplH.Restore)
 
 				r.Group(func(r chi.Router) {
-					r.Use(auth.RequireElevation(cfg.JWT, "template.delete"))
+					r.Use(auth.RequireElevation(cfg.JWT, cfg.Store, "template.delete"))
 					r.Delete("/{id}", tmplH.Delete)
 				})
 			})
@@ -326,12 +326,12 @@ func NewRouter(cfg Config) chi.Router {
 				r.Patch("/{id}", authH.UpdateUser)
 
 				r.Group(func(r chi.Router) {
-					r.Use(auth.RequireElevation(cfg.JWT, "user.delete"))
+					r.Use(auth.RequireElevation(cfg.JWT, cfg.Store, "user.delete"))
 					r.Delete("/{id}", authH.DeleteUser)
 				})
 
 				r.Group(func(r chi.Router) {
-					r.Use(auth.RequireElevation(cfg.JWT, "user.resetPassword"))
+					r.Use(auth.RequireElevation(cfg.JWT, cfg.Store, "user.resetPassword"))
 					r.Post("/{id}/reset-password", authH.ResetPassword)
 				})
 			})
