@@ -21,7 +21,20 @@ type ChangeRecord struct {
 	Status         string `json:"status"`
 	DetectedAt     string `json:"detectedAt"`
 	AffectedDocIDs string `json:"affectedDocIds"`
+	// RelatedServiceIDs is a JSON array of connector IDs this change's
+	// service depends on (from ServiceSnapshot.Dependencies), letting a
+	// dependent-service drift (e.g. a Docker config change affecting a
+	// Proxmox VM) be recognized as one logical change instead of N
+	// unrelated ones. "" defaults to "[]".
+	RelatedServiceIDs string `json:"relatedServiceIds"`
+	// PatternID is a stable identifier derived from (service, change type,
+	// summary) shared by recurrences of the same drift, so the UI can
+	// eventually surface "seen this before". "" means not computed.
+	PatternID string `json:"patternId"`
 }
+
+// changeColumns is the shared column list for every change SELECT.
+const changeColumns = `id, service_id, change_type, severity, summary, diff, status, detected_at, affected_doc_ids, related_service_ids, pattern_id`
 
 // AlertRecord represents a row in the alerts table.
 type AlertRecord struct {
@@ -55,11 +68,14 @@ func (s *Store) CreateChange(ctx context.Context, c *ChangeRecord) error {
 	if c.AffectedDocIDs == "" {
 		c.AffectedDocIDs = "[]"
 	}
+	if c.RelatedServiceIDs == "" {
+		c.RelatedServiceIDs = "[]"
+	}
 
 	_, err := s.db.ExecContext(ctx, `
-		INSERT INTO changes (id, service_id, change_type, severity, summary, diff, status, detected_at, affected_doc_ids)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, c.ID, c.ServiceID, c.ChangeType, c.Severity, c.Summary, c.Diff, c.Status, c.DetectedAt, c.AffectedDocIDs)
+		INSERT INTO changes (id, service_id, change_type, severity, summary, diff, status, detected_at, affected_doc_ids, related_service_ids, pattern_id)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, c.ID, c.ServiceID, c.ChangeType, c.Severity, c.Summary, c.Diff, c.Status, c.DetectedAt, c.AffectedDocIDs, c.RelatedServiceIDs, c.PatternID)
 	if err != nil {
 		return fmt.Errorf("create change: %w", err)
 	}
@@ -70,10 +86,10 @@ func (s *Store) CreateChange(ctx context.Context, c *ChangeRecord) error {
 func (s *Store) GetChange(ctx context.Context, id string) (*ChangeRecord, error) {
 	c := &ChangeRecord{}
 	err := s.db.QueryRowContext(ctx, `
-		SELECT id, service_id, change_type, severity, summary, diff, status, detected_at, affected_doc_ids
+		SELECT `+changeColumns+`
 		FROM changes WHERE id = ?
 	`, id).Scan(&c.ID, &c.ServiceID, &c.ChangeType, &c.Severity, &c.Summary,
-		&c.Diff, &c.Status, &c.DetectedAt, &c.AffectedDocIDs)
+		&c.Diff, &c.Status, &c.DetectedAt, &c.AffectedDocIDs, &c.RelatedServiceIDs, &c.PatternID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -81,6 +97,26 @@ func (s *Store) GetChange(ctx context.Context, id string) (*ChangeRecord, error)
 		return nil, fmt.Errorf("get change: %w", err)
 	}
 	return c, nil
+}
+
+// CountRecentChangesByPattern returns how many changes with the given
+// patternID (for a service) were detected at or after `since`, excluding
+// excludeID (the change just created for this drift). Used to flag a repeat
+// drift — the same pattern recurring within a short window, e.g. a
+// misconfiguration loop.
+func (s *Store) CountRecentChangesByPattern(ctx context.Context, serviceID, patternID, since, excludeID string) (int, error) {
+	if patternID == "" {
+		return 0, nil
+	}
+	var count int
+	err := s.db.QueryRowContext(ctx, `
+		SELECT COUNT(*) FROM changes
+		WHERE service_id = ? AND pattern_id = ? AND detected_at >= ? AND id != ?
+	`, serviceID, patternID, since, excludeID).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("count recent changes by pattern: %w", err)
+	}
+	return count, nil
 }
 
 // UpdateChangeStatus updates the status of a change record.
@@ -118,7 +154,7 @@ func (s *Store) ListChanges(ctx context.Context, serviceID, severity string, off
 		return nil, 0, fmt.Errorf("count changes: %w", err)
 	}
 
-	query := `SELECT id, service_id, change_type, severity, summary, diff, status, detected_at, affected_doc_ids
+	query := `SELECT ` + changeColumns + `
 		FROM changes ` + where + ` ORDER BY detected_at DESC LIMIT ? OFFSET ?`
 	args = append(args, limit, offset)
 
@@ -131,7 +167,7 @@ func (s *Store) ListChanges(ctx context.Context, serviceID, severity string, off
 	var changes []ChangeRecord
 	for rows.Next() {
 		var c ChangeRecord
-		if err := rows.Scan(&c.ID, &c.ServiceID, &c.ChangeType, &c.Severity, &c.Summary, &c.Diff, &c.Status, &c.DetectedAt, &c.AffectedDocIDs); err != nil {
+		if err := rows.Scan(&c.ID, &c.ServiceID, &c.ChangeType, &c.Severity, &c.Summary, &c.Diff, &c.Status, &c.DetectedAt, &c.AffectedDocIDs, &c.RelatedServiceIDs, &c.PatternID); err != nil {
 			return nil, 0, fmt.Errorf("scan: %w", err)
 		}
 		changes = append(changes, c)
@@ -324,7 +360,7 @@ func (s *Store) CountAlertsPending(ctx context.Context) (int, error) {
 // GetLatestChanges returns the most recent N changes.
 func (s *Store) GetLatestChanges(ctx context.Context, n int) ([]ChangeRecord, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, service_id, change_type, severity, summary, diff, status, detected_at, affected_doc_ids
+		SELECT `+changeColumns+`
 		FROM changes ORDER BY detected_at DESC LIMIT ?
 	`, n)
 	if err != nil {
@@ -335,7 +371,7 @@ func (s *Store) GetLatestChanges(ctx context.Context, n int) ([]ChangeRecord, er
 	var changes []ChangeRecord
 	for rows.Next() {
 		var c ChangeRecord
-		if err := rows.Scan(&c.ID, &c.ServiceID, &c.ChangeType, &c.Severity, &c.Summary, &c.Diff, &c.Status, &c.DetectedAt, &c.AffectedDocIDs); err != nil {
+		if err := rows.Scan(&c.ID, &c.ServiceID, &c.ChangeType, &c.Severity, &c.Summary, &c.Diff, &c.Status, &c.DetectedAt, &c.AffectedDocIDs, &c.RelatedServiceIDs, &c.PatternID); err != nil {
 			return nil, fmt.Errorf("scan: %w", err)
 		}
 		changes = append(changes, c)

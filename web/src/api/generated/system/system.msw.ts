@@ -111,6 +111,10 @@ export const getGetSystemBackupExportResponseMock = (
         undefined,
       ]),
       retryCount: faker.helpers.arrayElement([faker.number.int(), undefined]),
+      credentialExpiresAt: faker.helpers.arrayElement([
+        faker.helpers.arrayElement([faker.date.past().toISOString().slice(0, 19) + 'Z', null]),
+        undefined,
+      ]),
     })
   ),
   docs: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() => ({

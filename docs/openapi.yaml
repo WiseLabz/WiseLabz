@@ -483,6 +483,20 @@ paths:
       tags: [connectors]
       summary: Trigger a sync for one connector (progress streams over /ws)
       parameters: [{ $ref: '#/components/parameters/ConnectorId' }]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                fields:
+                  type: array
+                  items: { type: string }
+                  description: >-
+                    Optional selective-fetch hint (e.g. ["vms","storage"]) for a
+                    partial sync. A connector type that doesn't support selective
+                    fetch ignores it and fetches everything.
       responses:
         '202':
           description: Accepted
@@ -1810,6 +1824,8 @@ components:
         lastSyncError: { type: string }
         retryCount:
           { type: integer, description: Consecutive sync failures since the last success; resets to 0 on success }
+        credentialExpiresAt:
+          { type: string, format: date-time, nullable: true, description: 'Null when credentials have no known expiry' }
     ConnectorCreate:
       type: object
       required: [name, category, type, url, config]
@@ -1853,6 +1869,12 @@ components:
             True for connector types with no real implementation yet (Fetch/Validate always
             fail). The UI should mark the type as coming soon and hide/disable
             Test connection, Sync, and data-viewing actions for it.
+        degradedLatencyThresholdMs:
+          type: integer
+          description: >-
+            Health-check latency (ms) above which this connector type reports
+            "degraded" instead of "online". Omitted/zero means use the server's
+            global default.
     SchemaField:
       type: object
       required: [name, label, kind, required]
@@ -1863,6 +1885,10 @@ components:
         required: { type: boolean }
         secret: { type: boolean, description: Rendered as password input; write-only }
         placeholder: { type: string }
+        description: { type: string }
+        pattern: { type: string, description: Regexp a text/password value must match }
+        minLength: { type: integer }
+        maxLength: { type: integer }
         options:
           type: array
           items:

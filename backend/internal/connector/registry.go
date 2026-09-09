@@ -2,7 +2,9 @@ package connector
 
 import (
 	"fmt"
+	"regexp"
 	"sync"
+	"time"
 )
 
 // Factory creates a Connector from its config.
@@ -18,6 +20,20 @@ type TypeSchema struct {
 	// (Fetch/Validate always fail). The UI hides/disables Test, Sync, and
 	// data-viewing actions for these.
 	Stub bool `json:"stub,omitempty"`
+	// DegradedLatencyThresholdMs overrides the global
+	// DegradedLatencyThreshold for health checks on this connector type
+	// (e.g. a WiFi-backed host needs a looser SLA than an on-LAN one). Zero
+	// means "use the global default".
+	DegradedLatencyThresholdMs int `json:"degradedLatencyThresholdMs,omitempty"`
+}
+
+// DegradedLatencyThreshold returns this type's configured health-check
+// threshold, falling back to the package-wide default when unset.
+func (s TypeSchema) DegradedLatencyThreshold() time.Duration {
+	if s.DegradedLatencyThresholdMs <= 0 {
+		return DegradedLatencyThreshold
+	}
+	return time.Duration(s.DegradedLatencyThresholdMs) * time.Millisecond
 }
 
 // SchemaField describes a single configuration field.
@@ -28,6 +44,68 @@ type SchemaField struct {
 	Required    bool   `json:"required"`
 	Default     string `json:"default,omitempty"`
 	Placeholder string `json:"placeholder,omitempty"`
+	Description string `json:"description,omitempty"`
+	// Pattern, MinLength, MaxLength apply to "text"/"password" fields.
+	Pattern   string `json:"pattern,omitempty"`
+	MinLength int    `json:"minLength,omitempty"`
+	MaxLength int    `json:"maxLength,omitempty"`
+	// Options lists the allowed values for a "select" field.
+	Options []string `json:"options,omitempty"`
+}
+
+// ConfigValidationError reports a config value that fails its SchemaField's
+// validation rules.
+type ConfigValidationError struct {
+	Field   string
+	Message string
+}
+
+func (e *ConfigValidationError) Error() string {
+	return fmt.Sprintf("field %q: %s", e.Field, e.Message)
+}
+
+// ValidateConfig checks config against a connector type's schema, catching
+// malformed values (a non-URL in a URL field, an out-of-range string, an
+// invalid enum choice) before the connector's own Validate/Fetch ever runs.
+// It only validates fields that are present — connectors can still be
+// created/updated with required fields filled in later; presence is
+// enforced at Fetch/Validate time by the connector itself.
+func ValidateConfig(schema TypeSchema, config map[string]any) error {
+	for _, f := range schema.Fields {
+		raw, present := config[f.Key]
+		str, isStr := raw.(string)
+		if !present || !isStr || str == "" {
+			continue
+		}
+		if f.MinLength > 0 && len(str) < f.MinLength {
+			return &ConfigValidationError{Field: f.Key, Message: fmt.Sprintf("must be at least %d characters", f.MinLength)}
+		}
+		if f.MaxLength > 0 && len(str) > f.MaxLength {
+			return &ConfigValidationError{Field: f.Key, Message: fmt.Sprintf("must be at most %d characters", f.MaxLength)}
+		}
+		if f.Pattern != "" {
+			re, err := regexp.Compile(f.Pattern)
+			if err != nil {
+				return fmt.Errorf("field %q: invalid schema pattern: %w", f.Key, err)
+			}
+			if !re.MatchString(str) {
+				return &ConfigValidationError{Field: f.Key, Message: "does not match the required format"}
+			}
+		}
+		if f.Type == "select" && len(f.Options) > 0 {
+			ok := false
+			for _, opt := range f.Options {
+				if opt == str {
+					ok = true
+					break
+				}
+			}
+			if !ok {
+				return &ConfigValidationError{Field: f.Key, Message: fmt.Sprintf("must be one of %v", f.Options)}
+			}
+		}
+	}
+	return nil
 }
 
 var (

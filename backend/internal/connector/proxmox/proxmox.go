@@ -76,8 +76,16 @@ func (p *Connector) Validate(ctx context.Context, _ map[string]any) error {
 }
 
 // Fetch retrieves the current state of nodes, VMs, containers, and storage.
-func (p *Connector) Fetch(ctx context.Context, _ map[string]any) (*connector.ServiceSnapshot, error) {
+// config may carry a "fields" selective-fetch hint (see
+// connector.RequestedFields) naming a subset of {"vms","containers","storage"}
+// to skip the other upstream calls — e.g. a dashboard quick-check that only
+// needs VM state doesn't need to also hit /storage on every node.
+func (p *Connector) Fetch(ctx context.Context, config map[string]any) (*connector.ServiceSnapshot, error) {
 	start := time.Now()
+	fields := connector.RequestedFields(config)
+	wantVMs := connector.WantsField(fields, "vms")
+	wantContainers := connector.WantsField(fields, "containers")
+	wantStorage := connector.WantsField(fields, "storage")
 
 	// Fetch nodes
 	nodesRaw, err := p.doRequest(ctx, "GET", "/nodes", nil)
@@ -122,120 +130,126 @@ func (p *Connector) Fetch(ctx context.Context, _ map[string]any) (*connector.Ser
 		dependencies = append(dependencies, connector.ServiceDependency{Kind: "host", Name: node.Node})
 
 		// Fetch VMs
-		vmsRaw, err := p.doRequest(ctx, "GET", "/nodes/"+node.Node+"/qemu", nil)
-		if err != nil {
-			sections = append(sections, connector.SnapshotSection{
-				Title:   node.Node,
-				Content: nodeSection + "_VM fetch error: " + err.Error() + "_",
-			})
-			continue
-		}
-		var vmsResponse struct {
-			Data []struct {
-				VMID   int    `json:"vmid"`
-				Name   string `json:"name"`
-				Status string `json:"status"`
-				CPU    int    `json:"cpus"`
-				Memory int64  `json:"mem"`
-				Uptime int64  `json:"uptime"`
-			} `json:"data"`
-		}
-		if err := json.Unmarshal(vmsRaw, &vmsResponse); err != nil {
-			sections = append(sections, connector.SnapshotSection{
-				Title:   node.Node,
-				Content: nodeSection + "_VM decode error: " + err.Error() + "_",
-			})
-			continue
-		}
-
-		if len(vmsResponse.Data) > 0 {
-			nodeSection += "### Virtual Machines\n\n"
-			nodeSection += "| VMID | Name | Status | CPUs | Memory (MB) | Uptime |\n"
-			nodeSection += "|------|------|--------|------|-------------|--------|\n"
-			for _, vm := range vmsResponse.Data {
-				nodeSection += fmt.Sprintf("| %d | %s | %s | %d | %d | %d |\n",
-					vm.VMID, vm.Name, vm.Status, vm.CPU, vm.Memory, vm.Uptime)
+		if wantVMs {
+			vmsRaw, err := p.doRequest(ctx, "GET", "/nodes/"+node.Node+"/qemu", nil)
+			if err != nil {
+				sections = append(sections, connector.SnapshotSection{
+					Title:   node.Node,
+					Content: nodeSection + "_VM fetch error: " + err.Error() + "_",
+				})
+				continue
 			}
-			nodeSection += "\n"
-			totalVMs += len(vmsResponse.Data)
+			var vmsResponse struct {
+				Data []struct {
+					VMID   int    `json:"vmid"`
+					Name   string `json:"name"`
+					Status string `json:"status"`
+					CPU    int    `json:"cpus"`
+					Memory int64  `json:"mem"`
+					Uptime int64  `json:"uptime"`
+				} `json:"data"`
+			}
+			if err := json.Unmarshal(vmsRaw, &vmsResponse); err != nil {
+				sections = append(sections, connector.SnapshotSection{
+					Title:   node.Node,
+					Content: nodeSection + "_VM decode error: " + err.Error() + "_",
+				})
+				continue
+			}
+
+			if len(vmsResponse.Data) > 0 {
+				nodeSection += "### Virtual Machines\n\n"
+				nodeSection += "| VMID | Name | Status | CPUs | Memory (MB) | Uptime |\n"
+				nodeSection += "|------|------|--------|------|-------------|--------|\n"
+				for _, vm := range vmsResponse.Data {
+					nodeSection += fmt.Sprintf("| %d | %s | %s | %d | %d | %d |\n",
+						vm.VMID, vm.Name, vm.Status, vm.CPU, vm.Memory, vm.Uptime)
+				}
+				nodeSection += "\n"
+				totalVMs += len(vmsResponse.Data)
+			}
 		}
 
 		// Fetch containers
-		ctsRaw, err := p.doRequest(ctx, "GET", "/nodes/"+node.Node+"/lxc", nil)
-		if err != nil {
-			sections = append(sections, connector.SnapshotSection{
-				Title:   node.Node,
-				Content: nodeSection + "_CT fetch error: " + err.Error() + "_",
-			})
-			continue
-		}
-		var ctsResponse struct {
-			Data []struct {
-				VMID   int    `json:"vmid"`
-				Name   string `json:"name"`
-				Status string `json:"status"`
-				CPU    int    `json:"cpus"`
-				Memory int64  `json:"mem"`
-				Uptime int64  `json:"uptime"`
-			} `json:"data"`
-		}
-		if err := json.Unmarshal(ctsRaw, &ctsResponse); err != nil {
-			sections = append(sections, connector.SnapshotSection{
-				Title:   node.Node,
-				Content: nodeSection + "_CT decode error: " + err.Error() + "_",
-			})
-			continue
-		}
-
-		if len(ctsResponse.Data) > 0 {
-			nodeSection += "### Containers\n\n"
-			nodeSection += "| VMID | Name | Status | CPUs | Memory (MB) | Uptime |\n"
-			nodeSection += "|------|------|--------|------|-------------|--------|\n"
-			for _, ct := range ctsResponse.Data {
-				nodeSection += fmt.Sprintf("| %d | %s | %s | %d | %d | %d |\n",
-					ct.VMID, ct.Name, ct.Status, ct.CPU, ct.Memory, ct.Uptime)
+		if wantContainers {
+			ctsRaw, err := p.doRequest(ctx, "GET", "/nodes/"+node.Node+"/lxc", nil)
+			if err != nil {
+				sections = append(sections, connector.SnapshotSection{
+					Title:   node.Node,
+					Content: nodeSection + "_CT fetch error: " + err.Error() + "_",
+				})
+				continue
 			}
-			nodeSection += "\n"
-			totalCTs += len(ctsResponse.Data)
+			var ctsResponse struct {
+				Data []struct {
+					VMID   int    `json:"vmid"`
+					Name   string `json:"name"`
+					Status string `json:"status"`
+					CPU    int    `json:"cpus"`
+					Memory int64  `json:"mem"`
+					Uptime int64  `json:"uptime"`
+				} `json:"data"`
+			}
+			if err := json.Unmarshal(ctsRaw, &ctsResponse); err != nil {
+				sections = append(sections, connector.SnapshotSection{
+					Title:   node.Node,
+					Content: nodeSection + "_CT decode error: " + err.Error() + "_",
+				})
+				continue
+			}
+
+			if len(ctsResponse.Data) > 0 {
+				nodeSection += "### Containers\n\n"
+				nodeSection += "| VMID | Name | Status | CPUs | Memory (MB) | Uptime |\n"
+				nodeSection += "|------|------|--------|------|-------------|--------|\n"
+				for _, ct := range ctsResponse.Data {
+					nodeSection += fmt.Sprintf("| %d | %s | %s | %d | %d | %d |\n",
+						ct.VMID, ct.Name, ct.Status, ct.CPU, ct.Memory, ct.Uptime)
+				}
+				nodeSection += "\n"
+				totalCTs += len(ctsResponse.Data)
+			}
 		}
 
 		// Fetch storage
-		storageRaw, err := p.doRequest(ctx, "GET", "/nodes/"+node.Node+"/storage", nil)
-		if err != nil {
-			sections = append(sections, connector.SnapshotSection{
-				Title:   node.Node,
-				Content: nodeSection + "_Storage fetch error: " + err.Error() + "_",
-			})
-			continue
-		}
-		var storageResponse struct {
-			Data []struct {
-				Storage string `json:"storage"`
-				Type    string `json:"type"`
-				Used    int64  `json:"used"`
-				Total   int64  `json:"total"`
-				Avail   int64  `json:"avail"`
-			} `json:"data"`
-		}
-		if err := json.Unmarshal(storageRaw, &storageResponse); err != nil {
-			sections = append(sections, connector.SnapshotSection{
-				Title:   node.Node,
-				Content: nodeSection + "_Storage decode error: " + err.Error() + "_",
-			})
-			continue
-		}
-
-		if len(storageResponse.Data) > 0 {
-			nodeSection += "### Storage\n\n"
-			nodeSection += "| Storage | Type | Used (bytes) | Total (bytes) | Avail (bytes) |\n"
-			nodeSection += "|---------|------|---------------|----------------|----------------|\n"
-			for _, st := range storageResponse.Data {
-				nodeSection += fmt.Sprintf("| %s | %s | %d | %d | %d |\n",
-					st.Storage, st.Type, st.Used, st.Total, st.Avail)
-				dependencies = append(dependencies, connector.ServiceDependency{Kind: "storage", Name: st.Storage})
+		if wantStorage {
+			storageRaw, err := p.doRequest(ctx, "GET", "/nodes/"+node.Node+"/storage", nil)
+			if err != nil {
+				sections = append(sections, connector.SnapshotSection{
+					Title:   node.Node,
+					Content: nodeSection + "_Storage fetch error: " + err.Error() + "_",
+				})
+				continue
 			}
-			nodeSection += "\n"
-			totalStorage += len(storageResponse.Data)
+			var storageResponse struct {
+				Data []struct {
+					Storage string `json:"storage"`
+					Type    string `json:"type"`
+					Used    int64  `json:"used"`
+					Total   int64  `json:"total"`
+					Avail   int64  `json:"avail"`
+				} `json:"data"`
+			}
+			if err := json.Unmarshal(storageRaw, &storageResponse); err != nil {
+				sections = append(sections, connector.SnapshotSection{
+					Title:   node.Node,
+					Content: nodeSection + "_Storage decode error: " + err.Error() + "_",
+				})
+				continue
+			}
+
+			if len(storageResponse.Data) > 0 {
+				nodeSection += "### Storage\n\n"
+				nodeSection += "| Storage | Type | Used (bytes) | Total (bytes) | Avail (bytes) |\n"
+				nodeSection += "|---------|------|---------------|----------------|----------------|\n"
+				for _, st := range storageResponse.Data {
+					nodeSection += fmt.Sprintf("| %s | %s | %d | %d | %d |\n",
+						st.Storage, st.Type, st.Used, st.Total, st.Avail)
+					dependencies = append(dependencies, connector.ServiceDependency{Kind: "storage", Name: st.Storage})
+				}
+				nodeSection += "\n"
+				totalStorage += len(storageResponse.Data)
+			}
 		}
 
 		sections = append(sections, connector.SnapshotSection{

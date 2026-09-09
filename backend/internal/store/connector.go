@@ -35,13 +35,30 @@ type ConnectorRecord struct {
 	NextRunAt     string `json:"nextRunAt"`
 	LastSyncError string `json:"lastSyncError"`
 	RetryCount    int    `json:"retryCount"`
-	CreatedAt     string `json:"createdAt"`
-	UpdatedAt     string `json:"updatedAt"`
+	// CredentialExpiresAt is "" when the connector's stored credentials have
+	// no known expiry. When set (RFC3339) and in the past, the sync engine
+	// refuses to Fetch until refreshed (via CredentialRefresher) or updated.
+	CredentialExpiresAt string `json:"credentialExpiresAt"`
+	CreatedAt           string `json:"createdAt"`
+	UpdatedAt           string `json:"updatedAt"`
+}
+
+// IsCredentialExpired reports whether the connector's credentials have a
+// known expiry that has passed as of now.
+func (c *ConnectorRecord) IsCredentialExpired(now time.Time) bool {
+	if c.CredentialExpiresAt == "" {
+		return false
+	}
+	t, err := time.Parse(time.RFC3339, c.CredentialExpiresAt)
+	if err != nil {
+		return false
+	}
+	return now.After(t)
 }
 
 // connectorColumns is the shared column list for every connector SELECT.
 const connectorColumns = `id, name, category, type, url, owner, verify_tls, config_data, enabled, status, status_message,
-	last_sync_at, schedule_seconds, next_run_at, last_sync_duration_ms, last_sync_error, retry_count, created_at, updated_at`
+	last_sync_at, schedule_seconds, next_run_at, last_sync_duration_ms, last_sync_error, retry_count, credential_expires_at, created_at, updated_at`
 
 // SnapshotRecord represents a row in the service_snapshots table.
 type SnapshotRecord struct {
@@ -74,13 +91,13 @@ func (s *Store) CreateConnector(ctx context.Context, c *ConnectorRecord) error {
 
 	_, err := s.db.ExecContext(ctx, `
 		INSERT INTO connectors (id, name, category, type, url, owner, verify_tls, config_data, enabled, status, status_message, last_sync_at,
-			schedule_seconds, next_run_at, last_sync_duration_ms, last_sync_error, retry_count, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			schedule_seconds, next_run_at, last_sync_duration_ms, last_sync_error, retry_count, credential_expires_at, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`, c.ID, c.Name, c.Category, c.Type, c.URL, nilToStr(c.Owner), boolToInt(c.VerifyTLS), c.ConfigData,
 		boolToInt(c.Enabled), c.Status, c.StatusMessage, nilToStr(c.LastSyncAt),
 		// database/sql converts a nil *int argument to SQL NULL automatically.
 		c.ScheduleSeconds, nilToStr(c.NextRunAt), c.LastSyncDurationMs, c.LastSyncError, c.RetryCount,
-		c.CreatedAt, c.UpdatedAt)
+		nilToStr(c.CredentialExpiresAt), c.CreatedAt, c.UpdatedAt)
 	if err != nil {
 		if isUniqueViolation(err) {
 			return ErrConflict
@@ -94,12 +111,12 @@ func (s *Store) CreateConnector(ctx context.Context, c *ConnectorRecord) error {
 func (s *Store) GetConnector(ctx context.Context, id string) (*ConnectorRecord, error) {
 	c := &ConnectorRecord{}
 	var verifyTLS, enabled int
-	var owner, lastSyncAt, nextRunAt, lastSyncError sql.NullString
+	var owner, lastSyncAt, nextRunAt, lastSyncError, credentialExpiresAt sql.NullString
 	var scheduleSeconds, lastSyncDurationMs sql.NullInt64
 	err := s.db.QueryRowContext(ctx, `SELECT `+connectorColumns+` FROM connectors WHERE id = ?
 	`, id).Scan(&c.ID, &c.Name, &c.Category, &c.Type, &c.URL, &owner, &verifyTLS, &c.ConfigData,
 		&enabled, &c.Status, &c.StatusMessage, &lastSyncAt,
-		&scheduleSeconds, &nextRunAt, &lastSyncDurationMs, &lastSyncError, &c.RetryCount,
+		&scheduleSeconds, &nextRunAt, &lastSyncDurationMs, &lastSyncError, &c.RetryCount, &credentialExpiresAt,
 		&c.CreatedAt, &c.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
@@ -115,6 +132,7 @@ func (s *Store) GetConnector(ctx context.Context, id string) (*ConnectorRecord, 
 	c.LastSyncError = nullStrToStr(lastSyncError)
 	c.ScheduleSeconds = nullInt64ToIntPtr(scheduleSeconds)
 	c.LastSyncDurationMs = nullInt64ToIntPtr(lastSyncDurationMs)
+	c.CredentialExpiresAt = nullStrToStr(credentialExpiresAt)
 	return c, nil
 }
 
@@ -173,6 +191,9 @@ func (s *Store) UpdateConnector(ctx context.Context, id string, updates map[stri
 			args = append(args, v)
 		case "retry_count":
 			parts = append(parts, "retry_count = ?")
+			args = append(args, v)
+		case "credential_expires_at":
+			parts = append(parts, "credential_expires_at = ?")
 			args = append(args, v)
 		}
 	}
@@ -381,11 +402,11 @@ func scanConnectors(rows *sql.Rows) ([]ConnectorRecord, int, error) {
 	for rows.Next() {
 		var c ConnectorRecord
 		var verifyTLS, enabled int
-		var owner, lastSyncAt, nextRunAt, lastSyncError sql.NullString
+		var owner, lastSyncAt, nextRunAt, lastSyncError, credentialExpiresAt sql.NullString
 		var scheduleSeconds, lastSyncDurationMs sql.NullInt64
 		if err := rows.Scan(&c.ID, &c.Name, &c.Category, &c.Type, &c.URL, &owner, &verifyTLS, &c.ConfigData,
 			&enabled, &c.Status, &c.StatusMessage, &lastSyncAt,
-			&scheduleSeconds, &nextRunAt, &lastSyncDurationMs, &lastSyncError, &c.RetryCount,
+			&scheduleSeconds, &nextRunAt, &lastSyncDurationMs, &lastSyncError, &c.RetryCount, &credentialExpiresAt,
 			&c.CreatedAt, &c.UpdatedAt); err != nil {
 			return nil, 0, fmt.Errorf("scan connector: %w", err)
 		}
@@ -397,6 +418,7 @@ func scanConnectors(rows *sql.Rows) ([]ConnectorRecord, int, error) {
 		c.LastSyncError = nullStrToStr(lastSyncError)
 		c.ScheduleSeconds = nullInt64ToIntPtr(scheduleSeconds)
 		c.LastSyncDurationMs = nullInt64ToIntPtr(lastSyncDurationMs)
+		c.CredentialExpiresAt = nullStrToStr(credentialExpiresAt)
 		connectors = append(connectors, c)
 	}
 	if connectors == nil {

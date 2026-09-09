@@ -17,5 +17,10 @@ export interface SchemaField {
   /** Rendered as password input; write-only */
   secret?: boolean;
   placeholder?: string;
+  description?: string;
+  /** Regexp a text/password value must match */
+  pattern?: string;
+  minLength?: number;
+  maxLength?: number;
   options?: SchemaFieldOptionsItem[];
 }

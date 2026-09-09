@@ -14,6 +14,13 @@ type DiffResult struct {
 	Summary  string      `json:"summary"`
 	Detail   string      `json:"detail"`
 	Patches  []DiffPatch `json:"patches"`
+	// RelatedServiceIDs are the connector/service IDs (from
+	// ServiceDependency.Ref) the changed snapshot depends on, so a drift can
+	// be clustered with the services it may affect instead of standing alone.
+	// ponytail: one hop (this snapshot's own declared dependencies), not a
+	// full dependency-graph walk; extend to transitive deps if UI grouping
+	// needs it.
+	RelatedServiceIDs []string `json:"relatedServiceIds,omitempty"`
 }
 
 // DiffPatch is a single text diff hunk.
@@ -38,6 +45,9 @@ func Compare(prev, curr *connector.ServiceSnapshot) []DiffResult {
 		currSections[s.Title] = s
 	}
 
+	currRelated := relatedServiceIDs(curr)
+	prevRelated := relatedServiceIDs(prev)
+
 	// Check for added sections
 	for title, cs := range currSections {
 		if _, ok := prevSections[title]; !ok {
@@ -50,6 +60,7 @@ func Compare(prev, curr *connector.ServiceSnapshot) []DiffResult {
 					Section: title,
 					New:     cs.Content,
 				}},
+				RelatedServiceIDs: currRelated,
 			})
 		}
 	}
@@ -66,6 +77,7 @@ func Compare(prev, curr *connector.ServiceSnapshot) []DiffResult {
 					Section: title,
 					Old:     ps.Content,
 				}},
+				RelatedServiceIDs: prevRelated,
 			})
 		}
 	}
@@ -87,11 +99,30 @@ func Compare(prev, curr *connector.ServiceSnapshot) []DiffResult {
 					Old:     ps.Content,
 					New:     cs.Content,
 				}},
+				RelatedServiceIDs: currRelated,
 			})
 		}
 	}
 
 	return results
+}
+
+// relatedServiceIDs extracts the resolved connector/service IDs a snapshot
+// declares as dependencies (ServiceDependency.Ref), deduplicated.
+func relatedServiceIDs(snap *connector.ServiceSnapshot) []string {
+	if snap == nil {
+		return nil
+	}
+	seen := make(map[string]bool)
+	var ids []string
+	for _, d := range snap.Dependencies {
+		if d.Ref == "" || seen[d.Ref] {
+			continue
+		}
+		seen[d.Ref] = true
+		ids = append(ids, d.Ref)
+	}
+	return ids
 }
 
 func lineCount(s string) int {

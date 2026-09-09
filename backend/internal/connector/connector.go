@@ -3,6 +3,7 @@ package connector
 
 import (
 	"context"
+	"fmt"
 	"time"
 )
 
@@ -11,8 +12,101 @@ type Connector interface {
 	Name() string
 	Type() string
 	Category() string
+	// Fetch pulls a snapshot. config may carry a "fields" hint (see
+	// RequestedFields) requesting a partial fetch; a connector that doesn't
+	// support selective fetch may ignore it and always return everything.
 	Fetch(ctx context.Context, config map[string]any) (*ServiceSnapshot, error)
 	Validate(ctx context.Context, config map[string]any) error
+}
+
+// CredentialRefresher is implemented by connectors whose credentials can be
+// refreshed without user interaction (e.g. OAuth2 refresh tokens). The sync
+// engine calls RefreshCredentials before Fetch when the connector's stored
+// credentials have expired, and persists the returned config and expiry.
+type CredentialRefresher interface {
+	RefreshCredentials(ctx context.Context, config map[string]any) (newConfig map[string]any, expiresAt time.Time, err error)
+}
+
+// AuthError indicates a connector rejected credentials (expired, revoked, or
+// invalid). Retrying with the same credentials will not help.
+type AuthError struct{ Err error }
+
+func (e *AuthError) Error() string { return fmt.Sprintf("auth error: %v", e.Err) }
+func (e *AuthError) Unwrap() error { return e.Err }
+
+// NewAuthError wraps err as an AuthError.
+func NewAuthError(err error) *AuthError { return &AuthError{Err: err} }
+
+// TimeoutError indicates a connector call exceeded its deadline.
+type TimeoutError struct{ Err error }
+
+func (e *TimeoutError) Error() string { return fmt.Sprintf("timeout: %v", e.Err) }
+func (e *TimeoutError) Unwrap() error { return e.Err }
+
+// NewTimeoutError wraps err as a TimeoutError.
+func NewTimeoutError(err error) *TimeoutError { return &TimeoutError{Err: err} }
+
+// MalformedResponseError indicates the upstream service returned data the
+// connector could not parse.
+type MalformedResponseError struct{ Err error }
+
+func (e *MalformedResponseError) Error() string { return fmt.Sprintf("malformed response: %v", e.Err) }
+func (e *MalformedResponseError) Unwrap() error { return e.Err }
+
+// NewMalformedResponseError wraps err as a MalformedResponseError.
+func NewMalformedResponseError(err error) *MalformedResponseError {
+	return &MalformedResponseError{Err: err}
+}
+
+// ServiceUnavailableError indicates the upstream service is reachable but
+// reported itself as unavailable (e.g. HTTP 503, maintenance mode).
+type ServiceUnavailableError struct{ Err error }
+
+func (e *ServiceUnavailableError) Error() string {
+	return fmt.Sprintf("service unavailable: %v", e.Err)
+}
+func (e *ServiceUnavailableError) Unwrap() error { return e.Err }
+
+// NewServiceUnavailableError wraps err as a ServiceUnavailableError.
+func NewServiceUnavailableError(err error) *ServiceUnavailableError {
+	return &ServiceUnavailableError{Err: err}
+}
+
+// RequestedFields extracts the optional "fields" selective-fetch hint from a
+// connector config map. Returns nil if absent (meaning: fetch everything).
+func RequestedFields(config map[string]any) []string {
+	raw, ok := config["fields"]
+	if !ok {
+		return nil
+	}
+	switch v := raw.(type) {
+	case []string:
+		return v
+	case []any:
+		out := make([]string, 0, len(v))
+		for _, item := range v {
+			if s, ok := item.(string); ok {
+				out = append(out, s)
+			}
+		}
+		return out
+	default:
+		return nil
+	}
+}
+
+// WantsField reports whether field should be included given a fields hint.
+// An empty/nil fields list means "everything" — every field is wanted.
+func WantsField(fields []string, field string) bool {
+	if len(fields) == 0 {
+		return true
+	}
+	for _, f := range fields {
+		if f == field {
+			return true
+		}
+	}
+	return false
 }
 
 // ServiceSnapshot represents a point-in-time view of a service's state.
