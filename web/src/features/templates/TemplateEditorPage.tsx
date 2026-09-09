@@ -43,6 +43,7 @@ import {
   DiffIcon,
   HistoryIcon,
 } from '../../components/icons';
+import { TemplateSchemaPanel } from './TemplateSchemaPanel';
 
 const CATEGORIES = Object.values(ConnectorCategory);
 type Tab = 'read' | 'history';
@@ -325,6 +326,8 @@ export function TemplateEditorPage() {
                 ))}
               </div>
             </Panel>
+
+            <TemplateSchemaPanel />
           </div>
 
           {/* ── Right: preview ─────────────────────────────────────────── */}

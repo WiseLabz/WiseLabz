@@ -132,7 +132,11 @@ export function DocEditorPage() {
 
   const save = useMutation({
     mutationFn: () =>
-      putDocsDocId(docId, { content: draft ?? '', baseVersion: baseVersion ?? undefined }),
+      putDocsDocId(docId, {
+        content: draft ?? '',
+        baseVersion: baseVersion ?? undefined,
+        trigger: provenance === 'ai-draft' ? 'ai' : 'manual',
+      }),
     onSuccess: (updated) => {
       setJustSaved(true);
       setBaseVersion(updated.currentVersion);
@@ -325,6 +329,7 @@ export function DocEditorPage() {
             after={suggestion}
             baseLabel={t('docs.editor.aiDiffCurrent')}
             headLabel={t('docs.editor.aiDiffProposed')}
+            headTrigger="ai"
             label={t('docs.editor.aiDiffLabel')}
           />
         </Panel>

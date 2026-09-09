@@ -7,10 +7,7 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface DocSave {
-  content: string;
-  /** Version the edit was based on; enables last-write-wins detection */
-  baseVersion?: number;
-  /** Provenance of this save, e.g. "manual", "ai:claude-sonnet-5", "template". Defaults to "manual" server-side if omitted. */
-  trigger?: string;
-}
+export type TemplateSchemaFunctionsItem = {
+  name?: string;
+  description?: string;
+};

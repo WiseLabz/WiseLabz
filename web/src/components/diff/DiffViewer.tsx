@@ -26,6 +26,7 @@ export function DiffViewer({ diff }: { diff: Diff }) {
         after={after}
         baseLabel={diff.baseLabel}
         headLabel={diff.headLabel}
+        headTrigger={diff.headTrigger}
       />
     );
   }
@@ -121,12 +122,15 @@ export function DocDiff({
   after,
   baseLabel,
   headLabel,
+  headTrigger,
   label,
 }: {
   before: string;
   after: string;
   baseLabel?: string;
   headLabel?: string;
+  /** Provenance of the head revision, e.g. "manual", "ai:claude-sonnet-5", "template". */
+  headTrigger?: string;
   label?: string;
 }) {
   const layout = useUi((s) => s.diffLayout);
@@ -144,6 +148,11 @@ export function DocDiff({
             </span>
           )}
         </span>
+        {headTrigger && (
+          <span className="rounded bg-canvas-sunken px-1.5 py-0.5 font-mono text-2xs normal-case tracking-normal text-ink-faint">
+            {headTrigger}
+          </span>
+        )}
         <div className="flex items-center gap-3">
           <StatBar added={model.stats.added} removed={model.stats.removed} />
           <LayoutToggle layout={layout} onChange={setLayout} />

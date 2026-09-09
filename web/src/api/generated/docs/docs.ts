@@ -35,6 +35,7 @@ import type {
   GetDocsParams,
   NotFoundResponse,
   PostDocsGenerateBody,
+  TemplateSchema,
 } from '../../model';
 
 import { customInstance } from '../../axios-instance';
@@ -1593,6 +1594,128 @@ export function usePostDocsDocIdLockRelease<
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
   const queryOptions = getPostDocsDocIdLockReleaseQueryOptions(docId, options);
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+/**
+ * @summary Available templateData field paths and filter functions, for editor reference
+ */
+export const getDocsTemplateSchema = (
+  options?: SecondParameter<typeof customInstance>,
+  signal?: AbortSignal
+) => {
+  return customInstance<TemplateSchema>(
+    { url: `/docs/template-schema`, method: 'GET', signal },
+    options
+  );
+};
+
+export const getGetDocsTemplateSchemaQueryKey = () => {
+  return [`/docs/template-schema`] as const;
+};
+
+export const getGetDocsTemplateSchemaQueryOptions = <
+  TData = Awaited<ReturnType<typeof getDocsTemplateSchema>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: Partial<
+    UseQueryOptions<Awaited<ReturnType<typeof getDocsTemplateSchema>>, TError, TData>
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetDocsTemplateSchemaQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getDocsTemplateSchema>>> = ({ signal }) =>
+    getDocsTemplateSchema(requestOptions, signal);
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getDocsTemplateSchema>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type GetDocsTemplateSchemaQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getDocsTemplateSchema>>
+>;
+export type GetDocsTemplateSchemaQueryError = ErrorType<unknown>;
+
+export function useGetDocsTemplateSchema<
+  TData = Awaited<ReturnType<typeof getDocsTemplateSchema>>,
+  TError = ErrorType<unknown>,
+>(
+  options: {
+    query: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getDocsTemplateSchema>>, TError, TData>
+    > &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getDocsTemplateSchema>>,
+          TError,
+          Awaited<ReturnType<typeof getDocsTemplateSchema>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useGetDocsTemplateSchema<
+  TData = Awaited<ReturnType<typeof getDocsTemplateSchema>>,
+  TError = ErrorType<unknown>,
+>(
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getDocsTemplateSchema>>, TError, TData>
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getDocsTemplateSchema>>,
+          TError,
+          Awaited<ReturnType<typeof getDocsTemplateSchema>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useGetDocsTemplateSchema<
+  TData = Awaited<ReturnType<typeof getDocsTemplateSchema>>,
+  TError = ErrorType<unknown>,
+>(
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getDocsTemplateSchema>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * @summary Available templateData field paths and filter functions, for editor reference
+ */
+
+export function useGetDocsTemplateSchema<
+  TData = Awaited<ReturnType<typeof getDocsTemplateSchema>>,
+  TError = ErrorType<unknown>,
+>(
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getDocsTemplateSchema>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getGetDocsTemplateSchemaQueryOptions(options);
 
   const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
     queryKey: DataTag<QueryKey, TData, TError>;

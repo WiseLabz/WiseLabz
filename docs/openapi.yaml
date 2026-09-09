@@ -708,6 +708,16 @@ paths:
       responses:
         '200':
           description: OK
+  /docs/template-schema:
+    get:
+      tags: [docs]
+      summary: Available templateData field paths and filter functions, for editor reference
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TemplateSchema' }
   /docs/generate:
     post:
       tags: [docs]
@@ -1958,6 +1968,27 @@ components:
         baseVersion:
           type: integer
           description: 'Version the edit was based on; enables last-write-wins detection'
+        trigger:
+          type: string
+          description: 'Provenance of this save, e.g. "manual", "ai:claude-sonnet-5", "template". Defaults to "manual" server-side if omitted.'
+    TemplateSchema:
+      type: object
+      description: >
+        Free-form reference for the template editor: available templateData field
+        paths/types and the list of filter functions usable in `{{ .Field | fn }}`
+        pipelines. Shape mirrors backend doc.templatefuncs and connector.ServiceSnapshot
+        — not strictly typed since it's editor-reference-only.
+      properties:
+        fields:
+          type: object
+          additionalProperties: true
+        functions:
+          type: array
+          items:
+            type: object
+            properties:
+              name: { type: string }
+              description: { type: string }
     DocVersionMeta:
       type: object
       required: [rev, createdAt, trigger]
@@ -2199,6 +2230,7 @@ components:
           description: doc format only — full text of the "after" revision
         baseLabel: { type: string, description: 'doc format — label for the before revision, e.g. "rev 11"' }
         headLabel: { type: string, description: 'doc format — label for the after revision, e.g. "rev 12"' }
+        headTrigger: { type: string, description: 'doc format — provenance of the head revision, e.g. "manual", "ai:claude-sonnet-5", "template"' }
         language:
           type: string
           enum: [md, yaml, text]
