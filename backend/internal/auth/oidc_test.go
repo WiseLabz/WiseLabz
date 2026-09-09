@@ -53,6 +53,30 @@ func TestAuthURLBeforeInitialization(t *testing.T) {
 	_ = provider.AuthURL("state123", "http://localhost/callback")
 }
 
+func TestExtractGroups(t *testing.T) {
+	for name, tc := range map[string]struct {
+		value any
+		want  []string
+	}{
+		"array":        {value: []any{"admins", "readers", ""}, want: []string{"admins", "readers"}},
+		"string":       {value: "admins", want: []string{"admins"}},
+		"invalid":      {value: 42, want: nil},
+		"empty string": {value: "", want: nil},
+	} {
+		t.Run(name, func(t *testing.T) {
+			got := extractGroups(tc.value)
+			if len(got) != len(tc.want) {
+				t.Fatalf("extractGroups(%#v) = %#v, want %#v", tc.value, got, tc.want)
+			}
+			for i := range got {
+				if got[i] != tc.want[i] {
+					t.Fatalf("extractGroups(%#v) = %#v, want %#v", tc.value, got, tc.want)
+				}
+			}
+		})
+	}
+}
+
 func TestInitializeSuccess(t *testing.T) {
 	server := newMockOIDCServer(t)
 	defer server.Close()

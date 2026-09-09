@@ -12,7 +12,13 @@ import { HttpResponse, http } from 'msw';
 import type { RequestHandlerOptions } from 'msw';
 
 import { Role } from '../../model';
-import type { AuthProviders, AuthSession, ElevationToken } from '../../model';
+import type {
+  ApiKey,
+  ApiKeyCreated,
+  AuthProviders,
+  AuthSession,
+  ElevationToken,
+} from '../../model';
 
 export const getGetAuthProvidersResponseMock = (
   overrideResponse: Partial<Extract<AuthProviders, object>> = {}
@@ -98,6 +104,48 @@ export const getPostAuthElevateResponseMock = (
   token: faker.string.alpha({ length: { min: 10, max: 20 } }),
   expiresAt: faker.date.past().toISOString().slice(0, 19) + 'Z',
   ...overrideResponse,
+});
+
+export const getGetAuthApiKeysResponseMock = (): ApiKey[] =>
+  Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() => ({
+    id: faker.string.uuid(),
+    name: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    role: faker.helpers.arrayElement(Object.values(Role)),
+    createdAt: faker.date.past().toISOString().slice(0, 19) + 'Z',
+    expiresAt: faker.helpers.arrayElement([
+      faker.date.past().toISOString().slice(0, 19) + 'Z',
+      null,
+    ]),
+    lastUsedAt: faker.helpers.arrayElement([
+      faker.date.past().toISOString().slice(0, 19) + 'Z',
+      null,
+    ]),
+    revokedAt: faker.helpers.arrayElement([
+      faker.date.past().toISOString().slice(0, 19) + 'Z',
+      null,
+    ]),
+  }));
+
+export const getPostAuthApiKeysResponseMock = (): ApiKeyCreated => ({
+  ...{
+    id: faker.string.uuid(),
+    name: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    role: faker.helpers.arrayElement(Object.values(Role)),
+    createdAt: faker.date.past().toISOString().slice(0, 19) + 'Z',
+    expiresAt: faker.helpers.arrayElement([
+      faker.date.past().toISOString().slice(0, 19) + 'Z',
+      null,
+    ]),
+    lastUsedAt: faker.helpers.arrayElement([
+      faker.date.past().toISOString().slice(0, 19) + 'Z',
+      null,
+    ]),
+    revokedAt: faker.helpers.arrayElement([
+      faker.date.past().toISOString().slice(0, 19) + 'Z',
+      null,
+    ]),
+  },
+  ...{ token: faker.string.alpha({ length: { min: 10, max: 20 } }) },
 });
 
 export const getGetAuthProvidersMockHandler = (
@@ -238,6 +286,71 @@ export const getPostAuthElevateMockHandler = (
     options
   );
 };
+
+export const getGetAuthApiKeysMockHandler = (
+  overrideResponse?:
+    | ApiKey[]
+    | ((info: Parameters<Parameters<typeof http.get>[1]>[0]) => Promise<ApiKey[]> | ApiKey[]),
+  options?: RequestHandlerOptions
+) => {
+  return http.get(
+    '*/auth/api-keys',
+    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+      return HttpResponse.json(
+        overrideResponse !== undefined
+          ? typeof overrideResponse === 'function'
+            ? await overrideResponse(info)
+            : overrideResponse
+          : getGetAuthApiKeysResponseMock(),
+        { status: 200 }
+      );
+    },
+    options
+  );
+};
+
+export const getPostAuthApiKeysMockHandler = (
+  overrideResponse?:
+    | ApiKeyCreated
+    | ((
+        info: Parameters<Parameters<typeof http.post>[1]>[0]
+      ) => Promise<ApiKeyCreated> | ApiKeyCreated),
+  options?: RequestHandlerOptions
+) => {
+  return http.post(
+    '*/auth/api-keys',
+    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+      return HttpResponse.json(
+        overrideResponse !== undefined
+          ? typeof overrideResponse === 'function'
+            ? await overrideResponse(info)
+            : overrideResponse
+          : getPostAuthApiKeysResponseMock(),
+        { status: 201 }
+      );
+    },
+    options
+  );
+};
+
+export const getDeleteAuthApiKeysIdMockHandler = (
+  overrideResponse?:
+    | void
+    | ((info: Parameters<Parameters<typeof http.delete>[1]>[0]) => Promise<void> | void),
+  options?: RequestHandlerOptions
+) => {
+  return http.delete(
+    '*/auth/api-keys/:id',
+    async (info: Parameters<Parameters<typeof http.delete>[1]>[0]) => {
+      if (typeof overrideResponse === 'function') {
+        await overrideResponse(info);
+      }
+
+      return new HttpResponse(null, { status: 204 });
+    },
+    options
+  );
+};
 export const getAuthMock = () => [
   getGetAuthProvidersMockHandler(),
   getPostAuthLoginMockHandler(),
@@ -245,4 +358,7 @@ export const getAuthMock = () => [
   getPostAuthRefreshMockHandler(),
   getPostAuthLogoutMockHandler(),
   getPostAuthElevateMockHandler(),
+  getGetAuthApiKeysMockHandler(),
+  getPostAuthApiKeysMockHandler(),
+  getDeleteAuthApiKeysIdMockHandler(),
 ];

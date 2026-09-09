@@ -122,6 +122,47 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/ElevationToken' }
         '401': { $ref: '#/components/responses/Unauthorized' }
+  /auth/api-keys:
+    get:
+      tags: [auth]
+      summary: List the current user's API keys
+      responses:
+        '200':
+          description: API keys without token material
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/ApiKey' }
+    post:
+      tags: [auth]
+      summary: Create an API key for the current user
+      description: The opaque token is returned once and cannot be retrieved again.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ApiKeyCreate' }
+      responses:
+        '201':
+          description: Created; token is shown once
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiKeyCreated' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+  /auth/api-keys/{id}:
+    delete:
+      tags: [auth]
+      summary: Revoke one of the current user's API keys
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '204': { description: No Content }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
 
   # ───────────────────────── me ─────────────────────────
   /me:
@@ -1785,6 +1826,33 @@ components:
         accessToken: { type: string }
         expiresIn: { type: integer, description: Access token TTL in seconds }
         user: { $ref: '#/components/schemas/User' }
+    ApiKeyCreate:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, minLength: 1 }
+        expiresAt:
+          type: string
+          format: date-time
+          description: Optional expiration; omitted or empty means never.
+    ApiKey:
+      type: object
+      required: [id, name, role, createdAt, expiresAt, lastUsedAt, revokedAt]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        role: { $ref: '#/components/schemas/Role' }
+        createdAt: { type: string, format: date-time }
+        expiresAt: { type: string, format: date-time, nullable: true }
+        lastUsedAt: { type: string, format: date-time, nullable: true }
+        revokedAt: { type: string, format: date-time, nullable: true }
+    ApiKeyCreated:
+      allOf:
+        - $ref: '#/components/schemas/ApiKey'
+        - type: object
+          required: [token]
+          properties:
+            token: { type: string, description: Opaque token shown only once }
 
     # ── users ──
     User:

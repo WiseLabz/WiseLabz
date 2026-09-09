@@ -157,9 +157,15 @@ func (h *Handler) OIDCCallback(w http.ResponseWriter, r *http.Request) {
 		httputil.Error(w, http.StatusUnauthorized, "oidc_error", "OIDC identity requires a verified email")
 		return
 	}
+	if len(provCfg.EmailDomainAllowlist) > 0 && !emailDomainAllowed(claims.Email, provCfg.EmailDomainAllowlist) {
+		httputil.Error(w, http.StatusForbidden, "oidc_error", "OIDC email domain is not allowed")
+		return
+	}
+	role := oidcRoleForGroups(claims.Groups, provCfg.GroupRoleMapping)
 
 	// Find or create user
 	user, err := h.Store.GetUserByOIDCIdentity(r.Context(), claims.Issuer, claims.Subject)
+	isNewUser := false
 	if errors.Is(err, store.ErrNotFound) {
 		// Create new OIDC user
 		displayName := claims.Name
@@ -175,21 +181,28 @@ func (h *Handler) OIDCCallback(w http.ResponseWriter, r *http.Request) {
 			Username:    username,
 			DisplayName: displayName,
 			Email:       claims.Email,
-			Role:        "viewer", // default role for OIDC users
+			Role:        role,
 			AuthSource:  "oidc",
 		}
 		if err := h.Store.CreateOIDCUser(r.Context(), user, claims.Issuer, claims.Subject); err != nil {
 			httputil.Errorf(w, err)
 			return
 		}
+		isNewUser = true
 	} else if err != nil {
 		httputil.Errorf(w, err)
 		return
 	}
-
 	if user.Disabled {
 		httputil.Error(w, http.StatusForbidden, "forbidden", "Account is disabled")
 		return
+	}
+	if !isNewUser && user.AuthSource == "oidc" && user.Role != role {
+		if err := h.Store.UpdateUser(r.Context(), user.ID, map[string]any{"role": role}); err != nil {
+			httputil.Errorf(w, err)
+			return
+		}
+		user.Role = role
 	}
 
 	// Issue token pair
@@ -217,7 +230,7 @@ func (h *Handler) OIDCCallback(w http.ResponseWriter, r *http.Request) {
 		"accessToken": pair.AccessToken,
 		"expiresIn":   pair.ExpiresIn,
 		"user":        sanitizeUser(user),
-		"isNewUser":   user.CreatedAt == "", // just created
+		"isNewUser":   isNewUser,
 	})
 }
 
@@ -786,6 +799,7 @@ func (h *Handler) getOrInitOIDCProvider(ctx context.Context, cfg *config.OIDCPro
 		ClientID:     cfg.ClientID,
 		ClientSecret: cfg.ClientSecret,
 		Scopes:       cfg.Scopes,
+		GroupsClaim:  cfg.GroupsClaim,
 	}
 	if err := prov.Initialize(ctx); err != nil {
 		slog.Error("failed to init OIDC provider", "id", cfg.ID, "error", err)
@@ -793,6 +807,33 @@ func (h *Handler) getOrInitOIDCProvider(ctx context.Context, cfg *config.OIDCPro
 	}
 	h.oidcProv[cfg.ID] = prov
 	return prov
+}
+
+func emailDomainAllowed(email string, allowlist []string) bool {
+	parts := strings.Split(strings.ToLower(strings.TrimSpace(email)), "@")
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		return false
+	}
+	domain := parts[1]
+	for _, allowed := range allowlist {
+		if strings.EqualFold(strings.TrimPrefix(strings.TrimSpace(allowed), "@"), domain) {
+			return true
+		}
+	}
+	return false
+}
+
+func oidcRoleForGroups(groups []string, mapping map[string]string) string {
+	role := "viewer"
+	for _, group := range groups {
+		if strings.EqualFold(mapping[group], "operator") {
+			return "operator"
+		}
+		if strings.EqualFold(mapping[group], "viewer") {
+			role = "viewer"
+		}
+	}
+	return role
 }
 
 func sanitizeUser(u *store.User) map[string]any {

@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/coreos/go-oidc/v3/oidc"
 	"golang.org/x/oauth2"
@@ -16,6 +17,7 @@ type OIDCProvider struct {
 	ClientID     string
 	ClientSecret string
 	Scopes       []string
+	GroupsClaim  string
 
 	provider *oidc.Provider
 	oauth2   *oauth2.Config
@@ -23,12 +25,13 @@ type OIDCProvider struct {
 
 // OIDCClaims represents the claims extracted from an OIDC ID token.
 type OIDCClaims struct {
-	Issuer        string `json:"iss"`
-	Subject       string `json:"sub"`
-	Email         string `json:"email"`
-	EmailVerified bool   `json:"email_verified"`
-	Name          string `json:"name"`
-	PreferredName string `json:"preferred_username"`
+	Issuer        string   `json:"iss"`
+	Subject       string   `json:"sub"`
+	Email         string   `json:"email"`
+	EmailVerified bool     `json:"email_verified"`
+	Name          string   `json:"name"`
+	PreferredName string   `json:"preferred_username"`
+	Groups        []string `json:"-"`
 }
 
 // Initialize discovers the OIDC provider and configures the OAuth2 client.
@@ -85,9 +88,39 @@ func (p *OIDCProvider) Exchange(ctx context.Context, code string) (*OIDCClaims, 
 	if err := idToken.Claims(&claims); err != nil {
 		return nil, fmt.Errorf("parse claims: %w", err)
 	}
+	if p.GroupsClaim != "" {
+		var raw map[string]any
+		if err := idToken.Claims(&raw); err != nil {
+			return nil, fmt.Errorf("parse dynamic claims: %w", err)
+		}
+		claims.Groups = extractGroups(raw[p.GroupsClaim])
+	}
 
 	claims.Issuer = idToken.Issuer
 	return &claims, nil
+}
+
+func extractGroups(value any) []string {
+	var groups []string
+	switch values := value.(type) {
+	case []any:
+		for _, value := range values {
+			if group, ok := value.(string); ok && strings.TrimSpace(group) != "" {
+				groups = append(groups, group)
+			}
+		}
+	case []string:
+		for _, group := range values {
+			if strings.TrimSpace(group) != "" {
+				groups = append(groups, group)
+			}
+		}
+	case string:
+		if strings.TrimSpace(values) != "" {
+			groups = []string{values}
+		}
+	}
+	return groups
 }
 
 // IsInitialized returns true if the provider has been successfully initialized.

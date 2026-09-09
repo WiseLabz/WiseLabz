@@ -17,6 +17,7 @@ var tablesCreatedByMigrations = []string{
 	"template_sections", "changes", "alerts", "dashboard_layouts",
 	"auth_config", "ai_config", "notification_config", "in_app_notifications",
 	"quality_findings", "runbooks", "oidc_identities", "doc_locks",
+	"api_keys",
 }
 
 func TestRunMigrations(t *testing.T) {
@@ -114,14 +115,18 @@ func TestRunMigrationsDown(t *testing.T) {
 		t.Fatalf("RunMigrationsDown() error: %v", err)
 	}
 
-	// RunMigrationsDown rolls back only 000009_runbook_finding_target.
-	// Since 000009 doesn't create/drop tables (only modifies constraint),
-	// all tables should still exist after rolling back.
+	// The latest migration owns api_keys, so one rollback removes only that table.
 	var count int
 	for _, table := range tablesCreatedByMigrations {
+		if table == "api_keys" {
+			continue
+		}
 		if err := db.QueryRow("SELECT COUNT(*) FROM " + table).Scan(&count); err != nil {
 			t.Errorf("table %s should still exist after rolling back only the last migration: %v", table, err)
 		}
+	}
+	if err := db.QueryRow("SELECT COUNT(*) FROM api_keys").Scan(&count); err == nil {
+		t.Error("api_keys should not exist after rolling back its migration")
 	}
 }
 
@@ -154,13 +159,17 @@ func TestRunMigrationsDownPostgres(t *testing.T) {
 	}
 
 	var count int
-	// RunMigrationsDown rolls back only 000009_runbook_finding_target.
-	// Since 000009 doesn't create/drop tables (only modifies constraint),
-	// all tables should still exist after rolling back.
+	// The latest migration owns api_keys, so one rollback removes only that table.
 	for _, table := range tablesCreatedByMigrations {
+		if table == "api_keys" {
+			continue
+		}
 		if err := db.QueryRow("SELECT COUNT(*) FROM " + table).Scan(&count); err != nil {
 			t.Errorf("table %s should still exist after rolling back only the last migration: %v", table, err)
 		}
+	}
+	if err := db.QueryRow("SELECT COUNT(*) FROM api_keys").Scan(&count); err == nil {
+		t.Error("api_keys should not exist after rolling back its migration")
 	}
 }
 
