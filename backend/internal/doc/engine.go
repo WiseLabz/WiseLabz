@@ -72,7 +72,7 @@ func (e *Engine) render(ctx context.Context, templateID, connectorID string) (*r
 	}
 
 	for _, sec := range sections {
-		sectionTemplate, err := template.New("section").Parse(sec.Body)
+		sectionTemplate, err := template.New("section").Funcs(TemplateFuncs()).Parse(sec.Body)
 		if err != nil {
 			fmt.Fprintf(&buf, "## %s\n\n_Template error: %v_\n\n", sec.Title, err)
 			continue
