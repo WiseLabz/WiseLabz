@@ -140,7 +140,13 @@ func TestRunSyncRefusesExpiredCredentialsWithoutRefresher(t *testing.T) {
 // connector.CredentialRefresher.
 type refreshableConnector struct {
 	fakeConnector
-	newExpiry time.Time
+	newExpiry  time.Time
+	lastConfig map[string]any
+}
+
+func (r *refreshableConnector) Fetch(ctx context.Context, config map[string]any) (*connector.ServiceSnapshot, error) {
+	r.lastConfig = config
+	return r.fakeConnector.Fetch(ctx, config)
 }
 
 func (r *refreshableConnector) RefreshCredentials(_ context.Context, config map[string]any) (map[string]any, time.Time, error) {
@@ -194,6 +200,41 @@ func TestRunSyncRefreshesExpiredCredentials(t *testing.T) {
 	}
 	if cfg["token"] != "refreshed-token" {
 		t.Errorf("config_data token = %v, want refreshed-token (persisted from RefreshCredentials)", cfg["token"])
+	}
+	// url/verify_tls are only merged into the in-memory config for the
+	// connector factory — they must not get persisted into config_data,
+	// which already has its own dedicated columns for them.
+	if _, ok := cfg["url"]; ok {
+		t.Error("config_data persisted a url key, want it to stay out of stored config")
+	}
+}
+
+func TestRunSyncFieldsSurvivesCredentialRefresh(t *testing.T) {
+	rc := &refreshableConnector{
+		fakeConnector: fakeConnector{snapshot: &connector.ServiceSnapshot{ServiceName: "svc", FetchedAt: time.Now()}},
+		newExpiry:     time.Now().Add(24 * time.Hour),
+	}
+	connector.Register(
+		connector.TypeSchema{Type: "sync_test_refresh_fields", Category: "test", Name: "RefreshFields"},
+		func(_ map[string]any) (connector.Connector, error) { return rc, nil },
+	)
+	s := newTestStore(t)
+	ctx := context.Background()
+	conn := &store.ConnectorRecord{
+		Name: "svc", Category: "networking", Type: "sync_test_refresh_fields", Enabled: true,
+		CredentialExpiresAt: time.Now().Add(-time.Hour).UTC().Format(time.RFC3339),
+	}
+	if err := s.CreateConnector(ctx, conn); err != nil {
+		t.Fatalf("create connector: %v", err)
+	}
+
+	if _, err := NewEngine(s, nil, nil, nil).RunSyncFields(ctx, conn.ID, "job1", []string{"vms"}); err != nil {
+		t.Fatalf("RunSyncFields: %v", err)
+	}
+
+	got := connector.RequestedFields(rc.lastConfig)
+	if len(got) != 1 || got[0] != "vms" {
+		t.Errorf("connector received fields = %v after credential refresh, want [vms] (hint must survive the refresh)", got)
 	}
 }
 

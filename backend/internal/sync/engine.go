@@ -285,14 +285,29 @@ func (e *Engine) RunSyncFields(ctx context.Context, connectorID string, jobID st
 			finish("error", authErr)
 			return markError(result, start, authErr)
 		}
-		cfg = newCfg
-		cfg["url"] = rec.URL
-		cfg["verify_tls"] = rec.VerifyTLS
-		if configData, err := store.MarshalConnectorConfig(cfg); err == nil {
+		// Persist the refreshed credentials on their own — url/verify_tls
+		// already live in their own columns and "fields" is a per-request
+		// hint, not connector config; strip them regardless of whether the
+		// refresher's newConfig (often built by copying its input, which
+		// already carries these) included them.
+		toStore := make(map[string]any, len(newCfg))
+		for k, v := range newCfg {
+			toStore[k] = v
+		}
+		delete(toStore, "url")
+		delete(toStore, "verify_tls")
+		delete(toStore, "fields")
+		if configData, err := store.MarshalConnectorConfig(toStore); err == nil {
 			_ = e.store.UpdateConnector(ctx, connectorID, map[string]any{
 				"config_data":           configData,
 				"credential_expires_at": expiresAt.UTC().Format(time.RFC3339),
 			})
+		}
+		cfg = newCfg
+		cfg["url"] = rec.URL
+		cfg["verify_tls"] = rec.VerifyTLS
+		if len(fields) > 0 {
+			cfg["fields"] = fields
 		}
 		conn, err = connector.Get(rec.Type, cfg)
 		if err != nil {
