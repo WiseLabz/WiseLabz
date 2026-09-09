@@ -456,8 +456,9 @@ func (h *Handler) Data(w http.ResponseWriter, r *http.Request) {
 // syncsDefaultLimit and syncsMaxLimit mirror httputil.DefaultPageSize/MaxPageSize,
 // per the /connectors/{connectorId}/syncs OpenAPI spec (limit default 20, max 100).
 const (
-	syncsDefaultLimit = httputil.DefaultPageSize
-	syncsMaxLimit     = httputil.MaxPageSize
+	syncsDefaultLimit             = httputil.DefaultPageSize
+	syncsMaxLimit                 = httputil.MaxPageSize
+	restartPreviewDowntimeSeconds = 30
 )
 
 // Syncs handles GET /api/connectors/{id}/syncs (OpenAPI's connectorId path param).
@@ -526,6 +527,57 @@ func (h *Handler) RemovalImpact(w http.ResponseWriter, r *http.Request) {
 		"docSections":     docSections,
 		"snapshots":       snapshots,
 		"items":           items,
+	})
+}
+
+// RestartPreview handles POST /api/connectors/{id}/restart?dryRun=true.
+// It previews the future restart action from the latest stored snapshot.
+func (h *Handler) RestartPreview(w http.ResponseWriter, r *http.Request) {
+	dryRun := r.URL.Query()["dryRun"]
+	if len(dryRun) != 1 || dryRun[0] != "true" {
+		httputil.Error(
+			w,
+			http.StatusBadRequest,
+			"invalid_request",
+			"restart is not yet implemented, only dry-run preview is available",
+		)
+		return
+	}
+
+	id := r.PathValue("id")
+	if _, err := h.Store.GetConnector(r.Context(), id); err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			httputil.Error(w, http.StatusNotFound, "not_found", "Connector not found")
+			return
+		}
+		httputil.Errorf(w, err)
+		return
+	}
+
+	sn, err := h.Store.GetLatestSnapshot(r.Context(), id)
+	if errors.Is(err, store.ErrNotFound) {
+		httputil.Error(w, http.StatusNotFound, "not_found", "No snapshot available for connector")
+		return
+	}
+	if err != nil {
+		httputil.Errorf(w, err)
+		return
+	}
+
+	var snap connector.ServiceSnapshot
+	if err := json.Unmarshal([]byte(sn.Data), &snap); err != nil {
+		httputil.Errorf(w, fmt.Errorf("decode service snapshot: %w", err))
+		return
+	}
+
+	dependencies := snap.Dependencies
+	if dependencies == nil {
+		dependencies = []connector.ServiceDependency{}
+	}
+	httputil.JSON(w, http.StatusOK, map[string]any{
+		"targetService":            snap.ServiceName,
+		"estimatedDowntimeSeconds": restartPreviewDowntimeSeconds,
+		"dependentServices":        dependencies,
 	})
 }
 

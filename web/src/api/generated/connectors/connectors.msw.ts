@@ -17,6 +17,7 @@ import type {
   ConnectorTypeSchema,
   HealthCheckResult,
   RemovalImpact,
+  RestartPreview,
   ServiceSnapshot,
   SyncJobRef,
   SyncRun,
@@ -281,6 +282,25 @@ export const getGetConnectorsConnectorIdRemovalImpactResponseMock = (
   items: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() => ({
     type: faker.string.alpha({ length: { min: 10, max: 20 } }),
     name: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  })),
+  ...overrideResponse,
+});
+
+export const getPostConnectorsConnectorIdRestartResponseMock = (
+  overrideResponse: Partial<Extract<RestartPreview, object>> = {}
+): RestartPreview => ({
+  targetService: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  estimatedDowntimeSeconds: faker.number.int({ min: 0 }),
+  dependentServices: Array.from(
+    { length: faker.number.int({ min: 1, max: 4 }) },
+    (_, i) => i + 1
+  ).map(() => ({
+    kind: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    name: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    ref: faker.helpers.arrayElement([
+      faker.string.alpha({ length: { min: 10, max: 20 } }),
+      undefined,
+    ]),
   })),
   ...overrideResponse,
 });
@@ -581,6 +601,30 @@ export const getGetConnectorsConnectorIdRemovalImpactMockHandler = (
   );
 };
 
+export const getPostConnectorsConnectorIdRestartMockHandler = (
+  overrideResponse?:
+    | RestartPreview
+    | ((
+        info: Parameters<Parameters<typeof http.post>[1]>[0]
+      ) => Promise<RestartPreview> | RestartPreview),
+  options?: RequestHandlerOptions
+) => {
+  return http.post(
+    '*/connectors/:connectorId/restart',
+    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+      return HttpResponse.json(
+        overrideResponse !== undefined
+          ? typeof overrideResponse === 'function'
+            ? await overrideResponse(info)
+            : overrideResponse
+          : getPostConnectorsConnectorIdRestartResponseMock(),
+        { status: 200 }
+      );
+    },
+    options
+  );
+};
+
 export const getGetConnectorsConnectorIdDataMockHandler = (
   overrideResponse?:
     | ServiceSnapshot
@@ -746,6 +790,7 @@ export const getConnectorsMock = () => [
   getPutConnectorsConnectorIdMockHandler(),
   getDeleteConnectorsConnectorIdMockHandler(),
   getGetConnectorsConnectorIdRemovalImpactMockHandler(),
+  getPostConnectorsConnectorIdRestartMockHandler(),
   getGetConnectorsConnectorIdDataMockHandler(),
   getPostConnectorsConnectorIdTestMockHandler(),
   getPostConnectorsConnectorIdHealthMockHandler(),

@@ -153,6 +153,7 @@ func NewRouter(cfg Config) chi.Router {
 				r.Post("/", connH.Create)
 				r.Post("/{id}/test", connH.Test)
 				r.Post("/{id}/health", connH.Health)
+				r.Post("/{id}/restart", connH.RestartPreview)
 				r.Patch("/{id}", connH.Update) // compatibility for clients predating the OpenAPI PUT contract
 				r.Put("/{id}", connH.Update)
 				r.Put("/{id}/enabled", connH.ToggleEnabled)
