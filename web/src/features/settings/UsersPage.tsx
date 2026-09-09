@@ -38,8 +38,17 @@ export function UsersPage() {
   const invalidate = () => queryClient.invalidateQueries({ queryKey: getGetUsersQueryKey() });
 
   const patch = useMutation({
-    mutationFn: ({ id, role, disabled }: { id: string; role?: Role; disabled?: boolean }) =>
-      patchUsersUserId(id, { role, disabled }),
+    mutationFn: ({
+      id,
+      role,
+      disabled,
+      canManageDashboardDefaults,
+    }: {
+      id: string;
+      role?: Role;
+      disabled?: boolean;
+      canManageDashboardDefaults?: boolean;
+    }) => patchUsersUserId(id, { role, disabled, canManageDashboardDefaults }),
     onSuccess: () => {
       invalidate();
       toast.success(t('settings.users.updated'));
@@ -115,6 +124,20 @@ export function UsersPage() {
                     <option value="viewer">{t('settings.users.roleViewer')}</option>
                     <option value="operator">{t('settings.users.roleOperator')}</option>
                   </Select>
+
+                  {u.role === 'operator' && (
+                    <label className="flex items-center gap-1.5 text-2xs text-ink-faint">
+                      <input
+                        type="checkbox"
+                        checked={u.canManageDashboardDefaults ?? false}
+                        disabled={patch.isPending}
+                        onChange={(e) =>
+                          patch.mutate({ id: u.id, canManageDashboardDefaults: e.target.checked })
+                        }
+                      />
+                      {t('settings.users.manageDashboardDefaults')}
+                    </label>
+                  )}
 
                   <div className="flex items-center gap-1.5">
                     <Button
@@ -197,15 +220,23 @@ function InviteDialog({
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<Role>('viewer');
+  const [canManageDashboardDefaults, setCanManageDashboardDefaults] = useState(false);
 
   const create = useMutation({
-    mutationFn: () => postUsers({ username, email: email || undefined, role }),
+    mutationFn: () =>
+      postUsers({
+        username,
+        email: email || undefined,
+        role,
+        canManageDashboardDefaults: role === 'operator' ? canManageDashboardDefaults : undefined,
+      }),
     onSuccess: () => {
       onCreated();
       toast.success(t('settings.users.created'));
       setUsername('');
       setEmail('');
       setRole('viewer');
+      setCanManageDashboardDefaults(false);
       onClose();
     },
     onError: () => toast.error(t('settings.users.createError')),
@@ -242,6 +273,16 @@ function InviteDialog({
             <option value="operator">{t('settings.users.roleOperator')}</option>
           </Select>
         </Field>
+        {role === 'operator' && (
+          <label className="flex items-center gap-1.5 text-xs text-ink-faint">
+            <input
+              type="checkbox"
+              checked={canManageDashboardDefaults}
+              onChange={(e) => setCanManageDashboardDefaults(e.target.checked)}
+            />
+            {t('settings.users.manageDashboardDefaults')}
+          </label>
+        )}
         <div className="flex justify-end gap-2 pt-1">
           <Button type="button" variant="ghost" size="sm" onClick={onClose}>
             {t('common.cancel')}

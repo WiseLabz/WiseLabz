@@ -4,16 +4,31 @@
  * a live sync sweep across the canvas during a fleet sync. Edit mode: a
  * springy drag-to-reorder list + enable toggles, persisted per browser.
  */
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AnimatePresence, motion, Reorder, useDragControls } from 'motion/react';
 import { ErrorBoundary } from 'react-error-boundary';
-import { useDashboard, type WidgetId } from '../../store/dashboard';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  useDashboard,
+  widgetsFromWire,
+  widgetsToWire,
+  type WidgetId,
+  type WidgetDef,
+} from '../../store/dashboard';
 import { useUi } from '../../store/ui';
 import { useLive } from '../../store/live';
-import { useGetDashboardOverview } from '../../api/generated/dashboard/dashboard';
+import {
+  useGetDashboardOverview,
+  getDashboardLayoutAdminDefault,
+  putDashboardLayoutAdminDefault,
+  getGetDashboardLayoutAdminDefaultQueryKey,
+} from '../../api/generated/dashboard/dashboard';
+import { useGetMe } from '../../api/generated/me/me';
 import { relativeTime } from '../../lib/time';
+import { toast } from '../../lib/toast';
 import { Button } from '../../components/ui/Button';
+import { Dialog } from '../../components/ui/Dialog';
 import { ErrorState } from '../../components/ui/states';
 import { WidgetFrame } from '../../components/dashboard/WidgetFrame';
 import {
@@ -60,11 +75,24 @@ export function DashboardPage() {
   const { t } = useTranslation();
   const widgetTitle = (id: WidgetId) => t(`dashboard.widget.${id}`);
   const layout = useDashboard((s) => s.layout);
+  const hydrate = useDashboard((s) => s.hydrate);
+  const resetLayout = useDashboard((s) => s.reset);
+  useEffect(() => {
+    void hydrate();
+  }, [hydrate]);
   const editing = useUi((s) => s.editingDashboard);
   const setEditing = useUi((s) => s.setEditingDashboard);
   const lastSync = useLive((s) => s.activity.find((a) => a.kind === 'sync')?.at);
   const job = useLive((s) => s.jobs.global);
   const syncing = !!job && job.phase !== 'done' && job.phase !== 'error';
+  const { data: me } = useGetMe();
+  const [adminDefaultOpen, setAdminDefaultOpen] = useState(false);
+
+  const reset = useMutation({
+    mutationFn: resetLayout,
+    onSuccess: () => toast.success(t('dashboard.resetDone')),
+    onError: () => toast.error(t('dashboard.resetError')),
+  });
 
   const visible = layout.filter((w) => w.enabled);
 
@@ -95,6 +123,19 @@ export function DashboardPage() {
               {t('dashboard.lastSync', { time: lastSync ? `${relativeTime(lastSync)} ago` : '—' })}
             </span>
             <Button
+              variant="ghost"
+              size="sm"
+              disabled={reset.isPending}
+              onClick={() => reset.mutate()}
+            >
+              {t('dashboard.resetLayout')}
+            </Button>
+            {me?.role === 'operator' && me.canManageDashboardDefaults && (
+              <Button variant="ghost" size="sm" onClick={() => setAdminDefaultOpen(true)}>
+                {t('dashboard.editDefaultLayout')}
+              </Button>
+            )}
+            <Button
               variant={editing ? 'primary' : 'secondary'}
               size="sm"
               onClick={() => setEditing(!editing)}
@@ -105,6 +146,8 @@ export function DashboardPage() {
           </div>
         </div>
       </header>
+
+      <AdminDefaultDialog open={adminDefaultOpen} onClose={() => setAdminDefaultOpen(false)} />
 
       <AnimatePresence mode="wait">
         {editing ? (
@@ -274,6 +317,108 @@ function EditRow({
         />
       </button>
     </Reorder.Item>
+  );
+}
+
+/* ── Admin-default layout editor (operator, permission-gated) ─────────── */
+
+function AdminDefaultDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { t } = useTranslation();
+  const queryClient = useQueryClient();
+  const queryKey = getGetDashboardLayoutAdminDefaultQueryKey();
+  const { data, isLoading } = useQuery({
+    queryKey,
+    queryFn: () => getDashboardLayoutAdminDefault(),
+    enabled: open,
+  });
+  const [draft, setDraft] = useState<WidgetDef[]>([]);
+  // Adjust state during render (React-blessed alternative to a syncing effect):
+  // re-seed whenever the query yields a fresh reference, e.g. after an invalidate.
+  const [seeded, setSeeded] = useState<typeof data>(undefined);
+  if (data && data !== seeded) {
+    setSeeded(data);
+    setDraft(widgetsFromWire(data.widgets));
+  }
+
+  const save = useMutation({
+    mutationFn: (layout: WidgetDef[]) => putDashboardLayoutAdminDefault(widgetsToWire(layout)),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey });
+      toast.success(t('dashboard.defaultSaved'));
+      onClose();
+    },
+    onError: () => toast.error(t('dashboard.defaultSaveError')),
+  });
+
+  const move = (index: number, dir: -1 | 1) => {
+    const target = index + dir;
+    if (target < 0 || target >= draft.length) return;
+    const next = [...draft];
+    [next[index], next[target]] = [next[target], next[index]];
+    setDraft(next);
+  };
+
+  const toggle = (id: WidgetId) => {
+    setDraft((d) => d.map((w) => (w.id === id ? { ...w, enabled: !w.enabled } : w)));
+  };
+
+  return (
+    <Dialog open={open} onClose={onClose} title={t('dashboard.editDefaultLayout')}>
+      {isLoading ? (
+        <p className="text-sm text-ink-muted">{t('common.loading')}</p>
+      ) : (
+        <div className="space-y-4">
+          <p className="text-sm text-ink-muted">{t('dashboard.defaultHint')}</p>
+          <ul className="flex flex-col gap-2">
+            {draft.map((w, index) => (
+              <li
+                key={w.id}
+                className="flex items-center gap-3 rounded-lg border border-line-soft bg-surface px-3 py-2"
+              >
+                <div className="flex flex-col">
+                  <button
+                    onClick={() => move(index, -1)}
+                    disabled={index === 0}
+                    aria-label={t('dashboard.moveUp', { title: t(`dashboard.widget.${w.id}`) })}
+                    className="text-ink-faint transition-colors hover:text-ink disabled:pointer-events-none disabled:opacity-30"
+                  >
+                    <ChevronDownIcon size={14} className="rotate-180" />
+                  </button>
+                  <button
+                    onClick={() => move(index, 1)}
+                    disabled={index === draft.length - 1}
+                    aria-label={t('dashboard.moveDown', { title: t(`dashboard.widget.${w.id}`) })}
+                    className="text-ink-faint transition-colors hover:text-ink disabled:pointer-events-none disabled:opacity-30"
+                  >
+                    <ChevronDownIcon size={14} />
+                  </button>
+                </div>
+                <span className="flex-1 text-sm font-medium text-ink">
+                  {t(`dashboard.widget.${w.id}`)}
+                </span>
+                <label className="flex items-center gap-1.5 text-2xs text-ink-faint">
+                  <input type="checkbox" checked={w.enabled} onChange={() => toggle(w.id)} />
+                  {t('dashboard.enabled')}
+                </label>
+              </li>
+            ))}
+          </ul>
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" size="sm" onClick={onClose}>
+              {t('common.cancel')}
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              disabled={save.isPending}
+              onClick={() => save.mutate(draft)}
+            >
+              {t('common.save')}
+            </Button>
+          </div>
+        </div>
+      )}
+    </Dialog>
   );
 }
 

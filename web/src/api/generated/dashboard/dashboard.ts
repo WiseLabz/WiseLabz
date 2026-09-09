@@ -19,7 +19,7 @@ import type {
   UseQueryResult,
 } from '@tanstack/react-query';
 
-import type { DashboardLayout, DashboardOverview } from '../../model';
+import type { DashboardLayout, DashboardOverview, ForbiddenResponse } from '../../model';
 
 import { customInstance } from '../../axios-instance';
 import type { ErrorType, BodyType } from '../../axios-instance';
@@ -395,6 +395,395 @@ export function usePutDashboardLayout<
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
   const queryOptions = getPutDashboardLayoutQueryOptions(dashboardLayout, options);
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+/**
+ * Retrieve the system-wide default dashboard layout configured by operators.
+ * @summary Admin-default dashboard layout (operator)
+ */
+export const getDashboardLayoutAdminDefault = (
+  options?: SecondParameter<typeof customInstance>,
+  signal?: AbortSignal
+) => {
+  return customInstance<DashboardLayout>(
+    { url: `/dashboard/layout/admin-default`, method: 'GET', signal },
+    options
+  );
+};
+
+export const getGetDashboardLayoutAdminDefaultQueryKey = () => {
+  return [`/dashboard/layout/admin-default`] as const;
+};
+
+export const getGetDashboardLayoutAdminDefaultQueryOptions = <
+  TData = Awaited<ReturnType<typeof getDashboardLayoutAdminDefault>>,
+  TError = ErrorType<ForbiddenResponse>,
+>(options?: {
+  query?: Partial<
+    UseQueryOptions<Awaited<ReturnType<typeof getDashboardLayoutAdminDefault>>, TError, TData>
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetDashboardLayoutAdminDefaultQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getDashboardLayoutAdminDefault>>> = ({
+    signal,
+  }) => getDashboardLayoutAdminDefault(requestOptions, signal);
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getDashboardLayoutAdminDefault>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type GetDashboardLayoutAdminDefaultQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getDashboardLayoutAdminDefault>>
+>;
+export type GetDashboardLayoutAdminDefaultQueryError = ErrorType<ForbiddenResponse>;
+
+export function useGetDashboardLayoutAdminDefault<
+  TData = Awaited<ReturnType<typeof getDashboardLayoutAdminDefault>>,
+  TError = ErrorType<ForbiddenResponse>,
+>(
+  options: {
+    query: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getDashboardLayoutAdminDefault>>, TError, TData>
+    > &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getDashboardLayoutAdminDefault>>,
+          TError,
+          Awaited<ReturnType<typeof getDashboardLayoutAdminDefault>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useGetDashboardLayoutAdminDefault<
+  TData = Awaited<ReturnType<typeof getDashboardLayoutAdminDefault>>,
+  TError = ErrorType<ForbiddenResponse>,
+>(
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getDashboardLayoutAdminDefault>>, TError, TData>
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getDashboardLayoutAdminDefault>>,
+          TError,
+          Awaited<ReturnType<typeof getDashboardLayoutAdminDefault>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useGetDashboardLayoutAdminDefault<
+  TData = Awaited<ReturnType<typeof getDashboardLayoutAdminDefault>>,
+  TError = ErrorType<ForbiddenResponse>,
+>(
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getDashboardLayoutAdminDefault>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * @summary Admin-default dashboard layout (operator)
+ */
+
+export function useGetDashboardLayoutAdminDefault<
+  TData = Awaited<ReturnType<typeof getDashboardLayoutAdminDefault>>,
+  TError = ErrorType<ForbiddenResponse>,
+>(
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getDashboardLayoutAdminDefault>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getGetDashboardLayoutAdminDefaultQueryOptions(options);
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+/**
+ * Update the system-wide default layout that new users or reset users inherit.
+ * @summary Update admin-default dashboard layout (operator)
+ */
+export const putDashboardLayoutAdminDefault = (
+  dashboardLayout: BodyType<DashboardLayout>,
+  options?: SecondParameter<typeof customInstance>,
+  signal?: AbortSignal
+) => {
+  return customInstance<DashboardLayout>(
+    {
+      url: `/dashboard/layout/admin-default`,
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      data: dashboardLayout,
+      signal,
+    },
+    options
+  );
+};
+
+export const getPutDashboardLayoutAdminDefaultQueryKey = (
+  dashboardLayout?: BodyType<DashboardLayout>
+) => {
+  return ['PUT', `/dashboard/layout/admin-default`, dashboardLayout] as const;
+};
+
+export const getPutDashboardLayoutAdminDefaultQueryOptions = <
+  TData = Awaited<ReturnType<typeof putDashboardLayoutAdminDefault>>,
+  TError = ErrorType<ForbiddenResponse>,
+>(
+  dashboardLayout: BodyType<DashboardLayout>,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof putDashboardLayoutAdminDefault>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  }
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getPutDashboardLayoutAdminDefaultQueryKey(dashboardLayout);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof putDashboardLayoutAdminDefault>>> = ({
+    signal,
+  }) => putDashboardLayoutAdminDefault(dashboardLayout, requestOptions, signal);
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof putDashboardLayoutAdminDefault>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type PutDashboardLayoutAdminDefaultQueryResult = NonNullable<
+  Awaited<ReturnType<typeof putDashboardLayoutAdminDefault>>
+>;
+export type PutDashboardLayoutAdminDefaultQueryError = ErrorType<ForbiddenResponse>;
+
+export function usePutDashboardLayoutAdminDefault<
+  TData = Awaited<ReturnType<typeof putDashboardLayoutAdminDefault>>,
+  TError = ErrorType<ForbiddenResponse>,
+>(
+  dashboardLayout: BodyType<DashboardLayout>,
+  options: {
+    query: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof putDashboardLayoutAdminDefault>>, TError, TData>
+    > &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof putDashboardLayoutAdminDefault>>,
+          TError,
+          Awaited<ReturnType<typeof putDashboardLayoutAdminDefault>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function usePutDashboardLayoutAdminDefault<
+  TData = Awaited<ReturnType<typeof putDashboardLayoutAdminDefault>>,
+  TError = ErrorType<ForbiddenResponse>,
+>(
+  dashboardLayout: BodyType<DashboardLayout>,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof putDashboardLayoutAdminDefault>>, TError, TData>
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof putDashboardLayoutAdminDefault>>,
+          TError,
+          Awaited<ReturnType<typeof putDashboardLayoutAdminDefault>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function usePutDashboardLayoutAdminDefault<
+  TData = Awaited<ReturnType<typeof putDashboardLayoutAdminDefault>>,
+  TError = ErrorType<ForbiddenResponse>,
+>(
+  dashboardLayout: BodyType<DashboardLayout>,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof putDashboardLayoutAdminDefault>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * @summary Update admin-default dashboard layout (operator)
+ */
+
+export function usePutDashboardLayoutAdminDefault<
+  TData = Awaited<ReturnType<typeof putDashboardLayoutAdminDefault>>,
+  TError = ErrorType<ForbiddenResponse>,
+>(
+  dashboardLayout: BodyType<DashboardLayout>,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof putDashboardLayoutAdminDefault>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getPutDashboardLayoutAdminDefaultQueryOptions(dashboardLayout, options);
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+/**
+ * Overwrite the current user's layout with the system-wide admin default.
+ * @summary Reset to admin-default dashboard layout
+ */
+export const postDashboardLayoutReset = (
+  options?: SecondParameter<typeof customInstance>,
+  signal?: AbortSignal
+) => {
+  return customInstance<DashboardLayout>(
+    { url: `/dashboard/layout/reset`, method: 'POST', signal },
+    options
+  );
+};
+
+export const getPostDashboardLayoutResetQueryKey = () => {
+  return ['POST', `/dashboard/layout/reset`] as const;
+};
+
+export const getPostDashboardLayoutResetQueryOptions = <
+  TData = Awaited<ReturnType<typeof postDashboardLayoutReset>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: Partial<
+    UseQueryOptions<Awaited<ReturnType<typeof postDashboardLayoutReset>>, TError, TData>
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getPostDashboardLayoutResetQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof postDashboardLayoutReset>>> = ({
+    signal,
+  }) => postDashboardLayoutReset(requestOptions, signal);
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof postDashboardLayoutReset>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type PostDashboardLayoutResetQueryResult = NonNullable<
+  Awaited<ReturnType<typeof postDashboardLayoutReset>>
+>;
+export type PostDashboardLayoutResetQueryError = ErrorType<unknown>;
+
+export function usePostDashboardLayoutReset<
+  TData = Awaited<ReturnType<typeof postDashboardLayoutReset>>,
+  TError = ErrorType<unknown>,
+>(
+  options: {
+    query: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof postDashboardLayoutReset>>, TError, TData>
+    > &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postDashboardLayoutReset>>,
+          TError,
+          Awaited<ReturnType<typeof postDashboardLayoutReset>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function usePostDashboardLayoutReset<
+  TData = Awaited<ReturnType<typeof postDashboardLayoutReset>>,
+  TError = ErrorType<unknown>,
+>(
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof postDashboardLayoutReset>>, TError, TData>
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postDashboardLayoutReset>>,
+          TError,
+          Awaited<ReturnType<typeof postDashboardLayoutReset>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function usePostDashboardLayoutReset<
+  TData = Awaited<ReturnType<typeof postDashboardLayoutReset>>,
+  TError = ErrorType<unknown>,
+>(
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof postDashboardLayoutReset>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * @summary Reset to admin-default dashboard layout
+ */
+
+export function usePostDashboardLayoutReset<
+  TData = Awaited<ReturnType<typeof postDashboardLayoutReset>>,
+  TError = ErrorType<unknown>,
+>(
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof postDashboardLayoutReset>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getPostDashboardLayoutResetQueryOptions(options);
 
   const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
     queryKey: DataTag<QueryKey, TData, TError>;

@@ -12,4 +12,6 @@ export interface UserUpdate {
   role?: Role;
   disabled?: boolean;
   displayName?: string;
+  /** Only valid when role is operator; grants permission to edit the admin-default dashboard layout */
+  canManageDashboardDefaults?: boolean;
 }

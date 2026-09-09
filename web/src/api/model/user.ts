@@ -17,5 +17,7 @@ export interface User {
   role: Role;
   authSource: UserAuthSource;
   disabled?: boolean;
+  /** When role is operator, grants permission to edit the admin-default dashboard layout */
+  canManageDashboardDefaults?: boolean;
   createdAt: string;
 }

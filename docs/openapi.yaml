@@ -297,6 +297,48 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/DashboardLayout' }
+  /dashboard/layout/admin-default:
+    get:
+      tags: [dashboard]
+      summary: Admin-default dashboard layout (operator)
+      description: >
+        Retrieve the system-wide default dashboard layout configured by operators.
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DashboardLayout' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    put:
+      tags: [dashboard]
+      summary: Update admin-default dashboard layout (operator)
+      description: >
+        Update the system-wide default layout that new users or reset users inherit.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DashboardLayout' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DashboardLayout' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /dashboard/layout/reset:
+    post:
+      tags: [dashboard]
+      summary: Reset to admin-default dashboard layout
+      description: >
+        Overwrite the current user's layout with the system-wide admin default.
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DashboardLayout' }
 
   # ───────────────────────── connectors ─────────────────────────
   /connectors:
@@ -1658,6 +1700,7 @@ components:
         role: { $ref: '#/components/schemas/Role' }
         authSource: { type: string, enum: [local, oidc] }
         disabled: { type: boolean }
+        canManageDashboardDefaults: { type: boolean, description: 'When role is operator, grants permission to edit the admin-default dashboard layout' }
         createdAt: { type: string, format: date-time }
     UserCreate:
       type: object
@@ -1667,12 +1710,14 @@ components:
         email: { type: string, format: email }
         role: { $ref: '#/components/schemas/Role' }
         password: { type: string, format: password, description: Local accounts only }
+        canManageDashboardDefaults: { type: boolean, description: 'Only valid when role is operator; grants permission to edit the admin-default dashboard layout' }
     UserUpdate:
       type: object
       properties:
         role: { $ref: '#/components/schemas/Role' }
         disabled: { type: boolean }
         displayName: { type: string }
+        canManageDashboardDefaults: { type: boolean, description: 'Only valid when role is operator; grants permission to edit the admin-default dashboard layout' }
     ProfileUpdate:
       type: object
       properties:

@@ -165,11 +165,12 @@ func (s *Store) Init(ctx context.Context, adminPassword string) error {
 		}
 
 		admin := &User{
-			Username:     "admin",
-			DisplayName:  "Administrator",
-			Role:         "operator",
-			AuthSource:   "local",
-			PasswordHash: hash,
+			Username:                   "admin",
+			DisplayName:                "Administrator",
+			Role:                       "operator",
+			AuthSource:                 "local",
+			PasswordHash:               hash,
+			CanManageDashboardDefaults: true,
 		}
 		if err := s.CreateUser(ctx, admin); err != nil {
 			return fmt.Errorf("seed admin user: %w", err)

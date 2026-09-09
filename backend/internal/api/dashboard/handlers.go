@@ -2,6 +2,7 @@
 package dashboard
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 
@@ -66,10 +67,84 @@ func (h *Handler) GetLayout(w http.ResponseWriter, r *http.Request) {
 	).Scan(&widgets)
 
 	if err != nil {
-		// Return empty layout if not found
-		httputil.JSON(w, http.StatusOK, map[string]any{
-			"widgets": json.RawMessage("[]"),
-		})
+		// No saved layout yet — a new user starts on the administrator default.
+		widgets, err = h.getAdminDefaultWidgets(r.Context())
+		if err != nil {
+			widgets = "[]"
+		}
+	}
+
+	httputil.JSON(w, http.StatusOK, map[string]any{
+		"widgets": json.RawMessage(widgets),
+	})
+}
+
+// getAdminDefaultWidgets returns the raw JSON widgets column of the single
+// dashboard_admin_default row (id=1), seeded by migration 000010.
+func (h *Handler) getAdminDefaultWidgets(ctx context.Context) (string, error) {
+	var widgets string
+	err := h.Store.DB().QueryRowContext(ctx,
+		`SELECT widgets FROM dashboard_admin_default WHERE id = 1`,
+	).Scan(&widgets)
+	if err != nil {
+		return "", err
+	}
+	return widgets, nil
+}
+
+// GetAdminDefault handles GET /api/dashboard/layout/admin-default.
+func (h *Handler) GetAdminDefault(w http.ResponseWriter, r *http.Request) {
+	widgets, err := h.getAdminDefaultWidgets(r.Context())
+	if err != nil {
+		httputil.Errorf(w, err)
+		return
+	}
+	httputil.JSON(w, http.StatusOK, map[string]any{
+		"widgets": json.RawMessage(widgets),
+	})
+}
+
+// PutAdminDefault handles PUT /api/dashboard/layout/admin-default.
+func (h *Handler) PutAdminDefault(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Widgets json.RawMessage `json:"widgets"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		httputil.Error(w, http.StatusBadRequest, "invalid_request", "Invalid JSON body")
+		return
+	}
+
+	widgets := string(req.Widgets)
+	if widgets == "" || widgets == "null" {
+		widgets = "[]"
+	}
+
+	_, err := h.Store.DB().ExecContext(r.Context(),
+		`UPDATE dashboard_admin_default SET widgets = ? WHERE id = 1`, widgets,
+	)
+	if err != nil {
+		httputil.Errorf(w, err)
+		return
+	}
+
+	httputil.JSON(w, http.StatusOK, map[string]any{
+		"widgets": json.RawMessage(widgets),
+	})
+}
+
+// ResetLayout handles POST /api/dashboard/layout/reset.
+// Overwrites the caller's saved layout with the current administrator default.
+func (h *Handler) ResetLayout(w http.ResponseWriter, r *http.Request) {
+	userID := auth.UserIDFromContext(r.Context())
+
+	widgets, err := h.getAdminDefaultWidgets(r.Context())
+	if err != nil {
+		httputil.Errorf(w, err)
+		return
+	}
+
+	if err := h.saveLayoutWidgets(r.Context(), userID, widgets); err != nil {
+		httputil.Errorf(w, err)
 		return
 	}
 
@@ -95,23 +170,27 @@ func (h *Handler) SaveLayout(w http.ResponseWriter, r *http.Request) {
 		widgets = "[]"
 	}
 
-	// Upsert layout
-	_, err := h.Store.DB().ExecContext(r.Context(), `
-		INSERT INTO dashboard_layouts (user_id, widgets) VALUES (?, ?)
-		ON CONFLICT(user_id) DO UPDATE SET widgets = ?
-	`, userID, widgets, widgets)
-	if err != nil {
-		// SQLite doesn't support ON CONFLICT — use INSERT OR REPLACE
-		_, err = h.Store.DB().ExecContext(r.Context(), `
-			INSERT OR REPLACE INTO dashboard_layouts (user_id, widgets) VALUES (?, ?)
-		`, userID, widgets)
-		if err != nil {
-			httputil.Errorf(w, err)
-			return
-		}
+	if err := h.saveLayoutWidgets(r.Context(), userID, widgets); err != nil {
+		httputil.Errorf(w, err)
+		return
 	}
 
 	httputil.JSON(w, http.StatusOK, map[string]any{
 		"widgets": json.RawMessage(widgets),
 	})
+}
+
+// saveLayoutWidgets upserts a user's layout row.
+func (h *Handler) saveLayoutWidgets(ctx context.Context, userID, widgets string) error {
+	_, err := h.Store.DB().ExecContext(ctx, `
+		INSERT INTO dashboard_layouts (user_id, widgets) VALUES (?, ?)
+		ON CONFLICT(user_id) DO UPDATE SET widgets = ?
+	`, userID, widgets, widgets)
+	if err != nil {
+		// SQLite doesn't support ON CONFLICT — use INSERT OR REPLACE
+		_, err = h.Store.DB().ExecContext(ctx, `
+			INSERT OR REPLACE INTO dashboard_layouts (user_id, widgets) VALUES (?, ?)
+		`, userID, widgets)
+	}
+	return err
 }

@@ -23,6 +23,7 @@ export const getGetUsersResponseMock = (): User[] =>
     role: faker.helpers.arrayElement(Object.values(Role)),
     authSource: faker.helpers.arrayElement(['local', 'oidc'] as const),
     disabled: faker.helpers.arrayElement([faker.datatype.boolean(), undefined]),
+    canManageDashboardDefaults: faker.helpers.arrayElement([faker.datatype.boolean(), undefined]),
     createdAt: faker.date.past().toISOString().slice(0, 19) + 'Z',
   }));
 
@@ -39,6 +40,7 @@ export const getPostUsersResponseMock = (
   role: faker.helpers.arrayElement(Object.values(Role)),
   authSource: faker.helpers.arrayElement(['local', 'oidc'] as const),
   disabled: faker.helpers.arrayElement([faker.datatype.boolean(), undefined]),
+  canManageDashboardDefaults: faker.helpers.arrayElement([faker.datatype.boolean(), undefined]),
   createdAt: faker.date.past().toISOString().slice(0, 19) + 'Z',
   ...overrideResponse,
 });
@@ -56,6 +58,7 @@ export const getPatchUsersUserIdResponseMock = (
   role: faker.helpers.arrayElement(Object.values(Role)),
   authSource: faker.helpers.arrayElement(['local', 'oidc'] as const),
   disabled: faker.helpers.arrayElement([faker.datatype.boolean(), undefined]),
+  canManageDashboardDefaults: faker.helpers.arrayElement([faker.datatype.boolean(), undefined]),
   createdAt: faker.date.past().toISOString().slice(0, 19) + 'Z',
   ...overrideResponse,
 });

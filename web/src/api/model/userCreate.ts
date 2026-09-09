@@ -14,4 +14,6 @@ export interface UserCreate {
   role: Role;
   /** Local accounts only */
   password?: string;
+  /** Only valid when role is operator; grants permission to edit the admin-default dashboard layout */
+  canManageDashboardDefaults?: boolean;
 }

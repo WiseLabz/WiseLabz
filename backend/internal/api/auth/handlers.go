@@ -557,10 +557,11 @@ func (h *Handler) ListUsers(w http.ResponseWriter, r *http.Request) {
 // CreateUser handles POST /api/users.
 func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Username string `json:"username"`
-		Password string `json:"password"`
-		Email    string `json:"email"`
-		Role     string `json:"role"`
+		Username                   string `json:"username"`
+		Password                   string `json:"password"`
+		Email                      string `json:"email"`
+		Role                       string `json:"role"`
+		CanManageDashboardDefaults bool   `json:"canManageDashboardDefaults"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		httputil.Error(w, http.StatusBadRequest, "invalid_request", "Invalid JSON body")
@@ -577,6 +578,10 @@ func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
 		httputil.Error(w, http.StatusBadRequest, "invalid_request", "role must be 'viewer' or 'operator'")
 		return
 	}
+	if req.CanManageDashboardDefaults && req.Role != "operator" {
+		httputil.Error(w, http.StatusBadRequest, "invalid_request", "canManageDashboardDefaults requires role 'operator'")
+		return
+	}
 
 	hash, err := auth.HashPassword(req.Password)
 	if err != nil {
@@ -585,12 +590,13 @@ func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	user := &store.User{
-		Username:     req.Username,
-		DisplayName:  req.Username,
-		Email:        req.Email,
-		Role:         req.Role,
-		AuthSource:   "local",
-		PasswordHash: hash,
+		Username:                   req.Username,
+		DisplayName:                req.Username,
+		Email:                      req.Email,
+		Role:                       req.Role,
+		AuthSource:                 "local",
+		PasswordHash:               hash,
+		CanManageDashboardDefaults: req.CanManageDashboardDefaults,
 	}
 	if err := h.Store.CreateUser(r.Context(), user); err != nil {
 		if errors.Is(err, store.ErrConflict) {
@@ -613,11 +619,12 @@ func (h *Handler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		Username    *string `json:"username"`
-		DisplayName *string `json:"displayName"`
-		Email       *string `json:"email"`
-		Role        *string `json:"role"`
-		Disabled    *bool   `json:"disabled"`
+		Username                   *string `json:"username"`
+		DisplayName                *string `json:"displayName"`
+		Email                      *string `json:"email"`
+		Role                       *string `json:"role"`
+		Disabled                   *bool   `json:"disabled"`
+		CanManageDashboardDefaults *bool   `json:"canManageDashboardDefaults"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		httputil.Error(w, http.StatusBadRequest, "invalid_request", "Invalid JSON body")
@@ -643,6 +650,26 @@ func (h *Handler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.Disabled != nil {
 		updates["disabled"] = *req.Disabled
+	}
+	if req.CanManageDashboardDefaults != nil {
+		effectiveRole := req.Role
+		if effectiveRole == nil {
+			existing, err := h.Store.GetUserByID(r.Context(), userID)
+			if err != nil {
+				if errors.Is(err, store.ErrNotFound) {
+					httputil.Error(w, http.StatusNotFound, "not_found", "User not found")
+					return
+				}
+				httputil.Errorf(w, err)
+				return
+			}
+			effectiveRole = &existing.Role
+		}
+		if *req.CanManageDashboardDefaults && *effectiveRole != "operator" {
+			httputil.Error(w, http.StatusBadRequest, "invalid_request", "canManageDashboardDefaults requires role 'operator'")
+			return
+		}
+		updates["can_manage_dashboard_defaults"] = *req.CanManageDashboardDefaults
 	}
 
 	if len(updates) == 0 {
@@ -770,14 +797,15 @@ func (h *Handler) getOrInitOIDCProvider(ctx context.Context, cfg *config.OIDCPro
 
 func sanitizeUser(u *store.User) map[string]any {
 	return map[string]any{
-		"id":          u.ID,
-		"username":    u.Username,
-		"displayName": u.DisplayName,
-		"email":       u.Email,
-		"role":        u.Role,
-		"authSource":  u.AuthSource,
-		"disabled":    u.Disabled,
-		"createdAt":   u.CreatedAt,
+		"id":                         u.ID,
+		"username":                   u.Username,
+		"displayName":                u.DisplayName,
+		"email":                      u.Email,
+		"role":                       u.Role,
+		"authSource":                 u.AuthSource,
+		"disabled":                   u.Disabled,
+		"canManageDashboardDefaults": u.CanManageDashboardDefaults,
+		"createdAt":                  u.CreatedAt,
 	}
 }
 
