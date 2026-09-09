@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -93,6 +94,11 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		configData = string(data)
+	}
+
+	if err := validateConnectorConfig(req.Type, req.URL, verifyTLS, req.Config); err != nil {
+		httputil.Error(w, http.StatusBadRequest, "invalid_request", err.Error())
+		return
 	}
 
 	c := &store.ConnectorRecord{
@@ -200,6 +206,34 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	if len(updates) == 0 {
 		httputil.Error(w, http.StatusBadRequest, "invalid_request", "No fields to update")
 		return
+	}
+
+	if req.Config != nil {
+		rec, err := h.Store.GetConnector(r.Context(), id)
+		if err != nil {
+			if errors.Is(err, store.ErrNotFound) {
+				httputil.Error(w, http.StatusNotFound, "not_found", "Connector not found")
+				return
+			}
+			httputil.Errorf(w, err)
+			return
+		}
+		typ := rec.Type
+		if req.Type != nil {
+			typ = *req.Type
+		}
+		url := rec.URL
+		if req.URL != nil {
+			url = *req.URL
+		}
+		verifyTLS := rec.VerifyTLS
+		if req.VerifyTLS != nil {
+			verifyTLS = *req.VerifyTLS
+		}
+		if err := validateConnectorConfig(typ, url, verifyTLS, req.Config); err != nil {
+			httputil.Error(w, http.StatusBadRequest, "invalid_request", err.Error())
+			return
+		}
 	}
 
 	if err := h.Store.UpdateConnector(r.Context(), id, updates); err != nil {
@@ -344,7 +378,11 @@ func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
 	}
 	latency := time.Since(start)
 
-	status, message := connector.ClassifyHealth(validateErr, latency)
+	threshold := connector.DegradedLatencyThreshold
+	if schema, err := connector.GetTypeSchema(rec.Type); err == nil {
+		threshold = schema.DegradedLatencyThreshold()
+	}
+	status, message := connector.ClassifyHealth(validateErr, latency, threshold)
 	if err := h.Store.UpdateConnector(r.Context(), id, map[string]any{
 		"status":         status,
 		"status_message": message,
@@ -491,6 +529,24 @@ func (h *Handler) RemovalImpact(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// validateConnectorConfig checks a connector config against its type's
+// schema (SchemaField pattern/length/enum rules), catching malformed values
+// at save time rather than on first fetch. Unknown types are left for
+// connector.Get to reject.
+func validateConnectorConfig(typ, url string, verifyTLS bool, config map[string]any) error {
+	schema, err := connector.GetTypeSchema(typ)
+	if err != nil {
+		return nil
+	}
+	cfg := make(map[string]any, len(config)+2)
+	for k, v := range config {
+		cfg[k] = v
+	}
+	cfg["url"] = url
+	cfg["verify_tls"] = verifyTLS
+	return connector.ValidateConfig(*schema, cfg)
+}
+
 // Schema handles GET /api/connectors/schema.
 func (h *Handler) Schema(w http.ResponseWriter, _ *http.Request) {
 	httputil.JSON(w, http.StatusOK, connector.ListSchemas())
@@ -530,7 +586,9 @@ func (h *Handler) ToggleEnabled(w http.ResponseWriter, r *http.Request) {
 
 // Sync handles POST /api/connectors/{id}/sync.
 // Triggers a sync for a single connector. Returns 202 with job info; the sync
-// itself runs asynchronously and its progress streams over /ws.
+// itself runs asynchronously and its progress streams over /ws. An optional
+// JSON body {"fields": ["vms","storage"]} requests a partial fetch — a
+// dashboard quick-check doesn't need to force a full node/VM/container fetch.
 func (h *Handler) Sync(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 
@@ -543,9 +601,17 @@ func (h *Handler) Sync(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var req struct {
+		Fields []string `json:"fields"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil && !errors.Is(err, io.EOF) {
+		httputil.Error(w, http.StatusBadRequest, "invalid_request", "Invalid JSON body")
+		return
+	}
+
 	jobID := uuid.New().String()
 	go func() {
-		if _, err := h.SyncEngine.RunSync(context.Background(), id, jobID); err != nil {
+		if _, err := h.SyncEngine.RunSyncFields(context.Background(), id, jobID, req.Fields); err != nil {
 			slog.Error("sync failed", "connector", id, "job", jobID, "error", err)
 		}
 	}()

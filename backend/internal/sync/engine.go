@@ -4,6 +4,8 @@ package sync
 
 import (
 	"context"
+	"crypto/sha1" //nolint:gosec // non-cryptographic: stable pattern fingerprint, not a security boundary
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -13,6 +15,12 @@ import (
 	"github.com/WiseLabz/wiselabz/internal/store"
 	"github.com/WiseLabz/wiselabz/internal/ws"
 )
+
+// repeatDriftWindow is how far back to look for a prior change with the
+// same pattern ID when deciding whether a drift is "recurring" (a likely
+// misconfiguration loop) rather than a one-off.
+// ponytail: fixed 1h window, make configurable if a real deployment needs it.
+const repeatDriftWindow = time.Hour
 
 // retrySchedule is the backoff delay before each retry attempt (index 0 =
 // delay before the 2nd consecutive attempt, etc), mirroring
@@ -93,9 +101,17 @@ type RunResult struct {
 	Duration     string `json:"duration"`
 }
 
-// RunSync runs a sync for a single connector.
+// RunSync runs a full sync for a single connector (all fields).
 // Flow: Fetch -> Save Snapshot -> Diff -> Create Changes -> Create Alerts
 func (e *Engine) RunSync(ctx context.Context, connectorID string, jobID string) (*RunResult, error) {
+	return e.RunSyncFields(ctx, connectorID, jobID, nil)
+}
+
+// RunSyncFields runs a sync for a single connector, optionally requesting
+// only a subset of fields (e.g. []string{"vms","storage"}) so a caller like
+// a dashboard quick-check doesn't force a full fetch. A connector type that
+// doesn't support selective fetch ignores the hint and returns everything.
+func (e *Engine) RunSyncFields(ctx context.Context, connectorID string, jobID string, fields []string) (*RunResult, error) {
 	start := time.Now()
 	result := &RunResult{ConnectorID: connectorID}
 
@@ -216,6 +232,9 @@ func (e *Engine) RunSync(ctx context.Context, connectorID string, jobID string) 
 	}
 	cfg["url"] = rec.URL
 	cfg["verify_tls"] = rec.VerifyTLS
+	if len(fields) > 0 {
+		cfg["fields"] = fields
+	}
 
 	// Get connector implementation
 	conn, err := connector.Get(rec.Type, cfg)
@@ -240,6 +259,46 @@ func (e *Engine) RunSync(ctx context.Context, connectorID string, jobID string) 
 		}
 		finish("error", err)
 		return markError(result, start, fmt.Errorf("get connector impl: %w", err))
+	}
+
+	// Credential expiry check: refuse (or refresh, if the connector supports
+	// it) rather than let an expired credential fail Fetch with a confusing
+	// upstream error.
+	if rec.IsCredentialExpired(time.Now()) {
+		refresher, ok := conn.(connector.CredentialRefresher)
+		if !ok {
+			authErr := connector.NewAuthError(fmt.Errorf("credentials expired at %s", rec.CredentialExpiresAt))
+			_ = e.store.UpdateConnector(ctx, connectorID, map[string]any{
+				"status":         "offline",
+				"status_message": authErr.Error(),
+			})
+			finish("error", authErr)
+			return markError(result, start, authErr)
+		}
+		newCfg, expiresAt, refreshErr := refresher.RefreshCredentials(ctx, cfg)
+		if refreshErr != nil {
+			authErr := connector.NewAuthError(fmt.Errorf("credential refresh failed: %w", refreshErr))
+			_ = e.store.UpdateConnector(ctx, connectorID, map[string]any{
+				"status":         "offline",
+				"status_message": authErr.Error(),
+			})
+			finish("error", authErr)
+			return markError(result, start, authErr)
+		}
+		cfg = newCfg
+		cfg["url"] = rec.URL
+		cfg["verify_tls"] = rec.VerifyTLS
+		if configData, err := store.MarshalConnectorConfig(cfg); err == nil {
+			_ = e.store.UpdateConnector(ctx, connectorID, map[string]any{
+				"config_data":           configData,
+				"credential_expires_at": expiresAt.UTC().Format(time.RFC3339),
+			})
+		}
+		conn, err = connector.Get(rec.Type, cfg)
+		if err != nil {
+			finish("error", err)
+			return markError(result, start, fmt.Errorf("get connector impl after refresh: %w", err))
+		}
 	}
 
 	// Update status to fetching
@@ -277,6 +336,12 @@ func (e *Engine) RunSync(ctx context.Context, connectorID string, jobID string) 
 		}
 		finish("error", err)
 		return markError(result, start, fmt.Errorf("fetch: %w", err))
+	}
+
+	// Post-fetch transform/enrich pipeline: normalize field names, filter
+	// PII, merge/derive data — registered per connector category.
+	if err := runTransformers(ctx, rec.Category, sn); err != nil {
+		slog.Error("sync transform failed", "connector", connectorID, "error", err)
 	}
 
 	broadcast("diffing", 60)
@@ -324,13 +389,36 @@ func (e *Engine) RunSync(ctx context.Context, connectorID string, jobID string) 
 			diffResults := Compare(&prevSnap, sn)
 			for _, d := range diffResults {
 				diffJSON, _ := json.Marshal(d.Patches)
+				relatedJSON, _ := json.Marshal(d.RelatedServiceIDs)
+				patternID := changePatternID(connectorID, d.Type, d.Summary)
+
+				severity := d.Severity
+				summary := d.Summary
+				if repeatCount, err := e.store.CountRecentChangesByPattern(ctx, connectorID, patternID,
+					time.Now().Add(-repeatDriftWindow).UTC().Format(time.RFC3339), ""); err != nil {
+					slog.Error("count recent changes by pattern failed", "error", err)
+				} else if repeatCount > 0 {
+					// Same drift recurring within the window: likely a
+					// misconfiguration loop rather than a one-off — flag it
+					// as unusual by raising severity and noting the repeat.
+					summary = fmt.Sprintf("%s (recurring — seen %d time(s) in the last hour)", d.Summary, repeatCount)
+					switch severity {
+					case "info":
+						severity = "warning"
+					case "warning":
+						severity = "critical"
+					}
+				}
+
 				change := &store.ChangeRecord{
-					ServiceID:      connectorID,
-					ChangeType:     d.Type,
-					Severity:       d.Severity,
-					Summary:        d.Summary,
-					Diff:           string(diffJSON),
-					AffectedDocIDs: "[]",
+					ServiceID:         connectorID,
+					ChangeType:        d.Type,
+					Severity:          severity,
+					Summary:           summary,
+					Diff:              string(diffJSON),
+					AffectedDocIDs:    "[]",
+					RelatedServiceIDs: string(relatedJSON),
+					PatternID:         patternID,
 				}
 				if err := e.store.CreateChange(ctx, change); err != nil {
 					slog.Error("failed to create change", "error", err)
@@ -343,19 +431,19 @@ func (e *Engine) RunSync(ctx context.Context, connectorID string, jobID string) 
 						"changeId":      change.ID,
 						"serviceId":     connectorID,
 						"changeType":    d.Type,
-						"severity":      d.Severity,
-						"summary":       d.Summary,
+						"severity":      severity,
+						"summary":       summary,
 						"willTriggerAi": false,
 					})
 				}
 
 				// Create alert for non-info changes
-				if d.Severity != "info" {
+				if severity != "info" {
 					alert := &store.AlertRecord{
 						ChangeID:    change.ID,
 						ServiceID:   connectorID,
-						Severity:    d.Severity,
-						Title:       d.Summary,
+						Severity:    severity,
+						Title:       summary,
 						Description: d.Detail,
 					}
 					if err := e.store.CreateAlert(ctx, alert); err != nil {
@@ -372,8 +460,8 @@ func (e *Engine) RunSync(ctx context.Context, connectorID string, jobID string) 
 						e.hub.Broadcast(ws.EventAlertCreated, map[string]any{
 							"alertId":   alert.ID,
 							"serviceId": connectorID,
-							"severity":  d.Severity,
-							"title":     d.Summary,
+							"severity":  severity,
+							"title":     summary,
 						})
 					}
 				}
@@ -426,6 +514,14 @@ func (e *Engine) RunSyncAll(ctx context.Context, jobID string) ([]RunResult, err
 		results = append(results, *result)
 	}
 	return results, nil
+}
+
+// changePatternID derives a stable identifier for a drift "shape" — same
+// service, same change type, same summary — so recurrences of the same
+// drift can be recognized across sync runs.
+func changePatternID(connectorID, changeType, summary string) string {
+	h := sha1.Sum([]byte(connectorID + "|" + changeType + "|" + summary)) //nolint:gosec // fingerprint, not a security use
+	return hex.EncodeToString(h[:])
 }
 
 func markError(r *RunResult, start time.Time, err error) (*RunResult, error) {

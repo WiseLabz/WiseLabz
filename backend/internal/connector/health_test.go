@@ -31,3 +31,19 @@ func TestClassifyHealth(t *testing.T) {
 		})
 	}
 }
+
+func TestClassifyHealthPerTypeThreshold(t *testing.T) {
+	// A latency that's fine under a looser per-type threshold but would be
+	// "degraded" under the package default.
+	latency := 3 * time.Second
+	if status, _ := ClassifyHealth(nil, latency); status != "degraded" {
+		t.Fatalf("status with default threshold = %q, want degraded", status)
+	}
+	if status, _ := ClassifyHealth(nil, latency, 5*time.Second); status != "online" {
+		t.Errorf("status with 5s override = %q, want online", status)
+	}
+	// A zero override falls back to the package default rather than always-online.
+	if status, _ := ClassifyHealth(nil, latency, 0); status != "degraded" {
+		t.Errorf("status with zero override = %q, want degraded (falls back to default)", status)
+	}
+}

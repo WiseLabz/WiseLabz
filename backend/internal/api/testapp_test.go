@@ -21,6 +21,7 @@ import (
 	"github.com/WiseLabz/wiselabz/internal/config"
 	"github.com/WiseLabz/wiselabz/internal/doc"
 	"github.com/WiseLabz/wiselabz/internal/store"
+	"github.com/WiseLabz/wiselabz/internal/sync"
 )
 
 // testApp wires a real chi router (via api.NewRouter) to a fresh, migrated
@@ -61,10 +62,11 @@ func newTestApp(t *testing.T) *testApp {
 	}
 
 	router := api.NewRouter(api.Config{
-		Store:     s,
-		JWT:       jwtSvc,
-		Config:    cfg,
-		DocEngine: doc.NewEngine(s),
+		Store:      s,
+		JWT:        jwtSvc,
+		Config:     cfg,
+		DocEngine:  doc.NewEngine(s),
+		SyncEngine: sync.NewEngine(s, nil, nil, nil),
 	})
 
 	return &testApp{Router: router, Store: s, JWT: jwtSvc}
