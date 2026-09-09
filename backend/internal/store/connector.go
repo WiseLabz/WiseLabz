@@ -361,6 +361,9 @@ func (s *Store) GetSnapshotsByConnector(ctx context.Context, connectorID string,
 		}
 		snapshots = append(snapshots, sn)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate snapshots: %w", err)
+	}
 	if snapshots == nil {
 		snapshots = []SnapshotRecord{}
 	}
@@ -420,6 +423,9 @@ func scanConnectors(rows *sql.Rows) ([]ConnectorRecord, int, error) {
 		c.LastSyncDurationMs = nullInt64ToIntPtr(lastSyncDurationMs)
 		c.CredentialExpiresAt = nullStrToStr(credentialExpiresAt)
 		connectors = append(connectors, c)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, fmt.Errorf("iterate connectors: %w", err)
 	}
 	if connectors == nil {
 		connectors = []ConnectorRecord{}

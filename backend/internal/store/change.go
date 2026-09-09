@@ -172,6 +172,9 @@ func (s *Store) ListChanges(ctx context.Context, serviceID, severity string, off
 		}
 		changes = append(changes, c)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, fmt.Errorf("iterate changes: %w", err)
+	}
 	if changes == nil {
 		changes = []ChangeRecord{}
 	}
@@ -307,6 +310,9 @@ func (s *Store) ListAlerts(ctx context.Context, serviceID, severity, status stri
 		a.SnoozedUntil = snoozedUntil.String
 		alerts = append(alerts, a)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, fmt.Errorf("iterate alerts: %w", err)
+	}
 	if alerts == nil {
 		alerts = []AlertRecord{}
 	}
@@ -336,6 +342,9 @@ func (s *Store) GetExpiredSnoozedAlerts(ctx context.Context) ([]AlertRecord, err
 		a.ChangeID = changeID.String
 		a.SnoozedUntil = snoozedUntil.String
 		alerts = append(alerts, a)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate expired snoozed alerts: %w", err)
 	}
 	if alerts == nil {
 		alerts = []AlertRecord{}
@@ -376,6 +385,9 @@ func (s *Store) GetLatestChanges(ctx context.Context, n int) ([]ChangeRecord, er
 		}
 		changes = append(changes, c)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate latest changes: %w", err)
+	}
 	if changes == nil {
 		changes = []ChangeRecord{}
 	}
@@ -407,6 +419,9 @@ func (s *Store) CountConnectorsByStatus(ctx context.Context) (map[string]int, er
 			return nil, fmt.Errorf("scan status count: %w", err)
 		}
 		counts[status] = count
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate connector status counts: %w", err)
 	}
 	return counts, nil
 }
