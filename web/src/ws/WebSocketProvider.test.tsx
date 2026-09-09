@@ -30,6 +30,7 @@ describe('WebSocketProvider', () => {
   const originalWebSocket = window.WebSocket;
 
   afterEach(() => {
+    vi.useRealTimers();
     window.WebSocket = originalWebSocket;
     useAuth.setState({ status: 'unknown', user: null });
     useLive.setState({ activity: [], jobs: {}, pendingAlerts: 0, statusOverrides: {} });
@@ -233,5 +234,63 @@ describe('WebSocketProvider', () => {
     );
 
     expect(useLive.getState().docLocks['doc-2']).toBeUndefined();
+  });
+
+  it('gracefully drops malformed messages without crashing or mutating state', async () => {
+    window.WebSocket = TestWebSocket as unknown as typeof WebSocket;
+    useAuth.setState({ status: 'authenticated' });
+    const queryClient = new QueryClient();
+    const invalidateQueries = vi.spyOn(queryClient, 'invalidateQueries');
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <WebSocketProvider>
+          <div />
+        </WebSocketProvider>
+      </QueryClientProvider>
+    );
+
+    await waitFor(() => expect(TestWebSocket.last).toBeDefined());
+
+    act(() =>
+      TestWebSocket.last?.onmessage?.(
+        new MessageEvent('message', { data: 'not valid json{{{' })
+      )
+    );
+
+    expect(useLive.getState().activity).toEqual([]);
+    expect(invalidateQueries).not.toHaveBeenCalled();
+  });
+
+  it('reconnects with exponential backoff after socket closes', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    window.WebSocket = TestWebSocket as unknown as typeof WebSocket;
+    useAuth.setState({ status: 'authenticated' });
+
+    const { unmount } = render(
+      <QueryClientProvider client={new QueryClient()}>
+        <WebSocketProvider>
+          <div />
+        </WebSocketProvider>
+      </QueryClientProvider>
+    );
+
+    // Wait for initial connection with real timers
+    vi.useRealTimers();
+    await waitFor(() => expect(TestWebSocket.last).toBeDefined());
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+
+    const initialUrlCount = TestWebSocket.urls.length;
+
+    act(() => TestWebSocket.last?.onclose?.(new Event('close')));
+
+    expect(useLive.getState().ws).toBe('closed');
+    expect(TestWebSocket.urls.length).toBe(initialUrlCount);
+
+    vi.advanceTimersByTime(1000);
+
+    expect(TestWebSocket.urls.length).toBe(initialUrlCount + 1);
+
+    unmount();
   });
 });

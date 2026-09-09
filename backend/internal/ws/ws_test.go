@@ -2,9 +2,13 @@ package ws
 
 import (
 	"encoding/json"
+	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
+
+	"github.com/gorilla/websocket"
 )
 
 func TestHubConfiguredOrigin(t *testing.T) {
@@ -117,4 +121,234 @@ func TestDocLockEventBroadcast(t *testing.T) {
 	if env.Type != EventDocLockExpired {
 		t.Fatalf("event 3: got type %q, want %q", env.Type, EventDocLockExpired)
 	}
+}
+
+// TestUpgradeHandlerAndWritePump tests the full round trip: UpgradeHandler upgrades
+// the connection, and writePump sends messages to the client.
+func TestUpgradeHandlerAndWritePump(t *testing.T) {
+	hub := NewHub()
+	go hub.Run()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		err := hub.UpgradeHandler(w, r, "user-test-123", "admin")
+		if err != nil {
+			t.Logf("UpgradeHandler error: %v", err)
+		}
+	}))
+	defer server.Close()
+
+	// Convert http:// to ws://
+	wsURL := "ws" + strings.TrimPrefix(server.URL, "http")
+
+	dialer := websocket.DefaultDialer
+	conn, _, err := dialer.Dial(wsURL, nil)
+	if err != nil {
+		t.Fatalf("Dial error: %v", err)
+	}
+	defer func() { _ = conn.Close() }()
+
+	// Wait for client to register
+	deadline := time.Now().Add(time.Second)
+	for hub.ClientCount() != 1 && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+	}
+
+	if got := hub.ClientCount(); got != 1 {
+		t.Fatalf("ClientCount() = %d, want 1", got)
+	}
+
+	// Broadcast a message and verify it reaches the client
+	hub.Broadcast(EventSyncComplete, map[string]string{"job": "test-job"})
+
+	_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	_, data, err := conn.ReadMessage()
+	if err != nil {
+		t.Fatalf("ReadMessage error: %v", err)
+	}
+
+	var env Envelope
+	if err := json.Unmarshal(data, &env); err != nil {
+		t.Fatalf("Unmarshal envelope error: %v", err)
+	}
+
+	if env.Type != EventSyncComplete {
+		t.Errorf("envelope type = %q, want %q", env.Type, EventSyncComplete)
+	}
+
+	payload, ok := env.Payload.(map[string]interface{})
+	if !ok {
+		t.Errorf("payload type = %T, want map[string]interface{}", env.Payload)
+	}
+	if payload["job"] != "test-job" {
+		t.Errorf("payload job = %v, want test-job", payload["job"])
+	}
+}
+
+// TestReadPumpGarbageInput tests that readPump handles non-JSON garbage input
+// without crashing the server.
+func TestReadPumpGarbageInput(t *testing.T) {
+	hub := NewHub()
+	go hub.Run()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		err := hub.UpgradeHandler(w, r, "user-garbage-456", "viewer")
+		if err != nil {
+			t.Logf("UpgradeHandler error: %v", err)
+		}
+	}))
+	defer server.Close()
+
+	wsURL := "ws" + strings.TrimPrefix(server.URL, "http")
+
+	dialer := websocket.DefaultDialer
+	conn, _, err := dialer.Dial(wsURL, nil)
+	if err != nil {
+		t.Fatalf("Dial error: %v", err)
+	}
+	defer func() { _ = conn.Close() }()
+
+	// Wait for client to register
+	deadline := time.Now().Add(time.Second)
+	for hub.ClientCount() != 1 && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+	}
+
+	// Send garbage (non-JSON) data to the server
+	err = conn.WriteMessage(websocket.TextMessage, []byte("this is not json {malformed"))
+	if err != nil {
+		t.Fatalf("WriteMessage error: %v", err)
+	}
+
+	// Server should not crash. Connection may stay alive or close gracefully.
+	// Set a read deadline to detect if connection is responsive.
+	_ = conn.SetReadDeadline(time.Now().Add(500 * time.Millisecond))
+	_, _, _ = conn.ReadMessage()
+	// Error is acceptable (timeout or connection closed); no error also OK.
+	// The important thing is that the hub and server don't crash.
+
+	// Verify hub is still responsive by broadcasting to a different client
+	if hub.ClientCount() == 0 {
+		// Original client disconnected, which is fine
+		return
+	}
+
+	// If client is still connected, verify hub still processes broadcasts
+	hub.Broadcast(EventSystemHealth, map[string]string{"status": "ok"})
+	// If we get here without crash, test passes
+}
+
+// TestClientCloseDisconnect tests that readPump and writePump properly
+// handle client disconnection and remove the client from the hub.
+func TestClientCloseDisconnect(t *testing.T) {
+	hub := NewHub()
+	go hub.Run()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		err := hub.UpgradeHandler(w, r, "user-close-789", "operator")
+		if err != nil {
+			t.Logf("UpgradeHandler error: %v", err)
+		}
+	}))
+	defer server.Close()
+
+	wsURL := "ws" + strings.TrimPrefix(server.URL, "http")
+
+	dialer := websocket.DefaultDialer
+	conn, _, err := dialer.Dial(wsURL, nil)
+	if err != nil {
+		t.Fatalf("Dial error: %v", err)
+	}
+
+	// Wait for client to register
+	deadline := time.Now().Add(time.Second)
+	for hub.ClientCount() != 1 && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+	}
+
+	if got := hub.ClientCount(); got != 1 {
+		t.Fatalf("ClientCount() = %d, want 1 after connect", got)
+	}
+
+	// Close the client connection
+	_ = conn.Close()
+
+	// Wait for the hub to unregister the client
+	deadline = time.Now().Add(time.Second)
+	for hub.ClientCount() != 0 && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+	}
+
+	if got := hub.ClientCount(); got != 0 {
+		t.Fatalf("ClientCount() = %d after close, want 0", got)
+	}
+}
+
+// TestBroadcastToUserAfterUpgrade tests BroadcastToUser with a real WebSocket
+// connection, verifying that UpgradeHandler and writePump work together.
+func TestBroadcastToUserAfterUpgrade(t *testing.T) {
+	hub := NewHub()
+	go hub.Run()
+
+	// Create two separate servers/connections for two users
+	conn1 := setupWSConnection(t, hub, "alice")
+	defer func() { _ = conn1.Close() }()
+
+	conn2 := setupWSConnection(t, hub, "bob")
+	defer func() { _ = conn2.Close() }()
+
+	// Wait for both to register
+	deadline := time.Now().Add(time.Second)
+	for hub.ClientCount() != 2 && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+	}
+
+	// Broadcast to alice only
+	hub.BroadcastToUser("alice", EventAlertCreated, map[string]string{"alertId": "alert-1"})
+
+	// Alice should receive it
+	_ = conn1.SetReadDeadline(time.Now().Add(time.Second))
+	_, data, err := conn1.ReadMessage()
+	if err != nil {
+		t.Fatalf("conn1.ReadMessage error: %v", err)
+	}
+
+	var env Envelope
+	if err := json.Unmarshal(data, &env); err != nil {
+		t.Fatalf("Unmarshal error: %v", err)
+	}
+	if env.Type != EventAlertCreated {
+		t.Errorf("alice got type %q, want %q", env.Type, EventAlertCreated)
+	}
+
+	// Bob should not receive it (with timeout)
+	_ = conn2.SetReadDeadline(time.Now().Add(100 * time.Millisecond))
+	_, _, err = conn2.ReadMessage()
+	if err == nil {
+		t.Error("bob received a message meant for alice")
+	}
+}
+
+// setupWSConnection is a helper that creates a WebSocket connection to a test server
+// backed by the given hub, for a specific user.
+func setupWSConnection(t *testing.T, hub *Hub, userID string) *websocket.Conn {
+	t.Helper()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		err := hub.UpgradeHandler(w, r, userID, "user")
+		if err != nil {
+			t.Logf("UpgradeHandler error: %v", err)
+		}
+	}))
+	t.Cleanup(func() { server.Close() })
+
+	// Convert http:// to ws://
+	wsURL := "ws" + strings.TrimPrefix(server.URL, "http")
+
+	dialer := websocket.DefaultDialer
+	conn, _, err := dialer.Dial(wsURL, nil)
+	if err != nil {
+		t.Fatalf("Dial error for %s: %v", userID, err)
+	}
+
+	return conn
 }

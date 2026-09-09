@@ -161,9 +161,16 @@ jobs:
         run: npm ci --prefer-offline --no-audit --no-fund
         working-directory: web
 
-      - name: Run tests
-        run: npm test
+      - name: Run tests with coverage
+        run: npm run test:coverage
         working-directory: web
+
+      - name: Upload coverage
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: coverage-frontend
+          path: web/coverage
+          retention-days: 7
 
   test-backend:
     name: Test (Backend)
@@ -184,7 +191,18 @@ jobs:
           cache-dependency-path: backend/go.sum
 
       - name: Run tests
-        run: go test -coverprofile=coverage.out ./...
+        # -coverpkg=./... attributes coverage to the package under test, not just
+        # the package the test file lives in: most handler packages here are
+        # exercised through internal/api's router-level integration tests, so
+        # per-package-only coverage (the previous default) undercounted them.
+        run: go test -coverpkg=./... -coverprofile=coverage.out ./...
+        working-directory: backend
+
+      - name: Enforce coverage baseline
+        run: |
+          total=$(go tool cover -func=coverage.out | tail -1 | grep -oE '[0-9]+\.[0-9]+')
+          echo "Total coverage: ${total}%"
+          awk -v t="$total" 'BEGIN { exit (t+0 < 60) ? 1 : 0 }'
         working-directory: backend
 
       - name: Upload coverage

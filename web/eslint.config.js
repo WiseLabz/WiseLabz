@@ -5,9 +5,16 @@ import reactRefresh from 'eslint-plugin-react-refresh';
 
 export default [
   {
-    // dist = build output; src/api/generated + src/api/model = orval-generated (npm run gen:api);
-    // mockServiceWorker.js = MSW vendor worker (msw init)
-    ignores: ['dist', 'src/api/generated/**', 'src/api/model/**', 'public/mockServiceWorker.js'],
+    // dist = build output; coverage = vitest --coverage report; src/api/generated +
+    // src/api/model = orval-generated (npm run gen:api); mockServiceWorker.js = MSW
+    // vendor worker (msw init)
+    ignores: [
+      'dist',
+      'coverage',
+      'src/api/generated/**',
+      'src/api/model/**',
+      'public/mockServiceWorker.js',
+    ],
   },
   {
     files: ['**/*.{ts,tsx}'],
