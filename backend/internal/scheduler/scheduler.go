@@ -9,6 +9,8 @@ import (
 	"sync"
 
 	"github.com/robfig/cron/v3"
+
+	"github.com/WiseLabz/wiselabz/internal/logsafe"
 )
 
 // Runner manages a set of cron-scheduled jobs.
@@ -59,7 +61,7 @@ func (r *Runner) AddJob(name, cronExpr string, fn func(ctx context.Context)) (cr
 		return 0, fmt.Errorf("add job %q (cron %q): %w", name, cronExpr, err)
 	}
 
-	r.logger.Debug("job registered", "job", name, "cron", cronExpr)
+	r.logger.Debug("job registered", "job", name, "cron", logsafe.Sanitize(cronExpr))
 	return entryID, nil
 }
 

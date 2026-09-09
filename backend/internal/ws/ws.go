@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+
+	"github.com/WiseLabz/wiselabz/internal/logsafe"
 )
 
 // Event types sent over WebSocket.
@@ -88,7 +90,7 @@ func (h *Hub) Run() {
 			h.clients[client] = true
 			count := len(h.clients)
 			h.mu.Unlock()
-			slog.Info("WebSocket client connected", "user_id", client.userID, "total_clients", count)
+			slog.Info("WebSocket client connected", "user_id", logsafe.Sanitize(client.userID), "total_clients", count)
 
 		case client := <-h.unregister:
 			h.mu.Lock()
@@ -98,7 +100,7 @@ func (h *Hub) Run() {
 			}
 			count := len(h.clients)
 			h.mu.Unlock()
-			slog.Info("WebSocket client disconnected", "user_id", client.userID, "total_clients", count)
+			slog.Info("WebSocket client disconnected", "user_id", logsafe.Sanitize(client.userID), "total_clients", count)
 
 		case msg := <-h.broadcast:
 			h.mu.RLock()

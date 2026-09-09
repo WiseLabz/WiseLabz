@@ -4,6 +4,8 @@ import (
 	"log/slog"
 	"net/http"
 	"runtime/debug"
+
+	"github.com/WiseLabz/wiselabz/internal/logsafe"
 )
 
 // Recoverer catches panics in downstream handlers, logs them, and returns 500.
@@ -17,7 +19,7 @@ func Recoverer(next http.Handler) http.Handler {
 			slog.Error("panic recovered",
 				"panic", rec,
 				"stack", string(debug.Stack()),
-				"path", r.URL.Path,
+				"path", logsafe.Sanitize(r.URL.Path),
 				"method", r.Method,
 				"request_id", GetRequestID(r.Context()),
 			)

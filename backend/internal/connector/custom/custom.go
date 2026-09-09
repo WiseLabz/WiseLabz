@@ -69,7 +69,10 @@ func (c *Connector) Validate(ctx context.Context, config map[string]any) error {
 	}
 	setHeaders(req, config)
 
-	resp, err := c.client.Do(req)
+	// The URL is user-supplied by design (this connector calls whatever endpoint
+	// the operator configures); SSRF is mitigated at dial time by
+	// newGuardedClient, which blocks loopback/link-local targets and redirects.
+	resp, err := c.client.Do(req) // codeql[go/request-forgery]
 	if err != nil {
 		return fmt.Errorf("request failed: %w", err)
 	}
@@ -103,7 +106,8 @@ func (c *Connector) Fetch(ctx context.Context, config map[string]any) (*connecto
 	}
 	setHeaders(req, config)
 
-	resp, err := c.client.Do(req)
+	// See Validate above: SSRF is mitigated at dial time by newGuardedClient.
+	resp, err := c.client.Do(req) // codeql[go/request-forgery]
 	if err != nil {
 		return nil, fmt.Errorf("request failed: %w", err)
 	}

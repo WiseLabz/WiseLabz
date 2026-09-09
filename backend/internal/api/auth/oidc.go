@@ -19,6 +19,7 @@ import (
 	"github.com/WiseLabz/wiselabz/internal/auth"
 	"github.com/WiseLabz/wiselabz/internal/config"
 	"github.com/WiseLabz/wiselabz/internal/httputil"
+	"github.com/WiseLabz/wiselabz/internal/logsafe"
 	"github.com/WiseLabz/wiselabz/internal/store"
 )
 
@@ -66,7 +67,7 @@ func (h *Handler) OIDCCallback(w http.ResponseWriter, r *http.Request) {
 	// Exchange code for claims
 	claims, err := prov.Exchange(r.Context(), req.Code)
 	if err != nil {
-		slog.Error("OIDC exchange failed", "error", err, "provider", req.ProviderID)
+		slog.Error("OIDC exchange failed", "error", err, "provider", logsafe.Sanitize(req.ProviderID))
 		httputil.Error(w, http.StatusUnauthorized, "oidc_error", "Failed to authenticate with provider")
 		return
 	}
