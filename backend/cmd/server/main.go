@@ -109,6 +109,7 @@ func main() {
 
 	aiRegistry := ai.NewRegistry()
 	ai.RegisterOpenAICompatible(aiRegistry)
+	ai.RegisterClaude(aiRegistry)
 
 	// Build HTTP router
 	routerCfg := api.Config{
