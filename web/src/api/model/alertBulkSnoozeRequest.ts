@@ -7,13 +7,11 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export type WidgetPlacementType = (typeof WidgetPlacementType)[keyof typeof WidgetPlacementType];
-
-export const WidgetPlacementType = {
-  service_status: 'service_status',
-  recent_changes: 'recent_changes',
-  alert_summary: 'alert_summary',
-  sync_activity: 'sync_activity',
-  docs_health: 'docs_health',
-  attention: 'attention',
-} as const;
+export interface AlertBulkSnoozeRequest {
+  /**
+   * Explicit alert IDs to snooze — never "all matching the current filter".
+   * @minItems 1
+   */
+  ids: string[];
+  until: string;
+}

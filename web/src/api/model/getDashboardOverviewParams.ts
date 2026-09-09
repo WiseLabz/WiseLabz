@@ -6,14 +6,11 @@
  *
  * OpenAPI spec version: 0.1.0
  */
+import type { DaysQueryParameter } from './daysQueryParameter';
 
-export type WidgetPlacementType = (typeof WidgetPlacementType)[keyof typeof WidgetPlacementType];
-
-export const WidgetPlacementType = {
-  service_status: 'service_status',
-  recent_changes: 'recent_changes',
-  alert_summary: 'alert_summary',
-  sync_activity: 'sync_activity',
-  docs_health: 'docs_health',
-  attention: 'attention',
-} as const;
+export type GetDashboardOverviewParams = {
+  /**
+   * @minimum 1
+   */
+  days?: DaysQueryParameter;
+};

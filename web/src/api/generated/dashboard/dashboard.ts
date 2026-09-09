@@ -19,7 +19,12 @@ import type {
   UseQueryResult,
 } from '@tanstack/react-query';
 
-import type { DashboardLayout, DashboardOverview, ForbiddenResponse } from '../../model';
+import type {
+  DashboardLayout,
+  DashboardOverview,
+  ForbiddenResponse,
+  GetDashboardOverviewParams,
+} from '../../model';
 
 import { customInstance } from '../../axios-instance';
 import type { ErrorType, BodyType } from '../../axios-instance';
@@ -45,32 +50,38 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
  * @summary Aggregate overview (status counts, recent changes, alert summary)
  */
 export const getDashboardOverview = (
+  params?: GetDashboardOverviewParams,
   options?: SecondParameter<typeof customInstance>,
   signal?: AbortSignal
 ) => {
   return customInstance<DashboardOverview>(
-    { url: `/dashboard/overview`, method: 'GET', signal },
+    { url: `/dashboard/overview`, method: 'GET', params, signal },
     options
   );
 };
 
-export const getGetDashboardOverviewQueryKey = () => {
-  return [`/dashboard/overview`] as const;
+export const getGetDashboardOverviewQueryKey = (params?: GetDashboardOverviewParams) => {
+  return [`/dashboard/overview`, ...(params ? [params] : [])] as const;
 };
 
 export const getGetDashboardOverviewQueryOptions = <
   TData = Awaited<ReturnType<typeof getDashboardOverview>>,
   TError = ErrorType<unknown>,
->(options?: {
-  query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getDashboardOverview>>, TError, TData>>;
-  request?: SecondParameter<typeof customInstance>;
-}) => {
+>(
+  params?: GetDashboardOverviewParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getDashboardOverview>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  }
+) => {
   const { query: queryOptions, request: requestOptions } = options ?? {};
 
-  const queryKey = queryOptions?.queryKey ?? getGetDashboardOverviewQueryKey();
+  const queryKey = queryOptions?.queryKey ?? getGetDashboardOverviewQueryKey(params);
 
   const queryFn: QueryFunction<Awaited<ReturnType<typeof getDashboardOverview>>> = ({ signal }) =>
-    getDashboardOverview(requestOptions, signal);
+    getDashboardOverview(params, requestOptions, signal);
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof getDashboardOverview>>,
@@ -88,6 +99,7 @@ export function useGetDashboardOverview<
   TData = Awaited<ReturnType<typeof getDashboardOverview>>,
   TError = ErrorType<unknown>,
 >(
+  params: undefined | GetDashboardOverviewParams,
   options: {
     query: Partial<
       UseQueryOptions<Awaited<ReturnType<typeof getDashboardOverview>>, TError, TData>
@@ -108,6 +120,7 @@ export function useGetDashboardOverview<
   TData = Awaited<ReturnType<typeof getDashboardOverview>>,
   TError = ErrorType<unknown>,
 >(
+  params?: GetDashboardOverviewParams,
   options?: {
     query?: Partial<
       UseQueryOptions<Awaited<ReturnType<typeof getDashboardOverview>>, TError, TData>
@@ -128,6 +141,7 @@ export function useGetDashboardOverview<
   TData = Awaited<ReturnType<typeof getDashboardOverview>>,
   TError = ErrorType<unknown>,
 >(
+  params?: GetDashboardOverviewParams,
   options?: {
     query?: Partial<
       UseQueryOptions<Awaited<ReturnType<typeof getDashboardOverview>>, TError, TData>
@@ -144,6 +158,7 @@ export function useGetDashboardOverview<
   TData = Awaited<ReturnType<typeof getDashboardOverview>>,
   TError = ErrorType<unknown>,
 >(
+  params?: GetDashboardOverviewParams,
   options?: {
     query?: Partial<
       UseQueryOptions<Awaited<ReturnType<typeof getDashboardOverview>>, TError, TData>
@@ -152,7 +167,7 @@ export function useGetDashboardOverview<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getGetDashboardOverviewQueryOptions(options);
+  const queryOptions = getGetDashboardOverviewQueryOptions(params, options);
 
   const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
     queryKey: DataTag<QueryKey, TData, TError>;

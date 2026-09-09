@@ -14,6 +14,10 @@ interface UiState {
   setPalette: (open: boolean) => void;
   togglePalette: () => void;
 
+  shortcutsOpen: boolean;
+  setShortcuts: (open: boolean) => void;
+  toggleShortcuts: () => void;
+
   sidebarCollapsed: boolean;
   toggleSidebar: () => void;
 
@@ -28,6 +32,10 @@ export const useUi = create<UiState>((set) => ({
   paletteOpen: false,
   setPalette: (paletteOpen) => set({ paletteOpen }),
   togglePalette: () => set((s) => ({ paletteOpen: !s.paletteOpen })),
+
+  shortcutsOpen: false,
+  setShortcuts: (shortcutsOpen) => set({ shortcutsOpen }),
+  toggleShortcuts: () => set((s) => ({ shortcutsOpen: !s.shortcutsOpen })),
 
   sidebarCollapsed: false,
   toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),

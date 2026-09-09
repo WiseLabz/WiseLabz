@@ -21,6 +21,8 @@ import type {
 
 import type {
   Alert,
+  AlertBulkSnoozeRequest,
+  AlertBulkSnoozeResponse,
   AlertPage,
   GetAlertsParams,
   NotFoundResponse,
@@ -695,6 +697,145 @@ export function usePostAlertsAlertIdSnooze<
     postAlertsAlertIdSnoozeBody,
     options
   );
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+/**
+ * @summary Snooze multiple alerts
+ */
+export const postAlertsBulkSnooze = (
+  alertBulkSnoozeRequest: BodyType<AlertBulkSnoozeRequest>,
+  options?: SecondParameter<typeof customInstance>,
+  signal?: AbortSignal
+) => {
+  return customInstance<AlertBulkSnoozeResponse>(
+    {
+      url: `/alerts/bulk-snooze`,
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      data: alertBulkSnoozeRequest,
+      signal,
+    },
+    options
+  );
+};
+
+export const getPostAlertsBulkSnoozeQueryKey = (
+  alertBulkSnoozeRequest?: BodyType<AlertBulkSnoozeRequest>
+) => {
+  return ['POST', `/alerts/bulk-snooze`, alertBulkSnoozeRequest] as const;
+};
+
+export const getPostAlertsBulkSnoozeQueryOptions = <
+  TData = Awaited<ReturnType<typeof postAlertsBulkSnooze>>,
+  TError = ErrorType<unknown>,
+>(
+  alertBulkSnoozeRequest: BodyType<AlertBulkSnoozeRequest>,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof postAlertsBulkSnooze>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  }
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getPostAlertsBulkSnoozeQueryKey(alertBulkSnoozeRequest);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof postAlertsBulkSnooze>>> = ({ signal }) =>
+    postAlertsBulkSnooze(alertBulkSnoozeRequest, requestOptions, signal);
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof postAlertsBulkSnooze>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type PostAlertsBulkSnoozeQueryResult = NonNullable<
+  Awaited<ReturnType<typeof postAlertsBulkSnooze>>
+>;
+export type PostAlertsBulkSnoozeQueryError = ErrorType<unknown>;
+
+export function usePostAlertsBulkSnooze<
+  TData = Awaited<ReturnType<typeof postAlertsBulkSnooze>>,
+  TError = ErrorType<unknown>,
+>(
+  alertBulkSnoozeRequest: BodyType<AlertBulkSnoozeRequest>,
+  options: {
+    query: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof postAlertsBulkSnooze>>, TError, TData>
+    > &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postAlertsBulkSnooze>>,
+          TError,
+          Awaited<ReturnType<typeof postAlertsBulkSnooze>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function usePostAlertsBulkSnooze<
+  TData = Awaited<ReturnType<typeof postAlertsBulkSnooze>>,
+  TError = ErrorType<unknown>,
+>(
+  alertBulkSnoozeRequest: BodyType<AlertBulkSnoozeRequest>,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof postAlertsBulkSnooze>>, TError, TData>
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postAlertsBulkSnooze>>,
+          TError,
+          Awaited<ReturnType<typeof postAlertsBulkSnooze>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function usePostAlertsBulkSnooze<
+  TData = Awaited<ReturnType<typeof postAlertsBulkSnooze>>,
+  TError = ErrorType<unknown>,
+>(
+  alertBulkSnoozeRequest: BodyType<AlertBulkSnoozeRequest>,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof postAlertsBulkSnooze>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * @summary Snooze multiple alerts
+ */
+
+export function usePostAlertsBulkSnooze<
+  TData = Awaited<ReturnType<typeof postAlertsBulkSnooze>>,
+  TError = ErrorType<unknown>,
+>(
+  alertBulkSnoozeRequest: BodyType<AlertBulkSnoozeRequest>,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof postAlertsBulkSnooze>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getPostAlertsBulkSnoozeQueryOptions(alertBulkSnoozeRequest, options);
 
   const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
     queryKey: DataTag<QueryKey, TData, TError>;

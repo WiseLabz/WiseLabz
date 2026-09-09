@@ -39,6 +39,7 @@ export const en = {
     acknowledge: 'Acknowledge',
     ago: '{{time}} ago',
     current: 'current',
+    refresh: 'Refresh',
   },
   nav: {
     dashboard: 'Dashboard',
@@ -171,6 +172,13 @@ export const en = {
       changes: 'Recent changes',
       sync: 'Sync activity',
       docs: 'Documentation',
+      attention: 'Attention queue',
+    },
+    range: {
+      '24h': '24h',
+      '7d': '7d',
+      '30d': '30d',
+      '90d': '90d',
     },
   },
   widgets: {
@@ -178,6 +186,7 @@ export const en = {
     loadAlertsError: "Couldn't load alerts.",
     loadChangesError: "Couldn't load changes.",
     loadDocsError: "Couldn't load docs.",
+    loadAttentionError: "Couldn't load the attention queue.",
     roster: {
       emptyTitle: 'No services connected',
       emptyDesc: 'Add your first connector to start generating documentation.',
@@ -203,6 +212,10 @@ export const en = {
       awaiting: '{{count}} awaiting first generation',
       allDocumented: 'Every service has live documentation',
       open: 'Open documentation',
+    },
+    attention: {
+      emptyTitle: 'Nothing needs attention',
+      emptyDesc: 'All alerts and quality findings are resolved.',
     },
   },
   services: {
@@ -336,6 +349,12 @@ export const en = {
     filterCritical: 'Critical',
     filterWarning: 'Warning',
     filterInfo: 'Info',
+    bulkSelectedCount: '{{count}} selected',
+    bulkSelectLabel: 'Select alert: {{title}}',
+    bulkSnooze: 'Snooze selected',
+    bulkAllSucceeded: '{{count}} alert(s) snoozed',
+    bulkPartial: '{{succeeded}} succeeded, {{failed}} failed: {{reason}}',
+    bulkError: 'Bulk action failed',
   },
   runbooks: {
     heading: 'Runbook',

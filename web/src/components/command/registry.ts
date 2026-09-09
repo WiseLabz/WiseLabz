@@ -23,6 +23,8 @@ export interface Command {
   id: string;
   label: string;
   hint?: string;
+  /** Display-only shortcut string for the cheat sheet, e.g. "⌘K" or "g d". */
+  hotkey?: string;
   group: CommandGroup;
   Icon: React.ComponentType<{ size?: number; className?: string }>;
   run: (ctx: CommandCtx) => void;

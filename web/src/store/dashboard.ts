@@ -10,20 +10,37 @@ import {
   putDashboardLayout,
   postDashboardLayoutReset,
 } from '../api/generated/dashboard/dashboard';
-import { WidgetPlacementType, type DashboardLayout, type WidgetPlacement } from '../api/model';
+import {
+  WidgetPlacementType,
+  type DashboardLayout,
+  type WidgetPlacement,
+  type Severity,
+} from '../api/model';
 
 // Extends the spec's WidgetPlacement with the UI's enabled/disabled flag —
 // see the note on WIDGET_TYPE below for why the two shapes coexist.
-type WireWidget = WidgetPlacement & { enabled: boolean };
+type WireWidget = WidgetPlacement & {
+  enabled: boolean;
+  severityFilter?: Severity | 'all';
+  pollingEnabled?: boolean;
+};
 
-export type WidgetId = 'roster' | 'changes' | 'alerts' | 'sync' | 'docs';
+export type WidgetId = 'roster' | 'changes' | 'alerts' | 'sync' | 'docs' | 'attention';
 
 export interface WidgetDef {
   id: WidgetId;
   enabled: boolean;
   /** column span in the 6-col content grid */
   span: 2 | 3 | 4 | 6;
+  severityFilter?: Severity | 'all';
+  pollingEnabled?: boolean;
 }
+
+// Header time-range control (?range= URL param) and the RecentChangesWidget's
+// `days` query param share this lookup — no duration-string parsing needed.
+export type RangePreset = '24h' | '7d' | '30d' | '90d';
+export const RANGE_DAYS: Record<RangePreset, number> = { '24h': 1, '7d': 7, '30d': 30, '90d': 90 };
+export const DEFAULT_RANGE: RangePreset = '7d';
 
 export const DEFAULT_LAYOUT: WidgetDef[] = [
   { id: 'roster', enabled: true, span: 4 },
@@ -31,6 +48,8 @@ export const DEFAULT_LAYOUT: WidgetDef[] = [
   { id: 'changes', enabled: true, span: 3 },
   { id: 'sync', enabled: true, span: 3 },
   { id: 'docs', enabled: true, span: 6 },
+  // disabled by default — existing users shouldn't get a new widget forced on
+  { id: 'attention', enabled: false, span: 2 },
 ];
 
 // The OpenAPI contract models widgets as position/size placements
@@ -44,6 +63,7 @@ const WIDGET_TYPE: Record<WidgetId, WidgetPlacementType> = {
   changes: WidgetPlacementType.recent_changes,
   sync: WidgetPlacementType.sync_activity,
   docs: WidgetPlacementType.docs_health,
+  attention: WidgetPlacementType.attention,
 };
 
 const STORAGE_KEY = 'wiselabz.dashboard.layout';
@@ -57,7 +77,14 @@ export function widgetsFromWire(raw: unknown): WidgetDef[] {
       if (!known.has(id)) continue;
       const fallbackSpan = DEFAULT_LAYOUT.find((d) => d.id === id)!.span;
       const span = [2, 3, 4, 6].includes(w.w as number) ? (w.w as WidgetDef['span']) : fallbackSpan;
-      kept.push({ id, enabled: typeof w.enabled === 'boolean' ? w.enabled : true, span });
+      // ponytail: opaque JSON blob, no schema validation — field just needs to round-trip
+      kept.push({
+        id,
+        enabled: typeof w.enabled === 'boolean' ? w.enabled : true,
+        span,
+        severityFilter: w.severityFilter,
+        pollingEnabled: typeof w.pollingEnabled === 'boolean' ? w.pollingEnabled : undefined,
+      });
     }
   }
   const missing = DEFAULT_LAYOUT.filter((d) => !kept.some((w) => w.id === d.id));
@@ -73,6 +100,8 @@ export function widgetsToWire(layout: WidgetDef[]): DashboardLayout {
     w: w.span,
     h: 1,
     enabled: w.enabled,
+    severityFilter: w.severityFilter,
+    pollingEnabled: w.pollingEnabled,
   }));
   return { widgets } as unknown as DashboardLayout;
 }
@@ -100,6 +129,7 @@ interface DashboardState {
   hydrate: () => Promise<void>;
   setOrder: (ids: WidgetId[]) => void;
   toggle: (id: WidgetId) => void;
+  setWidgetOptions: (id: WidgetId, patch: Partial<Pick<WidgetDef, 'severityFilter' | 'pollingEnabled'>>) => void;
   reset: () => Promise<void>;
 }
 
@@ -128,6 +158,13 @@ export const useDashboard = create<DashboardState>((set, get) => ({
 
   toggle: (id) => {
     const layout = get().layout.map((w) => (w.id === id ? { ...w, enabled: !w.enabled } : w));
+    persistCache(layout);
+    set({ layout });
+    void putDashboardLayout(widgetsToWire(layout));
+  },
+
+  setWidgetOptions: (id, patch) => {
+    const layout = get().layout.map((w) => (w.id === id ? { ...w, ...patch } : w));
     persistCache(layout);
     set({ layout });
     void putDashboardLayout(widgetsToWire(layout));

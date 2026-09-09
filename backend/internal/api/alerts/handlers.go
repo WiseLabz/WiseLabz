@@ -168,3 +168,58 @@ func (h *Handler) Snooze(w http.ResponseWriter, r *http.Request) {
 	}
 	httputil.JSON(w, http.StatusOK, resp)
 }
+
+// bulkSnoozeRequest is the body of POST /api/alerts/bulk-snooze.
+type bulkSnoozeRequest struct {
+	IDs   []string `json:"ids"`
+	Until string   `json:"until"`
+}
+
+// bulkSnoozeItemResult is the per-item outcome in the bulk-snooze response.
+type bulkSnoozeItemResult struct {
+	ID     string `json:"id"`
+	Status string `json:"status"` // "success" | "error"
+	Reason string `json:"reason,omitempty"`
+}
+
+// BulkSnooze handles POST /api/alerts/bulk-snooze. It snoozes an explicit,
+// caller-supplied list of alert IDs until a common timestamp in one request.
+// One bad ID never aborts the batch: every item gets its own success/error
+// outcome, and one audit record is written per successfully-snoozed item.
+func (h *Handler) BulkSnooze(w http.ResponseWriter, r *http.Request) {
+	var req bulkSnoozeRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		httputil.Error(w, http.StatusBadRequest, "invalid_request", "Invalid JSON body")
+		return
+	}
+	if req.Until == "" {
+		httputil.Error(w, http.StatusBadRequest, "invalid_request", "until is required")
+		return
+	}
+	if _, err := time.Parse(time.RFC3339, req.Until); err != nil {
+		httputil.Error(w, http.StatusBadRequest, "invalid_request", "until must be an RFC3339 timestamp")
+		return
+	}
+	if len(req.IDs) == 0 {
+		httputil.Error(w, http.StatusBadRequest, "invalid_request", "ids must be a non-empty array")
+		return
+	}
+
+	results := make([]bulkSnoozeItemResult, 0, len(req.IDs))
+	for _, id := range req.IDs {
+		if err := h.Store.UpdateAlertStatus(r.Context(), id, "snoozed", req.Until); err != nil {
+			if errors.Is(err, store.ErrNotFound) {
+				results = append(results, bulkSnoozeItemResult{ID: id, Status: "error", Reason: "not_found"})
+				continue
+			}
+			results = append(results, bulkSnoozeItemResult{ID: id, Status: "error", Reason: "internal_error"})
+			continue
+		}
+		if err := h.Store.RecordAuditFromContext(r.Context(), "alert.bulk_snooze", "alert", id, nil); err != nil {
+			slog.Error("failed to record audit", "action", "alert.bulk_snooze", "error", err)
+		}
+		results = append(results, bulkSnoozeItemResult{ID: id, Status: "success"})
+	}
+
+	httputil.JSON(w, http.StatusOK, map[string]any{"results": results})
+}

@@ -6,6 +6,7 @@
  */
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useSearchParams } from 'react-router-dom';
 import { AnimatePresence, motion, Reorder, useDragControls } from 'motion/react';
 import { ErrorBoundary } from 'react-error-boundary';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -13,8 +14,10 @@ import {
   useDashboard,
   widgetsFromWire,
   widgetsToWire,
+  DEFAULT_RANGE,
   type WidgetId,
   type WidgetDef,
+  type RangePreset,
 } from '../../store/dashboard';
 import { useUi } from '../../store/ui';
 import { useLive } from '../../store/live';
@@ -37,6 +40,7 @@ import {
   RecentChangesWidget,
   SyncActivityWidget,
   DocsHealthWidget,
+  AttentionQueueWidget,
 } from '../../components/dashboard/widgets';
 import {
   LayersIcon,
@@ -62,7 +66,15 @@ const REGISTRY: Record<WidgetId, WidgetMeta> = {
   changes: { title: 'Recent changes', Icon: DiffIcon, Component: RecentChangesWidget, minH: 300 },
   sync: { title: 'Sync activity', Icon: SyncIcon, Component: SyncActivityWidget, minH: 300 },
   docs: { title: 'Documentation', Icon: FileTextIcon, Component: DocsHealthWidget, minH: 200 },
+  attention: {
+    title: 'Attention queue',
+    Icon: BellIcon,
+    Component: AttentionQueueWidget,
+    minH: 300,
+  },
 };
+
+const RANGE_PRESETS: RangePreset[] = ['24h', '7d', '30d', '90d'];
 
 const SPAN_CLASS: Record<number, string> = {
   2: 'lg:col-span-2',
@@ -115,6 +127,7 @@ export function DashboardPage() {
                 {syncing ? t('dashboard.reconciling') : t('dashboard.reconciled')}
               </p>
             </div>
+            <RangeControl />
             <StatusReadout />
           </div>
 
@@ -450,6 +463,38 @@ function SyncSweep({ active }: { active: boolean }) {
         </motion.div>
       )}
     </AnimatePresence>
+  );
+}
+
+/* ── Range control: preset day-window for the changes widget ───────────── */
+
+function RangeControl() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const range = (searchParams.get('range') as RangePreset | null) ?? DEFAULT_RANGE;
+
+  const setRange = (next: RangePreset) =>
+    setSearchParams((prev) => {
+      const params = new URLSearchParams(prev);
+      if (next === DEFAULT_RANGE) params.delete('range');
+      else params.set('range', next);
+      return params;
+    });
+
+  return (
+    <div className="flex items-center gap-1 rounded-lg border border-line-soft bg-canvas-sunken p-0.5">
+      {RANGE_PRESETS.map((preset) => (
+        <Button
+          key={preset}
+          variant="ghost"
+          size="sm"
+          aria-pressed={range === preset}
+          onClick={() => setRange(preset)}
+          style={{ color: range === preset ? 'var(--color-ink)' : 'var(--color-ink-muted)' }}
+        >
+          {preset}
+        </Button>
+      ))}
+    </div>
   );
 }
 

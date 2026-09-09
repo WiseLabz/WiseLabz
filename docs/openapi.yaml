@@ -308,6 +308,7 @@ paths:
     get:
       tags: [dashboard]
       summary: Aggregate overview (status counts, recent changes, alert summary)
+      parameters: [{ $ref: '#/components/parameters/DaysQuery' }]
       responses:
         '200':
           description: OK
@@ -1122,6 +1123,21 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Alert' }
+  /alerts/bulk-snooze:
+    post:
+      tags: [alerts]
+      summary: Snooze multiple alerts
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AlertBulkSnoozeRequest' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AlertBulkSnoozeResponse' }
 
   # ───────────────────────── attention queue ─────────────────────────
   /attention:
@@ -1741,6 +1757,7 @@ components:
     FindingId: { name: findingId, in: path, required: true, schema: { type: string } }
     SessionId: { name: sessionId, in: path, required: true, schema: { type: string } }
     ServiceIdQuery: { name: serviceId, in: query, required: false, schema: { type: string } }
+    DaysQuery: { name: days, in: query, required: false, schema: { type: integer, default: 7, minimum: 1 } }
     Page: { name: page, in: query, required: false, schema: { type: integer, default: 1, minimum: 1 } }
     PageSize: { name: pageSize, in: query, required: false, schema: { type: integer, default: 25, minimum: 1, maximum: 100 } }
 
@@ -1960,7 +1977,7 @@ components:
         id: { type: string }
         type:
           type: string
-          enum: [service_status, recent_changes, alert_summary, sync_activity, docs_health]
+          enum: [service_status, recent_changes, alert_summary, sync_activity, docs_health, attention]
         x: { type: integer }
         y: { type: integer }
         w: { type: integer }
@@ -2390,6 +2407,32 @@ components:
         results:
           type: array
           items: { $ref: '#/components/schemas/BulkResolveItemResult' }
+    AlertBulkSnoozeRequest:
+      type: object
+      required: [ids, until]
+      properties:
+        ids:
+          type: array
+          minItems: 1
+          items: { type: string }
+          description: Explicit alert IDs to snooze — never "all matching the current filter".
+        until: { type: string, format: date-time }
+    AlertBulkSnoozeItemResult:
+      type: object
+      required: [id, status]
+      properties:
+        id: { type: string }
+        status: { type: string, enum: [success, error] }
+        reason:
+          type: string
+          description: 'Present when status is error, e.g. not_found, internal_error.'
+    AlertBulkSnoozeResponse:
+      type: object
+      required: [results]
+      properties:
+        results:
+          type: array
+          items: { $ref: '#/components/schemas/AlertBulkSnoozeItemResult' }
     Diff:
       type: object
       description: >

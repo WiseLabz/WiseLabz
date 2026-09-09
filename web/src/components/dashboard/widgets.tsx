@@ -5,21 +5,85 @@
  * card grid: the roster is a dense dot+word list, changes/alerts are feeds,
  * sync is a live timeline, docs is a coverage meter.
  */
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { AnimatePresence, motion } from 'motion/react';
 import { useGetConnectors } from '../../api/generated/connectors/connectors';
 import { useGetDashboardOverview } from '../../api/generated/dashboard/dashboard';
 import { useGetAlerts } from '../../api/generated/alerts/alerts';
 import { useGetDocsTree } from '../../api/generated/docs/docs';
+import { useGetAttention } from '../../api/generated/attention/attention';
+import {
+  useDashboard,
+  RANGE_DAYS,
+  DEFAULT_RANGE,
+  type WidgetId,
+  type RangePreset,
+} from '../../store/dashboard';
 import { useLive } from '../../store/live';
 import { relativeTime } from '../../lib/time';
 import { StatusPill, SeverityTag } from '../ui/StatusDot';
 import { statusMeta, toneColor } from '../ui/status';
 import { SkeletonRows, EmptyState, ErrorState } from '../ui/states';
-import { ArrowRightIcon, FileTextIcon, CheckIcon } from '../icons';
+import { ArrowRightIcon, FileTextIcon, CheckIcon, SyncIcon } from '../icons';
 import { categoryIcon } from '../categoryIcon';
-import type { Connector, ServiceStatus } from '../../api/model';
+import type { Connector, ServiceStatus, Severity } from '../../api/model';
+
+const SEVERITY_FILTERS: { key: string; value: Severity | 'all' }[] = [
+  { key: 'alerts.filterAll', value: 'all' },
+  { key: 'alerts.filterCritical', value: 'critical' },
+  { key: 'alerts.filterWarning', value: 'warning' },
+  { key: 'alerts.filterInfo', value: 'info' },
+];
+
+/** Compact severity-filter tabs + refresh button, shared by widgets that poll. */
+function WidgetControls({
+  widgetId,
+  severityFilter,
+  onRefresh,
+}: {
+  widgetId: WidgetId;
+  severityFilter: Severity | 'all';
+  onRefresh: () => void;
+}) {
+  const { t } = useTranslation();
+  const setWidgetOptions = useDashboard((s) => s.setWidgetOptions);
+
+  return (
+    <div className="flex items-center justify-between gap-2 border-b border-line-soft px-2 py-1.5">
+      <div className="flex items-center gap-0.5">
+        {SEVERITY_FILTERS.map((f) => (
+          <button
+            key={f.value}
+            onClick={() => setWidgetOptions(widgetId, { severityFilter: f.value })}
+            className="rounded px-1.5 py-1 text-2xs font-medium transition-colors"
+            style={{
+              color: severityFilter === f.value ? 'var(--color-ink)' : 'var(--color-ink-faint)',
+              backgroundColor:
+                severityFilter === f.value ? 'var(--color-surface-raised)' : 'transparent',
+            }}
+          >
+            {t(f.key)}
+          </button>
+        ))}
+      </div>
+      <button
+        onClick={onRefresh}
+        aria-label={t('common.refresh')}
+        className="rounded p-1 text-ink-faint transition-colors hover:text-ink"
+      >
+        <SyncIcon size={13} />
+      </button>
+    </div>
+  );
+}
+
+function filterBySeverity<T extends { severity: Severity }>(
+  items: T[],
+  severityFilter: Severity | 'all'
+): T[] {
+  return severityFilter === 'all' ? items : items.filter((i) => i.severity === severityFilter);
+}
 
 const STATUS_RANK: Record<ServiceStatus, number> = {
   offline: 0,
@@ -121,51 +185,68 @@ export function ServiceRosterWidget() {
 export function AlertSummaryWidget() {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const { data, isLoading, isError, refetch } = useGetAlerts();
+  const widgetDef = useDashboard((s) => s.layout.find((w) => w.id === 'alerts'));
+  const severityFilter = widgetDef?.severityFilter ?? 'all';
+  const pollingEnabled = widgetDef?.pollingEnabled ?? false;
+  const { data, isLoading, isError, refetch } = useGetAlerts(undefined, {
+    query: { refetchInterval: pollingEnabled ? 30_000 : false },
+  });
   const pendingLive = useLive((s) => s.pendingAlerts);
 
   if (isLoading) return <SkeletonRows rows={3} />;
   if (isError || !data)
     return <ErrorState description={t('widgets.loadAlertsError')} onRetry={() => refetch()} />;
 
-  const pending = data.items.filter((a) => a.status === 'pending');
-  if (pending.length === 0)
-    return (
-      <EmptyState
-        icon={<CheckIcon size={20} />}
-        title={t('widgets.alerts.allClearTitle')}
-        description={t('widgets.alerts.allClearDesc')}
-      />
-    );
+  const pending = filterBySeverity(
+    data.items.filter((a) => a.status === 'pending'),
+    severityFilter
+  );
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex items-baseline gap-2 px-4 py-3">
-        <motion.span
-          key={Math.max(pending.length, pendingLive)}
-          initial={{ opacity: 0, y: -4 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="nums text-2xl font-semibold text-err"
-        >
-          {Math.max(pending.length, pendingLive)}
-        </motion.span>
-        <span className="text-xs text-ink-muted">{t('widgets.alerts.pending')}</span>
-      </div>
-      <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
-        {pending.slice(0, 4).map((a) => (
-          <button
-            key={a.id}
-            onClick={() => navigate('/alerts')}
-            className="flex w-full flex-col gap-1 rounded-md px-2 py-2 text-left transition-colors hover:bg-surface-raised"
-          >
-            <span className="flex items-center justify-between gap-2">
-              <SeverityTag severity={a.severity} />
-              <span className="font-mono text-2xs text-ink-faint">{relativeTime(a.createdAt)}</span>
-            </span>
-            <span className="line-clamp-2 text-sm text-ink">{a.title}</span>
-          </button>
-        ))}
-      </div>
+      <WidgetControls
+        widgetId="alerts"
+        severityFilter={severityFilter}
+        onRefresh={() => refetch()}
+      />
+      {pending.length === 0 ? (
+        <EmptyState
+          icon={<CheckIcon size={20} />}
+          title={t('widgets.alerts.allClearTitle')}
+          description={t('widgets.alerts.allClearDesc')}
+        />
+      ) : (
+        <>
+          <div className="flex items-baseline gap-2 px-4 py-3">
+            <motion.span
+              key={Math.max(pending.length, pendingLive)}
+              initial={{ opacity: 0, y: -4 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="nums text-2xl font-semibold text-err"
+            >
+              {Math.max(pending.length, pendingLive)}
+            </motion.span>
+            <span className="text-xs text-ink-muted">{t('widgets.alerts.pending')}</span>
+          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
+            {pending.slice(0, 4).map((a) => (
+              <button
+                key={a.id}
+                onClick={() => navigate('/alerts')}
+                className="flex w-full flex-col gap-1 rounded-md px-2 py-2 text-left transition-colors hover:bg-surface-raised"
+              >
+                <span className="flex items-center justify-between gap-2">
+                  <SeverityTag severity={a.severity} />
+                  <span className="font-mono text-2xs text-ink-faint">
+                    {relativeTime(a.createdAt)}
+                  </span>
+                </span>
+                <span className="line-clamp-2 text-sm text-ink">{a.title}</span>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -175,50 +256,65 @@ export function AlertSummaryWidget() {
 export function RecentChangesWidget() {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const { data, isLoading, isError, refetch } = useGetDashboardOverview();
+  const [searchParams] = useSearchParams();
+  const days = RANGE_DAYS[(searchParams.get('range') as RangePreset | null) ?? DEFAULT_RANGE];
+  const widgetDef = useDashboard((s) => s.layout.find((w) => w.id === 'changes'));
+  const severityFilter = widgetDef?.severityFilter ?? 'all';
+  const pollingEnabled = widgetDef?.pollingEnabled ?? false;
+  const { data, isLoading, isError, refetch } = useGetDashboardOverview(
+    { days },
+    { query: { refetchInterval: pollingEnabled ? 30_000 : false } }
+  );
 
   if (isLoading) return <SkeletonRows rows={4} />;
   if (isError || !data)
     return <ErrorState description={t('widgets.loadChangesError')} onRetry={() => refetch()} />;
 
-  const changes = data.recentChanges ?? [];
-  if (changes.length === 0)
-    return (
-      <EmptyState
-        icon={<CheckIcon size={20} />}
-        title={t('widgets.changes.emptyTitle')}
-        description={t('widgets.changes.emptyDesc')}
-      />
-    );
+  const changes = filterBySeverity(data.recentChanges ?? [], severityFilter);
 
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto">
-      {changes.map((c) => (
-        <button
-          key={c.id}
-          onClick={() => navigate(`/changes/${c.id}`)}
-          className="group flex w-full items-start gap-3 border-b border-line-soft px-4 py-2.5 text-left transition-colors last:border-0 hover:bg-surface-raised"
-        >
-          <span className="pt-0.5">
-            <SeverityTag severity={c.severity} />
-          </span>
-          <span className="min-w-0 flex-1">
-            <span className="block truncate text-sm text-ink">{c.summary}</span>
-            <span className="flex items-center gap-1.5 font-mono text-2xs text-ink-faint">
-              <span className="text-accent-primary-bright">{c.serviceName}</span>
-              <span>·</span>
-              <span>{c.changeType}</span>
-              <span>·</span>
-              <span>{relativeTime(c.detectedAt)}</span>
-              {c.willTriggerAi && (
-                <span className="ml-0.5 rounded bg-accent-primary-tint px-1 text-accent-primary">
-                  {t('widgets.changes.ai')}
+    <div className="flex min-h-0 flex-1 flex-col">
+      <WidgetControls
+        widgetId="changes"
+        severityFilter={severityFilter}
+        onRefresh={() => refetch()}
+      />
+      {changes.length === 0 ? (
+        <EmptyState
+          icon={<CheckIcon size={20} />}
+          title={t('widgets.changes.emptyTitle')}
+          description={t('widgets.changes.emptyDesc')}
+        />
+      ) : (
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          {changes.map((c) => (
+            <button
+              key={c.id}
+              onClick={() => navigate(`/changes/${c.id}`)}
+              className="group flex w-full items-start gap-3 border-b border-line-soft px-4 py-2.5 text-left transition-colors last:border-0 hover:bg-surface-raised"
+            >
+              <span className="pt-0.5">
+                <SeverityTag severity={c.severity} />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm text-ink">{c.summary}</span>
+                <span className="flex items-center gap-1.5 font-mono text-2xs text-ink-faint">
+                  <span className="text-accent-primary-bright">{c.serviceName}</span>
+                  <span>·</span>
+                  <span>{c.changeType}</span>
+                  <span>·</span>
+                  <span>{relativeTime(c.detectedAt)}</span>
+                  {c.willTriggerAi && (
+                    <span className="ml-0.5 rounded bg-accent-primary-tint px-1 text-accent-primary">
+                      {t('widgets.changes.ai')}
+                    </span>
+                  )}
                 </span>
-              )}
-            </span>
-          </span>
-        </button>
-      ))}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -296,6 +392,51 @@ export function SyncActivityWidget() {
           </ol>
         )}
       </div>
+    </div>
+  );
+}
+
+/* ── Attention queue (merged alerts + findings) ────────────────────────── */
+
+export function AttentionQueueWidget() {
+  const { t } = useTranslation();
+  const navigate = useNavigate();
+  const { data, isLoading, isError, refetch } = useGetAttention({ page: 1, pageSize: 5 });
+
+  if (isLoading) return <SkeletonRows rows={3} />;
+  if (isError || !data)
+    return <ErrorState description={t('widgets.loadAttentionError')} onRetry={() => refetch()} />;
+  if (data.data.length === 0)
+    return (
+      <EmptyState
+        icon={<CheckIcon size={20} />}
+        title={t('widgets.attention.emptyTitle')}
+        description={t('widgets.attention.emptyDesc')}
+      />
+    );
+
+  return (
+    <div className="min-h-0 flex-1 overflow-y-auto px-2 py-2">
+      {data.data.map((item) => (
+        <button
+          key={item.id}
+          onClick={() => navigate('/attention')}
+          className="flex w-full flex-col gap-1 rounded-md px-2 py-2 text-left transition-colors hover:bg-surface-raised"
+        >
+          <span className="flex items-center justify-between gap-2">
+            <span className="flex items-center gap-1.5">
+              <SeverityTag severity={item.severity} />
+              <span className="rounded px-1 py-0.5 text-[10px] font-medium text-ink-faint">
+                {item.kind === 'alert' ? 'Alert' : 'Finding'}
+              </span>
+            </span>
+            <span className="font-mono text-2xs text-ink-faint">
+              {relativeTime(item.detectedAt)}
+            </span>
+          </span>
+          <span className="line-clamp-2 text-sm text-ink">{item.title}</span>
+        </button>
+      ))}
     </div>
   );
 }
