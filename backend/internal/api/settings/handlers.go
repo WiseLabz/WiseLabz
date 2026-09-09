@@ -14,6 +14,7 @@ import (
 	"github.com/WiseLabz/wiselabz/internal/config"
 	"github.com/WiseLabz/wiselabz/internal/crypto"
 	"github.com/WiseLabz/wiselabz/internal/httputil"
+	"github.com/WiseLabz/wiselabz/internal/logsafe"
 	"github.com/WiseLabz/wiselabz/internal/store"
 )
 
@@ -406,7 +407,7 @@ func (h *Handler) TestNotificationsConfig(w http.ResponseWriter, r *http.Request
 		httputil.Error(w, http.StatusBadRequest, "invalid_request", "channel is required")
 		return
 	}
-	slog.Info("test notification requested", "channel", req.Channel)
+	slog.Info("test notification requested", "channel", logsafe.Sanitize(req.Channel))
 	httputil.JSON(w, http.StatusOK, map[string]any{"ok": true, "message": "Test notification sent"})
 }
 

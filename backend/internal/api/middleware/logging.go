@@ -6,6 +6,8 @@ import (
 	"net"
 	"net/http"
 	"time"
+
+	"github.com/WiseLabz/wiselabz/internal/logsafe"
 )
 
 // responseWriter wraps http.ResponseWriter to capture the status code.
@@ -48,8 +50,8 @@ func Logger(next http.Handler) http.Handler {
 
 		slog.Info("request",
 			"method", r.Method,
-			"path", r.URL.Path,
-			"query", r.URL.RawQuery,
+			"path", logsafe.Sanitize(r.URL.Path),
+			"query", logsafe.Sanitize(r.URL.RawQuery),
 			"status", rw.status,
 			"duration_ms", time.Since(start).Milliseconds(),
 			"remote_addr", r.RemoteAddr,

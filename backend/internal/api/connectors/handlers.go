@@ -16,6 +16,7 @@ import (
 
 	"github.com/WiseLabz/wiselabz/internal/connector"
 	"github.com/WiseLabz/wiselabz/internal/httputil"
+	"github.com/WiseLabz/wiselabz/internal/logsafe"
 	"github.com/WiseLabz/wiselabz/internal/store"
 	"github.com/WiseLabz/wiselabz/internal/sync"
 )
@@ -664,7 +665,7 @@ func (h *Handler) Sync(w http.ResponseWriter, r *http.Request) {
 	jobID := uuid.New().String()
 	go func() {
 		if _, err := h.SyncEngine.RunSyncFields(context.Background(), id, jobID, req.Fields); err != nil {
-			slog.Error("sync failed", "connector", id, "job", jobID, "error", err)
+			slog.Error("sync failed", "connector", logsafe.Sanitize(id), "job", jobID, "error", logsafe.Sanitize(err.Error()))
 		}
 	}()
 
