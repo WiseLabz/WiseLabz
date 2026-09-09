@@ -1,7 +1,14 @@
 pre-commit:
   parallel: true
   commands:
+    gen-api:
+      priority: 1
+      glob: "docs/openapi.yaml"
+      run: |
+        npm --prefix web run gen:api
+        git add web/src/api/generated web/src/api/model
     gofmt:
+      priority: 2
       run: |
         gofiles=$(find ./backend -name '*.go' -type f)
         if [ -n "$gofiles" ]; then
@@ -13,11 +20,13 @@ pre-commit:
           fi
         fi
     golangci-lint:
+      priority: 2
       run: |
         if [ -n "$(find ./backend -name '*.go' -type f)" ]; then
           golangci-lint run ./backend/...
         fi
     go-test:
+      priority: 2
       run: |
         if [ -n "$(find ./backend -name '*_test.go' -type f)" ]; then
           go test -short ./backend/...
@@ -25,6 +34,7 @@ pre-commit:
           echo "No test files yet, skipping"
         fi
     npm-lint:
+      priority: 2
       run: npm --prefix web run lint
 
 commit-msg:

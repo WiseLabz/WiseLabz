@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/robfig/cron/v3"
@@ -315,7 +316,10 @@ func (h *Handler) reregisterBackupJob(sched store.BackupSchedule) {
 			h.runBackupJob(jobCtx, sched)
 		})
 		if err != nil {
-			slog.Error("register backup job", "error", err)
+			// err wraps sched.CronExpr (user-controlled via PUT /schedule); strip
+			// line breaks before logging so a crafted cron string can't forge
+			// additional log entries (CWE-117).
+			slog.Error("register backup job", "error", stripLogControlChars(err.Error()))
 			h.BackupJobID = 0
 		} else {
 			h.BackupJobID = id
@@ -363,4 +367,12 @@ func (h *Handler) runBackupJob(ctx context.Context, sched store.BackupSchedule) 
 	}
 
 	slog.Info("Backup created", "id", run.ID, "size", run.SizeBytes)
+}
+
+// stripLogControlChars removes CR/LF from a string before it's logged, so a
+// value that embeds user input (e.g. an error wrapping a submitted cron
+// expression) can't forge additional log entries.
+func stripLogControlChars(s string) string {
+	s = strings.ReplaceAll(s, "\n", "")
+	return strings.ReplaceAll(s, "\r", "")
 }
