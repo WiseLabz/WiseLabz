@@ -94,21 +94,24 @@ If the pre-commit hook blocks you on a lint issue, run `make lint` to see the fu
 output and `make fmt` to auto-fix formatting. The commit-msg hook will reject
 non-conforming messages — the error tells you exactly what's wrong.
 
-## Frontend testing policy
+## Testing and coverage baseline
 
-The frontend (`web/`) has no automated test suite today, and none should be added
-before the planned rewrite (#52). Investing in tests against code that is about
-to be replaced wastes effort and slows the rewrite down. See #12.
+The frontend rewrite (#52) landed, so the deferral in the old policy (#12) no
+longer applies — `web/` has an automated Vitest suite and a `test-frontend` CI
+job, same as the backend's `test-backend` job.
 
-Once the rewrite lands, add behavioral coverage for:
+Both suites run with coverage in CI and enforce a floor so coverage only goes
+up over time:
 
-- auth guards
-- destructive actions
-- editor conflicts
-- diff rendering
-- WebSocket cache invalidation
+- **Backend** (`go test -coverpkg=./... -coverprofile=coverage.out ./...`):
+  floor is 60% total statement coverage (CI fails under it).
+- **Frontend** (`npm run test:coverage`, v8 provider): floor is set in
+  `web/vitest.config.ts` (`test.coverage.thresholds`) — currently 40%
+  statements/lines, 25% functions/branches.
 
-Backend tests are unaffected by this policy — keep adding them as usual.
+Raise these floors as coverage improves; never lower them. When adding a
+feature with non-trivial branching (auth, destructive actions, WebSocket
+handling), add regression tests for it rather than relying on the floor alone.
 
 ## Pull request process
 
