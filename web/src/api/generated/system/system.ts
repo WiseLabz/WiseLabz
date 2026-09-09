@@ -23,10 +23,14 @@ import type {
   AuditPage,
   BackupBundle,
   BackupImportResult,
+  BackupRun,
+  BackupRunPage,
+  BackupSchedule,
   DiagnosticsBundle,
   Error,
   ForbiddenResponse,
   GetSystemAuditParams,
+  GetSystemBackupRunsParams,
   Health,
   SystemInfo,
 } from '../../model';
@@ -526,6 +530,513 @@ export function usePostSystemBackupImport<
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
   const queryOptions = getPostSystemBackupImportQueryOptions(backupBundle, options);
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+/**
+ * @summary Current scheduled-backup configuration — operator. A default schedule is seeded at startup, so this always returns a value.
+ */
+export const getSystemBackupSchedule = (
+  options?: SecondParameter<typeof customInstance>,
+  signal?: AbortSignal
+) => {
+  return customInstance<BackupSchedule>(
+    { url: `/system/backup/schedule`, method: 'GET', signal },
+    options
+  );
+};
+
+export const getGetSystemBackupScheduleQueryKey = () => {
+  return [`/system/backup/schedule`] as const;
+};
+
+export const getGetSystemBackupScheduleQueryOptions = <
+  TData = Awaited<ReturnType<typeof getSystemBackupSchedule>>,
+  TError = ErrorType<ForbiddenResponse>,
+>(options?: {
+  query?: Partial<
+    UseQueryOptions<Awaited<ReturnType<typeof getSystemBackupSchedule>>, TError, TData>
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetSystemBackupScheduleQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getSystemBackupSchedule>>> = ({
+    signal,
+  }) => getSystemBackupSchedule(requestOptions, signal);
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getSystemBackupSchedule>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type GetSystemBackupScheduleQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getSystemBackupSchedule>>
+>;
+export type GetSystemBackupScheduleQueryError = ErrorType<ForbiddenResponse>;
+
+export function useGetSystemBackupSchedule<
+  TData = Awaited<ReturnType<typeof getSystemBackupSchedule>>,
+  TError = ErrorType<ForbiddenResponse>,
+>(
+  options: {
+    query: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getSystemBackupSchedule>>, TError, TData>
+    > &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getSystemBackupSchedule>>,
+          TError,
+          Awaited<ReturnType<typeof getSystemBackupSchedule>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useGetSystemBackupSchedule<
+  TData = Awaited<ReturnType<typeof getSystemBackupSchedule>>,
+  TError = ErrorType<ForbiddenResponse>,
+>(
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getSystemBackupSchedule>>, TError, TData>
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getSystemBackupSchedule>>,
+          TError,
+          Awaited<ReturnType<typeof getSystemBackupSchedule>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useGetSystemBackupSchedule<
+  TData = Awaited<ReturnType<typeof getSystemBackupSchedule>>,
+  TError = ErrorType<ForbiddenResponse>,
+>(
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getSystemBackupSchedule>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * @summary Current scheduled-backup configuration — operator. A default schedule is seeded at startup, so this always returns a value.
+ */
+
+export function useGetSystemBackupSchedule<
+  TData = Awaited<ReturnType<typeof getSystemBackupSchedule>>,
+  TError = ErrorType<ForbiddenResponse>,
+>(
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getSystemBackupSchedule>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getGetSystemBackupScheduleQueryOptions(options);
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+/**
+ * @summary Update the scheduled-backup configuration — operator. `cronExpr` must be a valid 5-field or 6-field cron expression; an invalid one is rejected (code `invalid_cron`) before it's persisted or handed to the scheduler. Re-registers the backup cron job with the new schedule. Audited as `backup.schedule.update`.
+ */
+export const putSystemBackupSchedule = (
+  backupSchedule: BodyType<BackupSchedule>,
+  options?: SecondParameter<typeof customInstance>,
+  signal?: AbortSignal
+) => {
+  return customInstance<BackupSchedule>(
+    {
+      url: `/system/backup/schedule`,
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      data: backupSchedule,
+      signal,
+    },
+    options
+  );
+};
+
+export const getPutSystemBackupScheduleQueryKey = (backupSchedule?: BodyType<BackupSchedule>) => {
+  return ['PUT', `/system/backup/schedule`, backupSchedule] as const;
+};
+
+export const getPutSystemBackupScheduleQueryOptions = <
+  TData = Awaited<ReturnType<typeof putSystemBackupSchedule>>,
+  TError = ErrorType<Error | ForbiddenResponse>,
+>(
+  backupSchedule: BodyType<BackupSchedule>,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof putSystemBackupSchedule>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  }
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getPutSystemBackupScheduleQueryKey(backupSchedule);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof putSystemBackupSchedule>>> = ({
+    signal,
+  }) => putSystemBackupSchedule(backupSchedule, requestOptions, signal);
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof putSystemBackupSchedule>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type PutSystemBackupScheduleQueryResult = NonNullable<
+  Awaited<ReturnType<typeof putSystemBackupSchedule>>
+>;
+export type PutSystemBackupScheduleQueryError = ErrorType<Error | ForbiddenResponse>;
+
+export function usePutSystemBackupSchedule<
+  TData = Awaited<ReturnType<typeof putSystemBackupSchedule>>,
+  TError = ErrorType<Error | ForbiddenResponse>,
+>(
+  backupSchedule: BodyType<BackupSchedule>,
+  options: {
+    query: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof putSystemBackupSchedule>>, TError, TData>
+    > &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof putSystemBackupSchedule>>,
+          TError,
+          Awaited<ReturnType<typeof putSystemBackupSchedule>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function usePutSystemBackupSchedule<
+  TData = Awaited<ReturnType<typeof putSystemBackupSchedule>>,
+  TError = ErrorType<Error | ForbiddenResponse>,
+>(
+  backupSchedule: BodyType<BackupSchedule>,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof putSystemBackupSchedule>>, TError, TData>
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof putSystemBackupSchedule>>,
+          TError,
+          Awaited<ReturnType<typeof putSystemBackupSchedule>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function usePutSystemBackupSchedule<
+  TData = Awaited<ReturnType<typeof putSystemBackupSchedule>>,
+  TError = ErrorType<Error | ForbiddenResponse>,
+>(
+  backupSchedule: BodyType<BackupSchedule>,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof putSystemBackupSchedule>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * @summary Update the scheduled-backup configuration — operator. `cronExpr` must be a valid 5-field or 6-field cron expression; an invalid one is rejected (code `invalid_cron`) before it's persisted or handed to the scheduler. Re-registers the backup cron job with the new schedule. Audited as `backup.schedule.update`.
+ */
+
+export function usePutSystemBackupSchedule<
+  TData = Awaited<ReturnType<typeof putSystemBackupSchedule>>,
+  TError = ErrorType<Error | ForbiddenResponse>,
+>(
+  backupSchedule: BodyType<BackupSchedule>,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof putSystemBackupSchedule>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getPutSystemBackupScheduleQueryOptions(backupSchedule, options);
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+/**
+ * @summary Paginated history of backups created by the schedule or on demand — operator
+ */
+export const getSystemBackupRuns = (
+  params?: GetSystemBackupRunsParams,
+  options?: SecondParameter<typeof customInstance>,
+  signal?: AbortSignal
+) => {
+  return customInstance<BackupRunPage>(
+    { url: `/system/backup/runs`, method: 'GET', params, signal },
+    options
+  );
+};
+
+export const getGetSystemBackupRunsQueryKey = (params?: GetSystemBackupRunsParams) => {
+  return [`/system/backup/runs`, ...(params ? [params] : [])] as const;
+};
+
+export const getGetSystemBackupRunsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getSystemBackupRuns>>,
+  TError = ErrorType<ForbiddenResponse>,
+>(
+  params?: GetSystemBackupRunsParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getSystemBackupRuns>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  }
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetSystemBackupRunsQueryKey(params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getSystemBackupRuns>>> = ({ signal }) =>
+    getSystemBackupRuns(params, requestOptions, signal);
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getSystemBackupRuns>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type GetSystemBackupRunsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getSystemBackupRuns>>
+>;
+export type GetSystemBackupRunsQueryError = ErrorType<ForbiddenResponse>;
+
+export function useGetSystemBackupRuns<
+  TData = Awaited<ReturnType<typeof getSystemBackupRuns>>,
+  TError = ErrorType<ForbiddenResponse>,
+>(
+  params: undefined | GetSystemBackupRunsParams,
+  options: {
+    query: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getSystemBackupRuns>>, TError, TData>
+    > &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getSystemBackupRuns>>,
+          TError,
+          Awaited<ReturnType<typeof getSystemBackupRuns>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useGetSystemBackupRuns<
+  TData = Awaited<ReturnType<typeof getSystemBackupRuns>>,
+  TError = ErrorType<ForbiddenResponse>,
+>(
+  params?: GetSystemBackupRunsParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getSystemBackupRuns>>, TError, TData>
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getSystemBackupRuns>>,
+          TError,
+          Awaited<ReturnType<typeof getSystemBackupRuns>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useGetSystemBackupRuns<
+  TData = Awaited<ReturnType<typeof getSystemBackupRuns>>,
+  TError = ErrorType<ForbiddenResponse>,
+>(
+  params?: GetSystemBackupRunsParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getSystemBackupRuns>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * @summary Paginated history of backups created by the schedule or on demand — operator
+ */
+
+export function useGetSystemBackupRuns<
+  TData = Awaited<ReturnType<typeof getSystemBackupRuns>>,
+  TError = ErrorType<ForbiddenResponse>,
+>(
+  params?: GetSystemBackupRunsParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getSystemBackupRuns>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getGetSystemBackupRunsQueryOptions(params, options);
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+/**
+ * @summary Trigger a backup immediately (`triggeredBy: "manual"`) — operator. Writes the bundle to the configured backup directory, records the run, and applies the current retention policy (same pruning as scheduled backups). Audited as `backup.run.created`, and as `backup.run.pruned` if the retention policy removes any older runs.
+ */
+export const postSystemBackupRun = (
+  options?: SecondParameter<typeof customInstance>,
+  signal?: AbortSignal
+) => {
+  return customInstance<BackupRun>({ url: `/system/backup/run`, method: 'POST', signal }, options);
+};
+
+export const getPostSystemBackupRunQueryKey = () => {
+  return ['POST', `/system/backup/run`] as const;
+};
+
+export const getPostSystemBackupRunQueryOptions = <
+  TData = Awaited<ReturnType<typeof postSystemBackupRun>>,
+  TError = ErrorType<ForbiddenResponse>,
+>(options?: {
+  query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof postSystemBackupRun>>, TError, TData>>;
+  request?: SecondParameter<typeof customInstance>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getPostSystemBackupRunQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof postSystemBackupRun>>> = ({ signal }) =>
+    postSystemBackupRun(requestOptions, signal);
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof postSystemBackupRun>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type PostSystemBackupRunQueryResult = NonNullable<
+  Awaited<ReturnType<typeof postSystemBackupRun>>
+>;
+export type PostSystemBackupRunQueryError = ErrorType<ForbiddenResponse>;
+
+export function usePostSystemBackupRun<
+  TData = Awaited<ReturnType<typeof postSystemBackupRun>>,
+  TError = ErrorType<ForbiddenResponse>,
+>(
+  options: {
+    query: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof postSystemBackupRun>>, TError, TData>
+    > &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postSystemBackupRun>>,
+          TError,
+          Awaited<ReturnType<typeof postSystemBackupRun>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function usePostSystemBackupRun<
+  TData = Awaited<ReturnType<typeof postSystemBackupRun>>,
+  TError = ErrorType<ForbiddenResponse>,
+>(
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof postSystemBackupRun>>, TError, TData>
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postSystemBackupRun>>,
+          TError,
+          Awaited<ReturnType<typeof postSystemBackupRun>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function usePostSystemBackupRun<
+  TData = Awaited<ReturnType<typeof postSystemBackupRun>>,
+  TError = ErrorType<ForbiddenResponse>,
+>(
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof postSystemBackupRun>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * @summary Trigger a backup immediately (`triggeredBy: "manual"`) — operator. Writes the bundle to the configured backup directory, records the run, and applies the current retention policy (same pruning as scheduled backups). Audited as `backup.run.created`, and as `backup.run.pruned` if the retention policy removes any older runs.
+ */
+
+export function usePostSystemBackupRun<
+  TData = Awaited<ReturnType<typeof postSystemBackupRun>>,
+  TError = ErrorType<ForbiddenResponse>,
+>(
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof postSystemBackupRun>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getPostSystemBackupRunQueryOptions(options);
 
   const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
     queryKey: DataTag<QueryKey, TData, TError>;

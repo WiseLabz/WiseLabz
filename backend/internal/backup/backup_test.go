@@ -252,3 +252,95 @@ func TestExportIncludesRecordsBeyondAPage(t *testing.T) {
 		t.Fatalf("exported docs = %d, want 1001", got)
 	}
 }
+
+func TestExportToFile(t *testing.T) {
+	ctx := context.Background()
+	s := newTestStore(t)
+
+	// Create a test backup
+	tmpDir := t.TempDir()
+	run, err := backup.ExportToFile(ctx, s, tmpDir)
+	if err != nil {
+		t.Fatalf("ExportToFile: %v", err)
+	}
+
+	// Verify returned metadata
+	if run.ID == "" {
+		t.Error("Run.ID is empty")
+	}
+	if run.FilePath == "" {
+		t.Error("Run.FilePath is empty")
+	}
+	if run.SizeBytes <= 0 {
+		t.Error("Run.SizeBytes should be positive")
+	}
+	if run.CreatedAt == "" {
+		t.Error("Run.CreatedAt is empty")
+	}
+
+	// Verify file exists and is valid JSON
+	if _, err := os.Stat(run.FilePath); err != nil {
+		t.Fatalf("backup file not created: %v", err)
+	}
+
+	data, err := os.ReadFile(run.FilePath)
+	if err != nil {
+		t.Fatalf("read backup file: %v", err)
+	}
+
+	var b backup.Bundle
+	if err := json.Unmarshal(data, &b); err != nil {
+		t.Fatalf("unmarshal backup JSON: %v", err)
+	}
+
+	if b.Version != backup.BundleVersion {
+		t.Errorf("Bundle version mismatch: got %d, want %d", b.Version, backup.BundleVersion)
+	}
+}
+
+// TestExportToFileDirNotWritable verifies ExportToFile returns an error
+// (rather than silently succeeding or panicking) when the backup directory
+// exists but the process can't write to it. Skipped when running as root,
+// since root ignores directory write permissions.
+func TestExportToFileDirNotWritable(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("running as root: permission bits don't block writes")
+	}
+
+	ctx := context.Background()
+	s := newTestStore(t)
+
+	tmpDir := t.TempDir()
+	if err := os.Chmod(tmpDir, 0o500); err != nil {
+		t.Fatalf("chmod backup dir read-only: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(tmpDir, 0o700) }) // let t.TempDir() clean up
+
+	if _, err := backup.ExportToFile(ctx, s, tmpDir); err == nil {
+		t.Fatal("ExportToFile into a read-only directory: got nil error, want an error")
+	}
+}
+
+func TestExportToFileCreatesDirectory(t *testing.T) {
+	ctx := context.Background()
+	s := newTestStore(t)
+
+	// Use a path that doesn't exist yet
+	tmpBase := t.TempDir()
+	tmpDir := fmt.Sprintf("%s/subdir/backups", tmpBase)
+
+	run, err := backup.ExportToFile(ctx, s, tmpDir)
+	if err != nil {
+		t.Fatalf("ExportToFile: %v", err)
+	}
+
+	// Verify directory was created
+	if _, err := os.Stat(tmpDir); err != nil {
+		t.Fatalf("backup directory not created: %v", err)
+	}
+
+	// Verify file exists
+	if _, err := os.Stat(run.FilePath); err != nil {
+		t.Fatalf("backup file not found: %v", err)
+	}
+}

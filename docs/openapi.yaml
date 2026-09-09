@@ -1554,6 +1554,80 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
         '403': { $ref: '#/components/responses/Forbidden' }
+  /system/backup/schedule:
+    get:
+      tags: [system]
+      summary: >-
+        Current scheduled-backup configuration — operator. A default schedule
+        is seeded at startup, so this always returns a value.
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BackupSchedule' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    put:
+      tags: [system]
+      summary: >-
+        Update the scheduled-backup configuration — operator. `cronExpr` must
+        be a valid 5-field or 6-field cron expression; an invalid one is
+        rejected (code `invalid_cron`) before it's persisted or handed to the
+        scheduler. Re-registers the backup cron job with the new schedule.
+        Audited as `backup.schedule.update`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BackupSchedule' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BackupSchedule' }
+        '400':
+          description: Invalid JSON body, or `cronExpr` is empty/not a valid cron expression (code `invalid_cron`)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /system/backup/runs:
+    get:
+      tags: [system]
+      summary: Paginated history of backups created by the schedule or on demand — operator
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, default: 20, minimum: 1 }
+        - name: offset
+          in: query
+          required: false
+          schema: { type: integer, default: 0, minimum: 0 }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BackupRunPage' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /system/backup/run:
+    post:
+      tags: [system]
+      summary: >-
+        Trigger a backup immediately (`triggeredBy: "manual"`) — operator.
+        Writes the bundle to the configured backup directory, records the run,
+        and applies the current retention policy (same pruning as scheduled
+        backups). Audited as `backup.run.created`, and as `backup.run.pruned`
+        if the retention policy removes any older runs.
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BackupRun' }
+        '403': { $ref: '#/components/responses/Forbidden' }
   /system/diagnostics:
     get:
       tags: [system]
@@ -2716,6 +2790,34 @@ components:
         docVersions: { $ref: '#/components/schemas/BackupCounts' }
         templates: { $ref: '#/components/schemas/BackupCounts' }
         templateSections: { $ref: '#/components/schemas/BackupCounts' }
+    BackupSchedule:
+      type: object
+      required: [cronExpr, maxBackups, maxAgeHours, enabled]
+      properties:
+        cronExpr: { type: string, description: 5-field or 6-field (with leading seconds) cron expression, example: '0 3 * * *' }
+        maxBackups: { type: integer, description: Keep at most this many recent backups; 0 or negative disables count-based pruning }
+        maxAgeHours: { type: integer, description: Delete backups older than this many hours; 0 or negative disables age-based pruning }
+        enabled: { type: boolean, description: Whether the backup job is registered with the scheduler }
+        updatedAt: { type: string, format: date-time }
+    BackupRun:
+      type: object
+      required: [id, triggeredBy, filePath, sizeBytes, createdAt]
+      properties:
+        id: { type: string }
+        triggeredBy: { type: string, enum: [schedule, manual] }
+        filePath: { type: string }
+        sizeBytes: { type: integer }
+        createdAt: { type: string, format: date-time }
+    BackupRunPage:
+      type: object
+      required: [runs, total, limit, offset]
+      properties:
+        runs:
+          type: array
+          items: { $ref: '#/components/schemas/BackupRun' }
+        total: { type: integer }
+        limit: { type: integer }
+        offset: { type: integer }
 
     # ── diagnostics ──
     DiagnosticsBundle:

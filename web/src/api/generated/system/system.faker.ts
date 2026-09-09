@@ -13,6 +13,9 @@ import type {
   AuditPage,
   BackupBundle,
   BackupImportResult,
+  BackupRun,
+  BackupRunPage,
+  BackupSchedule,
   DiagnosticsBundle,
   Health,
   SystemInfo,
@@ -223,6 +226,61 @@ export const getPostSystemBackupImportResponseMock = (
   docVersions: { imported: faker.number.int(), skipped: faker.number.int() },
   templates: { imported: faker.number.int(), skipped: faker.number.int() },
   templateSections: { imported: faker.number.int(), skipped: faker.number.int() },
+  ...overrideResponse,
+});
+
+export const getGetSystemBackupScheduleResponseMock = (
+  overrideResponse: Partial<Extract<BackupSchedule, object>> = {}
+): BackupSchedule => ({
+  cronExpr: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  maxBackups: faker.number.int(),
+  maxAgeHours: faker.number.int(),
+  enabled: faker.datatype.boolean(),
+  updatedAt: faker.helpers.arrayElement([
+    faker.date.past().toISOString().slice(0, 19) + 'Z',
+    undefined,
+  ]),
+  ...overrideResponse,
+});
+
+export const getPutSystemBackupScheduleResponseMock = (
+  overrideResponse: Partial<Extract<BackupSchedule, object>> = {}
+): BackupSchedule => ({
+  cronExpr: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  maxBackups: faker.number.int(),
+  maxAgeHours: faker.number.int(),
+  enabled: faker.datatype.boolean(),
+  updatedAt: faker.helpers.arrayElement([
+    faker.date.past().toISOString().slice(0, 19) + 'Z',
+    undefined,
+  ]),
+  ...overrideResponse,
+});
+
+export const getGetSystemBackupRunsResponseMock = (
+  overrideResponse: Partial<Extract<BackupRunPage, object>> = {}
+): BackupRunPage => ({
+  runs: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() => ({
+    id: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    triggeredBy: faker.helpers.arrayElement(['schedule', 'manual'] as const),
+    filePath: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    sizeBytes: faker.number.int(),
+    createdAt: faker.date.past().toISOString().slice(0, 19) + 'Z',
+  })),
+  total: faker.number.int(),
+  limit: faker.number.int(),
+  offset: faker.number.int(),
+  ...overrideResponse,
+});
+
+export const getPostSystemBackupRunResponseMock = (
+  overrideResponse: Partial<Extract<BackupRun, object>> = {}
+): BackupRun => ({
+  id: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  triggeredBy: faker.helpers.arrayElement(['schedule', 'manual'] as const),
+  filePath: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  sizeBytes: faker.number.int(),
+  createdAt: faker.date.past().toISOString().slice(0, 19) + 'Z',
   ...overrideResponse,
 });
 

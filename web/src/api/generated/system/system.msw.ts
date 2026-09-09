@@ -16,6 +16,9 @@ import type {
   AuditPage,
   BackupBundle,
   BackupImportResult,
+  BackupRun,
+  BackupRunPage,
+  BackupSchedule,
   DiagnosticsBundle,
   Health,
   SystemInfo,
@@ -226,6 +229,61 @@ export const getPostSystemBackupImportResponseMock = (
   docVersions: { imported: faker.number.int(), skipped: faker.number.int() },
   templates: { imported: faker.number.int(), skipped: faker.number.int() },
   templateSections: { imported: faker.number.int(), skipped: faker.number.int() },
+  ...overrideResponse,
+});
+
+export const getGetSystemBackupScheduleResponseMock = (
+  overrideResponse: Partial<Extract<BackupSchedule, object>> = {}
+): BackupSchedule => ({
+  cronExpr: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  maxBackups: faker.number.int(),
+  maxAgeHours: faker.number.int(),
+  enabled: faker.datatype.boolean(),
+  updatedAt: faker.helpers.arrayElement([
+    faker.date.past().toISOString().slice(0, 19) + 'Z',
+    undefined,
+  ]),
+  ...overrideResponse,
+});
+
+export const getPutSystemBackupScheduleResponseMock = (
+  overrideResponse: Partial<Extract<BackupSchedule, object>> = {}
+): BackupSchedule => ({
+  cronExpr: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  maxBackups: faker.number.int(),
+  maxAgeHours: faker.number.int(),
+  enabled: faker.datatype.boolean(),
+  updatedAt: faker.helpers.arrayElement([
+    faker.date.past().toISOString().slice(0, 19) + 'Z',
+    undefined,
+  ]),
+  ...overrideResponse,
+});
+
+export const getGetSystemBackupRunsResponseMock = (
+  overrideResponse: Partial<Extract<BackupRunPage, object>> = {}
+): BackupRunPage => ({
+  runs: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() => ({
+    id: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    triggeredBy: faker.helpers.arrayElement(['schedule', 'manual'] as const),
+    filePath: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    sizeBytes: faker.number.int(),
+    createdAt: faker.date.past().toISOString().slice(0, 19) + 'Z',
+  })),
+  total: faker.number.int(),
+  limit: faker.number.int(),
+  offset: faker.number.int(),
+  ...overrideResponse,
+});
+
+export const getPostSystemBackupRunResponseMock = (
+  overrideResponse: Partial<Extract<BackupRun, object>> = {}
+): BackupRun => ({
+  id: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  triggeredBy: faker.helpers.arrayElement(['schedule', 'manual'] as const),
+  filePath: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  sizeBytes: faker.number.int(),
+  createdAt: faker.date.past().toISOString().slice(0, 19) + 'Z',
   ...overrideResponse,
 });
 
@@ -512,6 +570,100 @@ export const getPostSystemBackupImportMockHandler = (
   );
 };
 
+export const getGetSystemBackupScheduleMockHandler = (
+  overrideResponse?:
+    | BackupSchedule
+    | ((
+        info: Parameters<Parameters<typeof http.get>[1]>[0]
+      ) => Promise<BackupSchedule> | BackupSchedule),
+  options?: RequestHandlerOptions
+) => {
+  return http.get(
+    '*/system/backup/schedule',
+    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+      return HttpResponse.json(
+        overrideResponse !== undefined
+          ? typeof overrideResponse === 'function'
+            ? await overrideResponse(info)
+            : overrideResponse
+          : getGetSystemBackupScheduleResponseMock(),
+        { status: 200 }
+      );
+    },
+    options
+  );
+};
+
+export const getPutSystemBackupScheduleMockHandler = (
+  overrideResponse?:
+    | BackupSchedule
+    | ((
+        info: Parameters<Parameters<typeof http.put>[1]>[0]
+      ) => Promise<BackupSchedule> | BackupSchedule),
+  options?: RequestHandlerOptions
+) => {
+  return http.put(
+    '*/system/backup/schedule',
+    async (info: Parameters<Parameters<typeof http.put>[1]>[0]) => {
+      return HttpResponse.json(
+        overrideResponse !== undefined
+          ? typeof overrideResponse === 'function'
+            ? await overrideResponse(info)
+            : overrideResponse
+          : getPutSystemBackupScheduleResponseMock(),
+        { status: 200 }
+      );
+    },
+    options
+  );
+};
+
+export const getGetSystemBackupRunsMockHandler = (
+  overrideResponse?:
+    | BackupRunPage
+    | ((
+        info: Parameters<Parameters<typeof http.get>[1]>[0]
+      ) => Promise<BackupRunPage> | BackupRunPage),
+  options?: RequestHandlerOptions
+) => {
+  return http.get(
+    '*/system/backup/runs',
+    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+      return HttpResponse.json(
+        overrideResponse !== undefined
+          ? typeof overrideResponse === 'function'
+            ? await overrideResponse(info)
+            : overrideResponse
+          : getGetSystemBackupRunsResponseMock(),
+        { status: 200 }
+      );
+    },
+    options
+  );
+};
+
+export const getPostSystemBackupRunMockHandler = (
+  overrideResponse?:
+    | BackupRun
+    | ((info: Parameters<Parameters<typeof http.post>[1]>[0]) => Promise<BackupRun> | BackupRun),
+  options?: RequestHandlerOptions
+) => {
+  return http.post(
+    '*/system/backup/run',
+    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+      return HttpResponse.json(
+        overrideResponse !== undefined
+          ? typeof overrideResponse === 'function'
+            ? await overrideResponse(info)
+            : overrideResponse
+          : getPostSystemBackupRunResponseMock(),
+        { status: 200 }
+      );
+    },
+    options
+  );
+};
+
 export const getGetSystemDiagnosticsMockHandler = (
   overrideResponse?:
     | DiagnosticsBundle
@@ -562,6 +714,10 @@ export const getSystemMock = () => [
   getGetSystemAuditMockHandler(),
   getGetSystemBackupExportMockHandler(),
   getPostSystemBackupImportMockHandler(),
+  getGetSystemBackupScheduleMockHandler(),
+  getPutSystemBackupScheduleMockHandler(),
+  getGetSystemBackupRunsMockHandler(),
+  getPostSystemBackupRunMockHandler(),
   getGetSystemDiagnosticsMockHandler(),
   getGetHealthMockHandler(),
 ];

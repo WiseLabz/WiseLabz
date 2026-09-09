@@ -112,6 +112,57 @@ func main() {
 	ai.RegisterOpenAICompatible(aiRegistry)
 	ai.RegisterClaude(aiRegistry)
 
+	// Determine backup directory: use configured value, or compute from DB DSN
+	backupDir := cfg.Backup.Dir
+	if backupDir == "" {
+		// Default: ./data/backups, or extract from SQLite path if configured
+		backupDir = "./data/backups"
+	}
+
+	// Seed the backup schedule from config defaults if no row exists yet.
+	// api.NewRouter's InitBackupJob reads it back and registers the cron job.
+	if _, err := s.GetBackupSchedule(ctx); err != nil {
+		logger.Info("Initializing backup schedule with defaults")
+		defaultSched := store.BackupSchedule{
+			CronExpr:    cfg.Backup.CronExpr,
+			MaxBackups:  cfg.Backup.MaxBackups,
+			MaxAgeHours: cfg.Backup.MaxAgeHours,
+			Enabled:     cfg.Backup.Enabled,
+		}
+		if err := s.UpsertBackupSchedule(ctx, defaultSched); err != nil {
+			logger.Error("Failed to initialize backup schedule", "error", err)
+			os.Exit(1)
+		}
+	}
+
+	// Start scheduler for retention, quality, sync, and backup jobs
+	jobRunner := scheduler.New(logger)
+	if _, err := jobRunner.AddJob("retention", cfg.Retention.CronExpr, func(jobCtx context.Context) {
+		retention.RunCleanupOnce(jobCtx, s, cfg.Retention, logger)
+	}); err != nil {
+		logger.Error("Failed to add retention job", "error", err)
+		os.Exit(1)
+	}
+	if _, err := jobRunner.AddJob("quality", cfg.Quality.CronExpr, func(jobCtx context.Context) {
+		quality.RunStaleSweepOnce(jobCtx, s, wsHub, logger)
+	}); err != nil {
+		logger.Error("Failed to add quality job", "error", err)
+		os.Exit(1)
+	}
+	if _, err := jobRunner.AddJob("sync", cfg.Sync.PollCronExpr, func(jobCtx context.Context) {
+		syncEngine.RunDueSyncs(jobCtx, logger)
+	}); err != nil {
+		logger.Error("Failed to add sync job", "error", err)
+		os.Exit(1)
+	}
+
+	// The backup job itself is registered by api.NewRouter (via the system
+	// handler's InitBackupJob), not here — that keeps the handler's
+	// BackupJobID bookkeeping in sync with what's actually scheduled, so a
+	// later PUT /schedule can remove/replace it instead of stacking a
+	// duplicate job alongside this startup registration.
+	jobRunner.Start(ctx)
+
 	// Build HTTP router
 	routerCfg := api.Config{
 		Store:      s,
@@ -120,6 +171,8 @@ func main() {
 		SyncEngine: syncEngine,
 		DocEngine:  docEngine,
 		WSHub:      wsHub,
+		Scheduler:  jobRunner,
+		BackupDir:  backupDir,
 	}
 	if cfg.Server.Embed {
 		spaFiles, err := fs.Sub(web.DistFS, "dist")
@@ -148,28 +201,6 @@ func main() {
 	go runAlertExpirer(ctx, s, notifDispatcher, logger)
 	go notifications.RunDeliveryRetries(ctx, notifDispatcher, logger)
 	go store.RunDocLockSweep(ctx, s, wsHub, store.DocLockHeartbeat, logger)
-
-	// Start scheduler for retention, quality, and sync jobs
-	jobRunner := scheduler.New(logger)
-	if _, err := jobRunner.AddJob("retention", cfg.Retention.CronExpr, func(jobCtx context.Context) {
-		retention.RunCleanupOnce(jobCtx, s, cfg.Retention, logger)
-	}); err != nil {
-		logger.Error("Failed to add retention job", "error", err)
-		os.Exit(1)
-	}
-	if _, err := jobRunner.AddJob("quality", cfg.Quality.CronExpr, func(jobCtx context.Context) {
-		quality.RunStaleSweepOnce(jobCtx, s, wsHub, logger)
-	}); err != nil {
-		logger.Error("Failed to add quality job", "error", err)
-		os.Exit(1)
-	}
-	if _, err := jobRunner.AddJob("sync", cfg.Sync.PollCronExpr, func(jobCtx context.Context) {
-		syncEngine.RunDueSyncs(jobCtx, logger)
-	}); err != nil {
-		logger.Error("Failed to add sync job", "error", err)
-		os.Exit(1)
-	}
-	jobRunner.Start(ctx)
 
 	// Wait for shutdown signal
 	<-ctx.Done()

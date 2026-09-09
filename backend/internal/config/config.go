@@ -23,6 +23,7 @@ type Config struct {
 	Quality   QualitySettings   `mapstructure:"quality"`
 	Log       LogSettings       `mapstructure:"log"`
 	Retention RetentionSettings `mapstructure:"retention"`
+	Backup    BackupSettings    `mapstructure:"backup"`
 }
 
 // Database holds database connection settings.
@@ -129,6 +130,15 @@ type RetentionSettings struct {
 	CronExpr       string `mapstructure:"cron_expr"` // cron expression for cleanup schedule
 }
 
+// BackupSettings holds scheduled backup configuration.
+type BackupSettings struct {
+	Dir         string `mapstructure:"dir"`           // directory where backups are written
+	CronExpr    string `mapstructure:"cron_expr"`     // cron expression for scheduled backups
+	MaxBackups  int    `mapstructure:"max_backups"`   // keep at most this many recent backups
+	MaxAgeHours int    `mapstructure:"max_age_hours"` // delete backups older than this
+	Enabled     bool   `mapstructure:"enabled"`       // enable/disable scheduled backups
+}
+
 // Load reads configuration from file and environment, returning a populated Config.
 // It searches for config.yaml in /etc/wiselabz/, ., and ./deploy/.
 // All values can be overridden via WISELABZ_ prefixed environment variables.
@@ -162,6 +172,11 @@ func Load() (*Config, error) {
 	v.SetDefault("retention.alert_days", 180)
 	v.SetDefault("retention.sync_run_days", 90)
 	v.SetDefault("retention.cron_expr", "0 0 * * *") // daily retention cleanup at midnight
+	v.SetDefault("backup.dir", "./data/backups")     // backups subdirectory in data folder
+	v.SetDefault("backup.cron_expr", "0 3 * * *")    // daily backups at 3 AM
+	v.SetDefault("backup.max_backups", 14)           // keep last 14 backups
+	v.SetDefault("backup.max_age_hours", 720)        // keep backups for 30 days
+	v.SetDefault("backup.enabled", true)             // scheduled backups enabled by default
 
 	if err := v.ReadInConfig(); err != nil {
 		// Config file is optional — env-only config is valid for PaaS deployments
@@ -221,6 +236,11 @@ func applyEnvOverrides(cfg *Config) {
 		"RETENTION_ALERT_DAYS":         func(v string) { cfg.Retention.AlertDays = intEnv(v) },
 		"RETENTION_SYNC_RUN_DAYS":      func(v string) { cfg.Retention.SyncRunDays = intEnv(v) },
 		"RETENTION_CRON_EXPR":          func(v string) { cfg.Retention.CronExpr = v },
+		"BACKUP_DIR":                   func(v string) { cfg.Backup.Dir = v },
+		"BACKUP_CRON_EXPR":             func(v string) { cfg.Backup.CronExpr = v },
+		"BACKUP_MAX_BACKUPS":           func(v string) { cfg.Backup.MaxBackups = intEnv(v) },
+		"BACKUP_MAX_AGE_HOURS":         func(v string) { cfg.Backup.MaxAgeHours = intEnv(v) },
+		"BACKUP_ENABLED":               func(v string) { cfg.Backup.Enabled = boolEnv(v) },
 	}
 
 	prefix := "WISELABZ_"
@@ -261,6 +281,7 @@ func (c *Config) validateCronExpressions() error {
 		"retention.cron_expr": c.Retention.CronExpr,
 		"quality.cron_expr":   c.Quality.CronExpr,
 		"sync.poll_cron_expr": c.Sync.PollCronExpr,
+		"backup.cron_expr":    c.Backup.CronExpr,
 	}
 
 	for name, expr := range cronExprs {
