@@ -90,6 +90,72 @@ export const getPutDashboardLayoutResponseMock = (
   ...overrideResponse,
 });
 
+export const getGetDashboardLayoutAdminDefaultResponseMock = (
+  overrideResponse: Partial<Extract<DashboardLayout, object>> = {}
+): DashboardLayout => ({
+  widgets: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(
+    () => ({
+      id: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      type: faker.helpers.arrayElement([
+        'service_status',
+        'recent_changes',
+        'alert_summary',
+        'sync_activity',
+        'docs_health',
+      ] as const),
+      x: faker.number.int(),
+      y: faker.number.int(),
+      w: faker.number.int(),
+      h: faker.number.int(),
+    })
+  ),
+  ...overrideResponse,
+});
+
+export const getPutDashboardLayoutAdminDefaultResponseMock = (
+  overrideResponse: Partial<Extract<DashboardLayout, object>> = {}
+): DashboardLayout => ({
+  widgets: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(
+    () => ({
+      id: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      type: faker.helpers.arrayElement([
+        'service_status',
+        'recent_changes',
+        'alert_summary',
+        'sync_activity',
+        'docs_health',
+      ] as const),
+      x: faker.number.int(),
+      y: faker.number.int(),
+      w: faker.number.int(),
+      h: faker.number.int(),
+    })
+  ),
+  ...overrideResponse,
+});
+
+export const getPostDashboardLayoutResetResponseMock = (
+  overrideResponse: Partial<Extract<DashboardLayout, object>> = {}
+): DashboardLayout => ({
+  widgets: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(
+    () => ({
+      id: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      type: faker.helpers.arrayElement([
+        'service_status',
+        'recent_changes',
+        'alert_summary',
+        'sync_activity',
+        'docs_health',
+      ] as const),
+      x: faker.number.int(),
+      y: faker.number.int(),
+      w: faker.number.int(),
+      h: faker.number.int(),
+    })
+  ),
+  ...overrideResponse,
+});
+
 export const getGetDashboardOverviewMockHandler = (
   overrideResponse?:
     | DashboardOverview
@@ -161,8 +227,83 @@ export const getPutDashboardLayoutMockHandler = (
     options
   );
 };
+
+export const getGetDashboardLayoutAdminDefaultMockHandler = (
+  overrideResponse?:
+    | DashboardLayout
+    | ((
+        info: Parameters<Parameters<typeof http.get>[1]>[0]
+      ) => Promise<DashboardLayout> | DashboardLayout),
+  options?: RequestHandlerOptions
+) => {
+  return http.get(
+    '*/dashboard/layout/admin-default',
+    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+      return HttpResponse.json(
+        overrideResponse !== undefined
+          ? typeof overrideResponse === 'function'
+            ? await overrideResponse(info)
+            : overrideResponse
+          : getGetDashboardLayoutAdminDefaultResponseMock(),
+        { status: 200 }
+      );
+    },
+    options
+  );
+};
+
+export const getPutDashboardLayoutAdminDefaultMockHandler = (
+  overrideResponse?:
+    | DashboardLayout
+    | ((
+        info: Parameters<Parameters<typeof http.put>[1]>[0]
+      ) => Promise<DashboardLayout> | DashboardLayout),
+  options?: RequestHandlerOptions
+) => {
+  return http.put(
+    '*/dashboard/layout/admin-default',
+    async (info: Parameters<Parameters<typeof http.put>[1]>[0]) => {
+      return HttpResponse.json(
+        overrideResponse !== undefined
+          ? typeof overrideResponse === 'function'
+            ? await overrideResponse(info)
+            : overrideResponse
+          : getPutDashboardLayoutAdminDefaultResponseMock(),
+        { status: 200 }
+      );
+    },
+    options
+  );
+};
+
+export const getPostDashboardLayoutResetMockHandler = (
+  overrideResponse?:
+    | DashboardLayout
+    | ((
+        info: Parameters<Parameters<typeof http.post>[1]>[0]
+      ) => Promise<DashboardLayout> | DashboardLayout),
+  options?: RequestHandlerOptions
+) => {
+  return http.post(
+    '*/dashboard/layout/reset',
+    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+      return HttpResponse.json(
+        overrideResponse !== undefined
+          ? typeof overrideResponse === 'function'
+            ? await overrideResponse(info)
+            : overrideResponse
+          : getPostDashboardLayoutResetResponseMock(),
+        { status: 200 }
+      );
+    },
+    options
+  );
+};
 export const getDashboardMock = () => [
   getGetDashboardOverviewMockHandler(),
   getGetDashboardLayoutMockHandler(),
   getPutDashboardLayoutMockHandler(),
+  getGetDashboardLayoutAdminDefaultMockHandler(),
+  getPutDashboardLayoutAdminDefaultMockHandler(),
+  getPostDashboardLayoutResetMockHandler(),
 ];

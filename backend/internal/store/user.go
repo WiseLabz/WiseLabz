@@ -16,15 +16,16 @@ import (
 
 // User represents a row in the users table.
 type User struct {
-	ID           string `json:"id"`
-	Username     string `json:"username"`
-	DisplayName  string `json:"displayName"`
-	Email        string `json:"email"`
-	Role         string `json:"role"`
-	AuthSource   string `json:"authSource"`
-	PasswordHash string `json:"-"`
-	Disabled     bool   `json:"disabled"`
-	CreatedAt    string `json:"createdAt"`
+	ID                         string `json:"id"`
+	Username                   string `json:"username"`
+	DisplayName                string `json:"displayName"`
+	Email                      string `json:"email"`
+	Role                       string `json:"role"`
+	AuthSource                 string `json:"authSource"`
+	PasswordHash               string `json:"-"`
+	Disabled                   bool   `json:"disabled"`
+	CanManageDashboardDefaults bool   `json:"canManageDashboardDefaults"`
+	CreatedAt                  string `json:"createdAt"`
 }
 
 // Session represents a row in the sessions table.
@@ -56,10 +57,10 @@ func (s *Store) CreateUser(ctx context.Context, user *User) error {
 	}
 
 	_, err := s.db.ExecContext(ctx, `
-		INSERT INTO users (id, username, display_name, email, role, auth_source, password_hash, disabled, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO users (id, username, display_name, email, role, auth_source, password_hash, disabled, can_manage_dashboard_defaults, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`, user.ID, user.Username, user.DisplayName, user.Email, user.Role, user.AuthSource,
-		user.PasswordHash, boolToInt(user.Disabled), user.CreatedAt)
+		user.PasswordHash, boolToInt(user.Disabled), boolToInt(user.CanManageDashboardDefaults), user.CreatedAt)
 	if err != nil {
 		if isUniqueViolation(err) {
 			return ErrConflict
@@ -72,12 +73,12 @@ func (s *Store) CreateUser(ctx context.Context, user *User) error {
 // GetUserByID retrieves a user by ID.
 func (s *Store) GetUserByID(ctx context.Context, id string) (*User, error) {
 	u := &User{}
-	var disabled int
+	var disabled, canManageDashboardDefaults int
 	err := s.db.QueryRowContext(ctx, `
-		SELECT id, username, display_name, email, role, auth_source, password_hash, disabled, created_at
+		SELECT id, username, display_name, email, role, auth_source, password_hash, disabled, can_manage_dashboard_defaults, created_at
 		FROM users WHERE id = ?
 	`, id).Scan(&u.ID, &u.Username, &u.DisplayName, &u.Email, &u.Role,
-		&u.AuthSource, &u.PasswordHash, &disabled, &u.CreatedAt)
+		&u.AuthSource, &u.PasswordHash, &disabled, &canManageDashboardDefaults, &u.CreatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -85,18 +86,19 @@ func (s *Store) GetUserByID(ctx context.Context, id string) (*User, error) {
 		return nil, fmt.Errorf("get user by id: %w", err)
 	}
 	u.Disabled = disabled != 0
+	u.CanManageDashboardDefaults = canManageDashboardDefaults != 0
 	return u, nil
 }
 
 // GetUserByUsername retrieves a user by username.
 func (s *Store) GetUserByUsername(ctx context.Context, username string) (*User, error) {
 	u := &User{}
-	var disabled int
+	var disabled, canManageDashboardDefaults int
 	err := s.db.QueryRowContext(ctx, `
-		SELECT id, username, display_name, email, role, auth_source, password_hash, disabled, created_at
+		SELECT id, username, display_name, email, role, auth_source, password_hash, disabled, can_manage_dashboard_defaults, created_at
 		FROM users WHERE username = ?
 	`, username).Scan(&u.ID, &u.Username, &u.DisplayName, &u.Email, &u.Role,
-		&u.AuthSource, &u.PasswordHash, &disabled, &u.CreatedAt)
+		&u.AuthSource, &u.PasswordHash, &disabled, &canManageDashboardDefaults, &u.CreatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -104,6 +106,7 @@ func (s *Store) GetUserByUsername(ctx context.Context, username string) (*User, 
 		return nil, fmt.Errorf("get user by username: %w", err)
 	}
 	u.Disabled = disabled != 0
+	u.CanManageDashboardDefaults = canManageDashboardDefaults != 0
 	return u, nil
 }
 
@@ -134,6 +137,9 @@ func (s *Store) UpdateUser(ctx context.Context, id string, updates map[string]an
 		case "username":
 			setClauses = append(setClauses, "username = ?")
 			args = append(args, v)
+		case "can_manage_dashboard_defaults":
+			setClauses = append(setClauses, "can_manage_dashboard_defaults = ?")
+			args = append(args, boolToInt(v.(bool)))
 		}
 	}
 
@@ -185,7 +191,7 @@ func (s *Store) ListUsers(ctx context.Context, offset, limit int) ([]User, int, 
 	}
 
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, username, display_name, email, role, auth_source, password_hash, disabled, created_at
+		SELECT id, username, display_name, email, role, auth_source, password_hash, disabled, can_manage_dashboard_defaults, created_at
 		FROM users ORDER BY created_at DESC LIMIT ? OFFSET ?
 	`, limit, offset)
 	if err != nil {
@@ -196,12 +202,13 @@ func (s *Store) ListUsers(ctx context.Context, offset, limit int) ([]User, int, 
 	var users []User
 	for rows.Next() {
 		var u User
-		var disabled int
+		var disabled, canManageDashboardDefaults int
 		if err := rows.Scan(&u.ID, &u.Username, &u.DisplayName, &u.Email, &u.Role,
-			&u.AuthSource, &u.PasswordHash, &disabled, &u.CreatedAt); err != nil {
+			&u.AuthSource, &u.PasswordHash, &disabled, &canManageDashboardDefaults, &u.CreatedAt); err != nil {
 			return nil, 0, fmt.Errorf("scan user: %w", err)
 		}
 		u.Disabled = disabled != 0
+		u.CanManageDashboardDefaults = canManageDashboardDefaults != 0
 		users = append(users, u)
 	}
 	if users == nil {
@@ -215,6 +222,26 @@ func (s *Store) CountUsers(ctx context.Context) (int, error) {
 	var count int
 	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM users`).Scan(&count)
 	return count, err
+}
+
+// UserHasPermission checks a named boolean permission column on the users table.
+// Implements auth.PermissionChecker. Only "can_manage_dashboard_defaults" is
+// supported today; unknown permission names return false.
+func (s *Store) UserHasPermission(ctx context.Context, userID, permission string) (bool, error) {
+	if permission != "can_manage_dashboard_defaults" {
+		return false, nil
+	}
+	var flag int
+	err := s.db.QueryRowContext(ctx,
+		`SELECT can_manage_dashboard_defaults FROM users WHERE id = ?`, userID,
+	).Scan(&flag)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("check user permission: %w", err)
+	}
+	return flag != 0, nil
 }
 
 // --- Session operations ---
@@ -349,13 +376,13 @@ func (s *Store) UpdateSessionLastSeen(ctx context.Context, id string) error {
 // GetUserByOIDCIdentity finds a user by the issuer and subject verified by OIDC.
 func (s *Store) GetUserByOIDCIdentity(ctx context.Context, issuer, subject string) (*User, error) {
 	u := &User{}
-	var disabled int
+	var disabled, canManageDashboardDefaults int
 	err := s.db.QueryRowContext(ctx, `
-		SELECT id, username, display_name, email, role, auth_source, password_hash, disabled, created_at
+		SELECT id, username, display_name, email, role, auth_source, password_hash, disabled, can_manage_dashboard_defaults, created_at
 		FROM users JOIN oidc_identities ON oidc_identities.user_id = users.id
 		WHERE oidc_identities.issuer = ? AND oidc_identities.subject = ?
 	`, issuer, subject).Scan(&u.ID, &u.Username, &u.DisplayName, &u.Email, &u.Role,
-		&u.AuthSource, &u.PasswordHash, &disabled, &u.CreatedAt)
+		&u.AuthSource, &u.PasswordHash, &disabled, &canManageDashboardDefaults, &u.CreatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -363,6 +390,7 @@ func (s *Store) GetUserByOIDCIdentity(ctx context.Context, issuer, subject strin
 		return nil, fmt.Errorf("get user by oidc identity: %w", err)
 	}
 	u.Disabled = disabled != 0
+	u.CanManageDashboardDefaults = canManageDashboardDefaults != 0
 	return u, nil
 }
 

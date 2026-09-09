@@ -80,6 +80,32 @@ func roleSatisfies(userRole, requiredRole string) bool {
 	return false
 }
 
+// PermissionChecker looks up whether a user has a named boolean permission flag.
+// Implemented by *store.Store (see internal/store/user.go) to avoid an import
+// cycle between internal/auth and internal/store.
+type PermissionChecker interface {
+	UserHasPermission(ctx context.Context, userID, permission string) (bool, error)
+}
+
+// RequirePermission returns middleware requiring operator role AND a named
+// per-user boolean permission flag (e.g. "can_manage_dashboard_defaults").
+func RequirePermission(checker PermissionChecker, permission string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if !roleSatisfies(RoleFromContext(r.Context()), "operator") {
+				http.Error(w, `{"code":"forbidden","message":"insufficient permissions"}`, http.StatusForbidden)
+				return
+			}
+			ok, err := checker.UserHasPermission(r.Context(), UserIDFromContext(r.Context()), permission)
+			if err != nil || !ok {
+				http.Error(w, `{"code":"forbidden","message":"insufficient permissions"}`, http.StatusForbidden)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
 // RequireElevation checks for a valid elevation token scoped to the given action.
 // Destructive endpoints chain this after RequireRole("operator") for step-up auth.
 func RequireElevation(jwtSvc *Service, action string) func(http.Handler) http.Handler {

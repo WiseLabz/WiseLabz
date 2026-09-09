@@ -86,3 +86,69 @@ export const getPutDashboardLayoutResponseMock = (
   ),
   ...overrideResponse,
 });
+
+export const getGetDashboardLayoutAdminDefaultResponseMock = (
+  overrideResponse: Partial<Extract<DashboardLayout, object>> = {}
+): DashboardLayout => ({
+  widgets: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(
+    () => ({
+      id: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      type: faker.helpers.arrayElement([
+        'service_status',
+        'recent_changes',
+        'alert_summary',
+        'sync_activity',
+        'docs_health',
+      ] as const),
+      x: faker.number.int(),
+      y: faker.number.int(),
+      w: faker.number.int(),
+      h: faker.number.int(),
+    })
+  ),
+  ...overrideResponse,
+});
+
+export const getPutDashboardLayoutAdminDefaultResponseMock = (
+  overrideResponse: Partial<Extract<DashboardLayout, object>> = {}
+): DashboardLayout => ({
+  widgets: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(
+    () => ({
+      id: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      type: faker.helpers.arrayElement([
+        'service_status',
+        'recent_changes',
+        'alert_summary',
+        'sync_activity',
+        'docs_health',
+      ] as const),
+      x: faker.number.int(),
+      y: faker.number.int(),
+      w: faker.number.int(),
+      h: faker.number.int(),
+    })
+  ),
+  ...overrideResponse,
+});
+
+export const getPostDashboardLayoutResetResponseMock = (
+  overrideResponse: Partial<Extract<DashboardLayout, object>> = {}
+): DashboardLayout => ({
+  widgets: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(
+    () => ({
+      id: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      type: faker.helpers.arrayElement([
+        'service_status',
+        'recent_changes',
+        'alert_summary',
+        'sync_activity',
+        'docs_health',
+      ] as const),
+      x: faker.number.int(),
+      y: faker.number.int(),
+      w: faker.number.int(),
+      h: faker.number.int(),
+    })
+  ),
+  ...overrideResponse,
+});

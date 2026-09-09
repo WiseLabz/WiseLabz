@@ -82,6 +82,7 @@ func NewRouter(cfg Config) chi.Router {
 	// Shared across the top-level /api/auth route below and the protected
 	// group further down.
 	operatorOnly := auth.RequireRole("operator")
+	dashboardDefaultOnly := auth.RequirePermission(cfg.Store, "can_manage_dashboard_defaults")
 
 	// --- Auth routes (mixed public/protected, single mount point) ---
 	// chi only allows one Mount per exact pattern, so the protected /api/auth
@@ -257,11 +258,17 @@ func NewRouter(cfg Config) chi.Router {
 
 		r.Route("/api/dashboard", func(r chi.Router) {
 			r.Get("/overview", dashH.Overview)
+			// Dashboard layout is a personal resource: any authenticated role
+			// (viewer or operator) may read/save/reset their own, scoped by
+			// user_id in the handler — no operatorOnly gate here.
 			r.Get("/layout", dashH.GetLayout)
+			r.Put("/layout", dashH.SaveLayout)
+			r.Post("/layout/reset", dashH.ResetLayout)
 
 			r.Group(func(r chi.Router) {
-				r.Use(operatorOnly)
-				r.Put("/layout", dashH.SaveLayout)
+				r.Use(dashboardDefaultOnly)
+				r.Get("/layout/admin-default", dashH.GetAdminDefault)
+				r.Put("/layout/admin-default", dashH.PutAdminDefault)
 			})
 		})
 
