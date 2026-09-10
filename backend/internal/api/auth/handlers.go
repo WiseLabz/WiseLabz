@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/WiseLabz/wiselabz/internal/auth"
@@ -325,21 +324,4 @@ func setRefreshCookie(w http.ResponseWriter, r *http.Request, token string, maxA
 
 func (h *Handler) logError(msg string, err error) {
 	slog.Error(msg, "error", err)
-}
-
-func readIP(r *http.Request) string {
-	// Check common proxy headers
-	if ip := r.Header.Get("X-Forwarded-For"); ip != "" {
-		parts := strings.Split(ip, ",")
-		return strings.TrimSpace(parts[0])
-	}
-	if ip := r.Header.Get("X-Real-IP"); ip != "" {
-		return ip
-	}
-	// Fall back to RemoteAddr
-	addr := r.RemoteAddr
-	if idx := strings.LastIndex(addr, ":"); idx != -1 {
-		return addr[:idx]
-	}
-	return addr
 }

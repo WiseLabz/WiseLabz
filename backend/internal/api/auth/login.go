@@ -100,7 +100,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		UserID:    user.ID,
 		TokenHash: store.HashToken(pair.RefreshToken),
 		UserAgent: r.UserAgent(),
-		IP:        readIP(r),
+		IP:        httputil.ClientIP(r, h.Config.Server.TrustedProxies),
 	}
 	if err := h.Store.CreateSession(r.Context(), session); err != nil {
 		httputil.Errorf(w, err)
@@ -221,7 +221,7 @@ func (h *Handler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 		UserID:    userID,
 		TokenHash: store.HashToken(pair.RefreshToken),
 		UserAgent: r.UserAgent(),
-		IP:        readIP(r),
+		IP:        httputil.ClientIP(r, h.Config.Server.TrustedProxies),
 	}); err != nil {
 		httputil.Errorf(w, err)
 		return

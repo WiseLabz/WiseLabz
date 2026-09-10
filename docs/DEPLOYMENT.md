@@ -66,7 +66,8 @@ A reference unit file is at `deploy/wiselabz.service`. Key points:
   default DSN is now an absolute path, `/data/wiselabz.db`, but pin this
   anyway for config file resolution).
 - `EnvironmentFile=` should point at a `root:wiselabz`-owned, mode `0640`
-  file holding `WISELABZ_AUTH_SECRET` / `WISELABZ_ADMIN_PASSWORD` / etc.
+  file holding `WISELABZ_AUTH_SECRET` / `WISELABZ_ENCRYPTION_KEY` /
+  `WISELABZ_SERVER_ORIGIN` / `WISELABZ_ADMIN_PASSWORD` / etc.
 - Default `StandardOutput=journal` is sufficient — no extra logging config
   needed; use `journalctl -u wiselabz`.
 - `TimeoutStopSec=15s` gives the app's graceful shutdown
