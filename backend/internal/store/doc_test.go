@@ -96,6 +96,24 @@ func TestUpdateDocOptimisticConcurrency(t *testing.T) {
 	}
 }
 
+func TestListDocsGroupedByService(t *testing.T) {
+	s := newDocTestStore(t)
+	ctx := context.Background()
+	for _, serviceID := range []string{"service-a", "service-b"} {
+		if err := s.CreateDoc(ctx, &DocRecord{Title: serviceID, Kind: "service", ServiceID: serviceID, Content: "content"}); err != nil {
+			t.Fatalf("CreateDoc() error: %v", err)
+		}
+	}
+
+	got, err := s.ListDocsGroupedByService(ctx)
+	if err != nil {
+		t.Fatalf("ListDocsGroupedByService() error: %v", err)
+	}
+	if len(got["service-a"]) != 1 || len(got["service-b"]) != 1 {
+		t.Fatalf("grouped docs = %+v, want one doc per service", got)
+	}
+}
+
 func TestTemplateVersions(t *testing.T) {
 	ctx := context.Background()
 	s := newDocTestStore(t)

@@ -201,3 +201,16 @@ func TestChangesBulkResolveEmptyIDs(t *testing.T) {
 		t.Fatalf("status = %d, want 400; body = %s", rec.Code, rec.Body)
 	}
 }
+
+func TestChangesBulkResolveRejectsTooManyIDs(t *testing.T) {
+	app := newTestApp(t)
+	_, opToken := app.user(t, "operator")
+	ids := make([]string, 501)
+
+	rec := app.req(t, http.MethodPost, "/api/changes/bulk-resolve", map[string]any{
+		"ids": ids, "status": "acknowledged",
+	}, opToken)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400; body = %s", rec.Code, rec.Body)
+	}
+}

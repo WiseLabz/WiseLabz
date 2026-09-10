@@ -23,17 +23,20 @@ var retrySchedule = []time.Duration{time.Minute, 5 * time.Minute, 15 * time.Minu
 // maxDeliveryAttempts caps retries; once exhausted a failed delivery stays failed with no next_attempt_at.
 const maxDeliveryAttempts = 5 // len(retrySchedule)
 
+const maxConcurrentNotifications = 8
+
 var webhookClient = &http.Client{Timeout: 10 * time.Second}
 
 // Dispatcher routes alert events to notification channels based on config.
 type Dispatcher struct {
-	store *store.Store
-	hub   *ws.Hub
+	store     *store.Store
+	hub       *ws.Hub
+	fanoutSem chan struct{}
 }
 
 // NewDispatcher creates a new notification dispatcher.
 func NewDispatcher(s *store.Store, hub *ws.Hub) *Dispatcher {
-	return &Dispatcher{store: s, hub: hub}
+	return &Dispatcher{store: s, hub: hub, fanoutSem: make(chan struct{}, maxConcurrentNotifications)}
 }
 
 // maxNotifyUsers bounds the single-page user fetch in NotifyAlertCreated.
@@ -47,11 +50,20 @@ func (d *Dispatcher) NotifyAlertCreated(ctx context.Context, alertID, title, mes
 		slog.Error("failed to list users for alert notification", "error", err)
 		return
 	}
+	channels := d.loadChannels(ctx)
+	go d.notifyAlertCreated(users, channels, alertID, title, message)
+}
+
+func (d *Dispatcher) notifyAlertCreated(users []store.User, channels []channelCfg, alertID, title, message string) {
 	for _, u := range users {
 		if u.Disabled {
 			continue
 		}
-		d.NotifyAlert(alertID, u.ID, "alert.created", title, message)
+		d.fanoutSem <- struct{}{}
+		go func(userID string) {
+			defer func() { <-d.fanoutSem }()
+			d.notifyAlert(context.Background(), channels, alertID, userID, "alert.created", title, message)
+		}(u.ID)
 	}
 }
 
@@ -91,7 +103,10 @@ func (d *Dispatcher) channel(ctx context.Context, typ string) (channelCfg, bool)
 // NotifyAlert dispatches an alert to all configured channels, recording a delivery row per
 // channel attempted (see store.DeliveryRecord).
 func (d *Dispatcher) NotifyAlert(alertID, userID, eventType, title, message string) {
-	ctx := context.Background()
+	d.notifyAlert(context.Background(), d.loadChannels(context.Background()), alertID, userID, eventType, title, message)
+}
+
+func (d *Dispatcher) notifyAlert(ctx context.Context, channels []channelCfg, alertID, userID, eventType, title, message string) {
 
 	notifID, err := d.createInApp(ctx, userID, alertID, eventType, title, message)
 	if err != nil {
@@ -108,7 +123,7 @@ func (d *Dispatcher) NotifyAlert(alertID, userID, eventType, title, message stri
 		})
 	}
 
-	if _, enabled := d.channel(ctx, "smtp"); enabled {
+	if _, enabled := findChannel(channels, "smtp"); enabled {
 		// ponytail: SMTP delivery is a stub — always "succeeds" and only logs. Real sending
 		// (user email lookup, SMTP auth/TLS, credential decryption) is out of scope for issue #18;
 		// still recorded as a real delivery row so retry/observability plumbing already covers it
@@ -117,9 +132,18 @@ func (d *Dispatcher) NotifyAlert(alertID, userID, eventType, title, message stri
 		d.recordDelivery(ctx, notifID, "smtp", store.DeliveryStatusSent, "")
 	}
 
-	if cfg, enabled := d.channel(ctx, "webhook"); enabled {
+	if cfg, enabled := findChannel(channels, "webhook"); enabled {
 		d.attemptWebhook(ctx, notifID, cfg, title, message)
 	}
+}
+
+func findChannel(channels []channelCfg, typ string) (channelCfg, bool) {
+	for _, c := range channels {
+		if c.Type == typ {
+			return c, c.Enabled
+		}
+	}
+	return channelCfg{}, false
 }
 
 // createInApp creates the in-app notification row and returns its ID.
