@@ -6,10 +6,10 @@
  *
  * OpenAPI spec version: 0.1.0
  */
-import type { PageParameter } from './pageParameter';
-import type { PageSizeParameter } from './pageSizeParameter';
+import type { GetSystemAuditExportFormat } from './getSystemAuditExportFormat';
 
-export type GetSystemAuditParams = {
+export type GetSystemAuditExportParams = {
+  format?: GetSystemAuditExportFormat;
   /**
    * Exact match, e.g. `connector.create`
    */
@@ -26,13 +26,4 @@ export type GetSystemAuditParams = {
    * Only records with createdAt <= this RFC3339 timestamp
    */
   createdBefore?: string;
-  /**
-   * @minimum 1
-   */
-  page?: PageParameter;
-  /**
-   * @minimum 1
-   * @maximum 100
-   */
-  pageSize?: PageSizeParameter;
 };

@@ -21,6 +21,7 @@ import type {
 
 import type {
   AuditPage,
+  AuditRecord,
   BackupBundle,
   BackupImportResult,
   BackupRun,
@@ -29,9 +30,11 @@ import type {
   DiagnosticsBundle,
   Error,
   ForbiddenResponse,
+  GetSystemAuditExportParams,
   GetSystemAuditParams,
   GetSystemBackupRunsParams,
   Health,
+  RetentionSettings,
   SystemInfo,
 } from '../../model';
 
@@ -272,6 +275,399 @@ export function useGetSystemAudit<
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
   const queryOptions = getGetSystemAuditQueryOptions(params, options);
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+/**
+ * @summary Export the full (unpaginated) set of audit records matching the given filters, as CSV or JSON — operator.
+ */
+export const getSystemAuditExport = (
+  params?: GetSystemAuditExportParams,
+  options?: SecondParameter<typeof customInstance>,
+  signal?: AbortSignal
+) => {
+  return customInstance<AuditRecord[] | string>(
+    { url: `/system/audit/export`, method: 'GET', params, signal },
+    options
+  );
+};
+
+export const getGetSystemAuditExportQueryKey = (params?: GetSystemAuditExportParams) => {
+  return [`/system/audit/export`, ...(params ? [params] : [])] as const;
+};
+
+export const getGetSystemAuditExportQueryOptions = <
+  TData = Awaited<ReturnType<typeof getSystemAuditExport>>,
+  TError = ErrorType<Error | ForbiddenResponse>,
+>(
+  params?: GetSystemAuditExportParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getSystemAuditExport>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  }
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetSystemAuditExportQueryKey(params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getSystemAuditExport>>> = ({ signal }) =>
+    getSystemAuditExport(params, requestOptions, signal);
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getSystemAuditExport>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type GetSystemAuditExportQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getSystemAuditExport>>
+>;
+export type GetSystemAuditExportQueryError = ErrorType<Error | ForbiddenResponse>;
+
+export function useGetSystemAuditExport<
+  TData = Awaited<ReturnType<typeof getSystemAuditExport>>,
+  TError = ErrorType<Error | ForbiddenResponse>,
+>(
+  params: undefined | GetSystemAuditExportParams,
+  options: {
+    query: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getSystemAuditExport>>, TError, TData>
+    > &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getSystemAuditExport>>,
+          TError,
+          Awaited<ReturnType<typeof getSystemAuditExport>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useGetSystemAuditExport<
+  TData = Awaited<ReturnType<typeof getSystemAuditExport>>,
+  TError = ErrorType<Error | ForbiddenResponse>,
+>(
+  params?: GetSystemAuditExportParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getSystemAuditExport>>, TError, TData>
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getSystemAuditExport>>,
+          TError,
+          Awaited<ReturnType<typeof getSystemAuditExport>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useGetSystemAuditExport<
+  TData = Awaited<ReturnType<typeof getSystemAuditExport>>,
+  TError = ErrorType<Error | ForbiddenResponse>,
+>(
+  params?: GetSystemAuditExportParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getSystemAuditExport>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * @summary Export the full (unpaginated) set of audit records matching the given filters, as CSV or JSON — operator.
+ */
+
+export function useGetSystemAuditExport<
+  TData = Awaited<ReturnType<typeof getSystemAuditExport>>,
+  TError = ErrorType<Error | ForbiddenResponse>,
+>(
+  params?: GetSystemAuditExportParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getSystemAuditExport>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getGetSystemAuditExportQueryOptions(params, options);
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+/**
+ * @summary Current data-retention cleanup configuration — operator. A default row (seeded from config on first boot) is always returned.
+ */
+export const getSystemSettingsRetention = (
+  options?: SecondParameter<typeof customInstance>,
+  signal?: AbortSignal
+) => {
+  return customInstance<RetentionSettings>(
+    { url: `/system/settings/retention`, method: 'GET', signal },
+    options
+  );
+};
+
+export const getGetSystemSettingsRetentionQueryKey = () => {
+  return [`/system/settings/retention`] as const;
+};
+
+export const getGetSystemSettingsRetentionQueryOptions = <
+  TData = Awaited<ReturnType<typeof getSystemSettingsRetention>>,
+  TError = ErrorType<ForbiddenResponse>,
+>(options?: {
+  query?: Partial<
+    UseQueryOptions<Awaited<ReturnType<typeof getSystemSettingsRetention>>, TError, TData>
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetSystemSettingsRetentionQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getSystemSettingsRetention>>> = ({
+    signal,
+  }) => getSystemSettingsRetention(requestOptions, signal);
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getSystemSettingsRetention>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type GetSystemSettingsRetentionQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getSystemSettingsRetention>>
+>;
+export type GetSystemSettingsRetentionQueryError = ErrorType<ForbiddenResponse>;
+
+export function useGetSystemSettingsRetention<
+  TData = Awaited<ReturnType<typeof getSystemSettingsRetention>>,
+  TError = ErrorType<ForbiddenResponse>,
+>(
+  options: {
+    query: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getSystemSettingsRetention>>, TError, TData>
+    > &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getSystemSettingsRetention>>,
+          TError,
+          Awaited<ReturnType<typeof getSystemSettingsRetention>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useGetSystemSettingsRetention<
+  TData = Awaited<ReturnType<typeof getSystemSettingsRetention>>,
+  TError = ErrorType<ForbiddenResponse>,
+>(
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getSystemSettingsRetention>>, TError, TData>
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getSystemSettingsRetention>>,
+          TError,
+          Awaited<ReturnType<typeof getSystemSettingsRetention>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useGetSystemSettingsRetention<
+  TData = Awaited<ReturnType<typeof getSystemSettingsRetention>>,
+  TError = ErrorType<ForbiddenResponse>,
+>(
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getSystemSettingsRetention>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * @summary Current data-retention cleanup configuration — operator. A default row (seeded from config on first boot) is always returned.
+ */
+
+export function useGetSystemSettingsRetention<
+  TData = Awaited<ReturnType<typeof getSystemSettingsRetention>>,
+  TError = ErrorType<ForbiddenResponse>,
+>(
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getSystemSettingsRetention>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getGetSystemSettingsRetentionQueryOptions(options);
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+/**
+ * @summary Update the data-retention cleanup configuration — operator. Each `*Days` field must be >= 0 (0 disables cleanup for that category, rejected otherwise with code `invalid_days`); `cronExpr` must be a valid 5-field or 6-field cron expression (code `invalid_cron` otherwise). Re-registers the retention cron job with the new schedule. Audited as `retention.settings.update`.
+ */
+export const putSystemSettingsRetention = (
+  retentionSettings: BodyType<RetentionSettings>,
+  options?: SecondParameter<typeof customInstance>,
+  signal?: AbortSignal
+) => {
+  return customInstance<RetentionSettings>(
+    {
+      url: `/system/settings/retention`,
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      data: retentionSettings,
+      signal,
+    },
+    options
+  );
+};
+
+export const getPutSystemSettingsRetentionQueryKey = (
+  retentionSettings?: BodyType<RetentionSettings>
+) => {
+  return ['PUT', `/system/settings/retention`, retentionSettings] as const;
+};
+
+export const getPutSystemSettingsRetentionQueryOptions = <
+  TData = Awaited<ReturnType<typeof putSystemSettingsRetention>>,
+  TError = ErrorType<Error | ForbiddenResponse>,
+>(
+  retentionSettings: BodyType<RetentionSettings>,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof putSystemSettingsRetention>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  }
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getPutSystemSettingsRetentionQueryKey(retentionSettings);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof putSystemSettingsRetention>>> = ({
+    signal,
+  }) => putSystemSettingsRetention(retentionSettings, requestOptions, signal);
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof putSystemSettingsRetention>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type PutSystemSettingsRetentionQueryResult = NonNullable<
+  Awaited<ReturnType<typeof putSystemSettingsRetention>>
+>;
+export type PutSystemSettingsRetentionQueryError = ErrorType<Error | ForbiddenResponse>;
+
+export function usePutSystemSettingsRetention<
+  TData = Awaited<ReturnType<typeof putSystemSettingsRetention>>,
+  TError = ErrorType<Error | ForbiddenResponse>,
+>(
+  retentionSettings: BodyType<RetentionSettings>,
+  options: {
+    query: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof putSystemSettingsRetention>>, TError, TData>
+    > &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof putSystemSettingsRetention>>,
+          TError,
+          Awaited<ReturnType<typeof putSystemSettingsRetention>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function usePutSystemSettingsRetention<
+  TData = Awaited<ReturnType<typeof putSystemSettingsRetention>>,
+  TError = ErrorType<Error | ForbiddenResponse>,
+>(
+  retentionSettings: BodyType<RetentionSettings>,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof putSystemSettingsRetention>>, TError, TData>
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof putSystemSettingsRetention>>,
+          TError,
+          Awaited<ReturnType<typeof putSystemSettingsRetention>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function usePutSystemSettingsRetention<
+  TData = Awaited<ReturnType<typeof putSystemSettingsRetention>>,
+  TError = ErrorType<Error | ForbiddenResponse>,
+>(
+  retentionSettings: BodyType<RetentionSettings>,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof putSystemSettingsRetention>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * @summary Update the data-retention cleanup configuration — operator. Each `*Days` field must be >= 0 (0 disables cleanup for that category, rejected otherwise with code `invalid_days`); `cronExpr` must be a valid 5-field or 6-field cron expression (code `invalid_cron` otherwise). Re-registers the retention cron job with the new schedule. Audited as `retention.settings.update`.
+ */
+
+export function usePutSystemSettingsRetention<
+  TData = Awaited<ReturnType<typeof putSystemSettingsRetention>>,
+  TError = ErrorType<Error | ForbiddenResponse>,
+>(
+  retentionSettings: BodyType<RetentionSettings>,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof putSystemSettingsRetention>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getPutSystemSettingsRetentionQueryOptions(retentionSettings, options);
 
   const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
     queryKey: DataTag<QueryKey, TData, TError>;

@@ -1578,6 +1578,16 @@ paths:
           required: false
           schema: { type: string }
           description: Exact match, e.g. `connector`, `doc`
+        - name: createdAfter
+          in: query
+          required: false
+          schema: { type: string, format: date-time }
+          description: Only records with createdAt >= this RFC3339 timestamp
+        - name: createdBefore
+          in: query
+          required: false
+          schema: { type: string, format: date-time }
+          description: Only records with createdAt <= this RFC3339 timestamp
         - { $ref: '#/components/parameters/Page' }
         - { $ref: '#/components/parameters/PageSize' }
       responses:
@@ -1586,6 +1596,98 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/AuditPage' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /system/audit/export:
+    get:
+      tags: [system]
+      summary: >-
+        Export the full (unpaginated) set of audit records matching the given
+        filters, as CSV or JSON — operator.
+      parameters:
+        - name: format
+          in: query
+          required: false
+          schema: { type: string, enum: [json, csv], default: json }
+        - name: action
+          in: query
+          required: false
+          schema: { type: string }
+          description: Exact match, e.g. `connector.create`
+        - name: targetType
+          in: query
+          required: false
+          schema: { type: string }
+          description: Exact match, e.g. `connector`, `doc`
+        - name: createdAfter
+          in: query
+          required: false
+          schema: { type: string, format: date-time }
+          description: Only records with createdAt >= this RFC3339 timestamp
+        - name: createdBefore
+          in: query
+          required: false
+          schema: { type: string, format: date-time }
+          description: Only records with createdAt <= this RFC3339 timestamp
+      responses:
+        '200':
+          description: OK
+          headers:
+            Content-Disposition:
+              schema: { type: string }
+              description: 'attachment; filename="wiselabz-audit-<timestamp>.json|csv"'
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/AuditRecord' }
+            text/csv:
+              schema: { type: string }
+        '400':
+          description: Invalid `format` (code `invalid_format`)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /system/settings/retention:
+    get:
+      tags: [system]
+      summary: >-
+        Current data-retention cleanup configuration — operator. A default
+        row (seeded from config on first boot) is always returned.
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RetentionSettings' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    put:
+      tags: [system]
+      summary: >-
+        Update the data-retention cleanup configuration — operator. Each
+        `*Days` field must be >= 0 (0 disables cleanup for that category,
+        rejected otherwise with code `invalid_days`); `cronExpr` must be a
+        valid 5-field or 6-field cron expression (code `invalid_cron`
+        otherwise). Re-registers the retention cron job with the new
+        schedule. Audited as `retention.settings.update`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RetentionSettings' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RetentionSettings' }
+        '400':
+          description: >-
+            Invalid JSON body, `cronExpr` empty/invalid (code `invalid_cron`),
+            or a negative `*Days` value (code `invalid_days`)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
         '403': { $ref: '#/components/responses/Forbidden' }
   /system/backup/export:
     get:
@@ -2942,6 +3044,17 @@ components:
         docVersions: { $ref: '#/components/schemas/BackupCounts' }
         templates: { $ref: '#/components/schemas/BackupCounts' }
         templateSections: { $ref: '#/components/schemas/BackupCounts' }
+    RetentionSettings:
+      type: object
+      required: [snapshotDays, docVersionDays, alertDays, syncRunDays, auditDays, cronExpr]
+      properties:
+        snapshotDays: { type: integer, description: Delete service snapshots older than this many days; 0 disables cleanup for this category }
+        docVersionDays: { type: integer, description: Delete doc revisions older than this many days; 0 disables cleanup for this category }
+        alertDays: { type: integer, description: Delete resolved/dismissed alerts older than this many days; 0 disables cleanup for this category }
+        syncRunDays: { type: integer, description: Delete sync run history older than this many days; 0 disables cleanup for this category }
+        auditDays: { type: integer, description: Delete audit log records older than this many days; 0 disables cleanup for this category }
+        cronExpr: { type: string, description: 5-field or 6-field (with leading seconds) cron expression, example: '0 0 * * *' }
+        updatedAt: { type: string, format: date-time }
     BackupSchedule:
       type: object
       required: [cronExpr, maxBackups, maxAgeHours, enabled]
