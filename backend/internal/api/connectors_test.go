@@ -302,7 +302,7 @@ func TestConnectorRestartPreview(t *testing.T) {
 		if err != nil {
 			t.Fatalf("count snapshots before preview: %v", err)
 		}
-		_, beforeAudits, err := app.Store.ListAuditRecords(context.Background(), "", "", 0, 100)
+		_, beforeAudits, err := app.Store.ListAuditRecords(context.Background(), "", "", "", "", 0, 100)
 		if err != nil {
 			t.Fatalf("count audits before preview: %v", err)
 		}
@@ -365,7 +365,7 @@ func TestConnectorRestartPreview(t *testing.T) {
 		if afterSnapshots != beforeSnapshots {
 			t.Fatalf("snapshot count = %d after preview, want %d", afterSnapshots, beforeSnapshots)
 		}
-		_, afterAudits, err := app.Store.ListAuditRecords(context.Background(), "", "", 0, 100)
+		_, afterAudits, err := app.Store.ListAuditRecords(context.Background(), "", "", "", "", 0, 100)
 		if err != nil {
 			t.Fatalf("count audits after preview: %v", err)
 		}

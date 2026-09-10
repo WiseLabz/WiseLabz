@@ -318,6 +318,7 @@ func NewRouter(cfg Config) chi.Router {
 
 			r.Get("/api/system/info", sysH.Info)
 			r.Get("/api/system/audit", sysH.ListAudit)
+			r.Get("/api/system/audit/export", sysH.ExportAudit)
 
 			r.Get("/api/system/settings/retention", sysH.GetRetentionSettings)
 			r.Put("/api/system/settings/retention", sysH.UpdateRetentionSettings)
