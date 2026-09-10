@@ -110,6 +110,12 @@ const NotificationsPage = lazy(() =>
 const SystemPage = lazy(() =>
   import('./features/settings').then(({ SystemPage }) => ({ default: SystemPage }))
 );
+const RetentionPage = lazy(() =>
+  import('./features/settings').then(({ RetentionPage }) => ({ default: RetentionPage }))
+);
+const AuditPage = lazy(() =>
+  import('./features/settings').then(({ AuditPage }) => ({ default: AuditPage }))
+);
 const AppearancePage = lazy(() =>
   import('./features/settings').then(({ AppearancePage }) => ({ default: AppearancePage }))
 );
@@ -252,6 +258,22 @@ const router = createBrowserRouter([
             element: (
               <RequireRole role="operator">
                 <SystemPage />
+              </RequireRole>
+            ),
+          },
+          {
+            path: 'retention',
+            element: (
+              <RequireRole role="operator">
+                <RetentionPage />
+              </RequireRole>
+            ),
+          },
+          {
+            path: 'audit',
+            element: (
+              <RequireRole role="operator">
+                <AuditPage />
               </RequireRole>
             ),
           },

@@ -13,6 +13,8 @@ import {
   BellIcon,
   GaugeIcon,
   LayersIcon,
+  ClockIcon,
+  HistoryIcon,
 } from '../../components/icons';
 
 export interface SettingsSection {
@@ -67,6 +69,20 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
     labelKey: 'settings.nav.system',
     labelDefault: 'System',
     Icon: GaugeIcon,
+    operatorOnly: true,
+  },
+  {
+    segment: 'retention',
+    labelKey: 'settings.nav.retention',
+    labelDefault: 'Retention',
+    Icon: ClockIcon,
+    operatorOnly: true,
+  },
+  {
+    segment: 'audit',
+    labelKey: 'settings.nav.audit',
+    labelDefault: 'Audit log',
+    Icon: HistoryIcon,
     operatorOnly: true,
   },
   {
