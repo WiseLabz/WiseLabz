@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/WiseLabz/wiselabz/internal/store"
 )
@@ -203,5 +204,64 @@ func TestAlertsBulkSnoozePartialFailure(t *testing.T) {
 	}
 	if page.Items[0].ActorUserID != opUserID {
 		t.Errorf("audit ActorUserID = %q, want %q", page.Items[0].ActorUserID, opUserID)
+	}
+}
+
+// TestAlertsListDaysWindow verifies the optional ?days= range gate on
+// GET /api/alerts: a recent alert plus a 30-day-old one, filtered down to
+// just the recent one under ?days=1, with no days param defaulting back to
+// "everything" for back-compat with the full Alerts page.
+func TestAlertsListDaysWindow(t *testing.T) {
+	app := newTestApp(t)
+	_, viewerToken := app.user(t, "viewer")
+	ctx := context.Background()
+	now := time.Now().UTC()
+
+	recent := &store.AlertRecord{
+		ServiceID: "svc-1", Severity: "info", Title: "recent", Description: "desc", Status: "pending",
+		CreatedAt: now.Format(time.RFC3339),
+	}
+	if err := app.Store.CreateAlert(ctx, recent); err != nil {
+		t.Fatalf("create recent alert: %v", err)
+	}
+	old := &store.AlertRecord{
+		ServiceID: "svc-1", Severity: "info", Title: "old", Description: "desc", Status: "pending",
+		CreatedAt: now.AddDate(0, 0, -30).Format(time.RFC3339),
+	}
+	if err := app.Store.CreateAlert(ctx, old); err != nil {
+		t.Fatalf("create old alert: %v", err)
+	}
+
+	tests := []struct {
+		name      string
+		query     string
+		wantTotal int
+	}{
+		{"days=1 excludes old alert", "?days=1", 1},
+		{"no days param returns everything", "", 2},
+		{"days=0 ignored, returns everything", "?days=0", 2},
+		{"negative days ignored, returns everything", "?days=-1", 2},
+		{"malformed days ignored, returns everything", "?days=abc", 2},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rec := app.req(t, http.MethodGet, "/api/alerts"+tt.query, nil, viewerToken)
+			if rec.Code != http.StatusOK {
+				t.Fatalf("status = %d, want 200; body = %s", rec.Code, rec.Body)
+			}
+			var body struct {
+				Items []struct {
+					ID string `json:"id"`
+				} `json:"items"`
+				Total int `json:"total"`
+			}
+			if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+				t.Fatalf("decode body: %v", err)
+			}
+			if body.Total != tt.wantTotal || len(body.Items) != tt.wantTotal {
+				t.Fatalf("total = %d, items len = %d, want %d", body.Total, len(body.Items), tt.wantTotal)
+			}
+		})
 	}
 }

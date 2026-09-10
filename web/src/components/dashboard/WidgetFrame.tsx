@@ -1,30 +1,28 @@
 /**
  * A dashboard cell. Not a card — it's a region in the instrument grid: flat
  * canvas, a quiet mono header, and hairlines (provided by the parent grid's
- * gap) doing the separation. Drag handle + remove appear only in edit mode.
+ * gap) doing the separation.
  */
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { motion, useDragControls } from 'motion/react';
+import { motion } from 'motion/react';
 import { IconButton } from '../ui/Button';
 import { PanelHeader } from '../ui/Panel';
-import { GripIcon, XIcon } from '../icons';
+import { SyncIcon, PauseIcon, PlayIcon } from '../icons';
 
 export function WidgetFrame({
   title,
   icon,
-  action,
-  editing,
-  onRemove,
-  dragControls,
+  onRefresh,
+  pollingEnabled,
+  onTogglePolling,
   children,
 }: {
   title: string;
   icon?: ReactNode;
-  action?: ReactNode;
-  editing?: boolean;
-  onRemove?: () => void;
-  dragControls?: ReturnType<typeof useDragControls>;
+  onRefresh?: () => void;
+  pollingEnabled?: boolean;
+  onTogglePolling?: () => void;
   children: ReactNode;
 }) {
   const { t } = useTranslation();
@@ -34,22 +32,19 @@ export function WidgetFrame({
         title={title}
         icon={icon}
         action={
-          editing ? (
+          onRefresh ? (
             <div className="flex items-center gap-0.5">
-              <button
-                aria-label={t('dashboard.dragReorder')}
-                onPointerDown={(e) => dragControls?.start(e)}
-                className="flex h-8 w-8 cursor-grab items-center justify-center rounded-sm text-ink-faint hover:bg-surface-raised active:cursor-grabbing"
+              <IconButton label={`${t('common.refresh')} ${title}`} onClick={onRefresh}>
+                <SyncIcon size={15} />
+              </IconButton>
+              <IconButton
+                label={pollingEnabled ? t('common.pause') : t('common.resume')}
+                onClick={onTogglePolling}
               >
-                <GripIcon size={16} />
-              </button>
-              <IconButton label={`${t('common.remove')} ${title}`} onClick={onRemove}>
-                <XIcon size={15} />
+                {pollingEnabled ? <PauseIcon size={15} /> : <PlayIcon size={15} />}
               </IconButton>
             </div>
-          ) : (
-            action
-          )
+          ) : undefined
         }
       />
       <motion.div layout="position" className="flex min-h-0 flex-1 flex-col">

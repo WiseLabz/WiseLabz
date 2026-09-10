@@ -6,6 +6,7 @@
  *
  * OpenAPI spec version: 0.1.0
  */
+import type { DaysQueryParameter } from './daysQueryParameter';
 import type { PageParameter } from './pageParameter';
 import type { PageSizeParameter } from './pageSizeParameter';
 
@@ -19,4 +20,8 @@ export type GetAttentionParams = {
    * @maximum 100
    */
   pageSize?: PageSizeParameter;
+  /**
+   * @minimum 1
+   */
+  days?: DaysQueryParameter;
 };

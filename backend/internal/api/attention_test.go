@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/WiseLabz/wiselabz/internal/store"
 )
@@ -221,6 +222,85 @@ func TestAttentionRunbookLinkForFinding(t *testing.T) {
 	}
 	if body.Data[0].RunbookID != rb.ID {
 		t.Errorf("runbook id = %q, want %q", body.Data[0].RunbookID, rb.ID)
+	}
+}
+
+// TestAttentionDaysWindow verifies the optional ?days= range gate on
+// GET /api/attention: a recent+old alert and a recent+old finding, filtered
+// down to just the two recent items under ?days=1, with no days param
+// defaulting back to "everything" for back-compat.
+func TestAttentionDaysWindow(t *testing.T) {
+	app := newTestApp(t)
+	_, viewerToken := app.user(t, "viewer")
+	ctx := context.Background()
+	now := time.Now().UTC()
+
+	recentAlert := &store.AlertRecord{
+		ServiceID: "svc-1", Severity: "info", Title: "recent alert", Description: "desc", Status: "pending",
+		CreatedAt: now.Format(time.RFC3339),
+	}
+	if err := app.Store.CreateAlert(ctx, recentAlert); err != nil {
+		t.Fatalf("create recent alert: %v", err)
+	}
+	oldAlert := &store.AlertRecord{
+		ServiceID: "svc-1", Severity: "info", Title: "old alert", Description: "desc", Status: "pending",
+		CreatedAt: now.AddDate(0, 0, -30).Format(time.RFC3339),
+	}
+	if err := app.Store.CreateAlert(ctx, oldAlert); err != nil {
+		t.Fatalf("create old alert: %v", err)
+	}
+
+	connector := &store.ConnectorRecord{Name: "attention days connector", Category: "networking", Type: "test", Enabled: true}
+	if err := app.Store.CreateConnector(ctx, connector); err != nil {
+		t.Fatalf("CreateConnector: %v", err)
+	}
+	recentFinding := &store.QualityFindingRecord{
+		ConnectorID: connector.ID, CheckType: "stale", Severity: "warning",
+		Title: "recent finding", Description: "desc",
+		FirstDetectedAt: now.Format(time.RFC3339), LastSeenAt: now.Format(time.RFC3339),
+	}
+	if err := app.Store.UpsertQualityFinding(ctx, recentFinding); err != nil {
+		t.Fatalf("upsert recent finding: %v", err)
+	}
+	old := now.AddDate(0, 0, -30).Format(time.RFC3339)
+	oldFinding := &store.QualityFindingRecord{
+		ConnectorID: connector.ID, CheckType: "empty", Severity: "warning",
+		Title: "old finding", Description: "desc",
+		FirstDetectedAt: old, LastSeenAt: old,
+	}
+	if err := app.Store.UpsertQualityFinding(ctx, oldFinding); err != nil {
+		t.Fatalf("upsert old finding: %v", err)
+	}
+
+	tests := []struct {
+		name      string
+		query     string
+		wantTotal int
+	}{
+		{"days=1 excludes old items across both origins", "?days=1", 2},
+		{"no days param returns everything", "", 4},
+		{"days=0 ignored, returns everything", "?days=0", 4},
+		{"negative days ignored, returns everything", "?days=-1", 4},
+		{"malformed days ignored, returns everything", "?days=abc", 4},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rec := app.req(t, http.MethodGet, "/api/attention"+tt.query, nil, viewerToken)
+			if rec.Code != http.StatusOK {
+				t.Fatalf("status = %d, want 200; body = %s", rec.Code, rec.Body)
+			}
+			var body struct {
+				Data  []any `json:"data"`
+				Total int   `json:"total"`
+			}
+			if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+				t.Fatalf("decode body: %v", err)
+			}
+			if body.Total != tt.wantTotal || len(body.Data) != tt.wantTotal {
+				t.Fatalf("total = %d, data len = %d, want %d", body.Total, len(body.Data), tt.wantTotal)
+			}
+		})
 	}
 }
 

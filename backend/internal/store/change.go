@@ -265,8 +265,8 @@ func (s *Store) UpdateAlertStatus(ctx context.Context, id, status, snoozedUntil 
 	return nil
 }
 
-// ListAlerts returns a paginated list of alerts, optionally filtered by service, severity, and status.
-func (s *Store) ListAlerts(ctx context.Context, serviceID, severity, status string, offset, limit int) ([]AlertRecord, int, error) {
+// ListAlerts returns a paginated list of alerts, optionally filtered by service, severity, status, and since.
+func (s *Store) ListAlerts(ctx context.Context, serviceID, severity, status, since string, offset, limit int) ([]AlertRecord, int, error) {
 	where := "WHERE 1=1"
 	var args []any
 	if serviceID != "" {
@@ -280,6 +280,10 @@ func (s *Store) ListAlerts(ctx context.Context, serviceID, severity, status stri
 	if status != "" {
 		where += " AND status = ?"
 		args = append(args, status)
+	}
+	if since != "" {
+		where += " AND created_at >= ?"
+		args = append(args, since)
 	}
 
 	var total int
