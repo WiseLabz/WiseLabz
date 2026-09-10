@@ -8,7 +8,6 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/WiseLabz/wiselabz/internal/config"
 	"github.com/WiseLabz/wiselabz/internal/store"
 )
 
@@ -16,7 +15,7 @@ import (
 // config value is > 0, deletes rows older than the cutoff. A category with
 // Days <= 0 is skipped (retention disabled). Errors in one category are
 // logged and do not stop the others from running.
-func RunCleanupOnce(ctx context.Context, s *store.Store, cfg config.RetentionSettings, logger *slog.Logger) {
+func RunCleanupOnce(ctx context.Context, s *store.Store, cfg store.RetentionSettings, logger *slog.Logger) {
 	cutoff := func(days int) string {
 		return time.Now().UTC().AddDate(0, 0, -days).Format(time.RFC3339)
 	}
@@ -54,6 +53,15 @@ func RunCleanupOnce(ctx context.Context, s *store.Store, cfg config.RetentionSet
 			logger.Error("delete old sync runs", "error", err)
 		} else if n > 0 {
 			logger.Info("Purged old sync runs", "count", n)
+		}
+	}
+
+	if cfg.AuditDays > 0 {
+		n, err := s.DeleteOldAuditRecords(ctx, cutoff(cfg.AuditDays))
+		if err != nil {
+			logger.Error("delete old audit records", "error", err)
+		} else if n > 0 {
+			logger.Info("Purged old audit records", "count", n)
 		}
 	}
 }

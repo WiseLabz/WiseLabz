@@ -121,8 +121,13 @@ func TestRunMigrationsDown(t *testing.T) {
 			t.Errorf("table %s should still exist after rolling back only the last migration: %v", table, err)
 		}
 	}
-	if hasColumn(t, db, "sqlite", "users", "locked_until") {
-		t.Error("users.locked_until should not exist after rolling back its migration")
+	var retentionSettingsCount int
+	err = db.QueryRow("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='retention_settings'").Scan(&retentionSettingsCount)
+	if err != nil {
+		t.Fatalf("query sqlite_master for retention_settings: %v", err)
+	}
+	if retentionSettingsCount != 0 {
+		t.Error("retention_settings table should not exist after rolling back its migration")
 	}
 }
 

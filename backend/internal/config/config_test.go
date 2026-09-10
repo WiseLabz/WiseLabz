@@ -49,6 +49,9 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.Retention.SyncRunDays != 90 {
 		t.Errorf("retention.sync_run_days = %d, want 90", cfg.Retention.SyncRunDays)
 	}
+	if cfg.Retention.AuditDays != 180 {
+		t.Errorf("retention.audit_days = %d, want 180", cfg.Retention.AuditDays)
+	}
 	if cfg.Retention.CronExpr != "0 0 * * *" {
 		t.Errorf("retention.cron_expr = %q, want 0 0 * * *", cfg.Retention.CronExpr)
 	}
@@ -224,6 +227,7 @@ func TestLoadEnvOverrideAllFields(t *testing.T) {
 		"WISELABZ_RETENTION_DOC_VERSION_DAYS":      "2",
 		"WISELABZ_RETENTION_ALERT_DAYS":            "3",
 		"WISELABZ_RETENTION_SYNC_RUN_DAYS":         "4",
+		"WISELABZ_RETENTION_AUDIT_DAYS":            "5",
 		"WISELABZ_RETENTION_CRON_EXPR":             "0 4 * * *",
 		"WISELABZ_BACKUP_DIR":                      "/tmp/backups",
 		"WISELABZ_BACKUP_CRON_EXPR":                "0 5 * * *",
@@ -249,7 +253,7 @@ func TestLoadEnvOverrideAllFields(t *testing.T) {
 		Sync:       SyncSettings{Schedule: "* * * * *", PollCronExpr: "*/5 * * * * *"},
 		Quality:    QualitySettings{CronExpr: "0 1 * * *"},
 		Log:        LogSettings{Level: "debug", Format: "json"},
-		Retention:  RetentionSettings{SnapshotDays: 1, DocVersionDays: 2, AlertDays: 3, SyncRunDays: 4, CronExpr: "0 4 * * *"},
+		Retention:  RetentionSettings{SnapshotDays: 1, DocVersionDays: 2, AlertDays: 3, SyncRunDays: 4, AuditDays: 5, CronExpr: "0 4 * * *"},
 		Backup:     BackupSettings{Dir: "/tmp/backups", CronExpr: "0 5 * * *", MaxBackups: 1, MaxAgeHours: 2, Enabled: false},
 	}
 

@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/WiseLabz/wiselabz/internal/config"
 	"github.com/WiseLabz/wiselabz/internal/store"
 
 	_ "modernc.org/sqlite"
@@ -59,12 +58,17 @@ func TestRunCleanupSkipsDisabledCategories(t *testing.T) {
 	if err := s.CreateAlert(ctx, alert); err != nil {
 		t.Fatalf("CreateAlert() error: %v", err)
 	}
+	// audit_log: retention enabled, should be purged.
+	if err := s.CreateAuditRecord(ctx, &store.AuditRecord{ActorUserID: "u1", ActorRole: "operator", Action: "test.action", CreatedAt: old}); err != nil {
+		t.Fatalf("CreateAuditRecord() error: %v", err)
+	}
 
-	cfg := config.RetentionSettings{
+	cfg := store.RetentionSettings{
 		SnapshotDays:   0,
 		DocVersionDays: 0,
 		AlertDays:      0, // disabled
 		SyncRunDays:    30,
+		AuditDays:      30,
 		CronExpr:       "0 0 * * *",
 	}
 
@@ -80,6 +84,14 @@ func TestRunCleanupSkipsDisabledCategories(t *testing.T) {
 
 	if _, err := s.GetAlert(ctx, alert.ID); err != nil {
 		t.Fatalf("alert should survive when AlertDays=0 (disabled), GetAlert() error: %v", err)
+	}
+
+	_, auditTotal, err := s.ListAuditRecords(ctx, "", "", "", "", 0, 20)
+	if err != nil {
+		t.Fatalf("ListAuditRecords() error: %v", err)
+	}
+	if auditTotal != 0 {
+		t.Fatalf("audit records after cleanup = %d, want 0 (AuditDays enabled)", auditTotal)
 	}
 }
 
@@ -98,7 +110,7 @@ func TestRunCleanupIdempotent(t *testing.T) {
 		t.Fatalf("CreateSyncRun() error: %v", err)
 	}
 
-	cfg := config.RetentionSettings{SyncRunDays: 30, CronExpr: "@daily"}
+	cfg := store.RetentionSettings{SyncRunDays: 30, CronExpr: "@daily"}
 
 	RunCleanupOnce(ctx, s, cfg, testLogger())
 	RunCleanupOnce(ctx, s, cfg, testLogger()) // must not error or panic on an already-clean table

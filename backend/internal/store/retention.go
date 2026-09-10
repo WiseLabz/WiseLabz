@@ -62,6 +62,17 @@ func (s *Store) DeleteOldSyncRuns(ctx context.Context, cutoff string) (int64, er
 	return rowsAffected(res), nil
 }
 
+// DeleteOldAuditRecords removes audit_log rows created before cutoff. Like
+// sync runs, there's no "keep latest" guard — the audit trail has no
+// current-state row that needs preserving.
+func (s *Store) DeleteOldAuditRecords(ctx context.Context, cutoff string) (int64, error) {
+	res, err := s.db.ExecContext(ctx, `DELETE FROM audit_log WHERE created_at < ?`, cutoff)
+	if err != nil {
+		return 0, fmt.Errorf("delete old audit records: %w", err)
+	}
+	return rowsAffected(res), nil
+}
+
 // rowsAffected returns res.RowsAffected(), or 0 if the driver doesn't
 // support it — retention counts are informational, not worth failing over.
 func rowsAffected(res interface{ RowsAffected() (int64, error) }) int64 {
