@@ -38,7 +38,9 @@ export function AuditPage() {
     action: action || undefined,
     targetType: targetType || undefined,
     createdAfter: createdAfter ? new Date(createdAfter).toISOString() : undefined,
-    createdBefore: createdBefore ? new Date(createdBefore).toISOString() : undefined,
+    // End of day (not midnight) so records created later on the selected
+    // day aren't excluded by the backend's inclusive `<=` comparison.
+    createdBefore: createdBefore ? new Date(`${createdBefore}T23:59:59.999Z`).toISOString() : undefined,
   };
 
   const { data, isLoading, isError, refetch } = useGetSystemAudit({

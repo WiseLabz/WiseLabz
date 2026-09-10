@@ -89,6 +89,16 @@ export function RetentionPage() {
     form.auditDays !== String(data.auditDays) ||
     form.cronExpr !== data.cronExpr;
 
+  // Empty or non-numeric day fields must not silently coerce to 0 (which
+  // would disable that retention category) when saved.
+  const isValidDays = (v: string) => v.trim() !== '' && Number.isInteger(Number(v)) && Number(v) >= 0;
+  const daysValid =
+    isValidDays(form.snapshotDays) &&
+    isValidDays(form.docVersionDays) &&
+    isValidDays(form.alertDays) &&
+    isValidDays(form.syncRunDays) &&
+    isValidDays(form.auditDays);
+
   const set = (field: keyof FormState) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm((f) => (f ? { ...f, [field]: e.target.value } : f));
 
@@ -166,7 +176,7 @@ export function RetentionPage() {
           <Button
             variant="primary"
             size="sm"
-            disabled={!dirty || save.isPending}
+            disabled={!dirty || !daysValid || save.isPending}
             onClick={() =>
               save.mutate({
                 snapshotDays: Number(form.snapshotDays),
