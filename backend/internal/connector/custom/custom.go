@@ -4,6 +4,7 @@ package custom
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -74,11 +75,19 @@ func (c *Connector) Validate(ctx context.Context, config map[string]any) error {
 	// newGuardedClient, which blocks loopback/link-local targets and redirects.
 	resp, err := c.client.Do(req) // codeql[go/request-forgery]
 	if err != nil {
+		if isTimeout(err) {
+			return connector.NewTimeoutError(fmt.Errorf("request failed: %w", err))
+		}
 		return fmt.Errorf("request failed: %w", err)
 	}
 	defer resp.Body.Close() //nolint:errcheck
 
-	if resp.StatusCode >= 500 {
+	switch {
+	case resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden:
+		return connector.NewAuthError(fmt.Errorf("server returned %d", resp.StatusCode))
+	case resp.StatusCode == http.StatusBadGateway || resp.StatusCode == http.StatusServiceUnavailable || resp.StatusCode == http.StatusGatewayTimeout:
+		return connector.NewServiceUnavailableError(fmt.Errorf("server returned %d", resp.StatusCode))
+	case resp.StatusCode >= 500:
 		return fmt.Errorf("server returned %d", resp.StatusCode)
 	}
 	return nil
@@ -109,6 +118,9 @@ func (c *Connector) Fetch(ctx context.Context, config map[string]any) (*connecto
 	// See Validate above: SSRF is mitigated at dial time by newGuardedClient.
 	resp, err := c.client.Do(req) // codeql[go/request-forgery]
 	if err != nil {
+		if isTimeout(err) {
+			return nil, connector.NewTimeoutError(fmt.Errorf("request failed: %w", err))
+		}
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
 	defer resp.Body.Close() //nolint:errcheck
@@ -202,6 +214,17 @@ func validateCustomURL(raw string) error {
 	}
 
 	return nil
+}
+
+// isTimeout reports whether err represents a request deadline being
+// exceeded, covering both a canceled context and a net.Error timeout
+// (e.g. a dial or read timing out on the underlying transport).
+func isTimeout(err error) bool {
+	if errors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
+	var netErr net.Error
+	return errors.As(err, &netErr) && netErr.Timeout()
 }
 
 // isDangerousIP returns true for loopback and link-local unicast addresses

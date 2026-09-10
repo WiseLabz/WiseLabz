@@ -2,6 +2,7 @@ package opnsense
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -22,8 +23,32 @@ func TestValidateUsesBasicAuthAndSurfacesStatus(t *testing.T) {
 	defer server.Close()
 	c := &Connector{url: server.URL, apiKey: "key", apiSecret: "secret", client: server.Client()}
 	err := c.Validate(context.Background(), nil)
-	if err == nil || !strings.Contains(err.Error(), "API returned 401: denied") {
-		t.Fatalf("Validate() error = %v", err)
+	var authErr *connector.AuthError
+	if !errors.As(err, &authErr) || !strings.Contains(err.Error(), "API returned 401: denied") {
+		t.Fatalf("Validate() error = %v, want *connector.AuthError", err)
+	}
+}
+
+func TestFetchSurfacesMalformedSystemResponse(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/core/firmware/status":
+			_, _ = w.Write([]byte(`not json`))
+		case "/api/diagnostics/interface/getInterfaces", "/api/firewall/filter/searchRule", "/api/routes/gateway/status":
+			_, _ = w.Write([]byte(`{}`))
+		default:
+			t.Fatalf("unexpected request path: %s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	c := &Connector{url: server.URL, apiKey: "key", apiSecret: "secret", client: server.Client()}
+	snap, err := c.Fetch(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("Fetch() error = %v", err)
+	}
+	if !strings.Contains(snap.Sections[0].Content, "malformed response") {
+		t.Fatalf("System section = %q, want malformed response placeholder", snap.Sections[0].Content)
 	}
 }
 

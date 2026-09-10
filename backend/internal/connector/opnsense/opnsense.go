@@ -5,8 +5,10 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -87,7 +89,12 @@ func (c *Connector) Fetch(ctx context.Context, _ map[string]any) (*connector.Ser
 			Version     string `json:"product_version"`
 			ProductName string `json:"product_name"`
 		}
-		if json.Unmarshal(raw, &info) == nil {
+		if err := json.Unmarshal(raw, &info); err != nil {
+			sections = append(sections, connector.SnapshotSection{
+				Title:   "System",
+				Content: "_System info unavailable: " + connector.NewMalformedResponseError(err).Error() + "_",
+			})
+		} else {
 			content := fmt.Sprintf("**Product**: %s\n**Version**: %s\n", info.ProductName, info.Version)
 			sections = append(sections, connector.SnapshotSection{
 				Title:   "System",
@@ -171,6 +178,9 @@ func (c *Connector) doRequest(ctx context.Context, method, path string) (data []
 
 	resp, err := c.client.Do(req)
 	if err != nil {
+		if isTimeout(err) {
+			return nil, connector.NewTimeoutError(fmt.Errorf("request failed: %w", err))
+		}
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
 	defer func() {
@@ -184,11 +194,27 @@ func (c *Connector) doRequest(ctx context.Context, method, path string) (data []
 		return nil, fmt.Errorf("read response: %w", err)
 	}
 
-	if resp.StatusCode >= 400 {
+	switch {
+	case resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden:
+		return nil, connector.NewAuthError(fmt.Errorf("API returned %d: %s", resp.StatusCode, string(data)))
+	case resp.StatusCode == http.StatusBadGateway || resp.StatusCode == http.StatusServiceUnavailable || resp.StatusCode == http.StatusGatewayTimeout:
+		return nil, connector.NewServiceUnavailableError(fmt.Errorf("API returned %d: %s", resp.StatusCode, string(data)))
+	case resp.StatusCode >= 400:
 		return nil, fmt.Errorf("API returned %d: %s", resp.StatusCode, string(data))
 	}
 
 	return data, nil
+}
+
+// isTimeout reports whether err represents a request deadline being
+// exceeded, covering both a canceled context and a net.Error timeout
+// (e.g. a dial or read timing out on the underlying transport).
+func isTimeout(err error) bool {
+	if errors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
+	var netErr net.Error
+	return errors.As(err, &netErr) && netErr.Timeout()
 }
 
 func buildInterfaceTable(raw []byte) string {
