@@ -82,6 +82,25 @@ type Counts struct {
 // Export builds a full backup bundle from the current store state, with
 // connector secrets redacted.
 func Export(ctx context.Context, s *store.Store) (*Bundle, error) {
+	var b *Bundle
+	err := s.WithinTransaction(ctx, func(tx *store.Store) error {
+		bundle, err := exportWithin(ctx, tx)
+		if err != nil {
+			return err
+		}
+		b = bundle
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return b, nil
+}
+
+// exportWithin builds the bundle from a single transaction-bound Store so
+// the connector/doc/template listings and their COUNT(*) totals all see one
+// consistent snapshot, even while syncs or edits are writing concurrently.
+func exportWithin(ctx context.Context, s *store.Store) (*Bundle, error) {
 	connectors, err := s.ListAllConnectors(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("export connectors: %w", err)
@@ -246,6 +265,9 @@ func exportDocs(ctx context.Context, s *store.Store) ([]store.DocRecord, error) 
 		if err != nil {
 			return nil, err
 		}
+		if len(page) == 0 {
+			return docs, nil
+		}
 		docs = append(docs, page...)
 		if len(docs) >= total {
 			return docs, nil
@@ -259,6 +281,9 @@ func exportTemplates(ctx context.Context, s *store.Store) ([]store.TemplateRecor
 		page, total, err := s.ListTemplates(ctx, offset, exportPageSize)
 		if err != nil {
 			return nil, err
+		}
+		if len(page) == 0 {
+			return templates, nil
 		}
 		templates = append(templates, page...)
 		if len(templates) >= total {

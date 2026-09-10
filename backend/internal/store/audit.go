@@ -113,6 +113,9 @@ func (s *Store) ListAuditRecords(ctx context.Context, action, targetType string,
 		}
 		records = append(records, a)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, fmt.Errorf("iterate audit records: %w", err)
+	}
 	if records == nil {
 		records = []AuditRecord{}
 	}

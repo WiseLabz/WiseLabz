@@ -73,6 +73,9 @@ func (s *Store) ListNotifications(ctx context.Context, userID string, unreadOnly
 		}
 		notifications = append(notifications, n)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, fmt.Errorf("iterate notifications: %w", err)
+	}
 	if notifications == nil {
 		notifications = []NotificationRecord{}
 	}

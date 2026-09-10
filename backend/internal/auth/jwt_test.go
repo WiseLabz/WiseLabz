@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"sync"
 	"testing"
 	"time"
 )
@@ -138,6 +139,54 @@ func TestElevationWrongAction(t *testing.T) {
 	_, err := svc.ValidateElevation(elev.Token, "user.delete", "user-123")
 	if err == nil {
 		t.Error("expected error for wrong action on elevation token")
+	}
+}
+
+// TestConcurrentIssuePairUniqueTokenIDs guards against the data race fixed
+// in issue #148: newTokenID() used to be an unsynchronized package-level
+// counter, so concurrent issuance could mint tokens with duplicate jti.
+// Run with -race to catch a regression to that shape.
+func TestConcurrentIssuePairUniqueTokenIDs(t *testing.T) {
+	svc := NewService("test-secret", time.Minute, time.Hour)
+
+	const n = 50
+	var wg sync.WaitGroup
+	ids := make(chan string, n*2)
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			pair, err := svc.IssuePair("user", "viewer")
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			access, err := svc.ValidateAccess(pair.AccessToken)
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			refresh, err := svc.ValidateRefresh(pair.RefreshToken)
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			ids <- access.ID
+			ids <- refresh.ID
+		}()
+	}
+	wg.Wait()
+	close(ids)
+
+	seen := make(map[string]bool)
+	for id := range ids {
+		if id == "" {
+			t.Fatal("jti is empty")
+		}
+		if seen[id] {
+			t.Fatalf("duplicate jti: %s", id)
+		}
+		seen[id] = true
 	}
 }
 

@@ -24,6 +24,9 @@ func (s *Store) GetOIDCProviderFlags(ctx context.Context) (map[string]bool, erro
 		}
 		out[id] = enabled != 0
 	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate oidc provider flags: %w", err)
+	}
 	return out, nil
 }
 

@@ -103,6 +103,9 @@ func (s *Store) ListDueDeliveries(ctx context.Context, now string, limit int) ([
 		}
 		deliveries = append(deliveries, d)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate due deliveries: %w", err)
+	}
 	return deliveries, nil
 }
 
@@ -139,6 +142,9 @@ func (s *Store) ListDeliveries(ctx context.Context, status string, offset, limit
 			return nil, 0, fmt.Errorf("scan: %w", err)
 		}
 		deliveries = append(deliveries, d)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, fmt.Errorf("iterate deliveries: %w", err)
 	}
 	return deliveries, total, nil
 }

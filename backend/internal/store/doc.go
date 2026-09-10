@@ -672,6 +672,10 @@ func runDocLockSweep(ctx context.Context, s *Store, hub *ws.Hub, logger *slog.Lo
 		expired = append(expired, l)
 	}
 	rows.Close() //nolint:errcheck
+	if err := rows.Err(); err != nil {
+		logger.Error("doc lock sweep: iterate expired", "error", err)
+		return
+	}
 
 	for _, l := range expired {
 		if _, err := s.db.ExecContext(ctx, `DELETE FROM doc_locks WHERE doc_id = ? AND expires_at <= ?`, l.DocID, now); err != nil {

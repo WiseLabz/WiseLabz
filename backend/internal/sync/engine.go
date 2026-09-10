@@ -7,6 +7,7 @@ import (
 	"crypto/sha1" //nolint:gosec // non-cryptographic: stable pattern fingerprint, not a security boundary
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -364,6 +365,29 @@ func (e *Engine) RunSyncFields(ctx context.Context, connectorID string, jobID st
 
 	// Get previous snapshot for diff
 	prevSn, prevErr := e.store.GetLatestSnapshot(ctx, connectorID)
+	if prevErr != nil && !errors.Is(prevErr, store.ErrNotFound) {
+		slog.Error("sync: previous snapshot unreadable, skipping diff", "connector", connectorID, "error", prevErr)
+		wrapped := fmt.Errorf("get latest snapshot: %w", prevErr)
+		if e.hub != nil {
+			e.hub.Broadcast(ws.EventSyncProgress, map[string]any{
+				"serviceId": connectorID,
+				"jobId":     jobID,
+				"phase":     "error",
+				"percent":   0,
+				"message":   wrapped.Error(),
+			})
+			e.hub.Broadcast(ws.EventSyncComplete, map[string]any{
+				"serviceId":       connectorID,
+				"jobId":           jobID,
+				"changesDetected": 0,
+				"alertsRaised":    0,
+				"durationMs":      time.Since(start).Milliseconds(),
+				"error":           wrapped.Error(),
+			})
+		}
+		finish("error", wrapped)
+		return markError(result, start, wrapped)
+	}
 
 	// Save new snapshot
 	snData, _ := json.Marshal(sn)
@@ -401,7 +425,9 @@ func (e *Engine) RunSyncFields(ctx context.Context, connectorID string, jobID st
 	// Diff against previous snapshot
 	if prevErr == nil {
 		var prevSnap connector.ServiceSnapshot
-		if err := json.Unmarshal([]byte(prevSn.Data), &prevSnap); err == nil {
+		if err := json.Unmarshal([]byte(prevSn.Data), &prevSnap); err != nil {
+			slog.Error("sync: previous snapshot unparseable, skipping diff", "connector", connectorID, "snapshot", prevSn.ID, "error", err)
+		} else {
 			diffResults := Compare(&prevSnap, sn)
 			for _, d := range diffResults {
 				diffJSON, _ := json.Marshal(d.Patches)
