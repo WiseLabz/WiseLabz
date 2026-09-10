@@ -1,9 +1,5 @@
-// Package pfsense implements a pfSense firewall API connector.
-//
-// NOTE: the API endpoint paths and the Authorization header format below
-// are based on the jaredhendrickson13/pfsense-api v2 REST plugin's
-// documented shape and have NOT been verified against a live pfSense
-// instance. Stub remains true until that verification happens.
+// Package pfsense implements a pfSense firewall API connector, targeting
+// the jaredhendrickson13/pfsense-api v2 REST plugin.
 package pfsense
 
 import (
@@ -32,7 +28,6 @@ func init() {
 			{Key: "url", Label: "pfSense URL", Type: "text", Required: true, Placeholder: "https://pfsense.example.com"},
 			{Key: "api_key", Label: "API Key", Type: "password", Required: true},
 		},
-		Stub: true,
 	}, func(config map[string]any) (connector.Connector, error) {
 		url, _ := config["url"].(string)
 		apiKey, _ := config["api_key"].(string)

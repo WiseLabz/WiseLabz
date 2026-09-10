@@ -15,7 +15,7 @@ func TestAllConnectorImplementationsRegister(t *testing.T) {
 		{typ: "custom", category: "virtualization"},
 		{typ: "docker", category: "containers_paas", stub: true},
 		{typ: "opnsense", category: "networking"},
-		{typ: "pfsense", category: "networking", stub: true},
+		{typ: "pfsense", category: "networking"},
 		{typ: "proxmox", category: "virtualization"},
 	}
 	for _, tt := range tests {
