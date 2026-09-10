@@ -5,6 +5,7 @@
  * API hydrates — it is never the source of truth.
  */
 import { create } from 'zustand';
+import { useSearchParams } from 'react-router-dom';
 import {
   getDashboardLayout,
   putDashboardLayout,
@@ -41,6 +42,15 @@ export interface WidgetDef {
 export type RangePreset = '24h' | '7d' | '30d' | '90d';
 export const RANGE_DAYS: Record<RangePreset, number> = { '24h': 1, '7d': 7, '30d': 30, '90d': 90 };
 export const DEFAULT_RANGE: RangePreset = '7d';
+
+/** Cadence for polling-enabled widgets' refetchInterval. */
+const WIDGET_POLL_INTERVAL_MS = 30_000;
+
+/** The header's ?range= URL param resolved to a day count, shared by every widget that windows by day. */
+export function useRangeDays(): number {
+  const [searchParams] = useSearchParams();
+  return RANGE_DAYS[(searchParams.get('range') as RangePreset | null) ?? DEFAULT_RANGE];
+}
 
 export const DEFAULT_LAYOUT: WidgetDef[] = [
   { id: 'roster', enabled: true, span: 4 },
@@ -177,3 +187,15 @@ export const useDashboard = create<DashboardState>((set, get) => ({
     set({ layout });
   },
 }));
+
+/** A widget's polling state and the cadence it drives, plus the toggle. */
+export function useWidgetPolling(id: WidgetId) {
+  const widgetDef = useDashboard((s) => s.layout.find((w) => w.id === id));
+  const setWidgetOptions = useDashboard((s) => s.setWidgetOptions);
+  const pollingEnabled = widgetDef?.pollingEnabled ?? false;
+  return {
+    pollingEnabled,
+    refetchInterval: pollingEnabled ? WIDGET_POLL_INTERVAL_MS : (false as const),
+    togglePolling: () => setWidgetOptions(id, { pollingEnabled: !pollingEnabled }),
+  };
+}

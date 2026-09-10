@@ -7,7 +7,6 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/WiseLabz/wiselabz/internal/httputil"
@@ -67,12 +66,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 
 	// days is optional here (unlike the dashboard overview): /api/alerts backs
 	// the full Alerts page and must keep showing everything when unset.
-	since := ""
-	if v := r.URL.Query().Get("days"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 {
-			since = time.Now().UTC().AddDate(0, 0, -n).Format(time.RFC3339)
-		}
-	}
+	since := store.SinceFromDays(r.URL.Query().Get("days"), 0)
 
 	alerts, total, err := h.Store.ListAlerts(r.Context(), serviceID, severity, status, since, offset, pageSize)
 	if err != nil {

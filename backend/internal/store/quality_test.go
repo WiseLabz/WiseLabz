@@ -60,7 +60,7 @@ func TestUpsertQualityFindingDedup(t *testing.T) {
 		t.Fatalf("conflict returned ID = %q, want persisted ID %q", second.ID, first.ID)
 	}
 
-	findings, total, err := s.ListQualityFindings(ctx, c.ID, "empty", "open", 0, 10)
+	findings, total, err := s.ListQualityFindings(ctx, c.ID, "empty", "open", "", 0, 10)
 	if err != nil {
 		t.Fatalf("ListQualityFindings() error: %v", err)
 	}
@@ -93,7 +93,7 @@ func TestResolveThenReopenCreatesFreshRow(t *testing.T) {
 		t.Fatal("reopened finding reused resolved row ID")
 	}
 
-	all, total, err := s.ListQualityFindings(ctx, c.ID, "failing", "", 0, 10)
+	all, total, err := s.ListQualityFindings(ctx, c.ID, "failing", "", "", 0, 10)
 	if err != nil {
 		t.Fatalf("ListQualityFindings() error: %v", err)
 	}
@@ -129,14 +129,14 @@ func TestListQualityFindingsFilters(t *testing.T) {
 		t.Fatalf("UpdateQualityFindingStatus() error: %v", err)
 	}
 
-	got, total, err := s.ListQualityFindings(ctx, one.ID, "", "open", 0, 10)
+	got, total, err := s.ListQualityFindings(ctx, one.ID, "", "open", "", 0, 10)
 	if err != nil {
 		t.Fatalf("ListQualityFindings() error: %v", err)
 	}
 	if total != 1 || len(got) != 1 || got[0].Title != "new" {
 		t.Fatalf("connector/status filter = %+v, total %d", got, total)
 	}
-	got, total, err = s.ListQualityFindings(ctx, "", "stale", "", 0, 1)
+	got, total, err = s.ListQualityFindings(ctx, "", "stale", "", "", 0, 1)
 	if err != nil {
 		t.Fatalf("ListQualityFindings(stale) error: %v", err)
 	}
@@ -179,7 +179,7 @@ func TestUpsertQualityFindingConcurrentDedup(t *testing.T) {
 		}
 	}
 
-	findings, total, err := s.ListQualityFindings(ctx, c.ID, "ownership_incomplete", "open", 0, workers)
+	findings, total, err := s.ListQualityFindings(ctx, c.ID, "ownership_incomplete", "open", "", 0, workers)
 	if err != nil {
 		t.Fatalf("ListQualityFindings() error: %v", err)
 	}

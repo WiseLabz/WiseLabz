@@ -87,7 +87,8 @@ func (s *Store) GetQualityFinding(ctx context.Context, id string) (*QualityFindi
 }
 
 // ListQualityFindings returns findings newest-seen first with optional filters.
-func (s *Store) ListQualityFindings(ctx context.Context, connectorID, checkType, status string, offset, limit int) ([]QualityFindingRecord, int, error) {
+// since, when non-empty, is an RFC3339 cutoff applied to last_seen_at.
+func (s *Store) ListQualityFindings(ctx context.Context, connectorID, checkType, status, since string, offset, limit int) ([]QualityFindingRecord, int, error) {
 	where := "WHERE 1=1"
 	var args []any
 	for _, filter := range []struct {
@@ -102,6 +103,10 @@ func (s *Store) ListQualityFindings(ctx context.Context, connectorID, checkType,
 			where += " AND " + filter.column + " = ?"
 			args = append(args, filter.value)
 		}
+	}
+	if since != "" {
+		where += " AND last_seen_at >= ?"
+		args = append(args, since)
 	}
 
 	var total int

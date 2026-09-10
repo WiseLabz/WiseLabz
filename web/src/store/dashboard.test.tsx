@@ -1,7 +1,9 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { renderHook, act } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { setupServer } from 'msw/node';
 import { http, HttpResponse } from 'msw';
-import { useDashboard, DEFAULT_LAYOUT, type WidgetId } from './dashboard';
+import { useDashboard, useWidgetPolling, useRangeDays, DEFAULT_LAYOUT, type WidgetId } from './dashboard';
 
 const server = setupServer();
 
@@ -88,5 +90,34 @@ describe('dashboard store', () => {
     await useDashboard.getState().reset();
 
     expect(useDashboard.getState().layout.find((w) => w.id === 'roster')?.enabled).toBe(true);
+  });
+});
+
+describe('useWidgetPolling', () => {
+  it('derives pollingEnabled/refetchInterval from the widget layout and toggles it', () => {
+    server.use(http.put('/api/dashboard/layout', () => HttpResponse.json({ widgets: [] })));
+    const { result } = renderHook(() => useWidgetPolling('alerts'));
+
+    expect(result.current.pollingEnabled).toBe(false);
+    expect(result.current.refetchInterval).toBe(false);
+
+    act(() => result.current.togglePolling());
+
+    expect(result.current.pollingEnabled).toBe(true);
+    expect(result.current.refetchInterval).toBe(30_000);
+  });
+});
+
+describe('useRangeDays', () => {
+  it('resolves the ?range= URL param to a day count, defaulting to 7d', () => {
+    const { result } = renderHook(() => useRangeDays(), {
+      wrapper: ({ children }) => <MemoryRouter initialEntries={['/?range=30d']}>{children}</MemoryRouter>,
+    });
+    expect(result.current).toBe(30);
+
+    const { result: defaultResult } = renderHook(() => useRangeDays(), {
+      wrapper: ({ children }) => <MemoryRouter>{children}</MemoryRouter>,
+    });
+    expect(defaultResult.current).toBe(7);
   });
 });
