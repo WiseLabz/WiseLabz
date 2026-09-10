@@ -2,6 +2,7 @@ package proxmox
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -86,7 +87,25 @@ func TestValidateUsesTokenAndSurfacesStatus(t *testing.T) {
 	defer server.Close()
 	c := &Connector{url: server.URL, tokenID: "user@pam!token", tokenSecret: "secret", client: server.Client()}
 	err := c.Validate(context.Background(), nil)
-	if err == nil || !strings.Contains(err.Error(), "API returned 403: denied") {
-		t.Fatalf("Validate() error = %v", err)
+	var authErr *connector.AuthError
+	if !errors.As(err, &authErr) || !strings.Contains(err.Error(), "API returned 403: denied") {
+		t.Fatalf("Validate() error = %v, want *connector.AuthError", err)
+	}
+}
+
+func TestFetchSurfacesMalformedNodesResponse(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/nodes" {
+			t.Fatalf("unexpected request path: %s", r.URL.Path)
+		}
+		_, _ = w.Write([]byte(`not json`))
+	}))
+	defer server.Close()
+
+	c := &Connector{url: server.URL, tokenID: "user@pam!token", tokenSecret: "secret", client: server.Client()}
+	_, err := c.Fetch(context.Background(), nil)
+	var malformedErr *connector.MalformedResponseError
+	if !errors.As(err, &malformedErr) {
+		t.Fatalf("Fetch() error = %v, want *connector.MalformedResponseError", err)
 	}
 }

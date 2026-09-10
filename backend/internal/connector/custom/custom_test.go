@@ -2,10 +2,13 @@ package custom
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/WiseLabz/wiselabz/internal/connector"
 )
 
 func TestValidateCustomURL(t *testing.T) {
@@ -36,5 +39,18 @@ func TestFetchUsesConfiguredMethodAndHeaders(t *testing.T) {
 	}
 	if snapshot.Metadata["status_code"] != "200" || !strings.Contains(snapshot.Sections[0].Content, `{"status":"ok"}`) {
 		t.Fatalf("snapshot = %+v", snapshot)
+	}
+}
+
+func TestValidateSurfacesAuthError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	defer server.Close()
+	c := &Connector{client: server.Client()}
+	err := c.Validate(context.Background(), map[string]any{"url": server.URL})
+	var authErr *connector.AuthError
+	if !errors.As(err, &authErr) {
+		t.Fatalf("Validate() error = %v, want *connector.AuthError", err)
 	}
 }
