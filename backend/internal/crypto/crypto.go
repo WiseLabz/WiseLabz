@@ -11,9 +11,26 @@ import (
 )
 
 // DeriveKey derives a 32-byte AES-256 key from a secret string using SHA-256.
+//
+// Deprecated: this is an unsalted, uniterated hash with no work factor and is
+// kept only so GetDecryptedAPIKey can read rows encrypted before
+// WISELABZ_ENCRYPTION_KEY was introduced. New encryption must use DecodeKey.
 func DeriveKey(secret string) []byte {
 	h := sha256.Sum256([]byte(secret))
 	return h[:]
+}
+
+// DecodeKey decodes a base64-encoded 32-byte AES-256 key, as produced by e.g.
+// `openssl rand -base64 32`.
+func DecodeKey(b64 string) ([]byte, error) {
+	key, err := base64.StdEncoding.DecodeString(b64)
+	if err != nil {
+		return nil, fmt.Errorf("decode key: %w", err)
+	}
+	if len(key) != 32 {
+		return nil, fmt.Errorf("key must decode to 32 bytes, got %d", len(key))
+	}
+	return key, nil
 }
 
 // Encrypt encrypts plaintext using AES-256-GCM and returns a base64-encoded

@@ -141,7 +141,7 @@ func (h *Handler) OIDCCallback(w http.ResponseWriter, r *http.Request) {
 		TokenHash:      store.HashToken(pair.RefreshToken),
 		AuthProviderID: req.ProviderID,
 		UserAgent:      r.UserAgent(),
-		IP:             readIP(r),
+		IP:             httputil.ClientIP(r, h.Config.Server.TrustedProxies),
 	}
 	if err := h.Store.CreateSession(r.Context(), session); err != nil {
 		httputil.Errorf(w, err)

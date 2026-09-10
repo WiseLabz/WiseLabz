@@ -15,15 +15,16 @@ import (
 
 // Config is the top-level configuration structure.
 type Config struct {
-	DB        Database          `mapstructure:"db"`
-	Server    Server            `mapstructure:"server"`
-	Auth      AuthSettings      `mapstructure:"auth"`
-	AI        AISettings        `mapstructure:"ai"`
-	Sync      SyncSettings      `mapstructure:"sync"`
-	Quality   QualitySettings   `mapstructure:"quality"`
-	Log       LogSettings       `mapstructure:"log"`
-	Retention RetentionSettings `mapstructure:"retention"`
-	Backup    BackupSettings    `mapstructure:"backup"`
+	DB         Database           `mapstructure:"db"`
+	Server     Server             `mapstructure:"server"`
+	Encryption EncryptionSettings `mapstructure:"encryption"`
+	Auth       AuthSettings       `mapstructure:"auth"`
+	AI         AISettings         `mapstructure:"ai"`
+	Sync       SyncSettings       `mapstructure:"sync"`
+	Quality    QualitySettings    `mapstructure:"quality"`
+	Log        LogSettings        `mapstructure:"log"`
+	Retention  RetentionSettings  `mapstructure:"retention"`
+	Backup     BackupSettings     `mapstructure:"backup"`
 }
 
 // Database holds database connection settings.
@@ -36,7 +37,8 @@ type Database struct {
 type Server struct {
 	Host                   string `mapstructure:"host"`
 	Port                   int    `mapstructure:"port"`
-	Origin                 string `mapstructure:"origin"`                   // CORS origin for production
+	Origin                 string `mapstructure:"origin"`                   // comma-separated allowed CORS origins
+	TrustedProxies         string `mapstructure:"trusted_proxies"`          // comma-separated CIDRs allowed to set X-Forwarded-For/X-Real-IP
 	Embed                  bool   `mapstructure:"embed"`                    // serve embedded SPA in production
 	ReadTimeoutSeconds     int    `mapstructure:"read_timeout_seconds"`     // HTTP read timeout
 	WriteTimeoutSeconds    int    `mapstructure:"write_timeout_seconds"`    // HTTP write timeout
@@ -54,6 +56,15 @@ func (s Server) ShutdownTimeoutDuration() time.Duration {
 		return 10 * time.Second
 	}
 	return time.Duration(s.ShutdownTimeoutSeconds) * time.Second
+}
+
+// EncryptionSettings holds the key used to encrypt sensitive data at rest
+// (e.g. stored AI provider API keys). Distinct from Auth.Secret so that
+// leaking one does not compromise the other, and so each can be rotated
+// independently.
+type EncryptionSettings struct {
+	// Key is a base64-encoded 32-byte AES-256 key, e.g. `openssl rand -base64 32`.
+	Key string `mapstructure:"key"`
 }
 
 // AuthSettings holds authentication settings.
@@ -218,7 +229,9 @@ func applyEnvOverrides(cfg *Config) {
 		"SERVER_HOST":                  func(v string) { cfg.Server.Host = v },
 		"SERVER_PORT":                  func(v string) { cfg.Server.Port = intEnv(v) },
 		"SERVER_ORIGIN":                func(v string) { cfg.Server.Origin = v },
+		"SERVER_TRUSTED_PROXIES":       func(v string) { cfg.Server.TrustedProxies = v },
 		"SERVER_EMBED":                 func(v string) { cfg.Server.Embed = boolEnv(v) },
+		"ENCRYPTION_KEY":               func(v string) { cfg.Encryption.Key = v },
 		"AUTH_SECRET":                  func(v string) { cfg.Auth.Secret = v },
 		"AUTH_ACCESS_TOKEN_TTL":        func(v string) { cfg.Auth.AccessTokenTTL = intEnv(v) },
 		"AUTH_REFRESH_TOKEN_TTL":       func(v string) { cfg.Auth.RefreshTokenTTL = intEnv(v) },

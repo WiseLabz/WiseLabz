@@ -14,7 +14,8 @@
 #
 # Quick start:
 #   1. cp .env.example .env
-#   2. edit .env (set WISELABZ_AUTH_SECRET, WISELABZ_ADMIN_PASSWORD, and the
+#   2. edit .env (set WISELABZ_AUTH_SECRET, WISELABZ_ENCRYPTION_KEY,
+#      WISELABZ_SERVER_ORIGIN, WISELABZ_ADMIN_PASSWORD, and the
 #      POSTGRES_* / WISELABZ_DB_DSN values)
 #   3. docker compose up -d
 

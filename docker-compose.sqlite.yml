@@ -13,7 +13,8 @@
 #
 # Quick start:
 #   1. cp .env.example .env
-#   2. edit .env (set WISELABZ_AUTH_SECRET and WISELABZ_ADMIN_PASSWORD)
+#   2. edit .env (set WISELABZ_AUTH_SECRET, WISELABZ_ENCRYPTION_KEY,
+#      WISELABZ_SERVER_ORIGIN, and WISELABZ_ADMIN_PASSWORD)
 #   3. docker compose -f docker-compose.sqlite.yml up -d
 
 services:

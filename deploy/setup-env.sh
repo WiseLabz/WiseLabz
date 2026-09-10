@@ -24,6 +24,7 @@ fi
 echo "Generating secrets..."
 # Generate secure keys and passwords
 AUTH_SECRET=$(openssl rand -base64 48 | tr -d '\n')
+ENCRYPTION_KEY=$(openssl rand -base64 32 | tr -d '\n')
 ADMIN_PASSWORD=$(openssl rand -base64 16 | tr -d '\n')
 PG_PASSWORD=$(openssl rand -hex 16 | tr -d '\n')
 
@@ -34,13 +35,15 @@ cp "$EXAMPLE_FILE" "$ENV_FILE"
 # Using a temp file or perl for cleaner replacement across OS environments
 if command -v perl >/dev/null 2>&1; then
     # Perl is highly portable and avoids escaping issues with '/' in base64
-    export AUTH_SECRET ADMIN_PASSWORD PG_PASSWORD
+    export AUTH_SECRET ENCRYPTION_KEY ADMIN_PASSWORD PG_PASSWORD
     perl -pi -e 's/^WISELABZ_AUTH_SECRET=.*/WISELABZ_AUTH_SECRET=$ENV{AUTH_SECRET}/' "$ENV_FILE"
+    perl -pi -e 's/^WISELABZ_ENCRYPTION_KEY=.*/WISELABZ_ENCRYPTION_KEY=$ENV{ENCRYPTION_KEY}/' "$ENV_FILE"
     perl -pi -e 's/^WISELABZ_ADMIN_PASSWORD=.*/WISELABZ_ADMIN_PASSWORD=$ENV{ADMIN_PASSWORD}/' "$ENV_FILE"
     perl -pi -e 's/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=$ENV{PG_PASSWORD}/' "$ENV_FILE"
 else
     # Fallback to sed (escaping base64 characters like / if needed, using | as delimiter)
     sed -i "s|^WISELABZ_AUTH_SECRET=.*|WISELABZ_AUTH_SECRET=${AUTH_SECRET}|" "$ENV_FILE"
+    sed -i "s|^WISELABZ_ENCRYPTION_KEY=.*|WISELABZ_ENCRYPTION_KEY=${ENCRYPTION_KEY}|" "$ENV_FILE"
     sed -i "s|^WISELABZ_ADMIN_PASSWORD=.*|WISELABZ_ADMIN_PASSWORD=${ADMIN_PASSWORD}|" "$ENV_FILE"
     sed -i "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=${PG_PASSWORD}|" "$ENV_FILE"
 fi
@@ -55,5 +58,7 @@ echo "   WISELABZ_ADMIN_PASSWORD :  $ADMIN_PASSWORD"
 echo "   POSTGRES_PASSWORD       :  $PG_PASSWORD"
 echo ""
 echo "========================================================================"
-echo " Note: The JWT secret (WISELABZ_AUTH_SECRET) was also generated and saved."
+echo " Note: WISELABZ_AUTH_SECRET and WISELABZ_ENCRYPTION_KEY were also"
+echo " generated and saved. You still need to set WISELABZ_SERVER_ORIGIN in"
+echo " $ENV_FILE to your public URL before the server will start."
 echo "========================================================================"

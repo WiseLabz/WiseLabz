@@ -277,7 +277,12 @@ func (h *Handler) UpdateAIConfig(w http.ResponseWriter, r *http.Request) {
 		args = append(args, *req.Model)
 	}
 	if req.APIKey != nil {
-		key := crypto.DeriveKey(h.Config.Auth.Secret)
+		key, err := crypto.DecodeKey(h.Config.Encryption.Key)
+		if err != nil {
+			slog.Error("Failed to load encryption key", "error", err)
+			httputil.Error(w, http.StatusInternalServerError, "internal_error", "Failed to encrypt API key")
+			return
+		}
 		encrypted, err := crypto.Encrypt(*req.APIKey, key)
 		if err != nil {
 			slog.Error("Failed to encrypt API key", "error", err)
@@ -420,11 +425,22 @@ func (h *Handler) GetDecryptedAPIKey() string {
 		return ""
 	}
 
-	key := crypto.DeriveKey(h.Config.Auth.Secret)
+	key, err := crypto.DecodeKey(h.Config.Encryption.Key)
+	if err != nil {
+		slog.Error("Failed to load encryption key", "error", err)
+		return ""
+	}
 	plaintext, err := crypto.Decrypt(encrypted, key)
 	if err != nil {
-		slog.Error("Failed to decrypt stored API key", "error", err)
-		return ""
+		// Legacy path: the row may predate WISELABZ_ENCRYPTION_KEY, when the
+		// key was derived from the JWT signing secret instead.
+		legacyKey := crypto.DeriveKey(h.Config.Auth.Secret) //nolint:staticcheck // intentional legacy fallback for rows encrypted before WISELABZ_ENCRYPTION_KEY
+		plaintext, err = crypto.Decrypt(encrypted, legacyKey)
+		if err != nil {
+			slog.Error("Failed to decrypt stored API key", "error", err)
+			return ""
+		}
+		slog.Warn("Decrypted API key using legacy derived key; re-save the AI config to migrate it to WISELABZ_ENCRYPTION_KEY")
 	}
 	return plaintext
 }

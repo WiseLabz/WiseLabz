@@ -21,8 +21,10 @@ cleanup() {
 }
 trap cleanup EXIT
 
-cat >"$env_file" <<'EOF'
+cat >"$env_file" <<EOF
 WISELABZ_AUTH_SECRET=compose-smoke-auth-secret-0123456789abcdef
+WISELABZ_ENCRYPTION_KEY=$(openssl rand -base64 32)
+WISELABZ_SERVER_ORIGIN=http://127.0.0.1:$port
 WISELABZ_ADMIN_PASSWORD=compose-smoke-admin-password
 POSTGRES_USER=wiselabz
 POSTGRES_PASSWORD=compose-smoke-postgres-password

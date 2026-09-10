@@ -128,4 +128,23 @@ func TestConnectorsSyncAcceptsFieldsHint(t *testing.T) {
 	if rec2.Code != http.StatusAccepted {
 		t.Fatalf("status (no body) = %d, want 202; body = %s", rec2.Code, rec2.Body)
 	}
+
+	// Both syncs run in background goroutines. Wait for them to finish
+	// before returning, otherwise this test's t.TempDir()/db cleanup can
+	// race with a goroutine still writing to them, e.g. by tearing down the
+	// database mid-write.
+	waitForSyncRuns(t, app, c.ID, 2)
+}
+
+func waitForSyncRuns(t *testing.T, app *testApp, connectorID string, want int) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		runs, err := app.Store.ListSyncRunsByConnector(context.Background(), connectorID, want)
+		if err == nil && len(runs) >= want {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("timed out waiting for %d sync runs to complete for connector %s", want, connectorID)
 }
