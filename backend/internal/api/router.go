@@ -71,6 +71,7 @@ func NewRouter(cfg Config) chi.Router {
 	// cfg.Scheduler) so its entry ID is tracked and later PUT /schedule calls
 	// can remove/replace it instead of stacking duplicate jobs.
 	sysH.InitBackupJob(context.Background())
+	sysH.InitRetentionJob(context.Background())
 	authH := authhandler.NewHandler(cfg.Store, cfg.JWT, cfg.Config)
 	apiKeyH := apikeyhandler.NewHandler(cfg.Store)
 	settingH := settinghandler.NewHandler(cfg.Store, cfg.Config, cfg.AIRegistry)
@@ -317,6 +318,9 @@ func NewRouter(cfg Config) chi.Router {
 
 			r.Get("/api/system/info", sysH.Info)
 			r.Get("/api/system/audit", sysH.ListAudit)
+
+			r.Get("/api/system/settings/retention", sysH.GetRetentionSettings)
+			r.Put("/api/system/settings/retention", sysH.UpdateRetentionSettings)
 
 			r.Route("/api/system/backup", func(r chi.Router) {
 				r.Get("/export", sysH.ExportBackup)

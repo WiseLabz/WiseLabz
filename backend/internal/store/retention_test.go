@@ -203,3 +203,44 @@ func TestDeleteOldSyncRuns(t *testing.T) {
 		t.Fatalf("DeleteOldSyncRuns() second call deleted %d rows, want 0", n)
 	}
 }
+
+func TestDeleteOldAuditRecords(t *testing.T) {
+	ctx := context.Background()
+	s := newDocTestStore(t)
+
+	old := time.Now().UTC().AddDate(0, 0, -365).Format(time.RFC3339)
+	recent := time.Now().UTC().Format(time.RFC3339)
+	cutoff := time.Now().UTC().AddDate(0, 0, -30).Format(time.RFC3339)
+
+	if err := s.CreateAuditRecord(ctx, &AuditRecord{ActorUserID: "u1", ActorRole: "operator", Action: "test.old", CreatedAt: old}); err != nil {
+		t.Fatalf("CreateAuditRecord(old) error: %v", err)
+	}
+	if err := s.CreateAuditRecord(ctx, &AuditRecord{ActorUserID: "u1", ActorRole: "operator", Action: "test.recent", CreatedAt: recent}); err != nil {
+		t.Fatalf("CreateAuditRecord(recent) error: %v", err)
+	}
+
+	n, err := s.DeleteOldAuditRecords(ctx, cutoff)
+	if err != nil {
+		t.Fatalf("DeleteOldAuditRecords() error: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("DeleteOldAuditRecords() deleted %d rows, want 1", n)
+	}
+
+	records, total, err := s.ListAuditRecords(ctx, "", "", "", "", 0, 20)
+	if err != nil {
+		t.Fatalf("ListAuditRecords() error: %v", err)
+	}
+	if total != 1 || len(records) != 1 || records[0].Action != "test.recent" {
+		t.Fatalf("records after cleanup = %+v, want only the recent record", records)
+	}
+
+	// Idempotency.
+	n, err = s.DeleteOldAuditRecords(ctx, cutoff)
+	if err != nil {
+		t.Fatalf("DeleteOldAuditRecords() second call error: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("DeleteOldAuditRecords() second call deleted %d rows, want 0", n)
+	}
+}

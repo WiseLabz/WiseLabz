@@ -17,13 +17,15 @@ import (
 
 // Handler holds dependencies for system endpoints.
 type Handler struct {
-	DB            store.DBTX
-	Config        *config.Config
-	Store         *store.Store
-	Scheduler     *scheduler.Runner // for re-registering backup jobs
-	BackupDir     string            // directory where backups are written
-	BackupJobIDMu sync.Mutex        // protects BackupJobID
-	BackupJobID   cron.EntryID      // current backup job entry ID (0 if not registered)
+	DB               store.DBTX
+	Config           *config.Config
+	Store            *store.Store
+	Scheduler        *scheduler.Runner // for re-registering backup/retention jobs
+	BackupDir        string            // directory where backups are written
+	BackupJobIDMu    sync.Mutex        // protects BackupJobID
+	BackupJobID      cron.EntryID      // current backup job entry ID (0 if not registered)
+	RetentionJobIDMu sync.Mutex        // protects RetentionJobID
+	RetentionJobID   cron.EntryID      // current retention job entry ID (0 if not registered)
 }
 
 // NewHandler creates a new system handler.
