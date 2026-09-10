@@ -28,6 +28,8 @@ type Handler struct {
 	WSHub    *ws.Hub
 }
 
+const maxBulkIDs = 500
+
 // NewHandler creates a new change handler.
 func NewHandler(s *store.Store, settingsH *settings.Handler, aiRegistry *ai.Registry, hub *ws.Hub) *Handler {
 	return &Handler{Store: s, Settings: settingsH, AI: aiRegistry, WSHub: hub}
@@ -210,33 +212,50 @@ func (h *Handler) BulkResolve(w http.ResponseWriter, r *http.Request) {
 		httputil.Error(w, http.StatusBadRequest, "invalid_request", "ids must be a non-empty array")
 		return
 	}
+	if len(req.IDs) > maxBulkIDs {
+		httputil.Error(w, http.StatusBadRequest, "invalid_request", "ids must contain at most 500 items")
+		return
+	}
 
 	results := make([]bulkResolveItemResult, 0, len(req.IDs))
+	changes, err := h.Store.ListChangesByID(r.Context(), req.IDs)
+	if err != nil {
+		for _, id := range req.IDs {
+			results = append(results, bulkResolveItemResult{ID: id, Status: "error", Reason: "internal_error"})
+		}
+		httputil.JSON(w, http.StatusOK, map[string]any{"results": results})
+		return
+	}
+	resolvedIDs := make([]string, 0, len(changes))
+	auditRecords := make([]store.AuditRecord, 0, len(changes))
+	eligible := make(map[string]bool, len(changes))
 	for _, id := range req.IDs {
-		c, err := h.Store.GetChange(r.Context(), id)
-		if errors.Is(err, store.ErrNotFound) {
-			results = append(results, bulkResolveItemResult{ID: id, Status: "error", Reason: "not_found"})
+		c, ok := changes[id]
+		if !ok || c.Severity == "critical" {
 			continue
 		}
-		if err != nil {
-			results = append(results, bulkResolveItemResult{ID: id, Status: "error", Reason: "internal_error"})
-			continue
-		}
-		if c.Severity == "critical" {
-			results = append(results, bulkResolveItemResult{ID: id, Status: "error", Reason: "not_low_risk"})
-			continue
-		}
-
-		if err := h.Store.UpdateChangeStatus(r.Context(), id, req.Status); err != nil {
-			results = append(results, bulkResolveItemResult{ID: id, Status: "error", Reason: "internal_error"})
-			continue
-		}
-		if err := h.Store.RecordAuditFromContext(r.Context(), auditAction, "change", id, map[string]any{
-			"severity": c.Severity,
-		}); err != nil {
+		resolvedIDs = append(resolvedIDs, id)
+		eligible[id] = true
+		auditRecords = append(auditRecords, store.AuditRecord{TargetID: id, Detail: fmt.Sprintf(`{"severity":%q}`, c.Severity)})
+	}
+	updateErr := h.Store.UpdateChangeStatuses(r.Context(), resolvedIDs, req.Status)
+	if updateErr == nil {
+		if err := h.Store.RecordAuditBatchFromContext(r.Context(), auditAction, "change", auditRecords); err != nil {
 			slog.Error("failed to record audit", "action", auditAction, "error", err)
 		}
-		results = append(results, bulkResolveItemResult{ID: id, Status: "success"})
+	}
+	for _, id := range req.IDs {
+		c, ok := changes[id]
+		switch {
+		case !ok:
+			results = append(results, bulkResolveItemResult{ID: id, Status: "error", Reason: "not_found"})
+		case c.Severity == "critical":
+			results = append(results, bulkResolveItemResult{ID: id, Status: "error", Reason: "not_low_risk"})
+		case updateErr != nil && eligible[id]:
+			results = append(results, bulkResolveItemResult{ID: id, Status: "error", Reason: "internal_error"})
+		default:
+			results = append(results, bulkResolveItemResult{ID: id, Status: "success"})
+		}
 	}
 
 	httputil.JSON(w, http.StatusOK, map[string]any{"results": results})

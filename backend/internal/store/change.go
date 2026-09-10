@@ -135,6 +135,52 @@ func (s *Store) UpdateChangeStatus(ctx context.Context, id, status string) error
 	return nil
 }
 
+// ListChangesByID returns the requested changes keyed by ID.
+func (s *Store) ListChangesByID(ctx context.Context, ids []string) (map[string]ChangeRecord, error) {
+	changes := make(map[string]ChangeRecord, len(ids))
+	if len(ids) == 0 {
+		return changes, nil
+	}
+
+	args := make([]any, len(ids))
+	for i, id := range ids {
+		args[i] = id
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT `+changeColumns+` FROM changes WHERE id IN (`+placeholders(len(ids))+`)`, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list changes by id: %w", err)
+	}
+	defer rows.Close() //nolint:errcheck
+
+	for rows.Next() {
+		var c ChangeRecord
+		if err := rows.Scan(&c.ID, &c.ServiceID, &c.ChangeType, &c.Severity, &c.Summary, &c.Diff, &c.Status, &c.DetectedAt, &c.AffectedDocIDs, &c.RelatedServiceIDs, &c.PatternID); err != nil {
+			return nil, fmt.Errorf("scan: %w", err)
+		}
+		changes[c.ID] = c
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate changes: %w", err)
+	}
+	return changes, nil
+}
+
+// UpdateChangeStatuses updates all requested change IDs in one statement.
+func (s *Store) UpdateChangeStatuses(ctx context.Context, ids []string, status string) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	args := make([]any, 1, len(ids)+1)
+	args[0] = status
+	for _, id := range ids {
+		args = append(args, id)
+	}
+	if _, err := s.db.ExecContext(ctx, `UPDATE changes SET status = ? WHERE id IN (`+placeholders(len(ids))+`)`, args...); err != nil {
+		return fmt.Errorf("update change statuses: %w", err)
+	}
+	return nil
+}
+
 // ListChanges returns a paginated list of change records, optionally filtered by service and severity.
 func (s *Store) ListChanges(ctx context.Context, serviceID, severity string, offset, limit int) ([]ChangeRecord, int, error) {
 	where := "WHERE 1=1"
@@ -263,6 +309,46 @@ func (s *Store) UpdateAlertStatus(ctx context.Context, id, status, snoozedUntil 
 		return ErrNotFound
 	}
 	return nil
+}
+
+// UpdateAlertStatuses updates all requested alert IDs in one statement and
+// returns the IDs that existed before the update.
+func (s *Store) UpdateAlertStatuses(ctx context.Context, ids []string, status, snoozedUntil string) (map[string]bool, error) {
+	found := make(map[string]bool, len(ids))
+	if len(ids) == 0 {
+		return found, nil
+	}
+	args := make([]any, len(ids))
+	for i, id := range ids {
+		args[i] = id
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT id FROM alerts WHERE id IN (`+placeholders(len(ids))+`)`, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list alerts by id: %w", err)
+	}
+	defer rows.Close() //nolint:errcheck
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scan: %w", err)
+		}
+		found[id] = true
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate alerts: %w", err)
+	}
+	if len(found) == 0 {
+		return found, nil
+	}
+
+	args = []any{status, snoozedUntil}
+	for id := range found {
+		args = append(args, id)
+	}
+	if _, err := s.db.ExecContext(ctx, `UPDATE alerts SET status = ?, snoozed_until = ? WHERE id IN (`+placeholders(len(found))+`)`, args...); err != nil {
+		return nil, fmt.Errorf("update alert statuses: %w", err)
+	}
+	return found, nil
 }
 
 // ListAlerts returns a paginated list of alerts, optionally filtered by service, severity, status, and since.
