@@ -38,6 +38,16 @@ type APIKeyChecker interface {
 	TouchAPIKeyLastUsed(ctx context.Context, keyID string) error
 }
 
+// UserStatusChecker returns a user's current role and disabled flag, so
+// AuthMiddleware can reject an access token whose role/disabled claims have
+// gone stale (a role change or disable revokes access immediately instead of
+// waiting out the access token's TTL). Optional: implemented by *store.Store
+// via a type assertion on the APIKeyChecker passed to AuthMiddleware, so
+// existing call sites and lightweight test doubles keep working unchanged.
+type UserStatusChecker interface {
+	GetUserRoleStatus(ctx context.Context, userID string) (role string, disabled bool, err error)
+}
+
 // AuthMiddleware validates JWT access tokens and opaque API keys, then injects
 // userID + role into the request context. The variadic checker preserves the
 // lightweight JWT-only call shape used by auth package tests and callers that
@@ -57,6 +67,13 @@ func AuthMiddleware(jwtSvc *Service, checkers ...APIKeyChecker) func(http.Handle
 
 			claims, err := jwtSvc.ValidateAccess(token)
 			if err == nil {
+				if statusChecker, ok := checker.(UserStatusChecker); ok {
+					role, disabled, statusErr := statusChecker.GetUserRoleStatus(r.Context(), claims.UserID)
+					if statusErr != nil || disabled || role != claims.Role {
+						http.Error(w, `{"code":"unauthorized","message":"session no longer valid"}`, http.StatusUnauthorized)
+						return
+					}
+				}
 				ctx := context.WithValue(r.Context(), ctxUserID, claims.UserID)
 				ctx = context.WithValue(ctx, ctxRole, claims.Role)
 				ctx = context.WithValue(ctx, ctxClaims, claims)

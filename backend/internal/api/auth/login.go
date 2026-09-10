@@ -1,14 +1,36 @@
 package auth
 
 import (
-	"crypto/subtle"
 	"encoding/json"
 	"net/http"
+	"time"
+
+	"golang.org/x/crypto/bcrypt"
 
 	"github.com/WiseLabz/wiselabz/internal/auth"
 	"github.com/WiseLabz/wiselabz/internal/httputil"
 	"github.com/WiseLabz/wiselabz/internal/store"
 )
+
+const (
+	maxFailedLoginAttempts = 5
+	loginLockoutDuration   = 15 * time.Minute
+)
+
+// dummyPasswordHash is a bcrypt hash (generated once at the package's normal
+// cost factor) verified against on every unknown-user or otherwise-rejected
+// login. It exists purely so the unknown-user path costs the same one bcrypt
+// comparison as the known-user path, closing the timing side channel that
+// let an attacker enumerate usernames by response time.
+var dummyPasswordHash = mustHashDummyPassword()
+
+func mustHashDummyPassword() string {
+	hash, err := auth.HashPassword("dummy-password-not-a-real-account")
+	if err != nil {
+		panic("auth: failed to precompute dummy password hash: " + err.Error())
+	}
+	return hash
+}
 
 // Login handles POST /api/auth/login.
 // Validates local credentials and returns a JWT token pair.
@@ -28,20 +50,42 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 
 	user, err := h.Store.GetUserByUsername(r.Context(), req.Username)
 	if err != nil {
-		// Use constant-time comparison to prevent username enumeration
-		subtle.ConstantTimeCompare([]byte("dummy"), []byte("dummy"))
+		// Unknown user: still pay for one bcrypt comparison so this path is
+		// not distinguishable by timing from a known user with a wrong password.
+		_ = bcrypt.CompareHashAndPassword([]byte(dummyPasswordHash), []byte(req.Password))
 		httputil.Error(w, http.StatusUnauthorized, "unauthorized", "Invalid credentials")
 		return
 	}
 
-	if user.Disabled || user.AuthSource != "local" {
+	if user.LockedUntil != "" {
+		if lockedUntil, parseErr := time.Parse(time.RFC3339, user.LockedUntil); parseErr == nil && time.Now().UTC().Before(lockedUntil) {
+			_ = bcrypt.CompareHashAndPassword([]byte(dummyPasswordHash), []byte(req.Password))
+			httputil.Error(w, http.StatusUnauthorized, "unauthorized", "Invalid credentials")
+			return
+		}
+	}
+
+	// Verify the password before checking account status, so a disabled or
+	// OIDC-only account still costs one bcrypt comparison like any other
+	// rejected login and is not distinguishable by timing.
+	verifyErr := auth.VerifyPassword(user.PasswordHash, req.Password)
+
+	if user.Disabled || user.AuthSource != "local" || verifyErr != nil {
+		if verifyErr != nil && !user.Disabled && user.AuthSource == "local" {
+			if locked, lockErr := h.Store.RegisterFailedLogin(r.Context(), user.ID, maxFailedLoginAttempts, loginLockoutDuration); lockErr != nil {
+				h.logError("failed to register failed login", lockErr)
+			} else if locked {
+				if auditErr := h.Store.RecordAuditFromContext(r.Context(), "auth.account_locked", "user", user.ID, map[string]any{"username": user.Username}); auditErr != nil {
+					h.logError("failed to record audit", auditErr)
+				}
+			}
+		}
 		httputil.Error(w, http.StatusUnauthorized, "unauthorized", "Invalid credentials")
 		return
 	}
 
-	if err := auth.VerifyPassword(user.PasswordHash, req.Password); err != nil {
-		httputil.Error(w, http.StatusUnauthorized, "unauthorized", "Invalid credentials")
-		return
+	if err := h.Store.ClearFailedLogins(r.Context(), user.ID); err != nil {
+		h.logError("failed to clear failed logins", err)
 	}
 
 	// Issue token pair
@@ -160,5 +204,32 @@ func (h *Handler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	httputil.NoContent(w)
+	// Evict every session (and thus every outstanding refresh token) issued
+	// under the old password, then re-issue a fresh pair so the caller isn't
+	// logged out of the request they just made.
+	if err := h.Store.DeleteUserSessions(r.Context(), userID); err != nil {
+		httputil.Errorf(w, err)
+		return
+	}
+
+	pair, err := h.JWT.IssuePair(userID, auth.RoleFromContext(r.Context()))
+	if err != nil {
+		httputil.Errorf(w, err)
+		return
+	}
+	if err := h.Store.CreateSession(r.Context(), &store.Session{
+		UserID:    userID,
+		TokenHash: store.HashToken(pair.RefreshToken),
+		UserAgent: r.UserAgent(),
+		IP:        readIP(r),
+	}); err != nil {
+		httputil.Errorf(w, err)
+		return
+	}
+	setRefreshCookie(w, r, pair.RefreshToken, h.Config.Auth.RefreshTokenTTLDuration())
+
+	httputil.JSON(w, http.StatusOK, map[string]any{
+		"accessToken": pair.AccessToken,
+		"expiresIn":   pair.ExpiresIn,
+	})
 }

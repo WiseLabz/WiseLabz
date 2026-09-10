@@ -98,16 +98,23 @@ func NewRouter(cfg Config) chi.Router {
 	// chi only allows one Mount per exact pattern, so the protected /api/auth
 	// routes (logout, elevate, config) are nested inside this same Route as
 	// inner auth-gated groups rather than a second top-level r.Route("/api/auth", ...).
+	// Per-IP throttle on unauthenticated auth endpoints: 5 requests/sec with a
+	// burst of 10, so a normal user retrying a typo never trips it but a
+	// sustained guessing campaign against one IP does.
+	authIPLimit := middleware.RateLimit(5, 10, func(r *http.Request) string { return readClientIP(r) })
+	// Per-user throttle on password re-verification for step-up auth.
+	elevateLimit := middleware.RateLimit(1, 5, func(r *http.Request) string { return auth.UserIDFromContext(r.Context()) })
+
 	r.Route("/api/auth", func(r chi.Router) {
-		r.Post("/login", authH.Login)
-		r.Post("/oidc/callback", authH.OIDCCallback)
-		r.Post("/refresh", authH.Refresh)
+		r.With(authIPLimit).Post("/login", authH.Login)
+		r.With(authIPLimit).Post("/oidc/callback", authH.OIDCCallback)
+		r.With(authIPLimit).Post("/refresh", authH.Refresh)
 		r.Get("/providers", authH.Providers)
 
 		r.Group(func(r chi.Router) {
 			r.Use(cfg.AuthMiddleware())
 			r.Post("/logout", authH.Logout)
-			r.Post("/elevate", authH.Elevate)
+			r.With(elevateLimit).Post("/elevate", authH.Elevate)
 			r.Route("/api-keys", func(r chi.Router) {
 				r.Get("/", apiKeyH.List)
 				r.Post("/", apiKeyH.Create)
@@ -405,4 +412,20 @@ func spaHandler(files fs.FS) http.HandlerFunc {
 // AuthMiddleware returns chi-compatible auth middleware from the JWT service.
 func (cfg Config) AuthMiddleware() func(http.Handler) http.Handler {
 	return auth.AuthMiddleware(cfg.JWT, cfg.Store)
+}
+
+// readClientIP extracts the client IP for rate-limit keying, preferring
+// proxy headers the same way authhandler.readIP does.
+func readClientIP(r *http.Request) string {
+	if ip := r.Header.Get("X-Forwarded-For"); ip != "" {
+		return strings.TrimSpace(strings.SplitN(ip, ",", 2)[0])
+	}
+	if ip := r.Header.Get("X-Real-IP"); ip != "" {
+		return ip
+	}
+	addr := r.RemoteAddr
+	if idx := strings.LastIndex(addr, ":"); idx != -1 {
+		return addr[:idx]
+	}
+	return addr
 }
