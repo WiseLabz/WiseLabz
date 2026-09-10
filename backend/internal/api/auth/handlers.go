@@ -189,6 +189,18 @@ func (h *Handler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// A role demotion or disable must take effect immediately, not just once
+	// the caller's still-valid access token expires.
+	if _, ok := updates["role"]; ok {
+		if err := h.Store.DeleteUserSessions(r.Context(), userID); err != nil {
+			h.logError("failed to delete user sessions after role change", err)
+		}
+	} else if disabled, ok := updates["disabled"].(bool); ok && disabled {
+		if err := h.Store.DeleteUserSessions(r.Context(), userID); err != nil {
+			h.logError("failed to delete user sessions after disable", err)
+		}
+	}
+
 	user, _ := h.Store.GetUserByID(r.Context(), userID)
 	httputil.JSON(w, http.StatusOK, sanitizeUser(user))
 }
@@ -254,6 +266,12 @@ func (h *Handler) ResetPassword(w http.ResponseWriter, r *http.Request) {
 		}
 		httputil.Errorf(w, err)
 		return
+	}
+
+	// A forced reset is the standard response to a suspected compromise; it
+	// must evict any session an attacker is already holding.
+	if err := h.Store.DeleteUserSessions(r.Context(), userID); err != nil {
+		h.logError("failed to delete user sessions after reset", err)
 	}
 
 	httputil.NoContent(w)

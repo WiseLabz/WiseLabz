@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgconn"
 )
@@ -183,5 +184,80 @@ func TestIsUniqueViolation(t *testing.T) {
 				t.Errorf("isUniqueViolation(%v) = %v, want %v", tc.err, got, tc.want)
 			}
 		})
+	}
+}
+
+func TestRegisterFailedLoginLocksAfterMaxAttempts(t *testing.T) {
+	s := newDocTestStore(t)
+	ctx := context.Background()
+	u := &User{Username: "lockout-user"}
+	if err := s.CreateUser(ctx, u); err != nil {
+		t.Fatalf("CreateUser() error: %v", err)
+	}
+
+	for i := 0; i < 4; i++ {
+		locked, err := s.RegisterFailedLogin(ctx, u.ID, 5, time.Minute)
+		if err != nil {
+			t.Fatalf("RegisterFailedLogin() error: %v", err)
+		}
+		if locked {
+			t.Fatalf("RegisterFailedLogin() locked on attempt %d, want unlocked", i+1)
+		}
+	}
+
+	locked, err := s.RegisterFailedLogin(ctx, u.ID, 5, time.Minute)
+	if err != nil {
+		t.Fatalf("RegisterFailedLogin() error: %v", err)
+	}
+	if !locked {
+		t.Fatalf("RegisterFailedLogin() on 5th attempt = false, want true")
+	}
+
+	got, err := s.GetUserByUsername(ctx, u.Username)
+	if err != nil {
+		t.Fatalf("GetUserByUsername() error: %v", err)
+	}
+	if got.LockedUntil == "" {
+		t.Fatalf("LockedUntil = %q, want non-empty after lockout", got.LockedUntil)
+	}
+	if got.FailedLoginAttempts != 0 {
+		t.Fatalf("FailedLoginAttempts = %d, want reset to 0 after lockout", got.FailedLoginAttempts)
+	}
+
+	if err := s.ClearFailedLogins(ctx, u.ID); err != nil {
+		t.Fatalf("ClearFailedLogins() error: %v", err)
+	}
+	got, err = s.GetUserByUsername(ctx, u.Username)
+	if err != nil {
+		t.Fatalf("GetUserByUsername() error: %v", err)
+	}
+	if got.LockedUntil != "" || got.FailedLoginAttempts != 0 {
+		t.Fatalf("after ClearFailedLogins() = %q, %d; want empty, 0", got.LockedUntil, got.FailedLoginAttempts)
+	}
+}
+
+func TestGetUserRoleStatus(t *testing.T) {
+	s := newDocTestStore(t)
+	ctx := context.Background()
+	u := &User{Username: "role-status-user", Role: "operator"}
+	if err := s.CreateUser(ctx, u); err != nil {
+		t.Fatalf("CreateUser() error: %v", err)
+	}
+
+	role, disabled, err := s.GetUserRoleStatus(ctx, u.ID)
+	if err != nil || role != "operator" || disabled {
+		t.Fatalf("GetUserRoleStatus() = %q, %v, %v; want operator, false, nil", role, disabled, err)
+	}
+
+	if err := s.UpdateUser(ctx, u.ID, map[string]any{"role": "viewer", "disabled": true}); err != nil {
+		t.Fatalf("UpdateUser() error: %v", err)
+	}
+	role, disabled, err = s.GetUserRoleStatus(ctx, u.ID)
+	if err != nil || role != "viewer" || !disabled {
+		t.Fatalf("GetUserRoleStatus() after update = %q, %v, %v; want viewer, true, nil", role, disabled, err)
+	}
+
+	if _, _, err := s.GetUserRoleStatus(ctx, "missing-id"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("GetUserRoleStatus(missing) error = %v, want ErrNotFound", err)
 	}
 }

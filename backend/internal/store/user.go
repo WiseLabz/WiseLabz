@@ -26,6 +26,8 @@ type User struct {
 	Disabled                   bool   `json:"disabled"`
 	CanManageDashboardDefaults bool   `json:"canManageDashboardDefaults"`
 	CreatedAt                  string `json:"createdAt"`
+	FailedLoginAttempts        int    `json:"-"`
+	LockedUntil                string `json:"-"`
 }
 
 // Session represents a row in the sessions table.
@@ -96,10 +98,10 @@ func (s *Store) GetUserByUsername(ctx context.Context, username string) (*User, 
 	u := &User{}
 	var disabled, canManageDashboardDefaults int
 	err := s.db.QueryRowContext(ctx, `
-		SELECT id, username, display_name, email, role, auth_source, password_hash, disabled, can_manage_dashboard_defaults, created_at
+		SELECT id, username, display_name, email, role, auth_source, password_hash, disabled, can_manage_dashboard_defaults, created_at, failed_login_attempts, locked_until
 		FROM users WHERE username = ?
 	`, username).Scan(&u.ID, &u.Username, &u.DisplayName, &u.Email, &u.Role,
-		&u.AuthSource, &u.PasswordHash, &disabled, &canManageDashboardDefaults, &u.CreatedAt)
+		&u.AuthSource, &u.PasswordHash, &disabled, &canManageDashboardDefaults, &u.CreatedAt, &u.FailedLoginAttempts, &u.LockedUntil)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -109,6 +111,58 @@ func (s *Store) GetUserByUsername(ctx context.Context, username string) (*User, 
 	u.Disabled = disabled != 0
 	u.CanManageDashboardDefaults = canManageDashboardDefaults != 0
 	return u, nil
+}
+
+// RegisterFailedLogin increments the account's failed-login counter and, once
+// it reaches maxAttempts, locks the account until now+lockDuration and resets
+// the counter. Returns true when this call caused the account to lock.
+func (s *Store) RegisterFailedLogin(ctx context.Context, userID string, maxAttempts int, lockDuration time.Duration) (bool, error) {
+	var attempts int
+	err := s.db.QueryRowContext(ctx,
+		`UPDATE users SET failed_login_attempts = failed_login_attempts + 1 WHERE id = ? RETURNING failed_login_attempts`,
+		userID,
+	).Scan(&attempts)
+	if err != nil {
+		return false, fmt.Errorf("register failed login: %w", err)
+	}
+	if attempts < maxAttempts {
+		return false, nil
+	}
+	lockedUntil := time.Now().UTC().Add(lockDuration).Format(time.RFC3339)
+	if _, err := s.db.ExecContext(ctx,
+		`UPDATE users SET failed_login_attempts = 0, locked_until = ? WHERE id = ?`,
+		lockedUntil, userID,
+	); err != nil {
+		return false, fmt.Errorf("lock user: %w", err)
+	}
+	return true, nil
+}
+
+// ClearFailedLogins resets the failed-login counter and any lockout after a
+// successful authentication.
+func (s *Store) ClearFailedLogins(ctx context.Context, userID string) error {
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE users SET failed_login_attempts = 0, locked_until = '' WHERE id = ?`, userID)
+	if err != nil {
+		return fmt.Errorf("clear failed logins: %w", err)
+	}
+	return nil
+}
+
+// GetUserRoleStatus returns the current role and disabled flag for a user.
+// Implements auth.UserStatusChecker so AuthMiddleware can detect a role
+// change or account disable that happened after an access token was issued.
+func (s *Store) GetUserRoleStatus(ctx context.Context, userID string) (string, bool, error) {
+	var role string
+	var disabled int
+	err := s.db.QueryRowContext(ctx, `SELECT role, disabled FROM users WHERE id = ?`, userID).Scan(&role, &disabled)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", false, ErrNotFound
+	}
+	if err != nil {
+		return "", false, fmt.Errorf("get user role status: %w", err)
+	}
+	return role, disabled != 0, nil
 }
 
 // UpdateUser updates fields on an existing user.

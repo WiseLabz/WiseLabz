@@ -121,8 +121,8 @@ func TestRunMigrationsDown(t *testing.T) {
 			t.Errorf("table %s should still exist after rolling back only the last migration: %v", table, err)
 		}
 	}
-	if hasColumn(t, db, "sqlite", "sessions", "auth_provider_id") {
-		t.Error("sessions.auth_provider_id should not exist after rolling back its migration")
+	if hasColumn(t, db, "sqlite", "users", "locked_until") {
+		t.Error("users.locked_until should not exist after rolling back its migration")
 	}
 }
 

@@ -293,3 +293,78 @@ func assertElevationAuditCalls(t *testing.T, calls []testAuditCall, action, reas
 		t.Fatalf("denied detail = %#v, want action %q reason %q", detail, action, reason)
 	}
 }
+
+// fakeStatusChecker satisfies both APIKeyChecker (unused, empty) and
+// UserStatusChecker so tests can drive AuthMiddleware's role/disabled check.
+type fakeStatusChecker struct {
+	role     string
+	disabled bool
+	err      error
+}
+
+func (f *fakeStatusChecker) LookupAPIKey(context.Context, string) (*APIKeyClaims, error) {
+	return nil, errors.New("not an API key")
+}
+func (f *fakeStatusChecker) TouchAPIKeyLastUsed(context.Context, string) error { return nil }
+func (f *fakeStatusChecker) GetUserRoleStatus(context.Context, string) (string, bool, error) {
+	return f.role, f.disabled, f.err
+}
+
+func TestAuthMiddlewareRejectsStaleRoleClaim(t *testing.T) {
+	svc := NewService("test-secret", time.Minute, time.Hour)
+	pair, _ := svc.IssuePair("user-1", "operator")
+
+	checker := &fakeStatusChecker{role: "viewer"} // demoted since the token was issued
+	handler := AuthMiddleware(svc, checker)(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
+		t.Error("handler should not be called for a stale role claim")
+	}))
+
+	req := httptest.NewRequest("GET", "/test", nil)
+	req.Header.Set("Authorization", "Bearer "+pair.AccessToken)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Errorf("status = %d, want 401", rec.Code)
+	}
+}
+
+func TestAuthMiddlewareRejectsDisabledUser(t *testing.T) {
+	svc := NewService("test-secret", time.Minute, time.Hour)
+	pair, _ := svc.IssuePair("user-1", "operator")
+
+	checker := &fakeStatusChecker{role: "operator", disabled: true}
+	handler := AuthMiddleware(svc, checker)(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
+		t.Error("handler should not be called for a disabled user")
+	}))
+
+	req := httptest.NewRequest("GET", "/test", nil)
+	req.Header.Set("Authorization", "Bearer "+pair.AccessToken)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Errorf("status = %d, want 401", rec.Code)
+	}
+}
+
+func TestAuthMiddlewareAllowsCurrentRoleClaim(t *testing.T) {
+	svc := NewService("test-secret", time.Minute, time.Hour)
+	pair, _ := svc.IssuePair("user-1", "operator")
+
+	checker := &fakeStatusChecker{role: "operator"}
+	called := false
+	handler := AuthMiddleware(svc, checker)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		called = true
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequest("GET", "/test", nil)
+	req.Header.Set("Authorization", "Bearer "+pair.AccessToken)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if !called || rec.Code != http.StatusOK {
+		t.Errorf("called = %v, status = %d, want true, 200", called, rec.Code)
+	}
+}
