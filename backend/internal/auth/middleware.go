@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/WiseLabz/wiselabz/internal/httputil"
 )
 
 type contextKey string
@@ -125,7 +127,7 @@ func RequireRole(role string) func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			userRole := RoleFromContext(r.Context())
 			if !roleSatisfies(userRole, role) {
-				http.Error(w, `{"code":"forbidden","message":"insufficient permissions"}`, http.StatusForbidden)
+				httputil.Error(w, http.StatusForbidden, "forbidden", "insufficient permissions")
 				return
 			}
 			next.ServeHTTP(w, r)
