@@ -11,6 +11,7 @@ import { faker } from '@faker-js/faker';
 import { ConnectorCategory, Role, ServiceStatus } from '../../model';
 import type {
   AuditPage,
+  AuditRecord,
   BackupBundle,
   BackupImportResult,
   BackupRun,
@@ -18,6 +19,7 @@ import type {
   BackupSchedule,
   DiagnosticsBundle,
   Health,
+  RetentionSettings,
   SystemInfo,
 } from '../../model';
 
@@ -61,6 +63,53 @@ export const getGetSystemAuditResponseMock = (
   total: faker.number.int(),
   page: faker.number.int(),
   pageSize: faker.number.int(),
+  ...overrideResponse,
+});
+
+export const getGetSystemAuditExportResponseMock = (): AuditRecord[] | string =>
+  faker.helpers.arrayElement([
+    Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() => ({
+      id: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      actorUserId: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      actorRole: faker.helpers.arrayElement(Object.values(Role)),
+      action: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      targetType: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      targetId: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      detail: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      createdAt: faker.date.past().toISOString().slice(0, 19) + 'Z',
+    })),
+    faker.word.sample(),
+  ]);
+
+export const getGetSystemSettingsRetentionResponseMock = (
+  overrideResponse: Partial<Extract<RetentionSettings, object>> = {}
+): RetentionSettings => ({
+  snapshotDays: faker.number.int(),
+  docVersionDays: faker.number.int(),
+  alertDays: faker.number.int(),
+  syncRunDays: faker.number.int(),
+  auditDays: faker.number.int(),
+  cronExpr: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  updatedAt: faker.helpers.arrayElement([
+    faker.date.past().toISOString().slice(0, 19) + 'Z',
+    undefined,
+  ]),
+  ...overrideResponse,
+});
+
+export const getPutSystemSettingsRetentionResponseMock = (
+  overrideResponse: Partial<Extract<RetentionSettings, object>> = {}
+): RetentionSettings => ({
+  snapshotDays: faker.number.int(),
+  docVersionDays: faker.number.int(),
+  alertDays: faker.number.int(),
+  syncRunDays: faker.number.int(),
+  auditDays: faker.number.int(),
+  cronExpr: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  updatedAt: faker.helpers.arrayElement([
+    faker.date.past().toISOString().slice(0, 19) + 'Z',
+    undefined,
+  ]),
   ...overrideResponse,
 });
 

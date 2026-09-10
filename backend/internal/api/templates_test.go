@@ -338,7 +338,7 @@ func TestTemplatesRestoreCreatesNewVersionAndUpdatesLiveContent(t *testing.T) {
 		t.Fatalf("versions = %+v, want restore rev 3", versions)
 	}
 
-	audits, _, err := app.Store.ListAuditRecords(context.Background(), "template.restore", "template", 0, 10)
+	audits, _, err := app.Store.ListAuditRecords(context.Background(), "template.restore", "template", "", "", 0, 10)
 	if err != nil {
 		t.Fatalf("list audit: %v", err)
 	}

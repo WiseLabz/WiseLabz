@@ -6,5 +6,7 @@ export { AuthPage } from './AuthPage';
 export { AiPage } from './AiPage';
 export { NotificationsPage } from './NotificationsPage';
 export { SystemPage } from './SystemPage';
+export { RetentionPage } from './RetentionPage';
+export { AuditPage } from './AuditPage';
 export { AppearancePage } from './AppearancePage';
 export { SETTINGS_SECTIONS } from './nav';

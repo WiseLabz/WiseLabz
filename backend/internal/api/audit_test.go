@@ -2,8 +2,10 @@ package api_test
 
 import (
 	"context"
+	"encoding/csv"
 	"encoding/json"
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/WiseLabz/wiselabz/internal/store"
@@ -338,4 +340,140 @@ func TestFindingResolveProducesAuditRecord(t *testing.T) {
 	if found.ActorRole != "operator" {
 		t.Errorf("ActorRole = %q, want operator", found.ActorRole)
 	}
+}
+
+func TestAuditExportRoleBoundary(t *testing.T) {
+	app := newTestApp(t)
+	_, viewerToken := app.user(t, "viewer")
+
+	rec := app.req(t, http.MethodGet, "/api/system/audit/export", nil, viewerToken)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403; body = %s", rec.Code, rec.Body)
+	}
+}
+
+// seedAuditRecords writes n audit records directly via the store, bypassing
+// the API, so export tests aren't coupled to any particular audited action.
+func seedAuditRecords(t *testing.T, app *testApp, action, targetType string, n int) {
+	t.Helper()
+	for i := 0; i < n; i++ {
+		if err := app.Store.CreateAuditRecord(context.Background(), &store.AuditRecord{
+			ActorUserID: "seed-user", ActorRole: "operator", Action: action, TargetType: targetType, TargetID: "t",
+		}); err != nil {
+			t.Fatalf("CreateAuditRecord() error: %v", err)
+		}
+	}
+}
+
+func TestAuditExportJSON(t *testing.T) {
+	app := newTestApp(t)
+	_, opToken := app.user(t, "operator")
+	seedAuditRecords(t, app, "export.test", "widget", 3)
+
+	rec := app.req(t, http.MethodGet, "/api/system/audit/export?format=json", nil, opToken)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body = %s", rec.Code, rec.Body)
+	}
+	if got := rec.Header().Get("Content-Disposition"); got == "" {
+		t.Errorf("Content-Disposition header missing")
+	}
+
+	var records []store.AuditRecord
+	if err := json.Unmarshal(rec.Body.Bytes(), &records); err != nil {
+		t.Fatalf("decode export body: %v", err)
+	}
+	count := 0
+	for _, r := range records {
+		if r.Action == "export.test" {
+			count++
+		}
+	}
+	if count != 3 {
+		t.Errorf("export.test records in export = %d, want 3", count)
+	}
+}
+
+func TestAuditExportCSV(t *testing.T) {
+	app := newTestApp(t)
+	_, opToken := app.user(t, "operator")
+	seedAuditRecords(t, app, "export.csv.test", "widget", 2)
+
+	rec := app.req(t, http.MethodGet, "/api/system/audit/export?format=csv", nil, opToken)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body = %s", rec.Code, rec.Body)
+	}
+	if ct := rec.Header().Get("Content-Type"); ct != "text/csv; charset=utf-8" {
+		t.Errorf("Content-Type = %q, want text/csv; charset=utf-8", ct)
+	}
+	if got := rec.Header().Get("Content-Disposition"); got == "" {
+		t.Errorf("Content-Disposition header missing")
+	}
+
+	reader := csv.NewReader(strings.NewReader(rec.Body.String()))
+	rows, err := reader.ReadAll()
+	if err != nil {
+		t.Fatalf("parse CSV body: %v", err)
+	}
+	if len(rows) < 1 {
+		t.Fatalf("CSV body has no rows")
+	}
+	wantHeader := []string{"id", "actorUserId", "actorRole", "action", "targetType", "targetId", "detail", "createdAt"}
+	if !slicesEqual(rows[0], wantHeader) {
+		t.Errorf("CSV header = %v, want %v", rows[0], wantHeader)
+	}
+	count := 0
+	for _, row := range rows[1:] {
+		if len(row) > 3 && row[3] == "export.csv.test" {
+			count++
+		}
+	}
+	if count != 2 {
+		t.Errorf("export.csv.test rows in CSV = %d, want 2", count)
+	}
+}
+
+func TestAuditExportInvalidFormat(t *testing.T) {
+	app := newTestApp(t)
+	_, opToken := app.user(t, "operator")
+
+	rec := app.req(t, http.MethodGet, "/api/system/audit/export?format=xml", nil, opToken)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400; body = %s", rec.Code, rec.Body)
+	}
+}
+
+func TestAuditExportFilters(t *testing.T) {
+	app := newTestApp(t)
+	_, opToken := app.user(t, "operator")
+	seedAuditRecords(t, app, "export.filter.match", "gadget", 2)
+	seedAuditRecords(t, app, "export.filter.other", "widget", 5)
+
+	rec := app.req(t, http.MethodGet, "/api/system/audit/export?format=json&action=export.filter.match&targetType=gadget", nil, opToken)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body = %s", rec.Code, rec.Body)
+	}
+	var records []store.AuditRecord
+	if err := json.Unmarshal(rec.Body.Bytes(), &records); err != nil {
+		t.Fatalf("decode export body: %v", err)
+	}
+	if len(records) != 2 {
+		t.Fatalf("filtered export returned %d records, want 2", len(records))
+	}
+	for _, r := range records {
+		if r.Action != "export.filter.match" || r.TargetType != "gadget" {
+			t.Errorf("unexpected record in filtered export: %+v", r)
+		}
+	}
+}
+
+func slicesEqual(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }

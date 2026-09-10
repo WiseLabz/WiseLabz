@@ -85,7 +85,7 @@ func TestProviderDisableRevokesMatchingSessionsAndAuditsCount(t *testing.T) {
 		}
 	}
 
-	audits, _, err := app.Store.ListAuditRecords(context.Background(), "auth.provider.enabled", "oidc_provider", 0, 10)
+	audits, _, err := app.Store.ListAuditRecords(context.Background(), "auth.provider.enabled", "oidc_provider", "", "", 0, 10)
 	if err != nil {
 		t.Fatalf("ListAuditRecords() error: %v", err)
 	}
@@ -129,7 +129,7 @@ func TestProviderEnableDoesNotRevokeSessions(t *testing.T) {
 	if err != nil || !active {
 		t.Fatalf("HasSessionTokenHash() = %v, %v; want true, nil", active, err)
 	}
-	audits, _, err := app.Store.ListAuditRecords(context.Background(), "auth.provider.enabled", "oidc_provider", 0, 10)
+	audits, _, err := app.Store.ListAuditRecords(context.Background(), "auth.provider.enabled", "oidc_provider", "", "", 0, 10)
 	if err != nil {
 		t.Fatalf("ListAuditRecords() error: %v", err)
 	}

@@ -22,7 +22,6 @@ import (
 	"github.com/WiseLabz/wiselabz/internal/doc"
 	"github.com/WiseLabz/wiselabz/internal/notifications"
 	"github.com/WiseLabz/wiselabz/internal/quality"
-	"github.com/WiseLabz/wiselabz/internal/retention"
 	"github.com/WiseLabz/wiselabz/internal/scheduler"
 	"github.com/WiseLabz/wiselabz/internal/store"
 	"github.com/WiseLabz/wiselabz/internal/sync"
@@ -146,14 +145,28 @@ func main() {
 		}
 	}
 
-	// Start scheduler for retention, quality, sync, and backup jobs
-	jobRunner := scheduler.New(logger)
-	if _, err := jobRunner.AddJob("retention", cfg.Retention.CronExpr, func(jobCtx context.Context) {
-		retention.RunCleanupOnce(jobCtx, s, cfg.Retention, logger)
-	}); err != nil {
-		logger.Error("Failed to add retention job", "error", err)
-		os.Exit(1)
+	// Seed the retention settings from config defaults if no row exists yet.
+	// api.NewRouter's InitRetentionJob reads it back and registers the cron job.
+	if _, err := s.GetRetentionSettings(ctx); err != nil {
+		logger.Info("Initializing retention settings with defaults")
+		defaultRetention := store.RetentionSettings{
+			SnapshotDays:   cfg.Retention.SnapshotDays,
+			DocVersionDays: cfg.Retention.DocVersionDays,
+			AlertDays:      cfg.Retention.AlertDays,
+			SyncRunDays:    cfg.Retention.SyncRunDays,
+			AuditDays:      cfg.Retention.AuditDays,
+			CronExpr:       cfg.Retention.CronExpr,
+		}
+		if err := s.UpsertRetentionSettings(ctx, defaultRetention); err != nil {
+			logger.Error("Failed to initialize retention settings", "error", err)
+			os.Exit(1)
+		}
 	}
+
+	// Start scheduler for quality, sync, and backup jobs. The retention job
+	// itself is registered by api.NewRouter (via the system handler's
+	// InitRetentionJob), same reasoning as the backup job below.
+	jobRunner := scheduler.New(logger)
 	if _, err := jobRunner.AddJob("quality", cfg.Quality.CronExpr, func(jobCtx context.Context) {
 		quality.RunStaleSweepOnce(jobCtx, s, wsHub, logger)
 	}); err != nil {
