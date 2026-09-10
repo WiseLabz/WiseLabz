@@ -11,7 +11,6 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/WiseLabz/wiselabz/internal/connector"
@@ -162,29 +161,11 @@ func setHeaders(req *http.Request, config map[string]any) {
 }
 
 // newGuardedClient builds an HTTP client whose dialer rejects connections to
-// loopback or link-local addresses at connect time. Enforcing the check in the
-// dialer (rather than pre-resolving with net.LookupIP) closes the DNS-rebinding
-// TOCTOU window: the address actually dialed is the one validated, even if the
-// hostname re-resolves between check and use. Redirects are blocked so a 3xx
-// cannot bounce the request to an internal target.
+// loopback or link-local addresses at connect time (see
+// connector.GuardedDialer). Redirects are blocked so a 3xx cannot bounce the
+// request to an internal target.
 func newGuardedClient() *http.Client {
-	dialer := &net.Dialer{
-		Timeout: 30 * time.Second,
-		Control: func(_, address string, _ syscall.RawConn) error {
-			host, _, err := net.SplitHostPort(address)
-			if err != nil {
-				return fmt.Errorf("split address %q: %w", address, err)
-			}
-			ip := net.ParseIP(host)
-			if ip == nil {
-				return fmt.Errorf("unresolvable address %q", host)
-			}
-			if isDangerousIP(ip) {
-				return fmt.Errorf("connection to blocked address %s denied", ip)
-			}
-			return nil
-		},
-	}
+	dialer := connector.GuardedDialer(30 * time.Second)
 	return &http.Client{
 		Timeout:   30 * time.Second,
 		Transport: &http.Transport{DialContext: dialer.DialContext},
@@ -225,12 +206,4 @@ func isTimeout(err error) bool {
 	}
 	var netErr net.Error
 	return errors.As(err, &netErr) && netErr.Timeout()
-}
-
-// isDangerousIP returns true for loopback and link-local unicast addresses
-// (the latter covers cloud metadata endpoints like 169.254.169.254). Private
-// ranges (RFC 1918) are allowed since this is a self-hosted monitoring tool
-// meant to connect to internal infrastructure.
-func isDangerousIP(ip net.IP) bool {
-	return ip.IsLoopback() || ip.IsLinkLocalUnicast()
 }
