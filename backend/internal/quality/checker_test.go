@@ -46,7 +46,7 @@ func createConnector(t *testing.T, s *store.Store, owner string) *store.Connecto
 
 func findings(t *testing.T, s *store.Store, connectorID, checkType, status string) []store.QualityFindingRecord {
 	t.Helper()
-	items, _, err := s.ListQualityFindings(context.Background(), connectorID, checkType, status, 0, 20)
+	items, _, err := s.ListQualityFindings(context.Background(), connectorID, checkType, status, "", 0, 20)
 	if err != nil {
 		t.Fatalf("ListQualityFindings() error: %v", err)
 	}

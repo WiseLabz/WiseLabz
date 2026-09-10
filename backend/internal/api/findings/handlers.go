@@ -61,6 +61,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 		r.URL.Query().Get("connectorId"),
 		r.URL.Query().Get("checkType"),
 		r.URL.Query().Get("status"),
+		"",
 		offset,
 		pageSize,
 	)
