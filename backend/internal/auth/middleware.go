@@ -166,12 +166,12 @@ func RequirePermission(checker PermissionChecker, permission string) func(http.H
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if !roleSatisfies(RoleFromContext(r.Context()), "operator") {
-				http.Error(w, `{"code":"forbidden","message":"insufficient permissions"}`, http.StatusForbidden)
+				httputil.Error(w, http.StatusForbidden, "forbidden", "insufficient permissions")
 				return
 			}
 			ok, err := checker.UserHasPermission(r.Context(), UserIDFromContext(r.Context()), permission)
 			if err != nil || !ok {
-				http.Error(w, `{"code":"forbidden","message":"insufficient permissions"}`, http.StatusForbidden)
+				httputil.Error(w, http.StatusForbidden, "forbidden", "insufficient permissions")
 				return
 			}
 			next.ServeHTTP(w, r)
