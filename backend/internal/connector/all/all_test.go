@@ -13,7 +13,7 @@ func TestAllConnectorImplementationsRegister(t *testing.T) {
 		stub     bool
 	}{
 		{typ: "custom", category: "virtualization"},
-		{typ: "docker", category: "containers_paas", stub: true},
+		{typ: "docker", category: "containers_paas"},
 		{typ: "opnsense", category: "networking"},
 		{typ: "pfsense", category: "networking", stub: true},
 		{typ: "proxmox", category: "virtualization"},

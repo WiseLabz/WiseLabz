@@ -52,8 +52,8 @@ func TestConnectorsSchemaMarksStubTypes(t *testing.T) {
 		byType[s.Type] = s.Stub
 	}
 
-	if stub, ok := byType["docker"]; !ok || !stub {
-		t.Errorf("docker.stub = %v (present=%v), want true", stub, ok)
+	if stub, ok := byType["docker"]; !ok || stub {
+		t.Errorf("docker.stub = %v (present=%v), want false", stub, ok)
 	}
 	if stub, ok := byType["proxmox"]; !ok || stub {
 		t.Errorf("proxmox.stub = %v (present=%v), want false", stub, ok)
