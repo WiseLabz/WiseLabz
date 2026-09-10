@@ -32,6 +32,8 @@ import {
   ClockCounterClockwiseIcon as PhClockCounterClockwise,
   PencilSimpleIcon as PhPencilSimple,
   ArrowRightIcon as PhArrowRight,
+  PauseIcon as PhPause,
+  PlayIcon as PhPlay,
 } from '@phosphor-icons/react';
 
 export type IconProps = PhosphorIconProps;
@@ -62,3 +64,5 @@ export const UserIcon = (p: IconProps) => <PhUser size={18} weight="regular" ari
 export const HistoryIcon = (p: IconProps) => <PhClockCounterClockwise size={18} weight="regular" aria-hidden="true" {...p} />;
 export const EditIcon = (p: IconProps) => <PhPencilSimple size={18} weight="regular" aria-hidden="true" {...p} />;
 export const ArrowRightIcon = (p: IconProps) => <PhArrowRight size={18} weight="regular" aria-hidden="true" {...p} />;
+export const PauseIcon = (p: IconProps) => <PhPause size={18} weight="regular" aria-hidden="true" {...p} />;
+export const PlayIcon = (p: IconProps) => <PhPlay size={18} weight="regular" aria-hidden="true" {...p} />;

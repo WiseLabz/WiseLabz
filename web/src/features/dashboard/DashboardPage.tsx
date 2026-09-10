@@ -14,6 +14,7 @@ import {
   useDashboard,
   widgetsFromWire,
   widgetsToWire,
+  RANGE_DAYS,
   DEFAULT_RANGE,
   type WidgetId,
   type WidgetDef,
@@ -26,8 +27,13 @@ import {
   getDashboardLayoutAdminDefault,
   putDashboardLayoutAdminDefault,
   getGetDashboardLayoutAdminDefaultQueryKey,
+  getGetDashboardOverviewQueryKey,
 } from '../../api/generated/dashboard/dashboard';
 import { useGetMe } from '../../api/generated/me/me';
+import { getGetConnectorsQueryKey } from '../../api/generated/connectors/connectors';
+import { getGetAlertsQueryKey } from '../../api/generated/alerts/alerts';
+import { getGetDocsTreeQueryKey } from '../../api/generated/docs/docs';
+import { getGetAttentionQueryKey } from '../../api/generated/attention/attention';
 import { relativeTime } from '../../lib/time';
 import { toast } from '../../lib/toast';
 import { Button } from '../../components/ui/Button';
@@ -89,6 +95,7 @@ export function DashboardPage() {
   const layout = useDashboard((s) => s.layout);
   const hydrate = useDashboard((s) => s.hydrate);
   const resetLayout = useDashboard((s) => s.reset);
+  const setWidgetOptions = useDashboard((s) => s.setWidgetOptions);
   useEffect(() => {
     void hydrate();
   }, [hydrate]);
@@ -99,6 +106,9 @@ export function DashboardPage() {
   const syncing = !!job && job.phase !== 'done' && job.phase !== 'error';
   const { data: me } = useGetMe();
   const [adminDefaultOpen, setAdminDefaultOpen] = useState(false);
+  const queryClient = useQueryClient();
+  const [searchParams] = useSearchParams();
+  const days = RANGE_DAYS[(searchParams.get('range') as RangePreset | null) ?? DEFAULT_RANGE];
 
   const reset = useMutation({
     mutationFn: resetLayout,
@@ -175,6 +185,18 @@ export function DashboardPage() {
           >
             {visible.map((w) => {
               const meta = REGISTRY[w.id];
+              const queryKey: readonly unknown[] | undefined =
+                w.id === 'roster'
+                  ? getGetConnectorsQueryKey()
+                  : w.id === 'alerts'
+                    ? getGetAlertsQueryKey({ days })
+                    : w.id === 'changes'
+                      ? getGetDashboardOverviewQueryKey({ days })
+                      : w.id === 'docs'
+                        ? getGetDocsTreeQueryKey()
+                        : w.id === 'attention'
+                          ? getGetAttentionQueryKey({ page: 1, pageSize: 5, days })
+                          : undefined;
               return (
                 <motion.div
                   key={w.id}
@@ -197,7 +219,17 @@ export function DashboardPage() {
                       </WidgetFrame>
                     )}
                   >
-                    <WidgetFrame title={widgetTitle(w.id)} icon={<meta.Icon size={15} />}>
+                    <WidgetFrame
+                      title={widgetTitle(w.id)}
+                      icon={<meta.Icon size={15} />}
+                      onRefresh={
+                        queryKey ? () => void queryClient.refetchQueries({ queryKey }) : undefined
+                      }
+                      pollingEnabled={w.pollingEnabled ?? false}
+                      onTogglePolling={() =>
+                        setWidgetOptions(w.id, { pollingEnabled: !w.pollingEnabled })
+                      }
+                    >
                       <meta.Component />
                     </WidgetFrame>
                   </ErrorBoundary>

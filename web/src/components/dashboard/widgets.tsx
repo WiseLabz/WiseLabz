@@ -25,7 +25,7 @@ import { relativeTime } from '../../lib/time';
 import { StatusPill, SeverityTag } from '../ui/StatusDot';
 import { statusMeta, toneColor } from '../ui/status';
 import { SkeletonRows, EmptyState, ErrorState } from '../ui/states';
-import { ArrowRightIcon, FileTextIcon, CheckIcon, SyncIcon } from '../icons';
+import { ArrowRightIcon, FileTextIcon, CheckIcon } from '../icons';
 import { categoryIcon } from '../categoryIcon';
 import type { Connector, ServiceStatus, Severity } from '../../api/model';
 
@@ -36,44 +36,33 @@ const SEVERITY_FILTERS: { key: string; value: Severity | 'all' }[] = [
   { key: 'alerts.filterInfo', value: 'info' },
 ];
 
-/** Compact severity-filter tabs + refresh button, shared by widgets that poll. */
-function WidgetControls({
+/** Compact severity-filter tabs, inline in a widget's body. */
+function SeverityTabs({
   widgetId,
   severityFilter,
-  onRefresh,
 }: {
   widgetId: WidgetId;
   severityFilter: Severity | 'all';
-  onRefresh: () => void;
 }) {
   const { t } = useTranslation();
   const setWidgetOptions = useDashboard((s) => s.setWidgetOptions);
 
   return (
-    <div className="flex items-center justify-between gap-2 border-b border-line-soft px-2 py-1.5">
-      <div className="flex items-center gap-0.5">
-        {SEVERITY_FILTERS.map((f) => (
-          <button
-            key={f.value}
-            onClick={() => setWidgetOptions(widgetId, { severityFilter: f.value })}
-            className="rounded px-1.5 py-1 text-2xs font-medium transition-colors"
-            style={{
-              color: severityFilter === f.value ? 'var(--color-ink)' : 'var(--color-ink-faint)',
-              backgroundColor:
-                severityFilter === f.value ? 'var(--color-surface-raised)' : 'transparent',
-            }}
-          >
-            {t(f.key)}
-          </button>
-        ))}
-      </div>
-      <button
-        onClick={onRefresh}
-        aria-label={t('common.refresh')}
-        className="rounded p-1 text-ink-faint transition-colors hover:text-ink"
-      >
-        <SyncIcon size={13} />
-      </button>
+    <div className="flex items-center gap-0.5 border-b border-line-soft px-2 py-1.5">
+      {SEVERITY_FILTERS.map((f) => (
+        <button
+          key={f.value}
+          onClick={() => setWidgetOptions(widgetId, { severityFilter: f.value })}
+          className="rounded px-1.5 py-1 text-2xs font-medium transition-colors"
+          style={{
+            color: severityFilter === f.value ? 'var(--color-ink)' : 'var(--color-ink-faint)',
+            backgroundColor:
+              severityFilter === f.value ? 'var(--color-surface-raised)' : 'transparent',
+          }}
+        >
+          {t(f.key)}
+        </button>
+      ))}
     </div>
   );
 }
@@ -97,7 +86,11 @@ const STATUS_RANK: Record<ServiceStatus, number> = {
 export function ServiceRosterWidget() {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const { data, isLoading, isError, refetch } = useGetConnectors();
+  const pollingEnabled =
+    useDashboard((s) => s.layout.find((w) => w.id === 'roster'))?.pollingEnabled ?? false;
+  const { data, isLoading, isError, refetch } = useGetConnectors({
+    query: { refetchInterval: pollingEnabled ? 30_000 : false },
+  });
   const overrides = useLive((s) => s.statusOverrides);
 
   if (isLoading) return <SkeletonRows rows={6} />;
@@ -185,12 +178,15 @@ export function ServiceRosterWidget() {
 export function AlertSummaryWidget() {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const days = RANGE_DAYS[(searchParams.get('range') as RangePreset | null) ?? DEFAULT_RANGE];
   const widgetDef = useDashboard((s) => s.layout.find((w) => w.id === 'alerts'));
   const severityFilter = widgetDef?.severityFilter ?? 'all';
   const pollingEnabled = widgetDef?.pollingEnabled ?? false;
-  const { data, isLoading, isError, refetch } = useGetAlerts(undefined, {
-    query: { refetchInterval: pollingEnabled ? 30_000 : false },
-  });
+  const { data, isLoading, isError, refetch } = useGetAlerts(
+    { days },
+    { query: { refetchInterval: pollingEnabled ? 30_000 : false } }
+  );
   const pendingLive = useLive((s) => s.pendingAlerts);
 
   if (isLoading) return <SkeletonRows rows={3} />;
@@ -204,11 +200,7 @@ export function AlertSummaryWidget() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <WidgetControls
-        widgetId="alerts"
-        severityFilter={severityFilter}
-        onRefresh={() => refetch()}
-      />
+      <SeverityTabs widgetId="alerts" severityFilter={severityFilter} />
       {pending.length === 0 ? (
         <EmptyState
           icon={<CheckIcon size={20} />}
@@ -274,11 +266,7 @@ export function RecentChangesWidget() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <WidgetControls
-        widgetId="changes"
-        severityFilter={severityFilter}
-        onRefresh={() => refetch()}
-      />
+      <SeverityTabs widgetId="changes" severityFilter={severityFilter} />
       {changes.length === 0 ? (
         <EmptyState
           icon={<CheckIcon size={20} />}
@@ -401,7 +389,14 @@ export function SyncActivityWidget() {
 export function AttentionQueueWidget() {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const { data, isLoading, isError, refetch } = useGetAttention({ page: 1, pageSize: 5 });
+  const [searchParams] = useSearchParams();
+  const days = RANGE_DAYS[(searchParams.get('range') as RangePreset | null) ?? DEFAULT_RANGE];
+  const pollingEnabled =
+    useDashboard((s) => s.layout.find((w) => w.id === 'attention'))?.pollingEnabled ?? false;
+  const { data, isLoading, isError, refetch } = useGetAttention(
+    { page: 1, pageSize: 5, days },
+    { query: { refetchInterval: pollingEnabled ? 30_000 : false } }
+  );
 
   if (isLoading) return <SkeletonRows rows={3} />;
   if (isError || !data)
@@ -446,7 +441,11 @@ export function AttentionQueueWidget() {
 export function DocsHealthWidget() {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const { data: tree, isLoading, isError, refetch } = useGetDocsTree();
+  const pollingEnabled =
+    useDashboard((s) => s.layout.find((w) => w.id === 'docs'))?.pollingEnabled ?? false;
+  const { data: tree, isLoading, isError, refetch } = useGetDocsTree({
+    query: { refetchInterval: pollingEnabled ? 30_000 : false },
+  });
   const { data: connectors } = useGetConnectors();
 
   if (isLoading) return <SkeletonRows rows={3} />;

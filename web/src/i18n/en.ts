@@ -40,6 +40,8 @@ export const en = {
     ago: '{{time}} ago',
     current: 'current',
     refresh: 'Refresh',
+    pause: 'Pause updates',
+    resume: 'Resume updates',
   },
   nav: {
     dashboard: 'Dashboard',

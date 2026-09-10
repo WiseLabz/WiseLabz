@@ -4,6 +4,8 @@ package attention
 import (
 	"net/http"
 	"sort"
+	"strconv"
+	"time"
 
 	"github.com/WiseLabz/wiselabz/internal/httputil"
 	"github.com/WiseLabz/wiselabz/internal/store"
@@ -52,8 +54,16 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	page, pageSize, offset := httputil.Paginate(r)
 	ctx := r.Context()
 
+	// days is optional; unset keeps today's back-compat behavior of showing everything.
+	since := ""
+	if v := r.URL.Query().Get("days"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			since = time.Now().UTC().AddDate(0, 0, -n).Format(time.RFC3339)
+		}
+	}
+
 	// Fetch pending alerts (unresolved and not dismissed)
-	alerts, _, err := h.Store.ListAlerts(ctx, "", "", "pending", 0, 1000) // ponytail: unbounded fetch for merge
+	alerts, _, err := h.Store.ListAlerts(ctx, "", "", "pending", "", 0, 1000) // ponytail: unbounded fetch for merge
 	if err != nil {
 		httputil.Errorf(w, err)
 		return
@@ -95,6 +105,17 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 			FindingType: f.CheckType,
 			RunbookID:   "", // will populate if runbook binding exists
 		})
+	}
+
+	// Filter merged items by the optional days window.
+	if since != "" {
+		filtered := items[:0]
+		for _, item := range items {
+			if item.DetectedAt >= since {
+				filtered = append(filtered, item)
+			}
+		}
+		items = filtered
 	}
 
 	// Sort by severity (critical first) then by detectedAt (newest first)
