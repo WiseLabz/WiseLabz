@@ -1,9 +1,21 @@
-// Package pfsense implements a mock pfSense connector.
+// Package pfsense implements a pfSense firewall API connector.
+//
+// NOTE: the API endpoint paths and the Authorization header format below
+// are based on the jaredhendrickson13/pfsense-api v2 REST plugin's
+// documented shape and have NOT been verified against a live pfSense
+// instance. Stub remains true until that verification happens.
 package pfsense
 
 import (
 	"context"
+	"crypto/tls"
+	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
+	"net"
+	"net/http"
+	"strings"
 	"time"
 
 	"github.com/WiseLabz/wiselabz/internal/connector"
@@ -21,37 +33,272 @@ func init() {
 			{Key: "api_key", Label: "API Key", Type: "password", Required: true},
 		},
 		Stub: true,
-	}, func(_ map[string]any) (connector.Connector, error) {
-		return &Connector{}, nil
+	}, func(config map[string]any) (connector.Connector, error) {
+		url, _ := config["url"].(string)
+		apiKey, _ := config["api_key"].(string)
+		dialer := connector.GuardedDialer(30 * time.Second)
+		client := &http.Client{
+			Timeout: 30 * time.Second,
+			Transport: &http.Transport{
+				DialContext:     dialer.DialContext,
+				TLSClientConfig: &tls.Config{InsecureSkipVerify: false},
+			},
+		}
+		return &Connector{
+			url:    strings.TrimSuffix(url, "/"),
+			apiKey: apiKey,
+			client: client,
+		}, nil
 	})
 }
 
-// Connector is a mock pfSense connector stub.
-type Connector struct{}
-
-// Name returns the connector display name.
-func (p *Connector) Name() string { return "pfSense" }
-
-// Type returns the connector type identifier.
-func (p *Connector) Type() string { return typeName }
-
-// Category returns the connector category.
-func (p *Connector) Category() string { return "networking" }
-
-// Validate is a stub that always returns a not-implemented error.
-func (p *Connector) Validate(_ context.Context, _ map[string]any) error {
-	return fmt.Errorf("pfSense connector is a stub — not yet implemented")
+// Connector fetches data from a pfSense firewall API.
+type Connector struct {
+	url    string
+	apiKey string
+	client *http.Client
 }
 
-// Fetch returns a stub snapshot for the pfSense connector.
-func (p *Connector) Fetch(_ context.Context, _ map[string]any) (*connector.ServiceSnapshot, error) {
+// Name returns the connector display name.
+func (c *Connector) Name() string { return "pfSense" }
+
+// Type returns the connector type identifier.
+func (c *Connector) Type() string { return typeName }
+
+// Category returns the connector category.
+func (c *Connector) Category() string { return "networking" }
+
+// Validate tests the connection to the pfSense API.
+func (c *Connector) Validate(ctx context.Context, _ map[string]any) error {
+	_, err := c.doRequest(ctx, "/api/v2/system/version")
+	return err
+}
+
+// Fetch retrieves system info, interfaces, firewall rules, and gateways.
+func (c *Connector) Fetch(ctx context.Context, _ map[string]any) (*connector.ServiceSnapshot, error) {
+	start := time.Now()
+	var sections []connector.SnapshotSection
+	var dependencies []connector.ServiceDependency
+	metadata := map[string]string{"pfsense_url": c.url}
+
+	if raw, err := c.doRequest(ctx, "/api/v2/system/version"); err != nil {
+		sections = append(sections, connector.SnapshotSection{Title: "System", Content: "_System info unavailable: " + err.Error() + "_"})
+	} else {
+		content, version := buildSystemContent(raw)
+		sections = append(sections, connector.SnapshotSection{Title: "System", Content: content})
+		if version != "" {
+			metadata["version"] = version
+		}
+	}
+
+	if raw, err := c.doRequest(ctx, "/api/v2/interfaces"); err != nil {
+		sections = append(sections, connector.SnapshotSection{Title: "Interfaces", Content: "_Interfaces unavailable: " + err.Error() + "_"})
+	} else {
+		sections = append(sections, connector.SnapshotSection{Title: "Interfaces", Content: buildInterfaceTable(raw)})
+		if wan := wanInterfaceName(raw); wan != "" {
+			dependencies = append(dependencies, connector.ServiceDependency{Kind: "network", Name: wan})
+		}
+	}
+
+	if raw, err := c.doRequest(ctx, "/api/v2/firewall/rules"); err != nil {
+		sections = append(sections, connector.SnapshotSection{Title: "Firewall Rules", Content: "_Rules unavailable: " + err.Error() + "_"})
+	} else {
+		sections = append(sections, connector.SnapshotSection{Title: "Firewall Rules", Content: buildRuleTable(raw)})
+	}
+
+	if raw, err := c.doRequest(ctx, "/api/v2/routing/gateways"); err != nil {
+		sections = append(sections, connector.SnapshotSection{Title: "Gateways", Content: "_Gateways unavailable: " + err.Error() + "_"})
+	} else {
+		sections = append(sections, connector.SnapshotSection{Title: "Gateways", Content: buildGatewayTable(raw)})
+		if upstream := primaryGatewayName(raw); upstream != "" {
+			dependencies = append(dependencies, connector.ServiceDependency{Kind: "upstream_service", Name: upstream})
+		}
+	}
+
 	return &connector.ServiceSnapshot{
-		ServiceName: "pfSense (stub)",
-		Type:        typeName,
-		Sections: []connector.SnapshotSection{
-			{Title: "Stub", Content: "pfSense connector is a stub. Real implementation pending."},
-		},
-		Metadata:  map[string]string{"stub": "true"},
-		FetchedAt: time.Now(),
+		ServiceName:  "pfSense",
+		Type:         typeName,
+		Sections:     sections,
+		Dependencies: dependencies,
+		Metadata:     metadata,
+		FetchedAt:    start,
 	}, nil
+}
+
+func (c *Connector) doRequest(ctx context.Context, path string) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", c.url+path, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+c.apiKey)
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := c.client.Do(req)
+	if err != nil {
+		if isTimeout(err) {
+			return nil, connector.NewTimeoutError(fmt.Errorf("request failed: %w", err))
+		}
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close() //nolint:errcheck
+
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read response: %w", err)
+	}
+
+	switch {
+	case resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden:
+		return nil, connector.NewAuthError(fmt.Errorf("API returned %d: %s", resp.StatusCode, string(data)))
+	case resp.StatusCode == http.StatusBadGateway || resp.StatusCode == http.StatusServiceUnavailable || resp.StatusCode == http.StatusGatewayTimeout:
+		return nil, connector.NewServiceUnavailableError(fmt.Errorf("API returned %d: %s", resp.StatusCode, string(data)))
+	case resp.StatusCode >= 400:
+		return nil, fmt.Errorf("API returned %d: %s", resp.StatusCode, string(data))
+	}
+
+	return data, nil
+}
+
+func isTimeout(err error) bool {
+	if errors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
+	var netErr net.Error
+	return errors.As(err, &netErr) && netErr.Timeout()
+}
+
+func buildSystemContent(raw []byte) (content, version string) {
+	var info struct {
+		Data struct {
+			Version string `json:"config_version"`
+			Product string `json:"platform"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(raw, &info); err != nil {
+		return "_System info unavailable: " + connector.NewMalformedResponseError(err).Error() + "_", ""
+	}
+	return fmt.Sprintf("**Product**: %s\n**Version**: %s\n", info.Data.Product, info.Data.Version), info.Data.Version
+}
+
+func buildInterfaceTable(raw []byte) string {
+	var resp struct {
+		Data []struct {
+			Identifier string `json:"id"`
+			Device     string `json:"if"`
+			IPAddress  string `json:"ipaddr"`
+			Status     string `json:"status"`
+			Enabled    bool   `json:"enable"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(raw, &resp); err != nil || len(resp.Data) == 0 {
+		return "_No interface data returned_"
+	}
+	var b strings.Builder
+	b.WriteString("| Device | IP Address | Status | Enabled |\n")
+	b.WriteString("|--------|------------|--------|---------|\n")
+	for _, iface := range resp.Data {
+		if _, err := fmt.Fprintf(&b, "| %s | %s | %s | %t |\n", iface.Device, iface.IPAddress, iface.Status, iface.Enabled); err != nil {
+			return ""
+		}
+	}
+	return b.String()
+}
+
+// wanInterfaceName returns the device name of the interface identified as
+// "wan" in the interfaces response, reusing data already fetched for the
+// Interfaces section. Falls back to the first interface if none is
+// explicitly identified as WAN.
+func wanInterfaceName(raw []byte) string {
+	var resp struct {
+		Data []struct {
+			Identifier string `json:"id"`
+			Device     string `json:"if"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(raw, &resp); err != nil || len(resp.Data) == 0 {
+		return ""
+	}
+	for _, iface := range resp.Data {
+		if strings.EqualFold(iface.Identifier, "wan") {
+			return iface.Device
+		}
+	}
+	return resp.Data[0].Device
+}
+
+func buildRuleTable(raw []byte) string {
+	var resp struct {
+		Data []struct {
+			Descr       string `json:"descr"`
+			Type        string `json:"type"`
+			Protocol    string `json:"protocol"`
+			Source      string `json:"source"`
+			Destination string `json:"destination"`
+			Disabled    bool   `json:"disabled"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(raw, &resp); err != nil || len(resp.Data) == 0 {
+		return "_No firewall rules returned_"
+	}
+	var b strings.Builder
+	b.WriteString("| Description | Action | Protocol | Source | Destination | Enabled |\n")
+	b.WriteString("|-------------|--------|----------|--------|-------------|--------|\n")
+	count := 0
+	for _, r := range resp.Data {
+		if count >= 50 {
+			if _, err := fmt.Fprintf(&b, "\n_...and %d more rules_", len(resp.Data)-50); err != nil {
+				return ""
+			}
+			break
+		}
+		if _, err := fmt.Fprintf(&b, "| %s | %s | %s | %s | %s | %t |\n",
+			r.Descr, r.Type, r.Protocol, r.Source, r.Destination, !r.Disabled); err != nil {
+			return ""
+		}
+		count++
+	}
+	return b.String()
+}
+
+func buildGatewayTable(raw []byte) string {
+	var resp struct {
+		Data []struct {
+			Name    string `json:"name"`
+			Gateway string `json:"gateway"`
+			Status  string `json:"status"`
+			RTT     string `json:"monitor_rtt"`
+			Loss    string `json:"monitor_loss"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(raw, &resp); err != nil || len(resp.Data) == 0 {
+		return "_No gateway data returned_"
+	}
+	var b strings.Builder
+	b.WriteString("| Gateway | Address | Status | RTT | Loss |\n")
+	b.WriteString("|---------|---------|--------|-----|------|\n")
+	for _, gw := range resp.Data {
+		if _, err := fmt.Fprintf(&b, "| %s | %s | %s | %s | %s |\n", gw.Name, gw.Gateway, gw.Status, gw.RTT, gw.Loss); err != nil {
+			return ""
+		}
+	}
+	return b.String()
+}
+
+// primaryGatewayName returns the name (or address, if unnamed) of the first
+// configured gateway, reusing data already fetched for the Gateways
+// section, to surface as the upstream dependency.
+func primaryGatewayName(raw []byte) string {
+	var resp struct {
+		Data []struct {
+			Name    string `json:"name"`
+			Gateway string `json:"gateway"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(raw, &resp); err != nil || len(resp.Data) == 0 {
+		return ""
+	}
+	if resp.Data[0].Name != "" {
+		return resp.Data[0].Name
+	}
+	return resp.Data[0].Gateway
 }

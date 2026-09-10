@@ -4,6 +4,8 @@ package connector
 import (
 	"context"
 	"fmt"
+	"net"
+	"syscall"
 	"time"
 )
 
@@ -132,6 +134,39 @@ type ServiceDependency struct {
 	Kind string `json:"kind"` // host | network | storage | upstream_service
 	Name string `json:"name"`
 	Ref  string `json:"ref,omitempty"` // optional connector/service ID if known
+}
+
+// GuardedDialer returns a *net.Dialer whose Control rejects connections to
+// loopback and link-local addresses (the latter covers cloud metadata
+// endpoints like 169.254.169.254). Private ranges (RFC 1918) are allowed
+// since this is a self-hosted monitoring tool meant to connect to internal
+// infrastructure. Enforcing the check in the dialer (rather than
+// pre-resolving with net.LookupIP) closes the DNS-rebinding TOCTOU window:
+// the address actually dialed is the one validated, even if the hostname
+// re-resolves between check and use.
+func GuardedDialer(timeout time.Duration) *net.Dialer {
+	return &net.Dialer{
+		Timeout: timeout,
+		Control: func(_, address string, _ syscall.RawConn) error {
+			host, _, err := net.SplitHostPort(address)
+			if err != nil {
+				return fmt.Errorf("split address %q: %w", address, err)
+			}
+			ip := net.ParseIP(host)
+			if ip == nil {
+				return fmt.Errorf("unresolvable address %q", host)
+			}
+			if IsDangerousIP(ip) {
+				return fmt.Errorf("connection to blocked address %s denied", ip)
+			}
+			return nil
+		},
+	}
+}
+
+// IsDangerousIP returns true for loopback and link-local unicast addresses.
+func IsDangerousIP(ip net.IP) bool {
+	return ip.IsLoopback() || ip.IsLinkLocalUnicast()
 }
 
 // MetadataValue Metadata returns a string metadata value, or the fallback if not set.
