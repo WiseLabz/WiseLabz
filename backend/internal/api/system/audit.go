@@ -3,6 +3,7 @@ package system
 import (
 	"encoding/csv"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -66,7 +67,10 @@ func (h *Handler) ExportAudit(w http.ResponseWriter, r *http.Request) {
 			return // headers already sent; nothing more we can do
 		}
 		for _, a := range records {
-			_ = cw.Write([]string{a.ID, a.ActorUserID, a.ActorRole, a.Action, a.TargetType, a.TargetID, a.Detail, a.CreatedAt})
+			if err := cw.Write([]string{a.ID, a.ActorUserID, a.ActorRole, a.Action, a.TargetType, a.TargetID, a.Detail, a.CreatedAt}); err != nil {
+				slog.Error("audit csv export: write row failed, aborting (client likely disconnected)", "error", err)
+				return
+			}
 		}
 		cw.Flush()
 		return

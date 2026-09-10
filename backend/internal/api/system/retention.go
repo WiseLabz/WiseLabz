@@ -2,7 +2,9 @@ package system
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 
@@ -18,7 +20,12 @@ import (
 func (h *Handler) GetRetentionSettings(w http.ResponseWriter, r *http.Request) {
 	rs, err := h.Store.GetRetentionSettings(r.Context())
 	if err != nil {
-		// If settings don't exist (shouldn't happen after init), return a sensible default
+		if !errors.Is(err, sql.ErrNoRows) {
+			httputil.Errorf(w, err)
+			return
+		}
+		// If settings don't exist (shouldn't happen after init), return a sensible default.
+		// keep in sync with config.go retention defaults
 		slog.Warn("retention settings not found, returning default", "error", err)
 		rs = store.RetentionSettings{
 			SnapshotDays:   90,
