@@ -1,12 +1,12 @@
-# Graph Report - WiseLabz  (2026-09-09)
+# Graph Report - WiseLabz  (2026-09-10)
 
 ## Corpus Check
-- 358 files · ~195,820 words
+- 373 files · ~207,889 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 1812 nodes · 3363 edges · 91 communities detected
-- Extraction: 57% EXTRACTED · 41% INFERRED · 0% AMBIGUOUS · INFERRED: 1368 edges (avg confidence: 0.8)
+- 1917 nodes · 3611 edges · 89 communities detected
+- Extraction: 56% EXTRACTED · 41% INFERRED · 0% AMBIGUOUS · INFERRED: 1489 edges (avg confidence: 0.8)
 - Token cost: 0 input · 0 output
 
 ## Community Hubs (Navigation)
@@ -56,19 +56,17 @@
 - [[_COMMUNITY_Community 43|Community 43]]
 - [[_COMMUNITY_Community 44|Community 44]]
 - [[_COMMUNITY_Community 45|Community 45]]
-- [[_COMMUNITY_Community 46|Community 46]]
-- [[_COMMUNITY_Community 47|Community 47]]
+- [[_COMMUNITY_Community 48|Community 48]]
 - [[_COMMUNITY_Community 49|Community 49]]
-- [[_COMMUNITY_Community 51|Community 51]]
+- [[_COMMUNITY_Community 50|Community 50]]
 - [[_COMMUNITY_Community 52|Community 52]]
 - [[_COMMUNITY_Community 53|Community 53]]
 - [[_COMMUNITY_Community 55|Community 55]]
 - [[_COMMUNITY_Community 56|Community 56]]
 - [[_COMMUNITY_Community 58|Community 58]]
 - [[_COMMUNITY_Community 59|Community 59]]
-- [[_COMMUNITY_Community 61|Community 61]]
-- [[_COMMUNITY_Community 62|Community 62]]
-- [[_COMMUNITY_Community 68|Community 68]]
+- [[_COMMUNITY_Community 60|Community 60]]
+- [[_COMMUNITY_Community 67|Community 67]]
 - [[_COMMUNITY_Community 71|Community 71]]
 - [[_COMMUNITY_Community 72|Community 72]]
 - [[_COMMUNITY_Community 73|Community 73]]
@@ -77,8 +75,6 @@
 - [[_COMMUNITY_Community 76|Community 76]]
 - [[_COMMUNITY_Community 77|Community 77]]
 - [[_COMMUNITY_Community 78|Community 78]]
-- [[_COMMUNITY_Community 101|Community 101]]
-- [[_COMMUNITY_Community 102|Community 102]]
 - [[_COMMUNITY_Community 103|Community 103]]
 - [[_COMMUNITY_Community 104|Community 104]]
 - [[_COMMUNITY_Community 105|Community 105]]
@@ -91,6 +87,9 @@
 - [[_COMMUNITY_Community 112|Community 112]]
 - [[_COMMUNITY_Community 113|Community 113]]
 - [[_COMMUNITY_Community 114|Community 114]]
+- [[_COMMUNITY_Community 115|Community 115]]
+- [[_COMMUNITY_Community 116|Community 116]]
+- [[_COMMUNITY_Community 178|Community 178]]
 - [[_COMMUNITY_Community 179|Community 179]]
 - [[_COMMUNITY_Community 180|Community 180]]
 - [[_COMMUNITY_Community 181|Community 181]]
@@ -100,19 +99,18 @@
 - [[_COMMUNITY_Community 185|Community 185]]
 - [[_COMMUNITY_Community 186|Community 186]]
 - [[_COMMUNITY_Community 187|Community 187]]
-- [[_COMMUNITY_Community 188|Community 188]]
 
 ## God Nodes (most connected - your core abstractions)
-1. `Errorf()` - 252 edges
-2. `newTestApp()` - 152 edges
-3. `Store` - 129 edges
-4. `JSON()` - 92 edges
-5. `New()` - 91 edges
+1. `Errorf()` - 267 edges
+2. `newTestApp()` - 160 edges
+3. `Store` - 140 edges
+4. `JSON()` - 94 edges
+5. `New()` - 93 edges
 6. `Error()` - 85 edges
 7. `New()` - 64 edges
-8. `newDocTestStore()` - 56 edges
-9. `contains()` - 32 edges
-10. `UserIDFromContext()` - 31 edges
+8. `newDocTestStore()` - 59 edges
+9. `contains()` - 36 edges
+10. `UserIDFromContext()` - 33 edges
 
 ## Surprising Connections (you probably didn't know these)
 - `WiseLabz Project` --conceptually_related_to--> `Monorepo with Go Workspaces`  [INFERRED]
@@ -123,8 +121,8 @@
   web/src/main.tsx → backend/internal/backup/backup.go
 - `enableMocks()` --calls--> `Import()`  [INFERRED]
   web/src/mocks/enable.ts → backend/internal/backup/backup.go
-- `main()` --calls--> `RunDocLockSweep()`  [INFERRED]
-  backend/cmd/server/main.go → backend/internal/store/doc.go
+- `TestOpenAICompatibleSuggestErrors()` --calls--> `contains()`  [INFERRED]
+  backend/internal/ai/openai_test.go → backend/internal/store/user.go
 
 ## Hyperedges (group relationships)
 - **Step-Up Confirmation Flow for Destructive Actions** — architecture_permissions_stepup, architecture_destructive_confirm_pattern, openapi_auth_elevate_endpoint, openapi_removal_impact_endpoint [EXTRACTED 0.90]
@@ -135,71 +133,71 @@
 
 ### Community 0 - "Community 0"
 Cohesion: 0.02
-Nodes (67): Handler, NewRouter(), spaHandler(), Handler, newToken(), sanitize(), APIKeyChecker, AuditRecorder (+59 more)
+Nodes (78): verifyOIDCState(), ClassifyHealth(), TestClassifyHealth(), TestClassifyHealthPerTypeThreshold(), join(), Errorf(), RequestID(), requestIDKey (+70 more)
 
 ### Community 1 - "Community 1"
 Cohesion: 0.02
-Nodes (164): seedAlert(), TestAlertsListSuccess(), TestAlertsResolveRoleBoundary(), TestAlertsResolveSuccess(), TestAlertsSnoozeSuccess(), TestAlertsSnoozeValidation(), TestAPIKeyCreateRejectsInvalidExpiryAndEmptyName(), TestAPIKeyRoutesEndToEnd() (+156 more)
+Nodes (61): Handler, TestAllConnectorImplementationsRegister(), Handler, newToken(), sanitize(), Handler, Handler, sanitizeSessions() (+53 more)
 
 ### Community 2 - "Community 2"
 Cohesion: 0.02
-Nodes (30): join(), Errorf(), placeholders(), BackupRun, BackupSchedule, MarshalConnectorConfig(), nullInt64ToIntPtr(), nullStrToStr() (+22 more)
+Nodes (175): seedAlert(), TestAlertsBulkSnoozePartialFailure(), TestAlertsBulkSnoozeRejectsTooManyIDs(), TestAlertsBulkSnoozeRoleBoundary(), TestAlertsBulkSnoozeValidation(), TestAlertsListDaysWindow(), TestAlertsListSuccess(), TestAlertsResolveRoleBoundary() (+167 more)
 
 ### Community 3 - "Community 3"
-Cohesion: 0.04
-Nodes (76): healthFakeConnector, ClassifyHealth(), TestClassifyHealth(), TestClassifyHealthPerTypeThreshold(), RequestID(), requestIDKey, main(), channelCfg (+68 more)
+Cohesion: 0.03
+Nodes (53): RegisterClaude(), claudeProvider, AuthError, Connector, GuardedDialer(), IsDangerousIP(), NewAuthError(), NewMalformedResponseError() (+45 more)
 
 ### Community 4 - "Community 4"
-Cohesion: 0.05
-Nodes (44): RequestedFields(), WantsField(), TestRequestedFields(), TestWantsField(), Register(), newEngineTestStore(), seedEngineConnector(), seedEngineTemplate() (+36 more)
+Cohesion: 0.04
+Nodes (74): StubProvider, bulkSnoozeItemResult, bulkSnoozeRequest, NewHandler(), Config, NewRouter(), spaHandler(), TestAuthMiddlewareAPIKeyLifecycle() (+66 more)
 
 ### Community 5 - "Community 5"
-Cohesion: 0.04
-Nodes (38): RegisterClaude(), TestClaudeSuggestErrors(), TestRegisterClaudeDefaults(), claudeProvider, RegisterOpenAICompatible(), TestOpenAICompatibleSuggestErrors(), TestRegisterOpenAICompatibleDefaults(), openAICompatibleProvider (+30 more)
+Cohesion: 0.05
+Nodes (50): RequestedFields(), ListSchemas(), Register(), TestRegisterDefaultsToNonStub(), TestRegisterStubRoundTrips(), newEngineTestStore(), seedEngineConnector(), seedEngineTemplate() (+42 more)
 
 ### Community 6 - "Community 6"
-Cohesion: 0.06
-Nodes (51): TestAPIKeyLifecycle(), TestAPIKeyNotFound(), TestCreateAuditRecordAndListFiltering(), TestRecordAuditFromContextMarshalsDetail(), seedConnectorForChanges(), TestChangeRelatedServiceIDsAndPatternIDRoundTrip(), TestChangeRelatedServiceIDsDefaultsToEmptyArray(), TestCountRecentChangesByPattern() (+43 more)
+Cohesion: 0.05
+Nodes (61): TestAPIKeyLifecycle(), TestAPIKeyNotFound(), TestCreateAuditRecordAndListFiltering(), TestRecordAuditFromContextMarshalsDetail(), seedConnectorForChanges(), TestChangeRelatedServiceIDsAndPatternIDRoundTrip(), TestChangeRelatedServiceIDsDefaultsToEmptyArray(), TestCountRecentChangesByPattern() (+53 more)
 
 ### Community 7 - "Community 7"
-Cohesion: 0.04
-Nodes (27): AuthError, Connector, NewAuthError(), NewMalformedResponseError(), NewServiceUnavailableError(), NewTimeoutError(), CredentialRefresher, TestTypedErrorsAreDistinguishableByType() (+19 more)
+Cohesion: 0.05
+Nodes (37): AISettings, AuthSettings, BackupSettings, Config, Load(), TestLoadDefaults(), TestLoadEnvOverride(), TestLoadEnvOverrideAllFields() (+29 more)
 
 ### Community 8 - "Community 8"
 Cohesion: 0.07
-Nodes (39): AIConfigSummary, Export(), exportDocs(), exportTemplates(), ExportToFile(), Import(), importBundle(), LoadAIConfigSummary() (+31 more)
+Nodes (39): AIConfigSummary, Export(), exportDocs(), exportTemplates(), ExportToFile(), exportWithin(), Import(), importBundle() (+31 more)
 
 ### Community 9 - "Community 9"
-Cohesion: 0.09
-Nodes (35): NewHandler(), Config, TestAuthMiddlewareAPIKeyLifecycle(), TestAuthMiddlewareRejectsExpiredAndRevokedAPIKeys(), NewService(), TestElevationExpired(), TestElevationRequiresOwner(), TestElevationWrongAction() (+27 more)
+Cohesion: 0.06
+Nodes (22): TestClaudeSuggestErrors(), TestRegisterClaudeDefaults(), RegisterOpenAICompatible(), TestOpenAICompatibleSuggestErrors(), TestRegisterOpenAICompatibleDefaults(), openAICompatibleProvider, Provider, NewRegistry() (+14 more)
 
 ### Community 10 - "Community 10"
 Cohesion: 0.08
 Nodes (11): renderAttention(), renderAuthGuard(), renderRoleGuard(), renderDashboard(), Engine, GenerateResult, renderResult, templateData (+3 more)
 
 ### Community 11 - "Community 11"
-Cohesion: 0.09
-Nodes (20): AISettings, AuthSettings, BackupSettings, Config, applyEnvOverrides(), boolEnv(), intEnv(), Load() (+12 more)
-
-### Community 12 - "Community 12"
 Cohesion: 0.08
 Nodes (27): ADR 0001 — Monorepo, ADR Index (docs/adr/), AI Doc Generation Module (opt-in, provider-agnostic), API Design — REST + WebSocket split, Dual Auth Design (Local JWT + OIDC), Changes/Diff Contract (infra vs doc format), Change-Aware Diff Engine, Monorepo with Go Workspaces (+19 more)
 
-### Community 13 - "Community 13"
+### Community 12 - "Community 12"
 Cohesion: 0.23
 Nodes (16): Checker, NewChecker(), RunStaleSweepOnce(), createConnector(), findings(), newTestStore(), TestCheckEmptyDetectsAndAutoResolves(), TestCheckFailingDetectsAndAutoResolves() (+8 more)
 
-### Community 14 - "Community 14"
-Cohesion: 0.13
-Nodes (6): DBTX, pgPlaceholderDB, pgTransactionDB, rewritePlaceholders(), TestRewritePlaceholders(), transactionDB
+### Community 13 - "Community 13"
+Cohesion: 0.22
+Nodes (12): channelCfg, Dispatcher, findChannel(), NewDispatcher(), deliveriesFor(), findDelivery(), newTestStore(), setWebhookConfig() (+4 more)
 
-### Community 15 - "Community 15"
+### Community 14 - "Community 14"
 Cohesion: 0.12
 Nodes (20): Axios API client, Button and IconButton, CommandPalette, theme cycling command, ConfirmDialog, Dialog, ElevationConfirm, English translation catalog (+12 more)
 
-### Community 16 - "Community 16"
+### Community 15 - "Community 15"
 Cohesion: 0.16
 Nodes (20): alerts, changes, connector config JSON, connectors, dashboard layouts, doc versions, docs, HashToken (+12 more)
+
+### Community 16 - "Community 16"
+Cohesion: 0.14
+Nodes (5): pgPlaceholderDB, pgTransactionDB, rewritePlaceholders(), TestRewritePlaceholders(), transactionDB
 
 ### Community 17 - "Community 17"
 Cohesion: 0.17
@@ -278,94 +276,86 @@ Cohesion: 0.31
 Nodes (6): buildDocDiff(), fold(), toUnits(), diffStats(), lineDiff(), wordDiff()
 
 ### Community 36 - "Community 36"
-Cohesion: 0.22
-Nodes (8): RunDocLockSweep(), DocLockRecord, DocRecord, DocVersionRecord, TemplateRecord, TemplateSectionRecord, TemplateVersionRecord, TemplateVersionSection
-
-### Community 37 - "Community 37"
 Cohesion: 0.39
 Nodes (5): addSection(), moveSection(), removeSection(), update(), updateSection()
 
-### Community 38 - "Community 38"
-Cohesion: 0.29
-Nodes (6): TestEmailDomainAllowed(), TestOIDCRoleForGroups(), emailDomainAllowed(), oidcRoleForGroups(), signOIDCState(), verifyOIDCState()
-
-### Community 39 - "Community 39"
+### Community 37 - "Community 37"
 Cohesion: 0.32
 Nodes (1): Runner
 
-### Community 40 - "Community 40"
+### Community 38 - "Community 38"
 Cohesion: 0.38
 Nodes (4): navigateTo(), invalidate(), markAllRead(), markRead()
+
+### Community 39 - "Community 39"
+Cohesion: 0.33
+Nodes (4): ShortcutsModal(), useCanMutate(), useRole(), RoleGate()
+
+### Community 40 - "Community 40"
+Cohesion: 0.38
+Nodes (4): loadCache(), persistCache(), widgetsFromWire(), widgetsToWire()
 
 ### Community 41 - "Community 41"
 Cohesion: 0.62
 Nodes (6): getResponse(), handleRequest(), resolveMainClient(), respondWithMock(), sendToClient(), serializeRequest()
 
 ### Community 42 - "Community 42"
-Cohesion: 0.29
-Nodes (3): Logger(), GetRequestID(), responseWriter
+Cohesion: 0.33
+Nodes (5): TestEmailDomainAllowed(), TestOIDCRoleForGroups(), emailDomainAllowed(), oidcRoleForGroups(), signOIDCState()
 
 ### Community 43 - "Community 43"
 Cohesion: 0.4
 Nodes (2): findRoute(), rowSeverity()
 
 ### Community 44 - "Community 44"
-Cohesion: 0.33
-Nodes (1): noopValidatedConnector
+Cohesion: 0.4
+Nodes (2): commit(), move()
 
 ### Community 45 - "Community 45"
-Cohesion: 0.4
-Nodes (3): Handler, severityRank(), Item
-
-### Community 46 - "Community 46"
 Cohesion: 0.6
 Nodes (3): fillBody(), generatePreview(), renderTemplate()
 
-### Community 47 - "Community 47"
-Cohesion: 0.5
-Nodes (3): useCanMutate(), useRole(), RoleGate()
+### Community 48 - "Community 48"
+Cohesion: 0.4
+Nodes (1): healthFakeConnector
 
 ### Community 49 - "Community 49"
-Cohesion: 0.5
-Nodes (2): commit(), move()
-
-### Community 51 - "Community 51"
-Cohesion: 0.6
-Nodes (4): loadCache(), persistCache(), widgetsFromWire(), widgetsToWire()
-
-### Community 52 - "Community 52"
 Cohesion: 0.4
-Nodes (3): bulkResolveItemResult, bulkResolveRequest, diffToSpec()
+Nodes (1): responseWriter
 
-### Community 53 - "Community 53"
+### Community 50 - "Community 50"
 Cohesion: 0.5
 Nodes (5): Commit Conventions & Hook Enforcement (dev workflow), commit-msg Hook, Conventional Commits Policy, lefthook Commit Hooks, pre-commit Hook
 
+### Community 52 - "Community 52"
+Cohesion: 0.83
+Nodes (3): close(), onKey(), reset()
+
+### Community 53 - "Community 53"
+Cohesion: 0.83
+Nodes (3): close(), onKey(), reset()
+
 ### Community 55 - "Community 55"
-Cohesion: 0.83
-Nodes (3): close(), onKey(), reset()
-
-### Community 56 - "Community 56"
-Cohesion: 0.83
-Nodes (3): close(), onKey(), reset()
-
-### Community 58 - "Community 58"
 Cohesion: 0.5
 Nodes (2): runSync(), triggerMockSync()
 
-### Community 59 - "Community 59"
+### Community 56 - "Community 56"
 Cohesion: 0.5
 Nodes (1): TestWebSocket
 
-### Community 61 - "Community 61"
+### Community 58 - "Community 58"
 Cohesion: 0.67
 Nodes (2): apply(), css()
 
-### Community 62 - "Community 62"
+### Community 59 - "Community 59"
+Cohesion: 0.5
+Nodes (3): FailedSyncRun, SyncRunRecord, SyncRunStatus
+
+### Community 60 - "Community 60"
 Cohesion: 0.5
 Nodes (4): AppShell — Bottom Dock Shell (single variant), Theme Engine — Code Default, User-Overridable, Per-User Dashboard Layout with Admin Default (v2), DashboardLayout Schema (per-user widget layout)
 
-### Community 68 - "Community 68"
+### Community 67 - "Community 67"
 Cohesion: 1.0
 Nodes (2): focusable(), onKeyDown()
 
@@ -401,53 +391,45 @@ Nodes (3): Database: SQLite + PostgreSQL, golang-migrate, sqlc (type-safe SQL co
 Cohesion: 0.67
 Nodes (3): Topbar Notification Center (deferred from V1), NotificationDelivery Schema (per-channel delivery/retry), Notification / NotificationPage Schemas
 
-### Community 101 - "Community 101"
+### Community 103 - "Community 103"
 Cohesion: 1.0
 Nodes (1): APIKey
 
-### Community 102 - "Community 102"
+### Community 104 - "Community 104"
 Cohesion: 1.0
 Nodes (1): AuditRecord
 
-### Community 103 - "Community 103"
+### Community 105 - "Community 105"
 Cohesion: 1.0
 Nodes (1): SavedView
 
-### Community 104 - "Community 104"
+### Community 106 - "Community 106"
 Cohesion: 1.0
 Nodes (2): Template catalog, Template preview generator
 
-### Community 105 - "Community 105"
+### Community 107 - "Community 107"
 Cohesion: 1.0
 Nodes (2): Change detail synthesizer, Homelab mock data
 
-### Community 106 - "Community 106"
+### Community 108 - "Community 108"
 Cohesion: 1.0
 Nodes (2): Settings mock data, Notification routing matrix
 
-### Community 107 - "Community 107"
+### Community 109 - "Community 109"
 Cohesion: 1.0
 Nodes (2): DocTree, Markdown
 
-### Community 108 - "Community 108"
+### Community 110 - "Community 110"
 Cohesion: 1.0
 Nodes (2): pgPlaceholderDB, rewritePlaceholders
 
-### Community 109 - "Community 109"
+### Community 111 - "Community 111"
 Cohesion: 1.0
 Nodes (2): safe application defaults, WISELABZ environment overrides
 
-### Community 110 - "Community 110"
-Cohesion: 1.0
-Nodes (2): Branch Naming Convention, Pull Request Process
-
-### Community 111 - "Community 111"
-Cohesion: 1.0
-Nodes (2): viper Config Loader, WISELABZ_ Env Var Config Override
-
 ### Community 112 - "Community 112"
 Cohesion: 1.0
-Nodes (2): GET /api/version (undocumented ops endpoint), GET /system/info
+Nodes (2): Branch Naming Convention, Pull Request Process
 
 ### Community 113 - "Community 113"
 Cohesion: 1.0
@@ -455,45 +437,53 @@ Nodes (2): chi HTTP Router, gorilla/websocket
 
 ### Community 114 - "Community 114"
 Cohesion: 1.0
+Nodes (2): viper Config Loader, WISELABZ_ Env Var Config Override
+
+### Community 115 - "Community 115"
+Cohesion: 1.0
 Nodes (2): GHCR Container Registry, GitHub Actions CI
 
-### Community 179 - "Community 179"
+### Community 116 - "Community 116"
+Cohesion: 1.0
+Nodes (2): GET /api/version (undocumented ops endpoint), GET /system/info
+
+### Community 178 - "Community 178"
 Cohesion: 1.0
 Nodes (1): TimeAgo
 
-### Community 180 - "Community 180"
+### Community 179 - "Community 179"
 Cohesion: 1.0
 Nodes (1): Panel
 
-### Community 181 - "Community 181"
+### Community 180 - "Community 180"
 Cohesion: 1.0
 Nodes (1): store package
 
-### Community 182 - "Community 182"
+### Community 181 - "Community 181"
 Cohesion: 1.0
 Nodes (1): OpenDB
 
-### Community 183 - "Community 183"
+### Community 182 - "Community 182"
 Cohesion: 1.0
 Nodes (1): ErrNotFound
 
-### Community 184 - "Community 184"
+### Community 183 - "Community 183"
 Cohesion: 1.0
 Nodes (1): ErrConflict
 
-### Community 185 - "Community 185"
+### Community 184 - "Community 184"
 Cohesion: 1.0
 Nodes (1): slog (stdlib logging)
 
-### Community 186 - "Community 186"
+### Community 185 - "Community 185"
 Cohesion: 1.0
 Nodes (1): Zustand State Management
 
-### Community 187 - "Community 187"
+### Community 186 - "Community 186"
 Cohesion: 1.0
 Nodes (1): Tailwind CSS
 
-### Community 188 - "Community 188"
+### Community 187 - "Community 187"
 Cohesion: 1.0
 Nodes (1): Docker Compose Deployment
 
@@ -504,73 +494,75 @@ Nodes (1): Docker Compose Deployment
   docs/MISSING.md · relation: conceptually_related_to
 
 ## Knowledge Gaps
-- **150 isolated node(s):** `testAuditCall`, `contextKey`, `APIKeyChecker`, `PermissionChecker`, `AuditRecorder` (+145 more)
+- **155 isolated node(s):** `testAuditCall`, `contextKey`, `APIKeyChecker`, `UserStatusChecker`, `PermissionChecker` (+150 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **Thin community `Community 39`** (8 nodes): `scheduler.go`, `Runner`, `.AddJob()`, `.EntryCount()`, `.jobContext()`, `.RemoveJob()`, `.Start()`, `.Stop()`
+- **Thin community `Community 37`** (8 nodes): `scheduler.go`, `Runner`, `.AddJob()`, `.EntryCount()`, `.jobContext()`, `.RemoveJob()`, `.Start()`, `.Stop()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 43`** (6 nodes): `eventLabel()`, `findRoute()`, `rowSeverity()`, `setCell()`, `setRowSeverity()`, `EventRoutingTable.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 44`** (6 nodes): `noopValidatedConnector`, `.Category()`, `.Fetch()`, `.Name()`, `.Type()`, `.Validate()`
+- **Thin community `Community 44`** (6 nodes): `commit()`, `move()`, `setRange()`, `toggle()`, `widgetTitle()`, `DashboardPage.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 49`** (5 nodes): `commit()`, `move()`, `toggle()`, `widgetTitle()`, `DashboardPage.tsx`
+- **Thin community `Community 48`** (5 nodes): `healthFakeConnector`, `.Category()`, `.Name()`, `.Type()`, `.Validate()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 58`** (4 nodes): `runSync()`, `runSync.ts`, `triggerSync.ts`, `triggerMockSync()`
+- **Thin community `Community 49`** (5 nodes): `logging.go`, `responseWriter`, `.Hijack()`, `.Write()`, `.WriteHeader()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 59`** (4 nodes): `WebSocketProvider.test.tsx`, `TestWebSocket`, `.close()`, `.constructor()`
+- **Thin community `Community 55`** (4 nodes): `runSync()`, `runSync.ts`, `triggerSync.ts`, `triggerMockSync()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 61`** (4 nodes): `apply()`, `css()`, `seed()`, `appearance.ts`
+- **Thin community `Community 56`** (4 nodes): `WebSocketProvider.test.tsx`, `TestWebSocket`, `.close()`, `.constructor()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 68`** (3 nodes): `focusable()`, `onKeyDown()`, `DocsPage.tsx`
+- **Thin community `Community 58`** (4 nodes): `apply()`, `css()`, `seed()`, `appearance.ts`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 67`** (3 nodes): `focusable()`, `onKeyDown()`, `DocsPage.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 71`** (3 nodes): `change.go`, `AlertRecord`, `ChangeRecord`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 101`** (2 nodes): `api_key.go`, `APIKey`
+- **Thin community `Community 103`** (2 nodes): `api_key.go`, `APIKey`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 102`** (2 nodes): `audit.go`, `AuditRecord`
+- **Thin community `Community 104`** (2 nodes): `audit.go`, `AuditRecord`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 103`** (2 nodes): `saved_view.go`, `SavedView`
+- **Thin community `Community 105`** (2 nodes): `saved_view.go`, `SavedView`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 104`** (2 nodes): `Template catalog`, `Template preview generator`
+- **Thin community `Community 106`** (2 nodes): `Template catalog`, `Template preview generator`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 105`** (2 nodes): `Change detail synthesizer`, `Homelab mock data`
+- **Thin community `Community 107`** (2 nodes): `Change detail synthesizer`, `Homelab mock data`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 106`** (2 nodes): `Settings mock data`, `Notification routing matrix`
+- **Thin community `Community 108`** (2 nodes): `Settings mock data`, `Notification routing matrix`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 107`** (2 nodes): `DocTree`, `Markdown`
+- **Thin community `Community 109`** (2 nodes): `DocTree`, `Markdown`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 108`** (2 nodes): `pgPlaceholderDB`, `rewritePlaceholders`
+- **Thin community `Community 110`** (2 nodes): `pgPlaceholderDB`, `rewritePlaceholders`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 109`** (2 nodes): `safe application defaults`, `WISELABZ environment overrides`
+- **Thin community `Community 111`** (2 nodes): `safe application defaults`, `WISELABZ environment overrides`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 110`** (2 nodes): `Branch Naming Convention`, `Pull Request Process`
-  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 111`** (2 nodes): `viper Config Loader`, `WISELABZ_ Env Var Config Override`
-  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 112`** (2 nodes): `GET /api/version (undocumented ops endpoint)`, `GET /system/info`
+- **Thin community `Community 112`** (2 nodes): `Branch Naming Convention`, `Pull Request Process`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 113`** (2 nodes): `chi HTTP Router`, `gorilla/websocket`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 114`** (2 nodes): `GHCR Container Registry`, `GitHub Actions CI`
+- **Thin community `Community 114`** (2 nodes): `viper Config Loader`, `WISELABZ_ Env Var Config Override`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 179`** (1 nodes): `TimeAgo`
+- **Thin community `Community 115`** (2 nodes): `GHCR Container Registry`, `GitHub Actions CI`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 180`** (1 nodes): `Panel`
+- **Thin community `Community 116`** (2 nodes): `GET /api/version (undocumented ops endpoint)`, `GET /system/info`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 181`** (1 nodes): `store package`
+- **Thin community `Community 178`** (1 nodes): `TimeAgo`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 182`** (1 nodes): `OpenDB`
+- **Thin community `Community 179`** (1 nodes): `Panel`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 183`** (1 nodes): `ErrNotFound`
+- **Thin community `Community 180`** (1 nodes): `store package`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 184`** (1 nodes): `ErrConflict`
+- **Thin community `Community 181`** (1 nodes): `OpenDB`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 185`** (1 nodes): `slog (stdlib logging)`
+- **Thin community `Community 182`** (1 nodes): `ErrNotFound`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 186`** (1 nodes): `Zustand State Management`
+- **Thin community `Community 183`** (1 nodes): `ErrConflict`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 187`** (1 nodes): `Tailwind CSS`
+- **Thin community `Community 184`** (1 nodes): `slog (stdlib logging)`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 188`** (1 nodes): `Docker Compose Deployment`
+- **Thin community `Community 185`** (1 nodes): `Zustand State Management`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 186`** (1 nodes): `Tailwind CSS`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 187`** (1 nodes): `Docker Compose Deployment`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 
 ## Suggested Questions
@@ -580,13 +572,13 @@ _Questions this graph is uniquely positioned to answer:_
   _Edge tagged AMBIGUOUS (relation: conceptually_related_to) - confidence is low._
 - **What is the exact relationship between `Topbar Notification Center (deferred from V1)` and `NotificationDelivery Schema (per-channel delivery/retry)`?**
   _Edge tagged AMBIGUOUS (relation: conceptually_related_to) - confidence is low._
-- **Why does `Errorf()` connect `Community 2` to `Community 0`, `Community 3`, `Community 4`, `Community 5`, `Community 7`, `Community 8`, `Community 39`, `Community 10`, `Community 11`, `Community 45`, `Community 13`, `Community 18`, `Community 19`, `Community 27`?**
-  _High betweenness centrality (0.250) - this node is a cross-community bridge._
-- **Why does `newTestApp()` connect `Community 1` to `Community 0`, `Community 9`, `Community 3`, `Community 4`?**
-  _High betweenness centrality (0.116) - this node is a cross-community bridge._
-- **Why does `RunMigrations()` connect `Community 3` to `Community 1`, `Community 2`, `Community 4`, `Community 6`, `Community 8`, `Community 9`, `Community 13`?**
+- **Why does `Errorf()` connect `Community 0` to `Community 1`, `Community 2`, `Community 3`, `Community 5`, `Community 37`, `Community 7`, `Community 8`, `Community 9`, `Community 10`, `Community 12`, `Community 18`, `Community 19`, `Community 27`?**
+  _High betweenness centrality (0.244) - this node is a cross-community bridge._
+- **Why does `newTestApp()` connect `Community 2` to `Community 0`, `Community 4`, `Community 5`?**
+  _High betweenness centrality (0.114) - this node is a cross-community bridge._
+- **Why does `RunMigrations()` connect `Community 0` to `Community 2`, `Community 4`, `Community 5`, `Community 6`, `Community 7`, `Community 8`, `Community 12`, `Community 13`?**
   _High betweenness centrality (0.072) - this node is a cross-community bridge._
-- **Are the 250 inferred relationships involving `Errorf()` (e.g. with `.IssuePair()` and `.IssueElevation()`) actually correct?**
-  _`Errorf()` has 250 INFERRED edges - model-reasoned connections that need verification._
-- **Are the 143 inferred relationships involving `newTestApp()` (e.g. with `TestAlertsListSuccess()` and `TestAlertsResolveRoleBoundary()`) actually correct?**
-  _`newTestApp()` has 143 INFERRED edges - model-reasoned connections that need verification._
+- **Are the 265 inferred relationships involving `Errorf()` (e.g. with `.IssuePair()` and `.IssueElevation()`) actually correct?**
+  _`Errorf()` has 265 INFERRED edges - model-reasoned connections that need verification._
+- **Are the 151 inferred relationships involving `newTestApp()` (e.g. with `TestAlertsListSuccess()` and `TestAlertsResolveRoleBoundary()`) actually correct?**
+  _`newTestApp()` has 151 INFERRED edges - model-reasoned connections that need verification._

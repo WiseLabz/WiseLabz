@@ -43,6 +43,11 @@ func (h *Handler) Tree(w http.ResponseWriter, r *http.Request) {
 		httputil.Errorf(w, err)
 		return
 	}
+	docsByService, err := h.Store.ListDocsGroupedByService(r.Context())
+	if err != nil {
+		httputil.Errorf(w, err)
+		return
+	}
 
 	type TreeNode struct {
 		ID       string     `json:"docId"`
@@ -58,13 +63,12 @@ func (h *Handler) Tree(w http.ResponseWriter, r *http.Request) {
 	}
 
 	for _, c := range connectors {
-		docs, _ := h.Store.ListDocsByService(r.Context(), c.ID)
 		connNode := TreeNode{
 			ID:    c.ID,
 			Title: c.Name,
 			Kind:  "service",
 		}
-		for _, d := range docs {
+		for _, d := range docsByService[c.ID] {
 			connNode.Children = append(connNode.Children, TreeNode{
 				ID:    d.ID,
 				Title: d.Title,

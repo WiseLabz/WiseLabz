@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -36,15 +37,59 @@ func (s *Store) CreateAuditRecord(ctx context.Context, a *AuditRecord) error {
 	if a.Detail == "" {
 		a.Detail = "{}"
 	}
-
-	_, err := s.db.ExecContext(ctx, `
-		INSERT INTO audit_log (id, actor_user_id, actor_role, action, target_type, target_id, detail, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-	`, a.ID, a.ActorUserID, a.ActorRole, a.Action, a.TargetType, a.TargetID, a.Detail, a.CreatedAt)
-	if err != nil {
-		return fmt.Errorf("create audit record: %w", err)
+	if err := s.insertAuditRecords(ctx, []AuditRecord{*a}); err != nil {
+		return err
 	}
 	return nil
+}
+
+// CreateAuditRecords inserts audit_log rows in one statement.
+func (s *Store) CreateAuditRecords(ctx context.Context, records []AuditRecord) error {
+	if len(records) == 0 {
+		return nil
+	}
+
+	for i := range records {
+		a := &records[i]
+		if a.ID == "" {
+			a.ID = uuid.New().String()
+		}
+		if a.CreatedAt == "" {
+			a.CreatedAt = time.Now().UTC().Format(time.RFC3339)
+		}
+		if a.Detail == "" {
+			a.Detail = "{}"
+		}
+	}
+	return s.insertAuditRecords(ctx, records)
+}
+
+func (s *Store) insertAuditRecords(ctx context.Context, records []AuditRecord) error {
+	args := make([]any, 0, len(records)*8)
+	values := make([]string, 0, len(records))
+	for _, a := range records {
+		values = append(values, "(?, ?, ?, ?, ?, ?, ?, ?)")
+		args = append(args, a.ID, a.ActorUserID, a.ActorRole, a.Action, a.TargetType, a.TargetID, a.Detail, a.CreatedAt)
+	}
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO audit_log (id, actor_user_id, actor_role, action, target_type, target_id, detail, created_at)
+		VALUES `+strings.Join(values, ", "), args...)
+	if err != nil {
+		return fmt.Errorf("create audit records: %w", err)
+	}
+	return nil
+}
+
+// RecordAuditBatchFromContext records one audit entry for each target using the
+// authenticated actor in ctx.
+func (s *Store) RecordAuditBatchFromContext(ctx context.Context, action, targetType string, records []AuditRecord) error {
+	for i := range records {
+		records[i].ActorUserID = auth.UserIDFromContext(ctx)
+		records[i].ActorRole = auth.RoleFromContext(ctx)
+		records[i].Action = action
+		records[i].TargetType = targetType
+	}
+	return s.CreateAuditRecords(ctx, records)
 }
 
 // RecordAuditFromContext is the one-line call handlers make after an audited

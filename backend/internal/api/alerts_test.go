@@ -132,6 +132,19 @@ func TestAlertsBulkSnoozeValidation(t *testing.T) {
 	}
 }
 
+func TestAlertsBulkSnoozeRejectsTooManyIDs(t *testing.T) {
+	app := newTestApp(t)
+	_, opToken := app.user(t, "operator")
+	ids := make([]string, 501)
+
+	rec := app.req(t, http.MethodPost, "/api/alerts/bulk-snooze", map[string]any{
+		"ids": ids, "until": "2099-01-01T00:00:00Z",
+	}, opToken)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400; body = %s", rec.Code, rec.Body)
+	}
+}
+
 // TestAlertsBulkSnoozePartialFailure mirrors
 // TestChangesBulkResolvePartialFailure: a mixed batch (a real seeded alert
 // and a nonexistent id) must not abort — each item gets its own outcome, and

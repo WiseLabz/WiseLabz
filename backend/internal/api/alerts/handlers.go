@@ -18,6 +18,8 @@ type Handler struct {
 	Store *store.Store
 }
 
+const maxBulkIDs = 500
+
 // NewHandler creates a new alert handler.
 func NewHandler(s *store.Store) *Handler {
 	return &Handler{Store: s}
@@ -208,21 +210,31 @@ func (h *Handler) BulkSnooze(w http.ResponseWriter, r *http.Request) {
 		httputil.Error(w, http.StatusBadRequest, "invalid_request", "ids must be a non-empty array")
 		return
 	}
+	if len(req.IDs) > maxBulkIDs {
+		httputil.Error(w, http.StatusBadRequest, "invalid_request", "ids must contain at most 500 items")
+		return
+	}
 
 	results := make([]bulkSnoozeItemResult, 0, len(req.IDs))
-	for _, id := range req.IDs {
-		if err := h.Store.UpdateAlertStatus(r.Context(), id, "snoozed", req.Until); err != nil {
-			if errors.Is(err, store.ErrNotFound) {
-				results = append(results, bulkSnoozeItemResult{ID: id, Status: "error", Reason: "not_found"})
-				continue
-			}
+	found, err := h.Store.UpdateAlertStatuses(r.Context(), req.IDs, "snoozed", req.Until)
+	if err != nil {
+		for _, id := range req.IDs {
 			results = append(results, bulkSnoozeItemResult{ID: id, Status: "error", Reason: "internal_error"})
+		}
+		httputil.JSON(w, http.StatusOK, map[string]any{"results": results})
+		return
+	}
+	auditRecords := make([]store.AuditRecord, 0, len(found))
+	for _, id := range req.IDs {
+		if !found[id] {
+			results = append(results, bulkSnoozeItemResult{ID: id, Status: "error", Reason: "not_found"})
 			continue
 		}
-		if err := h.Store.RecordAuditFromContext(r.Context(), "alert.bulk_snooze", "alert", id, nil); err != nil {
-			slog.Error("failed to record audit", "action", "alert.bulk_snooze", "error", err)
-		}
+		auditRecords = append(auditRecords, store.AuditRecord{TargetID: id})
 		results = append(results, bulkSnoozeItemResult{ID: id, Status: "success"})
+	}
+	if err := h.Store.RecordAuditBatchFromContext(r.Context(), "alert.bulk_snooze", "alert", auditRecords); err != nil {
+		slog.Error("failed to record audit", "action", "alert.bulk_snooze", "error", err)
 	}
 
 	httputil.JSON(w, http.StatusOK, map[string]any{"results": results})

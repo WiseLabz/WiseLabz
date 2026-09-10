@@ -228,6 +228,33 @@ func (s *Store) ListDocsByService(ctx context.Context, serviceID string) ([]DocR
 	return docs, nil
 }
 
+// ListDocsGroupedByService returns every service doc grouped by connector ID.
+func (s *Store) ListDocsGroupedByService(ctx context.Context) (map[string][]DocRecord, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT id, title, kind, service_id, content, current_version, created_at, updated_at
+		FROM docs WHERE service_id IS NOT NULL ORDER BY service_id, updated_at DESC
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("list docs grouped by service: %w", err)
+	}
+	defer rows.Close() //nolint:errcheck
+
+	docsByService := map[string][]DocRecord{}
+	for rows.Next() {
+		var d DocRecord
+		var svcID sql.NullString
+		if err := rows.Scan(&d.ID, &d.Title, &d.Kind, &svcID, &d.Content, &d.CurrentVersion, &d.CreatedAt, &d.UpdatedAt); err != nil {
+			return nil, fmt.Errorf("scan: %w", err)
+		}
+		d.ServiceID = svcID.String
+		docsByService[d.ServiceID] = append(docsByService[d.ServiceID], d)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate docs: %w", err)
+	}
+	return docsByService, nil
+}
+
 // ListAllDocs returns a paginated, optionally search-filtered list of all docs.
 func (s *Store) ListAllDocs(ctx context.Context, search string, offset, limit int) ([]DocRecord, int, error) {
 	where := "WHERE 1=1"
