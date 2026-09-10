@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 )
 
@@ -180,6 +181,83 @@ func TestLoadEnvOverride(t *testing.T) {
 	}
 	if cfg.Retention.CronExpr != "0 2 * * *" {
 		t.Errorf("retention.cron_expr = %q, want 0 2 * * *", cfg.Retention.CronExpr)
+	}
+}
+
+// TestLoadEnvOverrideAllFields asserts every WISELABZ_ env var wired up in
+// Load has a working override, including server.{read,write,shutdown}_timeout_seconds
+// which previously had no override at all (issue #147).
+func TestLoadEnvOverrideAllFields(t *testing.T) {
+	dir := t.TempDir()
+	oldDir, _ := os.Getwd()
+	os.Chdir(dir)          //nolint:errcheck
+	defer os.Chdir(oldDir) //nolint:errcheck
+
+	env := map[string]string{
+		"WISELABZ_DB_DRIVER":                       "postgres",
+		"WISELABZ_DB_DSN":                          "postgres://x",
+		"WISELABZ_SERVER_HOST":                     "127.0.0.1",
+		"WISELABZ_SERVER_PORT":                     "9090",
+		"WISELABZ_SERVER_ORIGIN":                   "https://example.com",
+		"WISELABZ_SERVER_TRUSTED_PROXIES":          "10.0.0.0/8",
+		"WISELABZ_SERVER_EMBED":                    "true",
+		"WISELABZ_SERVER_READ_TIMEOUT_SECONDS":     "5",
+		"WISELABZ_SERVER_WRITE_TIMEOUT_SECONDS":    "6",
+		"WISELABZ_SERVER_SHUTDOWN_TIMEOUT_SECONDS": "7",
+		"WISELABZ_ENCRYPTION_KEY":                  "env-key",
+		"WISELABZ_AUTH_SECRET":                     "env-secret",
+		"WISELABZ_AUTH_ACCESS_TOKEN_TTL":           "60",
+		"WISELABZ_AUTH_REFRESH_TOKEN_TTL":          "120",
+		"WISELABZ_AUTH_STEP_UP_FOR_DESTRUCTIVE":    "false",
+		"WISELABZ_AI_ENABLED":                      "true",
+		"WISELABZ_AI_PROVIDER":                     "openai",
+		"WISELABZ_AI_MODEL":                        "gpt-x",
+		"WISELABZ_AI_API_KEY":                      "key",
+		"WISELABZ_AI_BASE_URL":                     "http://localhost",
+		"WISELABZ_AI_MODE":                         "auto_update",
+		"WISELABZ_SYNC_SCHEDULE":                   "* * * * *",
+		"WISELABZ_SYNC_POLL_CRON_EXPR":             "*/5 * * * * *",
+		"WISELABZ_QUALITY_CRON_EXPR":               "0 1 * * *",
+		"WISELABZ_LOG_LEVEL":                       "debug",
+		"WISELABZ_LOG_FORMAT":                      "json",
+		"WISELABZ_RETENTION_SNAPSHOT_DAYS":         "1",
+		"WISELABZ_RETENTION_DOC_VERSION_DAYS":      "2",
+		"WISELABZ_RETENTION_ALERT_DAYS":            "3",
+		"WISELABZ_RETENTION_SYNC_RUN_DAYS":         "4",
+		"WISELABZ_RETENTION_CRON_EXPR":             "0 4 * * *",
+		"WISELABZ_BACKUP_DIR":                      "/tmp/backups",
+		"WISELABZ_BACKUP_CRON_EXPR":                "0 5 * * *",
+		"WISELABZ_BACKUP_MAX_BACKUPS":              "1",
+		"WISELABZ_BACKUP_MAX_AGE_HOURS":            "2",
+		"WISELABZ_BACKUP_ENABLED":                  "false",
+	}
+	for k, v := range env {
+		t.Setenv(k, v)
+	}
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+
+	want := Config{
+		DB:         Database{Driver: "postgres", DSN: "postgres://x"},
+		Server:     Server{Host: "127.0.0.1", Port: 9090, Origin: "https://example.com", TrustedProxies: "10.0.0.0/8", Embed: true, ReadTimeoutSeconds: 5, WriteTimeoutSeconds: 6, ShutdownTimeoutSeconds: 7},
+		Encryption: EncryptionSettings{Key: "env-key"},
+		Auth:       AuthSettings{Secret: "env-secret", AccessTokenTTL: 60, RefreshTokenTTL: 120, StepUpForDestructive: false},
+		AI:         AISettings{Enabled: true, Provider: "openai", Model: "gpt-x", APIKey: "key", BaseURL: "http://localhost", Mode: "auto_update"},
+		Sync:       SyncSettings{Schedule: "* * * * *", PollCronExpr: "*/5 * * * * *"},
+		Quality:    QualitySettings{CronExpr: "0 1 * * *"},
+		Log:        LogSettings{Level: "debug", Format: "json"},
+		Retention:  RetentionSettings{SnapshotDays: 1, DocVersionDays: 2, AlertDays: 3, SyncRunDays: 4, CronExpr: "0 4 * * *"},
+		Backup:     BackupSettings{Dir: "/tmp/backups", CronExpr: "0 5 * * *", MaxBackups: 1, MaxAgeHours: 2, Enabled: false},
+	}
+
+	got := *cfg
+	got.Auth.OIDC = nil
+	want.Auth.OIDC = nil
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("Load() with all env vars set =\n%+v\nwant\n%+v", got, want)
 	}
 }
 

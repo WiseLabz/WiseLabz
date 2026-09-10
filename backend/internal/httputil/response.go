@@ -73,6 +73,9 @@ const (
 	DefaultPageSize = 20
 	// MaxPageSize is the maximum number of items per page.
 	MaxPageSize = 100
+	// MaxPage is the maximum page number, chosen so (MaxPage-1)*MaxPageSize
+	// cannot overflow int and stays well within any reasonable dataset size.
+	MaxPage = 1_000_000
 )
 
 // Paginate extracts pagination parameters from the request query string.
@@ -83,6 +86,9 @@ func Paginate(r *http.Request) (page, pageSize, offset int) {
 
 	if page < 1 {
 		page = 1
+	}
+	if page > MaxPage {
+		page = MaxPage
 	}
 	if pageSize < 1 {
 		pageSize = DefaultPageSize

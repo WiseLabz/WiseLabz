@@ -9,6 +9,7 @@ import (
 	"github.com/robfig/cron/v3"
 
 	"github.com/WiseLabz/wiselabz/internal/config"
+	"github.com/WiseLabz/wiselabz/internal/diagnostics"
 	"github.com/WiseLabz/wiselabz/internal/httputil"
 	"github.com/WiseLabz/wiselabz/internal/scheduler"
 	"github.com/WiseLabz/wiselabz/internal/store"
@@ -39,22 +40,11 @@ func NewHandler(db store.DBTX, cfg *config.Config, s *store.Store, scheduler *sc
 // Health responds with the server health status.
 // GET /api/health
 func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
-	dbStatus := "ok"
-	if err := h.DB.PingContext(r.Context()); err != nil {
-		dbStatus = "down"
-	}
-
-	status := "ok"
-	if dbStatus != "ok" {
-		status = "degraded"
-	}
-
+	health := diagnostics.CheckHealth(r.Context(), h.DB)
 	httputil.JSON(w, http.StatusOK, map[string]any{
-		"status":  status,
-		"healthy": dbStatus == "ok",
-		"components": []map[string]any{
-			{"name": "database", "status": dbStatus},
-		},
+		"status":     health.Status,
+		"healthy":    health.Status == "ok",
+		"components": health.Components,
 	})
 }
 

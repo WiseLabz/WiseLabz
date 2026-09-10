@@ -79,6 +79,9 @@ func (s *Store) ListSyncRunsByConnector(ctx context.Context, connectorID string,
 		}
 		runs = append(runs, r)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate sync runs: %w", err)
+	}
 	return runs, nil
 }
 
@@ -114,6 +117,9 @@ func (s *Store) ListRecentFailedSyncRuns(ctx context.Context, limit int) ([]Fail
 			return nil, fmt.Errorf("scan: %w", err)
 		}
 		runs = append(runs, r)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate failed sync runs: %w", err)
 	}
 	return runs, nil
 }

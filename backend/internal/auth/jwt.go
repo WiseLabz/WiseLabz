@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 )
 
 const (
@@ -219,10 +220,6 @@ func hasAudience(audiences jwt.ClaimStrings, audience string) bool {
 	return false
 }
 
-// newTokenID generates a simple unique ID. In production, use UUID.
-var tokenIDCounter int64
-
 func newTokenID() string {
-	tokenIDCounter++
-	return fmt.Sprintf("jti_%d_%d", time.Now().UnixNano(), tokenIDCounter)
+	return uuid.NewString()
 }

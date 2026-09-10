@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"strconv"
 	"strings"
 	"time"
 
@@ -192,6 +191,32 @@ func Load() (*Config, error) {
 	v.SetDefault("backup.max_age_hours", 720)        // keep backups for 30 days
 	v.SetDefault("backup.enabled", true)             // scheduled backups enabled by default
 
+	// Bind every field to its WISELABZ_ env var. viper's AutomaticEnv alone
+	// does not reliably resolve nested keys through Unmarshal, so each key
+	// needs an explicit BindEnv; this is the single source of truth for env
+	// overrides (a field left out here silently can't be set via env).
+	v.SetEnvPrefix("WISELABZ")
+	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
+	v.AllowEmptyEnv(true) // an explicitly-set empty env var must still override the default
+	v.AutomaticEnv()
+	for _, key := range []string{
+		"db.driver", "db.dsn",
+		"server.host", "server.port", "server.origin", "server.trusted_proxies", "server.embed",
+		"server.read_timeout_seconds", "server.write_timeout_seconds", "server.shutdown_timeout_seconds",
+		"encryption.key",
+		"auth.secret", "auth.access_token_ttl", "auth.refresh_token_ttl", "auth.step_up_for_destructive",
+		"ai.enabled", "ai.provider", "ai.model", "ai.api_key", "ai.base_url", "ai.mode",
+		"sync.schedule", "sync.poll_cron_expr",
+		"quality.cron_expr",
+		"log.level", "log.format",
+		"retention.snapshot_days", "retention.doc_version_days", "retention.alert_days", "retention.sync_run_days", "retention.cron_expr",
+		"backup.dir", "backup.cron_expr", "backup.max_backups", "backup.max_age_hours", "backup.enabled",
+	} {
+		if err := v.BindEnv(key); err != nil {
+			return nil, fmt.Errorf("bind env %q: %w", key, err)
+		}
+	}
+
 	if err := v.ReadInConfig(); err != nil {
 		// Config file is optional — env-only config is valid for PaaS deployments
 		if _, ok := errors.AsType[viper.ConfigFileNotFoundError](err); !ok {
@@ -206,83 +231,12 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("unmarshal config: %w", err)
 	}
 
-	// Apply WISELABZ_ environment variable overrides manually.
-	// viper's AutomaticEnv + Unmarshal has inconsistent env resolution;
-	// this explicit pass guarantees env vars always take precedence.
-	applyEnvOverrides(&cfg)
-
 	// Validate cron expressions
 	if err := cfg.validateCronExpressions(); err != nil {
 		return nil, err
 	}
 
 	return &cfg, nil
-}
-
-// applyEnvOverrides checks for WISELABZ_ prefixed environment variables
-// and applies them to the config struct, overriding file/default values.
-func applyEnvOverrides(cfg *Config) {
-	// Map of env var suffix -> setter function
-	overrides := map[string]func(string){
-		"DB_DRIVER":                    func(v string) { cfg.DB.Driver = v },
-		"DB_DSN":                       func(v string) { cfg.DB.DSN = v },
-		"SERVER_HOST":                  func(v string) { cfg.Server.Host = v },
-		"SERVER_PORT":                  func(v string) { cfg.Server.Port = intEnv(v) },
-		"SERVER_ORIGIN":                func(v string) { cfg.Server.Origin = v },
-		"SERVER_TRUSTED_PROXIES":       func(v string) { cfg.Server.TrustedProxies = v },
-		"SERVER_EMBED":                 func(v string) { cfg.Server.Embed = boolEnv(v) },
-		"ENCRYPTION_KEY":               func(v string) { cfg.Encryption.Key = v },
-		"AUTH_SECRET":                  func(v string) { cfg.Auth.Secret = v },
-		"AUTH_ACCESS_TOKEN_TTL":        func(v string) { cfg.Auth.AccessTokenTTL = intEnv(v) },
-		"AUTH_REFRESH_TOKEN_TTL":       func(v string) { cfg.Auth.RefreshTokenTTL = intEnv(v) },
-		"AUTH_STEP_UP_FOR_DESTRUCTIVE": func(v string) { cfg.Auth.StepUpForDestructive = boolEnv(v) },
-		"AI_ENABLED":                   func(v string) { cfg.AI.Enabled = boolEnv(v) },
-		"AI_PROVIDER":                  func(v string) { cfg.AI.Provider = v },
-		"AI_MODEL":                     func(v string) { cfg.AI.Model = v },
-		"AI_API_KEY":                   func(v string) { cfg.AI.APIKey = v },
-		"AI_BASE_URL":                  func(v string) { cfg.AI.BaseURL = v },
-		"AI_MODE":                      func(v string) { cfg.AI.Mode = v },
-		"SYNC_SCHEDULE":                func(v string) { cfg.Sync.Schedule = v },
-		"SYNC_POLL_CRON_EXPR":          func(v string) { cfg.Sync.PollCronExpr = v },
-		"QUALITY_CRON_EXPR":            func(v string) { cfg.Quality.CronExpr = v },
-		"LOG_LEVEL":                    func(v string) { cfg.Log.Level = v },
-		"LOG_FORMAT":                   func(v string) { cfg.Log.Format = v },
-		"RETENTION_SNAPSHOT_DAYS":      func(v string) { cfg.Retention.SnapshotDays = intEnv(v) },
-		"RETENTION_DOC_VERSION_DAYS":   func(v string) { cfg.Retention.DocVersionDays = intEnv(v) },
-		"RETENTION_ALERT_DAYS":         func(v string) { cfg.Retention.AlertDays = intEnv(v) },
-		"RETENTION_SYNC_RUN_DAYS":      func(v string) { cfg.Retention.SyncRunDays = intEnv(v) },
-		"RETENTION_CRON_EXPR":          func(v string) { cfg.Retention.CronExpr = v },
-		"BACKUP_DIR":                   func(v string) { cfg.Backup.Dir = v },
-		"BACKUP_CRON_EXPR":             func(v string) { cfg.Backup.CronExpr = v },
-		"BACKUP_MAX_BACKUPS":           func(v string) { cfg.Backup.MaxBackups = intEnv(v) },
-		"BACKUP_MAX_AGE_HOURS":         func(v string) { cfg.Backup.MaxAgeHours = intEnv(v) },
-		"BACKUP_ENABLED":               func(v string) { cfg.Backup.Enabled = boolEnv(v) },
-	}
-
-	prefix := "WISELABZ_"
-	for _, e := range os.Environ() {
-		if !strings.HasPrefix(e, prefix) {
-			continue
-		}
-		kv := strings.TrimPrefix(e, prefix)
-		eq := strings.IndexByte(kv, '=')
-		if eq < 0 {
-			continue
-		}
-		key, val := kv[:eq], kv[eq+1:]
-		if setter, ok := overrides[key]; ok {
-			setter(val)
-		}
-	}
-}
-
-func intEnv(v string) int {
-	n, _ := strconv.Atoi(v)
-	return n
-}
-
-func boolEnv(v string) bool {
-	return v == "1" || strings.EqualFold(v, "true")
 }
 
 // validateCronExpressions validates all cron expressions in the config.

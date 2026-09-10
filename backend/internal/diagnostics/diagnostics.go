@@ -130,7 +130,7 @@ func Collect(ctx context.Context, s *store.Store, cfg *config.Config) (*Bundle, 
 
 	return &Bundle{
 		GeneratedAt: time.Now().UTC().Format(time.RFC3339),
-		Health:      collectHealth(ctx, s.DB()),
+		Health:      CheckHealth(ctx, s.DB()),
 		Versions:    collectVersions(),
 		SanitizedConfig: SanitizedConfig{
 			Connectors:    sanitizedConnectors,
@@ -145,8 +145,10 @@ func Collect(ctx context.Context, s *store.Store, cfg *config.Config) (*Bundle, 
 	}, nil
 }
 
-// collectHealth mirrors system.Handler.Health's DB-ping logic.
-func collectHealth(ctx context.Context, db store.DBTX) Health {
+// CheckHealth pings the database and classifies overall instance health.
+// Shared by system.Handler.Health and the diagnostics bundle so both report
+// the same status for the same instance state.
+func CheckHealth(ctx context.Context, db store.DBTX) Health {
 	dbStatus := "ok"
 	if err := db.PingContext(ctx); err != nil {
 		dbStatus = "down"

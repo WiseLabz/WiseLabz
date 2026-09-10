@@ -64,6 +64,9 @@ func (s *Store) ListSavedViews(ctx context.Context, userID, surface string) ([]S
 		}
 		views = append(views, v)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate saved views: %w", err)
+	}
 	if views == nil {
 		views = []SavedView{}
 	}

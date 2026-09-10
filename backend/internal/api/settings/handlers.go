@@ -173,7 +173,10 @@ func (h *Handler) UpdateProviderEnabled(w http.ResponseWriter, r *http.Request) 
 }
 
 func (h *Handler) oidcProviders(ctx context.Context) []map[string]any {
-	flags, _ := h.Store.GetOIDCProviderFlags(ctx)
+	flags, err := h.Store.GetOIDCProviderFlags(ctx)
+	if err != nil {
+		slog.Error("failed to get OIDC provider flags", "error", err)
+	}
 	out := make([]map[string]any, 0, len(h.Config.Auth.OIDC))
 	for i := range h.Config.Auth.OIDC {
 		p := &h.Config.Auth.OIDC[i]
