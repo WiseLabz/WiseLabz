@@ -15,6 +15,7 @@ import {
   useGetConnectorsConnectorIdData,
   useGetConnectorsConnectorIdSyncs,
   useGetConnectorsSchema,
+  postConnectorsConnectorIdRestart,
   putConnectorsConnectorIdEnabled,
   putConnectorsConnectorId,
   getGetConnectorsQueryKey,
@@ -75,6 +76,7 @@ export function ServiceDetailPage() {
   const overrides = useLive((s) => s.statusOverrides);
   const activity = useLive((s) => s.activity);
   const [removing, setRemoving] = useState(false);
+  const [restartPreviewOpen, setRestartPreviewOpen] = useState(false);
 
   const toggleEnabled = useMutation({
     mutationFn: (enabled: boolean) => putConnectorsConnectorIdEnabled(id, { enabled }),
@@ -91,6 +93,16 @@ export function ServiceDetailPage() {
       void connector.refetch();
     },
   });
+
+  const restartPreview = useMutation({
+    mutationFn: () => postConnectorsConnectorIdRestart(id, { dryRun: true }),
+  });
+
+  const openRestartPreview = () => {
+    restartPreview.reset();
+    setRestartPreviewOpen(true);
+    restartPreview.mutate();
+  };
 
   if (connector.isLoading) {
     return (
@@ -194,6 +206,16 @@ export function ServiceDetailPage() {
             <Button
               size="sm"
               variant="ghost"
+              onClick={openRestartPreview}
+              disabled={restartPreview.isPending}
+            >
+              {restartPreview.isPending
+                ? t('services.detail.restartPreviewLoading')
+                : t('services.detail.restartPreview')}
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
               onClick={() => toggleEnabled.mutate(!c.enabled)}
               disabled={toggleEnabled.isPending}
             >
@@ -231,6 +253,64 @@ export function ServiceDetailPage() {
           navigate('/services');
         }}
       />
+
+      <Dialog
+        open={restartPreviewOpen}
+        onClose={() => setRestartPreviewOpen(false)}
+        title={t('services.detail.restartPreviewTitle')}
+        size="sm"
+      >
+        {restartPreview.isPending ? (
+          <SkeletonRows rows={3} />
+        ) : restartPreview.isError || !restartPreview.data ? (
+          <div className="space-y-3">
+            <p className="text-sm text-err">{t('services.detail.restartPreviewError')}</p>
+            <Button size="sm" variant="secondary" onClick={() => restartPreview.mutate()}>
+              {t('common.retry')}
+            </Button>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <p className="text-sm text-ink-muted">{t('services.detail.restartPreviewNotice')}</p>
+            <dl className="grid grid-cols-2 gap-x-4 gap-y-3 rounded-md border border-line-soft bg-canvas-sunken p-3 text-sm">
+              <div>
+                <dt className="text-2xs text-ink-faint">{t('services.detail.restartTarget')}</dt>
+                <dd className="mt-0.5 font-medium text-ink">{restartPreview.data.targetService}</dd>
+              </div>
+              <div>
+                <dt className="text-2xs text-ink-faint">{t('services.detail.restartDowntime')}</dt>
+                <dd className="mt-0.5 font-medium text-ink">
+                  {t('services.detail.restartSeconds', {
+                    count: restartPreview.data.estimatedDowntimeSeconds,
+                  })}
+                </dd>
+              </div>
+            </dl>
+            <div>
+              <h3 className="text-sm font-semibold text-ink">
+                {t('services.detail.restartDependencies')}
+              </h3>
+              {restartPreview.data.dependentServices.length === 0 ? (
+                <p className="mt-1 text-sm text-ink-muted">
+                  {t('services.detail.restartNoDependencies')}
+                </p>
+              ) : (
+                <ul className="mt-2 divide-y divide-line-soft rounded-md border border-line-soft">
+                  {restartPreview.data.dependentServices.map((service) => (
+                    <li
+                      key={`${service.kind}-${service.name}`}
+                      className="px-3 py-2 text-sm text-ink"
+                    >
+                      <span>{service.name}</span>
+                      <span className="ml-2 font-mono text-2xs text-ink-faint">{service.kind}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        )}
+      </Dialog>
     </div>
   );
 }

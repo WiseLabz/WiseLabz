@@ -184,6 +184,17 @@ export const curatedHandlers = [
     return HttpResponse.json(removalImpact(params.connectorId as string));
   }),
 
+  http.post('*/connectors/:connectorId/restart', async ({ params }) => {
+    await delay(LATENCY);
+    const connector = connectors.find((item) => item.id === params.connectorId);
+    if (!connector) return new HttpResponse(null, { status: 404 });
+    return HttpResponse.json({
+      targetService: connector.name,
+      estimatedDowntimeSeconds: 30,
+      dependentServices: [],
+    });
+  }),
+
   // Live raw-state snapshot for the service detail page.
   http.get('*/connectors/:connectorId/data', async ({ params }) => {
     await delay(LATENCY);
