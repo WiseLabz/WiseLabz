@@ -110,7 +110,7 @@ func (h *Hub) Run() {
 					case client.send <- msg.data:
 					default:
 						// Client's send buffer is full — drop message
-						slog.Warn("WebSocket client send buffer full, dropping message", "user_id", client.userID)
+						slog.Warn("WebSocket client send buffer full, dropping message", "user_id", logsafe.Sanitize(client.userID))
 					}
 				}
 			}
