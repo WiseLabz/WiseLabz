@@ -94,6 +94,21 @@ If the pre-commit hook blocks you on a lint issue, run `make lint` to see the fu
 output and `make fmt` to auto-fix formatting. The commit-msg hook will reject
 non-conforming messages — the error tells you exactly what's wrong.
 
+## Releasing
+
+Releases are automated with [release-please](https://github.com/googleapis/release-please):
+
+1. Conventional Commits merged to `main` are picked up automatically.
+2. release-please keeps an open "release PR" that bumps the version (root
+   `CHANGELOG.md` and `web/package.json`) based on those commits.
+3. Merging that PR pushes a `vX.Y.Z` tag.
+4. The tag push triggers `release.yml`, which builds and publishes the
+   multi-arch image to GHCR, runs a Trivy scan, generates release notes with
+   git-cliff, and publishes the GitHub Release with an attached SBOM.
+
+No manual tagging or changelog editing is needed — write a correct
+Conventional Commit and the rest is automatic.
+
 ## Testing and coverage baseline
 
 The frontend rewrite (#52) landed, so the deferral in the old policy (#12) no
