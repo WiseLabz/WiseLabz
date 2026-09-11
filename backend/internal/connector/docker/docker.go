@@ -3,15 +3,20 @@ package docker
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	"syscall"
 	"time"
+
+	"golang.org/x/crypto/ssh"
 
 	"github.com/WiseLabz/wiselabz/internal/connector"
 )
@@ -24,11 +29,20 @@ func init() {
 		Category: "containers_paas",
 		Name:     "Docker",
 		Fields: []connector.SchemaField{
-			{Key: "host", Label: "Docker Host", Type: "text", Required: true, Placeholder: "unix:///var/run/docker.sock or tcp://host:2375"},
+			{Key: "host", Label: "Docker Host", Type: "text", Required: true, Placeholder: "unix:///var/run/docker.sock, tcp://host:2375, or ssh://user@host"},
+			{Key: "tls_cert", Label: "TLS Client Certificate (PEM)", Type: "secret", Description: "For tcp:// hosts using mutual TLS"},
+			{Key: "tls_key", Label: "TLS Client Key (PEM)", Type: "secret", Description: "For tcp:// hosts using mutual TLS"},
+			{Key: "tls_ca", Label: "TLS CA Certificate (PEM)", Type: "secret", Description: "Optional; verifies the server against this CA instead of the system pool"},
+			{Key: "verify_tls", Label: "Verify TLS", Type: "toggle", Default: "true", Description: "For tcp:// hosts with a client certificate configured"},
+			{Key: "ssh_user", Label: "SSH Username", Type: "text", Description: "For ssh:// hosts; overrides any user@ in the host URL"},
+			{Key: "ssh_password", Label: "SSH Password", Type: "password", Description: "For ssh:// hosts; ignored if an SSH private key is set"},
+			{Key: "ssh_private_key", Label: "SSH Private Key (PEM)", Type: "secret", Description: "For ssh:// hosts"},
+			{Key: "ssh_private_key_passphrase", Label: "SSH Private Key Passphrase", Type: "password", Description: "Optional; only used with an encrypted SSH private key"},
+			{Key: "ssh_host_key", Label: "SSH Host Public Key", Type: "secret", Description: "For ssh:// hosts; pinned host key in authorized_keys format (e.g. output of ssh-keyscan), required to verify the server's identity"},
 		},
 	}, func(config map[string]any) (connector.Connector, error) {
 		host, _ := config["host"].(string)
-		client, baseURL, err := newDockerClient(host)
+		client, baseURL, err := newDockerClient(host, config)
 		// Construction never fails here: an invalid/empty host (e.g. an
 		// unconfigured connector instance) surfaces as an error from
 		// Validate/Fetch instead, matching how other connectors treat
@@ -177,9 +191,11 @@ func isTimeout(err error) bool {
 // newDockerClient builds an HTTP client and base URL for the given Docker
 // host address. unix:// sockets are dialed directly; tcp:// hosts are dialed
 // through a guarded dialer that rejects loopback/link-local targets (mirrors
-// custom.newGuardedClient — to be shared via connector.go in the pfSense PR).
-// Any other scheme (including ssh://, deferred to a fast-follow) is rejected.
-func newDockerClient(host string) (*http.Client, string, error) {
+// custom.newGuardedClient — to be shared via connector.go in the pfSense PR)
+// and use mutual TLS when tls_cert/tls_key are configured; ssh:// hosts
+// tunnel the Engine API over an SSH connection. Any other scheme is
+// rejected.
+func newDockerClient(host string, config map[string]any) (*http.Client, string, error) {
 	switch {
 	case strings.HasPrefix(host, "unix://"):
 		socketPath := strings.TrimPrefix(host, "unix://")
@@ -192,31 +208,231 @@ func newDockerClient(host string) (*http.Client, string, error) {
 		return &http.Client{Timeout: 30 * time.Second, Transport: transport}, "http://unix", nil
 
 	case strings.HasPrefix(host, "tcp://"):
-		addr := strings.TrimPrefix(host, "tcp://")
-		dialer := &net.Dialer{
-			Timeout: 30 * time.Second,
-			Control: func(_, address string, _ syscall.RawConn) error {
-				h, _, err := net.SplitHostPort(address)
-				if err != nil {
-					return fmt.Errorf("split address %q: %w", address, err)
-				}
-				ip := net.ParseIP(h)
-				if ip == nil {
-					return fmt.Errorf("unresolvable address %q", h)
-				}
-				if ip.IsLoopback() || ip.IsLinkLocalUnicast() {
-					return fmt.Errorf("connection to blocked address %s denied", ip)
-				}
-				return nil
-			},
-		}
-		transport := &http.Transport{DialContext: dialer.DialContext}
-		return &http.Client{Timeout: 30 * time.Second, Transport: transport}, "http://" + addr, nil
+		return newTCPDockerClient(strings.TrimPrefix(host, "tcp://"), config)
+
+	case strings.HasPrefix(host, "ssh://"):
+		return newSSHDockerClient(host, config)
 
 	default:
-		return nil, "", fmt.Errorf("unsupported docker host scheme in %q (only unix:// and tcp:// are supported)", host)
+		return nil, "", fmt.Errorf("unsupported docker host scheme in %q (only unix://, tcp://, and ssh:// are supported)", host)
 	}
 }
+
+func newTCPDockerClient(addr string, config map[string]any) (*http.Client, string, error) {
+	dialer := &net.Dialer{
+		Timeout: 30 * time.Second,
+		Control: func(_, address string, _ syscall.RawConn) error {
+			h, _, err := net.SplitHostPort(address)
+			if err != nil {
+				return fmt.Errorf("split address %q: %w", address, err)
+			}
+			ip := net.ParseIP(h)
+			if ip == nil {
+				return fmt.Errorf("unresolvable address %q", h)
+			}
+			if ip.IsLoopback() || ip.IsLinkLocalUnicast() {
+				return fmt.Errorf("connection to blocked address %s denied", ip)
+			}
+			return nil
+		},
+	}
+
+	tlsConfig, err := buildDockerTLSConfig(config)
+	if err != nil {
+		return nil, "", err
+	}
+	if tlsConfig == nil {
+		transport := &http.Transport{DialContext: dialer.DialContext}
+		return &http.Client{Timeout: 30 * time.Second, Transport: transport}, "http://" + addr, nil
+	}
+	transport := &http.Transport{DialContext: dialer.DialContext, TLSClientConfig: tlsConfig}
+	return &http.Client{Timeout: 30 * time.Second, Transport: transport}, "https://" + addr, nil
+}
+
+// buildDockerTLSConfig builds the mutual-TLS config for a tcp:// Docker host
+// from its tls_cert/tls_key/tls_ca/verify_tls fields, or returns a nil
+// config (no error) when no client certificate is configured.
+func buildDockerTLSConfig(config map[string]any) (*tls.Config, error) {
+	certPEM, _ := config["tls_cert"].(string)
+	keyPEM, _ := config["tls_key"].(string)
+	if certPEM == "" || keyPEM == "" {
+		return nil, nil
+	}
+
+	cert, err := tls.X509KeyPair([]byte(certPEM), []byte(keyPEM))
+	if err != nil {
+		return nil, fmt.Errorf("parse TLS client certificate/key: %w", err)
+	}
+	verifyTLS := true
+	if v, ok := config["verify_tls"]; ok {
+		if b, ok := v.(bool); ok {
+			verifyTLS = b
+		}
+	}
+	tlsConfig := &tls.Config{
+		Certificates:       []tls.Certificate{cert},
+		InsecureSkipVerify: !verifyTLS,
+	}
+	if caPEM, _ := config["tls_ca"].(string); caPEM != "" {
+		pool := x509.NewCertPool()
+		if !pool.AppendCertsFromPEM([]byte(caPEM)) {
+			return nil, errors.New("parse TLS CA certificate: no valid certificates found")
+		}
+		tlsConfig.RootCAs = pool
+	}
+	return tlsConfig, nil
+}
+
+// newSSHDockerClient connects to an ssh:// Docker host by opening an SSH
+// session and running "docker system dial-stdio" on the remote end, the
+// same mechanism the Docker CLI itself uses for SSH contexts. The session's
+// stdin/stdout pipe is wrapped as a net.Conn and reused as the single
+// underlying connection for all Engine API requests.
+//
+// ponytail: one dial-stdio process per connector instance, no connection
+// pooling — fine since Fetch only issues serial requests; add pooling if
+// concurrent Docker connector requests are ever needed.
+func newSSHDockerClient(host string, config map[string]any) (*http.Client, string, error) {
+	u, err := url.Parse(host)
+	if err != nil {
+		return nil, "", fmt.Errorf("parse ssh host %q: %w", host, err)
+	}
+	addr := u.Host
+	if u.Port() == "" {
+		addr = net.JoinHostPort(u.Hostname(), "22")
+	}
+	user, _ := config["ssh_user"].(string)
+	if user == "" && u.User != nil {
+		user = u.User.Username()
+	}
+	if user == "" {
+		return nil, "", errors.New("ssh docker host requires a username (set ssh_user or user@ in the host URL)")
+	}
+
+	auth, err := sshAuthMethods(config)
+	if err != nil {
+		return nil, "", err
+	}
+
+	hostKeyText, _ := config["ssh_host_key"].(string)
+	if strings.TrimSpace(hostKeyText) == "" {
+		return nil, "", errors.New("ssh docker host requires a pinned host public key (set ssh_host_key)")
+	}
+	hostPublicKey, _, _, _, err := ssh.ParseAuthorizedKey([]byte(hostKeyText))
+	if err != nil {
+		return nil, "", fmt.Errorf("parse ssh_host_key: %w", err)
+	}
+
+	sshClient, err := ssh.Dial("tcp", addr, &ssh.ClientConfig{
+		User:            user,
+		Auth:            auth,
+		HostKeyCallback: ssh.FixedHostKey(hostPublicKey),
+		Timeout:         30 * time.Second,
+	})
+	if err != nil {
+		return nil, "", fmt.Errorf("ssh dial %q: %w", addr, err)
+	}
+
+	session, err := sshClient.NewSession()
+	if err != nil {
+		_ = sshClient.Close()
+		return nil, "", fmt.Errorf("open ssh session: %w", err)
+	}
+	stdin, err := session.StdinPipe()
+	if err != nil {
+		_ = session.Close()
+		_ = sshClient.Close()
+		return nil, "", fmt.Errorf("open ssh stdin pipe: %w", err)
+	}
+	stdout, err := session.StdoutPipe()
+	if err != nil {
+		_ = session.Close()
+		_ = sshClient.Close()
+		return nil, "", fmt.Errorf("open ssh stdout pipe: %w", err)
+	}
+	session.Stderr = io.Discard
+	if err := session.Start("docker system dial-stdio"); err != nil {
+		_ = session.Close()
+		_ = sshClient.Close()
+		return nil, "", fmt.Errorf("start docker system dial-stdio: %w", err)
+	}
+
+	conn := &sshStdioConn{stdin: stdin, stdout: stdout, session: session, client: sshClient}
+	transport := &http.Transport{
+		DialContext: func(context.Context, string, string) (net.Conn, error) {
+			if !conn.claim() {
+				return nil, errors.New("ssh docker connection already in use")
+			}
+			return conn, nil
+		},
+	}
+	return &http.Client{Timeout: 30 * time.Second, Transport: transport}, "http://docker", nil
+}
+
+func sshAuthMethods(config map[string]any) ([]ssh.AuthMethod, error) {
+	if keyPEM, _ := config["ssh_private_key"].(string); keyPEM != "" {
+		passphrase, _ := config["ssh_private_key_passphrase"].(string)
+		var signer ssh.Signer
+		var err error
+		if passphrase != "" {
+			signer, err = ssh.ParsePrivateKeyWithPassphrase([]byte(keyPEM), []byte(passphrase))
+		} else {
+			signer, err = ssh.ParsePrivateKey([]byte(keyPEM))
+		}
+		if err != nil {
+			return nil, fmt.Errorf("parse ssh private key: %w", err)
+		}
+		return []ssh.AuthMethod{ssh.PublicKeys(signer)}, nil
+	}
+	if password, _ := config["ssh_password"].(string); password != "" {
+		return []ssh.AuthMethod{ssh.Password(password)}, nil
+	}
+	return nil, errors.New("ssh docker host requires ssh_private_key or ssh_password")
+}
+
+// sshStdioConn adapts an SSH session's stdin/stdout pipes to a net.Conn for
+// use as an http.Transport connection. claim() lets the transport detect
+// reuse beyond the single supported connection instead of silently
+// corrupting the stream.
+type sshStdioConn struct {
+	stdin   io.WriteCloser
+	stdout  io.Reader
+	session *ssh.Session
+	client  *ssh.Client
+	claimed bool
+}
+
+func (c *sshStdioConn) claim() bool {
+	if c.claimed {
+		return false
+	}
+	c.claimed = true
+	return true
+}
+
+func (c *sshStdioConn) Read(b []byte) (int, error)  { return c.stdout.Read(b) }
+func (c *sshStdioConn) Write(b []byte) (int, error) { return c.stdin.Write(b) }
+
+func (c *sshStdioConn) Close() error {
+	_ = c.stdin.Close()
+	sessErr := c.session.Close()
+	cliErr := c.client.Close()
+	if sessErr != nil {
+		return sessErr
+	}
+	return cliErr
+}
+
+func (c *sshStdioConn) LocalAddr() net.Addr              { return dockerSSHAddr{} }
+func (c *sshStdioConn) RemoteAddr() net.Addr             { return dockerSSHAddr{} }
+func (c *sshStdioConn) SetDeadline(time.Time) error      { return nil }
+func (c *sshStdioConn) SetReadDeadline(time.Time) error  { return nil }
+func (c *sshStdioConn) SetWriteDeadline(time.Time) error { return nil }
+
+type dockerSSHAddr struct{}
+
+func (dockerSSHAddr) Network() string { return "ssh" }
+func (dockerSSHAddr) String() string  { return "docker-ssh-dial-stdio" }
 
 func buildContainerTable(raw []byte) string {
 	var containers []struct {

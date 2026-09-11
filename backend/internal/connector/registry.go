@@ -38,9 +38,13 @@ func (s TypeSchema) DegradedLatencyThreshold() time.Duration {
 
 // SchemaField describes a single configuration field.
 type SchemaField struct {
-	Key         string `json:"name"`
-	Label       string `json:"label"`
-	Type        string `json:"kind"` // "text", "password", "number", "select", "toggle"
+	Key   string `json:"name"`
+	Label string `json:"label"`
+	Type  string `json:"kind"` // "text", "password", "number", "select", "toggle", "secret"
+	// "secret" is a multi-line paste field for PEM certs/keys and similar
+	// blobs. It validates like "text" and is encrypted at rest like
+	// "password" (see store.IsSecretFieldType); unlike "password" it isn't
+	// masked in the UI, since masking a multi-line block isn't useful.
 	Required    bool   `json:"required"`
 	Default     string `json:"default,omitempty"`
 	Placeholder string `json:"placeholder,omitempty"`

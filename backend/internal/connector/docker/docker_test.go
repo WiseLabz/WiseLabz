@@ -1,13 +1,27 @@
 package docker
 
 import (
+	"bufio"
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/tls"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/pem"
+	"fmt"
+	"io"
+	"math/big"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
+
+	"golang.org/x/crypto/ssh"
 
 	"github.com/WiseLabz/wiselabz/internal/connector"
 )
@@ -110,8 +124,8 @@ func TestFetchToleratesEndpointFailure(t *testing.T) {
 }
 
 func TestNewDockerClientRejectsUnsupportedScheme(t *testing.T) {
-	if _, _, err := newDockerClient("ssh://user@host"); err == nil {
-		t.Fatal("newDockerClient(ssh://...) error = nil, want rejection")
+	if _, _, err := newDockerClient("ftp://user@host", nil); err == nil {
+		t.Fatal("newDockerClient(ftp://...) error = nil, want rejection")
 	}
 }
 
@@ -135,7 +149,7 @@ func TestNewDockerClientDialsUnixSocket(t *testing.T) {
 		_ = srv.Serve(listener)
 	}()
 
-	client, baseURL, err := newDockerClient("unix://" + socketPath)
+	client, baseURL, err := newDockerClient("unix://"+socketPath, nil)
 	if err != nil {
 		t.Fatalf("newDockerClient(unix://...) error = %v", err)
 	}
@@ -165,5 +179,255 @@ func TestFetchSurfacesMalformedSystemResponse(t *testing.T) {
 	}
 	if !strings.Contains(snap.Sections[0].Content, "malformed response") {
 		t.Fatalf("System section = %q, want malformed response placeholder", snap.Sections[0].Content)
+	}
+}
+
+func generateSelfSignedCert(t *testing.T) (certPEM, keyPEM []byte) {
+	t.Helper()
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatalf("generate key: %v", err)
+	}
+	template := &x509.Certificate{
+		SerialNumber: big.NewInt(1),
+		Subject:      pkix.Name{CommonName: "docker-test"},
+		NotBefore:    time.Now().Add(-time.Hour),
+		NotAfter:     time.Now().Add(time.Hour),
+		KeyUsage:     x509.KeyUsageDigitalSignature,
+		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth},
+	}
+	der, err := x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key)
+	if err != nil {
+		t.Fatalf("create certificate: %v", err)
+	}
+	certPEM = pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
+	keyDER, err := x509.MarshalECPrivateKey(key)
+	if err != nil {
+		t.Fatalf("marshal key: %v", err)
+	}
+	keyPEM = pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: keyDER})
+	return certPEM, keyPEM
+}
+
+func TestNewTCPDockerClientMutualTLS(t *testing.T) {
+	certPEM, keyPEM := generateSelfSignedCert(t)
+	clientCAPool := x509.NewCertPool()
+	if !clientCAPool.AppendCertsFromPEM(certPEM) {
+		t.Fatal("failed to load client cert into pool")
+	}
+
+	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if len(r.TLS.PeerCertificates) == 0 {
+			t.Error("server saw no client certificate")
+		}
+		_, _ = w.Write([]byte(`{"Version":"24.0.0"}`))
+	}))
+	server.TLS = &tls.Config{ClientAuth: tls.RequireAndVerifyClientCert, ClientCAs: clientCAPool}
+	server.StartTLS()
+	defer server.Close()
+
+	addr := strings.TrimPrefix(server.URL, "https://")
+
+	// newTCPDockerClient's guarded dialer intentionally refuses loopback
+	// addresses (see connector.GuardedDialer), which httptest always binds
+	// to — so exercise the TLS config it builds directly against the
+	// server via tls.Dial instead of going through the full client, still
+	// proving the cert/key/verify_tls wiring produces a working handshake.
+	tlsConfig, err := buildDockerTLSConfig(map[string]any{
+		"tls_cert":   string(certPEM),
+		"tls_key":    string(keyPEM),
+		"verify_tls": false,
+	})
+	if err != nil {
+		t.Fatalf("buildDockerTLSConfig() error = %v", err)
+	}
+	if tlsConfig == nil {
+		t.Fatal("buildDockerTLSConfig() = nil, want a config")
+	}
+	conn, err := tls.Dial("tcp", addr, tlsConfig)
+	if err != nil {
+		t.Fatalf("mutual TLS handshake failed: %v", err)
+	}
+	defer conn.Close() //nolint:errcheck
+	if _, err := conn.Write([]byte("GET /version HTTP/1.1\r\nHost: docker\r\nConnection: close\r\n\r\n")); err != nil {
+		t.Fatalf("write request: %v", err)
+	}
+	resp, err := http.ReadResponse(bufio.NewReader(conn), nil)
+	if err != nil {
+		t.Fatalf("read response: %v", err)
+	}
+	defer resp.Body.Close() //nolint:errcheck
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+}
+
+func TestNewTCPDockerClientNoTLSWhenNoCert(t *testing.T) {
+	client, baseURL, err := newTCPDockerClient("example:2375", nil)
+	if err != nil {
+		t.Fatalf("newTCPDockerClient() error = %v", err)
+	}
+	if baseURL != "http://example:2375" {
+		t.Fatalf("baseURL = %q, want http://example:2375", baseURL)
+	}
+	if client.Transport.(*http.Transport).TLSClientConfig != nil {
+		t.Fatal("TLSClientConfig set with no tls_cert/tls_key configured")
+	}
+}
+
+func TestNewTCPDockerClientRejectsInvalidCertPair(t *testing.T) {
+	if _, _, err := newTCPDockerClient("example:2376", map[string]any{
+		"tls_cert": "not a cert",
+		"tls_key":  "not a key",
+	}); err == nil {
+		t.Fatal("newTCPDockerClient() error = nil, want rejection of invalid cert/key")
+	}
+}
+
+// sshDockerServer runs a minimal SSH server accepting one exec request of
+// "docker system dial-stdio" and speaking a single canned HTTP exchange over
+// the resulting channel, enough to prove newSSHDockerClient's dial/auth/pipe
+// wiring actually carries Engine API traffic end to end.
+func startSSHDockerServer(t *testing.T, user, password string) (addr, hostPublicKeyText string) {
+	t.Helper()
+	hostKey, err := generateSSHHostKey()
+	if err != nil {
+		t.Fatalf("generate ssh host key: %v", err)
+	}
+	hostPublicKeyText = string(ssh.MarshalAuthorizedKey(hostKey.PublicKey()))
+
+	config := &ssh.ServerConfig{
+		PasswordCallback: func(c ssh.ConnMetadata, pass []byte) (*ssh.Permissions, error) {
+			if c.User() == user && string(pass) == password {
+				return nil, nil
+			}
+			return nil, fmt.Errorf("wrong credentials")
+		},
+	}
+	config.AddHostKey(hostKey)
+
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	t.Cleanup(func() { _ = listener.Close() })
+
+	go func() {
+		nConn, err := listener.Accept()
+		if err != nil {
+			return
+		}
+		sshConn, chans, reqs, err := ssh.NewServerConn(nConn, config)
+		if err != nil {
+			return
+		}
+		defer sshConn.Close() //nolint:errcheck
+		go ssh.DiscardRequests(reqs)
+		for newChan := range chans {
+			if newChan.ChannelType() != "session" {
+				_ = newChan.Reject(ssh.UnknownChannelType, "unsupported")
+				continue
+			}
+			channel, requests, err := newChan.Accept()
+			if err != nil {
+				return
+			}
+			go func() {
+				for req := range requests {
+					if req.Type == "exec" {
+						_ = req.Reply(true, nil)
+						go serveOneHTTPExchange(channel)
+					} else {
+						_ = req.Reply(false, nil)
+					}
+				}
+			}()
+		}
+	}()
+
+	return listener.Addr().String(), hostPublicKeyText
+}
+
+func serveOneHTTPExchange(channel ssh.Channel) {
+	defer channel.Close() //nolint:errcheck
+	reader := bufio.NewReader(channel)
+	for {
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			return
+		}
+		if line == "\r\n" || line == "\n" {
+			break
+		}
+	}
+	_, _ = channel.Write([]byte("HTTP/1.1 200 OK\r\nConnection: close\r\n\r\n{\"Version\":\"24.0.0\"}"))
+}
+
+func generateSSHHostKey() (ssh.Signer, error) {
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		return nil, err
+	}
+	return ssh.NewSignerFromKey(key)
+}
+
+func TestNewSSHDockerClientDialsAndExecutesDialStdio(t *testing.T) {
+	addr, hostKey := startSSHDockerServer(t, "testuser", "testpass")
+
+	client, baseURL, err := newSSHDockerClient("ssh://testuser@"+addr, map[string]any{
+		"ssh_password": "testpass",
+		"ssh_host_key": hostKey,
+	})
+	if err != nil {
+		t.Fatalf("newSSHDockerClient() error = %v", err)
+	}
+	if baseURL != "http://docker" {
+		t.Fatalf("baseURL = %q, want http://docker", baseURL)
+	}
+
+	resp, err := client.Get(baseURL + "/version")
+	if err != nil {
+		t.Fatalf("request over ssh dial-stdio failed: %v", err)
+	}
+	defer resp.Body.Close() //nolint:errcheck
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read response: %v", err)
+	}
+	if !strings.Contains(string(body), "24.0.0") {
+		t.Fatalf("body = %q, want version 24.0.0", body)
+	}
+}
+
+func TestNewSSHDockerClientRejectsWrongCredentials(t *testing.T) {
+	addr, hostKey := startSSHDockerServer(t, "testuser", "testpass")
+
+	if _, _, err := newSSHDockerClient("ssh://testuser@"+addr, map[string]any{
+		"ssh_password": "wrongpass",
+		"ssh_host_key": hostKey,
+	}); err == nil {
+		t.Fatal("newSSHDockerClient() error = nil, want auth failure")
+	}
+}
+
+func TestNewSSHDockerClientRejectsMissingHostKey(t *testing.T) {
+	addr, _ := startSSHDockerServer(t, "testuser", "testpass")
+
+	if _, _, err := newSSHDockerClient("ssh://testuser@"+addr, map[string]any{
+		"ssh_password": "testpass",
+	}); err == nil {
+		t.Fatal("newSSHDockerClient() error = nil, want rejection for missing ssh_host_key")
+	}
+}
+
+func TestNewSSHDockerClientRejectsWrongHostKey(t *testing.T) {
+	addr, _ := startSSHDockerServer(t, "testuser", "testpass")
+	_, otherHostKey := startSSHDockerServer(t, "testuser", "testpass")
+
+	if _, _, err := newSSHDockerClient("ssh://testuser@"+addr, map[string]any{
+		"ssh_password": "testpass",
+		"ssh_host_key": otherHostKey,
+	}); err == nil {
+		t.Fatal("newSSHDockerClient() error = nil, want rejection for mismatched host key")
 	}
 }

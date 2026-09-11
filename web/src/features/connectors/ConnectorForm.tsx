@@ -225,6 +225,23 @@ export function Field({
       </label>
     );
   }
+  if (field.kind === 'secret') {
+    return (
+      <label className="block">
+        <span className="mb-1 block text-2xs text-ink-faint">
+          {field.label}
+          {field.required && <span className="text-err"> *</span>}
+        </span>
+        <textarea
+          value={String(value)}
+          placeholder={field.placeholder}
+          rows={4}
+          onChange={(e) => onChange(e.target.value)}
+          className="w-full rounded-sm border border-line bg-surface px-2.5 py-2 font-mono text-xs text-ink outline-none placeholder:text-ink-faint focus-visible:border-accent-primary-soft"
+        />
+      </label>
+    );
+  }
   const type =
     field.kind === 'password' || field.secret
       ? 'password'

@@ -2167,7 +2167,7 @@ components:
       properties:
         name: { type: string }
         label: { type: string }
-        kind: { type: string, enum: [string, number, boolean, password, select] }
+        kind: { type: string, enum: [string, number, boolean, password, select, secret] }
         required: { type: boolean }
         secret: { type: boolean, description: Rendered as password input; write-only }
         placeholder: { type: string }

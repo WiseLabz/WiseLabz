@@ -137,6 +137,7 @@ export const getGetConnectorsSchemaResponseMock = (): ConnectorTypeSchema[] =>
           'boolean',
           'password',
           'select',
+          'secret',
         ] as const),
         required: faker.datatype.boolean(),
         secret: faker.helpers.arrayElement([faker.datatype.boolean(), undefined]),
