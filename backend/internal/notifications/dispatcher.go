@@ -1,5 +1,5 @@
-// Package notifications provides notification dispatching (in-app, SMTP stub, webhook) with
-// per-channel delivery tracking and bounded retry for failed deliveries.
+// Package notifications provides notification dispatching (in-app, SMTP stub, webhook, Discord,
+// Slack) with per-channel delivery tracking and bounded retry for failed deliveries.
 package notifications
 
 import (
@@ -133,7 +133,15 @@ func (d *Dispatcher) notifyAlert(ctx context.Context, channels []channelCfg, ale
 	}
 
 	if cfg, enabled := findChannel(channels, "webhook"); enabled {
-		d.attemptWebhook(ctx, notifID, cfg, title, message)
+		d.attemptChannel(ctx, notifID, "webhook", cfg, webhookPayload(title, message))
+	}
+
+	if cfg, enabled := findChannel(channels, "discord"); enabled {
+		d.attemptChannel(ctx, notifID, "discord", cfg, discordPayload(title, message))
+	}
+
+	if cfg, enabled := findChannel(channels, "slack"); enabled {
+		d.attemptChannel(ctx, notifID, "slack", cfg, slackPayload(title, message))
 	}
 }
 
@@ -178,23 +186,39 @@ func (d *Dispatcher) recordDelivery(ctx context.Context, notificationID, channel
 	}
 }
 
-// attemptWebhook sends the webhook and records the resulting delivery status.
-func (d *Dispatcher) attemptWebhook(ctx context.Context, notificationID string, cfg channelCfg, title, message string) {
+// attemptChannel sends payload to the channel's configured URL over the shared webhook transport
+// and records the resulting delivery status under channelType.
+func (d *Dispatcher) attemptChannel(ctx context.Context, notificationID, channelType string, cfg channelCfg, payload any) {
 	url, _ := cfg.Config["url"].(string)
 	if url == "" {
-		d.recordDelivery(ctx, notificationID, "webhook", store.DeliveryStatusFailed, "webhook url not configured")
+		d.recordDelivery(ctx, notificationID, channelType, store.DeliveryStatusFailed, channelType+" url not configured")
 		return
 	}
-	if err := sendWebhook(ctx, url, title, message); err != nil {
-		d.recordDelivery(ctx, notificationID, "webhook", store.DeliveryStatusFailed, err.Error())
+	if err := sendWebhook(ctx, url, payload); err != nil {
+		d.recordDelivery(ctx, notificationID, channelType, store.DeliveryStatusFailed, err.Error())
 		return
 	}
-	d.recordDelivery(ctx, notificationID, "webhook", store.DeliveryStatusSent, "")
+	d.recordDelivery(ctx, notificationID, channelType, store.DeliveryStatusSent, "")
+}
+
+// webhookPayload shapes a title/message pair into the generic webhook body.
+func webhookPayload(title, message string) any {
+	return map[string]string{"title": title, "message": message}
+}
+
+// discordPayload shapes a title/message pair into a Discord incoming-webhook body.
+func discordPayload(title, message string) any {
+	return map[string]string{"content": fmt.Sprintf("**%s**\n%s", title, message)}
+}
+
+// slackPayload shapes a title/message pair into a Slack incoming-webhook body.
+func slackPayload(title, message string) any {
+	return map[string]string{"text": fmt.Sprintf("*%s*\n%s", title, message)}
 }
 
 // sendWebhook POSTs a JSON payload to url and treats any transport error or non-2xx response as failure.
-func sendWebhook(ctx context.Context, url, title, message string) error {
-	body, err := json.Marshal(map[string]string{"title": title, "message": message})
+func sendWebhook(ctx context.Context, url string, payload any) error {
+	body, err := json.Marshal(payload)
 	if err != nil {
 		return err
 	}

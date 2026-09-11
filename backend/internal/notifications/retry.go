@@ -52,10 +52,14 @@ func (d *Dispatcher) retryDueDeliveries(ctx context.Context, logger *slog.Logger
 		var sendErr error
 		switch del.Channel {
 		case "webhook":
-			sendErr = d.retryWebhook(ctx, notif)
+			sendErr = d.retryChannel(ctx, notif, "webhook", webhookPayload)
+		case "discord":
+			sendErr = d.retryChannel(ctx, notif, "discord", discordPayload)
+		case "slack":
+			sendErr = d.retryChannel(ctx, notif, "slack", slackPayload)
 		default:
-			// ponytail: only webhook is retried today; in_app never fails and smtp is a stub
-			// that always succeeds, so neither channel ever lands in the failed+due set.
+			// ponytail: only webhook/discord/slack are retried today; in_app never fails and
+			// smtp is a stub that always succeeds, so neither lands in the failed+due set.
 			continue
 		}
 
@@ -77,16 +81,17 @@ func (d *Dispatcher) retryDueDeliveries(ctx context.Context, logger *slog.Logger
 	}
 }
 
-// retryWebhook re-sends a webhook delivery using the current channel config. If the webhook
-// channel was disabled or removed since the original attempt, retrying fails without a network call.
-func (d *Dispatcher) retryWebhook(ctx context.Context, notif *store.NotificationRecord) error {
-	cfg, enabled := d.channel(ctx, "webhook")
+// retryChannel re-sends a delivery for the given channel type using the current channel config.
+// If the channel was disabled or removed since the original attempt, retrying fails without a
+// network call.
+func (d *Dispatcher) retryChannel(ctx context.Context, notif *store.NotificationRecord, channelType string, payloadFn func(title, message string) any) error {
+	cfg, enabled := d.channel(ctx, channelType)
 	if !enabled {
-		return errors.New("webhook channel disabled or removed")
+		return errors.New(channelType + " channel disabled or removed")
 	}
 	url, _ := cfg.Config["url"].(string)
 	if url == "" {
-		return errors.New("webhook url not configured")
+		return errors.New(channelType + " url not configured")
 	}
-	return sendWebhook(ctx, url, notif.Title, notif.Message)
+	return sendWebhook(ctx, url, payloadFn(notif.Title, notif.Message))
 }

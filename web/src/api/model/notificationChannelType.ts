@@ -14,4 +14,6 @@ export const NotificationChannelType = {
   in_app: 'in_app',
   smtp: 'smtp',
   webhook: 'webhook',
+  discord: 'discord',
+  slack: 'slack',
 } as const;

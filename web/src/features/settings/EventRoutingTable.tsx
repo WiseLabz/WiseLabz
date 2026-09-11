@@ -15,6 +15,8 @@ const CHANNEL_LABELS: Record<NotificationChannelType, string> = {
   in_app: 'In-app',
   smtp: 'Email',
   webhook: 'Webhook',
+  discord: 'Discord',
+  slack: 'Slack',
 };
 
 function eventLabel(eventType: string): string {
