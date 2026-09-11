@@ -81,6 +81,9 @@ func newTestAppWithBackupDir(t *testing.T, backupDir string) *testApp {
 	cfg := &config.Config{
 		Server: config.Server{Origin: "http://localhost:5173"},
 		Auth:   config.AuthSettings{Secret: "test-secret"},
+		// A fixed valid base64 32-byte AES-256 key, so tests exercise real
+		// connector-secret encryption/decryption rather than skipping it.
+		Encryption: config.EncryptionSettings{Key: "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE="},
 	}
 
 	jobRunner := scheduler.New(logger)
@@ -90,7 +93,7 @@ func newTestAppWithBackupDir(t *testing.T, backupDir string) *testApp {
 		JWT:        jwtSvc,
 		Config:     cfg,
 		DocEngine:  doc.NewEngine(s),
-		SyncEngine: sync.NewEngine(s, nil, nil, nil),
+		SyncEngine: sync.NewEngine(s, nil, nil, nil, cfg.Encryption.Key),
 		Scheduler:  jobRunner,
 		BackupDir:  backupDir,
 	})

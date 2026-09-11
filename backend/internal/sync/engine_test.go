@@ -116,7 +116,7 @@ func TestRunSync_NotifiesOnEligibleAlert(t *testing.T) {
 	}
 
 	notifier := &fakeNotifier{}
-	engine := NewEngine(s, nil, notifier, nil)
+	engine := NewEngine(s, nil, notifier, nil, "")
 
 	result, err := engine.RunSync(ctx, conn.ID, "job1")
 	if err != nil {
@@ -164,7 +164,7 @@ func TestRunSync_NoNotifyOnInfoOnlyChange(t *testing.T) {
 	}
 
 	notifier := &fakeNotifier{}
-	engine := NewEngine(s, nil, notifier, nil)
+	engine := NewEngine(s, nil, notifier, nil, "")
 
 	result, err := engine.RunSync(ctx, conn.ID, "job1")
 	if err != nil {
@@ -206,7 +206,7 @@ func TestRunSyncInvokesQualityChecker(t *testing.T) {
 			}
 
 			checker := &fakeQualityChecker{}
-			_, err := NewEngine(s, nil, nil, checker).RunSync(ctx, tt.connector.ID, "quality-job")
+			_, err := NewEngine(s, nil, nil, checker, "").RunSync(ctx, tt.connector.ID, "quality-job")
 			if (err != nil) != tt.wantRunErr {
 				t.Fatalf("RunSync error = %v, want error %v", err, tt.wantRunErr)
 			}
@@ -230,7 +230,7 @@ func TestRunSyncQualityCheckerErrorIsNonFatal(t *testing.T) {
 		t.Fatalf("CreateConnector: %v", err)
 	}
 	checker := &fakeQualityChecker{err: errors.New("quality unavailable")}
-	result, err := NewEngine(s, nil, nil, checker).RunSync(context.Background(), record.ID, "quality-error-job")
+	result, err := NewEngine(s, nil, nil, checker, "").RunSync(context.Background(), record.ID, "quality-error-job")
 	if err != nil || result.Status != "success" {
 		t.Fatalf("RunSync() = (%+v, %v), want successful sync", result, err)
 	}

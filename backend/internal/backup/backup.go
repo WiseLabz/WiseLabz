@@ -156,25 +156,35 @@ func exportWithin(ctx context.Context, s *store.Store) (*Bundle, error) {
 }
 
 // RedactConnectorConfig removes every field the connector's TypeSchema marks
-// as "password" from configData (a JSON-encoded map). Returns an error only
-// when configData itself fails to parse. Exported for reuse by other
-// read-only export features (e.g. internal/diagnostics) that need the same
-// secret-stripping behavior.
+// as secret-bearing (see store.IsSecretFieldType) from configData (a
+// JSON-encoded map). Returns an error only when configData itself fails to
+// parse. Exported for reuse by other read-only export features (e.g.
+// internal/diagnostics) that need the same secret-stripping behavior.
+//
+// This deliberately parses/marshals configData as plain JSON rather than via
+// store.ParseConnectorConfig/MarshalConnectorConfig: the values being
+// redacted are dropped outright, so nothing here needs the encryption key,
+// and whether a value is encrypted, plaintext-legacy, or garbage is
+// irrelevant to deleting it by key name.
 func RedactConnectorConfig(connType, configData string) (string, error) {
-	cfg, err := store.ParseConnectorConfig(configData)
-	if err != nil {
-		return "", err
+	var cfg map[string]any
+	if err := json.Unmarshal([]byte(configData), &cfg); err != nil {
+		return "", fmt.Errorf("parse connector config: %w", err)
 	}
 	schema, err := connector.GetTypeSchema(connType)
 	if err != nil {
 		return configData, nil //nolint:nilerr // unknown type: nothing known to redact, keep as-is
 	}
 	for _, f := range schema.Fields {
-		if f.Type == "password" {
+		if store.IsSecretFieldType(f.Type) {
 			delete(cfg, f.Key)
 		}
 	}
-	return store.MarshalConnectorConfig(cfg)
+	b, err := json.Marshal(cfg)
+	if err != nil {
+		return "", fmt.Errorf("marshal connector config: %w", err)
+	}
+	return string(b), nil
 }
 
 // LoadAIConfigSummary reads the AI config row directly (never selecting
