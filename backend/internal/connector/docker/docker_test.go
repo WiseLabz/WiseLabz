@@ -288,12 +288,13 @@ func TestNewTCPDockerClientRejectsInvalidCertPair(t *testing.T) {
 // "docker system dial-stdio" and speaking a single canned HTTP exchange over
 // the resulting channel, enough to prove newSSHDockerClient's dial/auth/pipe
 // wiring actually carries Engine API traffic end to end.
-func startSSHDockerServer(t *testing.T, user, password string) (addr string) {
+func startSSHDockerServer(t *testing.T, user, password string) (addr, hostPublicKeyText string) {
 	t.Helper()
 	hostKey, err := generateSSHHostKey()
 	if err != nil {
 		t.Fatalf("generate ssh host key: %v", err)
 	}
+	hostPublicKeyText = string(ssh.MarshalAuthorizedKey(hostKey.PublicKey()))
 
 	config := &ssh.ServerConfig{
 		PasswordCallback: func(c ssh.ConnMetadata, pass []byte) (*ssh.Permissions, error) {
@@ -344,7 +345,7 @@ func startSSHDockerServer(t *testing.T, user, password string) (addr string) {
 		}
 	}()
 
-	return listener.Addr().String()
+	return listener.Addr().String(), hostPublicKeyText
 }
 
 func serveOneHTTPExchange(channel ssh.Channel) {
@@ -371,10 +372,11 @@ func generateSSHHostKey() (ssh.Signer, error) {
 }
 
 func TestNewSSHDockerClientDialsAndExecutesDialStdio(t *testing.T) {
-	addr := startSSHDockerServer(t, "testuser", "testpass")
+	addr, hostKey := startSSHDockerServer(t, "testuser", "testpass")
 
 	client, baseURL, err := newSSHDockerClient("ssh://testuser@"+addr, map[string]any{
 		"ssh_password": "testpass",
+		"ssh_host_key": hostKey,
 	})
 	if err != nil {
 		t.Fatalf("newSSHDockerClient() error = %v", err)
@@ -398,11 +400,34 @@ func TestNewSSHDockerClientDialsAndExecutesDialStdio(t *testing.T) {
 }
 
 func TestNewSSHDockerClientRejectsWrongCredentials(t *testing.T) {
-	addr := startSSHDockerServer(t, "testuser", "testpass")
+	addr, hostKey := startSSHDockerServer(t, "testuser", "testpass")
 
 	if _, _, err := newSSHDockerClient("ssh://testuser@"+addr, map[string]any{
 		"ssh_password": "wrongpass",
+		"ssh_host_key": hostKey,
 	}); err == nil {
 		t.Fatal("newSSHDockerClient() error = nil, want auth failure")
+	}
+}
+
+func TestNewSSHDockerClientRejectsMissingHostKey(t *testing.T) {
+	addr, _ := startSSHDockerServer(t, "testuser", "testpass")
+
+	if _, _, err := newSSHDockerClient("ssh://testuser@"+addr, map[string]any{
+		"ssh_password": "testpass",
+	}); err == nil {
+		t.Fatal("newSSHDockerClient() error = nil, want rejection for missing ssh_host_key")
+	}
+}
+
+func TestNewSSHDockerClientRejectsWrongHostKey(t *testing.T) {
+	addr, _ := startSSHDockerServer(t, "testuser", "testpass")
+	_, otherHostKey := startSSHDockerServer(t, "testuser", "testpass")
+
+	if _, _, err := newSSHDockerClient("ssh://testuser@"+addr, map[string]any{
+		"ssh_password": "testpass",
+		"ssh_host_key": otherHostKey,
+	}); err == nil {
+		t.Fatal("newSSHDockerClient() error = nil, want rejection for mismatched host key")
 	}
 }

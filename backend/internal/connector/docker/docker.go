@@ -38,6 +38,7 @@ func init() {
 			{Key: "ssh_password", Label: "SSH Password", Type: "password", Description: "For ssh:// hosts; ignored if an SSH private key is set"},
 			{Key: "ssh_private_key", Label: "SSH Private Key (PEM)", Type: "secret", Description: "For ssh:// hosts"},
 			{Key: "ssh_private_key_passphrase", Label: "SSH Private Key Passphrase", Type: "password", Description: "Optional; only used with an encrypted SSH private key"},
+			{Key: "ssh_host_key", Label: "SSH Host Public Key", Type: "secret", Description: "For ssh:// hosts; pinned host key in authorized_keys format (e.g. output of ssh-keyscan), required to verify the server's identity"},
 		},
 	}, func(config map[string]any) (connector.Connector, error) {
 		host, _ := config["host"].(string)
@@ -313,10 +314,19 @@ func newSSHDockerClient(host string, config map[string]any) (*http.Client, strin
 		return nil, "", err
 	}
 
+	hostKeyText, _ := config["ssh_host_key"].(string)
+	if strings.TrimSpace(hostKeyText) == "" {
+		return nil, "", errors.New("ssh docker host requires a pinned host public key (set ssh_host_key)")
+	}
+	hostPublicKey, _, _, _, err := ssh.ParseAuthorizedKey([]byte(hostKeyText))
+	if err != nil {
+		return nil, "", fmt.Errorf("parse ssh_host_key: %w", err)
+	}
+
 	sshClient, err := ssh.Dial("tcp", addr, &ssh.ClientConfig{
 		User:            user,
 		Auth:            auth,
-		HostKeyCallback: ssh.InsecureIgnoreHostKey(), //nolint:gosec // ponytail: no known_hosts management yet; revisit if host-key pinning is requested.
+		HostKeyCallback: ssh.FixedHostKey(hostPublicKey),
 		Timeout:         30 * time.Second,
 	})
 	if err != nil {
