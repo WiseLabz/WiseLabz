@@ -28,9 +28,9 @@ func TestBackupExportRedactsSecrets(t *testing.T) {
 	app := newTestApp(t)
 	_, opToken := app.user(t, "operator")
 
-	cfg, err := store.MarshalConnectorConfig(map[string]any{
+	cfg, err := store.MarshalConnectorConfig("proxmox", map[string]any{
 		"url": "https://pve.example.com", "token_id": "root@pam!monitoring", "token_secret": "super-secret-token",
-	})
+	}, app.Config.Encryption.Key)
 	if err != nil {
 		t.Fatalf("marshal config: %v", err)
 	}

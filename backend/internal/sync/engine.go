@@ -85,11 +85,15 @@ type Engine struct {
 	hub            *ws.Hub
 	notifier       AlertNotifier
 	qualityChecker QualityChecker
+	// encKey is the base64-encoded AES-256 key (config.Encryption.Key) used
+	// to decrypt/re-encrypt secret-bearing connector config fields via
+	// store.ParseConnectorConfig/MarshalConnectorConfig.
+	encKey string
 }
 
 // NewEngine creates a new sync engine.
-func NewEngine(s *store.Store, h *ws.Hub, notifier AlertNotifier, qualityChecker QualityChecker) *Engine {
-	return &Engine{store: s, hub: h, notifier: notifier, qualityChecker: qualityChecker}
+func NewEngine(s *store.Store, h *ws.Hub, notifier AlertNotifier, qualityChecker QualityChecker, encKey string) *Engine {
+	return &Engine{store: s, hub: h, notifier: notifier, qualityChecker: qualityChecker, encKey: encKey}
 }
 
 // RunResult holds the outcome of a sync run.
@@ -217,7 +221,7 @@ func (e *Engine) RunSyncFields(ctx context.Context, connectorID string, jobID st
 
 	// Parse config and inject top-level fields stored in separate columns
 	// so connector factories see url + verify_tls alongside their custom fields.
-	cfg, err := store.ParseConnectorConfig(rec.ConfigData)
+	cfg, err := store.ParseConnectorConfig(rec.Type, rec.ConfigData, e.encKey)
 	if err != nil {
 		slog.Error("sync parse config failed", "connector", connectorID, "error", err)
 		if e.hub != nil {
@@ -299,7 +303,7 @@ func (e *Engine) RunSyncFields(ctx context.Context, connectorID string, jobID st
 		delete(toStore, "url")
 		delete(toStore, "verify_tls")
 		delete(toStore, "fields")
-		if configData, err := store.MarshalConnectorConfig(toStore); err == nil {
+		if configData, err := store.MarshalConnectorConfig(rec.Type, toStore, e.encKey); err == nil {
 			_ = e.store.UpdateConnector(ctx, connectorID, map[string]any{
 				"config_data":           configData,
 				"credential_expires_at": expiresAt.UTC().Format(time.RFC3339),
