@@ -27,16 +27,23 @@ func init() {
 		Fields: []connector.SchemaField{
 			{Key: "url", Label: "pfSense URL", Type: "text", Required: true, Placeholder: "https://pfsense.example.com"},
 			{Key: "api_key", Label: "API Key", Type: "password", Required: true},
+			{Key: "verify_tls", Label: "Verify TLS", Type: "toggle", Required: false, Default: "true"},
 		},
 	}, func(config map[string]any) (connector.Connector, error) {
 		url, _ := config["url"].(string)
 		apiKey, _ := config["api_key"].(string)
+		verifyTLS := true
+		if v, ok := config["verify_tls"]; ok {
+			if b, ok := v.(bool); ok {
+				verifyTLS = b
+			}
+		}
 		dialer := connector.GuardedDialer(30 * time.Second)
 		client := &http.Client{
 			Timeout: 30 * time.Second,
 			Transport: &http.Transport{
 				DialContext:     dialer.DialContext,
-				TLSClientConfig: &tls.Config{InsecureSkipVerify: false},
+				TLSClientConfig: &tls.Config{InsecureSkipVerify: !verifyTLS},
 			},
 		}
 		return &Connector{
