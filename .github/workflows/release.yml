@@ -21,10 +21,10 @@ jobs:
           fetch-depth: 0
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@4574d27a4764455b0b5e4e99e4e98ba09a7e5ad7 # v3.6.0
+        uses: docker/setup-qemu-action@29109295f81e9208d7d86ff1c6c12d2833863392 # v3.6.0
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@f7ce87c1d6bead3e36075b2ce75da1f6cc28aaca # v3.10.0
+        uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2 # v3.10.0
 
       - name: Login to GHCR
         uses: docker/login-action@9780b0c442fbb1117ed29e0efdff1e18412f7567 # v3.3.0
@@ -35,7 +35,7 @@ jobs:
 
       - name: Extract Docker metadata
         id: meta
-        uses: docker/metadata-action@902fa8ec7d6ecbf8d84d538b9b16a4cef98485c9 # v5.7.0
+        uses: docker/metadata-action@902fa8ec7d6ecbf8d84d538b9b233a880e428804 # v5.7.0
         with:
           images: ghcr.io/${{ github.repository_owner }}/wiselabz
           tags: |
@@ -45,7 +45,7 @@ jobs:
 
       - name: Build and push
         id: build
-        uses: docker/build-push-action@0adf9956655fe3d2bba487a0835b9a15aa5ab2bb # v6.15.0
+        uses: docker/build-push-action@471d1dc4e07e5cdedd4c2171150001c434f0b7a4 # v6.15.0
         with:
           context: .
           file: ./Dockerfile
@@ -57,7 +57,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Scan image for vulnerabilities (report)
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
         with:
           image-ref: ghcr.io/${{ github.repository_owner }}/wiselabz@${{ steps.build.outputs.digest }}
           severity: "CRITICAL,HIGH"
@@ -65,7 +65,7 @@ jobs:
           exit-code: "0"
 
       - name: Scan image for vulnerabilities (gate on critical)
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
         with:
           image-ref: ghcr.io/${{ github.repository_owner }}/wiselabz@${{ steps.build.outputs.digest }}
           severity: "CRITICAL"
@@ -94,7 +94,7 @@ jobs:
           fetch-depth: 0
 
       - name: Generate changelog
-        uses: orhun/git-cliff-action@ce2ab141265b99ad41aa2fcf3623f9ac65726a91 # v4.4.0
+        uses: orhun/git-cliff-action@5948f44d10840fe2942302442a825512938ca72e # v4.4.0
         with:
           args: --latest --strip all --output CHANGELOG.md
 
