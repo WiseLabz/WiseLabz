@@ -115,7 +115,7 @@ func main() {
 
 	// Initialize engines
 	qualityChecker := quality.NewChecker(s, wsHub)
-	syncEngine := sync.NewEngine(s, wsHub, notifDispatcher, qualityChecker)
+	syncEngine := sync.NewEngine(s, wsHub, notifDispatcher, qualityChecker, cfg.Encryption.Key)
 	docEngine := doc.NewEngine(s)
 
 	aiRegistry := ai.NewRegistry()

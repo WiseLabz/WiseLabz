@@ -56,7 +56,7 @@ func TestRunSyncFlagsRepeatDriftAndBumpsSeverity(t *testing.T) {
 		t.Fatalf("seed snapshot: %v", err)
 	}
 
-	engine := NewEngine(s, nil, nil, nil)
+	engine := NewEngine(s, nil, nil, nil, "")
 
 	if _, err := engine.RunSync(ctx, conn.ID, "job1"); err != nil {
 		t.Fatalf("RunSync (1st): %v", err)
@@ -116,7 +116,7 @@ func TestRunSyncRefusesExpiredCredentialsWithoutRefresher(t *testing.T) {
 		t.Fatalf("create connector: %v", err)
 	}
 
-	result, err := NewEngine(s, nil, nil, nil).RunSync(ctx, conn.ID, "job1")
+	result, err := NewEngine(s, nil, nil, nil, "").RunSync(ctx, conn.ID, "job1")
 	if err == nil {
 		t.Fatal("RunSync() = nil error, want auth error for expired credentials")
 	}
@@ -179,7 +179,7 @@ func TestRunSyncRefreshesExpiredCredentials(t *testing.T) {
 		t.Fatalf("create connector: %v", err)
 	}
 
-	result, err := NewEngine(s, nil, nil, nil).RunSync(ctx, conn.ID, "job1")
+	result, err := NewEngine(s, nil, nil, nil, "").RunSync(ctx, conn.ID, "job1")
 	if err != nil {
 		t.Fatalf("RunSync: %v", err)
 	}
@@ -228,7 +228,7 @@ func TestRunSyncFieldsSurvivesCredentialRefresh(t *testing.T) {
 		t.Fatalf("create connector: %v", err)
 	}
 
-	if _, err := NewEngine(s, nil, nil, nil).RunSyncFields(ctx, conn.ID, "job1", []string{"vms"}); err != nil {
+	if _, err := NewEngine(s, nil, nil, nil, "").RunSyncFields(ctx, conn.ID, "job1", []string{"vms"}); err != nil {
 		t.Fatalf("RunSyncFields: %v", err)
 	}
 
@@ -251,7 +251,7 @@ func TestRunSyncFieldsPassesHintToConnector(t *testing.T) {
 		t.Fatalf("create connector: %v", err)
 	}
 
-	if _, err := NewEngine(s, nil, nil, nil).RunSyncFields(ctx, conn.ID, "job1", []string{"vms", "storage"}); err != nil {
+	if _, err := NewEngine(s, nil, nil, nil, "").RunSyncFields(ctx, conn.ID, "job1", []string{"vms", "storage"}); err != nil {
 		t.Fatalf("RunSyncFields: %v", err)
 	}
 

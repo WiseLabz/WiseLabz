@@ -75,7 +75,7 @@ func NewRouter(cfg Config) chi.Router {
 	authH := authhandler.NewHandler(cfg.Store, cfg.JWT, cfg.Config)
 	apiKeyH := apikeyhandler.NewHandler(cfg.Store)
 	settingH := settinghandler.NewHandler(cfg.Store, cfg.Config, cfg.AIRegistry)
-	connH := connhandler.NewHandler(cfg.Store, cfg.SyncEngine)
+	connH := connhandler.NewHandler(cfg.Store, cfg.SyncEngine, cfg.Config)
 	tmplH := tmplhandler.NewHandler(cfg.Store, cfg.DocEngine)
 	changeH := changehandler.NewHandler(cfg.Store, settingH, cfg.AIRegistry, cfg.WSHub)
 	alertH := alerthandler.NewHandler(cfg.Store)

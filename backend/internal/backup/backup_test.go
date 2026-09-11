@@ -44,15 +44,20 @@ func newTestStore(t *testing.T) *store.Store {
 	return s
 }
 
+// testEncKey is a fixed valid base64-encoded 32-byte AES-256 key for tests
+// that need to round-trip connector config through MarshalConnectorConfig
+// (mirrors backend/internal/api/testapp_test.go's test key).
+const testEncKey = "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE="
+
 func TestExportRedactsConnectorSecrets(t *testing.T) {
 	ctx := context.Background()
 	s := newTestStore(t)
 
-	proxmoxCfg, err := store.MarshalConnectorConfig(map[string]any{
+	proxmoxCfg, err := store.MarshalConnectorConfig("proxmox", map[string]any{
 		"url":          "https://pve.example.com:8006",
 		"token_id":     "root@pam!monitoring",
 		"token_secret": "super-secret-token",
-	})
+	}, testEncKey)
 	if err != nil {
 		t.Fatalf("marshal proxmox config: %v", err)
 	}
@@ -63,11 +68,11 @@ func TestExportRedactsConnectorSecrets(t *testing.T) {
 		t.Fatalf("create proxmox connector: %v", err)
 	}
 
-	opnsenseCfg, err := store.MarshalConnectorConfig(map[string]any{
+	opnsenseCfg, err := store.MarshalConnectorConfig("opnsense", map[string]any{
 		"url":        "https://fw.example.com",
 		"api_key":    "some-key",
 		"api_secret": "super-secret-api-secret",
-	})
+	}, testEncKey)
 	if err != nil {
 		t.Fatalf("marshal opnsense config: %v", err)
 	}
@@ -100,7 +105,7 @@ func TestExportRedactsConnectorSecrets(t *testing.T) {
 	}
 
 	for _, c := range b.Connectors {
-		cfg, err := store.ParseConnectorConfig(c.ConfigData)
+		cfg, err := store.ParseConnectorConfig(c.Type, c.ConfigData, testEncKey)
 		if err != nil {
 			t.Fatalf("parse connector config: %v", err)
 		}

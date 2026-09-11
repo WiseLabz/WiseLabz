@@ -14,6 +14,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/WiseLabz/wiselabz/internal/config"
 	"github.com/WiseLabz/wiselabz/internal/connector"
 	"github.com/WiseLabz/wiselabz/internal/httputil"
 	"github.com/WiseLabz/wiselabz/internal/logsafe"
@@ -25,11 +26,12 @@ import (
 type Handler struct {
 	Store      *store.Store
 	SyncEngine *sync.Engine
+	Config     *config.Config
 }
 
 // NewHandler creates a new connector handler.
-func NewHandler(s *store.Store, e *sync.Engine) *Handler {
-	return &Handler{Store: s, SyncEngine: e}
+func NewHandler(s *store.Store, e *sync.Engine, cfg *config.Config) *Handler {
+	return &Handler{Store: s, SyncEngine: e, Config: cfg}
 }
 
 // List handles GET /api/connectors.
@@ -89,12 +91,12 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 
 	configData := "{}"
 	if req.Config != nil {
-		data, err := json.Marshal(req.Config)
+		data, err := store.MarshalConnectorConfig(req.Type, req.Config, h.Config.Encryption.Key)
 		if err != nil {
-			httputil.Error(w, http.StatusBadRequest, "invalid_request", "Invalid config JSON")
+			httputil.Errorf(w, err)
 			return
 		}
-		configData = string(data)
+		configData = data
 	}
 
 	if err := validateConnectorConfig(req.Type, req.URL, verifyTLS, req.Config); err != nil {
@@ -186,14 +188,6 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	if req.VerifyTLS != nil {
 		updates["verify_tls"] = *req.VerifyTLS
 	}
-	if req.Config != nil {
-		data, err := json.Marshal(req.Config)
-		if err != nil {
-			httputil.Error(w, http.StatusBadRequest, "invalid_request", "Invalid config JSON")
-			return
-		}
-		updates["config_data"] = string(data)
-	}
 	if req.Enabled != nil {
 		updates["enabled"] = *req.Enabled
 	}
@@ -202,11 +196,6 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.Type != nil {
 		updates["type"] = *req.Type
-	}
-
-	if len(updates) == 0 {
-		httputil.Error(w, http.StatusBadRequest, "invalid_request", "No fields to update")
-		return
 	}
 
 	if req.Config != nil {
@@ -235,6 +224,17 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 			httputil.Error(w, http.StatusBadRequest, "invalid_request", err.Error())
 			return
 		}
+		data, err := store.MarshalConnectorConfig(typ, req.Config, h.Config.Encryption.Key)
+		if err != nil {
+			httputil.Errorf(w, err)
+			return
+		}
+		updates["config_data"] = data
+	}
+
+	if len(updates) == 0 {
+		httputil.Error(w, http.StatusBadRequest, "invalid_request", "No fields to update")
+		return
 	}
 
 	if err := h.Store.UpdateConnector(r.Context(), id, updates); err != nil {
@@ -309,7 +309,7 @@ func (h *Handler) Test(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cfg, err := store.ParseConnectorConfig(rec.ConfigData)
+	cfg, err := store.ParseConnectorConfig(rec.Type, rec.ConfigData, h.Config.Encryption.Key)
 	if err != nil {
 		httputil.Errorf(w, err)
 		return
@@ -363,7 +363,7 @@ func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cfg, err := store.ParseConnectorConfig(rec.ConfigData)
+	cfg, err := store.ParseConnectorConfig(rec.Type, rec.ConfigData, h.Config.Encryption.Key)
 	if err != nil {
 		httputil.Errorf(w, err)
 		return
