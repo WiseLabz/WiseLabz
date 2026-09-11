@@ -132,6 +132,8 @@ const settingsChannels: NotificationChannel[] = [
   { type: 'in_app', enabled: true },
   { type: 'smtp', enabled: true, config: { host: 'smtp.wiselabz.local', port: 587, from: 'wiselabz@home.lab' } },
   { type: 'webhook', enabled: false, config: { url: 'https://hooks.home.lab/wiselabz' } },
+  { type: 'discord', enabled: false, config: { url: 'https://discord.com/api/webhooks/…' } },
+  { type: 'slack', enabled: false, config: { url: 'https://hooks.slack.com/services/…' } },
 ];
 
 // Seed routing for every event×channel pair with sensible defaults.

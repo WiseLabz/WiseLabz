@@ -504,6 +504,8 @@ export const en = {
       inAppDesc: 'Live toasts and the activity feed.',
       smtpDesc: 'Email via the configured SMTP server.',
       webhookDesc: 'POST events to an external URL.',
+      discordDesc: 'Post events to a Discord channel via incoming webhook.',
+      slackDesc: 'Post events to a Slack channel via incoming webhook.',
       testChannel: 'Test {{channel}}',
       routingTitle: 'Event routing',
       routingDesc:

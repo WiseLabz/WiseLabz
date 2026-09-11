@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"log/slog"
 	"os"
+	"strings"
 	"testing"
 
 	_ "modernc.org/sqlite"
@@ -121,13 +122,14 @@ func TestRunMigrationsDown(t *testing.T) {
 			t.Errorf("table %s should still exist after rolling back only the last migration: %v", table, err)
 		}
 	}
-	var retentionSettingsCount int
-	err = db.QueryRow("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='retention_settings'").Scan(&retentionSettingsCount)
-	if err != nil {
-		t.Fatalf("query sqlite_master for retention_settings: %v", err)
+	// Rolling back only the latest migration (discord/slack channels) should restore the
+	// original channel CHECK constraint.
+	var deliveriesSchema string
+	if err := db.QueryRow("SELECT sql FROM sqlite_master WHERE type='table' AND name='notification_deliveries'").Scan(&deliveriesSchema); err != nil {
+		t.Fatalf("query sqlite_master for notification_deliveries: %v", err)
 	}
-	if retentionSettingsCount != 0 {
-		t.Error("retention_settings table should not exist after rolling back its migration")
+	if strings.Contains(deliveriesSchema, "discord") {
+		t.Error("notification_deliveries CHECK constraint should not allow 'discord' after rolling back its migration")
 	}
 }
 

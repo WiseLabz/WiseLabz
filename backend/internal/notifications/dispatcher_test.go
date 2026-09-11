@@ -3,10 +3,12 @@ package notifications
 import (
 	"context"
 	"database/sql"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/WiseLabz/wiselabz/internal/store"
@@ -35,11 +37,17 @@ func newTestStore(t *testing.T) *store.Store {
 // setWebhookConfig writes a notification_config row enabling only the webhook channel.
 func setWebhookConfig(t *testing.T, s *store.Store, url string) {
 	t.Helper()
-	cfgJSON := `{"channels":[{"type":"webhook","enabled":true,"config":{"url":"` + url + `"}}]}`
+	setChannelConfig(t, s, "webhook", url)
+}
+
+// setChannelConfig writes a notification_config row enabling only the given channel type.
+func setChannelConfig(t *testing.T, s *store.Store, channelType, url string) {
+	t.Helper()
+	cfgJSON := `{"channels":[{"type":"` + channelType + `","enabled":true,"config":{"url":"` + url + `"}}]}`
 	// newTestStore doesn't call Store.Init, so the id=1 singleton row may not exist yet — upsert.
 	if _, err := s.DB().ExecContext(context.Background(),
 		`INSERT INTO notification_config (id, config_json) VALUES (1, ?) ON CONFLICT(id) DO UPDATE SET config_json = excluded.config_json`, cfgJSON); err != nil {
-		t.Fatalf("set webhook config: %v", err)
+		t.Fatalf("set %s config: %v", channelType, err)
 	}
 }
 
@@ -156,6 +164,165 @@ func TestNotifyAlert_WebhookFailure(t *testing.T) {
 	}
 	if webhook.LastError == "" {
 		t.Errorf("expected non-empty LastError for failed delivery")
+	}
+}
+
+func TestNotifyAlert_DiscordSuccess(t *testing.T) {
+	s := newTestStore(t)
+	var gotBody string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		gotBody = string(body)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+	setChannelConfig(t, s, "discord", srv.URL)
+
+	d := NewDispatcher(s, nil)
+	d.NotifyAlert("alert-1", "user-1", "alert.created", "Title", "Message")
+
+	notifs, _, err := s.ListNotifications(context.Background(), "user-1", false, 0, 10)
+	if err != nil {
+		t.Fatalf("list notifications: %v", err)
+	}
+	deliveries := deliveriesFor(t, s, notifs[0].ID)
+	discord, ok := findDelivery(deliveries, "discord")
+	if !ok {
+		t.Fatalf("expected discord delivery row, got %+v", deliveries)
+	}
+	if discord.Status != store.DeliveryStatusSent {
+		t.Errorf("expected discord status sent, got %s (err=%s)", discord.Status, discord.LastError)
+	}
+	if !strings.Contains(gotBody, `"content"`) || !strings.Contains(gotBody, "**Title**") {
+		t.Errorf("expected discord payload with bolded title, got %s", gotBody)
+	}
+}
+
+func TestNotifyAlert_DiscordFailure(t *testing.T) {
+	s := newTestStore(t)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+	setChannelConfig(t, s, "discord", srv.URL)
+
+	d := NewDispatcher(s, nil)
+	d.NotifyAlert("alert-1", "user-1", "alert.created", "Title", "Message")
+
+	notifs, _, err := s.ListNotifications(context.Background(), "user-1", false, 0, 10)
+	if err != nil {
+		t.Fatalf("list notifications: %v", err)
+	}
+	discord, ok := findDelivery(deliveriesFor(t, s, notifs[0].ID), "discord")
+	if !ok {
+		t.Fatalf("expected discord delivery row, got none")
+	}
+	if discord.Status != store.DeliveryStatusFailed {
+		t.Errorf("expected discord status failed, got %s", discord.Status)
+	}
+}
+
+func TestNotifyAlert_SlackSuccess(t *testing.T) {
+	s := newTestStore(t)
+	var gotBody string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		gotBody = string(body)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+	setChannelConfig(t, s, "slack", srv.URL)
+
+	d := NewDispatcher(s, nil)
+	d.NotifyAlert("alert-1", "user-1", "alert.created", "Title", "Message")
+
+	notifs, _, err := s.ListNotifications(context.Background(), "user-1", false, 0, 10)
+	if err != nil {
+		t.Fatalf("list notifications: %v", err)
+	}
+	slack, ok := findDelivery(deliveriesFor(t, s, notifs[0].ID), "slack")
+	if !ok {
+		t.Fatalf("expected slack delivery row, got none")
+	}
+	if slack.Status != store.DeliveryStatusSent {
+		t.Errorf("expected slack status sent, got %s (err=%s)", slack.Status, slack.LastError)
+	}
+	if !strings.Contains(gotBody, `"text"`) || !strings.Contains(gotBody, "*Title*") {
+		t.Errorf("expected slack payload with italicized title, got %s", gotBody)
+	}
+}
+
+func TestNotifyAlert_SlackFailure(t *testing.T) {
+	s := newTestStore(t)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+	setChannelConfig(t, s, "slack", srv.URL)
+
+	d := NewDispatcher(s, nil)
+	d.NotifyAlert("alert-1", "user-1", "alert.created", "Title", "Message")
+
+	notifs, _, err := s.ListNotifications(context.Background(), "user-1", false, 0, 10)
+	if err != nil {
+		t.Fatalf("list notifications: %v", err)
+	}
+	slack, ok := findDelivery(deliveriesFor(t, s, notifs[0].ID), "slack")
+	if !ok {
+		t.Fatalf("expected slack delivery row, got none")
+	}
+	if slack.Status != store.DeliveryStatusFailed {
+		t.Errorf("expected slack status failed, got %s", slack.Status)
+	}
+}
+
+// TestRetryDueDeliveries_DiscordRecoversAfterFailure mirrors the webhook retry test for the
+// discord channel; the retry path is shared code (retryChannel), so covering one of the two new
+// channel types here is enough — slack goes through the identical path.
+func TestRetryDueDeliveries_DiscordRecoversAfterFailure(t *testing.T) {
+	s := newTestStore(t)
+
+	failing := true
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if failing {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+	setChannelConfig(t, s, "discord", srv.URL)
+
+	d := NewDispatcher(s, nil)
+	d.NotifyAlert("alert-1", "user-1", "alert.created", "Title", "Message")
+
+	notifs, _, err := s.ListNotifications(context.Background(), "user-1", false, 0, 10)
+	if err != nil {
+		t.Fatalf("list notifications: %v", err)
+	}
+	before, ok := findDelivery(deliveriesFor(t, s, notifs[0].ID), "discord")
+	if !ok || before.Status != store.DeliveryStatusFailed {
+		t.Fatalf("expected initial discord delivery to be failed, got %+v (ok=%v)", before, ok)
+	}
+
+	if _, err := s.DB().ExecContext(context.Background(),
+		`UPDATE notification_deliveries SET next_attempt_at = ? WHERE id = ?`, "1970-01-01T00:00:00Z", before.ID); err != nil {
+		t.Fatalf("force due: %v", err)
+	}
+
+	failing = false
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
+	d.retryDueDeliveries(context.Background(), logger)
+
+	after, ok := findDelivery(deliveriesFor(t, s, notifs[0].ID), "discord")
+	if !ok {
+		t.Fatalf("expected discord delivery row to still exist")
+	}
+	if after.Status != store.DeliveryStatusSent {
+		t.Errorf("expected discord status sent after retry, got %s", after.Status)
+	}
+	if after.Attempts != before.Attempts+1 {
+		t.Errorf("expected attempts %d, got %d", before.Attempts+1, after.Attempts)
 	}
 }
 

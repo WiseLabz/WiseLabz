@@ -23,6 +23,16 @@ const CHANNEL_LABELS: Record<NotificationChannelType, string> = {
   in_app: 'In-app',
   smtp: 'Email (SMTP)',
   webhook: 'Webhook',
+  discord: 'Discord',
+  slack: 'Slack',
+};
+
+const CHANNEL_DESC_KEYS: Record<NotificationChannelType, string> = {
+  in_app: 'settings.notifications.inAppDesc',
+  smtp: 'settings.notifications.smtpDesc',
+  webhook: 'settings.notifications.webhookDesc',
+  discord: 'settings.notifications.discordDesc',
+  slack: 'settings.notifications.slackDesc',
 };
 
 export function NotificationsPage() {
@@ -91,13 +101,7 @@ export function NotificationsPage() {
               title={t(`settings.notifications.channel.${c.type}`, {
                 defaultValue: CHANNEL_LABELS[c.type],
               })}
-              description={
-                c.type === 'in_app'
-                  ? t('settings.notifications.inAppDesc')
-                  : c.type === 'smtp'
-                    ? t('settings.notifications.smtpDesc')
-                    : t('settings.notifications.webhookDesc')
-              }
+              description={t(CHANNEL_DESC_KEYS[c.type])}
               checked={c.enabled}
               onChange={(enabled) => setChannelEnabled(c.type, enabled)}
             />

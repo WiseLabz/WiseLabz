@@ -2899,7 +2899,7 @@ components:
           items: { $ref: '#/components/schemas/NotificationRoute' }
     NotificationChannelType:
       type: string
-      enum: [in_app, smtp, webhook]
+      enum: [in_app, smtp, webhook, discord, slack]
     NotificationChannel:
       type: object
       required: [type, enabled]
