@@ -15,4 +15,5 @@ export const SchemaFieldKind = {
   boolean: 'boolean',
   password: 'password',
   select: 'select',
+  secret: 'secret',
 } as const;
