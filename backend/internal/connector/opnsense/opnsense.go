@@ -27,6 +27,7 @@ func init() {
 			{Key: "url", Label: "OPNSense URL", Type: "text", Required: true, Placeholder: "https://opnsense.example.com"},
 			{Key: "api_key", Label: "API Key", Type: "password", Required: true},
 			{Key: "api_secret", Label: "API Secret", Type: "password", Required: true},
+			{Key: "verify_tls", Label: "Verify TLS", Type: "toggle", Default: "true"},
 		},
 	}, func(config map[string]any) (connector.Connector, error) {
 		url, _ := config["url"].(string)
