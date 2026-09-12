@@ -16,6 +16,7 @@ import {
   useGetConnectorsConnectorIdSyncs,
   useGetConnectorsSchema,
   postConnectorsConnectorIdRestart,
+  postConnectorsConnectorIdHealth,
   putConnectorsConnectorIdEnabled,
   putConnectorsConnectorId,
   getGetConnectorsQueryKey,
@@ -46,6 +47,7 @@ import {
   DiffIcon,
   SparklesIcon,
   ChevronDownIcon,
+  GaugeIcon,
 } from '../../components/icons';
 import type { ServiceStatus, SyncRunStatus } from '../../api/model';
 
@@ -96,6 +98,14 @@ export function ServiceDetailPage() {
 
   const restartPreview = useMutation({
     mutationFn: () => postConnectorsConnectorIdRestart(id, { dryRun: true }),
+  });
+
+  const healthCheck = useMutation({
+    mutationFn: () => postConnectorsConnectorIdHealth(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: getGetConnectorsQueryKey() });
+      void connector.refetch();
+    },
   });
 
   const openRestartPreview = () => {
@@ -216,6 +226,18 @@ export function ServiceDetailPage() {
             <Button
               size="sm"
               variant="ghost"
+              onClick={() => healthCheck.mutate()}
+              disabled={healthCheck.isPending}
+              aria-describedby={healthCheck.isSuccess || healthCheck.isError ? 'health-check-result' : undefined}
+            >
+              <GaugeIcon size={14} />{' '}
+              {healthCheck.isPending
+                ? t('services.detail.healthCheckLoading')
+                : t('services.detail.healthCheck')}
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
               onClick={() => toggleEnabled.mutate(!c.enabled)}
               disabled={toggleEnabled.isPending}
             >
@@ -230,6 +252,26 @@ export function ServiceDetailPage() {
           </div>
         )}
       </header>
+
+      {(healthCheck.isSuccess || healthCheck.isError) && (
+        <p
+          id="health-check-result"
+          role="status"
+          className="mb-5 -mt-3 flex items-center gap-2 font-mono text-2xs text-ink-faint"
+        >
+          {healthCheck.isError ? (
+            <span className="text-err">{t('services.detail.healthCheckError')}</span>
+          ) : (
+            <>
+              <StatusPill status={healthCheck.data.status} />
+              {healthCheck.data.message && <span>{healthCheck.data.message}</span>}
+              {healthCheck.data.latencyMs != null && (
+                <span>{t('services.detail.lastDuration', { duration: durationLabel(healthCheck.data.latencyMs) })}</span>
+              )}
+            </>
+          )}
+        </p>
+      )}
 
       <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
         <div className="space-y-4">
