@@ -16,6 +16,7 @@ import (
 	"github.com/google/uuid"
 	_ "modernc.org/sqlite"
 
+	"github.com/WiseLabz/wiselabz/internal/ai"
 	"github.com/WiseLabz/wiselabz/internal/api"
 	"github.com/WiseLabz/wiselabz/internal/auth"
 	"github.com/WiseLabz/wiselabz/internal/config"
@@ -88,6 +89,10 @@ func newTestAppWithBackupDir(t *testing.T, backupDir string) *testApp {
 
 	jobRunner := scheduler.New(logger)
 
+	aiRegistry := ai.NewRegistry()
+	ai.RegisterOpenAICompatible(aiRegistry)
+	ai.RegisterClaude(aiRegistry)
+
 	router := api.NewRouter(api.Config{
 		Store:      s,
 		JWT:        jwtSvc,
@@ -96,6 +101,7 @@ func newTestAppWithBackupDir(t *testing.T, backupDir string) *testApp {
 		SyncEngine: sync.NewEngine(s, nil, nil, nil, cfg.Encryption.Key),
 		Scheduler:  jobRunner,
 		BackupDir:  backupDir,
+		AIRegistry: aiRegistry,
 	})
 
 	return &testApp{Router: router, Store: s, JWT: jwtSvc, Config: cfg, Scheduler: jobRunner, BackupDir: backupDir}

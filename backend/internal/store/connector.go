@@ -479,6 +479,9 @@ func ParseConnectorConfig(connType, data, encKeyB64 string) (map[string]any, err
 	if err := json.Unmarshal([]byte(data), &cfg); err != nil {
 		return nil, fmt.Errorf("parse connector config: %w", err)
 	}
+	if cfg == nil {
+		cfg = map[string]any{}
+	}
 
 	schema, err := connector.GetTypeSchema(connType)
 	if err != nil {

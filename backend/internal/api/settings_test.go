@@ -167,6 +167,30 @@ func TestAIConfigGetAndUpdateSuccess(t *testing.T) {
 	}
 }
 
+// TestAIConfigTestDoesNotPanicOnNilRegistry is a regression test for #195:
+// api.Config.AIRegistry was built in main.go but never wired into the
+// api.Config literal, so cfg.AIRegistry stayed nil and every AI endpoint
+// panicked in h.AI.Get(...). It's caught here at the router level: enabling
+// AI with a registered provider and hitting /api/ai/config/test must reach a
+// normal JSON response, not the Recoverer middleware's 500 from a nil
+// *ai.Registry method call.
+func TestAIConfigTestDoesNotPanicOnNilRegistry(t *testing.T) {
+	app := newTestApp(t)
+	_, opToken := app.user(t, "operator")
+
+	rec := app.req(t, http.MethodPut, "/api/ai/config", map[string]any{
+		"enabled": true, "provider": "openai", "apiKey": "sk-test", "model": "gpt-4o-mini",
+	}, opToken)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("update status = %d, want 200; body = %s", rec.Code, rec.Body)
+	}
+
+	rec = app.req(t, http.MethodPost, "/api/ai/config/test", nil, opToken)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("test status = %d, want 200 (nil AIRegistry would panic into a 500); body = %s", rec.Code, rec.Body)
+	}
+}
+
 func TestNotificationsConfigRoleBoundary(t *testing.T) {
 	app := newTestApp(t)
 	_, viewerToken := app.user(t, "viewer")

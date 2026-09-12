@@ -6,6 +6,26 @@ import (
 	"time"
 )
 
+// TestParseConnectorConfigNullDataDoesNotPanic is a regression test for
+// #196: json.Unmarshal("null", &cfg) succeeds but leaves cfg == nil, and
+// callers (sync engine, connector health-check handler) write into the
+// returned map directly, which panics with "assignment to entry in nil
+// map". ParseConnectorConfig must hand back a non-nil, writable map even
+// when config_data is the literal string "null".
+func TestParseConnectorConfigNullDataDoesNotPanic(t *testing.T) {
+	cfg, err := ParseConnectorConfig("unknown-type", "null", "")
+	if err != nil {
+		t.Fatalf("ParseConnectorConfig() error: %v", err)
+	}
+	if cfg == nil {
+		t.Fatal("ParseConnectorConfig() returned a nil map for null config_data")
+	}
+	cfg["url"] = "https://example.com" // would panic on a nil map
+	if cfg["url"] != "https://example.com" {
+		t.Fatalf("cfg[\"url\"] = %v, want https://example.com", cfg["url"])
+	}
+}
+
 func TestConnectorOwnerRoundTrip(t *testing.T) {
 	ctx := context.Background()
 	s := newDocTestStore(t)
