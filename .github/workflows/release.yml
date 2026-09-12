@@ -37,7 +37,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@902fa8ec7d6ecbf8d84d538b9b233a880e428804 # v5.7.0
         with:
-          images: ghcr.io/${{ github.repository_owner }}/wiselabz
+          images: ghcr.io/wiselabz/wiselabz
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
@@ -59,7 +59,7 @@ jobs:
       - name: Scan image for vulnerabilities (report)
         uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
         with:
-          image-ref: ghcr.io/${{ github.repository_owner }}/wiselabz@${{ steps.build.outputs.digest }}
+          image-ref: ghcr.io/wiselabz/wiselabz@${{ steps.build.outputs.digest }}
           severity: "CRITICAL,HIGH"
           ignore-unfixed: true
           exit-code: "0"
@@ -67,7 +67,7 @@ jobs:
       - name: Scan image for vulnerabilities (gate on critical)
         uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
         with:
-          image-ref: ghcr.io/${{ github.repository_owner }}/wiselabz@${{ steps.build.outputs.digest }}
+          image-ref: ghcr.io/wiselabz/wiselabz@${{ steps.build.outputs.digest }}
           severity: "CRITICAL"
           ignore-unfixed: true
           exit-code: "1"
@@ -75,7 +75,7 @@ jobs:
       - name: Generate SBOM
         uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
         with:
-          image: ghcr.io/${{ github.repository_owner }}/wiselabz@${{ steps.build.outputs.digest }}
+          image: ghcr.io/wiselabz/wiselabz@${{ steps.build.outputs.digest }}
           format: cyclonedx-json
           output-file: sbom.cdx.json
           upload-artifact: true
