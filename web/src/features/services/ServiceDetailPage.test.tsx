@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 import '../../i18n';
 import { ServiceDetailPage } from './ServiceDetailPage';
 
-const { restart } = vi.hoisted(() => ({ restart: vi.fn() }));
+const { restart, health } = vi.hoisted(() => ({ restart: vi.fn(), health: vi.fn() }));
 
 vi.mock('../../api/generated/connectors/connectors', () => ({
   useGetConnectorsConnectorId: () => ({
@@ -30,6 +30,7 @@ vi.mock('../../api/generated/connectors/connectors', () => ({
   useGetConnectorsConnectorIdSyncs: () => ({ data: [] }),
   useGetConnectorsSchema: () => ({ data: [] }),
   postConnectorsConnectorIdRestart: restart,
+  postConnectorsConnectorIdHealth: health,
   putConnectorsConnectorIdEnabled: vi.fn(),
   putConnectorsConnectorId: vi.fn(),
   getGetConnectorsQueryKey: () => [],
@@ -101,5 +102,40 @@ describe('ServiceDetailPage restart preview', () => {
     );
     expect(screen.getByText('30 seconds')).toBeInTheDocument();
     expect(screen.getByText('home-assistant')).toBeInTheDocument();
+  });
+});
+
+describe('ServiceDetailPage health check', () => {
+  it('runs a health check and shows the result, disabling the button while pending', async () => {
+    let resolveHealth: (value: { status: string; message: string; latencyMs: number }) => void =
+      () => {};
+    health.mockReturnValue(
+      new Promise((resolve) => {
+        resolveHealth = resolve;
+      })
+    );
+
+    renderPage();
+    const button = await screen.findByRole('button', { name: /Health check/ });
+    fireEvent.click(button);
+
+    await waitFor(() => expect(health).toHaveBeenCalledWith('svc-pve1'));
+    expect(await screen.findByRole('button', { name: 'Checking…' })).toBeDisabled();
+
+    resolveHealth({ status: 'degraded', message: 'Slow response', latencyMs: 820 });
+
+    expect(await screen.findByRole('status')).toHaveTextContent('Slow response');
+    expect(screen.getByRole('status')).toHaveTextContent('took 820ms');
+  });
+
+  it('shows an error message when the health check fails', async () => {
+    health.mockRejectedValue(new Error('boom'));
+
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: /Health check/ }));
+
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      "Couldn't run the health check. Try again."
+    );
   });
 });

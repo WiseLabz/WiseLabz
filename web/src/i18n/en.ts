@@ -295,6 +295,9 @@ export const en = {
       restartSeconds: '{{count}} seconds',
       restartDependencies: 'Dependent services',
       restartNoDependencies: 'No dependent services recorded.',
+      healthCheck: 'Health check',
+      healthCheckLoading: 'Checking…',
+      healthCheckError: "Couldn't run the health check. Try again.",
     },
   },
   connectors: {

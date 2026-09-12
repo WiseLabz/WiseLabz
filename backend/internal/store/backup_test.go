@@ -392,6 +392,44 @@ func TestPruneBackupRunsNegativeMaxBackups(t *testing.T) {
 	}
 }
 
+// TestUpsertBackupSchedulePostgresParity runs the same insert-then-update
+// round trip as TestUpsertBackupScheduleUpdatesRow against a real Postgres
+// database, so the ON CONFLICT upsert (rewritten from `?` to `$1..$n` for
+// postgres, see pgdb.go) is verified on both drivers rather than sqlite only.
+func TestUpsertBackupSchedulePostgresParity(t *testing.T) {
+	dsn := os.Getenv("WISELABZ_TEST_POSTGRES_DSN")
+	if dsn == "" {
+		t.Skip("WISELABZ_TEST_POSTGRES_DSN not set; skipping postgres backup schedule test")
+	}
+	db, err := sql.Open("pgx", dsn)
+	if err != nil {
+		t.Fatalf("open postgres: %v", err)
+	}
+	defer db.Close() //nolint:errcheck
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
+	if err := store.RunMigrations(db, "postgres", logger); err != nil {
+		t.Fatalf("RunMigrations(postgres) error: %v", err)
+	}
+	s := store.New(db, "postgres")
+
+	first := store.BackupSchedule{CronExpr: "0 3 * * *", MaxBackups: 14, MaxAgeHours: 720, Enabled: true}
+	if err := s.UpsertBackupSchedule(context.Background(), first); err != nil {
+		t.Fatalf("first postgres upsert error: %v", err)
+	}
+	second := store.BackupSchedule{CronExpr: "0 4 * * *", MaxBackups: 7, MaxAgeHours: 360, Enabled: false}
+	if err := s.UpsertBackupSchedule(context.Background(), second); err != nil {
+		t.Fatalf("second postgres upsert error: %v", err)
+	}
+
+	got, err := s.GetBackupSchedule(context.Background())
+	if err != nil {
+		t.Fatalf("GetBackupSchedule(postgres) error: %v", err)
+	}
+	if got.CronExpr != second.CronExpr || got.MaxBackups != second.MaxBackups || got.Enabled != second.Enabled {
+		t.Fatalf("postgres upserted schedule = %+v, want %+v", got, second)
+	}
+}
+
 // TestPruneBackupRunsCombinedLimits prunes using both count and age limits.
 func TestPruneBackupRunsCombinedLimits(t *testing.T) {
 	ctx := context.Background()

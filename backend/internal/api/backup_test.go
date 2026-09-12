@@ -63,6 +63,107 @@ func TestBackupImportBadVersion(t *testing.T) {
 	}
 }
 
+func TestBackupImportMalformedJSON(t *testing.T) {
+	app := newTestApp(t)
+	_, opToken := app.user(t, "operator")
+
+	req := httptest.NewRequest(http.MethodPost, "/api/system/backup/import", strings.NewReader("{not valid json"))
+	req.Header.Set("Authorization", "Bearer "+opToken)
+	rec := app.serve(req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400; body = %s", rec.Code, rec.Body)
+	}
+}
+
+func TestBackupImportRollbackNotVisibleViaAPI(t *testing.T) {
+	app := newTestApp(t)
+	_, opToken := app.user(t, "operator")
+
+	// Two doc versions with the same ID for the same doc: the second insert
+	// fails partway through the import, and the whole transaction — including
+	// the doc itself — must roll back rather than leaving a partial import.
+	b := map[string]any{
+		"version": backup.BundleVersion,
+		"docs":    []map[string]any{{"id": "doc-rollback", "title": "Rollback test", "kind": "lab"}},
+		"docVersions": []map[string]any{
+			{"id": "version-one", "docId": "doc-rollback", "rev": 1, "content": "first", "trigger": "manual"},
+			{"id": "version-two", "docId": "doc-rollback", "rev": 1, "content": "duplicate", "trigger": "manual"},
+		},
+	}
+
+	rec := app.req(t, http.MethodPost, "/api/system/backup/import", b, opToken)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400; body = %s", rec.Code, rec.Body)
+	}
+	if _, err := app.Store.GetDoc(context.Background(), "doc-rollback"); err == nil {
+		t.Fatal("doc from the failed import is visible via the store; transaction did not roll back")
+	}
+}
+
+func TestBackupScheduleRoleBoundary(t *testing.T) {
+	app := newTestApp(t)
+	_, viewerToken := app.user(t, "viewer")
+
+	rec := app.req(t, http.MethodPut, "/api/system/backup/schedule", map[string]any{
+		"cronExpr": "0 3 * * *", "maxBackups": 14, "maxAgeHours": 720, "enabled": true,
+	}, viewerToken)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403; body = %s", rec.Code, rec.Body)
+	}
+}
+
+func TestBackupUpdateScheduleRejectsInvalidCron(t *testing.T) {
+	app := newTestApp(t)
+	_, opToken := app.user(t, "operator")
+
+	rec := app.req(t, http.MethodPut, "/api/system/backup/schedule", map[string]any{
+		"cronExpr": "not a cron expression", "maxBackups": 14, "maxAgeHours": 720, "enabled": true,
+	}, opToken)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400; body = %s", rec.Code, rec.Body)
+	}
+}
+
+func TestBackupUpdateScheduleRejectsEmptyCron(t *testing.T) {
+	app := newTestApp(t)
+	_, opToken := app.user(t, "operator")
+
+	rec := app.req(t, http.MethodPut, "/api/system/backup/schedule", map[string]any{
+		"cronExpr": "", "maxBackups": 14, "maxAgeHours": 720, "enabled": true,
+	}, opToken)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400; body = %s", rec.Code, rec.Body)
+	}
+}
+
+func TestBackupUpdateScheduleAcceptsValidCronAndPersists(t *testing.T) {
+	app := newTestApp(t)
+	_, opToken := app.user(t, "operator")
+
+	rec := app.req(t, http.MethodPut, "/api/system/backup/schedule", map[string]any{
+		"cronExpr": "0 */6 * * *", "maxBackups": 7, "maxAgeHours": 168, "enabled": false,
+	}, opToken)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body = %s", rec.Code, rec.Body)
+	}
+
+	getRec := app.req(t, http.MethodGet, "/api/system/backup/schedule", nil, opToken)
+	if getRec.Code != http.StatusOK {
+		t.Fatalf("get status = %d, want 200; body = %s", getRec.Code, getRec.Body)
+	}
+	var sched struct {
+		CronExpr   string `json:"cronExpr"`
+		MaxBackups int    `json:"maxBackups"`
+		Enabled    bool   `json:"enabled"`
+	}
+	if err := json.Unmarshal(getRec.Body.Bytes(), &sched); err != nil {
+		t.Fatalf("decode schedule: %v", err)
+	}
+	if sched.CronExpr != "0 */6 * * *" || sched.MaxBackups != 7 || sched.Enabled {
+		t.Fatalf("schedule not persisted correctly: %+v", sched)
+	}
+}
+
 func TestBackupImportRejectsOversizedBody(t *testing.T) {
 	app := newTestApp(t)
 	_, opToken := app.user(t, "operator")
