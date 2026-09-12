@@ -197,6 +197,7 @@ func main() {
 		WSHub:      wsHub,
 		Scheduler:  jobRunner,
 		BackupDir:  backupDir,
+		AIRegistry: aiRegistry,
 	}
 	if cfg.Server.Embed {
 		spaFiles, err := fs.Sub(web.DistFS, "dist")
