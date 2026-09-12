@@ -113,6 +113,9 @@ const SystemPage = lazy(() =>
 const RetentionPage = lazy(() =>
   import('./features/settings').then(({ RetentionPage }) => ({ default: RetentionPage }))
 );
+const RunbooksPage = lazy(() =>
+  import('./features/settings').then(({ RunbooksPage }) => ({ default: RunbooksPage }))
+);
 const AuditPage = lazy(() =>
   import('./features/settings').then(({ AuditPage }) => ({ default: AuditPage }))
 );
@@ -258,6 +261,14 @@ const router = createBrowserRouter([
             element: (
               <RequireRole role="operator">
                 <SystemPage />
+              </RequireRole>
+            ),
+          },
+          {
+            path: 'runbooks',
+            element: (
+              <RequireRole role="operator">
+                <RunbooksPage />
               </RequireRole>
             ),
           },

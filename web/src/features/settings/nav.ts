@@ -15,6 +15,7 @@ import {
   LayersIcon,
   ClockIcon,
   HistoryIcon,
+  FileTextIcon,
 } from '../../components/icons';
 
 export interface SettingsSection {
@@ -69,6 +70,13 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
     labelKey: 'settings.nav.system',
     labelDefault: 'System',
     Icon: GaugeIcon,
+    operatorOnly: true,
+  },
+  {
+    segment: 'runbooks',
+    labelKey: 'settings.nav.runbooks',
+    labelDefault: 'Runbooks',
+    Icon: FileTextIcon,
     operatorOnly: true,
   },
   {
