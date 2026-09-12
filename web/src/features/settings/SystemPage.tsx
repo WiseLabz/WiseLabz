@@ -144,8 +144,55 @@ export function SystemPage() {
         )}
       </Panel>
 
+      <DiagnosticsSection />
+
       <BackupSection />
     </div>
+  );
+}
+
+function DiagnosticsSection() {
+  const { t } = useTranslation();
+  const [downloading, setDownloading] = useState(false);
+
+  const handleDownload = async () => {
+    setDownloading(true);
+    try {
+      const res = await AXIOS_INSTANCE.get('/system/diagnostics', { responseType: 'blob' });
+      const filename = filenameFromContentDisposition(
+        res.headers['content-disposition'] as string | undefined,
+        'wiselabz-diagnostics.json'
+      );
+      downloadBlob(res.data as Blob, filename);
+      toast.success(t('settings.system.diagnostics.downloaded'));
+    } catch {
+      toast.error(t('settings.system.diagnostics.downloadError'));
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  return (
+    <Section
+      title={t('settings.system.diagnostics.title')}
+      description={t('settings.system.diagnostics.subtitle')}
+      action={
+        <Button
+          variant="secondary"
+          size="sm"
+          disabled={downloading}
+          aria-label={t('settings.system.diagnostics.download')}
+          onClick={() => void handleDownload()}
+        >
+          <DownloadIcon size={14} />
+          {downloading ? t('settings.system.diagnostics.downloading') : t('settings.system.diagnostics.download')}
+        </Button>
+      }
+    >
+      <p className="text-xs leading-relaxed text-ink-muted">
+        {t('settings.system.diagnostics.sanitizedNote')}
+      </p>
+    </Section>
   );
 }
 
