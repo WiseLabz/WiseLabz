@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.3.0 (2026-09-12)
+
+## What's Changed
+* chore(release): publish release assets by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/188
+* fix(ci): use lowercase GHCR image reference by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/189
+* fix(release): generate notes from merged pull requests by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/191
+* feat(settings): backup ops, API keys, and delivery history by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/192
+* feat: runbook management UI and diagnostics bundle download by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/193
+* Connector health check UI + expanded backup regression coverage by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/194
+* fix: wire AIRegistry into router config and guard nil connector config map by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/213
+* fix: apply configured HTTP server read/write timeouts by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/214
+* fix: reject disabled users' API keys and revoke on disable by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/215
+
+
+**Full Changelog**: https://github.com/WiseLabz/WiseLabz/compare/v0.2.0...v0.3.0
+
 ## [0.2.0](https://github.com/WiseLabz/WiseLabz/compare/v0.1.0...v0.2.0) (2026-09-12)
 
 
