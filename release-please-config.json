@@ -4,6 +4,7 @@
     ".": {}
   },
   "release-type": "simple",
+  "changelog-type": "github",
   "last-release-sha": "88a1b0e1db233c5b6761f33e6324bd3af2a9c2a7",
   "include-component-in-tag": false,
   "changelog-sections": [
