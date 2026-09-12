@@ -12,16 +12,11 @@ import { Panel, PanelHeader } from '../../components/ui/Panel';
 import { Button } from '../../components/ui/Button';
 import { SkeletonRows, ErrorState, EmptyState } from '../../components/ui/states';
 import { toast } from '../../lib/toast';
+import { filenameFromContentDisposition, downloadBlob } from '../../lib/download';
 import { SubHeader, Section, Field, TextInput, Select } from './parts';
 import { HistoryIcon } from '../../components/icons';
 
 const PAGE_SIZE = 25;
-
-/** Reads a filename from a Content-Disposition header, falling back to a default. */
-function filenameFromContentDisposition(header: string | undefined, fallback: string): string {
-  const match = header?.match(/filename="?([^"；;]+)"?/);
-  return match?.[1] ?? fallback;
-}
 
 export function AuditPage() {
   const { t } = useTranslation();
@@ -60,14 +55,7 @@ export function AuditPage() {
         res.headers['content-disposition'] as string | undefined,
         `wiselabz-audit.${format}`
       );
-      const url = URL.createObjectURL(res.data as Blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
+      downloadBlob(res.data as Blob, filename);
     } catch {
       toast.error(t('settings.audit.exportError'));
     } finally {

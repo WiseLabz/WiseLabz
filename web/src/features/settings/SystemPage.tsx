@@ -1,18 +1,40 @@
 /**
- * Settings → System (operator-only). Read-only instance health: backend +
- * integration health, the live WebSocket connection state, the sync schedule, and
- * the running version. No mutations here — it's an instrument readout.
+ * Settings → System (operator-only). Instance health: backend + integration
+ * health, the live WebSocket connection state, the sync schedule, the running
+ * version, and backup operations (export, on-demand run, schedule, recent runs).
  */
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useGetSystemInfo, useGetHealth } from '../../api/generated/system/system';
-import type { HealthComponentsItemStatus } from '../../api/model';
+import {
+  getSystemBackupSchedule,
+  putSystemBackupSchedule,
+  getGetSystemBackupScheduleQueryKey,
+  useGetSystemBackupRuns,
+  postSystemBackupRun,
+  getGetSystemBackupRunsQueryKey,
+} from '../../api/generated/system/system';
+import type { BackupSchedule, HealthComponentsItemStatus } from '../../api/model';
+import { AXIOS_INSTANCE } from '../../api/axios-instance';
 import { useLive, type WsState } from '../../store/live';
 import { Panel, PanelHeader } from '../../components/ui/Panel';
-import { SkeletonRows, ErrorState } from '../../components/ui/states';
+import { Button } from '../../components/ui/Button';
+import { SkeletonRows, ErrorState, EmptyState } from '../../components/ui/states';
 import { ToneTag } from '../../components/ui/ToneTag';
+import { TimeAgo } from '../../components/ui/TimeAgo';
 import { type Tone } from '../../components/ui/status';
-import { SubHeader, Section } from './parts';
-import { GaugeIcon, ServerIcon, ClockIcon, NetworkIcon } from '../../components/icons';
+import { toast } from '../../lib/toast';
+import { filenameFromContentDisposition, downloadBlob } from '../../lib/download';
+import { SubHeader, Section, Field, TextInput } from './parts';
+import {
+  GaugeIcon,
+  ServerIcon,
+  ClockIcon,
+  NetworkIcon,
+  BoxIcon,
+  DownloadIcon,
+} from '../../components/icons';
 
 const healthTone: Record<HealthComponentsItemStatus, Tone> = {
   ok: 'ok',
@@ -121,7 +143,181 @@ export function SystemPage() {
           </ul>
         )}
       </Panel>
+
+      <BackupSection />
     </div>
+  );
+}
+
+function BackupSection() {
+  const { t } = useTranslation();
+  const queryClient = useQueryClient();
+  const [exporting, setExporting] = useState(false);
+
+  const schedule = useQuery({
+    queryKey: getGetSystemBackupScheduleQueryKey(),
+    queryFn: () => getSystemBackupSchedule(),
+  });
+  const runs = useGetSystemBackupRuns({ limit: 10 });
+
+  const [draft, setDraft] = useState<BackupSchedule | null>(null);
+  // Adjust state during render (React-blessed alternative to a syncing effect):
+  // re-seed whenever the query yields a fresh reference, e.g. after an invalidate.
+  const [seeded, setSeeded] = useState<BackupSchedule | null>(null);
+  if (schedule.data && schedule.data !== seeded) {
+    setSeeded(schedule.data);
+    setDraft({ ...schedule.data });
+  }
+
+  const saveSchedule = useMutation({
+    mutationFn: (body: BackupSchedule) => putSystemBackupSchedule(body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: getGetSystemBackupScheduleQueryKey() });
+      toast.success(t('settings.system.backup.scheduleSaved'));
+    },
+    onError: () => toast.error(t('settings.system.backup.scheduleSaveError')),
+  });
+
+  const runBackup = useMutation({
+    mutationFn: () => postSystemBackupRun(),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: getGetSystemBackupRunsQueryKey() });
+      toast.success(t('settings.system.backup.runOk'));
+    },
+    onError: () => toast.error(t('settings.system.backup.runError')),
+  });
+
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      const res = await AXIOS_INSTANCE.get('/system/backup/export', { responseType: 'blob' });
+      const filename = filenameFromContentDisposition(
+        res.headers['content-disposition'] as string | undefined,
+        'wiselabz-backup.zip'
+      );
+      downloadBlob(res.data as Blob, filename);
+    } catch {
+      toast.error(t('settings.system.backup.exportError'));
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const scheduleDirty = draft && schedule.data && JSON.stringify(draft) !== JSON.stringify(schedule.data);
+
+  return (
+    <Section
+      title={t('settings.system.backup.title')}
+      description={t('settings.system.backup.subtitle')}
+      action={
+        <div className="flex gap-2">
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={exporting}
+            onClick={() => void handleExport()}
+          >
+            <DownloadIcon size={14} /> {t('settings.system.backup.export')}
+          </Button>
+          <Button
+            variant="primary"
+            size="sm"
+            disabled={runBackup.isPending}
+            onClick={() => runBackup.mutate()}
+          >
+            {t('settings.system.backup.runNow')}
+          </Button>
+        </div>
+      }
+    >
+      {schedule.isLoading || !draft ? (
+        <SkeletonRows rows={2} className="p-0" />
+      ) : schedule.isError ? (
+        <ErrorState
+          description={t('settings.system.backup.scheduleError')}
+          onRetry={() => schedule.refetch()}
+        />
+      ) : (
+        <form
+          className="grid gap-4 sm:grid-cols-3"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (draft) saveSchedule.mutate(draft);
+          }}
+        >
+          <Field label={t('settings.system.backup.cronExpr')} htmlFor="backup-cron">
+            <TextInput
+              id="backup-cron"
+              value={draft.cronExpr}
+              onChange={(e) => setDraft((d) => (d ? { ...d, cronExpr: e.target.value } : d))}
+            />
+          </Field>
+          <Field label={t('settings.system.backup.maxBackups')} htmlFor="backup-max-backups">
+            <TextInput
+              id="backup-max-backups"
+              type="number"
+              value={draft.maxBackups}
+              onChange={(e) =>
+                setDraft((d) => (d ? { ...d, maxBackups: Number(e.target.value) } : d))
+              }
+            />
+          </Field>
+          <Field label={t('settings.system.backup.maxAgeHours')} htmlFor="backup-max-age">
+            <TextInput
+              id="backup-max-age"
+              type="number"
+              value={draft.maxAgeHours}
+              onChange={(e) =>
+                setDraft((d) => (d ? { ...d, maxAgeHours: Number(e.target.value) } : d))
+              }
+            />
+          </Field>
+          <div className="sm:col-span-3 flex justify-end">
+            <Button
+              type="submit"
+              variant="secondary"
+              size="sm"
+              disabled={!scheduleDirty || saveSchedule.isPending}
+            >
+              {t('common.save')}
+            </Button>
+          </div>
+        </form>
+      )}
+
+      <div className="mt-5 border-t border-line-soft pt-4">
+        <h3 className="mb-3 font-mono text-2xs text-ink-faint">
+          {t('settings.system.backup.recentRuns')}
+        </h3>
+        {runs.isLoading ? (
+          <SkeletonRows rows={3} className="p-0" />
+        ) : runs.isError || !runs.data ? (
+          <ErrorState
+            description={t('settings.system.backup.runsError')}
+            onRetry={() => runs.refetch()}
+          />
+        ) : runs.data.runs.length === 0 ? (
+          <EmptyState icon={<BoxIcon size={18} />} title={t('settings.system.backup.noRuns')} />
+        ) : (
+          <ul className="divide-y divide-line-soft">
+            {runs.data.runs.map((r) => (
+              <li key={r.id} className="flex items-center justify-between gap-4 py-2.5 first:pt-0 last:pb-0">
+                <div className="min-w-0">
+                  <p className="truncate font-mono text-xs text-ink">{r.filePath}</p>
+                  <p className="mt-0.5 font-mono text-2xs text-ink-faint">
+                    {(r.sizeBytes / (1024 * 1024)).toFixed(1)} MB · <TimeAgo at={r.createdAt} />
+                  </p>
+                </div>
+                <ToneTag
+                  tone={r.triggeredBy === 'manual' ? 'signal' : 'idle'}
+                  label={t(`settings.system.backup.triggeredBy.${r.triggeredBy}`)}
+                />
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </Section>
   );
 }
 

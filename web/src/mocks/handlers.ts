@@ -16,6 +16,7 @@ import { getDashboardMock } from '../api/generated/dashboard/dashboard.msw';
 import { getDocsMock } from '../api/generated/docs/docs.msw';
 import { getFindingsMock } from '../api/generated/findings/findings.msw';
 import { getMeMock } from '../api/generated/me/me.msw';
+import { getNotificationsMock } from '../api/generated/notifications/notifications.msw';
 import { getSettingsMock } from '../api/generated/settings/settings.msw';
 import { getSystemMock } from '../api/generated/system/system.msw';
 import { getTemplatesMock } from '../api/generated/templates/templates.msw';
@@ -37,6 +38,7 @@ export const handlers = [
   ...getChangesMock(),
   ...getAlertsMock(),
   ...getFindingsMock(),
+  ...getNotificationsMock(),
   ...getSettingsMock(),
   ...getSystemMock(),
 ];
