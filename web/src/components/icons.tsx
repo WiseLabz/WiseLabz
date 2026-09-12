@@ -34,6 +34,9 @@ import {
   ArrowRightIcon as PhArrowRight,
   PauseIcon as PhPause,
   PlayIcon as PhPlay,
+  DownloadSimpleIcon as PhDownloadSimple,
+  KeyIcon as PhKey,
+  CopyIcon as PhCopy,
 } from '@phosphor-icons/react';
 
 export type IconProps = PhosphorIconProps;
@@ -66,3 +69,6 @@ export const EditIcon = (p: IconProps) => <PhPencilSimple size={18} weight="regu
 export const ArrowRightIcon = (p: IconProps) => <PhArrowRight size={18} weight="regular" aria-hidden="true" {...p} />;
 export const PauseIcon = (p: IconProps) => <PhPause size={18} weight="regular" aria-hidden="true" {...p} />;
 export const PlayIcon = (p: IconProps) => <PhPlay size={18} weight="regular" aria-hidden="true" {...p} />;
+export const DownloadIcon = (p: IconProps) => <PhDownloadSimple size={18} weight="regular" aria-hidden="true" {...p} />;
+export const KeyIcon = (p: IconProps) => <PhKey size={18} weight="regular" aria-hidden="true" {...p} />;
+export const CopyIcon = (p: IconProps) => <PhCopy size={18} weight="regular" aria-hidden="true" {...p} />;

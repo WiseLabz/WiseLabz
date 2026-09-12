@@ -1,7 +1,8 @@
 /**
  * Settings → Notifications (operator-only). Channel enablement + a per-channel
- * test, plus the full event×channel routing matrix (EventRoutingTable). Local
- * draft state; "Save routing" persists the whole config.
+ * test, the full event×channel routing matrix (EventRoutingTable), and the
+ * delivery history (pending/sent/failed attempts, filterable by status).
+ * Local draft state; "Save routing" persists the whole config.
  */
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -12,12 +13,30 @@ import {
   postNotificationsConfigTest,
   getGetNotificationsConfigQueryKey,
 } from '../../api/generated/settings/settings';
-import type { NotificationConfig, NotificationChannelType } from '../../api/model';
+import { useGetNotificationsDeliveries } from '../../api/generated/notifications/notifications';
+import type {
+  NotificationConfig,
+  NotificationChannelType,
+  GetNotificationsDeliveriesStatus,
+} from '../../api/model';
+import { Panel, PanelHeader } from '../../components/ui/Panel';
 import { Button } from '../../components/ui/Button';
-import { SkeletonRows, ErrorState } from '../../components/ui/states';
+import { SkeletonRows, ErrorState, EmptyState } from '../../components/ui/states';
+import { ToneTag } from '../../components/ui/ToneTag';
+import { TimeAgo } from '../../components/ui/TimeAgo';
+import { type Tone } from '../../components/ui/status';
 import { toast } from '../../lib/toast';
-import { SubHeader, Section, ToggleRow } from './parts';
+import { SubHeader, Section, ToggleRow, Select } from './parts';
 import { EventRoutingTable } from './EventRoutingTable';
+import { HistoryIcon } from '../../components/icons';
+
+const PAGE_SIZE = 25;
+
+const deliveryTone: Record<GetNotificationsDeliveriesStatus, Tone> = {
+  pending: 'idle',
+  sent: 'ok',
+  failed: 'err',
+};
 
 const CHANNEL_LABELS: Record<NotificationChannelType, string> = {
   in_app: 'In-app',
@@ -142,7 +161,110 @@ export function NotificationsPage() {
       >
         <EventRoutingTable config={draft} onChange={setDraft} disabled={save.isPending} />
       </Section>
+
+      <DeliveryHistorySection />
     </div>
+  );
+}
+
+function DeliveryHistorySection() {
+  const { t } = useTranslation();
+  const [page, setPage] = useState(1);
+  const [status, setStatus] = useState<GetNotificationsDeliveriesStatus | ''>('');
+
+  const { data, isLoading, isError, refetch } = useGetNotificationsDeliveries({
+    status: status || undefined,
+    page,
+    pageSize: PAGE_SIZE,
+  });
+
+  const totalPages = data ? Math.max(1, Math.ceil(data.total / data.pageSize)) : 1;
+
+  return (
+    <Panel>
+      <PanelHeader
+        title={t('settings.notifications.deliveries.title')}
+        icon={<HistoryIcon size={14} />}
+        count={data?.total}
+        action={
+          <Select
+            aria-label={t('settings.notifications.deliveries.statusFilter')}
+            value={status}
+            onChange={(e) => {
+              setStatus(e.target.value as GetNotificationsDeliveriesStatus | '');
+              setPage(1);
+            }}
+            className="!w-auto"
+          >
+            <option value="">{t('settings.notifications.deliveries.anyStatus')}</option>
+            <option value="pending">{t('settings.notifications.deliveries.pending')}</option>
+            <option value="sent">{t('settings.notifications.deliveries.sent')}</option>
+            <option value="failed">{t('settings.notifications.deliveries.failed')}</option>
+          </Select>
+        }
+      />
+
+      {isLoading ? (
+        <SkeletonRows rows={6} />
+      ) : isError || !data ? (
+        <ErrorState
+          description={t('settings.notifications.deliveries.loadError')}
+          onRetry={() => refetch()}
+        />
+      ) : data.items.length === 0 ? (
+        <EmptyState title={t('settings.notifications.deliveries.empty')} />
+      ) : (
+        <>
+          <ul className="divide-y divide-line-soft">
+            {data.items.map((d) => (
+              <li key={d.id} className="flex items-center justify-between gap-4 px-4 py-2.5">
+                <div className="min-w-0 flex-1">
+                  <p className="flex items-center gap-2 text-sm text-ink">
+                    <span className="font-mono text-xs text-ink-muted">{d.channel}</span>
+                    <ToneTag tone={deliveryTone[d.status]} label={d.status} />
+                  </p>
+                  {d.status === 'failed' && d.lastError && (
+                    <p className="mt-0.5 truncate text-2xs leading-relaxed text-err">
+                      {d.lastError}
+                    </p>
+                  )}
+                  <p className="mt-0.5 flex items-center gap-1.5 font-mono text-2xs text-ink-faint">
+                    <span>
+                      {t('settings.notifications.deliveries.attempts', { count: d.attempts })}
+                    </span>
+                    <span>·</span>
+                    <TimeAgo at={d.createdAt} />
+                  </p>
+                </div>
+              </li>
+            ))}
+          </ul>
+          <div className="flex items-center justify-between gap-3 border-t border-line-soft px-4 py-2.5">
+            <span className="font-mono text-2xs text-ink-faint">
+              {page} / {totalPages}
+            </span>
+            <div className="flex gap-2">
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={page <= 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+              >
+                {t('common.previous')}
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={page >= totalPages}
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              >
+                {t('common.next')}
+              </Button>
+            </div>
+          </div>
+        </>
+      )}
+    </Panel>
   );
 }
 
