@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.4.0 (2026-09-15)
+
+## What's Changed
+* Fix release workflow SBOM upload by setting explicit repository context by @gsaraiva2109 with @Copilot in https://github.com/WiseLabz/WiseLabz/pull/247
+* feat: "ask your lab" retrieval-augmented chat (#238, piece 1/3) by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/246
+* feat: on-demand anomaly narration (#238, piece 2/3) by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/249
+* feat(ai): add provider fallback routing (#238, piece 3/3) by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/250
+* feat: cross-service linking and topology diagrams in generated docs by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/251
+
+## New Contributors
+* @gsaraiva2109 with @Copilot made their first contribution in https://github.com/WiseLabz/WiseLabz/pull/247
+
+**Full Changelog**: https://github.com/WiseLabz/WiseLabz/compare/v0.3.0...v0.4.0
+
 ## 0.3.0 (2026-09-14)
 
 ## What's Changed
