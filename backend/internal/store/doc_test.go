@@ -6,17 +6,30 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
+	"net/url"
 	"os"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
+	_ "github.com/jackc/pgx/v5/stdlib"
 	_ "modernc.org/sqlite"
 )
 
+// newDocTestStore returns a migrated Store. It uses a per-test SQLite file by
+// default; when WISELABZ_TEST_POSTGRES_DSN is set it instead uses a fresh,
+// isolated schema in that Postgres database so the same store tests run against
+// both dialects.
 func newDocTestStore(t *testing.T) *Store {
 	t.Helper()
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
+
+	if pgDSN := os.Getenv("WISELABZ_TEST_POSTGRES_DSN"); pgDSN != "" {
+		return newPostgresTestStore(t, pgDSN, logger)
+	}
+
 	dir := t.TempDir()
 	dsn := "file:" + dir + "/test.db?cache=shared"
 
@@ -26,13 +39,49 @@ func newDocTestStore(t *testing.T) *Store {
 	}
 	t.Cleanup(func() { _ = db.Close() })
 
-	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 	if err := RunMigrations(db, "sqlite", logger); err != nil {
 		t.Fatalf("RunMigrations() error: %v", err)
 	}
 	db.SetMaxOpenConns(1)
 
 	return New(db, "sqlite")
+}
+
+// newPostgresTestStore creates a uniquely named schema, migrates it, and drops
+// it on cleanup, so tests sharing one Postgres database stay isolated.
+func newPostgresTestStore(t *testing.T, dsn string, logger *slog.Logger) *Store {
+	t.Helper()
+	admin, err := sql.Open("pgx", dsn)
+	if err != nil {
+		t.Fatalf("open postgres: %v", err)
+	}
+	schema := "t_" + strings.ReplaceAll(uuid.NewString(), "-", "")
+	if _, err := admin.Exec("CREATE SCHEMA " + schema); err != nil {
+		_ = admin.Close()
+		t.Fatalf("create schema: %v", err)
+	}
+
+	u, err := url.Parse(dsn)
+	if err != nil {
+		t.Fatalf("parse postgres dsn: %v", err)
+	}
+	q := u.Query()
+	q.Set("search_path", schema)
+	u.RawQuery = q.Encode()
+
+	db, err := sql.Open("pgx", u.String())
+	if err != nil {
+		t.Fatalf("open postgres schema db: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = db.Close()
+		_, _ = admin.Exec("DROP SCHEMA " + schema + " CASCADE")
+		_ = admin.Close()
+	})
+	if err := RunMigrations(db, "postgres", logger); err != nil {
+		t.Fatalf("RunMigrations() error: %v", err)
+	}
+	return New(db, "postgres")
 }
 
 func TestUpdateDocOptimisticConcurrency(t *testing.T) {

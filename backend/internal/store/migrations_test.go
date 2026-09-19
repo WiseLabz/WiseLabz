@@ -479,3 +479,31 @@ func TestRunMigrationsPreservesRowsWithForeignKeys(t *testing.T) {
 		t.Errorf("foreign_keys after migrate = %d, %v; want 1", fk, err)
 	}
 }
+
+func TestGetMigrationStatus(t *testing.T) {
+	db, err := sql.Open("sqlite", "file:"+t.TempDir()+"/status.db?cache=shared")
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer db.Close() //nolint:errcheck
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
+
+	st, err := GetMigrationStatus(db, "sqlite")
+	if err != nil {
+		t.Fatalf("GetMigrationStatus() before migrate: %v", err)
+	}
+	if st.Current != 0 || st.Latest == 0 || !st.Pending() {
+		t.Errorf("before migrate = %+v, want current 0 and pending", st)
+	}
+
+	if err := RunMigrations(db, "sqlite", logger); err != nil {
+		t.Fatalf("RunMigrations() error: %v", err)
+	}
+	st, err = GetMigrationStatus(db, "sqlite")
+	if err != nil {
+		t.Fatalf("GetMigrationStatus() after migrate: %v", err)
+	}
+	if st.Current != st.Latest || st.Dirty || st.Pending() {
+		t.Errorf("after migrate = %+v, want current == latest, clean", st)
+	}
+}
