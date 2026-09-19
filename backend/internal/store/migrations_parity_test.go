@@ -98,7 +98,7 @@ func TestMigrationSchemaParity(t *testing.T) {
 	}
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 
-	pg := newPostgresTestStore(t, dsn, logger).db.(*sql.DB)
+	pg := newPostgresTestStore(t, dsn, logger).db.(pgPlaceholderDB).DB
 
 	sqliteDB, err := sql.Open("sqlite", "file:"+t.TempDir()+"/parity.db?cache=shared")
 	if err != nil {

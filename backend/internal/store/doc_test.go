@@ -84,6 +84,22 @@ func newPostgresTestStore(t *testing.T, dsn string, logger *slog.Logger) *Store 
 	return New(db, "postgres")
 }
 
+// skipOnPostgres skips tests that depend on SQLite-only features.
+func skipOnPostgres(t *testing.T, why string) {
+	t.Helper()
+	if os.Getenv("WISELABZ_TEST_POSTGRES_DSN") != "" {
+		t.Skip(why)
+	}
+}
+
+// mustCreateUser inserts a user with the given id so foreign keys resolve.
+func mustCreateUser(t *testing.T, s *Store, id string) {
+	t.Helper()
+	if err := s.CreateUser(context.Background(), &User{ID: id, Username: id, DisplayName: id, Email: id + "@example.com"}); err != nil {
+		t.Fatalf("CreateUser(%s) error: %v", id, err)
+	}
+}
+
 func TestUpdateDocOptimisticConcurrency(t *testing.T) {
 	ctx := context.Background()
 	s := newDocTestStore(t)
@@ -148,7 +164,8 @@ func TestUpdateDocOptimisticConcurrency(t *testing.T) {
 func TestListDocsGroupedByService(t *testing.T) {
 	s := newDocTestStore(t)
 	ctx := context.Background()
-	for _, serviceID := range []string{"service-a", "service-b"} {
+	serviceA, serviceB := mustCreateMaintenanceConnector(t, s), mustCreateMaintenanceConnector(t, s)
+	for _, serviceID := range []string{serviceA, serviceB} {
 		if err := s.CreateDoc(ctx, &DocRecord{Title: serviceID, Kind: "service", ServiceID: serviceID, Content: "content"}); err != nil {
 			t.Fatalf("CreateDoc() error: %v", err)
 		}
@@ -158,7 +175,7 @@ func TestListDocsGroupedByService(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListDocsGroupedByService() error: %v", err)
 	}
-	if len(got["service-a"]) != 1 || len(got["service-b"]) != 1 {
+	if len(got[serviceA]) != 1 || len(got[serviceB]) != 1 {
 		t.Fatalf("grouped docs = %+v, want one doc per service", got)
 	}
 }
@@ -349,6 +366,7 @@ func TestUpdateTemplateConcurrentVersionBumps(t *testing.T) {
 }
 
 func TestTemplateVersionIndexAndCascade(t *testing.T) {
+	skipOnPostgres(t, "EXPLAIN QUERY PLAN and PRAGMA are SQLite-only")
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	tmpl := &TemplateRecord{Name: "Runbook"}
@@ -402,6 +420,8 @@ func TestTemplateVersionIndexAndCascade(t *testing.T) {
 func TestDocLockConflict(t *testing.T) {
 	ctx := context.Background()
 	s := newDocTestStore(t)
+	mustCreateUser(t, s, "user-1")
+	mustCreateUser(t, s, "user-2")
 	d := &DocRecord{Title: "Test Doc", Content: "v1"}
 	if err := s.CreateDoc(ctx, d); err != nil {
 		t.Fatalf("CreateDoc() error: %v", err)
@@ -427,6 +447,8 @@ func TestDocLockConflict(t *testing.T) {
 func TestDocLockRenewalByHolder(t *testing.T) {
 	ctx := context.Background()
 	s := newDocTestStore(t)
+	mustCreateUser(t, s, "user-1")
+	mustCreateUser(t, s, "user-2")
 	d := &DocRecord{Title: "Test Doc", Content: "v1"}
 	if err := s.CreateDoc(ctx, d); err != nil {
 		t.Fatalf("CreateDoc() error: %v", err)
@@ -455,6 +477,8 @@ func TestDocLockRenewalByHolder(t *testing.T) {
 func TestDocLockAcquireAfterExpiry(t *testing.T) {
 	ctx := context.Background()
 	s := newDocTestStore(t)
+	mustCreateUser(t, s, "user-1")
+	mustCreateUser(t, s, "user-2")
 	d := &DocRecord{Title: "Test Doc", Content: "v1"}
 	if err := s.CreateDoc(ctx, d); err != nil {
 		t.Fatalf("CreateDoc() error: %v", err)
@@ -482,6 +506,8 @@ func TestDocLockAcquireAfterExpiry(t *testing.T) {
 func TestDocLockReleaseOnlyByHolder(t *testing.T) {
 	ctx := context.Background()
 	s := newDocTestStore(t)
+	mustCreateUser(t, s, "user-1")
+	mustCreateUser(t, s, "user-2")
 	d := &DocRecord{Title: "Test Doc", Content: "v1"}
 	if err := s.CreateDoc(ctx, d); err != nil {
 		t.Fatalf("CreateDoc() error: %v", err)
