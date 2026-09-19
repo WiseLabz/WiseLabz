@@ -122,7 +122,17 @@ func TestRunMigrationsDown(t *testing.T) {
 		t.Fatalf("RunMigrations() error: %v", err)
 	}
 
-	// Roll back the newest migration (snapshot_fetched_at_index) first; it
+	// Roll back the newest migration (hot_query_indexes) first; it must drop
+	// only its indexes.
+	if err := RunMigrationsDown(db, "sqlite", logger); err != nil {
+		t.Fatalf("RunMigrationsDown() hot_query_indexes error: %v", err)
+	}
+	var hotIdx string
+	if err := db.QueryRow("SELECT name FROM sqlite_master WHERE type='index' AND name='idx_alerts_status_created'").Scan(&hotIdx); !errors.Is(err, sql.ErrNoRows) {
+		t.Errorf("idx_alerts_status_created should not exist after rolling back its migration (err=%v)", err)
+	}
+
+	// Roll back the next migration (snapshot_fetched_at_index) first; it
 	// must drop only its index.
 	if err := RunMigrationsDown(db, "sqlite", logger); err != nil {
 		t.Fatalf("RunMigrationsDown() snapshot_fetched_at_index error: %v", err)
@@ -177,9 +187,12 @@ func TestRunMigrationsDown(t *testing.T) {
 	if !hasColumn(t, db, "sqlite", "users", "digest_cadence") {
 		t.Fatal("users.digest_cadence missing after reapply")
 	}
-	// Three down calls strip the reapplied migrations (index, digest prefs,
-	// compliance_rules) back off, returning to the same "compliance_rules and
+	// Four down calls strip the reapplied migrations (hot indexes, snapshot
+	// index, digest prefs, compliance_rules) back off, returning to the same "compliance_rules and
 	// user_digest_prefs absent" state as before the reapply.
+	if err := RunMigrationsDown(db, "sqlite", logger); err != nil {
+		t.Fatalf("RunMigrationsDown() after reapply, hot indexes call error: %v", err)
+	}
 	if err := RunMigrationsDown(db, "sqlite", logger); err != nil {
 		t.Fatalf("RunMigrationsDown() after reapply, index call error: %v", err)
 	}
