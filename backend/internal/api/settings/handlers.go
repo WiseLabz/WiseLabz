@@ -549,7 +549,9 @@ func (h *Handler) loadNotificationConfig(ctx context.Context) notificationConfig
 	cfg := notificationConfigDoc{Channels: []map[string]any{}, Routing: []map[string]any{}}
 	var raw string
 	if err := h.Store.DB().QueryRowContext(ctx, `SELECT config_json FROM notification_config WHERE id = 1`).Scan(&raw); err == nil && raw != "" {
-		_ = json.Unmarshal([]byte(raw), &cfg)
+		if err := json.Unmarshal([]byte(raw), &cfg); err != nil {
+			slog.Warn("settings: invalid stored notification config, using defaults", "error", err)
+		}
 		if cfg.Channels == nil {
 			cfg.Channels = []map[string]any{}
 		}
@@ -684,6 +686,7 @@ func (h *Handler) GetDecryptedAPIKey() string {
 	if err != nil {
 		// Legacy path: the row may predate WISELABZ_ENCRYPTION_KEY, when the
 		// key was derived from the JWT signing secret instead.
+		//lint:ignore SA1019 intentional legacy fallback for rows encrypted before WISELABZ_ENCRYPTION_KEY
 		legacyKey := crypto.DeriveKey(h.Config.Auth.Secret) //nolint:staticcheck // intentional legacy fallback for rows encrypted before WISELABZ_ENCRYPTION_KEY
 		plaintext, err = crypto.Decrypt(encrypted, legacyKey)
 		if err != nil {
