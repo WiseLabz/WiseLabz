@@ -344,14 +344,18 @@ func TestRunMigrationsDownPostgres(t *testing.T) {
 	if !hasColumn(t, db, "postgres", "changes", "narration") {
 		t.Error("changes.narration should still exist from an earlier migration")
 	}
-	// Only the newest migration (snapshot_fetched_at_index) is rolled back: its
-	// index must be gone while ai_config_providers from an earlier migration stays.
+	// Only the newest migration (hot_query_indexes) is rolled back: its indexes
+	// must be gone while snapshot_fetched_at_index and ai_config_providers from
+	// earlier migrations stay.
 	var name string
-	err = db.QueryRow(`SELECT indexname FROM pg_indexes WHERE schemaname = current_schema() AND indexname = 'idx_snapshots_fetched_at'`).Scan(&name)
+	err = db.QueryRow(`SELECT indexname FROM pg_indexes WHERE schemaname = current_schema() AND indexname = 'idx_alerts_status_created'`).Scan(&name)
 	if err == nil {
-		t.Error("idx_snapshots_fetched_at should not exist after rolling back its migration")
+		t.Error("idx_alerts_status_created should not exist after rolling back its migration")
 	} else if !errors.Is(err, sql.ErrNoRows) {
-		t.Fatalf("query pg_indexes for idx_snapshots_fetched_at: %v", err)
+		t.Fatalf("query pg_indexes for idx_alerts_status_created: %v", err)
+	}
+	if err := db.QueryRow(`SELECT indexname FROM pg_indexes WHERE schemaname = current_schema() AND indexname = 'idx_snapshots_fetched_at'`).Scan(&name); err != nil {
+		t.Errorf("idx_snapshots_fetched_at should still exist after rolling back only the last migration: %v", err)
 	}
 	if err := db.QueryRow(`SELECT table_name FROM information_schema.tables WHERE table_schema = current_schema() AND table_name = 'ai_config_providers'`).Scan(&name); err != nil {
 		t.Errorf("ai_config_providers should still exist after rolling back only the last migration: %v", err)
