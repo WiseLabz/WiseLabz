@@ -92,9 +92,12 @@ func skipOnPostgres(t *testing.T, why string) {
 	}
 }
 
-// mustCreateUser inserts a user with the given id so foreign keys resolve.
+// mustCreateUser inserts a user with the given id (if absent) so foreign keys resolve.
 func mustCreateUser(t *testing.T, s *Store, id string) {
 	t.Helper()
+	if u, err := s.GetUserByID(context.Background(), id); err == nil && u != nil {
+		return
+	}
 	if err := s.CreateUser(context.Background(), &User{ID: id, Username: id, DisplayName: id, Email: id + "@example.com"}); err != nil {
 		t.Fatalf("CreateUser(%s) error: %v", id, err)
 	}
