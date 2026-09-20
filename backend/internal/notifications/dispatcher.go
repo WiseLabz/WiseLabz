@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/WiseLabz/wiselabz/internal/crypto"
+	"github.com/WiseLabz/wiselabz/internal/logsafe"
 	"github.com/WiseLabz/wiselabz/internal/store"
 	"github.com/WiseLabz/wiselabz/internal/ws"
 )
@@ -274,7 +275,7 @@ func (d *Dispatcher) notifyExternalChannels(ctx context.Context, notifID string,
 func (d *Dispatcher) notificationConnectorCategory(ctx context.Context, connectorID string) string {
 	if connectorID != "" {
 		if connector, err := d.store.GetConnector(ctx, connectorID); err != nil {
-			slog.Error("failed to fetch connector for notification", "error", err, "connectorID", connectorID)
+			slog.Error("failed to fetch connector for notification", "error", err, "connectorID", logsafe.Sanitize(connectorID))
 			// Treat as unknown category; routes with a category filter just won't match.
 		} else {
 			return connector.Category
