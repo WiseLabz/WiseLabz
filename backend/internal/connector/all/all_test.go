@@ -18,6 +18,7 @@ func TestAllConnectorImplementationsRegister(t *testing.T) {
 		{typ: "pfsense", category: "networking"},
 		{typ: "pihole", category: "dns"},
 		{typ: "proxmox", category: "virtualization"},
+		{typ: "traefik", category: "networking"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.typ, func(t *testing.T) {
