@@ -9,6 +9,14 @@ import (
 	"github.com/WiseLabz/wiselabz/internal/httputil"
 )
 
+// complianceRule returns validComplianceRule with mut applied, for cases that
+// reject exactly one field of an otherwise-valid rule.
+func complianceRule(mut func(map[string]any)) map[string]any {
+	rule := validComplianceRule()
+	mut(rule)
+	return rule
+}
+
 // TestValidationErrorDetails pins the {field, msg} details envelope (issue
 // #350) for one representative validation failure per handler package, so a
 // handler cannot quietly drop back to a detail-less 400. It also asserts the
@@ -92,6 +100,34 @@ func TestValidationErrorDetails(t *testing.T) {
 			details: []httputil.FieldError{
 				{Field: "username", Msg: "is required"},
 				{Field: "password", Msg: "is required"},
+			},
+		},
+		{
+			name: "compliance rule connectorType", role: "operator",
+			method: "POST", path: "/api/compliance/rules",
+			body:    complianceRule(func(r map[string]any) { r["connectorType"] = "unknown" }),
+			details: []httputil.FieldError{{Field: "connectorType", Msg: "is not a known connector type"}},
+		},
+		{
+			// The offending condition is the second one: details must point at
+			// that row, not just at "conditions".
+			name: "compliance rule indexed condition", role: "operator",
+			method: "POST", path: "/api/compliance/rules",
+			body: complianceRule(func(r map[string]any) {
+				r["conditions"] = []map[string]any{
+					{"attribute": "action", "op": "eq", "value": "pass"},
+					{"attribute": "nope", "op": "eq", "value": "x"},
+				}
+			}),
+			details: []httputil.FieldError{{Field: "conditions[1].attribute", Msg: "is not a known attribute for this entity kind"}},
+		},
+		{
+			name: "compliance rule name and title", role: "operator",
+			method: "POST", path: "/api/compliance/rules",
+			body: complianceRule(func(r map[string]any) { r["name"] = ""; r["title"] = "" }),
+			details: []httputil.FieldError{
+				{Field: "name", Msg: "is required"},
+				{Field: "title", Msg: "is required"},
 			},
 		},
 		{
