@@ -16,6 +16,7 @@ func TestAllConnectorImplementationsRegister(t *testing.T) {
 		{typ: "docker", category: "containers_paas"},
 		{typ: "opnsense", category: "networking"},
 		{typ: "pfsense", category: "networking"},
+		{typ: "portainer", category: "containers_paas"},
 		{typ: "proxmox", category: "virtualization"},
 		{typ: "traefik", category: "networking"},
 	}

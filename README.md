@@ -98,11 +98,12 @@ use `server config validate` to check deployment settings and `server config pri
 | Service            | Status               |
 |--------------------|----------------------|
 | Proxmox VE         | Built-in             |
-| Docker / Portainer | Built-in             |
+| Docker             | Built-in             |
 | pfSense / OPNsense | Built-in             |
 | Netbird            | Built-in             |
 | Cloudflare         | Built-in             |
 | Traefik            | Built-in             |
+| Portainer          | Built-in             |
 | Everything else    | Community connectors |
 
 New service connectors are community-driven. If the service you run isn't here yet,
