@@ -122,6 +122,27 @@ func TestRunMigrationsDown(t *testing.T) {
 		t.Fatalf("RunMigrations() error: %v", err)
 	}
 
+	if !hasColumn(t, db, "sqlite", "retention_settings", "health_check_days") {
+		t.Fatal("retention_settings.health_check_days missing after migrations")
+	}
+	if err := RunMigrationsDown(db, "sqlite", logger); err != nil {
+		t.Fatalf("RunMigrationsDown() health_check_retention error: %v", err)
+	}
+	if hasColumn(t, db, "sqlite", "retention_settings", "health_check_days") {
+		t.Error("retention_settings.health_check_days should not exist after rolling back health_check_retention")
+	}
+
+	var healthChecksTable string
+	if err := db.QueryRow("SELECT name FROM sqlite_master WHERE type='table' AND name='health_checks'").Scan(&healthChecksTable); err != nil {
+		t.Fatalf("health_checks table missing after migrations: %v", err)
+	}
+	if err := RunMigrationsDown(db, "sqlite", logger); err != nil {
+		t.Fatalf("RunMigrationsDown() health_checks error: %v", err)
+	}
+	if err := db.QueryRow("SELECT name FROM sqlite_master WHERE type='table' AND name='health_checks'").Scan(&healthChecksTable); !errors.Is(err, sql.ErrNoRows) {
+		t.Errorf("health_checks should not exist after rolling back its migration (err=%v)", err)
+	}
+
 	assertKeysetPaginationIndexes(t, db, "sqlite", true)
 	if err := RunMigrationsDown(db, "sqlite", logger); err != nil {
 		t.Fatalf("RunMigrationsDown() keyset_pagination_indexes error: %v", err)
@@ -208,6 +229,22 @@ func TestRunMigrationsDown(t *testing.T) {
 	}
 	if !hasColumn(t, db, "sqlite", "users", "digest_cadence") {
 		t.Fatal("users.digest_cadence missing after reapply")
+	}
+	if !hasColumn(t, db, "sqlite", "retention_settings", "health_check_days") {
+		t.Fatal("retention_settings.health_check_days missing after reapply")
+	}
+	if err := RunMigrationsDown(db, "sqlite", logger); err != nil {
+		t.Fatalf("RunMigrationsDown() after reapply, health_check_retention error: %v", err)
+	}
+	if hasColumn(t, db, "sqlite", "retention_settings", "health_check_days") {
+		t.Error("retention_settings.health_check_days should not exist after rolling back health_check_retention")
+	}
+	if err := RunMigrationsDown(db, "sqlite", logger); err != nil {
+		t.Fatalf("RunMigrationsDown() after reapply, health_checks error: %v", err)
+	}
+	var healthChecksAfterReapply string
+	if err := db.QueryRow("SELECT name FROM sqlite_master WHERE type='table' AND name='health_checks'").Scan(&healthChecksAfterReapply); !errors.Is(err, sql.ErrNoRows) {
+		t.Errorf("health_checks should not exist after rolling back its migration (err=%v)", err)
 	}
 	assertKeysetPaginationIndexes(t, db, "sqlite", true)
 	if err := RunMigrationsDown(db, "sqlite", logger); err != nil {
