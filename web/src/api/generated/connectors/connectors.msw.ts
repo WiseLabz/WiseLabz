@@ -32,6 +32,7 @@ import type {
   SyncJobRef,
   SyncRun,
   TestResult,
+  UptimeReport,
 } from '../../model';
 
 export const getGetConnectorsResponseMock = (): Connector[] =>
@@ -452,6 +453,23 @@ export const getGetConnectorsConnectorIdDataResponseMock = (
     undefined,
   ]),
   fetchedAt: faker.date.past().toISOString().slice(0, 19) + 'Z',
+  ...overrideResponse,
+});
+
+export const getGetConnectorsConnectorIdUptimeResponseMock = (
+  overrideResponse: Partial<Extract<UptimeReport, object>> = {}
+): UptimeReport => ({
+  connectorId: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  windows: {
+    [faker.string.alphanumeric(5)]: {
+      windowStart: faker.date.past().toISOString().slice(0, 19) + 'Z',
+      windowEnd: faker.date.past().toISOString().slice(0, 19) + 'Z',
+      checkCount: faker.number.int(),
+      availabilityPct: faker.number.float({ fractionDigits: 2 }),
+      mttrSeconds: faker.number.float({ fractionDigits: 2 }),
+      outageCount: faker.number.int(),
+    },
+  },
   ...overrideResponse,
 });
 
@@ -1011,6 +1029,30 @@ export const getGetConnectorsConnectorIdDataMockHandler = (
   );
 };
 
+export const getGetConnectorsConnectorIdUptimeMockHandler = (
+  overrideResponse?:
+    | UptimeReport
+    | ((
+        info: Parameters<Parameters<typeof http.get>[1]>[0]
+      ) => Promise<UptimeReport> | UptimeReport),
+  options?: RequestHandlerOptions
+) => {
+  return http.get(
+    '*/connectors/:connectorId/uptime',
+    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+      return HttpResponse.json(
+        overrideResponse !== undefined
+          ? typeof overrideResponse === 'function'
+            ? await overrideResponse(info)
+            : overrideResponse
+          : getGetConnectorsConnectorIdUptimeResponseMock(),
+        { status: 200 }
+      );
+    },
+    options
+  );
+};
+
 export const getPostConnectorsConnectorIdTestMockHandler = (
   overrideResponse?:
     | TestResult
@@ -1475,6 +1517,7 @@ export const getConnectorsMock = () => [
   getGetConnectorsConnectorIdConfigFieldsMockHandler(),
   getPostConnectorsConnectorIdConfigPushMockHandler(),
   getGetConnectorsConnectorIdDataMockHandler(),
+  getGetConnectorsConnectorIdUptimeMockHandler(),
   getPostConnectorsConnectorIdTestMockHandler(),
   getPostConnectorsConnectorIdHealthMockHandler(),
   getPostConnectorsConnectorIdSyncMockHandler(),

@@ -1,4 +1,4 @@
--- 000035_golden_snapshots.up.sql — pin a snapshot per connector as the
+-- 000037_golden_snapshots.up.sql — pin a snapshot per connector as the
 -- known-good baseline, and add 'config_drift' as a valid quality_findings
 -- check_type so later snapshots can be flagged when they deviate from it
 -- (#275).

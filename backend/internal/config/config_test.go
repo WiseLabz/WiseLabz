@@ -57,6 +57,9 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.Retention.AuditDays != 180 {
 		t.Errorf("retention.audit_days = %d, want 180", cfg.Retention.AuditDays)
 	}
+	if cfg.Retention.HealthCheckDays != 90 {
+		t.Errorf("retention.health_check_days = %d, want 90", cfg.Retention.HealthCheckDays)
+	}
 	if cfg.Retention.CronExpr != "0 0 * * *" {
 		t.Errorf("retention.cron_expr = %q, want 0 0 * * *", cfg.Retention.CronExpr)
 	}
@@ -65,6 +68,15 @@ func TestLoadDefaults(t *testing.T) {
 	}
 	if cfg.Sync.PollCronExpr != "*/30 * * * * *" {
 		t.Errorf("sync.poll_cron_expr = %q, want */30 * * * * *", cfg.Sync.PollCronExpr)
+	}
+	if cfg.DocExport.Dir != "./data/docexport" {
+		t.Errorf("doc_export.dir = %q, want ./data/docexport", cfg.DocExport.Dir)
+	}
+	if cfg.DocExport.CronExpr != "0 2 * * *" {
+		t.Errorf("doc_export.cron_expr = %q, want 0 2 * * *", cfg.DocExport.CronExpr)
+	}
+	if cfg.DocExport.Enabled {
+		t.Errorf("doc_export.enabled = true, want false")
 	}
 }
 
@@ -243,12 +255,16 @@ func TestLoadEnvOverrideAllFields(t *testing.T) {
 		"WISELABZ_RETENTION_ALERT_DAYS":            "3",
 		"WISELABZ_RETENTION_SYNC_RUN_DAYS":         "4",
 		"WISELABZ_RETENTION_AUDIT_DAYS":            "5",
+		"WISELABZ_RETENTION_HEALTH_CHECK_DAYS":     "6",
 		"WISELABZ_RETENTION_CRON_EXPR":             "0 4 * * *",
 		"WISELABZ_BACKUP_DIR":                      "/tmp/backups",
 		"WISELABZ_BACKUP_CRON_EXPR":                "0 5 * * *",
 		"WISELABZ_BACKUP_MAX_BACKUPS":              "1",
 		"WISELABZ_BACKUP_MAX_AGE_HOURS":            "2",
 		"WISELABZ_BACKUP_ENABLED":                  "false",
+		"WISELABZ_DOC_EXPORT_DIR":                  "/tmp/docexport",
+		"WISELABZ_DOC_EXPORT_CRON_EXPR":            "0 6 * * *",
+		"WISELABZ_DOC_EXPORT_ENABLED":              "true",
 	}
 	for k, v := range env {
 		t.Setenv(k, v)
@@ -272,8 +288,9 @@ func TestLoadEnvOverrideAllFields(t *testing.T) {
 		Quality:   QualitySettings{CronExpr: "0 1 * * *"},
 		Rotation:  RotationSettings{MaxAgeDays: 45, WarnDays: 7},
 		Log:       LogSettings{Level: "debug", Format: "json"},
-		Retention: RetentionSettings{SnapshotDays: 1, DocVersionDays: 2, AlertDays: 3, SyncRunDays: 4, AuditDays: 5, CronExpr: "0 4 * * *"},
+		Retention: RetentionSettings{SnapshotDays: 1, DocVersionDays: 2, AlertDays: 3, SyncRunDays: 4, AuditDays: 5, HealthCheckDays: 6, CronExpr: "0 4 * * *"},
 		Backup:    BackupSettings{Dir: "/tmp/backups", CronExpr: "0 5 * * *", MaxBackups: 1, MaxAgeHours: 2, Enabled: false},
+		DocExport: DocExportSettings{Dir: "/tmp/docexport", CronExpr: "0 6 * * *", Enabled: true},
 	}
 
 	got := *cfg

@@ -1,4 +1,4 @@
--- Revert 000035: drop golden_snapshots and restrict quality_findings.check_type
+-- Revert 000037: drop golden_snapshots and restrict quality_findings.check_type
 -- back to the set that excludes 'config_drift'.
 -- Note: any open config_drift findings are dropped since they'd violate the
 -- narrower constraint. This is expected for a down migration.

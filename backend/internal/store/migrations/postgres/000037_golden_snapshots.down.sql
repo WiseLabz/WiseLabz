@@ -1,4 +1,4 @@
--- Revert 000035: drop golden_snapshots and restrict quality_findings.check_type
+-- Revert 000037: drop golden_snapshots and restrict quality_findings.check_type
 -- back to the set that excludes 'config_drift'.
 -- Rows with check_type = 'config_drift' are dropped first so the narrower
 -- constraint can be re-added without failing on existing data.
