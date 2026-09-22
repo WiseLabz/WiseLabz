@@ -122,6 +122,12 @@ func TestRunMigrationsDown(t *testing.T) {
 		t.Fatalf("RunMigrations() error: %v", err)
 	}
 
+	assertNtfyTelegramChannelsAllowed(t, db, true)
+	if err := RunMigrationsDown(db, "sqlite", logger); err != nil {
+		t.Fatalf("RunMigrationsDown() ntfy_telegram_channels error: %v", err)
+	}
+	assertNtfyTelegramChannelsAllowed(t, db, false)
+
 	assertKeysetPaginationIndexes(t, db, "sqlite", true)
 	if err := RunMigrationsDown(db, "sqlite", logger); err != nil {
 		t.Fatalf("RunMigrationsDown() keyset_pagination_indexes error: %v", err)
@@ -209,6 +215,13 @@ func TestRunMigrationsDown(t *testing.T) {
 	if !hasColumn(t, db, "sqlite", "users", "digest_cadence") {
 		t.Fatal("users.digest_cadence missing after reapply")
 	}
+
+	assertNtfyTelegramChannelsAllowed(t, db, true)
+	if err := RunMigrationsDown(db, "sqlite", logger); err != nil {
+		t.Fatalf("RunMigrationsDown() after reapply, ntfy_telegram_channels error: %v", err)
+	}
+	assertNtfyTelegramChannelsAllowed(t, db, false)
+
 	assertKeysetPaginationIndexes(t, db, "sqlite", true)
 	if err := RunMigrationsDown(db, "sqlite", logger); err != nil {
 		t.Fatalf("RunMigrationsDown() after reapply, keyset pagination indexes error: %v", err)
@@ -672,5 +685,20 @@ func assertSessionLastSeenIndex(t *testing.T, db *sql.DB, driver string, present
 		}
 	} else if err != nil || !strings.Contains(definition, "(last_seen_at)") {
 		t.Errorf("%s should index sessions(last_seen_at), got %q, %v", name, definition, err)
+	}
+}
+
+// assertNtfyTelegramChannelsAllowed checks 000034_ntfy_telegram_channels' widened CHECK
+// constraint on notification_deliveries.channel by inspecting the table's own SQLite schema
+// text (sqlite_master.sql), in both directions of the migration.
+func assertNtfyTelegramChannelsAllowed(t *testing.T, db *sql.DB, present bool) {
+	t.Helper()
+	var definition string
+	if err := db.QueryRow(`SELECT sql FROM sqlite_master WHERE type='table' AND name='notification_deliveries'`).Scan(&definition); err != nil {
+		t.Fatalf("read notification_deliveries schema: %v", err)
+	}
+	hasNtfy := strings.Contains(definition, "'ntfy'")
+	if hasNtfy != present {
+		t.Errorf("notification_deliveries CHECK constraint ntfy/telegram present=%v, want %v (schema: %s)", hasNtfy, present, definition)
 	}
 }
