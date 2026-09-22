@@ -1,4 +1,4 @@
--- 000035_health_check_retention.up.sql — adds a configurable retention
+-- 000036_health_check_retention.up.sql — adds a configurable retention
 -- window for the health_checks time series (#281), following the same
 -- *_days pattern as the other retention_settings columns.
 

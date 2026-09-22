@@ -143,6 +143,12 @@ func TestRunMigrationsDown(t *testing.T) {
 		t.Errorf("health_checks should not exist after rolling back its migration (err=%v)", err)
 	}
 
+	assertNtfyTelegramChannelsAllowed(t, db, "sqlite", true)
+	if err := RunMigrationsDown(db, "sqlite", logger); err != nil {
+		t.Fatalf("RunMigrationsDown() ntfy_telegram_channels error: %v", err)
+	}
+	assertNtfyTelegramChannelsAllowed(t, db, "sqlite", false)
+
 	assertKeysetPaginationIndexes(t, db, "sqlite", true)
 	if err := RunMigrationsDown(db, "sqlite", logger); err != nil {
 		t.Fatalf("RunMigrationsDown() keyset_pagination_indexes error: %v", err)
@@ -246,6 +252,12 @@ func TestRunMigrationsDown(t *testing.T) {
 	if err := db.QueryRow("SELECT name FROM sqlite_master WHERE type='table' AND name='health_checks'").Scan(&healthChecksAfterReapply); !errors.Is(err, sql.ErrNoRows) {
 		t.Errorf("health_checks should not exist after rolling back its migration (err=%v)", err)
 	}
+
+	assertNtfyTelegramChannelsAllowed(t, db, "sqlite", true)
+	if err := RunMigrationsDown(db, "sqlite", logger); err != nil {
+		t.Fatalf("RunMigrationsDown() after reapply, ntfy_telegram_channels error: %v", err)
+	}
+	assertNtfyTelegramChannelsAllowed(t, db, "sqlite", false)
 	assertKeysetPaginationIndexes(t, db, "sqlite", true)
 	if err := RunMigrationsDown(db, "sqlite", logger); err != nil {
 		t.Fatalf("RunMigrationsDown() after reapply, keyset pagination indexes error: %v", err)
@@ -406,6 +418,12 @@ func TestRunMigrationsDownPostgres(t *testing.T) {
 		t.Fatalf("RunMigrations() error: %v", err)
 	}
 
+	assertNtfyTelegramChannelsAllowed(t, db, "postgres", true)
+	if err := RunMigrationsDown(db, "postgres", logger); err != nil {
+		t.Fatalf("RunMigrationsDown() ntfy_telegram_channels error: %v", err)
+	}
+	assertNtfyTelegramChannelsAllowed(t, db, "postgres", false)
+
 	assertKeysetPaginationIndexes(t, db, "postgres", true)
 	if err := RunMigrationsDown(db, "postgres", logger); err != nil {
 		t.Fatalf("RunMigrationsDown() keyset_pagination_indexes error: %v", err)
@@ -451,6 +469,7 @@ func TestRunMigrationsDownPostgres(t *testing.T) {
 	assertShareLinkRetentionIndexes(t, db, "postgres", true)
 	assertSessionLastSeenIndex(t, db, "postgres", true)
 	assertKeysetPaginationIndexes(t, db, "postgres", true)
+	assertNtfyTelegramChannelsAllowed(t, db, "postgres", true)
 }
 
 func TestSessionAuthProviderMigration(t *testing.T) {
@@ -709,5 +728,24 @@ func assertSessionLastSeenIndex(t *testing.T, db *sql.DB, driver string, present
 		}
 	} else if err != nil || !strings.Contains(definition, "(last_seen_at)") {
 		t.Errorf("%s should index sessions(last_seen_at), got %q, %v", name, definition, err)
+	}
+}
+
+// assertNtfyTelegramChannelsAllowed checks 000034_ntfy_telegram_channels' widened CHECK
+// constraint on notification_deliveries.channel against the dialect's catalog, in both
+// directions of the migration.
+func assertNtfyTelegramChannelsAllowed(t *testing.T, db *sql.DB, driver string, present bool) {
+	t.Helper()
+	query := `SELECT sql FROM sqlite_master WHERE type='table' AND name='notification_deliveries'`
+	if driver == "postgres" {
+		query = `SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'notification_deliveries_channel_check'`
+	}
+	var definition string
+	if err := db.QueryRow(query).Scan(&definition); err != nil {
+		t.Fatalf("read notification_deliveries schema: %v", err)
+	}
+	hasNtfy := strings.Contains(definition, "'ntfy'")
+	if hasNtfy != present {
+		t.Errorf("notification_deliveries CHECK constraint ntfy/telegram present=%v, want %v (schema: %s)", hasNtfy, present, definition)
 	}
 }

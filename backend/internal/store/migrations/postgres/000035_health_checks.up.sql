@@ -1,4 +1,4 @@
--- 000034_health_checks.up.sql — persists each connector health check
+-- 000035_health_checks.up.sql — persists each connector health check
 -- (connector/health.go's Validate-only check) as a time-series row, so
 -- availability % and MTTR can be computed over a window instead of only
 -- exposing the latest status snapshot (#281).
