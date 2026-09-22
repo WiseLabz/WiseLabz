@@ -249,12 +249,14 @@ import (
     _ "github.com/WiseLabz/wiselabz/internal/connector/adguardhome"
     _ "github.com/WiseLabz/wiselabz/internal/connector/custom"
     _ "github.com/WiseLabz/wiselabz/internal/connector/docker"
+    _ "github.com/WiseLabz/wiselabz/internal/connector/home_assistant"
     _ "github.com/WiseLabz/wiselabz/internal/connector/mynewservice" // <-- add this
     _ "github.com/WiseLabz/wiselabz/internal/connector/opnsense"
     _ "github.com/WiseLabz/wiselabz/internal/connector/pfsense"
     _ "github.com/WiseLabz/wiselabz/internal/connector/portainer"
     _ "github.com/WiseLabz/wiselabz/internal/connector/proxmox"
     _ "github.com/WiseLabz/wiselabz/internal/connector/traefik"
+    _ "github.com/WiseLabz/wiselabz/internal/connector/unifi"
 )
 ```
 
@@ -402,6 +404,61 @@ handling that without splitting into two connectors:
   rather than silently calling a v6-only path.
 - **Test both.** Stand up one `httptest` fake per version, each answering 404
   for any path it does not serve, and run the same assertions against both.
+
+## Session-based and multi-flavour APIs
+
+Some vendors ship the same API behind two different front doors, and
+authenticate with a cookie rather than a header. The UniFi connector
+(`backend/internal/connector/unifi/`) is the reference for that shape:
+
+- **Give the client a cookie jar.** `http.Client.Jar` is what replays the
+  session cookie the login endpoint hands out; nothing else in the connector
+  has to know the cookie's name.
+- **Model the flavour as a path prefix.** A UniFi OS console serves the same
+  Network API as a classic controller, just behind `/proxy/network`. A
+  one-field `session` struct carrying that prefix keeps every call site
+  identical, and a `controller_type` select (`auto` / `unifios` / `classic`)
+  lets an operator pin it — same pattern as Pi-hole's `api_version`.
+- **Prefer the actionable error when auto-detecting.** A 404 from probing the
+  wrong flavour says nothing useful; an `AuthError` from the other probe means
+  the credentials really were rejected, so that is the error to report.
+- **Map the vendor's own error envelope.** UniFi answers failures with
+  `{"meta":{"rc":"error","msg":"api.err.Invalid"}}` and uses 400, not 401, for
+  bad credentials. Translate both into the shared connector error types so the
+  sync engine can tell "retry later" from "fix your credentials".
+
+## Keeping snapshots stable
+
+A snapshot is diffed against the previous one, so anything that changes on
+every poll turns into permanent noise. Decode the fields you need rather than
+the whole payload, and leave out uptime, byte and packet counters, load
+averages, signal strength and `last_seen`-style timestamps — the UniFi device
+and client endpoints return all of those next to the inventory data, and the
+connector simply does not decode them. The same rule is enforced for
+`SnapshotEntity.Attributes` by `AttributeSpec` (see `RegisterAttributeCatalog`):
+attributes are configuration, not telemetry. Where a resource is inherently
+volatile — connected clients, say — prefer a summary (counts per SSID) over
+one entity per instance.
+
+When nearly everything an API returns is volatile, filtering has to go a step
+further. The Home Assistant connector
+(`backend/internal/connector/home_assistant/`) is the reference for that case:
+
+- **Drop the timestamps outright.** Home Assistant stamps every entity with
+  `last_changed`/`last_updated`. Neither reaches the snapshot — they say when
+  something happened, not how the instance is configured.
+- **Collapse measurements to availability.** A `sensor.*` state is a live
+  reading. `stableState` reports such an entity as `available` (or
+  `unavailable`/`unknown`, which *are* meaningful) instead of its value, using
+  a volatile-domain list plus a numeric/timestamp check so an unrecognised
+  integration is treated conservatively.
+- **Report the counts, not the readings.** Per-domain totals and an
+  unavailable-entity count carry the operational signal that the individual
+  values would have, and only change when something actually changes.
+- **Sort before you cap.** Large instances expose thousands of entities, so a
+  `max_entities` field caps how many a snapshot carries. Entities are sorted by
+  ID first, so the cap always keeps the same set instead of whatever order the
+  API happened to return.
 
 ## Getting your connector merged
 
