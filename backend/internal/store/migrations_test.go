@@ -418,6 +418,27 @@ func TestRunMigrationsDownPostgres(t *testing.T) {
 		t.Fatalf("RunMigrations() error: %v", err)
 	}
 
+	if !hasColumn(t, db, "postgres", "retention_settings", "health_check_days") {
+		t.Fatal("retention_settings.health_check_days missing after migrations")
+	}
+	if err := RunMigrationsDown(db, "postgres", logger); err != nil {
+		t.Fatalf("RunMigrationsDown() health_check_retention error: %v", err)
+	}
+	if hasColumn(t, db, "postgres", "retention_settings", "health_check_days") {
+		t.Error("retention_settings.health_check_days should not exist after rolling back health_check_retention")
+	}
+
+	var healthChecksTable string
+	if err := db.QueryRow(`SELECT table_name FROM information_schema.tables WHERE table_schema = current_schema() AND table_name = 'health_checks'`).Scan(&healthChecksTable); err != nil {
+		t.Fatalf("health_checks table missing after migrations: %v", err)
+	}
+	if err := RunMigrationsDown(db, "postgres", logger); err != nil {
+		t.Fatalf("RunMigrationsDown() health_checks error: %v", err)
+	}
+	if err := db.QueryRow(`SELECT table_name FROM information_schema.tables WHERE table_schema = current_schema() AND table_name = 'health_checks'`).Scan(&healthChecksTable); !errors.Is(err, sql.ErrNoRows) {
+		t.Errorf("health_checks should not exist after rolling back its migration (err=%v)", err)
+	}
+
 	assertNtfyTelegramChannelsAllowed(t, db, "postgres", true)
 	if err := RunMigrationsDown(db, "postgres", logger); err != nil {
 		t.Fatalf("RunMigrationsDown() ntfy_telegram_channels error: %v", err)
@@ -470,6 +491,12 @@ func TestRunMigrationsDownPostgres(t *testing.T) {
 	assertSessionLastSeenIndex(t, db, "postgres", true)
 	assertKeysetPaginationIndexes(t, db, "postgres", true)
 	assertNtfyTelegramChannelsAllowed(t, db, "postgres", true)
+	if err := db.QueryRow(`SELECT table_name FROM information_schema.tables WHERE table_schema = current_schema() AND table_name = 'health_checks'`).Scan(&name); err != nil {
+		t.Errorf("health_checks should exist after reapply: %v", err)
+	}
+	if !hasColumn(t, db, "postgres", "retention_settings", "health_check_days") {
+		t.Error("retention_settings.health_check_days should exist after reapply")
+	}
 }
 
 func TestSessionAuthProviderMigration(t *testing.T) {
