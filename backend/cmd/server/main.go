@@ -17,6 +17,7 @@ import (
 	"github.com/WiseLabz/wiselabz/internal/api"
 	syshandler "github.com/WiseLabz/wiselabz/internal/api/system"
 	"github.com/WiseLabz/wiselabz/internal/auth"
+	"github.com/WiseLabz/wiselabz/internal/backup"
 	"github.com/WiseLabz/wiselabz/internal/config"
 	"github.com/WiseLabz/wiselabz/internal/doc"
 	"github.com/WiseLabz/wiselabz/internal/notifications"
@@ -162,6 +163,18 @@ func main() {
 		expireAlertsOnce(jobCtx, s, notifDispatcher, logger)
 	}); err != nil {
 		logger.Error("Failed to add alert expirer job", "error", err)
+		os.Exit(1)
+	}
+
+	// Unlike the backup job itself (registered by api.NewRouter via
+	// InitBackupJob, since its schedule is operator-configurable through
+	// PUT /schedule), the verify job has no persisted schedule of its own —
+	// it just registers here on a fixed cadence, same as "quality"/"digest"
+	// above.
+	if _, err := jobRunner.AddJob("backup-verify", backup.DefaultVerifyCronExpr, func(jobCtx context.Context) {
+		backup.RunVerifyOnce(jobCtx, backupDir, logger)
+	}); err != nil {
+		logger.Error("Failed to add backup verify job", "error", err)
 		os.Exit(1)
 	}
 
