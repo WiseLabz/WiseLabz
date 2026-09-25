@@ -36,6 +36,7 @@ export const getGetUsersResponseMock = (): User[] =>
       faker.string.alpha({ length: { min: 10, max: 20 } }),
       undefined,
     ]),
+    mfaEnabled: faker.helpers.arrayElement([faker.datatype.boolean(), undefined]),
   }));
 
 export const getPostUsersResponseMock = (
@@ -61,6 +62,7 @@ export const getPostUsersResponseMock = (
     faker.string.alpha({ length: { min: 10, max: 20 } }),
     undefined,
   ]),
+  mfaEnabled: faker.helpers.arrayElement([faker.datatype.boolean(), undefined]),
   ...overrideResponse,
 });
 
@@ -87,6 +89,7 @@ export const getPatchUsersUserIdResponseMock = (
     faker.string.alpha({ length: { min: 10, max: 20 } }),
     undefined,
   ]),
+  mfaEnabled: faker.helpers.arrayElement([faker.datatype.boolean(), undefined]),
   ...overrideResponse,
 });
 
@@ -193,10 +196,30 @@ export const getPostUsersUserIdResetPasswordMockHandler = (
     options
   );
 };
+
+export const getPostUsersUserIdResetMfaMockHandler = (
+  overrideResponse?:
+    | void
+    | ((info: Parameters<Parameters<typeof http.post>[1]>[0]) => Promise<void> | void),
+  options?: RequestHandlerOptions
+) => {
+  return http.post(
+    '*/users/:userId/reset-mfa',
+    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+      if (typeof overrideResponse === 'function') {
+        await overrideResponse(info);
+      }
+
+      return new HttpResponse(null, { status: 204 });
+    },
+    options
+  );
+};
 export const getUsersMock = () => [
   getGetUsersMockHandler(),
   getPostUsersMockHandler(),
   getPatchUsersUserIdMockHandler(),
   getDeleteUsersUserIdMockHandler(),
   getPostUsersUserIdResetPasswordMockHandler(),
+  getPostUsersUserIdResetMfaMockHandler(),
 ];

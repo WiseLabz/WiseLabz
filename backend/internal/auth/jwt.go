@@ -13,6 +13,7 @@ const (
 	tokenAudienceAccess    = "access"
 	tokenAudienceRefresh   = "refresh"
 	tokenAudienceElevation = "elevation"
+	tokenAudienceMFA       = "mfa"
 )
 
 // Claims represents the JWT claims for access and refresh tokens.
@@ -20,10 +21,36 @@ const (
 // management, API keys, granting connector permissions); per-connector
 // access is looked up per-request from the store, not carried in the token,
 // since it can change per connector at any time (see auth.RequireConnectorRole).
+//
+// MFAEnrollOnly marks a session issued to a user the require_2fa policy
+// covers but who hasn't enrolled a factor yet (#279). AuthMiddleware confines
+// such a session to the enrollment allowlist; the refresh path carries the
+// flag forward until ConfirmFactor drops it.
 type Claims struct {
 	jwt.RegisteredClaims
 	UserID        string `json:"uid"`
 	InstanceAdmin bool   `json:"admin"`
+	MFAEnrollOnly bool   `json:"mfa_enroll,omitempty"`
+}
+
+// MFAClaims represents a short-lived ticket issued after a correct password
+// but before the second factor, identifying only who is completing login.
+type MFAClaims struct {
+	jwt.RegisteredClaims
+	UserID string `json:"uid"`
+}
+
+// MFATicket is the response for a login that requires a second factor.
+type MFATicket struct {
+	Ticket    string    `json:"ticket"`
+	ExpiresAt time.Time `json:"expiresAt"`
+}
+
+// IssuePairOptions carries per-issuance flags for IssuePairWithOptions.
+type IssuePairOptions struct {
+	// MFAEnrollOnly stamps both tokens of the pair with the enrollment-only
+	// claim (see Claims.MFAEnrollOnly).
+	MFAEnrollOnly bool
 }
 
 // APIKeyClaims represents the identity and lifecycle fields needed to
@@ -81,6 +108,12 @@ func NewService(secret string, accessTTL, refreshTTL time.Duration) *Service {
 
 // IssuePair creates a new access + refresh token pair.
 func (s *Service) IssuePair(userID string, instanceAdmin bool) (*TokenPair, error) {
+	return s.IssuePairWithOptions(userID, instanceAdmin, IssuePairOptions{})
+}
+
+// IssuePairWithOptions creates a new access + refresh token pair, applying
+// opts to both tokens.
+func (s *Service) IssuePairWithOptions(userID string, instanceAdmin bool, opts IssuePairOptions) (*TokenPair, error) {
 	now := time.Now()
 
 	access, err := s.issue(Claims{
@@ -92,6 +125,7 @@ func (s *Service) IssuePair(userID string, instanceAdmin bool) (*TokenPair, erro
 		},
 		UserID:        userID,
 		InstanceAdmin: instanceAdmin,
+		MFAEnrollOnly: opts.MFAEnrollOnly,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("issue access token: %w", err)
@@ -106,6 +140,7 @@ func (s *Service) IssuePair(userID string, instanceAdmin bool) (*TokenPair, erro
 		},
 		UserID:        userID,
 		InstanceAdmin: instanceAdmin,
+		MFAEnrollOnly: opts.MFAEnrollOnly,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("issue refresh token: %w", err)
@@ -116,6 +151,58 @@ func (s *Service) IssuePair(userID string, instanceAdmin bool) (*TokenPair, erro
 		RefreshToken: refresh,
 		ExpiresIn:    int(s.accessTTL.Seconds()),
 	}, nil
+}
+
+// IssueMFATicket creates a short-lived (5 minute) ticket identifying a user
+// who passed the password step of login and now must present a second
+// factor to POST /auth/login/mfa. Its "mfa" audience keeps it from being
+// accepted anywhere an access, refresh or elevation token is expected, and
+// vice versa (see ValidateAccess/ValidateRefresh/ValidateElevation).
+func (s *Service) IssueMFATicket(userID string) (*MFATicket, error) {
+	now := time.Now()
+	expiresAt := now.Add(5 * time.Minute)
+
+	token, err := s.issueMFA(MFAClaims{
+		RegisteredClaims: jwt.RegisteredClaims{
+			Audience:  jwt.ClaimStrings{tokenAudienceMFA},
+			IssuedAt:  jwt.NewNumericDate(now),
+			ExpiresAt: jwt.NewNumericDate(expiresAt),
+			ID:        newTokenID(),
+		},
+		UserID: userID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("issue mfa ticket: %w", err)
+	}
+
+	return &MFATicket{Ticket: token, ExpiresAt: expiresAt}, nil
+}
+
+// ValidateMFATicket validates a login MFA ticket and returns its claims.
+func (s *Service) ValidateMFATicket(tokenString string) (*MFAClaims, error) {
+	claims := &MFAClaims{}
+	token, err := jwt.ParseWithClaims(tokenString, claims, func(t *jwt.Token) (interface{}, error) {
+		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
+		}
+		return s.secret, nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("parse mfa ticket: %w", err)
+	}
+	c, ok := token.Claims.(*MFAClaims)
+	if !ok || !token.Valid {
+		return nil, fmt.Errorf("invalid mfa ticket")
+	}
+	if !hasAudience(c.Audience, tokenAudienceMFA) {
+		return nil, fmt.Errorf("token is not an mfa ticket")
+	}
+	return c, nil
+}
+
+func (s *Service) issueMFA(claims MFAClaims) (string, error) {
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return token.SignedString(s.secret)
 }
 
 // ValidateAccess validates an access token and returns its claims.

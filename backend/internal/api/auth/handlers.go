@@ -47,7 +47,13 @@ func (h *Handler) ListUsers(w http.ResponseWriter, r *http.Request) {
 
 	sanitized := make([]map[string]any, len(users))
 	for i, u := range users {
-		sanitized[i] = sanitizeUser(&u)
+		s := sanitizeUser(&u)
+		if hasMFA, err := h.Store.UserHasMFA(r.Context(), u.ID); err != nil {
+			h.logError("failed to check user mfa status", err)
+		} else {
+			s["mfaEnabled"] = hasMFA
+		}
+		sanitized[i] = s
 	}
 
 	// Spec: GET /users returns a bare User[] (see openapi.yaml).
@@ -310,6 +316,43 @@ func (h *Handler) ResetPassword(w http.ResponseWriter, r *http.Request) {
 	if err := h.Store.RevokeAllAPIKeysForUser(r.Context(), userID); err != nil {
 		httputil.Errorf(w, err)
 		return
+	}
+
+	httputil.NoContent(w)
+}
+
+// ResetMFA handles POST /api/users/{id}/reset-mfa. Wipes every factor and
+// recovery code, revokes every session (an attacker who's compromised a
+// factor shouldn't keep a still-live session), and is audited (#279).
+func (h *Handler) ResetMFA(w http.ResponseWriter, r *http.Request) {
+	userID := r.PathValue("id")
+	if userID == "" {
+		httputil.Error(w, http.StatusBadRequest, "invalid_request", "User ID is required")
+		return
+	}
+	if _, err := h.Store.GetUserByID(r.Context(), userID); err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			httputil.Error(w, http.StatusNotFound, "not_found", "User not found")
+			return
+		}
+		httputil.Errorf(w, err)
+		return
+	}
+
+	if err := h.Store.DeleteUserFactors(r.Context(), userID); err != nil {
+		httputil.Errorf(w, err)
+		return
+	}
+	if err := h.Store.ReplaceRecoveryCodes(r.Context(), userID, nil); err != nil {
+		httputil.Errorf(w, err)
+		return
+	}
+	if err := h.Store.DeleteUserSessions(r.Context(), userID); err != nil {
+		h.logError("failed to delete user sessions after mfa reset", err)
+	}
+
+	if err := h.Store.RecordAuditFromContext(r.Context(), "user.mfa_reset", "user", userID, nil); err != nil {
+		h.logError("failed to record audit", err)
 	}
 
 	httputil.NoContent(w)

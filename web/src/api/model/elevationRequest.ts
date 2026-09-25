@@ -8,7 +8,7 @@
  */
 
 /**
- * One of `password` or `totp` proves the operator's identity for step-up.
+ * One of `password` (no confirmed factor) or `totp`/`recoveryCode` (confirmed factor) proves the caller's identity for step-up; see GET /auth/elevate/methods.
  */
 export interface ElevationRequest {
   /** The elevation action being requested, e.g. "connector.delete", "user.delete" */
@@ -16,4 +16,6 @@ export interface ElevationRequest {
   password?: string;
   /** 6-digit TOTP code when 2FA is configured */
   totp?: string;
+  /** A single-use recovery code, used instead of totp */
+  recoveryCode?: string;
 }

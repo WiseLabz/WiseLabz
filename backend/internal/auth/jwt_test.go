@@ -204,3 +204,90 @@ func TestElevationExpired(t *testing.T) {
 		t.Error("expected error for expired elevation token")
 	}
 }
+
+func TestIssueAndValidateMFATicket(t *testing.T) {
+	svc := NewService("test-secret", time.Minute, time.Hour)
+
+	ticket, err := svc.IssueMFATicket("user-mfa")
+	if err != nil {
+		t.Fatalf("IssueMFATicket() error: %v", err)
+	}
+	if ticket.Ticket == "" {
+		t.Fatal("ticket is empty")
+	}
+
+	claims, err := svc.ValidateMFATicket(ticket.Ticket)
+	if err != nil {
+		t.Fatalf("ValidateMFATicket() error: %v", err)
+	}
+	if claims.UserID != "user-mfa" {
+		t.Errorf("UserID = %q, want user-mfa", claims.UserID)
+	}
+}
+
+// TestMFATicketCannotBeUsedAsOtherTokenTypes covers #279's audience
+// separation: a ticket must not work as a bearer access token, and an access
+// token must not work as a ticket.
+func TestMFATicketCannotBeUsedAsOtherTokenTypes(t *testing.T) {
+	svc := NewService("test-secret", time.Minute, time.Hour)
+
+	ticket, err := svc.IssueMFATicket("user-mfa")
+	if err != nil {
+		t.Fatalf("IssueMFATicket() error: %v", err)
+	}
+	if _, err := svc.ValidateAccess(ticket.Ticket); err == nil {
+		t.Error("mfa ticket validated as access token")
+	}
+	if _, err := svc.ValidateRefresh(ticket.Ticket); err == nil {
+		t.Error("mfa ticket validated as refresh token")
+	}
+	if _, err := svc.ValidateElevation(ticket.Ticket, "connector.delete", "user-mfa"); err == nil {
+		t.Error("mfa ticket validated as elevation token")
+	}
+
+	pair, err := svc.IssuePair("user-mfa", false)
+	if err != nil {
+		t.Fatalf("IssuePair() error: %v", err)
+	}
+	if _, err := svc.ValidateMFATicket(pair.AccessToken); err == nil {
+		t.Error("access token validated as mfa ticket")
+	}
+}
+
+func TestMFAEnrollOnlyCarriedByIssuePairWithOptions(t *testing.T) {
+	svc := NewService("test-secret", time.Minute, time.Hour)
+
+	pair, err := svc.IssuePairWithOptions("user-enroll", false, IssuePairOptions{MFAEnrollOnly: true})
+	if err != nil {
+		t.Fatalf("IssuePairWithOptions() error: %v", err)
+	}
+
+	access, err := svc.ValidateAccess(pair.AccessToken)
+	if err != nil {
+		t.Fatalf("ValidateAccess() error: %v", err)
+	}
+	if !access.MFAEnrollOnly {
+		t.Error("access token MFAEnrollOnly = false, want true")
+	}
+
+	refresh, err := svc.ValidateRefresh(pair.RefreshToken)
+	if err != nil {
+		t.Fatalf("ValidateRefresh() error: %v", err)
+	}
+	if !refresh.MFAEnrollOnly {
+		t.Error("refresh token MFAEnrollOnly = false, want true")
+	}
+
+	// The plain IssuePair (used by every other call site) must default to false.
+	plain, err := svc.IssuePair("user-plain", false)
+	if err != nil {
+		t.Fatalf("IssuePair() error: %v", err)
+	}
+	plainClaims, err := svc.ValidateAccess(plain.AccessToken)
+	if err != nil {
+		t.Fatalf("ValidateAccess() error: %v", err)
+	}
+	if plainClaims.MFAEnrollOnly {
+		t.Error("IssuePair() MFAEnrollOnly = true, want false")
+	}
+}

@@ -17,21 +17,24 @@ func (h *Handler) GetAuthConfig(w http.ResponseWriter, r *http.Request) {
 		AccessTokenTTL       int
 		RefreshTokenTTL      int
 		StepUpForDestructive int
+		Require2FA           string
 	}
 	err := h.Store.DB().QueryRowContext(r.Context(), `
-		SELECT local_enabled, access_token_ttl, refresh_token_ttl, step_up_for_destructive
+		SELECT local_enabled, access_token_ttl, refresh_token_ttl, step_up_for_destructive, require_2fa
 		FROM auth_config WHERE id = 1
-	`).Scan(&rec.LocalEnabled, &rec.AccessTokenTTL, &rec.RefreshTokenTTL, &rec.StepUpForDestructive)
+	`).Scan(&rec.LocalEnabled, &rec.AccessTokenTTL, &rec.RefreshTokenTTL, &rec.StepUpForDestructive, &rec.Require2FA)
 
 	localEnabled := true
 	accessTTL := int(h.Config.Auth.AccessTokenTTLDuration().Seconds())
 	refreshTTL := int(h.Config.Auth.RefreshTokenTTLDuration().Seconds())
 	stepUp := h.Config.Auth.StepUpForDestructive
+	require2FA := "none"
 	if err == nil {
 		localEnabled = rec.LocalEnabled != 0
 		accessTTL = rec.AccessTokenTTL
 		refreshTTL = rec.RefreshTokenTTL
 		stepUp = rec.StepUpForDestructive != 0
+		require2FA = rec.Require2FA
 	}
 
 	httputil.JSON(w, http.StatusOK, map[string]any{
@@ -39,6 +42,7 @@ func (h *Handler) GetAuthConfig(w http.ResponseWriter, r *http.Request) {
 		"accessTokenTtl":       accessTTL,
 		"refreshTokenTtl":      refreshTTL,
 		"stepUpForDestructive": stepUp,
+		"require2fa":           require2FA,
 		"oidcProviders":        h.oidcProviders(r.Context()),
 	})
 }
@@ -46,10 +50,11 @@ func (h *Handler) GetAuthConfig(w http.ResponseWriter, r *http.Request) {
 // UpdateAuthConfig handles PUT /api/auth/config.
 func (h *Handler) UpdateAuthConfig(w http.ResponseWriter, r *http.Request) {
 	req, ok := httputil.DecodeJSON[struct {
-		LocalEnabled         *bool `json:"localEnabled"`
-		AccessTokenTTL       *int  `json:"accessTokenTtl"`
-		RefreshTokenTTL      *int  `json:"refreshTokenTtl"`
-		StepUpForDestructive *bool `json:"stepUpForDestructive"`
+		LocalEnabled         *bool   `json:"localEnabled"`
+		AccessTokenTTL       *int    `json:"accessTokenTtl"`
+		RefreshTokenTTL      *int    `json:"refreshTokenTtl"`
+		StepUpForDestructive *bool   `json:"stepUpForDestructive"`
+		Require2FA           *string `json:"require2fa"`
 	}](w, r)
 	if !ok {
 		return
@@ -73,6 +78,14 @@ func (h *Handler) UpdateAuthConfig(w http.ResponseWriter, r *http.Request) {
 	if req.StepUpForDestructive != nil {
 		parts = append(parts, "step_up_for_destructive = ?")
 		args = append(args, boolToInt(*req.StepUpForDestructive))
+	}
+	if req.Require2FA != nil {
+		if *req.Require2FA != "none" && *req.Require2FA != "admins" && *req.Require2FA != "all" {
+			httputil.ErrorWithDetails(w, http.StatusBadRequest, "invalid_request", "require2fa must be one of: none, admins, all", []httputil.FieldError{{Field: "require2fa", Msg: "must be one of: none, admins, all"}})
+			return
+		}
+		parts = append(parts, "require_2fa = ?")
+		args = append(args, *req.Require2FA)
 	}
 
 	if len(parts) == 0 {

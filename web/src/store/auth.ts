@@ -4,11 +4,17 @@
  * interceptor performs ONE silent refresh — we register that handler here. Mock-
  * backed for now (MSW): login/refresh/logout/oidc hit the curated handlers; the
  * real Go backend implements the same contract later.
+ *
+ * Two-factor login (#279): postAuthLogin returns either a normal AuthSession or
+ * a LoginMfaRequired envelope. In the latter case no session exists yet — we
+ * stash the ticket + methods and LoginPage renders a second step that calls
+ * submitMfa, which finishes the login via POST /auth/login/mfa.
  */
 import { create } from 'zustand';
-import type { AuthSession, OidcCallbackRequest, User } from '../api/model';
+import type { AuthSession, LoginMfaRequired, OidcCallbackRequest, User } from '../api/model';
 import {
   postAuthLogin,
+  postAuthLoginMfa,
   postAuthLogout,
   postAuthOidcCallback,
   postAuthRefresh,
@@ -21,26 +27,39 @@ type Status = 'unknown' | 'authenticated' | 'anonymous';
 interface AuthState {
   status: Status;
   user: User | null;
+  /** Set instead of a session by POST /auth/login when the user has a confirmed factor. */
+  mfaTicket: string | null;
+  mfaMethods: string[];
   /** Resolve the session once on app load (silent refresh from the cookie). */
   bootstrap: () => Promise<void>;
   login: (username: string, password: string) => Promise<void>;
+  /** Finishes a login that returned mfaTicket, with exactly one of totp/recoveryCode. */
+  submitMfa: (input: { totp?: string; recoveryCode?: string }) => Promise<void>;
+  /** Abandons the pending MFA step (e.g. "use a different account"). */
+  cancelMfa: () => void;
   loginOidc: (req: OidcCallbackRequest) => Promise<void>;
   logout: () => Promise<void>;
 }
 
-function apply(session: AuthSession): { status: Status; user: User } {
+function apply(session: AuthSession): { status: Status; user: User; mfaTicket: null; mfaMethods: never[] } {
   setAccessToken(session.accessToken);
-  return { status: 'authenticated', user: session.user };
+  return { status: 'authenticated', user: session.user, mfaTicket: null, mfaMethods: [] };
 }
 
-function clear(): { status: Status; user: null } {
+function isMfaRequired(result: AuthSession | LoginMfaRequired): result is LoginMfaRequired {
+  return 'mfaRequired' in result && result.mfaRequired === true;
+}
+
+function clear(): { status: Status; user: null; mfaTicket: null; mfaMethods: never[] } {
   setAccessToken(null);
-  return { status: 'anonymous', user: null };
+  return { status: 'anonymous', user: null, mfaTicket: null, mfaMethods: [] };
 }
 
-export const useAuth = create<AuthState>((set) => ({
+export const useAuth = create<AuthState>((set, get) => ({
   status: 'unknown',
   user: null,
+  mfaTicket: null,
+  mfaMethods: [],
 
   async bootstrap() {
     try {
@@ -51,7 +70,22 @@ export const useAuth = create<AuthState>((set) => ({
   },
 
   async login(username, password) {
-    set(apply(await postAuthLogin({ username, password })));
+    const result = await postAuthLogin({ username, password });
+    if (isMfaRequired(result)) {
+      set({ mfaTicket: result.ticket, mfaMethods: result.methods });
+      return;
+    }
+    set(apply(result));
+  },
+
+  async submitMfa(input) {
+    const ticket = get().mfaTicket;
+    if (!ticket) throw new Error('no pending MFA login');
+    set(apply(await postAuthLoginMfa({ ticket, ...input })));
+  },
+
+  cancelMfa() {
+    set({ mfaTicket: null, mfaMethods: [] });
   },
 
   async loginOidc(req) {

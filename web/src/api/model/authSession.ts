@@ -13,4 +13,6 @@ export interface AuthSession {
   /** Access token TTL in seconds */
   expiresIn: number;
   user: User;
+  /** Set when the require_2fa policy covers this user but they haven't enrolled a factor yet. The session is confined to the enrollment allowlist (GET /me, /me/mfa/**, logout, refresh) until they do. */
+  mfaEnrollmentRequired?: boolean;
 }

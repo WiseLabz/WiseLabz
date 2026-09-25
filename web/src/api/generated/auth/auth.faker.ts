@@ -16,7 +16,7 @@ import type {
   AuthSession,
   ElevationToken,
   GetAuthElevateMethods200,
-  PostAuthElevateOidcBegin200,
+  LoginMfaRequired,
 } from '../../model';
 
 export const getGetAuthProvidersResponseMock = (
@@ -31,7 +31,58 @@ export const getGetAuthProvidersResponseMock = (
   ...overrideResponse,
 });
 
-export const getPostAuthLoginResponseMock = (
+export const getPostAuthLoginResponseAuthSessionMock = (
+  overrideResponse: Partial<AuthSession> = {}
+): AuthSession => ({
+  ...{
+    accessToken: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    expiresIn: faker.number.int(),
+    user: {
+      id: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      username: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      displayName: faker.helpers.arrayElement([
+        faker.string.alpha({ length: { min: 10, max: 20 } }),
+        undefined,
+      ]),
+      email: faker.helpers.arrayElement([faker.internet.email(), undefined]),
+      role: faker.helpers.arrayElement(Object.values(Role)),
+      authSource: faker.helpers.arrayElement(['local', 'oidc'] as const),
+      disabled: faker.helpers.arrayElement([faker.datatype.boolean(), undefined]),
+      canManageDashboardDefaults: faker.helpers.arrayElement([faker.datatype.boolean(), undefined]),
+      createdAt: faker.date.past().toISOString().slice(0, 19) + 'Z',
+      digestCadence: faker.helpers.arrayElement([
+        faker.helpers.arrayElement(['off', 'daily', 'weekly'] as const),
+        undefined,
+      ]),
+      digestTimezone: faker.helpers.arrayElement([
+        faker.string.alpha({ length: { min: 10, max: 20 } }),
+        undefined,
+      ]),
+      mfaEnabled: faker.helpers.arrayElement([faker.datatype.boolean(), undefined]),
+    },
+    mfaEnrollmentRequired: faker.helpers.arrayElement([faker.datatype.boolean(), undefined]),
+  },
+  ...overrideResponse,
+});
+
+export const getPostAuthLoginResponseLoginMfaRequiredMock = (
+  overrideResponse: Partial<LoginMfaRequired> = {}
+): LoginMfaRequired => ({
+  ...{
+    mfaRequired: faker.helpers.arrayElement([true] as const),
+    ticket: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    methods: faker.helpers.arrayElements(['totp', 'recovery'] as const),
+  },
+  ...overrideResponse,
+});
+
+export const getPostAuthLoginResponseMock = (): AuthSession | LoginMfaRequired =>
+  faker.helpers.arrayElement([
+    { ...getPostAuthLoginResponseAuthSessionMock() },
+    { ...getPostAuthLoginResponseLoginMfaRequiredMock() },
+  ]);
+
+export const getPostAuthLoginMfaResponseMock = (
   overrideResponse: Partial<Extract<AuthSession, object>> = {}
 ): AuthSession => ({
   accessToken: faker.string.alpha({ length: { min: 10, max: 20 } }),
@@ -57,7 +108,9 @@ export const getPostAuthLoginResponseMock = (
       faker.string.alpha({ length: { min: 10, max: 20 } }),
       undefined,
     ]),
+    mfaEnabled: faker.helpers.arrayElement([faker.datatype.boolean(), undefined]),
   },
+  mfaEnrollmentRequired: faker.helpers.arrayElement([faker.datatype.boolean(), undefined]),
   ...overrideResponse,
 });
 
@@ -87,7 +140,9 @@ export const getPostAuthOidcCallbackResponseMock = (
       faker.string.alpha({ length: { min: 10, max: 20 } }),
       undefined,
     ]),
+    mfaEnabled: faker.helpers.arrayElement([faker.datatype.boolean(), undefined]),
   },
+  mfaEnrollmentRequired: faker.helpers.arrayElement([faker.datatype.boolean(), undefined]),
   ...overrideResponse,
 });
 
@@ -117,7 +172,9 @@ export const getPostAuthRefreshResponseMock = (
       faker.string.alpha({ length: { min: 10, max: 20 } }),
       undefined,
     ]),
+    mfaEnabled: faker.helpers.arrayElement([faker.datatype.boolean(), undefined]),
   },
+  mfaEnrollmentRequired: faker.helpers.arrayElement([faker.datatype.boolean(), undefined]),
   ...overrideResponse,
 });
 
@@ -132,22 +189,13 @@ export const getPostAuthElevateResponseMock = (
 export const getGetAuthElevateMethodsResponseMock = (
   overrideResponse: Partial<Extract<GetAuthElevateMethods200, object>> = {}
 ): GetAuthElevateMethods200 => ({
-  methods: faker.helpers.arrayElements(['password', 'oidc', 'totp'] as const),
-  ...overrideResponse,
-});
-
-export const getPostAuthElevateOidcBeginResponseMock = (
-  overrideResponse: Partial<Extract<PostAuthElevateOidcBegin200, object>> = {}
-): PostAuthElevateOidcBegin200 => ({
-  authUrl: faker.string.alpha({ length: { min: 10, max: 20 } }),
-  ...overrideResponse,
-});
-
-export const getPostAuthElevateOidcCompleteResponseMock = (
-  overrideResponse: Partial<Extract<ElevationToken, object>> = {}
-): ElevationToken => ({
-  token: faker.string.alpha({ length: { min: 10, max: 20 } }),
-  expiresAt: faker.date.past().toISOString().slice(0, 19) + 'Z',
+  methods: faker.helpers.arrayElements([
+    'password',
+    'totp',
+    'recovery',
+    'webauthn',
+    'oidc',
+  ] as const),
   ...overrideResponse,
 });
 

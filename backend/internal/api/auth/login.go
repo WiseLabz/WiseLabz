@@ -1,6 +1,8 @@
 package auth
 
 import (
+	"context"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -86,14 +88,144 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		h.logError("failed to clear failed logins", err)
 	}
 
-	// Issue token pair
-	pair, err := h.JWT.IssuePair(user.ID, user.InstanceAdminRole == "admin")
+	// A user with a confirmed second factor never gets a session from the
+	// password step alone: mint a short-lived MFA ticket instead and finish
+	// the login through POST /auth/login/mfa.
+	hasMFA, err := h.Store.UserHasMFA(r.Context(), user.ID)
+	if err != nil {
+		httputil.Errorf(w, err)
+		return
+	}
+	if hasMFA {
+		ticket, err := h.JWT.IssueMFATicket(user.ID)
+		if err != nil {
+			httputil.Errorf(w, err)
+			return
+		}
+		httputil.JSON(w, http.StatusOK, map[string]any{
+			"mfaRequired": true,
+			"ticket":      ticket.Ticket,
+			"methods":     []string{"totp", "recovery"},
+		})
+		return
+	}
+
+	// No factor enrolled: the require_2fa policy may still cover this user,
+	// in which case they get a session but it's confined to the enrollment
+	// allowlist (auth.AuthMiddleware) until they set up a factor.
+	enrollOnly, err := h.userCoveredByPolicy(r.Context(), user)
 	if err != nil {
 		httputil.Errorf(w, err)
 		return
 	}
 
-	// Create session
+	pair, err := h.issueSession(w, r, user, enrollOnly)
+	if err != nil {
+		httputil.Errorf(w, err)
+		return
+	}
+
+	resp := map[string]any{
+		"accessToken": pair.AccessToken,
+		"expiresIn":   pair.ExpiresIn,
+		"user":        sanitizeUser(user),
+	}
+	if enrollOnly {
+		resp["mfaEnrollmentRequired"] = true
+	}
+	httputil.JSON(w, http.StatusOK, resp)
+}
+
+// LoginMFA handles POST /auth/login/mfa, the second step of login for a user
+// with a confirmed factor. It gets the same authIPLimit as Login and counts
+// toward the same lockout on failure (see RegisterFailedLogin).
+func (h *Handler) LoginMFA(w http.ResponseWriter, r *http.Request) {
+	req, ok := httputil.DecodeJSON[struct {
+		Ticket       string `json:"ticket"`
+		TOTP         string `json:"totp"`
+		RecoveryCode string `json:"recoveryCode"`
+	}](w, r)
+	if !ok {
+		return
+	}
+	if req.Ticket == "" {
+		httputil.ErrorWithDetails(w, http.StatusBadRequest, "invalid_request", "ticket is required", []httputil.FieldError{{Field: "ticket", Msg: "is required"}})
+		return
+	}
+
+	claims, err := h.JWT.ValidateMFATicket(req.Ticket)
+	if err != nil {
+		httputil.Error(w, http.StatusUnauthorized, "unauthorized", "Invalid or expired ticket")
+		return
+	}
+
+	user, err := h.Store.GetUserByID(r.Context(), claims.UserID)
+	if err != nil || user.Disabled || user.AuthSource != "local" {
+		httputil.Error(w, http.StatusUnauthorized, "unauthorized", "Invalid or expired ticket")
+		return
+	}
+
+	if err := h.verifySecondFactor(r.Context(), user.ID, secondFactorInput{TOTP: req.TOTP, RecoveryCode: req.RecoveryCode}); err != nil {
+		if locked, lockErr := h.Store.RegisterFailedLogin(r.Context(), user.ID, maxFailedLoginAttempts, loginLockoutDuration); lockErr != nil {
+			h.logError("failed to register failed login", lockErr)
+		} else if locked {
+			if auditErr := h.Store.RecordAuditFromContext(r.Context(), "auth.account_locked", "user", user.ID, map[string]any{"username": user.Username}); auditErr != nil {
+				h.logError("failed to record audit", auditErr)
+			}
+		}
+		if auditErr := h.Store.RecordAuditFromContext(r.Context(), "auth.mfa.failed", "user", user.ID, nil); auditErr != nil {
+			h.logError("failed to record audit", auditErr)
+		}
+		httputil.Error(w, http.StatusUnauthorized, "unauthorized", "Invalid code")
+		return
+	}
+
+	if err := h.Store.ClearFailedLogins(r.Context(), user.ID); err != nil {
+		h.logError("failed to clear failed logins", err)
+	}
+	if err := h.Store.RecordAuditFromContext(r.Context(), "auth.mfa.success", "user", user.ID, nil); err != nil {
+		h.logError("failed to record audit", err)
+	}
+
+	pair, err := h.issueSession(w, r, user, false)
+	if err != nil {
+		httputil.Errorf(w, err)
+		return
+	}
+	httputil.JSON(w, http.StatusOK, map[string]any{
+		"accessToken": pair.AccessToken,
+		"expiresIn":   pair.ExpiresIn,
+		"user":        sanitizeUser(user),
+	})
+}
+
+// userCoveredByPolicy reports whether the instance's require_2fa policy
+// covers user ("all", or "admins" and the user is an instance admin) and
+// they have no confirmed factor yet — i.e. whether their next login should be
+// confined to an enrollment-only session.
+func (h *Handler) userCoveredByPolicy(ctx context.Context, user *store.User) (bool, error) {
+	require2FA, err := h.Store.GetRequire2FA(ctx)
+	if err != nil {
+		return false, err
+	}
+	switch require2FA {
+	case "all":
+		return true, nil
+	case "admins":
+		return user.InstanceAdminRole == "admin", nil
+	default:
+		return false, nil
+	}
+}
+
+// issueSession mints a token pair, opens a session row and sets the refresh
+// cookie — the tail shared by Login, LoginMFA and any handler that upgrades
+// an enrollment-only session (POST /me/mfa/totp/{id}/confirm).
+func (h *Handler) issueSession(w http.ResponseWriter, r *http.Request, user *store.User, enrollOnly bool) (*auth.TokenPair, error) {
+	pair, err := h.JWT.IssuePairWithOptions(user.ID, user.InstanceAdminRole == "admin", auth.IssuePairOptions{MFAEnrollOnly: enrollOnly})
+	if err != nil {
+		return nil, fmt.Errorf("issue token pair: %w", err)
+	}
 	session := &store.Session{
 		UserID:    user.ID,
 		TokenHash: store.HashToken(pair.RefreshToken),
@@ -101,18 +233,10 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		IP:        httputil.ClientIP(r, h.Config.Server.TrustedProxies),
 	}
 	if err := h.Store.CreateSession(r.Context(), session); err != nil {
-		httputil.Errorf(w, err)
-		return
+		return nil, fmt.Errorf("create session: %w", err)
 	}
-
-	// Set refresh token as HTTP-only cookie
 	setRefreshCookie(w, r, h.Config.Server.TrustedProxies, pair.RefreshToken, h.Config.Auth.RefreshTokenTTLDuration())
-
-	httputil.JSON(w, http.StatusOK, map[string]any{
-		"accessToken": pair.AccessToken,
-		"expiresIn":   pair.ExpiresIn,
-		"user":        sanitizeUser(user),
-	})
+	return pair, nil
 }
 
 // Me handles GET /api/me.

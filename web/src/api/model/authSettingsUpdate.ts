@@ -6,6 +6,7 @@
  *
  * OpenAPI spec version: 0.1.0
  */
+import type { AuthSettingsUpdateRequire2fa } from './authSettingsUpdateRequire2fa';
 
 /**
  * Mutable subset of AuthConfig (no providers, no credentials)
@@ -17,4 +18,5 @@ export interface AuthSettingsUpdate {
   /** seconds */
   refreshTokenTtl?: number;
   stepUpForDestructive?: boolean;
+  require2fa?: AuthSettingsUpdateRequire2fa;
 }

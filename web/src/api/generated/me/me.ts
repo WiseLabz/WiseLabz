@@ -21,9 +21,17 @@ import type {
 
 import type {
   BadRequestResponse,
+  ElevationRequiredResponse,
+  MfaStatus,
+  NotFoundResponse,
   PasswordChange,
+  PostMeMfaRecoveryCodes200,
+  PostMeMfaTotpBody,
+  PostMeMfaTotpFactorIdConfirmBody,
   ProfileUpdate,
   Session,
+  TotpConfirmResult,
+  TotpEnrollment,
   UnauthorizedResponse,
   User,
 } from '../../model';
@@ -633,6 +641,662 @@ export function useDeleteMeSessionsSessionId<
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
   const queryOptions = getDeleteMeSessionsSessionIdQueryOptions(sessionId, options);
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+/**
+ * @summary List own MFA factors, recovery codes remaining, and whether 2FA is required
+ */
+export const getMeMfa = (
+  options?: SecondParameter<typeof customInstance>,
+  signal?: AbortSignal
+) => {
+  return customInstance<MfaStatus>({ url: `/me/mfa`, method: 'GET', signal }, options);
+};
+
+export const getGetMeMfaQueryKey = () => {
+  return [`/me/mfa`] as const;
+};
+
+export const getGetMeMfaQueryOptions = <
+  TData = Awaited<ReturnType<typeof getMeMfa>>,
+  TError = ErrorType<BadRequestResponse>,
+>(options?: {
+  query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getMeMfa>>, TError, TData>>;
+  request?: SecondParameter<typeof customInstance>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetMeMfaQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getMeMfa>>> = ({ signal }) =>
+    getMeMfa(requestOptions, signal);
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getMeMfa>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type GetMeMfaQueryResult = NonNullable<Awaited<ReturnType<typeof getMeMfa>>>;
+export type GetMeMfaQueryError = ErrorType<BadRequestResponse>;
+
+export function useGetMeMfa<
+  TData = Awaited<ReturnType<typeof getMeMfa>>,
+  TError = ErrorType<BadRequestResponse>,
+>(
+  options: {
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof getMeMfa>>, TError, TData>> &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getMeMfa>>,
+          TError,
+          Awaited<ReturnType<typeof getMeMfa>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useGetMeMfa<
+  TData = Awaited<ReturnType<typeof getMeMfa>>,
+  TError = ErrorType<BadRequestResponse>,
+>(
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getMeMfa>>, TError, TData>> &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getMeMfa>>,
+          TError,
+          Awaited<ReturnType<typeof getMeMfa>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useGetMeMfa<
+  TData = Awaited<ReturnType<typeof getMeMfa>>,
+  TError = ErrorType<BadRequestResponse>,
+>(
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getMeMfa>>, TError, TData>>;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * @summary List own MFA factors, recovery codes remaining, and whether 2FA is required
+ */
+
+export function useGetMeMfa<
+  TData = Awaited<ReturnType<typeof getMeMfa>>,
+  TError = ErrorType<BadRequestResponse>,
+>(
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getMeMfa>>, TError, TData>>;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getGetMeMfaQueryOptions(options);
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+/**
+ * Creates a pending factor (unusable for login/step-up until confirmed). The frontend renders `otpauthUrl` as a QR code client-side.
+ * @summary Begin enrolling a TOTP factor
+ */
+export const postMeMfaTotp = (
+  postMeMfaTotpBody?: BodyType<PostMeMfaTotpBody>,
+  options?: SecondParameter<typeof customInstance>,
+  signal?: AbortSignal
+) => {
+  return customInstance<TotpEnrollment>(
+    {
+      url: `/me/mfa/totp`,
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      data: postMeMfaTotpBody,
+      signal,
+    },
+    options
+  );
+};
+
+export const getPostMeMfaTotpQueryKey = (postMeMfaTotpBody?: BodyType<PostMeMfaTotpBody>) => {
+  return ['POST', `/me/mfa/totp`, postMeMfaTotpBody] as const;
+};
+
+export const getPostMeMfaTotpQueryOptions = <
+  TData = Awaited<ReturnType<typeof postMeMfaTotp>>,
+  TError = ErrorType<BadRequestResponse>,
+>(
+  postMeMfaTotpBody?: BodyType<PostMeMfaTotpBody>,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof postMeMfaTotp>>, TError, TData>>;
+    request?: SecondParameter<typeof customInstance>;
+  }
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getPostMeMfaTotpQueryKey(postMeMfaTotpBody);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof postMeMfaTotp>>> = ({ signal }) =>
+    postMeMfaTotp(postMeMfaTotpBody, requestOptions, signal);
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof postMeMfaTotp>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type PostMeMfaTotpQueryResult = NonNullable<Awaited<ReturnType<typeof postMeMfaTotp>>>;
+export type PostMeMfaTotpQueryError = ErrorType<BadRequestResponse>;
+
+export function usePostMeMfaTotp<
+  TData = Awaited<ReturnType<typeof postMeMfaTotp>>,
+  TError = ErrorType<BadRequestResponse>,
+>(
+  postMeMfaTotpBody: undefined | BodyType<PostMeMfaTotpBody>,
+  options: {
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof postMeMfaTotp>>, TError, TData>> &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postMeMfaTotp>>,
+          TError,
+          Awaited<ReturnType<typeof postMeMfaTotp>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function usePostMeMfaTotp<
+  TData = Awaited<ReturnType<typeof postMeMfaTotp>>,
+  TError = ErrorType<BadRequestResponse>,
+>(
+  postMeMfaTotpBody?: BodyType<PostMeMfaTotpBody>,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof postMeMfaTotp>>, TError, TData>> &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postMeMfaTotp>>,
+          TError,
+          Awaited<ReturnType<typeof postMeMfaTotp>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function usePostMeMfaTotp<
+  TData = Awaited<ReturnType<typeof postMeMfaTotp>>,
+  TError = ErrorType<BadRequestResponse>,
+>(
+  postMeMfaTotpBody?: BodyType<PostMeMfaTotpBody>,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof postMeMfaTotp>>, TError, TData>>;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * @summary Begin enrolling a TOTP factor
+ */
+
+export function usePostMeMfaTotp<
+  TData = Awaited<ReturnType<typeof postMeMfaTotp>>,
+  TError = ErrorType<BadRequestResponse>,
+>(
+  postMeMfaTotpBody?: BodyType<PostMeMfaTotpBody>,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof postMeMfaTotp>>, TError, TData>>;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getPostMeMfaTotpQueryOptions(postMeMfaTotpBody, options);
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+/**
+ * On the user's first confirmed factor, also returns freshly generated recovery codes (shown once). If the caller's session was enrollment-only, also returns a fresh, fully-privileged token pair.
+ * @summary Confirm a pending TOTP factor with a code
+ */
+export const postMeMfaTotpFactorIdConfirm = (
+  factorId: string,
+  postMeMfaTotpFactorIdConfirmBody: BodyType<PostMeMfaTotpFactorIdConfirmBody>,
+  options?: SecondParameter<typeof customInstance>,
+  signal?: AbortSignal
+) => {
+  return customInstance<TotpConfirmResult>(
+    {
+      url: `/me/mfa/totp/${factorId}/confirm`,
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      data: postMeMfaTotpFactorIdConfirmBody,
+      signal,
+    },
+    options
+  );
+};
+
+export const getPostMeMfaTotpFactorIdConfirmQueryKey = (
+  factorId: string,
+  postMeMfaTotpFactorIdConfirmBody?: BodyType<PostMeMfaTotpFactorIdConfirmBody>
+) => {
+  return ['POST', `/me/mfa/totp/${factorId}/confirm`, postMeMfaTotpFactorIdConfirmBody] as const;
+};
+
+export const getPostMeMfaTotpFactorIdConfirmQueryOptions = <
+  TData = Awaited<ReturnType<typeof postMeMfaTotpFactorIdConfirm>>,
+  TError = ErrorType<BadRequestResponse | UnauthorizedResponse | NotFoundResponse | void>,
+>(
+  factorId: string,
+  postMeMfaTotpFactorIdConfirmBody: BodyType<PostMeMfaTotpFactorIdConfirmBody>,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof postMeMfaTotpFactorIdConfirm>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  }
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ??
+    getPostMeMfaTotpFactorIdConfirmQueryKey(factorId, postMeMfaTotpFactorIdConfirmBody);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof postMeMfaTotpFactorIdConfirm>>> = ({
+    signal,
+  }) =>
+    postMeMfaTotpFactorIdConfirm(
+      factorId,
+      postMeMfaTotpFactorIdConfirmBody,
+      requestOptions,
+      signal
+    );
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: factorId !== null && factorId !== undefined,
+    ...queryOptions,
+  } as UseQueryOptions<Awaited<ReturnType<typeof postMeMfaTotpFactorIdConfirm>>, TError, TData> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+};
+
+export type PostMeMfaTotpFactorIdConfirmQueryResult = NonNullable<
+  Awaited<ReturnType<typeof postMeMfaTotpFactorIdConfirm>>
+>;
+export type PostMeMfaTotpFactorIdConfirmQueryError = ErrorType<
+  BadRequestResponse | UnauthorizedResponse | NotFoundResponse | void
+>;
+
+export function usePostMeMfaTotpFactorIdConfirm<
+  TData = Awaited<ReturnType<typeof postMeMfaTotpFactorIdConfirm>>,
+  TError = ErrorType<BadRequestResponse | UnauthorizedResponse | NotFoundResponse | void>,
+>(
+  factorId: string,
+  postMeMfaTotpFactorIdConfirmBody: BodyType<PostMeMfaTotpFactorIdConfirmBody>,
+  options: {
+    query: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof postMeMfaTotpFactorIdConfirm>>, TError, TData>
+    > &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postMeMfaTotpFactorIdConfirm>>,
+          TError,
+          Awaited<ReturnType<typeof postMeMfaTotpFactorIdConfirm>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function usePostMeMfaTotpFactorIdConfirm<
+  TData = Awaited<ReturnType<typeof postMeMfaTotpFactorIdConfirm>>,
+  TError = ErrorType<BadRequestResponse | UnauthorizedResponse | NotFoundResponse | void>,
+>(
+  factorId: string,
+  postMeMfaTotpFactorIdConfirmBody: BodyType<PostMeMfaTotpFactorIdConfirmBody>,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof postMeMfaTotpFactorIdConfirm>>, TError, TData>
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postMeMfaTotpFactorIdConfirm>>,
+          TError,
+          Awaited<ReturnType<typeof postMeMfaTotpFactorIdConfirm>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function usePostMeMfaTotpFactorIdConfirm<
+  TData = Awaited<ReturnType<typeof postMeMfaTotpFactorIdConfirm>>,
+  TError = ErrorType<BadRequestResponse | UnauthorizedResponse | NotFoundResponse | void>,
+>(
+  factorId: string,
+  postMeMfaTotpFactorIdConfirmBody: BodyType<PostMeMfaTotpFactorIdConfirmBody>,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof postMeMfaTotpFactorIdConfirm>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * @summary Confirm a pending TOTP factor with a code
+ */
+
+export function usePostMeMfaTotpFactorIdConfirm<
+  TData = Awaited<ReturnType<typeof postMeMfaTotpFactorIdConfirm>>,
+  TError = ErrorType<BadRequestResponse | UnauthorizedResponse | NotFoundResponse | void>,
+>(
+  factorId: string,
+  postMeMfaTotpFactorIdConfirmBody: BodyType<PostMeMfaTotpFactorIdConfirmBody>,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof postMeMfaTotpFactorIdConfirm>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getPostMeMfaTotpFactorIdConfirmQueryOptions(
+    factorId,
+    postMeMfaTotpFactorIdConfirmBody,
+    options
+  );
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+/**
+ * Requires step-up elevation (action `mfa.manage`).
+ * @summary Regenerate recovery codes
+ */
+export const postMeMfaRecoveryCodes = (
+  options?: SecondParameter<typeof customInstance>,
+  signal?: AbortSignal
+) => {
+  return customInstance<PostMeMfaRecoveryCodes200>(
+    { url: `/me/mfa/recovery-codes`, method: 'POST', signal },
+    options
+  );
+};
+
+export const getPostMeMfaRecoveryCodesQueryKey = () => {
+  return ['POST', `/me/mfa/recovery-codes`] as const;
+};
+
+export const getPostMeMfaRecoveryCodesQueryOptions = <
+  TData = Awaited<ReturnType<typeof postMeMfaRecoveryCodes>>,
+  TError = ErrorType<ElevationRequiredResponse>,
+>(options?: {
+  query?: Partial<
+    UseQueryOptions<Awaited<ReturnType<typeof postMeMfaRecoveryCodes>>, TError, TData>
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getPostMeMfaRecoveryCodesQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof postMeMfaRecoveryCodes>>> = ({ signal }) =>
+    postMeMfaRecoveryCodes(requestOptions, signal);
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof postMeMfaRecoveryCodes>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type PostMeMfaRecoveryCodesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof postMeMfaRecoveryCodes>>
+>;
+export type PostMeMfaRecoveryCodesQueryError = ErrorType<ElevationRequiredResponse>;
+
+export function usePostMeMfaRecoveryCodes<
+  TData = Awaited<ReturnType<typeof postMeMfaRecoveryCodes>>,
+  TError = ErrorType<ElevationRequiredResponse>,
+>(
+  options: {
+    query: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof postMeMfaRecoveryCodes>>, TError, TData>
+    > &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postMeMfaRecoveryCodes>>,
+          TError,
+          Awaited<ReturnType<typeof postMeMfaRecoveryCodes>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function usePostMeMfaRecoveryCodes<
+  TData = Awaited<ReturnType<typeof postMeMfaRecoveryCodes>>,
+  TError = ErrorType<ElevationRequiredResponse>,
+>(
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof postMeMfaRecoveryCodes>>, TError, TData>
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postMeMfaRecoveryCodes>>,
+          TError,
+          Awaited<ReturnType<typeof postMeMfaRecoveryCodes>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function usePostMeMfaRecoveryCodes<
+  TData = Awaited<ReturnType<typeof postMeMfaRecoveryCodes>>,
+  TError = ErrorType<ElevationRequiredResponse>,
+>(
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof postMeMfaRecoveryCodes>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * @summary Regenerate recovery codes
+ */
+
+export function usePostMeMfaRecoveryCodes<
+  TData = Awaited<ReturnType<typeof postMeMfaRecoveryCodes>>,
+  TError = ErrorType<ElevationRequiredResponse>,
+>(
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof postMeMfaRecoveryCodes>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getPostMeMfaRecoveryCodesQueryOptions(options);
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+/**
+ * Requires step-up elevation (action `mfa.manage`). Refused with 409 `mfa_required_by_policy` when this is the last factor and the require_2fa policy still covers this user. Removing the last factor also wipes recovery codes.
+ * @summary Remove one of own MFA factors
+ */
+export const deleteMeMfaFactorsFactorId = (
+  factorId: string,
+  options?: SecondParameter<typeof customInstance>,
+  signal?: AbortSignal
+) => {
+  return customInstance<void>(
+    { url: `/me/mfa/factors/${factorId}`, method: 'DELETE', signal },
+    options
+  );
+};
+
+export const getDeleteMeMfaFactorsFactorIdQueryKey = (factorId: string) => {
+  return ['DELETE', `/me/mfa/factors/${factorId}`] as const;
+};
+
+export const getDeleteMeMfaFactorsFactorIdQueryOptions = <
+  TData = Awaited<ReturnType<typeof deleteMeMfaFactorsFactorId>>,
+  TError = ErrorType<ElevationRequiredResponse | NotFoundResponse | void>,
+>(
+  factorId: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof deleteMeMfaFactorsFactorId>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  }
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getDeleteMeMfaFactorsFactorIdQueryKey(factorId);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof deleteMeMfaFactorsFactorId>>> = ({
+    signal,
+  }) => deleteMeMfaFactorsFactorId(factorId, requestOptions, signal);
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: factorId !== null && factorId !== undefined,
+    ...queryOptions,
+  } as UseQueryOptions<Awaited<ReturnType<typeof deleteMeMfaFactorsFactorId>>, TError, TData> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+};
+
+export type DeleteMeMfaFactorsFactorIdQueryResult = NonNullable<
+  Awaited<ReturnType<typeof deleteMeMfaFactorsFactorId>>
+>;
+export type DeleteMeMfaFactorsFactorIdQueryError = ErrorType<
+  ElevationRequiredResponse | NotFoundResponse | void
+>;
+
+export function useDeleteMeMfaFactorsFactorId<
+  TData = Awaited<ReturnType<typeof deleteMeMfaFactorsFactorId>>,
+  TError = ErrorType<ElevationRequiredResponse | NotFoundResponse | void>,
+>(
+  factorId: string,
+  options: {
+    query: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof deleteMeMfaFactorsFactorId>>, TError, TData>
+    > &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof deleteMeMfaFactorsFactorId>>,
+          TError,
+          Awaited<ReturnType<typeof deleteMeMfaFactorsFactorId>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useDeleteMeMfaFactorsFactorId<
+  TData = Awaited<ReturnType<typeof deleteMeMfaFactorsFactorId>>,
+  TError = ErrorType<ElevationRequiredResponse | NotFoundResponse | void>,
+>(
+  factorId: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof deleteMeMfaFactorsFactorId>>, TError, TData>
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof deleteMeMfaFactorsFactorId>>,
+          TError,
+          Awaited<ReturnType<typeof deleteMeMfaFactorsFactorId>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useDeleteMeMfaFactorsFactorId<
+  TData = Awaited<ReturnType<typeof deleteMeMfaFactorsFactorId>>,
+  TError = ErrorType<ElevationRequiredResponse | NotFoundResponse | void>,
+>(
+  factorId: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof deleteMeMfaFactorsFactorId>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * @summary Remove one of own MFA factors
+ */
+
+export function useDeleteMeMfaFactorsFactorId<
+  TData = Awaited<ReturnType<typeof deleteMeMfaFactorsFactorId>>,
+  TError = ErrorType<ElevationRequiredResponse | NotFoundResponse | void>,
+>(
+  factorId: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof deleteMeMfaFactorsFactorId>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getDeleteMeMfaFactorsFactorIdQueryOptions(factorId, options);
 
   const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
     queryKey: DataTag<QueryKey, TData, TError>;

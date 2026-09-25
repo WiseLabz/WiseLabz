@@ -59,12 +59,42 @@ paths:
       description: >
         On success returns a short-lived access token in the body and sets the
         refresh token as an HttpOnly; Secure; SameSite=Strict cookie (§8.7).
+        A user with a confirmed second factor (#279) instead gets
+        `LoginMfaRequired` — no session yet — and must finish with POST
+        /auth/login/mfa. A user the require_2fa policy covers but who hasn't
+        enrolled gets a normal session plus `mfaEnrollmentRequired: true`,
+        confined to the enrollment allowlist until they enroll.
       security: []
       requestBody:
         required: true
         content:
           application/json:
             schema: { $ref: '#/components/schemas/LoginRequest' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/AuthSession'
+                  - $ref: '#/components/schemas/LoginMfaRequired'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /auth/login/mfa:
+    post:
+      tags: [auth]
+      summary: Finish a login that required a second factor
+      description: >
+        Second step of login for a user with a confirmed factor (#279).
+        Exactly one of `totp` or `recoveryCode` proves the second factor;
+        failures count toward the same lockout as a bad password.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginMfaRequest' }
       responses:
         '200':
           description: OK
@@ -219,6 +249,26 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/ElevationToken' }
         '401': { $ref: '#/components/responses/Unauthorized' }
+  /auth/elevate/methods:
+    get:
+      tags: [auth]
+      summary: Which step-up method(s) POST /auth/elevate expects
+      description: >
+        `["password"]` for a user without a confirmed factor, or
+        `["totp","recovery"]` once they have one (#279). PR 2 appends
+        "webauthn" and PR 3 appends "oidc".
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [methods]
+                properties:
+                  methods:
+                    type: array
+                    items: { type: string, enum: [password, totp, recovery, webauthn, oidc] }
   /auth/api-keys:
     get:
       tags: [auth]
@@ -320,6 +370,109 @@ paths:
       responses:
         '204': { description: No Content }
 
+  # ───────────────────────── me / mfa (#279, local accounts only) ─────────────────────────
+  /me/mfa:
+    get:
+      tags: [me]
+      summary: List own MFA factors, recovery codes remaining, and whether 2FA is required
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MfaStatus' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+  /me/mfa/totp:
+    post:
+      tags: [me]
+      summary: Begin enrolling a TOTP factor
+      description: >
+        Creates a pending factor (unusable for login/step-up until confirmed).
+        The frontend renders `otpauthUrl` as a QR code client-side.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string, description: 'Optional label, e.g. "Phone"' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TotpEnrollment' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+  /me/mfa/totp/{factorId}/confirm:
+    post:
+      tags: [me]
+      summary: Confirm a pending TOTP factor with a code
+      description: >
+        On the user's first confirmed factor, also returns freshly generated
+        recovery codes (shown once). If the caller's session was
+        enrollment-only, also returns a fresh, fully-privileged token pair.
+      parameters:
+        - name: factorId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code: { type: string, description: 6-digit TOTP code }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TotpConfirmResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: Factor already confirmed }
+  /me/mfa/recovery-codes:
+    post:
+      tags: [me]
+      summary: Regenerate recovery codes
+      description: Requires step-up elevation (action `mfa.manage`).
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [recoveryCodes]
+                properties:
+                  recoveryCodes:
+                    type: array
+                    items: { type: string }
+        '403': { $ref: '#/components/responses/ElevationRequired' }
+  /me/mfa/factors/{factorId}:
+    delete:
+      tags: [me]
+      summary: Remove one of own MFA factors
+      description: >
+        Requires step-up elevation (action `mfa.manage`). Refused with 409
+        `mfa_required_by_policy` when this is the last factor and the
+        require_2fa policy still covers this user. Removing the last factor
+        also wipes recovery codes.
+      parameters:
+        - name: factorId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '204': { description: No Content }
+        '403': { $ref: '#/components/responses/ElevationRequired' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: 'Last factor, still required by policy' }
+
   # ───────────────────────── users (admin) ─────────────────────────
   /users:
     get:
@@ -401,6 +554,26 @@ paths:
       responses:
         '204': { description: No Content }
         '403': { $ref: '#/components/responses/ElevationRequired' }
+  /users/{userId}/reset-mfa:
+    post:
+      tags: [users]
+      summary: Reset a user's two-factor authentication (operator)
+      description: >
+        Destructive. Deletes every factor and recovery code, revokes every
+        session, and is audited (#279). When `stepUpForDestructive` is
+        enabled, requires a valid `X-Elevation-Token` from POST
+        /auth/elevate; absent or expired tokens get a 403 `elevation-required`.
+      parameters:
+        - { $ref: '#/components/parameters/UserId' }
+        - name: X-Elevation-Token
+          in: header
+          required: false
+          schema: { type: string }
+          description: Elevation token from POST /auth/elevate (when step-up is on)
+      responses:
+        '204': { description: No Content }
+        '403': { $ref: '#/components/responses/ElevationRequired' }
+        '404': { $ref: '#/components/responses/NotFound' }
 
   # ───────────────────────── dashboard ─────────────────────────
   /dashboard/overview:
@@ -3127,6 +3300,30 @@ components:
         accessToken: { type: string }
         expiresIn: { type: integer, description: Access token TTL in seconds }
         user: { $ref: '#/components/schemas/User' }
+        mfaEnrollmentRequired:
+          type: boolean
+          description: >-
+            Set when the require_2fa policy covers this user but they haven't
+            enrolled a factor yet. The session is confined to the enrollment
+            allowlist (GET /me, /me/mfa/**, logout, refresh) until they do.
+    LoginMfaRequired:
+      type: object
+      description: Returned by POST /auth/login instead of a session when the user has a confirmed factor.
+      required: [mfaRequired, ticket, methods]
+      properties:
+        mfaRequired: { type: boolean, enum: [true] }
+        ticket: { type: string, description: Short-lived (5 min) ticket for POST /auth/login/mfa }
+        methods:
+          type: array
+          items: { type: string, enum: [totp, recovery] }
+    LoginMfaRequest:
+      type: object
+      description: One of `totp` or `recoveryCode` finishes the login POST /auth/login started.
+      required: [ticket]
+      properties:
+        ticket: { type: string }
+        totp: { type: string, description: 6-digit TOTP code }
+        recoveryCode: { type: string, description: 'A single-use recovery code, e.g. "abcde-fghjk"' }
     ApiKeyCreate:
       type: object
       required: [name]
@@ -3192,6 +3389,9 @@ components:
         createdAt: { type: string, format: date-time }
         digestCadence: { type: string, enum: [off, daily, weekly] }
         digestTimezone: { type: string, description: 'IANA timezone, e.g. America/New_York' }
+        mfaEnabled:
+          type: boolean
+          description: 'Has a confirmed MFA factor (#279). Only populated by GET /users; omitted elsewhere.'
     UserCreate:
       type: object
       required: [username, role]
@@ -3231,6 +3431,47 @@ components:
         createdAt: { type: string, format: date-time }
         lastSeenAt: { type: string, format: date-time }
         current: { type: boolean }
+
+    # ── me / mfa (#279) ──
+    MfaFactor:
+      type: object
+      required: [id, type, name, createdAt]
+      properties:
+        id: { type: string }
+        type: { type: string, enum: [totp, webauthn] }
+        name: { type: string }
+        createdAt: { type: string, format: date-time }
+    MfaStatus:
+      type: object
+      required: [factors, recoveryCodesRemaining, required]
+      properties:
+        factors:
+          type: array
+          items: { $ref: '#/components/schemas/MfaFactor' }
+        recoveryCodesRemaining: { type: integer }
+        required:
+          type: boolean
+          description: Whether the require_2fa policy currently covers this user.
+    TotpEnrollment:
+      type: object
+      required: [factorId, secret, otpauthUrl]
+      properties:
+        factorId: { type: string }
+        secret: { type: string, description: Manual-entry fallback for the QR code }
+        otpauthUrl: { type: string, description: 'otpauth:// URL to render as a QR code' }
+    TotpConfirmResult:
+      type: object
+      required: [factor]
+      properties:
+        factor: { $ref: '#/components/schemas/MfaFactor' }
+        recoveryCodes:
+          type: array
+          items: { type: string }
+          description: Present only on the user's first confirmed factor; shown once.
+        accessToken:
+          type: string
+          description: Present only when the caller's prior session was enrollment-only.
+        expiresIn: { type: integer, description: Access token TTL in seconds }
 
     # ── dashboard ──
     DashboardOverview:
@@ -4259,7 +4500,7 @@ components:
     # ── settings ──
     AuthConfig:
       type: object
-      required: [localEnabled, accessTokenTtl, refreshTokenTtl, stepUpForDestructive, oidcProviders]
+      required: [localEnabled, accessTokenTtl, refreshTokenTtl, stepUpForDestructive, require2fa, oidcProviders]
       properties:
         localEnabled: { type: boolean }
         accessTokenTtl: { type: integer, description: seconds }
@@ -4269,6 +4510,13 @@ components:
           description: >
             Require step-up re-auth (POST /auth/elevate) before destructive ops.
             Defaults on; the escape hatch for a single-admin homelab.
+        require2fa:
+          type: string
+          enum: [none, admins, all]
+          description: >-
+            Instance-wide 2FA policy for local accounts (#279). A covered user
+            who hasn't enrolled a factor gets an enrollment-only session at
+            their next login. Changing this doesn't touch existing sessions.
         oidcProviders:
           type: array
           description: Read-only; defined in config/env, not editable via API
@@ -4281,9 +4529,13 @@ components:
         accessTokenTtl: { type: integer, description: seconds }
         refreshTokenTtl: { type: integer, description: seconds }
         stepUpForDestructive: { type: boolean }
+        require2fa: { type: string, enum: [none, admins, all] }
     ElevationRequest:
       type: object
-      description: One of `password` or `totp` proves the operator's identity for step-up.
+      description: >-
+        One of `password` (no confirmed factor) or `totp`/`recoveryCode`
+        (confirmed factor) proves the caller's identity for step-up; see GET
+        /auth/elevate/methods.
       required: [action]
       properties:
         action:
@@ -4291,6 +4543,7 @@ components:
           description: The elevation action being requested, e.g. "connector.delete", "user.delete"
         password: { type: string, format: password }
         totp: { type: string, description: 6-digit TOTP code when 2FA is configured }
+        recoveryCode: { type: string, description: 'A single-use recovery code, used instead of totp' }
     ElevationToken:
       type: object
       required: [token, expiresAt]

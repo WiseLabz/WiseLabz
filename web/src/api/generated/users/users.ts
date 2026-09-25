@@ -23,6 +23,7 @@ import type {
   BadRequestResponse,
   ElevationRequiredResponse,
   ForbiddenResponse,
+  NotFoundResponse,
   User,
   UserCreate,
   UserUpdate,
@@ -660,6 +661,143 @@ export function usePostUsersUserIdResetPassword<
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
   const queryOptions = getPostUsersUserIdResetPasswordQueryOptions(userId, options);
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+/**
+ * Destructive. Deletes every factor and recovery code, revokes every session, and is audited (#279). When `stepUpForDestructive` is enabled, requires a valid `X-Elevation-Token` from POST /auth/elevate; absent or expired tokens get a 403 `elevation-required`.
+ * @summary Reset a user's two-factor authentication (operator)
+ */
+export const postUsersUserIdResetMfa = (
+  userId: string,
+  options?: SecondParameter<typeof customInstance>,
+  signal?: AbortSignal
+) => {
+  return customInstance<void>(
+    { url: `/users/${userId}/reset-mfa`, method: 'POST', signal },
+    options
+  );
+};
+
+export const getPostUsersUserIdResetMfaQueryKey = (userId: string) => {
+  return ['POST', `/users/${userId}/reset-mfa`] as const;
+};
+
+export const getPostUsersUserIdResetMfaQueryOptions = <
+  TData = Awaited<ReturnType<typeof postUsersUserIdResetMfa>>,
+  TError = ErrorType<ElevationRequiredResponse | NotFoundResponse>,
+>(
+  userId: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof postUsersUserIdResetMfa>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  }
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getPostUsersUserIdResetMfaQueryKey(userId);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof postUsersUserIdResetMfa>>> = ({
+    signal,
+  }) => postUsersUserIdResetMfa(userId, requestOptions, signal);
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: userId !== null && userId !== undefined,
+    ...queryOptions,
+  } as UseQueryOptions<Awaited<ReturnType<typeof postUsersUserIdResetMfa>>, TError, TData> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+};
+
+export type PostUsersUserIdResetMfaQueryResult = NonNullable<
+  Awaited<ReturnType<typeof postUsersUserIdResetMfa>>
+>;
+export type PostUsersUserIdResetMfaQueryError = ErrorType<
+  ElevationRequiredResponse | NotFoundResponse
+>;
+
+export function usePostUsersUserIdResetMfa<
+  TData = Awaited<ReturnType<typeof postUsersUserIdResetMfa>>,
+  TError = ErrorType<ElevationRequiredResponse | NotFoundResponse>,
+>(
+  userId: string,
+  options: {
+    query: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof postUsersUserIdResetMfa>>, TError, TData>
+    > &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postUsersUserIdResetMfa>>,
+          TError,
+          Awaited<ReturnType<typeof postUsersUserIdResetMfa>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function usePostUsersUserIdResetMfa<
+  TData = Awaited<ReturnType<typeof postUsersUserIdResetMfa>>,
+  TError = ErrorType<ElevationRequiredResponse | NotFoundResponse>,
+>(
+  userId: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof postUsersUserIdResetMfa>>, TError, TData>
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postUsersUserIdResetMfa>>,
+          TError,
+          Awaited<ReturnType<typeof postUsersUserIdResetMfa>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function usePostUsersUserIdResetMfa<
+  TData = Awaited<ReturnType<typeof postUsersUserIdResetMfa>>,
+  TError = ErrorType<ElevationRequiredResponse | NotFoundResponse>,
+>(
+  userId: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof postUsersUserIdResetMfa>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * @summary Reset a user's two-factor authentication (operator)
+ */
+
+export function usePostUsersUserIdResetMfa<
+  TData = Awaited<ReturnType<typeof postUsersUserIdResetMfa>>,
+  TError = ErrorType<ElevationRequiredResponse | NotFoundResponse>,
+>(
+  userId: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof postUsersUserIdResetMfa>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getPostUsersUserIdResetMfaQueryOptions(userId, options);
 
   const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
     queryKey: DataTag<QueryKey, TData, TError>;

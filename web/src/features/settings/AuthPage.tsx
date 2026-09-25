@@ -22,7 +22,7 @@ import { Button } from '../../components/ui/Button';
 import { SkeletonRows, ErrorState } from '../../components/ui/states';
 import { ToneTag } from '../../components/ui/ToneTag';
 import { toast } from '../../lib/toast';
-import { SubHeader, Section, Field, TextInput, ToggleRow, Toggle } from './parts';
+import { SubHeader, Section, Field, TextInput, ToggleRow, Toggle, Select } from './parts';
 
 /** Seconds → friendly "15 min" / "30 d" for the TTL hint. */
 function humanizeSeconds(s: number): string {
@@ -103,6 +103,27 @@ export function AuthPage() {
             onChange={(stepUpForDestructive) => update.mutate({ stepUpForDestructive })}
           />
         </div>
+      </Section>
+
+      <Section
+        title={t('settings.auth.require2faTitle', { defaultValue: 'Require two-factor authentication' })}
+        description={t('settings.auth.require2faDesc', {
+          defaultValue:
+            'Local users covered by this policy who have not enrolled a factor get an enrollment-only session at their next login. Changing this does not affect existing sessions.',
+        })}
+      >
+        <Field label={t('settings.auth.require2faLabel', { defaultValue: 'Policy' })} htmlFor="require-2fa">
+          <Select
+            id="require-2fa"
+            value={data.require2fa}
+            disabled={update.isPending}
+            onChange={(e) => update.mutate({ require2fa: e.target.value as typeof data.require2fa })}
+          >
+            <option value="none">{t('settings.auth.require2faNone', { defaultValue: 'None' })}</option>
+            <option value="admins">{t('settings.auth.require2faAdmins', { defaultValue: 'Admins' })}</option>
+            <option value="all">{t('settings.auth.require2faAll', { defaultValue: 'Everyone' })}</option>
+          </Select>
+        </Field>
       </Section>
 
       <Section title={t('settings.auth.ttlTitle')} description={t('settings.auth.ttlDesc')}>
