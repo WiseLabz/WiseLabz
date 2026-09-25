@@ -6,9 +6,11 @@
  *
  * OpenAPI spec version: 0.1.0
  */
-import type { PutConnectorsConnectorIdPermissionsUserId200Source } from './putConnectorsConnectorIdPermissionsUserId200Source';
 
-export type PutConnectorsConnectorIdPermissionsUserId200 = {
-  source?: PutConnectorsConnectorIdPermissionsUserId200Source;
-  [key: string]: unknown;
-};
+export type PutConnectorsConnectorIdPermissionsUserId200Source =
+  (typeof PutConnectorsConnectorIdPermissionsUserId200Source)[keyof typeof PutConnectorsConnectorIdPermissionsUserId200Source];
+
+export const PutConnectorsConnectorIdPermissionsUserId200Source = {
+  manual: 'manual',
+  oidc: 'oidc',
+} as const;

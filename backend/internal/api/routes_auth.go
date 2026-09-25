@@ -36,6 +36,9 @@ func mountAuthRoutes(r chi.Router, d routerDeps) {
 			r.Use(cfg.AuthMiddleware())
 			r.Post("/logout", d.authH.Logout)
 			r.With(elevateLimit).Post("/elevate", d.authH.Elevate)
+			r.Get("/elevate/methods", d.authH.ElevateMethods)
+			r.With(elevateLimit).Post("/elevate/oidc/begin", d.authH.ElevateOIDCBegin)
+			r.With(elevateLimit).Post("/elevate/oidc/complete", d.authH.ElevateOIDCComplete)
 			r.Route("/api-keys", func(r chi.Router) {
 				r.Get("/", d.apiKeyH.List)
 				r.Post("/", d.apiKeyH.Create)

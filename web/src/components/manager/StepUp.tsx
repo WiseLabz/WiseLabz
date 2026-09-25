@@ -3,20 +3,28 @@
  * (or TOTP, when configured), calls POST /auth/elevate, and hands the short-lived
  * elevation token back to the caller, which replays it on the destructive request
  * Self-contained: owns its own input and error state, never persists the secret.
+ *
+ * `mode: 'oidc'` (#279 part 3) is for a user whose account signs in through an
+ * IdP and has no password: it re-authenticates through a popup instead of a
+ * form field. See OIDCStepUp below.
  */
 import {useState} from 'react';
 import {useMutation} from '@tanstack/react-query';
 import {postAuthElevate} from '../../api/generated/auth/auth';
 import {Button} from '../ui/Button';
+import {OIDCStepUp} from './OIDCStepUp';
 
 export function StepUp({
                            onElevated,
                            mode = 'password',
                            action,
+                           providerName,
                        }: {
     onElevated: (token: string) => void;
-    mode?: 'password' | 'totp';
+    mode?: 'password' | 'totp' | 'oidc';
     action: string;
+    /** Display name for the oidc mode's button, e.g. "Authentik". */
+    providerName?: string;
 }) {
     const [value, setValue] = useState('');
     const elevate = useMutation({
@@ -24,6 +32,10 @@ export function StepUp({
             postAuthElevate(mode === 'totp' ? {totp: value, action} : {password: value, action}),
         onSuccess: (res) => onElevated(res.token),
     });
+
+    if (mode === 'oidc') {
+        return <OIDCStepUp action={action} providerName={providerName} onElevated={onElevated}/>;
+    }
 
     const label = mode === 'totp' ? 'Authenticator code' : 'Confirm your password';
     return (

@@ -501,6 +501,30 @@ func (s *Store) GetUserByOIDCIdentity(ctx context.Context, issuer, subject strin
 	return u, nil
 }
 
+// OIDCIdentity is the issuer+subject pair a user's OIDC login is verified
+// against (see oidc_identities).
+type OIDCIdentity struct {
+	Issuer  string
+	Subject string
+}
+
+// GetOIDCIdentityByUserID returns the OIDC identity linked to userID. Used
+// by the OIDC step-up flow to find which provider and subject to
+// re-authenticate against (#279 part 3).
+func (s *Store) GetOIDCIdentityByUserID(ctx context.Context, userID string) (*OIDCIdentity, error) {
+	id := &OIDCIdentity{}
+	err := s.db.QueryRowContext(ctx,
+		`SELECT issuer, subject FROM oidc_identities WHERE user_id = ?`, userID,
+	).Scan(&id.Issuer, &id.Subject)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get oidc identity by user id: %w", err)
+	}
+	return id, nil
+}
+
 // CreateOIDCUser creates an OIDC user and its verified identity atomically.
 // Returns true if a new user was created, false if it already existed (conflict).
 func (s *Store) CreateOIDCUser(ctx context.Context, user *User, issuer, subject string) (bool, error) {

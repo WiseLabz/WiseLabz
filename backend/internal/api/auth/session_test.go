@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/WiseLabz/wiselabz/internal/store"
@@ -188,6 +189,54 @@ func TestElevate(t *testing.T) {
 		rr := th.authedRequest(t, r, user.ID, user.InstanceAdminRole, th.H.Elevate)
 		if rr.Code != http.StatusBadRequest {
 			t.Fatalf("status = %d, want %d", rr.Code, http.StatusBadRequest)
+		}
+	})
+
+	// #279 part 3: an OIDC user has no local password, so the password path
+	// must not tell them to keep retrying one they don't have.
+	t.Run("oidc user is routed to oidc re-auth instead", func(t *testing.T) {
+		oidcUser := &store.User{Username: "oidc-elevate-user", AuthSource: "oidc"}
+		if err := th.Store.CreateUser(context.Background(), oidcUser); err != nil {
+			t.Fatalf("CreateUser() error: %v", err)
+		}
+		r := doJSON(t, http.MethodPost, "/api/auth/elevate", map[string]string{"password": "irrelevant", "action": "connector.delete"})
+		rr := th.authedRequest(t, r, oidcUser.ID, "user", th.H.Elevate)
+		if rr.Code != http.StatusBadRequest {
+			t.Fatalf("status = %d, want %d; body=%s", rr.Code, http.StatusBadRequest, rr.Body.String())
+		}
+		if !strings.Contains(rr.Body.String(), "use_oidc_reauth") {
+			t.Fatalf("body = %s, want code use_oidc_reauth", rr.Body.String())
+		}
+	})
+}
+
+func TestElevateMethods(t *testing.T) {
+	th := newTestHandler(t)
+
+	t.Run("local user", func(t *testing.T) {
+		user, _ := th.createUser(t, "viewer", false)
+		r := httptest.NewRequest(http.MethodGet, "/api/auth/elevate/methods", nil)
+		rr := th.authedRequest(t, r, user.ID, "user", th.H.ElevateMethods)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("status = %d, want %d; body=%s", rr.Code, http.StatusOK, rr.Body.String())
+		}
+		if !strings.Contains(rr.Body.String(), `"password"`) {
+			t.Fatalf("body = %s, want it to list password", rr.Body.String())
+		}
+	})
+
+	t.Run("oidc user", func(t *testing.T) {
+		oidcUser := &store.User{Username: "oidc-methods-user", AuthSource: "oidc"}
+		if err := th.Store.CreateUser(context.Background(), oidcUser); err != nil {
+			t.Fatalf("CreateUser() error: %v", err)
+		}
+		r := httptest.NewRequest(http.MethodGet, "/api/auth/elevate/methods", nil)
+		rr := th.authedRequest(t, r, oidcUser.ID, "user", th.H.ElevateMethods)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("status = %d, want %d; body=%s", rr.Code, http.StatusOK, rr.Body.String())
+		}
+		if !strings.Contains(rr.Body.String(), `"oidc"`) {
+			t.Fatalf("body = %s, want it to list oidc", rr.Body.String())
 		}
 	})
 }

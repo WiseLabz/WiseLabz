@@ -6,9 +6,14 @@
  *
  * OpenAPI spec version: 0.1.0
  */
-import type { PutConnectorsConnectorIdPermissionsUserId200Source } from './putConnectorsConnectorIdPermissionsUserId200Source';
 
-export type PutConnectorsConnectorIdPermissionsUserId200 = {
-  source?: PutConnectorsConnectorIdPermissionsUserId200Source;
-  [key: string]: unknown;
-};
+/**
+ * How the grant was created; see the endpoint description.
+ */
+export type GetConnectorsConnectorIdPermissions200ItemSource =
+  (typeof GetConnectorsConnectorIdPermissions200ItemSource)[keyof typeof GetConnectorsConnectorIdPermissions200ItemSource];
+
+export const GetConnectorsConnectorIdPermissions200ItemSource = {
+  manual: 'manual',
+  oidc: 'oidc',
+} as const;
