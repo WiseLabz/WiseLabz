@@ -1,7 +1,8 @@
 // Package httpx builds hardened outbound HTTP clients shared by every
 // non-inbound caller (AI providers, notification webhooks, doc export Git
-// remotes, and eventually connectors — see #265): TLS 1.2+, bounded
-// timeouts, and no redirect following.
+// remotes, and connectors via connector.NewHTTPClient — see #265): TLS 1.2+,
+// bounded timeouts, and no redirect following. RetryTransport adds bounded
+// retries for idempotent requests.
 package httpx
 
 import (
@@ -86,3 +87,14 @@ func clientTimeout(t time.Duration) time.Duration {
 // NoRedirect is an http.Client.CheckRedirect func that returns the redirect
 // response itself instead of following it.
 func NoRedirect(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+
+// IsSafeMethod reports whether method is a safe (read-only, idempotent) HTTP
+// method: GET, HEAD, or OPTIONS. Such requests may be safely retried and, for
+// API keys, may be allowed under read-only restrictions.
+func IsSafeMethod(method string) bool {
+	switch method {
+	case http.MethodGet, http.MethodHead, http.MethodOptions:
+		return true
+	}
+	return false
+}

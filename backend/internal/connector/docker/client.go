@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/WiseLabz/wiselabz/internal/connector"
+	"github.com/WiseLabz/wiselabz/internal/httpx"
 )
 
 // doPost issues a POST with no body, tolerating a 204 No Content response.
@@ -41,10 +42,7 @@ func (d *Connector) doPostBody(ctx context.Context, path string, body []byte) er
 	}
 	resp, err := d.client.Do(req)
 	if err != nil {
-		if isTimeout(err) {
-			return connector.NewTimeoutError(fmt.Errorf("request failed: %w", err))
-		}
-		return fmt.Errorf("request failed: %w", err)
+		return connector.MapTransportError(err)
 	}
 	defer resp.Body.Close() //nolint:errcheck
 	data, err := connector.ReadBody(resp.Body)
@@ -74,10 +72,7 @@ func (d *Connector) doRequest(ctx context.Context, path string) ([]byte, error) 
 
 	resp, err := d.client.Do(req)
 	if err != nil {
-		if isTimeout(err) {
-			return nil, connector.NewTimeoutError(fmt.Errorf("request failed: %w", err))
-		}
-		return nil, fmt.Errorf("request failed: %w", err)
+		return nil, connector.MapTransportError(err)
 	}
 	defer resp.Body.Close() //nolint:errcheck
 
@@ -94,14 +89,6 @@ func (d *Connector) doRequest(ctx context.Context, path string) ([]byte, error) 
 	}
 
 	return data, nil
-}
-
-func isTimeout(err error) bool {
-	if errors.Is(err, context.DeadlineExceeded) {
-		return true
-	}
-	var netErr net.Error
-	return errors.As(err, &netErr) && netErr.Timeout()
 }
 
 // newDockerClient builds an HTTP client and base URL for the given Docker
@@ -124,7 +111,7 @@ func newDockerClient(host string, config map[string]any) (*http.Client, string, 
 				return d.DialContext(ctx, "unix", socketPath)
 			},
 		}
-		return &http.Client{Timeout: 30 * time.Second, Transport: transport}, "http://unix", nil
+		return &http.Client{Timeout: 30 * time.Second, Transport: httpx.RetryTransport(transport, httpx.RetryPolicy{})}, "http://unix", nil
 
 	case strings.HasPrefix(host, "tcp://"):
 		return newTCPDockerClient(strings.TrimPrefix(host, "tcp://"), config)
@@ -162,10 +149,10 @@ func newTCPDockerClient(addr string, config map[string]any) (*http.Client, strin
 	}
 	if tlsConfig == nil {
 		transport := &http.Transport{DialContext: dialer.DialContext}
-		return &http.Client{Timeout: 30 * time.Second, Transport: transport}, "http://" + addr, nil
+		return &http.Client{Timeout: 30 * time.Second, Transport: httpx.RetryTransport(transport, httpx.RetryPolicy{})}, "http://" + addr, nil
 	}
 	transport := &http.Transport{DialContext: dialer.DialContext, TLSClientConfig: tlsConfig}
-	return &http.Client{Timeout: 30 * time.Second, Transport: transport}, "https://" + addr, nil
+	return &http.Client{Timeout: 30 * time.Second, Transport: httpx.RetryTransport(transport, httpx.RetryPolicy{})}, "https://" + addr, nil
 }
 
 // buildDockerTLSConfig builds the mutual-TLS config for a tcp:// Docker host
