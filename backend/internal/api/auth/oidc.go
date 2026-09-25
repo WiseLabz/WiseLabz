@@ -546,21 +546,34 @@ func oidcFlowCookieName(providerID string) string {
 	return oidcFlowCookie + "_" + base64.RawURLEncoding.EncodeToString(sum[:12])
 }
 
+// setFlowCookie is the single place every short-lived auth flow cookie
+// (OIDC login, OIDC step-up) gets written from, so there is exactly one
+// Secure-derivation site to reason about instead of one per cookie.
+// Secure is derived, not literal true, so CodeQL can't verify it;
+// IsSecureRequest returns true for both direct TLS and a trusted
+// TLS-terminating proxy.
+func setFlowCookie(w http.ResponseWriter, r *http.Request, trustedProxies, name, value string, maxAge int) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     name,
+		Value:    value,
+		Path:     "/api/auth",
+		MaxAge:   maxAge,
+		HttpOnly: true,
+		Secure:   httputil.IsSecureRequest(r, trustedProxies),
+		SameSite: http.SameSiteLaxMode,
+	})
+}
+
+// clearFlowCookie deletes a cookie set by setFlowCookie so it cannot be
+// replayed.
+func clearFlowCookie(w http.ResponseWriter, r *http.Request, trustedProxies, name string) {
+	setFlowCookie(w, r, trustedProxies, name, "", -1)
+}
+
 // setOIDCFlowCookie stores the state/nonce generated for this browser's login
 // attempt in a short-lived HttpOnly cookie, scoped to the auth endpoints.
 func setOIDCFlowCookie(w http.ResponseWriter, r *http.Request, trustedProxies, providerID, state, nonce string) {
-	http.SetCookie(w, &http.Cookie{
-		Name:     oidcFlowCookieName(providerID),
-		Value:    providerID + "." + state + "." + nonce,
-		Path:     "/api/auth",
-		MaxAge:   300,
-		HttpOnly: true,
-		// Secure is derived, not literal true, so CodeQL can't verify it;
-		// IsSecureRequest returns true for both direct TLS and a trusted
-		// TLS-terminating proxy.
-		Secure:   httputil.IsSecureRequest(r, trustedProxies), // codeql[go/cookie-secure-not-set]
-		SameSite: http.SameSiteLaxMode,
-	})
+	setFlowCookie(w, r, trustedProxies, oidcFlowCookieName(providerID), providerID+"."+state+"."+nonce, 300)
 }
 
 // readOIDCFlowCookie returns the state and nonce this browser was issued for
@@ -579,13 +592,5 @@ func readOIDCFlowCookie(r *http.Request, providerID string) (state, nonce string
 
 // clearOIDCFlowCookie deletes the flow cookie so it cannot be replayed.
 func clearOIDCFlowCookie(w http.ResponseWriter, r *http.Request, trustedProxies, providerID string) {
-	http.SetCookie(w, &http.Cookie{
-		Name:     oidcFlowCookieName(providerID),
-		Value:    "",
-		Path:     "/api/auth",
-		MaxAge:   -1,
-		HttpOnly: true,
-		Secure:   httputil.IsSecureRequest(r, trustedProxies), // codeql[go/cookie-secure-not-set]
-		SameSite: http.SameSiteLaxMode,
-	})
+	clearFlowCookie(w, r, trustedProxies, oidcFlowCookieName(providerID))
 }
