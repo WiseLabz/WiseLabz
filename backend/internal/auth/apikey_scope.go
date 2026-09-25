@@ -82,3 +82,25 @@ func RejectRestrictedAPIKey(w http.ResponseWriter, r *http.Request) bool {
 func isSafeMethod(method string) bool {
 	return httpx.IsSafeMethod(method)
 }
+
+const ctxTreatAsSafeMethod contextKey = "treatAsSafeMethod"
+
+// TreatAsSafeMethod marks every request through it as "safe" for
+// AuthMiddleware's read-only-key gate, regardless of its actual HTTP verb.
+// For routes that are inherently read-only no matter what verb they're
+// called with (the MCP JSON-RPC endpoint always POSTs, even for a pure
+// tools/call read - see internal/mcp, permanently read-only per #277), the
+// generic "non-GET/HEAD/OPTIONS ⇒ mutating" heuristic is a false positive
+// that would otherwise 403 a "read"-scope key before it ever reaches the
+// handler. Mount it ahead of AuthMiddleware in that route's own group (it
+// must run first, so AuthMiddleware sees the flag already set).
+func TreatAsSafeMethod(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), ctxTreatAsSafeMethod, true)))
+	})
+}
+
+func treatAsSafeFromContext(ctx context.Context) bool {
+	v, _ := ctx.Value(ctxTreatAsSafeMethod).(bool)
+	return v
+}

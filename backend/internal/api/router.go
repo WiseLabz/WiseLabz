@@ -33,6 +33,7 @@ import (
 	"github.com/WiseLabz/wiselabz/internal/config"
 	"github.com/WiseLabz/wiselabz/internal/doc"
 	"github.com/WiseLabz/wiselabz/internal/httputil"
+	internalmcp "github.com/WiseLabz/wiselabz/internal/mcp"
 	"github.com/WiseLabz/wiselabz/internal/quality"
 	"github.com/WiseLabz/wiselabz/internal/report"
 	"github.com/WiseLabz/wiselabz/internal/scheduler"
@@ -144,6 +145,9 @@ func newRouterDeps(cfg Config) routerDeps {
 		chatH:       chathandler.NewHandler(cfg.Store, settingH, cfg.AIRegistry, cfg.EmbedRegistry),
 		complianceH: compliancehandler.NewHandler(cfg.Store, ruleEvaluator),
 		reportH:     reporthandler.NewHandler(cfg.Store, cfg.ReportManager),
+		mcpH: internalmcp.NewHTTPHandler(internalmcp.Deps{
+			Store: cfg.Store, Settings: settingH, Embed: cfg.EmbedRegistry,
+		}),
 	}
 }
 
