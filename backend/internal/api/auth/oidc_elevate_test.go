@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/tls"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -315,6 +316,39 @@ func TestElevateOIDC(t *testing.T) {
 			t.Fatalf("status = %d, want 400; body=%s", rr.Code, rr.Body.String())
 		}
 	})
+
+	// Both the login flow cookie (setOIDCFlowCookie) and this one
+	// (setOIDCElevateFlowCookie) go through the shared setFlowCookie helper,
+	// so this exercises the one Secure-derivation site for both.
+	t.Run("flow cookie Secure follows the request scheme", func(t *testing.T) {
+		th, _, user := elevateOIDCTestSetup(t)
+
+		httpReq := doJSON(t, http.MethodPost, "/api/auth/elevate/oidc/begin", map[string]string{"action": "connector.delete"})
+		httpRR := th.authedRequest(t, httpReq, user.ID, "user", th.H.ElevateOIDCBegin)
+		httpCookie := flowCookieFrom(t, httpRR)
+		if httpCookie.Secure {
+			t.Error("flow cookie Secure = true on a plain http request, want false")
+		}
+
+		tlsReq := doJSON(t, http.MethodPost, "/api/auth/elevate/oidc/begin", map[string]string{"action": "connector.delete"})
+		tlsReq.TLS = &tls.ConnectionState{}
+		tlsRR := th.authedRequest(t, tlsReq, user.ID, "user", th.H.ElevateOIDCBegin)
+		tlsCookie := flowCookieFrom(t, tlsRR)
+		if !tlsCookie.Secure {
+			t.Error("flow cookie Secure = false on a TLS request, want true")
+		}
+	})
+}
+
+func flowCookieFrom(t *testing.T, rr *httptest.ResponseRecorder) *http.Cookie {
+	t.Helper()
+	for _, c := range rr.Result().Cookies() {
+		if c.Name == oidcElevateFlowCookie {
+			return c
+		}
+	}
+	t.Fatal("no elevate flow cookie in response")
+	return nil
 }
 
 func containsCode(body []byte, code string) bool {

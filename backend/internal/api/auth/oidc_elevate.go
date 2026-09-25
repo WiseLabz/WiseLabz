@@ -206,25 +206,15 @@ func (h *Handler) findOIDCProviderByIssuer(issuer string) *config.OIDCProvider {
 }
 
 // setOIDCElevateFlowCookie stores flow in a short-lived HttpOnly cookie
-// scoped to the auth endpoints, mirroring setOIDCFlowCookie for login.
+// scoped to the auth endpoints, mirroring setOIDCFlowCookie for login (both
+// go through the shared setFlowCookie).
 func setOIDCElevateFlowCookie(w http.ResponseWriter, r *http.Request, trustedProxies string, flow oidcElevateFlow) {
 	data, err := json.Marshal(flow)
 	if err != nil {
 		slog.Error("failed to marshal oidc elevate flow cookie", "error", err)
 		return
 	}
-	http.SetCookie(w, &http.Cookie{
-		Name:     oidcElevateFlowCookie,
-		Value:    base64.RawURLEncoding.EncodeToString(data),
-		Path:     "/api/auth",
-		MaxAge:   300,
-		HttpOnly: true,
-		// Secure is derived, not literal true, so CodeQL can't verify it;
-		// IsSecureRequest returns true for both direct TLS and a trusted
-		// TLS-terminating proxy.
-		Secure:   httputil.IsSecureRequest(r, trustedProxies), // codeql[go/cookie-secure-not-set]
-		SameSite: http.SameSiteLaxMode,
-	})
+	setFlowCookie(w, r, trustedProxies, oidcElevateFlowCookie, base64.RawURLEncoding.EncodeToString(data), 300)
 }
 
 // readOIDCElevateFlowCookie returns the flow this browser started, if any.
@@ -249,13 +239,5 @@ func readOIDCElevateFlowCookie(r *http.Request) (oidcElevateFlow, bool) {
 
 // clearOIDCElevateFlowCookie deletes the flow cookie so it cannot be replayed.
 func clearOIDCElevateFlowCookie(w http.ResponseWriter, r *http.Request, trustedProxies string) {
-	http.SetCookie(w, &http.Cookie{
-		Name:     oidcElevateFlowCookie,
-		Value:    "",
-		Path:     "/api/auth",
-		MaxAge:   -1,
-		HttpOnly: true,
-		Secure:   httputil.IsSecureRequest(r, trustedProxies), // codeql[go/cookie-secure-not-set]
-		SameSite: http.SameSiteLaxMode,
-	})
+	clearFlowCookie(w, r, trustedProxies, oidcElevateFlowCookie)
 }
