@@ -347,6 +347,48 @@ func TestElevatePasswordRejectedWhenMFAEnabled(t *testing.T) {
 	}
 }
 
+// TestElevateRejectsOIDCUsers covers #279 part 3's coordination point: an
+// OIDC user has no local password or TOTP factor, so Elevate must reject
+// them with 400 use_oidc_reauth instead of "Invalid password", and
+// ElevateMethods must report ["oidc"] rather than ["password"].
+func TestElevateRejectsOIDCUsers(t *testing.T) {
+	th := newTestHandler(t)
+	user := &store.User{Username: "oidc-user"}
+	if _, err := th.Store.CreateOIDCUser(context.Background(), user, "https://issuer.example", "subject-1"); err != nil {
+		t.Fatalf("CreateOIDCUser() error: %v", err)
+	}
+
+	t.Run("methods reports oidc", func(t *testing.T) {
+		rr := th.authedRequest(t, httptest.NewRequest(http.MethodGet, "/api/auth/elevate/methods", nil), user.ID, "viewer", th.H.ElevateMethods)
+		var body struct {
+			Methods []string `json:"methods"`
+		}
+		if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		if len(body.Methods) != 1 || body.Methods[0] != "oidc" {
+			t.Fatalf("methods = %v, want [oidc]", body.Methods)
+		}
+	})
+
+	t.Run("elevate rejects with use_oidc_reauth", func(t *testing.T) {
+		r := doJSON(t, http.MethodPost, "/api/auth/elevate", map[string]string{"password": "irrelevant", "action": "connector.delete"})
+		rr := th.authedRequest(t, r, user.ID, "viewer", th.H.Elevate)
+		if rr.Code != http.StatusBadRequest {
+			t.Fatalf("status = %d, want %d; body=%s", rr.Code, http.StatusBadRequest, rr.Body.String())
+		}
+		var body struct {
+			Code string `json:"code"`
+		}
+		if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		if body.Code != "use_oidc_reauth" {
+			t.Fatalf("code = %q, want use_oidc_reauth", body.Code)
+		}
+	})
+}
+
 func TestElevateWithTOTPAndRecoveryCode(t *testing.T) {
 	th := newTestHandler(t)
 	user, _ := th.createUser(t, "operator", false)
