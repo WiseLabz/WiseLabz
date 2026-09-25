@@ -20,6 +20,7 @@ export function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation() as { state?: { from?: string } };
   const login = useAuth((s) => s.login);
+  const mfaTicket = useAuth((s) => s.mfaTicket);
   const { data: providers } = useGetAuthProviders();
 
   const [username, setUsername] = useState('');
@@ -35,11 +36,22 @@ export function LoginPage() {
     setBusy(true);
     try {
       await login(username, password);
-      navigate(from, { replace: true });
+      // A successful password step with no confirmed factor lands here with
+      // a real session; login() only sets mfaTicket when a factor is required
+      // (see LoginMfaStep below), so useAuth().status flips to 'authenticated'
+      // and the router itself takes over from RequireAuth.
+      if (!useAuth.getState().mfaTicket) {
+        navigate(from, { replace: true });
+      }
     } catch {
       toast.error(t('auth.loginFailed'));
+    } finally {
       setBusy(false);
     }
+  }
+
+  if (mfaTicket) {
+    return <LoginMfaStep onDone={() => navigate(from, { replace: true })} />;
   }
 
   return (
@@ -127,6 +139,117 @@ export function LoginPage() {
             </div>
           </>
         )}
+      </div>
+    </div>
+  );
+}
+
+/** Second step of a login that required a second factor (#279). */
+function LoginMfaStep({ onDone }: { onDone: () => void }) {
+  const { t } = useTranslation();
+  const submitMfa = useAuth((s) => s.submitMfa);
+  const cancelMfa = useAuth((s) => s.cancelMfa);
+  const [useRecoveryCode, setUseRecoveryCode] = useState(false);
+  const [code, setCode] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(false);
+
+  async function submit() {
+    if (!code) return;
+    setBusy(true);
+    setError(false);
+    try {
+      await submitMfa(useRecoveryCode ? { recoveryCode: code } : { totp: code });
+      onDone();
+    } catch {
+      setError(true);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="overflow-hidden rounded-lg border border-line bg-surface shadow-(--shadow-pop)">
+      <div className="flex items-center gap-3 border-b border-line-soft px-6 py-5">
+        <div className="flex h-9 w-9 items-center justify-center rounded-md bg-accent-primary shadow-(--shadow-raised)">
+          <span className="font-mono text-base font-bold text-accent-primary-ink">W</span>
+        </div>
+        <div>
+          <p className="text-sm font-semibold text-ink">
+            {t('auth.mfa.title', { defaultValue: 'Two-factor authentication' })}
+          </p>
+          <p className="font-mono text-2xs text-ink-faint">
+            {useRecoveryCode
+              ? t('auth.mfa.recoveryPrompt', { defaultValue: 'Enter a recovery code' })
+              : t('auth.mfa.totpPrompt', { defaultValue: 'Enter your authenticator code' })}
+          </p>
+        </div>
+      </div>
+
+      <div className="px-6 py-5">
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            void submit();
+          }}
+          className="space-y-3.5"
+        >
+          <div>
+            <label htmlFor="mfa-code" className={labelClass}>
+              {useRecoveryCode
+                ? t('auth.mfa.recoveryCode', { defaultValue: 'Recovery code' })
+                : t('auth.mfa.code', { defaultValue: 'Authenticator code' })}
+            </label>
+            <input
+              id="mfa-code"
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              inputMode={useRecoveryCode ? undefined : 'numeric'}
+              autoComplete="one-time-code"
+              autoFocus
+              className={inputClass}
+            />
+            {error && (
+              <p className="mt-1.5 text-2xs text-err">
+                {t('auth.mfa.invalidCode', { defaultValue: 'That code is not valid. Try again.' })}
+              </p>
+            )}
+          </div>
+          <Button
+            type="submit"
+            variant="primary"
+            size="md"
+            disabled={busy || !code}
+            className="w-full justify-center"
+          >
+            {busy
+              ? t('auth.signingIn')
+              : t('auth.mfa.verify', { defaultValue: 'Verify' })}
+          </Button>
+        </form>
+
+        <div className="mt-4 flex items-center justify-between text-2xs">
+          <button
+            type="button"
+            className="text-ink-faint underline-offset-2 hover:text-ink hover:underline"
+            onClick={() => {
+              setUseRecoveryCode((v) => !v);
+              setCode('');
+              setError(false);
+            }}
+          >
+            {useRecoveryCode
+              ? t('auth.mfa.useAuthenticator', { defaultValue: 'Use authenticator app instead' })
+              : t('auth.mfa.useRecoveryCode', { defaultValue: 'Use a recovery code' })}
+          </button>
+          <button
+            type="button"
+            className="text-ink-faint underline-offset-2 hover:text-ink hover:underline"
+            onClick={cancelMfa}
+          >
+            {t('common.cancel')}
+          </button>
+        </div>
       </div>
     </div>
   );

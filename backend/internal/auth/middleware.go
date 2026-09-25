@@ -45,6 +45,18 @@ func InstanceAdminFromContext(ctx context.Context) bool {
 	return admin
 }
 
+// MFAEnrollOnlyFromContext reports whether the current request's access
+// token carries the enrollment-only claim (see Claims.MFAEnrollOnly). Used
+// by /me/mfa/totp/{id}/confirm to know whether completing enrollment should
+// also mint a fresh, fully-privileged token pair.
+func MFAEnrollOnlyFromContext(ctx context.Context) bool {
+	claims, _ := ctx.Value(ctxClaims).(*Claims)
+	if claims == nil {
+		return false
+	}
+	return claims.MFAEnrollOnly
+}
+
 // APIKeyChecker looks up opaque API keys without coupling auth to the store
 // package. The store adapts its APIKey model to APIKeyClaims.
 type APIKeyChecker interface {
@@ -89,6 +101,10 @@ func AuthMiddleware(jwtSvc *Service, checkers ...APIKeyChecker) func(http.Handle
 						return
 					}
 				}
+				if claims.MFAEnrollOnly && !mfaEnrollmentAllowed(r) {
+					httputil.Error(w, http.StatusForbidden, "mfa_enrollment_required", "Complete two-factor enrollment to continue")
+					return
+				}
 				ctx := context.WithValue(r.Context(), ctxUserID, claims.UserID)
 				ctx = context.WithValue(ctx, ctxInstanceAdmin, claims.InstanceAdmin)
 				ctx = context.WithValue(ctx, ctxClaims, claims)
@@ -124,6 +140,40 @@ func AuthMiddleware(jwtSvc *Service, checkers ...APIKeyChecker) func(http.Handle
 
 			http.Error(w, `{"code":"unauthorized","message":"invalid or expired token"}`, http.StatusUnauthorized)
 		})
+	}
+}
+
+// mfaEnrollmentAllowed reports whether r may proceed for a caller whose
+// session is enrollment-only (Claims.MFAEnrollOnly). Kept as a single table
+// so the allowlist is easy to audit and test (#279): GET /me (so the UI can
+// render who's logged in), the whole /me/mfa subtree (so they can actually
+// enroll), and logout/refresh (so they aren't trapped). Everything else gets
+// a 403 mfa_enrollment_required.
+func mfaEnrollmentAllowed(r *http.Request) bool {
+	path := r.URL.Path
+	// The whole API is mounted twice, under /api and the versioned /api/v1
+	// alias (see api.NewRouter) — strip whichever prefix is present before
+	// matching, checking the longer one first since it contains the other.
+	switch {
+	case strings.HasPrefix(path, "/api/v1"):
+		path = strings.TrimPrefix(path, "/api/v1")
+	case strings.HasPrefix(path, "/api"):
+		path = strings.TrimPrefix(path, "/api")
+	}
+	if path == "" {
+		path = "/"
+	}
+	switch {
+	case r.Method == http.MethodGet && path == "/me":
+		return true
+	case strings.HasPrefix(path, "/me/mfa"):
+		return true
+	case r.Method == http.MethodPost && path == "/auth/logout":
+		return true
+	case r.Method == http.MethodPost && path == "/auth/refresh":
+		return true
+	default:
+		return false
 	}
 }
 

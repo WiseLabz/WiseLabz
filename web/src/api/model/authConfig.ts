@@ -6,6 +6,7 @@
  *
  * OpenAPI spec version: 0.1.0
  */
+import type { AuthConfigRequire2fa } from './authConfigRequire2fa';
 import type { OidcProvider } from './oidcProvider';
 
 export interface AuthConfig {
@@ -16,6 +17,8 @@ export interface AuthConfig {
   refreshTokenTtl: number;
   /** Require step-up re-auth (POST /auth/elevate) before destructive ops. Defaults on; the escape hatch for a single-admin homelab. */
   stepUpForDestructive: boolean;
+  /** Instance-wide 2FA policy for local accounts (#279). A covered user who hasn't enrolled a factor gets an enrollment-only session at their next login. Changing this doesn't touch existing sessions. */
+  require2fa: AuthConfigRequire2fa;
   /** Read-only; defined in config/env, not editable via API */
   oidcProviders: OidcProvider[];
 }

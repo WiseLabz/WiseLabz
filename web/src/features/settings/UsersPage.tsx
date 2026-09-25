@@ -11,6 +11,7 @@ import {
   getGetUsersQueryKey,
   deleteUsersUserId,
   postUsersUserIdResetPassword,
+  postUsersUserIdResetMfa,
 } from '../../api/generated/users/users';
 import { patchUserInstanceAdmin, postUserInstanceAdmin, type InstanceAdminRole } from '../../api/permissions';
 import { useGetMe } from '../../api/generated/me/me';
@@ -36,6 +37,7 @@ export function UsersPage() {
   const [inviteOpen, setInviteOpen] = useState(false);
   const [toDelete, setToDelete] = useState<User | null>(null);
   const [toReset, setToReset] = useState<User | null>(null);
+  const [toResetMfa, setToResetMfa] = useState<User | null>(null);
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: getGetUsersQueryKey() });
 
@@ -79,6 +81,17 @@ export function UsersPage() {
     onError: () => toast.error(t('settings.users.resetError')),
   });
 
+  const resetMfa = useMutation({
+    mutationFn: ({ id, token }: { id: string; token: string | null }) =>
+      postUsersUserIdResetMfa(id, token ? { headers: { 'X-Elevation-Token': token } } : undefined),
+    onSuccess: () => {
+      invalidate();
+      toast.success(t('settings.users.resetMfaSent', { defaultValue: '2FA has been reset for this user.' }));
+      setToResetMfa(null);
+    },
+    onError: () => toast.error(t('settings.users.resetMfaError', { defaultValue: 'Could not reset 2FA for this user.' })),
+  });
+
   return (
     <div>
       <SubHeader title={t('settings.users.title')} description={t('settings.users.subtitle')} />
@@ -109,6 +122,9 @@ export function UsersPage() {
                       <span className="truncate font-medium">{u.displayName || u.username}</span>
                       <span className="font-mono text-2xs text-ink-faint">@{u.username}</span>
                       {u.disabled && <ToneTag tone="idle" label={t('common.disabled')} />}
+                      {u.mfaEnabled && (
+                        <ToneTag tone="ok" label={t('settings.users.mfaEnabled', { defaultValue: '2FA' })} />
+                      )}
                     </p>
                     <p className="mt-0.5 flex items-center gap-1.5 font-mono text-2xs text-ink-faint">
                       <span>{u.email ?? '—'}</span>
@@ -165,6 +181,16 @@ export function UsersPage() {
                         {t('settings.users.reset')}
                       </Button>
                     )}
+                    {u.authSource === 'local' && u.mfaEnabled && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        disabled={resetMfa.isPending}
+                        onClick={() => setToResetMfa(u)}
+                      >
+                        {t('settings.users.resetMfa', { defaultValue: 'Reset 2FA' })}
+                      </Button>
+                    )}
                     <Button
                       variant="danger"
                       size="sm"
@@ -208,6 +234,22 @@ export function UsersPage() {
         isPending={reset.isPending}
         onConfirm={(token) => {
           if (toReset) return reset.mutateAsync({ id: toReset.id, token });
+        }}
+      />
+
+      <ElevationConfirm
+        open={toResetMfa !== null}
+        onClose={() => setToResetMfa(null)}
+        resourceName={toResetMfa?.username ?? ''}
+        action="user.resetMfa"
+        title={t('settings.users.resetMfaTitle', { defaultValue: 'Reset two-factor authentication' })}
+        description={t('settings.users.resetMfaConfirm', {
+          defaultValue: 'This deletes every factor and recovery code and signs them out everywhere.',
+        })}
+        confirmLabel={t('settings.users.resetMfa', { defaultValue: 'Reset 2FA' })}
+        isPending={resetMfa.isPending}
+        onConfirm={(token) => {
+          if (toResetMfa) return resetMfa.mutateAsync({ id: toResetMfa.id, token });
         }}
       />
     </div>

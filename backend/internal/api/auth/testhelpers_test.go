@@ -11,10 +11,13 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/pquerna/otp"
+	"github.com/pquerna/otp/totp"
 	_ "modernc.org/sqlite"
 
 	upstreamauth "github.com/WiseLabz/wiselabz/internal/auth"
 	"github.com/WiseLabz/wiselabz/internal/config"
+	"github.com/WiseLabz/wiselabz/internal/crypto"
 	"github.com/WiseLabz/wiselabz/internal/store"
 )
 
@@ -49,8 +52,9 @@ func newTestHandler(t *testing.T) *testHandler {
 
 	jwtSvc := upstreamauth.NewService("test-secret", 15*time.Minute, 24*time.Hour)
 	cfg := &config.Config{
-		Server: config.Server{Origin: "http://localhost:5173"},
-		Auth:   config.AuthSettings{Secret: "test-secret"},
+		Server:     config.Server{Origin: "http://localhost:5173"},
+		Auth:       config.AuthSettings{Secret: "test-secret"},
+		Encryption: config.EncryptionSettings{Key: "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE="},
 	}
 
 	return &testHandler{
@@ -83,6 +87,48 @@ func (th *testHandler) createUser(t *testing.T, role string, disabled bool) (*st
 		t.Fatalf("create user: %v", err)
 	}
 	return u, password
+}
+
+// enrollTOTP confirms a TOTP factor for userID directly against the store
+// (bypassing the enrollment HTTP endpoints) and returns the raw secret so
+// tests can generate valid codes with totpCodeAt.
+func (th *testHandler) enrollTOTP(t *testing.T, userID string) string {
+	t.Helper()
+	secret, _, err := upstreamauth.GenerateTOTPSecret("WiseLabz", userID)
+	if err != nil {
+		t.Fatalf("GenerateTOTPSecret() error: %v", err)
+	}
+	key, err := crypto.DecodeKey(th.H.Config.Encryption.Key)
+	if err != nil {
+		t.Fatalf("DecodeKey() error: %v", err)
+	}
+	encrypted, err := crypto.Encrypt(secret, key)
+	if err != nil {
+		t.Fatalf("Encrypt() error: %v", err)
+	}
+	factor, err := th.Store.CreatePendingTOTP(context.Background(), userID, "Authenticator", encrypted)
+	if err != nil {
+		t.Fatalf("CreatePendingTOTP() error: %v", err)
+	}
+	if _, err := th.Store.ConfirmFactor(context.Background(), factor.ID); err != nil {
+		t.Fatalf("ConfirmFactor() error: %v", err)
+	}
+	return secret
+}
+
+// totpCodeAt generates a valid TOTP code for secret at the given time, using
+// the same SHA1/6-digit/30s parameters as internal/auth.GenerateTOTPSecret.
+func totpCodeAt(t *testing.T, secret string, when time.Time) string {
+	t.Helper()
+	code, err := totp.GenerateCodeCustom(secret, when, totp.ValidateOpts{
+		Period:    30,
+		Digits:    otp.DigitsSix,
+		Algorithm: otp.AlgorithmSHA1,
+	})
+	if err != nil {
+		t.Fatalf("GenerateCodeCustom() error: %v", err)
+	}
+	return code
 }
 
 // instanceAdminRoleFor maps the test-facing "operator"/"viewer" spelling

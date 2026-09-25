@@ -17,7 +17,6 @@ import {
   useGetConnectorsConnectorIdRemovalImpact,
 } from '../../api/generated/connectors/connectors';
 import {useGetAuthConfig} from '../../api/generated/settings/settings';
-import {useAuth} from '../../store/auth';
 import {Button} from '../ui/Button';
 import {StepUp} from './StepUp';
 import {AlertTriangleIcon, XIcon} from '../icons';
@@ -44,10 +43,6 @@ export function ConfirmDestructive({
     });
     const authConfig = useGetAuthConfig({query: {enabled: open}});
     const stepUpRequired = authConfig.data?.stepUpForDestructive ?? true;
-    // #279 part 3: an OIDC user has no password, so step-up re-authenticates
-    // through their IdP in a popup instead of StepUp's password field.
-    const authSource = useAuth((s) => s.user?.authSource);
-    const stepUpMode = authSource === 'oidc' ? 'oidc' : 'password';
 
     // Transient input is cleared on every close path, so each open starts fresh.
     const reset = () => {
@@ -177,7 +172,7 @@ export function ConfirmDestructive({
 
                             {/* Step-up (only once the name matches, to keep focus ordered) */}
                             {stepUpRequired && nameMatches && !token && (
-                                <StepUp action="connector.delete" mode={stepUpMode} onElevated={setToken}/>
+                                <StepUp action="connector.delete" onElevated={setToken}/>
                             )}
                             {stepUpRequired && token && (
                                 <p className="text-2xs text-ok">Re-authenticated — ready to remove.</p>

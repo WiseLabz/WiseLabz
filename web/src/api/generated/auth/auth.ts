@@ -31,6 +31,8 @@ import type {
   Error,
   ForbiddenResponse,
   GetAuthElevateMethods200,
+  LoginMfaRequest,
+  LoginMfaRequired,
   LoginRequest,
   NotFoundResponse,
   OidcCallbackRequest,
@@ -168,7 +170,7 @@ export function useGetAuthProviders<
 }
 
 /**
- * On success returns a short-lived access token in the body and sets the refresh token as an HttpOnly; Secure; SameSite=Strict cookie (§8.7).
+ * On success returns a short-lived access token in the body and sets the refresh token as an HttpOnly; Secure; SameSite=Strict cookie (§8.7). A user with a confirmed second factor (#279) instead gets `LoginMfaRequired` — no session yet — and must finish with POST /auth/login/mfa. A user the require_2fa policy covers but who hasn't enrolled gets a normal session plus `mfaEnrollmentRequired: true`, confined to the enrollment allowlist until they enroll.
  * @summary Local username/password login
  */
 export const postAuthLogin = (
@@ -176,7 +178,7 @@ export const postAuthLogin = (
   options?: SecondParameter<typeof customInstance>,
   signal?: AbortSignal
 ) => {
-  return customInstance<AuthSession>(
+  return customInstance<AuthSession | LoginMfaRequired>(
     {
       url: `/auth/login`,
       method: 'POST',
@@ -284,6 +286,131 @@ export function usePostAuthLogin<
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
   const queryOptions = getPostAuthLoginQueryOptions(loginRequest, options);
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+/**
+ * Second step of login for a user with a confirmed factor (#279). Exactly one of `totp` or `recoveryCode` proves the second factor; failures count toward the same lockout as a bad password.
+ * @summary Finish a login that required a second factor
+ */
+export const postAuthLoginMfa = (
+  loginMfaRequest: BodyType<LoginMfaRequest>,
+  options?: SecondParameter<typeof customInstance>,
+  signal?: AbortSignal
+) => {
+  return customInstance<AuthSession>(
+    {
+      url: `/auth/login/mfa`,
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      data: loginMfaRequest,
+      signal,
+    },
+    options
+  );
+};
+
+export const getPostAuthLoginMfaQueryKey = (loginMfaRequest?: BodyType<LoginMfaRequest>) => {
+  return ['POST', `/auth/login/mfa`, loginMfaRequest] as const;
+};
+
+export const getPostAuthLoginMfaQueryOptions = <
+  TData = Awaited<ReturnType<typeof postAuthLoginMfa>>,
+  TError = ErrorType<BadRequestResponse | UnauthorizedResponse>,
+>(
+  loginMfaRequest: BodyType<LoginMfaRequest>,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof postAuthLoginMfa>>, TError, TData>>;
+    request?: SecondParameter<typeof customInstance>;
+  }
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getPostAuthLoginMfaQueryKey(loginMfaRequest);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof postAuthLoginMfa>>> = ({ signal }) =>
+    postAuthLoginMfa(loginMfaRequest, requestOptions, signal);
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof postAuthLoginMfa>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type PostAuthLoginMfaQueryResult = NonNullable<Awaited<ReturnType<typeof postAuthLoginMfa>>>;
+export type PostAuthLoginMfaQueryError = ErrorType<BadRequestResponse | UnauthorizedResponse>;
+
+export function usePostAuthLoginMfa<
+  TData = Awaited<ReturnType<typeof postAuthLoginMfa>>,
+  TError = ErrorType<BadRequestResponse | UnauthorizedResponse>,
+>(
+  loginMfaRequest: BodyType<LoginMfaRequest>,
+  options: {
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof postAuthLoginMfa>>, TError, TData>> &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postAuthLoginMfa>>,
+          TError,
+          Awaited<ReturnType<typeof postAuthLoginMfa>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function usePostAuthLoginMfa<
+  TData = Awaited<ReturnType<typeof postAuthLoginMfa>>,
+  TError = ErrorType<BadRequestResponse | UnauthorizedResponse>,
+>(
+  loginMfaRequest: BodyType<LoginMfaRequest>,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof postAuthLoginMfa>>, TError, TData>> &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postAuthLoginMfa>>,
+          TError,
+          Awaited<ReturnType<typeof postAuthLoginMfa>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function usePostAuthLoginMfa<
+  TData = Awaited<ReturnType<typeof postAuthLoginMfa>>,
+  TError = ErrorType<BadRequestResponse | UnauthorizedResponse>,
+>(
+  loginMfaRequest: BodyType<LoginMfaRequest>,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof postAuthLoginMfa>>, TError, TData>>;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * @summary Finish a login that required a second factor
+ */
+
+export function usePostAuthLoginMfa<
+  TData = Awaited<ReturnType<typeof postAuthLoginMfa>>,
+  TError = ErrorType<BadRequestResponse | UnauthorizedResponse>,
+>(
+  loginMfaRequest: BodyType<LoginMfaRequest>,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof postAuthLoginMfa>>, TError, TData>>;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getPostAuthLoginMfaQueryOptions(loginMfaRequest, options);
 
   const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
     queryKey: DataTag<QueryKey, TData, TError>;
@@ -770,8 +897,8 @@ export function usePostAuthElevate<
 }
 
 /**
- * `["password"]` for a local account, `["oidc"]` for one that signs in through an identity provider (#279 part 3). #279 part 1 (TOTP) extends this to include `"totp"` once a user has a second factor enrolled.
- * @summary Which step-up factors the caller can use
+ * `["password"]` for a local account without a confirmed factor, `["totp","recovery"]` once one is confirmed (#279 part 1), or `["oidc"]` for an account that signs in through an identity provider (#279 part 3). PR 2 appends `"webauthn"` alongside totp/recovery.
+ * @summary Which step-up method(s) POST /auth/elevate expects
  */
 export const getAuthElevateMethods = (
   options?: SecondParameter<typeof customInstance>,
@@ -868,7 +995,7 @@ export function useGetAuthElevateMethods<
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
- * @summary Which step-up factors the caller can use
+ * @summary Which step-up method(s) POST /auth/elevate expects
  */
 
 export function useGetAuthElevateMethods<

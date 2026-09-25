@@ -25,6 +25,7 @@ export const getGetAuthConfigResponseMock = (
   accessTokenTtl: faker.number.int(),
   refreshTokenTtl: faker.number.int(),
   stepUpForDestructive: faker.datatype.boolean(),
+  require2fa: faker.helpers.arrayElement(['none', 'admins', 'all'] as const),
   oidcProviders: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(
     () => ({
       id: faker.string.alpha({ length: { min: 10, max: 20 } }),
@@ -52,6 +53,7 @@ export const getPutAuthConfigResponseMock = (
   accessTokenTtl: faker.number.int(),
   refreshTokenTtl: faker.number.int(),
   stepUpForDestructive: faker.datatype.boolean(),
+  require2fa: faker.helpers.arrayElement(['none', 'admins', 'all'] as const),
   oidcProviders: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(
     () => ({
       id: faker.string.alpha({ length: { min: 10, max: 20 } }),

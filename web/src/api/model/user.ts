@@ -24,4 +24,6 @@ export interface User {
   digestCadence?: UserDigestCadence;
   /** IANA timezone, e.g. America/New_York */
   digestTimezone?: string;
+  /** Has a confirmed MFA factor (#279). Only populated by GET /users; omitted elsewhere. */
+  mfaEnabled?: boolean;
 }

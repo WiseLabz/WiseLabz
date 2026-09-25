@@ -28,6 +28,7 @@ func mountAuthRoutes(r chi.Router, d routerDeps) {
 
 	r.Route("/auth", func(r chi.Router) {
 		r.With(authIPLimit).Post("/login", d.authH.Login)
+		r.With(authIPLimit).Post("/login/mfa", d.authH.LoginMFA)
 		r.With(authIPLimit).Post("/oidc/callback", d.authH.OIDCCallback)
 		r.With(authIPLimit).Post("/refresh", d.authH.Refresh)
 		r.Get("/providers", d.authH.Providers)
@@ -58,12 +59,26 @@ func mountAuthRoutes(r chi.Router, d routerDeps) {
 // mountMeRoutes registers the caller's own profile and session routes. It must
 // be called on an already-authenticated group.
 func mountMeRoutes(r chi.Router, d routerDeps) {
+	cfg := d.cfg
+
 	r.Route("/me", func(r chi.Router) {
 		r.Get("/", d.authH.Me)
 		r.Patch("/", d.authH.UpdateMe)
 		r.Post("/password", d.authH.ChangePassword)
 		r.Get("/sessions", d.authH.ListSessions)
 		r.Delete("/sessions/{id}", d.authH.DeleteSession)
+
+		r.Route("/mfa", func(r chi.Router) {
+			r.Get("/", d.authH.GetMFA)
+			r.Post("/totp", d.authH.PostMFATOTP)
+			r.Post("/totp/{id}/confirm", d.authH.PostMFATOTPConfirm)
+
+			r.Group(func(r chi.Router) {
+				r.Use(auth.RequireElevation(cfg.JWT, cfg.Store, "mfa.manage"))
+				r.Post("/recovery-codes", d.authH.PostMFARecoveryCodes)
+				r.Delete("/factors/{id}", d.authH.DeleteMFAFactor)
+			})
+		})
 	})
 }
 
@@ -85,6 +100,11 @@ func mountUserRoutes(r chi.Router, d routerDeps) {
 		r.Group(func(r chi.Router) {
 			r.Use(auth.RequireElevation(cfg.JWT, cfg.Store, "user.resetPassword"))
 			r.Post("/{id}/reset-password", d.authH.ResetPassword)
+		})
+
+		r.Group(func(r chi.Router) {
+			r.Use(auth.RequireElevation(cfg.JWT, cfg.Store, "user.resetMfa"))
+			r.Post("/{id}/reset-mfa", d.authH.ResetMFA)
 		})
 	})
 }

@@ -37,6 +37,18 @@ export const setRefreshHandler = (fn: RefreshFn): void => {
   refreshHandler = fn;
 };
 
+/**
+ * Called on a 403 `mfa_enrollment_required` — the caller's session is
+ * confined to the enrollment allowlist until they set up a factor (#279).
+ * guards.tsx wires the real implementation (a redirect to Settings →
+ * Security); default no-ops so requests still just reject normally.
+ */
+type MfaEnrollmentRequiredFn = () => void;
+let mfaEnrollmentRequiredHandler: MfaEnrollmentRequiredFn = () => {};
+export const setMfaEnrollmentRequiredHandler = (fn: MfaEnrollmentRequiredFn): void => {
+  mfaEnrollmentRequiredHandler = fn;
+};
+
 // Attach the in-memory access token to every request.
 AXIOS_INSTANCE.interceptors.request.use((config) => {
   if (config.url === '/healthz' || config.url === '/readyz') {
@@ -50,7 +62,8 @@ AXIOS_INSTANCE.interceptors.request.use((config) => {
   return config;
 });
 
-// Single silent-refresh-and-retry on 401.
+// Single silent-refresh-and-retry on 401; a global redirect on the
+// enrollment-only 403.
 AXIOS_INSTANCE.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
@@ -66,6 +79,12 @@ AXIOS_INSTANCE.interceptors.response.use(
       if (refreshed) {
         return AXIOS_INSTANCE(original);
       }
+    }
+    if (
+      error.response?.status === 403 &&
+      (error.response.data as { code?: string } | undefined)?.code === 'mfa_enrollment_required'
+    ) {
+      mfaEnrollmentRequiredHandler();
     }
     return Promise.reject(error);
   }

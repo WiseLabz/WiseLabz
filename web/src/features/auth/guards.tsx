@@ -10,11 +10,13 @@
  * security.
  */
 import type { ReactNode } from 'react';
-import { Link, Navigate, useLocation } from 'react-router-dom';
+import { useEffect } from 'react';
+import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../store/auth';
 import { useIsInstanceAdmin } from '../../hooks/useRole';
 import { useGetConnectors } from '../../api/generated/connectors/connectors';
+import { setMfaEnrollmentRequiredHandler } from '../../api/axios-instance';
 import { EmptyState, SkeletonRows } from '../../components/ui/states';
 
 /** Centered brand splash shown while the session resolves. */
@@ -28,9 +30,28 @@ export function Splash() {
   );
 }
 
+/**
+ * Two-factor enrollment gate (#279). A session the require_2fa policy covers
+ * but who hasn't enrolled a factor gets a 403 `mfa_enrollment_required` on
+ * anything outside the server's own enrollment allowlist; the axios
+ * interceptor calls this handler, and we redirect into Settings → Profile
+ * (Security section) so the caller can finish enrolling. Registered once
+ * per RequireAuth mount — cheap, and keeps the wiring colocated with the
+ * other auth guards instead of a separate app-level effect.
+ */
+function useMfaEnrollmentRedirect() {
+  const navigate = useNavigate();
+  useEffect(() => {
+    setMfaEnrollmentRequiredHandler(() => {
+      navigate('/settings/profile');
+    });
+  }, [navigate]);
+}
+
 export function RequireAuth({ children }: { children: ReactNode }) {
   const status = useAuth((s) => s.status);
   const location = useLocation();
+  useMfaEnrollmentRedirect();
   if (status === 'unknown') return <Splash />;
   if (status === 'anonymous') {
     return <Navigate to="/login" replace state={{ from: location.pathname }} />;

@@ -33,6 +33,7 @@ export const getGetUsersResponseMock = (): User[] =>
       faker.string.alpha({ length: { min: 10, max: 20 } }),
       undefined,
     ]),
+    mfaEnabled: faker.helpers.arrayElement([faker.datatype.boolean(), undefined]),
   }));
 
 export const getPostUsersResponseMock = (
@@ -58,6 +59,7 @@ export const getPostUsersResponseMock = (
     faker.string.alpha({ length: { min: 10, max: 20 } }),
     undefined,
   ]),
+  mfaEnabled: faker.helpers.arrayElement([faker.datatype.boolean(), undefined]),
   ...overrideResponse,
 });
 
@@ -84,5 +86,6 @@ export const getPatchUsersUserIdResponseMock = (
     faker.string.alpha({ length: { min: 10, max: 20 } }),
     undefined,
   ]),
+  mfaEnabled: faker.helpers.arrayElement([faker.datatype.boolean(), undefined]),
   ...overrideResponse,
 });

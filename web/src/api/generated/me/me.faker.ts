@@ -9,7 +9,14 @@
 import { faker } from '@faker-js/faker';
 
 import { Role } from '../../model';
-import type { Session, User } from '../../model';
+import type {
+  MfaStatus,
+  PostMeMfaRecoveryCodes200,
+  Session,
+  TotpConfirmResult,
+  TotpEnrollment,
+  User,
+} from '../../model';
 
 export const getGetMeResponseMock = (
   overrideResponse: Partial<Extract<User, object>> = {}
@@ -34,6 +41,7 @@ export const getGetMeResponseMock = (
     faker.string.alpha({ length: { min: 10, max: 20 } }),
     undefined,
   ]),
+  mfaEnabled: faker.helpers.arrayElement([faker.datatype.boolean(), undefined]),
   ...overrideResponse,
 });
 
@@ -60,6 +68,7 @@ export const getPatchMeResponseMock = (
     faker.string.alpha({ length: { min: 10, max: 20 } }),
     undefined,
   ]),
+  mfaEnabled: faker.helpers.arrayElement([faker.datatype.boolean(), undefined]),
   ...overrideResponse,
 });
 
@@ -78,3 +87,60 @@ export const getGetMeSessionsResponseMock = (): Session[] =>
     lastSeenAt: faker.date.past().toISOString().slice(0, 19) + 'Z',
     current: faker.datatype.boolean(),
   }));
+
+export const getGetMeMfaResponseMock = (
+  overrideResponse: Partial<Extract<MfaStatus, object>> = {}
+): MfaStatus => ({
+  factors: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(
+    () => ({
+      id: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      type: faker.helpers.arrayElement(['totp', 'webauthn'] as const),
+      name: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      createdAt: faker.date.past().toISOString().slice(0, 19) + 'Z',
+    })
+  ),
+  recoveryCodesRemaining: faker.number.int(),
+  required: faker.datatype.boolean(),
+  ...overrideResponse,
+});
+
+export const getPostMeMfaTotpResponseMock = (
+  overrideResponse: Partial<Extract<TotpEnrollment, object>> = {}
+): TotpEnrollment => ({
+  factorId: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  secret: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  otpauthUrl: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  ...overrideResponse,
+});
+
+export const getPostMeMfaTotpFactorIdConfirmResponseMock = (
+  overrideResponse: Partial<Extract<TotpConfirmResult, object>> = {}
+): TotpConfirmResult => ({
+  factor: {
+    id: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    type: faker.helpers.arrayElement(['totp', 'webauthn'] as const),
+    name: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    createdAt: faker.date.past().toISOString().slice(0, 19) + 'Z',
+  },
+  recoveryCodes: faker.helpers.arrayElement([
+    Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() =>
+      faker.string.alpha({ length: { min: 10, max: 20 } })
+    ),
+    undefined,
+  ]),
+  accessToken: faker.helpers.arrayElement([
+    faker.string.alpha({ length: { min: 10, max: 20 } }),
+    undefined,
+  ]),
+  expiresIn: faker.helpers.arrayElement([faker.number.int(), undefined]),
+  ...overrideResponse,
+});
+
+export const getPostMeMfaRecoveryCodesResponseMock = (
+  overrideResponse: Partial<Extract<PostMeMfaRecoveryCodes200, object>> = {}
+): PostMeMfaRecoveryCodes200 => ({
+  recoveryCodes: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(
+    () => faker.string.alpha({ length: { min: 10, max: 20 } })
+  ),
+  ...overrideResponse,
+});

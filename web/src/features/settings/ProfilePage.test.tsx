@@ -39,6 +39,17 @@ vi.mock('../../api/generated/me/me', () => ({
   getMeSessions: vi.fn(() => Promise.resolve([])),
   deleteMeSessionsSessionId: revokeSessionMock,
   getGetMeSessionsQueryKey: () => ['getMeSessions'],
+  useGetMeMfa: () => ({
+    data: { factors: [], recoveryCodesRemaining: 0, required: false },
+    isLoading: false,
+    isError: false,
+    refetch: vi.fn(),
+  }),
+  getGetMeMfaQueryKey: () => ['getMeMfa'],
+  postMeMfaTotp: vi.fn(),
+  postMeMfaTotpFactorIdConfirm: vi.fn(),
+  postMeMfaRecoveryCodes: vi.fn(),
+  deleteMeMfaFactorsFactorId: vi.fn(),
 }));
 
 vi.mock('../../api/generated/auth/auth', () => ({

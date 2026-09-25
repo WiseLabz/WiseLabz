@@ -122,6 +122,25 @@ func TestRunMigrationsDown(t *testing.T) {
 		t.Fatalf("RunMigrations() error: %v", err)
 	}
 
+	// 000042_mfa is the latest migration, so it must be the first one rolled
+	// back, ahead of 000041_connector_grant_source below.
+	var mfaFactorsTable string
+	if err := db.QueryRow("SELECT name FROM sqlite_master WHERE type='table' AND name='user_mfa_factors'").Scan(&mfaFactorsTable); err != nil {
+		t.Fatalf("user_mfa_factors table missing after migrations: %v", err)
+	}
+	if !hasColumn(t, db, "sqlite", "auth_config", "require_2fa") {
+		t.Fatal("auth_config.require_2fa missing after migrations")
+	}
+	if err := RunMigrationsDown(db, "sqlite", logger); err != nil {
+		t.Fatalf("RunMigrationsDown() mfa error: %v", err)
+	}
+	if err := db.QueryRow("SELECT name FROM sqlite_master WHERE type='table' AND name='user_mfa_factors'").Scan(&mfaFactorsTable); !errors.Is(err, sql.ErrNoRows) {
+		t.Errorf("user_mfa_factors should not exist after rolling back mfa (err=%v)", err)
+	}
+	if hasColumn(t, db, "sqlite", "auth_config", "require_2fa") {
+		t.Error("auth_config.require_2fa should not exist after rolling back mfa")
+	}
+
 	if !hasColumn(t, db, "sqlite", "user_connector_roles", "source") {
 		t.Fatal("user_connector_roles.source missing after migrations")
 	}
@@ -291,6 +310,16 @@ func TestRunMigrationsDown(t *testing.T) {
 	if err := db.QueryRow("SELECT name FROM sqlite_master WHERE type='table' AND name='job_health'").Scan(&jobHealthTable); err != nil {
 		t.Fatalf("job_health table missing after reapply: %v", err)
 	}
+	if err := db.QueryRow("SELECT name FROM sqlite_master WHERE type='table' AND name='user_mfa_factors'").Scan(&mfaFactorsTable); err != nil {
+		t.Fatalf("user_mfa_factors table missing after reapply: %v", err)
+	}
+	if err := RunMigrationsDown(db, "sqlite", logger); err != nil {
+		t.Fatalf("RunMigrationsDown() after reapply, mfa error: %v", err)
+	}
+	if err := db.QueryRow("SELECT name FROM sqlite_master WHERE type='table' AND name='user_mfa_factors'").Scan(&mfaFactorsTable); !errors.Is(err, sql.ErrNoRows) {
+		t.Errorf("user_mfa_factors should not exist after rolling back mfa (err=%v)", err)
+	}
+
 	if !hasColumn(t, db, "sqlite", "user_connector_roles", "source") {
 		t.Fatal("user_connector_roles.source missing after reapply")
 	}
@@ -509,6 +538,23 @@ func TestRunMigrationsDownPostgres(t *testing.T) {
 	if err := RunMigrations(db, "postgres", logger); err != nil {
 		t.Fatalf("RunMigrations() error: %v", err)
 	}
+	var mfaFactorsTable string
+	if err := db.QueryRow(`SELECT table_name FROM information_schema.tables WHERE table_schema = current_schema() AND table_name = 'user_mfa_factors'`).Scan(&mfaFactorsTable); err != nil {
+		t.Fatalf("user_mfa_factors table missing after migrations: %v", err)
+	}
+	if !hasColumn(t, db, "postgres", "auth_config", "require_2fa") {
+		t.Fatal("auth_config.require_2fa missing after migrations")
+	}
+	if err := RunMigrationsDown(db, "postgres", logger); err != nil {
+		t.Fatalf("RunMigrationsDown() mfa error: %v", err)
+	}
+	if err := db.QueryRow(`SELECT table_name FROM information_schema.tables WHERE table_schema = current_schema() AND table_name = 'user_mfa_factors'`).Scan(&mfaFactorsTable); !errors.Is(err, sql.ErrNoRows) {
+		t.Errorf("user_mfa_factors should not exist after rolling back mfa (err=%v)", err)
+	}
+	if hasColumn(t, db, "postgres", "auth_config", "require_2fa") {
+		t.Error("auth_config.require_2fa should not exist after rolling back mfa")
+	}
+
 	if !hasColumn(t, db, "postgres", "user_connector_roles", "source") {
 		t.Fatal("user_connector_roles.source missing after migrations")
 	}
@@ -518,6 +564,7 @@ func TestRunMigrationsDownPostgres(t *testing.T) {
 	if hasColumn(t, db, "postgres", "user_connector_roles", "source") {
 		t.Error("user_connector_roles.source should not exist after rolling back connector_grant_source")
 	}
+
 	for _, col := range []string{"scope", "connector_ids"} {
 		if !hasColumn(t, db, "postgres", "api_keys", col) {
 			t.Fatalf("api_keys.%s missing after migrations", col)

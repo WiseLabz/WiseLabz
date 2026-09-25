@@ -12,6 +12,8 @@ export type GetAuthElevateMethods200MethodsItem =
 
 export const GetAuthElevateMethods200MethodsItem = {
   password: 'password',
-  oidc: 'oidc',
   totp: 'totp',
+  recovery: 'recovery',
+  webauthn: 'webauthn',
+  oidc: 'oidc',
 } as const;
