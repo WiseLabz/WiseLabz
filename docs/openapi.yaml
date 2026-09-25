@@ -171,11 +171,12 @@ paths:
   /auth/elevate/methods:
     get:
       tags: [auth]
-      summary: Which step-up factors the caller can use
+      summary: Which step-up method(s) POST /auth/elevate expects
       description: >
-        `["password"]` for a local account, `["oidc"]` for one that signs in
-        through an identity provider (#279 part 3). #279 part 1 (TOTP) extends
-        this to include `"totp"` once a user has a second factor enrolled.
+        `["password"]` for a local account without a confirmed factor,
+        `["totp","recovery"]` once one is confirmed (#279 part 1), or
+        `["oidc"]` for an account that signs in through an identity provider
+        (#279 part 3). PR 2 appends `"webauthn"` alongside totp/recovery.
       responses:
         '200':
           description: OK
@@ -187,7 +188,7 @@ paths:
                 properties:
                   methods:
                     type: array
-                    items: { type: string, enum: [password, oidc, totp] }
+                    items: { type: string, enum: [password, totp, recovery, webauthn, oidc] }
         '401': { $ref: '#/components/responses/Unauthorized' }
   /auth/elevate/oidc/begin:
     post:
@@ -249,26 +250,6 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/ElevationToken' }
         '401': { $ref: '#/components/responses/Unauthorized' }
-  /auth/elevate/methods:
-    get:
-      tags: [auth]
-      summary: Which step-up method(s) POST /auth/elevate expects
-      description: >
-        `["password"]` for a user without a confirmed factor, or
-        `["totp","recovery"]` once they have one (#279). PR 2 appends
-        "webauthn" and PR 3 appends "oidc".
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [methods]
-                properties:
-                  methods:
-                    type: array
-                    items: { type: string, enum: [password, totp, recovery, webauthn, oidc] }
   /auth/api-keys:
     get:
       tags: [auth]

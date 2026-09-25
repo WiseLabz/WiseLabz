@@ -33,18 +33,13 @@ export function StepUp({
 
   const methods = data?.methods ?? ['password'];
 
-  if (isLoading) {
-    return <SkeletonRows rows={1} className="rounded-md border border-line-soft bg-canvas-sunken p-3" />;
-  }
-
-  if (methods.includes('oidc')) {
-    return <OIDCStepUp action={action} onElevated={onElevated} />;
-  }
-
   // methods is ["password"] or ["totp","recovery"] (see GET /auth/elevate/methods);
   // default to the first once loaded, but let the caller switch to recovery.
   const activeMode = mode ?? (methods.includes('totp') ? 'totp' : 'password');
 
+  // Hooks must run unconditionally on every render, so useMutation is
+  // declared before the isLoading/oidc early returns below — it's simply
+  // unused in those branches.
   const elevate = useMutation({
     mutationFn: () =>
       postAuthElevate(
@@ -56,6 +51,14 @@ export function StepUp({
       ),
     onSuccess: (res) => onElevated(res.token),
   });
+
+  if (isLoading) {
+    return <SkeletonRows rows={1} className="rounded-md border border-line-soft bg-canvas-sunken p-3" />;
+  }
+
+  if (methods.includes('oidc')) {
+    return <OIDCStepUp action={action} onElevated={onElevated} />;
+  }
 
   const label =
     activeMode === 'password'

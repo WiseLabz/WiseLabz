@@ -20,6 +20,7 @@ import type {
   ElevationToken,
   GetAuthElevateMethods200,
   LoginMfaRequired,
+  PostAuthElevateOidcBegin200,
 } from '../../model';
 
 export const getGetAuthProvidersResponseMock = (
@@ -199,6 +200,21 @@ export const getGetAuthElevateMethodsResponseMock = (
     'webauthn',
     'oidc',
   ] as const),
+  ...overrideResponse,
+});
+
+export const getPostAuthElevateOidcBeginResponseMock = (
+  overrideResponse: Partial<Extract<PostAuthElevateOidcBegin200, object>> = {}
+): PostAuthElevateOidcBegin200 => ({
+  authUrl: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  ...overrideResponse,
+});
+
+export const getPostAuthElevateOidcCompleteResponseMock = (
+  overrideResponse: Partial<Extract<ElevationToken, object>> = {}
+): ElevationToken => ({
+  token: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  expiresAt: faker.date.past().toISOString().slice(0, 19) + 'Z',
   ...overrideResponse,
 });
 
@@ -440,6 +456,54 @@ export const getGetAuthElevateMethodsMockHandler = (
   );
 };
 
+export const getPostAuthElevateOidcBeginMockHandler = (
+  overrideResponse?:
+    | PostAuthElevateOidcBegin200
+    | ((
+        info: Parameters<Parameters<typeof http.post>[1]>[0]
+      ) => Promise<PostAuthElevateOidcBegin200> | PostAuthElevateOidcBegin200),
+  options?: RequestHandlerOptions
+) => {
+  return http.post(
+    '*/auth/elevate/oidc/begin',
+    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+      return HttpResponse.json(
+        overrideResponse !== undefined
+          ? typeof overrideResponse === 'function'
+            ? await overrideResponse(info)
+            : overrideResponse
+          : getPostAuthElevateOidcBeginResponseMock(),
+        { status: 200 }
+      );
+    },
+    options
+  );
+};
+
+export const getPostAuthElevateOidcCompleteMockHandler = (
+  overrideResponse?:
+    | ElevationToken
+    | ((
+        info: Parameters<Parameters<typeof http.post>[1]>[0]
+      ) => Promise<ElevationToken> | ElevationToken),
+  options?: RequestHandlerOptions
+) => {
+  return http.post(
+    '*/auth/elevate/oidc/complete',
+    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+      return HttpResponse.json(
+        overrideResponse !== undefined
+          ? typeof overrideResponse === 'function'
+            ? await overrideResponse(info)
+            : overrideResponse
+          : getPostAuthElevateOidcCompleteResponseMock(),
+        { status: 200 }
+      );
+    },
+    options
+  );
+};
+
 export const getGetAuthApiKeysMockHandler = (
   overrideResponse?:
     | ApiKey[]
@@ -513,6 +577,8 @@ export const getAuthMock = () => [
   getPostAuthLogoutMockHandler(),
   getPostAuthElevateMockHandler(),
   getGetAuthElevateMethodsMockHandler(),
+  getPostAuthElevateOidcBeginMockHandler(),
+  getPostAuthElevateOidcCompleteMockHandler(),
   getGetAuthApiKeysMockHandler(),
   getPostAuthApiKeysMockHandler(),
   getDeleteAuthApiKeysIdMockHandler(),

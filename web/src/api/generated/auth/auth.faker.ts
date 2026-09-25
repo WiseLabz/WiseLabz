@@ -17,6 +17,7 @@ import type {
   ElevationToken,
   GetAuthElevateMethods200,
   LoginMfaRequired,
+  PostAuthElevateOidcBegin200,
 } from '../../model';
 
 export const getGetAuthProvidersResponseMock = (
@@ -196,6 +197,21 @@ export const getGetAuthElevateMethodsResponseMock = (
     'webauthn',
     'oidc',
   ] as const),
+  ...overrideResponse,
+});
+
+export const getPostAuthElevateOidcBeginResponseMock = (
+  overrideResponse: Partial<Extract<PostAuthElevateOidcBegin200, object>> = {}
+): PostAuthElevateOidcBegin200 => ({
+  authUrl: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  ...overrideResponse,
+});
+
+export const getPostAuthElevateOidcCompleteResponseMock = (
+  overrideResponse: Partial<Extract<ElevationToken, object>> = {}
+): ElevationToken => ({
+  token: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  expiresAt: faker.date.past().toISOString().slice(0, 19) + 'Z',
   ...overrideResponse,
 });
 
