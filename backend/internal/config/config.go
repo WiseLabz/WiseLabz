@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/robfig/cron/v3"
 	"github.com/spf13/viper"
 )
@@ -130,15 +131,19 @@ func (a AuthSettings) RefreshTokenTTLDuration() time.Duration {
 
 // OIDCProvider defines an OIDC provider from the config file.
 type OIDCProvider struct {
-	ID                   string            `mapstructure:"id"`
-	DisplayName          string            `mapstructure:"display_name"`
-	IssuerURL            string            `mapstructure:"issuer_url"`
-	ClientID             string            `mapstructure:"client_id"`
-	ClientSecret         string            `mapstructure:"client_secret"`
-	Scopes               []string          `mapstructure:"scopes"`
-	GroupsClaim          string            `mapstructure:"groups_claim"`
-	GroupRoleMapping     map[string]string `mapstructure:"group_role_mapping"`
-	EmailDomainAllowlist []string          `mapstructure:"email_domain_allowlist"`
+	ID               string            `mapstructure:"id"`
+	DisplayName      string            `mapstructure:"display_name"`
+	IssuerURL        string            `mapstructure:"issuer_url"`
+	ClientID         string            `mapstructure:"client_id"`
+	ClientSecret     string            `mapstructure:"client_secret"`
+	Scopes           []string          `mapstructure:"scopes"`
+	GroupsClaim      string            `mapstructure:"groups_claim"`
+	GroupRoleMapping map[string]string `mapstructure:"group_role_mapping"`
+	// GroupConnectorRoles maps an IdP group to per-connector roles, keyed by
+	// connector UUID or "*" for every connector (#279 part 3). Distinct from
+	// GroupRoleMapping, which only ever grants the flat instance-admin role.
+	GroupConnectorRoles  map[string]map[string]string `mapstructure:"group_connector_roles"`
+	EmailDomainAllowlist []string                     `mapstructure:"email_domain_allowlist"`
 }
 
 // AISettings holds AI module settings.
@@ -395,6 +400,9 @@ func Load() (*Config, error) {
 	if err := cfg.validateCronExpressions(); err != nil {
 		return nil, err
 	}
+	if err := cfg.validateOIDCGroupConnectorRoles(); err != nil {
+		return nil, err
+	}
 	if cfg.Server.PublicURL != "" {
 		u, err := url.Parse(cfg.Server.PublicURL)
 		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
@@ -433,5 +441,27 @@ func (c *Config) validateCronExpressions() error {
 		}
 	}
 
+	return nil
+}
+
+// validateOIDCGroupConnectorRoles checks every auth.oidc[].group_connector_roles
+// entry: the connector key must be "*" or a UUID, and the role must be
+// "viewer" or "operator" (#279 part 3). Fails startup on the first invalid
+// value, the same way validateCronExpressions rejects a bad cron expression.
+func (c *Config) validateOIDCGroupConnectorRoles() error {
+	for _, provider := range c.Auth.OIDC {
+		for group, connectorRoles := range provider.GroupConnectorRoles {
+			for connectorID, role := range connectorRoles {
+				if connectorID != "*" {
+					if _, err := uuid.Parse(connectorID); err != nil {
+						return fmt.Errorf("auth.oidc[%s].group_connector_roles[%s]: connector key %q must be \"*\" or a UUID", provider.ID, group, connectorID)
+					}
+				}
+				if !strings.EqualFold(role, "viewer") && !strings.EqualFold(role, "operator") {
+					return fmt.Errorf("auth.oidc[%s].group_connector_roles[%s][%s]: role %q must be \"viewer\" or \"operator\"", provider.ID, group, connectorID, role)
+				}
+			}
+		}
+	}
 	return nil
 }

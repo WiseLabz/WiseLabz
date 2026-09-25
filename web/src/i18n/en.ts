@@ -421,6 +421,8 @@ export const en = {
       addUserPlaceholder: 'Add a user…',
       addUser: 'Add',
       error: "Couldn't update permissions.",
+      viaSso: 'via SSO',
+      viaSsoHint: "Synced from this user's identity provider group at login; edit their IdP group membership instead.",
     },
   },
   changes: {

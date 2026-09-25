@@ -121,6 +121,15 @@ func (h *Handler) Elevate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// OIDC users have no local password to verify; misreporting this as
+	// "Invalid password" would tell them to keep retrying a password they
+	// don't have. They re-authenticate through POST /auth/elevate/oidc/begin
+	// instead (#279 part 3).
+	if user.AuthSource == "oidc" {
+		httputil.Error(w, http.StatusBadRequest, "use_oidc_reauth", "This account signs in through your identity provider; re-authenticate with POST /auth/elevate/oidc/begin instead")
+		return
+	}
+
 	if err := auth.VerifyPassword(user.PasswordHash, req.Password); err != nil {
 		httputil.Error(w, http.StatusUnauthorized, "unauthorized", "Invalid password")
 		return
@@ -140,6 +149,28 @@ func (h *Handler) Elevate(w http.ResponseWriter, r *http.Request) {
 		"token":     token.Token,
 		"expiresAt": token.ExpiresAt.Format(time.RFC3339),
 	})
+}
+
+// ElevateMethods handles GET /api/auth/elevate/methods.
+//
+// Minimal version for #279 part 3: reports the one factor available to the
+// caller today, "password" for a local account or "oidc" for one that
+// signs in through an IdP. #279 part 1 (TOTP) extends this to a list that
+// can include "totp" alongside "password" once a user has enrolled a
+// second factor — coordinate via rebase (see .claude/plans/279/README.md).
+func (h *Handler) ElevateMethods(w http.ResponseWriter, r *http.Request) {
+	userID := auth.UserIDFromContext(r.Context())
+	user, err := h.Store.GetUserByID(r.Context(), userID)
+	if err != nil {
+		httputil.Error(w, http.StatusUnauthorized, "unauthorized", "User not found")
+		return
+	}
+
+	method := "password"
+	if user.AuthSource == "oidc" {
+		method = "oidc"
+	}
+	httputil.JSON(w, http.StatusOK, map[string]any{"methods": []string{method}})
 }
 
 // ListSessions handles GET /api/me/sessions.

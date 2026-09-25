@@ -18,6 +18,8 @@ import type {
   AuthProviders,
   AuthSession,
   ElevationToken,
+  GetAuthElevateMethods200,
+  PostAuthElevateOidcBegin200,
 } from '../../model';
 
 export const getGetAuthProvidersResponseMock = (
@@ -123,6 +125,28 @@ export const getPostAuthRefreshResponseMock = (
 });
 
 export const getPostAuthElevateResponseMock = (
+  overrideResponse: Partial<Extract<ElevationToken, object>> = {}
+): ElevationToken => ({
+  token: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  expiresAt: faker.date.past().toISOString().slice(0, 19) + 'Z',
+  ...overrideResponse,
+});
+
+export const getGetAuthElevateMethodsResponseMock = (
+  overrideResponse: Partial<Extract<GetAuthElevateMethods200, object>> = {}
+): GetAuthElevateMethods200 => ({
+  methods: faker.helpers.arrayElements(['password', 'oidc', 'totp'] as const),
+  ...overrideResponse,
+});
+
+export const getPostAuthElevateOidcBeginResponseMock = (
+  overrideResponse: Partial<Extract<PostAuthElevateOidcBegin200, object>> = {}
+): PostAuthElevateOidcBegin200 => ({
+  authUrl: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  ...overrideResponse,
+});
+
+export const getPostAuthElevateOidcCompleteResponseMock = (
   overrideResponse: Partial<Extract<ElevationToken, object>> = {}
 ): ElevationToken => ({
   token: faker.string.alpha({ length: { min: 10, max: 20 } }),
@@ -319,6 +343,78 @@ export const getPostAuthElevateMockHandler = (
   );
 };
 
+export const getGetAuthElevateMethodsMockHandler = (
+  overrideResponse?:
+    | GetAuthElevateMethods200
+    | ((
+        info: Parameters<Parameters<typeof http.get>[1]>[0]
+      ) => Promise<GetAuthElevateMethods200> | GetAuthElevateMethods200),
+  options?: RequestHandlerOptions
+) => {
+  return http.get(
+    '*/auth/elevate/methods',
+    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+      return HttpResponse.json(
+        overrideResponse !== undefined
+          ? typeof overrideResponse === 'function'
+            ? await overrideResponse(info)
+            : overrideResponse
+          : getGetAuthElevateMethodsResponseMock(),
+        { status: 200 }
+      );
+    },
+    options
+  );
+};
+
+export const getPostAuthElevateOidcBeginMockHandler = (
+  overrideResponse?:
+    | PostAuthElevateOidcBegin200
+    | ((
+        info: Parameters<Parameters<typeof http.post>[1]>[0]
+      ) => Promise<PostAuthElevateOidcBegin200> | PostAuthElevateOidcBegin200),
+  options?: RequestHandlerOptions
+) => {
+  return http.post(
+    '*/auth/elevate/oidc/begin',
+    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+      return HttpResponse.json(
+        overrideResponse !== undefined
+          ? typeof overrideResponse === 'function'
+            ? await overrideResponse(info)
+            : overrideResponse
+          : getPostAuthElevateOidcBeginResponseMock(),
+        { status: 200 }
+      );
+    },
+    options
+  );
+};
+
+export const getPostAuthElevateOidcCompleteMockHandler = (
+  overrideResponse?:
+    | ElevationToken
+    | ((
+        info: Parameters<Parameters<typeof http.post>[1]>[0]
+      ) => Promise<ElevationToken> | ElevationToken),
+  options?: RequestHandlerOptions
+) => {
+  return http.post(
+    '*/auth/elevate/oidc/complete',
+    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+      return HttpResponse.json(
+        overrideResponse !== undefined
+          ? typeof overrideResponse === 'function'
+            ? await overrideResponse(info)
+            : overrideResponse
+          : getPostAuthElevateOidcCompleteResponseMock(),
+        { status: 200 }
+      );
+    },
+    options
+  );
+};
+
 export const getGetAuthApiKeysMockHandler = (
   overrideResponse?:
     | ApiKey[]
@@ -390,6 +486,9 @@ export const getAuthMock = () => [
   getPostAuthRefreshMockHandler(),
   getPostAuthLogoutMockHandler(),
   getPostAuthElevateMockHandler(),
+  getGetAuthElevateMethodsMockHandler(),
+  getPostAuthElevateOidcBeginMockHandler(),
+  getPostAuthElevateOidcCompleteMockHandler(),
   getGetAuthApiKeysMockHandler(),
   getPostAuthApiKeysMockHandler(),
   getDeleteAuthApiKeysIdMockHandler(),

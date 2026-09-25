@@ -725,10 +725,22 @@ export const getPostSyncResponseMock = (
 
 export const getGetConnectorsConnectorIdPermissionsResponseMock =
   (): GetConnectorsConnectorIdPermissions200Item[] =>
-    Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() => ({}));
+    Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() => ({
+      source: faker.helpers.arrayElement([
+        faker.helpers.arrayElement(['manual', 'oidc'] as const),
+        undefined,
+      ]),
+    }));
 
-export const getPutConnectorsConnectorIdPermissionsUserIdResponseMock =
-  (): PutConnectorsConnectorIdPermissionsUserId200 => ({});
+export const getPutConnectorsConnectorIdPermissionsUserIdResponseMock = (
+  overrideResponse: Partial<Extract<PutConnectorsConnectorIdPermissionsUserId200, object>> = {}
+): PutConnectorsConnectorIdPermissionsUserId200 => ({
+  source: faker.helpers.arrayElement([
+    faker.helpers.arrayElement(['manual', 'oidc'] as const),
+    undefined,
+  ]),
+  ...overrideResponse,
+});
 
 export const getGetConnectorsMockHandler = (
   overrideResponse?:

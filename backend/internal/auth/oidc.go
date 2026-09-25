@@ -32,6 +32,16 @@ type OIDCClaims struct {
 	Name          string   `json:"name"`
 	PreferredName string   `json:"preferred_username"`
 	Groups        []string `json:"-"`
+	// AuthTime is the IdP's `auth_time` claim: when the end-user last
+	// actively authenticated, in Unix seconds. Used by OIDC step-up
+	// (#279 part 3) to confirm a re-auth actually just happened; some IdPs
+	// omit it unless the request carries max_age, which the step-up flow
+	// always sets.
+	AuthTime int64 `json:"auth_time"`
+	// AMR/ACR are captured for future use (enforcing IdP MFA claims is out
+	// of scope for #279 part 3) but not otherwise validated yet.
+	AMR []string `json:"amr"`
+	ACR string   `json:"acr"`
 }
 
 // Initialize discovers the OIDC provider and configures the OAuth2 client.
@@ -64,6 +74,15 @@ func (p *OIDCProvider) Initialize(ctx context.Context) error {
 // redirectURL is the callback URL for this authentication flow.
 func (p *OIDCProvider) AuthURL(state, nonce, redirectURL string) string {
 	return p.configFor(redirectURL).AuthCodeURL(state, oidc.Nonce(nonce))
+}
+
+// AuthURLWithOptions is AuthURL with extra authorization-request parameters,
+// e.g. `prompt=login` and `max_age=0` to force the IdP to re-prompt for
+// credentials during OIDC step-up (#279 part 3) instead of silently
+// reusing the browser's existing IdP session.
+func (p *OIDCProvider) AuthURLWithOptions(state, nonce, redirectURL string, opts ...oauth2.AuthCodeOption) string {
+	allOpts := append([]oauth2.AuthCodeOption{oidc.Nonce(nonce)}, opts...)
+	return p.configFor(redirectURL).AuthCodeURL(state, allOpts...)
 }
 
 // configFor returns a per-flow copy of the OAuth2 config carrying redirectURL,

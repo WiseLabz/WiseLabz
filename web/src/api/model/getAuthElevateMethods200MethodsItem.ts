@@ -6,9 +6,12 @@
  *
  * OpenAPI spec version: 0.1.0
  */
-import type { PutConnectorsConnectorIdPermissionsUserId200Source } from './putConnectorsConnectorIdPermissionsUserId200Source';
 
-export type PutConnectorsConnectorIdPermissionsUserId200 = {
-  source?: PutConnectorsConnectorIdPermissionsUserId200Source;
-  [key: string]: unknown;
-};
+export type GetAuthElevateMethods200MethodsItem =
+  (typeof GetAuthElevateMethods200MethodsItem)[keyof typeof GetAuthElevateMethods200MethodsItem];
+
+export const GetAuthElevateMethods200MethodsItem = {
+  password: 'password',
+  oidc: 'oidc',
+  totp: 'totp',
+} as const;

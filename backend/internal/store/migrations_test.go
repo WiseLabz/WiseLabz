@@ -122,6 +122,16 @@ func TestRunMigrationsDown(t *testing.T) {
 		t.Fatalf("RunMigrations() error: %v", err)
 	}
 
+	if !hasColumn(t, db, "sqlite", "user_connector_roles", "source") {
+		t.Fatal("user_connector_roles.source missing after migrations")
+	}
+	if err := RunMigrationsDown(db, "sqlite", logger); err != nil {
+		t.Fatalf("RunMigrationsDown() connector_grant_source error: %v", err)
+	}
+	if hasColumn(t, db, "sqlite", "user_connector_roles", "source") {
+		t.Error("user_connector_roles.source should not exist after rolling back connector_grant_source")
+	}
+
 	var reportsTable string
 	if err := db.QueryRow("SELECT name FROM sqlite_master WHERE type='table' AND name='reports'").Scan(&reportsTable); err != nil {
 		t.Fatalf("reports table missing after migrations: %v", err)
@@ -280,6 +290,15 @@ func TestRunMigrationsDown(t *testing.T) {
 	}
 	if err := db.QueryRow("SELECT name FROM sqlite_master WHERE type='table' AND name='job_health'").Scan(&jobHealthTable); err != nil {
 		t.Fatalf("job_health table missing after reapply: %v", err)
+	}
+	if !hasColumn(t, db, "sqlite", "user_connector_roles", "source") {
+		t.Fatal("user_connector_roles.source missing after reapply")
+	}
+	if err := RunMigrationsDown(db, "sqlite", logger); err != nil {
+		t.Fatalf("RunMigrationsDown() after reapply, connector_grant_source error: %v", err)
+	}
+	if hasColumn(t, db, "sqlite", "user_connector_roles", "source") {
+		t.Error("user_connector_roles.source should not exist after rolling back connector_grant_source (after reapply)")
 	}
 	if err := RunMigrationsDown(db, "sqlite", logger); err != nil {
 		t.Fatalf("RunMigrationsDown() after reapply, api_key_scopes error: %v", err)
@@ -489,6 +508,15 @@ func TestRunMigrationsDownPostgres(t *testing.T) {
 
 	if err := RunMigrations(db, "postgres", logger); err != nil {
 		t.Fatalf("RunMigrations() error: %v", err)
+	}
+	if !hasColumn(t, db, "postgres", "user_connector_roles", "source") {
+		t.Fatal("user_connector_roles.source missing after migrations")
+	}
+	if err := RunMigrationsDown(db, "postgres", logger); err != nil {
+		t.Fatalf("RunMigrationsDown() connector_grant_source error: %v", err)
+	}
+	if hasColumn(t, db, "postgres", "user_connector_roles", "source") {
+		t.Error("user_connector_roles.source should not exist after rolling back connector_grant_source")
 	}
 	for _, col := range []string{"scope", "connector_ids"} {
 		if !hasColumn(t, db, "postgres", "api_keys", col) {

@@ -129,6 +129,95 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ElevationToken' }
+        '400':
+          description: >
+            The account signs in through an OIDC provider and has no password;
+            use `code: "use_oidc_reauth"` to route the client to
+            POST /auth/elevate/oidc/begin instead.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /auth/elevate/methods:
+    get:
+      tags: [auth]
+      summary: Which step-up factors the caller can use
+      description: >
+        `["password"]` for a local account, `["oidc"]` for one that signs in
+        through an identity provider (#279 part 3). #279 part 1 (TOTP) extends
+        this to include `"totp"` once a user has a second factor enrolled.
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [methods]
+                properties:
+                  methods:
+                    type: array
+                    items: { type: string, enum: [password, oidc, totp] }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /auth/elevate/oidc/begin:
+    post:
+      tags: [auth]
+      summary: Start OIDC step-up re-authentication (#279 part 3)
+      description: >
+        For a caller whose account signs in through an IdP and has no password
+        to confirm with POST /auth/elevate. Returns an authorize URL — opened
+        in a popup — that forces the IdP to re-prompt for credentials
+        (`prompt=login`, `max_age=0`) instead of silently reusing an existing
+        IdP session. Uses the normal `/auth/callback` redirect URL, so no new
+        IdP redirect URI registration is needed.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action]
+              properties:
+                action: { type: string, description: "The elevation action being requested, e.g. connector.delete" }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [authUrl]
+                properties:
+                  authUrl: { type: string }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /auth/elevate/oidc/complete:
+    post:
+      tags: [auth]
+      summary: Finish OIDC step-up re-authentication (#279 part 3)
+      description: >
+        Exchanges the popup's authorization code, requires the re-authenticated
+        `iss`/`sub` to match the caller's linked OIDC identity, and requires
+        `auth_time` to be present and within 120s of now. Returns
+        `401 {code: "oidc_reauth_unsupported"}` when the IdP omits `auth_time`.
+        On success, mints the same elevation token POST /auth/elevate would.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code, state]
+              properties:
+                code: { type: string }
+                state: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ElevationToken' }
         '401': { $ref: '#/components/responses/Unauthorized' }
   /auth/api-keys:
     get:
@@ -2726,19 +2815,33 @@ paths:
     get:
       tags: [connectors]
       summary: List per-connector access grants (instance-admin only)
+      description: >
+        One row per (user, source) pair — a user with both a manual grant and
+        an OIDC group->connector-role sync can appear twice, once per `source`
+        (#279 part 3). `source: "oidc"` rows are read-only: they're revoked by
+        the user's IdP group membership at their next login, not by this API.
       parameters: [{ $ref: '#/components/parameters/ConnectorId' }]
       responses:
         '200':
           description: OK
           content:
             application/json:
-              schema: { type: array, items: { type: object, additionalProperties: true } }
+              schema:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: true
+                  properties:
+                    source: { type: string, enum: [manual, oidc], description: How the grant was created; see the endpoint description. }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
   /connectors/{connectorId}/permissions/{userId}:
     put:
       tags: [connectors]
-      summary: Grant or change a user's role on a connector (instance-admin only)
+      summary: Grant or change a user's manual role on a connector (instance-admin only)
+      description: >
+        Always acts on the `source: "manual"` grant; never touches an `oidc`
+        row synced for the same user/connector pair (#279 part 3).
       parameters:
         - { $ref: '#/components/parameters/ConnectorId' }
         - { $ref: '#/components/parameters/UserId' }
@@ -2756,13 +2859,21 @@ paths:
           description: The resulting grant
           content:
             application/json:
-              schema: { type: object, additionalProperties: true }
+              schema:
+                type: object
+                additionalProperties: true
+                properties:
+                  source: { type: string, enum: [manual, oidc] }
         '400': { $ref: '#/components/responses/BadRequest' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
     delete:
       tags: [connectors]
-      summary: Revoke a user's grant on a connector (instance-admin only)
+      summary: Revoke a user's manual grant on a connector (instance-admin only)
+      description: >
+        Always acts on the `source: "manual"` grant; an `oidc` row synced for
+        the same pair, if any, is untouched and still governs access until the
+        user's next login (#279 part 3).
       parameters:
         - { $ref: '#/components/parameters/ConnectorId' }
         - { $ref: '#/components/parameters/UserId' }

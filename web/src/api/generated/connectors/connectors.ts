@@ -4617,6 +4617,7 @@ export function usePostSync<
 }
 
 /**
+ * One row per (user, source) pair — a user with both a manual grant and an OIDC group->connector-role sync can appear twice, once per `source` (#279 part 3). `source: "oidc"` rows are read-only: they're revoked by the user's IdP group membership at their next login, not by this API.
  * @summary List per-connector access grants (instance-admin only)
  */
 export const getConnectorsConnectorIdPermissions = (
@@ -4776,7 +4777,8 @@ export function useGetConnectorsConnectorIdPermissions<
 }
 
 /**
- * @summary Grant or change a user's role on a connector (instance-admin only)
+ * Always acts on the `source: "manual"` grant; never touches an `oidc` row synced for the same user/connector pair (#279 part 3).
+ * @summary Grant or change a user's manual role on a connector (instance-admin only)
  */
 export const putConnectorsConnectorIdPermissionsUserId = (
   connectorId: string,
@@ -4942,7 +4944,7 @@ export function usePutConnectorsConnectorIdPermissionsUserId<
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
- * @summary Grant or change a user's role on a connector (instance-admin only)
+ * @summary Grant or change a user's manual role on a connector (instance-admin only)
  */
 
 export function usePutConnectorsConnectorIdPermissionsUserId<
@@ -4979,7 +4981,8 @@ export function usePutConnectorsConnectorIdPermissionsUserId<
 }
 
 /**
- * @summary Revoke a user's grant on a connector (instance-admin only)
+ * Always acts on the `source: "manual"` grant; an `oidc` row synced for the same pair, if any, is untouched and still governs access until the user's next login (#279 part 3).
+ * @summary Revoke a user's manual grant on a connector (instance-admin only)
  */
 export const deleteConnectorsConnectorIdPermissionsUserId = (
   connectorId: string,
@@ -5119,7 +5122,7 @@ export function useDeleteConnectorsConnectorIdPermissionsUserId<
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
- * @summary Revoke a user's grant on a connector (instance-admin only)
+ * @summary Revoke a user's manual grant on a connector (instance-admin only)
  */
 
 export function useDeleteConnectorsConnectorIdPermissionsUserId<

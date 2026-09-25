@@ -44,6 +44,19 @@ auth:
   #       - openid
   #       - profile
   #       - email
+  #     groups_claim: groups
+  #     # Maps an IdP group to the flat instance-admin role ("admin" logs
+  #     # in as an instance admin; anything else is a regular user).
+  #     group_role_mapping:
+  #       homelab-admins: admin
+  #     # Maps an IdP group to per-connector viewer/operator roles, synced
+  #     # on every login (#279 part 3). Key is a connector UUID or "*" for
+  #     # every connector. Group names match case-insensitively.
+  #     group_connector_roles:
+  #       homelab-ops:
+  #         "*": operator
+  #       family:
+  #         3f1c1e2a-1111-4c22-8b33-aaaaaaaaaaaa: viewer
 
 # AI module (opt-in)
 ai:

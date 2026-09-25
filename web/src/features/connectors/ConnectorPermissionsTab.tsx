@@ -31,8 +31,13 @@ export function ConnectorPermissionsTab({ connectorId }: { connectorId: string }
   if (!isInstanceAdmin) return null;
 
   const userById = new Map((users.data ?? []).map((u) => [u.id, u]));
-  const grantedUserIds = new Set((grants.data ?? []).map((g) => g.userId));
-  const addableUsers = (users.data ?? []).filter((u) => !grantedUserIds.has(u.id));
+  // Only a 'manual' grant blocks adding a user here — a user with only an
+  // 'oidc'-sourced grant (#279 part 3) can still get a manual grant added
+  // alongside it (GetUserConnectorRole takes the higher of the two).
+  const manuallyGrantedUserIds = new Set(
+    (grants.data ?? []).filter((g) => g.source !== 'oidc').map((g) => g.userId)
+  );
+  const addableUsers = (users.data ?? []).filter((u) => !manuallyGrantedUserIds.has(u.id));
 
   const onAdd = () => {
     if (!addingUserId) return;
@@ -60,31 +65,53 @@ export function ConnectorPermissionsTab({ connectorId }: { connectorId: string }
         <ul className="mb-4 divide-y divide-line-soft">
           {(grants.data ?? []).map((g) => {
             const user = userById.get(g.userId);
+            // 'oidc' grants are synced from the user's IdP group at login
+            // (#279 part 3) and are read-only here — editing them would be
+            // silently overwritten at the user's next login anyway.
+            const isSSO = g.source === 'oidc';
             return (
               <li key={g.id} className="flex items-center justify-between gap-3 py-2.5">
                 <div className="min-w-0">
-                  <p className="truncate text-sm text-ink">{user?.displayName || user?.username || g.userId}</p>
+                  <div className="flex items-center gap-1.5">
+                    <p className="truncate text-sm text-ink">{user?.displayName || user?.username || g.userId}</p>
+                    {isSSO && (
+                      <span
+                        title={t('connectors.permissions.viaSsoHint')}
+                        className="shrink-0 rounded-full bg-canvas px-1.5 py-0.5 text-2xs text-ink-faint"
+                      >
+                        {t('connectors.permissions.viaSso')}
+                      </span>
+                    )}
+                  </div>
                   {user?.username && <p className="truncate text-2xs text-ink-faint">{user.username}</p>}
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
-                  <select
-                    value={g.role}
-                    onChange={(e) =>
-                      upsert.mutate({ userId: g.userId, role: e.target.value as ConnectorRole })
-                    }
-                    className="rounded-md border border-line-soft bg-canvas px-2 py-1 text-xs text-ink"
-                  >
-                    <option value="viewer">{t('connectors.permissions.viewer')}</option>
-                    <option value="operator">{t('connectors.permissions.operator')}</option>
-                  </select>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    disabled={remove.isPending}
-                    onClick={() => remove.mutate(g.userId)}
-                  >
-                    {t('connectors.permissions.revoke')}
-                  </Button>
+                  {isSSO ? (
+                    <span className="rounded-md border border-line-soft px-2 py-1 text-xs text-ink-muted">
+                      {g.role === 'operator' ? t('connectors.permissions.operator') : t('connectors.permissions.viewer')}
+                    </span>
+                  ) : (
+                    <>
+                      <select
+                        value={g.role}
+                        onChange={(e) =>
+                          upsert.mutate({ userId: g.userId, role: e.target.value as ConnectorRole })
+                        }
+                        className="rounded-md border border-line-soft bg-canvas px-2 py-1 text-xs text-ink"
+                      >
+                        <option value="viewer">{t('connectors.permissions.viewer')}</option>
+                        <option value="operator">{t('connectors.permissions.operator')}</option>
+                      </select>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        disabled={remove.isPending}
+                        onClick={() => remove.mutate(g.userId)}
+                      >
+                        {t('connectors.permissions.revoke')}
+                      </Button>
+                    </>
+                  )}
                 </div>
               </li>
             );

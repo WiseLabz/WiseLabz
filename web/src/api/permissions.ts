@@ -9,12 +9,18 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { customInstance } from './axios-instance';
 
 export type ConnectorRole = 'viewer' | 'operator';
+// 'oidc' grants are synced from the user's IdP groups at login
+// (group_connector_roles, #279 part 3) and are read-only in this API: the
+// PUT/DELETE endpoints below only ever act on the 'manual' row for a given
+// (user, connector) pair.
+export type ConnectorGrantSource = 'manual' | 'oidc';
 
 export interface ConnectorGrant {
   id: string;
   userId: string;
   connectorId: string;
   role: ConnectorRole;
+  source: ConnectorGrantSource;
   createdAt: string;
   updatedAt: string;
 }

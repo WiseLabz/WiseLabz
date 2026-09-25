@@ -6,5 +6,10 @@
  *
  * OpenAPI spec version: 0.1.0
  */
+import type { GetConnectorsConnectorIdPermissions200ItemSource } from './getConnectorsConnectorIdPermissions200ItemSource';
 
-export type GetConnectorsConnectorIdPermissions200Item = { [key: string]: unknown };
+export type GetConnectorsConnectorIdPermissions200Item = {
+  /** How the grant was created; see the endpoint description. */
+  source?: GetConnectorsConnectorIdPermissions200ItemSource;
+  [key: string]: unknown;
+};

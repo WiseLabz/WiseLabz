@@ -192,6 +192,39 @@ This supersedes the frontend plan's original §8.6 ("add/edit OIDC provider via 
 which has been amended accordingly. Endpoint contract: `docs/openapi.yaml`
 (`/auth/config`, `/auth/providers/{providerId}/enabled`).
 
+### OIDC group→connector roles and IdP step-up (#279 part 3)
+
+An IdP group can grant per-connector `viewer`/`operator` roles, alongside the
+flat instance-admin `group_role_mapping` above: `auth.oidc[].group_connector_roles`
+maps a group name to `{connectorId: role}`, where the connector key is a UUID
+or `"*"` for every connector (see `deploy/config.example.yaml`). Group names
+are matched case-insensitively — viper lowercases config map keys read from
+YAML, so the same caveat that applies to `group_role_mapping` applies here.
+
+Grants carry a `source` (`manual`/`oidc`). The manual-grant admin API
+(`PUT`/`DELETE /connectors/{id}/permissions/{userId}`) only ever touches the
+`manual` row for a (user, connector) pair; the OIDC login hook only ever
+touches the `oidc` row, replacing it wholesale on every login with whatever
+the caller's current groups justify. `GetUserConnectorRole` takes the higher
+of the two rows, so a manual grant is never silently downgraded by an IdP
+sync and vice versa. **Known limitation:** this only re-syncs at login —
+leaving a group or narrowing the mapping doesn't take effect until the
+user's next login, and a connector created after a `"*"` mapping is written
+is picked up starting at that same next login, not immediately.
+
+2FA (TOTP/WebAuthn, #279 parts 1-2) applies to local accounts only — OIDC
+users rely on their IdP's own MFA. An OIDC user still needs to prove they're
+present for a destructive action, so step-up for them re-authenticates
+through their IdP in a popup instead of a password: `POST
+/auth/elevate/oidc/begin` returns an authorize URL with `prompt=login` and
+`max_age=0` so the IdP re-prompts instead of silently reusing an existing
+session, and `POST /auth/elevate/oidc/complete` requires the IdP's
+`auth_time` claim to be present and within 120 seconds of now before it
+mints the same elevation token the password path would. Some IdPs omit
+`auth_time` unless the request carries `max_age` (which this flow always
+sets); if it's still missing, the endpoint returns `401
+oidc_reauth_unsupported` rather than pretending the re-auth succeeded.
+
 ### Permissions & step-up for mutating actions (decided 2026-06-27)
 
 Two layers gate state-changing actions, on top of the session model above:

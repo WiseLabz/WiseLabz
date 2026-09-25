@@ -348,6 +348,107 @@ func TestLoadRejectsEmptyCronExpr(t *testing.T) {
 	}
 }
 
+func TestLoadParsesGroupConnectorRoles(t *testing.T) {
+	dir := t.TempDir()
+
+	yamlContent := `
+auth:
+  secret: test-secret-key
+  oidc:
+    - id: authentik
+      issuer_url: https://auth.example.com
+      client_id: abc123
+      client_secret: secret123
+      groups_claim: groups
+      group_connector_roles:
+        homelab-ops:
+          "*": operator
+        family:
+          3f1c1e2a-1111-4c22-8b33-aaaaaaaaaaaa: viewer
+`
+	configPath := filepath.Join(dir, "config.yaml")
+	if err := os.WriteFile(configPath, []byte(yamlContent), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	oldDir, _ := os.Getwd()
+	os.Chdir(dir)          //nolint:errcheck
+	defer os.Chdir(oldDir) //nolint:errcheck
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+	if len(cfg.Auth.OIDC) != 1 {
+		t.Fatalf("len(auth.oidc) = %d, want 1", len(cfg.Auth.OIDC))
+	}
+	mapping := cfg.Auth.OIDC[0].GroupConnectorRoles
+	if mapping["homelab-ops"]["*"] != "operator" {
+		t.Errorf("group_connector_roles[homelab-ops][*] = %q, want operator", mapping["homelab-ops"]["*"])
+	}
+	if mapping["family"]["3f1c1e2a-1111-4c22-8b33-aaaaaaaaaaaa"] != "viewer" {
+		t.Errorf("group_connector_roles[family][uuid] = %q, want viewer", mapping["family"]["3f1c1e2a-1111-4c22-8b33-aaaaaaaaaaaa"])
+	}
+}
+
+func TestLoadRejectsInvalidGroupConnectorRoleValue(t *testing.T) {
+	dir := t.TempDir()
+
+	yamlContent := `
+auth:
+  secret: test-secret-key
+  oidc:
+    - id: authentik
+      issuer_url: https://auth.example.com
+      client_id: abc123
+      client_secret: secret123
+      group_connector_roles:
+        homelab-ops:
+          "*": admin
+`
+	configPath := filepath.Join(dir, "config.yaml")
+	if err := os.WriteFile(configPath, []byte(yamlContent), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	oldDir, _ := os.Getwd()
+	os.Chdir(dir)          //nolint:errcheck
+	defer os.Chdir(oldDir) //nolint:errcheck
+
+	if _, err := Load(); err == nil {
+		t.Fatal("Load() error = nil, want error for group_connector_roles role \"admin\"")
+	}
+}
+
+func TestLoadRejectsInvalidGroupConnectorRoleKey(t *testing.T) {
+	dir := t.TempDir()
+
+	yamlContent := `
+auth:
+  secret: test-secret-key
+  oidc:
+    - id: authentik
+      issuer_url: https://auth.example.com
+      client_id: abc123
+      client_secret: secret123
+      group_connector_roles:
+        homelab-ops:
+          not-a-uuid-or-star: viewer
+`
+	configPath := filepath.Join(dir, "config.yaml")
+	if err := os.WriteFile(configPath, []byte(yamlContent), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	oldDir, _ := os.Getwd()
+	os.Chdir(dir)          //nolint:errcheck
+	defer os.Chdir(oldDir) //nolint:errcheck
+
+	if _, err := Load(); err == nil {
+		t.Fatal("Load() error = nil, want error for group_connector_roles key \"not-a-uuid-or-star\"")
+	}
+}
+
 func TestServerAddr(t *testing.T) {
 	s := Server{Host: "0.0.0.0", Port: 8080}
 	if addr := s.Addr(); addr != "0.0.0.0:8080" {

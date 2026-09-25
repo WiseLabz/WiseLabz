@@ -9,6 +9,20 @@ import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../store/auth';
 import { toast } from '../../lib/toast';
 import { Splash } from './guards';
+import { OIDC_STEP_UP_FLAG, OIDC_STEP_UP_MESSAGE } from './oidcStepUpFlow';
+
+// consumeOIDCStepUpFlag reads and clears the opener's flag in one step, so a
+// popup the user closed without completing never leaves a stale flag behind
+// to misclassify a later, ordinary login redirect in the same tab.
+function consumeOIDCStepUpFlag(): boolean {
+  try {
+    const pending = sessionStorage.getItem(OIDC_STEP_UP_FLAG) === '1';
+    sessionStorage.removeItem(OIDC_STEP_UP_FLAG);
+    return pending;
+  } catch {
+    return false;
+  }
+}
 
 export function AuthCallbackPage() {
   const { t } = useTranslation();
@@ -21,9 +35,27 @@ export function AuthCallbackPage() {
     if (ran.current) return; // StrictMode double-invoke guard
     ran.current = true;
 
-    const providerId = params.get('providerId') ?? '';
     const code = params.get('code') ?? '';
     const state = params.get('state') ?? '';
+
+    // Read (and always clear) the flag first: a flag left behind by a popup
+    // the user closed without completing must not misclassify a later,
+    // ordinary login redirect in the same tab.
+    const stepUpPending = consumeOIDCStepUpFlag();
+
+    // OIDC step-up (#279 part 3): this page loaded inside the popup
+    // OIDCStepUp opened, not the top-level login tab. Hand the code/state
+    // back to the opener — it holds the access token this exchange needs —
+    // and never run the login exchange here.
+    if (stepUpPending && window.opener) {
+      if (code && state) {
+        window.opener.postMessage({ type: OIDC_STEP_UP_MESSAGE, code, state }, window.location.origin);
+      }
+      window.close();
+      return;
+    }
+
+    const providerId = params.get('providerId') ?? '';
 
     if (!providerId || !code) {
       toast.error(t('auth.oidcFailed'));

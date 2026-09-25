@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/WiseLabz/wiselabz/internal/config"
+	"github.com/WiseLabz/wiselabz/internal/store"
 )
 
 // TestOIDCCallbackRejectsMissingFlowCookie covers the original vulnerability:
@@ -201,4 +202,75 @@ func TestGetOrInitOIDCProvider(t *testing.T) {
 			}
 		}
 	})
+}
+
+// TestSyncOIDCConnectorGrants covers #279 part 3's login hook end to end
+// against a real store: an OIDC login creates grants from the group
+// mapping, a later login with fewer groups revokes what's no longer
+// justified, and a local user is never touched.
+func TestSyncOIDCConnectorGrants(t *testing.T) {
+	th := newTestHandler(t)
+	ctx := context.Background()
+
+	c1 := &store.ConnectorRecord{Name: "conn-1", Category: "virtualization", Type: "proxmox", URL: "https://example.com"}
+	if err := th.Store.CreateConnector(ctx, c1); err != nil {
+		t.Fatalf("CreateConnector() error: %v", err)
+	}
+	c2 := &store.ConnectorRecord{Name: "conn-2", Category: "virtualization", Type: "proxmox", URL: "https://example.com"}
+	if err := th.Store.CreateConnector(ctx, c2); err != nil {
+		t.Fatalf("CreateConnector() error: %v", err)
+	}
+
+	oidcUser := &store.User{Username: "oidc-user", AuthSource: "oidc"}
+	if err := th.Store.CreateUser(ctx, oidcUser); err != nil {
+		t.Fatalf("CreateUser() error: %v", err)
+	}
+	mapping := map[string]map[string]string{"ops": {c1.ID: "viewer", c2.ID: "operator"}}
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/oidc/callback", nil)
+
+	th.H.syncOIDCConnectorGrants(req, oidcUser, []string{"ops"}, mapping)
+
+	role, err := th.Store.GetUserConnectorRole(ctx, oidcUser.ID, c1.ID)
+	if err != nil {
+		t.Fatalf("GetUserConnectorRole() error: %v", err)
+	}
+	if role != "viewer" {
+		t.Fatalf("GetUserConnectorRole(c1) after first login = %q, want viewer", role)
+	}
+	role, err = th.Store.GetUserConnectorRole(ctx, oidcUser.ID, c2.ID)
+	if err != nil {
+		t.Fatalf("GetUserConnectorRole() error: %v", err)
+	}
+	if role != "operator" {
+		t.Fatalf("GetUserConnectorRole(c2) after first login = %q, want operator", role)
+	}
+
+	// A later login with fewer groups revokes what's no longer justified.
+	th.H.syncOIDCConnectorGrants(req, oidcUser, nil, mapping)
+
+	role, err = th.Store.GetUserConnectorRole(ctx, oidcUser.ID, c1.ID)
+	if err != nil {
+		t.Fatalf("GetUserConnectorRole() error: %v", err)
+	}
+	if role != "" {
+		t.Fatalf("GetUserConnectorRole(c1) after losing the group = %q, want empty (revoked)", role)
+	}
+	role, err = th.Store.GetUserConnectorRole(ctx, oidcUser.ID, c2.ID)
+	if err != nil {
+		t.Fatalf("GetUserConnectorRole() error: %v", err)
+	}
+	if role != "" {
+		t.Fatalf("GetUserConnectorRole(c2) after losing the group = %q, want empty (revoked)", role)
+	}
+
+	// A local user is never synced, even if called directly.
+	localUser, _ := th.createUser(t, "viewer", false)
+	th.H.syncOIDCConnectorGrants(req, localUser, []string{"ops"}, mapping)
+	role, err = th.Store.GetUserConnectorRole(ctx, localUser.ID, c1.ID)
+	if err != nil {
+		t.Fatalf("GetUserConnectorRole() error: %v", err)
+	}
+	if role != "" {
+		t.Fatalf("GetUserConnectorRole() for a local user = %q, want empty (never synced)", role)
+	}
 }

@@ -6,9 +6,7 @@
  *
  * OpenAPI spec version: 0.1.0
  */
-import type { PutConnectorsConnectorIdPermissionsUserId200Source } from './putConnectorsConnectorIdPermissionsUserId200Source';
 
-export type PutConnectorsConnectorIdPermissionsUserId200 = {
-  source?: PutConnectorsConnectorIdPermissionsUserId200Source;
-  [key: string]: unknown;
+export type PostAuthElevateOidcBegin200 = {
+  authUrl: string;
 };

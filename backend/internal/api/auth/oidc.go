@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -67,7 +68,88 @@ func (h *Handler) OIDCCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.syncOIDCConnectorGrants(r, user, claims.Groups, provCfg.GroupConnectorRoles)
+
 	h.completeOIDCLogin(w, r, user, req.ProviderID, isNewUser)
+}
+
+// syncOIDCConnectorGrants applies the provider's group_connector_roles
+// mapping for user on every OIDC login (#279 part 3), so leaving a group or
+// narrowing the mapping revokes access at the next login rather than only
+// ever adding it. Only ever called for AuthSource=="oidc" users. Failures
+// are logged, not returned — an OIDC login must not fail because of a grant
+// sync problem, since that would lock the user out entirely.
+func (h *Handler) syncOIDCConnectorGrants(r *http.Request, user *store.User, groups []string, mapping map[string]map[string]string) {
+	if user.AuthSource != "oidc" {
+		return
+	}
+	ctx := r.Context()
+	allConnectorIDs, err := h.Store.ListConnectorIDs(ctx)
+	if err != nil {
+		slog.Error("failed to list connectors for oidc grant sync", "error", err)
+		return
+	}
+	knownConnectorIDs := make(map[string]bool, len(allConnectorIDs))
+	for _, id := range allConnectorIDs {
+		knownConnectorIDs[id] = true
+	}
+
+	desired := oidcConnectorRolesForGroups(groups, mapping, allConnectorIDs)
+	var unknown []string
+	for connectorID := range desired {
+		if !knownConnectorIDs[connectorID] {
+			unknown = append(unknown, connectorID)
+			delete(desired, connectorID)
+		}
+	}
+	if len(unknown) > 0 {
+		slog.Warn("oidc group_connector_roles references unknown connector ids", "userId", user.ID, "connectorIds", unknown)
+	}
+
+	diff, err := h.Store.SyncOIDCConnectorGrants(ctx, user.ID, desired)
+	if err != nil {
+		slog.Error("failed to sync oidc connector grants", "userId", user.ID, "error", err)
+		return
+	}
+	if diff.Empty() {
+		return
+	}
+	if err := h.Store.CreateAuditRecord(ctx, &store.AuditRecord{
+		ActorUserID: user.ID,
+		ActorRole:   user.InstanceAdminRole,
+		Action:      "auth.oidc.connector_grants_synced",
+		TargetType:  "user",
+		TargetID:    user.ID,
+		Detail:      auditConnectorGrantDiffJSON(diff),
+	}); err != nil {
+		slog.Error("failed to record audit", "action", "auth.oidc.connector_grants_synced", "error", err)
+	}
+}
+
+// auditConnectorGrantDiffJSON marshals a ConnectorGrantDiff's added/removed
+// connector IDs and roles for the audit detail column. Marshal errors are
+// swallowed (never expected for this shape) so a sync that already
+// succeeded is never lost over an audit-formatting problem.
+func auditConnectorGrantDiffJSON(diff store.ConnectorGrantDiff) string {
+	type entry struct {
+		ConnectorID string `json:"connectorId"`
+		Role        string `json:"role"`
+	}
+	toEntries := func(grants []store.ConnectorGrant) []entry {
+		out := make([]entry, len(grants))
+		for i, g := range grants {
+			out[i] = entry{ConnectorID: g.ConnectorID, Role: g.Role}
+		}
+		return out
+	}
+	data, err := json.Marshal(map[string]any{
+		"added":   toEntries(diff.Added),
+		"removed": toEntries(diff.Removed),
+	})
+	if err != nil {
+		return "{}"
+	}
+	return string(data)
 }
 
 // verifyOIDCFlowState reads back the flow cookie this browser was issued when
@@ -391,6 +473,60 @@ func oidcRoleForGroups(groups []string, mapping map[string]string) string {
 		}
 	}
 	return role
+}
+
+// oidcConnectorRolesForGroups maps OIDC groups to per-connector viewer/operator
+// roles via the admin-configured GroupConnectorRoles (#279 part 3), distinct
+// from oidcRoleForGroups' flat instance-admin role. A "*" entry expands
+// against allConnectorIDs; when several groups grant a role on the same
+// connector, the highest one wins. Group names are matched case-insensitively
+// because viper lowercases map keys read from config (same caveat as
+// oidcRoleForGroups).
+func oidcConnectorRolesForGroups(groups []string, mapping map[string]map[string]string, allConnectorIDs []string) map[string]string {
+	result := make(map[string]string)
+	if len(mapping) == 0 {
+		return result
+	}
+	// Case-insensitive lookup: build a lowercased view of the mapping once.
+	lowered := make(map[string]map[string]string, len(mapping))
+	for group, connectorRoles := range mapping {
+		lowered[strings.ToLower(group)] = connectorRoles
+	}
+	grant := func(connectorID, role string) {
+		if strings.EqualFold(role, "viewer") {
+			role = "viewer"
+		} else if strings.EqualFold(role, "operator") {
+			role = "operator"
+		} else {
+			return
+		}
+		if existing, ok := result[connectorID]; !ok || connectorRoleLess(existing, role) {
+			result[connectorID] = role
+		}
+	}
+	for _, group := range groups {
+		connectorRoles, ok := lowered[strings.ToLower(group)]
+		if !ok {
+			continue
+		}
+		for connectorID, role := range connectorRoles {
+			if connectorID == "*" {
+				for _, id := range allConnectorIDs {
+					grant(id, role)
+				}
+				continue
+			}
+			grant(connectorID, role)
+		}
+	}
+	return result
+}
+
+// connectorRoleLess reports whether role a ranks below role b ("viewer" <
+// "operator"), for oidcConnectorRolesForGroups' highest-wins merge.
+func connectorRoleLess(a, b string) bool {
+	rank := map[string]int{"viewer": 1, "operator": 2}
+	return rank[a] < rank[b]
 }
 
 // randomOIDCToken returns a random URL-safe token used as an OIDC state or

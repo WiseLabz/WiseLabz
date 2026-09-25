@@ -28,10 +28,15 @@ import type {
   BadRequestResponse,
   ElevationRequest,
   ElevationToken,
+  Error,
   ForbiddenResponse,
+  GetAuthElevateMethods200,
   LoginRequest,
   NotFoundResponse,
   OidcCallbackRequest,
+  PostAuthElevateOidcBegin200,
+  PostAuthElevateOidcBeginBody,
+  PostAuthElevateOidcCompleteBody,
   UnauthorizedResponse,
 } from '../../model';
 
@@ -666,7 +671,7 @@ export const getPostAuthElevateQueryKey = (elevationRequest?: BodyType<Elevation
 
 export const getPostAuthElevateQueryOptions = <
   TData = Awaited<ReturnType<typeof postAuthElevate>>,
-  TError = ErrorType<UnauthorizedResponse>,
+  TError = ErrorType<Error | UnauthorizedResponse>,
 >(
   elevationRequest: BodyType<ElevationRequest>,
   options?: {
@@ -689,11 +694,11 @@ export const getPostAuthElevateQueryOptions = <
 };
 
 export type PostAuthElevateQueryResult = NonNullable<Awaited<ReturnType<typeof postAuthElevate>>>;
-export type PostAuthElevateQueryError = ErrorType<UnauthorizedResponse>;
+export type PostAuthElevateQueryError = ErrorType<Error | UnauthorizedResponse>;
 
 export function usePostAuthElevate<
   TData = Awaited<ReturnType<typeof postAuthElevate>>,
-  TError = ErrorType<UnauthorizedResponse>,
+  TError = ErrorType<Error | UnauthorizedResponse>,
 >(
   elevationRequest: BodyType<ElevationRequest>,
   options: {
@@ -712,7 +717,7 @@ export function usePostAuthElevate<
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 export function usePostAuthElevate<
   TData = Awaited<ReturnType<typeof postAuthElevate>>,
-  TError = ErrorType<UnauthorizedResponse>,
+  TError = ErrorType<Error | UnauthorizedResponse>,
 >(
   elevationRequest: BodyType<ElevationRequest>,
   options?: {
@@ -731,7 +736,7 @@ export function usePostAuthElevate<
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 export function usePostAuthElevate<
   TData = Awaited<ReturnType<typeof postAuthElevate>>,
-  TError = ErrorType<UnauthorizedResponse>,
+  TError = ErrorType<Error | UnauthorizedResponse>,
 >(
   elevationRequest: BodyType<ElevationRequest>,
   options?: {
@@ -746,7 +751,7 @@ export function usePostAuthElevate<
 
 export function usePostAuthElevate<
   TData = Awaited<ReturnType<typeof postAuthElevate>>,
-  TError = ErrorType<UnauthorizedResponse>,
+  TError = ErrorType<Error | UnauthorizedResponse>,
 >(
   elevationRequest: BodyType<ElevationRequest>,
   options?: {
@@ -756,6 +761,420 @@ export function usePostAuthElevate<
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
   const queryOptions = getPostAuthElevateQueryOptions(elevationRequest, options);
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+/**
+ * `["password"]` for a local account, `["oidc"]` for one that signs in through an identity provider (#279 part 3). #279 part 1 (TOTP) extends this to include `"totp"` once a user has a second factor enrolled.
+ * @summary Which step-up factors the caller can use
+ */
+export const getAuthElevateMethods = (
+  options?: SecondParameter<typeof customInstance>,
+  signal?: AbortSignal
+) => {
+  return customInstance<GetAuthElevateMethods200>(
+    { url: `/auth/elevate/methods`, method: 'GET', signal },
+    options
+  );
+};
+
+export const getGetAuthElevateMethodsQueryKey = () => {
+  return [`/auth/elevate/methods`] as const;
+};
+
+export const getGetAuthElevateMethodsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getAuthElevateMethods>>,
+  TError = ErrorType<UnauthorizedResponse>,
+>(options?: {
+  query?: Partial<
+    UseQueryOptions<Awaited<ReturnType<typeof getAuthElevateMethods>>, TError, TData>
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetAuthElevateMethodsQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getAuthElevateMethods>>> = ({ signal }) =>
+    getAuthElevateMethods(requestOptions, signal);
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getAuthElevateMethods>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type GetAuthElevateMethodsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getAuthElevateMethods>>
+>;
+export type GetAuthElevateMethodsQueryError = ErrorType<UnauthorizedResponse>;
+
+export function useGetAuthElevateMethods<
+  TData = Awaited<ReturnType<typeof getAuthElevateMethods>>,
+  TError = ErrorType<UnauthorizedResponse>,
+>(
+  options: {
+    query: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getAuthElevateMethods>>, TError, TData>
+    > &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getAuthElevateMethods>>,
+          TError,
+          Awaited<ReturnType<typeof getAuthElevateMethods>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useGetAuthElevateMethods<
+  TData = Awaited<ReturnType<typeof getAuthElevateMethods>>,
+  TError = ErrorType<UnauthorizedResponse>,
+>(
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getAuthElevateMethods>>, TError, TData>
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getAuthElevateMethods>>,
+          TError,
+          Awaited<ReturnType<typeof getAuthElevateMethods>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useGetAuthElevateMethods<
+  TData = Awaited<ReturnType<typeof getAuthElevateMethods>>,
+  TError = ErrorType<UnauthorizedResponse>,
+>(
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getAuthElevateMethods>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * @summary Which step-up factors the caller can use
+ */
+
+export function useGetAuthElevateMethods<
+  TData = Awaited<ReturnType<typeof getAuthElevateMethods>>,
+  TError = ErrorType<UnauthorizedResponse>,
+>(
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getAuthElevateMethods>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getGetAuthElevateMethodsQueryOptions(options);
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+/**
+ * For a caller whose account signs in through an IdP and has no password to confirm with POST /auth/elevate. Returns an authorize URL — opened in a popup — that forces the IdP to re-prompt for credentials (`prompt=login`, `max_age=0`) instead of silently reusing an existing IdP session. Uses the normal `/auth/callback` redirect URL, so no new IdP redirect URI registration is needed.
+ * @summary Start OIDC step-up re-authentication (#279 part 3)
+ */
+export const postAuthElevateOidcBegin = (
+  postAuthElevateOidcBeginBody: BodyType<PostAuthElevateOidcBeginBody>,
+  options?: SecondParameter<typeof customInstance>,
+  signal?: AbortSignal
+) => {
+  return customInstance<PostAuthElevateOidcBegin200>(
+    {
+      url: `/auth/elevate/oidc/begin`,
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      data: postAuthElevateOidcBeginBody,
+      signal,
+    },
+    options
+  );
+};
+
+export const getPostAuthElevateOidcBeginQueryKey = (
+  postAuthElevateOidcBeginBody?: BodyType<PostAuthElevateOidcBeginBody>
+) => {
+  return ['POST', `/auth/elevate/oidc/begin`, postAuthElevateOidcBeginBody] as const;
+};
+
+export const getPostAuthElevateOidcBeginQueryOptions = <
+  TData = Awaited<ReturnType<typeof postAuthElevateOidcBegin>>,
+  TError = ErrorType<BadRequestResponse | UnauthorizedResponse | ForbiddenResponse>,
+>(
+  postAuthElevateOidcBeginBody: BodyType<PostAuthElevateOidcBeginBody>,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof postAuthElevateOidcBegin>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  }
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getPostAuthElevateOidcBeginQueryKey(postAuthElevateOidcBeginBody);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof postAuthElevateOidcBegin>>> = ({
+    signal,
+  }) => postAuthElevateOidcBegin(postAuthElevateOidcBeginBody, requestOptions, signal);
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof postAuthElevateOidcBegin>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type PostAuthElevateOidcBeginQueryResult = NonNullable<
+  Awaited<ReturnType<typeof postAuthElevateOidcBegin>>
+>;
+export type PostAuthElevateOidcBeginQueryError = ErrorType<
+  BadRequestResponse | UnauthorizedResponse | ForbiddenResponse
+>;
+
+export function usePostAuthElevateOidcBegin<
+  TData = Awaited<ReturnType<typeof postAuthElevateOidcBegin>>,
+  TError = ErrorType<BadRequestResponse | UnauthorizedResponse | ForbiddenResponse>,
+>(
+  postAuthElevateOidcBeginBody: BodyType<PostAuthElevateOidcBeginBody>,
+  options: {
+    query: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof postAuthElevateOidcBegin>>, TError, TData>
+    > &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postAuthElevateOidcBegin>>,
+          TError,
+          Awaited<ReturnType<typeof postAuthElevateOidcBegin>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function usePostAuthElevateOidcBegin<
+  TData = Awaited<ReturnType<typeof postAuthElevateOidcBegin>>,
+  TError = ErrorType<BadRequestResponse | UnauthorizedResponse | ForbiddenResponse>,
+>(
+  postAuthElevateOidcBeginBody: BodyType<PostAuthElevateOidcBeginBody>,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof postAuthElevateOidcBegin>>, TError, TData>
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postAuthElevateOidcBegin>>,
+          TError,
+          Awaited<ReturnType<typeof postAuthElevateOidcBegin>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function usePostAuthElevateOidcBegin<
+  TData = Awaited<ReturnType<typeof postAuthElevateOidcBegin>>,
+  TError = ErrorType<BadRequestResponse | UnauthorizedResponse | ForbiddenResponse>,
+>(
+  postAuthElevateOidcBeginBody: BodyType<PostAuthElevateOidcBeginBody>,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof postAuthElevateOidcBegin>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * @summary Start OIDC step-up re-authentication (#279 part 3)
+ */
+
+export function usePostAuthElevateOidcBegin<
+  TData = Awaited<ReturnType<typeof postAuthElevateOidcBegin>>,
+  TError = ErrorType<BadRequestResponse | UnauthorizedResponse | ForbiddenResponse>,
+>(
+  postAuthElevateOidcBeginBody: BodyType<PostAuthElevateOidcBeginBody>,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof postAuthElevateOidcBegin>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getPostAuthElevateOidcBeginQueryOptions(
+    postAuthElevateOidcBeginBody,
+    options
+  );
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+/**
+ * Exchanges the popup's authorization code, requires the re-authenticated `iss`/`sub` to match the caller's linked OIDC identity, and requires `auth_time` to be present and within 120s of now. Returns `401 {code: "oidc_reauth_unsupported"}` when the IdP omits `auth_time`. On success, mints the same elevation token POST /auth/elevate would.
+ * @summary Finish OIDC step-up re-authentication (#279 part 3)
+ */
+export const postAuthElevateOidcComplete = (
+  postAuthElevateOidcCompleteBody: BodyType<PostAuthElevateOidcCompleteBody>,
+  options?: SecondParameter<typeof customInstance>,
+  signal?: AbortSignal
+) => {
+  return customInstance<ElevationToken>(
+    {
+      url: `/auth/elevate/oidc/complete`,
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      data: postAuthElevateOidcCompleteBody,
+      signal,
+    },
+    options
+  );
+};
+
+export const getPostAuthElevateOidcCompleteQueryKey = (
+  postAuthElevateOidcCompleteBody?: BodyType<PostAuthElevateOidcCompleteBody>
+) => {
+  return ['POST', `/auth/elevate/oidc/complete`, postAuthElevateOidcCompleteBody] as const;
+};
+
+export const getPostAuthElevateOidcCompleteQueryOptions = <
+  TData = Awaited<ReturnType<typeof postAuthElevateOidcComplete>>,
+  TError = ErrorType<UnauthorizedResponse>,
+>(
+  postAuthElevateOidcCompleteBody: BodyType<PostAuthElevateOidcCompleteBody>,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof postAuthElevateOidcComplete>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  }
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ??
+    getPostAuthElevateOidcCompleteQueryKey(postAuthElevateOidcCompleteBody);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof postAuthElevateOidcComplete>>> = ({
+    signal,
+  }) => postAuthElevateOidcComplete(postAuthElevateOidcCompleteBody, requestOptions, signal);
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof postAuthElevateOidcComplete>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type PostAuthElevateOidcCompleteQueryResult = NonNullable<
+  Awaited<ReturnType<typeof postAuthElevateOidcComplete>>
+>;
+export type PostAuthElevateOidcCompleteQueryError = ErrorType<UnauthorizedResponse>;
+
+export function usePostAuthElevateOidcComplete<
+  TData = Awaited<ReturnType<typeof postAuthElevateOidcComplete>>,
+  TError = ErrorType<UnauthorizedResponse>,
+>(
+  postAuthElevateOidcCompleteBody: BodyType<PostAuthElevateOidcCompleteBody>,
+  options: {
+    query: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof postAuthElevateOidcComplete>>, TError, TData>
+    > &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postAuthElevateOidcComplete>>,
+          TError,
+          Awaited<ReturnType<typeof postAuthElevateOidcComplete>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function usePostAuthElevateOidcComplete<
+  TData = Awaited<ReturnType<typeof postAuthElevateOidcComplete>>,
+  TError = ErrorType<UnauthorizedResponse>,
+>(
+  postAuthElevateOidcCompleteBody: BodyType<PostAuthElevateOidcCompleteBody>,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof postAuthElevateOidcComplete>>, TError, TData>
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postAuthElevateOidcComplete>>,
+          TError,
+          Awaited<ReturnType<typeof postAuthElevateOidcComplete>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function usePostAuthElevateOidcComplete<
+  TData = Awaited<ReturnType<typeof postAuthElevateOidcComplete>>,
+  TError = ErrorType<UnauthorizedResponse>,
+>(
+  postAuthElevateOidcCompleteBody: BodyType<PostAuthElevateOidcCompleteBody>,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof postAuthElevateOidcComplete>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * @summary Finish OIDC step-up re-authentication (#279 part 3)
+ */
+
+export function usePostAuthElevateOidcComplete<
+  TData = Awaited<ReturnType<typeof postAuthElevateOidcComplete>>,
+  TError = ErrorType<UnauthorizedResponse>,
+>(
+  postAuthElevateOidcCompleteBody: BodyType<PostAuthElevateOidcCompleteBody>,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof postAuthElevateOidcComplete>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getPostAuthElevateOidcCompleteQueryOptions(
+    postAuthElevateOidcCompleteBody,
+    options
+  );
 
   const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
     queryKey: DataTag<QueryKey, TData, TError>;
