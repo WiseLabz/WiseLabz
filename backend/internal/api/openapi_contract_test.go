@@ -20,6 +20,18 @@ var (
 	// routerOnly: served by the router but deliberately absent from the spec.
 	routerOnly = map[string]string{
 		"GET /ws": "WebSocket upgrade, not a REST operation; documented in docs/WS_CONTRACT.md",
+		// MCP (#277): JSON-RPC over HTTP, not a REST resource - r.Mount
+		// registers every method chi knows about for its wildcard path.
+		"CONNECT /mcp/*": "MCP JSON-RPC endpoint (mcp-go StreamableHTTPServer), not a REST operation.",
+		"DELETE /mcp/*":  "MCP JSON-RPC endpoint (mcp-go StreamableHTTPServer), not a REST operation.",
+		"GET /mcp/*":     "MCP JSON-RPC endpoint (mcp-go StreamableHTTPServer), not a REST operation.",
+		"HEAD /mcp/*":    "MCP JSON-RPC endpoint (mcp-go StreamableHTTPServer), not a REST operation.",
+		"OPTIONS /mcp/*": "MCP JSON-RPC endpoint (mcp-go StreamableHTTPServer), not a REST operation.",
+		"PATCH /mcp/*":   "MCP JSON-RPC endpoint (mcp-go StreamableHTTPServer), not a REST operation.",
+		"POST /mcp/*":    "MCP JSON-RPC endpoint (mcp-go StreamableHTTPServer), not a REST operation.",
+		"PUT /mcp/*":     "MCP JSON-RPC endpoint (mcp-go StreamableHTTPServer), not a REST operation.",
+		"QUERY /mcp/*":   "MCP JSON-RPC endpoint (mcp-go StreamableHTTPServer), not a REST operation.",
+		"TRACE /mcp/*":   "MCP JSON-RPC endpoint (mcp-go StreamableHTTPServer), not a REST operation.",
 	}
 	// specOnly: documented in the spec but not implemented by the router.
 	specOnly = map[string]string{

@@ -106,7 +106,7 @@ func AuthMiddleware(jwtSvc *Service, checkers ...APIKeyChecker) func(http.Handle
 						}
 					}
 					restriction := keyClaims.Restriction
-					if restriction.ReadOnly && !isSafeMethod(r.Method) {
+					if restriction.ReadOnly && !isSafeMethod(r.Method) && !treatAsSafeFromContext(r.Context()) {
 						httputil.Error(w, http.StatusForbidden, "forbidden", "API key is read-only")
 						return
 					}

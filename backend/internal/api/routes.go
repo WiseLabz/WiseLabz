@@ -1,6 +1,8 @@
 package api
 
 import (
+	"net/http"
+
 	"github.com/go-chi/chi/v5"
 
 	alerthandler "github.com/WiseLabz/wiselabz/internal/api/alerts"
@@ -48,6 +50,7 @@ type routerDeps struct {
 	chatH       *chathandler.Handler
 	complianceH *compliancehandler.Handler
 	reportH     *reporthandler.Handler
+	mcpH        http.Handler
 }
 
 // mountAPIRoutes registers the whole API surface on r. It is mounted twice by
@@ -89,6 +92,19 @@ func mountAPIRoutes(r chi.Router, d routerDeps) {
 
 			r.Post("/sync", d.connH.SyncAll)
 		})
+	})
+
+	// The MCP endpoint gets its own authenticated group (rather than sharing
+	// the one above) so auth.TreatAsSafeMethod can run ahead of
+	// AuthMiddleware: mcp-go's StreamableHTTP transport always POSTs, even
+	// for a pure tools/call read, and every tool this server exposes is a
+	// read (see internal/mcp) - so a "read"-scope API key must not be
+	// blocked by AuthMiddleware's generic non-GET/HEAD/OPTIONS-is-mutating
+	// heuristic here.
+	r.Group(func(r chi.Router) {
+		r.Use(auth.TreatAsSafeMethod)
+		r.Use(d.cfg.AuthMiddleware())
+		mountMCPRoutes(r, d)
 	})
 
 	mountWSRoutes(r, d)
