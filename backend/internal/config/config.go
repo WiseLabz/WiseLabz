@@ -106,11 +106,20 @@ type EncryptionSettings struct {
 
 // AuthSettings holds authentication settings.
 type AuthSettings struct {
-	Secret               string         `mapstructure:"secret"`
-	AccessTokenTTL       int            `mapstructure:"access_token_ttl"`
-	RefreshTokenTTL      int            `mapstructure:"refresh_token_ttl"`
-	StepUpForDestructive bool           `mapstructure:"step_up_for_destructive"`
-	OIDC                 []OIDCProvider `mapstructure:"oidc"`
+	Secret               string           `mapstructure:"secret"`
+	AccessTokenTTL       int              `mapstructure:"access_token_ttl"`
+	RefreshTokenTTL      int              `mapstructure:"refresh_token_ttl"`
+	StepUpForDestructive bool             `mapstructure:"step_up_for_destructive"`
+	OIDC                 []OIDCProvider   `mapstructure:"oidc"`
+	WebAuthn             WebAuthnSettings `mapstructure:"webauthn"`
+}
+
+// WebAuthnSettings optionally overrides the relying-party ID/name WebAuthn
+// (#279 part 2) would otherwise derive from Server.Origin. Leave both empty
+// to use the derived values.
+type WebAuthnSettings struct {
+	RPID          string `mapstructure:"rp_id"`
+	RPDisplayName string `mapstructure:"rp_display_name"`
 }
 
 // AccessTokenTTLDuration returns the access token TTL as a time.Duration.
@@ -364,6 +373,7 @@ func Load() (*Config, error) {
 		"server.read_timeout_seconds", "server.write_timeout_seconds", "server.shutdown_timeout_seconds",
 		"encryption.key",
 		"auth.secret", "auth.access_token_ttl", "auth.refresh_token_ttl", "auth.step_up_for_destructive",
+		"auth.webauthn.rp_id", "auth.webauthn.rp_display_name",
 		"ai.enabled", "ai.provider", "ai.model", "ai.api_key", "ai.base_url", "ai.mode",
 		"ai.embed_provider", "ai.embed_model", "ai.embed_api_key", "ai.embed_base_url",
 		"sync.schedule", "sync.poll_cron_expr",

@@ -16,6 +16,8 @@ import {
   getGetMeMfaQueryKey,
   postMeMfaTotp,
   postMeMfaTotpFactorIdConfirm,
+  postMeMfaWebauthnRegisterBegin,
+  postMeMfaWebauthnRegisterFinish,
   postMeMfaRecoveryCodes,
   deleteMeMfaFactorsFactorId,
 } from '../../api/generated/me/me';
@@ -31,6 +33,8 @@ import type { Session, ApiKey, MfaFactor } from '../../api/model';
 import { ApiKeyScope } from '../../api/model/apiKeyScope';
 import { UserDigestCadence } from '../../api/model/userDigestCadence';
 import { setAccessToken } from '../../api/axios-instance';
+import { registerWebAuthn, isWebAuthnCancel } from '../../lib/webauthn';
+import type { WebAuthnResponse } from '../../api/model';
 import { Button } from '../../components/ui/Button';
 import { SkeletonRows, ErrorState, EmptyState } from '../../components/ui/states';
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
@@ -429,6 +433,8 @@ function SecuritySection() {
   const { data, isLoading, isError, refetch } = useGetMeMfa();
 
   const [enrolling, setEnrolling] = useState(false);
+  const [addingKey, setAddingKey] = useState(false);
+  const [keyName, setKeyName] = useState('');
   const [toRemove, setToRemove] = useState<MfaFactor | null>(null);
   const [regenerating, setRegenerating] = useState(false);
   const [newCodes, setNewCodes] = useState<string[] | null>(null);
@@ -455,6 +461,24 @@ function SecuritySection() {
       setRegenerating(false);
     },
     onError: () => toast.error(t('settings.security.recoveryError', { defaultValue: 'Could not regenerate recovery codes.' })),
+  });
+
+  const registerKey = useMutation({
+    mutationFn: async () => {
+      const options = await postMeMfaWebauthnRegisterBegin({ name: keyName.trim() });
+      const credential = await registerWebAuthn(options);
+      return postMeMfaWebauthnRegisterFinish(credential as unknown as WebAuthnResponse);
+    },
+    onSuccess: (res) => {
+      if (res.accessToken) setAccessToken(res.accessToken);
+      invalidate();
+      setAddingKey(false);
+      setKeyName('');
+      if (res.recoveryCodes) setNewCodes(res.recoveryCodes);
+    },
+    onError: (err) => {
+      if (!isWebAuthnCancel(err)) toast.error(t('settings.security.keyError', { defaultValue: 'Could not add the security key.' }));
+    },
   });
 
   return (
@@ -499,7 +523,9 @@ function SecuritySection() {
                     <div className="min-w-0 flex-1">
                       <p className="flex items-center gap-2 text-sm text-ink">
                         <span className="truncate">{f.name}</span>
-                        <ToneTag tone="ok" label={t('settings.security.totp', { defaultValue: 'Authenticator app' })} />
+                        <ToneTag tone="ok" label={f.type === 'webauthn'
+                          ? t('settings.security.webauthn', { defaultValue: 'Security key / passkey' })
+                          : t('settings.security.totp', { defaultValue: 'Authenticator app' })} />
                       </p>
                       <p className="mt-0.5 font-mono text-2xs text-ink-faint">
                         {t('settings.security.addedOn', { defaultValue: 'Added' })} <TimeAgo at={f.createdAt} />
@@ -525,8 +551,31 @@ function SecuritySection() {
               </div>
             </div>
           )}
+
+          <div className="mt-4 border-t border-line-soft pt-4">
+            {data.webauthnAvailable && window.isSecureContext ? (
+              <Button variant="secondary" size="sm" onClick={() => setAddingKey(true)}>
+                {t('settings.security.addKey', { defaultValue: 'Add security key / passkey' })}
+              </Button>
+            ) : (
+              <p className="text-2xs text-ink-muted">
+                {t('settings.security.keyUnavailable', { defaultValue: 'Security keys are unavailable. Use HTTPS (or localhost) and configure a server origin.' })}
+              </p>
+            )}
+          </div>
         </>
       )}
+
+      <Dialog open={addingKey} onClose={() => setAddingKey(false)} title={t('settings.security.addKey', { defaultValue: 'Add security key / passkey' })} size="sm">
+        <form className="space-y-4" onSubmit={(event) => { event.preventDefault(); registerKey.mutate(); }}>
+          <Field label={t('settings.security.keyName', { defaultValue: 'Name' })} htmlFor="security-key-name">
+            <TextInput id="security-key-name" value={keyName} onChange={(event) => setKeyName(event.target.value)} placeholder="Security key" />
+          </Field>
+          <Button type="submit" variant="primary" size="sm" disabled={registerKey.isPending}>
+            {t('settings.security.registerKey', { defaultValue: 'Register key' })}
+          </Button>
+        </form>
+      </Dialog>
 
       <MfaEnrollDialog open={enrolling} onClose={() => setEnrolling(false)} onEnrolled={invalidate} />
 

@@ -13,4 +13,5 @@ export type LoginMfaRequiredMethodsItem =
 export const LoginMfaRequiredMethodsItem = {
   totp: 'totp',
   recovery: 'recovery',
+  webauthn: 'webauthn',
 } as const;

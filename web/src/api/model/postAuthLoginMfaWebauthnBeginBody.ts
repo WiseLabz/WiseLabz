@@ -6,16 +6,7 @@
  *
  * OpenAPI spec version: 0.1.0
  */
-import type { WebAuthnResponse } from './webAuthnResponse';
 
-/**
- * One of `totp` or `recoveryCode` finishes the login POST /auth/login started.
- */
-export interface LoginMfaRequest {
+export type PostAuthLoginMfaWebauthnBeginBody = {
   ticket: string;
-  /** 6-digit TOTP code */
-  totp?: string;
-  /** A single-use recovery code, e.g. "abcde-fghjk" */
-  recoveryCode?: string;
-  webauthn?: WebAuthnResponse;
-}
+};

@@ -39,7 +39,10 @@ import type {
   PostAuthElevateOidcBegin200,
   PostAuthElevateOidcBeginBody,
   PostAuthElevateOidcCompleteBody,
+  PostAuthElevateWebauthnBeginBody,
+  PostAuthLoginMfaWebauthnBeginBody,
   UnauthorizedResponse,
+  WebAuthnOptions,
 } from '../../model';
 
 import { customInstance } from '../../axios-instance';
@@ -411,6 +414,150 @@ export function usePostAuthLoginMfa<
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
   const queryOptions = getPostAuthLoginMfaQueryOptions(loginMfaRequest, options);
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+/**
+ * @summary Begin a WebAuthn second-factor login ceremony
+ */
+export const postAuthLoginMfaWebauthnBegin = (
+  postAuthLoginMfaWebauthnBeginBody: BodyType<PostAuthLoginMfaWebauthnBeginBody>,
+  options?: SecondParameter<typeof customInstance>,
+  signal?: AbortSignal
+) => {
+  return customInstance<WebAuthnOptions>(
+    {
+      url: `/auth/login/mfa/webauthn/begin`,
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      data: postAuthLoginMfaWebauthnBeginBody,
+      signal,
+    },
+    options
+  );
+};
+
+export const getPostAuthLoginMfaWebauthnBeginQueryKey = (
+  postAuthLoginMfaWebauthnBeginBody?: BodyType<PostAuthLoginMfaWebauthnBeginBody>
+) => {
+  return ['POST', `/auth/login/mfa/webauthn/begin`, postAuthLoginMfaWebauthnBeginBody] as const;
+};
+
+export const getPostAuthLoginMfaWebauthnBeginQueryOptions = <
+  TData = Awaited<ReturnType<typeof postAuthLoginMfaWebauthnBegin>>,
+  TError = ErrorType<UnauthorizedResponse | void>,
+>(
+  postAuthLoginMfaWebauthnBeginBody: BodyType<PostAuthLoginMfaWebauthnBeginBody>,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof postAuthLoginMfaWebauthnBegin>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  }
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ??
+    getPostAuthLoginMfaWebauthnBeginQueryKey(postAuthLoginMfaWebauthnBeginBody);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof postAuthLoginMfaWebauthnBegin>>> = ({
+    signal,
+  }) => postAuthLoginMfaWebauthnBegin(postAuthLoginMfaWebauthnBeginBody, requestOptions, signal);
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof postAuthLoginMfaWebauthnBegin>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type PostAuthLoginMfaWebauthnBeginQueryResult = NonNullable<
+  Awaited<ReturnType<typeof postAuthLoginMfaWebauthnBegin>>
+>;
+export type PostAuthLoginMfaWebauthnBeginQueryError = ErrorType<UnauthorizedResponse | void>;
+
+export function usePostAuthLoginMfaWebauthnBegin<
+  TData = Awaited<ReturnType<typeof postAuthLoginMfaWebauthnBegin>>,
+  TError = ErrorType<UnauthorizedResponse | void>,
+>(
+  postAuthLoginMfaWebauthnBeginBody: BodyType<PostAuthLoginMfaWebauthnBeginBody>,
+  options: {
+    query: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof postAuthLoginMfaWebauthnBegin>>, TError, TData>
+    > &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postAuthLoginMfaWebauthnBegin>>,
+          TError,
+          Awaited<ReturnType<typeof postAuthLoginMfaWebauthnBegin>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function usePostAuthLoginMfaWebauthnBegin<
+  TData = Awaited<ReturnType<typeof postAuthLoginMfaWebauthnBegin>>,
+  TError = ErrorType<UnauthorizedResponse | void>,
+>(
+  postAuthLoginMfaWebauthnBeginBody: BodyType<PostAuthLoginMfaWebauthnBeginBody>,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof postAuthLoginMfaWebauthnBegin>>, TError, TData>
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postAuthLoginMfaWebauthnBegin>>,
+          TError,
+          Awaited<ReturnType<typeof postAuthLoginMfaWebauthnBegin>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function usePostAuthLoginMfaWebauthnBegin<
+  TData = Awaited<ReturnType<typeof postAuthLoginMfaWebauthnBegin>>,
+  TError = ErrorType<UnauthorizedResponse | void>,
+>(
+  postAuthLoginMfaWebauthnBeginBody: BodyType<PostAuthLoginMfaWebauthnBeginBody>,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof postAuthLoginMfaWebauthnBegin>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * @summary Begin a WebAuthn second-factor login ceremony
+ */
+
+export function usePostAuthLoginMfaWebauthnBegin<
+  TData = Awaited<ReturnType<typeof postAuthLoginMfaWebauthnBegin>>,
+  TError = ErrorType<UnauthorizedResponse | void>,
+>(
+  postAuthLoginMfaWebauthnBeginBody: BodyType<PostAuthLoginMfaWebauthnBeginBody>,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof postAuthLoginMfaWebauthnBegin>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getPostAuthLoginMfaWebauthnBeginQueryOptions(
+    postAuthLoginMfaWebauthnBeginBody,
+    options
+  );
 
   const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
     queryKey: DataTag<QueryKey, TData, TError>;
@@ -1011,6 +1158,150 @@ export function useGetAuthElevateMethods<
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
   const queryOptions = getGetAuthElevateMethodsQueryOptions(options);
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+/**
+ * @summary Begin WebAuthn step-up for one action
+ */
+export const postAuthElevateWebauthnBegin = (
+  postAuthElevateWebauthnBeginBody: BodyType<PostAuthElevateWebauthnBeginBody>,
+  options?: SecondParameter<typeof customInstance>,
+  signal?: AbortSignal
+) => {
+  return customInstance<WebAuthnOptions>(
+    {
+      url: `/auth/elevate/webauthn/begin`,
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      data: postAuthElevateWebauthnBeginBody,
+      signal,
+    },
+    options
+  );
+};
+
+export const getPostAuthElevateWebauthnBeginQueryKey = (
+  postAuthElevateWebauthnBeginBody?: BodyType<PostAuthElevateWebauthnBeginBody>
+) => {
+  return ['POST', `/auth/elevate/webauthn/begin`, postAuthElevateWebauthnBeginBody] as const;
+};
+
+export const getPostAuthElevateWebauthnBeginQueryOptions = <
+  TData = Awaited<ReturnType<typeof postAuthElevateWebauthnBegin>>,
+  TError = ErrorType<void>,
+>(
+  postAuthElevateWebauthnBeginBody: BodyType<PostAuthElevateWebauthnBeginBody>,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof postAuthElevateWebauthnBegin>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  }
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ??
+    getPostAuthElevateWebauthnBeginQueryKey(postAuthElevateWebauthnBeginBody);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof postAuthElevateWebauthnBegin>>> = ({
+    signal,
+  }) => postAuthElevateWebauthnBegin(postAuthElevateWebauthnBeginBody, requestOptions, signal);
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof postAuthElevateWebauthnBegin>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type PostAuthElevateWebauthnBeginQueryResult = NonNullable<
+  Awaited<ReturnType<typeof postAuthElevateWebauthnBegin>>
+>;
+export type PostAuthElevateWebauthnBeginQueryError = ErrorType<void>;
+
+export function usePostAuthElevateWebauthnBegin<
+  TData = Awaited<ReturnType<typeof postAuthElevateWebauthnBegin>>,
+  TError = ErrorType<void>,
+>(
+  postAuthElevateWebauthnBeginBody: BodyType<PostAuthElevateWebauthnBeginBody>,
+  options: {
+    query: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof postAuthElevateWebauthnBegin>>, TError, TData>
+    > &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postAuthElevateWebauthnBegin>>,
+          TError,
+          Awaited<ReturnType<typeof postAuthElevateWebauthnBegin>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function usePostAuthElevateWebauthnBegin<
+  TData = Awaited<ReturnType<typeof postAuthElevateWebauthnBegin>>,
+  TError = ErrorType<void>,
+>(
+  postAuthElevateWebauthnBeginBody: BodyType<PostAuthElevateWebauthnBeginBody>,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof postAuthElevateWebauthnBegin>>, TError, TData>
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postAuthElevateWebauthnBegin>>,
+          TError,
+          Awaited<ReturnType<typeof postAuthElevateWebauthnBegin>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function usePostAuthElevateWebauthnBegin<
+  TData = Awaited<ReturnType<typeof postAuthElevateWebauthnBegin>>,
+  TError = ErrorType<void>,
+>(
+  postAuthElevateWebauthnBeginBody: BodyType<PostAuthElevateWebauthnBeginBody>,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof postAuthElevateWebauthnBegin>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * @summary Begin WebAuthn step-up for one action
+ */
+
+export function usePostAuthElevateWebauthnBegin<
+  TData = Awaited<ReturnType<typeof postAuthElevateWebauthnBegin>>,
+  TError = ErrorType<void>,
+>(
+  postAuthElevateWebauthnBeginBody: BodyType<PostAuthElevateWebauthnBeginBody>,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof postAuthElevateWebauthnBegin>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getPostAuthElevateWebauthnBeginQueryOptions(
+    postAuthElevateWebauthnBeginBody,
+    options
+  );
 
   const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
     queryKey: DataTag<QueryKey, TData, TError>;

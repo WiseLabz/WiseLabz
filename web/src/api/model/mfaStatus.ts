@@ -11,6 +11,8 @@ import type { MfaFactor } from './mfaFactor';
 export interface MfaStatus {
   factors: MfaFactor[];
   recoveryCodesRemaining: number;
+  /** Whether this instance has a usable WebAuthn relying party */
+  webauthnAvailable: boolean;
   /** Whether the require_2fa policy currently covers this user. */
   required: boolean;
 }

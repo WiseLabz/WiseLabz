@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"time"
@@ -102,10 +103,15 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 			httputil.Errorf(w, err)
 			return
 		}
+		methods, err := h.mfaMethods(r.Context(), user.ID)
+		if err != nil {
+			httputil.Errorf(w, err)
+			return
+		}
 		httputil.JSON(w, http.StatusOK, map[string]any{
 			"mfaRequired": true,
 			"ticket":      ticket.Ticket,
-			"methods":     []string{"totp", "recovery"},
+			"methods":     methods,
 		})
 		return
 	}
@@ -141,9 +147,10 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 // toward the same lockout on failure (see RegisterFailedLogin).
 func (h *Handler) LoginMFA(w http.ResponseWriter, r *http.Request) {
 	req, ok := httputil.DecodeJSON[struct {
-		Ticket       string `json:"ticket"`
-		TOTP         string `json:"totp"`
-		RecoveryCode string `json:"recoveryCode"`
+		Ticket       string          `json:"ticket"`
+		TOTP         string          `json:"totp"`
+		RecoveryCode string          `json:"recoveryCode"`
+		WebAuthn     json.RawMessage `json:"webauthn"`
 	}](w, r)
 	if !ok {
 		return
@@ -165,7 +172,7 @@ func (h *Handler) LoginMFA(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.verifySecondFactor(r.Context(), user.ID, secondFactorInput{TOTP: req.TOTP, RecoveryCode: req.RecoveryCode}); err != nil {
+	if err := h.verifySecondFactor(w, r, user.ID, secondFactorInput{TOTP: req.TOTP, RecoveryCode: req.RecoveryCode, WebAuthn: req.WebAuthn, Purpose: "login"}); err != nil {
 		if locked, lockErr := h.Store.RegisterFailedLogin(r.Context(), user.ID, maxFailedLoginAttempts, loginLockoutDuration); lockErr != nil {
 			h.logError("failed to register failed login", lockErr)
 		} else if locked {

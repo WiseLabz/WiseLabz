@@ -19,6 +19,7 @@ import type {
   TotpConfirmResult,
   TotpEnrollment,
   User,
+  WebAuthnOptions,
 } from '../../model';
 
 export const getGetMeResponseMock = (
@@ -103,6 +104,7 @@ export const getGetMeMfaResponseMock = (
     })
   ),
   recoveryCodesRemaining: faker.number.int(),
+  webauthnAvailable: faker.datatype.boolean(),
   required: faker.datatype.boolean(),
   ...overrideResponse,
 });
@@ -117,6 +119,31 @@ export const getPostMeMfaTotpResponseMock = (
 });
 
 export const getPostMeMfaTotpFactorIdConfirmResponseMock = (
+  overrideResponse: Partial<Extract<TotpConfirmResult, object>> = {}
+): TotpConfirmResult => ({
+  factor: {
+    id: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    type: faker.helpers.arrayElement(['totp', 'webauthn'] as const),
+    name: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    createdAt: faker.date.past().toISOString().slice(0, 19) + 'Z',
+  },
+  recoveryCodes: faker.helpers.arrayElement([
+    Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() =>
+      faker.string.alpha({ length: { min: 10, max: 20 } })
+    ),
+    undefined,
+  ]),
+  accessToken: faker.helpers.arrayElement([
+    faker.string.alpha({ length: { min: 10, max: 20 } }),
+    undefined,
+  ]),
+  expiresIn: faker.helpers.arrayElement([faker.number.int(), undefined]),
+  ...overrideResponse,
+});
+
+export const getPostMeMfaWebauthnRegisterBeginResponseMock = (): WebAuthnOptions => ({});
+
+export const getPostMeMfaWebauthnRegisterFinishResponseMock = (
   overrideResponse: Partial<Extract<TotpConfirmResult, object>> = {}
 ): TotpConfirmResult => ({
   factor: {
@@ -322,6 +349,54 @@ export const getPostMeMfaTotpFactorIdConfirmMockHandler = (
   );
 };
 
+export const getPostMeMfaWebauthnRegisterBeginMockHandler = (
+  overrideResponse?:
+    | WebAuthnOptions
+    | ((
+        info: Parameters<Parameters<typeof http.post>[1]>[0]
+      ) => Promise<WebAuthnOptions> | WebAuthnOptions),
+  options?: RequestHandlerOptions
+) => {
+  return http.post(
+    '*/me/mfa/webauthn/register/begin',
+    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+      return HttpResponse.json(
+        overrideResponse !== undefined
+          ? typeof overrideResponse === 'function'
+            ? await overrideResponse(info)
+            : overrideResponse
+          : getPostMeMfaWebauthnRegisterBeginResponseMock(),
+        { status: 200 }
+      );
+    },
+    options
+  );
+};
+
+export const getPostMeMfaWebauthnRegisterFinishMockHandler = (
+  overrideResponse?:
+    | TotpConfirmResult
+    | ((
+        info: Parameters<Parameters<typeof http.post>[1]>[0]
+      ) => Promise<TotpConfirmResult> | TotpConfirmResult),
+  options?: RequestHandlerOptions
+) => {
+  return http.post(
+    '*/me/mfa/webauthn/register/finish',
+    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+      return HttpResponse.json(
+        overrideResponse !== undefined
+          ? typeof overrideResponse === 'function'
+            ? await overrideResponse(info)
+            : overrideResponse
+          : getPostMeMfaWebauthnRegisterFinishResponseMock(),
+        { status: 200 }
+      );
+    },
+    options
+  );
+};
+
 export const getPostMeMfaRecoveryCodesMockHandler = (
   overrideResponse?:
     | PostMeMfaRecoveryCodes200
@@ -373,6 +448,8 @@ export const getMeMock = () => [
   getGetMeMfaMockHandler(),
   getPostMeMfaTotpMockHandler(),
   getPostMeMfaTotpFactorIdConfirmMockHandler(),
+  getPostMeMfaWebauthnRegisterBeginMockHandler(),
+  getPostMeMfaWebauthnRegisterFinishMockHandler(),
   getPostMeMfaRecoveryCodesMockHandler(),
   getDeleteMeMfaFactorsFactorIdMockHandler(),
 ];

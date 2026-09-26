@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 
@@ -20,22 +21,34 @@ var (
 )
 
 // secondFactorInput carries a submitted factor response. Exactly one field
-// is set today; PR 2 adds a WebAuthn assertion alongside these two.
+// is set for each request.
 type secondFactorInput struct {
 	TOTP         string
 	RecoveryCode string
+	WebAuthn     json.RawMessage
+	Purpose      string
 }
 
 // verifySecondFactor checks a submitted factor response for userID. Exactly
-// one of TOTP / RecoveryCode (PR 2 adds WebAuthn) is set on in. This is the
-// single entry point POST /auth/login/mfa and POST /auth/elevate both call,
-// so PR 2 only needs to add one more case here.
-func (h *Handler) verifySecondFactor(ctx context.Context, userID string, in secondFactorInput) error {
+// one of TOTP, RecoveryCode, or WebAuthn is set on in. Both login MFA and
+// step-up call this entry point.
+func (h *Handler) verifySecondFactor(w http.ResponseWriter, r *http.Request, userID string, in secondFactorInput) error {
+	count := 0
+	for _, present := range []bool{in.TOTP != "", in.RecoveryCode != "", len(in.WebAuthn) > 0} {
+		if present {
+			count++
+		}
+	}
+	if count != 1 {
+		return errFactorRequired
+	}
 	switch {
 	case in.TOTP != "":
-		return h.verifyTOTP(ctx, userID, in.TOTP)
+		return h.verifyTOTP(r.Context(), userID, in.TOTP)
 	case in.RecoveryCode != "":
-		return h.verifyRecoveryCode(ctx, userID, in.RecoveryCode)
+		return h.verifyRecoveryCode(r.Context(), userID, in.RecoveryCode)
+	case len(in.WebAuthn) > 0:
+		return h.verifyWebAuthnAssertion(w, r, userID, in.Purpose, in.WebAuthn)
 	default:
 		return errFactorRequired
 	}
@@ -140,7 +153,34 @@ func (h *Handler) GetMFA(w http.ResponseWriter, r *http.Request) {
 		"factors":                out,
 		"recoveryCodesRemaining": remaining,
 		"required":               covered,
+		"webauthnAvailable":      h.WebAuthn != nil,
 	})
+}
+
+func (h *Handler) mfaMethods(ctx context.Context, userID string) ([]string, error) {
+	factors, err := h.Store.ListUserFactors(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	methods := make([]string, 0, 3)
+	for _, factor := range factors {
+		if factor.Type == "totp" {
+			methods = append(methods, "totp")
+			break
+		}
+	}
+	if len(factors) > 0 {
+		methods = append(methods, "recovery")
+	}
+	if h.WebAuthn != nil {
+		for _, factor := range factors {
+			if factor.Type == "webauthn" {
+				methods = append(methods, "webauthn")
+				break
+			}
+		}
+	}
+	return methods, nil
 }
 
 // PostMFATOTP handles POST /me/mfa/totp: begins enrollment of a new TOTP
@@ -254,26 +294,33 @@ func (h *Handler) PostMFATOTPConfirm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp := map[string]any{"factor": factorJSON(*confirmed)}
-
-	remaining, err := h.Store.ListUserFactors(r.Context(), user.ID)
+	resp, err := h.enrollmentResult(w, r, user, confirmed)
 	if err != nil {
 		httputil.Errorf(w, err)
 		return
 	}
+	httputil.JSON(w, http.StatusOK, resp)
+}
+
+// enrollmentResult applies the shared first-factor recovery-code and
+// enrollment-only session upgrade behavior after a factor is confirmed.
+func (h *Handler) enrollmentResult(w http.ResponseWriter, r *http.Request, user *store.User, factor *store.MFAFactor) (map[string]any, error) {
+	resp := map[string]any{"factor": factorJSON(*factor)}
+	remaining, err := h.Store.ListUserFactors(r.Context(), user.ID)
+	if err != nil {
+		return nil, err
+	}
 	if len(remaining) == 1 {
 		codes, err := auth.GenerateRecoveryCodes()
 		if err != nil {
-			httputil.Errorf(w, err)
-			return
+			return nil, err
 		}
 		hashes := make([]string, len(codes))
 		for i, c := range codes {
 			hashes[i] = store.HashToken(auth.NormalizeRecoveryCode(c))
 		}
 		if err := h.Store.ReplaceRecoveryCodes(r.Context(), user.ID, hashes); err != nil {
-			httputil.Errorf(w, err)
-			return
+			return nil, err
 		}
 		resp["recoveryCodes"] = codes
 	}
@@ -281,8 +328,7 @@ func (h *Handler) PostMFATOTPConfirm(w http.ResponseWriter, r *http.Request) {
 	if auth.MFAEnrollOnlyFromContext(r.Context()) {
 		pair, err := h.issueSession(w, r, user, false)
 		if err != nil {
-			httputil.Errorf(w, err)
-			return
+			return nil, err
 		}
 		resp["accessToken"] = pair.AccessToken
 		resp["expiresIn"] = pair.ExpiresIn
@@ -291,8 +337,7 @@ func (h *Handler) PostMFATOTPConfirm(w http.ResponseWriter, r *http.Request) {
 	if err := h.Store.RecordAuditFromContext(r.Context(), "auth.mfa.enrolled", "user", user.ID, map[string]any{"factorId": factor.ID}); err != nil {
 		h.logError("failed to record audit", err)
 	}
-
-	httputil.JSON(w, http.StatusOK, resp)
+	return resp, nil
 }
 
 // PostMFARecoveryCodes handles POST /me/mfa/recovery-codes. Requires

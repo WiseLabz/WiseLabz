@@ -6,16 +6,10 @@
  *
  * OpenAPI spec version: 0.1.0
  */
-import type { WebAuthnResponse } from './webAuthnResponse';
 
 /**
- * One of `totp` or `recoveryCode` finishes the login POST /auth/login started.
+ * JSON envelope produced by go-webauthn for the browser WebAuthn API.
  */
-export interface LoginMfaRequest {
-  ticket: string;
-  /** 6-digit TOTP code */
-  totp?: string;
-  /** A single-use recovery code, e.g. "abcde-fghjk" */
-  recoveryCode?: string;
-  webauthn?: WebAuthnResponse;
+export interface WebAuthnOptions {
+  [key: string]: unknown;
 }

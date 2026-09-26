@@ -18,6 +18,7 @@ import type {
   GetAuthElevateMethods200,
   LoginMfaRequired,
   PostAuthElevateOidcBegin200,
+  WebAuthnOptions,
 } from '../../model';
 
 export const getGetAuthProvidersResponseMock = (
@@ -72,7 +73,7 @@ export const getPostAuthLoginResponseLoginMfaRequiredMock = (
   ...{
     mfaRequired: faker.helpers.arrayElement([true] as const),
     ticket: faker.string.alpha({ length: { min: 10, max: 20 } }),
-    methods: faker.helpers.arrayElements(['totp', 'recovery'] as const),
+    methods: faker.helpers.arrayElements(['totp', 'recovery', 'webauthn'] as const),
   },
   ...overrideResponse,
 });
@@ -114,6 +115,8 @@ export const getPostAuthLoginMfaResponseMock = (
   mfaEnrollmentRequired: faker.helpers.arrayElement([faker.datatype.boolean(), undefined]),
   ...overrideResponse,
 });
+
+export const getPostAuthLoginMfaWebauthnBeginResponseMock = (): WebAuthnOptions => ({});
 
 export const getPostAuthOidcCallbackResponseMock = (
   overrideResponse: Partial<Extract<AuthSession, object>> = {}
@@ -199,6 +202,8 @@ export const getGetAuthElevateMethodsResponseMock = (
   ] as const),
   ...overrideResponse,
 });
+
+export const getPostAuthElevateWebauthnBeginResponseMock = (): WebAuthnOptions => ({});
 
 export const getPostAuthElevateOidcBeginResponseMock = (
   overrideResponse: Partial<Extract<PostAuthElevateOidcBegin200, object>> = {}

@@ -6,6 +6,7 @@
  *
  * OpenAPI spec version: 0.1.0
  */
+import type { WebAuthnResponse } from './webAuthnResponse';
 
 /**
  * One of `password` (no confirmed factor) or `totp`/`recoveryCode` (confirmed factor) proves the caller's identity for step-up; see GET /auth/elevate/methods.
@@ -18,4 +19,5 @@ export interface ElevationRequest {
   totp?: string;
   /** A single-use recovery code, used instead of totp */
   recoveryCode?: string;
+  webauthn?: WebAuthnResponse;
 }
