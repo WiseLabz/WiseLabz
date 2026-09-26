@@ -22,6 +22,7 @@ type EntityChange struct {
 	New    any    `json:"new,omitempty"`
 }
 
+// DependencyChange records an added or removed snapshot dependency.
 type DependencyChange struct {
 	Kind   string `json:"kind"`
 	Name   string `json:"name"`
@@ -29,6 +30,7 @@ type DependencyChange struct {
 	Change string `json:"change"`
 }
 
+// SnapshotDiffSummary counts changed sections, distinct entities, and dependencies.
 type SnapshotDiffSummary struct {
 	SectionsAdded       int `json:"sectionsAdded"`
 	SectionsRemoved     int `json:"sectionsRemoved"`
@@ -40,6 +42,7 @@ type SnapshotDiffSummary struct {
 	DependenciesRemoved int `json:"dependenciesRemoved"`
 }
 
+// SnapshotDiff is the complete comparison returned by the snapshot diff API.
 type SnapshotDiff struct {
 	Provenance   SnapshotDiffProvenance `json:"provenance"`
 	Summary      SnapshotDiffSummary    `json:"summary"`
@@ -63,6 +66,7 @@ func entityMap(entities []connector.SnapshotEntity) map[string]connector.Snapsho
 	return result
 }
 
+// CompareEntities returns deterministic field-level changes between entity sets.
 func CompareEntities(prev, curr []connector.SnapshotEntity) []EntityChange {
 	before, after := entityMap(prev), entityMap(curr)
 	keys := make([]string, 0, len(before)+len(after))
@@ -154,6 +158,7 @@ func CompareEntities(prev, curr []connector.SnapshotEntity) []EntityChange {
 	return changes
 }
 
+// CompareDependencies returns deterministic added and removed dependencies.
 func CompareDependencies(prev, curr []connector.ServiceDependency) []DependencyChange {
 	key := func(d connector.ServiceDependency) string { return d.Kind + "\x00" + d.Name + "\x00" + d.Ref }
 	before := make(map[string]connector.ServiceDependency, len(prev))
@@ -191,6 +196,7 @@ func CompareDependencies(prev, curr []connector.ServiceDependency) []DependencyC
 	return changes
 }
 
+// BuildSnapshotDiff compares sections, entities, and dependencies in two snapshots.
 func BuildSnapshotDiff(prev, curr *connector.ServiceSnapshot) SnapshotDiff {
 	d := SnapshotDiff{Sections: Compare(prev, curr), Entities: CompareEntities(prev.Entities, curr.Entities), Dependencies: CompareDependencies(prev.Dependencies, curr.Dependencies)}
 	if d.Sections == nil {

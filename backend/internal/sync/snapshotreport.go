@@ -13,11 +13,14 @@ import (
 	"unicode"
 )
 
+// SnapshotDiffSource identifies a stored snapshot and hashes its exact data string.
 type SnapshotDiffSource struct {
 	ID        string `json:"id"`
 	FetchedAt string `json:"fetchedAt"`
 	SHA256    string `json:"sha256"`
 }
+
+// SnapshotDiffProvenance records the sources and author of a generated comparison.
 type SnapshotDiffProvenance struct {
 	ConnectorID   string             `json:"connectorId"`
 	ConnectorName string             `json:"connectorName"`
@@ -27,6 +30,7 @@ type SnapshotDiffProvenance struct {
 	GeneratedBy   string             `json:"generatedBy"`
 }
 
+// SnapshotSourceFromRecord builds provenance from a stored snapshot row.
 func SnapshotSourceFromRecord(id, fetchedAt, data string) SnapshotDiffSource {
 	hash := sha256.Sum256([]byte(data))
 	return SnapshotDiffSource{id, fetchedAt, hex.EncodeToString(hash[:])}
@@ -71,6 +75,7 @@ func safeCSVCell(value string) string {
 	return value
 }
 
+// RenderSnapshotDiff returns an export body and content type for a supported format.
 func RenderSnapshotDiff(d SnapshotDiff, format string) ([]byte, string, error) {
 	switch format {
 	case "json":

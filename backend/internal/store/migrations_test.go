@@ -569,6 +569,15 @@ func TestRunMigrationsDownPostgres(t *testing.T) {
 	if err := RunMigrations(db, "postgres", logger); err != nil {
 		t.Fatalf("RunMigrations() error: %v", err)
 	}
+	if !hasColumn(t, db, "postgres", "sync_runs", "snapshot_id") {
+		t.Fatal("sync_runs.snapshot_id missing after migrations")
+	}
+	if err := RunMigrationsDown(db, "postgres", logger); err != nil {
+		t.Fatalf("RunMigrationsDown() sync_runs_snapshot_id error: %v", err)
+	}
+	if hasColumn(t, db, "postgres", "sync_runs", "snapshot_id") {
+		t.Fatal("sync_runs.snapshot_id should not exist after rollback")
+	}
 	if !hasColumn(t, db, "postgres", "user_mfa_factors", "credential_id") {
 		t.Fatal("user_mfa_factors.credential_id missing after migrations")
 	}
