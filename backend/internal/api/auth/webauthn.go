@@ -68,7 +68,7 @@ type webAuthnFlow struct {
 	Session webauthn.SessionData `json:"session"`
 }
 
-func (h *Handler) setWebAuthnFlow(w http.ResponseWriter, r *http.Request, flow webAuthnFlow) error {
+func (h *Handler) setWebAuthnFlow(w http.ResponseWriter, flow webAuthnFlow) error {
 	data, err := json.Marshal(flow)
 	if err != nil {
 		return err
@@ -86,7 +86,7 @@ func (h *Handler) setWebAuthnFlow(w http.ResponseWriter, r *http.Request, flow w
 	}
 	http.SetCookie(w, &http.Cookie{
 		Name: webAuthnFlowCookie, Value: value, Path: "/api", MaxAge: 300,
-		HttpOnly: true, Secure: httputil.IsSecureRequest(r, h.Config.Server.TrustedProxies),
+		HttpOnly: true, Secure: true,
 		SameSite: http.SameSiteStrictMode,
 	})
 	return nil
@@ -96,7 +96,7 @@ func (h *Handler) readWebAuthnFlow(w http.ResponseWriter, r *http.Request, userI
 	cookie, err := r.Cookie(webAuthnFlowCookie)
 	http.SetCookie(w, &http.Cookie{
 		Name: webAuthnFlowCookie, Path: "/api", Value: "", MaxAge: -1,
-		HttpOnly: true, Secure: httputil.IsSecureRequest(r, h.Config.Server.TrustedProxies),
+		HttpOnly: true, Secure: true,
 		SameSite: http.SameSiteStrictMode,
 	})
 	if err != nil {
@@ -162,7 +162,7 @@ func (h *Handler) PostWebAuthnRegisterBegin(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	session.Expires = time.Now().Add(5 * time.Minute)
-	if err := h.setWebAuthnFlow(w, r, webAuthnFlow{UserID: user.ID, Purpose: "register", Name: req.Name, Session: *session}); err != nil {
+	if err := h.setWebAuthnFlow(w, webAuthnFlow{UserID: user.ID, Purpose: "register", Name: req.Name, Session: *session}); err != nil {
 		httputil.Errorf(w, err)
 		return
 	}
@@ -279,7 +279,7 @@ func (h *Handler) beginWebAuthnAssertion(w http.ResponseWriter, r *http.Request,
 		return
 	}
 	session.Expires = time.Now().Add(5 * time.Minute)
-	if err := h.setWebAuthnFlow(w, r, webAuthnFlow{UserID: user.ID, Purpose: purpose, Session: *session}); err != nil {
+	if err := h.setWebAuthnFlow(w, webAuthnFlow{UserID: user.ID, Purpose: purpose, Session: *session}); err != nil {
 		httputil.Errorf(w, err)
 		return
 	}

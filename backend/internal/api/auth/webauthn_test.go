@@ -133,6 +133,9 @@ func webAuthnCookie(t *testing.T, rr *httptest.ResponseRecorder) *http.Cookie {
 	t.Helper()
 	for _, cookie := range rr.Result().Cookies() {
 		if cookie.Name == webAuthnFlowCookie && cookie.MaxAge > 0 {
+			if !cookie.Secure || !cookie.HttpOnly || cookie.SameSite != http.SameSiteStrictMode {
+				t.Fatalf("WebAuthn ceremony cookie lacks security attributes: %+v", cookie)
+			}
 			return cookie
 		}
 	}
@@ -188,6 +191,11 @@ func TestWebAuthnRegistrationAndLogin(t *testing.T) {
 	th.H.LoginMFA(finish, finishReq)
 	if finish.Code != http.StatusOK {
 		t.Fatalf("login finish: %d %s", finish.Code, finish.Body.String())
+	}
+	for _, cookie := range finish.Result().Cookies() {
+		if cookie.Name == webAuthnFlowCookie && (cookie.MaxAge != -1 || !cookie.Secure || !cookie.HttpOnly || cookie.SameSite != http.SameSiteStrictMode) {
+			t.Fatalf("WebAuthn ceremony cookie was not securely cleared: %+v", cookie)
+		}
 	}
 	if _, err := th.Store.GetFactorByCredentialID(t.Context(), base64.RawURLEncoding.EncodeToString(v.id)); err != nil {
 		t.Fatal(err)
