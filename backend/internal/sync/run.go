@@ -216,6 +216,7 @@ func (e *Engine) finishSync(ctx context.Context, connectorID, jobID string, rec 
 		Attempt:      attempt,
 		ChangesCount: result.ChangesCount,
 		AlertsCount:  result.AlertsCount,
+		SnapshotID:   snapshotIDOrNil(result.SnapshotID),
 	}); err != nil {
 		slog.Error("record sync run failed", "connector", logsafe.Sanitize(connectorID), "error", logsafe.Sanitize(err.Error()))
 	}
@@ -252,6 +253,13 @@ func (e *Engine) finishSync(ctx context.Context, connectorID, jobID string, rec 
 			slog.Error("doc regeneration failed", "connector", logsafe.Sanitize(connectorID), "error", logsafe.Sanitize(err.Error()))
 		}
 	}
+}
+
+func snapshotIDOrNil(id string) *string {
+	if id == "" {
+		return nil
+	}
+	return &id
 }
 
 func (e *Engine) syncConfig(rec *store.ConnectorRecord, fields []string) (map[string]any, error) {
