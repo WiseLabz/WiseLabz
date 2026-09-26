@@ -1,6 +1,7 @@
 package sync
 
 import (
+	"encoding/csv"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -18,7 +19,7 @@ func TestSnapshotDiffEntityFieldsAndCounts(t *testing.T) {
 	if d.Summary.EntitiesAdded != 1 || d.Summary.EntitiesRemoved != 1 || d.Summary.EntitiesModified != 1 || d.Summary.DependenciesAdded != 1 || d.Summary.DependenciesRemoved != 1 {
 		t.Fatalf("summary: %+v", d.Summary)
 	}
-	want := []string{"7:attributes.enabled:modified", "7:attributes.gone:removed", "7:attributes.new:added", "7:ip:modified", "7:name:modified", "Added:entity:added", "Removed:entity:removed"}
+	want := []string{"externalId:7:attributes.enabled:modified", "externalId:7:attributes.gone:removed", "externalId:7:attributes.new:added", "externalId:7:ip:modified", "externalId:7:name:modified", "name:Added:entity:added", "name:Removed:entity:removed"}
 	got := make([]string, 0, len(d.Entities))
 	for _, e := range d.Entities {
 		got = append(got, e.Key+":"+e.Field+":"+e.Change)
@@ -91,5 +92,51 @@ func TestCompareDependenciesDeterministic(t *testing.T) {
 		if got := strings.Join(parts, "|"); got != want {
 			t.Fatalf("iteration %d: %s", i, got)
 		}
+	}
+}
+
+func TestCompareEntitiesKeepsExternalIDAndFallbackNameDistinct(t *testing.T) {
+	before := &connector.ServiceSnapshot{Entities: []connector.SnapshotEntity{{Kind: "vm", Name: "External", ExternalID: "x", IP: "1"}, {Kind: "vm", Name: "x", IP: "2"}}}
+	after := &connector.ServiceSnapshot{Entities: []connector.SnapshotEntity{{Kind: "vm", Name: "External", ExternalID: "x", IP: "3"}, {Kind: "vm", Name: "x", IP: "4"}}}
+	d := BuildSnapshotDiff(before, after)
+	if d.Summary.EntitiesModified != 2 || len(d.Entities) != 2 {
+		t.Fatalf("lost entity: %+v", d)
+	}
+	if d.Entities[0].Key == d.Entities[1].Key {
+		t.Fatalf("colliding keys: %+v", d.Entities)
+	}
+	if d.Entities[0].Key != "externalId:x" || d.Entities[1].Key != "name:x" {
+		t.Fatalf("unexpected keys: %+v", d.Entities)
+	}
+}
+
+func TestSnapshotDiffCSVNeutralizesFormulaCellsOnly(t *testing.T) {
+	d := SnapshotDiff{Sections: []DiffResult{{Type: "modified", Patches: []DiffPatch{{Section: "=SUM(1,2)", Old: " \t+1", New: "safe"}}}}, Entities: []EntityChange{{Kind: "vm", Key: "@key", Field: "name", Change: "modified", Old: "-1", New: "  =HYPERLINK(1)"}}, Dependencies: []DependencyChange{}}
+	csvBytes, _, err := RenderSnapshotDiff(d, "csv")
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.SplitN(string(csvBytes), "kind,key,field,change,old,new\n", 2)
+	if len(lines) != 2 {
+		t.Fatal("missing CSV header")
+	}
+	rows, err := csv.NewReader(strings.NewReader(lines[1])).ReadAll()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rows[0][1] != "'=SUM(1,2)" || rows[0][4] != "' \t+1" || rows[0][5] != "safe" || rows[1][1] != "'@key" || rows[1][4] != "'-1" || rows[1][5] != "'  =HYPERLINK(1)" {
+		t.Fatalf("unsafe CSV rows: %#v", rows)
+	}
+	jsonBytes, _, err := RenderSnapshotDiff(d, "json")
+	if err != nil || strings.Contains(string(jsonBytes), "'@key") {
+		t.Fatalf("JSON changed: %s %v", jsonBytes, err)
+	}
+	mdBytes, _, err := RenderSnapshotDiff(d, "md")
+	if err != nil || strings.Contains(string(mdBytes), "'@key") {
+		t.Fatalf("Markdown changed: %s %v", mdBytes, err)
+	}
+	htmlBytes, _, err := RenderSnapshotDiff(d, "html")
+	if err != nil || strings.Contains(string(htmlBytes), "'@key") {
+		t.Fatalf("HTML changed: %s %v", htmlBytes, err)
 	}
 }

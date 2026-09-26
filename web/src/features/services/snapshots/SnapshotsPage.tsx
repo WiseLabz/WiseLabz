@@ -56,7 +56,8 @@ export function SnapshotsPage() {
     enabled: !!id,
   });
   const rows = timeline.data?.pages.flatMap((page) => page.rows) ?? [];
-  const activeFrom = from || (to ? rows[rows.findIndex((row) => row.id === to) + 1]?.id ?? '' : '');
+  const targetIndex = rows.findIndex((row) => row.id === to);
+  const activeFrom = from || (to && targetIndex >= 0 ? rows[targetIndex + 1]?.id ?? '' : '');
   const view = useGetConnectorsConnectorIdSnapshotsSnapshotId(id, snapshotId, {
     query: { enabled: !!snapshotId },
   });

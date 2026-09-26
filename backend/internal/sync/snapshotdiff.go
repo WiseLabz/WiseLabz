@@ -50,9 +50,9 @@ type SnapshotDiff struct {
 
 func entityKey(e connector.SnapshotEntity) string {
 	if e.ExternalID != "" {
-		return e.ExternalID
+		return "externalId:" + e.ExternalID
 	}
-	return e.Name
+	return "name:" + e.Name
 }
 
 func entityMap(entities []connector.SnapshotEntity) map[string]connector.SnapshotEntity {

@@ -63,4 +63,20 @@ describe('SnapshotsPage', () => {
     await waitFor(() => expect(download).toHaveBeenCalledOnce());
     expect(get).toHaveBeenCalledWith('/connectors/svc/snapshots/diff', expect.objectContaining({ params: { from: 'old', to: 'new', format: 'csv' }, responseType: 'blob' }));
   });
+
+  it('finds the predecessor when a linked sync snapshot is on a later page', async () => {
+    get.mockImplementation((_url: string, options?: { params?: { cursor?: string } }) => options?.params?.cursor
+      ? Promise.resolve({ data: [
+        { id: 'target', fetchedAt: '2026-09-25T10:00:00Z', sizeBytes: 512, golden: false },
+        { id: 'older', fetchedAt: '2026-09-24T10:00:00Z', sizeBytes: 256, golden: false },
+      ], headers: {} })
+      : Promise.resolve({ data: [
+        { id: 'newer', fetchedAt: '2026-09-26T10:00:00Z', sizeBytes: 1024, golden: false },
+      ], headers: { 'x-next-cursor': 'page-2' } }));
+
+    mount('/services/svc/snapshots?b=target');
+    expect(await screen.findByText('older → target')).toBeInTheDocument();
+    expect(get).toHaveBeenCalledTimes(2);
+    expect(get).toHaveBeenCalledWith('/connectors/svc/snapshots', expect.objectContaining({ params: { limit: 30, cursor: 'page-2' } }));
+  });
 });

@@ -10,6 +10,7 @@ import (
 	"html/template"
 	"strings"
 	"time"
+	"unicode"
 )
 
 type SnapshotDiffSource struct {
@@ -61,6 +62,15 @@ func snapshotReportRows(d SnapshotDiff) [][]string {
 	return rows
 }
 
+// safeCSVCell keeps spreadsheet applications from evaluating data as a formula.
+func safeCSVCell(value string) string {
+	trimmed := strings.TrimLeftFunc(value, unicode.IsSpace)
+	if trimmed != "" && strings.ContainsRune("=+-@", rune(trimmed[0])) {
+		return "'" + value
+	}
+	return value
+}
+
 func RenderSnapshotDiff(d SnapshotDiff, format string) ([]byte, string, error) {
 	switch format {
 	case "json":
@@ -76,7 +86,13 @@ func RenderSnapshotDiff(d SnapshotDiff, format string) ([]byte, string, error) {
 		if err := w.Write([]string{"kind", "key", "field", "change", "old", "new"}); err != nil {
 			return nil, "", err
 		}
-		if err := w.WriteAll(snapshotReportRows(d)); err != nil {
+		rows := snapshotReportRows(d)
+		for _, row := range rows {
+			for i, cell := range row {
+				row[i] = safeCSVCell(cell)
+			}
+		}
+		if err := w.WriteAll(rows); err != nil {
 			return nil, "", err
 		}
 		return b.Bytes(), "text/csv", nil
