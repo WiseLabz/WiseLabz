@@ -21,6 +21,7 @@ import type {
   GetAuthElevateMethods200,
   LoginMfaRequired,
   PostAuthElevateOidcBegin200,
+  WebAuthnOptions,
 } from '../../model';
 
 export const getGetAuthProvidersResponseMock = (
@@ -75,7 +76,7 @@ export const getPostAuthLoginResponseLoginMfaRequiredMock = (
   ...{
     mfaRequired: faker.helpers.arrayElement([true] as const),
     ticket: faker.string.alpha({ length: { min: 10, max: 20 } }),
-    methods: faker.helpers.arrayElements(['totp', 'recovery'] as const),
+    methods: faker.helpers.arrayElements(['totp', 'recovery', 'webauthn'] as const),
   },
   ...overrideResponse,
 });
@@ -117,6 +118,8 @@ export const getPostAuthLoginMfaResponseMock = (
   mfaEnrollmentRequired: faker.helpers.arrayElement([faker.datatype.boolean(), undefined]),
   ...overrideResponse,
 });
+
+export const getPostAuthLoginMfaWebauthnBeginResponseMock = (): WebAuthnOptions => ({});
 
 export const getPostAuthOidcCallbackResponseMock = (
   overrideResponse: Partial<Extract<AuthSession, object>> = {}
@@ -202,6 +205,8 @@ export const getGetAuthElevateMethodsResponseMock = (
   ] as const),
   ...overrideResponse,
 });
+
+export const getPostAuthElevateWebauthnBeginResponseMock = (): WebAuthnOptions => ({});
 
 export const getPostAuthElevateOidcBeginResponseMock = (
   overrideResponse: Partial<Extract<PostAuthElevateOidcBegin200, object>> = {}
@@ -341,6 +346,30 @@ export const getPostAuthLoginMfaMockHandler = (
   );
 };
 
+export const getPostAuthLoginMfaWebauthnBeginMockHandler = (
+  overrideResponse?:
+    | WebAuthnOptions
+    | ((
+        info: Parameters<Parameters<typeof http.post>[1]>[0]
+      ) => Promise<WebAuthnOptions> | WebAuthnOptions),
+  options?: RequestHandlerOptions
+) => {
+  return http.post(
+    '*/auth/login/mfa/webauthn/begin',
+    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+      return HttpResponse.json(
+        overrideResponse !== undefined
+          ? typeof overrideResponse === 'function'
+            ? await overrideResponse(info)
+            : overrideResponse
+          : getPostAuthLoginMfaWebauthnBeginResponseMock(),
+        { status: 200 }
+      );
+    },
+    options
+  );
+};
+
 export const getPostAuthOidcCallbackMockHandler = (
   overrideResponse?:
     | AuthSession
@@ -449,6 +478,30 @@ export const getGetAuthElevateMethodsMockHandler = (
             ? await overrideResponse(info)
             : overrideResponse
           : getGetAuthElevateMethodsResponseMock(),
+        { status: 200 }
+      );
+    },
+    options
+  );
+};
+
+export const getPostAuthElevateWebauthnBeginMockHandler = (
+  overrideResponse?:
+    | WebAuthnOptions
+    | ((
+        info: Parameters<Parameters<typeof http.post>[1]>[0]
+      ) => Promise<WebAuthnOptions> | WebAuthnOptions),
+  options?: RequestHandlerOptions
+) => {
+  return http.post(
+    '*/auth/elevate/webauthn/begin',
+    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+      return HttpResponse.json(
+        overrideResponse !== undefined
+          ? typeof overrideResponse === 'function'
+            ? await overrideResponse(info)
+            : overrideResponse
+          : getPostAuthElevateWebauthnBeginResponseMock(),
         { status: 200 }
       );
     },
@@ -572,11 +625,13 @@ export const getAuthMock = () => [
   getGetAuthProvidersMockHandler(),
   getPostAuthLoginMockHandler(),
   getPostAuthLoginMfaMockHandler(),
+  getPostAuthLoginMfaWebauthnBeginMockHandler(),
   getPostAuthOidcCallbackMockHandler(),
   getPostAuthRefreshMockHandler(),
   getPostAuthLogoutMockHandler(),
   getPostAuthElevateMockHandler(),
   getGetAuthElevateMethodsMockHandler(),
+  getPostAuthElevateWebauthnBeginMockHandler(),
   getPostAuthElevateOidcBeginMockHandler(),
   getPostAuthElevateOidcCompleteMockHandler(),
   getGetAuthApiKeysMockHandler(),

@@ -10,6 +10,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/go-webauthn/webauthn/webauthn"
+
 	"github.com/WiseLabz/wiselabz/internal/auth"
 	"github.com/WiseLabz/wiselabz/internal/config"
 	"github.com/WiseLabz/wiselabz/internal/httputil"
@@ -21,16 +23,24 @@ type Handler struct {
 	Store    *store.Store
 	JWT      *auth.Service
 	Config   *config.Config
+	WebAuthn *webauthn.WebAuthn
 	oidcMu   sync.Mutex                    // guards oidcProv
 	oidcProv map[string]*auth.OIDCProvider // initialized on first use
 }
 
 // NewHandler creates a new auth handler.
 func NewHandler(s *store.Store, jwtSvc *auth.Service, cfg *config.Config) *Handler {
+	wa, enabled, err := auth.NewWebAuthnService(cfg)
+	if err != nil {
+		slog.Warn("WebAuthn disabled: invalid relying-party configuration", "error", err)
+	} else if !enabled {
+		slog.Warn("WebAuthn disabled: no usable server origin configured")
+	}
 	return &Handler{
-		Store:  s,
-		JWT:    jwtSvc,
-		Config: cfg,
+		Store:    s,
+		JWT:      jwtSvc,
+		Config:   cfg,
+		WebAuthn: wa,
 	}
 }
 

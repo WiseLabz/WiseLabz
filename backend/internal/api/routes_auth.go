@@ -29,6 +29,7 @@ func mountAuthRoutes(r chi.Router, d routerDeps) {
 	r.Route("/auth", func(r chi.Router) {
 		r.With(authIPLimit).Post("/login", d.authH.Login)
 		r.With(authIPLimit).Post("/login/mfa", d.authH.LoginMFA)
+		r.With(authIPLimit).Post("/login/mfa/webauthn/begin", d.authH.PostWebAuthnLoginBegin)
 		r.With(authIPLimit).Post("/oidc/callback", d.authH.OIDCCallback)
 		r.With(authIPLimit).Post("/refresh", d.authH.Refresh)
 		r.Get("/providers", d.authH.Providers)
@@ -37,6 +38,7 @@ func mountAuthRoutes(r chi.Router, d routerDeps) {
 			r.Use(cfg.AuthMiddleware())
 			r.Post("/logout", d.authH.Logout)
 			r.With(elevateLimit).Post("/elevate", d.authH.Elevate)
+			r.With(elevateLimit).Post("/elevate/webauthn/begin", d.authH.PostWebAuthnElevateBegin)
 			r.Get("/elevate/methods", d.authH.ElevateMethods)
 			r.With(elevateLimit).Post("/elevate/oidc/begin", d.authH.ElevateOIDCBegin)
 			r.With(elevateLimit).Post("/elevate/oidc/complete", d.authH.ElevateOIDCComplete)
@@ -72,6 +74,8 @@ func mountMeRoutes(r chi.Router, d routerDeps) {
 			r.Get("/", d.authH.GetMFA)
 			r.Post("/totp", d.authH.PostMFATOTP)
 			r.Post("/totp/{id}/confirm", d.authH.PostMFATOTPConfirm)
+			r.Post("/webauthn/register/begin", d.authH.PostWebAuthnRegisterBegin)
+			r.Post("/webauthn/register/finish", d.authH.PostWebAuthnRegisterFinish)
 
 			r.Group(func(r chi.Router) {
 				r.Use(auth.RequireElevation(cfg.JWT, cfg.Store, "mfa.manage"))

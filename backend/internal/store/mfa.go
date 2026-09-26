@@ -11,15 +11,19 @@ import (
 )
 
 // MFAFactor represents a row in the user_mfa_factors table. Secret is the
-// factor's TOTP secret encrypted at rest with internal/crypto.Encrypt; PR 2
-// (WebAuthn) reuses this same table (see the type CHECK constraint) with its
-// own encoding in Secret. ConfirmedAt is "" while enrollment is pending.
+// factor's TOTP secret encrypted at rest with internal/crypto.Encrypt; a
+// webauthn factor (#279 part 2) leaves Secret empty and instead carries
+// CredentialID (base64url, indexed, unique) and Credential (the
+// JSON-marshaled webauthn.Credential — public key, sign count, transports,
+// aaguid, backup state, ...). ConfirmedAt is "" while enrollment is pending.
 type MFAFactor struct {
 	ID           string `json:"id"`
 	UserID       string `json:"userId"`
 	Type         string `json:"type"`
 	Name         string `json:"name"`
 	Secret       string `json:"-"`
+	CredentialID string `json:"-"`
+	Credential   string `json:"-"`
 	ConfirmedAt  string `json:"confirmedAt"`
 	LastUsedStep int64  `json:"-"`
 	CreatedAt    string `json:"createdAt"`
@@ -92,11 +96,11 @@ func (s *Store) ConfirmFactor(ctx context.Context, factorID string) (*MFAFactor,
 // must check UserID themselves.
 func (s *Store) GetFactor(ctx context.Context, factorID string) (*MFAFactor, error) {
 	f := &MFAFactor{}
-	var confirmedAt sql.NullString
+	var confirmedAt, credentialID, credential sql.NullString
 	err := s.db.QueryRowContext(ctx, `
-		SELECT id, user_id, type, name, secret, confirmed_at, last_used_step, created_at
+		SELECT id, user_id, type, name, secret, confirmed_at, last_used_step, created_at, credential_id, credential
 		FROM user_mfa_factors WHERE id = ?
-	`, factorID).Scan(&f.ID, &f.UserID, &f.Type, &f.Name, &f.Secret, &confirmedAt, &f.LastUsedStep, &f.CreatedAt)
+	`, factorID).Scan(&f.ID, &f.UserID, &f.Type, &f.Name, &f.Secret, &confirmedAt, &f.LastUsedStep, &f.CreatedAt, &credentialID, &credential)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -104,6 +108,8 @@ func (s *Store) GetFactor(ctx context.Context, factorID string) (*MFAFactor, err
 		return nil, fmt.Errorf("get factor: %w", err)
 	}
 	f.ConfirmedAt = confirmedAt.String
+	f.CredentialID = credentialID.String
+	f.Credential = credential.String
 	return f, nil
 }
 
@@ -111,7 +117,7 @@ func (s *Store) GetFactor(ctx context.Context, factorID string) (*MFAFactor, err
 // are not "their factors" yet).
 func (s *Store) ListUserFactors(ctx context.Context, userID string) ([]MFAFactor, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, user_id, type, name, secret, confirmed_at, last_used_step, created_at
+		SELECT id, user_id, type, name, secret, confirmed_at, last_used_step, created_at, credential_id, credential
 		FROM user_mfa_factors WHERE user_id = ? AND confirmed_at IS NOT NULL ORDER BY created_at
 	`, userID)
 	if err != nil {
@@ -122,11 +128,13 @@ func (s *Store) ListUserFactors(ctx context.Context, userID string) ([]MFAFactor
 	var factors []MFAFactor
 	for rows.Next() {
 		var f MFAFactor
-		var confirmedAt sql.NullString
-		if err := rows.Scan(&f.ID, &f.UserID, &f.Type, &f.Name, &f.Secret, &confirmedAt, &f.LastUsedStep, &f.CreatedAt); err != nil {
+		var confirmedAt, credentialID, credential sql.NullString
+		if err := rows.Scan(&f.ID, &f.UserID, &f.Type, &f.Name, &f.Secret, &confirmedAt, &f.LastUsedStep, &f.CreatedAt, &credentialID, &credential); err != nil {
 			return nil, fmt.Errorf("scan factor: %w", err)
 		}
 		f.ConfirmedAt = confirmedAt.String
+		f.CredentialID = credentialID.String
+		f.Credential = credential.String
 		factors = append(factors, f)
 	}
 	if err := rows.Err(); err != nil {
@@ -155,6 +163,78 @@ func (s *Store) GetConfirmedTOTPFactor(ctx context.Context, userID string) (*MFA
 	}
 	f.ConfirmedAt = confirmedAt.String
 	return f, nil
+}
+
+// --- WebAuthn factors (#279 part 2) ---
+//
+// Unlike TOTP, a user may register several webauthn factors (one per
+// authenticator), so there is no "confirmed webauthn factor" singular
+// lookup; ListUserFactors already returns every confirmed factor of every
+// type, and callers filter on Type == "webauthn" themselves.
+
+// CreateWebAuthnFactor inserts a confirmed webauthn factor directly (there is
+// no pending state to confirm later, unlike TOTP: the registration ceremony
+// itself proves possession of the authenticator). credential is the
+// JSON-marshaled webauthn.Credential and credentialID its base64url
+// credential ID, kept in its own indexed+unique column so the login/step-up
+// ceremonies can look a factor up by it directly.
+func (s *Store) CreateWebAuthnFactor(ctx context.Context, userID, name, credentialID, credential string) (*MFAFactor, error) {
+	f := &MFAFactor{
+		ID:           uuid.New().String(),
+		UserID:       userID,
+		Type:         "webauthn",
+		Name:         name,
+		CredentialID: credentialID,
+		Credential:   credential,
+		CreatedAt:    time.Now().UTC().Format(time.RFC3339),
+	}
+	now := f.CreatedAt
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO user_mfa_factors (id, user_id, type, name, secret, confirmed_at, last_used_step, created_at, credential_id, credential)
+		VALUES (?, ?, 'webauthn', ?, '', ?, 0, ?, ?, ?)
+	`, f.ID, f.UserID, f.Name, now, f.CreatedAt, f.CredentialID, f.Credential)
+	if err != nil {
+		return nil, fmt.Errorf("create webauthn factor: %w", err)
+	}
+	f.ConfirmedAt = now
+	return f, nil
+}
+
+// GetFactorByCredentialID looks up a confirmed webauthn factor by its
+// credential ID, as used by the login/step-up assertion ceremonies once the
+// client reports which credential it used. Returns ErrNotFound if no
+// confirmed factor carries that credential ID.
+func (s *Store) GetFactorByCredentialID(ctx context.Context, credentialID string) (*MFAFactor, error) {
+	f := &MFAFactor{}
+	var confirmedAt, cID, credential sql.NullString
+	err := s.db.QueryRowContext(ctx, `
+		SELECT id, user_id, type, name, secret, confirmed_at, last_used_step, created_at, credential_id, credential
+		FROM user_mfa_factors WHERE credential_id = ? AND confirmed_at IS NOT NULL
+	`, credentialID).Scan(&f.ID, &f.UserID, &f.Type, &f.Name, &f.Secret, &confirmedAt, &f.LastUsedStep, &f.CreatedAt, &cID, &credential)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get factor by credential id: %w", err)
+	}
+	f.ConfirmedAt = confirmedAt.String
+	f.CredentialID = cID.String
+	f.Credential = credential.String
+	return f, nil
+}
+
+// UpdateSignCount saves the verified credential only if another assertion has
+// not advanced it since the caller read it.
+func (s *Store) UpdateSignCount(ctx context.Context, factorID, previous, credential string) (bool, error) {
+	result, err := s.db.ExecContext(ctx, `UPDATE user_mfa_factors SET credential = ? WHERE id = ? AND credential = ?`, credential, factorID, previous)
+	if err != nil {
+		return false, fmt.Errorf("update sign count: %w", err)
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return false, fmt.Errorf("rows affected: %w", err)
+	}
+	return rows == 1, nil
 }
 
 // DeleteFactor removes a single factor (used for self-service removal and as

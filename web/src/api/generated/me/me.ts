@@ -28,12 +28,15 @@ import type {
   PostMeMfaRecoveryCodes200,
   PostMeMfaTotpBody,
   PostMeMfaTotpFactorIdConfirmBody,
+  PostMeMfaWebauthnRegisterBeginBody,
   ProfileUpdate,
   Session,
   TotpConfirmResult,
   TotpEnrollment,
   UnauthorizedResponse,
   User,
+  WebAuthnOptions,
+  WebAuthnResponse,
 } from '../../model';
 
 import { customInstance } from '../../axios-instance';
@@ -1037,6 +1040,290 @@ export function usePostMeMfaTotpFactorIdConfirm<
     postMeMfaTotpFactorIdConfirmBody,
     options
   );
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+/**
+ * @summary Begin registering a security key or passkey
+ */
+export const postMeMfaWebauthnRegisterBegin = (
+  postMeMfaWebauthnRegisterBeginBody?: BodyType<PostMeMfaWebauthnRegisterBeginBody>,
+  options?: SecondParameter<typeof customInstance>,
+  signal?: AbortSignal
+) => {
+  return customInstance<WebAuthnOptions>(
+    {
+      url: `/me/mfa/webauthn/register/begin`,
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      data: postMeMfaWebauthnRegisterBeginBody,
+      signal,
+    },
+    options
+  );
+};
+
+export const getPostMeMfaWebauthnRegisterBeginQueryKey = (
+  postMeMfaWebauthnRegisterBeginBody?: BodyType<PostMeMfaWebauthnRegisterBeginBody>
+) => {
+  return ['POST', `/me/mfa/webauthn/register/begin`, postMeMfaWebauthnRegisterBeginBody] as const;
+};
+
+export const getPostMeMfaWebauthnRegisterBeginQueryOptions = <
+  TData = Awaited<ReturnType<typeof postMeMfaWebauthnRegisterBegin>>,
+  TError = ErrorType<void>,
+>(
+  postMeMfaWebauthnRegisterBeginBody?: BodyType<PostMeMfaWebauthnRegisterBeginBody>,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof postMeMfaWebauthnRegisterBegin>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  }
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ??
+    getPostMeMfaWebauthnRegisterBeginQueryKey(postMeMfaWebauthnRegisterBeginBody);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof postMeMfaWebauthnRegisterBegin>>> = ({
+    signal,
+  }) => postMeMfaWebauthnRegisterBegin(postMeMfaWebauthnRegisterBeginBody, requestOptions, signal);
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof postMeMfaWebauthnRegisterBegin>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type PostMeMfaWebauthnRegisterBeginQueryResult = NonNullable<
+  Awaited<ReturnType<typeof postMeMfaWebauthnRegisterBegin>>
+>;
+export type PostMeMfaWebauthnRegisterBeginQueryError = ErrorType<void>;
+
+export function usePostMeMfaWebauthnRegisterBegin<
+  TData = Awaited<ReturnType<typeof postMeMfaWebauthnRegisterBegin>>,
+  TError = ErrorType<void>,
+>(
+  postMeMfaWebauthnRegisterBeginBody: undefined | BodyType<PostMeMfaWebauthnRegisterBeginBody>,
+  options: {
+    query: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof postMeMfaWebauthnRegisterBegin>>, TError, TData>
+    > &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postMeMfaWebauthnRegisterBegin>>,
+          TError,
+          Awaited<ReturnType<typeof postMeMfaWebauthnRegisterBegin>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function usePostMeMfaWebauthnRegisterBegin<
+  TData = Awaited<ReturnType<typeof postMeMfaWebauthnRegisterBegin>>,
+  TError = ErrorType<void>,
+>(
+  postMeMfaWebauthnRegisterBeginBody?: BodyType<PostMeMfaWebauthnRegisterBeginBody>,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof postMeMfaWebauthnRegisterBegin>>, TError, TData>
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postMeMfaWebauthnRegisterBegin>>,
+          TError,
+          Awaited<ReturnType<typeof postMeMfaWebauthnRegisterBegin>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function usePostMeMfaWebauthnRegisterBegin<
+  TData = Awaited<ReturnType<typeof postMeMfaWebauthnRegisterBegin>>,
+  TError = ErrorType<void>,
+>(
+  postMeMfaWebauthnRegisterBeginBody?: BodyType<PostMeMfaWebauthnRegisterBeginBody>,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof postMeMfaWebauthnRegisterBegin>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * @summary Begin registering a security key or passkey
+ */
+
+export function usePostMeMfaWebauthnRegisterBegin<
+  TData = Awaited<ReturnType<typeof postMeMfaWebauthnRegisterBegin>>,
+  TError = ErrorType<void>,
+>(
+  postMeMfaWebauthnRegisterBeginBody?: BodyType<PostMeMfaWebauthnRegisterBeginBody>,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof postMeMfaWebauthnRegisterBegin>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getPostMeMfaWebauthnRegisterBeginQueryOptions(
+    postMeMfaWebauthnRegisterBeginBody,
+    options
+  );
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+/**
+ * @summary Finish registering a security key or passkey
+ */
+export const postMeMfaWebauthnRegisterFinish = (
+  webAuthnResponse: BodyType<WebAuthnResponse>,
+  options?: SecondParameter<typeof customInstance>,
+  signal?: AbortSignal
+) => {
+  return customInstance<TotpConfirmResult>(
+    {
+      url: `/me/mfa/webauthn/register/finish`,
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      data: webAuthnResponse,
+      signal,
+    },
+    options
+  );
+};
+
+export const getPostMeMfaWebauthnRegisterFinishQueryKey = (
+  webAuthnResponse?: BodyType<WebAuthnResponse>
+) => {
+  return ['POST', `/me/mfa/webauthn/register/finish`, webAuthnResponse] as const;
+};
+
+export const getPostMeMfaWebauthnRegisterFinishQueryOptions = <
+  TData = Awaited<ReturnType<typeof postMeMfaWebauthnRegisterFinish>>,
+  TError = ErrorType<UnauthorizedResponse | void>,
+>(
+  webAuthnResponse: BodyType<WebAuthnResponse>,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof postMeMfaWebauthnRegisterFinish>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  }
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getPostMeMfaWebauthnRegisterFinishQueryKey(webAuthnResponse);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof postMeMfaWebauthnRegisterFinish>>> = ({
+    signal,
+  }) => postMeMfaWebauthnRegisterFinish(webAuthnResponse, requestOptions, signal);
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof postMeMfaWebauthnRegisterFinish>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type PostMeMfaWebauthnRegisterFinishQueryResult = NonNullable<
+  Awaited<ReturnType<typeof postMeMfaWebauthnRegisterFinish>>
+>;
+export type PostMeMfaWebauthnRegisterFinishQueryError = ErrorType<UnauthorizedResponse | void>;
+
+export function usePostMeMfaWebauthnRegisterFinish<
+  TData = Awaited<ReturnType<typeof postMeMfaWebauthnRegisterFinish>>,
+  TError = ErrorType<UnauthorizedResponse | void>,
+>(
+  webAuthnResponse: BodyType<WebAuthnResponse>,
+  options: {
+    query: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof postMeMfaWebauthnRegisterFinish>>, TError, TData>
+    > &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postMeMfaWebauthnRegisterFinish>>,
+          TError,
+          Awaited<ReturnType<typeof postMeMfaWebauthnRegisterFinish>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function usePostMeMfaWebauthnRegisterFinish<
+  TData = Awaited<ReturnType<typeof postMeMfaWebauthnRegisterFinish>>,
+  TError = ErrorType<UnauthorizedResponse | void>,
+>(
+  webAuthnResponse: BodyType<WebAuthnResponse>,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof postMeMfaWebauthnRegisterFinish>>, TError, TData>
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof postMeMfaWebauthnRegisterFinish>>,
+          TError,
+          Awaited<ReturnType<typeof postMeMfaWebauthnRegisterFinish>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function usePostMeMfaWebauthnRegisterFinish<
+  TData = Awaited<ReturnType<typeof postMeMfaWebauthnRegisterFinish>>,
+  TError = ErrorType<UnauthorizedResponse | void>,
+>(
+  webAuthnResponse: BodyType<WebAuthnResponse>,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof postMeMfaWebauthnRegisterFinish>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * @summary Finish registering a security key or passkey
+ */
+
+export function usePostMeMfaWebauthnRegisterFinish<
+  TData = Awaited<ReturnType<typeof postMeMfaWebauthnRegisterFinish>>,
+  TError = ErrorType<UnauthorizedResponse | void>,
+>(
+  webAuthnResponse: BodyType<WebAuthnResponse>,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof postMeMfaWebauthnRegisterFinish>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getPostMeMfaWebauthnRegisterFinishQueryOptions(webAuthnResponse, options);
 
   const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
     queryKey: DataTag<QueryKey, TData, TError>;

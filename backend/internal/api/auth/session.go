@@ -120,10 +120,11 @@ func (h *Handler) Elevate(w http.ResponseWriter, r *http.Request) {
 	userID := auth.UserIDFromContext(r.Context())
 
 	req, ok := httputil.DecodeJSON[struct {
-		Password     string `json:"password"`
-		Action       string `json:"action"` // e.g. "connector.delete"
-		TOTP         string `json:"totp"`
-		RecoveryCode string `json:"recoveryCode"`
+		Password     string          `json:"password"`
+		Action       string          `json:"action"` // e.g. "connector.delete"
+		TOTP         string          `json:"totp"`
+		RecoveryCode string          `json:"recoveryCode"`
+		WebAuthn     json.RawMessage `json:"webauthn"`
 	}](w, r)
 	if !ok {
 		return
@@ -158,7 +159,7 @@ func (h *Handler) Elevate(w http.ResponseWriter, r *http.Request) {
 			httputil.Error(w, http.StatusBadRequest, "invalid_request", "This account has two-factor authentication enabled; use your authenticator code or a recovery code instead of your password")
 			return
 		}
-		if err := h.verifySecondFactor(r.Context(), userID, secondFactorInput{TOTP: req.TOTP, RecoveryCode: req.RecoveryCode}); err != nil {
+		if err := h.verifySecondFactor(w, r, userID, secondFactorInput{TOTP: req.TOTP, RecoveryCode: req.RecoveryCode, WebAuthn: req.WebAuthn, Purpose: "elevate:" + req.Action}); err != nil {
 			httputil.Error(w, http.StatusUnauthorized, "unauthorized", "Invalid code")
 			return
 		}
@@ -214,7 +215,11 @@ func (h *Handler) ElevateMethods(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if hasMFA {
-			methods = []string{"totp", "recovery"}
+			methods, err = h.mfaMethods(r.Context(), userID)
+			if err != nil {
+				httputil.Errorf(w, err)
+				return
+			}
 		} else {
 			methods = []string{"password"}
 		}

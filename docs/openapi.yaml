@@ -103,6 +103,28 @@ paths:
               schema: { $ref: '#/components/schemas/AuthSession' }
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
+  /auth/login/mfa/webauthn/begin:
+    post:
+      tags: [auth]
+      summary: Begin a WebAuthn second-factor login ceremony
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ticket]
+              properties:
+                ticket: { type: string }
+      responses:
+        '200':
+          description: PublicKeyCredentialRequestOptions envelope
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WebAuthnOptions' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { description: WebAuthn is unavailable or not enrolled }
   /auth/oidc/callback:
     post:
       tags: [auth]
@@ -190,6 +212,26 @@ paths:
                     type: array
                     items: { type: string, enum: [password, totp, recovery, webauthn, oidc] }
         '401': { $ref: '#/components/responses/Unauthorized' }
+  /auth/elevate/webauthn/begin:
+    post:
+      tags: [auth]
+      summary: Begin WebAuthn step-up for one action
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action]
+              properties:
+                action: { type: string }
+      responses:
+        '200':
+          description: PublicKeyCredentialRequestOptions envelope
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WebAuthnOptions' }
+        '409': { description: WebAuthn is unavailable or not enrolled }
   /auth/elevate/oidc/begin:
     post:
       tags: [auth]
@@ -416,6 +458,41 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { description: Factor already confirmed }
+  /me/mfa/webauthn/register/begin:
+    post:
+      tags: [me]
+      summary: Begin registering a security key or passkey
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+      responses:
+        '200':
+          description: PublicKeyCredentialCreationOptions envelope
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WebAuthnOptions' }
+        '409': { description: WebAuthn is unavailable }
+  /me/mfa/webauthn/register/finish:
+    post:
+      tags: [me]
+      summary: Finish registering a security key or passkey
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/WebAuthnResponse' }
+      responses:
+        '200':
+          description: Registered factor and optional first-factor recovery codes
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TotpConfirmResult' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { description: WebAuthn is unavailable or credential already registered }
   /me/mfa/recovery-codes:
     post:
       tags: [me]
@@ -3296,7 +3373,7 @@ components:
         ticket: { type: string, description: Short-lived (5 min) ticket for POST /auth/login/mfa }
         methods:
           type: array
-          items: { type: string, enum: [totp, recovery] }
+          items: { type: string, enum: [totp, recovery, webauthn] }
     LoginMfaRequest:
       type: object
       description: One of `totp` or `recoveryCode` finishes the login POST /auth/login started.
@@ -3305,6 +3382,15 @@ components:
         ticket: { type: string }
         totp: { type: string, description: 6-digit TOTP code }
         recoveryCode: { type: string, description: 'A single-use recovery code, e.g. "abcde-fghjk"' }
+        webauthn: { $ref: '#/components/schemas/WebAuthnResponse' }
+    WebAuthnOptions:
+      type: object
+      description: JSON envelope produced by go-webauthn for the browser WebAuthn API.
+      additionalProperties: true
+    WebAuthnResponse:
+      type: object
+      description: Browser credential response encoded as WebAuthn JSON.
+      additionalProperties: true
     ApiKeyCreate:
       type: object
       required: [name]
@@ -3424,12 +3510,13 @@ components:
         createdAt: { type: string, format: date-time }
     MfaStatus:
       type: object
-      required: [factors, recoveryCodesRemaining, required]
+      required: [factors, recoveryCodesRemaining, required, webauthnAvailable]
       properties:
         factors:
           type: array
           items: { $ref: '#/components/schemas/MfaFactor' }
         recoveryCodesRemaining: { type: integer }
+        webauthnAvailable: { type: boolean, description: Whether this instance has a usable WebAuthn relying party }
         required:
           type: boolean
           description: Whether the require_2fa policy currently covers this user.
@@ -4525,6 +4612,7 @@ components:
         password: { type: string, format: password }
         totp: { type: string, description: 6-digit TOTP code when 2FA is configured }
         recoveryCode: { type: string, description: 'A single-use recovery code, used instead of totp' }
+        webauthn: { $ref: '#/components/schemas/WebAuthnResponse' }
     ElevationToken:
       type: object
       required: [token, expiresAt]

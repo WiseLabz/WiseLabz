@@ -122,8 +122,18 @@ func TestRunMigrationsDown(t *testing.T) {
 		t.Fatalf("RunMigrations() error: %v", err)
 	}
 
-	// 000042_mfa is the latest migration, so it must be the first one rolled
-	// back, ahead of 000041_connector_grant_source below.
+	// 000043_webauthn is the latest migration, so it must be the first one
+	// rolled back, ahead of 000042_mfa below.
+	if !hasColumn(t, db, "sqlite", "user_mfa_factors", "credential_id") {
+		t.Fatal("user_mfa_factors.credential_id missing after migrations")
+	}
+	if err := RunMigrationsDown(db, "sqlite", logger); err != nil {
+		t.Fatalf("RunMigrationsDown() webauthn error: %v", err)
+	}
+	if hasColumn(t, db, "sqlite", "user_mfa_factors", "credential_id") {
+		t.Error("user_mfa_factors.credential_id should not exist after rolling back webauthn")
+	}
+
 	var mfaFactorsTable string
 	if err := db.QueryRow("SELECT name FROM sqlite_master WHERE type='table' AND name='user_mfa_factors'").Scan(&mfaFactorsTable); err != nil {
 		t.Fatalf("user_mfa_factors table missing after migrations: %v", err)
@@ -312,6 +322,12 @@ func TestRunMigrationsDown(t *testing.T) {
 	}
 	if err := db.QueryRow("SELECT name FROM sqlite_master WHERE type='table' AND name='user_mfa_factors'").Scan(&mfaFactorsTable); err != nil {
 		t.Fatalf("user_mfa_factors table missing after reapply: %v", err)
+	}
+	if err := RunMigrationsDown(db, "sqlite", logger); err != nil {
+		t.Fatalf("RunMigrationsDown() after reapply, webauthn error: %v", err)
+	}
+	if hasColumn(t, db, "sqlite", "user_mfa_factors", "credential_id") {
+		t.Error("user_mfa_factors.credential_id should not exist after rolling back webauthn")
 	}
 	if err := RunMigrationsDown(db, "sqlite", logger); err != nil {
 		t.Fatalf("RunMigrationsDown() after reapply, mfa error: %v", err)
@@ -537,6 +553,15 @@ func TestRunMigrationsDownPostgres(t *testing.T) {
 
 	if err := RunMigrations(db, "postgres", logger); err != nil {
 		t.Fatalf("RunMigrations() error: %v", err)
+	}
+	if !hasColumn(t, db, "postgres", "user_mfa_factors", "credential_id") {
+		t.Fatal("user_mfa_factors.credential_id missing after migrations")
+	}
+	if err := RunMigrationsDown(db, "postgres", logger); err != nil {
+		t.Fatalf("RunMigrationsDown() webauthn error: %v", err)
+	}
+	if hasColumn(t, db, "postgres", "user_mfa_factors", "credential_id") {
+		t.Error("user_mfa_factors.credential_id should not exist after rolling back webauthn")
 	}
 	var mfaFactorsTable string
 	if err := db.QueryRow(`SELECT table_name FROM information_schema.tables WHERE table_schema = current_schema() AND table_name = 'user_mfa_factors'`).Scan(&mfaFactorsTable); err != nil {

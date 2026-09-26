@@ -5,15 +5,20 @@ import '../../i18n';
 import { LoginPage } from './LoginPage';
 import { useAuth } from '../../store/auth';
 
-const { postAuthLoginMock, postAuthLoginMfaMock } = vi.hoisted(() => ({
+const { postAuthLoginMock, postAuthLoginMfaMock, beginWebAuthnMock, startAuthenticationMock } = vi.hoisted(() => ({
   postAuthLoginMock: vi.fn(),
   postAuthLoginMfaMock: vi.fn(),
+  beginWebAuthnMock: vi.fn(),
+  startAuthenticationMock: vi.fn(),
 }));
+
+vi.mock('@simplewebauthn/browser', () => ({ startAuthentication: startAuthenticationMock }));
 
 vi.mock('../../api/generated/auth/auth', () => ({
   useGetAuthProviders: () => ({ data: { localEnabled: true, oidc: [] } }),
   postAuthLogin: postAuthLoginMock,
   postAuthLoginMfa: postAuthLoginMfaMock,
+  postAuthLoginMfaWebauthnBegin: beginWebAuthnMock,
   postAuthLogout: vi.fn(),
   postAuthOidcCallback: vi.fn(),
   postAuthRefresh: vi.fn().mockRejectedValue(new Error('no session')),
@@ -95,5 +100,20 @@ describe('LoginPage two-factor step (#279)', () => {
 
     await waitFor(() => expect(screen.getByText(/not valid/i)).toBeInTheDocument());
     expect(useAuth.getState().mfaTicket).toBe('tix-1');
+  });
+
+  it('offers the security key before codes and quietly handles cancellation', async () => {
+    useAuth.setState({ mfaTicket: 'tix-1', mfaMethods: ['recovery', 'webauthn'] });
+    beginWebAuthnMock.mockResolvedValue({ publicKey: { challenge: 'challenge' } });
+    const cancelled = new Error('cancelled');
+    cancelled.name = 'NotAllowedError';
+    startAuthenticationMock.mockRejectedValue(cancelled);
+    renderLoginPage();
+
+    fireEvent.click(screen.getByRole('button', { name: /use security key/i }));
+    await waitFor(() => expect(startAuthenticationMock).toHaveBeenCalledWith({ optionsJSON: { challenge: 'challenge' } }));
+    expect(postAuthLoginMfaMock).not.toHaveBeenCalled();
+    expect(screen.queryByText(/not valid/i)).not.toBeInTheDocument();
+    expect(screen.getByLabelText(/recovery code/i)).toBeInTheDocument();
   });
 });

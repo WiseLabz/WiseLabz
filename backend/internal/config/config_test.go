@@ -241,6 +241,8 @@ func TestLoadEnvOverrideAllFields(t *testing.T) {
 		"WISELABZ_AUTH_ACCESS_TOKEN_TTL":           "60",
 		"WISELABZ_AUTH_REFRESH_TOKEN_TTL":          "120",
 		"WISELABZ_AUTH_STEP_UP_FOR_DESTRUCTIVE":    "false",
+		"WISELABZ_AUTH_WEBAUTHN_RP_ID":             "example.com",
+		"WISELABZ_AUTH_WEBAUTHN_RP_DISPLAY_NAME":   "WiseLabz Test",
 		"WISELABZ_AI_ENABLED":                      "true",
 		"WISELABZ_AI_PROVIDER":                     "openai",
 		"WISELABZ_AI_MODEL":                        "gpt-x",
@@ -295,7 +297,7 @@ func TestLoadEnvOverrideAllFields(t *testing.T) {
 		DB:         Database{Driver: "postgres", DSN: "postgres://x", MaxOpenConns: 7, MaxIdleConns: 3, ConnMaxLifetimeSeconds: 60, ConnMaxIdleTimeSeconds: 30},
 		Server:     Server{Host: "127.0.0.1", Port: 9090, Origin: "https://example.com", TrustedProxies: "10.0.0.0/8", PublicURL: "https://reports.example.com", Embed: true, ReadTimeoutSeconds: 5, WriteTimeoutSeconds: 6, ShutdownTimeoutSeconds: 7},
 		Encryption: EncryptionSettings{Key: "env-key"},
-		Auth:       AuthSettings{Secret: "env-secret", AccessTokenTTL: 60, RefreshTokenTTL: 120, StepUpForDestructive: false},
+		Auth:       AuthSettings{Secret: "env-secret", AccessTokenTTL: 60, RefreshTokenTTL: 120, StepUpForDestructive: false, WebAuthn: WebAuthnSettings{RPID: "example.com", RPDisplayName: "WiseLabz Test"}},
 		AI: AISettings{
 			Enabled: true, Provider: "openai", Model: "gpt-x", APIKey: "key", BaseURL: "http://localhost", Mode: "auto_update",
 			EmbedProvider: "openai", EmbedModel: "text-embedding-3-small", EmbedAPIKey: "embed-key", EmbedBaseURL: "http://embed-host",

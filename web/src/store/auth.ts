@@ -11,7 +11,7 @@
  * submitMfa, which finishes the login via POST /auth/login/mfa.
  */
 import { create } from 'zustand';
-import type { AuthSession, LoginMfaRequired, OidcCallbackRequest, User } from '../api/model';
+import type { AuthSession, LoginMfaRequired, OidcCallbackRequest, User, WebAuthnResponse } from '../api/model';
 import {
   postAuthLogin,
   postAuthLoginMfa,
@@ -34,7 +34,7 @@ interface AuthState {
   bootstrap: () => Promise<void>;
   login: (username: string, password: string) => Promise<void>;
   /** Finishes a login that returned mfaTicket, with exactly one of totp/recoveryCode. */
-  submitMfa: (input: { totp?: string; recoveryCode?: string }) => Promise<void>;
+  submitMfa: (input: { totp?: string; recoveryCode?: string; webauthn?: WebAuthnResponse }) => Promise<void>;
   /** Abandons the pending MFA step (e.g. "use a different account"). */
   cancelMfa: () => void;
   loginOidc: (req: OidcCallbackRequest) => Promise<void>;

@@ -7,7 +7,9 @@ import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../store/auth';
-import { useGetAuthProviders } from '../../api/generated/auth/auth';
+import { postAuthLoginMfaWebauthnBegin, useGetAuthProviders } from '../../api/generated/auth/auth';
+import type { WebAuthnResponse } from '../../api/model';
+import { authenticateWebAuthn, isWebAuthnCancel } from '../../lib/webauthn';
 import { Button } from '../../components/ui/Button';
 import { toast } from '../../lib/toast';
 
@@ -149,7 +151,9 @@ function LoginMfaStep({ onDone }: { onDone: () => void }) {
   const { t } = useTranslation();
   const submitMfa = useAuth((s) => s.submitMfa);
   const cancelMfa = useAuth((s) => s.cancelMfa);
-  const [useRecoveryCode, setUseRecoveryCode] = useState(false);
+  const ticket = useAuth((s) => s.mfaTicket);
+  const methods = useAuth((s) => s.mfaMethods);
+  const [useRecoveryCode, setUseRecoveryCode] = useState(!methods.includes('totp'));
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
@@ -163,6 +167,22 @@ function LoginMfaStep({ onDone }: { onDone: () => void }) {
       onDone();
     } catch {
       setError(true);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function authenticateWithSecurityKey() {
+    if (!ticket) return;
+    setBusy(true);
+    setError(false);
+    try {
+      const options = await postAuthLoginMfaWebauthnBegin({ ticket });
+      const assertion = await authenticateWebAuthn(options);
+      await submitMfa({ webauthn: assertion as unknown as WebAuthnResponse });
+      onDone();
+    } catch (err) {
+      if (!isWebAuthnCancel(err)) setError(true);
     } finally {
       setBusy(false);
     }
@@ -187,6 +207,11 @@ function LoginMfaStep({ onDone }: { onDone: () => void }) {
       </div>
 
       <div className="px-6 py-5">
+        {methods.includes('webauthn') && (
+          <Button type="button" variant="primary" size="md" disabled={busy} className="mb-4 w-full justify-center" onClick={() => void authenticateWithSecurityKey()}>
+            {t('auth.mfa.useSecurityKey', { defaultValue: 'Use security key' })}
+          </Button>
+        )}
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -229,7 +254,7 @@ function LoginMfaStep({ onDone }: { onDone: () => void }) {
         </form>
 
         <div className="mt-4 flex items-center justify-between text-2xs">
-          <button
+          {methods.includes('totp') && <button
             type="button"
             className="text-ink-faint underline-offset-2 hover:text-ink hover:underline"
             onClick={() => {
@@ -241,7 +266,7 @@ function LoginMfaStep({ onDone }: { onDone: () => void }) {
             {useRecoveryCode
               ? t('auth.mfa.useAuthenticator', { defaultValue: 'Use authenticator app instead' })
               : t('auth.mfa.useRecoveryCode', { defaultValue: 'Use a recovery code' })}
-          </button>
+          </button>}
           <button
             type="button"
             className="text-ink-faint underline-offset-2 hover:text-ink hover:underline"

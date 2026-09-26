@@ -225,6 +225,15 @@ mints the same elevation token the password path would. Some IdPs omit
 sets); if it's still missing, the endpoint returns `401
 oidc_reauth_unsupported` rather than pretending the re-auth succeeded.
 
+WebAuthn security keys and passkeys are second factors for local accounts and
+can also confirm step-up actions. They do not provide passwordless login. The
+relying-party ID defaults to the first hostname in `WISELABZ_SERVER_ORIGIN`;
+all configured origins are allowed. `WISELABZ_AUTH_WEBAUTHN_RP_ID` and
+`WISELABZ_AUTH_WEBAUTHN_RP_DISPLAY_NAME` can override the defaults. Without a
+usable origin, WebAuthn is disabled. Browser WebAuthn requires HTTPS, except
+for HTTP on localhost. Registration and assertion ceremonies expire after
+five minutes.
+
 ### Permissions & step-up for mutating actions (decided 2026-06-27)
 
 Two layers gate state-changing actions, on top of the session model above:

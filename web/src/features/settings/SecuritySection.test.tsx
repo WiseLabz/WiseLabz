@@ -12,10 +12,17 @@ HTMLDialogElement.prototype.close = vi.fn(function (this: HTMLDialogElement) {
   this.open = false;
 });
 
-const { postMeMfaTotpMock, confirmMock } = vi.hoisted(() => ({
+const { postMeMfaTotpMock, confirmMock, beginKeyMock, finishKeyMock, startRegistrationMock } = vi.hoisted(() => ({
   postMeMfaTotpMock: vi.fn(),
   confirmMock: vi.fn(),
+  beginKeyMock: vi.fn(),
+  finishKeyMock: vi.fn(),
+  startRegistrationMock: vi.fn(),
 }));
+
+vi.mock('@simplewebauthn/browser', () => ({ startRegistration: startRegistrationMock }));
+
+let webauthnAvailable = false;
 
 vi.mock('qrcode', () => ({
   toDataURL: vi.fn().mockResolvedValue('data:image/png;base64,fake'),
@@ -42,7 +49,7 @@ vi.mock('../../api/generated/me/me', () => ({
   deleteMeSessionsSessionId: vi.fn(),
   getGetMeSessionsQueryKey: () => ['getMeSessions'],
   useGetMeMfa: () => ({
-    data: { factors: [], recoveryCodesRemaining: 0, required: false },
+    data: { factors: [], recoveryCodesRemaining: 0, required: false, webauthnAvailable },
     isLoading: false,
     isError: false,
     refetch: vi.fn(),
@@ -50,6 +57,8 @@ vi.mock('../../api/generated/me/me', () => ({
   getGetMeMfaQueryKey: () => ['getMeMfa'],
   postMeMfaTotp: postMeMfaTotpMock,
   postMeMfaTotpFactorIdConfirm: confirmMock,
+  postMeMfaWebauthnRegisterBegin: beginKeyMock,
+  postMeMfaWebauthnRegisterFinish: finishKeyMock,
   postMeMfaRecoveryCodes: vi.fn(),
   deleteMeMfaFactorsFactorId: vi.fn(),
 }));
@@ -77,6 +86,7 @@ function renderProfilePage() {
 describe('Settings > Profile > Security (#279 enrollment happy path)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    webauthnAvailable = false;
     postMeMfaTotpMock.mockResolvedValue({
       factorId: 'f1',
       secret: 'JBSWY3DPEHPK3PXP',
@@ -115,5 +125,27 @@ describe('Settings > Profile > Security (#279 enrollment happy path)', () => {
 
     fireEvent.click(doneButton);
     await waitFor(() => expect(screen.queryByText('abcde-fghjk')).not.toBeInTheDocument());
+  });
+
+  it('registers a security key and shows the first-factor recovery codes', async () => {
+    webauthnAvailable = true;
+    Object.defineProperty(window, 'isSecureContext', { configurable: true, value: true });
+    beginKeyMock.mockResolvedValue({ publicKey: { challenge: 'challenge' } });
+    startRegistrationMock.mockResolvedValue({ id: 'credential', response: {} });
+    finishKeyMock.mockResolvedValue({
+      factor: { id: 'k1', type: 'webauthn', name: 'Desk key', createdAt: '2025-01-01T00:00:00Z' },
+      recoveryCodes: ['abcde-fghjk'],
+    });
+    renderProfilePage();
+
+    fireEvent.click(screen.getByRole('button', { name: /add security key/i }));
+    await screen.findByRole('button', { name: /register key/i });
+    fireEvent.change(screen.getByPlaceholderText('Security key'), { target: { value: 'Desk key' } });
+    fireEvent.click(screen.getByRole('button', { name: /register key/i }));
+
+    await waitFor(() => expect(beginKeyMock).toHaveBeenCalledWith({ name: 'Desk key' }));
+    await waitFor(() => expect(startRegistrationMock).toHaveBeenCalledWith({ optionsJSON: { challenge: 'challenge' } }));
+    await waitFor(() => expect(finishKeyMock).toHaveBeenCalledWith({ id: 'credential', response: {} }));
+    await waitFor(() => expect(screen.getByText('abcde-fghjk')).toBeInTheDocument());
   });
 });
