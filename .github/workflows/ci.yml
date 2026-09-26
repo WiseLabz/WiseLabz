@@ -263,7 +263,8 @@ jobs:
     runs-on: ubuntu-latest
     needs: changes
     if: needs.changes.outputs.backend == 'true'
-    timeout-minutes: 10
+    # Connector race tests can take over 8 minutes; allow setup and cleanup.
+    timeout-minutes: 15
 
     steps:
       - name: Checkout
