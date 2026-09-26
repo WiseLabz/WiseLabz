@@ -7,13 +7,14 @@
  * step-up + type-to-confirm flow via <ConfirmDestructive/>.
  */
 import { useMemo, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { Link, useParams, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   useGetConnectorsConnectorId,
   useGetConnectorsConnectorIdData,
   useGetConnectorsConnectorIdSyncs,
+  useGetConnectorsConnectorIdSnapshots,
   useGetConnectorsConnectorIdConfigFields,
   useGetConnectorsSchema,
   postConnectorsConnectorIdRestart,
@@ -585,6 +586,7 @@ function SnapshotPanel({ id }: { id: string }) {
     <Panel className="p-5">
       <div className="mb-3 flex items-center justify-between">
         <h2 className="text-sm font-semibold text-ink">{t('services.detail.snapshot')}</h2>
+        <Link to={`/services/${id}/snapshots`} className="font-mono text-xs text-accent-secondary hover:underline">{t('services.snapshots.history')}</Link>
         {data.data && (
           <span className="font-mono text-2xs text-ink-faint">
             {t('services.detail.fetchedAt', { time: relativeTime(data.data.fetchedAt) })}
@@ -844,6 +846,7 @@ function SyncStatusTag({ status }: { status: SyncRunStatus }) {
 function SyncHistoryPanel({ id }: { id: string }) {
   const { t } = useTranslation();
   const syncs = useGetConnectorsConnectorIdSyncs(id, { limit: 10 });
+  const snapshots = useGetConnectorsConnectorIdSnapshots(id, { limit: 100 });
 
   return (
     <Panel className="p-5">
@@ -879,6 +882,13 @@ function SyncHistoryPanel({ id }: { id: string }) {
               </p>
               {run.status === 'error' && run.error && (
                 <p className="mt-1 pl-5 text-2xs text-err">{run.error}</p>
+              )}
+              {run.snapshotId && (
+                <Link className="ml-5 font-mono text-2xs text-accent-secondary hover:underline" to={`/services/${id}/snapshots?${(() => {
+                  const index = snapshots.data?.findIndex((snapshot) => snapshot.id === run.snapshotId) ?? -1;
+                  const previous = index >= 0 ? snapshots.data?.[index + 1] : undefined;
+                  return previous ? `a=${encodeURIComponent(previous.id)}&b=${encodeURIComponent(run.snapshotId)}` : `b=${encodeURIComponent(run.snapshotId)}`;
+                })()}`}>{t('services.snapshots.viewChanges')}</Link>
               )}
             </li>
           ))}

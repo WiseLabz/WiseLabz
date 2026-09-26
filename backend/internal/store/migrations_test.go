@@ -122,8 +122,17 @@ func TestRunMigrationsDown(t *testing.T) {
 		t.Fatalf("RunMigrations() error: %v", err)
 	}
 
-	// 000043_webauthn is the latest migration, so it must be the first one
-	// rolled back, ahead of 000042_mfa below.
+	// 000044_sync_runs_snapshot_id is the latest migration.
+	if !hasColumn(t, db, "sqlite", "sync_runs", "snapshot_id") {
+		t.Fatal("sync_runs.snapshot_id missing after migrations")
+	}
+	if err := RunMigrationsDown(db, "sqlite", logger); err != nil {
+		t.Fatalf("RunMigrationsDown() sync_runs_snapshot_id error: %v", err)
+	}
+	if hasColumn(t, db, "sqlite", "sync_runs", "snapshot_id") {
+		t.Error("sync_runs.snapshot_id should not exist after rollback")
+	}
+	// Roll back 000043_webauthn ahead of 000042_mfa.
 	if !hasColumn(t, db, "sqlite", "user_mfa_factors", "credential_id") {
 		t.Fatal("user_mfa_factors.credential_id missing after migrations")
 	}
@@ -322,6 +331,12 @@ func TestRunMigrationsDown(t *testing.T) {
 	}
 	if err := db.QueryRow("SELECT name FROM sqlite_master WHERE type='table' AND name='user_mfa_factors'").Scan(&mfaFactorsTable); err != nil {
 		t.Fatalf("user_mfa_factors table missing after reapply: %v", err)
+	}
+	if err := RunMigrationsDown(db, "sqlite", logger); err != nil {
+		t.Fatalf("RunMigrationsDown() after reapply, snapshot_id error: %v", err)
+	}
+	if hasColumn(t, db, "sqlite", "sync_runs", "snapshot_id") {
+		t.Error("sync_runs.snapshot_id should not exist after reapply and rollback")
 	}
 	if err := RunMigrationsDown(db, "sqlite", logger); err != nil {
 		t.Fatalf("RunMigrationsDown() after reapply, webauthn error: %v", err)
@@ -553,6 +568,15 @@ func TestRunMigrationsDownPostgres(t *testing.T) {
 
 	if err := RunMigrations(db, "postgres", logger); err != nil {
 		t.Fatalf("RunMigrations() error: %v", err)
+	}
+	if !hasColumn(t, db, "postgres", "sync_runs", "snapshot_id") {
+		t.Fatal("sync_runs.snapshot_id missing after migrations")
+	}
+	if err := RunMigrationsDown(db, "postgres", logger); err != nil {
+		t.Fatalf("RunMigrationsDown() sync_runs_snapshot_id error: %v", err)
+	}
+	if hasColumn(t, db, "postgres", "sync_runs", "snapshot_id") {
+		t.Fatal("sync_runs.snapshot_id should not exist after rollback")
 	}
 	if !hasColumn(t, db, "postgres", "user_mfa_factors", "credential_id") {
 		t.Fatal("user_mfa_factors.credential_id missing after migrations")

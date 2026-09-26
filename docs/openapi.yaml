@@ -1272,6 +1272,85 @@ paths:
               schema:
                 type: array
                 items: { $ref: '#/components/schemas/SyncRun' }
+  /connectors/{connectorId}/snapshots:
+    get:
+      tags: [connectors]
+      summary: Snapshot history for one connector (newest first)
+      parameters:
+        - { $ref: '#/components/parameters/ConnectorId' }
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, default: 20, maximum: 100 }
+        - { $ref: '#/components/parameters/Cursor' }
+      responses:
+        '200':
+          description: OK
+          headers:
+            X-Next-Cursor:
+              description: Cursor for the next keyset page when more rows follow.
+              required: false
+              schema: { type: string }
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/SnapshotSummary' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /connectors/{connectorId}/snapshots/diff:
+    get:
+      tags: [connectors]
+      summary: Compare two snapshots of one connector
+      description: Without format, returns JSON for the browser. With format, downloads an attachment and records an audit event.
+      parameters:
+        - { $ref: '#/components/parameters/ConnectorId' }
+        - name: from
+          in: query
+          required: true
+          schema: { type: string }
+        - name: to
+          in: query
+          required: true
+          schema: { type: string }
+        - name: format
+          in: query
+          required: false
+          schema: { type: string, enum: [json, csv, md, html] }
+      responses:
+        '200':
+          description: JSON body, or an attachment when format is set
+          headers:
+            Content-Disposition:
+              description: Attachment filename when format is set.
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SnapshotDiff' }
+            text/csv:
+              schema: { type: string }
+            text/markdown:
+              schema: { type: string }
+            text/html:
+              schema: { type: string }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /connectors/{connectorId}/snapshots/{snapshotId}:
+    get:
+      tags: [connectors]
+      summary: Full snapshot belonging to one connector
+      parameters:
+        - { $ref: '#/components/parameters/ConnectorId' }
+        - name: snapshotId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SnapshotFull' }
+        '404': { $ref: '#/components/responses/NotFound' }
   /connectors/bulk-sync:
     post:
       tags: [connectors]
@@ -3857,6 +3936,7 @@ components:
           { type: integer, description: Retry attempt number for this run; 1 for the first try }
         changesCount: { type: integer }
         alertsCount: { type: integer }
+        snapshotId: { type: string, nullable: true, description: 'Snapshot produced by this run, if one was saved' }
     ServiceSnapshot:
       type: object
       description: Mirrors backend connector.ServiceSnapshot
@@ -3878,6 +3958,145 @@ components:
         title: { type: string }
         content: { type: string, description: Markdown }
         order: { type: integer }
+    SnapshotSummary:
+      type: object
+      required: [id, fetchedAt, sizeBytes, golden]
+      properties:
+        id: { type: string }
+        fetchedAt: { type: string, format: date-time }
+        sizeBytes: { type: integer, format: int64 }
+        golden: { type: boolean }
+    SnapshotFull:
+      type: object
+      required: [id, connectorId, serviceName, type, sections, entities, dependencies, metadata, fetchedAt]
+      properties:
+        id: { type: string }
+        connectorId: { type: string }
+        serviceName: { type: string }
+        type: { type: string }
+        sections:
+          type: array
+          items: { $ref: '#/components/schemas/SnapshotContentSection' }
+        entities:
+          type: array
+          items: { $ref: '#/components/schemas/SnapshotEntity' }
+        dependencies:
+          type: array
+          items: { $ref: '#/components/schemas/SnapshotDependency' }
+        metadata:
+          type: object
+          additionalProperties: { type: string }
+        fetchedAt: { type: string, format: date-time }
+    SnapshotContentSection:
+      type: object
+      required: [title, content]
+      properties:
+        title: { type: string }
+        content: { type: string, description: Markdown }
+    SnapshotEntity:
+      type: object
+      required: [kind, name]
+      properties:
+        kind: { type: string }
+        name: { type: string }
+        ip: { type: string }
+        hostname: { type: string }
+        externalId: { type: string }
+        attributes:
+          type: object
+          additionalProperties: true
+    SnapshotDependency:
+      type: object
+      required: [kind, name]
+      properties:
+        kind: { type: string }
+        name: { type: string }
+        ref: { type: string }
+    SnapshotDiff:
+      type: object
+      required: [provenance, summary, sections, entities, dependencies]
+      properties:
+        provenance: { $ref: '#/components/schemas/SnapshotDiffProvenance' }
+        summary: { $ref: '#/components/schemas/SnapshotDiffSummary' }
+        sections:
+          type: array
+          items: { $ref: '#/components/schemas/SnapshotSectionChange' }
+        entities:
+          type: array
+          items: { $ref: '#/components/schemas/EntityChange' }
+        dependencies:
+          type: array
+          items: { $ref: '#/components/schemas/DependencyChange' }
+    SnapshotDiffProvenance:
+      type: object
+      required: [connectorId, connectorName, from, to, generatedAt, generatedBy]
+      properties:
+        connectorId: { type: string }
+        connectorName: { type: string }
+        from: { $ref: '#/components/schemas/SnapshotDiffSource' }
+        to: { $ref: '#/components/schemas/SnapshotDiffSource' }
+        generatedAt: { type: string, format: date-time }
+        generatedBy: { type: string }
+    SnapshotDiffSource:
+      type: object
+      required: [id, fetchedAt, sha256]
+      properties:
+        id: { type: string }
+        fetchedAt: { type: string, format: date-time }
+        sha256: { type: string }
+    SnapshotDiffSummary:
+      type: object
+      required: [sectionsAdded, sectionsRemoved, sectionsModified, entitiesAdded, entitiesRemoved, entitiesModified, dependenciesAdded, dependenciesRemoved]
+      properties:
+        sectionsAdded: { type: integer }
+        sectionsRemoved: { type: integer }
+        sectionsModified: { type: integer }
+        entitiesAdded: { type: integer }
+        entitiesRemoved: { type: integer }
+        entitiesModified: { type: integer }
+        dependenciesAdded: { type: integer }
+        dependenciesRemoved: { type: integer }
+    SnapshotSectionChange:
+      type: object
+      required: [type, severity, summary, detail, patches]
+      properties:
+        type: { type: string, enum: [added, removed, modified] }
+        severity: { type: string }
+        summary: { type: string }
+        detail: { type: string }
+        patches:
+          type: array
+          items: { $ref: '#/components/schemas/SnapshotDiffPatch' }
+        relatedServiceIds:
+          type: array
+          items: { type: string }
+    SnapshotDiffPatch:
+      type: object
+      required: [section]
+      properties:
+        section: { type: string }
+        old: { type: string }
+        new: { type: string }
+        line: { type: integer }
+    EntityChange:
+      type: object
+      required: [kind, key, name, field, change]
+      properties:
+        kind: { type: string }
+        key: { type: string }
+        name: { type: string }
+        field: { type: string }
+        change: { type: string, enum: [added, removed, modified] }
+        old: { nullable: true }
+        new: { nullable: true }
+    DependencyChange:
+      type: object
+      required: [kind, name, ref, change]
+      properties:
+        kind: { type: string }
+        name: { type: string }
+        ref: { type: string }
+        change: { type: string, enum: [added, removed] }
 
     # ── docs ──
     DocNode:
