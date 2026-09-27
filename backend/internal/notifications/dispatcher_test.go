@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -406,6 +407,7 @@ func TestNotifyAlert_TelegramDecryptsBotToken(t *testing.T) {
 		t.Fatal(err)
 	}
 	setChannelConfigJSON(t, s, `[{"type":"telegram","enabled":true,"config":{"chatId":"12345","secretEncrypted":"`+enc+`"}}]`)
+	paths := fakePublicAPI(t, &telegramAPIBase, "/bot")
 
 	d := NewDispatcher(s, nil)
 	d.SetEncryptionKey(base64.StdEncoding.EncodeToString(rawKey))
@@ -419,8 +421,11 @@ func TestNotifyAlert_TelegramDecryptsBotToken(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected telegram delivery row, got none")
 	}
-	if strings.Contains(telegram.LastError, "bot token") {
-		t.Errorf("expected decrypted bot token to be used, got error: %s", telegram.LastError)
+	if telegram.LastError != "" {
+		t.Errorf("telegram delivery error: %s", telegram.LastError)
+	}
+	if got := paths(); !slices.Equal(got, []string{"/botbot-token/sendMessage"}) {
+		t.Errorf("telegram API got requests %q, want the decrypted bot token in the path", got)
 	}
 }
 

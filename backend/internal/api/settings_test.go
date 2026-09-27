@@ -186,8 +186,11 @@ func TestAIConfigTestDoesNotPanicOnNilRegistry(t *testing.T) {
 	app := newTestApp(t)
 	_, opToken := app.user(t, "operator")
 
+	// baseUrl is a closed local port so the provider call fails at once
+	// instead of reaching the real OpenAI API.
 	rec := app.req(t, http.MethodPut, "/api/ai/config", map[string]any{
 		"enabled": true, "provider": "openai", "apiKey": "sk-test", "model": "gpt-4o-mini",
+		"baseUrl": "http://127.0.0.1:1",
 	}, opToken)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("update status = %d, want 200; body = %s", rec.Code, rec.Body)
