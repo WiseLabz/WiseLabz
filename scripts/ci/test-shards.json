@@ -54,20 +54,6 @@
       "rest": true
     }
   },
-  "cover": {
-    "api-a-c": {
-      "packages": ["./internal/api"],
-      "pattern": "^Test[A-C]"
-    },
-    "api-rest": {
-      "packages": ["./internal/api"],
-      "rest": true
-    },
-    "other": {
-      "packages": ["./..."],
-      "exclude": ["./internal/api"]
-    }
-  },
   "postgres": {
     "a-g": {
       "packages": ["./internal/store/..."],

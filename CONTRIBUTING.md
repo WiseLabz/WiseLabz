@@ -130,8 +130,12 @@ job, same as the backend's `test-backend` job.
 Both suites run with coverage in CI and enforce a floor so coverage only goes
 up over time:
 
-- **Backend** (`go test -coverpkg=./... -coverprofile=coverage.out ./...`):
-  floor is 60% total statement coverage (CI fails under it).
+- **Backend** (from `backend/`:
+  `go test -coverpkg="$(../scripts/ci/coverpkg.sh)" -coverprofile=coverage.out ./...`):
+  floor is 60% total statement coverage (CI fails under it). `coverpkg.sh`
+  is `./...` minus test-only helper packages (`apitest`, `storetest`). To
+  check a change to how coverage is collected, compare per-package results
+  with `scripts/ci/coverage-parity.sh old.out new.out`, not just the total.
 - **Frontend** (`bun run test:coverage`, v8 provider): floor is set in
   `web/vitest.config.ts` (`test.coverage.thresholds`) — currently 40%
   statements/lines, 25% functions/branches.
