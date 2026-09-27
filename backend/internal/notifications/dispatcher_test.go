@@ -19,6 +19,7 @@ import (
 	"github.com/WiseLabz/wiselabz/internal/connector"
 	"github.com/WiseLabz/wiselabz/internal/crypto"
 	"github.com/WiseLabz/wiselabz/internal/store"
+	"github.com/WiseLabz/wiselabz/internal/store/storetest"
 	_ "modernc.org/sqlite"
 )
 
@@ -28,13 +29,12 @@ func newTestStore(t *testing.T) *store.Store {
 	t.Helper()
 	// Webhook tests target httptest servers on 127.0.0.1, which the guarded dialer blocks.
 	connector.AllowLoopbackForTest(t)
-	dir := t.TempDir()
 	// busy_timeout, and the single connection the other test helpers in this repo also pin:
 	// dispatcher fan-out writes from goroutines while the test body reads, and an unbounded
 	// sqlite pool turns that overlap into a sporadic SQLITE_BUSY ("database is locked")
 	// rather than a wait. Not store.OpenDB, which also enables foreign_keys — several tests
 	// here dispatch to synthetic user IDs that have no users row.
-	dsn := "file:" + dir + "/test.db?cache=shared&_pragma=busy_timeout(5000)"
+	dsn := "file:" + storetest.MigratedSQLite(t) + "?cache=shared&_pragma=busy_timeout(5000)"
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		t.Fatalf("open db: %v", err)
@@ -42,10 +42,6 @@ func newTestStore(t *testing.T) *store.Store {
 	db.SetMaxOpenConns(1)
 	t.Cleanup(func() { db.Close() }) //nolint:errcheck
 
-	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-	if err := store.RunMigrations(db, "sqlite", logger); err != nil {
-		t.Fatalf("run migrations: %v", err)
-	}
 	return store.New(db, "sqlite")
 }
 

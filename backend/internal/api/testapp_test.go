@@ -23,6 +23,7 @@ import (
 	"github.com/WiseLabz/wiselabz/internal/doc"
 	"github.com/WiseLabz/wiselabz/internal/scheduler"
 	"github.com/WiseLabz/wiselabz/internal/store"
+	"github.com/WiseLabz/wiselabz/internal/store/storetest"
 	"github.com/WiseLabz/wiselabz/internal/sync"
 	"github.com/WiseLabz/wiselabz/internal/ws"
 )
@@ -50,19 +51,13 @@ func newTestApp(t *testing.T) *testApp {
 func newTestAppWithBackupDir(t *testing.T, backupDir string) *testApp {
 	t.Helper()
 
-	dir := t.TempDir()
-	dsn := "file:" + dir + "/test.db?cache=shared"
+	dsn := "file:" + storetest.MigratedSQLite(t) + "?cache=shared"
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		t.Fatalf("open db: %v", err)
 	}
 	db.SetMaxOpenConns(1)
 	t.Cleanup(func() { _ = db.Close() })
-
-	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-	if err := store.RunMigrations(db, "sqlite", logger); err != nil {
-		t.Fatalf("run migrations: %v", err)
-	}
 
 	s := store.New(db, "sqlite")
 	if err := s.Init(context.Background(), "admin-seed-pw-1234"); err != nil {
@@ -89,6 +84,7 @@ func newTestAppWithBackupDir(t *testing.T, backupDir string) *testApp {
 		Encryption: config.EncryptionSettings{Key: "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE="},
 	}
 
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 	jobRunner := scheduler.New(logger)
 
 	aiRegistry := ai.NewRegistry()
