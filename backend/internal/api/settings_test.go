@@ -11,6 +11,7 @@ import (
 )
 
 func TestAuthConfigRoleBoundary(t *testing.T) {
+	t.Parallel()
 	app := newTestApp(t)
 	_, viewerToken := app.user(t, "viewer")
 
@@ -21,6 +22,7 @@ func TestAuthConfigRoleBoundary(t *testing.T) {
 }
 
 func TestAuthConfigGetAndUpdateSuccess(t *testing.T) {
+	t.Parallel()
 	app := newTestApp(t)
 	_, opToken := app.user(t, "operator")
 
@@ -36,6 +38,7 @@ func TestAuthConfigGetAndUpdateSuccess(t *testing.T) {
 }
 
 func TestAuthConfigUpdateValidation(t *testing.T) {
+	t.Parallel()
 	app := newTestApp(t)
 	_, opToken := app.user(t, "operator")
 
@@ -46,6 +49,7 @@ func TestAuthConfigUpdateValidation(t *testing.T) {
 }
 
 func TestProviderDisableRevokesMatchingSessionsAndAuditsCount(t *testing.T) {
+	t.Parallel()
 	app := newTestApp(t)
 	app.Config.Auth.OIDC = []config.OIDCProvider{{
 		ID:          "authentik",
@@ -102,6 +106,7 @@ func TestProviderDisableRevokesMatchingSessionsAndAuditsCount(t *testing.T) {
 }
 
 func TestProviderEnableDoesNotRevokeSessions(t *testing.T) {
+	t.Parallel()
 	app := newTestApp(t)
 	app.Config.Auth.OIDC = []config.OIDCProvider{{
 		ID:          "authentik",
@@ -143,6 +148,7 @@ func TestProviderEnableDoesNotRevokeSessions(t *testing.T) {
 }
 
 func TestAIConfigRoleBoundary(t *testing.T) {
+	t.Parallel()
 	app := newTestApp(t)
 	_, viewerToken := app.user(t, "viewer")
 
@@ -153,6 +159,7 @@ func TestAIConfigRoleBoundary(t *testing.T) {
 }
 
 func TestAIConfigGetAndUpdateSuccess(t *testing.T) {
+	t.Parallel()
 	app := newTestApp(t)
 	_, opToken := app.user(t, "operator")
 
@@ -175,6 +182,7 @@ func TestAIConfigGetAndUpdateSuccess(t *testing.T) {
 // normal JSON response, not the Recoverer middleware's 500 from a nil
 // *ai.Registry method call.
 func TestAIConfigTestDoesNotPanicOnNilRegistry(t *testing.T) {
+	t.Parallel()
 	app := newTestApp(t)
 	_, opToken := app.user(t, "operator")
 
@@ -192,6 +200,7 @@ func TestAIConfigTestDoesNotPanicOnNilRegistry(t *testing.T) {
 }
 
 func TestNotificationsConfigRoleBoundary(t *testing.T) {
+	t.Parallel()
 	app := newTestApp(t)
 	_, viewerToken := app.user(t, "viewer")
 
@@ -202,6 +211,7 @@ func TestNotificationsConfigRoleBoundary(t *testing.T) {
 }
 
 func TestNotificationsConfigGetAndUpdateSuccess(t *testing.T) {
+	t.Parallel()
 	app := newTestApp(t)
 	_, opToken := app.user(t, "operator")
 
@@ -217,6 +227,7 @@ func TestNotificationsConfigGetAndUpdateSuccess(t *testing.T) {
 }
 
 func TestNotificationsConfigUpdateValidation(t *testing.T) {
+	t.Parallel()
 	app := newTestApp(t)
 	_, opToken := app.user(t, "operator")
 

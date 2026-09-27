@@ -8,4 +8,4 @@
 set -Eeuo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")/../../backend"
-go list ./... | grep -vE '/internal/(api/apitest|store/storetest)$' | paste -sd, -
+go list ./... | grep -vE '/internal/(api/apitest|store/storetest|connector/connectortest)$' | paste -sd, -

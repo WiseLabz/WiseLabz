@@ -96,7 +96,7 @@ func newTestAppWithBackupDir(t *testing.T, backupDir string) *testApp {
 	ai.RegisterOpenAIEmbedder(embedRegistry)
 
 	wsHub := ws.NewHub(cfg.Server.Origin)
-	go wsHub.Run(context.Background())
+	go wsHub.Run(t.Context()) // stops when the test ends
 
 	router := api.NewRouter(api.Config{
 		WSHub:         wsHub,
@@ -208,6 +208,7 @@ func (a *testApp) serve(r *http.Request) *httptest.ResponseRecorder {
 // Backup API Integration Tests
 
 func TestBackupScheduleGetDefaults(t *testing.T) {
+	t.Parallel()
 	app := newTestApp(t)
 	_, token := app.user(t, "operator")
 
@@ -235,6 +236,7 @@ func TestBackupScheduleGetDefaults(t *testing.T) {
 }
 
 func TestBackupScheduleUpdate(t *testing.T) {
+	t.Parallel()
 	app := newTestApp(t)
 	_, token := app.user(t, "operator")
 
@@ -273,6 +275,7 @@ func TestBackupScheduleUpdate(t *testing.T) {
 }
 
 func TestBackupScheduleUpdateInvalidCron(t *testing.T) {
+	t.Parallel()
 	app := newTestApp(t)
 	_, token := app.user(t, "operator")
 
@@ -290,6 +293,7 @@ func TestBackupScheduleUpdateInvalidCron(t *testing.T) {
 }
 
 func TestBackupListRunsEmpty(t *testing.T) {
+	t.Parallel()
 	app := newTestApp(t)
 	_, token := app.user(t, "operator")
 
@@ -317,6 +321,7 @@ func TestBackupListRunsEmpty(t *testing.T) {
 }
 
 func TestBackupCreateManualRun(t *testing.T) {
+	t.Parallel()
 	app := newTestApp(t)
 	_, token := app.user(t, "operator")
 
@@ -371,6 +376,7 @@ func TestBackupCreateManualRun(t *testing.T) {
 // without going through that bookkeeping, repeated updates would stack
 // duplicate "backup" cron entries instead of replacing the one entry.
 func TestBackupScheduleUpdateDoesNotLeakSchedulerJobs(t *testing.T) {
+	t.Parallel()
 	app := newTestApp(t)
 	_, token := app.user(t, "operator")
 
@@ -413,6 +419,7 @@ func TestBackupScheduleUpdateDoesNotLeakSchedulerJobs(t *testing.T) {
 // TestBackupRoutesRequireOperatorRole verifies all four new backup endpoints
 // are gated behind the operator role, not merely authentication.
 func TestBackupRoutesRequireOperatorRole(t *testing.T) {
+	t.Parallel()
 	app := newTestApp(t)
 	_, viewerToken := app.user(t, "viewer")
 
@@ -444,6 +451,7 @@ func TestBackupRoutesRequireOperatorRole(t *testing.T) {
 // backup directory can't be created, e.g. because its parent is a file
 // instead of a directory.
 func TestBackupCreateManualRunFailsWhenDirNotCreatable(t *testing.T) {
+	t.Parallel()
 	base := t.TempDir()
 	blocker := base + "/blocker"
 	if err := os.WriteFile(blocker, []byte("not a directory"), 0o644); err != nil {
