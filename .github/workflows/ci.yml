@@ -332,13 +332,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      # The core and connector shards compile different packages, so they keep
-      # separate build caches.
+      # One shard since #401 (see docs/TESTING.md); the matrix stays so the
+      # suite can be re-split in scripts/ci/test-shards.json alone.
       - name: Setup Go
         id: go
         uses: ./.github/actions/go-cache-restore
         with:
-          kind: ${{ matrix.shard == 'core' && 'race-core' || 'race-connectors' }}
+          kind: race
 
       - name: Run race-sensitive tests
         run: scripts/ci/test-shards.sh run race "$SHARD" -race
@@ -346,7 +346,6 @@ jobs:
           SHARD: ${{ matrix.shard }}
 
       - name: Save Go cache
-        if: matrix.shard == 'core' || matrix.shard == 'connectors-rest'
         uses: ./.github/actions/go-cache-save
         with:
           prefix: ${{ steps.go.outputs.prefix }}
