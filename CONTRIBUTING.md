@@ -141,6 +141,10 @@ up over time:
   `web/vitest.config.ts` (`test.coverage.thresholds`) — currently 40%
   statements/lines, 25% functions/branches.
 
+For profiling test time and the rules that keep backend tests fast and
+deterministic (parallel tests, no fixed sleeps, no public network), see
+[docs/TESTING.md](docs/TESTING.md).
+
 Raise these floors as coverage improves; never lower them. When adding a
 feature with non-trivial branching (auth, destructive actions, WebSocket
 handling), add regression tests for it rather than relying on the floor alone.
