@@ -1,0 +1,36 @@
+name: Stress (temporary)
+
+# TEMPORARY for #401: validates the t.Parallel() rollout under repeated,
+# shuffled -race runs. Remove this file before merging.
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  stress:
+    name: Stress (${{ matrix.pkg }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        pkg: [internal/api, internal/api/connectors]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Go
+        uses: ./.github/actions/go-cache-restore
+        with:
+          kind: race
+
+      - name: Stress
+        working-directory: backend
+        env:
+          PKG: ${{ matrix.pkg }}
+        # No -v: go test prints only failures (with their logs) and the
+        # shuffle seed, so a failure is reproducible with -shuffle=<seed>.
+        run: go test -race -count=20 -shuffle=on "./$PKG"
