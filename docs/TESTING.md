@@ -355,6 +355,10 @@ the expanded race shard, lint/static/vulnerability checks, build and compose
 smoke. Local checks were completed sequentially with bounded Go build
 concurrency after a resource-heavy verification attempt; their logs and
 baseline/candidate coverage profiles are retained with the local evidence.
+On memory-limited machines, run checks sequentially with disk-backed
+`GOTMPDIR` and `TMPDIR`, `GOFLAGS=-p=1`, `GOMAXPROCS=2` and
+`GOMEMLIMIT=384MiB`. These limit verification processes; production and CI
+configuration are unchanged.
 
 ## Follow-ups
 
