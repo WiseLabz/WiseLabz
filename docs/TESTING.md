@@ -312,10 +312,49 @@ comparison outputs are retained so this variation is visible.
 
 ### CI measurements
 
-The existing Test profile workflow runs each mode three times with uncached
-execution and uploads raw JSON. The three configurations are the unchanged
-baseline, baseline with only the expanded race scope, and the implementation.
-Results and run links are recorded here after collection.
+The existing Test profile workflow ran normal, race and cover modes three
+times per configuration on `ubuntu-latest`, with `-count=1`, the same Go
+version and each mode's usual restored cache kind. Each run links to raw
+JSON/text artifacts (retained by the workflow for 14 days). Normal and cover
+use all backend packages; race uses the shard scope at that commit.
+The expanded-scope baseline changes only `test-shards.json`, separating
+fixture/timing improvements from the extra race coverage.
+
+| Configuration / source | Normal runs → median (s) | Race runs → median (s) | Cover runs → median (s) |
+|---|---|---|---|
+| [Unchanged baseline](https://github.com/WiseLabz/WiseLabz/actions/runs/36496216327) (`fb615e3`) | 143, 140, 139 → **140** | 50, 48, 49 → **49** | 61, 62, 61 → **61** |
+| [Expanded-scope baseline](https://github.com/WiseLabz/WiseLabz/actions/runs/36496761938) (`b067e81`) | 139, 140, 146 → **140** | 424, 448, 439 → **439** | 53, 59, 67 → **59** |
+| [Implementation](https://github.com/WiseLabz/WiseLabz/actions/runs/36497384852) (`2aeb6cc`) | 106, 107, 99 → **106** | 95, 106, 89 → **95** | 29, 40, 65 → **40** |
+
+At the same expanded race scope, the median falls **439s → 95s**: **344s
+(78%)** saved. Against the former smaller scope, the final race run costs
+**46s more** (49s → 95s) while covering eleven additional packages. Normal
+falls 140s → 106s and cover 61s → 40s. These wall clocks include compilation;
+cache restoration, cold builds of newly included race binaries and runner
+variance are distinct from package execution. The package medians below
+show the test-time effect directly; the normal baseline has a cold profile
+build cache while race/cover restore their regular CI cache kinds.
+
+| Package | Normal baseline / implementation median (s) | Race expanded baseline / implementation median (s) |
+|---|---|---|
+| `internal/store` | 33.851 / 3.548 | 304.379 / 26.538 |
+| `internal/quality` | 10.620 / 0.937 | 88.422 / 7.468 |
+| `internal/backup` | 9.260 / 2.538 | 73.753 / 14.930 |
+| `internal/doc` | 6.455 / 0.575 | 58.286 / 4.582 |
+| `internal/docexport` | 5.961 / 1.240 | 43.799 / 6.626 |
+| `internal/chat` | 0.736 / 0.361 | 7.272 / 3.676 |
+| `internal/mcp` | 1.797 / 0.492 | 17.545 / 4.860 |
+| `internal/retention` | 2.264 / 0.406 | 16.584 / 4.267 |
+| `internal/diagnostics` | 1.469 / 0.428 | 13.940 / 3.880 |
+| `cmd/backup` | 2.375 / 1.055 | 34.649 / 17.875 |
+| `cmd/server` | 1.654 / 0.533 | 6.277 / 8.123 |
+
+[Regular backend CI](https://github.com/WiseLabz/WiseLabz/actions/runs/36497434502)
+passes on the implementation commit, including PostgreSQL 16, coverage,
+the expanded race shard, lint/static/vulnerability checks, build and compose
+smoke. Local checks were completed sequentially with bounded Go build
+concurrency after a resource-heavy verification attempt; their logs and
+baseline/candidate coverage profiles are retained with the local evidence.
 
 ## Follow-ups
 
