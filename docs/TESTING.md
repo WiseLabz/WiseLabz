@@ -188,13 +188,24 @@ The baseline is `main` at 358d4a9 (run 36355404045), with warm caches:
 | Postgres (3 shards) | 3 | 52s | 137s |
 | Whole CI run | | | 227s wall |
 
-Results after #401 (median of 3 CI runs):
+Results after #401 (PR #404, median of 3 CI runs):
 
 | Job group | Jobs | Longest job | Runner time |
 |---|---|---|---|
-| Coverage | 1 | _pending CI_ | _pending CI_ |
-| Race (one shard, now incl. `internal/api/...`) | 1 | _pending CI_ | _pending CI_ |
-| Postgres (unchanged) | 3 | _pending CI_ | _pending CI_ |
+| Coverage | 1 | 94s (91, 94, 125) | 94s |
+| Race (one shard, now incl. `internal/api/...`) | 1 | 147s (142, 147, 150) | 147s |
+| Postgres (unchanged) | 3 | 66s | 178s |
+| Whole CI run | | | 165s wall (160, 165, 169) |
+
+- **Coverage:** the critical path goes from 181s (slowest shard plus the
+  merge job) to 94s.
+- **Race:** runner time goes from 537s to 147s, although the suite now also
+  covers `internal/api/...`. The PR runs had a cold race build cache (the
+  single-shard `race` cache kind is saved on `main` only), so most of those
+  147s went to compiling; the slowest package, `internal/api`, took 22s.
+  Expect the job to get faster once `main` has saved the cache.
+- **Postgres:** these shards did not change; their 137s → 178s is runner
+  variance.
 
 ## Follow-ups
 
