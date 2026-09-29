@@ -394,8 +394,7 @@ included.
 ### Measurements and validation
 
 The planning baseline for the scheduled export test was **0.85, 1.01, 1.01s**
-(median **1.01s**). Fresh local measurements follow; CI coverage/race medians will be added
-when the candidate profile finishes. Local profiles use `-count=1`
+(median **1.01s**). Fresh local and three-run CI measurements follow. Local profiles use `-count=1`
 with Go 1.27.1, warm build caches, disabled test-result caching, `GOFLAGS=-p=1`,
 `GOMAXPROCS=2` and `GOMEMLIMIT=384MiB`. Each package process starts with a cold
 in-memory migration template.
@@ -416,6 +415,65 @@ sleep. Package savings do not establish a 5% whole-job saving.
 
 Both affected packages pass normally, with `-race`, and with
 `-race -count=20 -shuffle=on`.
+
+Full backend tests and the expanded `race/all` shard pass with `-count=1`.
+Full `-coverpkg` coverage stays **80.4% → 80.4%**;
+`coverage-parity.sh` reports **zero packages outside the existing tolerances**.
+Formatting, shard-definition validation, golangci-lint, `go vet ./...` and
+staticcheck v0.8.1 pass. The export test passes alone with race detection,
+and first in the entire shuffled package (`-race -count=1 -shuffle=10`),
+proving cold template initialization works inside the bubble. Isolated
+negative controls remove the export registration or fail while the callback
+gate is held: each exits at the intended assertion and completes cleanup,
+without a timeout or bubble deadlock. Raw local JSON, profiles and logs are
+retained under `/tmp/issue408-evidence/` on the verification machine.
+
+### Three-run CI comparison
+
+The existing Test profile workflow ran three uncached test executions per
+mode, with `-count=1`, Go 1.27.1 and `ubuntu-latest`. Baseline and candidate
+coverage/race runs restore the **same** main build-cache snapshot
+(`36507104776`, dependency hash `aa226528…`). Modified test binaries and the
+new scheduler race binary still require compilation. Normal mode has no
+profile cache in either configuration and builds cold. Workflow timings
+below measure the test command including compilation; setup/cache download
+time is outside that measurement. Raw JSON/text artifacts remain attached
+to each linked run for the workflow's usual 14-day retention.
+
+| Profile / source | Normal runs → median (s) | Race runs → median (s) | Coverage runs → median (s) |
+|---|---|---|---|
+| [Baseline](https://github.com/WiseLabz/WiseLabz/actions/runs/36507943499) (`91d073a`) | 101, 106, 78 → **101** | 95, 94, 154 → **95** | 38, 24, 30 → **30** |
+| [Candidate](https://github.com/WiseLabz/WiseLabz/actions/runs/36508418726) (`329d208`) | 102, 105, 127 → **105** | 171, 83, 96 → **96** | 29, 37, 25 → **29** |
+
+Coverage saves **1s (3.3%)**; race costs **1s more (1.1%)**, with
+`internal/scheduler` newly included; normal costs **4s more (4.0%)**.
+Neither affected CI job meets the **5% / 10s** savings threshold. Adoption
+therefore uses the explicitly agreed reliability exception. These noisy
+whole-job timings do not establish a whole-suite speedup. The race scope
+changes intentionally; its candidate scheduler package median is **1.019s**
+(including the unchanged one-second race exit sleep), versus no scheduler
+coverage in the baseline shard.
+
+| CI package/test median | Baseline (s) | Candidate (s) | Change |
+|---|---|---|---|
+| `docexport`, normal | 1.464 | 1.144 | 0.320s saved (21.9%) |
+| `docexport`, coverage | 2.124 | 1.117 | 1.007s saved (47.4%) |
+| `docexport`, race | 8.351 | 6.567 | 1.784s saved (21.4%) |
+| Scheduled export, normal | 0.41 | 0.01 | 0.40s saved (97.6%) |
+| Scheduled export, coverage | 0.92 | 0.01 | 0.91s saved (98.9%) |
+| Scheduled export, race | 0.58 | 0.08 | 0.50s saved (86.2%) |
+| `scheduler`, normal | 0.008 | 0.009 | 0.001s more (12.5%) |
+| `scheduler`, coverage | 0.044 | 0.040 | 0.004s saved (9.1%) |
+
+[Regular CI](https://github.com/WiseLabz/WiseLabz/actions/runs/36508410636)
+passes on the implementation revision, including the expanded race shard,
+coverage, PostgreSQL shards, static/lint/vulnerability checks, build and
+compose smoke. The initial attempt failed in the unchanged
+`TestConnectorsSyncAcceptsFieldsHint/fields` during `TempDir` removal
+(`directory not empty`); the same-revision confirmation passed. A separate
+100-run baseline check did not reproduce that cleanup failure. The initial
+failure is retained in the run's first attempt and local evidence; this
+patch does not modify the API fixture or sync cleanup.
 
 ## Follow-ups
 
