@@ -275,20 +275,23 @@ smaller than it is.
 
 ---
 
-## Manager actions (v1 scope)
+## Manager actions
 
-WiseLabz is a homelab manager, not only a doc manager (see `PRODUCT.md`). The v1
-manager layer is deliberately narrow and all of it is REST (per the API design
+WiseLabz is a homelab manager, not only a doc manager (see `PRODUCT.md`). The
+manager layer is deliberately scoped and all of it is REST (per the API design
 below — no mutations over WS):
 
 - **Sync** — trigger a sync/refresh globally or per-service.
 - **Connector enable/disable** — a persisted flag; the connector definition is
   untouched.
 - **Connector add/remove (full CRUD via UI)** — see below.
-
-**Out of scope for v1:** lab-mutating operations (service start/stop/restart,
-config push back to the service). These are desired but deferred; each will require
-its own row in the step-up table and a blast-radius definition before shipping.
+- **Lab-mutating operations** — service start/stop/restart and config push back
+  to the service (shipped, #236). Each has its own row in the step-up table and a
+  defined blast radius, and is gated by an operator grant, an elevation token and
+  a dry-run/confirmation preview; see
+  [ADR 0001](adr/0001-lab-mutating-operation-boundaries.md),
+  [ADR 0002](adr/0002-start-stop-lab-mutating-operations.md) and
+  [ADR 0003](adr/0003-config-push-lab-mutating-operation.md).
 
 ### Connector management via UI (decided 2026-06-27)
 
