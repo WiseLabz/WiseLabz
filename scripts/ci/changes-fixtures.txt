@@ -51,7 +51,7 @@ scripts/ci/test-shards.json	backend,compose
 web/src/App.tsx	frontend,compose
 web/bun.lock	frontend,compose
 .github/actions/bun-setup/action.yml	frontend,compose,workflows
-Dockerfile	compose
+Dockerfile	backend
 .dockerignore	compose
 docker-compose.yml	compose
 docker-compose.sqlite.yml	compose
