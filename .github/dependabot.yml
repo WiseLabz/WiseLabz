@@ -10,9 +10,14 @@ version: 2
 
 multi-ecosystem-groups:
   # Dockerfile base images and the compose Postgres image, in one PR.
+  # Commit message and labels belong on the group, not its updates.
   images:
     schedule:
       interval: monthly
+    commit-message:
+      prefix: chore
+      include: scope
+    labels: ["area:platform"]
 
 updates:
   # "/" only scans .github/workflows, so the composite actions are listed too.
@@ -88,10 +93,6 @@ updates:
     ignore:
       - dependency-name: golang
         update-types: ["version-update:semver-major", "version-update:semver-minor"]
-    commit-message:
-      prefix: chore
-      include: scope
-    labels: ["area:platform"]
 
   # A Postgres major needs a data migration, so it is never proposed.
   - package-ecosystem: docker-compose
@@ -103,7 +104,3 @@ updates:
     ignore:
       - dependency-name: postgres
         update-types: ["version-update:semver-major"]
-    commit-message:
-      prefix: chore
-      include: scope
-    labels: ["area:platform"]
