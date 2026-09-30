@@ -45,3 +45,4 @@ coverage.out
 
 # Knowledge graph output — large, irrelevant to the Docker build.
 graphify-out/
+# scratch
