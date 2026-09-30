@@ -1,10 +1,19 @@
-# Monthly dependency updates, at most two PRs per ecosystem: every PR costs a
-# CI run, and each merge makes the others re-run in the merge queue. The
-# cooldown skips releases younger than a week, which are often re-patched.
-# Security updates ignore the schedule and cooldown. The commit prefixes pass
-# the lefthook commit-msg check and stay out of the changelog (release-please
-# hides ci and chore). See "What CI runs" in docs/TESTING.md.
+# Monthly version updates, at most two PRs per ecosystem: every PR costs a
+# CI run. The cooldown skips releases younger than a week, which are often
+# re-patched. Security updates (enabled in repository settings) ignore the
+# schedule and cooldown, and arrive as one grouped PR per ecosystem. The commit
+# prefixes pass the lefthook commit-msg check and stay out of the changelog
+# (release-please hides ci and chore). Minor and patch PRs merge on their own
+# once approved (dependabot-auto-merge.yml). See "What CI runs" in
+# docs/TESTING.md.
 version: 2
+
+multi-ecosystem-groups:
+  # Dockerfile base images and the compose Postgres image, in one PR.
+  images:
+    schedule:
+      interval: monthly
+
 updates:
   # "/" only scans .github/workflows, so the composite actions are listed too.
   - package-ecosystem: github-actions
@@ -17,6 +26,9 @@ updates:
       default-days: 7
     groups:
       actions:
+        patterns: ["*"]
+      actions-security:
+        applies-to: security-updates
         patterns: ["*"]
     commit-message:
       prefix: ci
@@ -36,6 +48,9 @@ updates:
         update-types: [minor, patch]
       go-major:
         update-types: [major]
+      go-security:
+        applies-to: security-updates
+        patterns: ["*"]
     commit-message:
       prefix: chore
       include: scope
@@ -53,8 +68,42 @@ updates:
         update-types: [minor, patch]
       web-major:
         update-types: [major]
+      web-security:
+        applies-to: security-updates
+        patterns: ["*"]
     commit-message:
       prefix: chore
       include: scope
     labels: ["area:frontend"]
     open-pull-requests-limit: 5
+
+  # Images are pinned as tag@digest; Dependabot moves both. The Go version
+  # follows go.mod and the CI setup-go pin, so only the golang digest moves.
+  - package-ecosystem: docker
+    directory: "/"
+    multi-ecosystem-group: images
+    patterns: ["*"]
+    cooldown:
+      default-days: 7
+    ignore:
+      - dependency-name: golang
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+    commit-message:
+      prefix: chore
+      include: scope
+    labels: ["area:platform"]
+
+  # A Postgres major needs a data migration, so it is never proposed.
+  - package-ecosystem: docker-compose
+    directory: "/"
+    multi-ecosystem-group: images
+    patterns: ["*"]
+    cooldown:
+      default-days: 7
+    ignore:
+      - dependency-name: postgres
+        update-types: ["version-update:semver-major"]
+    commit-message:
+      prefix: chore
+      include: scope
+    labels: ["area:platform"]
