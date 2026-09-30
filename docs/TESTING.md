@@ -218,8 +218,8 @@ guarded dialer applies), or at a closed local port such as
 
 ## What CI runs
 
-`CI Status` is the only required check, and it reports on every PR and every
-push to `main`. The workflow always starts: a `paths-ignore` trigger would
+`CI Status` is the only required check, and it reports on every PR, every
+merge-queue entry and every push to `main`. The workflow always starts: a `paths-ignore` trigger would
 leave the required check pending forever on a docs-only PR. The `changes` job
 decides what else runs, using `scripts/ci/changes.sh`, and every other job is
 gated on its outputs.
@@ -253,6 +253,14 @@ cost a full run until someone classifies them.
 **Release PRs.** On pull requests, a `web/package.json` change that only bumps
 `version` is ignored, so the release-please PR skips the heavy jobs. The push
 to `main` after a release still runs them.
+
+**Merge queue.** PRs to `main` merge through a merge queue instead of having
+to be up to date with `main`. Merging several PRs no longer means rebasing and
+re-running CI on each one in turn: the queue tests them on top of each other
+(`merge_group` event) and merges each once its entry passes. The queue run
+classifies the changes of every PR in the entry from the queue's base to its
+head. The version-only rule above does not apply there, so a release PR runs
+the frontend jobs once in the queue.
 
 **Postgres closure.** When backend changed, `changes` sets up Go and runs
 `changes.sh go-closure`. It lists the dependencies of the Postgres test
@@ -314,13 +322,20 @@ This must print nothing:
 grep -rnE 'uses: [^.].*@v[0-9]' .github
 ```
 
-**Dependabot.** `.github/dependabot.yml` opens update PRs every week:
+**Dependabot.** `.github/dependabot.yml` opens update PRs once a month, at
+most two per ecosystem, and skips releases younger than 7 days (cooldown).
+Security updates arrive as soon as an advisory is published, regardless of
+the schedule.
 
 | Ecosystem | Scope | PRs | Commit | Label |
 |---|---|---|---|---|
 | `github-actions` | workflows and `.github/actions/*` | one grouped PR | `ci: ...` | `area:platform` |
-| `gomod` | `/backend` | minor+patch grouped, one PR per major | `chore(deps): ...` | `area:backend` |
-| `bun` | `/web` | minor+patch grouped, one PR per major | `chore(deps): ...` | `area:frontend` |
+| `gomod` | `/backend` | minor+patch grouped, majors grouped | `chore(deps): ...` | `area:backend` |
+| `bun` | `/web` | minor+patch grouped, majors grouped | `chore(deps): ...` | `area:frontend` |
+
+If one major in a majors PR breaks, fix it on the PR or skip it with an
+`ignore` entry for that dependency, so the other majors can still land. To
+merge several Dependabot PRs, add them all to the merge queue.
 
 Both commit types pass the `commit-msg` hook and stay out of the changelog.
 Dependabot rewrites each SHA together with its `# vX.Y.Z` comment. An actions
