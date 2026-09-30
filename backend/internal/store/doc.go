@@ -249,3 +249,4 @@ func (s *Store) CountDocs(ctx context.Context) (int, error) {
 	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM docs`).Scan(&count)
 	return count, err
 }
+// scratch
