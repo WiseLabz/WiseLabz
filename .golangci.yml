@@ -28,3 +28,4 @@ formatters:
   enable:
     - gofmt
     - goimports
+# scratch
