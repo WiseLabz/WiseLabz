@@ -530,3 +530,4 @@ This file records the _outcome_ of each decision; the ADRs record the _reasoning
 ---
 
 _Last updated: 2026-06-27_
+<!-- scratch -->
