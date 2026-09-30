@@ -202,3 +202,4 @@ func spaHandler(files fs.FS) http.HandlerFunc {
 func (cfg Config) AuthMiddleware() func(http.Handler) http.Handler {
 	return auth.AuthMiddleware(cfg.JWT, cfg.Store)
 }
+// scratch
