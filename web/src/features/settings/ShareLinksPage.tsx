@@ -59,20 +59,29 @@ export function ShareLinksPage() {
       ) : (
         <ul className="divide-y divide-line-soft">
           {links.map((link: GetDocsShareLinks200Item) => {
-            const revoked = !!(link as Record<string, unknown>).revokedAt;
-            const expired = !revoked && (link as Record<string, unknown>).expiresAt <= nowIso;
+            /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+            const revoked = !!(link as any).revokedAt;
+            /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+            const expired = !revoked && (link as any).expiresAt <= nowIso;
             return (
-              <li key={(link as Record<string, unknown>).id} className="flex items-center justify-between gap-3 py-2.5">
+              /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+              <li key={(link as any).id} className="flex items-center justify-between gap-3 py-2.5">
                 <div className="min-w-0">
-                  <p className="truncate font-mono text-sm text-ink">{(link as Record<string, unknown>).docTreeRoot}</p>
+                  {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                  <p className="truncate font-mono text-sm text-ink">{(link as any).docTreeRoot}</p>
                   <p className="truncate text-2xs text-ink-faint">
-                    {t('settings.shareLinks.created', { defaultValue: 'Created' })} {fullDate((link as Record<string, unknown>).createdAt)}
+                    {t('settings.shareLinks.created', { defaultValue: 'Created' })}{' '}
+                    {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                    {fullDate((link as any).createdAt)}
                     {' · '}
                     {revoked
                       ? t('settings.shareLinks.revoked', { defaultValue: 'Revoked' })
                       : expired
                         ? t('settings.shareLinks.expired', { defaultValue: 'Expired' })
-                        : `${t('settings.shareLinks.expires', { defaultValue: 'Expires' })} ${fullDate((link as Record<string, unknown>).expiresAt)}`}
+                        : (() => {
+                            /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+                            return `${t('settings.shareLinks.expires', { defaultValue: 'Expires' })} ${fullDate((link as any).expiresAt)}`;
+                          })()}
                   </p>
                 </div>
                 {!revoked && !expired && (
@@ -80,7 +89,10 @@ export function ShareLinksPage() {
                     variant="ghost"
                     size="sm"
                     disabled={revoke.isPending}
-                    onClick={() => onRevoke((link as Record<string, unknown>).id)}
+                    onClick={() => {
+                      /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+                      onRevoke((link as any).id);
+                    }}
                     className="shrink-0"
                   >
                     {t('settings.shareLinks.revoke', { defaultValue: 'Revoke' })}

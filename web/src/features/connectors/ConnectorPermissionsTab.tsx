@@ -83,16 +83,20 @@ export function ConnectorPermissionsTab({ connectorId }: { connectorId: string }
       ) : (
         <ul className="mb-4 divide-y divide-line-soft">
           {(grants.data ?? []).map((g: GetConnectorsConnectorIdPermissions200Item) => {
-            const user = userById.get((g as Record<string, unknown>).userId);
+            /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+            const user = userById.get((g as any).userId);
             // 'oidc' grants are synced from the user's IdP group at login
             // (#279 part 3) and are read-only here — editing them would be
             // silently overwritten at the user's next login anyway.
-            const isSSO = (g as Record<string, unknown>).source === 'oidc';
+            /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+            const isSSO = (g as any).source === 'oidc';
             return (
-              <li key={(g as Record<string, unknown>).id} className="flex items-center justify-between gap-3 py-2.5">
+              /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+              <li key={(g as any).id} className="flex items-center justify-between gap-3 py-2.5">
                 <div className="min-w-0">
                   <div className="flex items-center gap-1.5">
-                    <p className="truncate text-sm text-ink">{user?.displayName || user?.username || (g as Record<string, unknown>).userId}</p>
+                    {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                    <p className="truncate text-sm text-ink">{user?.displayName || user?.username || (g as any).userId}</p>
                     {isSSO && (
                       <span
                         title={t('connectors.permissions.viaSsoHint')}
@@ -107,15 +111,21 @@ export function ConnectorPermissionsTab({ connectorId }: { connectorId: string }
                 <div className="flex shrink-0 items-center gap-2">
                   {isSSO ? (
                     <span className="rounded-md border border-line-soft px-2 py-1 text-xs text-ink-muted">
-                      {(g as Record<string, unknown>).role === 'operator' ? t('connectors.permissions.operator') : t('connectors.permissions.viewer')}
+                      {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                      {(g as any).role === 'operator' ? t('connectors.permissions.operator') : t('connectors.permissions.viewer')}
                     </span>
                   ) : (
                     <>
-                      <select
-                        value={(g as Record<string, unknown>).role}
-                        onChange={(e) =>
-                          upsert.mutate({ userId: (g as Record<string, unknown>).userId, role: e.target.value as 'viewer' | 'operator' })
-                        }
+                      {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                      <select value={(g as any).role}
+                        onChange={(e) => {
+                          /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+                          const userId = (g as any).userId;
+                          upsert.mutate({
+                            userId,
+                            role: e.target.value as 'viewer' | 'operator',
+                          });
+                        }}
                         className="rounded-md border border-line-soft bg-canvas px-2 py-1 text-xs text-ink"
                       >
                         <option value="viewer">{t('connectors.permissions.viewer')}</option>
@@ -125,7 +135,10 @@ export function ConnectorPermissionsTab({ connectorId }: { connectorId: string }
                         variant="ghost"
                         size="sm"
                         disabled={remove.isPending}
-                        onClick={() => remove.mutate((g as Record<string, unknown>).userId)}
+                        onClick={() => {
+                          /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+                          remove.mutate((g as any).userId);
+                        }}
                       >
                         {t('connectors.permissions.revoke')}
                       </Button>

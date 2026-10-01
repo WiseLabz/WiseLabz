@@ -98,8 +98,10 @@ export function ShareLinkPage() {
             </Panel>
           ) : (
             <Panel className="p-6">
-              <h1 className="mb-4 font-mono text-lg font-semibold text-ink">{(doc.data as Record<string, unknown>)?.title}</h1>
-              <Markdown source={(doc.data as Record<string, unknown>)?.content} />
+              {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+              <h1 className="mb-4 font-mono text-lg font-semibold text-ink">{(doc.data as any)?.title}</h1>
+              {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+              <Markdown source={(doc.data as any)?.content} />
             </Panel>
           )}
         </section>
