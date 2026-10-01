@@ -45,3 +45,13 @@ coverage.out
 
 # Knowledge graph output — large, irrelevant to the Docker build.
 graphify-out/
+
+# Shared agent tooling and OpenSpec plans — development-only, never part of
+# the application build. (.git stays in the context; see the note above.)
+.agents/
+.claude/
+.codex/
+openspec/
+AGENTS.md
+CLAUDE.md
+skills-lock.json
