@@ -60,8 +60,11 @@ func TestSnapshotUTCDataMigration(t *testing.T) {
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	if err := RunMigrationsDown(s.rawDB, s.driver, logger); err != nil {
-		t.Fatal(err)
+	// Roll back retention_scan_indexes, then snapshot_utc itself.
+	for range 2 {
+		if err := RunMigrationsDown(s.rawDB, s.driver, logger); err != nil {
+			t.Fatal(err)
+		}
 	}
 	c := ConnectorRecord{Name: "legacy", Category: "virtualization", Type: "proxmox", URL: "https://example.test"}
 	if err := s.CreateConnector(ctx, &c); err != nil {

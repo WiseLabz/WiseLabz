@@ -137,7 +137,7 @@ func TestListAuditRecordsDateRange(t *testing.T) {
 	}
 }
 
-func TestListAllAuditRecords(t *testing.T) {
+func TestEachAuditRecord(t *testing.T) {
 	ctx := context.Background()
 	s := newDocTestStore(t)
 
@@ -154,24 +154,65 @@ func TestListAllAuditRecords(t *testing.T) {
 		t.Fatalf("CreateAuditRecord(other) error: %v", err)
 	}
 
-	all, err := s.ListAllAuditRecords(ctx, "", "", "", "")
-	if err != nil {
-		t.Fatalf("ListAllAuditRecords() error: %v", err)
-	}
-	if len(all) != 4 {
-		t.Fatalf("ListAllAuditRecords() = %d records, want 4 (no LIMIT)", len(all))
+	collect := func(action, targetType string) ([]AuditRecord, error) {
+		var out []AuditRecord
+		err := s.EachAuditRecord(ctx, action, targetType, "", "", func(a AuditRecord) error {
+			out = append(out, a)
+			return nil
+		})
+		return out, err
 	}
 
-	filtered, err := s.ListAllAuditRecords(ctx, "export.action", "widget", "", "")
+	all, err := collect("", "")
 	if err != nil {
-		t.Fatalf("ListAllAuditRecords(filtered) error: %v", err)
+		t.Fatalf("EachAuditRecord() error: %v", err)
+	}
+	if len(all) != 4 {
+		t.Fatalf("EachAuditRecord() = %d records, want 4 (no LIMIT)", len(all))
+	}
+
+	filtered, err := collect("export.action", "widget")
+	if err != nil {
+		t.Fatalf("EachAuditRecord(filtered) error: %v", err)
 	}
 	if len(filtered) != 3 {
-		t.Fatalf("ListAllAuditRecords(filtered) = %d records, want 3", len(filtered))
+		t.Fatalf("EachAuditRecord(filtered) = %d records, want 3", len(filtered))
 	}
 	for _, r := range filtered {
 		if r.Action != "export.action" || r.TargetType != "widget" {
 			t.Errorf("unexpected record in filtered result: %+v", r)
 		}
+	}
+}
+
+// TestEachAuditRecordPaging spans several keyset pages with identical
+// created_at values, so the (created_at, id) tiebreak must neither drop nor
+// repeat rows at page boundaries.
+func TestEachAuditRecordPaging(t *testing.T) {
+	ctx := context.Background()
+	s := newDocTestStore(t)
+
+	total := 2*auditExportPageSize + 7
+	recs := make([]AuditRecord, total)
+	for i := range recs {
+		recs[i] = AuditRecord{ActorUserID: "u1", ActorRole: "operator", Action: "page.action", TargetType: "widget", CreatedAt: "2026-01-01T00:00:00Z"}
+	}
+	if err := s.CreateAuditRecords(ctx, recs); err != nil {
+		t.Fatalf("CreateAuditRecords() error: %v", err)
+	}
+
+	seen := map[string]bool{}
+	err := s.EachAuditRecord(ctx, "page.action", "", "", "", func(a AuditRecord) error {
+		if seen[a.ID] {
+			t.Errorf("duplicate record %s", a.ID)
+		}
+		seen[a.ID] = true
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("EachAuditRecord() error: %v", err)
+	}
+	if len(seen) != total {
+		t.Fatalf("got %d records, want %d", len(seen), total)
 	}
 }

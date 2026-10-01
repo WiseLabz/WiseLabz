@@ -21,6 +21,43 @@ import { refreshSession, useAuth } from '../store/auth';
 import { customInstance } from '../api/axios-instance';
 import type { WsEvent } from '../types/ws';
 
+// A sync can emit hundreds of change/alert frames in a burst. Invalidations are
+// coalesced per query key and toasts per kind, so a burst costs one refetch per
+// list and one toast instead of N each.
+const BURST_MS = 300;
+
+const invalidateTimers = new Map<string, ReturnType<typeof setTimeout>>();
+function invalidateDebounced(qc: ReturnType<typeof useQueryClient>, queryKey: readonly unknown[]) {
+  const k = JSON.stringify(queryKey);
+  clearTimeout(invalidateTimers.get(k));
+  invalidateTimers.set(
+    k,
+    setTimeout(() => {
+      invalidateTimers.delete(k);
+      void qc.invalidateQueries({ queryKey });
+    }, BURST_MS)
+  );
+}
+
+type Burst = { count: number; first: () => void; summary: (n: number) => void };
+const bursts = new Map<string, Burst & { timer: ReturnType<typeof setTimeout> }>();
+// Buffers toasts of one kind; a lone event shows its own toast, a burst a summary.
+function toastBurst(kind: string, first: () => void, summary: (n: number) => void) {
+  const cur = bursts.get(kind);
+  if (cur) {
+    clearTimeout(cur.timer);
+    cur.count++;
+    cur.summary = summary;
+  }
+  const b = cur ?? { count: 1, first, summary, timer: undefined as never };
+  b.timer = setTimeout(() => {
+    bursts.delete(kind);
+    if (b.count === 1) b.first();
+    else b.summary(b.count);
+  }, BURST_MS);
+  bursts.set(kind, b);
+}
+
 const jump = (to: string) => ({
   label: i18n.t('notify.view'),
   onClick: () => navigateTo(to),
@@ -213,14 +250,19 @@ function handle(frame: WsEvent, qc: ReturnType<typeof useQueryClient>) {
         at: frame.ts,
         tone: p.severity === 'critical' ? 'err' : p.severity === 'warning' ? 'warn' : 'signal',
       });
-      qc.invalidateQueries({ queryKey: getGetChangesQueryKey() });
-      qc.invalidateQueries({ queryKey: getGetDashboardOverviewQueryKey() });
-      {
-        const opts = { action: jump(`/changes/${p.changeId}`) };
-        if (p.severity === 'critical') toast.error(p.summary, opts);
-        else if (p.severity === 'warning') toast.warning(p.summary, opts);
-        else toast.info(p.summary, opts);
-      }
+      invalidateDebounced(qc, getGetChangesQueryKey());
+      invalidateDebounced(qc, getGetDashboardOverviewQueryKey());
+      toastBurst(
+        'change.detected',
+        () => {
+          const opts = { action: jump(`/changes/${p.changeId}`) };
+          if (p.severity === 'critical') toast.error(p.summary, opts);
+          else if (p.severity === 'warning') toast.warning(p.summary, opts);
+          else toast.info(p.summary, opts);
+        },
+        (n) =>
+          toast.info(i18n.t('notify.changesDetected', { count: n }), { action: jump('/changes') })
+      );
       break;
     }
     case 'alert.created': {
@@ -234,13 +276,18 @@ function handle(frame: WsEvent, qc: ReturnType<typeof useQueryClient>) {
         at: frame.ts,
         tone: p.severity === 'critical' ? 'err' : 'warn',
       });
-      qc.invalidateQueries({ queryKey: getGetAlertsQueryKey() });
-      qc.invalidateQueries({ queryKey: getGetNotificationsQueryKey() });
-      {
-        const opts = { action: jump('/alerts') };
-        if (p.severity === 'critical') toast.error(p.title, opts);
-        else toast.warning(p.title, opts);
-      }
+      invalidateDebounced(qc, getGetAlertsQueryKey());
+      invalidateDebounced(qc, getGetNotificationsQueryKey());
+      toastBurst(
+        'alert.created',
+        () => {
+          const opts = { action: jump('/alerts') };
+          if (p.severity === 'critical') toast.error(p.title, opts);
+          else toast.warning(p.title, opts);
+        },
+        (n) =>
+          toast.warning(i18n.t('notify.alertsCreated', { count: n }), { action: jump('/alerts') })
+      );
       break;
     }
     case 'alert.resolved': {

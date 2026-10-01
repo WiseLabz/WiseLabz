@@ -183,6 +183,20 @@ describe('WebSocketProvider', () => {
     expect(useLive.getState().activity).toHaveLength(1);
   });
 
+  it('coalesces an alert burst into one refetch of each list', async () => {
+    const queryClient = new QueryClient();
+    const invalidateQueries = vi.spyOn(queryClient, 'invalidateQueries');
+    await renderProvider(queryClient);
+
+    for (let i = 0; i < 5; i++) send(alertFrame({ id: `burst-${i}` }, `alert-${i}`));
+
+    // Counters and the activity feed stay per-event; only refetches are deferred.
+    expect(useLive.getState().pendingAlerts).toBe(5);
+    expect(invalidateQueries).not.toHaveBeenCalled();
+    await waitFor(() => expect(invalidateQueries).toHaveBeenCalledTimes(2));
+    expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: getGetAlertsQueryKey() });
+  });
+
   it('handles a connector-scoped frame carrying connectorId', async () => {
     await renderProvider();
 

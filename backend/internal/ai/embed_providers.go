@@ -34,7 +34,7 @@ func RegisterOllamaEmbedder(r *EmbedRegistry) {
 		return &ollamaEmbedder{
 			baseURL: strings.TrimRight(baseURL, "/"),
 			model:   model,
-			client:  httpx.NewClient(httpx.Options{Timeout: llmTimeout}),
+			client:  sharedHTTPClient(),
 		}, nil
 	})
 }
@@ -100,7 +100,7 @@ func RegisterOpenAIEmbedder(r *EmbedRegistry) {
 			baseURL: strings.TrimRight(baseURL, "/"),
 			apiKey:  apiKey,
 			model:   model,
-			client:  httpx.NewClient(httpx.Options{Timeout: llmTimeout}),
+			client:  sharedHTTPClient(),
 		}, nil
 	})
 }

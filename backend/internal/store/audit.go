@@ -2,7 +2,6 @@ package store
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -155,29 +154,45 @@ func (s *Store) ListAuditRecordsKeyset(ctx context.Context, action, targetType, 
 	return keysetQuery(ctx, s.db, "audit_log", auditColumns, where, args, "created_at", cur, limit, scanAuditRecord)
 }
 
-// ListAllAuditRecords returns every audit record matching the given filters
-// (no pagination), newest first. Used by the export endpoint, which needs
-// the full matching set rather than one page — kept as a separate method
-// instead of overloading ListAuditRecords with a "limit<=0 means unbounded"
-// convention, since that would change what a zero/negative limit means for
-// its existing paginated caller.
-func (s *Store) ListAllAuditRecords(ctx context.Context, action, targetType, createdAfter, createdBefore string) ([]AuditRecord, error) {
+// auditExportPageSize is the keyset page size EachAuditRecord reads per query.
+const auditExportPageSize = 1000
+
+// EachAuditRecord calls fn for every audit record matching the given filters,
+// newest first, until fn returns an error. Used by the export endpoint, which
+// needs the full matching set: rows are read one keyset page at a time so
+// memory stays bounded and no query holds the (single, on SQLite) connection
+// while fn writes to a slow client.
+func (s *Store) EachAuditRecord(ctx context.Context, action, targetType, createdAfter, createdBefore string, fn func(AuditRecord) error) error {
 	where, args := auditFilterClause(action, targetType, createdAfter, createdBefore)
 
-	query := `SELECT ` + auditColumns + `
-		FROM audit_log ` + where + ` ORDER BY created_at DESC`
-
-	rows, err := s.db.QueryContext(ctx, query, args...)
-	if err != nil {
-		return nil, fmt.Errorf("list all audit records: %w", err)
+	var cur Keyset
+	for {
+		pageWhere, pageArgs := where, args
+		if !cur.Empty() {
+			pageWhere += " AND (created_at, id) < (?, ?)"
+			pageArgs = append(append([]any{}, args...), cur.Sort, cur.ID)
+		}
+		query := `SELECT ` + auditColumns + ` FROM audit_log ` + pageWhere +
+			` ORDER BY created_at DESC, id DESC LIMIT ?`
+		page, err := scanAll(ctx, s.db, "audit_log", query, append(pageArgs, auditExportPageSize), scanAuditRecord)
+		if err != nil {
+			return fmt.Errorf("export audit records: %w", err)
+		}
+		for _, a := range page {
+			if err := fn(a); err != nil {
+				return err
+			}
+		}
+		if len(page) < auditExportPageSize {
+			return nil
+		}
+		last := page[len(page)-1]
+		cur = Keyset{Sort: last.CreatedAt, ID: last.ID}
 	}
-	defer rows.Close() //nolint:errcheck
-
-	return scanAuditRecordRows(rows)
 }
 
 // auditFilterClause builds the shared WHERE clause + args for
-// ListAuditRecords and ListAllAuditRecords.
+// ListAuditRecords and EachAuditRecord.
 func auditFilterClause(action, targetType, createdAfter, createdBefore string) (string, []any) {
 	where := "WHERE 1=1"
 	var args []any
@@ -207,21 +222,4 @@ func scanAuditRecord(row rowScanner) (AuditRecord, error) {
 	var a AuditRecord
 	err := row.Scan(&a.ID, &a.ActorUserID, &a.ActorRole, &a.Action, &a.TargetType, &a.TargetID, &a.Detail, &a.CreatedAt)
 	return a, err
-}
-
-// scanAuditRecordRows scans all rows of an audit_log query into []AuditRecord,
-// returning a non-nil empty slice (never nil) when there are no rows.
-func scanAuditRecordRows(rows *sql.Rows) ([]AuditRecord, error) {
-	records := make([]AuditRecord, 0)
-	for rows.Next() {
-		a, err := scanAuditRecord(rows)
-		if err != nil {
-			return nil, fmt.Errorf("scan: %w", err)
-		}
-		records = append(records, a)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate audit records: %w", err)
-	}
-	return records, nil
 }

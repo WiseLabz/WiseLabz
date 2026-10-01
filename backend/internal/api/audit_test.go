@@ -530,3 +530,20 @@ func TestAuditCSVNeutralizesFormulas(t *testing.T) {
 		t.Fatalf("got %d formula rows, want 5", count)
 	}
 }
+
+func TestAuditExportJSONEmpty(t *testing.T) {
+	t.Parallel()
+	app := newTestApp(t)
+	_, opToken := app.user(t, "operator")
+
+	rec := app.req(t, http.MethodGet, "/api/system/audit/export?format=json&action=no.such.action", nil, opToken)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body = %s", rec.Code, rec.Body)
+	}
+	if got := rec.Header().Get("Content-Type"); got != "application/json; charset=utf-8" {
+		t.Errorf("Content-Type = %q", got)
+	}
+	if got := strings.TrimSpace(rec.Body.String()); got != "[]" {
+		t.Errorf("body = %q, want []", got)
+	}
+}

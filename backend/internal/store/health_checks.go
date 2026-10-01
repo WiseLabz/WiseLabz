@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/google/uuid"
@@ -68,47 +69,81 @@ type UptimeStats struct {
 // excluded from the mean, consistent with the usual MTTR definition (mean
 // time to recover from *resolved* incidents).
 func (s *Store) GetConnectorUptime(ctx context.Context, connectorID string, since, until time.Time) (UptimeStats, error) {
-	sinceStr := since.UTC().Format(time.RFC3339)
-	untilStr := until.UTC().Format(time.RFC3339)
-	stats := UptimeStats{
-		ConnectorID: connectorID,
-		WindowStart: sinceStr,
-		WindowEnd:   untilStr,
+	points, err := s.loadHealthPoints(ctx, connectorID, since, until)
+	if err != nil {
+		return UptimeStats{ConnectorID: connectorID}, err
 	}
+	return computeUptime(connectorID, points, since, until), nil
+}
 
+// GetConnectorUptimeWindows computes GetConnectorUptime for several lookback
+// windows ending at until with a single scan of health_checks (the longest
+// window's rows are loaded once and narrowed per window). Results are in the
+// order of lookbacks.
+func (s *Store) GetConnectorUptimeWindows(ctx context.Context, connectorID string, until time.Time, lookbacks []time.Duration) ([]UptimeStats, error) {
+	var longest time.Duration
+	for _, d := range lookbacks {
+		longest = max(longest, d)
+	}
+	points, err := s.loadHealthPoints(ctx, connectorID, until.Add(-longest), until)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]UptimeStats, 0, len(lookbacks))
+	for _, d := range lookbacks {
+		since := until.Add(-d)
+		// points are ascending, so the window is a suffix.
+		i := sort.Search(len(points), func(i int) bool { return !points[i].checkedAt.Before(since) })
+		out = append(out, computeUptime(connectorID, points[i:], since, until))
+	}
+	return out, nil
+}
+
+type healthPoint struct {
+	status    string
+	checkedAt time.Time
+}
+
+// loadHealthPoints returns the connector's checks in [since, until), oldest first.
+func (s *Store) loadHealthPoints(ctx context.Context, connectorID string, since, until time.Time) ([]healthPoint, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT status, checked_at FROM health_checks
 		WHERE connector_id = ? AND checked_at >= ? AND checked_at < ?
 		ORDER BY checked_at ASC
-	`, connectorID, sinceStr, untilStr)
+	`, connectorID, since.UTC().Format(time.RFC3339), until.UTC().Format(time.RFC3339))
 	if err != nil {
-		return stats, fmt.Errorf("get connector uptime: %w", err)
+		return nil, fmt.Errorf("get connector uptime: %w", err)
 	}
 	defer rows.Close() //nolint:errcheck
 
-	type point struct {
-		status    string
-		checkedAt time.Time
-	}
-	var points []point
+	var points []healthPoint
 	for rows.Next() {
 		var status, checkedAt string
 		if err := rows.Scan(&status, &checkedAt); err != nil {
-			return stats, fmt.Errorf("scan health check: %w", err)
+			return nil, fmt.Errorf("scan health check: %w", err)
 		}
 		ts, err := time.Parse(time.RFC3339, checkedAt)
 		if err != nil {
-			return stats, fmt.Errorf("parse checked_at %q: %w", checkedAt, err)
+			return nil, fmt.Errorf("parse checked_at %q: %w", checkedAt, err)
 		}
-		points = append(points, point{status: status, checkedAt: ts})
+		points = append(points, healthPoint{status: status, checkedAt: ts})
 	}
 	if err := rows.Err(); err != nil {
-		return stats, fmt.Errorf("iterate health checks: %w", err)
+		return nil, fmt.Errorf("iterate health checks: %w", err)
 	}
+	return points, nil
+}
 
+// computeUptime derives UptimeStats from the window's ascending points.
+func computeUptime(connectorID string, points []healthPoint, since, until time.Time) UptimeStats {
+	stats := UptimeStats{
+		ConnectorID: connectorID,
+		WindowStart: since.UTC().Format(time.RFC3339),
+		WindowEnd:   until.UTC().Format(time.RFC3339),
+	}
 	stats.CheckCount = len(points)
 	if len(points) == 0 {
-		return stats, nil
+		return stats
 	}
 
 	var upDuration, totalDuration time.Duration
@@ -151,7 +186,7 @@ func (s *Store) GetConnectorUptime(ctx context.Context, connectorID string, sinc
 		stats.MTTRSeconds = (sum / time.Duration(len(recoveries))).Seconds()
 	}
 
-	return stats, nil
+	return stats
 }
 
 // DeleteOldHealthChecks removes health_checks rows checked before cutoff.
