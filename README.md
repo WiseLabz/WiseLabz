@@ -47,16 +47,16 @@ git clone https://github.com/WiseLabz/WiseLabz.git
 cd WiseLabz
 
 # Copy and edit the configuration
-cp config.example.yaml config.yaml
-# Edit config.yaml — add at least one service connection
+cp deploy/config.example.yaml config.yaml
+# Edit config.yaml to set the database, server and auth keys
 
 # Start everything
 docker compose up -d
 ```
 
-Open `http://localhost:8080` and register your first service. A `config.example.yaml`
-file is included in the repository root with commented examples for every supported
-service.
+Open `http://localhost:8080` and register your first service. A `config.example.yaml` template is included under `deploy/` with commented
+examples of every config key. Service connections are registered through the
+dashboard, not through `config.yaml`.
 
 ## Configuration
 
@@ -70,17 +70,12 @@ your config file and tune settings per deployment without editing YAML.
 server:
   port: 8080
 
-database:
+db:
   driver: sqlite                # or "postgres"
   dsn: ./data/wiselabz.db
 
-services:
-  - name: home-proxmox
-    type: proxmox
-    url: https://192.168.1.10:8006
-    # token_id and token_secret are read from env:
-    #   WISELABZ_SERVICES_0_TOKEN_ID
-    #   WISELABZ_SERVICES_0_TOKEN_SECRET
+# Service connections (proxmox, docker, pfsense, ...) are registered through
+# the dashboard or the API — there is no `services:` key in the config.
 ```
 
 For a full list of configuration keys, see [deploy/config.example.yaml](deploy/config.example.yaml).
@@ -109,6 +104,8 @@ use `server config validate` to check deployment settings and `server config pri
 | AdGuard Home       | Built-in             |
 | UniFi              | Built-in             |
 | TrueNAS            | Built-in             |
+| DNS Resolver         | Built-in             |
+| Custom HTTP          | Built-in             |
 | Everything else    | Community connectors |
 
 New service connectors are community-driven. If the service you run isn't here yet,
