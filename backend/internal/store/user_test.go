@@ -432,3 +432,64 @@ func TestRotateSessionTokenErrors(t *testing.T) {
 		}
 	})
 }
+
+func TestDisableUserRevokesShareLinksAtomically(t *testing.T) {
+	s := newDocTestStore(t)
+	ctx := t.Context()
+	u := &User{Username: "share-creator"}
+	if err := s.CreateUser(ctx, u); err != nil {
+		t.Fatal(err)
+	}
+	link := &ShareLink{TokenHash: HashToken("share-token"), DocTreeRoot: "root", CreatedBy: u.ID, ExpiresAt: time.Now().Add(time.Hour).UTC().Format(time.RFC3339)}
+	if err := s.CreateShareLink(ctx, link); err != nil {
+		t.Fatal(err)
+	}
+	stop := errors.New("rollback disable")
+	err := s.WithinTransaction(ctx, func(tx *Store) error {
+		if err := tx.UpdateUser(ctx, u.ID, map[string]any{"disabled": true}); err != nil {
+			return err
+		}
+		revoked, err := tx.GetShareLinkByID(ctx, link.ID)
+		if err != nil {
+			return err
+		}
+		if revoked.RevokedAt == "" {
+			t.Error("link not revoked in disable transaction")
+		}
+		return stop
+	})
+	if !errors.Is(err, stop) {
+		t.Fatal(err)
+	}
+	after, err := s.GetShareLinkByID(ctx, link.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	user, err := s.GetUserByID(ctx, u.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if user.Disabled || after.RevokedAt != "" {
+		t.Fatal("disable and revocation did not roll back together")
+	}
+	if err := s.UpdateUser(ctx, u.ID, map[string]any{"disabled": true}); err != nil {
+		t.Fatal(err)
+	}
+	after, err = s.GetShareLinkByID(ctx, link.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.RevokedAt == "" {
+		t.Fatal("disable did not revoke link")
+	}
+	if err := s.UpdateUser(ctx, u.ID, map[string]any{"disabled": false}); err != nil {
+		t.Fatal(err)
+	}
+	stillRevoked, err := s.GetShareLinkByID(ctx, link.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stillRevoked.RevokedAt != after.RevokedAt {
+		t.Fatal("reenabling changed link revocation")
+	}
+}

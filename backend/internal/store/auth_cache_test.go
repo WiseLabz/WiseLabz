@@ -73,9 +73,12 @@ func TestUserStatusCache(t *testing.T) {
 		t.Fatal(err)
 	}
 	check("user", false)
+	// Disable now uses a transaction; the read-counting wrapper does not support BeginTx.
+	s.db = db.DBTX
 	if err := s.UpdateUser(ctx, u.ID, map[string]any{"disabled": true}); err != nil {
 		t.Fatal(err)
 	}
+	s.db = db
 	check("user", true)
 	if err := s.DeleteUser(ctx, u.ID); err != nil {
 		t.Fatal(err)

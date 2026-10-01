@@ -133,3 +133,12 @@ func (s *Store) TouchShareLinkLastAccessed(ctx context.Context, id string) error
 	}
 	return nil
 }
+
+// RevokeShareLinksForUser permanently revokes all active links created by a user.
+func (s *Store) RevokeShareLinksForUser(ctx context.Context, userID string) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE share_links SET revoked_at = ? WHERE created_by = ? AND revoked_at = ''`, time.Now().UTC().Format(time.RFC3339), userID)
+	if err != nil {
+		return fmt.Errorf("revoke user share links: %w", err)
+	}
+	return nil
+}

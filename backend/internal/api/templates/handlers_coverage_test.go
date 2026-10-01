@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/WiseLabz/wiselabz/internal/api/apitest"
+	"github.com/WiseLabz/wiselabz/internal/auth"
 	"github.com/WiseLabz/wiselabz/internal/store"
 )
 
@@ -165,8 +167,13 @@ func TestPreviewDoesNotPersist(t *testing.T) {
 	if err := h.Store.CreateConnector(ctx, conn); err != nil {
 		t.Fatal(err)
 	}
+	userID := apitest.NewUser(t, h.Store, "viewer")
+	apitest.GrantConnectorRole(t, h.Store, userID, conn.ID, "viewer")
+	preview := func(w http.ResponseWriter, r *http.Request) {
+		h.Preview(w, r.WithContext(auth.ContextWithUser(r.Context(), userID, false)))
+	}
 	// A matching connector without a snapshot produces a per-connector render error.
-	rr := templateRequest(t, h.Preview, tmpl.ID, "", "", 200)
+	rr := templateRequest(t, preview, tmpl.ID, "", "", 200)
 	if !strings.Contains(rr.Body.String(), `"renderError":"`) {
 		t.Fatalf("missing render error: %s", rr.Body.String())
 	}
@@ -179,7 +186,7 @@ func TestPreviewDoesNotPersist(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		rr = templateRequest(t, h.Preview, tmpl.ID, "", fmt.Sprintf(`{"connectorId":%q}`, conn.ID), 200)
+		rr = templateRequest(t, preview, tmpl.ID, "", fmt.Sprintf(`{"connectorId":%q}`, conn.ID), 200)
 		var result struct {
 			Affected []struct {
 				HasExistingDoc bool    `json:"hasExistingDoc"`

@@ -12,10 +12,12 @@ type Factory func(config map[string]any) (Connector, error)
 
 // TypeSchema describes the configuration schema for a connector type.
 type TypeSchema struct {
-	Type     string        `json:"type"`
-	Category string        `json:"category"`
-	Name     string        `json:"displayName"`
-	Fields   []SchemaField `json:"fields"`
+	// EndpointConfigKeys names config values whose replacement requires an instance admin.
+	EndpointConfigKeys []string      `json:"-"`
+	Type               string        `json:"type"`
+	Category           string        `json:"category"`
+	Name               string        `json:"displayName"`
+	Fields             []SchemaField `json:"fields"`
 	// Stub is true for connector types with no real implementation yet
 	// (Fetch/Validate always fail). The UI hides/disables Test, Sync, and
 	// data-viewing actions for these.

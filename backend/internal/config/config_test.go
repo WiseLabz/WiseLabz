@@ -34,6 +34,9 @@ func TestLoadDefaults(t *testing.T) {
 		cfg.DB.ConnMaxLifetime() != 30*time.Minute || cfg.DB.ConnMaxIdleTime() != 5*time.Minute {
 		t.Errorf("unexpected db pool defaults: %+v", cfg.DB)
 	}
+	if cfg.Auth.ShareLinkMaxTTL != 2592000 || cfg.Auth.ShareLinkMaxTTLDuration() != 30*24*time.Hour {
+		t.Errorf("unexpected share-link lifetime default: %v", cfg.Auth.ShareLinkMaxTTL)
+	}
 	if cfg.Auth.AccessTokenTTL != 900 {
 		t.Errorf("auth.access_token_ttl = %d, want 900", cfg.Auth.AccessTokenTTL)
 	}
@@ -237,6 +240,7 @@ func TestLoadEnvOverrideAllFields(t *testing.T) {
 		"WISELABZ_SERVER_WRITE_TIMEOUT_SECONDS":         "6",
 		"WISELABZ_SERVER_SHUTDOWN_TIMEOUT_SECONDS":      "7",
 		"WISELABZ_ENCRYPTION_KEY":                       "env-key",
+		"WISELABZ_AUTH_SHARE_LINK_MAX_TTL":              "3600",
 		"WISELABZ_AUTH_SECRET":                          "env-secret",
 		"WISELABZ_AUTH_ACCESS_TOKEN_TTL":                "60",
 		"WISELABZ_AUTH_REFRESH_TOKEN_TTL":               "120",
@@ -305,7 +309,7 @@ func TestLoadEnvOverrideAllFields(t *testing.T) {
 		DB:         Database{Driver: "postgres", DSN: "postgres://x", MaxOpenConns: 7, MaxIdleConns: 3, ConnMaxLifetimeSeconds: 60, ConnMaxIdleTimeSeconds: 30},
 		Server:     Server{Host: "127.0.0.1", Port: 9090, Origin: "https://example.com", TrustedProxies: "10.0.0.0/8", PublicURL: "https://reports.example.com", Embed: true, ReadTimeoutSeconds: 5, WriteTimeoutSeconds: 6, ShutdownTimeoutSeconds: 7},
 		Encryption: EncryptionSettings{Key: "env-key"},
-		Auth:       AuthSettings{Secret: "env-secret", AccessTokenTTL: 60, RefreshTokenTTL: 120, StepUpForDestructive: false, WebAuthn: WebAuthnSettings{RPID: "example.com", RPDisplayName: "WiseLabz Test"}},
+		Auth:       AuthSettings{ShareLinkMaxTTL: 3600, Secret: "env-secret", AccessTokenTTL: 60, RefreshTokenTTL: 120, StepUpForDestructive: false, WebAuthn: WebAuthnSettings{RPID: "example.com", RPDisplayName: "WiseLabz Test"}},
 		AI: AISettings{
 			Enabled: true, Provider: "openai", Model: "gpt-x", APIKey: "key", BaseURL: "http://localhost", Mode: "auto_update",
 			EmbedProvider: "openai", EmbedModel: "text-embedding-3-small", EmbedAPIKey: "embed-key", EmbedBaseURL: "http://embed-host",
@@ -654,5 +658,21 @@ func TestDocExportGitCommitModeValidation(t *testing.T) {
 	g := DocExportGitSettings{Remote: "https://git.example.com/docs.git", Branch: "main", Path: "docs", CommitMode: "invalid"}
 	if err := g.Validate(); err == nil || !strings.Contains(err.Error(), "commit_mode") {
 		t.Fatalf("Validate() = %v, want commit_mode error", err)
+	}
+}
+
+func TestShareLinkMaxTTLConfig(t *testing.T) {
+	t.Setenv("WISELABZ_AUTH_SHARE_LINK_MAX_TTL", "3600")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Auth.ShareLinkMaxTTLDuration() != time.Hour {
+		t.Fatalf("configured share lifetime = %v", cfg.Auth.ShareLinkMaxTTLDuration())
+	}
+	for _, value := range []int{0, -1} {
+		if got := (AuthSettings{ShareLinkMaxTTL: value}).ShareLinkMaxTTLDuration(); got != 30*24*time.Hour {
+			t.Fatalf("fallback = %v", got)
+		}
 	}
 }
