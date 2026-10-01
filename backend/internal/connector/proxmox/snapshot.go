@@ -9,6 +9,8 @@ import (
 	"github.com/WiseLabz/wiselabz/internal/connector"
 )
 
+const bytesPerMB = 1024 * 1024
+
 // Fetch retrieves the current state of nodes, VMs, containers, and storage.
 // config may carry a "fields" selective-fetch hint (see
 // connector.RequestedFields) naming a subset of {"vms","containers","storage"}
@@ -30,14 +32,12 @@ func (p *Connector) Fetch(ctx context.Context, config map[string]any) (*connecto
 
 	var nodesResponse struct {
 		Data []struct {
-			Node   string  `json:"node"`
-			Status string  `json:"status"`
-			Uptime int64   `json:"uptime"`
-			CPU    float64 `json:"cpu"`
-			Memory struct {
-				Used  int64 `json:"used"`
-				Total int64 `json:"total"`
-			} `json:"mem"`
+			Node   string `json:"node"`
+			Status string `json:"status"`
+			// mem/maxmem are flat byte counts in GET /nodes. Only maxmem is
+			// rendered: live usage, uptime and CPU change every fetch and
+			// would register as drift on each sync.
+			MaxMem int64 `json:"maxmem"`
 		} `json:"data"`
 	}
 	if err := json.Unmarshal(nodesRaw, &nodesResponse); err != nil {
@@ -59,9 +59,7 @@ func (p *Connector) Fetch(ctx context.Context, config map[string]any) (*connecto
 	for _, node := range nodesResponse.Data {
 		nodeSection := fmt.Sprintf("## Node: %s\n\n", node.Node)
 		nodeSection += fmt.Sprintf("- **Status**: %s\n", node.Status)
-		nodeSection += fmt.Sprintf("- **Uptime**: %d seconds\n", node.Uptime)
-		nodeSection += fmt.Sprintf("- **CPU**: %.2f%%\n", node.CPU*100)
-		nodeSection += fmt.Sprintf("- **Memory**: %d / %d bytes\n\n", node.Memory.Used, node.Memory.Total)
+		nodeSection += fmt.Sprintf("- **Memory**: %d MB\n\n", node.MaxMem/bytesPerMB)
 
 		dependencies = append(dependencies, connector.ServiceDependency{Kind: "host", Name: node.Node})
 
@@ -81,8 +79,7 @@ func (p *Connector) Fetch(ctx context.Context, config map[string]any) (*connecto
 					Name   string `json:"name"`
 					Status string `json:"status"`
 					CPU    int    `json:"cpus"`
-					Memory int64  `json:"mem"`
-					Uptime int64  `json:"uptime"`
+					MaxMem int64  `json:"maxmem"`
 				} `json:"data"`
 			}
 			if err := json.Unmarshal(vmsRaw, &vmsResponse); err != nil {
@@ -95,11 +92,11 @@ func (p *Connector) Fetch(ctx context.Context, config map[string]any) (*connecto
 
 			if len(vmsResponse.Data) > 0 {
 				nodeSection += "### Virtual Machines\n\n"
-				nodeSection += "| VMID | Name | Status | CPUs | Memory (MB) | Uptime |\n"
-				nodeSection += "|------|------|--------|------|-------------|--------|\n"
+				nodeSection += "| VMID | Name | Status | CPUs | Memory (MB) |\n"
+				nodeSection += "|------|------|--------|------|-------------|\n"
 				for _, vm := range vmsResponse.Data {
-					nodeSection += fmt.Sprintf("| %d | %s | %s | %d | %d | %d |\n",
-						vm.VMID, vm.Name, vm.Status, vm.CPU, vm.Memory, vm.Uptime)
+					nodeSection += fmt.Sprintf("| %d | %s | %s | %d | %d |\n",
+						vm.VMID, vm.Name, vm.Status, vm.CPU, vm.MaxMem/bytesPerMB)
 					ent := connector.SnapshotEntity{
 						Kind:       "vm",
 						Name:       vm.Name,
@@ -147,8 +144,7 @@ func (p *Connector) Fetch(ctx context.Context, config map[string]any) (*connecto
 					Name   string `json:"name"`
 					Status string `json:"status"`
 					CPU    int    `json:"cpus"`
-					Memory int64  `json:"mem"`
-					Uptime int64  `json:"uptime"`
+					MaxMem int64  `json:"maxmem"`
 				} `json:"data"`
 			}
 			if err := json.Unmarshal(ctsRaw, &ctsResponse); err != nil {
@@ -161,11 +157,11 @@ func (p *Connector) Fetch(ctx context.Context, config map[string]any) (*connecto
 
 			if len(ctsResponse.Data) > 0 {
 				nodeSection += "### Containers\n\n"
-				nodeSection += "| VMID | Name | Status | CPUs | Memory (MB) | Uptime |\n"
-				nodeSection += "|------|------|--------|------|-------------|--------|\n"
+				nodeSection += "| VMID | Name | Status | CPUs | Memory (MB) |\n"
+				nodeSection += "|------|------|--------|------|-------------|\n"
 				for _, ct := range ctsResponse.Data {
-					nodeSection += fmt.Sprintf("| %d | %s | %s | %d | %d | %d |\n",
-						ct.VMID, ct.Name, ct.Status, ct.CPU, ct.Memory, ct.Uptime)
+					nodeSection += fmt.Sprintf("| %d | %s | %s | %d | %d |\n",
+						ct.VMID, ct.Name, ct.Status, ct.CPU, ct.MaxMem/bytesPerMB)
 					ent := connector.SnapshotEntity{
 						Kind:       "container",
 						Name:       ct.Name,

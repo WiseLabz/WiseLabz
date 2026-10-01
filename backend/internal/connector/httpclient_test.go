@@ -7,6 +7,8 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -120,5 +122,26 @@ func TestNewHTTPClientBlocksLoopbackByDefault(t *testing.T) {
 	defer srv.Close()
 	if _, err := NewHTTPClient(HTTPClientOptions{}).Get(srv.URL); err == nil {
 		t.Error("GET loopback succeeded, want the guarded dialer to refuse it")
+	}
+}
+
+func TestMapTransportErrorRedactsQuery(t *testing.T) {
+	err := MapTransportError(&url.Error{
+		Op:  "Get",
+		URL: "http://user:pw@pihole.lan/admin/api.php?summaryRaw&auth=SECRET#frag",
+		Err: errors.New("connection refused"),
+	})
+	for _, leak := range []string{"SECRET", "pw", "summaryRaw"} {
+		if strings.Contains(err.Error(), leak) {
+			t.Errorf("error %q leaks %q", err, leak)
+		}
+	}
+	if !strings.Contains(err.Error(), "connection refused") {
+		t.Errorf("error %q lost its cause", err)
+	}
+	var te *TimeoutError
+	err = MapTransportError(&url.Error{Op: "Get", URL: "http://h/?auth=SECRET", Err: context.DeadlineExceeded})
+	if !errors.As(err, &te) || strings.Contains(err.Error(), "SECRET") {
+		t.Errorf("timeout error = %v", err)
 	}
 }

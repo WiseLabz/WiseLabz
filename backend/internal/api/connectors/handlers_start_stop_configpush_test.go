@@ -304,9 +304,9 @@ func TestConfigPushHandler(t *testing.T) {
 			w.Header().Set("Content-Type", "application/json")
 			switch {
 			case r.URL.Path == "/nodes":
-				_, _ = w.Write([]byte(`{"data":[{"node":"pve1","status":"online","uptime":100,"cpu":0.1,"mem":{"used":1,"total":2}}]}`))
+				_, _ = w.Write([]byte(`{"data":[{"node":"pve1","status":"online","uptime":100,"cpu":0.1,"mem":1,"maxmem":2}]}`))
 			case r.URL.Path == "/nodes/pve1/qemu":
-				_, _ = w.Write([]byte(`{"data":[{"vmid":100,"name":"vm1","status":"running","cpus":2,"mem":` + itoa(int(memory.Load())) + `,"uptime":10}]}`))
+				_, _ = w.Write([]byte(`{"data":[{"vmid":100,"name":"vm1","status":"running","cpus":2,"maxmem":` + itoa(int(memory.Load())*1048576) + `,"uptime":10}]}`))
 			case r.URL.Path == "/nodes/pve1/lxc" || r.URL.Path == "/nodes/pve1/storage":
 				_, _ = w.Write([]byte(`{"data":[]}`))
 			case r.URL.Path == "/cluster/resources":
@@ -352,9 +352,9 @@ func TestConfigPushHandler(t *testing.T) {
 			w.Header().Set("Content-Type", "application/json")
 			switch {
 			case r.URL.Path == "/nodes":
-				_, _ = w.Write([]byte(`{"data":[{"node":"pve1","status":"online","uptime":100,"cpu":0.1,"mem":{"used":1,"total":2}}]}`))
+				_, _ = w.Write([]byte(`{"data":[{"node":"pve1","status":"online","uptime":100,"cpu":0.1,"mem":1,"maxmem":2}]}`))
 			case r.URL.Path == "/nodes/pve1/qemu":
-				_, _ = w.Write([]byte(`{"data":[{"vmid":100,"name":"vm1","status":"running","cpus":2,"mem":2048,"uptime":10}]}`)) // never changes
+				_, _ = w.Write([]byte(`{"data":[{"vmid":100,"name":"vm1","status":"running","cpus":2,"maxmem":2147483648,"uptime":10}]}`)) // never changes
 			case r.URL.Path == "/nodes/pve1/lxc" || r.URL.Path == "/nodes/pve1/storage":
 				_, _ = w.Write([]byte(`{"data":[]}`))
 			case r.URL.Path == "/cluster/resources":
@@ -413,9 +413,9 @@ func TestConfigPushHandler(t *testing.T) {
 			w.Header().Set("Content-Type", "application/json")
 			switch {
 			case r.URL.Path == "/nodes":
-				_, _ = w.Write([]byte(`{"data":[{"node":"pve1","status":"online","uptime":100,"cpu":0.1,"mem":{"used":1,"total":2}}]}`))
+				_, _ = w.Write([]byte(`{"data":[{"node":"pve1","status":"online","uptime":100,"cpu":0.1,"mem":1,"maxmem":2}]}`))
 			case r.URL.Path == "/nodes/pve1/qemu":
-				_, _ = w.Write([]byte(`{"data":[{"vmid":100,"name":"vm1","status":"running","cpus":2,"mem":2048,"uptime":10}]}`)) // never changes
+				_, _ = w.Write([]byte(`{"data":[{"vmid":100,"name":"vm1","status":"running","cpus":2,"maxmem":2147483648,"uptime":10}]}`)) // never changes
 			case r.URL.Path == "/nodes/pve1/lxc" || r.URL.Path == "/nodes/pve1/storage":
 				_, _ = w.Write([]byte(`{"data":[]}`))
 			case r.URL.Path == "/cluster/resources":

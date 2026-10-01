@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -59,11 +61,35 @@ func NewHTTPClient(o HTTPClientOptions) *http.Client {
 // MapTransportError wraps an error from http.Client.Do: a deadline or
 // network timeout becomes a TimeoutError, anything else a plain
 // "request failed" error.
+//
+// The request URL embedded in a *url.Error has its query string and userinfo
+// stripped, since some upstream APIs (e.g. Pi-hole v5) carry credentials in
+// the query and the error ends up in sync history, the API and logs.
 func MapTransportError(err error) error {
+	err = redactURLQuery(err)
 	if IsTimeout(err) {
 		return NewTimeoutError(fmt.Errorf("request failed: %w", err))
 	}
 	return fmt.Errorf("request failed: %w", err)
+}
+
+// redactURLQuery returns err with the query string and userinfo removed from
+// the URL of any wrapped *url.Error. The error chain is preserved.
+func redactURLQuery(err error) error {
+	var ue *url.Error
+	if !errors.As(err, &ue) {
+		return err
+	}
+	redacted := *ue
+	if u, perr := url.Parse(ue.URL); perr == nil {
+		u.RawQuery = ""
+		u.Fragment = ""
+		u.User = nil
+		redacted.URL = u.String()
+	} else if i := strings.IndexAny(ue.URL, "?#"); i >= 0 {
+		redacted.URL = ue.URL[:i]
+	}
+	return &redacted
 }
 
 // IsTimeout reports whether err represents a request deadline being

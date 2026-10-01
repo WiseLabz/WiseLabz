@@ -18,16 +18,16 @@ func TestFetchEntityAttributes(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
 		case "/nodes":
-			_, _ = w.Write([]byte(`{"data":[{"node":"pve1","status":"online","uptime":100,"cpu":0.1,"mem":{"used":1,"total":2}}]}`))
+			_, _ = w.Write([]byte(`{"data":[{"node":"pve1","status":"online","uptime":100,"cpu":0.1,"mem":1073741824,"maxmem":8589934592,"maxcpu":4}]}`))
 		case "/nodes/pve1/qemu":
 			_, _ = w.Write([]byte(`{"data":[
-				{"vmid":100,"name":"web1","status":"running","cpus":2,"mem":1024,"uptime":10},
-				{"vmid":101,"name":"tmpl1","status":"stopped","cpus":1,"mem":512,"uptime":0}
+				{"vmid":100,"name":"web1","status":"running","cpus":2,"mem":1024000,"maxmem":1073741824,"uptime":10},
+				{"vmid":101,"name":"tmpl1","status":"stopped","cpus":1,"mem":512000,"maxmem":536870912,"uptime":0}
 			]}`))
 		case "/nodes/pve1/lxc":
 			_, _ = w.Write([]byte(`{"data":[
-				{"vmid":200,"name":"ct1","status":"running","cpus":1,"mem":256,"uptime":5},
-				{"vmid":201,"name":"ct2","status":"stopped","cpus":1,"mem":256,"uptime":0}
+				{"vmid":200,"name":"ct1","status":"running","cpus":1,"mem":256000,"maxmem":268435456,"uptime":5},
+				{"vmid":201,"name":"ct2","status":"stopped","cpus":1,"mem":256000,"maxmem":268435456,"uptime":0}
 			]}`))
 		case "/nodes/pve1/qemu/100/config":
 			_, _ = w.Write([]byte(`{"data":{"onboot":1,"protection":0,"agent":"enabled=1,fstrim_cloned_disks=1","template":0,"ostype":"l26"}}`))
@@ -129,9 +129,9 @@ func TestFetchEntityAttributesOmittedWithoutEntitiesField(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
 		case "/nodes":
-			_, _ = w.Write([]byte(`{"data":[{"node":"pve1","status":"online","uptime":100,"cpu":0.1,"mem":{"used":1,"total":2}}]}`))
+			_, _ = w.Write([]byte(`{"data":[{"node":"pve1","status":"online","uptime":100,"cpu":0.1,"mem":1073741824,"maxmem":8589934592,"maxcpu":4}]}`))
 		case "/nodes/pve1/qemu":
-			_, _ = w.Write([]byte(`{"data":[{"vmid":100,"name":"web1","status":"running","cpus":2,"mem":1024,"uptime":10}]}`))
+			_, _ = w.Write([]byte(`{"data":[{"vmid":100,"name":"web1","status":"running","cpus":2,"mem":1024000,"maxmem":1073741824,"uptime":10}]}`))
 		case "/nodes/pve1/lxc":
 			_, _ = w.Write([]byte(`{"data":[]}`))
 		default:
@@ -162,9 +162,9 @@ func TestFetchEntityAttributesDegradesOnConfigError(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
 		case "/nodes":
-			_, _ = w.Write([]byte(`{"data":[{"node":"pve1","status":"online","uptime":100,"cpu":0.1,"mem":{"used":1,"total":2}}]}`))
+			_, _ = w.Write([]byte(`{"data":[{"node":"pve1","status":"online","uptime":100,"cpu":0.1,"mem":1073741824,"maxmem":8589934592,"maxcpu":4}]}`))
 		case "/nodes/pve1/qemu":
-			_, _ = w.Write([]byte(`{"data":[{"vmid":100,"name":"web1","status":"stopped","cpus":2,"mem":1024,"uptime":0}]}`))
+			_, _ = w.Write([]byte(`{"data":[{"vmid":100,"name":"web1","status":"stopped","cpus":2,"mem":1024000,"maxmem":1073741824,"uptime":0}]}`))
 		case "/nodes/pve1/lxc":
 			_, _ = w.Write([]byte(`{"data":[]}`))
 		case "/nodes/pve1/qemu/100/config":
