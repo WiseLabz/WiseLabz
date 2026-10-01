@@ -14,6 +14,9 @@ func postgresDB(t *testing.T) *sql.DB {
 	t.Helper()
 	dsn := os.Getenv("WISELABZ_TEST_POSTGRES_DSN")
 	if dsn == "" {
+		if os.Getenv("CI") == "true" {
+			t.Fatal("WISELABZ_TEST_POSTGRES_DSN not set in CI environment")
+		}
 		t.Skip("WISELABZ_TEST_POSTGRES_DSN not set")
 	}
 	db, err := sql.Open("pgx", dsn)
@@ -84,5 +87,56 @@ func TestWatchReportsTerminatedSession(t *testing.T) {
 		}
 	case <-ctx.Done():
 		t.Fatal("watch did not detect loss")
+	}
+}
+
+func TestCampaignContextCancel(t *testing.T) {
+	db := postgresDB(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	first := New(db, 20*time.Millisecond)
+	defer first.Close() //nolint:errcheck
+	if err := first.Campaign(ctx); err != nil {
+		t.Fatal(err)
+	}
+	second := New(db, 20*time.Millisecond)
+	defer second.Close() //nolint:errcheck
+	ctx2, cancel2 := context.WithCancel(ctx)
+	done := make(chan error, 1)
+	go func() { done <- second.Campaign(ctx2) }()
+	time.Sleep(100 * time.Millisecond)
+	cancel2()
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("expected Campaign to be canceled")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Campaign did not return after context cancel")
+	}
+}
+
+func TestElectorCloseWithoutCampaign(t *testing.T) {
+	db := postgresDB(t)
+	e := New(db, 20*time.Millisecond)
+	if err := e.Close(); err != nil {
+		t.Fatalf("Close without Campaign: %v", err)
+	}
+}
+
+func TestWatchOnNonCampaignedElector(t *testing.T) {
+	db := postgresDB(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	e := New(db, 20*time.Millisecond)
+	defer e.Close() //nolint:errcheck
+	lost := e.Watch(ctx)
+	select {
+	case err := <-lost:
+		if err == nil {
+			t.Fatal("watch on non-campaigned elector should error")
+		}
+	case <-ctx.Done():
+		t.Fatal("watch on non-campaigned elector did not return error")
 	}
 }

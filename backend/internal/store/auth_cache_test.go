@@ -236,3 +236,31 @@ func TestCachedUserStatusRejectsRevokedAccess(t *testing.T) {
 		})
 	}
 }
+
+func TestUserStatusCacheConcurrentGetAfterLoad(t *testing.T) {
+	s := newDocTestStore(t)
+	ctx := context.Background()
+	u := &User{Username: "concurrent-get", InstanceAdminRole: "admin"}
+	if err := s.CreateUser(ctx, u); err != nil {
+		t.Fatal(err)
+	}
+	var wg sync.WaitGroup
+	const readers = 8
+	for range readers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for range 20 {
+				_, _, err := s.GetUserRoleStatus(ctx, u.ID)
+				if err != nil {
+					t.Error(err)
+				}
+			}
+		}()
+	}
+	wg.Wait()
+	got, off, err := s.GetUserRoleStatus(ctx, u.ID)
+	if err != nil || got != "admin" || off {
+		t.Fatalf("final status = %q, %v, %v; want admin, false, nil", got, off, err)
+	}
+}
