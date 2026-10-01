@@ -7,7 +7,7 @@
  * The body is a separate component mounted only while open, so its query/cursor
  * state initializes fresh on every open — no reset effects needed.
  */
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
@@ -220,10 +220,27 @@ function PaletteBody() {
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
+  const listboxId = useId();
+  const optionId = (id: string) => `${listboxId}-${id}`;
+
+  // Focus the input on open and restore focus to the opener on close.
   useEffect(() => {
+    const opener = document.activeElement as HTMLElement | null;
     const id = requestAnimationFrame(() => inputRef.current?.focus());
-    return () => cancelAnimationFrame(id);
+    return () => {
+      cancelAnimationFrame(id);
+      opener?.focus?.();
+    };
   }, []);
+
+  // Escape closes the palette wherever focus is.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [setOpen]);
 
   const filtered = useMemo(() => {
     const q = query.trim();
@@ -262,8 +279,10 @@ function PaletteBody() {
       e.preventDefault();
       const c = filtered[cursor];
       if (c) run(c);
-    } else if (e.key === 'Escape') {
-      setOpen(false);
+    } else if (e.key === 'Tab') {
+      // Focus trap: the input is the only tab stop (options are navigated with arrows).
+      e.preventDefault();
+      inputRef.current?.focus();
     }
   };
 
@@ -285,7 +304,8 @@ function PaletteBody() {
       <div className="absolute inset-0 bg-black/55 backdrop-blur-sm" />
       <motion.div
         role="dialog"
-        aria-label="Command palette"
+        aria-modal="true"
+        aria-label={t('command.title')}
         className="reg-ticks relative w-full max-w-xl overflow-hidden rounded-sm border border-line-strong bg-surface-overlay shadow-(--shadow-pop)"
         initial={{ opacity: 0, y: -12, scale: 0.97 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -312,6 +332,12 @@ function PaletteBody() {
           </svg>
           <input
             ref={inputRef}
+            role="combobox"
+            aria-expanded="true"
+            aria-controls={listboxId}
+            aria-autocomplete="list"
+            aria-label={t('command.title')}
+            aria-activedescendant={filtered[cursor] ? optionId(filtered[cursor].id) : undefined}
             value={query}
             onChange={(e) => {
               setQuery(e.target.value);
@@ -325,15 +351,21 @@ function PaletteBody() {
           </kbd>
         </div>
 
-        <div ref={listRef} className="max-h-[52vh] overflow-y-auto p-2">
+        <div
+          ref={listRef}
+          id={listboxId}
+          role="listbox"
+          aria-label={t('command.results')}
+          className="max-h-[52vh] overflow-y-auto p-2"
+        >
           {filtered.length === 0 && (
             <p className="px-3 py-8 text-center text-sm text-ink-faint">
               {t('command.noMatches', { query })}
             </p>
           )}
           {groups.map(([group, items]) => (
-            <div key={group} className="mb-1">
-              <p className="px-2.5 py-1.5 text-2xs font-semibold text-ink-faint">
+            <div key={group} role="group" aria-label={t(`command.group.${group}`)} className="mb-1">
+              <p aria-hidden="true" className="px-2.5 py-1.5 text-2xs font-semibold text-ink-faint">
                 {t(`command.group.${group}`)}
               </p>
               {items.map((c) => {
@@ -344,6 +376,10 @@ function PaletteBody() {
                 return (
                   <button
                     key={c.id}
+                    id={optionId(c.id)}
+                    role="option"
+                    aria-selected={isActive}
+                    tabIndex={-1}
                     data-active={isActive}
                     onMouseMove={() => setActive(idx)}
                     onClick={() => run(c)}

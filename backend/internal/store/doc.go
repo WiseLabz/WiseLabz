@@ -184,12 +184,13 @@ func (s *Store) ListDocsByService(ctx context.Context, serviceID string) ([]DocR
 	return docs, nil
 }
 
-// ListDocsGroupedByService returns every service doc grouped by connector ID.
+// ListDocsGroupedByService returns every doc grouped by connector ID; service-less (lab) docs
+// are grouped under the empty key.
 // Content is deliberately not loaded (Content is empty): callers render titles.
 func (s *Store) ListDocsGroupedByService(ctx context.Context) (map[string][]DocRecord, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT `+docSummaryColumns+`
-		FROM docs WHERE service_id IS NOT NULL ORDER BY service_id, updated_at DESC
+		FROM docs ORDER BY service_id, updated_at DESC
 	`)
 	if err != nil {
 		return nil, fmt.Errorf("list docs grouped by service: %w", err)

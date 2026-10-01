@@ -9,7 +9,7 @@ import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { useMutation } from '@tanstack/react-query';
-import { useGetDocs, postDocsTopology } from '../../api/generated/docs/docs';
+import { useGetDocsTree, postDocsTopology } from '../../api/generated/docs/docs';
 import { Panel } from '../../components/ui/Panel';
 import { Button } from '../../components/ui/Button';
 import { RoleGate } from '../../components/ui/RoleGate';
@@ -21,14 +21,14 @@ const TOPOLOGY_TITLE = 'Lab Topology';
 export function TopologyPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const { data, isLoading, isError, refetch } = useGetDocs({ search: TOPOLOGY_TITLE, pageSize: 5 });
+  const { data, isLoading, isError, refetch } = useGetDocsTree();
 
   const generate = useMutation({
     mutationFn: () => postDocsTopology(),
     onSuccess: (result) => navigate(`/docs/${result.docId}`, { replace: true }),
   });
 
-  const existing = data?.items.find((d) => d.title === TOPOLOGY_TITLE && d.kind === 'lab');
+  const existing = data?.children?.find((d) => d.title === TOPOLOGY_TITLE && d.kind === 'lab');
 
   useEffect(() => {
     if (existing) navigate(`/docs/${existing.docId}`, { replace: true });

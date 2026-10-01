@@ -261,6 +261,31 @@ func TestNotificationsConfigRoundTrip(t *testing.T) {
 			t.Fatalf("status = %d, want %d", rr.Code, http.StatusOK)
 		}
 	})
+
+	t.Run("test notification unconfigured channel", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/api/notifications/config/test", strings.NewReader(`{"channel":"slack"}`))
+		rr := httptest.NewRecorder()
+		h.TestNotificationsConfig(rr, req)
+		if rr.Code != http.StatusBadRequest {
+			t.Fatalf("status = %d, want %d", rr.Code, http.StatusBadRequest)
+		}
+	})
+
+	t.Run("test notification reports real sender failure", func(t *testing.T) {
+		body := `{"channels":[{"id":"c2","type":"slack","enabled":true,"config":{}}],"routing":[]}`
+		put := httptest.NewRequest(http.MethodPut, "/api/notifications/config", strings.NewReader(body))
+		h.UpdateNotificationsConfig(httptest.NewRecorder(), put)
+
+		req := httptest.NewRequest(http.MethodPost, "/api/notifications/config/test", strings.NewReader(`{"channel":"slack"}`))
+		rr := httptest.NewRecorder()
+		h.TestNotificationsConfig(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("status = %d, want %d", rr.Code, http.StatusOK)
+		}
+		if !strings.Contains(rr.Body.String(), `"ok":false`) || !strings.Contains(rr.Body.String(), "slack url not configured") {
+			t.Errorf("body = %s, want ok:false with sender error", rr.Body.String())
+		}
+	})
 }
 
 func TestGetDecryptedAPIKeyNoKeyStored(t *testing.T) {

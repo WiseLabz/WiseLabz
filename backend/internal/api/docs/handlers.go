@@ -69,6 +69,12 @@ func (h *Handler) Tree(w http.ResponseWriter, r *http.Request) {
 		Kind:  "lab",
 	}
 
+	// Service-less docs (e.g. "Lab Topology") hang directly off the lab root. They follow the
+	// same rule as List: visible to any authenticated viewer.
+	for _, d := range docsByService[""] {
+		root.Children = append(root.Children, TreeNode{ID: d.ID, Title: d.Title, Kind: d.Kind})
+	}
+
 	for _, c := range connectors {
 		if !isAllowed[c.ID] {
 			continue
