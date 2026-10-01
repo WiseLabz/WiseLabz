@@ -6,15 +6,18 @@
  *
  * OpenAPI spec version: 0.1.0
  */
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import type {
   DataTag,
   DefinedInitialDataOptions,
   DefinedUseQueryResult,
+  MutationFunction,
   QueryClient,
   QueryFunction,
   QueryKey,
   UndefinedInitialDataOptions,
+  UseMutationOptions,
+  UseMutationResult,
   UseQueryOptions,
   UseQueryResult,
 } from '@tanstack/react-query';
@@ -157,6 +160,7 @@ export function useGetUsers<
 }
 
 /**
+ * When `stepUpForDestructive` is enabled, requires an `X-Elevation-Token` for action `user.create`.
  * @summary Create / invite a user (operator)
  */
 export const postUsers = (
@@ -176,111 +180,76 @@ export const postUsers = (
   );
 };
 
-export const getPostUsersQueryKey = (userCreate?: BodyType<UserCreate>) => {
-  return ['POST', `/users`, userCreate] as const;
-};
+export const getPostUsersMutationKey = () => ['postUsers'] as const;
 
-export const getPostUsersQueryOptions = <
-  TData = Awaited<ReturnType<typeof postUsers>>,
+export const getPostUsersMutationOptions = <
   TError = ErrorType<BadRequestResponse | ForbiddenResponse>,
->(
-  userCreate: BodyType<UserCreate>,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof postUsers>>, TError, TData>>;
-    request?: SecondParameter<typeof customInstance>;
-  }
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
-
-  const queryKey = queryOptions?.queryKey ?? getPostUsersQueryKey(userCreate);
-
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof postUsers>>> = ({ signal }) =>
-    postUsers(userCreate, requestOptions, signal);
-
-  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof postUsers>>,
     TError,
-    TData
-  > & { queryKey: DataTag<QueryKey, TData, TError> };
+    PostUsersMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof postUsers>>,
+  TError,
+  PostUsersMutationVariables,
+  TContext
+> => {
+  const mutationKey = getPostUsersMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof postUsers>>,
+    PostUsersMutationVariables
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return postUsers(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type PostUsersQueryResult = NonNullable<Awaited<ReturnType<typeof postUsers>>>;
-export type PostUsersQueryError = ErrorType<BadRequestResponse | ForbiddenResponse>;
+export type PostUsersMutationResult = NonNullable<Awaited<ReturnType<typeof postUsers>>>;
+export type PostUsersMutationBody = BodyType<UserCreate>;
+export type PostUsersMutationError = ErrorType<BadRequestResponse | ForbiddenResponse>;
+export type PostUsersMutationVariables = { data: BodyType<UserCreate> };
 
-export function usePostUsers<
-  TData = Awaited<ReturnType<typeof postUsers>>,
-  TError = ErrorType<BadRequestResponse | ForbiddenResponse>,
->(
-  userCreate: BodyType<UserCreate>,
-  options: {
-    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof postUsers>>, TError, TData>> &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postUsers>>,
-          TError,
-          Awaited<ReturnType<typeof postUsers>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostUsers<
-  TData = Awaited<ReturnType<typeof postUsers>>,
-  TError = ErrorType<BadRequestResponse | ForbiddenResponse>,
->(
-  userCreate: BodyType<UserCreate>,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof postUsers>>, TError, TData>> &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postUsers>>,
-          TError,
-          Awaited<ReturnType<typeof postUsers>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostUsers<
-  TData = Awaited<ReturnType<typeof postUsers>>,
-  TError = ErrorType<BadRequestResponse | ForbiddenResponse>,
->(
-  userCreate: BodyType<UserCreate>,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof postUsers>>, TError, TData>>;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
  * @summary Create / invite a user (operator)
  */
-
-export function usePostUsers<
-  TData = Awaited<ReturnType<typeof postUsers>>,
+export const usePostUsers = <
   TError = ErrorType<BadRequestResponse | ForbiddenResponse>,
+  TContext = unknown,
 >(
-  userCreate: BodyType<UserCreate>,
   options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof postUsers>>, TError, TData>>;
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof postUsers>>,
+      TError,
+      PostUsersMutationVariables,
+      TContext
+    >;
     request?: SecondParameter<typeof customInstance>;
   },
   queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getPostUsersQueryOptions(userCreate, options);
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
+): UseMutationResult<
+  Awaited<ReturnType<typeof postUsers>>,
+  TError,
+  PostUsersMutationVariables,
+  TContext
+> => {
+  return useMutation(getPostUsersMutationOptions(options), queryClient);
+};
 /**
+ * When `stepUpForDestructive` is enabled, requires an `X-Elevation-Token` for action `user.update`, issued with this user's ID as `target`.
  * @summary Update a user's role or status (operator)
  */
 export const patchUsersUserId = (
@@ -301,118 +270,73 @@ export const patchUsersUserId = (
   );
 };
 
-export const getPatchUsersUserIdQueryKey = (userId: string, userUpdate?: BodyType<UserUpdate>) => {
-  return ['PATCH', `/users/${userId}`, userUpdate] as const;
-};
+export const getPatchUsersUserIdMutationKey = () => ['patchUsersUserId'] as const;
 
-export const getPatchUsersUserIdQueryOptions = <
-  TData = Awaited<ReturnType<typeof patchUsersUserId>>,
+export const getPatchUsersUserIdMutationOptions = <
   TError = ErrorType<ForbiddenResponse>,
->(
-  userId: string,
-  userUpdate: BodyType<UserUpdate>,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof patchUsersUserId>>, TError, TData>>;
-    request?: SecondParameter<typeof customInstance>;
-  }
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof patchUsersUserId>>,
+    TError,
+    PatchUsersUserIdMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof patchUsersUserId>>,
+  TError,
+  PatchUsersUserIdMutationVariables,
+  TContext
+> => {
+  const mutationKey = getPatchUsersUserIdMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
 
-  const queryKey = queryOptions?.queryKey ?? getPatchUsersUserIdQueryKey(userId, userUpdate);
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof patchUsersUserId>>,
+    PatchUsersUserIdMutationVariables
+  > = (props) => {
+    const { userId, data } = props ?? {};
 
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof patchUsersUserId>>> = ({ signal }) =>
-    patchUsersUserId(userId, userUpdate, requestOptions, signal);
-
-  return {
-    queryKey,
-    queryFn,
-    enabled: userId !== null && userId !== undefined,
-    ...queryOptions,
-  } as UseQueryOptions<Awaited<ReturnType<typeof patchUsersUserId>>, TError, TData> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
+    return patchUsersUserId(userId, data, requestOptions);
   };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type PatchUsersUserIdQueryResult = NonNullable<Awaited<ReturnType<typeof patchUsersUserId>>>;
-export type PatchUsersUserIdQueryError = ErrorType<ForbiddenResponse>;
+export type PatchUsersUserIdMutationResult = NonNullable<
+  Awaited<ReturnType<typeof patchUsersUserId>>
+>;
+export type PatchUsersUserIdMutationBody = BodyType<UserUpdate>;
+export type PatchUsersUserIdMutationError = ErrorType<ForbiddenResponse>;
+export type PatchUsersUserIdMutationVariables = { userId: string; data: BodyType<UserUpdate> };
 
-export function usePatchUsersUserId<
-  TData = Awaited<ReturnType<typeof patchUsersUserId>>,
-  TError = ErrorType<ForbiddenResponse>,
->(
-  userId: string,
-  userUpdate: BodyType<UserUpdate>,
-  options: {
-    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof patchUsersUserId>>, TError, TData>> &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof patchUsersUserId>>,
-          TError,
-          Awaited<ReturnType<typeof patchUsersUserId>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePatchUsersUserId<
-  TData = Awaited<ReturnType<typeof patchUsersUserId>>,
-  TError = ErrorType<ForbiddenResponse>,
->(
-  userId: string,
-  userUpdate: BodyType<UserUpdate>,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof patchUsersUserId>>, TError, TData>> &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof patchUsersUserId>>,
-          TError,
-          Awaited<ReturnType<typeof patchUsersUserId>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePatchUsersUserId<
-  TData = Awaited<ReturnType<typeof patchUsersUserId>>,
-  TError = ErrorType<ForbiddenResponse>,
->(
-  userId: string,
-  userUpdate: BodyType<UserUpdate>,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof patchUsersUserId>>, TError, TData>>;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
  * @summary Update a user's role or status (operator)
  */
-
-export function usePatchUsersUserId<
-  TData = Awaited<ReturnType<typeof patchUsersUserId>>,
-  TError = ErrorType<ForbiddenResponse>,
->(
-  userId: string,
-  userUpdate: BodyType<UserUpdate>,
+export const usePatchUsersUserId = <TError = ErrorType<ForbiddenResponse>, TContext = unknown>(
   options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof patchUsersUserId>>, TError, TData>>;
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof patchUsersUserId>>,
+      TError,
+      PatchUsersUserIdMutationVariables,
+      TContext
+    >;
     request?: SecondParameter<typeof customInstance>;
   },
   queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getPatchUsersUserIdQueryOptions(userId, userUpdate, options);
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
+): UseMutationResult<
+  Awaited<ReturnType<typeof patchUsersUserId>>,
+  TError,
+  PatchUsersUserIdMutationVariables,
+  TContext
+> => {
+  return useMutation(getPatchUsersUserIdMutationOptions(options), queryClient);
+};
 /**
  * Destructive. When `stepUpForDestructive` is enabled, requires a valid `X-Elevation-Token` from POST /auth/elevate; absent or expired tokens get a 403 `elevation-required`.
  * @summary Delete a user (operator)
@@ -425,115 +349,76 @@ export const deleteUsersUserId = (
   return customInstance<void>({ url: `/users/${userId}`, method: 'DELETE', signal }, options);
 };
 
-export const getDeleteUsersUserIdQueryKey = (userId: string) => {
-  return ['DELETE', `/users/${userId}`] as const;
-};
+export const getDeleteUsersUserIdMutationKey = () => ['deleteUsersUserId'] as const;
 
-export const getDeleteUsersUserIdQueryOptions = <
-  TData = Awaited<ReturnType<typeof deleteUsersUserId>>,
+export const getDeleteUsersUserIdMutationOptions = <
   TError = ErrorType<ElevationRequiredResponse>,
->(
-  userId: string,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteUsersUserId>>, TError, TData>>;
-    request?: SecondParameter<typeof customInstance>;
-  }
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteUsersUserId>>,
+    TError,
+    DeleteUsersUserIdMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteUsersUserId>>,
+  TError,
+  DeleteUsersUserIdMutationVariables,
+  TContext
+> => {
+  const mutationKey = getDeleteUsersUserIdMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
 
-  const queryKey = queryOptions?.queryKey ?? getDeleteUsersUserIdQueryKey(userId);
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteUsersUserId>>,
+    DeleteUsersUserIdMutationVariables
+  > = (props) => {
+    const { userId } = props ?? {};
 
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof deleteUsersUserId>>> = ({ signal }) =>
-    deleteUsersUserId(userId, requestOptions, signal);
-
-  return {
-    queryKey,
-    queryFn,
-    enabled: userId !== null && userId !== undefined,
-    ...queryOptions,
-  } as UseQueryOptions<Awaited<ReturnType<typeof deleteUsersUserId>>, TError, TData> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
+    return deleteUsersUserId(userId, requestOptions);
   };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type DeleteUsersUserIdQueryResult = NonNullable<
+export type DeleteUsersUserIdMutationResult = NonNullable<
   Awaited<ReturnType<typeof deleteUsersUserId>>
 >;
-export type DeleteUsersUserIdQueryError = ErrorType<ElevationRequiredResponse>;
 
-export function useDeleteUsersUserId<
-  TData = Awaited<ReturnType<typeof deleteUsersUserId>>,
-  TError = ErrorType<ElevationRequiredResponse>,
->(
-  userId: string,
-  options: {
-    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteUsersUserId>>, TError, TData>> &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof deleteUsersUserId>>,
-          TError,
-          Awaited<ReturnType<typeof deleteUsersUserId>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function useDeleteUsersUserId<
-  TData = Awaited<ReturnType<typeof deleteUsersUserId>>,
-  TError = ErrorType<ElevationRequiredResponse>,
->(
-  userId: string,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteUsersUserId>>, TError, TData>> &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof deleteUsersUserId>>,
-          TError,
-          Awaited<ReturnType<typeof deleteUsersUserId>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function useDeleteUsersUserId<
-  TData = Awaited<ReturnType<typeof deleteUsersUserId>>,
-  TError = ErrorType<ElevationRequiredResponse>,
->(
-  userId: string,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteUsersUserId>>, TError, TData>>;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export type DeleteUsersUserIdMutationError = ErrorType<ElevationRequiredResponse>;
+export type DeleteUsersUserIdMutationVariables = { userId: string };
+
 /**
  * @summary Delete a user (operator)
  */
-
-export function useDeleteUsersUserId<
-  TData = Awaited<ReturnType<typeof deleteUsersUserId>>,
+export const useDeleteUsersUserId = <
   TError = ErrorType<ElevationRequiredResponse>,
+  TContext = unknown,
 >(
-  userId: string,
   options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteUsersUserId>>, TError, TData>>;
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof deleteUsersUserId>>,
+      TError,
+      DeleteUsersUserIdMutationVariables,
+      TContext
+    >;
     request?: SecondParameter<typeof customInstance>;
   },
   queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getDeleteUsersUserIdQueryOptions(userId, options);
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
+): UseMutationResult<
+  Awaited<ReturnType<typeof deleteUsersUserId>>,
+  TError,
+  DeleteUsersUserIdMutationVariables,
+  TContext
+> => {
+  return useMutation(getDeleteUsersUserIdMutationOptions(options), queryClient);
+};
 /**
  * Destructive. When `stepUpForDestructive` is enabled, requires a valid `X-Elevation-Token` from POST /auth/elevate; absent or expired tokens get a 403 `elevation-required`.
  * @summary Operator-triggered password reset
@@ -549,126 +434,77 @@ export const postUsersUserIdResetPassword = (
   );
 };
 
-export const getPostUsersUserIdResetPasswordQueryKey = (userId: string) => {
-  return ['POST', `/users/${userId}/reset-password`] as const;
-};
+export const getPostUsersUserIdResetPasswordMutationKey = () =>
+  ['postUsersUserIdResetPassword'] as const;
 
-export const getPostUsersUserIdResetPasswordQueryOptions = <
-  TData = Awaited<ReturnType<typeof postUsersUserIdResetPassword>>,
+export const getPostUsersUserIdResetPasswordMutationOptions = <
   TError = ErrorType<ElevationRequiredResponse>,
->(
-  userId: string,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postUsersUserIdResetPassword>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  }
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof postUsersUserIdResetPassword>>,
+    TError,
+    PostUsersUserIdResetPasswordMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof postUsersUserIdResetPassword>>,
+  TError,
+  PostUsersUserIdResetPasswordMutationVariables,
+  TContext
+> => {
+  const mutationKey = getPostUsersUserIdResetPasswordMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
 
-  const queryKey = queryOptions?.queryKey ?? getPostUsersUserIdResetPasswordQueryKey(userId);
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof postUsersUserIdResetPassword>>,
+    PostUsersUserIdResetPasswordMutationVariables
+  > = (props) => {
+    const { userId } = props ?? {};
 
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof postUsersUserIdResetPassword>>> = ({
-    signal,
-  }) => postUsersUserIdResetPassword(userId, requestOptions, signal);
-
-  return {
-    queryKey,
-    queryFn,
-    enabled: userId !== null && userId !== undefined,
-    ...queryOptions,
-  } as UseQueryOptions<Awaited<ReturnType<typeof postUsersUserIdResetPassword>>, TError, TData> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
+    return postUsersUserIdResetPassword(userId, requestOptions);
   };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type PostUsersUserIdResetPasswordQueryResult = NonNullable<
+export type PostUsersUserIdResetPasswordMutationResult = NonNullable<
   Awaited<ReturnType<typeof postUsersUserIdResetPassword>>
 >;
-export type PostUsersUserIdResetPasswordQueryError = ErrorType<ElevationRequiredResponse>;
 
-export function usePostUsersUserIdResetPassword<
-  TData = Awaited<ReturnType<typeof postUsersUserIdResetPassword>>,
-  TError = ErrorType<ElevationRequiredResponse>,
->(
-  userId: string,
-  options: {
-    query: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postUsersUserIdResetPassword>>, TError, TData>
-    > &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postUsersUserIdResetPassword>>,
-          TError,
-          Awaited<ReturnType<typeof postUsersUserIdResetPassword>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostUsersUserIdResetPassword<
-  TData = Awaited<ReturnType<typeof postUsersUserIdResetPassword>>,
-  TError = ErrorType<ElevationRequiredResponse>,
->(
-  userId: string,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postUsersUserIdResetPassword>>, TError, TData>
-    > &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postUsersUserIdResetPassword>>,
-          TError,
-          Awaited<ReturnType<typeof postUsersUserIdResetPassword>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostUsersUserIdResetPassword<
-  TData = Awaited<ReturnType<typeof postUsersUserIdResetPassword>>,
-  TError = ErrorType<ElevationRequiredResponse>,
->(
-  userId: string,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postUsersUserIdResetPassword>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export type PostUsersUserIdResetPasswordMutationError = ErrorType<ElevationRequiredResponse>;
+export type PostUsersUserIdResetPasswordMutationVariables = { userId: string };
+
 /**
  * @summary Operator-triggered password reset
  */
-
-export function usePostUsersUserIdResetPassword<
-  TData = Awaited<ReturnType<typeof postUsersUserIdResetPassword>>,
+export const usePostUsersUserIdResetPassword = <
   TError = ErrorType<ElevationRequiredResponse>,
+  TContext = unknown,
 >(
-  userId: string,
   options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postUsersUserIdResetPassword>>, TError, TData>
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof postUsersUserIdResetPassword>>,
+      TError,
+      PostUsersUserIdResetPasswordMutationVariables,
+      TContext
     >;
     request?: SecondParameter<typeof customInstance>;
   },
   queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getPostUsersUserIdResetPasswordQueryOptions(userId, options);
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
+): UseMutationResult<
+  Awaited<ReturnType<typeof postUsersUserIdResetPassword>>,
+  TError,
+  PostUsersUserIdResetPasswordMutationVariables,
+  TContext
+> => {
+  return useMutation(getPostUsersUserIdResetPasswordMutationOptions(options), queryClient);
+};
 /**
  * Destructive. Deletes every factor and recovery code, revokes every session, and is audited (#279). When `stepUpForDestructive` is enabled, requires a valid `X-Elevation-Token` from POST /auth/elevate; absent or expired tokens get a 403 `elevation-required`.
  * @summary Reset a user's two-factor authentication (operator)
@@ -684,124 +520,75 @@ export const postUsersUserIdResetMfa = (
   );
 };
 
-export const getPostUsersUserIdResetMfaQueryKey = (userId: string) => {
-  return ['POST', `/users/${userId}/reset-mfa`] as const;
-};
+export const getPostUsersUserIdResetMfaMutationKey = () => ['postUsersUserIdResetMfa'] as const;
 
-export const getPostUsersUserIdResetMfaQueryOptions = <
-  TData = Awaited<ReturnType<typeof postUsersUserIdResetMfa>>,
+export const getPostUsersUserIdResetMfaMutationOptions = <
   TError = ErrorType<ElevationRequiredResponse | NotFoundResponse>,
->(
-  userId: string,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postUsersUserIdResetMfa>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  }
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof postUsersUserIdResetMfa>>,
+    TError,
+    PostUsersUserIdResetMfaMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof postUsersUserIdResetMfa>>,
+  TError,
+  PostUsersUserIdResetMfaMutationVariables,
+  TContext
+> => {
+  const mutationKey = getPostUsersUserIdResetMfaMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
 
-  const queryKey = queryOptions?.queryKey ?? getPostUsersUserIdResetMfaQueryKey(userId);
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof postUsersUserIdResetMfa>>,
+    PostUsersUserIdResetMfaMutationVariables
+  > = (props) => {
+    const { userId } = props ?? {};
 
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof postUsersUserIdResetMfa>>> = ({
-    signal,
-  }) => postUsersUserIdResetMfa(userId, requestOptions, signal);
-
-  return {
-    queryKey,
-    queryFn,
-    enabled: userId !== null && userId !== undefined,
-    ...queryOptions,
-  } as UseQueryOptions<Awaited<ReturnType<typeof postUsersUserIdResetMfa>>, TError, TData> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
+    return postUsersUserIdResetMfa(userId, requestOptions);
   };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type PostUsersUserIdResetMfaQueryResult = NonNullable<
+export type PostUsersUserIdResetMfaMutationResult = NonNullable<
   Awaited<ReturnType<typeof postUsersUserIdResetMfa>>
 >;
-export type PostUsersUserIdResetMfaQueryError = ErrorType<
+
+export type PostUsersUserIdResetMfaMutationError = ErrorType<
   ElevationRequiredResponse | NotFoundResponse
 >;
+export type PostUsersUserIdResetMfaMutationVariables = { userId: string };
 
-export function usePostUsersUserIdResetMfa<
-  TData = Awaited<ReturnType<typeof postUsersUserIdResetMfa>>,
-  TError = ErrorType<ElevationRequiredResponse | NotFoundResponse>,
->(
-  userId: string,
-  options: {
-    query: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postUsersUserIdResetMfa>>, TError, TData>
-    > &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postUsersUserIdResetMfa>>,
-          TError,
-          Awaited<ReturnType<typeof postUsersUserIdResetMfa>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostUsersUserIdResetMfa<
-  TData = Awaited<ReturnType<typeof postUsersUserIdResetMfa>>,
-  TError = ErrorType<ElevationRequiredResponse | NotFoundResponse>,
->(
-  userId: string,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postUsersUserIdResetMfa>>, TError, TData>
-    > &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postUsersUserIdResetMfa>>,
-          TError,
-          Awaited<ReturnType<typeof postUsersUserIdResetMfa>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostUsersUserIdResetMfa<
-  TData = Awaited<ReturnType<typeof postUsersUserIdResetMfa>>,
-  TError = ErrorType<ElevationRequiredResponse | NotFoundResponse>,
->(
-  userId: string,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postUsersUserIdResetMfa>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
  * @summary Reset a user's two-factor authentication (operator)
  */
-
-export function usePostUsersUserIdResetMfa<
-  TData = Awaited<ReturnType<typeof postUsersUserIdResetMfa>>,
+export const usePostUsersUserIdResetMfa = <
   TError = ErrorType<ElevationRequiredResponse | NotFoundResponse>,
+  TContext = unknown,
 >(
-  userId: string,
   options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postUsersUserIdResetMfa>>, TError, TData>
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof postUsersUserIdResetMfa>>,
+      TError,
+      PostUsersUserIdResetMfaMutationVariables,
+      TContext
     >;
     request?: SecondParameter<typeof customInstance>;
   },
   queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getPostUsersUserIdResetMfaQueryOptions(userId, options);
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
+): UseMutationResult<
+  Awaited<ReturnType<typeof postUsersUserIdResetMfa>>,
+  TError,
+  PostUsersUserIdResetMfaMutationVariables,
+  TContext
+> => {
+  return useMutation(getPostUsersUserIdResetMfaMutationOptions(options), queryClient);
+};

@@ -21,7 +21,8 @@ export default defineConfig({
           name: 'customInstance',
         },
         query: {
-          useQuery: true,
+          // useQuery stays at its default (GET only); forcing it on would turn
+          // body-less POSTs like postSync into queries instead of mutations.
           // Changes/alerts feeds are paginated; opt specific keys into infinite later.
           useInfinite: false,
         },

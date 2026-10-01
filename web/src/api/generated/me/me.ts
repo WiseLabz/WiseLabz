@@ -6,15 +6,18 @@
  *
  * OpenAPI spec version: 0.1.0
  */
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import type {
   DataTag,
   DefinedInitialDataOptions,
   DefinedUseQueryResult,
+  MutationFunction,
   QueryClient,
   QueryFunction,
   QueryKey,
   UndefinedInitialDataOptions,
+  UseMutationOptions,
+  UseMutationResult,
   UseQueryOptions,
   UseQueryResult,
 } from '@tanstack/react-query';
@@ -183,110 +186,71 @@ export const patchMe = (
   );
 };
 
-export const getPatchMeQueryKey = (profileUpdate?: BodyType<ProfileUpdate>) => {
-  return ['PATCH', `/me`, profileUpdate] as const;
-};
+export const getPatchMeMutationKey = () => ['patchMe'] as const;
 
-export const getPatchMeQueryOptions = <
-  TData = Awaited<ReturnType<typeof patchMe>>,
+export const getPatchMeMutationOptions = <
   TError = ErrorType<unknown>,
->(
-  profileUpdate: BodyType<ProfileUpdate>,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof patchMe>>, TError, TData>>;
-    request?: SecondParameter<typeof customInstance>;
-  }
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
-
-  const queryKey = queryOptions?.queryKey ?? getPatchMeQueryKey(profileUpdate);
-
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof patchMe>>> = ({ signal }) =>
-    patchMe(profileUpdate, requestOptions, signal);
-
-  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof patchMe>>,
     TError,
-    TData
-  > & { queryKey: DataTag<QueryKey, TData, TError> };
+    PatchMeMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof patchMe>>,
+  TError,
+  PatchMeMutationVariables,
+  TContext
+> => {
+  const mutationKey = getPatchMeMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof patchMe>>,
+    PatchMeMutationVariables
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return patchMe(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type PatchMeQueryResult = NonNullable<Awaited<ReturnType<typeof patchMe>>>;
-export type PatchMeQueryError = ErrorType<unknown>;
+export type PatchMeMutationResult = NonNullable<Awaited<ReturnType<typeof patchMe>>>;
+export type PatchMeMutationBody = BodyType<ProfileUpdate>;
+export type PatchMeMutationError = ErrorType<unknown>;
+export type PatchMeMutationVariables = { data: BodyType<ProfileUpdate> };
 
-export function usePatchMe<
-  TData = Awaited<ReturnType<typeof patchMe>>,
-  TError = ErrorType<unknown>,
->(
-  profileUpdate: BodyType<ProfileUpdate>,
-  options: {
-    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof patchMe>>, TError, TData>> &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof patchMe>>,
-          TError,
-          Awaited<ReturnType<typeof patchMe>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePatchMe<
-  TData = Awaited<ReturnType<typeof patchMe>>,
-  TError = ErrorType<unknown>,
->(
-  profileUpdate: BodyType<ProfileUpdate>,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof patchMe>>, TError, TData>> &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof patchMe>>,
-          TError,
-          Awaited<ReturnType<typeof patchMe>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePatchMe<
-  TData = Awaited<ReturnType<typeof patchMe>>,
-  TError = ErrorType<unknown>,
->(
-  profileUpdate: BodyType<ProfileUpdate>,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof patchMe>>, TError, TData>>;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
  * @summary Update own profile (display name, email)
  */
-
-export function usePatchMe<
-  TData = Awaited<ReturnType<typeof patchMe>>,
-  TError = ErrorType<unknown>,
->(
-  profileUpdate: BodyType<ProfileUpdate>,
+export const usePatchMe = <TError = ErrorType<unknown>, TContext = unknown>(
   options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof patchMe>>, TError, TData>>;
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof patchMe>>,
+      TError,
+      PatchMeMutationVariables,
+      TContext
+    >;
     request?: SecondParameter<typeof customInstance>;
   },
   queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getPatchMeQueryOptions(profileUpdate, options);
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
+): UseMutationResult<
+  Awaited<ReturnType<typeof patchMe>>,
+  TError,
+  PatchMeMutationVariables,
+  TContext
+> => {
+  return useMutation(getPatchMeMutationOptions(options), queryClient);
+};
 /**
  * @summary Change own password (local accounts only)
  */
@@ -307,110 +271,74 @@ export const postMePassword = (
   );
 };
 
-export const getPostMePasswordQueryKey = (passwordChange?: BodyType<PasswordChange>) => {
-  return ['POST', `/me/password`, passwordChange] as const;
-};
+export const getPostMePasswordMutationKey = () => ['postMePassword'] as const;
 
-export const getPostMePasswordQueryOptions = <
-  TData = Awaited<ReturnType<typeof postMePassword>>,
+export const getPostMePasswordMutationOptions = <
   TError = ErrorType<BadRequestResponse | void>,
->(
-  passwordChange: BodyType<PasswordChange>,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof postMePassword>>, TError, TData>>;
-    request?: SecondParameter<typeof customInstance>;
-  }
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
-
-  const queryKey = queryOptions?.queryKey ?? getPostMePasswordQueryKey(passwordChange);
-
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof postMePassword>>> = ({ signal }) =>
-    postMePassword(passwordChange, requestOptions, signal);
-
-  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof postMePassword>>,
     TError,
-    TData
-  > & { queryKey: DataTag<QueryKey, TData, TError> };
+    PostMePasswordMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof postMePassword>>,
+  TError,
+  PostMePasswordMutationVariables,
+  TContext
+> => {
+  const mutationKey = getPostMePasswordMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof postMePassword>>,
+    PostMePasswordMutationVariables
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return postMePassword(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type PostMePasswordQueryResult = NonNullable<Awaited<ReturnType<typeof postMePassword>>>;
-export type PostMePasswordQueryError = ErrorType<BadRequestResponse | void>;
+export type PostMePasswordMutationResult = NonNullable<Awaited<ReturnType<typeof postMePassword>>>;
+export type PostMePasswordMutationBody = BodyType<PasswordChange>;
+export type PostMePasswordMutationError = ErrorType<BadRequestResponse | void>;
+export type PostMePasswordMutationVariables = { data: BodyType<PasswordChange> };
 
-export function usePostMePassword<
-  TData = Awaited<ReturnType<typeof postMePassword>>,
-  TError = ErrorType<BadRequestResponse | void>,
->(
-  passwordChange: BodyType<PasswordChange>,
-  options: {
-    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof postMePassword>>, TError, TData>> &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postMePassword>>,
-          TError,
-          Awaited<ReturnType<typeof postMePassword>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostMePassword<
-  TData = Awaited<ReturnType<typeof postMePassword>>,
-  TError = ErrorType<BadRequestResponse | void>,
->(
-  passwordChange: BodyType<PasswordChange>,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof postMePassword>>, TError, TData>> &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postMePassword>>,
-          TError,
-          Awaited<ReturnType<typeof postMePassword>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostMePassword<
-  TData = Awaited<ReturnType<typeof postMePassword>>,
-  TError = ErrorType<BadRequestResponse | void>,
->(
-  passwordChange: BodyType<PasswordChange>,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof postMePassword>>, TError, TData>>;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
  * @summary Change own password (local accounts only)
  */
-
-export function usePostMePassword<
-  TData = Awaited<ReturnType<typeof postMePassword>>,
+export const usePostMePassword = <
   TError = ErrorType<BadRequestResponse | void>,
+  TContext = unknown,
 >(
-  passwordChange: BodyType<PasswordChange>,
   options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof postMePassword>>, TError, TData>>;
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof postMePassword>>,
+      TError,
+      PostMePasswordMutationVariables,
+      TContext
+    >;
     request?: SecondParameter<typeof customInstance>;
   },
   queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getPostMePasswordQueryOptions(passwordChange, options);
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
+): UseMutationResult<
+  Awaited<ReturnType<typeof postMePassword>>,
+  TError,
+  PostMePasswordMutationVariables,
+  TContext
+> => {
+  return useMutation(getPostMePasswordMutationOptions(options), queryClient);
+};
 /**
  * @summary List own active sessions
  */
@@ -532,126 +460,73 @@ export const deleteMeSessionsSessionId = (
   );
 };
 
-export const getDeleteMeSessionsSessionIdQueryKey = (sessionId: string) => {
-  return ['DELETE', `/me/sessions/${sessionId}`] as const;
-};
+export const getDeleteMeSessionsSessionIdMutationKey = () => ['deleteMeSessionsSessionId'] as const;
 
-export const getDeleteMeSessionsSessionIdQueryOptions = <
-  TData = Awaited<ReturnType<typeof deleteMeSessionsSessionId>>,
+export const getDeleteMeSessionsSessionIdMutationOptions = <
   TError = ErrorType<unknown>,
->(
-  sessionId: string,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof deleteMeSessionsSessionId>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  }
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteMeSessionsSessionId>>,
+    TError,
+    DeleteMeSessionsSessionIdMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteMeSessionsSessionId>>,
+  TError,
+  DeleteMeSessionsSessionIdMutationVariables,
+  TContext
+> => {
+  const mutationKey = getDeleteMeSessionsSessionIdMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
 
-  const queryKey = queryOptions?.queryKey ?? getDeleteMeSessionsSessionIdQueryKey(sessionId);
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteMeSessionsSessionId>>,
+    DeleteMeSessionsSessionIdMutationVariables
+  > = (props) => {
+    const { sessionId } = props ?? {};
 
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof deleteMeSessionsSessionId>>> = ({
-    signal,
-  }) => deleteMeSessionsSessionId(sessionId, requestOptions, signal);
-
-  return {
-    queryKey,
-    queryFn,
-    enabled: sessionId !== null && sessionId !== undefined,
-    ...queryOptions,
-  } as UseQueryOptions<Awaited<ReturnType<typeof deleteMeSessionsSessionId>>, TError, TData> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
+    return deleteMeSessionsSessionId(sessionId, requestOptions);
   };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type DeleteMeSessionsSessionIdQueryResult = NonNullable<
+export type DeleteMeSessionsSessionIdMutationResult = NonNullable<
   Awaited<ReturnType<typeof deleteMeSessionsSessionId>>
 >;
-export type DeleteMeSessionsSessionIdQueryError = ErrorType<unknown>;
 
-export function useDeleteMeSessionsSessionId<
-  TData = Awaited<ReturnType<typeof deleteMeSessionsSessionId>>,
-  TError = ErrorType<unknown>,
->(
-  sessionId: string,
-  options: {
-    query: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof deleteMeSessionsSessionId>>, TError, TData>
-    > &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof deleteMeSessionsSessionId>>,
-          TError,
-          Awaited<ReturnType<typeof deleteMeSessionsSessionId>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function useDeleteMeSessionsSessionId<
-  TData = Awaited<ReturnType<typeof deleteMeSessionsSessionId>>,
-  TError = ErrorType<unknown>,
->(
-  sessionId: string,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof deleteMeSessionsSessionId>>, TError, TData>
-    > &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof deleteMeSessionsSessionId>>,
-          TError,
-          Awaited<ReturnType<typeof deleteMeSessionsSessionId>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function useDeleteMeSessionsSessionId<
-  TData = Awaited<ReturnType<typeof deleteMeSessionsSessionId>>,
-  TError = ErrorType<unknown>,
->(
-  sessionId: string,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof deleteMeSessionsSessionId>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export type DeleteMeSessionsSessionIdMutationError = ErrorType<unknown>;
+export type DeleteMeSessionsSessionIdMutationVariables = { sessionId: string };
+
 /**
  * @summary Revoke one of own sessions
  */
-
-export function useDeleteMeSessionsSessionId<
-  TData = Awaited<ReturnType<typeof deleteMeSessionsSessionId>>,
-  TError = ErrorType<unknown>,
->(
-  sessionId: string,
+export const useDeleteMeSessionsSessionId = <TError = ErrorType<unknown>, TContext = unknown>(
   options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof deleteMeSessionsSessionId>>, TError, TData>
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof deleteMeSessionsSessionId>>,
+      TError,
+      DeleteMeSessionsSessionIdMutationVariables,
+      TContext
     >;
     request?: SecondParameter<typeof customInstance>;
   },
   queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getDeleteMeSessionsSessionIdQueryOptions(sessionId, options);
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
+): UseMutationResult<
+  Awaited<ReturnType<typeof deleteMeSessionsSessionId>>,
+  TError,
+  DeleteMeSessionsSessionIdMutationVariables,
+  TContext
+> => {
+  return useMutation(getDeleteMeSessionsSessionIdMutationOptions(options), queryClient);
+};
 /**
  * @summary List own MFA factors, recovery codes remaining, and whether 2FA is required
  */
@@ -780,110 +655,76 @@ export const postMeMfaTotp = (
   );
 };
 
-export const getPostMeMfaTotpQueryKey = (postMeMfaTotpBody?: BodyType<PostMeMfaTotpBody>) => {
-  return ['POST', `/me/mfa/totp`, postMeMfaTotpBody] as const;
-};
+export const getPostMeMfaTotpMutationKey = () => ['postMeMfaTotp'] as const;
 
-export const getPostMeMfaTotpQueryOptions = <
-  TData = Awaited<ReturnType<typeof postMeMfaTotp>>,
+export const getPostMeMfaTotpMutationOptions = <
   TError = ErrorType<BadRequestResponse | UnauthorizedResponse | void>,
->(
-  postMeMfaTotpBody?: BodyType<PostMeMfaTotpBody>,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof postMeMfaTotp>>, TError, TData>>;
-    request?: SecondParameter<typeof customInstance>;
-  }
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
-
-  const queryKey = queryOptions?.queryKey ?? getPostMeMfaTotpQueryKey(postMeMfaTotpBody);
-
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof postMeMfaTotp>>> = ({ signal }) =>
-    postMeMfaTotp(postMeMfaTotpBody, requestOptions, signal);
-
-  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof postMeMfaTotp>>,
     TError,
-    TData
-  > & { queryKey: DataTag<QueryKey, TData, TError> };
+    PostMeMfaTotpMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof postMeMfaTotp>>,
+  TError,
+  PostMeMfaTotpMutationVariables,
+  TContext
+> => {
+  const mutationKey = getPostMeMfaTotpMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof postMeMfaTotp>>,
+    PostMeMfaTotpMutationVariables
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return postMeMfaTotp(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type PostMeMfaTotpQueryResult = NonNullable<Awaited<ReturnType<typeof postMeMfaTotp>>>;
-export type PostMeMfaTotpQueryError = ErrorType<BadRequestResponse | UnauthorizedResponse | void>;
+export type PostMeMfaTotpMutationResult = NonNullable<Awaited<ReturnType<typeof postMeMfaTotp>>>;
+export type PostMeMfaTotpMutationBody = BodyType<PostMeMfaTotpBody> | undefined;
+export type PostMeMfaTotpMutationError = ErrorType<
+  BadRequestResponse | UnauthorizedResponse | void
+>;
+export type PostMeMfaTotpMutationVariables = { data?: BodyType<PostMeMfaTotpBody> };
 
-export function usePostMeMfaTotp<
-  TData = Awaited<ReturnType<typeof postMeMfaTotp>>,
-  TError = ErrorType<BadRequestResponse | UnauthorizedResponse | void>,
->(
-  postMeMfaTotpBody: undefined | BodyType<PostMeMfaTotpBody>,
-  options: {
-    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof postMeMfaTotp>>, TError, TData>> &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postMeMfaTotp>>,
-          TError,
-          Awaited<ReturnType<typeof postMeMfaTotp>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostMeMfaTotp<
-  TData = Awaited<ReturnType<typeof postMeMfaTotp>>,
-  TError = ErrorType<BadRequestResponse | UnauthorizedResponse | void>,
->(
-  postMeMfaTotpBody?: BodyType<PostMeMfaTotpBody>,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof postMeMfaTotp>>, TError, TData>> &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postMeMfaTotp>>,
-          TError,
-          Awaited<ReturnType<typeof postMeMfaTotp>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostMeMfaTotp<
-  TData = Awaited<ReturnType<typeof postMeMfaTotp>>,
-  TError = ErrorType<BadRequestResponse | UnauthorizedResponse | void>,
->(
-  postMeMfaTotpBody?: BodyType<PostMeMfaTotpBody>,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof postMeMfaTotp>>, TError, TData>>;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
  * @summary Begin enrolling a TOTP factor
  */
-
-export function usePostMeMfaTotp<
-  TData = Awaited<ReturnType<typeof postMeMfaTotp>>,
+export const usePostMeMfaTotp = <
   TError = ErrorType<BadRequestResponse | UnauthorizedResponse | void>,
+  TContext = unknown,
 >(
-  postMeMfaTotpBody?: BodyType<PostMeMfaTotpBody>,
   options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof postMeMfaTotp>>, TError, TData>>;
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof postMeMfaTotp>>,
+      TError,
+      PostMeMfaTotpMutationVariables,
+      TContext
+    >;
     request?: SecondParameter<typeof customInstance>;
   },
   queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getPostMeMfaTotpQueryOptions(postMeMfaTotpBody, options);
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
+): UseMutationResult<
+  Awaited<ReturnType<typeof postMeMfaTotp>>,
+  TError,
+  PostMeMfaTotpMutationVariables,
+  TContext
+> => {
+  return useMutation(getPostMeMfaTotpMutationOptions(options), queryClient);
+};
 /**
  * On the user's first confirmed factor, also returns freshly generated recovery codes (shown once). If the caller's session was enrollment-only, also returns a fresh, fully-privileged token pair.
  * @summary Confirm a pending TOTP factor with a code
@@ -906,148 +747,82 @@ export const postMeMfaTotpFactorIdConfirm = (
   );
 };
 
-export const getPostMeMfaTotpFactorIdConfirmQueryKey = (
-  factorId: string,
-  postMeMfaTotpFactorIdConfirmBody?: BodyType<PostMeMfaTotpFactorIdConfirmBody>
-) => {
-  return ['POST', `/me/mfa/totp/${factorId}/confirm`, postMeMfaTotpFactorIdConfirmBody] as const;
-};
+export const getPostMeMfaTotpFactorIdConfirmMutationKey = () =>
+  ['postMeMfaTotpFactorIdConfirm'] as const;
 
-export const getPostMeMfaTotpFactorIdConfirmQueryOptions = <
-  TData = Awaited<ReturnType<typeof postMeMfaTotpFactorIdConfirm>>,
+export const getPostMeMfaTotpFactorIdConfirmMutationOptions = <
   TError = ErrorType<BadRequestResponse | UnauthorizedResponse | NotFoundResponse | void>,
->(
-  factorId: string,
-  postMeMfaTotpFactorIdConfirmBody: BodyType<PostMeMfaTotpFactorIdConfirmBody>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postMeMfaTotpFactorIdConfirm>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  }
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof postMeMfaTotpFactorIdConfirm>>,
+    TError,
+    PostMeMfaTotpFactorIdConfirmMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof postMeMfaTotpFactorIdConfirm>>,
+  TError,
+  PostMeMfaTotpFactorIdConfirmMutationVariables,
+  TContext
+> => {
+  const mutationKey = getPostMeMfaTotpFactorIdConfirmMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
 
-  const queryKey =
-    queryOptions?.queryKey ??
-    getPostMeMfaTotpFactorIdConfirmQueryKey(factorId, postMeMfaTotpFactorIdConfirmBody);
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof postMeMfaTotpFactorIdConfirm>>,
+    PostMeMfaTotpFactorIdConfirmMutationVariables
+  > = (props) => {
+    const { factorId, data } = props ?? {};
 
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof postMeMfaTotpFactorIdConfirm>>> = ({
-    signal,
-  }) =>
-    postMeMfaTotpFactorIdConfirm(
-      factorId,
-      postMeMfaTotpFactorIdConfirmBody,
-      requestOptions,
-      signal
-    );
-
-  return {
-    queryKey,
-    queryFn,
-    enabled: factorId !== null && factorId !== undefined,
-    ...queryOptions,
-  } as UseQueryOptions<Awaited<ReturnType<typeof postMeMfaTotpFactorIdConfirm>>, TError, TData> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
+    return postMeMfaTotpFactorIdConfirm(factorId, data, requestOptions);
   };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type PostMeMfaTotpFactorIdConfirmQueryResult = NonNullable<
+export type PostMeMfaTotpFactorIdConfirmMutationResult = NonNullable<
   Awaited<ReturnType<typeof postMeMfaTotpFactorIdConfirm>>
 >;
-export type PostMeMfaTotpFactorIdConfirmQueryError = ErrorType<
+export type PostMeMfaTotpFactorIdConfirmMutationBody = BodyType<PostMeMfaTotpFactorIdConfirmBody>;
+export type PostMeMfaTotpFactorIdConfirmMutationError = ErrorType<
   BadRequestResponse | UnauthorizedResponse | NotFoundResponse | void
 >;
+export type PostMeMfaTotpFactorIdConfirmMutationVariables = {
+  factorId: string;
+  data: BodyType<PostMeMfaTotpFactorIdConfirmBody>;
+};
 
-export function usePostMeMfaTotpFactorIdConfirm<
-  TData = Awaited<ReturnType<typeof postMeMfaTotpFactorIdConfirm>>,
-  TError = ErrorType<BadRequestResponse | UnauthorizedResponse | NotFoundResponse | void>,
->(
-  factorId: string,
-  postMeMfaTotpFactorIdConfirmBody: BodyType<PostMeMfaTotpFactorIdConfirmBody>,
-  options: {
-    query: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postMeMfaTotpFactorIdConfirm>>, TError, TData>
-    > &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postMeMfaTotpFactorIdConfirm>>,
-          TError,
-          Awaited<ReturnType<typeof postMeMfaTotpFactorIdConfirm>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostMeMfaTotpFactorIdConfirm<
-  TData = Awaited<ReturnType<typeof postMeMfaTotpFactorIdConfirm>>,
-  TError = ErrorType<BadRequestResponse | UnauthorizedResponse | NotFoundResponse | void>,
->(
-  factorId: string,
-  postMeMfaTotpFactorIdConfirmBody: BodyType<PostMeMfaTotpFactorIdConfirmBody>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postMeMfaTotpFactorIdConfirm>>, TError, TData>
-    > &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postMeMfaTotpFactorIdConfirm>>,
-          TError,
-          Awaited<ReturnType<typeof postMeMfaTotpFactorIdConfirm>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostMeMfaTotpFactorIdConfirm<
-  TData = Awaited<ReturnType<typeof postMeMfaTotpFactorIdConfirm>>,
-  TError = ErrorType<BadRequestResponse | UnauthorizedResponse | NotFoundResponse | void>,
->(
-  factorId: string,
-  postMeMfaTotpFactorIdConfirmBody: BodyType<PostMeMfaTotpFactorIdConfirmBody>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postMeMfaTotpFactorIdConfirm>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
  * @summary Confirm a pending TOTP factor with a code
  */
-
-export function usePostMeMfaTotpFactorIdConfirm<
-  TData = Awaited<ReturnType<typeof postMeMfaTotpFactorIdConfirm>>,
+export const usePostMeMfaTotpFactorIdConfirm = <
   TError = ErrorType<BadRequestResponse | UnauthorizedResponse | NotFoundResponse | void>,
+  TContext = unknown,
 >(
-  factorId: string,
-  postMeMfaTotpFactorIdConfirmBody: BodyType<PostMeMfaTotpFactorIdConfirmBody>,
   options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postMeMfaTotpFactorIdConfirm>>, TError, TData>
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof postMeMfaTotpFactorIdConfirm>>,
+      TError,
+      PostMeMfaTotpFactorIdConfirmMutationVariables,
+      TContext
     >;
     request?: SecondParameter<typeof customInstance>;
   },
   queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getPostMeMfaTotpFactorIdConfirmQueryOptions(
-    factorId,
-    postMeMfaTotpFactorIdConfirmBody,
-    options
-  );
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
+): UseMutationResult<
+  Awaited<ReturnType<typeof postMeMfaTotpFactorIdConfirm>>,
+  TError,
+  PostMeMfaTotpFactorIdConfirmMutationVariables,
+  TContext
+> => {
+  return useMutation(getPostMeMfaTotpFactorIdConfirmMutationOptions(options), queryClient);
+};
 /**
  * Requires step-up elevation (action `mfa.manage`; a user with no factor elevates with their password), except for sessions confined to forced MFA enrollment. 400 `elevation_required` when the token is missing, 401 when invalid, 403 for API keys.
  * @summary Begin registering a security key or passkey
@@ -1069,132 +844,82 @@ export const postMeMfaWebauthnRegisterBegin = (
   );
 };
 
-export const getPostMeMfaWebauthnRegisterBeginQueryKey = (
-  postMeMfaWebauthnRegisterBeginBody?: BodyType<PostMeMfaWebauthnRegisterBeginBody>
-) => {
-  return ['POST', `/me/mfa/webauthn/register/begin`, postMeMfaWebauthnRegisterBeginBody] as const;
-};
+export const getPostMeMfaWebauthnRegisterBeginMutationKey = () =>
+  ['postMeMfaWebauthnRegisterBegin'] as const;
 
-export const getPostMeMfaWebauthnRegisterBeginQueryOptions = <
-  TData = Awaited<ReturnType<typeof postMeMfaWebauthnRegisterBegin>>,
+export const getPostMeMfaWebauthnRegisterBeginMutationOptions = <
   TError = ErrorType<BadRequestResponse | UnauthorizedResponse | void>,
->(
-  postMeMfaWebauthnRegisterBeginBody?: BodyType<PostMeMfaWebauthnRegisterBeginBody>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postMeMfaWebauthnRegisterBegin>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  }
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
-
-  const queryKey =
-    queryOptions?.queryKey ??
-    getPostMeMfaWebauthnRegisterBeginQueryKey(postMeMfaWebauthnRegisterBeginBody);
-
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof postMeMfaWebauthnRegisterBegin>>> = ({
-    signal,
-  }) => postMeMfaWebauthnRegisterBegin(postMeMfaWebauthnRegisterBeginBody, requestOptions, signal);
-
-  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof postMeMfaWebauthnRegisterBegin>>,
     TError,
-    TData
-  > & { queryKey: DataTag<QueryKey, TData, TError> };
+    PostMeMfaWebauthnRegisterBeginMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof postMeMfaWebauthnRegisterBegin>>,
+  TError,
+  PostMeMfaWebauthnRegisterBeginMutationVariables,
+  TContext
+> => {
+  const mutationKey = getPostMeMfaWebauthnRegisterBeginMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof postMeMfaWebauthnRegisterBegin>>,
+    PostMeMfaWebauthnRegisterBeginMutationVariables
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return postMeMfaWebauthnRegisterBegin(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type PostMeMfaWebauthnRegisterBeginQueryResult = NonNullable<
+export type PostMeMfaWebauthnRegisterBeginMutationResult = NonNullable<
   Awaited<ReturnType<typeof postMeMfaWebauthnRegisterBegin>>
 >;
-export type PostMeMfaWebauthnRegisterBeginQueryError = ErrorType<
+export type PostMeMfaWebauthnRegisterBeginMutationBody =
+  BodyType<PostMeMfaWebauthnRegisterBeginBody> | undefined;
+export type PostMeMfaWebauthnRegisterBeginMutationError = ErrorType<
   BadRequestResponse | UnauthorizedResponse | void
 >;
+export type PostMeMfaWebauthnRegisterBeginMutationVariables = {
+  data?: BodyType<PostMeMfaWebauthnRegisterBeginBody>;
+};
 
-export function usePostMeMfaWebauthnRegisterBegin<
-  TData = Awaited<ReturnType<typeof postMeMfaWebauthnRegisterBegin>>,
-  TError = ErrorType<BadRequestResponse | UnauthorizedResponse | void>,
->(
-  postMeMfaWebauthnRegisterBeginBody: undefined | BodyType<PostMeMfaWebauthnRegisterBeginBody>,
-  options: {
-    query: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postMeMfaWebauthnRegisterBegin>>, TError, TData>
-    > &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postMeMfaWebauthnRegisterBegin>>,
-          TError,
-          Awaited<ReturnType<typeof postMeMfaWebauthnRegisterBegin>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostMeMfaWebauthnRegisterBegin<
-  TData = Awaited<ReturnType<typeof postMeMfaWebauthnRegisterBegin>>,
-  TError = ErrorType<BadRequestResponse | UnauthorizedResponse | void>,
->(
-  postMeMfaWebauthnRegisterBeginBody?: BodyType<PostMeMfaWebauthnRegisterBeginBody>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postMeMfaWebauthnRegisterBegin>>, TError, TData>
-    > &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postMeMfaWebauthnRegisterBegin>>,
-          TError,
-          Awaited<ReturnType<typeof postMeMfaWebauthnRegisterBegin>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostMeMfaWebauthnRegisterBegin<
-  TData = Awaited<ReturnType<typeof postMeMfaWebauthnRegisterBegin>>,
-  TError = ErrorType<BadRequestResponse | UnauthorizedResponse | void>,
->(
-  postMeMfaWebauthnRegisterBeginBody?: BodyType<PostMeMfaWebauthnRegisterBeginBody>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postMeMfaWebauthnRegisterBegin>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
  * @summary Begin registering a security key or passkey
  */
-
-export function usePostMeMfaWebauthnRegisterBegin<
-  TData = Awaited<ReturnType<typeof postMeMfaWebauthnRegisterBegin>>,
+export const usePostMeMfaWebauthnRegisterBegin = <
   TError = ErrorType<BadRequestResponse | UnauthorizedResponse | void>,
+  TContext = unknown,
 >(
-  postMeMfaWebauthnRegisterBeginBody?: BodyType<PostMeMfaWebauthnRegisterBeginBody>,
   options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postMeMfaWebauthnRegisterBegin>>, TError, TData>
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof postMeMfaWebauthnRegisterBegin>>,
+      TError,
+      PostMeMfaWebauthnRegisterBeginMutationVariables,
+      TContext
     >;
     request?: SecondParameter<typeof customInstance>;
   },
   queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getPostMeMfaWebauthnRegisterBeginQueryOptions(
-    postMeMfaWebauthnRegisterBeginBody,
-    options
-  );
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
+): UseMutationResult<
+  Awaited<ReturnType<typeof postMeMfaWebauthnRegisterBegin>>,
+  TError,
+  PostMeMfaWebauthnRegisterBeginMutationVariables,
+  TContext
+> => {
+  return useMutation(getPostMeMfaWebauthnRegisterBeginMutationOptions(options), queryClient);
+};
 /**
  * @summary Finish registering a security key or passkey
  */
@@ -1215,126 +940,77 @@ export const postMeMfaWebauthnRegisterFinish = (
   );
 };
 
-export const getPostMeMfaWebauthnRegisterFinishQueryKey = (
-  webAuthnResponse?: BodyType<WebAuthnResponse>
-) => {
-  return ['POST', `/me/mfa/webauthn/register/finish`, webAuthnResponse] as const;
-};
+export const getPostMeMfaWebauthnRegisterFinishMutationKey = () =>
+  ['postMeMfaWebauthnRegisterFinish'] as const;
 
-export const getPostMeMfaWebauthnRegisterFinishQueryOptions = <
-  TData = Awaited<ReturnType<typeof postMeMfaWebauthnRegisterFinish>>,
+export const getPostMeMfaWebauthnRegisterFinishMutationOptions = <
   TError = ErrorType<UnauthorizedResponse | void>,
->(
-  webAuthnResponse: BodyType<WebAuthnResponse>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postMeMfaWebauthnRegisterFinish>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  }
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
-
-  const queryKey =
-    queryOptions?.queryKey ?? getPostMeMfaWebauthnRegisterFinishQueryKey(webAuthnResponse);
-
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof postMeMfaWebauthnRegisterFinish>>> = ({
-    signal,
-  }) => postMeMfaWebauthnRegisterFinish(webAuthnResponse, requestOptions, signal);
-
-  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof postMeMfaWebauthnRegisterFinish>>,
     TError,
-    TData
-  > & { queryKey: DataTag<QueryKey, TData, TError> };
+    PostMeMfaWebauthnRegisterFinishMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof postMeMfaWebauthnRegisterFinish>>,
+  TError,
+  PostMeMfaWebauthnRegisterFinishMutationVariables,
+  TContext
+> => {
+  const mutationKey = getPostMeMfaWebauthnRegisterFinishMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof postMeMfaWebauthnRegisterFinish>>,
+    PostMeMfaWebauthnRegisterFinishMutationVariables
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return postMeMfaWebauthnRegisterFinish(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type PostMeMfaWebauthnRegisterFinishQueryResult = NonNullable<
+export type PostMeMfaWebauthnRegisterFinishMutationResult = NonNullable<
   Awaited<ReturnType<typeof postMeMfaWebauthnRegisterFinish>>
 >;
-export type PostMeMfaWebauthnRegisterFinishQueryError = ErrorType<UnauthorizedResponse | void>;
+export type PostMeMfaWebauthnRegisterFinishMutationBody = BodyType<WebAuthnResponse>;
+export type PostMeMfaWebauthnRegisterFinishMutationError = ErrorType<UnauthorizedResponse | void>;
+export type PostMeMfaWebauthnRegisterFinishMutationVariables = { data: BodyType<WebAuthnResponse> };
 
-export function usePostMeMfaWebauthnRegisterFinish<
-  TData = Awaited<ReturnType<typeof postMeMfaWebauthnRegisterFinish>>,
-  TError = ErrorType<UnauthorizedResponse | void>,
->(
-  webAuthnResponse: BodyType<WebAuthnResponse>,
-  options: {
-    query: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postMeMfaWebauthnRegisterFinish>>, TError, TData>
-    > &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postMeMfaWebauthnRegisterFinish>>,
-          TError,
-          Awaited<ReturnType<typeof postMeMfaWebauthnRegisterFinish>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostMeMfaWebauthnRegisterFinish<
-  TData = Awaited<ReturnType<typeof postMeMfaWebauthnRegisterFinish>>,
-  TError = ErrorType<UnauthorizedResponse | void>,
->(
-  webAuthnResponse: BodyType<WebAuthnResponse>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postMeMfaWebauthnRegisterFinish>>, TError, TData>
-    > &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postMeMfaWebauthnRegisterFinish>>,
-          TError,
-          Awaited<ReturnType<typeof postMeMfaWebauthnRegisterFinish>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostMeMfaWebauthnRegisterFinish<
-  TData = Awaited<ReturnType<typeof postMeMfaWebauthnRegisterFinish>>,
-  TError = ErrorType<UnauthorizedResponse | void>,
->(
-  webAuthnResponse: BodyType<WebAuthnResponse>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postMeMfaWebauthnRegisterFinish>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
  * @summary Finish registering a security key or passkey
  */
-
-export function usePostMeMfaWebauthnRegisterFinish<
-  TData = Awaited<ReturnType<typeof postMeMfaWebauthnRegisterFinish>>,
+export const usePostMeMfaWebauthnRegisterFinish = <
   TError = ErrorType<UnauthorizedResponse | void>,
+  TContext = unknown,
 >(
-  webAuthnResponse: BodyType<WebAuthnResponse>,
   options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postMeMfaWebauthnRegisterFinish>>, TError, TData>
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof postMeMfaWebauthnRegisterFinish>>,
+      TError,
+      PostMeMfaWebauthnRegisterFinishMutationVariables,
+      TContext
     >;
     request?: SecondParameter<typeof customInstance>;
   },
   queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getPostMeMfaWebauthnRegisterFinishQueryOptions(webAuthnResponse, options);
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
+): UseMutationResult<
+  Awaited<ReturnType<typeof postMeMfaWebauthnRegisterFinish>>,
+  TError,
+  PostMeMfaWebauthnRegisterFinishMutationVariables,
+  TContext
+> => {
+  return useMutation(getPostMeMfaWebauthnRegisterFinishMutationOptions(options), queryClient);
+};
 /**
  * Requires step-up elevation (action `mfa.manage`).
  * @summary Regenerate recovery codes
@@ -1349,115 +1025,73 @@ export const postMeMfaRecoveryCodes = (
   );
 };
 
-export const getPostMeMfaRecoveryCodesQueryKey = () => {
-  return ['POST', `/me/mfa/recovery-codes`] as const;
-};
+export const getPostMeMfaRecoveryCodesMutationKey = () => ['postMeMfaRecoveryCodes'] as const;
 
-export const getPostMeMfaRecoveryCodesQueryOptions = <
-  TData = Awaited<ReturnType<typeof postMeMfaRecoveryCodes>>,
+export const getPostMeMfaRecoveryCodesMutationOptions = <
   TError = ErrorType<ElevationRequiredResponse>,
+  TContext = unknown,
 >(options?: {
-  query?: Partial<
-    UseQueryOptions<Awaited<ReturnType<typeof postMeMfaRecoveryCodes>>, TError, TData>
-  >;
-  request?: SecondParameter<typeof customInstance>;
-}) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
-
-  const queryKey = queryOptions?.queryKey ?? getPostMeMfaRecoveryCodesQueryKey();
-
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof postMeMfaRecoveryCodes>>> = ({ signal }) =>
-    postMeMfaRecoveryCodes(requestOptions, signal);
-
-  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+  mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof postMeMfaRecoveryCodes>>,
     TError,
-    TData
-  > & { queryKey: DataTag<QueryKey, TData, TError> };
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof postMeMfaRecoveryCodes>>,
+  TError,
+  void,
+  TContext
+> => {
+  const mutationKey = getPostMeMfaRecoveryCodesMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof postMeMfaRecoveryCodes>>,
+    void
+  > = () => {
+    return postMeMfaRecoveryCodes(requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type PostMeMfaRecoveryCodesQueryResult = NonNullable<
+export type PostMeMfaRecoveryCodesMutationResult = NonNullable<
   Awaited<ReturnType<typeof postMeMfaRecoveryCodes>>
 >;
-export type PostMeMfaRecoveryCodesQueryError = ErrorType<ElevationRequiredResponse>;
 
-export function usePostMeMfaRecoveryCodes<
-  TData = Awaited<ReturnType<typeof postMeMfaRecoveryCodes>>,
-  TError = ErrorType<ElevationRequiredResponse>,
->(
-  options: {
-    query: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postMeMfaRecoveryCodes>>, TError, TData>
-    > &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postMeMfaRecoveryCodes>>,
-          TError,
-          Awaited<ReturnType<typeof postMeMfaRecoveryCodes>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostMeMfaRecoveryCodes<
-  TData = Awaited<ReturnType<typeof postMeMfaRecoveryCodes>>,
-  TError = ErrorType<ElevationRequiredResponse>,
->(
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postMeMfaRecoveryCodes>>, TError, TData>
-    > &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postMeMfaRecoveryCodes>>,
-          TError,
-          Awaited<ReturnType<typeof postMeMfaRecoveryCodes>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostMeMfaRecoveryCodes<
-  TData = Awaited<ReturnType<typeof postMeMfaRecoveryCodes>>,
-  TError = ErrorType<ElevationRequiredResponse>,
->(
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postMeMfaRecoveryCodes>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export type PostMeMfaRecoveryCodesMutationError = ErrorType<ElevationRequiredResponse>;
+
 /**
  * @summary Regenerate recovery codes
  */
-
-export function usePostMeMfaRecoveryCodes<
-  TData = Awaited<ReturnType<typeof postMeMfaRecoveryCodes>>,
+export const usePostMeMfaRecoveryCodes = <
   TError = ErrorType<ElevationRequiredResponse>,
+  TContext = unknown,
 >(
   options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postMeMfaRecoveryCodes>>, TError, TData>
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof postMeMfaRecoveryCodes>>,
+      TError,
+      void,
+      TContext
     >;
     request?: SecondParameter<typeof customInstance>;
   },
   queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getPostMeMfaRecoveryCodesQueryOptions(options);
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
+): UseMutationResult<
+  Awaited<ReturnType<typeof postMeMfaRecoveryCodes>>,
+  TError,
+  void,
+  TContext
+> => {
+  return useMutation(getPostMeMfaRecoveryCodesMutationOptions(options), queryClient);
+};
 /**
  * Requires step-up elevation (action `mfa.manage`). Refused with 409 `mfa_required_by_policy` when this is the last factor and the require_2fa policy still covers this user. Removing the last factor also wipes recovery codes.
  * @summary Remove one of own MFA factors
@@ -1473,124 +1107,76 @@ export const deleteMeMfaFactorsFactorId = (
   );
 };
 
-export const getDeleteMeMfaFactorsFactorIdQueryKey = (factorId: string) => {
-  return ['DELETE', `/me/mfa/factors/${factorId}`] as const;
-};
+export const getDeleteMeMfaFactorsFactorIdMutationKey = () =>
+  ['deleteMeMfaFactorsFactorId'] as const;
 
-export const getDeleteMeMfaFactorsFactorIdQueryOptions = <
-  TData = Awaited<ReturnType<typeof deleteMeMfaFactorsFactorId>>,
+export const getDeleteMeMfaFactorsFactorIdMutationOptions = <
   TError = ErrorType<ElevationRequiredResponse | NotFoundResponse | void>,
->(
-  factorId: string,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof deleteMeMfaFactorsFactorId>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  }
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteMeMfaFactorsFactorId>>,
+    TError,
+    DeleteMeMfaFactorsFactorIdMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteMeMfaFactorsFactorId>>,
+  TError,
+  DeleteMeMfaFactorsFactorIdMutationVariables,
+  TContext
+> => {
+  const mutationKey = getDeleteMeMfaFactorsFactorIdMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
 
-  const queryKey = queryOptions?.queryKey ?? getDeleteMeMfaFactorsFactorIdQueryKey(factorId);
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteMeMfaFactorsFactorId>>,
+    DeleteMeMfaFactorsFactorIdMutationVariables
+  > = (props) => {
+    const { factorId } = props ?? {};
 
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof deleteMeMfaFactorsFactorId>>> = ({
-    signal,
-  }) => deleteMeMfaFactorsFactorId(factorId, requestOptions, signal);
-
-  return {
-    queryKey,
-    queryFn,
-    enabled: factorId !== null && factorId !== undefined,
-    ...queryOptions,
-  } as UseQueryOptions<Awaited<ReturnType<typeof deleteMeMfaFactorsFactorId>>, TError, TData> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
+    return deleteMeMfaFactorsFactorId(factorId, requestOptions);
   };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type DeleteMeMfaFactorsFactorIdQueryResult = NonNullable<
+export type DeleteMeMfaFactorsFactorIdMutationResult = NonNullable<
   Awaited<ReturnType<typeof deleteMeMfaFactorsFactorId>>
 >;
-export type DeleteMeMfaFactorsFactorIdQueryError = ErrorType<
+
+export type DeleteMeMfaFactorsFactorIdMutationError = ErrorType<
   ElevationRequiredResponse | NotFoundResponse | void
 >;
+export type DeleteMeMfaFactorsFactorIdMutationVariables = { factorId: string };
 
-export function useDeleteMeMfaFactorsFactorId<
-  TData = Awaited<ReturnType<typeof deleteMeMfaFactorsFactorId>>,
-  TError = ErrorType<ElevationRequiredResponse | NotFoundResponse | void>,
->(
-  factorId: string,
-  options: {
-    query: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof deleteMeMfaFactorsFactorId>>, TError, TData>
-    > &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof deleteMeMfaFactorsFactorId>>,
-          TError,
-          Awaited<ReturnType<typeof deleteMeMfaFactorsFactorId>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function useDeleteMeMfaFactorsFactorId<
-  TData = Awaited<ReturnType<typeof deleteMeMfaFactorsFactorId>>,
-  TError = ErrorType<ElevationRequiredResponse | NotFoundResponse | void>,
->(
-  factorId: string,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof deleteMeMfaFactorsFactorId>>, TError, TData>
-    > &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof deleteMeMfaFactorsFactorId>>,
-          TError,
-          Awaited<ReturnType<typeof deleteMeMfaFactorsFactorId>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function useDeleteMeMfaFactorsFactorId<
-  TData = Awaited<ReturnType<typeof deleteMeMfaFactorsFactorId>>,
-  TError = ErrorType<ElevationRequiredResponse | NotFoundResponse | void>,
->(
-  factorId: string,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof deleteMeMfaFactorsFactorId>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
  * @summary Remove one of own MFA factors
  */
-
-export function useDeleteMeMfaFactorsFactorId<
-  TData = Awaited<ReturnType<typeof deleteMeMfaFactorsFactorId>>,
+export const useDeleteMeMfaFactorsFactorId = <
   TError = ErrorType<ElevationRequiredResponse | NotFoundResponse | void>,
+  TContext = unknown,
 >(
-  factorId: string,
   options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof deleteMeMfaFactorsFactorId>>, TError, TData>
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof deleteMeMfaFactorsFactorId>>,
+      TError,
+      DeleteMeMfaFactorsFactorIdMutationVariables,
+      TContext
     >;
     request?: SecondParameter<typeof customInstance>;
   },
   queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getDeleteMeMfaFactorsFactorIdQueryOptions(factorId, options);
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
+): UseMutationResult<
+  Awaited<ReturnType<typeof deleteMeMfaFactorsFactorId>>,
+  TError,
+  DeleteMeMfaFactorsFactorIdMutationVariables,
+  TContext
+> => {
+  return useMutation(getDeleteMeMfaFactorsFactorIdMutationOptions(options), queryClient);
+};

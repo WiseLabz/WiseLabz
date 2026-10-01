@@ -10,4 +10,6 @@
 export type PostAuthElevateOidcBeginBody = {
   /** The elevation action being requested, e.g. connector.delete */
   action: string;
+  /** ID of the resource the token is bound to, for actions on one (e.g. the user for user.delete) */
+  target?: string;
 };

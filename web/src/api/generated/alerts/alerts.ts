@@ -6,15 +6,18 @@
  *
  * OpenAPI spec version: 0.1.0
  */
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import type {
   DataTag,
   DefinedInitialDataOptions,
   DefinedUseQueryResult,
+  MutationFunction,
   QueryClient,
   QueryFunction,
   QueryKey,
   UndefinedInitialDataOptions,
+  UseMutationOptions,
+  UseMutationResult,
   UseQueryOptions,
   UseQueryResult,
 } from '@tanstack/react-query';
@@ -297,126 +300,73 @@ export const postAlertsAlertIdResolve = (
   );
 };
 
-export const getPostAlertsAlertIdResolveQueryKey = (alertId: string) => {
-  return ['POST', `/alerts/${alertId}/resolve`] as const;
-};
+export const getPostAlertsAlertIdResolveMutationKey = () => ['postAlertsAlertIdResolve'] as const;
 
-export const getPostAlertsAlertIdResolveQueryOptions = <
-  TData = Awaited<ReturnType<typeof postAlertsAlertIdResolve>>,
+export const getPostAlertsAlertIdResolveMutationOptions = <
   TError = ErrorType<unknown>,
->(
-  alertId: string,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postAlertsAlertIdResolve>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  }
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof postAlertsAlertIdResolve>>,
+    TError,
+    PostAlertsAlertIdResolveMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof postAlertsAlertIdResolve>>,
+  TError,
+  PostAlertsAlertIdResolveMutationVariables,
+  TContext
+> => {
+  const mutationKey = getPostAlertsAlertIdResolveMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
 
-  const queryKey = queryOptions?.queryKey ?? getPostAlertsAlertIdResolveQueryKey(alertId);
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof postAlertsAlertIdResolve>>,
+    PostAlertsAlertIdResolveMutationVariables
+  > = (props) => {
+    const { alertId } = props ?? {};
 
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof postAlertsAlertIdResolve>>> = ({
-    signal,
-  }) => postAlertsAlertIdResolve(alertId, requestOptions, signal);
-
-  return {
-    queryKey,
-    queryFn,
-    enabled: alertId !== null && alertId !== undefined,
-    ...queryOptions,
-  } as UseQueryOptions<Awaited<ReturnType<typeof postAlertsAlertIdResolve>>, TError, TData> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
+    return postAlertsAlertIdResolve(alertId, requestOptions);
   };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type PostAlertsAlertIdResolveQueryResult = NonNullable<
+export type PostAlertsAlertIdResolveMutationResult = NonNullable<
   Awaited<ReturnType<typeof postAlertsAlertIdResolve>>
 >;
-export type PostAlertsAlertIdResolveQueryError = ErrorType<unknown>;
 
-export function usePostAlertsAlertIdResolve<
-  TData = Awaited<ReturnType<typeof postAlertsAlertIdResolve>>,
-  TError = ErrorType<unknown>,
->(
-  alertId: string,
-  options: {
-    query: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postAlertsAlertIdResolve>>, TError, TData>
-    > &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postAlertsAlertIdResolve>>,
-          TError,
-          Awaited<ReturnType<typeof postAlertsAlertIdResolve>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostAlertsAlertIdResolve<
-  TData = Awaited<ReturnType<typeof postAlertsAlertIdResolve>>,
-  TError = ErrorType<unknown>,
->(
-  alertId: string,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postAlertsAlertIdResolve>>, TError, TData>
-    > &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postAlertsAlertIdResolve>>,
-          TError,
-          Awaited<ReturnType<typeof postAlertsAlertIdResolve>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostAlertsAlertIdResolve<
-  TData = Awaited<ReturnType<typeof postAlertsAlertIdResolve>>,
-  TError = ErrorType<unknown>,
->(
-  alertId: string,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postAlertsAlertIdResolve>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export type PostAlertsAlertIdResolveMutationError = ErrorType<unknown>;
+export type PostAlertsAlertIdResolveMutationVariables = { alertId: string };
+
 /**
  * @summary Resolve an alert
  */
-
-export function usePostAlertsAlertIdResolve<
-  TData = Awaited<ReturnType<typeof postAlertsAlertIdResolve>>,
-  TError = ErrorType<unknown>,
->(
-  alertId: string,
+export const usePostAlertsAlertIdResolve = <TError = ErrorType<unknown>, TContext = unknown>(
   options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postAlertsAlertIdResolve>>, TError, TData>
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof postAlertsAlertIdResolve>>,
+      TError,
+      PostAlertsAlertIdResolveMutationVariables,
+      TContext
     >;
     request?: SecondParameter<typeof customInstance>;
   },
   queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getPostAlertsAlertIdResolveQueryOptions(alertId, options);
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
+): UseMutationResult<
+  Awaited<ReturnType<typeof postAlertsAlertIdResolve>>,
+  TError,
+  PostAlertsAlertIdResolveMutationVariables,
+  TContext
+> => {
+  return useMutation(getPostAlertsAlertIdResolveMutationOptions(options), queryClient);
+};
 /**
  * @summary Dismiss an alert
  */
@@ -431,126 +381,73 @@ export const postAlertsAlertIdDismiss = (
   );
 };
 
-export const getPostAlertsAlertIdDismissQueryKey = (alertId: string) => {
-  return ['POST', `/alerts/${alertId}/dismiss`] as const;
-};
+export const getPostAlertsAlertIdDismissMutationKey = () => ['postAlertsAlertIdDismiss'] as const;
 
-export const getPostAlertsAlertIdDismissQueryOptions = <
-  TData = Awaited<ReturnType<typeof postAlertsAlertIdDismiss>>,
+export const getPostAlertsAlertIdDismissMutationOptions = <
   TError = ErrorType<unknown>,
->(
-  alertId: string,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postAlertsAlertIdDismiss>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  }
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof postAlertsAlertIdDismiss>>,
+    TError,
+    PostAlertsAlertIdDismissMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof postAlertsAlertIdDismiss>>,
+  TError,
+  PostAlertsAlertIdDismissMutationVariables,
+  TContext
+> => {
+  const mutationKey = getPostAlertsAlertIdDismissMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
 
-  const queryKey = queryOptions?.queryKey ?? getPostAlertsAlertIdDismissQueryKey(alertId);
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof postAlertsAlertIdDismiss>>,
+    PostAlertsAlertIdDismissMutationVariables
+  > = (props) => {
+    const { alertId } = props ?? {};
 
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof postAlertsAlertIdDismiss>>> = ({
-    signal,
-  }) => postAlertsAlertIdDismiss(alertId, requestOptions, signal);
-
-  return {
-    queryKey,
-    queryFn,
-    enabled: alertId !== null && alertId !== undefined,
-    ...queryOptions,
-  } as UseQueryOptions<Awaited<ReturnType<typeof postAlertsAlertIdDismiss>>, TError, TData> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
+    return postAlertsAlertIdDismiss(alertId, requestOptions);
   };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type PostAlertsAlertIdDismissQueryResult = NonNullable<
+export type PostAlertsAlertIdDismissMutationResult = NonNullable<
   Awaited<ReturnType<typeof postAlertsAlertIdDismiss>>
 >;
-export type PostAlertsAlertIdDismissQueryError = ErrorType<unknown>;
 
-export function usePostAlertsAlertIdDismiss<
-  TData = Awaited<ReturnType<typeof postAlertsAlertIdDismiss>>,
-  TError = ErrorType<unknown>,
->(
-  alertId: string,
-  options: {
-    query: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postAlertsAlertIdDismiss>>, TError, TData>
-    > &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postAlertsAlertIdDismiss>>,
-          TError,
-          Awaited<ReturnType<typeof postAlertsAlertIdDismiss>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostAlertsAlertIdDismiss<
-  TData = Awaited<ReturnType<typeof postAlertsAlertIdDismiss>>,
-  TError = ErrorType<unknown>,
->(
-  alertId: string,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postAlertsAlertIdDismiss>>, TError, TData>
-    > &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postAlertsAlertIdDismiss>>,
-          TError,
-          Awaited<ReturnType<typeof postAlertsAlertIdDismiss>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostAlertsAlertIdDismiss<
-  TData = Awaited<ReturnType<typeof postAlertsAlertIdDismiss>>,
-  TError = ErrorType<unknown>,
->(
-  alertId: string,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postAlertsAlertIdDismiss>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export type PostAlertsAlertIdDismissMutationError = ErrorType<unknown>;
+export type PostAlertsAlertIdDismissMutationVariables = { alertId: string };
+
 /**
  * @summary Dismiss an alert
  */
-
-export function usePostAlertsAlertIdDismiss<
-  TData = Awaited<ReturnType<typeof postAlertsAlertIdDismiss>>,
-  TError = ErrorType<unknown>,
->(
-  alertId: string,
+export const usePostAlertsAlertIdDismiss = <TError = ErrorType<unknown>, TContext = unknown>(
   options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postAlertsAlertIdDismiss>>, TError, TData>
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof postAlertsAlertIdDismiss>>,
+      TError,
+      PostAlertsAlertIdDismissMutationVariables,
+      TContext
     >;
     request?: SecondParameter<typeof customInstance>;
   },
   queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getPostAlertsAlertIdDismissQueryOptions(alertId, options);
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
+): UseMutationResult<
+  Awaited<ReturnType<typeof postAlertsAlertIdDismiss>>,
+  TError,
+  PostAlertsAlertIdDismissMutationVariables,
+  TContext
+> => {
+  return useMutation(getPostAlertsAlertIdDismissMutationOptions(options), queryClient);
+};
 /**
  * @summary Snooze an alert
  */
@@ -572,140 +469,76 @@ export const postAlertsAlertIdSnooze = (
   );
 };
 
-export const getPostAlertsAlertIdSnoozeQueryKey = (
-  alertId: string,
-  postAlertsAlertIdSnoozeBody?: BodyType<PostAlertsAlertIdSnoozeBody>
-) => {
-  return ['POST', `/alerts/${alertId}/snooze`, postAlertsAlertIdSnoozeBody] as const;
-};
+export const getPostAlertsAlertIdSnoozeMutationKey = () => ['postAlertsAlertIdSnooze'] as const;
 
-export const getPostAlertsAlertIdSnoozeQueryOptions = <
-  TData = Awaited<ReturnType<typeof postAlertsAlertIdSnooze>>,
+export const getPostAlertsAlertIdSnoozeMutationOptions = <
   TError = ErrorType<unknown>,
->(
-  alertId: string,
-  postAlertsAlertIdSnoozeBody: BodyType<PostAlertsAlertIdSnoozeBody>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postAlertsAlertIdSnooze>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  }
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof postAlertsAlertIdSnooze>>,
+    TError,
+    PostAlertsAlertIdSnoozeMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof postAlertsAlertIdSnooze>>,
+  TError,
+  PostAlertsAlertIdSnoozeMutationVariables,
+  TContext
+> => {
+  const mutationKey = getPostAlertsAlertIdSnoozeMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
 
-  const queryKey =
-    queryOptions?.queryKey ??
-    getPostAlertsAlertIdSnoozeQueryKey(alertId, postAlertsAlertIdSnoozeBody);
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof postAlertsAlertIdSnooze>>,
+    PostAlertsAlertIdSnoozeMutationVariables
+  > = (props) => {
+    const { alertId, data } = props ?? {};
 
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof postAlertsAlertIdSnooze>>> = ({
-    signal,
-  }) => postAlertsAlertIdSnooze(alertId, postAlertsAlertIdSnoozeBody, requestOptions, signal);
-
-  return {
-    queryKey,
-    queryFn,
-    enabled: alertId !== null && alertId !== undefined,
-    ...queryOptions,
-  } as UseQueryOptions<Awaited<ReturnType<typeof postAlertsAlertIdSnooze>>, TError, TData> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
+    return postAlertsAlertIdSnooze(alertId, data, requestOptions);
   };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type PostAlertsAlertIdSnoozeQueryResult = NonNullable<
+export type PostAlertsAlertIdSnoozeMutationResult = NonNullable<
   Awaited<ReturnType<typeof postAlertsAlertIdSnooze>>
 >;
-export type PostAlertsAlertIdSnoozeQueryError = ErrorType<unknown>;
+export type PostAlertsAlertIdSnoozeMutationBody = BodyType<PostAlertsAlertIdSnoozeBody>;
+export type PostAlertsAlertIdSnoozeMutationError = ErrorType<unknown>;
+export type PostAlertsAlertIdSnoozeMutationVariables = {
+  alertId: string;
+  data: BodyType<PostAlertsAlertIdSnoozeBody>;
+};
 
-export function usePostAlertsAlertIdSnooze<
-  TData = Awaited<ReturnType<typeof postAlertsAlertIdSnooze>>,
-  TError = ErrorType<unknown>,
->(
-  alertId: string,
-  postAlertsAlertIdSnoozeBody: BodyType<PostAlertsAlertIdSnoozeBody>,
-  options: {
-    query: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postAlertsAlertIdSnooze>>, TError, TData>
-    > &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postAlertsAlertIdSnooze>>,
-          TError,
-          Awaited<ReturnType<typeof postAlertsAlertIdSnooze>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostAlertsAlertIdSnooze<
-  TData = Awaited<ReturnType<typeof postAlertsAlertIdSnooze>>,
-  TError = ErrorType<unknown>,
->(
-  alertId: string,
-  postAlertsAlertIdSnoozeBody: BodyType<PostAlertsAlertIdSnoozeBody>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postAlertsAlertIdSnooze>>, TError, TData>
-    > &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postAlertsAlertIdSnooze>>,
-          TError,
-          Awaited<ReturnType<typeof postAlertsAlertIdSnooze>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostAlertsAlertIdSnooze<
-  TData = Awaited<ReturnType<typeof postAlertsAlertIdSnooze>>,
-  TError = ErrorType<unknown>,
->(
-  alertId: string,
-  postAlertsAlertIdSnoozeBody: BodyType<PostAlertsAlertIdSnoozeBody>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postAlertsAlertIdSnooze>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
  * @summary Snooze an alert
  */
-
-export function usePostAlertsAlertIdSnooze<
-  TData = Awaited<ReturnType<typeof postAlertsAlertIdSnooze>>,
-  TError = ErrorType<unknown>,
->(
-  alertId: string,
-  postAlertsAlertIdSnoozeBody: BodyType<PostAlertsAlertIdSnoozeBody>,
+export const usePostAlertsAlertIdSnooze = <TError = ErrorType<unknown>, TContext = unknown>(
   options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postAlertsAlertIdSnooze>>, TError, TData>
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof postAlertsAlertIdSnooze>>,
+      TError,
+      PostAlertsAlertIdSnoozeMutationVariables,
+      TContext
     >;
     request?: SecondParameter<typeof customInstance>;
   },
   queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getPostAlertsAlertIdSnoozeQueryOptions(
-    alertId,
-    postAlertsAlertIdSnoozeBody,
-    options
-  );
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
+): UseMutationResult<
+  Awaited<ReturnType<typeof postAlertsAlertIdSnooze>>,
+  TError,
+  PostAlertsAlertIdSnoozeMutationVariables,
+  TContext
+> => {
+  return useMutation(getPostAlertsAlertIdSnoozeMutationOptions(options), queryClient);
+};
 /**
  * @summary Snooze multiple alerts
  */
@@ -726,121 +559,70 @@ export const postAlertsBulkSnooze = (
   );
 };
 
-export const getPostAlertsBulkSnoozeQueryKey = (
-  alertBulkSnoozeRequest?: BodyType<AlertBulkSnoozeRequest>
-) => {
-  return ['POST', `/alerts/bulk-snooze`, alertBulkSnoozeRequest] as const;
-};
+export const getPostAlertsBulkSnoozeMutationKey = () => ['postAlertsBulkSnooze'] as const;
 
-export const getPostAlertsBulkSnoozeQueryOptions = <
-  TData = Awaited<ReturnType<typeof postAlertsBulkSnooze>>,
+export const getPostAlertsBulkSnoozeMutationOptions = <
   TError = ErrorType<BadRequestResponse>,
->(
-  alertBulkSnoozeRequest: BodyType<AlertBulkSnoozeRequest>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postAlertsBulkSnooze>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  }
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
-
-  const queryKey =
-    queryOptions?.queryKey ?? getPostAlertsBulkSnoozeQueryKey(alertBulkSnoozeRequest);
-
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof postAlertsBulkSnooze>>> = ({ signal }) =>
-    postAlertsBulkSnooze(alertBulkSnoozeRequest, requestOptions, signal);
-
-  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof postAlertsBulkSnooze>>,
     TError,
-    TData
-  > & { queryKey: DataTag<QueryKey, TData, TError> };
+    PostAlertsBulkSnoozeMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof postAlertsBulkSnooze>>,
+  TError,
+  PostAlertsBulkSnoozeMutationVariables,
+  TContext
+> => {
+  const mutationKey = getPostAlertsBulkSnoozeMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof postAlertsBulkSnooze>>,
+    PostAlertsBulkSnoozeMutationVariables
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return postAlertsBulkSnooze(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type PostAlertsBulkSnoozeQueryResult = NonNullable<
+export type PostAlertsBulkSnoozeMutationResult = NonNullable<
   Awaited<ReturnType<typeof postAlertsBulkSnooze>>
 >;
-export type PostAlertsBulkSnoozeQueryError = ErrorType<BadRequestResponse>;
+export type PostAlertsBulkSnoozeMutationBody = BodyType<AlertBulkSnoozeRequest>;
+export type PostAlertsBulkSnoozeMutationError = ErrorType<BadRequestResponse>;
+export type PostAlertsBulkSnoozeMutationVariables = { data: BodyType<AlertBulkSnoozeRequest> };
 
-export function usePostAlertsBulkSnooze<
-  TData = Awaited<ReturnType<typeof postAlertsBulkSnooze>>,
-  TError = ErrorType<BadRequestResponse>,
->(
-  alertBulkSnoozeRequest: BodyType<AlertBulkSnoozeRequest>,
-  options: {
-    query: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postAlertsBulkSnooze>>, TError, TData>
-    > &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postAlertsBulkSnooze>>,
-          TError,
-          Awaited<ReturnType<typeof postAlertsBulkSnooze>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostAlertsBulkSnooze<
-  TData = Awaited<ReturnType<typeof postAlertsBulkSnooze>>,
-  TError = ErrorType<BadRequestResponse>,
->(
-  alertBulkSnoozeRequest: BodyType<AlertBulkSnoozeRequest>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postAlertsBulkSnooze>>, TError, TData>
-    > &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postAlertsBulkSnooze>>,
-          TError,
-          Awaited<ReturnType<typeof postAlertsBulkSnooze>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostAlertsBulkSnooze<
-  TData = Awaited<ReturnType<typeof postAlertsBulkSnooze>>,
-  TError = ErrorType<BadRequestResponse>,
->(
-  alertBulkSnoozeRequest: BodyType<AlertBulkSnoozeRequest>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postAlertsBulkSnooze>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
  * @summary Snooze multiple alerts
  */
-
-export function usePostAlertsBulkSnooze<
-  TData = Awaited<ReturnType<typeof postAlertsBulkSnooze>>,
-  TError = ErrorType<BadRequestResponse>,
->(
-  alertBulkSnoozeRequest: BodyType<AlertBulkSnoozeRequest>,
+export const usePostAlertsBulkSnooze = <TError = ErrorType<BadRequestResponse>, TContext = unknown>(
   options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postAlertsBulkSnooze>>, TError, TData>
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof postAlertsBulkSnooze>>,
+      TError,
+      PostAlertsBulkSnoozeMutationVariables,
+      TContext
     >;
     request?: SecondParameter<typeof customInstance>;
   },
   queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getPostAlertsBulkSnoozeQueryOptions(alertBulkSnoozeRequest, options);
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
+): UseMutationResult<
+  Awaited<ReturnType<typeof postAlertsBulkSnooze>>,
+  TError,
+  PostAlertsBulkSnoozeMutationVariables,
+  TContext
+> => {
+  return useMutation(getPostAlertsBulkSnoozeMutationOptions(options), queryClient);
+};
