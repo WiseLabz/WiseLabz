@@ -115,7 +115,7 @@ describe('ShareDialog (#240 PR2)', () => {
   });
 
   it('renders nothing when no node is selected', () => {
-    const { container } = render(<ShareDialog open={true} onClose={vi.fn()} node={null} />);
+    const { container } = render(<ShareDialog open={true} onClose={vi.fn()} node={null} />, { wrapper: Wrapper });
     // Dialog chrome (title bar) still renders; the body content area is empty.
     expect(container.querySelector('input')).not.toBeInTheDocument();
   });
