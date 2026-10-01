@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 
@@ -53,8 +54,14 @@ func ParseConnectorConfig(connType, data, encKeyB64 string) (map[string]any, err
 				return nil, fmt.Errorf("decode encryption key: %w", err)
 			}
 		}
-		if plaintext, err := crypto.Decrypt(raw, key); err == nil {
+		plaintext, _, err := crypto.DecryptFor(crypto.PurposeConnector, connType+"/"+f.Key, raw, key)
+		switch {
+		case err == nil:
 			cfg[f.Key] = plaintext
+		case crypto.IsV2(raw):
+			// A v2 ciphertext that fails authentication was tampered with or
+			// moved between fields; never treat it as plaintext.
+			return nil, fmt.Errorf("decrypt connector config field %q: %w", f.Key, err)
 		}
 		// else: not valid ciphertext, treat as legacy plaintext and leave as-is.
 	}
@@ -116,7 +123,7 @@ func MarshalConnectorConfig(connType string, cfg map[string]any, encKeyB64 strin
 					return "", fmt.Errorf("decode encryption key: %w", err)
 				}
 			}
-			encrypted, err := crypto.Encrypt(raw, key)
+			encrypted, err := crypto.EncryptFor(crypto.PurposeConnector, connType+"/"+f.Key, raw, key)
 			if err != nil {
 				return "", fmt.Errorf("encrypt connector config field %q: %w", f.Key, err)
 			}
@@ -131,4 +138,60 @@ func MarshalConnectorConfig(connType string, cfg map[string]any, encKeyB64 strin
 		return "", fmt.Errorf("marshal connector config: %w", err)
 	}
 	return string(b), nil
+}
+
+// connectorSecretsNeedMigration reports whether any secret field in the stored
+// config_data is legacy plaintext or a pre-v2 ciphertext.
+func connectorSecretsNeedMigration(connType, data string) bool {
+	schema, err := connector.GetTypeSchema(connType)
+	if err != nil {
+		return false
+	}
+	var cfg map[string]any
+	if json.Unmarshal([]byte(data), &cfg) != nil {
+		return false
+	}
+	for _, f := range schema.Fields {
+		if !IsSecretFieldType(f.Type) {
+			continue
+		}
+		if raw, ok := cfg[f.Key].(string); ok && raw != "" && !crypto.IsV2(raw) {
+			return true
+		}
+	}
+	return false
+}
+
+// MigrateConnectorSecrets re-encrypts every connector secret that is still
+// legacy plaintext or a pre-v2 ciphertext under the purpose-bound key. It is
+// idempotent and returns the number of connectors rewritten.
+func (s *Store) MigrateConnectorSecrets(ctx context.Context, encKeyB64 string) (int, error) {
+	const page = 200
+	migrated := 0
+	for offset := 0; ; offset += page {
+		recs, _, err := s.ListConnectors(ctx, offset, page)
+		if err != nil {
+			return migrated, fmt.Errorf("list connectors: %w", err)
+		}
+		for _, rec := range recs {
+			if !connectorSecretsNeedMigration(rec.Type, rec.ConfigData) {
+				continue
+			}
+			cfg, err := ParseConnectorConfig(rec.Type, rec.ConfigData, encKeyB64)
+			if err != nil {
+				return migrated, fmt.Errorf("connector %s: %w", rec.ID, err)
+			}
+			data, err := MarshalConnectorConfig(rec.Type, cfg, encKeyB64)
+			if err != nil {
+				return migrated, fmt.Errorf("connector %s: %w", rec.ID, err)
+			}
+			if err := s.UpdateConnector(ctx, rec.ID, map[string]any{"config_data": data}); err != nil {
+				return migrated, fmt.Errorf("connector %s: %w", rec.ID, err)
+			}
+			migrated++
+		}
+		if len(recs) < page {
+			return migrated, nil
+		}
+	}
 }

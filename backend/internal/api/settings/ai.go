@@ -46,7 +46,7 @@ func (h *Handler) encryptAIKey(w http.ResponseWriter, plaintext, encryptLogMsg s
 		httputil.Error(w, http.StatusInternalServerError, "internal_error", "Failed to encrypt API key")
 		return "", false
 	}
-	encrypted, err := crypto.Encrypt(plaintext, key)
+	encrypted, err := crypto.EncryptFor(crypto.PurposeAI, "api-key", plaintext, key)
 	if err != nil {
 		slog.Error(encryptLogMsg, "error", err)
 		httputil.Error(w, http.StatusInternalServerError, "internal_error", "Failed to encrypt API key")

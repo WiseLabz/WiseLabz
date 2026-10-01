@@ -235,7 +235,7 @@ func (h *Handler) setOIDCElevateFlowCookie(w http.ResponseWriter, r *http.Reques
 	if err != nil {
 		return err
 	}
-	value, err := crypto.Encrypt(string(data), key)
+	value, err := crypto.EncryptFor(crypto.PurposeCookie, oidcElevateFlowCookie, string(data), key)
 	if err != nil {
 		return err
 	}
@@ -253,7 +253,7 @@ func (h *Handler) readOIDCElevateFlowCookie(r *http.Request) (oidcElevateFlow, b
 	if err != nil {
 		return oidcElevateFlow{}, false
 	}
-	plaintext, err := crypto.Decrypt(cookie.Value, key)
+	plaintext, _, err := crypto.DecryptFor(crypto.PurposeCookie, oidcElevateFlowCookie, cookie.Value, key)
 	if err != nil {
 		return oidcElevateFlow{}, false
 	}

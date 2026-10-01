@@ -154,3 +154,24 @@ func TestDecodeKeyUsableForEncryptDecrypt(t *testing.T) {
 		t.Fatalf("Decrypt returned %q, want %q", decrypted, "payload")
 	}
 }
+
+func TestEncryptForBindsPurposeAndAAD(t *testing.T) {
+	key := make([]byte, 32)
+	enc, err := EncryptFor(PurposeMFA, "a", "secret", key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, legacy, err := DecryptFor(PurposeMFA, "a", enc, key); err != nil || legacy || got != "secret" {
+		t.Fatalf("roundtrip: %q %v %v", got, legacy, err)
+	}
+	if _, _, err := DecryptFor(PurposeMFA, "b", enc, key); err == nil {
+		t.Error("wrong AAD must fail")
+	}
+	if _, _, err := DecryptFor(PurposeAI, "a", enc, key); err == nil {
+		t.Error("wrong purpose must fail")
+	}
+	old, _ := Encrypt("legacy", key)
+	if got, legacy, err := DecryptFor(PurposeAI, "a", old, key); err != nil || !legacy || got != "legacy" {
+		t.Errorf("legacy fallback: %q %v %v", got, legacy, err)
+	}
+}

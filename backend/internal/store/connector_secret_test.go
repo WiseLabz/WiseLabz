@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"strings"
 	"testing"
 
@@ -83,5 +84,49 @@ func TestConnectorConfigLegacyPlaintextFallback(t *testing.T) {
 	}
 	if cfg2["api_key"] != plaintext {
 		t.Fatalf("api_key after re-encrypt round trip = %v, want %q", cfg2["api_key"], plaintext)
+	}
+}
+
+func TestMigrateConnectorSecrets(t *testing.T) {
+	ctx := context.Background()
+	s := newDocTestStore(t)
+
+	legacy := &ConnectorRecord{
+		Name: "legacy", Category: "virtualization", Type: secretTestConnType, URL: "https://example.com",
+		ConfigData: `{"url":"https://example.com","api_key":"plain-secret"}`,
+	}
+	if err := s.CreateConnector(ctx, legacy); err != nil {
+		t.Fatal(err)
+	}
+
+	n, err := s.MigrateConnectorSecrets(ctx, testEncKey)
+	if err != nil || n != 1 {
+		t.Fatalf("first run = %d, %v; want 1, nil", n, err)
+	}
+	got, err := s.GetConnector(ctx, legacy.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(got.ConfigData, "plain-secret") || !strings.Contains(got.ConfigData, `"v2:`) {
+		t.Fatalf("config not re-encrypted: %s", got.ConfigData)
+	}
+	cfg, err := ParseConnectorConfig(secretTestConnType, got.ConfigData, testEncKey)
+	if err != nil || cfg["api_key"] != "plain-secret" {
+		t.Fatalf("roundtrip = %v, %v", cfg["api_key"], err)
+	}
+	if n, err := s.MigrateConnectorSecrets(ctx, testEncKey); err != nil || n != 0 {
+		t.Fatalf("second run = %d, %v; want 0, nil", n, err)
+	}
+}
+
+func TestParseConnectorConfigRejectsTamperedV2(t *testing.T) {
+	data, err := MarshalConnectorConfig(secretTestConnType, map[string]any{"api_key": "s"}, testEncKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Move the ciphertext to a different field/type context: AAD must reject it.
+	tampered := strings.Replace(data, `"v2:`, `"v2:AAAA`, 1)
+	if _, err := ParseConnectorConfig(secretTestConnType, tampered, testEncKey); err == nil {
+		t.Fatal("tampered v2 value must error, not be treated as plaintext")
 	}
 }
