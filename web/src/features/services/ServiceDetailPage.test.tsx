@@ -64,6 +64,7 @@ vi.mock('../../api/generated/docs/docs', () => ({
 vi.mock('../../api/generated/templates/templates', () => ({
   useGetTemplates: () => ({ data: [] }),
 }));
+vi.mock('./UptimePanel', () => ({ UptimePanel: () => null }));
 vi.mock('../../hooks/useRole', () => ({ useConnectorRole: () => 'operator' }));
 vi.mock('../../store/live', () => ({
   useLive: (selector: (state: object) => unknown) =>

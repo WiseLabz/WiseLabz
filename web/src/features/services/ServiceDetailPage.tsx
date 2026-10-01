@@ -46,6 +46,7 @@ import { Button } from '../../components/ui/Button';
 import { Panel } from '../../components/ui/Panel';
 import { Dialog } from '../../components/ui/Dialog';
 import { SkeletonRows, ErrorState, EmptyState } from '../../components/ui/states';
+import { UptimePanel } from './UptimePanel';
 import { Markdown } from '../../components/docs/Markdown';
 import { ConfirmDestructive } from '../../components/manager/ConfirmDestructive';
 import { ElevationConfirm } from '../../components/manager/ElevationConfirm';
@@ -294,6 +295,7 @@ export function ServiceDetailPage() {
 
       <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
         <div className="space-y-4">
+          <UptimePanel id={c.id} />
           <SnapshotPanel id={c.id} />
           <ServiceChangesPanel id={c.id} />
         </div>

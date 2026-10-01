@@ -41,6 +41,7 @@ import {
   SyncActivityWidget,
   DocsHealthWidget,
   AttentionQueueWidget,
+  FleetUptimeWidget,
 } from '../../components/dashboard/widgets';
 import {
   LayersIcon,
@@ -49,6 +50,7 @@ import {
   SyncIcon,
   FileTextIcon,
   GripIcon,
+  GaugeIcon,
   CheckIcon,
   ChevronDownIcon,
 } from '../../components/icons';
@@ -72,6 +74,7 @@ const REGISTRY: Record<WidgetId, WidgetMeta> = {
     Component: AttentionQueueWidget,
     minH: 300,
   },
+  uptime: { title: 'Fleet uptime', Icon: GaugeIcon, Component: FleetUptimeWidget, minH: 300 },
 };
 
 const RANGE_PRESETS: RangePreset[] = ['24h', '7d', '30d', '90d'];

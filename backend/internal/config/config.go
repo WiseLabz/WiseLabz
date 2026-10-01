@@ -25,6 +25,7 @@ type Config struct {
 	Sync       SyncSettings       `mapstructure:"sync"`
 	HA         HASettings         `mapstructure:"ha"`
 	Quality    QualitySettings    `mapstructure:"quality"`
+	Health     HealthSettings     `mapstructure:"health"`
 	Rotation   RotationSettings   `mapstructure:"rotation"`
 	Log        LogSettings        `mapstructure:"log"`
 	Retention  RetentionSettings  `mapstructure:"retention"`
@@ -215,6 +216,11 @@ type QualitySettings struct {
 	CronExpr string `mapstructure:"cron_expr"` // cron expression for quality checks
 }
 
+// HealthSettings holds scheduled connector health check settings.
+type HealthSettings struct {
+	CronExpr string `mapstructure:"cron_expr"` // cron expression for scheduled health checks
+}
+
 // RotationSettings holds the default credential rotation policy applied to
 // connectors that don't set their own rotation_max_age_days override.
 type RotationSettings struct {
@@ -380,9 +386,10 @@ func Load() (*Config, error) {
 	v.SetDefault("sync.timeout", "5m")
 	v.SetDefault("ha.leader_election", false)
 	v.SetDefault("ha.lock_poll_interval", "5s")
-	v.SetDefault("quality.cron_expr", "0 0 * * *") // daily quality checks at midnight
-	v.SetDefault("rotation.max_age_days", 90)      // secrets older than this are due for rotation
-	v.SetDefault("rotation.warn_days", 14)         // warn this many days before the due date
+	v.SetDefault("quality.cron_expr", "0 0 * * *")  // daily quality checks at midnight
+	v.SetDefault("health.cron_expr", "0 * * * * *") // every 60 seconds
+	v.SetDefault("rotation.max_age_days", 90)       // secrets older than this are due for rotation
+	v.SetDefault("rotation.warn_days", 14)          // warn this many days before the due date
 	v.SetDefault("log.level", "info")
 	v.SetDefault("log.format", "text")
 	v.SetDefault("retention.snapshot_days", 90)
@@ -430,6 +437,7 @@ func Load() (*Config, error) {
 		"sync.schedule", "sync.poll_cron_expr", "sync.max_concurrency", "sync.due_batch_size", "sync.timeout",
 		"ha.leader_election", "ha.lock_poll_interval",
 		"quality.cron_expr",
+		"health.cron_expr",
 		"rotation.max_age_days", "rotation.warn_days",
 		"log.level", "log.format",
 		"retention.snapshot_days", "retention.doc_version_days", "retention.alert_days", "retention.sync_run_days", "retention.audit_days", "retention.health_check_days", "retention.report_days", "retention.cron_expr",
@@ -488,6 +496,7 @@ func (c *Config) validateCronExpressions() error {
 	cronExprs := map[string]string{
 		"retention.cron_expr":  c.Retention.CronExpr,
 		"quality.cron_expr":    c.Quality.CronExpr,
+		"health.cron_expr":     c.Health.CronExpr,
 		"sync.poll_cron_expr":  c.Sync.PollCronExpr,
 		"backup.cron_expr":     c.Backup.CronExpr,
 		"doc_export.cron_expr": c.DocExport.CronExpr,

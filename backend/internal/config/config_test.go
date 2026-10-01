@@ -70,6 +70,9 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.Quality.CronExpr != "0 0 * * *" {
 		t.Errorf("quality.cron_expr = %q, want 0 0 * * *", cfg.Quality.CronExpr)
 	}
+	if cfg.Health.CronExpr != "0 * * * * *" {
+		t.Errorf("health.cron_expr = %q, want 0 * * * * *", cfg.Health.CronExpr)
+	}
 	if cfg.Sync.PollCronExpr != "*/30 * * * * *" {
 		t.Errorf("sync.poll_cron_expr = %q, want */30 * * * * *", cfg.Sync.PollCronExpr)
 	}
@@ -265,6 +268,7 @@ func TestLoadEnvOverrideAllFields(t *testing.T) {
 		"WISELABZ_HA_LEADER_ELECTION":                   "true",
 		"WISELABZ_HA_LOCK_POLL_INTERVAL":                "3s",
 		"WISELABZ_QUALITY_CRON_EXPR":                    "0 1 * * *",
+		"WISELABZ_HEALTH_CRON_EXPR":                     "*/30 * * * * *",
 		"WISELABZ_ROTATION_MAX_AGE_DAYS":                "45",
 		"WISELABZ_ROTATION_WARN_DAYS":                   "7",
 		"WISELABZ_LOG_LEVEL":                            "debug",
@@ -317,6 +321,7 @@ func TestLoadEnvOverrideAllFields(t *testing.T) {
 		Sync:      SyncSettings{Schedule: "* * * * *", PollCronExpr: "*/5 * * * * *", MaxConcurrency: 7, DueBatchSize: 8, Timeout: 9 * time.Minute},
 		HA:        HASettings{LeaderElection: true, LockPollInterval: 3 * time.Second},
 		Quality:   QualitySettings{CronExpr: "0 1 * * *"},
+		Health:    HealthSettings{CronExpr: "*/30 * * * * *"},
 		Rotation:  RotationSettings{MaxAgeDays: 45, WarnDays: 7},
 		Log:       LogSettings{Level: "debug", Format: "json"},
 		Retention: RetentionSettings{SnapshotDays: 1, DocVersionDays: 2, AlertDays: 3, SyncRunDays: 4, AuditDays: 5, HealthCheckDays: 6, ReportDays: 7, CronExpr: "0 4 * * *"},
@@ -346,6 +351,20 @@ func TestLoadRejectsInvalidCronExpr(t *testing.T) {
 
 	if _, err := Load(); err == nil {
 		t.Fatal("Load() error = nil, want error for invalid retention.cron_expr")
+	}
+}
+
+func TestLoadRejectsInvalidHealthCronExpr(t *testing.T) {
+	dir := t.TempDir()
+	oldDir, _ := os.Getwd()
+	os.Chdir(dir)          //nolint:errcheck
+	defer os.Chdir(oldDir) //nolint:errcheck
+
+	t.Setenv("WISELABZ_AUTH_SECRET", "env-secret")
+	t.Setenv("WISELABZ_HEALTH_CRON_EXPR", "not a cron expression")
+
+	if _, err := Load(); err == nil {
+		t.Fatal("Load() error = nil, want error for invalid health.cron_expr")
 	}
 }
 

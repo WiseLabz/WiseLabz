@@ -7,14 +7,11 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export type WidgetPlacementType = (typeof WidgetPlacementType)[keyof typeof WidgetPlacementType];
+export type GetConnectorsConnectorIdUptimeHistoryWindow =
+  (typeof GetConnectorsConnectorIdUptimeHistoryWindow)[keyof typeof GetConnectorsConnectorIdUptimeHistoryWindow];
 
-export const WidgetPlacementType = {
-  service_status: 'service_status',
-  recent_changes: 'recent_changes',
-  alert_summary: 'alert_summary',
-  sync_activity: 'sync_activity',
-  docs_health: 'docs_health',
-  attention: 'attention',
-  uptime: 'uptime',
+export const GetConnectorsConnectorIdUptimeHistoryWindow = {
+  '24h': '24h',
+  '7d': '7d',
+  '30d': '30d',
 } as const;

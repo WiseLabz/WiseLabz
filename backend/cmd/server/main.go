@@ -22,6 +22,7 @@ import (
 	"github.com/WiseLabz/wiselabz/internal/config"
 	"github.com/WiseLabz/wiselabz/internal/doc"
 	"github.com/WiseLabz/wiselabz/internal/docexport"
+	"github.com/WiseLabz/wiselabz/internal/health"
 	"github.com/WiseLabz/wiselabz/internal/leader"
 	"github.com/WiseLabz/wiselabz/internal/logsafe"
 	"github.com/WiseLabz/wiselabz/internal/notifications"
@@ -289,6 +290,13 @@ func registerJobs(
 		return syncEngine.RunDueSyncs(jobCtx, logger)
 	}); err != nil {
 		logger.Error("Failed to add sync job", "error", err)
+		os.Exit(1)
+	}
+	healthRunner := &health.Runner{Store: s, EncKey: cfg.Encryption.Key, MaxConcurrency: cfg.Sync.MaxConcurrency * 2}
+	if _, err := jobRunner.AddJob("health", cfg.Health.CronExpr, func(jobCtx context.Context) error {
+		return healthRunner.RunDueChecks(jobCtx, logger)
+	}); err != nil {
+		logger.Error("Failed to add health job", "error", err)
 		os.Exit(1)
 	}
 	if _, err := jobRunner.AddJob("digest", "0 * * * *", func(jobCtx context.Context) error {
