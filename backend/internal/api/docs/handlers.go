@@ -101,33 +101,12 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	page, pageSize, offset := httputil.Paginate(r)
 	search := r.URL.Query().Get("search")
 
-	docs, total, err := h.Store.ListAllDocs(r.Context(), search, offset, pageSize)
+	docs, total, err := h.Store.ListViewableDocs(r.Context(), auth.UserIDFromContext(r.Context()), search, offset, pageSize)
 	if err != nil {
 		httputil.Errorf(w, err)
 		return
 	}
-	serviceIDs := make([]string, 0, len(docs))
-	for _, d := range docs {
-		if d.ServiceID != "" {
-			serviceIDs = append(serviceIDs, d.ServiceID)
-		}
-	}
-	allowed, err := h.Store.FilterConnectorIDsByGrant(r.Context(), auth.UserIDFromContext(r.Context()), serviceIDs, "viewer")
-	if err != nil {
-		httputil.Errorf(w, err)
-		return
-	}
-	isAllowed := make(map[string]bool, len(allowed))
-	for _, id := range allowed {
-		isAllowed[id] = true
-	}
-	filtered := make([]store.DocRecord, 0, len(docs))
-	for _, d := range docs {
-		if d.ServiceID == "" || isAllowed[d.ServiceID] {
-			filtered = append(filtered, d)
-		}
-	}
-	httputil.WritePaginated(w, filtered, page, pageSize, total)
+	httputil.WritePaginated(w, docs, page, pageSize, total)
 }
 
 // Get handles GET /api/docs/{id}.

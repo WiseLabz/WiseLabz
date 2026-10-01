@@ -4,6 +4,7 @@ package attention
 import (
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/WiseLabz/wiselabz/internal/auth"
@@ -35,7 +36,10 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	since := store.SinceFromDays(r.URL.Query().Get("days"), 0)
 
 	userID := auth.UserIDFromContext(r.Context())
-	key := fmt.Sprintf("%s|%s|%d|%d", userID, r.URL.Query().Get("days"), offset, pageSize)
+	// A connector-restricted API key sees a narrower result than its owner's
+	// session, so the restriction is part of the key (#527).
+	restriction := strings.Join(auth.APIKeyRestrictionFromContext(r.Context()).ConnectorIDs, ",")
+	key := fmt.Sprintf("%s|%s|%s|%d|%d", userID, restriction, r.URL.Query().Get("days"), offset, pageSize)
 	if cached, ok := h.cache.Get(key); ok {
 		httputil.WriteDataPaginated(w, cached.Data, cached.Page, cached.PageSize, cached.Total)
 		return

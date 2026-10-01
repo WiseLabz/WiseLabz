@@ -129,12 +129,29 @@ func (h *Handler) validateSteps(ctx context.Context, inputs []stepInput) ([]*sto
 }
 
 // toStepResponses builds the response steps for one runbook's steps,
-// computing canExecute per userID. connectorNames/canExecute are caller-
+// computing canExecute per userID and redacting steps on connectors userID
+// cannot view. connectorNames/connectorRoles are caller-
 // provided caches so List (many runbooks, possibly sharing connectors) does
 // one lookup per connector instead of one per step.
-func (h *Handler) toStepResponses(ctx context.Context, userID string, steps []*store.RunbookStepRecord, connectorNames map[string]string, canExecute map[string]bool) ([]stepResponse, error) {
+func (h *Handler) toStepResponses(ctx context.Context, userID string, steps []*store.RunbookStepRecord, connectorNames map[string]string, connectorRoles map[string]string) ([]stepResponse, error) {
 	out := make([]stepResponse, 0, len(steps))
 	for _, st := range steps {
+		role, err := h.connectorRole(ctx, userID, st.ConnectorID, connectorRoles)
+		if err != nil {
+			return nil, err
+		}
+		if role == "" {
+			// Hide the connector, entity and verb from callers with no grant (#527).
+			out = append(out, stepResponse{
+				ID:                   st.ID,
+				Position:             st.Position,
+				Title:                "Restricted step",
+				ExecuteBlockedReason: "no_viewer_grant",
+			})
+			continue
+		}
+		can := role == "operator"
+
 		name, ok := connectorNames[st.ConnectorID]
 		if !ok {
 			conn, err := h.Store.GetConnector(ctx, st.ConnectorID)
@@ -145,16 +162,6 @@ func (h *Handler) toStepResponses(ctx context.Context, userID string, steps []*s
 				name = conn.Name
 			}
 			connectorNames[st.ConnectorID] = name
-		}
-
-		can, ok := canExecute[st.ConnectorID]
-		if !ok {
-			var err error
-			can, err = h.Store.UserHasConnectorRole(ctx, userID, st.ConnectorID, "operator")
-			if err != nil {
-				return nil, err
-			}
-			canExecute[st.ConnectorID] = can
 		}
 		reason := ""
 		if !can {
@@ -176,9 +183,23 @@ func (h *Handler) toStepResponses(ctx context.Context, userID string, steps []*s
 	return out, nil
 }
 
+// connectorRole returns userID's effective role on connectorID ("" for none),
+// memoised in cache.
+func (h *Handler) connectorRole(ctx context.Context, userID, connectorID string, cache map[string]string) (string, error) {
+	if role, ok := cache[connectorID]; ok {
+		return role, nil
+	}
+	role, err := h.Store.GetUserConnectorRole(ctx, userID, connectorID)
+	if err != nil {
+		return "", err
+	}
+	cache[connectorID] = role
+	return role, nil
+}
+
 // toRunbookResponse builds the response for a single runbook (Get/Create/Update).
 func (h *Handler) toRunbookResponse(ctx context.Context, rb *store.RunbookRecord, steps []*store.RunbookStepRecord) (runbookResponse, error) {
-	stepResps, err := h.toStepResponses(ctx, auth.UserIDFromContext(ctx), steps, map[string]string{}, map[string]bool{})
+	stepResps, err := h.toStepResponses(ctx, auth.UserIDFromContext(ctx), steps, map[string]string{}, map[string]string{})
 	if err != nil {
 		return runbookResponse{}, err
 	}
@@ -274,10 +295,10 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 
 	userID := auth.UserIDFromContext(r.Context())
 	connectorNames := map[string]string{}
-	canExecute := map[string]bool{}
+	connectorRoles := map[string]string{}
 	responses := make([]runbookResponse, 0, len(pageItems))
 	for _, rb := range pageItems {
-		stepResps, err := h.toStepResponses(r.Context(), userID, stepsByRunbook[rb.ID], connectorNames, canExecute)
+		stepResps, err := h.toStepResponses(r.Context(), userID, stepsByRunbook[rb.ID], connectorNames, connectorRoles)
 		if err != nil {
 			httputil.Errorf(w, err)
 			return

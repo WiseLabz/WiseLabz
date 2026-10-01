@@ -34,10 +34,14 @@ func (h *Handler) requireDocOperator(w http.ResponseWriter, r *http.Request, con
 }
 
 // requireDocViewer 404s (not 403, to avoid confirming existence) unless the
-// caller may view a doc scoped to connectorID. Lab-wide docs are visible to
-// any authenticated user, same as before this migration.
+// caller may view a doc scoped to connectorID. Lab-wide docs (e.g. Lab
+// Topology) aggregate every connector's data, so only instance admins see them.
 func (h *Handler) requireDocViewer(w http.ResponseWriter, r *http.Request, connectorID string) bool {
 	if connectorID == "" {
+		if !auth.InstanceAdminFromContext(r.Context()) {
+			httputil.Error(w, http.StatusNotFound, "not_found", "Doc not found")
+			return false
+		}
 		return true
 	}
 	ok, err := h.Store.UserHasConnectorRole(r.Context(), auth.UserIDFromContext(r.Context()), connectorID, "viewer")

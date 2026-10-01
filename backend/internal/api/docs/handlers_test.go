@@ -221,6 +221,7 @@ func TestVersion(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/api/docs/"+docRecord.ID+"/versions/1", nil)
 		req.SetPathValue("id", docRecord.ID)
 		req.SetPathValue("rev", "1")
+		req = req.WithContext(auth.ContextWithUser(req.Context(), "admin", true))
 		rr := httptest.NewRecorder()
 		h.Version(rr, req)
 
@@ -499,5 +500,71 @@ func TestAISuggestInvalidJSON(t *testing.T) {
 	h.AISuggest(rr, req)
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d; body=%s", rr.Code, http.StatusBadRequest, rr.Body.String())
+	}
+}
+
+// TestListHidesLabWideDocsAndTotalsFromNonAdmins: lab-wide docs (Lab Topology)
+// are admin-only, and the total must not count docs the caller can't see (#528, #527).
+func TestListHidesLabWideDocsAndTotalsFromNonAdmins(t *testing.T) {
+	h := newTestHandler(t)
+	ctx := context.Background()
+	c := &store.ConnectorRecord{Name: "c", Category: "networking", Type: "generic", Enabled: true}
+	if err := h.Store.CreateConnector(ctx, c); err != nil {
+		t.Fatal(err)
+	}
+	other := &store.ConnectorRecord{Name: "other", Category: "networking", Type: "generic", Enabled: true}
+	if err := h.Store.CreateConnector(ctx, other); err != nil {
+		t.Fatal(err)
+	}
+	var labID string
+	for _, d := range []*store.DocRecord{
+		{Title: "visible", Kind: "service", ServiceID: c.ID},
+		{Title: "hidden", Kind: "service", ServiceID: other.ID},
+		{Title: "Lab Topology", Kind: "lab"},
+	} {
+		if err := h.Store.CreateDoc(ctx, d); err != nil {
+			t.Fatal(err)
+		}
+		if d.Kind == "lab" {
+			labID = d.ID
+		}
+	}
+
+	list := func(req *http.Request) (titles []string, total int) {
+		rr := httptest.NewRecorder()
+		h.List(rr, req)
+		var resp struct {
+			Items []store.DocRecord `json:"items"`
+			Total int               `json:"total"`
+		}
+		if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("decode: %v; body=%s", err, rr.Body.String())
+		}
+		for _, d := range resp.Items {
+			titles = append(titles, d.Title)
+		}
+		return titles, resp.Total
+	}
+
+	userReq := withGrant(t, h.Store, httptest.NewRequest(http.MethodGet, "/api/docs", nil), c.ID, "viewer")
+	titles, total := list(userReq)
+	if len(titles) != 1 || titles[0] != "visible" || total != 1 {
+		t.Errorf("non-admin list = %v total=%d, want [visible] total=1", titles, total)
+	}
+
+	adminReq := httptest.NewRequest(http.MethodGet, "/api/docs", nil)
+	adminReq = adminReq.WithContext(auth.ContextWithUser(adminReq.Context(), apitest.NewUser(t, h.Store, "admin"), true))
+	if _, total := list(adminReq); total != 1 {
+		t.Errorf("admin total = %d, want 1 (lab doc only; no connector grants)", total)
+	}
+
+	getReq := httptest.NewRequest(http.MethodGet, "/api/docs/"+labID, nil)
+	getReq.SetPathValue("id", labID)
+	getReq = userReq.Clone(getReq.Context())
+	getReq.SetPathValue("id", labID)
+	rr := httptest.NewRecorder()
+	h.Get(rr, getReq)
+	if rr.Code != http.StatusNotFound {
+		t.Errorf("non-admin GET lab doc status = %d, want 404", rr.Code)
 	}
 }

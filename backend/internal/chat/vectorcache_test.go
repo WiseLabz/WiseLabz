@@ -7,6 +7,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/WiseLabz/wiselabz/internal/auth"
 	"github.com/WiseLabz/wiselabz/internal/store"
 	"github.com/WiseLabz/wiselabz/internal/store/storetest"
 )
@@ -92,7 +93,7 @@ func TestVectorCacheConcurrent(t *testing.T) {
 }
 
 func TestRetrieveUsesCacheAndSyncInvalidates(t *testing.T) {
-	ctx := context.Background()
+	ctx := auth.ContextWithUser(context.Background(), "", true) // lab-wide docs are admin-only
 	db, err := sql.Open("sqlite", "file:"+storetest.MigratedSQLite(t)+"?cache=shared")
 	if err != nil {
 		t.Fatalf("open db: %v", err)
