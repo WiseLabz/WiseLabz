@@ -20,7 +20,7 @@ func newHandler(t *testing.T) (*Handler, *store.Store) {
 	t.Helper()
 	s := apitest.NewStore(t)
 	reg := ai.NewRegistry()
-	return NewHandler(s, settings.NewHandler(s, &config.Config{}, reg), reg, ai.NewEmbedRegistry()), s
+	return NewHandler(s, settings.NewHandler(s, &config.Config{}, reg).AIConfig, reg, ai.NewEmbedRegistry()), s
 }
 
 // serve runs fn as the given user through the real auth middleware.

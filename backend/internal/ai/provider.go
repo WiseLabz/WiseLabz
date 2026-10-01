@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"sync"
+	"time"
 )
 
 // Provider is the interface for AI suggestion providers.
@@ -168,3 +169,6 @@ func (s *StubProvider) SuggestStream(_ context.Context, _ *SuggestRequest) (<-ch
 	}()
 	return ch, nil
 }
+
+// llmTimeout bounds a whole request to an LLM or embedding provider.
+const llmTimeout = 60 * time.Second

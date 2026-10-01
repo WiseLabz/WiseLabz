@@ -5,12 +5,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"strings"
-	"time"
 
-	"github.com/WiseLabz/wiselabz/internal/connector"
 	"github.com/WiseLabz/wiselabz/internal/httpx"
 )
 
@@ -44,7 +41,7 @@ func RegisterOpenAICompatible(r *Registry) {
 				baseURL: strings.TrimRight(baseURL, "/"),
 				apiKey:  apiKey,
 				model:   model,
-				client:  httpx.NewClient(httpx.Options{Timeout: 60 * time.Second}),
+				client:  httpx.NewClient(httpx.Options{Timeout: llmTimeout}),
 			}, nil
 		}
 	}
@@ -87,8 +84,8 @@ func (p *openAICompatibleProvider) Suggest(ctx context.Context, req *SuggestRequ
 	defer resp.Body.Close() //nolint:errcheck
 
 	if resp.StatusCode >= 300 {
-		b, _ := io.ReadAll(io.LimitReader(resp.Body, connector.MaxResponseBytes))
-		return "", &StatusError{Code: resp.StatusCode, Body: strings.TrimSpace(string(b))}
+		body := httpx.ErrorBody(resp.Body)
+		return "", &StatusError{Code: resp.StatusCode, Body: body}
 	}
 
 	var out struct {
@@ -98,7 +95,7 @@ func (p *openAICompatibleProvider) Suggest(ctx context.Context, req *SuggestRequ
 			} `json:"message"`
 		} `json:"choices"`
 	}
-	if err := json.NewDecoder(connector.LimitedBody(resp.Body)).Decode(&out); err != nil {
+	if err := json.NewDecoder(httpx.LimitedBody(resp.Body)).Decode(&out); err != nil {
 		return "", fmt.Errorf("decode ai response: %w", err)
 	}
 	if len(out.Choices) == 0 {
