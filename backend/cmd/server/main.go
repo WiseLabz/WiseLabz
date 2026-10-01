@@ -258,6 +258,12 @@ func openStore(cfg *config.Config, logger *slog.Logger) *store.Store {
 	}
 
 	s := store.New(db, cfg.DB.Driver)
+	if n, err := s.MigrateConnectorSecrets(context.Background(), cfg.Encryption.Key); err != nil {
+		logger.Error("Failed to migrate connector secrets", "error", err)
+		os.Exit(1)
+	} else if n > 0 {
+		logger.Info("Re-encrypted connector secrets", "count", n)
+	}
 	readDB, err := store.OpenReadDB(cfg.DB.Driver, cfg.DB.DSN)
 	if err != nil {
 		logger.Error("Failed to open read database", "error", err)

@@ -108,7 +108,7 @@ func (l *Loader) decryptAPIKey(encrypted string) string {
 		slog.Error("Failed to load encryption key", "error", err)
 		return ""
 	}
-	plaintext, err := crypto.Decrypt(encrypted, key)
+	plaintext, _, err := crypto.DecryptFor(crypto.PurposeAI, "api-key", encrypted, key)
 	if err != nil {
 		// Legacy path: the row may predate WISELABZ_ENCRYPTION_KEY, when the
 		// key was derived from the JWT signing secret instead.
@@ -133,7 +133,7 @@ func (l *Loader) decryptEmbedAPIKey(encrypted string) string {
 		slog.Error("Failed to load encryption key", "error", err)
 		return ""
 	}
-	plaintext, err := crypto.Decrypt(encrypted, key)
+	plaintext, _, err := crypto.DecryptFor(crypto.PurposeAI, "api-key", encrypted, key)
 	if err != nil {
 		slog.Error("Failed to decrypt stored embed API key", "error", err)
 		return ""
@@ -164,7 +164,7 @@ func (l *Loader) FallbackProviders(ctx context.Context) []ai.ProviderConfig {
 	for _, r := range rows {
 		apiKey := ""
 		if r.APIKeyEncrypted != "" && keyErr == nil {
-			if plaintext, err := crypto.Decrypt(r.APIKeyEncrypted, key); err == nil {
+			if plaintext, _, err := crypto.DecryptFor(crypto.PurposeAI, "api-key", r.APIKeyEncrypted, key); err == nil {
 				apiKey = plaintext
 			} else {
 				slog.Error("failed to decrypt fallback AI provider API key", "error", err)

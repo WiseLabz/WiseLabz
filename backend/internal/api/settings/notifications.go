@@ -86,7 +86,7 @@ func (h *Handler) applyChannelSecrets(ctx context.Context, cfg *notificationConf
 					return fmt.Errorf("load encryption key: %w", err)
 				}
 			}
-			enc, err := crypto.Encrypt(secret, key)
+			enc, err := crypto.EncryptFor(crypto.PurposeNotification, "signing-secret", secret, key)
 			if err != nil {
 				return fmt.Errorf("encrypt signing secret: %w", err)
 			}
@@ -159,7 +159,7 @@ func (h *Handler) TestNotificationsConfig(w http.ResponseWriter, r *http.Request
 	if enc, _ := conf["secretEncrypted"].(string); enc != "" {
 		key, err := crypto.DecodeKey(h.Config.Encryption.Key)
 		if err == nil {
-			secret, err = crypto.Decrypt(enc, key)
+			secret, _, err = crypto.DecryptFor(crypto.PurposeNotification, "signing-secret", enc, key)
 		}
 		if err != nil {
 			slog.Error("settings: decrypt channel secret for test", "channel", logsafe.Sanitize(req.Channel), "error", logsafe.Err(err))
