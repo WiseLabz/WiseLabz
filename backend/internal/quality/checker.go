@@ -62,7 +62,7 @@ func NewChecker(s *store.Store, hub *ws.Hub, notifier FindingNotifier, rotation 
 
 // RunForConnector runs every quality check for one connector.
 func (c *Checker) RunForConnector(ctx context.Context, connectorID string) error {
-	docs, err := c.store.ListDocsByService(ctx, connectorID)
+	docs, err := c.store.ListDocPreviewsByService(ctx, connectorID)
 	if err != nil {
 		return fmt.Errorf("list docs: %w", err)
 	}
