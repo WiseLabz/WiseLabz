@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/WiseLabz/wiselabz/internal/csvutil"
 	"github.com/WiseLabz/wiselabz/internal/httputil"
 	"github.com/WiseLabz/wiselabz/internal/store"
 )
@@ -90,7 +91,11 @@ func (h *Handler) ExportAudit(w http.ResponseWriter, r *http.Request) {
 			return // headers already sent; nothing more we can do
 		}
 		for _, a := range records {
-			if err := cw.Write([]string{a.ID, a.ActorUserID, a.ActorRole, a.Action, a.TargetType, a.TargetID, a.Detail, a.CreatedAt}); err != nil {
+			row := []string{a.ID, a.ActorUserID, a.ActorRole, a.Action, a.TargetType, a.TargetID, a.Detail, a.CreatedAt}
+			for i, cell := range row {
+				row[i] = csvutil.SafeCell(cell)
+			}
+			if err := cw.Write(row); err != nil {
 				slog.Error("audit csv export: write row failed, aborting (client likely disconnected)", "error", err)
 				return
 			}

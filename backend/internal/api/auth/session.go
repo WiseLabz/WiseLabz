@@ -134,6 +134,11 @@ func (h *Handler) Elevate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !validElevationAction(req.Action) {
+		httputil.ErrorWithDetails(w, http.StatusBadRequest, "invalid_request", "unknown action", []httputil.FieldError{{Field: "action", Msg: "must be a supported elevation action"}})
+		return
+	}
+
 	user, err := h.Store.GetUserByID(r.Context(), userID)
 	if err != nil {
 		httputil.Error(w, http.StatusUnauthorized, "unauthorized", "User not found")
@@ -281,4 +286,16 @@ func (h *Handler) DeleteSession(w http.ResponseWriter, r *http.Request) {
 	}
 
 	httputil.NoContent(w)
+}
+
+// validElevationAction matches the scopes used by elevation-protected endpoints.
+func validElevationAction(action string) bool {
+	switch action {
+	case "connector.delete", "connector.restart", "connector.start", "connector.stop",
+		"connector.bulkRestart", "connector.configPush", "template.delete", "user.delete",
+		"user.resetPassword", "user.resetMfa", "mfa.manage":
+		return true
+	default:
+		return false
+	}
 }

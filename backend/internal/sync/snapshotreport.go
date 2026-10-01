@@ -10,7 +10,8 @@ import (
 	"html/template"
 	"strings"
 	"time"
-	"unicode"
+
+	"github.com/WiseLabz/wiselabz/internal/csvutil"
 )
 
 // SnapshotDiffSource identifies a stored snapshot and hashes its exact data string.
@@ -66,15 +67,6 @@ func snapshotReportRows(d SnapshotDiff) [][]string {
 	return rows
 }
 
-// safeCSVCell keeps spreadsheet applications from evaluating data as a formula.
-func safeCSVCell(value string) string {
-	trimmed := strings.TrimLeftFunc(value, unicode.IsSpace)
-	if trimmed != "" && strings.ContainsRune("=+-@", rune(trimmed[0])) {
-		return "'" + value
-	}
-	return value
-}
-
 // RenderSnapshotDiff returns an export body and content type for a supported format.
 func RenderSnapshotDiff(d SnapshotDiff, format string) ([]byte, string, error) {
 	switch format {
@@ -94,7 +86,7 @@ func RenderSnapshotDiff(d SnapshotDiff, format string) ([]byte, string, error) {
 		rows := snapshotReportRows(d)
 		for _, row := range rows {
 			for i, cell := range row {
-				row[i] = safeCSVCell(cell)
+				row[i] = csvutil.SafeCell(cell)
 			}
 		}
 		if err := w.WriteAll(rows); err != nil {

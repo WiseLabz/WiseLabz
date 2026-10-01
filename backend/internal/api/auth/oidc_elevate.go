@@ -57,6 +57,11 @@ func (h *Handler) ElevateOIDCBegin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !validElevationAction(req.Action) {
+		httputil.Error(w, http.StatusBadRequest, "invalid_request", "unknown action")
+		return
+	}
+
 	identity, err := h.Store.GetOIDCIdentityByUserID(r.Context(), userID)
 	if err != nil {
 		if err == store.ErrNotFound {

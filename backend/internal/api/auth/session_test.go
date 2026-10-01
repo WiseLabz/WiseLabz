@@ -286,3 +286,32 @@ func TestDeleteSession(t *testing.T) {
 		}
 	})
 }
+
+func TestElevateRejectsUnknownAction(t *testing.T) {
+	th := newTestHandler(t)
+	user, password := th.createUser(t, "operator", false)
+	for _, action := range []string{"=HYPERLINK(\"https://example.com\")", "unknown.action"} {
+		r := doJSON(t, http.MethodPost, "/api/auth/elevate", map[string]string{"password": password, "action": action})
+		rr := th.authedRequest(t, r, user.ID, user.InstanceAdminRole, th.H.Elevate)
+		if rr.Code != http.StatusBadRequest {
+			t.Fatalf("action %q: status %d, want 400", action, rr.Code)
+		}
+	}
+}
+
+func TestElevationActionValidation(t *testing.T) {
+	for _, action := range []string{"connector.delete", "connector.restart", "connector.start", "connector.stop", "connector.bulkRestart", "connector.configPush", "template.delete", "user.delete", "user.resetPassword", "user.resetMfa", "mfa.manage"} {
+		if !validElevationAction(action) {
+			t.Errorf("known action %q rejected", action)
+		}
+	}
+	th := newTestHandler(t)
+	for _, handler := range []http.HandlerFunc{th.H.ElevateOIDCBegin, th.H.PostWebAuthnElevateBegin} {
+		r := doJSON(t, http.MethodPost, "/api/auth/elevate", map[string]string{"action": "=1+1"})
+		rr := httptest.NewRecorder()
+		handler(rr, r)
+		if rr.Code != http.StatusBadRequest {
+			t.Fatalf("unknown action: status %d: %s", rr.Code, rr.Body.String())
+		}
+	}
+}
