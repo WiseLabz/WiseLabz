@@ -21,6 +21,14 @@ monitors a DNS Resolver service it doesn't own the lifecycle of (the
 pfSense/OPNsense connectors own that) — so it gets neither start/stop nor
 restart, mirrored from PR1's scope decision, not re-litigated here.
 
+Addendum (#511): portainer (stacks; restart is stop+start), truenas (apps;
+restart is `app.redeploy`), home_assistant (restart only) and unifi (device
+restart, plus a PoE power-cycle exposed as `Restart` on a `port` entity
+whose `entityRef` is `<switch MAC>:<port>`) implement the same optional
+interfaces. A port entity lists the devices behind it in its
+`connectedDevices` attribute, and the dry-run preview returns them as
+`affectedEntities` so the PoE blast radius is shown before confirming.
+
 ### Authorization
 
 Reuse `auth.RequireRole("operator")` as-is. No new role.

@@ -194,6 +194,11 @@ platform, read the [Connector Guide](docs/connectors/CONNECTOR_GUIDE.md). It wal
 the `Connector` interface, the `ServiceSnapshot` data structure, registration, testing,
 and mocking with a working example.
 
+## Translating the UI
+
+The web UI is translatable. See [docs/TRANSLATING.md](docs/TRANSLATING.md) for how to add a
+language; partial translations are welcome and fall back to English.
+
 ## Getting help
 
 Open a [GitHub Discussion](https://github.com/WiseLabz/WiseLabz/discussions) or comment on

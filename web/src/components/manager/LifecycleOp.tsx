@@ -4,6 +4,7 @@
  * (`useMutatingOp.ts`), reused by ServiceDetailPage and RunbookPanel (#282).
  */
 import type { ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Button } from '../ui/Button';
 import { Dialog } from '../ui/Dialog';
 import { SkeletonRows } from '../ui/states';
@@ -46,6 +47,7 @@ export function MutatingOpDialogs({
    * manage more than one entity (VMs, containers, …). */
   entityPicker?: ReactNode;
 }) {
+  const { t } = useTranslation();
   return (
     <>
       <Dialog
@@ -82,6 +84,18 @@ export function MutatingOpDialogs({
                   </dd>
                 </div>
               </dl>
+              {(op.preview.data.affectedEntities?.length ?? 0) > 0 && (
+                <div>
+                  <h3 className="text-sm font-semibold text-ink">{t('services.detail.opAffected')}</h3>
+                  <ul className="mt-2 divide-y divide-line-soft rounded-md border border-warn/40">
+                    {op.preview.data.affectedEntities?.map((name) => (
+                      <li key={name} className="px-3 py-2 text-sm text-ink">
+                        {name}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
               <div>
                 <h3 className="text-sm font-semibold text-ink">{messages.dependenciesLabel}</h3>
                 {op.preview.data.dependentServices.length === 0 ? (

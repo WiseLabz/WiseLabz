@@ -244,7 +244,11 @@ func (c *Connector) Fetch(ctx context.Context, config map[string]any) (snapshot 
 }
 
 func (c *Connector) doRequest(ctx context.Context, path string) (data []byte, err error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.url+path, nil)
+	return c.doMethod(ctx, http.MethodGet, path)
+}
+
+func (c *Connector) doMethod(ctx context.Context, method, path string) (data []byte, err error) {
+	req, err := http.NewRequestWithContext(ctx, method, c.url+path, nil)
 	if err != nil {
 		return nil, err
 	}

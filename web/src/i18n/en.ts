@@ -1,5 +1,5 @@
 /**
- * English catalog — the only v1 locale. Every user-facing string lives here and
+ * English catalog — the source of truth and fallback for every locale. Every user-facing string lives here and
  * is read via `t('namespace.key')` (react-i18next). Add keys per feature under a
  * namespaced object; keep keys stable (they are the contract for translations).
  */
@@ -401,6 +401,7 @@ export const en = {
       opIndefinite: 'Indefinite (until started again)',
       opDependencies: 'Dependent services',
       opNoDependencies: 'No dependent services recorded.',
+      opAffected: 'Devices that will lose power or connectivity',
       healthCheck: 'Health check',
       healthCheckLoading: 'Checking…',
       healthCheckError: "Couldn't run the health check. Try again.",
@@ -1147,6 +1148,13 @@ export const en = {
       username: 'Username',
       email: 'Email',
       sendInvite: 'Send invite',
+    },
+    language: {
+      heading: 'Language',
+      desc: 'Interface language. Text without a translation appears in English.',
+      groupLabel: 'Interface language',
+      auto: 'Automatic',
+      autoDesc: 'Follow the browser language.',
     },
     appearance: {
       title: 'Appearance',
