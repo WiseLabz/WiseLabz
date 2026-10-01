@@ -6,10 +6,14 @@
  */
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Dialog } from '../../components/ui/Dialog';
 import { Button } from '../../components/ui/Button';
 import { CopyIcon, CheckIcon } from '../../components/icons';
-import { useCreateShareLink } from '../../api/shareLinks';
+import {
+  postDocsShareLinks,
+  getGetDocsShareLinksQueryKey,
+} from '../../api/generated/docs/docs';
 import { toast } from '../../lib/toast';
 import { copyText } from '../../lib/clipboard';
 import { cn } from '../../lib/cn';
@@ -28,30 +32,32 @@ interface ShareDialogProps {
 
 export function ShareDialog({ open, onClose, node }: ShareDialogProps) {
   const { t } = useTranslation();
-  const create = useCreateShareLink();
+  const queryClient = useQueryClient();
   const [ttlHours, setTtlHours] = useState<number>(TTL_PRESETS[1].hours);
   const [createdUrl, setCreatedUrl] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
+  const create = useMutation({
+    mutationFn: (body: { docTreeRoot: string; expiresAt: string }) =>
+      postDocsShareLinks(body),
+    onSuccess: (link) => {
+      setCreatedUrl(`${window.location.origin}/share/${link.token}`);
+      queryClient.invalidateQueries({ queryKey: getGetDocsShareLinksQueryKey() });
+    },
+    onError: () =>
+      toast.error(t('docs.share.error', { defaultValue: 'Could not create share link' })),
+  });
+
   const handleClose = () => {
     setCreatedUrl(null);
     setCopied(false);
-    create.reset();
     onClose();
   };
 
   const handleCreate = () => {
     if (!node) return;
     const expiresAt = new Date(Date.now() + ttlHours * 60 * 60 * 1000).toISOString();
-    create.mutate(
-      { docTreeRoot: node.docId, expiresAt },
-      {
-        onSuccess: (link) => {
-          setCreatedUrl(`${window.location.origin}/share/${link.token}`);
-        },
-        onError: () => toast.error(t('docs.share.error', { defaultValue: 'Could not create share link' })),
-      }
-    );
+    create.mutate({ docTreeRoot: node.docId, expiresAt });
   };
 
   const handleCopy = async () => {

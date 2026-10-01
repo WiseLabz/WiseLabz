@@ -16,14 +16,10 @@ let docResult: { data?: unknown; isLoading: boolean; isError: boolean } = {
   isError: false,
 };
 
-vi.mock('../../api/shareLinks', async () => {
-  const actual = await vi.importActual<typeof import('../../api/shareLinks')>('../../api/shareLinks');
-  return {
-    ...actual,
-    useShareLinkTree: () => treeResult,
-    useShareLinkDoc: () => docResult,
-  };
-});
+vi.mock('../../api/generated/docs/docs', () => ({
+  useGetShareTokenTree: () => treeResult,
+  useGetShareTokenDocsDocId: () => docResult,
+}));
 
 function renderPage(path = '/share/tok123') {
   return render(

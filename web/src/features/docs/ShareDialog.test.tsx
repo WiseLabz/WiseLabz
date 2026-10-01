@@ -1,5 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { ReactNode } from 'react';
 import '../../i18n';
 import { toast } from '../../lib/toast';
 import { ShareDialog } from './ShareDialog';
@@ -13,15 +15,30 @@ HTMLDialogElement.prototype.close = vi.fn(function (this: HTMLDialogElement) {
 });
 
 const { createMock } = vi.hoisted(() => ({ createMock: vi.fn() }));
-vi.mock('../../api/shareLinks', () => ({
-  useCreateShareLink: () => ({ mutate: createMock, isPending: false, reset: vi.fn() }),
+vi.mock('../../api/generated/docs/docs', () => ({
+  postDocsShareLinks: createMock,
+  getGetDocsShareLinksQueryKey: () => ['/docs/share-links'],
 }));
 
 const writeText = vi.fn().mockResolvedValue(undefined);
 Object.assign(navigator, { clipboard: { writeText } });
 
+function Wrapper({ children }: { children: ReactNode }) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return (
+    <QueryClientProvider client={queryClient}>
+      {children}
+    </QueryClientProvider>
+  );
+}
+
 function renderDialog(open = true) {
-  return render(<ShareDialog open={open} onClose={vi.fn()} node={{ docId: 'c1', title: 'Connector One' }} />);
+  return render(
+    <ShareDialog open={open} onClose={vi.fn()} node={{ docId: 'c1', title: 'Connector One' }} />,
+    { wrapper: Wrapper }
+  );
 }
 
 describe('ShareDialog (#240 PR2)', () => {
@@ -43,32 +60,31 @@ describe('ShareDialog (#240 PR2)', () => {
     expect(weekButton.className).toMatch(/border-accent-primary/);
   });
 
-  it('creating a link calls the mutation with docTreeRoot and a future expiresAt', () => {
+  it('creating a link calls the mutation with docTreeRoot and a future expiresAt', async () => {
+    createMock.mockResolvedValue({ id: 's1', token: 'wlz_share_xyz' });
     renderDialog();
     fireEvent.click(screen.getByRole('button', { name: /create link/i }));
-    expect(createMock).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(createMock).toHaveBeenCalledTimes(1));
     const [body] = createMock.mock.calls[0];
     expect(body.docTreeRoot).toBe('c1');
     expect(new Date(body.expiresAt).getTime()).toBeGreaterThan(Date.now());
   });
 
   it('shows the one-time token URL after creation and copies it', async () => {
-    createMock.mockImplementation((_body, opts) => {
-      opts.onSuccess({
-        id: 's1',
-        token: 'wlz_share_xyz',
-        docTreeRoot: 'c1',
-        createdBy: 'u1',
-        createdAt: '',
-        expiresAt: '',
-        revokedAt: '',
-        lastAccessedAt: '',
-      });
+    createMock.mockResolvedValue({
+      id: 's1',
+      token: 'wlz_share_xyz',
+      docTreeRoot: 'c1',
+      createdBy: 'u1',
+      createdAt: '',
+      expiresAt: '',
+      revokedAt: '',
+      lastAccessedAt: '',
     });
     renderDialog();
     fireEvent.click(screen.getByRole('button', { name: /create link/i }));
 
-    expect(screen.getByText(/won't be shown again/i)).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText(/won't be shown again/i)).toBeInTheDocument());
     const input = screen.getByDisplayValue(/\/share\/wlz_share_xyz$/) as HTMLInputElement;
     expect(input).toBeInTheDocument();
 
@@ -82,10 +98,10 @@ describe('ShareDialog (#240 PR2)', () => {
     const execCommand = vi.fn().mockReturnValue(success);
     Object.defineProperty(document, 'execCommand', { value: execCommand, configurable: true });
     const error = vi.spyOn(toast, 'error');
-    createMock.mockImplementation((_body, opts) => opts.onSuccess({ token: 'wlz_share_xyz' }));
+    createMock.mockResolvedValue({ token: 'wlz_share_xyz' });
     renderDialog();
     fireEvent.click(screen.getByRole('button', { name: /create link/i }));
-    const input = screen.getByDisplayValue(/\/share\/wlz_share_xyz$/) as HTMLInputElement;
+    const input = await screen.findByDisplayValue(/\/share\/wlz_share_xyz$/);
     fireEvent.click(screen.getByRole('button', { name: /^copy$/i }));
     await waitFor(() => expect(execCommand).toHaveBeenCalledWith('copy'));
     if (success) {
@@ -99,7 +115,7 @@ describe('ShareDialog (#240 PR2)', () => {
   });
 
   it('renders nothing when no node is selected', () => {
-    const { container } = render(<ShareDialog open={true} onClose={vi.fn()} node={null} />);
+    const { container } = render(<ShareDialog open={true} onClose={vi.fn()} node={null} />, { wrapper: Wrapper });
     // Dialog chrome (title bar) still renders; the body content area is empty.
     expect(container.querySelector('input')).not.toBeInTheDocument();
   });

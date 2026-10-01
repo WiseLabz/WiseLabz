@@ -6,13 +6,15 @@
  */
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useGetUsers } from '../../api/generated/users/users';
 import {
-  useGetConnectorPermissions,
-  useUpsertConnectorPermission,
-  useDeleteConnectorPermission,
-  type ConnectorRole,
-} from '../../api/permissions';
+  useGetConnectorsConnectorIdPermissions,
+  putConnectorsConnectorIdPermissionsUserId,
+  deleteConnectorsConnectorIdPermissionsUserId,
+  getGetConnectorsConnectorIdPermissionsQueryKey,
+} from '../../api/generated/connectors/connectors';
+import type { GetConnectorsConnectorIdPermissions200Item } from '../../api/model';
 import { useIsInstanceAdmin } from '../../hooks/useRole';
 import { Panel } from '../../components/ui/Panel';
 import { Button } from '../../components/ui/Button';
@@ -21,12 +23,35 @@ import { toast } from '../../lib/toast';
 
 export function ConnectorPermissionsTab({ connectorId }: { connectorId: string }) {
   const { t } = useTranslation();
+  const queryClient = useQueryClient();
   const isInstanceAdmin = useIsInstanceAdmin();
-  const grants = useGetConnectorPermissions(connectorId, isInstanceAdmin);
+  const grants = useGetConnectorsConnectorIdPermissions(connectorId, {
+    query: { enabled: isInstanceAdmin },
+  });
   const users = useGetUsers({ query: { enabled: isInstanceAdmin } });
-  const upsert = useUpsertConnectorPermission(connectorId);
-  const remove = useDeleteConnectorPermission(connectorId);
   const [addingUserId, setAddingUserId] = useState('');
+
+  const upsert = useMutation({
+    mutationFn: ({ userId, role }: { userId: string; role: 'viewer' | 'operator' }) =>
+      putConnectorsConnectorIdPermissionsUserId(connectorId, userId, { role }),
+    onSuccess: () => {
+      setAddingUserId('');
+      queryClient.invalidateQueries({
+        queryKey: getGetConnectorsConnectorIdPermissionsQueryKey(connectorId),
+      });
+    },
+    onError: () =>
+      toast.error(t('connectors.permissions.error')),
+  });
+
+  const remove = useMutation({
+    mutationFn: (userId: string) =>
+      deleteConnectorsConnectorIdPermissionsUserId(connectorId, userId),
+    onSuccess: () =>
+      queryClient.invalidateQueries({
+        queryKey: getGetConnectorsConnectorIdPermissionsQueryKey(connectorId),
+      }),
+  });
 
   if (!isInstanceAdmin) return null;
 
@@ -41,13 +66,7 @@ export function ConnectorPermissionsTab({ connectorId }: { connectorId: string }
 
   const onAdd = () => {
     if (!addingUserId) return;
-    upsert.mutate(
-      { userId: addingUserId, role: 'viewer' },
-      {
-        onSuccess: () => setAddingUserId(''),
-        onError: () => toast.error(t('connectors.permissions.error')),
-      }
-    );
+    upsert.mutate({ userId: addingUserId, role: 'viewer' });
   };
 
   return (
@@ -63,17 +82,21 @@ export function ConnectorPermissionsTab({ connectorId }: { connectorId: string }
         <EmptyState title={t('connectors.permissions.emptyTitle')} />
       ) : (
         <ul className="mb-4 divide-y divide-line-soft">
-          {(grants.data ?? []).map((g) => {
-            const user = userById.get(g.userId);
+          {(grants.data ?? []).map((g: GetConnectorsConnectorIdPermissions200Item) => {
+            /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+            const user = userById.get((g as any).userId);
             // 'oidc' grants are synced from the user's IdP group at login
             // (#279 part 3) and are read-only here — editing them would be
             // silently overwritten at the user's next login anyway.
-            const isSSO = g.source === 'oidc';
+            /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+            const isSSO = (g as any).source === 'oidc';
             return (
-              <li key={g.id} className="flex items-center justify-between gap-3 py-2.5">
+              /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+              <li key={(g as any).id} className="flex items-center justify-between gap-3 py-2.5">
                 <div className="min-w-0">
                   <div className="flex items-center gap-1.5">
-                    <p className="truncate text-sm text-ink">{user?.displayName || user?.username || g.userId}</p>
+                    {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                    <p className="truncate text-sm text-ink">{user?.displayName || user?.username || (g as any).userId}</p>
                     {isSSO && (
                       <span
                         title={t('connectors.permissions.viaSsoHint')}
@@ -88,15 +111,21 @@ export function ConnectorPermissionsTab({ connectorId }: { connectorId: string }
                 <div className="flex shrink-0 items-center gap-2">
                   {isSSO ? (
                     <span className="rounded-md border border-line-soft px-2 py-1 text-xs text-ink-muted">
-                      {g.role === 'operator' ? t('connectors.permissions.operator') : t('connectors.permissions.viewer')}
+                      {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                      {(g as any).role === 'operator' ? t('connectors.permissions.operator') : t('connectors.permissions.viewer')}
                     </span>
                   ) : (
                     <>
-                      <select
-                        value={g.role}
-                        onChange={(e) =>
-                          upsert.mutate({ userId: g.userId, role: e.target.value as ConnectorRole })
-                        }
+                      {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                      <select value={(g as any).role}
+                        onChange={(e) => {
+                          /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+                          const userId = (g as any).userId;
+                          upsert.mutate({
+                            userId,
+                            role: e.target.value as 'viewer' | 'operator',
+                          });
+                        }}
                         className="rounded-md border border-line-soft bg-canvas px-2 py-1 text-xs text-ink"
                       >
                         <option value="viewer">{t('connectors.permissions.viewer')}</option>
@@ -106,7 +135,10 @@ export function ConnectorPermissionsTab({ connectorId }: { connectorId: string }
                         variant="ghost"
                         size="sm"
                         disabled={remove.isPending}
-                        onClick={() => remove.mutate(g.userId)}
+                        onClick={() => {
+                          /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+                          remove.mutate((g as any).userId);
+                        }}
                       >
                         {t('connectors.permissions.revoke')}
                       </Button>
