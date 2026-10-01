@@ -76,6 +76,8 @@ func NewRouter(cfg Config) chi.Router {
 	r.Use(middleware.Logger)
 	r.Use(middleware.SecurityHeaders(cfg.Config.Server.TrustedProxies))
 	r.Use(middleware.CORS(cfg.Config.Server.Origin))
+	r.Use(middleware.Compress)
+	r.Use(middleware.CacheHeaders)
 
 	d := newRouterDeps(cfg)
 	mountRootRoutes(r, d)
