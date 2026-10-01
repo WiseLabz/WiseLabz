@@ -105,7 +105,7 @@ func (h *Handler) ExportAudit(w http.ResponseWriter, r *http.Request) {
 	}
 
 	filename := fmt.Sprintf("wiselabz-audit-%s.json", timestamp)
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.Header().Set("Content-Disposition", `attachment; filename="`+filename+`"`)
 	enc := json.NewEncoder(w)
 	if _, err := io.WriteString(w, "["); err != nil {

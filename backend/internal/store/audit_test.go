@@ -184,3 +184,35 @@ func TestEachAuditRecord(t *testing.T) {
 		}
 	}
 }
+
+// TestEachAuditRecordPaging spans several keyset pages with identical
+// created_at values, so the (created_at, id) tiebreak must neither drop nor
+// repeat rows at page boundaries.
+func TestEachAuditRecordPaging(t *testing.T) {
+	ctx := context.Background()
+	s := newDocTestStore(t)
+
+	total := 2*auditExportPageSize + 7
+	recs := make([]AuditRecord, total)
+	for i := range recs {
+		recs[i] = AuditRecord{ActorUserID: "u1", ActorRole: "operator", Action: "page.action", TargetType: "widget", CreatedAt: "2026-01-01T00:00:00Z"}
+	}
+	if err := s.CreateAuditRecords(ctx, recs); err != nil {
+		t.Fatalf("CreateAuditRecords() error: %v", err)
+	}
+
+	seen := map[string]bool{}
+	err := s.EachAuditRecord(ctx, "page.action", "", "", "", func(a AuditRecord) error {
+		if seen[a.ID] {
+			t.Errorf("duplicate record %s", a.ID)
+		}
+		seen[a.ID] = true
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("EachAuditRecord() error: %v", err)
+	}
+	if len(seen) != total {
+		t.Fatalf("got %d records, want %d", len(seen), total)
+	}
+}
