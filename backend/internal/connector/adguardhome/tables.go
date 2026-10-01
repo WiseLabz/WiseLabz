@@ -7,34 +7,13 @@ import (
 	"strings"
 
 	"github.com/WiseLabz/wiselabz/internal/connector"
+	"github.com/WiseLabz/wiselabz/internal/connector/snapshotutil"
 )
 
 // maxRenderedRules caps how many custom filtering rules are rendered in the
 // section body. A hand-maintained rule set is small, but an imported one can
 // run to thousands of lines, which would bloat every snapshot and diff.
 const maxRenderedRules = 200
-
-// cell escapes a value for use inside a Markdown table cell. Filtering
-// rules and upstream specs routinely contain '|' (as in "[/example.org/]"
-// syntax or "|ads.example.com^") and would otherwise split the row.
-func cell(s string) string {
-	if s == "" {
-		return "—"
-	}
-	s = strings.ReplaceAll(s, "\n", " ")
-	return strings.ReplaceAll(s, "|", `\|`)
-}
-
-func malformed(title string, err error) string {
-	return "_" + title + " unavailable: " + connector.NewMalformedResponseError(err).Error() + "_"
-}
-
-func yesNo(b bool) string {
-	if b {
-		return "yes"
-	}
-	return "no"
-}
 
 // statusInfo carries the parts of /control/status the rest of Fetch needs:
 // the metadata to merge into the snapshot and whether this build even has
@@ -57,21 +36,21 @@ func buildStatus(raw []byte) (string, statusInfo) {
 		DHCPAvailable     bool     `json:"dhcp_available"`
 	}
 	if err := json.Unmarshal(raw, &status); err != nil {
-		return malformed("Status", err), statusInfo{}
+		return snapshotutil.MalformedSection("Status", err), statusInfo{}
 	}
 
 	var b strings.Builder
 	b.WriteString("| Setting | Value |\n")
 	b.WriteString("|---------|-------|\n")
-	_, _ = fmt.Fprintf(&b, "| Version | %s |\n", cell(status.Version))
-	_, _ = fmt.Fprintf(&b, "| Running | %s |\n", yesNo(status.Running))
-	_, _ = fmt.Fprintf(&b, "| Protection enabled | %s |\n", yesNo(status.ProtectionEnabled))
-	_, _ = fmt.Fprintf(&b, "| DNS addresses | %s |\n", cell(strings.Join(status.DNSAddresses, ", ")))
+	_, _ = fmt.Fprintf(&b, "| Version | %s |\n", snapshotutil.MDCell(status.Version))
+	_, _ = fmt.Fprintf(&b, "| Running | %s |\n", snapshotutil.YesNo(status.Running))
+	_, _ = fmt.Fprintf(&b, "| Protection enabled | %s |\n", snapshotutil.YesNo(status.ProtectionEnabled))
+	_, _ = fmt.Fprintf(&b, "| DNS addresses | %s |\n", snapshotutil.MDCell(strings.Join(status.DNSAddresses, ", ")))
 	_, _ = fmt.Fprintf(&b, "| DNS port | %d |\n", status.DNSPort)
 	_, _ = fmt.Fprintf(&b, "| Web port | %d |\n", status.HTTPPort)
-	_, _ = fmt.Fprintf(&b, "| DHCP available | %s |\n", yesNo(status.DHCPAvailable))
+	_, _ = fmt.Fprintf(&b, "| DHCP available | %s |\n", snapshotutil.YesNo(status.DHCPAvailable))
 	if status.Language != "" {
-		_, _ = fmt.Fprintf(&b, "| Language | %s |\n", cell(status.Language))
+		_, _ = fmt.Fprintf(&b, "| Language | %s |\n", snapshotutil.MDCell(status.Language))
 	}
 
 	metadata := map[string]string{
@@ -108,26 +87,26 @@ func buildDNSInfo(raw []byte) (string, []string, map[string]string) {
 		ProtectionEnabled bool     `json:"protection_enabled"`
 	}
 	if err := json.Unmarshal(raw, &info); err != nil {
-		return malformed("DNS Configuration", err), nil, nil
+		return snapshotutil.MalformedSection("DNS Configuration", err), nil, nil
 	}
 
 	var b strings.Builder
 	b.WriteString("| Setting | Value |\n")
 	b.WriteString("|---------|-------|\n")
-	_, _ = fmt.Fprintf(&b, "| Upstream DNS | %s |\n", cell(strings.Join(info.UpstreamDNS, "<br>")))
-	_, _ = fmt.Fprintf(&b, "| Bootstrap DNS | %s |\n", cell(strings.Join(info.BootstrapDNS, "<br>")))
-	_, _ = fmt.Fprintf(&b, "| Fallback DNS | %s |\n", cell(strings.Join(info.FallbackDNS, "<br>")))
-	_, _ = fmt.Fprintf(&b, "| Private PTR upstreams | %s |\n", cell(strings.Join(info.LocalPTRUpstreams, "<br>")))
-	_, _ = fmt.Fprintf(&b, "| Upstream mode | %s |\n", cell(info.UpstreamMode))
-	_, _ = fmt.Fprintf(&b, "| Blocking mode | %s |\n", cell(info.BlockingMode))
+	_, _ = fmt.Fprintf(&b, "| Upstream DNS | %s |\n", snapshotutil.MDCell(strings.Join(info.UpstreamDNS, "<br>")))
+	_, _ = fmt.Fprintf(&b, "| Bootstrap DNS | %s |\n", snapshotutil.MDCell(strings.Join(info.BootstrapDNS, "<br>")))
+	_, _ = fmt.Fprintf(&b, "| Fallback DNS | %s |\n", snapshotutil.MDCell(strings.Join(info.FallbackDNS, "<br>")))
+	_, _ = fmt.Fprintf(&b, "| Private PTR upstreams | %s |\n", snapshotutil.MDCell(strings.Join(info.LocalPTRUpstreams, "<br>")))
+	_, _ = fmt.Fprintf(&b, "| Upstream mode | %s |\n", snapshotutil.MDCell(info.UpstreamMode))
+	_, _ = fmt.Fprintf(&b, "| Blocking mode | %s |\n", snapshotutil.MDCell(info.BlockingMode))
 	if info.BlockingMode == "custom_ip" {
-		_, _ = fmt.Fprintf(&b, "| Blocking IPv4 | %s |\n", cell(info.BlockingIPv4))
-		_, _ = fmt.Fprintf(&b, "| Blocking IPv6 | %s |\n", cell(info.BlockingIPv6))
+		_, _ = fmt.Fprintf(&b, "| Blocking IPv4 | %s |\n", snapshotutil.MDCell(info.BlockingIPv4))
+		_, _ = fmt.Fprintf(&b, "| Blocking IPv6 | %s |\n", snapshotutil.MDCell(info.BlockingIPv6))
 	}
-	_, _ = fmt.Fprintf(&b, "| DNSSEC | %s |\n", yesNo(info.DNSSECEnabled))
-	_, _ = fmt.Fprintf(&b, "| EDNS client subnet | %s |\n", yesNo(info.EDNSCSEnabled))
-	_, _ = fmt.Fprintf(&b, "| IPv6 disabled | %s |\n", yesNo(info.DisableIPv6))
-	_, _ = fmt.Fprintf(&b, "| Resolve clients | %s |\n", yesNo(info.ResolveClients))
+	_, _ = fmt.Fprintf(&b, "| DNSSEC | %s |\n", snapshotutil.YesNo(info.DNSSECEnabled))
+	_, _ = fmt.Fprintf(&b, "| EDNS client subnet | %s |\n", snapshotutil.YesNo(info.EDNSCSEnabled))
+	_, _ = fmt.Fprintf(&b, "| IPv6 disabled | %s |\n", snapshotutil.YesNo(info.DisableIPv6))
+	_, _ = fmt.Fprintf(&b, "| Resolve clients | %s |\n", snapshotutil.YesNo(info.ResolveClients))
 	_, _ = fmt.Fprintf(&b, "| Rate limit | %d |\n", info.RateLimit)
 	_, _ = fmt.Fprintf(&b, "| Cache size | %d |\n", info.CacheSize)
 
@@ -163,7 +142,7 @@ func buildFiltering(raw []byte) (lists string, rules string, entities []connecto
 		UserRules        []string `json:"user_rules"`
 	}
 	if err := json.Unmarshal(raw, &status); err != nil {
-		return malformed("Filter Lists", err), malformed("Custom Filtering Rules", err), nil, nil
+		return snapshotutil.MalformedSection("Filter Lists", err), snapshotutil.MalformedSection("Custom Filtering Rules", err), nil, nil
 	}
 
 	groups := []struct {
@@ -188,9 +167,9 @@ func buildFiltering(raw []byte) (lists string, rules string, entities []connecto
 					enabledLists++
 				}
 				_, _ = fmt.Fprintf(&b, "| %s | %s | %s | %d | %s |\n",
-					cell(f.Name), g.kind, yesNo(f.Enabled), f.RulesCount, cell(f.URL))
+					snapshotutil.MDCell(f.Name), g.kind, snapshotutil.YesNo(f.Enabled), f.RulesCount, snapshotutil.MDCell(f.URL))
 				attrs := map[string]any{"enabled": f.Enabled, "kind": g.kind}
-				putString(attrs, "url", f.URL)
+				snapshotutil.PutString(attrs, "url", f.URL)
 				entities = append(entities, connector.SnapshotEntity{
 					Kind:       "filter_list",
 					Name:       f.Name,
@@ -255,7 +234,7 @@ func buildRewriteTable(raw []byte) (string, []connector.SnapshotEntity) {
 		Answer string `json:"answer"`
 	}
 	if err := json.Unmarshal(raw, &rewrites); err != nil {
-		return malformed("DNS Rewrites", err), nil
+		return snapshotutil.MalformedSection("DNS Rewrites", err), nil
 	}
 	if len(rewrites) == 0 {
 		return "_No DNS rewrites configured_", nil
@@ -266,10 +245,10 @@ func buildRewriteTable(raw []byte) (string, []connector.SnapshotEntity) {
 	b.WriteString("|--------|--------|\n")
 	entities := make([]connector.SnapshotEntity, 0, len(rewrites))
 	for _, r := range rewrites {
-		_, _ = fmt.Fprintf(&b, "| %s | %s |\n", cell(r.Domain), cell(r.Answer))
+		_, _ = fmt.Fprintf(&b, "| %s | %s |\n", snapshotutil.MDCell(r.Domain), snapshotutil.MDCell(r.Answer))
 		wildcard := strings.HasPrefix(r.Domain, "*.")
 		attrs := map[string]any{"wildcard": wildcard}
-		putString(attrs, "answer", r.Answer)
+		snapshotutil.PutString(attrs, "answer", r.Answer)
 		entity := connector.SnapshotEntity{
 			Kind:       "dns_rewrite",
 			Name:       r.Domain,
@@ -305,7 +284,7 @@ func buildClientTable(raw []byte) (string, []connector.SnapshotEntity) {
 		} `json:"clients"`
 	}
 	if err := json.Unmarshal(raw, &payload); err != nil {
-		return malformed("Clients", err), nil
+		return snapshotutil.MalformedSection("Clients", err), nil
 	}
 	if len(payload.Clients) == 0 {
 		return "_No persistent clients configured_", nil
@@ -317,9 +296,9 @@ func buildClientTable(raw []byte) (string, []connector.SnapshotEntity) {
 	entities := make([]connector.SnapshotEntity, 0, len(payload.Clients))
 	for _, cl := range payload.Clients {
 		_, _ = fmt.Fprintf(&b, "| %s | %s | %s | %s | %s | %s | %s |\n",
-			cell(cl.Name), cell(strings.Join(cl.IDs, ", ")), yesNo(cl.UseGlobalSettings),
-			yesNo(cl.FilteringEnabled), cell(strings.Join(cl.BlockedServices, ", ")),
-			cell(strings.Join(cl.Upstreams, "<br>")), cell(strings.Join(cl.Tags, ", ")))
+			snapshotutil.MDCell(cl.Name), snapshotutil.MDCell(strings.Join(cl.IDs, ", ")), snapshotutil.YesNo(cl.UseGlobalSettings),
+			snapshotutil.YesNo(cl.FilteringEnabled), snapshotutil.MDCell(strings.Join(cl.BlockedServices, ", ")),
+			snapshotutil.MDCell(strings.Join(cl.Upstreams, "<br>")), snapshotutil.MDCell(strings.Join(cl.Tags, ", ")))
 
 		attrs := map[string]any{
 			"useGlobalSettings":   cl.UseGlobalSettings,
@@ -327,10 +306,10 @@ func buildClientTable(raw []byte) (string, []connector.SnapshotEntity) {
 			"safebrowsingEnabled": cl.SafebrowsingEnabled,
 			"parentalEnabled":     cl.ParentalEnabled,
 		}
-		putStrings(attrs, "ids", cl.IDs)
-		putStrings(attrs, "tags", cl.Tags)
-		putStrings(attrs, "blockedServices", cl.BlockedServices)
-		putStrings(attrs, "upstreams", cl.Upstreams)
+		snapshotutil.PutStrings(attrs, "ids", cl.IDs)
+		snapshotutil.PutStrings(attrs, "tags", cl.Tags)
+		snapshotutil.PutStrings(attrs, "blockedServices", cl.BlockedServices)
+		snapshotutil.PutStrings(attrs, "upstreams", cl.Upstreams)
 		entities = append(entities, connector.SnapshotEntity{
 			Kind:       "client",
 			Name:       cl.Name,
@@ -377,17 +356,17 @@ func buildDHCP(raw []byte) (string, []connector.SnapshotEntity, map[string]strin
 		StaticLeases []lease `json:"static_leases"`
 	}
 	if err := json.Unmarshal(raw, &status); err != nil {
-		return malformed("DHCP", err), nil, nil
+		return snapshotutil.MalformedSection("DHCP", err), nil, nil
 	}
 
 	var b strings.Builder
 	b.WriteString("| Setting | Value |\n")
 	b.WriteString("|---------|-------|\n")
-	_, _ = fmt.Fprintf(&b, "| Enabled | %s |\n", yesNo(status.Enabled))
-	_, _ = fmt.Fprintf(&b, "| Interface | %s |\n", cell(status.InterfaceName))
-	_, _ = fmt.Fprintf(&b, "| IPv4 range | %s |\n", cell(rangeText(status.V4.RangeStart, status.V4.RangeEnd)))
-	_, _ = fmt.Fprintf(&b, "| Gateway | %s |\n", cell(status.V4.GatewayIP))
-	_, _ = fmt.Fprintf(&b, "| Subnet mask | %s |\n", cell(status.V4.SubnetMask))
+	_, _ = fmt.Fprintf(&b, "| Enabled | %s |\n", snapshotutil.YesNo(status.Enabled))
+	_, _ = fmt.Fprintf(&b, "| Interface | %s |\n", snapshotutil.MDCell(status.InterfaceName))
+	_, _ = fmt.Fprintf(&b, "| IPv4 range | %s |\n", snapshotutil.MDCell(rangeText(status.V4.RangeStart, status.V4.RangeEnd)))
+	_, _ = fmt.Fprintf(&b, "| Gateway | %s |\n", snapshotutil.MDCell(status.V4.GatewayIP))
+	_, _ = fmt.Fprintf(&b, "| Subnet mask | %s |\n", snapshotutil.MDCell(status.V4.SubnetMask))
 	_, _ = fmt.Fprintf(&b, "| Lease duration | %ds |\n", status.V4.LeaseDuration)
 
 	groups := []struct {
@@ -403,9 +382,9 @@ func buildDHCP(raw []byte) (string, []connector.SnapshotEntity, map[string]strin
 		for _, g := range groups {
 			for _, l := range g.leases {
 				_, _ = fmt.Fprintf(&b, "| %s | %s | %s | %s |\n",
-					cell(l.Hostname), cell(l.IP), cell(l.MAC), yesNo(g.static))
+					snapshotutil.MDCell(l.Hostname), snapshotutil.MDCell(l.IP), snapshotutil.MDCell(l.MAC), snapshotutil.YesNo(g.static))
 				attrs := map[string]any{"static": g.static}
-				putString(attrs, "mac", l.MAC)
+				snapshotutil.PutString(attrs, "mac", l.MAC)
 				entities = append(entities, connector.SnapshotEntity{
 					Kind:       "dhcp_lease",
 					Name:       leaseName(l.Hostname, l.IP, l.MAC),
@@ -443,17 +422,5 @@ func leaseName(hostname, ip, mac string) string {
 		return ip
 	default:
 		return mac
-	}
-}
-
-func putString(attrs map[string]any, key, value string) {
-	if value != "" {
-		attrs[key] = value
-	}
-}
-
-func putStrings(attrs map[string]any, key string, values []string) {
-	if len(values) > 0 {
-		attrs[key] = values
 	}
 }

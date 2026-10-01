@@ -29,6 +29,13 @@ type Options struct {
 	// honors HTTP(S)_PROXY. When set, proxy environment variables are ignored
 	// so the dialer always sees the real target (a proxy would bypass a guard).
 	DialContext func(ctx context.Context, network, addr string) (net.Conn, error)
+	// TLSConfig, when set, is the base TLS configuration (client
+	// certificates, custom roots). It is cloned; MinVersion is raised to TLS
+	// 1.2 if lower, and InsecureSkipVerify is OR-ed with the option above.
+	TLSConfig *tls.Config
+	// DisableKeepAlives closes each connection after one request, for
+	// transports whose dialer opens a one-shot tunnel (SSH).
+	DisableKeepAlives bool
 }
 
 // defaultResponseHeaderTimeout bounds the wait for response headers when the
@@ -51,10 +58,19 @@ func NewTransport(o Options) *http.Transport {
 	if headerTimeout == 0 {
 		headerTimeout = defaultResponseHeaderTimeout
 	}
+	tlsConfig := &tls.Config{}
+	if o.TLSConfig != nil {
+		tlsConfig = o.TLSConfig.Clone()
+	}
+	if tlsConfig.MinVersion < tls.VersionTLS12 {
+		tlsConfig.MinVersion = tls.VersionTLS12
+	}
+	tlsConfig.InsecureSkipVerify = tlsConfig.InsecureSkipVerify || o.InsecureSkipVerify //nolint:gosec // opt-in per caller
 	return &http.Transport{
 		Proxy:                 proxy,
 		DialContext:           dial,
-		TLSClientConfig:       &tls.Config{MinVersion: tls.VersionTLS12, InsecureSkipVerify: o.InsecureSkipVerify}, //nolint:gosec // opt-in per caller
+		TLSClientConfig:       tlsConfig,
+		DisableKeepAlives:     o.DisableKeepAlives,
 		TLSHandshakeTimeout:   10 * time.Second,
 		ResponseHeaderTimeout: headerTimeout,
 		IdleConnTimeout:       90 * time.Second,

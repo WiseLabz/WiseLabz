@@ -57,190 +57,30 @@ func (p *Connector) Fetch(ctx context.Context, config map[string]any) (*connecto
 	totalStorage := 0
 
 	for _, node := range nodesResponse.Data {
-		var nodeErr error
-		nodeSection := fmt.Sprintf("## Node: %s\n\n", node.Node)
-		nodeSection += fmt.Sprintf("- **Status**: %s\n", node.Status)
-		nodeSection += fmt.Sprintf("- **Memory**: %d MB\n\n", node.MaxMem/bytesPerMB)
-
+		nr := &nodeResult{section: fmt.Sprintf("## Node: %s\n\n- **Status**: %s\n- **Memory**: %d MB\n\n",
+			node.Node, node.Status, node.MaxMem/bytesPerMB)}
 		dependencies = append(dependencies, connector.ServiceDependency{Kind: "host", Name: node.Node})
 
-		// Fetch VMs
 		if wantVMs {
-			func() {
-				vmsRaw, err := p.doRequest(ctx, "GET", "/nodes/"+node.Node+"/qemu", nil)
-				if err != nil {
-					if nodeErr == nil {
-						nodeErr = err
-					}
-					return
-				}
-				var vmsResponse struct {
-					Data []struct {
-						VMID   int    `json:"vmid"`
-						Name   string `json:"name"`
-						Status string `json:"status"`
-						CPU    int    `json:"cpus"`
-						MaxMem int64  `json:"maxmem"`
-					} `json:"data"`
-				}
-				if err := json.Unmarshal(vmsRaw, &vmsResponse); err != nil {
-					if nodeErr == nil {
-						nodeErr = err
-					}
-					return
-				}
-
-				if len(vmsResponse.Data) > 0 {
-					nodeSection += "### Virtual Machines\n\n"
-					nodeSection += "| VMID | Name | Status | CPUs | Memory (MB) |\n"
-					nodeSection += "|------|------|--------|------|-------------|\n"
-					for _, vm := range vmsResponse.Data {
-						nodeSection += fmt.Sprintf("| %d | %s | %s | %d | %d |\n",
-							vm.VMID, vm.Name, vm.Status, vm.CPU, vm.MaxMem/bytesPerMB)
-						ent := connector.SnapshotEntity{
-							Kind:       "vm",
-							Name:       vm.Name,
-							ExternalID: fmt.Sprintf("%d", vm.VMID),
-						}
-						attrs := map[string]any{"status": vm.Status}
-						if wantEntities {
-							if vm.Status == "running" {
-								ent.IP = p.fetchQemuIP(ctx, node.Node, vm.VMID)
-							}
-							if cfg, ok := p.fetchQemuConfig(ctx, node.Node, vm.VMID); ok {
-								attrs["onboot"] = cfg.Onboot != 0
-								attrs["protection"] = cfg.Protection != 0
-								attrs["template"] = cfg.Template != 0
-								attrs["agent_enabled"] = agentEnabled(cfg.Agent)
-								if cfg.OSType != "" {
-									attrs["os_type"] = cfg.OSType
-								}
-							}
-							if enabled, ok := p.fetchFirewallEnabled(ctx, "qemu", node.Node, vm.VMID); ok {
-								attrs["firewall_enabled"] = enabled
-							}
-						}
-						ent.Attributes = attrs
-						entities = append(entities, ent)
-					}
-					nodeSection += "\n"
-					totalVMs += len(vmsResponse.Data)
-				}
-			}()
+			p.fetchVMs(ctx, node.Node, wantEntities, nr)
 		}
-
-		// Fetch containers
 		if wantContainers {
-			func() {
-				ctsRaw, err := p.doRequest(ctx, "GET", "/nodes/"+node.Node+"/lxc", nil)
-				if err != nil {
-					if nodeErr == nil {
-						nodeErr = err
-					}
-					return
-				}
-				var ctsResponse struct {
-					Data []struct {
-						VMID   int    `json:"vmid"`
-						Name   string `json:"name"`
-						Status string `json:"status"`
-						CPU    int    `json:"cpus"`
-						MaxMem int64  `json:"maxmem"`
-					} `json:"data"`
-				}
-				if err := json.Unmarshal(ctsRaw, &ctsResponse); err != nil {
-					if nodeErr == nil {
-						nodeErr = err
-					}
-					return
-				}
-
-				if len(ctsResponse.Data) > 0 {
-					nodeSection += "### Containers\n\n"
-					nodeSection += "| VMID | Name | Status | CPUs | Memory (MB) |\n"
-					nodeSection += "|------|------|--------|------|-------------|\n"
-					for _, ct := range ctsResponse.Data {
-						nodeSection += fmt.Sprintf("| %d | %s | %s | %d | %d |\n",
-							ct.VMID, ct.Name, ct.Status, ct.CPU, ct.MaxMem/bytesPerMB)
-						ent := connector.SnapshotEntity{
-							Kind:       "container",
-							Name:       ct.Name,
-							ExternalID: fmt.Sprintf("%d", ct.VMID),
-						}
-						attrs := map[string]any{"status": ct.Status}
-						if wantEntities {
-							if ct.Status == "running" {
-								ent.IP = p.fetchLxcIP(ctx, node.Node, ct.VMID)
-							}
-							if cfg, ok := p.fetchLxcConfig(ctx, node.Node, ct.VMID); ok {
-								attrs["onboot"] = cfg.Onboot != 0
-								attrs["protection"] = cfg.Protection != 0
-								attrs["template"] = cfg.Template != 0
-								attrs["agent_enabled"] = agentEnabled(cfg.Agent)
-								attrs["unprivileged"] = cfg.Unprivileged != 0
-								if cfg.OSType != "" {
-									attrs["os_type"] = cfg.OSType
-								}
-							}
-							if enabled, ok := p.fetchFirewallEnabled(ctx, "lxc", node.Node, ct.VMID); ok {
-								attrs["firewall_enabled"] = enabled
-							}
-						}
-						ent.Attributes = attrs
-						entities = append(entities, ent)
-					}
-					nodeSection += "\n"
-					totalCTs += len(ctsResponse.Data)
-				}
-			}()
+			p.fetchContainers(ctx, node.Node, wantEntities, nr)
 		}
-
-		// Fetch storage
 		if wantStorage {
-			func() {
-				storageRaw, err := p.doRequest(ctx, "GET", "/nodes/"+node.Node+"/storage", nil)
-				if err != nil {
-					if nodeErr == nil {
-						nodeErr = err
-					}
-					return
-				}
-				var storageResponse struct {
-					Data []struct {
-						Storage string `json:"storage"`
-						Type    string `json:"type"`
-						Used    int64  `json:"used"`
-						Total   int64  `json:"total"`
-						Avail   int64  `json:"avail"`
-					} `json:"data"`
-				}
-				if err := json.Unmarshal(storageRaw, &storageResponse); err != nil {
-					if nodeErr == nil {
-						nodeErr = err
-					}
-					return
-				}
-
-				if len(storageResponse.Data) > 0 {
-					nodeSection += "### Storage\n\n"
-					nodeSection += "| Storage | Type | Used (bytes) | Total (bytes) | Avail (bytes) |\n"
-					nodeSection += "|---------|------|---------------|----------------|----------------|\n"
-					for _, st := range storageResponse.Data {
-						nodeSection += fmt.Sprintf("| %s | %s | %d | %d | %d |\n",
-							st.Storage, st.Type, st.Used, st.Total, st.Avail)
-						dependencies = append(dependencies, connector.ServiceDependency{Kind: "storage", Name: st.Storage})
-					}
-					nodeSection += "\n"
-					totalStorage += len(storageResponse.Data)
-				}
-			}()
+			p.fetchStorage(ctx, node.Node, nr)
 		}
 
-		section := connector.SnapshotSection{Title: node.Node, Content: nodeSection}
-		if nodeErr != nil {
-			section = connector.ErrorSection(node.Node, nodeErr)
+		section := connector.SnapshotSection{Title: node.Node, Content: nr.section}
+		if nr.err != nil {
+			section = connector.ErrorSection(node.Node, nr.err)
 		}
 		sections = append(sections, section)
+		entities = append(entities, nr.entities...)
+		dependencies = append(dependencies, nr.dependencies...)
+		totalVMs += nr.vms
+		totalCTs += nr.cts
+		totalStorage += nr.storage
 	}
 
 	metadata["total_vms"] = fmt.Sprintf("%d", totalVMs)
@@ -257,4 +97,168 @@ func (p *Connector) Fetch(ctx context.Context, config map[string]any) (*connecto
 		Metadata:     metadata,
 		FetchedAt:    start,
 	}, nil
+}
+
+// nodeResult accumulates what one node contributes to the snapshot. A failed
+// resource call records only the first error and leaves the others to run.
+type nodeResult struct {
+	section      string
+	entities     []connector.SnapshotEntity
+	dependencies []connector.ServiceDependency
+	vms, cts     int
+	storage      int
+	err          error
+}
+
+func (r *nodeResult) fail(err error) {
+	if r.err == nil {
+		r.err = err
+	}
+}
+
+// guestList is the shared shape of the /qemu and /lxc listings.
+type guestList struct {
+	Data []struct {
+		VMID   int    `json:"vmid"`
+		Name   string `json:"name"`
+		Status string `json:"status"`
+		CPU    int    `json:"cpus"`
+		MaxMem int64  `json:"maxmem"`
+	} `json:"data"`
+}
+
+// fetchGuests lists the guests of one kind ("qemu" or "lxc") on a node.
+func (p *Connector) fetchGuests(ctx context.Context, node, kind string) (guestList, error) {
+	var list guestList
+	raw, err := p.doRequest(ctx, "GET", "/nodes/"+node+"/"+kind, nil)
+	if err != nil {
+		return list, err
+	}
+	err = json.Unmarshal(raw, &list)
+	return list, err
+}
+
+func (p *Connector) fetchVMs(ctx context.Context, node string, wantEntities bool, nr *nodeResult) {
+	list, err := p.fetchGuests(ctx, node, "qemu")
+	if err != nil {
+		nr.fail(err)
+		return
+	}
+	if len(list.Data) == 0 {
+		return
+	}
+	nr.section += "### Virtual Machines\n\n"
+	nr.section += "| VMID | Name | Status | CPUs | Memory (MB) |\n"
+	nr.section += "|------|------|--------|------|-------------|\n"
+	for _, vm := range list.Data {
+		nr.section += fmt.Sprintf("| %d | %s | %s | %d | %d |\n",
+			vm.VMID, vm.Name, vm.Status, vm.CPU, vm.MaxMem/bytesPerMB)
+		ent := connector.SnapshotEntity{
+			Kind:       "vm",
+			Name:       vm.Name,
+			ExternalID: fmt.Sprintf("%d", vm.VMID),
+		}
+		attrs := map[string]any{"status": vm.Status}
+		if wantEntities {
+			if vm.Status == "running" {
+				ent.IP = p.fetchQemuIP(ctx, node, vm.VMID)
+			}
+			if cfg, ok := p.fetchQemuConfig(ctx, node, vm.VMID); ok {
+				attrs["onboot"] = cfg.Onboot != 0
+				attrs["protection"] = cfg.Protection != 0
+				attrs["template"] = cfg.Template != 0
+				attrs["agent_enabled"] = agentEnabled(cfg.Agent)
+				if cfg.OSType != "" {
+					attrs["os_type"] = cfg.OSType
+				}
+			}
+			if enabled, ok := p.fetchFirewallEnabled(ctx, "qemu", node, vm.VMID); ok {
+				attrs["firewall_enabled"] = enabled
+			}
+		}
+		ent.Attributes = attrs
+		nr.entities = append(nr.entities, ent)
+	}
+	nr.section += "\n"
+	nr.vms += len(list.Data)
+}
+
+func (p *Connector) fetchContainers(ctx context.Context, node string, wantEntities bool, nr *nodeResult) {
+	list, err := p.fetchGuests(ctx, node, "lxc")
+	if err != nil {
+		nr.fail(err)
+		return
+	}
+	if len(list.Data) == 0 {
+		return
+	}
+	nr.section += "### Containers\n\n"
+	nr.section += "| VMID | Name | Status | CPUs | Memory (MB) |\n"
+	nr.section += "|------|------|--------|------|-------------|\n"
+	for _, ct := range list.Data {
+		nr.section += fmt.Sprintf("| %d | %s | %s | %d | %d |\n",
+			ct.VMID, ct.Name, ct.Status, ct.CPU, ct.MaxMem/bytesPerMB)
+		ent := connector.SnapshotEntity{
+			Kind:       "container",
+			Name:       ct.Name,
+			ExternalID: fmt.Sprintf("%d", ct.VMID),
+		}
+		attrs := map[string]any{"status": ct.Status}
+		if wantEntities {
+			if ct.Status == "running" {
+				ent.IP = p.fetchLxcIP(ctx, node, ct.VMID)
+			}
+			if cfg, ok := p.fetchLxcConfig(ctx, node, ct.VMID); ok {
+				attrs["onboot"] = cfg.Onboot != 0
+				attrs["protection"] = cfg.Protection != 0
+				attrs["template"] = cfg.Template != 0
+				attrs["agent_enabled"] = agentEnabled(cfg.Agent)
+				attrs["unprivileged"] = cfg.Unprivileged != 0
+				if cfg.OSType != "" {
+					attrs["os_type"] = cfg.OSType
+				}
+			}
+			if enabled, ok := p.fetchFirewallEnabled(ctx, "lxc", node, ct.VMID); ok {
+				attrs["firewall_enabled"] = enabled
+			}
+		}
+		ent.Attributes = attrs
+		nr.entities = append(nr.entities, ent)
+	}
+	nr.section += "\n"
+	nr.cts += len(list.Data)
+}
+
+func (p *Connector) fetchStorage(ctx context.Context, node string, nr *nodeResult) {
+	raw, err := p.doRequest(ctx, "GET", "/nodes/"+node+"/storage", nil)
+	if err != nil {
+		nr.fail(err)
+		return
+	}
+	var resp struct {
+		Data []struct {
+			Storage string `json:"storage"`
+			Type    string `json:"type"`
+			Used    int64  `json:"used"`
+			Total   int64  `json:"total"`
+			Avail   int64  `json:"avail"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(raw, &resp); err != nil {
+		nr.fail(err)
+		return
+	}
+	if len(resp.Data) == 0 {
+		return
+	}
+	nr.section += "### Storage\n\n"
+	nr.section += "| Storage | Type | Used (bytes) | Total (bytes) | Avail (bytes) |\n"
+	nr.section += "|---------|------|---------------|----------------|----------------|\n"
+	for _, st := range resp.Data {
+		nr.section += fmt.Sprintf("| %s | %s | %d | %d | %d |\n",
+			st.Storage, st.Type, st.Used, st.Total, st.Avail)
+		nr.dependencies = append(nr.dependencies, connector.ServiceDependency{Kind: "storage", Name: st.Storage})
+	}
+	nr.section += "\n"
+	nr.storage += len(resp.Data)
 }

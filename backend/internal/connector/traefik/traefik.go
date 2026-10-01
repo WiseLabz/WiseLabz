@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/WiseLabz/wiselabz/internal/connector"
+	"github.com/WiseLabz/wiselabz/internal/connector/snapshotutil"
 )
 
 const typeName = "traefik"
@@ -177,7 +178,7 @@ func (c *Connector) Fetch(ctx context.Context, config map[string]any) (snapshot 
 	if connector.WantsField(fields, "overview") {
 		raw, err := c.doRequest(ctx, pathOverview)
 		if err != nil {
-			sections = append(sections, unavailable("Overview", err))
+			sections = append(sections, snapshotutil.UnavailableSection("Overview", err))
 		} else {
 			content, counts := buildOverview(raw)
 			sections = append(sections, connector.SnapshotSection{Title: "Overview", Content: content})
@@ -191,7 +192,7 @@ func (c *Connector) Fetch(ctx context.Context, config map[string]any) (snapshot 
 	if connector.WantsField(fields, "routers") {
 		raw, err := c.doRequest(ctx, pathRouters)
 		if err != nil {
-			sections = append(sections, unavailable("HTTP Routers", err))
+			sections = append(sections, snapshotutil.UnavailableSection("HTTP Routers", err))
 		} else {
 			content, ents, svcs := buildRouterTable(raw)
 			sections = append(sections, connector.SnapshotSection{Title: "HTTP Routers", Content: content})
@@ -204,7 +205,7 @@ func (c *Connector) Fetch(ctx context.Context, config map[string]any) (snapshot 
 	if connector.WantsField(fields, "services") {
 		raw, err := c.doRequest(ctx, pathServices)
 		if err != nil {
-			sections = append(sections, unavailable("HTTP Services", err))
+			sections = append(sections, snapshotutil.UnavailableSection("HTTP Services", err))
 		} else {
 			content, ents := buildServiceTable(raw)
 			sections = append(sections, connector.SnapshotSection{Title: "HTTP Services", Content: content})
@@ -216,7 +217,7 @@ func (c *Connector) Fetch(ctx context.Context, config map[string]any) (snapshot 
 	if connector.WantsField(fields, "middlewares") {
 		raw, err := c.doRequest(ctx, pathMiddlewares)
 		if err != nil {
-			sections = append(sections, unavailable("HTTP Middlewares", err))
+			sections = append(sections, snapshotutil.UnavailableSection("HTTP Middlewares", err))
 		} else {
 			content, ents := buildMiddlewareTable(raw)
 			sections = append(sections, connector.SnapshotSection{Title: "HTTP Middlewares", Content: content})
@@ -228,7 +229,7 @@ func (c *Connector) Fetch(ctx context.Context, config map[string]any) (snapshot 
 	if connector.WantsField(fields, "entrypoints") {
 		raw, err := c.doRequest(ctx, pathEntryPoints)
 		if err != nil {
-			sections = append(sections, unavailable("Entry Points", err))
+			sections = append(sections, snapshotutil.UnavailableSection("Entry Points", err))
 		} else {
 			content, ents := buildEntryPointTable(raw)
 			sections = append(sections, connector.SnapshotSection{Title: "Entry Points", Content: content})
@@ -289,10 +290,6 @@ func serviceDependencies(services []string) []connector.ServiceDependency {
 	return deps
 }
 
-func unavailable(title string, err error) connector.SnapshotSection {
-	return connector.ErrorSection(title, err)
-}
-
 func (c *Connector) doRequest(ctx context.Context, path string) (data []byte, err error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.url+path, nil)
 	if err != nil {
@@ -306,24 +303,5 @@ func (c *Connector) doRequest(ctx context.Context, path string) (data []byte, er
 		req.Header.Set("Authorization", "Bearer "+c.apiToken)
 	}
 
-	resp, err := c.client.Do(req)
-	if err != nil {
-		return nil, connector.MapTransportError(err)
-	}
-	defer func() {
-		if cerr := resp.Body.Close(); cerr != nil && err == nil {
-			err = cerr
-		}
-	}()
-
-	data, err = connector.ReadBody(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("read response: %w", err)
-	}
-
-	if statusErr := connector.CheckStatus(resp.StatusCode, data); statusErr != nil {
-		return nil, statusErr
-	}
-
-	return data, nil
+	return connector.Do(c.client, req)
 }

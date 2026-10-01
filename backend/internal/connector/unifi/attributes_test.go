@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/WiseLabz/wiselabz/internal/connector"
+	"github.com/WiseLabz/wiselabz/internal/connector/connectortest"
 )
 
 // TestAttributeCatalogCoversEmittedKeys ensures every attribute key this
@@ -23,7 +24,7 @@ func TestAttributeCatalogCoversEmittedKeys(t *testing.T) {
 				emitted[e.Kind] = map[string]string{}
 			}
 			for key, value := range e.Attributes {
-				emitted[e.Kind][key] = jsonType(value)
+				emitted[e.Kind][key] = connectortest.JSONType(value)
 			}
 		}
 	}
@@ -61,21 +62,5 @@ func TestAttributeCatalogCoversEmittedKeys(t *testing.T) {
 		if _, ok := emitted[kind]; !ok {
 			t.Errorf("catalog declares entity kind %q, which the connector never emits", kind)
 		}
-	}
-}
-
-// jsonType maps a Go attribute value to the AttributeSpec type vocabulary.
-func jsonType(v any) string {
-	switch v.(type) {
-	case bool:
-		return "boolean"
-	case string:
-		return "string"
-	case int, int64, float64:
-		return "number"
-	case []string:
-		return "string_array"
-	default:
-		return "unknown"
 	}
 }

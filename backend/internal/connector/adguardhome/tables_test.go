@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/WiseLabz/wiselabz/internal/connector"
+	"github.com/WiseLabz/wiselabz/internal/connector/snapshotutil"
 )
 
 // TestBuildersOnMalformedAndEmptyInput checks every builder degrades to a
@@ -320,13 +321,13 @@ func TestLeaseNameFallsBackToAddress(t *testing.T) {
 // TestCellEscapesPipes guards the Markdown tables against filtering syntax
 // that contains '|'.
 func TestCellEscapesPipes(t *testing.T) {
-	if got := cell("||ads.example.com^"); got != `\|\|ads.example.com^` {
+	if got := snapshotutil.MDCell("||ads.example.com^"); got != `\|\|ads.example.com^` {
 		t.Errorf("cell = %q", got)
 	}
-	if got := cell(""); got != "—" {
-		t.Errorf("cell(\"\") = %q, want an em dash", got)
+	if got := snapshotutil.MDCell(""); got != "—" {
+		t.Errorf("snapshotutil.MDCell(\"\") = %q, want an em dash", got)
 	}
-	if got := cell("a\nb"); got != "a b" {
+	if got := snapshotutil.MDCell("a\nb"); got != "a b" {
 		t.Errorf("cell with newline = %q", got)
 	}
 }

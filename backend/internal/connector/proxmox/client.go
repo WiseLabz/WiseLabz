@@ -2,7 +2,6 @@ package proxmox
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"net/http"
 
@@ -21,20 +20,5 @@ func (p *Connector) doRequest(ctx context.Context, method, path string, body io.
 	req.Header.Set("Authorization", "PVEAPIToken="+p.tokenID+"="+p.tokenSecret)
 	req.Header.Set("Accept", "application/json")
 
-	resp, err := p.client.Do(req)
-	if err != nil {
-		return nil, connector.MapTransportError(err)
-	}
-	defer resp.Body.Close() //nolint:errcheck
-
-	data, err := connector.ReadBody(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("read response: %w", err)
-	}
-
-	if statusErr := connector.CheckStatus(resp.StatusCode, data); statusErr != nil {
-		return nil, statusErr
-	}
-
-	return data, nil
+	return connector.Do(p.client, req)
 }

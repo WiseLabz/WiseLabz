@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/WiseLabz/wiselabz/internal/connector"
+	"github.com/WiseLabz/wiselabz/internal/connector/snapshotutil"
 )
 
 // zfsProp is a ZFS property as the TrueNAS API reports it: an object with
@@ -50,37 +51,8 @@ func (p zfsProp) String() string {
 	return p.RawValue
 }
 
-// cell escapes a value for use inside a Markdown table cell: dataset paths
-// and share comments can carry '|' or newlines, which would otherwise
-// split a row into extra columns.
-func cell(s string) string {
-	if s == "" {
-		return "—"
-	}
-	s = strings.ReplaceAll(s, "\n", " ")
-	return strings.ReplaceAll(s, "|", `\|`)
-}
-
-func malformed(title string, err error) string {
-	return "_" + title + " unavailable: " + connector.NewMalformedResponseError(err).Error() + "_"
-}
-
-func empty(noun string) string { return "_No " + noun + " returned_" }
-
 func countMeta(key string, n int) map[string]string {
 	return map[string]string{key: fmt.Sprintf("%d", n)}
-}
-
-func putString(attrs map[string]any, key, value string) {
-	if value != "" {
-		attrs[key] = value
-	}
-}
-
-func putStrings(attrs map[string]any, key string, values []string) {
-	if len(values) > 0 {
-		attrs[key] = values
-	}
 }
 
 // humanBytes renders a byte count in binary units. Capacities are static,
@@ -118,7 +90,7 @@ func buildSystem(raw []byte) (string, []connector.SnapshotEntity, map[string]str
 		ECCMemory     bool   `json:"ecc_memory"`
 	}
 	if err := json.Unmarshal(raw, &info); err != nil {
-		return malformed("System", err), nil, nil
+		return snapshotutil.MalformedSection("System", err), nil, nil
 	}
 
 	var b strings.Builder
@@ -140,7 +112,7 @@ func buildSystem(raw []byte) (string, []connector.SnapshotEntity, map[string]str
 		if r.value == "" {
 			continue
 		}
-		_, _ = fmt.Fprintf(&b, "| %s | %s |\n", r.label, cell(r.value))
+		_, _ = fmt.Fprintf(&b, "| %s | %s |\n", r.label, snapshotutil.MDCell(r.value))
 	}
 
 	metadata := map[string]string{}
@@ -198,10 +170,10 @@ func buildPools(raw []byte) (string, []connector.SnapshotEntity, map[string]stri
 		} `json:"topology"`
 	}
 	if err := json.Unmarshal(raw, &pools); err != nil {
-		return malformed("Pools", err), nil, nil
+		return snapshotutil.MalformedSection("Pools", err), nil, nil
 	}
 	if len(pools) == 0 {
-		return empty("pools"), nil, countMeta("pool_count", 0)
+		return snapshotutil.Empty("pools"), nil, countMeta("pool_count", 0)
 	}
 
 	var b strings.Builder
@@ -222,18 +194,18 @@ func buildPools(raw []byte) (string, []connector.SnapshotEntity, map[string]stri
 		}
 		encrypted := p.Encrypt > 0
 		_, _ = fmt.Fprintf(&b, "| %s | %s | %t | %t | %s | %s |\n",
-			cell(p.Name), cell(p.Status), p.Healthy, encrypted,
-			cell(strings.Join(topology, "<br>")), cell(p.Path))
+			snapshotutil.MDCell(p.Name), snapshotutil.MDCell(p.Status), p.Healthy, encrypted,
+			snapshotutil.MDCell(strings.Join(topology, "<br>")), snapshotutil.MDCell(p.Path))
 
 		attrs := map[string]any{
 			"healthy":       p.Healthy,
 			"encrypted":     encrypted,
 			"dataVdevCount": len(p.Topology.Data),
 		}
-		putString(attrs, "status", p.Status)
-		putString(attrs, "path", p.Path)
-		putString(attrs, "autotrim", p.AutoTrim.String())
-		putStrings(attrs, "topology", topology)
+		snapshotutil.PutString(attrs, "status", p.Status)
+		snapshotutil.PutString(attrs, "path", p.Path)
+		snapshotutil.PutString(attrs, "autotrim", p.AutoTrim.String())
+		snapshotutil.PutStrings(attrs, "topology", topology)
 		entities = append(entities, connector.SnapshotEntity{
 			Kind: "pool", Name: p.Name, ExternalID: p.Name, Attributes: attrs,
 		})
@@ -272,11 +244,11 @@ func summarizeVdevs(label string, vdevs []vdev) []string {
 func buildDatasets(raw []byte) (string, []connector.SnapshotEntity, map[string]string) {
 	var datasets []dataset
 	if err := json.Unmarshal(raw, &datasets); err != nil {
-		return malformed("Datasets", err), nil, nil
+		return snapshotutil.MalformedSection("Datasets", err), nil, nil
 	}
 	flat := flattenDatasets(datasets)
 	if len(flat) == 0 {
-		return empty("datasets"), nil, countMeta("dataset_count", 0)
+		return snapshotutil.Empty("datasets"), nil, countMeta("dataset_count", 0)
 	}
 
 	var b strings.Builder
@@ -289,20 +261,20 @@ func buildDatasets(raw []byte) (string, []connector.SnapshotEntity, map[string]s
 			quota = "none"
 		}
 		_, _ = fmt.Fprintf(&b, "| %s | %s | %t | %s | %s | %s | %s |\n",
-			cell(d.Name), cell(d.Type), d.Encrypted, cell(d.Compression.String()),
-			cell(quota), cell(d.ReadOnly.String()), cell(d.MountPoint))
+			snapshotutil.MDCell(d.Name), snapshotutil.MDCell(d.Type), d.Encrypted, snapshotutil.MDCell(d.Compression.String()),
+			snapshotutil.MDCell(quota), snapshotutil.MDCell(d.ReadOnly.String()), snapshotutil.MDCell(d.MountPoint))
 
 		attrs := map[string]any{"encrypted": d.Encrypted}
-		putString(attrs, "datasetType", d.Type)
-		putString(attrs, "pool", d.Pool)
-		putString(attrs, "encryptionAlgorithm", d.EncryptionAlgorithm)
-		putString(attrs, "compression", d.Compression.String())
-		putString(attrs, "deduplication", d.Deduplication.String())
-		putString(attrs, "atime", d.ATime.String())
-		putString(attrs, "readonly", d.ReadOnly.String())
-		putString(attrs, "sync", d.Sync.String())
-		putString(attrs, "quota", d.Quota.String())
-		putString(attrs, "mountpoint", d.MountPoint)
+		snapshotutil.PutString(attrs, "datasetType", d.Type)
+		snapshotutil.PutString(attrs, "pool", d.Pool)
+		snapshotutil.PutString(attrs, "encryptionAlgorithm", d.EncryptionAlgorithm)
+		snapshotutil.PutString(attrs, "compression", d.Compression.String())
+		snapshotutil.PutString(attrs, "deduplication", d.Deduplication.String())
+		snapshotutil.PutString(attrs, "atime", d.ATime.String())
+		snapshotutil.PutString(attrs, "readonly", d.ReadOnly.String())
+		snapshotutil.PutString(attrs, "sync", d.Sync.String())
+		snapshotutil.PutString(attrs, "quota", d.Quota.String())
+		snapshotutil.PutString(attrs, "mountpoint", d.MountPoint)
 		entities = append(entities, connector.SnapshotEntity{
 			Kind: "dataset", Name: d.Name, ExternalID: d.ID, Attributes: attrs,
 		})
@@ -372,10 +344,10 @@ func buildDisks(raw []byte) (string, []connector.SnapshotEntity, map[string]stri
 		ToggleSMART bool   `json:"togglesmart"`
 	}
 	if err := json.Unmarshal(raw, &disks); err != nil {
-		return malformed("Disks", err), nil, nil
+		return snapshotutil.MalformedSection("Disks", err), nil, nil
 	}
 	if len(disks) == 0 {
-		return empty("disks"), nil, countMeta("disk_count", 0)
+		return snapshotutil.Empty("disks"), nil, countMeta("disk_count", 0)
 	}
 
 	var b strings.Builder
@@ -384,18 +356,18 @@ func buildDisks(raw []byte) (string, []connector.SnapshotEntity, map[string]stri
 	entities := make([]connector.SnapshotEntity, 0, len(disks))
 	for _, d := range disks {
 		_, _ = fmt.Fprintf(&b, "| %s | %s | %s | %s | %s | %s | %t |\n",
-			cell(d.Name), cell(d.Type), cell(humanBytes(d.Size)), cell(d.Model),
-			cell(d.Serial), cell(d.Pool), d.ToggleSMART)
+			snapshotutil.MDCell(d.Name), snapshotutil.MDCell(d.Type), snapshotutil.MDCell(humanBytes(d.Size)), snapshotutil.MDCell(d.Model),
+			snapshotutil.MDCell(d.Serial), snapshotutil.MDCell(d.Pool), d.ToggleSMART)
 
 		attrs := map[string]any{"smartEnabled": d.ToggleSMART}
 		if d.Size > 0 {
 			attrs["size"] = d.Size
 		}
-		putString(attrs, "serial", d.Serial)
-		putString(attrs, "model", d.Model)
-		putString(attrs, "diskType", d.Type)
-		putString(attrs, "pool", d.Pool)
-		putString(attrs, "description", d.Description)
+		snapshotutil.PutString(attrs, "serial", d.Serial)
+		snapshotutil.PutString(attrs, "model", d.Model)
+		snapshotutil.PutString(attrs, "diskType", d.Type)
+		snapshotutil.PutString(attrs, "pool", d.Pool)
+		snapshotutil.PutString(attrs, "description", d.Description)
 		entities = append(entities, connector.SnapshotEntity{
 			Kind: "disk", Name: d.Name, ExternalID: d.Name, Attributes: attrs,
 		})
@@ -417,10 +389,10 @@ func buildSMBShares(raw []byte) (string, []connector.SnapshotEntity, map[string]
 		Comment   string `json:"comment"`
 	}
 	if err := json.Unmarshal(raw, &shares); err != nil {
-		return malformed("SMB Shares", err), nil, nil
+		return snapshotutil.MalformedSection("SMB Shares", err), nil, nil
 	}
 	if len(shares) == 0 {
-		return empty("SMB shares"), nil, countMeta("smb_share_count", 0)
+		return snapshotutil.Empty("SMB shares"), nil, countMeta("smb_share_count", 0)
 	}
 
 	var b strings.Builder
@@ -429,7 +401,7 @@ func buildSMBShares(raw []byte) (string, []connector.SnapshotEntity, map[string]
 	entities := make([]connector.SnapshotEntity, 0, len(shares))
 	for _, s := range shares {
 		_, _ = fmt.Fprintf(&b, "| %s | %s | %t | %t | %t | %t | %s |\n",
-			cell(s.Name), cell(s.Path), s.Enabled, s.ReadOnly, s.GuestOK, s.Browsable, cell(s.Purpose))
+			snapshotutil.MDCell(s.Name), snapshotutil.MDCell(s.Path), s.Enabled, s.ReadOnly, s.GuestOK, s.Browsable, snapshotutil.MDCell(s.Purpose))
 
 		attrs := map[string]any{
 			"protocol":    "smb",
@@ -438,9 +410,9 @@ func buildSMBShares(raw []byte) (string, []connector.SnapshotEntity, map[string]
 			"guestAccess": s.GuestOK,
 			"browsable":   s.Browsable,
 		}
-		putString(attrs, "path", s.Path)
-		putString(attrs, "purpose", s.Purpose)
-		putString(attrs, "comment", s.Comment)
+		snapshotutil.PutString(attrs, "path", s.Path)
+		snapshotutil.PutString(attrs, "purpose", s.Purpose)
+		snapshotutil.PutString(attrs, "comment", s.Comment)
 		entities = append(entities, connector.SnapshotEntity{
 			Kind: "share", Name: s.Name, ExternalID: fmt.Sprintf("smb:%d", s.ID), Attributes: attrs,
 		})
@@ -463,10 +435,10 @@ func buildNFSShares(raw []byte) (string, []connector.SnapshotEntity, map[string]
 		Comment     string   `json:"comment"`
 	}
 	if err := json.Unmarshal(raw, &shares); err != nil {
-		return malformed("NFS Shares", err), nil, nil
+		return snapshotutil.MalformedSection("NFS Shares", err), nil, nil
 	}
 	if len(shares) == 0 {
-		return empty("NFS shares"), nil, countMeta("nfs_share_count", 0)
+		return snapshotutil.Empty("NFS shares"), nil, countMeta("nfs_share_count", 0)
 	}
 
 	var b strings.Builder
@@ -480,15 +452,15 @@ func buildNFSShares(raw []byte) (string, []connector.SnapshotEntity, map[string]
 		}
 		name := strings.Join(paths, ", ")
 		_, _ = fmt.Fprintf(&b, "| %s | %t | %t | %s | %s | %s |\n",
-			cell(name), s.Enabled, s.ReadOnly, cell(strings.Join(s.Networks, ", ")),
-			cell(strings.Join(s.Hosts, ", ")), cell(s.MaprootUser))
+			snapshotutil.MDCell(name), s.Enabled, s.ReadOnly, snapshotutil.MDCell(strings.Join(s.Networks, ", ")),
+			snapshotutil.MDCell(strings.Join(s.Hosts, ", ")), snapshotutil.MDCell(s.MaprootUser))
 
 		attrs := map[string]any{"protocol": "nfs", "enabled": s.Enabled, "readonly": s.ReadOnly}
-		putString(attrs, "path", strings.Join(paths, ", "))
-		putString(attrs, "maprootUser", s.MaprootUser)
-		putString(attrs, "comment", s.Comment)
-		putStrings(attrs, "networks", s.Networks)
-		putStrings(attrs, "hosts", s.Hosts)
+		snapshotutil.PutString(attrs, "path", strings.Join(paths, ", "))
+		snapshotutil.PutString(attrs, "maprootUser", s.MaprootUser)
+		snapshotutil.PutString(attrs, "comment", s.Comment)
+		snapshotutil.PutStrings(attrs, "networks", s.Networks)
+		snapshotutil.PutStrings(attrs, "hosts", s.Hosts)
 		entities = append(entities, connector.SnapshotEntity{
 			Kind: "share", Name: name, ExternalID: fmt.Sprintf("nfs:%d", s.ID), Attributes: attrs,
 		})
@@ -505,10 +477,10 @@ func buildServices(raw []byte) (string, []connector.SnapshotEntity, map[string]s
 		State   string `json:"state"`
 	}
 	if err := json.Unmarshal(raw, &services); err != nil {
-		return malformed("Services", err), nil, nil
+		return snapshotutil.MalformedSection("Services", err), nil, nil
 	}
 	if len(services) == 0 {
-		return empty("services"), nil, countMeta("service_count", 0)
+		return snapshotutil.Empty("services"), nil, countMeta("service_count", 0)
 	}
 	sort.Slice(services, func(i, j int) bool { return services[i].Service < services[j].Service })
 
@@ -521,10 +493,10 @@ func buildServices(raw []byte) (string, []connector.SnapshotEntity, map[string]s
 		if strings.EqualFold(s.State, "RUNNING") {
 			running++
 		}
-		_, _ = fmt.Fprintf(&b, "| %s | %s | %t |\n", cell(s.Service), cell(s.State), s.Enable)
+		_, _ = fmt.Fprintf(&b, "| %s | %s | %t |\n", snapshotutil.MDCell(s.Service), snapshotutil.MDCell(s.State), s.Enable)
 
 		attrs := map[string]any{"startOnBoot": s.Enable}
-		putString(attrs, "state", s.State)
+		snapshotutil.PutString(attrs, "state", s.State)
 		entities = append(entities, connector.SnapshotEntity{
 			Kind: "service", Name: s.Service, ExternalID: s.Service, Attributes: attrs,
 		})
@@ -552,10 +524,10 @@ func buildInterfaces(raw []byte) (string, []connector.SnapshotEntity, map[string
 		} `json:"aliases"`
 	}
 	if err := json.Unmarshal(raw, &ifaces); err != nil {
-		return malformed("Network Interfaces", err), nil, nil
+		return snapshotutil.MalformedSection("Network Interfaces", err), nil, nil
 	}
 	if len(ifaces) == 0 {
-		return empty("network interfaces"), nil, countMeta("interface_count", 0)
+		return snapshotutil.Empty("network interfaces"), nil, countMeta("interface_count", 0)
 	}
 
 	var b strings.Builder
@@ -579,15 +551,15 @@ func buildInterfaces(raw []byte) (string, []connector.SnapshotEntity, map[string
 			mtu = fmt.Sprintf("%d", i.MTU)
 		}
 		_, _ = fmt.Fprintf(&b, "| %s | %s | %s | %t | %s | %s |\n",
-			cell(i.Name), cell(i.Type), cell(strings.Join(addresses, ", ")), i.IPv4DHCP, mtu, cell(i.Description))
+			snapshotutil.MDCell(i.Name), snapshotutil.MDCell(i.Type), snapshotutil.MDCell(strings.Join(addresses, ", ")), i.IPv4DHCP, mtu, snapshotutil.MDCell(i.Description))
 
 		attrs := map[string]any{"dhcp": i.IPv4DHCP}
 		if i.MTU > 0 {
 			attrs["mtu"] = i.MTU
 		}
-		putString(attrs, "interfaceType", i.Type)
-		putString(attrs, "description", i.Description)
-		putStrings(attrs, "addresses", addresses)
+		snapshotutil.PutString(attrs, "interfaceType", i.Type)
+		snapshotutil.PutString(attrs, "description", i.Description)
+		snapshotutil.PutStrings(attrs, "addresses", addresses)
 		name := i.Name
 		if name == "" {
 			name = i.ID
@@ -633,10 +605,10 @@ func buildSnapshotTasks(raw []byte) (string, []connector.SnapshotEntity, map[str
 		} `json:"schedule"`
 	}
 	if err := json.Unmarshal(raw, &tasks); err != nil {
-		return malformed("Snapshot Tasks", err), nil, nil
+		return snapshotutil.MalformedSection("Snapshot Tasks", err), nil, nil
 	}
 	if len(tasks) == 0 {
-		return empty("snapshot tasks"), nil, countMeta("snapshot_task_count", 0)
+		return snapshotutil.Empty("snapshot tasks"), nil, countMeta("snapshot_task_count", 0)
 	}
 
 	var b strings.Builder
@@ -652,14 +624,14 @@ func buildSnapshotTasks(raw []byte) (string, []connector.SnapshotEntity, map[str
 			lifetime = fmt.Sprintf("%d %s", t.LifetimeValue, t.LifetimeUnit)
 		}
 		_, _ = fmt.Fprintf(&b, "| %s | %t | %s | %s | %s | %t |\n",
-			cell(t.Dataset), t.Recursive, cell(schedule), cell(lifetime), cell(t.NamingSchema), t.Enabled)
+			snapshotutil.MDCell(t.Dataset), t.Recursive, snapshotutil.MDCell(schedule), snapshotutil.MDCell(lifetime), snapshotutil.MDCell(t.NamingSchema), t.Enabled)
 
 		attrs := map[string]any{"recursive": t.Recursive, "enabled": t.Enabled}
-		putString(attrs, "dataset", t.Dataset)
-		putString(attrs, "schedule", schedule)
-		putString(attrs, "lifetime", lifetime)
-		putString(attrs, "namingSchema", t.NamingSchema)
-		putStrings(attrs, "exclude", t.Exclude)
+		snapshotutil.PutString(attrs, "dataset", t.Dataset)
+		snapshotutil.PutString(attrs, "schedule", schedule)
+		snapshotutil.PutString(attrs, "lifetime", lifetime)
+		snapshotutil.PutString(attrs, "namingSchema", t.NamingSchema)
+		snapshotutil.PutStrings(attrs, "exclude", t.Exclude)
 		entities = append(entities, connector.SnapshotEntity{
 			Kind: "snapshot_task", Name: t.Dataset, ExternalID: fmt.Sprintf("snapshottask:%d", t.ID), Attributes: attrs,
 		})
@@ -682,10 +654,10 @@ func buildReplicationTasks(raw []byte) (string, []connector.SnapshotEntity, map[
 		RetentionPolicy string   `json:"retention_policy"`
 	}
 	if err := json.Unmarshal(raw, &tasks); err != nil {
-		return malformed("Replication Tasks", err), nil, nil
+		return snapshotutil.MalformedSection("Replication Tasks", err), nil, nil
 	}
 	if len(tasks) == 0 {
-		return empty("replication tasks"), nil, countMeta("replication_task_count", 0)
+		return snapshotutil.Empty("replication tasks"), nil, countMeta("replication_task_count", 0)
 	}
 
 	var b strings.Builder
@@ -694,15 +666,15 @@ func buildReplicationTasks(raw []byte) (string, []connector.SnapshotEntity, map[
 	entities := make([]connector.SnapshotEntity, 0, len(tasks))
 	for _, t := range tasks {
 		_, _ = fmt.Fprintf(&b, "| %s | %s | %s | %s | %s | %t | %t |\n",
-			cell(t.Name), cell(t.Direction), cell(t.Transport), cell(strings.Join(t.SourceDatasets, ", ")),
-			cell(t.TargetDataset), t.Auto, t.Enabled)
+			snapshotutil.MDCell(t.Name), snapshotutil.MDCell(t.Direction), snapshotutil.MDCell(t.Transport), snapshotutil.MDCell(strings.Join(t.SourceDatasets, ", ")),
+			snapshotutil.MDCell(t.TargetDataset), t.Auto, t.Enabled)
 
 		attrs := map[string]any{"recursive": t.Recursive, "enabled": t.Enabled, "auto": t.Auto}
-		putString(attrs, "direction", t.Direction)
-		putString(attrs, "transport", t.Transport)
-		putString(attrs, "targetDataset", t.TargetDataset)
-		putString(attrs, "retentionPolicy", t.RetentionPolicy)
-		putStrings(attrs, "sourceDatasets", t.SourceDatasets)
+		snapshotutil.PutString(attrs, "direction", t.Direction)
+		snapshotutil.PutString(attrs, "transport", t.Transport)
+		snapshotutil.PutString(attrs, "targetDataset", t.TargetDataset)
+		snapshotutil.PutString(attrs, "retentionPolicy", t.RetentionPolicy)
+		snapshotutil.PutStrings(attrs, "sourceDatasets", t.SourceDatasets)
 		entities = append(entities, connector.SnapshotEntity{
 			Kind: "replication_task", Name: t.Name, ExternalID: fmt.Sprintf("replication:%d", t.ID), Attributes: attrs,
 		})

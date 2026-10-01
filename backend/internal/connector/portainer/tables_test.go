@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+
+	"github.com/WiseLabz/wiselabz/internal/connector/snapshotutil"
 )
 
 func decodeEnvironments(t *testing.T, raw string) []environment {
@@ -254,13 +256,13 @@ func TestNetworkRows(t *testing.T) {
 // TestCellEscapesPipes guards table rows against values containing '|',
 // which would otherwise split a row into extra columns.
 func TestCellEscapesPipes(t *testing.T) {
-	if got := cell("sh -c 'a | b'"); got != `sh -c 'a \| b'` {
-		t.Errorf("cell() = %q", got)
+	if got := snapshotutil.MDCell("sh -c 'a | b'"); got != `sh -c 'a \| b'` {
+		t.Errorf("snapshotutil.MDCell() = %q", got)
 	}
-	if got := cell("two\nlines"); got != "two lines" {
-		t.Errorf("cell() = %q", got)
+	if got := snapshotutil.MDCell("two\nlines"); got != "two lines" {
+		t.Errorf("snapshotutil.MDCell() = %q", got)
 	}
-	if got := cell(""); got != "—" {
-		t.Errorf("cell(\"\") = %q", got)
+	if got := snapshotutil.MDCell(""); got != "—" {
+		t.Errorf("snapshotutil.MDCell(\"\") = %q", got)
 	}
 }

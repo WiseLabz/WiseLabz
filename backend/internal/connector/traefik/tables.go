@@ -7,27 +7,13 @@ import (
 	"strings"
 
 	"github.com/WiseLabz/wiselabz/internal/connector"
+	"github.com/WiseLabz/wiselabz/internal/connector/snapshotutil"
 )
 
 // meta keys a middleware object carries besides its actual configuration
 // block; everything else is a middleware kind (basicAuth, headers, ...).
 var middlewareMetaKeys = map[string]struct{}{
 	"status": {}, "usedBy": {}, "name": {}, "provider": {}, "type": {}, "error": {},
-}
-
-// cell escapes a value for use inside a Markdown table cell. Traefik rules
-// routinely contain '|' (as in "Host(`a`) || Host(`b`)") and would
-// otherwise split the row into extra columns.
-func cell(s string) string {
-	if s == "" {
-		return "—"
-	}
-	s = strings.ReplaceAll(s, "\n", " ")
-	return strings.ReplaceAll(s, "|", `\|`)
-}
-
-func malformed(title string, err error) string {
-	return "_" + title + " unavailable: " + connector.NewMalformedResponseError(err).Error() + "_"
 }
 
 // buildOverview renders /api/overview and returns count metadata alongside.
@@ -54,7 +40,7 @@ func buildOverview(raw []byte) (string, map[string]string) {
 		} `json:"features"`
 	}
 	if err := json.Unmarshal(raw, &overview); err != nil {
-		return malformed("Overview", err), nil
+		return snapshotutil.MalformedSection("Overview", err), nil
 	}
 
 	var b strings.Builder
@@ -70,14 +56,14 @@ func buildOverview(raw []byte) (string, map[string]string) {
 			r.name, r.s.Routers.Total, r.s.Services.Total, r.s.Middlewares.Total, errs)
 	}
 	if len(overview.Providers) > 0 {
-		_, _ = fmt.Fprintf(&b, "\nProviders: %s\n", cell(strings.Join(overview.Providers, ", ")))
+		_, _ = fmt.Fprintf(&b, "\nProviders: %s\n", snapshotutil.MDCell(strings.Join(overview.Providers, ", ")))
 	}
 	_, _ = fmt.Fprintf(&b, "\nAccess log: %t", overview.Features.AccessLog)
 	if overview.Features.Metrics != "" {
-		_, _ = fmt.Fprintf(&b, " · Metrics: %s", cell(overview.Features.Metrics))
+		_, _ = fmt.Fprintf(&b, " · Metrics: %s", snapshotutil.MDCell(overview.Features.Metrics))
 	}
 	if overview.Features.Tracing != "" {
-		_, _ = fmt.Fprintf(&b, " · Tracing: %s", cell(overview.Features.Tracing))
+		_, _ = fmt.Fprintf(&b, " · Tracing: %s", snapshotutil.MDCell(overview.Features.Tracing))
 	}
 	b.WriteString("\n")
 
@@ -108,7 +94,7 @@ func buildRouterTable(raw []byte) (string, []connector.SnapshotEntity, []string)
 		} `json:"tls"`
 	}
 	if err := json.Unmarshal(raw, &routers); err != nil {
-		return malformed("HTTP Routers", err), nil, nil
+		return snapshotutil.MalformedSection("HTTP Routers", err), nil, nil
 	}
 	if len(routers) == 0 {
 		return "_No routers returned_", nil, nil
@@ -128,19 +114,19 @@ func buildRouterTable(raw []byte) (string, []connector.SnapshotEntity, []string)
 			}
 		}
 		_, _ = fmt.Fprintf(&b, "| %s | %s | %s | %s | %s | %s | %s |\n",
-			cell(r.Name), cell(r.Rule), cell(r.Service),
-			cell(strings.Join(r.EntryPoints, ", ")), cell(strings.Join(r.Middlewares, ", ")),
-			tlsDesc, cell(r.Status))
+			snapshotutil.MDCell(r.Name), snapshotutil.MDCell(r.Rule), snapshotutil.MDCell(r.Service),
+			snapshotutil.MDCell(strings.Join(r.EntryPoints, ", ")), snapshotutil.MDCell(strings.Join(r.Middlewares, ", ")),
+			tlsDesc, snapshotutil.MDCell(r.Status))
 
 		attrs := map[string]any{"tls": r.TLS != nil}
-		putString(attrs, "status", r.Status)
-		putString(attrs, "rule", r.Rule)
-		putString(attrs, "service", r.Service)
-		putString(attrs, "provider", r.Provider)
-		putStrings(attrs, "entryPoints", r.EntryPoints)
-		putStrings(attrs, "middlewares", r.Middlewares)
+		snapshotutil.PutString(attrs, "status", r.Status)
+		snapshotutil.PutString(attrs, "rule", r.Rule)
+		snapshotutil.PutString(attrs, "service", r.Service)
+		snapshotutil.PutString(attrs, "provider", r.Provider)
+		snapshotutil.PutStrings(attrs, "entryPoints", r.EntryPoints)
+		snapshotutil.PutStrings(attrs, "middlewares", r.Middlewares)
 		if r.TLS != nil {
-			putString(attrs, "certResolver", r.TLS.CertResolver)
+			snapshotutil.PutString(attrs, "certResolver", r.TLS.CertResolver)
 		}
 		entities = append(entities, connector.SnapshotEntity{
 			Kind: "router", Name: r.Name, ExternalID: r.Name, Hostname: hostFromRule(r.Rule), Attributes: attrs,
@@ -183,7 +169,7 @@ func buildServiceTable(raw []byte) (string, []connector.SnapshotEntity) {
 		} `json:"loadBalancer"`
 	}
 	if err := json.Unmarshal(raw, &services); err != nil {
-		return malformed("HTTP Services", err), nil
+		return snapshotutil.MalformedSection("HTTP Services", err), nil
 	}
 	if len(services) == 0 {
 		return "_No services returned_", nil
@@ -207,13 +193,13 @@ func buildServiceTable(raw []byte) (string, []connector.SnapshotEntity) {
 			passHost = s.LoadBalancer.PassHostHeader == nil || *s.LoadBalancer.PassHostHeader
 		}
 		_, _ = fmt.Fprintf(&b, "| %s | %s | %s | %s | %s |\n",
-			cell(s.Name), cell(s.Provider), cell(strings.Join(servers, "<br>")),
-			cell(healthSummary(s.ServerStatus)), cell(s.Status))
+			snapshotutil.MDCell(s.Name), snapshotutil.MDCell(s.Provider), snapshotutil.MDCell(strings.Join(servers, "<br>")),
+			snapshotutil.MDCell(healthSummary(s.ServerStatus)), snapshotutil.MDCell(s.Status))
 
 		attrs := map[string]any{"serverCount": len(servers), "passHostHeader": passHost}
-		putString(attrs, "status", s.Status)
-		putString(attrs, "provider", s.Provider)
-		putStrings(attrs, "servers", servers)
+		snapshotutil.PutString(attrs, "status", s.Status)
+		snapshotutil.PutString(attrs, "provider", s.Provider)
+		snapshotutil.PutStrings(attrs, "servers", servers)
 		entities = append(entities, connector.SnapshotEntity{
 			Kind: "service", Name: s.Name, ExternalID: s.Name, Attributes: attrs,
 		})
@@ -241,7 +227,7 @@ func healthSummary(status map[string]string) string {
 func buildMiddlewareTable(raw []byte) (string, []connector.SnapshotEntity) {
 	var items []map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &items); err != nil {
-		return malformed("HTTP Middlewares", err), nil
+		return snapshotutil.MalformedSection("HTTP Middlewares", err), nil
 	}
 	if len(items) == 0 {
 		return "_No middlewares returned_", nil
@@ -262,13 +248,13 @@ func buildMiddlewareTable(raw []byte) (string, []connector.SnapshotEntity) {
 		}
 
 		_, _ = fmt.Fprintf(&b, "| %s | %s | %s | %s | %s |\n",
-			cell(name), cell(strings.Join(types, ", ")), cell(provider),
-			cell(strings.Join(usedBy, ", ")), cell(status))
+			snapshotutil.MDCell(name), snapshotutil.MDCell(strings.Join(types, ", ")), snapshotutil.MDCell(provider),
+			snapshotutil.MDCell(strings.Join(usedBy, ", ")), snapshotutil.MDCell(status))
 
 		attrs := map[string]any{}
-		putString(attrs, "status", status)
-		putString(attrs, "provider", provider)
-		putStrings(attrs, "types", types)
+		snapshotutil.PutString(attrs, "status", status)
+		snapshotutil.PutString(attrs, "provider", provider)
+		snapshotutil.PutStrings(attrs, "types", types)
 		entities = append(entities, connector.SnapshotEntity{
 			Kind: "middleware", Name: name, ExternalID: name, Attributes: attrs,
 		})
@@ -307,7 +293,7 @@ func buildEntryPointTable(raw []byte) (string, []connector.SnapshotEntity) {
 		} `json:"http"`
 	}
 	if err := json.Unmarshal(raw, &eps); err != nil {
-		return malformed("Entry Points", err), nil
+		return snapshotutil.MalformedSection("Entry Points", err), nil
 	}
 	if len(eps) == 0 {
 		return "_No entry points returned_", nil
@@ -325,10 +311,10 @@ func buildEntryPointTable(raw []byte) (string, []connector.SnapshotEntity) {
 				tlsDesc = "yes (" + e.HTTP.TLS.CertResolver + ")"
 			}
 		}
-		_, _ = fmt.Fprintf(&b, "| %s | %s | %t | %s |\n", cell(e.Name), cell(e.Address), e.AsDefault, tlsDesc)
+		_, _ = fmt.Fprintf(&b, "| %s | %s | %t | %s |\n", snapshotutil.MDCell(e.Name), snapshotutil.MDCell(e.Address), e.AsDefault, tlsDesc)
 
 		attrs := map[string]any{"asDefault": e.AsDefault, "tls": e.HTTP.TLS != nil}
-		putString(attrs, "address", e.Address)
+		snapshotutil.PutString(attrs, "address", e.Address)
 		entities = append(entities, connector.SnapshotEntity{
 			Kind: "entrypoint", Name: e.Name, ExternalID: e.Name, Attributes: attrs,
 		})
@@ -346,16 +332,4 @@ func rawString(item map[string]json.RawMessage, key string) string {
 		return ""
 	}
 	return s
-}
-
-func putString(attrs map[string]any, key, value string) {
-	if value != "" {
-		attrs[key] = value
-	}
-}
-
-func putStrings(attrs map[string]any, key string, values []string) {
-	if len(values) > 0 {
-		attrs[key] = values
-	}
 }

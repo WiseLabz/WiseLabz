@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/WiseLabz/wiselabz/internal/connector"
+	"github.com/WiseLabz/wiselabz/internal/connector/snapshotutil"
 )
 
 // The v5 (api.php/groups.php) and v6 (REST) APIs return the same concepts in
@@ -85,13 +86,6 @@ func cell(s string) string {
 	return s
 }
 
-func yesNo(b bool) string {
-	if b {
-		return "yes"
-	}
-	return "no"
-}
-
 func buildGroupTable(rows []groupRow) (content string, entities []connector.SnapshotEntity) {
 	if len(rows) == 0 {
 		return "_No groups returned_", nil
@@ -100,7 +94,7 @@ func buildGroupTable(rows []groupRow) (content string, entities []connector.Snap
 	b.WriteString("| Group | Enabled | Comment |\n")
 	b.WriteString("|-------|---------|---------|\n")
 	for _, r := range rows {
-		fmt.Fprintf(&b, "| %s | %s | %s |\n", cell(r.Name), yesNo(r.Enabled), cell(r.Comment))
+		fmt.Fprintf(&b, "| %s | %s | %s |\n", cell(r.Name), snapshotutil.YesNo(r.Enabled), cell(r.Comment))
 		entities = append(entities, connector.SnapshotEntity{
 			Kind:       "dns_group",
 			Name:       r.Name,
@@ -123,7 +117,7 @@ func buildAdlistTable(rows []adlistRow) (content string, entities []connector.Sn
 	b.WriteString("|---------|------|---------|--------|---------|\n")
 	for _, r := range rows {
 		fmt.Fprintf(&b, "| %s | %s | %s | %s | %s |\n",
-			cell(r.Address), cell(r.Kind), yesNo(r.Enabled), cell(strings.Join(r.Groups, ", ")), cell(r.Comment))
+			cell(r.Address), cell(r.Kind), snapshotutil.YesNo(r.Enabled), cell(strings.Join(r.Groups, ", ")), cell(r.Comment))
 		entities = append(entities, connector.SnapshotEntity{
 			Kind:       "blocklist",
 			Name:       r.Address,
@@ -170,7 +164,7 @@ func buildDomainTable(rows []domainRow) (content string, entities []connector.Sn
 	b.WriteString("|--------|------|-------|---------|--------|---------|\n")
 	for _, r := range rows {
 		fmt.Fprintf(&b, "| %s | %s | %s | %s | %s | %s |\n",
-			cell(r.Domain), cell(r.Rule), cell(r.Match), yesNo(r.Enabled),
+			cell(r.Domain), cell(r.Rule), cell(r.Match), snapshotutil.YesNo(r.Enabled),
 			cell(strings.Join(r.Groups, ", ")), cell(r.Comment))
 		entities = append(entities, connector.SnapshotEntity{
 			Kind:       "domain_rule",

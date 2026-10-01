@@ -277,8 +277,8 @@ func TestNewTCPDockerClientNoTLSWhenNoCert(t *testing.T) {
 	if baseURL != "http://example:2375" {
 		t.Fatalf("baseURL = %q, want http://example:2375", baseURL)
 	}
-	if httpx.Unwrap(client.Transport).(*http.Transport).TLSClientConfig != nil {
-		t.Fatal("TLSClientConfig set with no tls_cert/tls_key configured")
+	if len(httpx.Unwrap(client.Transport).(*http.Transport).TLSClientConfig.Certificates) != 0 {
+		t.Fatal("client certificate set with no tls_cert/tls_key configured")
 	}
 }
 
