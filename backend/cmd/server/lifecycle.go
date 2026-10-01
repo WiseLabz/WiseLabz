@@ -25,17 +25,21 @@ type lifecycleScheduler interface {
 // lifecycleDeps holds everything the lifecycle manager needs to start and
 // stop the server's long-running goroutines.
 type lifecycleDeps struct {
-	SyncEngine      interface{ Wait(context.Context) error }
-	Logger          *slog.Logger
-	HTTPServer      *http.Server
-	WSHub           *ws.Hub
-	Scheduler       lifecycleScheduler
-	Dispatcher      *notifications.Dispatcher
-	Store           *store.Store
-	Ready           *syshandler.ReadyState
-	Elector         leader.Election
-	LeaderElection  bool
-	ShutdownTimeout time.Duration
+	SyncEngine     interface{ Wait(context.Context) error }
+	Logger         *slog.Logger
+	HTTPServer     *http.Server
+	WSHub          *ws.Hub
+	Scheduler      lifecycleScheduler
+	Dispatcher     *notifications.Dispatcher
+	Store          *store.Store
+	Ready          *syshandler.ReadyState
+	Elector        leader.Election
+	LeaderElection bool
+	// TopologyBackfill, when set, runs once in the background whenever this
+	// instance holds leadership, rebuilding topology edges for connectors that
+	// synced before edge building existed. Optional.
+	TopologyBackfill func(context.Context) (int, error)
+	ShutdownTimeout  time.Duration
 }
 
 // lifecycleManager starts every long-running server goroutine (HTTP server,
@@ -151,6 +155,16 @@ func (m *lifecycleManager) startLeaderWorkers() {
 		notifications.RunDeliveryRetries(m.workCtx, m.deps.Dispatcher, logger)
 		return nil
 	})
+	if backfill := m.deps.TopologyBackfill; backfill != nil {
+		m.group.Go(func() error {
+			if n, err := backfill(m.workCtx); err != nil {
+				logger.Error("topology backfill failed", "error", err)
+			} else if n > 0 {
+				logger.Info("topology backfill complete", "connectors", n)
+			}
+			return nil
+		})
+	}
 	m.group.Go(func() error {
 		store.RunDocLockSweep(m.workCtx, m.deps.Store, m.deps.WSHub, store.DocLockHeartbeat, logger)
 		return nil

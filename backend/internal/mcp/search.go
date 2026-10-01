@@ -19,7 +19,7 @@ const searchLimit = 20
 // restriction) inside Store.SearchContent.
 func registerSearch(s *mcpserver.MCPServer, d Deps) {
 	tool := mcpsdk.NewTool("search",
-		mcpsdk.WithDescription("Keyword full-text search over lab documentation and runbooks. Works without any AI provider configured. Returns ranked hits with a short snippet."),
+		mcpsdk.WithDescription("Keyword full-text search over lab documentation and runbooks. Works without any AI provider configured. Common stopwords are ignored, the last word matches as a prefix, and a query with no searchable words returns no hits. Docs and runbooks are interleaved by rank; each hit carries a 0-1 relevance score relative to the best hit of its type. Returns hits with a short snippet."),
 		mcpsdk.WithString("query", mcpsdk.Required(), mcpsdk.Description("Keywords to search for.")),
 	)
 

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/WiseLabz/wiselabz/internal/httputil"
 	"github.com/WiseLabz/wiselabz/internal/store"
@@ -74,6 +75,34 @@ func (h *Handler) DraftRunbook(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, draft)
 }
 
+// truncateDiff cuts s to at most limit bytes without splitting a UTF-8
+// sequence, appending a marker when it shortened anything.
+func truncateDiff(s string, limit int) string {
+	if len(s) <= limit {
+		return s
+	}
+	s = s[:limit]
+	for len(s) > 0 && !utf8.ValidString(s) {
+		s = s[:len(s)-1]
+	}
+	return s + "\n... (truncated)"
+}
+
+// codeFence returns a Markdown fence longer than any backtick run in s (min
+// 3), so quoted content containing ``` cannot close the block early.
+func codeFence(s string) string {
+	longest, run := 0, 0
+	for _, r := range s {
+		if r == '`' {
+			run++
+			longest = max(longest, run)
+		} else {
+			run = 0
+		}
+	}
+	return strings.Repeat("`", max(3, longest+1))
+}
+
 // buildRunbookDraft renders the deterministic runbook template.
 func buildRunbookDraft(a *store.AlertRecord, serviceName string, change *store.ChangeRecord, existing *store.RunbookRecord, targetType, targetValue string) RunbookDraft {
 	subject := serviceName
@@ -90,10 +119,9 @@ func buildRunbookDraft(a *store.AlertRecord, serviceName string, change *store.C
 	if change != nil {
 		fmt.Fprintf(&b, "\n## Related change\n\n%s (type: %s, severity: %s).\n", change.Summary, change.ChangeType, change.Severity)
 		if diff := strings.TrimSpace(change.Diff); diff != "" && diff != "{}" && diff != "[]" {
-			if len(diff) > maxDraftDiffChars {
-				diff = diff[:maxDraftDiffChars] + "\n... (truncated)"
-			}
-			fmt.Fprintf(&b, "\nDiff:\n\n```\n%s\n```\n", diff)
+			diff = truncateDiff(diff, maxDraftDiffChars)
+			fence := codeFence(diff)
+			fmt.Fprintf(&b, "\nDiff:\n\n%s\n%s\n%s\n", fence, diff, fence)
 		}
 	}
 

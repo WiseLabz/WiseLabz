@@ -1490,6 +1490,142 @@ export function useGetDocsEditProposals<
 }
 
 /**
+ * @summary Get one proposal including its proposed content (operator on the doc's connector; instance admin for lab-wide docs)
+ */
+export const getDocsEditProposalsProposalId = (
+  proposalId: string,
+  options?: SecondParameter<typeof customInstance>,
+  signal?: AbortSignal
+) => {
+  return customInstance<DocEditProposal>(
+    { url: `/docs/edit-proposals/${proposalId}`, method: 'GET', signal },
+    options
+  );
+};
+
+export const getGetDocsEditProposalsProposalIdQueryKey = (proposalId: string) => {
+  return [`/docs/edit-proposals/${proposalId}`] as const;
+};
+
+export const getGetDocsEditProposalsProposalIdQueryOptions = <
+  TData = Awaited<ReturnType<typeof getDocsEditProposalsProposalId>>,
+  TError = ErrorType<NotFoundResponse>,
+>(
+  proposalId: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getDocsEditProposalsProposalId>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  }
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetDocsEditProposalsProposalIdQueryKey(proposalId);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getDocsEditProposalsProposalId>>> = ({
+    signal,
+  }) => getDocsEditProposalsProposalId(proposalId, requestOptions, signal);
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: proposalId !== null && proposalId !== undefined,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getDocsEditProposalsProposalId>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type GetDocsEditProposalsProposalIdQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getDocsEditProposalsProposalId>>
+>;
+export type GetDocsEditProposalsProposalIdQueryError = ErrorType<NotFoundResponse>;
+
+export function useGetDocsEditProposalsProposalId<
+  TData = Awaited<ReturnType<typeof getDocsEditProposalsProposalId>>,
+  TError = ErrorType<NotFoundResponse>,
+>(
+  proposalId: string,
+  options: {
+    query: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getDocsEditProposalsProposalId>>, TError, TData>
+    > &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getDocsEditProposalsProposalId>>,
+          TError,
+          Awaited<ReturnType<typeof getDocsEditProposalsProposalId>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useGetDocsEditProposalsProposalId<
+  TData = Awaited<ReturnType<typeof getDocsEditProposalsProposalId>>,
+  TError = ErrorType<NotFoundResponse>,
+>(
+  proposalId: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getDocsEditProposalsProposalId>>, TError, TData>
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getDocsEditProposalsProposalId>>,
+          TError,
+          Awaited<ReturnType<typeof getDocsEditProposalsProposalId>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useGetDocsEditProposalsProposalId<
+  TData = Awaited<ReturnType<typeof getDocsEditProposalsProposalId>>,
+  TError = ErrorType<NotFoundResponse>,
+>(
+  proposalId: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getDocsEditProposalsProposalId>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * @summary Get one proposal including its proposed content (operator on the doc's connector; instance admin for lab-wide docs)
+ */
+
+export function useGetDocsEditProposalsProposalId<
+  TData = Awaited<ReturnType<typeof getDocsEditProposalsProposalId>>,
+  TError = ErrorType<NotFoundResponse>,
+>(
+  proposalId: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getDocsEditProposalsProposalId>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getGetDocsEditProposalsProposalIdQueryOptions(proposalId, options);
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+/**
  * @summary Approve a proposal, applying it as a new doc version (operator)
  */
 export const postDocsEditProposalsProposalIdApprove = (

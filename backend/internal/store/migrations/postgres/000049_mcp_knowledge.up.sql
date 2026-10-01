@@ -2,11 +2,15 @@
 -- persisted entity-level topology edges, and reviewable doc edit proposals.
 
 ALTER TABLE docs ADD COLUMN search_tsv tsvector
-    GENERATED ALWAYS AS (to_tsvector('english', coalesce(title, '') || ' ' || coalesce(content, ''))) STORED;
+    GENERATED ALWAYS AS (
+        setweight(to_tsvector('english', coalesce(title, '')), 'A') ||
+        setweight(to_tsvector('english', coalesce(content, '')), 'B')) STORED;
 CREATE INDEX idx_docs_search ON docs USING GIN (search_tsv);
 
 ALTER TABLE runbooks ADD COLUMN search_tsv tsvector
-    GENERATED ALWAYS AS (to_tsvector('english', coalesce(title, '') || ' ' || coalesce(body, ''))) STORED;
+    GENERATED ALWAYS AS (
+        setweight(to_tsvector('english', coalesce(title, '')), 'A') ||
+        setweight(to_tsvector('english', coalesce(body, '')), 'B')) STORED;
 CREATE INDEX idx_runbooks_search ON runbooks USING GIN (search_tsv);
 
 CREATE TABLE topology_edges (
@@ -25,8 +29,11 @@ CREATE TABLE topology_edges (
     created_at       TEXT NOT NULL
 );
 CREATE INDEX idx_topology_edges_connector ON topology_edges(connector_id);
-CREATE INDEX idx_topology_edges_src ON topology_edges(src_connector_id);
-CREATE INDEX idx_topology_edges_dst ON topology_edges(dst_connector_id);
+-- (connector, kind) in both directions: ListTopologyEdges filters on the
+-- endpoint connectors, and the same_as cleanup in
+-- ReplaceTopologyEdgesForConnector matches kind plus either endpoint.
+CREATE INDEX idx_topology_edges_src ON topology_edges(src_connector_id, kind);
+CREATE INDEX idx_topology_edges_dst ON topology_edges(dst_connector_id, kind);
 
 CREATE TABLE doc_edit_proposals (
     id           TEXT PRIMARY KEY,

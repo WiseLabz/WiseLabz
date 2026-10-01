@@ -76,3 +76,82 @@ func TestRebuildTopologyForConnector(t *testing.T) {
 		t.Fatalf("stale edges after re-sync: %+v", edges)
 	}
 }
+
+// Only a missing snapshot (store.ErrNotFound) may clear a connector's edges;
+// an unparseable one must leave the last good edges in place.
+func TestRebuildTopologyKeepsEdgesOnSnapshotError(t *testing.T) {
+	ctx := context.Background()
+	s := newEngineTestStore(t)
+	e := NewEngine(s)
+
+	dock := seedEngineConnectorWithEntities(t, s, "Docker", "containers_paas", "docker", nil)
+	addTopologySnapshot(t, s, dock, connector.ServiceSnapshot{
+		ServiceName:  "Docker",
+		Dependencies: []connector.ServiceDependency{{Kind: "network", Name: "lan"}},
+	})
+	if err := e.RebuildTopologyForConnector(ctx, dock); err != nil {
+		t.Fatal(err)
+	}
+	before, _ := s.ListTopologyEdges(ctx, []string{dock})
+	if len(before) == 0 {
+		t.Fatal("expected edges before corrupting the snapshot")
+	}
+
+	if err := s.CreateSnapshot(ctx, &store.SnapshotRecord{ConnectorID: dock, Data: "{not json"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.RebuildTopologyForConnector(ctx, dock); err == nil {
+		t.Fatal("expected an error for an unparseable snapshot")
+	}
+	after, _ := s.ListTopologyEdges(ctx, []string{dock})
+	if len(after) != len(before) {
+		t.Fatalf("edges changed on snapshot error: before %d, after %d", len(before), len(after))
+	}
+
+	// A connector with no snapshot at all does lose its edges.
+	bare := seedEngineConnectorWithEntities(t, s, "Bare", "containers_paas", "docker", nil)
+	if err := s.ReplaceTopologyEdgesForConnector(ctx, bare, []store.TopologyEdge{{
+		SrcConnectorID: bare, SrcKind: "service", SrcName: "Bare", DstConnectorID: bare, DstKind: "network", DstName: "lan", Kind: store.TopologyEdgeDependency,
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.RebuildTopologyForConnector(ctx, bare); err != nil {
+		t.Fatal(err)
+	}
+	if edges, _ := s.ListTopologyEdges(ctx, []string{bare}); len(edges) != 0 {
+		t.Fatalf("snapshot-less connector kept edges: %+v", edges)
+	}
+}
+
+func TestBackfillTopology(t *testing.T) {
+	ctx := context.Background()
+	s := newEngineTestStore(t)
+	e := NewEngine(s)
+
+	withSnap := seedEngineConnectorWithEntities(t, s, "Docker", "containers_paas", "docker", nil)
+	addTopologySnapshot(t, s, withSnap, connector.ServiceSnapshot{
+		ServiceName:  "Docker",
+		Dependencies: []connector.ServiceDependency{{Kind: "network", Name: "lan"}},
+	})
+	// Has a snapshot but it yields no edges, so it is "missing" on every run.
+	noEdges := seedEngineConnectorWithEntities(t, s, "Empty", "containers_paas", "docker", nil)
+
+	n, err := e.BackfillTopology(ctx)
+	if err != nil || n != 2 {
+		t.Fatalf("backfill = %d, %v; want 2 connectors rebuilt", n, err)
+	}
+	if edges, _ := s.ListTopologyEdges(ctx, []string{withSnap}); len(edges) == 0 {
+		t.Fatal("snapshot connector has no edges after backfill")
+	}
+	if edges, _ := s.ListTopologyEdges(ctx, []string{noEdges}); len(edges) != 0 {
+		t.Fatalf("edge-less connector got edges: %+v", edges)
+	}
+	// Idempotent: connectors that already have edges are skipped; the
+	// edge-less one is just rebuilt to nothing again.
+	if n, err := e.BackfillTopology(ctx); err != nil || n != 1 {
+		t.Fatalf("second backfill = %d, %v; want 1", n, err)
+	}
+	if edges, _ := s.ListTopologyEdges(ctx, []string{withSnap}); len(edges) == 0 {
+		t.Fatal("existing edges were lost")
+	}
+}

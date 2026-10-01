@@ -32,6 +32,7 @@ import {
   getGetDocsDocIdResponseMock,
   getGetDocsDocIdVersionsResponseMock,
   getGetDocsDocIdVersionsRevResponseMock,
+  getGetDocsEditProposalsProposalIdResponseMock,
   getGetDocsEditProposalsResponseMock,
   getGetDocsResponseMock,
   getGetDocsServiceConnectorIdResponseMock,
@@ -64,6 +65,7 @@ export {
   getGetDocsDocIdLockResponseMock,
   getPostDocsDocIdLockResponseMock,
   getGetDocsEditProposalsResponseMock,
+  getGetDocsEditProposalsProposalIdResponseMock,
   getPostDocsEditProposalsProposalIdApproveResponseMock,
   getPostDocsEditProposalsProposalIdRejectResponseMock,
   getGetDocsTemplateSchemaResponseMock,
@@ -356,6 +358,30 @@ export const getGetDocsEditProposalsMockHandler = (
   );
 };
 
+export const getGetDocsEditProposalsProposalIdMockHandler = (
+  overrideResponse?:
+    | DocEditProposal
+    | ((
+        info: Parameters<Parameters<typeof http.get>[1]>[0]
+      ) => Promise<DocEditProposal> | DocEditProposal),
+  options?: RequestHandlerOptions
+) => {
+  return http.get(
+    '*/docs/edit-proposals/:proposalId',
+    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+      return HttpResponse.json(
+        overrideResponse !== undefined
+          ? typeof overrideResponse === 'function'
+            ? await overrideResponse(info)
+            : overrideResponse
+          : getGetDocsEditProposalsProposalIdResponseMock(),
+        { status: 200 }
+      );
+    },
+    options
+  );
+};
+
 export const getPostDocsEditProposalsProposalIdApproveMockHandler = (
   overrideResponse?:
     | DocEditProposal
@@ -603,6 +629,7 @@ export const getDocsMock = () => [
   getPostDocsDocIdLockMockHandler(),
   getPostDocsDocIdLockReleaseMockHandler(),
   getGetDocsEditProposalsMockHandler(),
+  getGetDocsEditProposalsProposalIdMockHandler(),
   getPostDocsEditProposalsProposalIdApproveMockHandler(),
   getPostDocsEditProposalsProposalIdRejectMockHandler(),
   getGetDocsTemplateSchemaMockHandler(),

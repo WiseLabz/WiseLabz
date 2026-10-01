@@ -72,3 +72,39 @@ func TestRunbookTools(t *testing.T) {
 		}
 	})
 }
+
+// get_runbook drops the linked doc id unless the caller may view the doc; a
+// lab-wide doc is only viewable by an unrestricted instance admin.
+func TestGetRunbookDocLinkVisibility(t *testing.T) {
+	ctx := context.Background()
+	h := newTestHarness(t)
+	userID := createUser(t, h.Store)
+	connID := createConnector(t, h.Store, "pve", "virtualization")
+	if _, err := h.Store.UpsertConnectorGrant(ctx, userID, connID, "viewer"); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.Store.CreateDoc(ctx, &store.DocRecord{ID: "lab", Title: "Lab", Kind: "lab", Content: "x"}); err != nil {
+		t.Fatal(err)
+	}
+	docID := "lab"
+	rb, err := h.Store.CreateRunbook(ctx, &store.RunbookRecord{Title: "RB", Body: "b", TargetType: "alert_severity", TargetValue: "critical", DocID: &docID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	docOf := func(c context.Context) string {
+		var out struct {
+			DocID string `json:"docId"`
+		}
+		h.callTool(c, t, "get_runbook", map[string]any{"id": rb.ID}, &out)
+		return out.DocID
+	}
+	if got := docOf(adminCtx(userID)); got != "lab" {
+		t.Errorf("admin docId = %q, want lab", got)
+	}
+	if got := docOf(userCtx(userID)); got != "" {
+		t.Errorf("non-admin docId = %q, want hidden", got)
+	}
+	if got := docOf(restrictedAdminCtx(userID, []string{connID})); got != "" {
+		t.Errorf("restricted key docId = %q, want hidden", got)
+	}
+}

@@ -31,3 +31,12 @@
 ## 6. Integration
 
 - [x] 6.1 Run `go test ./...`, web tests, `openspec validate mcp-search-topology-proposals`, update `test-shards.json` if needed, and run `graphify update .`
+
+## 7. Review follow-ups
+
+- [x] 7.1 Cap pending proposals (replace same author+doc, 25 per author), validate `baseVersion`, filter/page the review list in SQL without content, add `GET /docs/edit-proposals/{id}` and lazy content in the review UI
+- [x] 7.2 Treat connector-restricted keys as non-admin for lab-wide docs in `auth.InstanceAdminFromContext`
+- [x] 7.3 Only `ErrNotFound` clears topology edges; add startup topology backfill and `(connector, kind)` edge indexes
+- [x] 7.4 Align search across engines (stopwords, shared sanitized query, Postgres weights, rank-interleaved results) and document engine differences
+- [x] 7.5 Rune-safe, fence-safe diff quoting in runbook drafts
+- [x] 7.6 Tests for the above (store, mcp, api, doc, auth, alerts, web)

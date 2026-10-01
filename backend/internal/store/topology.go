@@ -117,3 +117,31 @@ func (s *Store) ListTopologyEdges(ctx context.Context, connectorIDs []string) ([
 	}
 	return edges, nil
 }
+
+// ListConnectorIDsMissingTopology returns connectors that have at least one
+// snapshot but no topology edges: the ones that synced before edge building
+// existed (or whose rebuild failed) and so need a backfill.
+func (s *Store) ListConnectorIDsMissingTopology(ctx context.Context) ([]string, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT c.id FROM connectors c
+		WHERE EXISTS (SELECT 1 FROM service_snapshots sn WHERE sn.connector_id = c.id)
+		  AND NOT EXISTS (SELECT 1 FROM topology_edges t WHERE t.connector_id = c.id)
+		ORDER BY c.id
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("list connectors missing topology: %w", err)
+	}
+	defer rows.Close() //nolint:errcheck
+	ids := []string{}
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scan connector id: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate connectors missing topology: %w", err)
+	}
+	return ids, nil
+}

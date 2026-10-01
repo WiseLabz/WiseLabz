@@ -21,6 +21,14 @@ The MCP server SHALL provide a `search` tool performing keyword full-text search
 - **WHEN** a doc or runbook is created, edited or deleted
 - **THEN** subsequent searches reflect the change
 
+#### Scenario: Stopword-only or syntax-only query
+- **WHEN** the query contains no searchable words (only stopwords or punctuation/FTS operators)
+- **THEN** an empty hit list is returned without error, on both database engines
+
+#### Scenario: Lab-wide docs
+- **WHEN** the caller is an unrestricted instance admin
+- **THEN** lab-wide docs are searchable; a connector-restricted key never sees them
+
 ### Requirement: Topology path tool
 The MCP server SHALL provide a `topology_path` tool returning a shortest path between two entities using persisted topology edges, and MUST NOT expose entities, or traverse through connectors, the caller cannot view.
 
@@ -31,6 +39,14 @@ The MCP server SHALL provide a `topology_path` tool returning a shortest path be
 #### Scenario: Hidden intermediate
 - **WHEN** the only path passes through an entity of a connector the caller cannot view
 - **THEN** the tool reports no path and reveals nothing about the hidden entity
+
+#### Scenario: Edges backfilled on startup
+- **WHEN** the leader starts and a connector has a snapshot but no edges
+- **THEN** its edges are rebuilt in the background without blocking startup
+
+#### Scenario: Snapshot load failure
+- **WHEN** a rebuild fails to load or parse the latest snapshot (anything other than "no snapshot")
+- **THEN** the existing edges are left unchanged
 
 #### Scenario: Edges refreshed on sync
 - **WHEN** a connector sync completes

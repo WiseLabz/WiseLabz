@@ -24,3 +24,10 @@ Gives operators a quick starting point for a runbook from an alert without requi
 #### Scenario: Works without AI
 - **WHEN** AI is disabled
 - **THEN** the draft is still returned
+
+### Requirement: Safe diff quoting
+The draft SHALL truncate a quoted change diff on UTF-8 boundaries and fence it so the diff's own content cannot close the Markdown block.
+
+#### Scenario: Diff contains a code fence
+- **WHEN** the change diff contains triple backticks
+- **THEN** the draft wraps it in a longer fence and the diff stays inside the block

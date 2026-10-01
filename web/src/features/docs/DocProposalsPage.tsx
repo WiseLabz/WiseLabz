@@ -9,6 +9,7 @@ import { isAxiosError } from 'axios';
 import {
   getGetDocsEditProposalsQueryKey,
   postDocsEditProposalsProposalIdApprove,
+  useGetDocsEditProposalsProposalId,
   postDocsEditProposalsProposalIdReject,
   useGetDocsEditProposals,
 } from '../../api/generated/docs/docs';
@@ -20,10 +21,25 @@ import { relativeTime } from '../../lib/time';
 import { toast } from '../../lib/toast';
 import { FileTextIcon } from '../../components/icons';
 
+/** Proposed body, fetched on demand: the list endpoint omits `content` so a
+ *  long queue of large proposals stays cheap to page through. */
+function ProposalContent({ id }: { id: string }) {
+  const { t } = useTranslation();
+  const { data, isLoading, isError } = useGetDocsEditProposalsProposalId(id);
+  if (isLoading) return <p className="mt-2 text-xs text-ink-muted">{t('docs.proposals.loadingContent')}</p>;
+  if (isError || !data) return <p className="mt-2 text-xs text-err">{t('docs.proposals.contentError')}</p>;
+  return (
+    <pre className="mt-2 max-h-80 overflow-auto whitespace-pre-wrap rounded-md border border-line-soft bg-surface p-3 font-mono text-xs text-ink">
+      {data.content}
+    </pre>
+  );
+}
+
 export function DocProposalsPage() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const [page, setPage] = useState(1);
+  const [open, setOpen] = useState<Record<string, boolean>>({});
   const pageSize = 20;
 
   const { data, isLoading, isError, refetch } = useGetDocsEditProposals({ page, pageSize });
@@ -113,11 +129,12 @@ export function DocProposalsPage() {
                   </Button>
                 </div>
               </div>
-              <details className="mt-3">
+              <details
+                className="mt-3"
+                onToggle={(e) => setOpen((o) => ({ ...o, [p.id]: e.currentTarget.open }))}
+              >
                 <summary className="cursor-pointer text-xs text-ink-muted">{t('docs.proposals.viewContent')}</summary>
-                <pre className="mt-2 max-h-80 overflow-auto whitespace-pre-wrap rounded-md border border-line-soft bg-surface p-3 font-mono text-xs text-ink">
-                  {p.content}
-                </pre>
+                {open[p.id] && <ProposalContent id={p.id} />}
               </details>
             </Panel>
           ))}

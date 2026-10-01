@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/WiseLabz/wiselabz/internal/auth"
@@ -113,5 +114,97 @@ func TestSearchContent(t *testing.T) {
 	}
 	if hits, _ = s.SearchContent(viewerCtx, u.ID, "topology", 10); len(hits) != 0 {
 		t.Fatalf("non-admin saw lab doc: %+v", hits)
+	}
+}
+
+func TestSearchContentQueryHandling(t *testing.T) {
+	ctx := context.Background()
+	s := newDocTestStore(t)
+	u := &User{Username: "admin", DisplayName: "A", InstanceAdminRole: "admin", AuthSource: "local", PasswordHash: "x"}
+	if err := s.CreateUser(ctx, u); err != nil {
+		t.Fatal(err)
+	}
+	adminCtx := auth.ContextWithUser(ctx, u.ID, true)
+	for _, d := range []*DocRecord{
+		{ID: "d1", Title: "The gateway", Kind: "lab", Content: "the quick brown router and the gateway"},
+		{ID: "d2", Title: "Café Münchën", Kind: "lab", Content: "naïve résumé of the 東京 datacenter"},
+	} {
+		if err := s.CreateDoc(ctx, d); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := s.CreateRunbook(ctx, &RunbookRecord{ID: "rb1", Title: "Gateway restart", Body: "restart the gateway", TargetType: "alert_severity", TargetValue: "critical"}); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Run("stopword-only and punctuation-only queries return no hits and no error", func(t *testing.T) {
+		for _, q := range []string{"the", "the and of", "a", "", "   ", "*", "-", `"`, "()", `" * NEAR OR - ( )`, "!!!"} {
+			hits, err := s.SearchContent(adminCtx, u.ID, q, 10)
+			if err != nil || len(hits) != 0 {
+				t.Errorf("query %q: hits %+v, err %v; want none, nil", q, hits, err)
+			}
+		}
+	})
+
+	t.Run("stopwords are ignored next to real terms", func(t *testing.T) {
+		hits, err := s.SearchContent(adminCtx, u.ID, "the gateway", 10)
+		if err != nil || len(hits) == 0 {
+			t.Fatalf("hits %+v, err %v", hits, err)
+		}
+	})
+
+	t.Run("FTS operators in input are inert", func(t *testing.T) {
+		for _, q := range []string{`gateway OR router`, `gateway NEAR router`, `-gateway`, `gate*`, `(gateway)`, `"gateway`, `gateway AND NOT router`, `col:gateway`, `^gateway`} {
+			if _, err := s.SearchContent(adminCtx, u.ID, q, 10); err != nil {
+				t.Errorf("query %q: %v", q, err)
+			}
+		}
+		// OR is dropped as a stopword-like literal term, so both words are ANDed.
+		hits, _ := s.SearchContent(adminCtx, u.ID, `gateway OR nonexistentword`, 10)
+		if len(hits) != 0 {
+			t.Errorf("operator treated as OR: %+v", hits)
+		}
+	})
+
+	t.Run("non-ASCII text is searchable", func(t *testing.T) {
+		for _, q := range []string{"café", "munchen", "naïve", "東京", "résumé"} {
+			hits, err := s.SearchContent(adminCtx, u.ID, q, 10)
+			if err != nil || len(hits) == 0 || hits[0].ID != "d2" {
+				t.Errorf("query %q: hits %+v, err %v; want d2", q, hits, err)
+			}
+		}
+	})
+
+	t.Run("docs and runbooks interleave by rank with normalized scores", func(t *testing.T) {
+		hits, err := s.SearchContent(adminCtx, u.ID, "gateway", 10)
+		if err != nil || len(hits) != 2 {
+			t.Fatalf("hits %+v, err %v", hits, err)
+		}
+		if hits[0].Type != SearchHitDoc || hits[1].Type != SearchHitRunbook {
+			t.Fatalf("order = %s, %s; want doc then runbook", hits[0].Type, hits[1].Type)
+		}
+		for _, h := range hits {
+			if h.Score <= 0 || h.Score > 1 {
+				t.Errorf("score %v out of (0,1]", h.Score)
+			}
+		}
+		if capped, _ := s.SearchContent(adminCtx, u.ID, "gateway", 1); len(capped) != 1 {
+			t.Errorf("limit not applied: %+v", capped)
+		}
+	})
+}
+
+func TestInterleaveHits(t *testing.T) {
+	d := []SearchHit{{ID: "d1"}, {ID: "d2"}, {ID: "d3"}}
+	r := []SearchHit{{ID: "r1"}}
+	var got []string
+	for _, h := range interleaveHits(d, r, 10) {
+		got = append(got, h.ID)
+	}
+	if want := "d1 r1 d2 d3"; strings.Join(got, " ") != want {
+		t.Fatalf("got %v, want %s", got, want)
+	}
+	if n := len(interleaveHits(d, r, 2)); n != 2 {
+		t.Fatalf("limit: %d", n)
 	}
 }

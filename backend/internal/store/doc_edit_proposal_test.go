@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 )
 
@@ -87,14 +88,126 @@ func TestDocEditProposalLifecycle(t *testing.T) {
 		}
 	})
 
-	t.Run("list filters by status", func(t *testing.T) {
-		pending, err := s.ListDocEditProposals(ctx, ProposalPending)
-		if err != nil || len(pending) != 1 || pending[0].DocTitle != "Doc" {
-			t.Fatalf("pending = %+v, %v", pending, err)
+	t.Run("list filters by status, omits content and pages in SQL", func(t *testing.T) {
+		all := ProposalScope{All: true}
+		pending, total, err := s.ListDocEditProposals(ctx, ProposalPending, all, 10, 0)
+		// The stale proposal was superseded when the reject-case proposal was
+		// created by the same author for the same doc, so nothing is pending.
+		if err != nil || total != 0 || len(pending) != 0 {
+			t.Fatalf("pending = %+v, total %d, %v", pending, total, err)
 		}
-		all, _ := s.ListDocEditProposals(ctx, "")
-		if len(all) != 3 {
-			t.Fatalf("all = %d, want 3", len(all))
+		items, total, err := s.ListDocEditProposals(ctx, "", all, 1, 0)
+		if err != nil || total != 2 || len(items) != 1 {
+			t.Fatalf("page 1 = %+v, total %d, %v", items, total, err)
+		}
+		if items[0].Content != "" || items[0].DocTitle != "Doc" {
+			t.Fatalf("list item = %+v, want empty content and joined title", items[0])
+		}
+		next, _, _ := s.ListDocEditProposals(ctx, "", all, 1, 1)
+		if len(next) != 1 || next[0].ID == items[0].ID {
+			t.Fatalf("page 2 = %+v", next)
+		}
+		if got, _ := s.GetDocEditProposal(ctx, items[0].ID); got.Content == "" {
+			t.Fatal("single get must keep content")
+		}
+	})
+}
+
+func TestDocEditProposalSupersedeAndCap(t *testing.T) {
+	ctx := context.Background()
+	s := newDocTestStore(t)
+	mkUser := func(name string) string {
+		u := &User{Username: name, DisplayName: name, InstanceAdminRole: "user", AuthSource: "local", PasswordHash: "x"}
+		if err := s.CreateUser(ctx, u); err != nil {
+			t.Fatal(err)
+		}
+		return u.ID
+	}
+	author, other := mkUser("author"), mkUser("other")
+	conn := ConnectorRecord{Name: "c", Category: "virtualization", Type: "proxmox", URL: "https://c.test"}
+	if err := s.CreateConnector(ctx, &conn); err != nil {
+		t.Fatal(err)
+	}
+	mkDoc := func(id, svc string) {
+		if err := s.CreateDoc(ctx, &DocRecord{ID: id, Title: id, Kind: "service", ServiceID: svc, Content: "v1"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	propose := func(docID, authorID, content string) (*DocEditProposal, error) {
+		p := &DocEditProposal{DocID: docID, BaseVersion: 1, Content: content, AuthorID: authorID}
+		return p, s.CreateDocEditProposal(ctx, p)
+	}
+	all := ProposalScope{All: true}
+
+	t.Run("same author and doc supersedes the older pending proposal", func(t *testing.T) {
+		mkDoc("d-sup", "")
+		first, _ := propose("d-sup", author, "first")
+		if _, err := propose("d-sup", other, "other author keeps theirs"); err != nil {
+			t.Fatal(err)
+		}
+		second, err := propose("d-sup", author, "second")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := s.GetDocEditProposal(ctx, first.ID); !errors.Is(err, ErrNotFound) {
+			t.Fatalf("first proposal err = %v, want superseded (ErrNotFound)", err)
+		}
+		if _, err := s.GetDocEditProposal(ctx, second.ID); err != nil {
+			t.Fatal(err)
+		}
+		_, total, _ := s.ListDocEditProposals(ctx, ProposalPending, all, 10, 0)
+		if total != 2 {
+			t.Fatalf("pending = %d, want 2 (author's latest + other author's)", total)
+		}
+	})
+
+	t.Run("per-author pending cap", func(t *testing.T) {
+		capped := mkUser("capped")
+		for i := 0; i < MaxPendingProposalsPerAuthor; i++ {
+			id := fmt.Sprintf("d-cap-%d", i)
+			mkDoc(id, "")
+			if _, err := propose(id, capped, "x"); err != nil {
+				t.Fatalf("proposal %d: %v", i, err)
+			}
+		}
+		mkDoc("d-cap-over", "")
+		if _, err := propose("d-cap-over", capped, "x"); !errors.Is(err, ErrProposalLimit) {
+			t.Fatalf("over-cap err = %v, want ErrProposalLimit", err)
+		}
+		// Replacing an existing pending proposal at the cap is still allowed.
+		if _, err := propose("d-cap-0", capped, "replaced"); err != nil {
+			t.Fatalf("replace at cap: %v", err)
+		}
+		// Other authors are unaffected.
+		if _, err := propose("d-cap-over", other, "x"); err != nil {
+			t.Fatalf("other author: %v", err)
+		}
+	})
+
+	t.Run("scope filters lab-wide and connector docs in SQL", func(t *testing.T) {
+		mkDoc("d-conn", conn.ID)
+		if _, err := propose("d-conn", author, "x"); err != nil {
+			t.Fatal(err)
+		}
+		titles := func(sc ProposalScope) map[string]bool {
+			items, _, err := s.ListDocEditProposals(ctx, ProposalPending, sc, 200, 0)
+			if err != nil {
+				t.Fatal(err)
+			}
+			m := map[string]bool{}
+			for _, it := range items {
+				m[it.DocID] = true
+			}
+			return m
+		}
+		if got := titles(ProposalScope{ConnectorIDs: []string{conn.ID}}); len(got) != 1 || !got["d-conn"] {
+			t.Fatalf("connector scope = %v", got)
+		}
+		if got := titles(ProposalScope{LabWide: true}); got["d-conn"] || !got["d-sup"] {
+			t.Fatalf("lab-wide scope = %v", got)
+		}
+		if got := titles(ProposalScope{}); len(got) != 0 {
+			t.Fatalf("empty scope = %v, want none", got)
 		}
 	})
 }

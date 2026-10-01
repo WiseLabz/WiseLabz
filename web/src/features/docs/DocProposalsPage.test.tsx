@@ -30,6 +30,7 @@ vi.mock('../../api/generated/docs/docs', () => ({
     isError: false,
     refetch: vi.fn(),
   }),
+  useGetDocsEditProposalsProposalId: () => ({ data: proposal, isLoading: false, isError: false }),
   postDocsEditProposalsProposalIdApprove: (id: string) => approveMock(id),
   postDocsEditProposalsProposalIdReject: (id: string) => rejectMock(id),
 }));
@@ -62,10 +63,14 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe('DocProposalsPage', () => {
-  it('lists the proposal with its summary and content', () => {
+  it('lists the proposal with its summary and loads content only when expanded', () => {
     renderPage();
     expect(screen.getByText('Router runbook')).toBeInTheDocument();
     expect(screen.getByText('Fix the reset steps')).toBeInTheDocument();
+    expect(screen.queryByText('# New body')).not.toBeInTheDocument();
+    const details = screen.getByText('View proposed content').closest('details') as HTMLDetailsElement;
+    details.open = true;
+    fireEvent(details, new Event('toggle'));
     expect(screen.getByText('# New body')).toBeInTheDocument();
   });
 

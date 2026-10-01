@@ -21,8 +21,31 @@ The MCP server SHALL provide a `propose_doc_edit` tool creating a pending propos
 - **WHEN** the caller lacks operator access to the doc (or is not instance admin for a lab-wide doc)
 - **THEN** the call is rejected
 
+#### Scenario: Connector-limited key on a lab-wide doc
+- **WHEN** a connector-restricted key (even one owned by an instance admin) targets a lab-wide doc
+- **THEN** the call is rejected as if the doc did not exist
+
+#### Scenario: Invalid base version
+- **WHEN** `baseVersion` is below 1 or ahead of the doc's current version
+- **THEN** the call is rejected; a stale (older) base is accepted and fails at approval
+
+#### Scenario: Oversized content
+- **WHEN** the content is empty or larger than 256 KiB
+- **THEN** the call is rejected (exactly 256 KiB is accepted)
+
+### Requirement: Bounded pending proposals
+A new proposal by the same author for the same doc SHALL replace that author's older pending proposal, and an author MUST NOT hold more than 25 pending proposals.
+
+#### Scenario: Replacement
+- **WHEN** an author proposes again for a doc where they already have a pending proposal
+- **THEN** only the newer proposal remains pending
+
+#### Scenario: Cap reached
+- **WHEN** an author with 25 pending proposals proposes on another doc
+- **THEN** the call is rejected with a clear error
+
 ### Requirement: Review proposals
-Doc operators SHALL be able to list, approve and reject proposals via REST and a review UI.
+Doc operators SHALL be able to list, approve and reject proposals via REST and a review UI. The list is filtered and paginated in the database and omits proposal content; a single-proposal endpoint returns it.
 
 #### Scenario: Approve applies edit
 - **WHEN** an operator approves a proposal whose base version equals the doc's current version

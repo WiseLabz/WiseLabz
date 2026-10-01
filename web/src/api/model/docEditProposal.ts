@@ -16,8 +16,8 @@ export interface DocEditProposal {
   serviceId?: string;
   /** Doc version the proposal was written against */
   baseVersion: number;
-  /** Proposed replacement body */
-  content: string;
+  /** Proposed replacement body. Omitted from list responses; fetch the single proposal to read it */
+  content?: string;
   summary: string;
   authorId: string;
   status: DocEditProposalStatus;

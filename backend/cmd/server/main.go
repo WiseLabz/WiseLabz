@@ -180,17 +180,18 @@ func main() {
 	// drain HTTP/WS -> stop scheduler -> wait for remaining goroutines ->
 	// wait for in-flight dispatch goroutines -> close the DB last.
 	lifecycle := newLifecycleManager(lifecycleDeps{
-		SyncEngine:      syncEngine,
-		Logger:          logger,
-		HTTPServer:      srv,
-		WSHub:           wsHub,
-		Scheduler:       jobRunner,
-		Dispatcher:      notifDispatcher,
-		Store:           s,
-		Ready:           readyState,
-		Elector:         elector,
-		LeaderElection:  cfg.HA.LeaderElection,
-		ShutdownTimeout: cfg.Server.ShutdownTimeoutDuration(),
+		SyncEngine:       syncEngine,
+		Logger:           logger,
+		HTTPServer:       srv,
+		WSHub:            wsHub,
+		Scheduler:        jobRunner,
+		Dispatcher:       notifDispatcher,
+		Store:            s,
+		Ready:            readyState,
+		Elector:          elector,
+		LeaderElection:   cfg.HA.LeaderElection,
+		TopologyBackfill: docEngine.BackfillTopology,
+		ShutdownTimeout:  cfg.Server.ShutdownTimeoutDuration(),
 	})
 	lifecycle.Start()
 

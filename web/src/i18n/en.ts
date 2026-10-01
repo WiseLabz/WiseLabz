@@ -682,6 +682,8 @@ export const en = {
       emptyDesc: 'Edits suggested by AI clients will show up here for review.',
       meta: 'Based on v{{version}} · {{time}} ago',
       viewContent: 'View proposed content',
+      loadingContent: 'Loading content…',
+      contentError: 'Could not load the proposed content.',
       approve: 'Approve',
       reject: 'Reject',
       approved: 'Proposal approved and applied as a new version.',

@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/WiseLabz/wiselabz/internal/connector"
+	"github.com/WiseLabz/wiselabz/internal/logsafe"
 	"github.com/WiseLabz/wiselabz/internal/store"
 )
 
@@ -27,7 +29,8 @@ func entityRef(e connector.SnapshotEntity) string {
 // connectorID from its latest snapshot: declared ServiceDependencies, plus
 // cross-connector entity matches found by matchEntities (external ID, IP,
 // hostname). Edges are replaced atomically, so a re-sync never leaves stale
-// edges behind. A connector with no snapshot simply loses its edges.
+// edges behind. A connector with no snapshot simply loses its edges; any other failure
+// loading the snapshot returns the error and leaves existing edges untouched.
 //
 // Matches are heuristic (they can link unrelated objects sharing an IP), so
 // every edge records how it was derived in Source.
@@ -41,9 +44,14 @@ func (e *Engine) RebuildTopologyForConnector(ctx context.Context, connectorID st
 	}
 
 	snap, err := e.snapshots.latest(ctx, connectorID)
-	if err != nil {
-		// No (parseable) snapshot yet: drop whatever edges exist.
+	if errors.Is(err, store.ErrNotFound) {
+		// No snapshot at all: drop whatever edges exist.
 		return e.store.ReplaceTopologyEdgesForConnector(ctx, connectorID, nil)
+	}
+	if err != nil {
+		// A transient DB error or an unparseable snapshot says nothing about
+		// the real topology; keep the last good edges rather than wiping them.
+		return fmt.Errorf("load latest snapshot: %w", err)
 	}
 
 	b := &edgeBuilder{seen: map[string]bool{}}
@@ -138,4 +146,29 @@ func (b *edgeBuilder) add(src store.TopologyEdge, dstConnectorID, dstKind, dstNa
 	}
 	b.seen[key] = true
 	b.edges = append(b.edges, e)
+}
+
+// BackfillTopology rebuilds edges for connectors that have a snapshot but no
+// edges yet, so topology_path works right after upgrade instead of waiting for
+// each connector's next sync. It is idempotent and cheap (a connector whose
+// snapshot genuinely yields no edges is just rebuilt to nothing again), and a
+// per-connector failure is logged and skipped. It returns how many connectors
+// were rebuilt.
+func (e *Engine) BackfillTopology(ctx context.Context) (int, error) {
+	ids, err := e.store.ListConnectorIDsMissingTopology(ctx)
+	if err != nil {
+		return 0, err
+	}
+	rebuilt := 0
+	for _, id := range ids {
+		if ctx.Err() != nil {
+			return rebuilt, ctx.Err()
+		}
+		if err := e.RebuildTopologyForConnector(ctx, id); err != nil {
+			slog.Error("topology backfill failed", "connector", logsafe.Sanitize(id), "error", logsafe.Sanitize(err.Error()))
+			continue
+		}
+		rebuilt++
+	}
+	return rebuilt, nil
 }

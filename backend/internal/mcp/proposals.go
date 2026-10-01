@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 
 	mcpsdk "github.com/mark3labs/mcp-go/mcp"
@@ -27,7 +28,7 @@ const maxProposalSummaryChars = 500
 // key scope and operator access itself.
 func registerProposeDocEdit(s *mcpserver.MCPServer, d Deps) {
 	tool := mcpsdk.NewTool("propose_doc_edit",
-		mcpsdk.WithDescription("Propose a replacement body for a doc. The doc is NOT changed: a doc operator must review and approve the proposal. Requires a full-scope API key and operator access to the doc (instance admin for lab-wide docs)."),
+		mcpsdk.WithDescription("Propose a replacement body for a doc. The doc is NOT changed: a doc operator must review and approve the proposal. Requires a full-scope API key and operator access to the doc (instance admin for lab-wide docs; connector-limited keys cannot touch lab-wide docs). A new proposal for the same doc replaces your earlier pending one; at most 25 pending proposals per user."),
 		mcpsdk.WithString("docId", mcpsdk.Required(), mcpsdk.Description("ID of the doc to propose an edit for.")),
 		mcpsdk.WithString("content", mcpsdk.Required(), mcpsdk.Description("The complete proposed doc body (Markdown).")),
 		mcpsdk.WithNumber("baseVersion", mcpsdk.Description("Doc version the proposal was written against. Defaults to the doc's current version; approval fails if the doc has changed since.")),
@@ -72,16 +73,28 @@ func registerProposeDocEdit(s *mcpserver.MCPServer, d Deps) {
 			return mcpsdk.NewToolResultError("doc not found"), nil
 		}
 
+		// A stale base is allowed (approval then reports a conflict), but a
+		// base that never existed - below 1 or ahead of the doc - is a client
+		// bug and is rejected up front.
 		base := req.GetInt("baseVersion", doc.CurrentVersion)
+		if base < 1 || base > doc.CurrentVersion {
+			return mcpsdk.NewToolResultError(fmt.Sprintf("baseVersion must be between 1 and the doc's current version (%d)", doc.CurrentVersion)), nil
+		}
 		p := &store.DocEditProposal{
 			DocID: docID, BaseVersion: base, Content: content, Summary: summary, AuthorID: userID,
 		}
 		if err := d.Store.CreateDocEditProposal(ctx, p); err != nil {
+			if errors.Is(err, store.ErrProposalLimit) {
+				return mcpsdk.NewToolResultError(err.Error()), nil
+			}
 			return mcpsdk.NewToolResultErrorFromErr("create proposal", err), nil
 		}
 		if err := d.Store.RecordAuditFromContext(ctx, "doc.edit_proposed", "doc", docID, map[string]any{
 			"proposalId": p.ID, "baseVersion": base, "via": "mcp",
 		}); err != nil {
+			// Best-effort, like every other audited write: the proposal is
+			// already stored and stays reviewable, so a failed audit row is
+			// logged rather than turned into a tool error.
 			slog.Error("failed to record audit", "action", "doc.edit_proposed", "error", err)
 		}
 
@@ -96,7 +109,9 @@ func registerProposeDocEdit(s *mcpserver.MCPServer, d Deps) {
 
 // canOperateDoc reports whether the caller holds operator access to doc:
 // operator grant on its connector (API-key restrictions apply), or instance
-// admin for lab-wide docs - the same rule as saving a doc over REST.
+// admin for lab-wide docs - the same rule as saving a doc over REST. A
+// connector-restricted API key is never instance admin (see
+// auth.InstanceAdminFromContext), so it cannot operate lab-wide docs.
 func canOperateDoc(ctx context.Context, s *store.Store, userID string, doc *store.DocRecord) (bool, error) {
 	if doc.ServiceID == "" {
 		return auth.InstanceAdminFromContext(ctx), nil

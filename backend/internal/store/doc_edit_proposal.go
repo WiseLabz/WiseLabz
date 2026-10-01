@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -58,7 +59,21 @@ func scanDocEditProposal(row rowScanner) (*DocEditProposal, error) {
 	return &p, nil
 }
 
-// CreateDocEditProposal stores a pending proposal. The doc must exist.
+// MaxPendingProposalsPerAuthor bounds how many pending proposals one author
+// may hold at once, so an automated client cannot grow the table (and the
+// reviewers' queue) without limit. A new proposal by the same author for the
+// same doc replaces their older pending one and does not count against it.
+const MaxPendingProposalsPerAuthor = 25
+
+// ErrProposalLimit is returned by CreateDocEditProposal when the author
+// already holds MaxPendingProposalsPerAuthor pending proposals on other docs.
+var ErrProposalLimit = fmt.Errorf("too many pending doc edit proposals (limit %d): wait for review or reuse an existing one", MaxPendingProposalsPerAuthor)
+
+// CreateDocEditProposal stores a pending proposal. The doc must exist. Any
+// earlier pending proposal by the same author for the same doc is superseded
+// (deleted) in the same transaction, and ErrProposalLimit is returned when the
+// author would exceed MaxPendingProposalsPerAuthor. The count-then-insert is
+// not serialized across concurrent writers, so the cap is a soft bound.
 func (s *Store) CreateDocEditProposal(ctx context.Context, p *DocEditProposal) error {
 	if p.ID == "" {
 		p.ID = uuid.New().String()
@@ -67,13 +82,29 @@ func (s *Store) CreateDocEditProposal(ctx context.Context, p *DocEditProposal) e
 		p.CreatedAt = time.Now().UTC().Format(time.RFC3339)
 	}
 	p.Status = ProposalPending
-	if _, err := s.db.ExecContext(ctx, `
-		INSERT INTO doc_edit_proposals (id, doc_id, base_version, content, summary, author_id, status, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-	`, p.ID, p.DocID, p.BaseVersion, p.Content, p.Summary, p.AuthorID, p.Status, p.CreatedAt); err != nil {
-		return fmt.Errorf("create doc edit proposal: %w", err)
-	}
-	return nil
+	return s.WithinTransaction(ctx, func(tx *Store) error {
+		if _, err := tx.db.ExecContext(ctx,
+			`DELETE FROM doc_edit_proposals WHERE doc_id = ? AND author_id = ? AND status = ?`,
+			p.DocID, p.AuthorID, ProposalPending); err != nil {
+			return fmt.Errorf("supersede doc edit proposals: %w", err)
+		}
+		var pending int
+		if err := tx.db.QueryRowContext(ctx,
+			`SELECT COUNT(*) FROM doc_edit_proposals WHERE author_id = ? AND status = ?`,
+			p.AuthorID, ProposalPending).Scan(&pending); err != nil {
+			return fmt.Errorf("count pending doc edit proposals: %w", err)
+		}
+		if pending >= MaxPendingProposalsPerAuthor {
+			return ErrProposalLimit
+		}
+		if _, err := tx.db.ExecContext(ctx, `
+			INSERT INTO doc_edit_proposals (id, doc_id, base_version, content, summary, author_id, status, created_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		`, p.ID, p.DocID, p.BaseVersion, p.Content, p.Summary, p.AuthorID, p.Status, p.CreatedAt); err != nil {
+			return fmt.Errorf("create doc edit proposal: %w", err)
+		}
+		return nil
+	})
 }
 
 // GetDocEditProposal retrieves one proposal.
@@ -90,21 +121,55 @@ func (s *Store) GetDocEditProposal(ctx context.Context, id string) (*DocEditProp
 	return p, nil
 }
 
-// ListDocEditProposals returns proposals filtered by status ("" for all),
-// newest first. Callers must filter the result to proposals whose doc they
-// may review.
-func (s *Store) ListDocEditProposals(ctx context.Context, status string) ([]DocEditProposal, error) {
-	query := `SELECT ` + docEditProposalColumns + `
-		FROM doc_edit_proposals p JOIN docs d ON d.id = p.doc_id`
+// ProposalScope narrows a proposal listing to the docs a caller may review.
+// All skips the filter (admin tooling and tests); otherwise a proposal is
+// included when its doc is lab-wide and LabWide is set, or its doc's
+// connector is in ConnectorIDs.
+type ProposalScope struct {
+	All          bool
+	LabWide      bool
+	ConnectorIDs []string
+}
+
+// ListDocEditProposals returns one page of proposals filtered by status ("" for
+// all) and scope, newest first, plus the total matching count. Filtering and
+// paging happen in SQL, and Content is left empty (use GetDocEditProposal for
+// the body) so a long queue of large proposals is never loaded into memory.
+func (s *Store) ListDocEditProposals(ctx context.Context, status string, scope ProposalScope, limit, offset int) ([]DocEditProposal, int, error) {
+	where := ` WHERE 1 = 1`
 	var args []any
 	if status != "" {
-		query += ` WHERE p.status = ?`
+		where += ` AND p.status = ?`
 		args = append(args, status)
 	}
-	query += ` ORDER BY p.created_at DESC, p.id`
-	rows, err := s.db.QueryContext(ctx, query, args...)
+	if !scope.All {
+		var conds []string
+		if scope.LabWide {
+			conds = append(conds, `d.service_id IS NULL`, `d.service_id = ''`)
+		}
+		if len(scope.ConnectorIDs) > 0 {
+			conds = append(conds, `d.service_id IN (`+placeholders(len(scope.ConnectorIDs))+`)`)
+			for _, id := range scope.ConnectorIDs {
+				args = append(args, id)
+			}
+		}
+		if len(conds) == 0 {
+			return []DocEditProposal{}, 0, nil
+		}
+		where += ` AND (` + strings.Join(conds, ` OR `) + `)`
+	}
+	from := ` FROM doc_edit_proposals p JOIN docs d ON d.id = p.doc_id` + where
+
+	var total int
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*)`+from, args...).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("count doc edit proposals: %w", err)
+	}
+
+	query := `SELECT ` + strings.Replace(docEditProposalColumns, "p.content", "'' AS content", 1) + from +
+		` ORDER BY p.created_at DESC, p.id LIMIT ? OFFSET ?`
+	rows, err := s.db.QueryContext(ctx, query, append(args, limit, offset)...)
 	if err != nil {
-		return nil, fmt.Errorf("list doc edit proposals: %w", err)
+		return nil, 0, fmt.Errorf("list doc edit proposals: %w", err)
 	}
 	defer rows.Close() //nolint:errcheck
 
@@ -112,14 +177,14 @@ func (s *Store) ListDocEditProposals(ctx context.Context, status string) ([]DocE
 	for rows.Next() {
 		p, err := scanDocEditProposal(rows)
 		if err != nil {
-			return nil, fmt.Errorf("scan doc edit proposal: %w", err)
+			return nil, 0, fmt.Errorf("scan doc edit proposal: %w", err)
 		}
 		out = append(out, *p)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate doc edit proposals: %w", err)
+		return nil, 0, fmt.Errorf("iterate doc edit proposals: %w", err)
 	}
-	return out, nil
+	return out, total, nil
 }
 
 // ApproveDocEditProposal applies a pending proposal to its doc as a new

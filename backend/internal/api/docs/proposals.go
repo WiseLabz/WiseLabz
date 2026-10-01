@@ -13,23 +13,31 @@ import (
 // canReviewProposal reports whether the caller may approve/reject a proposal
 // on a doc scoped to connectorID: operator on that connector, or instance
 // admin for lab-wide docs - the same rule as saving the doc directly.
-func (h *Handler) canReviewProposal(r *http.Request, connectorID string, cache map[string]bool) (bool, error) {
+func (h *Handler) canReviewProposal(r *http.Request, connectorID string) (bool, error) {
 	if connectorID == "" {
 		return auth.InstanceAdminFromContext(r.Context()), nil
 	}
-	if ok, hit := cache[connectorID]; hit {
-		return ok, nil
-	}
-	ok, err := h.Store.UserHasConnectorRole(r.Context(), auth.UserIDFromContext(r.Context()), connectorID, "operator")
+	return h.Store.UserHasConnectorRole(r.Context(), auth.UserIDFromContext(r.Context()), connectorID, "operator")
+}
+
+// reviewableScope is the SQL-side equivalent of canReviewProposal: the set of
+// connectors the caller holds operator on (API-key restrictions applied),
+// plus lab-wide docs for instance admins.
+func (h *Handler) reviewableScope(r *http.Request) (store.ProposalScope, error) {
+	all, err := h.Store.ListConnectorIDs(r.Context())
 	if err != nil {
-		return false, err
+		return store.ProposalScope{}, err
 	}
-	cache[connectorID] = ok
-	return ok, nil
+	ids, err := h.Store.FilterConnectorIDsByGrant(r.Context(), auth.UserIDFromContext(r.Context()), all, "operator")
+	if err != nil {
+		return store.ProposalScope{}, err
+	}
+	return store.ProposalScope{LabWide: auth.InstanceAdminFromContext(r.Context()), ConnectorIDs: ids}, nil
 }
 
 // ListProposals handles GET /api/docs/edit-proposals: proposals (default
-// status pending) on docs the caller may review.
+// status pending) on docs the caller may review. The list omits proposal
+// content; fetch it with GetProposal.
 func (h *Handler) ListProposals(w http.ResponseWriter, r *http.Request) {
 	status := r.URL.Query().Get("status")
 	if status == "" {
@@ -44,28 +52,17 @@ func (h *Handler) ListProposals(w http.ResponseWriter, r *http.Request) {
 	}
 	page, pageSize, offset := httputil.Paginate(r)
 
-	all, err := h.Store.ListDocEditProposals(r.Context(), status)
+	scope, err := h.reviewableScope(r)
 	if err != nil {
 		httputil.Errorf(w, err)
 		return
 	}
-	cache := map[string]bool{}
-	visible := make([]store.DocEditProposal, 0, len(all))
-	for _, p := range all {
-		ok, err := h.canReviewProposal(r, p.ServiceID, cache)
-		if err != nil {
-			httputil.Errorf(w, err)
-			return
-		}
-		if ok {
-			visible = append(visible, p)
-		}
+	items, total, err := h.Store.ListDocEditProposals(r.Context(), status, scope, pageSize, offset)
+	if err != nil {
+		httputil.Errorf(w, err)
+		return
 	}
-	total := len(visible)
-	if offset > total {
-		offset = total
-	}
-	httputil.WritePaginated(w, visible[offset:min(offset+pageSize, total)], page, pageSize, total)
+	httputil.WritePaginated(w, items, page, pageSize, total)
 }
 
 // loadReviewableProposal loads the proposal and enforces review access,
@@ -81,7 +78,7 @@ func (h *Handler) loadReviewableProposal(w http.ResponseWriter, r *http.Request)
 		httputil.Errorf(w, err)
 		return nil
 	}
-	ok, err := h.canReviewProposal(r, p.ServiceID, map[string]bool{})
+	ok, err := h.canReviewProposal(r, p.ServiceID)
 	if err != nil {
 		httputil.Errorf(w, err)
 		return nil
@@ -91,6 +88,16 @@ func (h *Handler) loadReviewableProposal(w http.ResponseWriter, r *http.Request)
 		return nil
 	}
 	return p
+}
+
+// GetProposal handles GET /api/docs/edit-proposals/{id}: one proposal
+// including its proposed content (the list endpoint omits it).
+func (h *Handler) GetProposal(w http.ResponseWriter, r *http.Request) {
+	p := h.loadReviewableProposal(w, r)
+	if p == nil {
+		return
+	}
+	httputil.JSON(w, http.StatusOK, p)
 }
 
 // ApproveProposal handles POST /api/docs/edit-proposals/{id}/approve: applies

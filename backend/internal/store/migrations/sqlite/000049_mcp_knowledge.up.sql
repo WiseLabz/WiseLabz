@@ -2,6 +2,11 @@
 -- by triggers so every write path, including backup import, is covered),
 -- persisted entity-level topology edges, and reviewable doc edit proposals.
 
+-- id is UNINDEXED (stored, not tokenized), so the trigger DELETE ... WHERE id = ?
+-- scans the FTS table. That is deliberate: mapping to docs.rowid instead would
+-- be O(log n) but docs/runbooks have TEXT primary keys, so SQLite may renumber
+-- their implicit rowids on VACUUM and silently desynchronize the index. The
+-- corpus is small (docs and runbooks of one lab), so correctness wins.
 CREATE VIRTUAL TABLE docs_fts USING fts5(id UNINDEXED, title, content, tokenize = 'porter unicode61');
 INSERT INTO docs_fts (id, title, content) SELECT id, title, content FROM docs;
 
@@ -46,8 +51,11 @@ CREATE TABLE topology_edges (
     created_at       TEXT NOT NULL
 );
 CREATE INDEX idx_topology_edges_connector ON topology_edges(connector_id);
-CREATE INDEX idx_topology_edges_src ON topology_edges(src_connector_id);
-CREATE INDEX idx_topology_edges_dst ON topology_edges(dst_connector_id);
+-- (connector, kind) in both directions: ListTopologyEdges filters on the
+-- endpoint connectors, and the same_as cleanup in
+-- ReplaceTopologyEdgesForConnector matches kind plus either endpoint.
+CREATE INDEX idx_topology_edges_src ON topology_edges(src_connector_id, kind);
+CREATE INDEX idx_topology_edges_dst ON topology_edges(dst_connector_id, kind);
 
 CREATE TABLE doc_edit_proposals (
     id           TEXT PRIMARY KEY,

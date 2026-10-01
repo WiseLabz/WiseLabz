@@ -142,3 +142,15 @@ func createConnector(t *testing.T, s *store.Store, name, category string) string
 	}
 	return c.ID
 }
+
+// adminCtx builds a context for an unrestricted instance-admin session.
+func adminCtx(userID string) context.Context {
+	return auth.ContextWithUser(context.Background(), userID, true)
+}
+
+// restrictedAdminCtx builds a context carrying instance admin AND a connector
+// restriction, which must never be treated as admin (defense in depth: the
+// auth middleware already clears admin for restricted keys).
+func restrictedAdminCtx(userID string, connectorIDs []string) context.Context {
+	return auth.ContextWithAPIKeyRestriction(adminCtx(userID), auth.APIKeyRestriction{ConnectorIDs: connectorIDs})
+}

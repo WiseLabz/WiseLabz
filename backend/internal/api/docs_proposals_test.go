@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/WiseLabz/wiselabz/internal/store"
@@ -32,13 +33,18 @@ func TestDocEditProposalsREST(t *testing.T) {
 	viewerID, viewerToken := app.user(t, "viewer")
 	app.connectorGrant(t, viewerID, "svc-1", "viewer")
 
-	propose := func(docID string, base int, content string) *store.DocEditProposal {
+	otherAuthorID, _ := app.user(t, "viewer")
+	proposeAs := func(author, docID string, base int, content string) *store.DocEditProposal {
 		t.Helper()
-		p := &store.DocEditProposal{DocID: docID, BaseVersion: base, Content: content, AuthorID: authorID}
+		p := &store.DocEditProposal{DocID: docID, BaseVersion: base, Content: content, AuthorID: author}
 		if err := app.Store.CreateDocEditProposal(ctx, p); err != nil {
 			t.Fatalf("create proposal: %v", err)
 		}
 		return p
+	}
+	propose := func(docID string, base int, content string) *store.DocEditProposal {
+		t.Helper()
+		return proposeAs(authorID, docID, base, content)
 	}
 	approve := func(token, id string) int {
 		return app.req(t, http.MethodPost, "/api/docs/edit-proposals/"+id+"/approve", nil, token).Code
@@ -72,6 +78,45 @@ func TestDocEditProposalsREST(t *testing.T) {
 		}
 	})
 
+	t.Run("list omits content; get returns it to reviewers only", func(t *testing.T) {
+		p := propose("doc-1", 1, "full body text")
+		rec := app.req(t, http.MethodGet, "/api/docs/edit-proposals", nil, opToken)
+		if rec.Code != http.StatusOK || strings.Contains(rec.Body.String(), "full body text") {
+			t.Fatalf("list leaked content or failed: %d %s", rec.Code, rec.Body)
+		}
+		rec = app.req(t, http.MethodGet, "/api/docs/edit-proposals/"+p.ID, nil, opToken)
+		var got store.DocEditProposal
+		if rec.Code != http.StatusOK || json.Unmarshal(rec.Body.Bytes(), &got) != nil || got.Content != "full body text" {
+			t.Fatalf("get = %d %s", rec.Code, rec.Body)
+		}
+		if rec := app.req(t, http.MethodGet, "/api/docs/edit-proposals/"+p.ID, nil, viewerToken); rec.Code != http.StatusNotFound {
+			t.Fatalf("viewer get = %d, want 404", rec.Code)
+		}
+		if rec := app.req(t, http.MethodGet, "/api/docs/edit-proposals/missing", nil, opToken); rec.Code != http.StatusNotFound {
+			t.Fatalf("missing get = %d, want 404", rec.Code)
+		}
+	})
+
+	t.Run("pagination happens in SQL", func(t *testing.T) {
+		for _, id := range []string{"pg-1", "pg-2", "pg-3"} {
+			if err := app.Store.CreateDoc(ctx, &store.DocRecord{ID: id, Title: id, Kind: "service", ServiceID: "svc-1", Content: "v1"}); err != nil {
+				t.Fatal(err)
+			}
+			propose(id, 1, "x")
+		}
+		var page struct {
+			Items []store.DocEditProposal `json:"items"`
+			Total int                     `json:"total"`
+		}
+		rec := app.req(t, http.MethodGet, "/api/docs/edit-proposals?page=2&pageSize=2", nil, opToken)
+		if rec.Code != http.StatusOK || json.Unmarshal(rec.Body.Bytes(), &page) != nil {
+			t.Fatalf("page 2 = %d %s", rec.Code, rec.Body)
+		}
+		if page.Total != 4 || len(page.Items) != 2 {
+			t.Fatalf("page 2 = %d items of %d", len(page.Items), page.Total)
+		}
+	})
+
 	t.Run("viewer cannot approve or reject", func(t *testing.T) {
 		p := propose("doc-1", 1, "nope")
 		if code := approve(viewerToken, p.ID); code != http.StatusNotFound {
@@ -84,7 +129,7 @@ func TestDocEditProposalsREST(t *testing.T) {
 
 	t.Run("approve applies, writes audit, then conflicts when stale", func(t *testing.T) {
 		p := propose("doc-1", 1, "approved body")
-		stale := propose("doc-1", 1, "stale body")
+		stale := proposeAs(otherAuthorID, "doc-1", 1, "stale body")
 		if code := approve(opToken, p.ID); code != http.StatusOK {
 			t.Fatalf("approve = %d, want 200", code)
 		}
