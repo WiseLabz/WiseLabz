@@ -14,6 +14,17 @@ openspec/changes/x/proposal.md	-
 .claude/settings.json	-
 .agents/skills/x/SKILL.md	-
 .codex/hooks.json	-
+AGENTS.md	-
+CLAUDE.md	-
+.agents/skills/x/evals/evals.json	-
+.agents/skills/x/agents/openai.yaml	-
+.agents/skills/x/scripts/example.sh	-
+.agents/skills/x/templates/main.go	-
+.claude/commands/a.md	-
+.claude/skills/b/SKILL.md	-
+.claude/skills/b/scripts/check.sh	-
+openspec/config.yaml	-
+openspec/changes/c/specs/d/spec.md	-
 prototypes/sketch.html	-
 deploy/wiselabz.service	-
 LICENSE	-

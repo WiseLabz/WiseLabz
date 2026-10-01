@@ -246,6 +246,22 @@ release-please config and manifest), local tooling (`Makefile`,
 `CODEOWNERS`, issue and PR templates, `.github/dependabot.yml`). A docs-only
 PR finishes in about 15 seconds.
 
+**Agent-only changes.** Shared agent tooling is ignored by directory rule, for
+every file type: `.agents/**`, `.claude/**`, `.codex/**` and `openspec/**`
+(JSON, YAML and shell examples included), plus `AGENTS.md`, `CLAUDE.md` (via
+`*.md`) and `skills-lock.json`. A PR, merge-queue entry or push to `main`
+that touches only these paths, whether it adds, edits or deletes them, selects
+no backend, frontend, compose, workflow-lint, govulncheck or Postgres job.
+`Detect changes` and `CI Status` still run and pass. The exceptions are the
+usual ones: a mixed change selects what its other paths select, and an
+unclassified path still selects the application checks. These files are also
+excluded from the Docker build context (`.dockerignore`); `.git` stays in it
+for Go VCS stamping. Application lint, vet, test and CodeQL commands run from
+`backend/` or `web/` (CodeQL is also path-gated to `backend/**`), so skill
+examples and templates are never scanned and no extra scan exclusions are
+needed. Do not add JSON, YAML or shell ignores globally; add a fixture under
+the agent directory instead.
+
 **Fail-safe.** A path that matches no rule is `unclassified` and selects
 backend, frontend, compose and gomod. Unknown files never cause a skip; they
 cost a full run until someone classifies them.
