@@ -16,6 +16,7 @@ export const en = {
     wholeService: 'Whole service',
   },
   common: {
+    actionFailed: 'Something went wrong — the action did not complete.',
     save: 'Save',
     cancel: 'Cancel',
     confirm: 'Confirm',
@@ -1168,6 +1169,9 @@ export const en = {
     syncCompleteTitle: 'Sync complete',
     syncCompleteDetail: '{{changes}} change(s) · {{alerts}} alert(s)',
     newAlert: 'New alert',
+    reload: 'Reload',
+    healthDegraded: 'A system component is degraded or down.',
+    aiSuggestionFailed: 'The AI suggestion failed.',
     documentationRegenerated: 'Documentation regenerated',
     documentationRegeneratedDetail: '{{trigger}} · v{{version}}',
   },

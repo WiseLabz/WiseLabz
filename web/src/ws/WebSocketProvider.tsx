@@ -8,7 +8,7 @@ import { useEffect, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { getGetDashboardOverviewQueryKey } from '../api/generated/dashboard/dashboard';
 import { getGetChangesQueryKey } from '../api/generated/changes/changes';
-import { getGetAlertsQueryKey } from '../api/generated/alerts/alerts';
+import { getAlerts, getGetAlertsQueryKey } from '../api/generated/alerts/alerts';
 import { getGetConnectorsQueryKey } from '../api/generated/connectors/connectors';
 import { getGetFindingsQueryKey } from '../api/generated/findings/findings';
 import { getGetNotificationsQueryKey } from '../api/generated/notifications/notifications';
@@ -17,7 +17,7 @@ import { useLive } from '../store/live';
 import { toast } from '../lib/toast';
 import { navigateTo } from '../lib/navigation';
 import i18n from '../i18n';
-import { useAuth } from '../store/auth';
+import { refreshSession, useAuth } from '../store/auth';
 import { customInstance } from '../api/axios-instance';
 import type { WsEvent } from '../types/ws';
 
@@ -38,12 +38,21 @@ const fetchTicket = () =>
 // Recent event ids remembered for dedupe. Bounded so a long session can't grow it.
 const SEEN_CAP = 500;
 
+// crypto.randomUUID is undefined on non-secure (plain-HTTP LAN) origins.
+const newId = () =>
+  typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+    ? crypto.randomUUID()
+    : `local-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+
+// Alert badge drifts if frames are missed; recount from the API this often.
+const ALERT_RESYNC_MS = 60_000;
+
 // Older servers may omit id/ts; fill them locally. A fallback id is never seen
 // twice, so it is never deduped.
 function normalize(raw: WsEvent): WsEvent {
   return {
     ...raw,
-    id: raw.id || crypto.randomUUID(),
+    id: raw.id || newId(),
     ts: raw.ts || new Date().toISOString(),
   } as WsEvent;
 }
@@ -62,7 +71,6 @@ function resync(qc: ReturnType<typeof useQueryClient>) {
 
 export function WebSocketProvider({ children }: { children: React.ReactNode }) {
   const qc = useQueryClient();
-  const live = useRef(useLive.getState()).current; // stable store handle
   const reconnects = useRef(0);
   // Provider-level so dedupe survives reconnects: Set for lookup, array for FIFO eviction.
   const seen = useRef({ ids: new Set<string>(), order: [] as string[] }).current;
@@ -77,6 +85,15 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
     let socket: WebSocket | null = null;
     let retry: ReturnType<typeof setTimeout> | undefined;
     let closed = false;
+    const syncAlertCount = async () => {
+      try {
+        const page = await getAlerts({ status: 'pending', pageSize: 1 });
+        if (!closed && typeof page?.total === 'number')
+          useLive.getState().setPendingAlerts(page.total);
+      } catch {
+        // keep the current count; the next tick retries
+      }
+    };
     let hasOpened = false; // first open is a fresh load; later opens are reconnects
 
     const connect = async () => {
@@ -97,12 +114,14 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
         reconnects.current = 0;
         useLive.getState().setWs('open');
         if (hasOpened) resync(qc);
+        void syncAlertCount();
         hasOpened = true;
       };
 
       socket.onclose = () => {
-        useLive.getState().setWs('closed');
+        // A stale socket (after logout→login) must not clobber the new one's state.
         if (closed) return;
+        useLive.getState().setWs('closed');
         const delay = Math.min(1000 * 2 ** reconnects.current++, 15000);
         retry = setTimeout(connect, delay);
       };
@@ -123,16 +142,16 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
     };
 
     void connect();
+    const alertTimer = setInterval(() => void syncAlertCount(), ALERT_RESYNC_MS);
     return () => {
       closed = true;
+      clearInterval(alertTimer);
       if (retry) clearTimeout(retry);
       socket?.close();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status]);
 
-  // touch `live` so the ref isn't flagged unused under noUnusedLocals
-  void live;
   return <>{children}</>;
 }
 
@@ -276,6 +295,28 @@ function handle(frame: WsEvent, qc: ReturnType<typeof useQueryClient>) {
     }
     case 'system.resync': {
       resync(qc);
+      break;
+    }
+    case 'system.notice': {
+      const p = frame.payload;
+      const tone =
+        p.level === 'critical' ? toast.error : p.level === 'warning' ? toast.warning : toast.info;
+      if (p.action === 'reload')
+        tone(p.message, {
+          action: { label: i18n.t('notify.reload'), onClick: () => location.reload() },
+        });
+      else tone(p.message);
+      if (p.action === 'reauth') void refreshSession();
+      break;
+    }
+    case 'system.health': {
+      qc.invalidateQueries({ queryKey: getGetDashboardOverviewQueryKey() });
+      if (frame.payload.status !== 'ok') toast.warning(i18n.t('notify.healthDegraded'));
+      break;
+    }
+    case 'doc.ai_suggestion': {
+      // Streaming deltas are consumed over REST by the editor; only surface failures.
+      if (frame.payload.status === 'error') toast.error(i18n.t('notify.aiSuggestionFailed'));
       break;
     }
     default:

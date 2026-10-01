@@ -6,13 +6,17 @@
  * Against a real backend `triggerMockSync` is a no-op (no `window.__wsMock`).
  */
 import { postSync, postConnectorsConnectorIdSync } from '../api/generated/connectors/connectors';
+import { toast } from './toast';
+import i18n from '../i18n';
 import { triggerMockSync } from '../ws/triggerSync';
 
 export async function runSync(connectorId: string | null = null): Promise<void> {
   try {
     if (connectorId) await postConnectorsConnectorIdSync(connectorId);
     else await postSync();
-  } finally {
-    triggerMockSync(connectorId);
+  } catch {
+    toast.error(i18n.t('common.actionFailed'));
+    return;
   }
+  triggerMockSync(connectorId);
 }

@@ -11,7 +11,13 @@
  * submitMfa, which finishes the login via POST /auth/login/mfa.
  */
 import { create } from 'zustand';
-import type { AuthSession, LoginMfaRequired, OidcCallbackRequest, User, WebAuthnResponse } from '../api/model';
+import type {
+  AuthSession,
+  LoginMfaRequired,
+  OidcCallbackRequest,
+  User,
+  WebAuthnResponse,
+} from '../api/model';
 import {
   postAuthLogin,
   postAuthLoginMfa,
@@ -34,14 +40,23 @@ interface AuthState {
   bootstrap: () => Promise<void>;
   login: (username: string, password: string) => Promise<void>;
   /** Finishes a login that returned mfaTicket, with exactly one of totp/recoveryCode. */
-  submitMfa: (input: { totp?: string; recoveryCode?: string; webauthn?: WebAuthnResponse }) => Promise<void>;
+  submitMfa: (input: {
+    totp?: string;
+    recoveryCode?: string;
+    webauthn?: WebAuthnResponse;
+  }) => Promise<void>;
   /** Abandons the pending MFA step (e.g. "use a different account"). */
   cancelMfa: () => void;
   loginOidc: (req: OidcCallbackRequest) => Promise<void>;
   logout: () => Promise<void>;
 }
 
-function apply(session: AuthSession): { status: Status; user: User; mfaTicket: null; mfaMethods: never[] } {
+function apply(session: AuthSession): {
+  status: Status;
+  user: User;
+  mfaTicket: null;
+  mfaMethods: never[];
+} {
   setAccessToken(session.accessToken);
   return { status: 'authenticated', user: session.user, mfaTicket: null, mfaMethods: [] };
 }
@@ -104,14 +119,25 @@ export const useAuth = create<AuthState>((set, get) => ({
 }));
 
 // Register the interceptor's silent-refresh handler once. Returning true tells the
-// interceptor to retry the original request with the new token.
-setRefreshHandler(async () => {
-  try {
-    const session = await postAuthRefresh();
-    useAuth.setState(apply(session));
-    return true;
-  } catch {
-    useAuth.setState(clear());
-    return false;
-  }
-});
+// interceptor to retry the original request with the new token. Concurrent 401s
+// share one in-flight refresh (rotation would reject the second call), and the
+// session is only dropped when the server actually rejects the refresh token;
+// network errors and 5xx leave it intact so a later request can retry.
+let refreshInFlight: Promise<boolean> | null = null;
+export const refreshSession = (): Promise<boolean> => {
+  refreshInFlight ??= (async () => {
+    try {
+      const session = await postAuthRefresh();
+      useAuth.setState(apply(session));
+      return true;
+    } catch (err) {
+      const status = (err as { response?: { status?: number } }).response?.status;
+      if (status === 401 || status === 403) useAuth.setState(clear());
+      return false;
+    } finally {
+      refreshInFlight = null;
+    }
+  })();
+  return refreshInFlight;
+};
+setRefreshHandler(refreshSession);
