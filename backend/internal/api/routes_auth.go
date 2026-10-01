@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -22,11 +23,11 @@ func mountAuthRoutes(r chi.Router, d routerDeps) {
 	// Per-IP throttle on unauthenticated auth endpoints: 5 requests/sec with a
 	// burst of 10, so a normal user retrying a typo never trips it but a
 	// sustained guessing campaign against one IP does.
-	authIPLimit := middleware.RateLimit(5, 10, func(r *http.Request) string {
+	authIPLimit := middleware.RateLimit(context.Background(), 5, 10, func(r *http.Request) string {
 		return middleware.IPKey(httputil.ClientIP(r, cfg.Config.Server.TrustedProxies))
 	})
 	// Per-user throttle on password re-verification for step-up auth.
-	elevateLimit := middleware.RateLimit(1, 5, func(r *http.Request) string { return auth.UserIDFromContext(r.Context()) })
+	elevateLimit := middleware.RateLimit(context.Background(), 1, 5, func(r *http.Request) string { return auth.UserIDFromContext(r.Context()) })
 
 	r.Route("/auth", func(r chi.Router) {
 		r.With(authIPLimit).Post("/login", d.authH.Login)

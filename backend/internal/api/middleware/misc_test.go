@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -63,7 +64,9 @@ func TestRecovererPassThrough(t *testing.T) {
 func TestRateLimit(t *testing.T) {
 	// rate 0 => no refill, so the burst is deterministic regardless of timing.
 	keyFn := func(r *http.Request) string { return r.Header.Get("X-Key") }
-	h := RateLimit(0, 2, keyFn)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }))
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	h := RateLimit(ctx, 0, 2, keyFn)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }))
 
 	do := func(key string) *httptest.ResponseRecorder {
 		req := httptest.NewRequest(http.MethodGet, "/", nil)

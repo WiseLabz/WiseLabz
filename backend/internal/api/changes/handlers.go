@@ -36,7 +36,7 @@ func NewHandler(s *store.Store, settingsH *settings.Handler, aiRegistry *ai.Regi
 	return &Handler{Store: s, Settings: settingsH, AI: aiRegistry, WSHub: hub}
 }
 
-// aiSuggestTimeout bounds detached AI suggestion calls.
+// aiSuggestTimeout bounds detached AI suggestion calls. Keep in sync with api/docs/ai.go.
 const aiSuggestTimeout = 2 * time.Minute
 
 // diffToSpec converts the stored []sync.DiffPatch JSON into the spec's Diff{format,hunks} shape.

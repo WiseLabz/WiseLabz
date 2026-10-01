@@ -18,7 +18,7 @@ import (
 
 const (
 	overviewDefaultDays = 7
-	overviewCacheTTL    = 5 * time.Second
+	cacheTTL            = 5 * time.Second
 )
 
 // Handler holds dependencies for dashboard endpoints.
@@ -29,7 +29,7 @@ type Handler struct {
 
 // NewHandler creates a new dashboard handler.
 func NewHandler(s *store.Store) *Handler {
-	return &Handler{Store: s, cache: ttlcache.New[map[string]any](overviewCacheTTL)}
+	return &Handler{Store: s, cache: ttlcache.New[map[string]any](cacheTTL)}
 }
 
 // Overview handles GET /api/dashboard/overview.

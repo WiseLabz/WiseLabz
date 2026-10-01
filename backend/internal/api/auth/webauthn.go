@@ -21,7 +21,10 @@ import (
 	"github.com/WiseLabz/wiselabz/internal/store"
 )
 
-const webAuthnFlowCookie = "webauthn_flow"
+const (
+	webAuthnFlowCookie    = "webauthn_flow"
+	webAuthnSessionExpiry = 5 * time.Minute
+)
 
 type webAuthnUser struct {
 	id          uuid.UUID
@@ -161,7 +164,7 @@ func (h *Handler) PostWebAuthnRegisterBegin(w http.ResponseWriter, r *http.Reque
 		httputil.Errorf(w, err)
 		return
 	}
-	session.Expires = time.Now().Add(5 * time.Minute)
+	session.Expires = time.Now().Add(webAuthnSessionExpiry)
 	if err := h.setWebAuthnFlow(w, webAuthnFlow{UserID: user.ID, Purpose: "register", Name: req.Name, Session: *session}); err != nil {
 		httputil.Errorf(w, err)
 		return
@@ -287,7 +290,7 @@ func (h *Handler) beginWebAuthnAssertion(w http.ResponseWriter, r *http.Request,
 		httputil.Errorf(w, err)
 		return
 	}
-	session.Expires = time.Now().Add(5 * time.Minute)
+	session.Expires = time.Now().Add(webAuthnSessionExpiry)
 	if err := h.setWebAuthnFlow(w, webAuthnFlow{UserID: user.ID, Purpose: purpose, Session: *session}); err != nil {
 		httputil.Errorf(w, err)
 		return

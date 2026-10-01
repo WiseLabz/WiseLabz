@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"context"
 	"net"
 	"net/http"
 	"net/netip"
@@ -18,9 +19,9 @@ import (
 // 10 minutes; fine for a single-instance deployment. If this ever runs
 // behind multiple backend replicas, move the bucket to a shared store (Redis)
 // so limits are enforced per key across instances, not per instance.
-func RateLimit(ratePerSecond float64, burst int, keyFunc func(*http.Request) string) func(http.Handler) http.Handler {
+func RateLimit(ctx context.Context, ratePerSecond float64, burst int, keyFunc func(*http.Request) string) func(http.Handler) http.Handler {
 	l := &limiterStore{limiters: make(map[string]*visitor), rate: rate.Limit(ratePerSecond), burst: burst}
-	go l.sweepLoop()
+	go l.sweepLoop(ctx)
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -92,11 +93,18 @@ func (l *limiterStore) allow(key string) bool {
 	return v.limiter.Allow()
 }
 
-func (l *limiterStore) sweepLoop() {
-	for range time.Tick(10 * time.Minute) {
-		l.mu.Lock()
-		l.sweepLocked()
-		l.mu.Unlock()
+func (l *limiterStore) sweepLoop(ctx context.Context) {
+	ticker := time.NewTicker(10 * time.Minute)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			l.mu.Lock()
+			l.sweepLocked()
+			l.mu.Unlock()
+		}
 	}
 }
 
