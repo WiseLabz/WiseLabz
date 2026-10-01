@@ -47,7 +47,7 @@ func (h *Handler) OIDCCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	nonce, ok := h.verifyOIDCFlowState(w, r, req.ProviderID, req.State)
+	nonce, codeVerifier, ok := h.verifyOIDCFlowState(w, r, req.ProviderID, req.State)
 	if !ok {
 		return
 	}
@@ -57,7 +57,7 @@ func (h *Handler) OIDCCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	claims, ok := h.exchangeOIDCCode(w, r, prov, provCfg, req.ProviderID, req.Code, nonce)
+	claims, ok := h.exchangeOIDCCode(w, r, prov, provCfg, req.ProviderID, req.Code, nonce, codeVerifier)
 	if !ok {
 		return
 	}
@@ -155,15 +155,15 @@ func auditConnectorGrantDiffJSON(diff store.ConnectorGrantDiff) string {
 // verifyOIDCFlowState reads back the flow cookie this browser was issued when
 // it started the login, clears it so it cannot be replayed, and constant-time
 // compares the cookie's state against the caller-supplied state. Returns the
-// nonce bound to this browser's attempt.
-func (h *Handler) verifyOIDCFlowState(w http.ResponseWriter, r *http.Request, providerID, state string) (string, bool) {
-	cookieState, nonce, ok := readOIDCFlowCookie(r, providerID)
+// nonce and code verifier bound to this browser's attempt.
+func (h *Handler) verifyOIDCFlowState(w http.ResponseWriter, r *http.Request, providerID, state string) (nonce, codeVerifier string, ok bool) {
+	cookieState, nonce, codeVerifier, ok := readOIDCFlowCookie(r, providerID)
 	clearOIDCFlowCookie(w, r, h.Config.Server.TrustedProxies, providerID)
 	if !ok || subtle.ConstantTimeCompare([]byte(cookieState), []byte(state)) != 1 {
 		httputil.Error(w, http.StatusUnauthorized, "oidc_error", "Invalid or expired state")
-		return "", false
+		return "", "", false
 	}
-	return nonce, true
+	return nonce, codeVerifier, true
 }
 
 // resolveOIDCProvider finds the provider configuration, rejects it if an admin
@@ -189,8 +189,8 @@ func (h *Handler) resolveOIDCProvider(w http.ResponseWriter, r *http.Request, pr
 // exchangeOIDCCode trades the authorization code for identity claims against
 // the pinned redirect URL, then enforces the verified-email requirement and
 // the provider's email domain allowlist.
-func (h *Handler) exchangeOIDCCode(w http.ResponseWriter, r *http.Request, prov *auth.OIDCProvider, provCfg *config.OIDCProvider, providerID, code, nonce string) (*auth.OIDCClaims, bool) {
-	claims, err := prov.Exchange(r.Context(), code, nonce, h.oidcRedirectURL(r))
+func (h *Handler) exchangeOIDCCode(w http.ResponseWriter, r *http.Request, prov *auth.OIDCProvider, provCfg *config.OIDCProvider, providerID, code, nonce, codeVerifier string) (*auth.OIDCClaims, bool) {
+	claims, err := prov.Exchange(r.Context(), code, nonce, codeVerifier, h.oidcRedirectURL(r))
 	if err != nil {
 		slog.Error("OIDC exchange failed", "error", err, "provider", logsafe.Sanitize(providerID))
 		httputil.Error(w, http.StatusUnauthorized, "oidc_error", "Failed to authenticate with provider")
@@ -328,8 +328,12 @@ func (h *Handler) Providers(w http.ResponseWriter, r *http.Request) {
 			httputil.Errorf(w, err)
 			return
 		}
-		setOIDCFlowCookie(w, r, h.Config.Server.TrustedProxies, p.ID, state, nonce)
-		authURL := prov.AuthURL(state, nonce, redirectURL)
+		authURL, codeVerifier, err := prov.AuthURL(state, nonce, redirectURL)
+		if err != nil {
+			httputil.Errorf(w, err)
+			return
+		}
+		setOIDCFlowCookie(w, r, h.Config.Server.TrustedProxies, p.ID, state, nonce, codeVerifier)
 		oidc = append(oidc, providerInfo{
 			ID:          p.ID,
 			DisplayName: p.DisplayName,
@@ -570,24 +574,24 @@ func clearFlowCookie(w http.ResponseWriter, r *http.Request, trustedProxies, nam
 	setFlowCookie(w, r, trustedProxies, name, "", -1)
 }
 
-// setOIDCFlowCookie stores the state/nonce generated for this browser's login
+// setOIDCFlowCookie stores the state/nonce/codeVerifier generated for this browser's login
 // attempt in a short-lived HttpOnly cookie, scoped to the auth endpoints.
-func setOIDCFlowCookie(w http.ResponseWriter, r *http.Request, trustedProxies, providerID, state, nonce string) {
-	setFlowCookie(w, r, trustedProxies, oidcFlowCookieName(providerID), providerID+"."+state+"."+nonce, 300)
+func setOIDCFlowCookie(w http.ResponseWriter, r *http.Request, trustedProxies, providerID, state, nonce, codeVerifier string) {
+	setFlowCookie(w, r, trustedProxies, oidcFlowCookieName(providerID), providerID+"."+state+"."+nonce+"."+codeVerifier, 300)
 }
 
-// readOIDCFlowCookie returns the state and nonce this browser was issued for
+// readOIDCFlowCookie returns the state, nonce, and code verifier this browser was issued for
 // providerID, if any.
-func readOIDCFlowCookie(r *http.Request, providerID string) (state, nonce string, ok bool) {
+func readOIDCFlowCookie(r *http.Request, providerID string) (state, nonce, codeVerifier string, ok bool) {
 	cookie, err := r.Cookie(oidcFlowCookieName(providerID))
 	if err != nil {
-		return "", "", false
+		return "", "", "", false
 	}
-	parts := strings.SplitN(cookie.Value, ".", 3)
-	if len(parts) != 3 || parts[0] != providerID || parts[1] == "" || parts[2] == "" {
-		return "", "", false
+	parts := strings.SplitN(cookie.Value, ".", 4)
+	if len(parts) != 4 || parts[0] != providerID || parts[1] == "" || parts[2] == "" || parts[3] == "" {
+		return "", "", "", false
 	}
-	return parts[1], parts[2], true
+	return parts[1], parts[2], parts[3], true
 }
 
 // clearOIDCFlowCookie deletes the flow cookie so it cannot be replayed.

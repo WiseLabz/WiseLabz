@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"strings"
 
 	"github.com/WiseLabz/wiselabz/internal/crypto"
 )
@@ -20,6 +21,9 @@ func (c *Config) Validate() error {
 	var errs []error
 	if len(c.Auth.Secret) < MinAuthSecretLen {
 		errs = append(errs, fmt.Errorf("WISELABZ_AUTH_SECRET is missing or too short (min %d chars)", MinAuthSecretLen))
+	}
+	if isPlaceholderSecret(c.Auth.Secret) {
+		errs = append(errs, fmt.Errorf("WISELABZ_AUTH_SECRET cannot be a placeholder value; generate a new one with: openssl rand -base64 48"))
 	}
 	if _, err := crypto.DecodeKey(c.Encryption.Key); err != nil {
 		errs = append(errs, fmt.Errorf("WISELABZ_ENCRYPTION_KEY is missing or invalid (want base64-encoded 32 bytes, e.g. `openssl rand -base64 32`): %w", err))
@@ -109,4 +113,10 @@ func redactKVPassword(dsn string) string {
 		return dsn[:i+len(key)] + redactedValue + dsn[end:]
 	}
 	return dsn
+}
+
+// isPlaceholderSecret reports whether a secret looks like an unmodified example value.
+func isPlaceholderSecret(s string) bool {
+	lower := strings.ToLower(s)
+	return strings.Contains(lower, "change-me") || strings.Contains(lower, "changeme")
 }

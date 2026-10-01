@@ -25,8 +25,9 @@ server:
 
 # Authentication
 auth:
-  # JWT signing secret — CHANGE THIS to a random 64-char string
-  secret: change-me-to-a-random-64-character-string
+  # JWT signing secret — REQUIRED. Generate with: openssl rand -base64 48
+  # Must be at least 32 characters and cannot be a placeholder value.
+  secret:
   # Access token lifetime in seconds (default 15 minutes)
   access_token_ttl: 900
   # Refresh token lifetime in seconds (default 7 days)

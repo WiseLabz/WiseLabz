@@ -43,7 +43,7 @@ func TestOIDCCallbackRejectsStateMismatchedWithCookie(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 
 	cookieRec := httptest.NewRecorder()
-	setOIDCFlowCookie(cookieRec, req, "", "okta", "real-state", "real-nonce")
+	setOIDCFlowCookie(cookieRec, req, "", "okta", "real-state", "real-nonce", "test-verifier")
 	for _, c := range cookieRec.Result().Cookies() {
 		req.AddCookie(c)
 	}
@@ -67,7 +67,7 @@ func TestOIDCCallbackRejectsUnknownProvider(t *testing.T) {
 
 	// Set the flow cookie
 	cookieRec := httptest.NewRecorder()
-	setOIDCFlowCookie(cookieRec, req, "", "unknown", "state", "nonce")
+	setOIDCFlowCookie(cookieRec, req, "", "unknown", "state", "nonce", "test-verifier")
 	for _, c := range cookieRec.Result().Cookies() {
 		req.AddCookie(c)
 	}
@@ -285,7 +285,7 @@ func TestOIDCCallbackRejectsBadNonce(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 
 	cookieRec := httptest.NewRecorder()
-	setOIDCFlowCookie(cookieRec, req, "", "okta", "state", "real-nonce")
+	setOIDCFlowCookie(cookieRec, req, "", "okta", "state", "real-nonce", "test-verifier")
 	for _, c := range cookieRec.Result().Cookies() {
 		req.AddCookie(c)
 	}
