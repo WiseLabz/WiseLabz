@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -155,6 +156,9 @@ func beginElevate(t *testing.T, th *testHandler, userID, action string) (state, 
 	q := u.Query()
 	state = q.Get("state")
 	nonce = q.Get("nonce")
+	if !strings.HasPrefix(state, "wiselabz:oidc-step-up:") {
+		t.Fatalf("state = %q, want step-up marker", state)
+	}
 	if state == "" || nonce == "" {
 		t.Fatalf("authUrl missing state/nonce: %s", body.AuthURL)
 	}

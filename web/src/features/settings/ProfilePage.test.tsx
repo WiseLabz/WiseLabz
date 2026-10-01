@@ -1,7 +1,8 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import '../../i18n';
+import { toast } from '../../lib/toast';
 import { ProfilePage } from './ProfilePage';
 
 const {
@@ -87,6 +88,8 @@ describe('ProfilePage (#237 Phase 4 - Digest Settings)', () => {
 
   afterEach(() => {
     cleanup();
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
   });
 
   it('renders digest cadence and timezone fields when me.digestTimezone is empty', () => {
@@ -193,6 +196,29 @@ describe('ProfilePage API keys (#278 scopes)', () => {
 
   afterEach(() => {
     cleanup();
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it.each([true, false])('copies a new API token on HTTP, success=%s', async (success) => {
+    vi.stubGlobal('navigator', { ...navigator, clipboard: undefined });
+    const execCommand = vi.fn().mockReturnValue(success);
+    Object.defineProperty(document, 'execCommand', { value: execCommand, configurable: true });
+    const error = vi.spyOn(toast, 'error');
+    renderProfilePage();
+    fireEvent.change(screen.getByLabelText(/^name$/i), { target: { value: 'ci' } });
+    fireEvent.click(screen.getByRole('button', { name: /create key/i }));
+    expect(await screen.findByText('wlz_x')).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: /^copy$/i }));
+    await waitFor(() => expect(execCommand).toHaveBeenCalledWith('copy'));
+    if (success) {
+      expect(await screen.findByText(/^copied$/i)).toBeInTheDocument();
+      expect(error).not.toHaveBeenCalled();
+    } else {
+      await waitFor(() => expect(error).toHaveBeenCalled());
+      expect(screen.queryByText(/^copied$/i)).not.toBeInTheDocument();
+      expect(screen.getByText('wlz_x')).toBeVisible();
+    }
   });
 
   it('sends the chosen scope and connector restriction', async () => {

@@ -35,6 +35,7 @@ describe('OIDCStepUp', () => {
   beforeEach(() => {
     postAuthElevateOidcBegin.mockReset();
     postAuthElevateOidcComplete.mockReset();
+    postAuthElevateOidcComplete.mockResolvedValue({ token: 'elevation-token' });
   });
 
   it('shows a blocked-popup message when window.open returns null', async () => {
@@ -61,6 +62,7 @@ describe('OIDCStepUp', () => {
     window.dispatchEvent(
       new MessageEvent('message', {
         origin: 'https://attacker.example.com',
+        source: popup as unknown as Window,
         data: { type: OIDC_STEP_UP_MESSAGE, code: 'evil-code', state: 'evil-state' },
       }),
     );
@@ -70,6 +72,22 @@ describe('OIDCStepUp', () => {
 
     expect(postAuthElevateOidcComplete).not.toHaveBeenCalled();
     expect(onElevated).not.toHaveBeenCalled();
+  });
+
+  it('ignores a same-origin message from another window', async () => {
+    const popup = fakePopup();
+    vi.spyOn(window, 'open').mockReturnValue(popup as unknown as Window);
+    postAuthElevateOidcBegin.mockResolvedValue({ authUrl: 'https://idp.example.com/authorize' });
+    render(<OIDCStepUp action="connector.delete" onElevated={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button'));
+    await waitFor(() => expect(popup.location.href).toBe('https://idp.example.com/authorize'));
+    window.dispatchEvent(new MessageEvent('message', {
+      origin: window.location.origin,
+      source: window,
+      data: { type: OIDC_STEP_UP_MESSAGE, code: 'evil-code', state: 'evil-state' },
+    }));
+    expect(postAuthElevateOidcComplete).not.toHaveBeenCalled();
+    expect(popup.close).not.toHaveBeenCalled();
   });
 
   it('completes elevation on a same-origin message', async () => {
@@ -86,6 +104,7 @@ describe('OIDCStepUp', () => {
     window.dispatchEvent(
       new MessageEvent('message', {
         origin: window.location.origin,
+        source: popup as unknown as Window,
         data: { type: OIDC_STEP_UP_MESSAGE, code: 'good-code', state: 'good-state' },
       }),
     );

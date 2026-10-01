@@ -9,7 +9,6 @@ import {useEffect, useRef, useState} from 'react';
 import {postAuthElevateOidcBegin, postAuthElevateOidcComplete} from '../../api/generated/auth/auth';
 import {Button} from '../ui/Button';
 import {
-  OIDC_STEP_UP_FLAG,
   isOIDCStepUpMessage,
 } from '../../features/auth/oidcStepUpFlow';
 
@@ -47,14 +46,6 @@ export function OIDCStepUp({
     popupRef.current = popup;
     setStatus('waiting');
 
-    try {
-      sessionStorage.setItem(OIDC_STEP_UP_FLAG, '1');
-    } catch {
-      // Best-effort; if storage is unavailable the callback page falls back
-      // to treating this as a login redirect, which fails loudly rather
-      // than silently, so we still try to proceed.
-    }
-
     let settled = false;
     const finish = (fn: () => void) => {
       if (settled) return;
@@ -64,7 +55,7 @@ export function OIDCStepUp({
     };
 
     const onMessage = (event: MessageEvent) => {
-      if (event.origin !== window.location.origin) return;
+      if (event.origin !== window.location.origin || event.source !== popup) return;
       if (!isOIDCStepUpMessage(event.data)) return;
       finish(() => {
         setStatus('completing');
