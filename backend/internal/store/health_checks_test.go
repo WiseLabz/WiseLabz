@@ -195,3 +195,38 @@ func TestDeleteOldHealthChecks(t *testing.T) {
 		t.Fatalf("DeleteOldHealthChecks() second call deleted %d rows, want 0", n)
 	}
 }
+
+// TestGetConnectorUptimeWindowsMatchesSingleWindow verifies the one-scan
+// multi-window query returns exactly what separate per-window queries do.
+func TestGetConnectorUptimeWindowsMatchesSingleWindow(t *testing.T) {
+	ctx := context.Background()
+	s := newDocTestStore(t)
+	connectorID := createTestConnector(ctx, t, s)
+
+	until := time.Date(2026, 1, 10, 0, 0, 0, 0, time.UTC)
+	for i, st := range []string{"online", "offline", "offline", "online", "online", "offline", "online"} {
+		hc := &HealthCheckRecord{
+			ConnectorID: connectorID,
+			Status:      st,
+			CheckedAt:   until.Add(-time.Duration(7-i) * 10 * time.Hour).Format(time.RFC3339),
+		}
+		if err := s.RecordHealthCheck(ctx, hc); err != nil {
+			t.Fatalf("RecordHealthCheck() error: %v", err)
+		}
+	}
+
+	lookbacks := []time.Duration{24 * time.Hour, 72 * time.Hour, 30 * 24 * time.Hour}
+	got, err := s.GetConnectorUptimeWindows(ctx, connectorID, until, lookbacks)
+	if err != nil {
+		t.Fatalf("GetConnectorUptimeWindows() error: %v", err)
+	}
+	for i, d := range lookbacks {
+		want, err := s.GetConnectorUptime(ctx, connectorID, until.Add(-d), until)
+		if err != nil {
+			t.Fatalf("GetConnectorUptime() error: %v", err)
+		}
+		if got[i] != want {
+			t.Errorf("window %v = %+v, want %+v", d, got[i], want)
+		}
+	}
+}

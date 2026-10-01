@@ -8,10 +8,8 @@ import (
 	"io"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/WiseLabz/wiselabz/internal/connector"
-	"github.com/WiseLabz/wiselabz/internal/httpx"
 )
 
 // claudeProvider talks to Anthropic's Messages API.
@@ -41,7 +39,7 @@ func RegisterClaude(r *Registry) {
 			baseURL: strings.TrimRight(baseURL, "/"),
 			apiKey:  apiKey,
 			model:   model,
-			client:  httpx.NewClient(httpx.Options{Timeout: 60 * time.Second}),
+			client:  sharedHTTPClient(),
 		}, nil
 	}
 	r.Register("claude", factory)

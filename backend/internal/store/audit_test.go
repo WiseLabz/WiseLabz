@@ -137,7 +137,7 @@ func TestListAuditRecordsDateRange(t *testing.T) {
 	}
 }
 
-func TestListAllAuditRecords(t *testing.T) {
+func TestEachAuditRecord(t *testing.T) {
 	ctx := context.Background()
 	s := newDocTestStore(t)
 
@@ -154,20 +154,29 @@ func TestListAllAuditRecords(t *testing.T) {
 		t.Fatalf("CreateAuditRecord(other) error: %v", err)
 	}
 
-	all, err := s.ListAllAuditRecords(ctx, "", "", "", "")
-	if err != nil {
-		t.Fatalf("ListAllAuditRecords() error: %v", err)
-	}
-	if len(all) != 4 {
-		t.Fatalf("ListAllAuditRecords() = %d records, want 4 (no LIMIT)", len(all))
+	collect := func(action, targetType string) ([]AuditRecord, error) {
+		var out []AuditRecord
+		err := s.EachAuditRecord(ctx, action, targetType, "", "", func(a AuditRecord) error {
+			out = append(out, a)
+			return nil
+		})
+		return out, err
 	}
 
-	filtered, err := s.ListAllAuditRecords(ctx, "export.action", "widget", "", "")
+	all, err := collect("", "")
 	if err != nil {
-		t.Fatalf("ListAllAuditRecords(filtered) error: %v", err)
+		t.Fatalf("EachAuditRecord() error: %v", err)
+	}
+	if len(all) != 4 {
+		t.Fatalf("EachAuditRecord() = %d records, want 4 (no LIMIT)", len(all))
+	}
+
+	filtered, err := collect("export.action", "widget")
+	if err != nil {
+		t.Fatalf("EachAuditRecord(filtered) error: %v", err)
 	}
 	if len(filtered) != 3 {
-		t.Fatalf("ListAllAuditRecords(filtered) = %d records, want 3", len(filtered))
+		t.Fatalf("EachAuditRecord(filtered) = %d records, want 3", len(filtered))
 	}
 	for _, r := range filtered {
 		if r.Action != "export.action" || r.TargetType != "widget" {

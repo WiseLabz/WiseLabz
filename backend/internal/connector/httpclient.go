@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -39,17 +40,37 @@ type HTTPClientOptions struct {
 	Jar http.CookieJar
 }
 
+// sharedTransports holds one pooled transport per TLS-verification mode, so
+// connections are kept alive across connector.Get calls instead of every
+// client opening (and leaving idle for IdleConnTimeout) its own. A transport
+// carries no per-connector state; cookies live on the client's Jar.
+var (
+	verifiedTransport = sync.OnceValue(func() *http.Transport { return newTransport(false) })
+	insecureTransport = sync.OnceValue(func() *http.Transport { return newTransport(true) })
+)
+
+func sharedTransport(skipTLSVerify bool) *http.Transport {
+	if skipTLSVerify {
+		return insecureTransport()
+	}
+	return verifiedTransport()
+}
+
+func newTransport(skipTLSVerify bool) *http.Transport {
+	return httpx.NewTransport(httpx.Options{
+		Timeout:            DefaultHTTPTimeout,
+		InsecureSkipVerify: skipTLSVerify,
+		DialContext:        GuardedDialer(DefaultHTTPTimeout).DialContext,
+	})
+}
+
 // NewHTTPClient returns the shared client every HTTP connector uses (#265):
 // httpx's hardened transport (TLS 1.2+, bounded timeouts, no redirects)
 // dialing through GuardedDialer so loopback and link-local targets stay
 // blocked, with idempotent requests retried on transient upstream errors
 // (see httpx.RetryTransport).
 func NewHTTPClient(o HTTPClientOptions) *http.Client {
-	transport := httpx.NewTransport(httpx.Options{
-		Timeout:            DefaultHTTPTimeout,
-		InsecureSkipVerify: o.SkipTLSVerify,
-		DialContext:        GuardedDialer(DefaultHTTPTimeout).DialContext,
-	})
+	transport := sharedTransport(o.SkipTLSVerify)
 	return &http.Client{
 		Timeout:       DefaultHTTPTimeout,
 		Transport:     httpx.RetryTransport(transport, retryPolicy),

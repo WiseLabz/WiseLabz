@@ -6,7 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/http"
 	"sync"
+	"time"
+
+	"github.com/WiseLabz/wiselabz/internal/httpx"
 )
 
 // Provider is the interface for AI suggestion providers.
@@ -168,3 +172,9 @@ func (s *StubProvider) SuggestStream(_ context.Context, _ *SuggestRequest) (<-ch
 	}()
 	return ch, nil
 }
+
+// sharedHTTPClient is the one client every provider uses, so connections to
+// the vendor APIs are pooled and kept alive across Registry.Get calls.
+var sharedHTTPClient = sync.OnceValue(func() *http.Client {
+	return httpx.NewClient(httpx.Options{Timeout: 60 * time.Second})
+})

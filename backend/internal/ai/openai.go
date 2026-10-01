@@ -8,10 +8,8 @@ import (
 	"io"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/WiseLabz/wiselabz/internal/connector"
-	"github.com/WiseLabz/wiselabz/internal/httpx"
 )
 
 // openAICompatibleProvider talks to any OpenAI-compatible chat completions
@@ -44,7 +42,7 @@ func RegisterOpenAICompatible(r *Registry) {
 				baseURL: strings.TrimRight(baseURL, "/"),
 				apiKey:  apiKey,
 				model:   model,
-				client:  httpx.NewClient(httpx.Options{Timeout: 60 * time.Second}),
+				client:  sharedHTTPClient(),
 			}, nil
 		}
 	}

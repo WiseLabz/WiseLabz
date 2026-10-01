@@ -37,13 +37,18 @@ func (h *Handler) Uptime(w http.ResponseWriter, r *http.Request) {
 	}
 
 	now := time.Now().UTC()
+	lookbacks := make([]time.Duration, len(uptimeWindows))
+	for i, win := range uptimeWindows {
+		lookbacks[i] = win.d
+	}
+	all, err := h.Store.GetConnectorUptimeWindows(r.Context(), id, now, lookbacks)
+	if err != nil {
+		httputil.Errorf(w, err)
+		return
+	}
 	windows := make(map[string]any, len(uptimeWindows))
-	for _, win := range uptimeWindows {
-		stats, err := h.Store.GetConnectorUptime(r.Context(), id, now.Add(-win.d), now)
-		if err != nil {
-			httputil.Errorf(w, err)
-			return
-		}
+	for i, win := range uptimeWindows {
+		stats := all[i]
 		windows[win.label] = map[string]any{
 			"windowStart":     stats.WindowStart,
 			"windowEnd":       stats.WindowEnd,

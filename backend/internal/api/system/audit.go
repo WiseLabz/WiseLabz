@@ -2,7 +2,9 @@ package system
 
 import (
 	"encoding/csv"
+	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"time"
@@ -73,14 +75,11 @@ func (h *Handler) ExportAudit(w http.ResponseWriter, r *http.Request) {
 	createdAfter := r.URL.Query().Get("createdAfter")
 	createdBefore := r.URL.Query().Get("createdBefore")
 
-	records, err := h.Store.ListAllAuditRecords(r.Context(), action, targetType, createdAfter, createdBefore)
-	if err != nil {
-		httputil.Errorf(w, err)
-		return
-	}
-
 	timestamp := time.Now().UTC().Format("20060102-150405")
+	ctx := r.Context()
 
+	// Rows are streamed page by page. Once the first byte is written the
+	// status is committed, so a mid-stream failure can only abort the body.
 	if format == "csv" {
 		filename := fmt.Sprintf("wiselabz-audit-%s.csv", timestamp)
 		w.Header().Set("Content-Type", "text/csv; charset=utf-8")
@@ -90,21 +89,41 @@ func (h *Handler) ExportAudit(w http.ResponseWriter, r *http.Request) {
 		if err := cw.Write(auditCSVHeader); err != nil {
 			return // headers already sent; nothing more we can do
 		}
-		for _, a := range records {
+		err := h.Store.EachAuditRecord(ctx, action, targetType, createdAfter, createdBefore, func(a store.AuditRecord) error {
 			row := []string{a.ID, a.ActorUserID, a.ActorRole, a.Action, a.TargetType, a.TargetID, a.Detail, a.CreatedAt}
 			for i, cell := range row {
 				row[i] = csvutil.SafeCell(cell)
 			}
-			if err := cw.Write(row); err != nil {
-				slog.Error("audit csv export: write row failed, aborting (client likely disconnected)", "error", err)
-				return
-			}
+			return cw.Write(row)
+		})
+		if err != nil {
+			slog.Error("audit csv export aborted (client likely disconnected)", "error", err)
+			return
 		}
 		cw.Flush()
 		return
 	}
 
 	filename := fmt.Sprintf("wiselabz-audit-%s.json", timestamp)
+	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Content-Disposition", `attachment; filename="`+filename+`"`)
-	httputil.JSON(w, http.StatusOK, records)
+	enc := json.NewEncoder(w)
+	if _, err := io.WriteString(w, "["); err != nil {
+		return
+	}
+	n := 0
+	err := h.Store.EachAuditRecord(ctx, action, targetType, createdAfter, createdBefore, func(a store.AuditRecord) error {
+		if n > 0 {
+			if _, err := io.WriteString(w, ","); err != nil {
+				return err
+			}
+		}
+		n++
+		return enc.Encode(a)
+	})
+	if err != nil {
+		slog.Error("audit json export aborted", "error", err)
+		return
+	}
+	_, _ = io.WriteString(w, "]")
 }

@@ -8,10 +8,8 @@ import (
 	"io"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/WiseLabz/wiselabz/internal/connector"
-	"github.com/WiseLabz/wiselabz/internal/httpx"
 )
 
 // ollamaEmbedder talks to a local (or self-hosted) Ollama server's batch
@@ -37,7 +35,7 @@ func RegisterOllamaEmbedder(r *EmbedRegistry) {
 		return &ollamaEmbedder{
 			baseURL: strings.TrimRight(baseURL, "/"),
 			model:   model,
-			client:  httpx.NewClient(httpx.Options{Timeout: 60 * time.Second}),
+			client:  sharedHTTPClient(),
 		}, nil
 	})
 }
@@ -103,7 +101,7 @@ func RegisterOpenAIEmbedder(r *EmbedRegistry) {
 			baseURL: strings.TrimRight(baseURL, "/"),
 			apiKey:  apiKey,
 			model:   model,
-			client:  httpx.NewClient(httpx.Options{Timeout: 60 * time.Second}),
+			client:  sharedHTTPClient(),
 		}, nil
 	})
 }

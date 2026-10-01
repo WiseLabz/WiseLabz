@@ -1209,6 +1209,8 @@ export const en = {
   notify: {
     view: 'View',
     syncComplete: 'Sync complete — {{changes}} change(s), {{alerts}} alert(s)',
+    changesDetected: '{{count}} changes detected',
+    alertsCreated: '{{count}} new alerts',
     syncCompleteTitle: 'Sync complete',
     syncCompleteDetail: '{{changes}} change(s) · {{alerts}} alert(s)',
     newAlert: 'New alert',

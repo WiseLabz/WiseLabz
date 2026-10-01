@@ -100,7 +100,10 @@ function Segmented<T extends string>({
 
 export function ThemeControls() {
   const { t } = useTranslation();
-  const { font, mode, preset, custom } = useTheme();
+  const font = useTheme((s) => s.font);
+  const mode = useTheme((s) => s.mode);
+  const preset = useTheme((s) => s.preset);
+  const custom = useTheme((s) => s.custom);
   const setFont = useTheme((s) => s.setFont);
   const setMode = useTheme((s) => s.setMode);
   const setPreset = useTheme((s) => s.setPreset);
