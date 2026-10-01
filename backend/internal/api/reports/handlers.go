@@ -201,6 +201,10 @@ func (h *Handler) Run(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	out, e := h.Manager.Run(r.Context(), x)
+	if e != nil && out.ID == "" {
+		httputil.Errorf(w, e)
+		return
+	}
 	report.LogPartial(e)
 	_ = h.Store.RecordAuditFromContext(r.Context(), "report.definition.run", "report_definition", x.ID, nil)
 	httputil.JSON(w, 201, reportJSON(out, true))
