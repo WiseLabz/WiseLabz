@@ -32,11 +32,9 @@ func (s *Store) ListReportDefinitions(ctx context.Context) ([]ReportDefinitionRe
 	var out []ReportDefinitionRecord
 	for rows.Next() {
 		var r ReportDefinitionRecord
-		var enabled int
-		if err := rows.Scan(&r.ID, &r.Slug, &r.Name, &enabled, &r.CronExpr, &r.Timezone, &r.Sections, &r.ConnectorIDs, &r.Channels, &r.CreatedBy, &r.CreatedAt, &r.UpdatedAt); err != nil {
+		if err := rows.Scan(&r.ID, &r.Slug, &r.Name, &r.Enabled, &r.CronExpr, &r.Timezone, &r.Sections, &r.ConnectorIDs, &r.Channels, &r.CreatedBy, &r.CreatedAt, &r.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("scan report definition: %w", err)
 		}
-		r.Enabled = enabled != 0
 		out = append(out, r)
 	}
 	if err := rows.Err(); err != nil {
@@ -48,15 +46,13 @@ func (s *Store) ListReportDefinitions(ctx context.Context) ([]ReportDefinitionRe
 // GetReportDefinition retrieves one schedule by ID.
 func (s *Store) GetReportDefinition(ctx context.Context, id string) (ReportDefinitionRecord, error) {
 	var r ReportDefinitionRecord
-	var enabled int
-	err := s.db.QueryRowContext(ctx, `SELECT id, slug, name, enabled, cron_expr, timezone, sections, connector_ids, channels, created_by, created_at, updated_at FROM report_definitions WHERE id = ?`, id).Scan(&r.ID, &r.Slug, &r.Name, &enabled, &r.CronExpr, &r.Timezone, &r.Sections, &r.ConnectorIDs, &r.Channels, &r.CreatedBy, &r.CreatedAt, &r.UpdatedAt)
+	err := s.db.QueryRowContext(ctx, `SELECT id, slug, name, enabled, cron_expr, timezone, sections, connector_ids, channels, created_by, created_at, updated_at FROM report_definitions WHERE id = ?`, id).Scan(&r.ID, &r.Slug, &r.Name, &r.Enabled, &r.CronExpr, &r.Timezone, &r.Sections, &r.ConnectorIDs, &r.Channels, &r.CreatedBy, &r.CreatedAt, &r.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return r, ErrNotFound
 	}
 	if err != nil {
 		return r, fmt.Errorf("get report definition: %w", err)
 	}
-	r.Enabled = enabled != 0
 	return r, nil
 }
 
@@ -72,7 +68,7 @@ func (s *Store) CreateReportDefinition(ctx context.Context, r *ReportDefinitionR
 	if r.UpdatedAt == "" {
 		r.UpdatedAt = now
 	}
-	_, err := s.db.ExecContext(ctx, `INSERT INTO report_definitions (id,slug,name,enabled,cron_expr,timezone,sections,connector_ids,channels,created_by,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`, r.ID, r.Slug, r.Name, boolToInt(r.Enabled), r.CronExpr, r.Timezone, r.Sections, r.ConnectorIDs, r.Channels, r.CreatedBy, r.CreatedAt, r.UpdatedAt)
+	_, err := s.db.ExecContext(ctx, `INSERT INTO report_definitions (id,slug,name,enabled,cron_expr,timezone,sections,connector_ids,channels,created_by,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`, r.ID, r.Slug, r.Name, r.Enabled, r.CronExpr, r.Timezone, r.Sections, r.ConnectorIDs, r.Channels, r.CreatedBy, r.CreatedAt, r.UpdatedAt)
 	if isUniqueViolation(err) {
 		return ErrConflict
 	}
@@ -85,7 +81,7 @@ func (s *Store) CreateReportDefinition(ctx context.Context, r *ReportDefinitionR
 // UpdateReportDefinition updates a schedule's mutable fields.
 func (s *Store) UpdateReportDefinition(ctx context.Context, r ReportDefinitionRecord) error {
 	r.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
-	res, err := s.db.ExecContext(ctx, `UPDATE report_definitions SET name=?,enabled=?,cron_expr=?,timezone=?,sections=?,connector_ids=?,channels=?,updated_at=? WHERE id=?`, r.Name, boolToInt(r.Enabled), r.CronExpr, r.Timezone, r.Sections, r.ConnectorIDs, r.Channels, r.UpdatedAt, r.ID)
+	res, err := s.db.ExecContext(ctx, `UPDATE report_definitions SET name=?,enabled=?,cron_expr=?,timezone=?,sections=?,connector_ids=?,channels=?,updated_at=? WHERE id=?`, r.Name, r.Enabled, r.CronExpr, r.Timezone, r.Sections, r.ConnectorIDs, r.Channels, r.UpdatedAt, r.ID)
 	if err != nil {
 		return fmt.Errorf("update report definition: %w", err)
 	}
@@ -117,7 +113,7 @@ func (s *Store) CreateReport(ctx context.Context, r *ReportRecord) error {
 	if r.CreatedAt == "" {
 		r.CreatedAt = time.Now().UTC().Format(time.RFC3339)
 	}
-	_, err := s.db.ExecContext(ctx, `INSERT INTO reports (id,definition_id,definition_name,trigger,period_start,period_end,truncated,data,markdown,status,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)`, r.ID, nilToStr(r.DefinitionID), r.DefinitionName, r.Trigger, r.PeriodStart, r.PeriodEnd, boolToInt(r.Truncated), r.Data, r.Markdown, r.Status, r.CreatedAt)
+	_, err := s.db.ExecContext(ctx, `INSERT INTO reports (id,definition_id,definition_name,trigger,period_start,period_end,truncated,data,markdown,status,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)`, r.ID, nilToStr(r.DefinitionID), r.DefinitionName, r.Trigger, r.PeriodStart, r.PeriodEnd, r.Truncated, r.Data, r.Markdown, r.Status, r.CreatedAt)
 	if err != nil {
 		return fmt.Errorf("create report: %w", err)
 	}
@@ -154,12 +150,10 @@ func (s *Store) ListReports(ctx context.Context, definitionID string, limit, off
 	for rows.Next() {
 		var r ReportRecord
 		var definitionID sql.NullString
-		var truncated int
-		if err := rows.Scan(&r.ID, &definitionID, &r.DefinitionName, &r.Trigger, &r.PeriodStart, &r.PeriodEnd, &truncated, &r.Data, &r.Markdown, &r.Status, &r.CreatedAt); err != nil {
+		if err := rows.Scan(&r.ID, &definitionID, &r.DefinitionName, &r.Trigger, &r.PeriodStart, &r.PeriodEnd, &r.Truncated, &r.Data, &r.Markdown, &r.Status, &r.CreatedAt); err != nil {
 			return nil, 0, fmt.Errorf("scan report: %w", err)
 		}
 		r.DefinitionID = definitionID.String
-		r.Truncated = truncated != 0
 		out = append(out, r)
 	}
 	if err := rows.Err(); err != nil {
@@ -170,8 +164,7 @@ func (s *Store) ListReports(ctx context.Context, definitionID string, limit, off
 func (s *Store) getReport(ctx context.Context, q string, args ...any) (ReportRecord, error) {
 	var r ReportRecord
 	var id sql.NullString
-	var trunc int
-	err := s.db.QueryRowContext(ctx, q, args...).Scan(&r.ID, &id, &r.DefinitionName, &r.Trigger, &r.PeriodStart, &r.PeriodEnd, &trunc, &r.Data, &r.Markdown, &r.Status, &r.CreatedAt)
+	err := s.db.QueryRowContext(ctx, q, args...).Scan(&r.ID, &id, &r.DefinitionName, &r.Trigger, &r.PeriodStart, &r.PeriodEnd, &r.Truncated, &r.Data, &r.Markdown, &r.Status, &r.CreatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return r, ErrNotFound
 	}
@@ -179,6 +172,5 @@ func (s *Store) getReport(ctx context.Context, q string, args ...any) (ReportRec
 		return r, fmt.Errorf("get report: %w", err)
 	}
 	r.DefinitionID = id.String
-	r.Truncated = trunc != 0
 	return r, nil
 }

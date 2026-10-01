@@ -131,7 +131,10 @@ func TestRunMigrationsDown(t *testing.T) {
 		t.Fatalf("RunMigrations() error: %v", err)
 	}
 
-	// 000045_runbook_steps is the latest migration.
+	if err := RunMigrationsDown(db, "sqlite", logger); err != nil {
+		t.Fatalf("RunMigrationsDown() snapshot_utc error: %v", err)
+	}
+	// 000046_snapshot_utc has been rolled back; next is runbook_steps.
 	var runbookStepsTable string
 	if err := db.QueryRow("SELECT name FROM sqlite_master WHERE type='table' AND name='runbook_steps'").Scan(&runbookStepsTable); err != nil {
 		t.Fatalf("runbook_steps table missing after migrations: %v", err)
@@ -350,6 +353,9 @@ func TestRunMigrationsDown(t *testing.T) {
 	}
 	if err := db.QueryRow("SELECT name FROM sqlite_master WHERE type='table' AND name='user_mfa_factors'").Scan(&mfaFactorsTable); err != nil {
 		t.Fatalf("user_mfa_factors table missing after reapply: %v", err)
+	}
+	if err := RunMigrationsDown(db, "sqlite", logger); err != nil {
+		t.Fatalf("RunMigrationsDown() snapshot_utc error: %v", err)
 	}
 	// 000045_runbook_steps is the latest migration again after the reapply
 	// above, so it must be rolled back before sync_runs.snapshot_id — same
@@ -599,6 +605,9 @@ func TestRunMigrationsDownPostgres(t *testing.T) {
 
 	if err := RunMigrations(db, "postgres", logger); err != nil {
 		t.Fatalf("RunMigrations() error: %v", err)
+	}
+	if err := RunMigrationsDown(db, "postgres", logger); err != nil {
+		t.Fatalf("RunMigrationsDown() snapshot_utc error: %v", err)
 	}
 	var runbookStepsTable string
 	if err := db.QueryRow(`SELECT table_name FROM information_schema.tables WHERE table_schema = current_schema() AND table_name = 'runbook_steps'`).Scan(&runbookStepsTable); err != nil {

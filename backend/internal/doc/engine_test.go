@@ -459,3 +459,69 @@ func TestPreviewFromTemplateWithoutSnapshotReturnsRenderError(t *testing.T) {
 		t.Fatalf("PreviewFromTemplate() error = %v, want get snapshot error", err)
 	}
 }
+
+func TestRegeneratePreservesHumanAndTemplateDocs(t *testing.T) {
+	for _, trigger := range []string{"manual", "save", "restore", "ai:test", "template", "sync", "snapshot", "missing-history"} {
+		t.Run(trigger, func(t *testing.T) {
+			ctx := context.Background()
+			s := newEngineTestStore(t)
+			connectorID := seedEngineConnector(t, s, "Node one", "virtualization", "proxmox", true)
+			engine := NewEngine(s)
+			generated, err := engine.GenerateFromSnapshot(ctx, connectorID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if trigger == "missing-history" {
+				err = s.UpdateDoc(ctx, generated.DocID, "# Custom layout\n\nHuman notes", nil)
+			} else {
+				_, err = s.UpdateDocWithVersion(ctx, generated.DocID, "# Custom layout\n\nHuman notes", nil, "editor", trigger)
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			before, err := s.GetDoc(ctx, generated.DocID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for range 2 {
+				if err := engine.RegenerateForConnector(ctx, connectorID); err != nil {
+					t.Fatal(err)
+				}
+			}
+			after, err := s.GetDoc(ctx, generated.DocID)
+			if err != nil || after.Content != before.Content || after.CurrentVersion != before.CurrentVersion {
+				t.Fatalf("protected doc changed: %+v, %v", after, err)
+			}
+			changes, total, err := s.ListChanges(ctx, connectorID, "", 0, 10)
+			if err != nil || total != 1 || len(changes) != 1 {
+				t.Fatalf("review changes = %+v, %d, %v; want one", changes, total, err)
+			}
+			if changes[0].Status != "new" || !strings.Contains(changes[0].AffectedDocIDs, generated.DocID) || !strings.Contains(changes[0].Diff, "Human notes") {
+				t.Fatalf("review change = %+v", changes[0])
+			}
+		})
+	}
+}
+
+func TestRegeneratePreservesInitialTemplateLayout(t *testing.T) {
+	ctx := context.Background()
+	s := newEngineTestStore(t)
+	connectorID := seedEngineConnector(t, s, "Node one", "virtualization", "proxmox", true)
+	templateID := seedEngineTemplate(t, s, `{}`, store.TemplateSectionRecord{Title: "Custom overview", Body: "Template layout: {{.ServiceName}}"})
+	engine := NewEngine(s)
+	generated, err := engine.GenerateFromTemplate(ctx, templateID, connectorID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := engine.RegenerateForConnector(ctx, connectorID); err != nil {
+		t.Fatal(err)
+	}
+	d, err := s.GetDoc(ctx, generated.DocID)
+	if err != nil || d.Content != generated.Content || d.CurrentVersion != 1 {
+		t.Fatalf("template layout lost: %+v, %v", d, err)
+	}
+	changes, total, err := s.ListChanges(ctx, connectorID, "", 0, 10)
+	if err != nil || total != 1 || len(changes) != 1 {
+		t.Fatalf("template review = %+v, %d, %v", changes, total, err)
+	}
+}

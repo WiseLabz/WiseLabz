@@ -317,7 +317,7 @@ func (e *Engine) persistSyncSnapshot(ctx context.Context, connectorID string, sn
 		return nil, nil, "", fmt.Errorf("get latest snapshot: %w", prevErr)
 	}
 	data, _ := json.Marshal(sn)
-	snapshot := &store.SnapshotRecord{ConnectorID: connectorID, Data: string(data), FetchedAt: sn.FetchedAt.Format(time.RFC3339)}
+	snapshot := &store.SnapshotRecord{ConnectorID: connectorID, Data: string(data), FetchedAt: sn.FetchedAt.UTC().Format(store.SnapshotTimeFormat)}
 	maintenance, err := e.store.GetActiveMaintenanceWindow(ctx, connectorID)
 	if err != nil {
 		slog.Error("get active maintenance window failed", "connector", logsafe.Sanitize(connectorID), "error", logsafe.Sanitize(err.Error()))
