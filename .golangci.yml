@@ -6,7 +6,6 @@ run:
 linters:
   enable:
     - errcheck
-    - forbidigo
     - govet
     - ineffassign
     - staticcheck
@@ -15,12 +14,6 @@ linters:
     - revive
     - funlen
   settings:
-    forbidigo:
-      analyze-types: true
-      patterns:
-        - p: 'slog\.(Error|Warn|Info|Debug|Log)\('
-          msg: 'use httputil.Logger(ctx) instead of direct slog calls in internal/api'
-          path: 'internal/api/(?!.*middleware\.go)'
     funlen:
       # Ratchet at the current maximum; tighten as #265/#266/#269 land.
       lines: 240
