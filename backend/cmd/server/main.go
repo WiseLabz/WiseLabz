@@ -64,26 +64,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Open database
-	db, err := store.OpenDB(cfg.DB.Driver, cfg.DB.DSN, store.PoolConfig{
-		MaxOpenConns:    cfg.DB.MaxOpenConns,
-		MaxIdleConns:    cfg.DB.MaxIdleConns,
-		ConnMaxLifetime: cfg.DB.ConnMaxLifetime(),
-		ConnMaxIdleTime: cfg.DB.ConnMaxIdleTime(),
-	})
-	if err != nil {
-		logger.Error("Failed to open database", "error", err)
-		os.Exit(1)
-	}
-
-	// Run migrations
-	if err := store.RunMigrations(db, cfg.DB.Driver, logger); err != nil {
-		logger.Error("Failed to run migrations", "error", err)
-		os.Exit(1)
-	}
-
-	// Initialize store
-	s := store.New(db, cfg.DB.Driver)
+	s := openStore(cfg, logger)
 
 	// Create root context that cancels on interrupt. This only signals that
 	// shutdown should begin; the lifecycle manager below owns the separate
@@ -93,8 +74,7 @@ func main() {
 	defer cancel()
 
 	// Initialize singleton configs + seed admin if needed
-	adminPassword := os.Getenv("WISELABZ_ADMIN_PASSWORD")
-	if err := s.Init(ctx, adminPassword); err != nil {
+	if err := s.Init(ctx, cfg.AdminPassword); err != nil {
 		logger.Error("Failed to initialize store", "error", err)
 		os.Exit(1)
 	}
@@ -126,13 +106,7 @@ func main() {
 	docEngine := doc.NewEngine(s)
 	syncEngine.SetDocRegenerator(docEngine)
 
-	aiRegistry := ai.NewRegistry()
-	ai.RegisterOpenAICompatible(aiRegistry)
-	ai.RegisterClaude(aiRegistry)
-
-	embedRegistry := ai.NewEmbedRegistry()
-	ai.RegisterOllamaEmbedder(embedRegistry)
-	ai.RegisterOpenAIEmbedder(embedRegistry)
+	aiRegistry, embedRegistry := newAIRegistries()
 
 	// Determine backup directory: use configured value, or compute from DB DSN
 	backupDir := cfg.Backup.Dir
@@ -152,89 +126,12 @@ func main() {
 	// transition, reported via system.job_failed (#384) — see
 	// scheduler.Runner.SetHealthTracking.
 	jobRunner.SetHealthTracking(s, notifDispatcher)
-	reportGenerator := report.NewGenerator(s)
-	reportManager := report.NewManager(s, reportGenerator, jobRunner, func(ctx context.Context, rec store.ReportRecord, def store.ReportDefinitionRecord) {
-		var channels []string
-		_ = json.Unmarshal([]byte(def.Channels), &channels)
-		var data report.ReportData
-		_ = json.Unmarshal([]byte(rec.Data), &data)
-		notifDispatcher.NotifyReport(ctx, "Report: "+def.Name, report.Summary(data), channels)
-	})
+	reportManager := newReportManager(s, jobRunner, notifDispatcher)
 	if err := reportManager.Init(ctx); err != nil {
 		logger.Error("Failed to initialize report schedules", "error", err)
 		os.Exit(1)
 	}
-	if _, err := jobRunner.AddJob("quality", cfg.Quality.CronExpr, func(jobCtx context.Context) error {
-		return quality.RunStaleSweepOnce(jobCtx, s, wsHub, notifDispatcher, logger)
-	}); err != nil {
-		logger.Error("Failed to add quality job", "error", err)
-		os.Exit(1)
-	}
-	if _, err := jobRunner.AddJob("sync", cfg.Sync.PollCronExpr, func(jobCtx context.Context) error {
-		return syncEngine.RunDueSyncs(jobCtx, logger)
-	}); err != nil {
-		logger.Error("Failed to add sync job", "error", err)
-		os.Exit(1)
-	}
-	if _, err := jobRunner.AddJob("digest", "0 * * * *", func(jobCtx context.Context) error {
-		return notifDispatcher.RunDigestSweep(jobCtx, time.Now().UTC(), logger)
-	}); err != nil {
-		logger.Error("Failed to add digest job", "error", err)
-		os.Exit(1)
-	}
-	if _, err := jobRunner.AddJob("alertExpirer", "0 * * * * *", func(jobCtx context.Context) error {
-		return expireAlertsOnce(jobCtx, s, notifDispatcher, logger)
-	}); err != nil {
-		logger.Error("Failed to add alert expirer job", "error", err)
-		os.Exit(1)
-	}
-
-	// Unlike the backup job itself (registered by api.NewRouter via
-	// InitBackupJob, since its schedule is operator-configurable through
-	// PUT /schedule), the verify job has no persisted schedule of its own —
-	// it just registers here on a fixed cadence, same as "quality"/"digest"
-	// above.
-	if _, err := jobRunner.AddJob("backup-verify", backup.DefaultVerifyCronExpr, func(jobCtx context.Context) error {
-		return backup.RunVerifyOnce(jobCtx, backupDir, logger)
-	}); err != nil {
-		logger.Error("Failed to add backup verify job", "error", err)
-		os.Exit(1)
-	}
-
-	// Scheduled doc export (issues #283, #377): writes every generated doc as
-	// Markdown to a local directory and, when doc_export.git.remote is set,
-	// commits and pushes it to that Git remote. Config-file only for now,
-	// same as "quality"/"digest"/"backup-verify" above — no operator-facing
-	// API to change it at runtime. Opt-in via doc_export.enabled since it
-	// writes to disk on a schedule. Failures notify system.job_failed on
-	// state transitions only, via the scheduler's centralized health
-	// tracking (#384) — see jobRunner.SetHealthTracking above.
-	if cfg.DocExport.Enabled {
-		docExporter := docexport.NewExporter(s)
-		if g := cfg.DocExport.Git; g.Enabled() {
-			if err := docExporter.ConfigureGit(docexport.GitOptions{
-				Remote: g.Remote, Branch: g.Branch, Path: g.Path,
-				AuthorName: g.AuthorName, AuthorEmail: g.AuthorEmail,
-				Token: g.Token, SSHKeyPath: g.SSHKeyPath, SSHKnownHosts: g.SSHKnownHosts,
-				InsecureSkipHostKey: g.InsecureSkipHostKey,
-				CommitMode:          g.CommitMode, AuthorFromUser: g.AuthorFromUser,
-				MaxRevisionsPerRun: g.MaxRevisionsPerRun,
-			}); err != nil {
-				logger.Error("Failed to configure doc export Git target", "error", err)
-				os.Exit(1)
-			}
-			if g.InsecureSkipHostKey {
-				logger.Warn("doc export: SSH host key verification is disabled (doc_export.git.insecure_skip_host_key); pushes are open to MITM")
-			}
-			logger.Info("doc export: Git target configured", "remote", logsafe.Sanitize(g.Remote), "branch", g.Branch, "path", g.Path)
-		}
-		if _, err := jobRunner.AddJob("docexport", cfg.DocExport.CronExpr, func(jobCtx context.Context) error {
-			return docexport.RunExportOnce(jobCtx, docExporter, cfg.DocExport.Dir, logger)
-		}); err != nil {
-			logger.Error("Failed to add doc export job", "error", err)
-			os.Exit(1)
-		}
-	}
+	registerJobs(jobRunner, cfg, s, wsHub, notifDispatcher, syncEngine, backupDir, logger)
 
 	// Build HTTP router
 	readyState := &syshandler.ReadyState{}
@@ -313,6 +210,145 @@ func main() {
 	logger.Info("Shutdown complete")
 	if exitCode != 0 {
 		os.Exit(exitCode)
+	}
+}
+
+// newAIRegistries registers the built-in chat and embedding providers.
+func newAIRegistries() (*ai.Registry, *ai.EmbedRegistry) {
+	aiRegistry := ai.NewRegistry()
+	ai.RegisterOpenAICompatible(aiRegistry)
+	ai.RegisterClaude(aiRegistry)
+
+	embedRegistry := ai.NewEmbedRegistry()
+	ai.RegisterOllamaEmbedder(embedRegistry)
+	ai.RegisterOpenAIEmbedder(embedRegistry)
+	return aiRegistry, embedRegistry
+}
+
+// newReportManager builds the report manager, notifying the report's
+// channels whenever a scheduled report completes.
+func newReportManager(s *store.Store, jobRunner *scheduler.Runner, d *notifications.Dispatcher) *report.Manager {
+	reportGenerator := report.NewGenerator(s)
+	return report.NewManager(s, reportGenerator, jobRunner, func(ctx context.Context, rec store.ReportRecord, def store.ReportDefinitionRecord) {
+		var channels []string
+		_ = json.Unmarshal([]byte(def.Channels), &channels)
+		var data report.ReportData
+		_ = json.Unmarshal([]byte(rec.Data), &data)
+		d.NotifyReport(ctx, "Report: "+def.Name, report.Summary(data), channels)
+	})
+}
+
+// openStore opens the database, runs migrations and wraps it in a Store,
+// exiting the process on failure.
+func openStore(cfg *config.Config, logger *slog.Logger) *store.Store {
+	db, err := store.OpenDB(cfg.DB.Driver, cfg.DB.DSN, store.PoolConfig{
+		MaxOpenConns:    cfg.DB.MaxOpenConns,
+		MaxIdleConns:    cfg.DB.MaxIdleConns,
+		ConnMaxLifetime: cfg.DB.ConnMaxLifetime(),
+		ConnMaxIdleTime: cfg.DB.ConnMaxIdleTime(),
+	})
+	if err != nil {
+		logger.Error("Failed to open database", "error", err)
+		os.Exit(1)
+	}
+
+	if err := store.RunMigrations(db, cfg.DB.Driver, logger); err != nil {
+		logger.Error("Failed to run migrations", "error", err)
+		os.Exit(1)
+	}
+
+	s := store.New(db, cfg.DB.Driver)
+	readDB, err := store.OpenReadDB(cfg.DB.Driver, cfg.DB.DSN)
+	if err != nil {
+		logger.Error("Failed to open read database", "error", err)
+		os.Exit(1)
+	}
+	s.SetReadDB(readDB)
+	return s
+}
+
+// registerJobs adds the fixed-cadence background jobs to the scheduler,
+// exiting the process if any cannot be registered.
+func registerJobs(
+	jobRunner *scheduler.Runner,
+	cfg *config.Config,
+	s *store.Store,
+	wsHub *ws.Hub,
+	notifDispatcher *notifications.Dispatcher,
+	syncEngine *sync.Engine,
+	backupDir string,
+	logger *slog.Logger,
+) {
+	if _, err := jobRunner.AddJob("quality", cfg.Quality.CronExpr, func(jobCtx context.Context) error {
+		return quality.RunStaleSweepOnce(jobCtx, s, wsHub, notifDispatcher, logger)
+	}); err != nil {
+		logger.Error("Failed to add quality job", "error", err)
+		os.Exit(1)
+	}
+	if _, err := jobRunner.AddJob("sync", cfg.Sync.PollCronExpr, func(jobCtx context.Context) error {
+		return syncEngine.RunDueSyncs(jobCtx, logger)
+	}); err != nil {
+		logger.Error("Failed to add sync job", "error", err)
+		os.Exit(1)
+	}
+	if _, err := jobRunner.AddJob("digest", "0 * * * *", func(jobCtx context.Context) error {
+		return notifDispatcher.RunDigestSweep(jobCtx, time.Now().UTC(), logger)
+	}); err != nil {
+		logger.Error("Failed to add digest job", "error", err)
+		os.Exit(1)
+	}
+	if _, err := jobRunner.AddJob("alertExpirer", "0 * * * * *", func(jobCtx context.Context) error {
+		return expireAlertsOnce(jobCtx, s, notifDispatcher, logger)
+	}); err != nil {
+		logger.Error("Failed to add alert expirer job", "error", err)
+		os.Exit(1)
+	}
+
+	// Unlike the backup job itself (registered by api.NewRouter via
+	// InitBackupJob, since its schedule is operator-configurable through
+	// PUT /schedule), the verify job has no persisted schedule of its own —
+	// it just registers here on a fixed cadence, same as "quality"/"digest"
+	// above.
+	if _, err := jobRunner.AddJob("backup-verify", backup.DefaultVerifyCronExpr, func(jobCtx context.Context) error {
+		return backup.RunVerifyOnce(jobCtx, backupDir, logger)
+	}); err != nil {
+		logger.Error("Failed to add backup verify job", "error", err)
+		os.Exit(1)
+	}
+
+	// Scheduled doc export (issues #283, #377): writes every generated doc as
+	// Markdown to a local directory and, when doc_export.git.remote is set,
+	// commits and pushes it to that Git remote. Config-file only for now,
+	// same as "quality"/"digest"/"backup-verify" above — no operator-facing
+	// API to change it at runtime. Opt-in via doc_export.enabled since it
+	// writes to disk on a schedule. Failures notify system.job_failed on
+	// state transitions only, via the scheduler's centralized health
+	// tracking (#384) — see jobRunner.SetHealthTracking above.
+	if cfg.DocExport.Enabled {
+		docExporter := docexport.NewExporter(s)
+		if g := cfg.DocExport.Git; g.Enabled() {
+			if err := docExporter.ConfigureGit(docexport.GitOptions{
+				Remote: g.Remote, Branch: g.Branch, Path: g.Path,
+				AuthorName: g.AuthorName, AuthorEmail: g.AuthorEmail,
+				Token: g.Token, SSHKeyPath: g.SSHKeyPath, SSHKnownHosts: g.SSHKnownHosts,
+				InsecureSkipHostKey: g.InsecureSkipHostKey,
+				CommitMode:          g.CommitMode, AuthorFromUser: g.AuthorFromUser,
+				MaxRevisionsPerRun: g.MaxRevisionsPerRun,
+			}); err != nil {
+				logger.Error("Failed to configure doc export Git target", "error", err)
+				os.Exit(1)
+			}
+			if g.InsecureSkipHostKey {
+				logger.Warn("doc export: SSH host key verification is disabled (doc_export.git.insecure_skip_host_key); pushes are open to MITM")
+			}
+			logger.Info("doc export: Git target configured", "remote", logsafe.Sanitize(g.Remote), "branch", g.Branch, "path", g.Path)
+		}
+		if _, err := jobRunner.AddJob("docexport", cfg.DocExport.CronExpr, func(jobCtx context.Context) error {
+			return docexport.RunExportOnce(jobCtx, docExporter, cfg.DocExport.Dir, logger)
+		}); err != nil {
+			logger.Error("Failed to add doc export job", "error", err)
+			os.Exit(1)
+		}
 	}
 }
 

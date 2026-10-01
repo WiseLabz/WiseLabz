@@ -274,6 +274,7 @@ func (h *Handler) completeOIDCLogin(w http.ResponseWriter, r *http.Request, user
 	}
 
 	session := &store.Session{
+		ID:             pair.SessionID,
 		UserID:         user.ID,
 		TokenHash:      store.HashToken(pair.RefreshToken),
 		AuthProviderID: providerID,

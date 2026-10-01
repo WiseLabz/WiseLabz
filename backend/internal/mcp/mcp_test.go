@@ -54,7 +54,7 @@ func newTestHarness(t *testing.T) *testHarness {
 		return fakeEmbedder{}, nil
 	})
 
-	mcpServer := newMCPServer(Deps{Store: s, Settings: settingsH, Embed: embedRegistry})
+	mcpServer := newMCPServer(Deps{Store: s, AIConfig: settingsH.AIConfig, Embed: embedRegistry})
 	client, err := mcpclient.NewInProcessClient(mcpServer)
 	if err != nil {
 		t.Fatalf("new in-process client: %v", err)

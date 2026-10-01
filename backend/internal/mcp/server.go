@@ -12,7 +12,7 @@ import (
 	mcpserver "github.com/mark3labs/mcp-go/server"
 
 	"github.com/WiseLabz/wiselabz/internal/ai"
-	"github.com/WiseLabz/wiselabz/internal/api/settings"
+	"github.com/WiseLabz/wiselabz/internal/aicfg"
 	"github.com/WiseLabz/wiselabz/internal/store"
 )
 
@@ -26,7 +26,7 @@ const defaultPageSize = 30
 // same wiring internal/api/chat.Handler uses for PostMessage).
 type Deps struct {
 	Store    *store.Store
-	Settings *settings.Handler
+	AIConfig *aicfg.Loader
 	Embed    *ai.EmbedRegistry
 }
 

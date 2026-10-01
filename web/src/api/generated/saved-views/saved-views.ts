@@ -6,15 +6,18 @@
  *
  * OpenAPI spec version: 0.1.0
  */
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import type {
   DataTag,
   DefinedInitialDataOptions,
   DefinedUseQueryResult,
+  MutationFunction,
   QueryClient,
   QueryFunction,
   QueryKey,
   UndefinedInitialDataOptions,
+  UseMutationOptions,
+  UseMutationResult,
   UseQueryOptions,
   UseQueryResult,
 } from '@tanstack/react-query';
@@ -187,110 +190,74 @@ export const postSavedViews = (
   );
 };
 
-export const getPostSavedViewsQueryKey = (savedViewCreate?: BodyType<SavedViewCreate>) => {
-  return ['POST', `/saved-views`, savedViewCreate] as const;
-};
+export const getPostSavedViewsMutationKey = () => ['postSavedViews'] as const;
 
-export const getPostSavedViewsQueryOptions = <
-  TData = Awaited<ReturnType<typeof postSavedViews>>,
+export const getPostSavedViewsMutationOptions = <
   TError = ErrorType<BadRequestResponse | UnauthorizedResponse>,
->(
-  savedViewCreate: BodyType<SavedViewCreate>,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof postSavedViews>>, TError, TData>>;
-    request?: SecondParameter<typeof customInstance>;
-  }
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
-
-  const queryKey = queryOptions?.queryKey ?? getPostSavedViewsQueryKey(savedViewCreate);
-
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof postSavedViews>>> = ({ signal }) =>
-    postSavedViews(savedViewCreate, requestOptions, signal);
-
-  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof postSavedViews>>,
     TError,
-    TData
-  > & { queryKey: DataTag<QueryKey, TData, TError> };
+    PostSavedViewsMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof postSavedViews>>,
+  TError,
+  PostSavedViewsMutationVariables,
+  TContext
+> => {
+  const mutationKey = getPostSavedViewsMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof postSavedViews>>,
+    PostSavedViewsMutationVariables
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return postSavedViews(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type PostSavedViewsQueryResult = NonNullable<Awaited<ReturnType<typeof postSavedViews>>>;
-export type PostSavedViewsQueryError = ErrorType<BadRequestResponse | UnauthorizedResponse>;
+export type PostSavedViewsMutationResult = NonNullable<Awaited<ReturnType<typeof postSavedViews>>>;
+export type PostSavedViewsMutationBody = BodyType<SavedViewCreate>;
+export type PostSavedViewsMutationError = ErrorType<BadRequestResponse | UnauthorizedResponse>;
+export type PostSavedViewsMutationVariables = { data: BodyType<SavedViewCreate> };
 
-export function usePostSavedViews<
-  TData = Awaited<ReturnType<typeof postSavedViews>>,
-  TError = ErrorType<BadRequestResponse | UnauthorizedResponse>,
->(
-  savedViewCreate: BodyType<SavedViewCreate>,
-  options: {
-    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof postSavedViews>>, TError, TData>> &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postSavedViews>>,
-          TError,
-          Awaited<ReturnType<typeof postSavedViews>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostSavedViews<
-  TData = Awaited<ReturnType<typeof postSavedViews>>,
-  TError = ErrorType<BadRequestResponse | UnauthorizedResponse>,
->(
-  savedViewCreate: BodyType<SavedViewCreate>,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof postSavedViews>>, TError, TData>> &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postSavedViews>>,
-          TError,
-          Awaited<ReturnType<typeof postSavedViews>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostSavedViews<
-  TData = Awaited<ReturnType<typeof postSavedViews>>,
-  TError = ErrorType<BadRequestResponse | UnauthorizedResponse>,
->(
-  savedViewCreate: BodyType<SavedViewCreate>,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof postSavedViews>>, TError, TData>>;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
  * @summary Save the current filter state of a list surface under a name
  */
-
-export function usePostSavedViews<
-  TData = Awaited<ReturnType<typeof postSavedViews>>,
+export const usePostSavedViews = <
   TError = ErrorType<BadRequestResponse | UnauthorizedResponse>,
+  TContext = unknown,
 >(
-  savedViewCreate: BodyType<SavedViewCreate>,
   options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof postSavedViews>>, TError, TData>>;
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof postSavedViews>>,
+      TError,
+      PostSavedViewsMutationVariables,
+      TContext
+    >;
     request?: SecondParameter<typeof customInstance>;
   },
   queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getPostSavedViewsQueryOptions(savedViewCreate, options);
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
+): UseMutationResult<
+  Awaited<ReturnType<typeof postSavedViews>>,
+  TError,
+  PostSavedViewsMutationVariables,
+  TContext
+> => {
+  return useMutation(getPostSavedViewsMutationOptions(options), queryClient);
+};
 /**
  * @summary Delete one of the current user's saved views
  */
@@ -305,124 +272,76 @@ export const deleteSavedViewsSavedViewId = (
   );
 };
 
-export const getDeleteSavedViewsSavedViewIdQueryKey = (savedViewId: string) => {
-  return ['DELETE', `/saved-views/${savedViewId}`] as const;
-};
+export const getDeleteSavedViewsSavedViewIdMutationKey = () =>
+  ['deleteSavedViewsSavedViewId'] as const;
 
-export const getDeleteSavedViewsSavedViewIdQueryOptions = <
-  TData = Awaited<ReturnType<typeof deleteSavedViewsSavedViewId>>,
+export const getDeleteSavedViewsSavedViewIdMutationOptions = <
   TError = ErrorType<UnauthorizedResponse | ForbiddenResponse | NotFoundResponse>,
->(
-  savedViewId: string,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof deleteSavedViewsSavedViewId>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  }
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteSavedViewsSavedViewId>>,
+    TError,
+    DeleteSavedViewsSavedViewIdMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteSavedViewsSavedViewId>>,
+  TError,
+  DeleteSavedViewsSavedViewIdMutationVariables,
+  TContext
+> => {
+  const mutationKey = getDeleteSavedViewsSavedViewIdMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
 
-  const queryKey = queryOptions?.queryKey ?? getDeleteSavedViewsSavedViewIdQueryKey(savedViewId);
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteSavedViewsSavedViewId>>,
+    DeleteSavedViewsSavedViewIdMutationVariables
+  > = (props) => {
+    const { savedViewId } = props ?? {};
 
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof deleteSavedViewsSavedViewId>>> = ({
-    signal,
-  }) => deleteSavedViewsSavedViewId(savedViewId, requestOptions, signal);
-
-  return {
-    queryKey,
-    queryFn,
-    enabled: savedViewId !== null && savedViewId !== undefined,
-    ...queryOptions,
-  } as UseQueryOptions<Awaited<ReturnType<typeof deleteSavedViewsSavedViewId>>, TError, TData> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
+    return deleteSavedViewsSavedViewId(savedViewId, requestOptions);
   };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type DeleteSavedViewsSavedViewIdQueryResult = NonNullable<
+export type DeleteSavedViewsSavedViewIdMutationResult = NonNullable<
   Awaited<ReturnType<typeof deleteSavedViewsSavedViewId>>
 >;
-export type DeleteSavedViewsSavedViewIdQueryError = ErrorType<
+
+export type DeleteSavedViewsSavedViewIdMutationError = ErrorType<
   UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
 >;
+export type DeleteSavedViewsSavedViewIdMutationVariables = { savedViewId: string };
 
-export function useDeleteSavedViewsSavedViewId<
-  TData = Awaited<ReturnType<typeof deleteSavedViewsSavedViewId>>,
-  TError = ErrorType<UnauthorizedResponse | ForbiddenResponse | NotFoundResponse>,
->(
-  savedViewId: string,
-  options: {
-    query: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof deleteSavedViewsSavedViewId>>, TError, TData>
-    > &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof deleteSavedViewsSavedViewId>>,
-          TError,
-          Awaited<ReturnType<typeof deleteSavedViewsSavedViewId>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function useDeleteSavedViewsSavedViewId<
-  TData = Awaited<ReturnType<typeof deleteSavedViewsSavedViewId>>,
-  TError = ErrorType<UnauthorizedResponse | ForbiddenResponse | NotFoundResponse>,
->(
-  savedViewId: string,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof deleteSavedViewsSavedViewId>>, TError, TData>
-    > &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof deleteSavedViewsSavedViewId>>,
-          TError,
-          Awaited<ReturnType<typeof deleteSavedViewsSavedViewId>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function useDeleteSavedViewsSavedViewId<
-  TData = Awaited<ReturnType<typeof deleteSavedViewsSavedViewId>>,
-  TError = ErrorType<UnauthorizedResponse | ForbiddenResponse | NotFoundResponse>,
->(
-  savedViewId: string,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof deleteSavedViewsSavedViewId>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
  * @summary Delete one of the current user's saved views
  */
-
-export function useDeleteSavedViewsSavedViewId<
-  TData = Awaited<ReturnType<typeof deleteSavedViewsSavedViewId>>,
+export const useDeleteSavedViewsSavedViewId = <
   TError = ErrorType<UnauthorizedResponse | ForbiddenResponse | NotFoundResponse>,
+  TContext = unknown,
 >(
-  savedViewId: string,
   options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof deleteSavedViewsSavedViewId>>, TError, TData>
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof deleteSavedViewsSavedViewId>>,
+      TError,
+      DeleteSavedViewsSavedViewIdMutationVariables,
+      TContext
     >;
     request?: SecondParameter<typeof customInstance>;
   },
   queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getDeleteSavedViewsSavedViewIdQueryOptions(savedViewId, options);
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
+): UseMutationResult<
+  Awaited<ReturnType<typeof deleteSavedViewsSavedViewId>>,
+  TError,
+  DeleteSavedViewsSavedViewIdMutationVariables,
+  TContext
+> => {
+  return useMutation(getDeleteSavedViewsSavedViewIdMutationOptions(options), queryClient);
+};

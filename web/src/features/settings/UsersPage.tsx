@@ -22,6 +22,7 @@ import { Panel } from '../../components/ui/Panel';
 import { SkeletonRows, ErrorState, EmptyState } from '../../components/ui/states';
 import { Dialog } from '../../components/ui/Dialog';
 import { ElevationConfirm } from '../../components/manager/ElevationConfirm';
+import { elevationOptions, useStepUpMutation } from '../../components/manager/useStepUpMutation';
 import { ToneTag } from '../../components/ui/ToneTag';
 import { toast } from '../../lib/toast';
 import { SubHeader, Field, TextInput } from './parts';
@@ -41,22 +42,32 @@ export function UsersPage() {
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: getGetUsersQueryKey() });
 
-  const patch = useMutation({
-    mutationFn: ({
-      id,
-      instanceAdminRole,
-      disabled,
-      canManageDashboardDefaults,
-    }: {
-      id: string;
-      instanceAdminRole?: 'admin' | 'user';
-      disabled?: boolean;
-      canManageDashboardDefaults?: boolean;
-    }) => patchUsersUserId(id, {
-      instanceAdminRole,
-      disabled,
-      canManageDashboardDefaults,
-    } as Parameters<typeof patchUsersUserId>[1]),
+  const patch = useStepUpMutation({
+    action: 'user.update',
+    target: (v: { id: string }) => v.id,
+    mutationFn: (
+      {
+        id,
+        instanceAdminRole,
+        disabled,
+        canManageDashboardDefaults,
+      }: {
+        id: string;
+        instanceAdminRole?: 'admin' | 'user';
+        disabled?: boolean;
+        canManageDashboardDefaults?: boolean;
+      },
+      token
+    ) =>
+      patchUsersUserId(
+        id,
+        {
+          instanceAdminRole,
+          disabled,
+          canManageDashboardDefaults,
+        } as Parameters<typeof patchUsersUserId>[1],
+        elevationOptions(token)
+      ),
     onSuccess: () => {
       invalidate();
       toast.success(t('settings.users.updated'));
@@ -211,6 +222,8 @@ export function UsersPage() {
         )}
       </Panel>
 
+      {patch.dialog}
+
       <InviteDialog open={inviteOpen} onClose={() => setInviteOpen(false)} onCreated={invalidate} />
 
       <ElevationConfirm
@@ -218,6 +231,7 @@ export function UsersPage() {
         onClose={() => setToDelete(null)}
         resourceName={toDelete?.username ?? ''}
         action="user.delete"
+        target={toDelete?.id}
         title={t('settings.users.deleteTitle')}
         description={t('settings.users.deleteConfirm')}
         confirmLabel={t('common.delete')}
@@ -232,6 +246,7 @@ export function UsersPage() {
         onClose={() => setToReset(null)}
         resourceName={toReset?.username ?? ''}
         action="user.resetPassword"
+        target={toReset?.id}
         title={t('settings.users.resetTitle')}
         description={t('settings.users.resetConfirm')}
         confirmLabel={t('settings.users.reset')}
@@ -246,6 +261,7 @@ export function UsersPage() {
         onClose={() => setToResetMfa(null)}
         resourceName={toResetMfa?.username ?? ''}
         action="user.resetMfa"
+        target={toResetMfa?.id}
         title={t('settings.users.resetMfaTitle', { defaultValue: 'Reset two-factor authentication' })}
         description={t('settings.users.resetMfaConfirm', {
           defaultValue: 'This deletes every factor and recovery code and signs them out everywhere.',
@@ -276,14 +292,18 @@ function InviteDialog({
   const [instanceAdminRole, setInstanceAdminRole] = useState<'admin' | 'user'>('user');
   const [canManageDashboardDefaults, setCanManageDashboardDefaults] = useState(false);
 
-  const create = useMutation({
-    mutationFn: () =>
-      postUsers({
-        username,
-        email: email || undefined,
-        instanceAdminRole,
-        canManageDashboardDefaults: instanceAdminRole === 'admin' ? canManageDashboardDefaults : undefined,
-      } as unknown as Parameters<typeof postUsers>[0]),
+  const create = useStepUpMutation({
+    action: 'user.create',
+    mutationFn: (_: void, token) =>
+      postUsers(
+        {
+          username,
+          email: email || undefined,
+          instanceAdminRole,
+          canManageDashboardDefaults: instanceAdminRole === 'admin' ? canManageDashboardDefaults : undefined,
+        } as unknown as Parameters<typeof postUsers>[0],
+        elevationOptions(token)
+      ),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: getGetUsersQueryKey() });
       onCreated();
@@ -298,6 +318,8 @@ function InviteDialog({
   });
 
   return (
+    <>
+    {create.dialog}
     <Dialog open={open} onClose={onClose} title={t('settings.users.inviteTitle')}>
       <form
         className="space-y-4"
@@ -355,5 +377,6 @@ function InviteDialog({
         </div>
       </form>
     </Dialog>
+    </>
   );
 }

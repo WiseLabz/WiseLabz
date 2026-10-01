@@ -291,3 +291,31 @@ func TestMFAEnrollOnlyCarriedByIssuePairWithOptions(t *testing.T) {
 		t.Error("IssuePair() MFAEnrollOnly = true, want false")
 	}
 }
+
+func TestConsumeElevationIsSingleUseAndBound(t *testing.T) {
+	t.Parallel()
+	svc := NewService("test-secret", 15*time.Minute, 24*time.Hour)
+	bind := ElevationBinding{SessionID: "sess-1", Target: "user-9"}
+	issue := func() string {
+		elev, err := svc.IssueElevationBound("user-1", "user.delete", bind)
+		if err != nil {
+			t.Fatalf("IssueElevationBound() error: %v", err)
+		}
+		return elev.Token
+	}
+
+	if _, err := svc.ConsumeElevation(issue(), "user.delete", "user-1", ElevationBinding{SessionID: "sess-2", Target: "user-9"}); err == nil {
+		t.Error("token from another session was accepted")
+	}
+	if _, err := svc.ConsumeElevation(issue(), "user.delete", "user-1", ElevationBinding{SessionID: "sess-1", Target: "user-8"}); err == nil {
+		t.Error("token for another target was accepted")
+	}
+
+	tok := issue()
+	if _, err := svc.ConsumeElevation(tok, "user.delete", "user-1", bind); err != nil {
+		t.Fatalf("first use rejected: %v", err)
+	}
+	if _, err := svc.ConsumeElevation(tok, "user.delete", "user-1", bind); err == nil {
+		t.Error("replayed token was accepted")
+	}
+}

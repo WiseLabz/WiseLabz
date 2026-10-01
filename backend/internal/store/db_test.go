@@ -81,3 +81,48 @@ func TestPoolConfigWithDefaults(t *testing.T) {
 		t.Errorf("idle conns should be capped at open conns, got %d", got.MaxIdleConns)
 	}
 }
+
+func TestReadOnlyDSN(t *testing.T) {
+	for dsn, want := range map[string]string{
+		"file:/data/w.db?cache=shared":   "file:/data/w.db?mode=ro&_pragma=busy_timeout(5000)",
+		"/data/w.db":                     "file:/data/w.db?mode=ro&_pragma=busy_timeout(5000)",
+		"file:/data/w.db?_pragma=foo(1)": "file:/data/w.db?mode=ro&_pragma=busy_timeout(5000)&_pragma=foo(1)",
+		":memory:":                       "",
+		"file::memory:?cache=shared":     "",
+		"file:x?mode=memory":             "",
+	} {
+		if got := readOnlyDSN(dsn); got != want {
+			t.Errorf("readOnlyDSN(%q) = %q, want %q", dsn, got, want)
+		}
+	}
+}
+
+func TestOpenReadDBIsReadOnlyAndSeesWrites(t *testing.T) {
+	dsn := "file:" + filepath.Join(t.TempDir(), "test.db") + "?cache=shared"
+	writer, err := OpenDB("sqlite", dsn)
+	if err != nil {
+		t.Fatalf("OpenDB() error: %v", err)
+	}
+	defer writer.Close() //nolint:errcheck
+	if _, err := writer.Exec("CREATE TABLE t (v INTEGER)"); err != nil {
+		t.Fatal(err)
+	}
+	reader, err := OpenReadDB("sqlite", dsn)
+	if err != nil || reader == nil {
+		t.Fatalf("OpenReadDB() = %v, %v", reader, err)
+	}
+	defer reader.Close() //nolint:errcheck
+	if _, err := writer.Exec("INSERT INTO t VALUES (1)"); err != nil {
+		t.Fatal(err)
+	}
+	var n int
+	if err := reader.QueryRow("SELECT COUNT(*) FROM t").Scan(&n); err != nil || n != 1 {
+		t.Fatalf("reader count = %d, %v; want committed write visible", n, err)
+	}
+	if _, err := reader.Exec("INSERT INTO t VALUES (2)"); err == nil {
+		t.Fatal("reader accepted a write")
+	}
+	if r, err := OpenReadDB("postgres", dsn); r != nil || err != nil {
+		t.Fatalf("postgres reader = %v, %v; want nil", r, err)
+	}
+}

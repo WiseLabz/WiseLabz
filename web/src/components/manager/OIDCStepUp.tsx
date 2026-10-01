@@ -21,10 +21,12 @@ const POLL_MS = 500;
 
 export function OIDCStepUp({
                               action,
+                              target,
                               providerName,
                               onElevated,
                             }: {
   action: string;
+  target?: string;
   providerName?: string;
   onElevated: (token: string) => void;
 }) {
@@ -86,7 +88,7 @@ export function OIDCStepUp({
       window.clearTimeout(timeout);
     };
 
-    postAuthElevateOidcBegin({action})
+    postAuthElevateOidcBegin({action, target})
       .then((res) => {
         if (popup.closed) return;
         popup.location.href = res.authUrl;

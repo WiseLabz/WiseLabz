@@ -10,7 +10,7 @@
  */
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   useGetAuthConfig,
   putAuthConfig,
@@ -19,6 +19,7 @@ import {
 } from '../../api/generated/settings/settings';
 import type { OidcProvider } from '../../api/model';
 import { Button } from '../../components/ui/Button';
+import { elevationOptions, useStepUpMutation } from '../../components/manager/useStepUpMutation';
 import { SkeletonRows, ErrorState } from '../../components/ui/states';
 import { ToneTag } from '../../components/ui/ToneTag';
 import { toast } from '../../lib/toast';
@@ -50,8 +51,9 @@ export function AuthPage() {
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: getGetAuthConfigQueryKey() });
 
-  const update = useMutation({
-    mutationFn: (body: Parameters<typeof putAuthConfig>[0]) => putAuthConfig(body),
+  const update = useStepUpMutation({
+    action: 'authConfig.update',
+    mutationFn: (body: Parameters<typeof putAuthConfig>[0], token) => putAuthConfig(body, elevationOptions(token)),
     onSuccess: () => {
       invalidate();
       toast.success(t('settings.auth.saved'));
@@ -59,9 +61,11 @@ export function AuthPage() {
     onError: () => toast.error(t('settings.auth.saveError')),
   });
 
-  const toggleProvider = useMutation({
-    mutationFn: ({ id, enabled }: { id: string; enabled: boolean }) =>
-      putAuthProvidersProviderIdEnabled(id, { enabled }),
+  const toggleProvider = useStepUpMutation({
+    action: 'authProvider.toggle',
+    target: (v: { id: string }) => v.id,
+    mutationFn: ({ id, enabled }: { id: string; enabled: boolean }, token) =>
+      putAuthProvidersProviderIdEnabled(id, { enabled }, elevationOptions(token)),
     onSuccess: () => {
       invalidate();
       toast.success(t('settings.auth.providerUpdated'));
@@ -85,6 +89,8 @@ export function AuthPage() {
   return (
     <div>
       <SubHeader title={t('settings.auth.title')} description={t('settings.auth.subtitle')} />
+      {update.dialog}
+      {toggleProvider.dialog}
 
       <Section title={t('settings.auth.methodsTitle')}>
         <div className="space-y-3">

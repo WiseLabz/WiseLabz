@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/WiseLabz/wiselabz/internal/connector"
+	"github.com/WiseLabz/wiselabz/internal/connector/snapshotutil"
 )
 
 const (
@@ -333,11 +334,11 @@ func TestBuildServicesEdgeCases(t *testing.T) {
 }
 
 func TestCellEscapesMarkdown(t *testing.T) {
-	if got := cell(""); got != "—" {
-		t.Errorf("cell(\"\") = %q, want an em dash", got)
+	if got := snapshotutil.MDCell(""); got != "—" {
+		t.Errorf("snapshotutil.MDCell(\"\") = %q, want an em dash", got)
 	}
-	if got := cell("a|b\nc"); got != `a\|b c` {
-		t.Errorf("cell() = %q, want the pipe escaped and the newline flattened", got)
+	if got := snapshotutil.MDCell("a|b\nc"); got != `a\|b c` {
+		t.Errorf("snapshotutil.MDCell() = %q, want the pipe escaped and the newline flattened", got)
 	}
 }
 

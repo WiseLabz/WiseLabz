@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/WiseLabz/wiselabz/internal/connector"
+	"github.com/WiseLabz/wiselabz/internal/connector/snapshotutil"
 )
 
 func TestBuildersOnMalformedAndEmptyInput(t *testing.T) {
@@ -348,8 +349,8 @@ func TestCell(t *testing.T) {
 		{"line\nbreak", "line break"},
 	}
 	for _, tt := range tests {
-		if got := cell(tt.in); got != tt.want {
-			t.Errorf("cell(%q) = %q, want %q", tt.in, got, tt.want)
+		if got := snapshotutil.MDCell(tt.in); got != tt.want {
+			t.Errorf("snapshotutil.MDCell(%q) = %q, want %q", tt.in, got, tt.want)
 		}
 	}
 }

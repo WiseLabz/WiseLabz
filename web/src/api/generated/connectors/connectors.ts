@@ -6,15 +6,18 @@
  *
  * OpenAPI spec version: 0.1.0
  */
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import type {
   DataTag,
   DefinedInitialDataOptions,
   DefinedUseQueryResult,
+  MutationFunction,
   QueryClient,
   QueryFunction,
   QueryKey,
   UndefinedInitialDataOptions,
+  UseMutationOptions,
+  UseMutationResult,
   UseQueryOptions,
   UseQueryResult,
 } from '@tanstack/react-query';
@@ -218,110 +221,74 @@ export const postConnectors = (
   );
 };
 
-export const getPostConnectorsQueryKey = (connectorCreate?: BodyType<ConnectorCreate>) => {
-  return ['POST', `/connectors`, connectorCreate] as const;
-};
+export const getPostConnectorsMutationKey = () => ['postConnectors'] as const;
 
-export const getPostConnectorsQueryOptions = <
-  TData = Awaited<ReturnType<typeof postConnectors>>,
+export const getPostConnectorsMutationOptions = <
   TError = ErrorType<BadRequestResponse | ForbiddenResponse>,
->(
-  connectorCreate: BodyType<ConnectorCreate>,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof postConnectors>>, TError, TData>>;
-    request?: SecondParameter<typeof customInstance>;
-  }
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
-
-  const queryKey = queryOptions?.queryKey ?? getPostConnectorsQueryKey(connectorCreate);
-
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof postConnectors>>> = ({ signal }) =>
-    postConnectors(connectorCreate, requestOptions, signal);
-
-  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof postConnectors>>,
     TError,
-    TData
-  > & { queryKey: DataTag<QueryKey, TData, TError> };
+    PostConnectorsMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof postConnectors>>,
+  TError,
+  PostConnectorsMutationVariables,
+  TContext
+> => {
+  const mutationKey = getPostConnectorsMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof postConnectors>>,
+    PostConnectorsMutationVariables
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return postConnectors(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type PostConnectorsQueryResult = NonNullable<Awaited<ReturnType<typeof postConnectors>>>;
-export type PostConnectorsQueryError = ErrorType<BadRequestResponse | ForbiddenResponse>;
+export type PostConnectorsMutationResult = NonNullable<Awaited<ReturnType<typeof postConnectors>>>;
+export type PostConnectorsMutationBody = BodyType<ConnectorCreate>;
+export type PostConnectorsMutationError = ErrorType<BadRequestResponse | ForbiddenResponse>;
+export type PostConnectorsMutationVariables = { data: BodyType<ConnectorCreate> };
 
-export function usePostConnectors<
-  TData = Awaited<ReturnType<typeof postConnectors>>,
-  TError = ErrorType<BadRequestResponse | ForbiddenResponse>,
->(
-  connectorCreate: BodyType<ConnectorCreate>,
-  options: {
-    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof postConnectors>>, TError, TData>> &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postConnectors>>,
-          TError,
-          Awaited<ReturnType<typeof postConnectors>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostConnectors<
-  TData = Awaited<ReturnType<typeof postConnectors>>,
-  TError = ErrorType<BadRequestResponse | ForbiddenResponse>,
->(
-  connectorCreate: BodyType<ConnectorCreate>,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof postConnectors>>, TError, TData>> &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postConnectors>>,
-          TError,
-          Awaited<ReturnType<typeof postConnectors>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostConnectors<
-  TData = Awaited<ReturnType<typeof postConnectors>>,
-  TError = ErrorType<BadRequestResponse | ForbiddenResponse>,
->(
-  connectorCreate: BodyType<ConnectorCreate>,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof postConnectors>>, TError, TData>>;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
  * @summary Create a connector (operator)
  */
-
-export function usePostConnectors<
-  TData = Awaited<ReturnType<typeof postConnectors>>,
+export const usePostConnectors = <
   TError = ErrorType<BadRequestResponse | ForbiddenResponse>,
+  TContext = unknown,
 >(
-  connectorCreate: BodyType<ConnectorCreate>,
   options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof postConnectors>>, TError, TData>>;
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof postConnectors>>,
+      TError,
+      PostConnectorsMutationVariables,
+      TContext
+    >;
     request?: SecondParameter<typeof customInstance>;
   },
   queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getPostConnectorsQueryOptions(connectorCreate, options);
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
+): UseMutationResult<
+  Awaited<ReturnType<typeof postConnectors>>,
+  TError,
+  PostConnectorsMutationVariables,
+  TContext
+> => {
+  return useMutation(getPostConnectorsMutationOptions(options), queryClient);
+};
 /**
  * @summary Category/type field metadata used to render schema-driven forms
  */
@@ -597,141 +564,81 @@ export const putConnectorsConnectorId = (
   );
 };
 
-export const getPutConnectorsConnectorIdQueryKey = (
-  connectorId: string,
-  connectorUpdate?: BodyType<ConnectorUpdate>
-) => {
-  return ['PUT', `/connectors/${connectorId}`, connectorUpdate] as const;
-};
+export const getPutConnectorsConnectorIdMutationKey = () => ['putConnectorsConnectorId'] as const;
 
-export const getPutConnectorsConnectorIdQueryOptions = <
-  TData = Awaited<ReturnType<typeof putConnectorsConnectorId>>,
+export const getPutConnectorsConnectorIdMutationOptions = <
   TError = ErrorType<BadRequestResponse | ForbiddenResponse | NotFoundResponse>,
->(
-  connectorId: string,
-  connectorUpdate: BodyType<ConnectorUpdate>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof putConnectorsConnectorId>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  }
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof putConnectorsConnectorId>>,
+    TError,
+    PutConnectorsConnectorIdMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof putConnectorsConnectorId>>,
+  TError,
+  PutConnectorsConnectorIdMutationVariables,
+  TContext
+> => {
+  const mutationKey = getPutConnectorsConnectorIdMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
 
-  const queryKey =
-    queryOptions?.queryKey ?? getPutConnectorsConnectorIdQueryKey(connectorId, connectorUpdate);
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof putConnectorsConnectorId>>,
+    PutConnectorsConnectorIdMutationVariables
+  > = (props) => {
+    const { connectorId, data } = props ?? {};
 
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof putConnectorsConnectorId>>> = ({
-    signal,
-  }) => putConnectorsConnectorId(connectorId, connectorUpdate, requestOptions, signal);
-
-  return {
-    queryKey,
-    queryFn,
-    enabled: connectorId !== null && connectorId !== undefined,
-    ...queryOptions,
-  } as UseQueryOptions<Awaited<ReturnType<typeof putConnectorsConnectorId>>, TError, TData> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
+    return putConnectorsConnectorId(connectorId, data, requestOptions);
   };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type PutConnectorsConnectorIdQueryResult = NonNullable<
+export type PutConnectorsConnectorIdMutationResult = NonNullable<
   Awaited<ReturnType<typeof putConnectorsConnectorId>>
 >;
-export type PutConnectorsConnectorIdQueryError = ErrorType<
+export type PutConnectorsConnectorIdMutationBody = BodyType<ConnectorUpdate>;
+export type PutConnectorsConnectorIdMutationError = ErrorType<
   BadRequestResponse | ForbiddenResponse | NotFoundResponse
 >;
+export type PutConnectorsConnectorIdMutationVariables = {
+  connectorId: string;
+  data: BodyType<ConnectorUpdate>;
+};
 
-export function usePutConnectorsConnectorId<
-  TData = Awaited<ReturnType<typeof putConnectorsConnectorId>>,
-  TError = ErrorType<BadRequestResponse | ForbiddenResponse | NotFoundResponse>,
->(
-  connectorId: string,
-  connectorUpdate: BodyType<ConnectorUpdate>,
-  options: {
-    query: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof putConnectorsConnectorId>>, TError, TData>
-    > &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof putConnectorsConnectorId>>,
-          TError,
-          Awaited<ReturnType<typeof putConnectorsConnectorId>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePutConnectorsConnectorId<
-  TData = Awaited<ReturnType<typeof putConnectorsConnectorId>>,
-  TError = ErrorType<BadRequestResponse | ForbiddenResponse | NotFoundResponse>,
->(
-  connectorId: string,
-  connectorUpdate: BodyType<ConnectorUpdate>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof putConnectorsConnectorId>>, TError, TData>
-    > &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof putConnectorsConnectorId>>,
-          TError,
-          Awaited<ReturnType<typeof putConnectorsConnectorId>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePutConnectorsConnectorId<
-  TData = Awaited<ReturnType<typeof putConnectorsConnectorId>>,
-  TError = ErrorType<BadRequestResponse | ForbiddenResponse | NotFoundResponse>,
->(
-  connectorId: string,
-  connectorUpdate: BodyType<ConnectorUpdate>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof putConnectorsConnectorId>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
  * @summary Update a connector (operator)
  */
-
-export function usePutConnectorsConnectorId<
-  TData = Awaited<ReturnType<typeof putConnectorsConnectorId>>,
+export const usePutConnectorsConnectorId = <
   TError = ErrorType<BadRequestResponse | ForbiddenResponse | NotFoundResponse>,
+  TContext = unknown,
 >(
-  connectorId: string,
-  connectorUpdate: BodyType<ConnectorUpdate>,
   options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof putConnectorsConnectorId>>, TError, TData>
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof putConnectorsConnectorId>>,
+      TError,
+      PutConnectorsConnectorIdMutationVariables,
+      TContext
     >;
     request?: SecondParameter<typeof customInstance>;
   },
   queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getPutConnectorsConnectorIdQueryOptions(
-    connectorId,
-    connectorUpdate,
-    options
-  );
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
+): UseMutationResult<
+  Awaited<ReturnType<typeof putConnectorsConnectorId>>,
+  TError,
+  PutConnectorsConnectorIdMutationVariables,
+  TContext
+> => {
+  return useMutation(getPutConnectorsConnectorIdMutationOptions(options), queryClient);
+};
 /**
  * Destructive: cascades to the connector's snapshots and generated doc sections (see GET /removal-impact for the blast radius). When `stepUpForDestructive` is enabled, requires a valid `X-Elevation-Token` from POST /auth/elevate; absent or expired tokens get a 403 `elevation-required`.
  * @summary Remove a connector (operator, destructive)
@@ -747,126 +654,77 @@ export const deleteConnectorsConnectorId = (
   );
 };
 
-export const getDeleteConnectorsConnectorIdQueryKey = (connectorId: string) => {
-  return ['DELETE', `/connectors/${connectorId}`] as const;
-};
+export const getDeleteConnectorsConnectorIdMutationKey = () =>
+  ['deleteConnectorsConnectorId'] as const;
 
-export const getDeleteConnectorsConnectorIdQueryOptions = <
-  TData = Awaited<ReturnType<typeof deleteConnectorsConnectorId>>,
+export const getDeleteConnectorsConnectorIdMutationOptions = <
   TError = ErrorType<ElevationRequiredResponse>,
->(
-  connectorId: string,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof deleteConnectorsConnectorId>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  }
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteConnectorsConnectorId>>,
+    TError,
+    DeleteConnectorsConnectorIdMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteConnectorsConnectorId>>,
+  TError,
+  DeleteConnectorsConnectorIdMutationVariables,
+  TContext
+> => {
+  const mutationKey = getDeleteConnectorsConnectorIdMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
 
-  const queryKey = queryOptions?.queryKey ?? getDeleteConnectorsConnectorIdQueryKey(connectorId);
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteConnectorsConnectorId>>,
+    DeleteConnectorsConnectorIdMutationVariables
+  > = (props) => {
+    const { connectorId } = props ?? {};
 
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof deleteConnectorsConnectorId>>> = ({
-    signal,
-  }) => deleteConnectorsConnectorId(connectorId, requestOptions, signal);
-
-  return {
-    queryKey,
-    queryFn,
-    enabled: connectorId !== null && connectorId !== undefined,
-    ...queryOptions,
-  } as UseQueryOptions<Awaited<ReturnType<typeof deleteConnectorsConnectorId>>, TError, TData> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
+    return deleteConnectorsConnectorId(connectorId, requestOptions);
   };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type DeleteConnectorsConnectorIdQueryResult = NonNullable<
+export type DeleteConnectorsConnectorIdMutationResult = NonNullable<
   Awaited<ReturnType<typeof deleteConnectorsConnectorId>>
 >;
-export type DeleteConnectorsConnectorIdQueryError = ErrorType<ElevationRequiredResponse>;
 
-export function useDeleteConnectorsConnectorId<
-  TData = Awaited<ReturnType<typeof deleteConnectorsConnectorId>>,
-  TError = ErrorType<ElevationRequiredResponse>,
->(
-  connectorId: string,
-  options: {
-    query: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof deleteConnectorsConnectorId>>, TError, TData>
-    > &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof deleteConnectorsConnectorId>>,
-          TError,
-          Awaited<ReturnType<typeof deleteConnectorsConnectorId>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function useDeleteConnectorsConnectorId<
-  TData = Awaited<ReturnType<typeof deleteConnectorsConnectorId>>,
-  TError = ErrorType<ElevationRequiredResponse>,
->(
-  connectorId: string,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof deleteConnectorsConnectorId>>, TError, TData>
-    > &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof deleteConnectorsConnectorId>>,
-          TError,
-          Awaited<ReturnType<typeof deleteConnectorsConnectorId>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function useDeleteConnectorsConnectorId<
-  TData = Awaited<ReturnType<typeof deleteConnectorsConnectorId>>,
-  TError = ErrorType<ElevationRequiredResponse>,
->(
-  connectorId: string,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof deleteConnectorsConnectorId>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export type DeleteConnectorsConnectorIdMutationError = ErrorType<ElevationRequiredResponse>;
+export type DeleteConnectorsConnectorIdMutationVariables = { connectorId: string };
+
 /**
  * @summary Remove a connector (operator, destructive)
  */
-
-export function useDeleteConnectorsConnectorId<
-  TData = Awaited<ReturnType<typeof deleteConnectorsConnectorId>>,
+export const useDeleteConnectorsConnectorId = <
   TError = ErrorType<ElevationRequiredResponse>,
+  TContext = unknown,
 >(
-  connectorId: string,
   options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof deleteConnectorsConnectorId>>, TError, TData>
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof deleteConnectorsConnectorId>>,
+      TError,
+      DeleteConnectorsConnectorIdMutationVariables,
+      TContext
     >;
     request?: SecondParameter<typeof customInstance>;
   },
   queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getDeleteConnectorsConnectorIdQueryOptions(connectorId, options);
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
+): UseMutationResult<
+  Awaited<ReturnType<typeof deleteConnectorsConnectorId>>,
+  TError,
+  DeleteConnectorsConnectorIdMutationVariables,
+  TContext
+> => {
+  return useMutation(getDeleteConnectorsConnectorIdMutationOptions(options), queryClient);
+};
 /**
  * Computes the concrete dependents a removal destroys, so the UI can state them exactly before the user commits (machine-honest confirm pattern).
  * @summary Blast radius for removing this connector (operator)
@@ -1049,167 +907,84 @@ export const postConnectorsConnectorIdRestart = (
   );
 };
 
-export const getPostConnectorsConnectorIdRestartQueryKey = (
-  connectorId: string,
-  postConnectorsConnectorIdRestartBody?: BodyType<PostConnectorsConnectorIdRestartBody>,
-  params?: PostConnectorsConnectorIdRestartParams
-) => {
-  return [
-    'POST',
-    `/connectors/${connectorId}/restart`,
-    ...(params ? [params] : []),
-    postConnectorsConnectorIdRestartBody,
-  ] as const;
-};
+export const getPostConnectorsConnectorIdRestartMutationKey = () =>
+  ['postConnectorsConnectorIdRestart'] as const;
 
-export const getPostConnectorsConnectorIdRestartQueryOptions = <
-  TData = Awaited<ReturnType<typeof postConnectorsConnectorIdRestart>>,
+export const getPostConnectorsConnectorIdRestartMutationOptions = <
   TError = ErrorType<Error | ElevationRequiredResponse | ForbiddenResponse | NotFoundResponse>,
->(
-  connectorId: string,
-  postConnectorsConnectorIdRestartBody?: BodyType<PostConnectorsConnectorIdRestartBody>,
-  params?: PostConnectorsConnectorIdRestartParams,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postConnectorsConnectorIdRestart>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  }
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
-
-  const queryKey =
-    queryOptions?.queryKey ??
-    getPostConnectorsConnectorIdRestartQueryKey(
-      connectorId,
-      postConnectorsConnectorIdRestartBody,
-      params
-    );
-
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof postConnectorsConnectorIdRestart>>> = ({
-    signal,
-  }) =>
-    postConnectorsConnectorIdRestart(
-      connectorId,
-      postConnectorsConnectorIdRestartBody,
-      params,
-      requestOptions,
-      signal
-    );
-
-  return {
-    queryKey,
-    queryFn,
-    enabled: connectorId !== null && connectorId !== undefined,
-    ...queryOptions,
-  } as UseQueryOptions<
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof postConnectorsConnectorIdRestart>>,
     TError,
-    TData
-  > & { queryKey: DataTag<QueryKey, TData, TError> };
+    PostConnectorsConnectorIdRestartMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof postConnectorsConnectorIdRestart>>,
+  TError,
+  PostConnectorsConnectorIdRestartMutationVariables,
+  TContext
+> => {
+  const mutationKey = getPostConnectorsConnectorIdRestartMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof postConnectorsConnectorIdRestart>>,
+    PostConnectorsConnectorIdRestartMutationVariables
+  > = (props) => {
+    const { connectorId, data, params } = props ?? {};
+
+    return postConnectorsConnectorIdRestart(connectorId, data, params, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type PostConnectorsConnectorIdRestartQueryResult = NonNullable<
+export type PostConnectorsConnectorIdRestartMutationResult = NonNullable<
   Awaited<ReturnType<typeof postConnectorsConnectorIdRestart>>
 >;
-export type PostConnectorsConnectorIdRestartQueryError = ErrorType<
+export type PostConnectorsConnectorIdRestartMutationBody =
+  BodyType<PostConnectorsConnectorIdRestartBody> | undefined;
+export type PostConnectorsConnectorIdRestartMutationError = ErrorType<
   Error | ElevationRequiredResponse | ForbiddenResponse | NotFoundResponse
 >;
+export type PostConnectorsConnectorIdRestartMutationVariables = {
+  connectorId: string;
+  data?: BodyType<PostConnectorsConnectorIdRestartBody>;
+  params?: PostConnectorsConnectorIdRestartParams;
+};
 
-export function usePostConnectorsConnectorIdRestart<
-  TData = Awaited<ReturnType<typeof postConnectorsConnectorIdRestart>>,
-  TError = ErrorType<Error | ElevationRequiredResponse | ForbiddenResponse | NotFoundResponse>,
->(
-  connectorId: string,
-  postConnectorsConnectorIdRestartBody: undefined | BodyType<PostConnectorsConnectorIdRestartBody>,
-  params: undefined | PostConnectorsConnectorIdRestartParams,
-  options: {
-    query: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postConnectorsConnectorIdRestart>>, TError, TData>
-    > &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postConnectorsConnectorIdRestart>>,
-          TError,
-          Awaited<ReturnType<typeof postConnectorsConnectorIdRestart>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostConnectorsConnectorIdRestart<
-  TData = Awaited<ReturnType<typeof postConnectorsConnectorIdRestart>>,
-  TError = ErrorType<Error | ElevationRequiredResponse | ForbiddenResponse | NotFoundResponse>,
->(
-  connectorId: string,
-  postConnectorsConnectorIdRestartBody?: BodyType<PostConnectorsConnectorIdRestartBody>,
-  params?: PostConnectorsConnectorIdRestartParams,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postConnectorsConnectorIdRestart>>, TError, TData>
-    > &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postConnectorsConnectorIdRestart>>,
-          TError,
-          Awaited<ReturnType<typeof postConnectorsConnectorIdRestart>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostConnectorsConnectorIdRestart<
-  TData = Awaited<ReturnType<typeof postConnectorsConnectorIdRestart>>,
-  TError = ErrorType<Error | ElevationRequiredResponse | ForbiddenResponse | NotFoundResponse>,
->(
-  connectorId: string,
-  postConnectorsConnectorIdRestartBody?: BodyType<PostConnectorsConnectorIdRestartBody>,
-  params?: PostConnectorsConnectorIdRestartParams,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postConnectorsConnectorIdRestart>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
  * @summary Preview or perform a service restart (operator, elevation-gated)
  */
-
-export function usePostConnectorsConnectorIdRestart<
-  TData = Awaited<ReturnType<typeof postConnectorsConnectorIdRestart>>,
+export const usePostConnectorsConnectorIdRestart = <
   TError = ErrorType<Error | ElevationRequiredResponse | ForbiddenResponse | NotFoundResponse>,
+  TContext = unknown,
 >(
-  connectorId: string,
-  postConnectorsConnectorIdRestartBody?: BodyType<PostConnectorsConnectorIdRestartBody>,
-  params?: PostConnectorsConnectorIdRestartParams,
   options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postConnectorsConnectorIdRestart>>, TError, TData>
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof postConnectorsConnectorIdRestart>>,
+      TError,
+      PostConnectorsConnectorIdRestartMutationVariables,
+      TContext
     >;
     request?: SecondParameter<typeof customInstance>;
   },
   queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getPostConnectorsConnectorIdRestartQueryOptions(
-    connectorId,
-    postConnectorsConnectorIdRestartBody,
-    params,
-    options
-  );
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
+): UseMutationResult<
+  Awaited<ReturnType<typeof postConnectorsConnectorIdRestart>>,
+  TError,
+  PostConnectorsConnectorIdRestartMutationVariables,
+  TContext
+> => {
+  return useMutation(getPostConnectorsConnectorIdRestartMutationOptions(options), queryClient);
+};
 /**
  * Same dry-run/elevation-gated-mutate shape as /restart (see ADR 0002): dryRun=true previews from the latest stored snapshot; absent/false performs the real start, requiring a valid X-Elevation-Token for action connector.start. 400s with unsupported_operation if the connector type has no start capability. On success, records a connector.start audit row; on failure, raises an AlertRecord.
  * @summary Preview or perform a service start (operator, elevation-gated)
@@ -1234,167 +1009,84 @@ export const postConnectorsConnectorIdStart = (
   );
 };
 
-export const getPostConnectorsConnectorIdStartQueryKey = (
-  connectorId: string,
-  postConnectorsConnectorIdStartBody?: BodyType<PostConnectorsConnectorIdStartBody>,
-  params?: PostConnectorsConnectorIdStartParams
-) => {
-  return [
-    'POST',
-    `/connectors/${connectorId}/start`,
-    ...(params ? [params] : []),
-    postConnectorsConnectorIdStartBody,
-  ] as const;
-};
+export const getPostConnectorsConnectorIdStartMutationKey = () =>
+  ['postConnectorsConnectorIdStart'] as const;
 
-export const getPostConnectorsConnectorIdStartQueryOptions = <
-  TData = Awaited<ReturnType<typeof postConnectorsConnectorIdStart>>,
+export const getPostConnectorsConnectorIdStartMutationOptions = <
   TError = ErrorType<Error | ElevationRequiredResponse | ForbiddenResponse | NotFoundResponse>,
->(
-  connectorId: string,
-  postConnectorsConnectorIdStartBody?: BodyType<PostConnectorsConnectorIdStartBody>,
-  params?: PostConnectorsConnectorIdStartParams,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postConnectorsConnectorIdStart>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  }
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
-
-  const queryKey =
-    queryOptions?.queryKey ??
-    getPostConnectorsConnectorIdStartQueryKey(
-      connectorId,
-      postConnectorsConnectorIdStartBody,
-      params
-    );
-
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof postConnectorsConnectorIdStart>>> = ({
-    signal,
-  }) =>
-    postConnectorsConnectorIdStart(
-      connectorId,
-      postConnectorsConnectorIdStartBody,
-      params,
-      requestOptions,
-      signal
-    );
-
-  return {
-    queryKey,
-    queryFn,
-    enabled: connectorId !== null && connectorId !== undefined,
-    ...queryOptions,
-  } as UseQueryOptions<
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof postConnectorsConnectorIdStart>>,
     TError,
-    TData
-  > & { queryKey: DataTag<QueryKey, TData, TError> };
+    PostConnectorsConnectorIdStartMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof postConnectorsConnectorIdStart>>,
+  TError,
+  PostConnectorsConnectorIdStartMutationVariables,
+  TContext
+> => {
+  const mutationKey = getPostConnectorsConnectorIdStartMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof postConnectorsConnectorIdStart>>,
+    PostConnectorsConnectorIdStartMutationVariables
+  > = (props) => {
+    const { connectorId, data, params } = props ?? {};
+
+    return postConnectorsConnectorIdStart(connectorId, data, params, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type PostConnectorsConnectorIdStartQueryResult = NonNullable<
+export type PostConnectorsConnectorIdStartMutationResult = NonNullable<
   Awaited<ReturnType<typeof postConnectorsConnectorIdStart>>
 >;
-export type PostConnectorsConnectorIdStartQueryError = ErrorType<
+export type PostConnectorsConnectorIdStartMutationBody =
+  BodyType<PostConnectorsConnectorIdStartBody> | undefined;
+export type PostConnectorsConnectorIdStartMutationError = ErrorType<
   Error | ElevationRequiredResponse | ForbiddenResponse | NotFoundResponse
 >;
+export type PostConnectorsConnectorIdStartMutationVariables = {
+  connectorId: string;
+  data?: BodyType<PostConnectorsConnectorIdStartBody>;
+  params?: PostConnectorsConnectorIdStartParams;
+};
 
-export function usePostConnectorsConnectorIdStart<
-  TData = Awaited<ReturnType<typeof postConnectorsConnectorIdStart>>,
-  TError = ErrorType<Error | ElevationRequiredResponse | ForbiddenResponse | NotFoundResponse>,
->(
-  connectorId: string,
-  postConnectorsConnectorIdStartBody: undefined | BodyType<PostConnectorsConnectorIdStartBody>,
-  params: undefined | PostConnectorsConnectorIdStartParams,
-  options: {
-    query: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postConnectorsConnectorIdStart>>, TError, TData>
-    > &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postConnectorsConnectorIdStart>>,
-          TError,
-          Awaited<ReturnType<typeof postConnectorsConnectorIdStart>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostConnectorsConnectorIdStart<
-  TData = Awaited<ReturnType<typeof postConnectorsConnectorIdStart>>,
-  TError = ErrorType<Error | ElevationRequiredResponse | ForbiddenResponse | NotFoundResponse>,
->(
-  connectorId: string,
-  postConnectorsConnectorIdStartBody?: BodyType<PostConnectorsConnectorIdStartBody>,
-  params?: PostConnectorsConnectorIdStartParams,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postConnectorsConnectorIdStart>>, TError, TData>
-    > &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postConnectorsConnectorIdStart>>,
-          TError,
-          Awaited<ReturnType<typeof postConnectorsConnectorIdStart>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostConnectorsConnectorIdStart<
-  TData = Awaited<ReturnType<typeof postConnectorsConnectorIdStart>>,
-  TError = ErrorType<Error | ElevationRequiredResponse | ForbiddenResponse | NotFoundResponse>,
->(
-  connectorId: string,
-  postConnectorsConnectorIdStartBody?: BodyType<PostConnectorsConnectorIdStartBody>,
-  params?: PostConnectorsConnectorIdStartParams,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postConnectorsConnectorIdStart>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
  * @summary Preview or perform a service start (operator, elevation-gated)
  */
-
-export function usePostConnectorsConnectorIdStart<
-  TData = Awaited<ReturnType<typeof postConnectorsConnectorIdStart>>,
+export const usePostConnectorsConnectorIdStart = <
   TError = ErrorType<Error | ElevationRequiredResponse | ForbiddenResponse | NotFoundResponse>,
+  TContext = unknown,
 >(
-  connectorId: string,
-  postConnectorsConnectorIdStartBody?: BodyType<PostConnectorsConnectorIdStartBody>,
-  params?: PostConnectorsConnectorIdStartParams,
   options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postConnectorsConnectorIdStart>>, TError, TData>
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof postConnectorsConnectorIdStart>>,
+      TError,
+      PostConnectorsConnectorIdStartMutationVariables,
+      TContext
     >;
     request?: SecondParameter<typeof customInstance>;
   },
   queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getPostConnectorsConnectorIdStartQueryOptions(
-    connectorId,
-    postConnectorsConnectorIdStartBody,
-    params,
-    options
-  );
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
+): UseMutationResult<
+  Awaited<ReturnType<typeof postConnectorsConnectorIdStart>>,
+  TError,
+  PostConnectorsConnectorIdStartMutationVariables,
+  TContext
+> => {
+  return useMutation(getPostConnectorsConnectorIdStartMutationOptions(options), queryClient);
+};
 /**
  * Same dry-run/elevation-gated-mutate shape as /restart (see ADR 0002): dryRun=true previews from the latest stored snapshot; absent/false performs the real stop, requiring a valid X-Elevation-Token for action connector.stop. estimatedDowntimeSeconds is 0 in the preview since a stop's downtime is indefinite until an explicit start. 400s with unsupported_operation if the connector type has no stop capability. On success, records a connector.stop audit row; on failure, raises an AlertRecord.
  * @summary Preview or perform a service stop (operator, elevation-gated)
@@ -1419,165 +1111,84 @@ export const postConnectorsConnectorIdStop = (
   );
 };
 
-export const getPostConnectorsConnectorIdStopQueryKey = (
-  connectorId: string,
-  postConnectorsConnectorIdStopBody?: BodyType<PostConnectorsConnectorIdStopBody>,
-  params?: PostConnectorsConnectorIdStopParams
-) => {
-  return [
-    'POST',
-    `/connectors/${connectorId}/stop`,
-    ...(params ? [params] : []),
-    postConnectorsConnectorIdStopBody,
-  ] as const;
-};
+export const getPostConnectorsConnectorIdStopMutationKey = () =>
+  ['postConnectorsConnectorIdStop'] as const;
 
-export const getPostConnectorsConnectorIdStopQueryOptions = <
-  TData = Awaited<ReturnType<typeof postConnectorsConnectorIdStop>>,
+export const getPostConnectorsConnectorIdStopMutationOptions = <
   TError = ErrorType<Error | ElevationRequiredResponse | ForbiddenResponse | NotFoundResponse>,
->(
-  connectorId: string,
-  postConnectorsConnectorIdStopBody?: BodyType<PostConnectorsConnectorIdStopBody>,
-  params?: PostConnectorsConnectorIdStopParams,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postConnectorsConnectorIdStop>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  }
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof postConnectorsConnectorIdStop>>,
+    TError,
+    PostConnectorsConnectorIdStopMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof postConnectorsConnectorIdStop>>,
+  TError,
+  PostConnectorsConnectorIdStopMutationVariables,
+  TContext
+> => {
+  const mutationKey = getPostConnectorsConnectorIdStopMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
 
-  const queryKey =
-    queryOptions?.queryKey ??
-    getPostConnectorsConnectorIdStopQueryKey(
-      connectorId,
-      postConnectorsConnectorIdStopBody,
-      params
-    );
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof postConnectorsConnectorIdStop>>,
+    PostConnectorsConnectorIdStopMutationVariables
+  > = (props) => {
+    const { connectorId, data, params } = props ?? {};
 
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof postConnectorsConnectorIdStop>>> = ({
-    signal,
-  }) =>
-    postConnectorsConnectorIdStop(
-      connectorId,
-      postConnectorsConnectorIdStopBody,
-      params,
-      requestOptions,
-      signal
-    );
-
-  return {
-    queryKey,
-    queryFn,
-    enabled: connectorId !== null && connectorId !== undefined,
-    ...queryOptions,
-  } as UseQueryOptions<Awaited<ReturnType<typeof postConnectorsConnectorIdStop>>, TError, TData> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
+    return postConnectorsConnectorIdStop(connectorId, data, params, requestOptions);
   };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type PostConnectorsConnectorIdStopQueryResult = NonNullable<
+export type PostConnectorsConnectorIdStopMutationResult = NonNullable<
   Awaited<ReturnType<typeof postConnectorsConnectorIdStop>>
 >;
-export type PostConnectorsConnectorIdStopQueryError = ErrorType<
+export type PostConnectorsConnectorIdStopMutationBody =
+  BodyType<PostConnectorsConnectorIdStopBody> | undefined;
+export type PostConnectorsConnectorIdStopMutationError = ErrorType<
   Error | ElevationRequiredResponse | ForbiddenResponse | NotFoundResponse
 >;
+export type PostConnectorsConnectorIdStopMutationVariables = {
+  connectorId: string;
+  data?: BodyType<PostConnectorsConnectorIdStopBody>;
+  params?: PostConnectorsConnectorIdStopParams;
+};
 
-export function usePostConnectorsConnectorIdStop<
-  TData = Awaited<ReturnType<typeof postConnectorsConnectorIdStop>>,
-  TError = ErrorType<Error | ElevationRequiredResponse | ForbiddenResponse | NotFoundResponse>,
->(
-  connectorId: string,
-  postConnectorsConnectorIdStopBody: undefined | BodyType<PostConnectorsConnectorIdStopBody>,
-  params: undefined | PostConnectorsConnectorIdStopParams,
-  options: {
-    query: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postConnectorsConnectorIdStop>>, TError, TData>
-    > &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postConnectorsConnectorIdStop>>,
-          TError,
-          Awaited<ReturnType<typeof postConnectorsConnectorIdStop>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostConnectorsConnectorIdStop<
-  TData = Awaited<ReturnType<typeof postConnectorsConnectorIdStop>>,
-  TError = ErrorType<Error | ElevationRequiredResponse | ForbiddenResponse | NotFoundResponse>,
->(
-  connectorId: string,
-  postConnectorsConnectorIdStopBody?: BodyType<PostConnectorsConnectorIdStopBody>,
-  params?: PostConnectorsConnectorIdStopParams,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postConnectorsConnectorIdStop>>, TError, TData>
-    > &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postConnectorsConnectorIdStop>>,
-          TError,
-          Awaited<ReturnType<typeof postConnectorsConnectorIdStop>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostConnectorsConnectorIdStop<
-  TData = Awaited<ReturnType<typeof postConnectorsConnectorIdStop>>,
-  TError = ErrorType<Error | ElevationRequiredResponse | ForbiddenResponse | NotFoundResponse>,
->(
-  connectorId: string,
-  postConnectorsConnectorIdStopBody?: BodyType<PostConnectorsConnectorIdStopBody>,
-  params?: PostConnectorsConnectorIdStopParams,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postConnectorsConnectorIdStop>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
  * @summary Preview or perform a service stop (operator, elevation-gated)
  */
-
-export function usePostConnectorsConnectorIdStop<
-  TData = Awaited<ReturnType<typeof postConnectorsConnectorIdStop>>,
+export const usePostConnectorsConnectorIdStop = <
   TError = ErrorType<Error | ElevationRequiredResponse | ForbiddenResponse | NotFoundResponse>,
+  TContext = unknown,
 >(
-  connectorId: string,
-  postConnectorsConnectorIdStopBody?: BodyType<PostConnectorsConnectorIdStopBody>,
-  params?: PostConnectorsConnectorIdStopParams,
   options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postConnectorsConnectorIdStop>>, TError, TData>
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof postConnectorsConnectorIdStop>>,
+      TError,
+      PostConnectorsConnectorIdStopMutationVariables,
+      TContext
     >;
     request?: SecondParameter<typeof customInstance>;
   },
   queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getPostConnectorsConnectorIdStopQueryOptions(
-    connectorId,
-    postConnectorsConnectorIdStopBody,
-    params,
-    options
-  );
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
+): UseMutationResult<
+  Awaited<ReturnType<typeof postConnectorsConnectorIdStop>>,
+  TError,
+  PostConnectorsConnectorIdStopMutationVariables,
+  TContext
+> => {
+  return useMutation(getPostConnectorsConnectorIdStopMutationOptions(options), queryClient);
+};
 /**
  * Returns the connector's WritableFields() (ADR 0003), or an empty array if the connector type doesn't implement config-push.
  * @summary List a connector's whitelisted config-push fields
@@ -1758,177 +1369,83 @@ export const postConnectorsConnectorIdConfigPush = (
   );
 };
 
-export const getPostConnectorsConnectorIdConfigPushQueryKey = (
-  connectorId: string,
-  postConnectorsConnectorIdConfigPushBody?: BodyType<PostConnectorsConnectorIdConfigPushBody>
-) => {
-  return [
-    'POST',
-    `/connectors/${connectorId}/config-push`,
-    postConnectorsConnectorIdConfigPushBody,
-  ] as const;
-};
+export const getPostConnectorsConnectorIdConfigPushMutationKey = () =>
+  ['postConnectorsConnectorIdConfigPush'] as const;
 
-export const getPostConnectorsConnectorIdConfigPushQueryOptions = <
-  TData = Awaited<ReturnType<typeof postConnectorsConnectorIdConfigPush>>,
+export const getPostConnectorsConnectorIdConfigPushMutationOptions = <
   TError = ErrorType<Error | ElevationRequiredResponse | ForbiddenResponse | NotFoundResponse>,
->(
-  connectorId: string,
-  postConnectorsConnectorIdConfigPushBody: BodyType<PostConnectorsConnectorIdConfigPushBody>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<
-        Awaited<ReturnType<typeof postConnectorsConnectorIdConfigPush>>,
-        TError,
-        TData
-      >
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  }
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
-
-  const queryKey =
-    queryOptions?.queryKey ??
-    getPostConnectorsConnectorIdConfigPushQueryKey(
-      connectorId,
-      postConnectorsConnectorIdConfigPushBody
-    );
-
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof postConnectorsConnectorIdConfigPush>>> = ({
-    signal,
-  }) =>
-    postConnectorsConnectorIdConfigPush(
-      connectorId,
-      postConnectorsConnectorIdConfigPushBody,
-      requestOptions,
-      signal
-    );
-
-  return {
-    queryKey,
-    queryFn,
-    enabled: connectorId !== null && connectorId !== undefined,
-    ...queryOptions,
-  } as UseQueryOptions<
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof postConnectorsConnectorIdConfigPush>>,
     TError,
-    TData
-  > & { queryKey: DataTag<QueryKey, TData, TError> };
+    PostConnectorsConnectorIdConfigPushMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof postConnectorsConnectorIdConfigPush>>,
+  TError,
+  PostConnectorsConnectorIdConfigPushMutationVariables,
+  TContext
+> => {
+  const mutationKey = getPostConnectorsConnectorIdConfigPushMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof postConnectorsConnectorIdConfigPush>>,
+    PostConnectorsConnectorIdConfigPushMutationVariables
+  > = (props) => {
+    const { connectorId, data } = props ?? {};
+
+    return postConnectorsConnectorIdConfigPush(connectorId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type PostConnectorsConnectorIdConfigPushQueryResult = NonNullable<
+export type PostConnectorsConnectorIdConfigPushMutationResult = NonNullable<
   Awaited<ReturnType<typeof postConnectorsConnectorIdConfigPush>>
 >;
-export type PostConnectorsConnectorIdConfigPushQueryError = ErrorType<
+export type PostConnectorsConnectorIdConfigPushMutationBody =
+  BodyType<PostConnectorsConnectorIdConfigPushBody>;
+export type PostConnectorsConnectorIdConfigPushMutationError = ErrorType<
   Error | ElevationRequiredResponse | ForbiddenResponse | NotFoundResponse
 >;
+export type PostConnectorsConnectorIdConfigPushMutationVariables = {
+  connectorId: string;
+  data: BodyType<PostConnectorsConnectorIdConfigPushBody>;
+};
 
-export function usePostConnectorsConnectorIdConfigPush<
-  TData = Awaited<ReturnType<typeof postConnectorsConnectorIdConfigPush>>,
-  TError = ErrorType<Error | ElevationRequiredResponse | ForbiddenResponse | NotFoundResponse>,
->(
-  connectorId: string,
-  postConnectorsConnectorIdConfigPushBody: BodyType<PostConnectorsConnectorIdConfigPushBody>,
-  options: {
-    query: Partial<
-      UseQueryOptions<
-        Awaited<ReturnType<typeof postConnectorsConnectorIdConfigPush>>,
-        TError,
-        TData
-      >
-    > &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postConnectorsConnectorIdConfigPush>>,
-          TError,
-          Awaited<ReturnType<typeof postConnectorsConnectorIdConfigPush>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostConnectorsConnectorIdConfigPush<
-  TData = Awaited<ReturnType<typeof postConnectorsConnectorIdConfigPush>>,
-  TError = ErrorType<Error | ElevationRequiredResponse | ForbiddenResponse | NotFoundResponse>,
->(
-  connectorId: string,
-  postConnectorsConnectorIdConfigPushBody: BodyType<PostConnectorsConnectorIdConfigPushBody>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<
-        Awaited<ReturnType<typeof postConnectorsConnectorIdConfigPush>>,
-        TError,
-        TData
-      >
-    > &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postConnectorsConnectorIdConfigPush>>,
-          TError,
-          Awaited<ReturnType<typeof postConnectorsConnectorIdConfigPush>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostConnectorsConnectorIdConfigPush<
-  TData = Awaited<ReturnType<typeof postConnectorsConnectorIdConfigPush>>,
-  TError = ErrorType<Error | ElevationRequiredResponse | ForbiddenResponse | NotFoundResponse>,
->(
-  connectorId: string,
-  postConnectorsConnectorIdConfigPushBody: BodyType<PostConnectorsConnectorIdConfigPushBody>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<
-        Awaited<ReturnType<typeof postConnectorsConnectorIdConfigPush>>,
-        TError,
-        TData
-      >
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
  * @summary Push one whitelisted config field (operator, elevation-gated)
  */
-
-export function usePostConnectorsConnectorIdConfigPush<
-  TData = Awaited<ReturnType<typeof postConnectorsConnectorIdConfigPush>>,
+export const usePostConnectorsConnectorIdConfigPush = <
   TError = ErrorType<Error | ElevationRequiredResponse | ForbiddenResponse | NotFoundResponse>,
+  TContext = unknown,
 >(
-  connectorId: string,
-  postConnectorsConnectorIdConfigPushBody: BodyType<PostConnectorsConnectorIdConfigPushBody>,
   options?: {
-    query?: Partial<
-      UseQueryOptions<
-        Awaited<ReturnType<typeof postConnectorsConnectorIdConfigPush>>,
-        TError,
-        TData
-      >
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof postConnectorsConnectorIdConfigPush>>,
+      TError,
+      PostConnectorsConnectorIdConfigPushMutationVariables,
+      TContext
     >;
     request?: SecondParameter<typeof customInstance>;
   },
   queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getPostConnectorsConnectorIdConfigPushQueryOptions(
-    connectorId,
-    postConnectorsConnectorIdConfigPushBody,
-    options
-  );
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
+): UseMutationResult<
+  Awaited<ReturnType<typeof postConnectorsConnectorIdConfigPush>>,
+  TError,
+  PostConnectorsConnectorIdConfigPushMutationVariables,
+  TContext
+> => {
+  return useMutation(getPostConnectorsConnectorIdConfigPushMutationOptions(options), queryClient);
+};
 /**
  * @summary Latest fetched service snapshot (live data)
  */
@@ -2214,126 +1731,74 @@ export const postConnectorsConnectorIdTest = (
   );
 };
 
-export const getPostConnectorsConnectorIdTestQueryKey = (connectorId: string) => {
-  return ['POST', `/connectors/${connectorId}/test`] as const;
-};
+export const getPostConnectorsConnectorIdTestMutationKey = () =>
+  ['postConnectorsConnectorIdTest'] as const;
 
-export const getPostConnectorsConnectorIdTestQueryOptions = <
-  TData = Awaited<ReturnType<typeof postConnectorsConnectorIdTest>>,
+export const getPostConnectorsConnectorIdTestMutationOptions = <
   TError = ErrorType<unknown>,
->(
-  connectorId: string,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postConnectorsConnectorIdTest>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  }
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof postConnectorsConnectorIdTest>>,
+    TError,
+    PostConnectorsConnectorIdTestMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof postConnectorsConnectorIdTest>>,
+  TError,
+  PostConnectorsConnectorIdTestMutationVariables,
+  TContext
+> => {
+  const mutationKey = getPostConnectorsConnectorIdTestMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
 
-  const queryKey = queryOptions?.queryKey ?? getPostConnectorsConnectorIdTestQueryKey(connectorId);
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof postConnectorsConnectorIdTest>>,
+    PostConnectorsConnectorIdTestMutationVariables
+  > = (props) => {
+    const { connectorId } = props ?? {};
 
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof postConnectorsConnectorIdTest>>> = ({
-    signal,
-  }) => postConnectorsConnectorIdTest(connectorId, requestOptions, signal);
-
-  return {
-    queryKey,
-    queryFn,
-    enabled: connectorId !== null && connectorId !== undefined,
-    ...queryOptions,
-  } as UseQueryOptions<Awaited<ReturnType<typeof postConnectorsConnectorIdTest>>, TError, TData> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
+    return postConnectorsConnectorIdTest(connectorId, requestOptions);
   };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type PostConnectorsConnectorIdTestQueryResult = NonNullable<
+export type PostConnectorsConnectorIdTestMutationResult = NonNullable<
   Awaited<ReturnType<typeof postConnectorsConnectorIdTest>>
 >;
-export type PostConnectorsConnectorIdTestQueryError = ErrorType<unknown>;
 
-export function usePostConnectorsConnectorIdTest<
-  TData = Awaited<ReturnType<typeof postConnectorsConnectorIdTest>>,
-  TError = ErrorType<unknown>,
->(
-  connectorId: string,
-  options: {
-    query: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postConnectorsConnectorIdTest>>, TError, TData>
-    > &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postConnectorsConnectorIdTest>>,
-          TError,
-          Awaited<ReturnType<typeof postConnectorsConnectorIdTest>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostConnectorsConnectorIdTest<
-  TData = Awaited<ReturnType<typeof postConnectorsConnectorIdTest>>,
-  TError = ErrorType<unknown>,
->(
-  connectorId: string,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postConnectorsConnectorIdTest>>, TError, TData>
-    > &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postConnectorsConnectorIdTest>>,
-          TError,
-          Awaited<ReturnType<typeof postConnectorsConnectorIdTest>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostConnectorsConnectorIdTest<
-  TData = Awaited<ReturnType<typeof postConnectorsConnectorIdTest>>,
-  TError = ErrorType<unknown>,
->(
-  connectorId: string,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postConnectorsConnectorIdTest>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export type PostConnectorsConnectorIdTestMutationError = ErrorType<unknown>;
+export type PostConnectorsConnectorIdTestMutationVariables = { connectorId: string };
+
 /**
  * @summary Test connection without saving
  */
-
-export function usePostConnectorsConnectorIdTest<
-  TData = Awaited<ReturnType<typeof postConnectorsConnectorIdTest>>,
-  TError = ErrorType<unknown>,
->(
-  connectorId: string,
+export const usePostConnectorsConnectorIdTest = <TError = ErrorType<unknown>, TContext = unknown>(
   options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postConnectorsConnectorIdTest>>, TError, TData>
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof postConnectorsConnectorIdTest>>,
+      TError,
+      PostConnectorsConnectorIdTestMutationVariables,
+      TContext
     >;
     request?: SecondParameter<typeof customInstance>;
   },
   queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getPostConnectorsConnectorIdTestQueryOptions(connectorId, options);
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
+): UseMutationResult<
+  Awaited<ReturnType<typeof postConnectorsConnectorIdTest>>,
+  TError,
+  PostConnectorsConnectorIdTestMutationVariables,
+  TContext
+> => {
+  return useMutation(getPostConnectorsConnectorIdTestMutationOptions(options), queryClient);
+};
 /**
  * Runs the connector's Validate step only and saves the resulting online/degraded/offline status, independently of running a full sync. Unlike /test, this call updates the connector's persisted status.
  * @summary Cheap connectivity check (no fetch, no snapshot, no docs); persists status
@@ -2349,129 +1814,77 @@ export const postConnectorsConnectorIdHealth = (
   );
 };
 
-export const getPostConnectorsConnectorIdHealthQueryKey = (connectorId: string) => {
-  return ['POST', `/connectors/${connectorId}/health`] as const;
-};
+export const getPostConnectorsConnectorIdHealthMutationKey = () =>
+  ['postConnectorsConnectorIdHealth'] as const;
 
-export const getPostConnectorsConnectorIdHealthQueryOptions = <
-  TData = Awaited<ReturnType<typeof postConnectorsConnectorIdHealth>>,
+export const getPostConnectorsConnectorIdHealthMutationOptions = <
   TError = ErrorType<NotFoundResponse>,
->(
-  connectorId: string,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postConnectorsConnectorIdHealth>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  }
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
-
-  const queryKey =
-    queryOptions?.queryKey ?? getPostConnectorsConnectorIdHealthQueryKey(connectorId);
-
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof postConnectorsConnectorIdHealth>>> = ({
-    signal,
-  }) => postConnectorsConnectorIdHealth(connectorId, requestOptions, signal);
-
-  return {
-    queryKey,
-    queryFn,
-    enabled: connectorId !== null && connectorId !== undefined,
-    ...queryOptions,
-  } as UseQueryOptions<
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof postConnectorsConnectorIdHealth>>,
     TError,
-    TData
-  > & { queryKey: DataTag<QueryKey, TData, TError> };
+    PostConnectorsConnectorIdHealthMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof postConnectorsConnectorIdHealth>>,
+  TError,
+  PostConnectorsConnectorIdHealthMutationVariables,
+  TContext
+> => {
+  const mutationKey = getPostConnectorsConnectorIdHealthMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof postConnectorsConnectorIdHealth>>,
+    PostConnectorsConnectorIdHealthMutationVariables
+  > = (props) => {
+    const { connectorId } = props ?? {};
+
+    return postConnectorsConnectorIdHealth(connectorId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type PostConnectorsConnectorIdHealthQueryResult = NonNullable<
+export type PostConnectorsConnectorIdHealthMutationResult = NonNullable<
   Awaited<ReturnType<typeof postConnectorsConnectorIdHealth>>
 >;
-export type PostConnectorsConnectorIdHealthQueryError = ErrorType<NotFoundResponse>;
 
-export function usePostConnectorsConnectorIdHealth<
-  TData = Awaited<ReturnType<typeof postConnectorsConnectorIdHealth>>,
-  TError = ErrorType<NotFoundResponse>,
->(
-  connectorId: string,
-  options: {
-    query: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postConnectorsConnectorIdHealth>>, TError, TData>
-    > &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postConnectorsConnectorIdHealth>>,
-          TError,
-          Awaited<ReturnType<typeof postConnectorsConnectorIdHealth>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostConnectorsConnectorIdHealth<
-  TData = Awaited<ReturnType<typeof postConnectorsConnectorIdHealth>>,
-  TError = ErrorType<NotFoundResponse>,
->(
-  connectorId: string,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postConnectorsConnectorIdHealth>>, TError, TData>
-    > &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postConnectorsConnectorIdHealth>>,
-          TError,
-          Awaited<ReturnType<typeof postConnectorsConnectorIdHealth>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostConnectorsConnectorIdHealth<
-  TData = Awaited<ReturnType<typeof postConnectorsConnectorIdHealth>>,
-  TError = ErrorType<NotFoundResponse>,
->(
-  connectorId: string,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postConnectorsConnectorIdHealth>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export type PostConnectorsConnectorIdHealthMutationError = ErrorType<NotFoundResponse>;
+export type PostConnectorsConnectorIdHealthMutationVariables = { connectorId: string };
+
 /**
  * @summary Cheap connectivity check (no fetch, no snapshot, no docs); persists status
  */
-
-export function usePostConnectorsConnectorIdHealth<
-  TData = Awaited<ReturnType<typeof postConnectorsConnectorIdHealth>>,
+export const usePostConnectorsConnectorIdHealth = <
   TError = ErrorType<NotFoundResponse>,
+  TContext = unknown,
 >(
-  connectorId: string,
   options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postConnectorsConnectorIdHealth>>, TError, TData>
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof postConnectorsConnectorIdHealth>>,
+      TError,
+      PostConnectorsConnectorIdHealthMutationVariables,
+      TContext
     >;
     request?: SecondParameter<typeof customInstance>;
   },
   queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getPostConnectorsConnectorIdHealthQueryOptions(connectorId, options);
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
+): UseMutationResult<
+  Awaited<ReturnType<typeof postConnectorsConnectorIdHealth>>,
+  TError,
+  PostConnectorsConnectorIdHealthMutationVariables,
+  TContext
+> => {
+  return useMutation(getPostConnectorsConnectorIdHealthMutationOptions(options), queryClient);
+};
 /**
  * @summary Trigger a sync for one connector (progress streams over /ws)
  */
@@ -2493,146 +1906,78 @@ export const postConnectorsConnectorIdSync = (
   );
 };
 
-export const getPostConnectorsConnectorIdSyncQueryKey = (
-  connectorId: string,
-  postConnectorsConnectorIdSyncBody?: BodyType<PostConnectorsConnectorIdSyncBody>
-) => {
-  return ['POST', `/connectors/${connectorId}/sync`, postConnectorsConnectorIdSyncBody] as const;
-};
+export const getPostConnectorsConnectorIdSyncMutationKey = () =>
+  ['postConnectorsConnectorIdSync'] as const;
 
-export const getPostConnectorsConnectorIdSyncQueryOptions = <
-  TData = Awaited<ReturnType<typeof postConnectorsConnectorIdSync>>,
+export const getPostConnectorsConnectorIdSyncMutationOptions = <
   TError = ErrorType<unknown>,
->(
-  connectorId: string,
-  postConnectorsConnectorIdSyncBody?: BodyType<PostConnectorsConnectorIdSyncBody>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postConnectorsConnectorIdSync>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  }
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof postConnectorsConnectorIdSync>>,
+    TError,
+    PostConnectorsConnectorIdSyncMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof postConnectorsConnectorIdSync>>,
+  TError,
+  PostConnectorsConnectorIdSyncMutationVariables,
+  TContext
+> => {
+  const mutationKey = getPostConnectorsConnectorIdSyncMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
 
-  const queryKey =
-    queryOptions?.queryKey ??
-    getPostConnectorsConnectorIdSyncQueryKey(connectorId, postConnectorsConnectorIdSyncBody);
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof postConnectorsConnectorIdSync>>,
+    PostConnectorsConnectorIdSyncMutationVariables
+  > = (props) => {
+    const { connectorId, data } = props ?? {};
 
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof postConnectorsConnectorIdSync>>> = ({
-    signal,
-  }) =>
-    postConnectorsConnectorIdSync(
-      connectorId,
-      postConnectorsConnectorIdSyncBody,
-      requestOptions,
-      signal
-    );
-
-  return {
-    queryKey,
-    queryFn,
-    enabled: connectorId !== null && connectorId !== undefined,
-    ...queryOptions,
-  } as UseQueryOptions<Awaited<ReturnType<typeof postConnectorsConnectorIdSync>>, TError, TData> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
+    return postConnectorsConnectorIdSync(connectorId, data, requestOptions);
   };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type PostConnectorsConnectorIdSyncQueryResult = NonNullable<
+export type PostConnectorsConnectorIdSyncMutationResult = NonNullable<
   Awaited<ReturnType<typeof postConnectorsConnectorIdSync>>
 >;
-export type PostConnectorsConnectorIdSyncQueryError = ErrorType<unknown>;
+export type PostConnectorsConnectorIdSyncMutationBody =
+  BodyType<PostConnectorsConnectorIdSyncBody> | undefined;
+export type PostConnectorsConnectorIdSyncMutationError = ErrorType<unknown>;
+export type PostConnectorsConnectorIdSyncMutationVariables = {
+  connectorId: string;
+  data?: BodyType<PostConnectorsConnectorIdSyncBody>;
+};
 
-export function usePostConnectorsConnectorIdSync<
-  TData = Awaited<ReturnType<typeof postConnectorsConnectorIdSync>>,
-  TError = ErrorType<unknown>,
->(
-  connectorId: string,
-  postConnectorsConnectorIdSyncBody: undefined | BodyType<PostConnectorsConnectorIdSyncBody>,
-  options: {
-    query: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postConnectorsConnectorIdSync>>, TError, TData>
-    > &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postConnectorsConnectorIdSync>>,
-          TError,
-          Awaited<ReturnType<typeof postConnectorsConnectorIdSync>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostConnectorsConnectorIdSync<
-  TData = Awaited<ReturnType<typeof postConnectorsConnectorIdSync>>,
-  TError = ErrorType<unknown>,
->(
-  connectorId: string,
-  postConnectorsConnectorIdSyncBody?: BodyType<PostConnectorsConnectorIdSyncBody>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postConnectorsConnectorIdSync>>, TError, TData>
-    > &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postConnectorsConnectorIdSync>>,
-          TError,
-          Awaited<ReturnType<typeof postConnectorsConnectorIdSync>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostConnectorsConnectorIdSync<
-  TData = Awaited<ReturnType<typeof postConnectorsConnectorIdSync>>,
-  TError = ErrorType<unknown>,
->(
-  connectorId: string,
-  postConnectorsConnectorIdSyncBody?: BodyType<PostConnectorsConnectorIdSyncBody>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postConnectorsConnectorIdSync>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
  * @summary Trigger a sync for one connector (progress streams over /ws)
  */
-
-export function usePostConnectorsConnectorIdSync<
-  TData = Awaited<ReturnType<typeof postConnectorsConnectorIdSync>>,
-  TError = ErrorType<unknown>,
->(
-  connectorId: string,
-  postConnectorsConnectorIdSyncBody?: BodyType<PostConnectorsConnectorIdSyncBody>,
+export const usePostConnectorsConnectorIdSync = <TError = ErrorType<unknown>, TContext = unknown>(
   options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postConnectorsConnectorIdSync>>, TError, TData>
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof postConnectorsConnectorIdSync>>,
+      TError,
+      PostConnectorsConnectorIdSyncMutationVariables,
+      TContext
     >;
     request?: SecondParameter<typeof customInstance>;
   },
   queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getPostConnectorsConnectorIdSyncQueryOptions(
-    connectorId,
-    postConnectorsConnectorIdSyncBody,
-    options
-  );
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
+): UseMutationResult<
+  Awaited<ReturnType<typeof postConnectorsConnectorIdSync>>,
+  TError,
+  PostConnectorsConnectorIdSyncMutationVariables,
+  TContext
+> => {
+  return useMutation(getPostConnectorsConnectorIdSyncMutationOptions(options), queryClient);
+};
 /**
  * @summary Recent sync run history for one connector (newest first)
  */
@@ -3298,125 +2643,76 @@ export const postConnectorsBulkSync = (
   );
 };
 
-export const getPostConnectorsBulkSyncQueryKey = (
-  connectorBulkSyncRequest?: BodyType<ConnectorBulkSyncRequest>
-) => {
-  return ['POST', `/connectors/bulk-sync`, connectorBulkSyncRequest] as const;
-};
+export const getPostConnectorsBulkSyncMutationKey = () => ['postConnectorsBulkSync'] as const;
 
-export const getPostConnectorsBulkSyncQueryOptions = <
-  TData = Awaited<ReturnType<typeof postConnectorsBulkSync>>,
+export const getPostConnectorsBulkSyncMutationOptions = <
   TError = ErrorType<BadRequestResponse>,
->(
-  connectorBulkSyncRequest: BodyType<ConnectorBulkSyncRequest>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postConnectorsBulkSync>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  }
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
-
-  const queryKey =
-    queryOptions?.queryKey ?? getPostConnectorsBulkSyncQueryKey(connectorBulkSyncRequest);
-
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof postConnectorsBulkSync>>> = ({ signal }) =>
-    postConnectorsBulkSync(connectorBulkSyncRequest, requestOptions, signal);
-
-  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof postConnectorsBulkSync>>,
     TError,
-    TData
-  > & { queryKey: DataTag<QueryKey, TData, TError> };
+    PostConnectorsBulkSyncMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof postConnectorsBulkSync>>,
+  TError,
+  PostConnectorsBulkSyncMutationVariables,
+  TContext
+> => {
+  const mutationKey = getPostConnectorsBulkSyncMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof postConnectorsBulkSync>>,
+    PostConnectorsBulkSyncMutationVariables
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return postConnectorsBulkSync(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type PostConnectorsBulkSyncQueryResult = NonNullable<
+export type PostConnectorsBulkSyncMutationResult = NonNullable<
   Awaited<ReturnType<typeof postConnectorsBulkSync>>
 >;
-export type PostConnectorsBulkSyncQueryError = ErrorType<BadRequestResponse>;
+export type PostConnectorsBulkSyncMutationBody = BodyType<ConnectorBulkSyncRequest>;
+export type PostConnectorsBulkSyncMutationError = ErrorType<BadRequestResponse>;
+export type PostConnectorsBulkSyncMutationVariables = { data: BodyType<ConnectorBulkSyncRequest> };
 
-export function usePostConnectorsBulkSync<
-  TData = Awaited<ReturnType<typeof postConnectorsBulkSync>>,
-  TError = ErrorType<BadRequestResponse>,
->(
-  connectorBulkSyncRequest: BodyType<ConnectorBulkSyncRequest>,
-  options: {
-    query: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postConnectorsBulkSync>>, TError, TData>
-    > &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postConnectorsBulkSync>>,
-          TError,
-          Awaited<ReturnType<typeof postConnectorsBulkSync>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostConnectorsBulkSync<
-  TData = Awaited<ReturnType<typeof postConnectorsBulkSync>>,
-  TError = ErrorType<BadRequestResponse>,
->(
-  connectorBulkSyncRequest: BodyType<ConnectorBulkSyncRequest>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postConnectorsBulkSync>>, TError, TData>
-    > &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postConnectorsBulkSync>>,
-          TError,
-          Awaited<ReturnType<typeof postConnectorsBulkSync>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostConnectorsBulkSync<
-  TData = Awaited<ReturnType<typeof postConnectorsBulkSync>>,
-  TError = ErrorType<BadRequestResponse>,
->(
-  connectorBulkSyncRequest: BodyType<ConnectorBulkSyncRequest>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postConnectorsBulkSync>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
  * @summary Trigger a sync for an explicit list of connectors in one request
  */
-
-export function usePostConnectorsBulkSync<
-  TData = Awaited<ReturnType<typeof postConnectorsBulkSync>>,
+export const usePostConnectorsBulkSync = <
   TError = ErrorType<BadRequestResponse>,
+  TContext = unknown,
 >(
-  connectorBulkSyncRequest: BodyType<ConnectorBulkSyncRequest>,
   options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postConnectorsBulkSync>>, TError, TData>
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof postConnectorsBulkSync>>,
+      TError,
+      PostConnectorsBulkSyncMutationVariables,
+      TContext
     >;
     request?: SecondParameter<typeof customInstance>;
   },
   queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getPostConnectorsBulkSyncQueryOptions(connectorBulkSyncRequest, options);
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
+): UseMutationResult<
+  Awaited<ReturnType<typeof postConnectorsBulkSync>>,
+  TError,
+  PostConnectorsBulkSyncMutationVariables,
+  TContext
+> => {
+  return useMutation(getPostConnectorsBulkSyncMutationOptions(options), queryClient);
+};
 /**
  * For each connector implementing credential refresh, refreshes and persists its credentials. Not elevation-gated (matches how single-connector sync/re-auth aren't gated today either). One bad ID never aborts the batch; one audit record is written per successfully-refreshed item.
  * @summary Refresh credentials for an explicit list of connectors in one request
@@ -3438,126 +2734,78 @@ export const postConnectorsBulkReauth = (
   );
 };
 
-export const getPostConnectorsBulkReauthQueryKey = (
-  connectorBulkReauthRequest?: BodyType<ConnectorBulkReauthRequest>
-) => {
-  return ['POST', `/connectors/bulk-reauth`, connectorBulkReauthRequest] as const;
-};
+export const getPostConnectorsBulkReauthMutationKey = () => ['postConnectorsBulkReauth'] as const;
 
-export const getPostConnectorsBulkReauthQueryOptions = <
-  TData = Awaited<ReturnType<typeof postConnectorsBulkReauth>>,
+export const getPostConnectorsBulkReauthMutationOptions = <
   TError = ErrorType<BadRequestResponse>,
->(
-  connectorBulkReauthRequest: BodyType<ConnectorBulkReauthRequest>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postConnectorsBulkReauth>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  }
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
-
-  const queryKey =
-    queryOptions?.queryKey ?? getPostConnectorsBulkReauthQueryKey(connectorBulkReauthRequest);
-
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof postConnectorsBulkReauth>>> = ({
-    signal,
-  }) => postConnectorsBulkReauth(connectorBulkReauthRequest, requestOptions, signal);
-
-  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof postConnectorsBulkReauth>>,
     TError,
-    TData
-  > & { queryKey: DataTag<QueryKey, TData, TError> };
+    PostConnectorsBulkReauthMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof postConnectorsBulkReauth>>,
+  TError,
+  PostConnectorsBulkReauthMutationVariables,
+  TContext
+> => {
+  const mutationKey = getPostConnectorsBulkReauthMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof postConnectorsBulkReauth>>,
+    PostConnectorsBulkReauthMutationVariables
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return postConnectorsBulkReauth(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type PostConnectorsBulkReauthQueryResult = NonNullable<
+export type PostConnectorsBulkReauthMutationResult = NonNullable<
   Awaited<ReturnType<typeof postConnectorsBulkReauth>>
 >;
-export type PostConnectorsBulkReauthQueryError = ErrorType<BadRequestResponse>;
+export type PostConnectorsBulkReauthMutationBody = BodyType<ConnectorBulkReauthRequest>;
+export type PostConnectorsBulkReauthMutationError = ErrorType<BadRequestResponse>;
+export type PostConnectorsBulkReauthMutationVariables = {
+  data: BodyType<ConnectorBulkReauthRequest>;
+};
 
-export function usePostConnectorsBulkReauth<
-  TData = Awaited<ReturnType<typeof postConnectorsBulkReauth>>,
-  TError = ErrorType<BadRequestResponse>,
->(
-  connectorBulkReauthRequest: BodyType<ConnectorBulkReauthRequest>,
-  options: {
-    query: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postConnectorsBulkReauth>>, TError, TData>
-    > &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postConnectorsBulkReauth>>,
-          TError,
-          Awaited<ReturnType<typeof postConnectorsBulkReauth>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostConnectorsBulkReauth<
-  TData = Awaited<ReturnType<typeof postConnectorsBulkReauth>>,
-  TError = ErrorType<BadRequestResponse>,
->(
-  connectorBulkReauthRequest: BodyType<ConnectorBulkReauthRequest>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postConnectorsBulkReauth>>, TError, TData>
-    > &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postConnectorsBulkReauth>>,
-          TError,
-          Awaited<ReturnType<typeof postConnectorsBulkReauth>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostConnectorsBulkReauth<
-  TData = Awaited<ReturnType<typeof postConnectorsBulkReauth>>,
-  TError = ErrorType<BadRequestResponse>,
->(
-  connectorBulkReauthRequest: BodyType<ConnectorBulkReauthRequest>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postConnectorsBulkReauth>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
  * @summary Refresh credentials for an explicit list of connectors in one request
  */
-
-export function usePostConnectorsBulkReauth<
-  TData = Awaited<ReturnType<typeof postConnectorsBulkReauth>>,
+export const usePostConnectorsBulkReauth = <
   TError = ErrorType<BadRequestResponse>,
+  TContext = unknown,
 >(
-  connectorBulkReauthRequest: BodyType<ConnectorBulkReauthRequest>,
   options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postConnectorsBulkReauth>>, TError, TData>
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof postConnectorsBulkReauth>>,
+      TError,
+      PostConnectorsBulkReauthMutationVariables,
+      TContext
     >;
     request?: SecondParameter<typeof customInstance>;
   },
   queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getPostConnectorsBulkReauthQueryOptions(connectorBulkReauthRequest, options);
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
+): UseMutationResult<
+  Awaited<ReturnType<typeof postConnectorsBulkReauth>>,
+  TError,
+  PostConnectorsBulkReauthMutationVariables,
+  TContext
+> => {
+  return useMutation(getPostConnectorsBulkReauthMutationOptions(options), queryClient);
+};
 /**
  * Gated by X-Elevation-Token, action `connector.bulkRestart` — one elevation covers the whole batch, not one per item. One bad ID never aborts the batch; one audit record is written per successfully-restarted item.
  * @summary Restart an explicit list of connectors in one request
@@ -3579,131 +2827,80 @@ export const postConnectorsBulkRestart = (
   );
 };
 
-export const getPostConnectorsBulkRestartQueryKey = (
-  connectorBulkRestartRequest?: BodyType<ConnectorBulkRestartRequest>
-) => {
-  return ['POST', `/connectors/bulk-restart`, connectorBulkRestartRequest] as const;
-};
+export const getPostConnectorsBulkRestartMutationKey = () => ['postConnectorsBulkRestart'] as const;
 
-export const getPostConnectorsBulkRestartQueryOptions = <
-  TData = Awaited<ReturnType<typeof postConnectorsBulkRestart>>,
+export const getPostConnectorsBulkRestartMutationOptions = <
   TError = ErrorType<BadRequestResponse | UnauthorizedResponse>,
->(
-  connectorBulkRestartRequest: BodyType<ConnectorBulkRestartRequest>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postConnectorsBulkRestart>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  }
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
-
-  const queryKey =
-    queryOptions?.queryKey ?? getPostConnectorsBulkRestartQueryKey(connectorBulkRestartRequest);
-
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof postConnectorsBulkRestart>>> = ({
-    signal,
-  }) => postConnectorsBulkRestart(connectorBulkRestartRequest, requestOptions, signal);
-
-  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof postConnectorsBulkRestart>>,
     TError,
-    TData
-  > & { queryKey: DataTag<QueryKey, TData, TError> };
+    PostConnectorsBulkRestartMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof postConnectorsBulkRestart>>,
+  TError,
+  PostConnectorsBulkRestartMutationVariables,
+  TContext
+> => {
+  const mutationKey = getPostConnectorsBulkRestartMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof postConnectorsBulkRestart>>,
+    PostConnectorsBulkRestartMutationVariables
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return postConnectorsBulkRestart(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type PostConnectorsBulkRestartQueryResult = NonNullable<
+export type PostConnectorsBulkRestartMutationResult = NonNullable<
   Awaited<ReturnType<typeof postConnectorsBulkRestart>>
 >;
-export type PostConnectorsBulkRestartQueryError = ErrorType<
+export type PostConnectorsBulkRestartMutationBody = BodyType<ConnectorBulkRestartRequest>;
+export type PostConnectorsBulkRestartMutationError = ErrorType<
   BadRequestResponse | UnauthorizedResponse
 >;
+export type PostConnectorsBulkRestartMutationVariables = {
+  data: BodyType<ConnectorBulkRestartRequest>;
+};
 
-export function usePostConnectorsBulkRestart<
-  TData = Awaited<ReturnType<typeof postConnectorsBulkRestart>>,
-  TError = ErrorType<BadRequestResponse | UnauthorizedResponse>,
->(
-  connectorBulkRestartRequest: BodyType<ConnectorBulkRestartRequest>,
-  options: {
-    query: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postConnectorsBulkRestart>>, TError, TData>
-    > &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postConnectorsBulkRestart>>,
-          TError,
-          Awaited<ReturnType<typeof postConnectorsBulkRestart>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostConnectorsBulkRestart<
-  TData = Awaited<ReturnType<typeof postConnectorsBulkRestart>>,
-  TError = ErrorType<BadRequestResponse | UnauthorizedResponse>,
->(
-  connectorBulkRestartRequest: BodyType<ConnectorBulkRestartRequest>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postConnectorsBulkRestart>>, TError, TData>
-    > &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postConnectorsBulkRestart>>,
-          TError,
-          Awaited<ReturnType<typeof postConnectorsBulkRestart>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostConnectorsBulkRestart<
-  TData = Awaited<ReturnType<typeof postConnectorsBulkRestart>>,
-  TError = ErrorType<BadRequestResponse | UnauthorizedResponse>,
->(
-  connectorBulkRestartRequest: BodyType<ConnectorBulkRestartRequest>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postConnectorsBulkRestart>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
  * @summary Restart an explicit list of connectors in one request
  */
-
-export function usePostConnectorsBulkRestart<
-  TData = Awaited<ReturnType<typeof postConnectorsBulkRestart>>,
+export const usePostConnectorsBulkRestart = <
   TError = ErrorType<BadRequestResponse | UnauthorizedResponse>,
+  TContext = unknown,
 >(
-  connectorBulkRestartRequest: BodyType<ConnectorBulkRestartRequest>,
   options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postConnectorsBulkRestart>>, TError, TData>
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof postConnectorsBulkRestart>>,
+      TError,
+      PostConnectorsBulkRestartMutationVariables,
+      TContext
     >;
     request?: SecondParameter<typeof customInstance>;
   },
   queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getPostConnectorsBulkRestartQueryOptions(
-    connectorBulkRestartRequest,
-    options
-  );
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
+): UseMutationResult<
+  Awaited<ReturnType<typeof postConnectorsBulkRestart>>,
+  TError,
+  PostConnectorsBulkRestartMutationVariables,
+  TContext
+> => {
+  return useMutation(getPostConnectorsBulkRestartMutationOptions(options), queryClient);
+};
 /**
  * @summary Enable/disable a connector
  */
@@ -3725,152 +2922,78 @@ export const putConnectorsConnectorIdEnabled = (
   );
 };
 
-export const getPutConnectorsConnectorIdEnabledQueryKey = (
-  connectorId: string,
-  putConnectorsConnectorIdEnabledBody?: BodyType<PutConnectorsConnectorIdEnabledBody>
-) => {
-  return [
-    'PUT',
-    `/connectors/${connectorId}/enabled`,
-    putConnectorsConnectorIdEnabledBody,
-  ] as const;
-};
+export const getPutConnectorsConnectorIdEnabledMutationKey = () =>
+  ['putConnectorsConnectorIdEnabled'] as const;
 
-export const getPutConnectorsConnectorIdEnabledQueryOptions = <
-  TData = Awaited<ReturnType<typeof putConnectorsConnectorIdEnabled>>,
+export const getPutConnectorsConnectorIdEnabledMutationOptions = <
   TError = ErrorType<unknown>,
->(
-  connectorId: string,
-  putConnectorsConnectorIdEnabledBody: BodyType<PutConnectorsConnectorIdEnabledBody>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof putConnectorsConnectorIdEnabled>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  }
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
-
-  const queryKey =
-    queryOptions?.queryKey ??
-    getPutConnectorsConnectorIdEnabledQueryKey(connectorId, putConnectorsConnectorIdEnabledBody);
-
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof putConnectorsConnectorIdEnabled>>> = ({
-    signal,
-  }) =>
-    putConnectorsConnectorIdEnabled(
-      connectorId,
-      putConnectorsConnectorIdEnabledBody,
-      requestOptions,
-      signal
-    );
-
-  return {
-    queryKey,
-    queryFn,
-    enabled: connectorId !== null && connectorId !== undefined,
-    ...queryOptions,
-  } as UseQueryOptions<
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof putConnectorsConnectorIdEnabled>>,
     TError,
-    TData
-  > & { queryKey: DataTag<QueryKey, TData, TError> };
+    PutConnectorsConnectorIdEnabledMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof putConnectorsConnectorIdEnabled>>,
+  TError,
+  PutConnectorsConnectorIdEnabledMutationVariables,
+  TContext
+> => {
+  const mutationKey = getPutConnectorsConnectorIdEnabledMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof putConnectorsConnectorIdEnabled>>,
+    PutConnectorsConnectorIdEnabledMutationVariables
+  > = (props) => {
+    const { connectorId, data } = props ?? {};
+
+    return putConnectorsConnectorIdEnabled(connectorId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type PutConnectorsConnectorIdEnabledQueryResult = NonNullable<
+export type PutConnectorsConnectorIdEnabledMutationResult = NonNullable<
   Awaited<ReturnType<typeof putConnectorsConnectorIdEnabled>>
 >;
-export type PutConnectorsConnectorIdEnabledQueryError = ErrorType<unknown>;
+export type PutConnectorsConnectorIdEnabledMutationBody =
+  BodyType<PutConnectorsConnectorIdEnabledBody>;
+export type PutConnectorsConnectorIdEnabledMutationError = ErrorType<unknown>;
+export type PutConnectorsConnectorIdEnabledMutationVariables = {
+  connectorId: string;
+  data: BodyType<PutConnectorsConnectorIdEnabledBody>;
+};
 
-export function usePutConnectorsConnectorIdEnabled<
-  TData = Awaited<ReturnType<typeof putConnectorsConnectorIdEnabled>>,
-  TError = ErrorType<unknown>,
->(
-  connectorId: string,
-  putConnectorsConnectorIdEnabledBody: BodyType<PutConnectorsConnectorIdEnabledBody>,
-  options: {
-    query: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof putConnectorsConnectorIdEnabled>>, TError, TData>
-    > &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof putConnectorsConnectorIdEnabled>>,
-          TError,
-          Awaited<ReturnType<typeof putConnectorsConnectorIdEnabled>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePutConnectorsConnectorIdEnabled<
-  TData = Awaited<ReturnType<typeof putConnectorsConnectorIdEnabled>>,
-  TError = ErrorType<unknown>,
->(
-  connectorId: string,
-  putConnectorsConnectorIdEnabledBody: BodyType<PutConnectorsConnectorIdEnabledBody>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof putConnectorsConnectorIdEnabled>>, TError, TData>
-    > &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof putConnectorsConnectorIdEnabled>>,
-          TError,
-          Awaited<ReturnType<typeof putConnectorsConnectorIdEnabled>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePutConnectorsConnectorIdEnabled<
-  TData = Awaited<ReturnType<typeof putConnectorsConnectorIdEnabled>>,
-  TError = ErrorType<unknown>,
->(
-  connectorId: string,
-  putConnectorsConnectorIdEnabledBody: BodyType<PutConnectorsConnectorIdEnabledBody>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof putConnectorsConnectorIdEnabled>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
  * @summary Enable/disable a connector
  */
-
-export function usePutConnectorsConnectorIdEnabled<
-  TData = Awaited<ReturnType<typeof putConnectorsConnectorIdEnabled>>,
-  TError = ErrorType<unknown>,
->(
-  connectorId: string,
-  putConnectorsConnectorIdEnabledBody: BodyType<PutConnectorsConnectorIdEnabledBody>,
+export const usePutConnectorsConnectorIdEnabled = <TError = ErrorType<unknown>, TContext = unknown>(
   options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof putConnectorsConnectorIdEnabled>>, TError, TData>
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof putConnectorsConnectorIdEnabled>>,
+      TError,
+      PutConnectorsConnectorIdEnabledMutationVariables,
+      TContext
     >;
     request?: SecondParameter<typeof customInstance>;
   },
   queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getPutConnectorsConnectorIdEnabledQueryOptions(
-    connectorId,
-    putConnectorsConnectorIdEnabledBody,
-    options
-  );
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
+): UseMutationResult<
+  Awaited<ReturnType<typeof putConnectorsConnectorIdEnabled>>,
+  TError,
+  PutConnectorsConnectorIdEnabledMutationVariables,
+  TContext
+> => {
+  return useMutation(getPutConnectorsConnectorIdEnabledMutationOptions(options), queryClient);
+};
 /**
  * @summary Get a connector's active maintenance window, if any
  */
@@ -4054,177 +3177,86 @@ export const postConnectorsConnectorIdMaintenanceWindow = (
   );
 };
 
-export const getPostConnectorsConnectorIdMaintenanceWindowQueryKey = (
-  connectorId: string,
-  openMaintenanceWindowRequest?: BodyType<OpenMaintenanceWindowRequest>
-) => {
-  return [
-    'POST',
-    `/connectors/${connectorId}/maintenance-window`,
-    openMaintenanceWindowRequest,
-  ] as const;
-};
+export const getPostConnectorsConnectorIdMaintenanceWindowMutationKey = () =>
+  ['postConnectorsConnectorIdMaintenanceWindow'] as const;
 
-export const getPostConnectorsConnectorIdMaintenanceWindowQueryOptions = <
-  TData = Awaited<ReturnType<typeof postConnectorsConnectorIdMaintenanceWindow>>,
+export const getPostConnectorsConnectorIdMaintenanceWindowMutationOptions = <
   TError = ErrorType<BadRequestResponse | NotFoundResponse>,
->(
-  connectorId: string,
-  openMaintenanceWindowRequest: BodyType<OpenMaintenanceWindowRequest>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<
-        Awaited<ReturnType<typeof postConnectorsConnectorIdMaintenanceWindow>>,
-        TError,
-        TData
-      >
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  }
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
-
-  const queryKey =
-    queryOptions?.queryKey ??
-    getPostConnectorsConnectorIdMaintenanceWindowQueryKey(
-      connectorId,
-      openMaintenanceWindowRequest
-    );
-
-  const queryFn: QueryFunction<
-    Awaited<ReturnType<typeof postConnectorsConnectorIdMaintenanceWindow>>
-  > = ({ signal }) =>
-    postConnectorsConnectorIdMaintenanceWindow(
-      connectorId,
-      openMaintenanceWindowRequest,
-      requestOptions,
-      signal
-    );
-
-  return {
-    queryKey,
-    queryFn,
-    enabled: connectorId !== null && connectorId !== undefined,
-    ...queryOptions,
-  } as UseQueryOptions<
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof postConnectorsConnectorIdMaintenanceWindow>>,
     TError,
-    TData
-  > & { queryKey: DataTag<QueryKey, TData, TError> };
+    PostConnectorsConnectorIdMaintenanceWindowMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof postConnectorsConnectorIdMaintenanceWindow>>,
+  TError,
+  PostConnectorsConnectorIdMaintenanceWindowMutationVariables,
+  TContext
+> => {
+  const mutationKey = getPostConnectorsConnectorIdMaintenanceWindowMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof postConnectorsConnectorIdMaintenanceWindow>>,
+    PostConnectorsConnectorIdMaintenanceWindowMutationVariables
+  > = (props) => {
+    const { connectorId, data } = props ?? {};
+
+    return postConnectorsConnectorIdMaintenanceWindow(connectorId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type PostConnectorsConnectorIdMaintenanceWindowQueryResult = NonNullable<
+export type PostConnectorsConnectorIdMaintenanceWindowMutationResult = NonNullable<
   Awaited<ReturnType<typeof postConnectorsConnectorIdMaintenanceWindow>>
 >;
-export type PostConnectorsConnectorIdMaintenanceWindowQueryError = ErrorType<
+export type PostConnectorsConnectorIdMaintenanceWindowMutationBody =
+  BodyType<OpenMaintenanceWindowRequest>;
+export type PostConnectorsConnectorIdMaintenanceWindowMutationError = ErrorType<
   BadRequestResponse | NotFoundResponse
 >;
+export type PostConnectorsConnectorIdMaintenanceWindowMutationVariables = {
+  connectorId: string;
+  data: BodyType<OpenMaintenanceWindowRequest>;
+};
 
-export function usePostConnectorsConnectorIdMaintenanceWindow<
-  TData = Awaited<ReturnType<typeof postConnectorsConnectorIdMaintenanceWindow>>,
-  TError = ErrorType<BadRequestResponse | NotFoundResponse>,
->(
-  connectorId: string,
-  openMaintenanceWindowRequest: BodyType<OpenMaintenanceWindowRequest>,
-  options: {
-    query: Partial<
-      UseQueryOptions<
-        Awaited<ReturnType<typeof postConnectorsConnectorIdMaintenanceWindow>>,
-        TError,
-        TData
-      >
-    > &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postConnectorsConnectorIdMaintenanceWindow>>,
-          TError,
-          Awaited<ReturnType<typeof postConnectorsConnectorIdMaintenanceWindow>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostConnectorsConnectorIdMaintenanceWindow<
-  TData = Awaited<ReturnType<typeof postConnectorsConnectorIdMaintenanceWindow>>,
-  TError = ErrorType<BadRequestResponse | NotFoundResponse>,
->(
-  connectorId: string,
-  openMaintenanceWindowRequest: BodyType<OpenMaintenanceWindowRequest>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<
-        Awaited<ReturnType<typeof postConnectorsConnectorIdMaintenanceWindow>>,
-        TError,
-        TData
-      >
-    > &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postConnectorsConnectorIdMaintenanceWindow>>,
-          TError,
-          Awaited<ReturnType<typeof postConnectorsConnectorIdMaintenanceWindow>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostConnectorsConnectorIdMaintenanceWindow<
-  TData = Awaited<ReturnType<typeof postConnectorsConnectorIdMaintenanceWindow>>,
-  TError = ErrorType<BadRequestResponse | NotFoundResponse>,
->(
-  connectorId: string,
-  openMaintenanceWindowRequest: BodyType<OpenMaintenanceWindowRequest>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<
-        Awaited<ReturnType<typeof postConnectorsConnectorIdMaintenanceWindow>>,
-        TError,
-        TData
-      >
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
  * @summary Open a time-boxed maintenance window on a connector
  */
-
-export function usePostConnectorsConnectorIdMaintenanceWindow<
-  TData = Awaited<ReturnType<typeof postConnectorsConnectorIdMaintenanceWindow>>,
+export const usePostConnectorsConnectorIdMaintenanceWindow = <
   TError = ErrorType<BadRequestResponse | NotFoundResponse>,
+  TContext = unknown,
 >(
-  connectorId: string,
-  openMaintenanceWindowRequest: BodyType<OpenMaintenanceWindowRequest>,
   options?: {
-    query?: Partial<
-      UseQueryOptions<
-        Awaited<ReturnType<typeof postConnectorsConnectorIdMaintenanceWindow>>,
-        TError,
-        TData
-      >
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof postConnectorsConnectorIdMaintenanceWindow>>,
+      TError,
+      PostConnectorsConnectorIdMaintenanceWindowMutationVariables,
+      TContext
     >;
     request?: SecondParameter<typeof customInstance>;
   },
   queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getPostConnectorsConnectorIdMaintenanceWindowQueryOptions(
-    connectorId,
-    openMaintenanceWindowRequest,
-    options
+): UseMutationResult<
+  Awaited<ReturnType<typeof postConnectorsConnectorIdMaintenanceWindow>>,
+  TError,
+  PostConnectorsConnectorIdMaintenanceWindowMutationVariables,
+  TContext
+> => {
+  return useMutation(
+    getPostConnectorsConnectorIdMaintenanceWindowMutationOptions(options),
+    queryClient
   );
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
+};
 /**
  * @summary Close a connector's active maintenance window early (no-op if none)
  */
@@ -4239,153 +3271,80 @@ export const deleteConnectorsConnectorIdMaintenanceWindow = (
   );
 };
 
-export const getDeleteConnectorsConnectorIdMaintenanceWindowQueryKey = (connectorId: string) => {
-  return ['DELETE', `/connectors/${connectorId}/maintenance-window`] as const;
-};
+export const getDeleteConnectorsConnectorIdMaintenanceWindowMutationKey = () =>
+  ['deleteConnectorsConnectorIdMaintenanceWindow'] as const;
 
-export const getDeleteConnectorsConnectorIdMaintenanceWindowQueryOptions = <
-  TData = Awaited<ReturnType<typeof deleteConnectorsConnectorIdMaintenanceWindow>>,
+export const getDeleteConnectorsConnectorIdMaintenanceWindowMutationOptions = <
   TError = ErrorType<unknown>,
->(
-  connectorId: string,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<
-        Awaited<ReturnType<typeof deleteConnectorsConnectorIdMaintenanceWindow>>,
-        TError,
-        TData
-      >
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  }
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
-
-  const queryKey =
-    queryOptions?.queryKey ?? getDeleteConnectorsConnectorIdMaintenanceWindowQueryKey(connectorId);
-
-  const queryFn: QueryFunction<
-    Awaited<ReturnType<typeof deleteConnectorsConnectorIdMaintenanceWindow>>
-  > = ({ signal }) =>
-    deleteConnectorsConnectorIdMaintenanceWindow(connectorId, requestOptions, signal);
-
-  return {
-    queryKey,
-    queryFn,
-    enabled: connectorId !== null && connectorId !== undefined,
-    ...queryOptions,
-  } as UseQueryOptions<
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof deleteConnectorsConnectorIdMaintenanceWindow>>,
     TError,
-    TData
-  > & { queryKey: DataTag<QueryKey, TData, TError> };
+    DeleteConnectorsConnectorIdMaintenanceWindowMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteConnectorsConnectorIdMaintenanceWindow>>,
+  TError,
+  DeleteConnectorsConnectorIdMaintenanceWindowMutationVariables,
+  TContext
+> => {
+  const mutationKey = getDeleteConnectorsConnectorIdMaintenanceWindowMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteConnectorsConnectorIdMaintenanceWindow>>,
+    DeleteConnectorsConnectorIdMaintenanceWindowMutationVariables
+  > = (props) => {
+    const { connectorId } = props ?? {};
+
+    return deleteConnectorsConnectorIdMaintenanceWindow(connectorId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type DeleteConnectorsConnectorIdMaintenanceWindowQueryResult = NonNullable<
+export type DeleteConnectorsConnectorIdMaintenanceWindowMutationResult = NonNullable<
   Awaited<ReturnType<typeof deleteConnectorsConnectorIdMaintenanceWindow>>
 >;
-export type DeleteConnectorsConnectorIdMaintenanceWindowQueryError = ErrorType<unknown>;
 
-export function useDeleteConnectorsConnectorIdMaintenanceWindow<
-  TData = Awaited<ReturnType<typeof deleteConnectorsConnectorIdMaintenanceWindow>>,
-  TError = ErrorType<unknown>,
->(
-  connectorId: string,
-  options: {
-    query: Partial<
-      UseQueryOptions<
-        Awaited<ReturnType<typeof deleteConnectorsConnectorIdMaintenanceWindow>>,
-        TError,
-        TData
-      >
-    > &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof deleteConnectorsConnectorIdMaintenanceWindow>>,
-          TError,
-          Awaited<ReturnType<typeof deleteConnectorsConnectorIdMaintenanceWindow>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function useDeleteConnectorsConnectorIdMaintenanceWindow<
-  TData = Awaited<ReturnType<typeof deleteConnectorsConnectorIdMaintenanceWindow>>,
-  TError = ErrorType<unknown>,
->(
-  connectorId: string,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<
-        Awaited<ReturnType<typeof deleteConnectorsConnectorIdMaintenanceWindow>>,
-        TError,
-        TData
-      >
-    > &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof deleteConnectorsConnectorIdMaintenanceWindow>>,
-          TError,
-          Awaited<ReturnType<typeof deleteConnectorsConnectorIdMaintenanceWindow>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function useDeleteConnectorsConnectorIdMaintenanceWindow<
-  TData = Awaited<ReturnType<typeof deleteConnectorsConnectorIdMaintenanceWindow>>,
-  TError = ErrorType<unknown>,
->(
-  connectorId: string,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<
-        Awaited<ReturnType<typeof deleteConnectorsConnectorIdMaintenanceWindow>>,
-        TError,
-        TData
-      >
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export type DeleteConnectorsConnectorIdMaintenanceWindowMutationError = ErrorType<unknown>;
+export type DeleteConnectorsConnectorIdMaintenanceWindowMutationVariables = { connectorId: string };
+
 /**
  * @summary Close a connector's active maintenance window early (no-op if none)
  */
-
-export function useDeleteConnectorsConnectorIdMaintenanceWindow<
-  TData = Awaited<ReturnType<typeof deleteConnectorsConnectorIdMaintenanceWindow>>,
+export const useDeleteConnectorsConnectorIdMaintenanceWindow = <
   TError = ErrorType<unknown>,
+  TContext = unknown,
 >(
-  connectorId: string,
   options?: {
-    query?: Partial<
-      UseQueryOptions<
-        Awaited<ReturnType<typeof deleteConnectorsConnectorIdMaintenanceWindow>>,
-        TError,
-        TData
-      >
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof deleteConnectorsConnectorIdMaintenanceWindow>>,
+      TError,
+      DeleteConnectorsConnectorIdMaintenanceWindowMutationVariables,
+      TContext
     >;
     request?: SecondParameter<typeof customInstance>;
   },
   queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getDeleteConnectorsConnectorIdMaintenanceWindowQueryOptions(
-    connectorId,
-    options
+): UseMutationResult<
+  Awaited<ReturnType<typeof deleteConnectorsConnectorIdMaintenanceWindow>>,
+  TError,
+  DeleteConnectorsConnectorIdMaintenanceWindowMutationVariables,
+  TContext
+> => {
+  return useMutation(
+    getDeleteConnectorsConnectorIdMaintenanceWindowMutationOptions(options),
+    queryClient
   );
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
+};
 /**
  * @summary Get a connector's pinned golden snapshot, if any
  */
@@ -4565,170 +3524,86 @@ export const postConnectorsConnectorIdGoldenSnapshot = (
   );
 };
 
-export const getPostConnectorsConnectorIdGoldenSnapshotQueryKey = (
-  connectorId: string,
-  pinGoldenSnapshotRequest?: BodyType<PinGoldenSnapshotRequest>
-) => {
-  return ['POST', `/connectors/${connectorId}/golden-snapshot`, pinGoldenSnapshotRequest] as const;
-};
+export const getPostConnectorsConnectorIdGoldenSnapshotMutationKey = () =>
+  ['postConnectorsConnectorIdGoldenSnapshot'] as const;
 
-export const getPostConnectorsConnectorIdGoldenSnapshotQueryOptions = <
-  TData = Awaited<ReturnType<typeof postConnectorsConnectorIdGoldenSnapshot>>,
+export const getPostConnectorsConnectorIdGoldenSnapshotMutationOptions = <
   TError = ErrorType<BadRequestResponse | NotFoundResponse>,
->(
-  connectorId: string,
-  pinGoldenSnapshotRequest?: BodyType<PinGoldenSnapshotRequest>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<
-        Awaited<ReturnType<typeof postConnectorsConnectorIdGoldenSnapshot>>,
-        TError,
-        TData
-      >
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  }
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
-
-  const queryKey =
-    queryOptions?.queryKey ??
-    getPostConnectorsConnectorIdGoldenSnapshotQueryKey(connectorId, pinGoldenSnapshotRequest);
-
-  const queryFn: QueryFunction<
-    Awaited<ReturnType<typeof postConnectorsConnectorIdGoldenSnapshot>>
-  > = ({ signal }) =>
-    postConnectorsConnectorIdGoldenSnapshot(
-      connectorId,
-      pinGoldenSnapshotRequest,
-      requestOptions,
-      signal
-    );
-
-  return {
-    queryKey,
-    queryFn,
-    enabled: connectorId !== null && connectorId !== undefined,
-    ...queryOptions,
-  } as UseQueryOptions<
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof postConnectorsConnectorIdGoldenSnapshot>>,
     TError,
-    TData
-  > & { queryKey: DataTag<QueryKey, TData, TError> };
+    PostConnectorsConnectorIdGoldenSnapshotMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof postConnectorsConnectorIdGoldenSnapshot>>,
+  TError,
+  PostConnectorsConnectorIdGoldenSnapshotMutationVariables,
+  TContext
+> => {
+  const mutationKey = getPostConnectorsConnectorIdGoldenSnapshotMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof postConnectorsConnectorIdGoldenSnapshot>>,
+    PostConnectorsConnectorIdGoldenSnapshotMutationVariables
+  > = (props) => {
+    const { connectorId, data } = props ?? {};
+
+    return postConnectorsConnectorIdGoldenSnapshot(connectorId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type PostConnectorsConnectorIdGoldenSnapshotQueryResult = NonNullable<
+export type PostConnectorsConnectorIdGoldenSnapshotMutationResult = NonNullable<
   Awaited<ReturnType<typeof postConnectorsConnectorIdGoldenSnapshot>>
 >;
-export type PostConnectorsConnectorIdGoldenSnapshotQueryError = ErrorType<
+export type PostConnectorsConnectorIdGoldenSnapshotMutationBody =
+  BodyType<PinGoldenSnapshotRequest> | undefined;
+export type PostConnectorsConnectorIdGoldenSnapshotMutationError = ErrorType<
   BadRequestResponse | NotFoundResponse
 >;
+export type PostConnectorsConnectorIdGoldenSnapshotMutationVariables = {
+  connectorId: string;
+  data?: BodyType<PinGoldenSnapshotRequest>;
+};
 
-export function usePostConnectorsConnectorIdGoldenSnapshot<
-  TData = Awaited<ReturnType<typeof postConnectorsConnectorIdGoldenSnapshot>>,
-  TError = ErrorType<BadRequestResponse | NotFoundResponse>,
->(
-  connectorId: string,
-  pinGoldenSnapshotRequest: undefined | BodyType<PinGoldenSnapshotRequest>,
-  options: {
-    query: Partial<
-      UseQueryOptions<
-        Awaited<ReturnType<typeof postConnectorsConnectorIdGoldenSnapshot>>,
-        TError,
-        TData
-      >
-    > &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postConnectorsConnectorIdGoldenSnapshot>>,
-          TError,
-          Awaited<ReturnType<typeof postConnectorsConnectorIdGoldenSnapshot>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostConnectorsConnectorIdGoldenSnapshot<
-  TData = Awaited<ReturnType<typeof postConnectorsConnectorIdGoldenSnapshot>>,
-  TError = ErrorType<BadRequestResponse | NotFoundResponse>,
->(
-  connectorId: string,
-  pinGoldenSnapshotRequest?: BodyType<PinGoldenSnapshotRequest>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<
-        Awaited<ReturnType<typeof postConnectorsConnectorIdGoldenSnapshot>>,
-        TError,
-        TData
-      >
-    > &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postConnectorsConnectorIdGoldenSnapshot>>,
-          TError,
-          Awaited<ReturnType<typeof postConnectorsConnectorIdGoldenSnapshot>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostConnectorsConnectorIdGoldenSnapshot<
-  TData = Awaited<ReturnType<typeof postConnectorsConnectorIdGoldenSnapshot>>,
-  TError = ErrorType<BadRequestResponse | NotFoundResponse>,
->(
-  connectorId: string,
-  pinGoldenSnapshotRequest?: BodyType<PinGoldenSnapshotRequest>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<
-        Awaited<ReturnType<typeof postConnectorsConnectorIdGoldenSnapshot>>,
-        TError,
-        TData
-      >
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
  * @summary Pin a snapshot as the connector's golden configuration baseline
  */
-
-export function usePostConnectorsConnectorIdGoldenSnapshot<
-  TData = Awaited<ReturnType<typeof postConnectorsConnectorIdGoldenSnapshot>>,
+export const usePostConnectorsConnectorIdGoldenSnapshot = <
   TError = ErrorType<BadRequestResponse | NotFoundResponse>,
+  TContext = unknown,
 >(
-  connectorId: string,
-  pinGoldenSnapshotRequest?: BodyType<PinGoldenSnapshotRequest>,
   options?: {
-    query?: Partial<
-      UseQueryOptions<
-        Awaited<ReturnType<typeof postConnectorsConnectorIdGoldenSnapshot>>,
-        TError,
-        TData
-      >
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof postConnectorsConnectorIdGoldenSnapshot>>,
+      TError,
+      PostConnectorsConnectorIdGoldenSnapshotMutationVariables,
+      TContext
     >;
     request?: SecondParameter<typeof customInstance>;
   },
   queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getPostConnectorsConnectorIdGoldenSnapshotQueryOptions(
-    connectorId,
-    pinGoldenSnapshotRequest,
-    options
+): UseMutationResult<
+  Awaited<ReturnType<typeof postConnectorsConnectorIdGoldenSnapshot>>,
+  TError,
+  PostConnectorsConnectorIdGoldenSnapshotMutationVariables,
+  TContext
+> => {
+  return useMutation(
+    getPostConnectorsConnectorIdGoldenSnapshotMutationOptions(options),
+    queryClient
   );
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
+};
 /**
  * @summary Unpin a connector's golden snapshot (no-op if none)
  */
@@ -4743,153 +3618,80 @@ export const deleteConnectorsConnectorIdGoldenSnapshot = (
   );
 };
 
-export const getDeleteConnectorsConnectorIdGoldenSnapshotQueryKey = (connectorId: string) => {
-  return ['DELETE', `/connectors/${connectorId}/golden-snapshot`] as const;
-};
+export const getDeleteConnectorsConnectorIdGoldenSnapshotMutationKey = () =>
+  ['deleteConnectorsConnectorIdGoldenSnapshot'] as const;
 
-export const getDeleteConnectorsConnectorIdGoldenSnapshotQueryOptions = <
-  TData = Awaited<ReturnType<typeof deleteConnectorsConnectorIdGoldenSnapshot>>,
+export const getDeleteConnectorsConnectorIdGoldenSnapshotMutationOptions = <
   TError = ErrorType<unknown>,
->(
-  connectorId: string,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<
-        Awaited<ReturnType<typeof deleteConnectorsConnectorIdGoldenSnapshot>>,
-        TError,
-        TData
-      >
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  }
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
-
-  const queryKey =
-    queryOptions?.queryKey ?? getDeleteConnectorsConnectorIdGoldenSnapshotQueryKey(connectorId);
-
-  const queryFn: QueryFunction<
-    Awaited<ReturnType<typeof deleteConnectorsConnectorIdGoldenSnapshot>>
-  > = ({ signal }) =>
-    deleteConnectorsConnectorIdGoldenSnapshot(connectorId, requestOptions, signal);
-
-  return {
-    queryKey,
-    queryFn,
-    enabled: connectorId !== null && connectorId !== undefined,
-    ...queryOptions,
-  } as UseQueryOptions<
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof deleteConnectorsConnectorIdGoldenSnapshot>>,
     TError,
-    TData
-  > & { queryKey: DataTag<QueryKey, TData, TError> };
+    DeleteConnectorsConnectorIdGoldenSnapshotMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteConnectorsConnectorIdGoldenSnapshot>>,
+  TError,
+  DeleteConnectorsConnectorIdGoldenSnapshotMutationVariables,
+  TContext
+> => {
+  const mutationKey = getDeleteConnectorsConnectorIdGoldenSnapshotMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteConnectorsConnectorIdGoldenSnapshot>>,
+    DeleteConnectorsConnectorIdGoldenSnapshotMutationVariables
+  > = (props) => {
+    const { connectorId } = props ?? {};
+
+    return deleteConnectorsConnectorIdGoldenSnapshot(connectorId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type DeleteConnectorsConnectorIdGoldenSnapshotQueryResult = NonNullable<
+export type DeleteConnectorsConnectorIdGoldenSnapshotMutationResult = NonNullable<
   Awaited<ReturnType<typeof deleteConnectorsConnectorIdGoldenSnapshot>>
 >;
-export type DeleteConnectorsConnectorIdGoldenSnapshotQueryError = ErrorType<unknown>;
 
-export function useDeleteConnectorsConnectorIdGoldenSnapshot<
-  TData = Awaited<ReturnType<typeof deleteConnectorsConnectorIdGoldenSnapshot>>,
-  TError = ErrorType<unknown>,
->(
-  connectorId: string,
-  options: {
-    query: Partial<
-      UseQueryOptions<
-        Awaited<ReturnType<typeof deleteConnectorsConnectorIdGoldenSnapshot>>,
-        TError,
-        TData
-      >
-    > &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof deleteConnectorsConnectorIdGoldenSnapshot>>,
-          TError,
-          Awaited<ReturnType<typeof deleteConnectorsConnectorIdGoldenSnapshot>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function useDeleteConnectorsConnectorIdGoldenSnapshot<
-  TData = Awaited<ReturnType<typeof deleteConnectorsConnectorIdGoldenSnapshot>>,
-  TError = ErrorType<unknown>,
->(
-  connectorId: string,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<
-        Awaited<ReturnType<typeof deleteConnectorsConnectorIdGoldenSnapshot>>,
-        TError,
-        TData
-      >
-    > &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof deleteConnectorsConnectorIdGoldenSnapshot>>,
-          TError,
-          Awaited<ReturnType<typeof deleteConnectorsConnectorIdGoldenSnapshot>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function useDeleteConnectorsConnectorIdGoldenSnapshot<
-  TData = Awaited<ReturnType<typeof deleteConnectorsConnectorIdGoldenSnapshot>>,
-  TError = ErrorType<unknown>,
->(
-  connectorId: string,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<
-        Awaited<ReturnType<typeof deleteConnectorsConnectorIdGoldenSnapshot>>,
-        TError,
-        TData
-      >
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export type DeleteConnectorsConnectorIdGoldenSnapshotMutationError = ErrorType<unknown>;
+export type DeleteConnectorsConnectorIdGoldenSnapshotMutationVariables = { connectorId: string };
+
 /**
  * @summary Unpin a connector's golden snapshot (no-op if none)
  */
-
-export function useDeleteConnectorsConnectorIdGoldenSnapshot<
-  TData = Awaited<ReturnType<typeof deleteConnectorsConnectorIdGoldenSnapshot>>,
+export const useDeleteConnectorsConnectorIdGoldenSnapshot = <
   TError = ErrorType<unknown>,
+  TContext = unknown,
 >(
-  connectorId: string,
   options?: {
-    query?: Partial<
-      UseQueryOptions<
-        Awaited<ReturnType<typeof deleteConnectorsConnectorIdGoldenSnapshot>>,
-        TError,
-        TData
-      >
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof deleteConnectorsConnectorIdGoldenSnapshot>>,
+      TError,
+      DeleteConnectorsConnectorIdGoldenSnapshotMutationVariables,
+      TContext
     >;
     request?: SecondParameter<typeof customInstance>;
   },
   queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getDeleteConnectorsConnectorIdGoldenSnapshotQueryOptions(
-    connectorId,
-    options
+): UseMutationResult<
+  Awaited<ReturnType<typeof deleteConnectorsConnectorIdGoldenSnapshot>>,
+  TError,
+  DeleteConnectorsConnectorIdGoldenSnapshotMutationVariables,
+  TContext
+> => {
+  return useMutation(
+    getDeleteConnectorsConnectorIdGoldenSnapshotMutationOptions(options),
+    queryClient
   );
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
+};
 /**
  * Used by the services list badge to avoid an N+1 fetch per row.
  * @summary List every currently active maintenance window, across all connectors
@@ -5024,103 +3826,45 @@ export const postSync = (
   return customInstance<SyncJobRef>({ url: `/sync`, method: 'POST', signal }, options);
 };
 
-export const getPostSyncQueryKey = () => {
-  return ['POST', `/sync`] as const;
-};
+export const getPostSyncMutationKey = () => ['postSync'] as const;
 
-export const getPostSyncQueryOptions = <
-  TData = Awaited<ReturnType<typeof postSync>>,
+export const getPostSyncMutationOptions = <
   TError = ErrorType<unknown>,
+  TContext = unknown,
 >(options?: {
-  query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof postSync>>, TError, TData>>;
+  mutation?: UseMutationOptions<Awaited<ReturnType<typeof postSync>>, TError, void, TContext>;
   request?: SecondParameter<typeof customInstance>;
-}) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
+}): UseMutationOptions<Awaited<ReturnType<typeof postSync>>, TError, void, TContext> => {
+  const mutationKey = getPostSyncMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
 
-  const queryKey = queryOptions?.queryKey ?? getPostSyncQueryKey();
+  const mutationFn: MutationFunction<Awaited<ReturnType<typeof postSync>>, void> = () => {
+    return postSync(requestOptions);
+  };
 
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof postSync>>> = ({ signal }) =>
-    postSync(requestOptions, signal);
-
-  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
-    Awaited<ReturnType<typeof postSync>>,
-    TError,
-    TData
-  > & { queryKey: DataTag<QueryKey, TData, TError> };
+  return { mutationFn, ...mutationOptions };
 };
 
-export type PostSyncQueryResult = NonNullable<Awaited<ReturnType<typeof postSync>>>;
-export type PostSyncQueryError = ErrorType<unknown>;
+export type PostSyncMutationResult = NonNullable<Awaited<ReturnType<typeof postSync>>>;
 
-export function usePostSync<
-  TData = Awaited<ReturnType<typeof postSync>>,
-  TError = ErrorType<unknown>,
->(
-  options: {
-    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof postSync>>, TError, TData>> &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postSync>>,
-          TError,
-          Awaited<ReturnType<typeof postSync>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostSync<
-  TData = Awaited<ReturnType<typeof postSync>>,
-  TError = ErrorType<unknown>,
->(
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof postSync>>, TError, TData>> &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postSync>>,
-          TError,
-          Awaited<ReturnType<typeof postSync>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostSync<
-  TData = Awaited<ReturnType<typeof postSync>>,
-  TError = ErrorType<unknown>,
->(
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof postSync>>, TError, TData>>;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export type PostSyncMutationError = ErrorType<unknown>;
+
 /**
  * @summary Trigger a global sync of all connectors
  */
-
-export function usePostSync<
-  TData = Awaited<ReturnType<typeof postSync>>,
-  TError = ErrorType<unknown>,
->(
+export const usePostSync = <TError = ErrorType<unknown>, TContext = unknown>(
   options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof postSync>>, TError, TData>>;
+    mutation?: UseMutationOptions<Awaited<ReturnType<typeof postSync>>, TError, void, TContext>;
     request?: SecondParameter<typeof customInstance>;
   },
   queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getPostSyncQueryOptions(options);
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
+): UseMutationResult<Awaited<ReturnType<typeof postSync>>, TError, void, TContext> => {
+  return useMutation(getPostSyncMutationOptions(options), queryClient);
+};
 /**
  * One row per (user, source) pair — a user with both a manual grant and an OIDC group->connector-role sync can appear twice, once per `source` (#279 part 3). `source: "oidc"` rows are read-only: they're revoked by the user's IdP group membership at their next login, not by this API.
  * @summary List per-connector access grants (instance-admin only)
@@ -5304,187 +4048,87 @@ export const putConnectorsConnectorIdPermissionsUserId = (
   );
 };
 
-export const getPutConnectorsConnectorIdPermissionsUserIdQueryKey = (
-  connectorId: string,
-  userId: string,
-  putConnectorsConnectorIdPermissionsUserIdBody?: BodyType<PutConnectorsConnectorIdPermissionsUserIdBody>
-) => {
-  return [
-    'PUT',
-    `/connectors/${connectorId}/permissions/${userId}`,
-    putConnectorsConnectorIdPermissionsUserIdBody,
-  ] as const;
-};
+export const getPutConnectorsConnectorIdPermissionsUserIdMutationKey = () =>
+  ['putConnectorsConnectorIdPermissionsUserId'] as const;
 
-export const getPutConnectorsConnectorIdPermissionsUserIdQueryOptions = <
-  TData = Awaited<ReturnType<typeof putConnectorsConnectorIdPermissionsUserId>>,
+export const getPutConnectorsConnectorIdPermissionsUserIdMutationOptions = <
   TError = ErrorType<BadRequestResponse | ForbiddenResponse | NotFoundResponse>,
->(
-  connectorId: string,
-  userId: string,
-  putConnectorsConnectorIdPermissionsUserIdBody: BodyType<PutConnectorsConnectorIdPermissionsUserIdBody>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<
-        Awaited<ReturnType<typeof putConnectorsConnectorIdPermissionsUserId>>,
-        TError,
-        TData
-      >
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  }
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
-
-  const queryKey =
-    queryOptions?.queryKey ??
-    getPutConnectorsConnectorIdPermissionsUserIdQueryKey(
-      connectorId,
-      userId,
-      putConnectorsConnectorIdPermissionsUserIdBody
-    );
-
-  const queryFn: QueryFunction<
-    Awaited<ReturnType<typeof putConnectorsConnectorIdPermissionsUserId>>
-  > = ({ signal }) =>
-    putConnectorsConnectorIdPermissionsUserId(
-      connectorId,
-      userId,
-      putConnectorsConnectorIdPermissionsUserIdBody,
-      requestOptions,
-      signal
-    );
-
-  return {
-    queryKey,
-    queryFn,
-    enabled:
-      connectorId !== null && connectorId !== undefined && userId !== null && userId !== undefined,
-    ...queryOptions,
-  } as UseQueryOptions<
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof putConnectorsConnectorIdPermissionsUserId>>,
     TError,
-    TData
-  > & { queryKey: DataTag<QueryKey, TData, TError> };
+    PutConnectorsConnectorIdPermissionsUserIdMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof putConnectorsConnectorIdPermissionsUserId>>,
+  TError,
+  PutConnectorsConnectorIdPermissionsUserIdMutationVariables,
+  TContext
+> => {
+  const mutationKey = getPutConnectorsConnectorIdPermissionsUserIdMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof putConnectorsConnectorIdPermissionsUserId>>,
+    PutConnectorsConnectorIdPermissionsUserIdMutationVariables
+  > = (props) => {
+    const { connectorId, userId, data } = props ?? {};
+
+    return putConnectorsConnectorIdPermissionsUserId(connectorId, userId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type PutConnectorsConnectorIdPermissionsUserIdQueryResult = NonNullable<
+export type PutConnectorsConnectorIdPermissionsUserIdMutationResult = NonNullable<
   Awaited<ReturnType<typeof putConnectorsConnectorIdPermissionsUserId>>
 >;
-export type PutConnectorsConnectorIdPermissionsUserIdQueryError = ErrorType<
+export type PutConnectorsConnectorIdPermissionsUserIdMutationBody =
+  BodyType<PutConnectorsConnectorIdPermissionsUserIdBody>;
+export type PutConnectorsConnectorIdPermissionsUserIdMutationError = ErrorType<
   BadRequestResponse | ForbiddenResponse | NotFoundResponse
 >;
+export type PutConnectorsConnectorIdPermissionsUserIdMutationVariables = {
+  connectorId: string;
+  userId: string;
+  data: BodyType<PutConnectorsConnectorIdPermissionsUserIdBody>;
+};
 
-export function usePutConnectorsConnectorIdPermissionsUserId<
-  TData = Awaited<ReturnType<typeof putConnectorsConnectorIdPermissionsUserId>>,
-  TError = ErrorType<BadRequestResponse | ForbiddenResponse | NotFoundResponse>,
->(
-  connectorId: string,
-  userId: string,
-  putConnectorsConnectorIdPermissionsUserIdBody: BodyType<PutConnectorsConnectorIdPermissionsUserIdBody>,
-  options: {
-    query: Partial<
-      UseQueryOptions<
-        Awaited<ReturnType<typeof putConnectorsConnectorIdPermissionsUserId>>,
-        TError,
-        TData
-      >
-    > &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof putConnectorsConnectorIdPermissionsUserId>>,
-          TError,
-          Awaited<ReturnType<typeof putConnectorsConnectorIdPermissionsUserId>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePutConnectorsConnectorIdPermissionsUserId<
-  TData = Awaited<ReturnType<typeof putConnectorsConnectorIdPermissionsUserId>>,
-  TError = ErrorType<BadRequestResponse | ForbiddenResponse | NotFoundResponse>,
->(
-  connectorId: string,
-  userId: string,
-  putConnectorsConnectorIdPermissionsUserIdBody: BodyType<PutConnectorsConnectorIdPermissionsUserIdBody>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<
-        Awaited<ReturnType<typeof putConnectorsConnectorIdPermissionsUserId>>,
-        TError,
-        TData
-      >
-    > &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof putConnectorsConnectorIdPermissionsUserId>>,
-          TError,
-          Awaited<ReturnType<typeof putConnectorsConnectorIdPermissionsUserId>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePutConnectorsConnectorIdPermissionsUserId<
-  TData = Awaited<ReturnType<typeof putConnectorsConnectorIdPermissionsUserId>>,
-  TError = ErrorType<BadRequestResponse | ForbiddenResponse | NotFoundResponse>,
->(
-  connectorId: string,
-  userId: string,
-  putConnectorsConnectorIdPermissionsUserIdBody: BodyType<PutConnectorsConnectorIdPermissionsUserIdBody>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<
-        Awaited<ReturnType<typeof putConnectorsConnectorIdPermissionsUserId>>,
-        TError,
-        TData
-      >
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
  * @summary Grant or change a user's manual role on a connector (instance-admin only)
  */
-
-export function usePutConnectorsConnectorIdPermissionsUserId<
-  TData = Awaited<ReturnType<typeof putConnectorsConnectorIdPermissionsUserId>>,
+export const usePutConnectorsConnectorIdPermissionsUserId = <
   TError = ErrorType<BadRequestResponse | ForbiddenResponse | NotFoundResponse>,
+  TContext = unknown,
 >(
-  connectorId: string,
-  userId: string,
-  putConnectorsConnectorIdPermissionsUserIdBody: BodyType<PutConnectorsConnectorIdPermissionsUserIdBody>,
   options?: {
-    query?: Partial<
-      UseQueryOptions<
-        Awaited<ReturnType<typeof putConnectorsConnectorIdPermissionsUserId>>,
-        TError,
-        TData
-      >
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof putConnectorsConnectorIdPermissionsUserId>>,
+      TError,
+      PutConnectorsConnectorIdPermissionsUserIdMutationVariables,
+      TContext
     >;
     request?: SecondParameter<typeof customInstance>;
   },
   queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getPutConnectorsConnectorIdPermissionsUserIdQueryOptions(
-    connectorId,
-    userId,
-    putConnectorsConnectorIdPermissionsUserIdBody,
-    options
+): UseMutationResult<
+  Awaited<ReturnType<typeof putConnectorsConnectorIdPermissionsUserId>>,
+  TError,
+  PutConnectorsConnectorIdPermissionsUserIdMutationVariables,
+  TContext
+> => {
+  return useMutation(
+    getPutConnectorsConnectorIdPermissionsUserIdMutationOptions(options),
+    queryClient
   );
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
+};
 /**
  * Always acts on the `source: "manual"` grant; an `oidc` row synced for the same pair, if any, is untouched and still governs access until the user's next login (#279 part 3).
  * @summary Revoke a user's manual grant on a connector (instance-admin only)
@@ -5501,162 +4145,82 @@ export const deleteConnectorsConnectorIdPermissionsUserId = (
   );
 };
 
-export const getDeleteConnectorsConnectorIdPermissionsUserIdQueryKey = (
-  connectorId: string,
-  userId: string
-) => {
-  return ['DELETE', `/connectors/${connectorId}/permissions/${userId}`] as const;
-};
+export const getDeleteConnectorsConnectorIdPermissionsUserIdMutationKey = () =>
+  ['deleteConnectorsConnectorIdPermissionsUserId'] as const;
 
-export const getDeleteConnectorsConnectorIdPermissionsUserIdQueryOptions = <
-  TData = Awaited<ReturnType<typeof deleteConnectorsConnectorIdPermissionsUserId>>,
+export const getDeleteConnectorsConnectorIdPermissionsUserIdMutationOptions = <
   TError = ErrorType<ForbiddenResponse | NotFoundResponse>,
->(
-  connectorId: string,
-  userId: string,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<
-        Awaited<ReturnType<typeof deleteConnectorsConnectorIdPermissionsUserId>>,
-        TError,
-        TData
-      >
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  }
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
-
-  const queryKey =
-    queryOptions?.queryKey ??
-    getDeleteConnectorsConnectorIdPermissionsUserIdQueryKey(connectorId, userId);
-
-  const queryFn: QueryFunction<
-    Awaited<ReturnType<typeof deleteConnectorsConnectorIdPermissionsUserId>>
-  > = ({ signal }) =>
-    deleteConnectorsConnectorIdPermissionsUserId(connectorId, userId, requestOptions, signal);
-
-  return {
-    queryKey,
-    queryFn,
-    enabled:
-      connectorId !== null && connectorId !== undefined && userId !== null && userId !== undefined,
-    ...queryOptions,
-  } as UseQueryOptions<
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof deleteConnectorsConnectorIdPermissionsUserId>>,
     TError,
-    TData
-  > & { queryKey: DataTag<QueryKey, TData, TError> };
+    DeleteConnectorsConnectorIdPermissionsUserIdMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteConnectorsConnectorIdPermissionsUserId>>,
+  TError,
+  DeleteConnectorsConnectorIdPermissionsUserIdMutationVariables,
+  TContext
+> => {
+  const mutationKey = getDeleteConnectorsConnectorIdPermissionsUserIdMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteConnectorsConnectorIdPermissionsUserId>>,
+    DeleteConnectorsConnectorIdPermissionsUserIdMutationVariables
+  > = (props) => {
+    const { connectorId, userId } = props ?? {};
+
+    return deleteConnectorsConnectorIdPermissionsUserId(connectorId, userId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type DeleteConnectorsConnectorIdPermissionsUserIdQueryResult = NonNullable<
+export type DeleteConnectorsConnectorIdPermissionsUserIdMutationResult = NonNullable<
   Awaited<ReturnType<typeof deleteConnectorsConnectorIdPermissionsUserId>>
 >;
-export type DeleteConnectorsConnectorIdPermissionsUserIdQueryError = ErrorType<
+
+export type DeleteConnectorsConnectorIdPermissionsUserIdMutationError = ErrorType<
   ForbiddenResponse | NotFoundResponse
 >;
+export type DeleteConnectorsConnectorIdPermissionsUserIdMutationVariables = {
+  connectorId: string;
+  userId: string;
+};
 
-export function useDeleteConnectorsConnectorIdPermissionsUserId<
-  TData = Awaited<ReturnType<typeof deleteConnectorsConnectorIdPermissionsUserId>>,
-  TError = ErrorType<ForbiddenResponse | NotFoundResponse>,
->(
-  connectorId: string,
-  userId: string,
-  options: {
-    query: Partial<
-      UseQueryOptions<
-        Awaited<ReturnType<typeof deleteConnectorsConnectorIdPermissionsUserId>>,
-        TError,
-        TData
-      >
-    > &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof deleteConnectorsConnectorIdPermissionsUserId>>,
-          TError,
-          Awaited<ReturnType<typeof deleteConnectorsConnectorIdPermissionsUserId>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function useDeleteConnectorsConnectorIdPermissionsUserId<
-  TData = Awaited<ReturnType<typeof deleteConnectorsConnectorIdPermissionsUserId>>,
-  TError = ErrorType<ForbiddenResponse | NotFoundResponse>,
->(
-  connectorId: string,
-  userId: string,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<
-        Awaited<ReturnType<typeof deleteConnectorsConnectorIdPermissionsUserId>>,
-        TError,
-        TData
-      >
-    > &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof deleteConnectorsConnectorIdPermissionsUserId>>,
-          TError,
-          Awaited<ReturnType<typeof deleteConnectorsConnectorIdPermissionsUserId>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function useDeleteConnectorsConnectorIdPermissionsUserId<
-  TData = Awaited<ReturnType<typeof deleteConnectorsConnectorIdPermissionsUserId>>,
-  TError = ErrorType<ForbiddenResponse | NotFoundResponse>,
->(
-  connectorId: string,
-  userId: string,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<
-        Awaited<ReturnType<typeof deleteConnectorsConnectorIdPermissionsUserId>>,
-        TError,
-        TData
-      >
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
  * @summary Revoke a user's manual grant on a connector (instance-admin only)
  */
-
-export function useDeleteConnectorsConnectorIdPermissionsUserId<
-  TData = Awaited<ReturnType<typeof deleteConnectorsConnectorIdPermissionsUserId>>,
+export const useDeleteConnectorsConnectorIdPermissionsUserId = <
   TError = ErrorType<ForbiddenResponse | NotFoundResponse>,
+  TContext = unknown,
 >(
-  connectorId: string,
-  userId: string,
   options?: {
-    query?: Partial<
-      UseQueryOptions<
-        Awaited<ReturnType<typeof deleteConnectorsConnectorIdPermissionsUserId>>,
-        TError,
-        TData
-      >
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof deleteConnectorsConnectorIdPermissionsUserId>>,
+      TError,
+      DeleteConnectorsConnectorIdPermissionsUserIdMutationVariables,
+      TContext
     >;
     request?: SecondParameter<typeof customInstance>;
   },
   queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getDeleteConnectorsConnectorIdPermissionsUserIdQueryOptions(
-    connectorId,
-    userId,
-    options
+): UseMutationResult<
+  Awaited<ReturnType<typeof deleteConnectorsConnectorIdPermissionsUserId>>,
+  TError,
+  DeleteConnectorsConnectorIdPermissionsUserIdMutationVariables,
+  TContext
+> => {
+  return useMutation(
+    getDeleteConnectorsConnectorIdPermissionsUserIdMutationOptions(options),
+    queryClient
   );
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
+};

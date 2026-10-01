@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/WiseLabz/wiselabz/internal/connector"
+	"github.com/WiseLabz/wiselabz/internal/connector/snapshotutil"
 )
 
 // Portainer environment (endpoint) types, as returned in the "Type" field.
@@ -91,16 +92,6 @@ func (e environment) swarm() bool {
 	return len(e.Snapshots) > 0 && e.Snapshots[0].Swarm
 }
 
-// cell escapes a value for use inside a Markdown table cell; container
-// commands, image references and mountpoints can all contain '|'.
-func cell(s string) string {
-	if s == "" {
-		return "—"
-	}
-	s = strings.ReplaceAll(s, "\n", " ")
-	return strings.ReplaceAll(s, "|", `\|`)
-}
-
 // environmentTypeName maps Portainer's numeric environment type to a stable
 // string for attributes and tables.
 func environmentTypeName(t int) string {
@@ -182,8 +173,8 @@ func buildEnvironmentTable(envs []environment) (string, []connector.SnapshotEnti
 	for _, env := range envs {
 		typeName := environmentTypeName(env.Type)
 		_, _ = fmt.Fprintf(&b, "| %s | %s | %s | %s | %s | %t |\n",
-			cell(env.Name), typeName, statusName(env.Status), cell(env.URL),
-			cell(env.dockerVersion()), env.swarm())
+			snapshotutil.MDCell(env.Name), typeName, statusName(env.Status), snapshotutil.MDCell(env.URL),
+			snapshotutil.MDCell(env.dockerVersion()), env.swarm())
 
 		attrs := map[string]any{
 			"type":    typeName,
@@ -192,10 +183,10 @@ func buildEnvironmentTable(envs []environment) (string, []connector.SnapshotEnti
 			"swarm":   env.swarm(),
 			"groupId": env.GroupID,
 		}
-		putString(attrs, "url", env.URL)
-		putString(attrs, "publicUrl", env.PublicURL)
-		putString(attrs, "dockerVersion", env.dockerVersion())
-		putStrings(attrs, "tags", tagNames(env.TagIDs))
+		snapshotutil.PutString(attrs, "url", env.URL)
+		snapshotutil.PutString(attrs, "publicUrl", env.PublicURL)
+		snapshotutil.PutString(attrs, "dockerVersion", env.dockerVersion())
+		snapshotutil.PutStrings(attrs, "tags", tagNames(env.TagIDs))
 		entities = append(entities, connector.SnapshotEntity{
 			Kind:       "environment",
 			Name:       env.Name,
@@ -252,7 +243,7 @@ func buildStackTable(raw []byte, envNames map[int]string) (string, []connector.S
 		EntryPoint string `json:"EntryPoint"`
 	}
 	if err := json.Unmarshal(raw, &stacks); err != nil {
-		return malformed("Stacks", err), nil
+		return snapshotutil.MalformedSection("Stacks", err), nil
 	}
 	if len(stacks) == 0 {
 		return "_No stacks returned_", nil
@@ -268,14 +259,14 @@ func buildStackTable(raw []byte, envNames map[int]string) (string, []connector.S
 			envName = fmt.Sprintf("endpoint %d", s.EndpointID)
 		}
 		_, _ = fmt.Fprintf(&b, "| %s | %s | %s | %s | %s |\n",
-			cell(s.Name), cell(envName), stackTypeName(s.Type), stackStatusName(s.Status), cell(s.EntryPoint))
+			snapshotutil.MDCell(s.Name), snapshotutil.MDCell(envName), stackTypeName(s.Type), stackStatusName(s.Status), snapshotutil.MDCell(s.EntryPoint))
 
 		attrs := map[string]any{
 			"type":   stackTypeName(s.Type),
 			"status": stackStatusName(s.Status),
 		}
-		putString(attrs, "environment", envName)
-		putString(attrs, "entryPoint", s.EntryPoint)
+		snapshotutil.PutString(attrs, "environment", envName)
+		snapshotutil.PutString(attrs, "entryPoint", s.EntryPoint)
 		entities = append(entities, connector.SnapshotEntity{
 			Kind: "stack", Name: s.Name, ExternalID: fmt.Sprintf("%d", s.ID), Attributes: attrs,
 		})
@@ -326,15 +317,15 @@ func containerRows(envName string, raw []byte) (string, []connector.SnapshotEnti
 			ports = append(ports, fmt.Sprintf("%d:%d/%s", p.PublicPort, p.PrivatePort, p.Type))
 		}
 		_, _ = fmt.Fprintf(&b, "| %s | %s | %s | %s | %s | %s |\n",
-			cell(envName), cell(name), cell(c.Image), cell(c.State), cell(c.Status), cell(strings.Join(ports, ", ")))
+			snapshotutil.MDCell(envName), snapshotutil.MDCell(name), snapshotutil.MDCell(c.Image), snapshotutil.MDCell(c.State), snapshotutil.MDCell(c.Status), snapshotutil.MDCell(strings.Join(ports, ", ")))
 
 		attrs := map[string]any{}
-		putString(attrs, "image", c.Image)
-		putString(attrs, "state", c.State)
-		putString(attrs, "network_mode", c.HostConfig.NetworkMode)
-		putString(attrs, "environment", envName)
-		putString(attrs, "stack", c.Labels[composeProjectLabel])
-		putStrings(attrs, "published_ports", ports)
+		snapshotutil.PutString(attrs, "image", c.Image)
+		snapshotutil.PutString(attrs, "state", c.State)
+		snapshotutil.PutString(attrs, "network_mode", c.HostConfig.NetworkMode)
+		snapshotutil.PutString(attrs, "environment", envName)
+		snapshotutil.PutString(attrs, "stack", c.Labels[composeProjectLabel])
+		snapshotutil.PutStrings(attrs, "published_ports", ports)
 
 		ent := connector.SnapshotEntity{Kind: "container", Name: name, ExternalID: c.ID, Attributes: attrs}
 		for _, net := range c.NetworkSettings.Networks {
@@ -365,12 +356,12 @@ func volumeRows(envName string, raw []byte) (string, []connector.SnapshotEntity,
 	entities := make([]connector.SnapshotEntity, 0, len(resp.Volumes))
 	for _, v := range resp.Volumes {
 		_, _ = fmt.Fprintf(&b, "| %s | %s | %s | %s |\n",
-			cell(envName), cell(v.Name), cell(v.Driver), cell(v.Mountpoint))
+			snapshotutil.MDCell(envName), snapshotutil.MDCell(v.Name), snapshotutil.MDCell(v.Driver), snapshotutil.MDCell(v.Mountpoint))
 
 		attrs := map[string]any{}
-		putString(attrs, "driver", v.Driver)
-		putString(attrs, "mountpoint", v.Mountpoint)
-		putString(attrs, "environment", envName)
+		snapshotutil.PutString(attrs, "driver", v.Driver)
+		snapshotutil.PutString(attrs, "mountpoint", v.Mountpoint)
+		snapshotutil.PutString(attrs, "environment", envName)
 		entities = append(entities, connector.SnapshotEntity{
 			Kind: "volume", Name: v.Name, ExternalID: scopedID(envName, v.Name), Attributes: attrs,
 		})
@@ -395,12 +386,12 @@ func networkRows(envName string, raw []byte) (string, []connector.SnapshotEntity
 	entities := make([]connector.SnapshotEntity, 0, len(networks))
 	for _, n := range networks {
 		_, _ = fmt.Fprintf(&b, "| %s | %s | %s | %s | %t |\n",
-			cell(envName), cell(n.Name), cell(n.Driver), cell(n.Scope), n.Internal)
+			snapshotutil.MDCell(envName), snapshotutil.MDCell(n.Name), snapshotutil.MDCell(n.Driver), snapshotutil.MDCell(n.Scope), n.Internal)
 
 		attrs := map[string]any{"internal": n.Internal}
-		putString(attrs, "driver", n.Driver)
-		putString(attrs, "scope", n.Scope)
-		putString(attrs, "environment", envName)
+		snapshotutil.PutString(attrs, "driver", n.Driver)
+		snapshotutil.PutString(attrs, "scope", n.Scope)
+		snapshotutil.PutString(attrs, "environment", envName)
 		externalID := n.ID
 		if externalID == "" {
 			externalID = scopedID(envName, n.Name)
@@ -415,19 +406,3 @@ func networkRows(envName string, raw []byte) (string, []connector.SnapshotEntity
 // scopedID qualifies a resource name with its environment, since volume and
 // network names are only unique within one Docker engine.
 func scopedID(envName, name string) string { return envName + "/" + name }
-
-func malformed(title string, err error) string {
-	return "_" + title + " unavailable: " + connector.NewMalformedResponseError(err).Error() + "_"
-}
-
-func putString(attrs map[string]any, key, value string) {
-	if value != "" {
-		attrs[key] = value
-	}
-}
-
-func putStrings(attrs map[string]any, key string, values []string) {
-	if len(values) > 0 {
-		attrs[key] = values
-	}
-}

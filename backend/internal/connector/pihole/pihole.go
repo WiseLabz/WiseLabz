@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/WiseLabz/wiselabz/internal/connector"
+	"github.com/WiseLabz/wiselabz/internal/connector/snapshotutil"
 )
 
 const typeName = "pihole"
@@ -232,18 +233,10 @@ func (c *Connector) Fetch(ctx context.Context, _ map[string]any) (*connector.Ser
 	}, nil
 }
 
-// unavailable renders the standard "section could not be fetched" placeholder.
-func unavailable(title string, err error) connector.SnapshotSection {
-	return connector.SnapshotSection{
-		Title:   title,
-		Content: "_" + title + " unavailable: " + err.Error() + "_",
-	}
-}
-
 func (c *Connector) fetchHosts(ctx context.Context, s session) (connector.SnapshotSection, []connector.SnapshotEntity) {
 	raw, err := c.get(ctx, s, resourceHosts)
 	if err != nil {
-		return unavailable("Local DNS Records", err), nil
+		return snapshotutil.UnavailableSection("Local DNS Records", err), nil
 	}
 	content, entities := parseHosts(s.version, raw)
 	return connector.SnapshotSection{Title: "Local DNS Records", Content: content}, entities
@@ -262,7 +255,7 @@ func parseHosts(version string, raw []byte) (content string, entities []connecto
 func (c *Connector) fetchGroups(ctx context.Context, s session) ([]groupRow, connector.SnapshotSection, []connector.SnapshotEntity) {
 	raw, err := c.get(ctx, s, resourceGroups)
 	if err != nil {
-		return nil, unavailable("Groups", err), nil
+		return nil, snapshotutil.UnavailableSection("Groups", err), nil
 	}
 	var rows []groupRow
 	if s.version == version5 {
@@ -271,7 +264,7 @@ func (c *Connector) fetchGroups(ctx context.Context, s session) ([]groupRow, con
 		rows, err = parseGroupsV6(raw)
 	}
 	if err != nil {
-		return nil, unavailable("Groups", err), nil
+		return nil, snapshotutil.UnavailableSection("Groups", err), nil
 	}
 	content, entities := buildGroupTable(rows)
 	return rows, connector.SnapshotSection{Title: "Groups", Content: content}, entities
@@ -280,7 +273,7 @@ func (c *Connector) fetchGroups(ctx context.Context, s session) ([]groupRow, con
 func (c *Connector) fetchAdlists(ctx context.Context, s session, names map[int]string) (connector.SnapshotSection, []connector.SnapshotEntity) {
 	raw, err := c.get(ctx, s, resourceLists)
 	if err != nil {
-		return unavailable("Blocklists", err), nil
+		return snapshotutil.UnavailableSection("Blocklists", err), nil
 	}
 	var rows []adlistRow
 	if s.version == version5 {
@@ -289,7 +282,7 @@ func (c *Connector) fetchAdlists(ctx context.Context, s session, names map[int]s
 		rows, err = parseAdlistsV6(raw, names)
 	}
 	if err != nil {
-		return unavailable("Blocklists", err), nil
+		return snapshotutil.UnavailableSection("Blocklists", err), nil
 	}
 	content, entities := buildAdlistTable(rows)
 	return connector.SnapshotSection{Title: "Blocklists", Content: content}, entities
@@ -298,7 +291,7 @@ func (c *Connector) fetchAdlists(ctx context.Context, s session, names map[int]s
 func (c *Connector) fetchClients(ctx context.Context, s session, names map[int]string) (connector.SnapshotSection, []connector.SnapshotEntity) {
 	raw, err := c.get(ctx, s, resourceClients)
 	if err != nil {
-		return unavailable("Clients", err), nil
+		return snapshotutil.UnavailableSection("Clients", err), nil
 	}
 	var rows []clientRow
 	if s.version == version5 {
@@ -307,7 +300,7 @@ func (c *Connector) fetchClients(ctx context.Context, s session, names map[int]s
 		rows, err = parseClientsV6(raw, names)
 	}
 	if err != nil {
-		return unavailable("Clients", err), nil
+		return snapshotutil.UnavailableSection("Clients", err), nil
 	}
 	content, entities := buildClientTable(rows)
 	return connector.SnapshotSection{Title: "Clients", Content: content}, entities
@@ -316,7 +309,7 @@ func (c *Connector) fetchClients(ctx context.Context, s session, names map[int]s
 func (c *Connector) fetchDomains(ctx context.Context, s session, names map[int]string) (connector.SnapshotSection, []connector.SnapshotEntity) {
 	raw, err := c.get(ctx, s, resourceDomains)
 	if err != nil {
-		return unavailable("Domain Rules", err), nil
+		return snapshotutil.UnavailableSection("Domain Rules", err), nil
 	}
 	var rows []domainRow
 	if s.version == version5 {
@@ -325,7 +318,7 @@ func (c *Connector) fetchDomains(ctx context.Context, s session, names map[int]s
 		rows, err = parseDomainsV6(raw, names)
 	}
 	if err != nil {
-		return unavailable("Domain Rules", err), nil
+		return snapshotutil.UnavailableSection("Domain Rules", err), nil
 	}
 	content, entities := buildDomainTable(rows)
 	return connector.SnapshotSection{Title: "Domain Rules", Content: content}, entities
@@ -516,22 +509,7 @@ func (c *Connector) doRequest(ctx context.Context, sid, path string) ([]byte, er
 // send issues req and maps transport and HTTP status failures onto the
 // connector error taxonomy, reading the body under connector.ReadBody's cap.
 func (c *Connector) send(req *http.Request) ([]byte, error) {
-	resp, err := c.client.Do(req)
-	if err != nil {
-		return nil, connector.MapTransportError(err)
-	}
-	defer resp.Body.Close() //nolint:errcheck
-
-	data, err := connector.ReadBody(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("read response: %w", err)
-	}
-
-	if statusErr := connector.CheckStatus(resp.StatusCode, data); statusErr != nil {
-		return nil, statusErr
-	}
-
-	return data, nil
+	return connector.Do(c.client, req)
 }
 
 // buildHostsTable renders the Pi-hole local DNS "IP hostname" entries as a

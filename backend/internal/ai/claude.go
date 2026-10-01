@@ -5,11 +5,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"strings"
 
-	"github.com/WiseLabz/wiselabz/internal/connector"
+	"github.com/WiseLabz/wiselabz/internal/httpx"
 )
 
 // claudeProvider talks to Anthropic's Messages API.
@@ -82,8 +81,8 @@ func (p *claudeProvider) Suggest(ctx context.Context, req *SuggestRequest) (stri
 	defer resp.Body.Close() //nolint:errcheck
 
 	if resp.StatusCode >= 300 {
-		b, _ := io.ReadAll(io.LimitReader(resp.Body, connector.MaxResponseBytes))
-		return "", &StatusError{Code: resp.StatusCode, Body: strings.TrimSpace(string(b))}
+		body := httpx.ErrorBody(resp.Body)
+		return "", &StatusError{Code: resp.StatusCode, Body: body}
 	}
 
 	var out struct {
@@ -92,7 +91,7 @@ func (p *claudeProvider) Suggest(ctx context.Context, req *SuggestRequest) (stri
 			Text string `json:"text"`
 		} `json:"content"`
 	}
-	if err := json.NewDecoder(connector.LimitedBody(resp.Body)).Decode(&out); err != nil {
+	if err := json.NewDecoder(httpx.LimitedBody(resp.Body)).Decode(&out); err != nil {
 		return "", fmt.Errorf("decode ai response: %w", err)
 	}
 	if len(out.Content) == 0 {

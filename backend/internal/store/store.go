@@ -28,6 +28,7 @@ type DBTX interface {
 // and all repository implementations.
 type Store struct {
 	db                   DBTX
+	readDB               *sql.DB // optional read-only pool; nil on transaction stores
 	rawDB                *sql.DB
 	driver               string
 	userStatusMu         sync.Mutex
@@ -94,6 +95,19 @@ func New(db *sql.DB, driver string) *Store {
 	return &Store{db: db, rawDB: db, driver: driver}
 }
 
+// SetReadDB installs a read-only pool (see OpenReadDB) used by hot read paths.
+// The Store takes ownership and closes it in Close.
+func (s *Store) SetReadDB(db *sql.DB) { s.readDB = db }
+
+// reader returns the connection for read-only queries. Transaction stores
+// have no readDB, so reads inside a transaction see its own writes.
+func (s *Store) reader() DBTX {
+	if s.readDB != nil {
+		return s.readDB
+	}
+	return s.db
+}
+
 // WithinTransaction runs fn against a transaction-bound Store and commits only on success.
 func (s *Store) WithinTransaction(ctx context.Context, fn func(*Store) error) error {
 	var (
@@ -140,6 +154,9 @@ func (s *Store) RawDB() *sql.DB { return s.rawDB }
 
 // Close closes the database connection.
 func (s *Store) Close() error {
+	if s.readDB != nil {
+		_ = s.readDB.Close()
+	}
 	return s.db.Close()
 }
 

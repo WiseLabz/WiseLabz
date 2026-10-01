@@ -168,7 +168,8 @@ paths:
         Re-authenticates the current operator (password, or TOTP when configured)
         and mints a short-lived elevation token scoped to one destructive action
         (ARCHITECTURE.md 2026-06-27). The token is replayed in the `X-Elevation-Token`
-        header on the destructive request (e.g. connector removal). Only required
+        header on the destructive request (e.g. connector removal). It is bound to
+        the session that earned it and to `target`, and is spent by one request. Only required
         when `stepUpForDestructive` is enabled.
       requestBody:
         required: true
@@ -253,6 +254,7 @@ paths:
               required: [action]
               properties:
                 action: { type: string, description: "The elevation action being requested, e.g. connector.delete" }
+                target: { type: string, description: "ID of the resource the token is bound to, for actions on one (e.g. the user for user.delete)" }
       responses:
         '200':
           description: OK
@@ -308,7 +310,16 @@ paths:
     post:
       tags: [auth]
       summary: Create an API key for the current user
-      description: The opaque token is returned once and cannot be retrieved again.
+      description: >
+        The opaque token is returned once and cannot be retrieved again. When
+        `stepUpForDestructive` is enabled, requires an `X-Elevation-Token` for
+        action `apiKey.create`.
+      parameters:
+        - name: X-Elevation-Token
+          in: header
+          required: false
+          schema: { type: string }
+          description: Single-use elevation token from POST /auth/elevate for action `apiKey.create` (when step-up is on)
       requestBody:
         required: true
         content:
@@ -564,6 +575,15 @@ paths:
     post:
       tags: [users]
       summary: Create / invite a user (operator)
+      description: >
+        When `stepUpForDestructive` is enabled, requires an `X-Elevation-Token`
+        for action `user.create`.
+      parameters:
+        - name: X-Elevation-Token
+          in: header
+          required: false
+          schema: { type: string }
+          description: Single-use elevation token from POST /auth/elevate for action `user.create` (when step-up is on)
       requestBody:
         required: true
         content:
@@ -582,6 +602,15 @@ paths:
     patch:
       tags: [users]
       summary: Update a user's role or status (operator)
+      description: >
+        When `stepUpForDestructive` is enabled, requires an `X-Elevation-Token`
+        for action `user.update`, issued with this user's ID as `target`.
+      parameters:
+        - name: X-Elevation-Token
+          in: header
+          required: false
+          schema: { type: string }
+          description: Single-use elevation token from POST /auth/elevate for action `user.update` (when step-up is on)
       requestBody:
         required: true
         content:
@@ -2574,7 +2603,14 @@ paths:
       summary: Update mutable auth settings — operator (toggles + token TTLs only)
       description: >
         Cannot create/edit OIDC providers or touch any credential. Accepts only
-        local-login enablement and token lifetimes.
+        local-login enablement and token lifetimes. When `stepUpForDestructive`
+        is enabled, requires an `X-Elevation-Token` for action `authConfig.update`.
+      parameters:
+        - name: X-Elevation-Token
+          in: header
+          required: false
+          schema: { type: string }
+          description: Single-use elevation token from POST /auth/elevate for action `authConfig.update` (when step-up is on)
       requestBody:
         required: true
         content:
@@ -2593,9 +2629,16 @@ paths:
       summary: Enable/disable a file-defined OIDC provider — operator
       description: >
         The only per-provider mutation exposed. Persists an enable/disable flag in the
-        app DB; the provider definition itself stays in config/env.
+        app DB; the provider definition itself stays in config/env. When
+        `stepUpForDestructive` is enabled, requires an `X-Elevation-Token` for
+        action `authProvider.toggle`, issued with the provider ID as `target`.
       parameters:
         - { name: providerId, in: path, required: true, schema: { type: string } }
+        - name: X-Elevation-Token
+          in: header
+          required: false
+          schema: { type: string }
+          description: Single-use elevation token from POST /auth/elevate for action `authProvider.toggle` (when step-up is on)
       requestBody:
         required: true
         content:
@@ -4993,6 +5036,13 @@ components:
         action:
           type: string
           description: The elevation action being requested, e.g. "connector.delete", "user.delete"
+        target:
+          type: string
+          description: >-
+            ID of the resource the token is bound to, for actions on one (the user
+            for `user.delete`, `user.resetPassword`, `user.resetMfa`, `user.update`;
+            the provider for `authProvider.toggle`). The token is also bound to the
+            caller's session and is single-use.
         password: { type: string, format: password }
         totp: { type: string, description: 6-digit TOTP code when 2FA is configured }
         recoveryCode: { type: string, description: 'A single-use recovery code, used instead of totp' }

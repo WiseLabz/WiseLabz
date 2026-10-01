@@ -6,15 +6,18 @@
  *
  * OpenAPI spec version: 0.1.0
  */
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import type {
   DataTag,
   DefinedInitialDataOptions,
   DefinedUseQueryResult,
+  MutationFunction,
   QueryClient,
   QueryFunction,
   QueryKey,
   UndefinedInitialDataOptions,
+  UseMutationOptions,
+  UseMutationResult,
   UseQueryOptions,
   UseQueryResult,
 } from '@tanstack/react-query';
@@ -312,124 +315,76 @@ export const postFindingsFindingIdResolve = (
   );
 };
 
-export const getPostFindingsFindingIdResolveQueryKey = (findingId: string) => {
-  return ['POST', `/findings/${findingId}/resolve`] as const;
-};
+export const getPostFindingsFindingIdResolveMutationKey = () =>
+  ['postFindingsFindingIdResolve'] as const;
 
-export const getPostFindingsFindingIdResolveQueryOptions = <
-  TData = Awaited<ReturnType<typeof postFindingsFindingIdResolve>>,
+export const getPostFindingsFindingIdResolveMutationOptions = <
   TError = ErrorType<ForbiddenResponse | NotFoundResponse>,
->(
-  findingId: string,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postFindingsFindingIdResolve>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  }
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof postFindingsFindingIdResolve>>,
+    TError,
+    PostFindingsFindingIdResolveMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof postFindingsFindingIdResolve>>,
+  TError,
+  PostFindingsFindingIdResolveMutationVariables,
+  TContext
+> => {
+  const mutationKey = getPostFindingsFindingIdResolveMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
 
-  const queryKey = queryOptions?.queryKey ?? getPostFindingsFindingIdResolveQueryKey(findingId);
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof postFindingsFindingIdResolve>>,
+    PostFindingsFindingIdResolveMutationVariables
+  > = (props) => {
+    const { findingId } = props ?? {};
 
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof postFindingsFindingIdResolve>>> = ({
-    signal,
-  }) => postFindingsFindingIdResolve(findingId, requestOptions, signal);
-
-  return {
-    queryKey,
-    queryFn,
-    enabled: findingId !== null && findingId !== undefined,
-    ...queryOptions,
-  } as UseQueryOptions<Awaited<ReturnType<typeof postFindingsFindingIdResolve>>, TError, TData> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
+    return postFindingsFindingIdResolve(findingId, requestOptions);
   };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type PostFindingsFindingIdResolveQueryResult = NonNullable<
+export type PostFindingsFindingIdResolveMutationResult = NonNullable<
   Awaited<ReturnType<typeof postFindingsFindingIdResolve>>
 >;
-export type PostFindingsFindingIdResolveQueryError = ErrorType<
+
+export type PostFindingsFindingIdResolveMutationError = ErrorType<
   ForbiddenResponse | NotFoundResponse
 >;
+export type PostFindingsFindingIdResolveMutationVariables = { findingId: string };
 
-export function usePostFindingsFindingIdResolve<
-  TData = Awaited<ReturnType<typeof postFindingsFindingIdResolve>>,
-  TError = ErrorType<ForbiddenResponse | NotFoundResponse>,
->(
-  findingId: string,
-  options: {
-    query: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postFindingsFindingIdResolve>>, TError, TData>
-    > &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postFindingsFindingIdResolve>>,
-          TError,
-          Awaited<ReturnType<typeof postFindingsFindingIdResolve>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostFindingsFindingIdResolve<
-  TData = Awaited<ReturnType<typeof postFindingsFindingIdResolve>>,
-  TError = ErrorType<ForbiddenResponse | NotFoundResponse>,
->(
-  findingId: string,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postFindingsFindingIdResolve>>, TError, TData>
-    > &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postFindingsFindingIdResolve>>,
-          TError,
-          Awaited<ReturnType<typeof postFindingsFindingIdResolve>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostFindingsFindingIdResolve<
-  TData = Awaited<ReturnType<typeof postFindingsFindingIdResolve>>,
-  TError = ErrorType<ForbiddenResponse | NotFoundResponse>,
->(
-  findingId: string,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postFindingsFindingIdResolve>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
  * @summary Resolve a documentation quality finding (operator)
  */
-
-export function usePostFindingsFindingIdResolve<
-  TData = Awaited<ReturnType<typeof postFindingsFindingIdResolve>>,
+export const usePostFindingsFindingIdResolve = <
   TError = ErrorType<ForbiddenResponse | NotFoundResponse>,
+  TContext = unknown,
 >(
-  findingId: string,
   options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postFindingsFindingIdResolve>>, TError, TData>
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof postFindingsFindingIdResolve>>,
+      TError,
+      PostFindingsFindingIdResolveMutationVariables,
+      TContext
     >;
     request?: SecondParameter<typeof customInstance>;
   },
   queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getPostFindingsFindingIdResolveQueryOptions(findingId, options);
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
+): UseMutationResult<
+  Awaited<ReturnType<typeof postFindingsFindingIdResolve>>,
+  TError,
+  PostFindingsFindingIdResolveMutationVariables,
+  TContext
+> => {
+  return useMutation(getPostFindingsFindingIdResolveMutationOptions(options), queryClient);
+};

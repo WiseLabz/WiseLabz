@@ -165,6 +165,23 @@ func (s *Store) GetLatestSnapshot(ctx context.Context, connectorID string) (*Sna
 	return sn, nil
 }
 
+// GetLatestSnapshotID returns the ID of a connector's most recent snapshot
+// without loading its data.
+func (s *Store) GetLatestSnapshotID(ctx context.Context, connectorID string) (string, error) {
+	var id string
+	err := s.db.QueryRowContext(ctx, `
+		SELECT id FROM service_snapshots WHERE connector_id = ?
+		ORDER BY fetched_at DESC, id DESC LIMIT 1
+	`, connectorID).Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", ErrNotFound
+	}
+	if err != nil {
+		return "", fmt.Errorf("get latest snapshot id: %w", err)
+	}
+	return id, nil
+}
+
 // GetSnapshotsByConnector returns snapshots for a connector (newest first).
 func (s *Store) GetSnapshotsByConnector(ctx context.Context, connectorID string, limit int) ([]SnapshotRecord, error) {
 	rows, err := s.db.QueryContext(ctx, `

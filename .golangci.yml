@@ -15,9 +15,9 @@ linters:
     - funlen
   settings:
     funlen:
-      # Ratchet at the current maximum; tighten as #265/#266/#269 land.
-      lines: 240
-      statements: 118
+      # Ratchet; tighten further as oversized functions are split.
+      lines: 150
+      statements: 100
   exclusions:
     rules:
       - path: '_test\.go$'

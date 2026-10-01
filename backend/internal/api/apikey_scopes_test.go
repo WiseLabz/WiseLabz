@@ -13,7 +13,7 @@ import (
 // response.
 func createKey(t *testing.T, app *testApp, token string, body map[string]any) map[string]any {
 	t.Helper()
-	rec := app.req(t, http.MethodPost, "/api/auth/api-keys", body, token)
+	rec := app.reqElevated(t, http.MethodPost, "/api/auth/api-keys", body, token, "apiKey.create")
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create API key status = %d: %s", rec.Code, rec.Body)
 	}

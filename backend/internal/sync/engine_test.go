@@ -395,3 +395,38 @@ func TestRunSyncBatchRollbackAndRetry(t *testing.T) {
 		}
 	}
 }
+
+// TestRunSync_SkipsUnchangedSnapshot verifies a sync whose content matches the
+// latest snapshot (ignoring fetch time) stores no new snapshot.
+func TestRunSync_SkipsUnchangedSnapshot(t *testing.T) {
+	fc := &fakeConnector{snapshot: &connector.ServiceSnapshot{ServiceName: "svc", FetchedAt: time.Now()}}
+	connector.Register(
+		connector.TypeSchema{Type: "sync_test_fake_unchanged", Category: "test", Name: "Fake Unchanged"},
+		func(_ map[string]any) (connector.Connector, error) { return fc, nil },
+	)
+	s := newTestStore(t)
+	ctx := context.Background()
+	rec := &store.ConnectorRecord{Name: "svc", Category: "networking", Type: "sync_test_fake_unchanged", Enabled: true}
+	if err := s.CreateConnector(ctx, rec); err != nil {
+		t.Fatal(err)
+	}
+	e := NewEngine(s, nil, nil, nil, "")
+	if _, err := e.RunSync(ctx, rec.ID, "first"); err != nil {
+		t.Fatal(err)
+	}
+	fc.snapshot = &connector.ServiceSnapshot{ServiceName: "svc", FetchedAt: time.Now().Add(time.Minute)}
+	if _, err := e.RunSync(ctx, rec.ID, "second"); err != nil {
+		t.Fatal(err)
+	}
+	n, err := s.CountSnapshotsByConnector(ctx, rec.ID)
+	if err != nil || n != 1 {
+		t.Fatalf("snapshots = %d, err = %v; want 1", n, err)
+	}
+	fc.snapshot = &connector.ServiceSnapshot{ServiceName: "svc2", FetchedAt: time.Now().Add(2 * time.Minute)}
+	if _, err := e.RunSync(ctx, rec.ID, "third"); err != nil {
+		t.Fatal(err)
+	}
+	if n, _ = s.CountSnapshotsByConnector(ctx, rec.ID); n != 2 {
+		t.Fatalf("snapshots after change = %d; want 2", n)
+	}
+}

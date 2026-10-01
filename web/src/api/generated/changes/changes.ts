@@ -6,15 +6,18 @@
  *
  * OpenAPI spec version: 0.1.0
  */
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import type {
   DataTag,
   DefinedInitialDataOptions,
   DefinedUseQueryResult,
+  MutationFunction,
   QueryClient,
   QueryFunction,
   QueryKey,
   UndefinedInitialDataOptions,
+  UseMutationOptions,
+  UseMutationResult,
   UseQueryOptions,
   UseQueryResult,
 } from '@tanstack/react-query';
@@ -305,125 +308,73 @@ export const postChangesChangeIdAck = (
   );
 };
 
-export const getPostChangesChangeIdAckQueryKey = (changeId: string) => {
-  return ['POST', `/changes/${changeId}/ack`] as const;
-};
+export const getPostChangesChangeIdAckMutationKey = () => ['postChangesChangeIdAck'] as const;
 
-export const getPostChangesChangeIdAckQueryOptions = <
-  TData = Awaited<ReturnType<typeof postChangesChangeIdAck>>,
+export const getPostChangesChangeIdAckMutationOptions = <
   TError = ErrorType<unknown>,
->(
-  changeId: string,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postChangesChangeIdAck>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  }
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof postChangesChangeIdAck>>,
+    TError,
+    PostChangesChangeIdAckMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof postChangesChangeIdAck>>,
+  TError,
+  PostChangesChangeIdAckMutationVariables,
+  TContext
+> => {
+  const mutationKey = getPostChangesChangeIdAckMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
 
-  const queryKey = queryOptions?.queryKey ?? getPostChangesChangeIdAckQueryKey(changeId);
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof postChangesChangeIdAck>>,
+    PostChangesChangeIdAckMutationVariables
+  > = (props) => {
+    const { changeId } = props ?? {};
 
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof postChangesChangeIdAck>>> = ({ signal }) =>
-    postChangesChangeIdAck(changeId, requestOptions, signal);
-
-  return {
-    queryKey,
-    queryFn,
-    enabled: changeId !== null && changeId !== undefined,
-    ...queryOptions,
-  } as UseQueryOptions<Awaited<ReturnType<typeof postChangesChangeIdAck>>, TError, TData> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
+    return postChangesChangeIdAck(changeId, requestOptions);
   };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type PostChangesChangeIdAckQueryResult = NonNullable<
+export type PostChangesChangeIdAckMutationResult = NonNullable<
   Awaited<ReturnType<typeof postChangesChangeIdAck>>
 >;
-export type PostChangesChangeIdAckQueryError = ErrorType<unknown>;
 
-export function usePostChangesChangeIdAck<
-  TData = Awaited<ReturnType<typeof postChangesChangeIdAck>>,
-  TError = ErrorType<unknown>,
->(
-  changeId: string,
-  options: {
-    query: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postChangesChangeIdAck>>, TError, TData>
-    > &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postChangesChangeIdAck>>,
-          TError,
-          Awaited<ReturnType<typeof postChangesChangeIdAck>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostChangesChangeIdAck<
-  TData = Awaited<ReturnType<typeof postChangesChangeIdAck>>,
-  TError = ErrorType<unknown>,
->(
-  changeId: string,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postChangesChangeIdAck>>, TError, TData>
-    > &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postChangesChangeIdAck>>,
-          TError,
-          Awaited<ReturnType<typeof postChangesChangeIdAck>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostChangesChangeIdAck<
-  TData = Awaited<ReturnType<typeof postChangesChangeIdAck>>,
-  TError = ErrorType<unknown>,
->(
-  changeId: string,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postChangesChangeIdAck>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export type PostChangesChangeIdAckMutationError = ErrorType<unknown>;
+export type PostChangesChangeIdAckMutationVariables = { changeId: string };
+
 /**
  * @summary Acknowledge a change
  */
-
-export function usePostChangesChangeIdAck<
-  TData = Awaited<ReturnType<typeof postChangesChangeIdAck>>,
-  TError = ErrorType<unknown>,
->(
-  changeId: string,
+export const usePostChangesChangeIdAck = <TError = ErrorType<unknown>, TContext = unknown>(
   options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postChangesChangeIdAck>>, TError, TData>
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof postChangesChangeIdAck>>,
+      TError,
+      PostChangesChangeIdAckMutationVariables,
+      TContext
     >;
     request?: SecondParameter<typeof customInstance>;
   },
   queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getPostChangesChangeIdAckQueryOptions(changeId, options);
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
+): UseMutationResult<
+  Awaited<ReturnType<typeof postChangesChangeIdAck>>,
+  TError,
+  PostChangesChangeIdAckMutationVariables,
+  TContext
+> => {
+  return useMutation(getPostChangesChangeIdAckMutationOptions(options), queryClient);
+};
 /**
  * @summary Dismiss a change
  */
@@ -438,126 +389,74 @@ export const postChangesChangeIdDismiss = (
   );
 };
 
-export const getPostChangesChangeIdDismissQueryKey = (changeId: string) => {
-  return ['POST', `/changes/${changeId}/dismiss`] as const;
-};
+export const getPostChangesChangeIdDismissMutationKey = () =>
+  ['postChangesChangeIdDismiss'] as const;
 
-export const getPostChangesChangeIdDismissQueryOptions = <
-  TData = Awaited<ReturnType<typeof postChangesChangeIdDismiss>>,
+export const getPostChangesChangeIdDismissMutationOptions = <
   TError = ErrorType<unknown>,
->(
-  changeId: string,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postChangesChangeIdDismiss>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  }
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof postChangesChangeIdDismiss>>,
+    TError,
+    PostChangesChangeIdDismissMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof postChangesChangeIdDismiss>>,
+  TError,
+  PostChangesChangeIdDismissMutationVariables,
+  TContext
+> => {
+  const mutationKey = getPostChangesChangeIdDismissMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
 
-  const queryKey = queryOptions?.queryKey ?? getPostChangesChangeIdDismissQueryKey(changeId);
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof postChangesChangeIdDismiss>>,
+    PostChangesChangeIdDismissMutationVariables
+  > = (props) => {
+    const { changeId } = props ?? {};
 
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof postChangesChangeIdDismiss>>> = ({
-    signal,
-  }) => postChangesChangeIdDismiss(changeId, requestOptions, signal);
-
-  return {
-    queryKey,
-    queryFn,
-    enabled: changeId !== null && changeId !== undefined,
-    ...queryOptions,
-  } as UseQueryOptions<Awaited<ReturnType<typeof postChangesChangeIdDismiss>>, TError, TData> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
+    return postChangesChangeIdDismiss(changeId, requestOptions);
   };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type PostChangesChangeIdDismissQueryResult = NonNullable<
+export type PostChangesChangeIdDismissMutationResult = NonNullable<
   Awaited<ReturnType<typeof postChangesChangeIdDismiss>>
 >;
-export type PostChangesChangeIdDismissQueryError = ErrorType<unknown>;
 
-export function usePostChangesChangeIdDismiss<
-  TData = Awaited<ReturnType<typeof postChangesChangeIdDismiss>>,
-  TError = ErrorType<unknown>,
->(
-  changeId: string,
-  options: {
-    query: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postChangesChangeIdDismiss>>, TError, TData>
-    > &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postChangesChangeIdDismiss>>,
-          TError,
-          Awaited<ReturnType<typeof postChangesChangeIdDismiss>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostChangesChangeIdDismiss<
-  TData = Awaited<ReturnType<typeof postChangesChangeIdDismiss>>,
-  TError = ErrorType<unknown>,
->(
-  changeId: string,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postChangesChangeIdDismiss>>, TError, TData>
-    > &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postChangesChangeIdDismiss>>,
-          TError,
-          Awaited<ReturnType<typeof postChangesChangeIdDismiss>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostChangesChangeIdDismiss<
-  TData = Awaited<ReturnType<typeof postChangesChangeIdDismiss>>,
-  TError = ErrorType<unknown>,
->(
-  changeId: string,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postChangesChangeIdDismiss>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export type PostChangesChangeIdDismissMutationError = ErrorType<unknown>;
+export type PostChangesChangeIdDismissMutationVariables = { changeId: string };
+
 /**
  * @summary Dismiss a change
  */
-
-export function usePostChangesChangeIdDismiss<
-  TData = Awaited<ReturnType<typeof postChangesChangeIdDismiss>>,
-  TError = ErrorType<unknown>,
->(
-  changeId: string,
+export const usePostChangesChangeIdDismiss = <TError = ErrorType<unknown>, TContext = unknown>(
   options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postChangesChangeIdDismiss>>, TError, TData>
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof postChangesChangeIdDismiss>>,
+      TError,
+      PostChangesChangeIdDismissMutationVariables,
+      TContext
     >;
     request?: SecondParameter<typeof customInstance>;
   },
   queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getPostChangesChangeIdDismissQueryOptions(changeId, options);
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
+): UseMutationResult<
+  Awaited<ReturnType<typeof postChangesChangeIdDismiss>>,
+  TError,
+  PostChangesChangeIdDismissMutationVariables,
+  TContext
+> => {
+  return useMutation(getPostChangesChangeIdDismissMutationOptions(options), queryClient);
+};
 /**
  * Bulk review action for low-risk changes (issue #27). The caller must supply an explicit list of change IDs — there is no "all matching the current filter" option, by design. "Low-risk" is enforced server-side as severity != critical; the client's selection is never trusted. Each ID is independently verified (exists, not critical) and resolved on its own — one bad ID never aborts the batch. The response reports a per-item outcome, and one audit record is written per successfully-resolved item.
  * @summary Acknowledge or dismiss an explicit list of changes in one request
@@ -579,124 +478,76 @@ export const postChangesBulkResolve = (
   );
 };
 
-export const getPostChangesBulkResolveQueryKey = (
-  bulkResolveRequest?: BodyType<BulkResolveRequest>
-) => {
-  return ['POST', `/changes/bulk-resolve`, bulkResolveRequest] as const;
-};
+export const getPostChangesBulkResolveMutationKey = () => ['postChangesBulkResolve'] as const;
 
-export const getPostChangesBulkResolveQueryOptions = <
-  TData = Awaited<ReturnType<typeof postChangesBulkResolve>>,
+export const getPostChangesBulkResolveMutationOptions = <
   TError = ErrorType<BadRequestResponse>,
->(
-  bulkResolveRequest: BodyType<BulkResolveRequest>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postChangesBulkResolve>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  }
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
-
-  const queryKey = queryOptions?.queryKey ?? getPostChangesBulkResolveQueryKey(bulkResolveRequest);
-
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof postChangesBulkResolve>>> = ({ signal }) =>
-    postChangesBulkResolve(bulkResolveRequest, requestOptions, signal);
-
-  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof postChangesBulkResolve>>,
     TError,
-    TData
-  > & { queryKey: DataTag<QueryKey, TData, TError> };
+    PostChangesBulkResolveMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof postChangesBulkResolve>>,
+  TError,
+  PostChangesBulkResolveMutationVariables,
+  TContext
+> => {
+  const mutationKey = getPostChangesBulkResolveMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof postChangesBulkResolve>>,
+    PostChangesBulkResolveMutationVariables
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return postChangesBulkResolve(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type PostChangesBulkResolveQueryResult = NonNullable<
+export type PostChangesBulkResolveMutationResult = NonNullable<
   Awaited<ReturnType<typeof postChangesBulkResolve>>
 >;
-export type PostChangesBulkResolveQueryError = ErrorType<BadRequestResponse>;
+export type PostChangesBulkResolveMutationBody = BodyType<BulkResolveRequest>;
+export type PostChangesBulkResolveMutationError = ErrorType<BadRequestResponse>;
+export type PostChangesBulkResolveMutationVariables = { data: BodyType<BulkResolveRequest> };
 
-export function usePostChangesBulkResolve<
-  TData = Awaited<ReturnType<typeof postChangesBulkResolve>>,
-  TError = ErrorType<BadRequestResponse>,
->(
-  bulkResolveRequest: BodyType<BulkResolveRequest>,
-  options: {
-    query: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postChangesBulkResolve>>, TError, TData>
-    > &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postChangesBulkResolve>>,
-          TError,
-          Awaited<ReturnType<typeof postChangesBulkResolve>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostChangesBulkResolve<
-  TData = Awaited<ReturnType<typeof postChangesBulkResolve>>,
-  TError = ErrorType<BadRequestResponse>,
->(
-  bulkResolveRequest: BodyType<BulkResolveRequest>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postChangesBulkResolve>>, TError, TData>
-    > &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postChangesBulkResolve>>,
-          TError,
-          Awaited<ReturnType<typeof postChangesBulkResolve>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostChangesBulkResolve<
-  TData = Awaited<ReturnType<typeof postChangesBulkResolve>>,
-  TError = ErrorType<BadRequestResponse>,
->(
-  bulkResolveRequest: BodyType<BulkResolveRequest>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postChangesBulkResolve>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
  * @summary Acknowledge or dismiss an explicit list of changes in one request
  */
-
-export function usePostChangesBulkResolve<
-  TData = Awaited<ReturnType<typeof postChangesBulkResolve>>,
+export const usePostChangesBulkResolve = <
   TError = ErrorType<BadRequestResponse>,
+  TContext = unknown,
 >(
-  bulkResolveRequest: BodyType<BulkResolveRequest>,
   options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postChangesBulkResolve>>, TError, TData>
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof postChangesBulkResolve>>,
+      TError,
+      PostChangesBulkResolveMutationVariables,
+      TContext
     >;
     request?: SecondParameter<typeof customInstance>;
   },
   queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getPostChangesBulkResolveQueryOptions(bulkResolveRequest, options);
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
+): UseMutationResult<
+  Awaited<ReturnType<typeof postChangesBulkResolve>>,
+  TError,
+  PostChangesBulkResolveMutationVariables,
+  TContext
+> => {
+  return useMutation(getPostChangesBulkResolveMutationOptions(options), queryClient);
+};
 /**
  * @summary Trigger an AI doc update for this change (AI module must be enabled)
  */
@@ -711,126 +562,74 @@ export const postChangesChangeIdAiUpdate = (
   );
 };
 
-export const getPostChangesChangeIdAiUpdateQueryKey = (changeId: string) => {
-  return ['POST', `/changes/${changeId}/ai-update`] as const;
-};
+export const getPostChangesChangeIdAiUpdateMutationKey = () =>
+  ['postChangesChangeIdAiUpdate'] as const;
 
-export const getPostChangesChangeIdAiUpdateQueryOptions = <
-  TData = Awaited<ReturnType<typeof postChangesChangeIdAiUpdate>>,
+export const getPostChangesChangeIdAiUpdateMutationOptions = <
   TError = ErrorType<Error>,
->(
-  changeId: string,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postChangesChangeIdAiUpdate>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  }
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof postChangesChangeIdAiUpdate>>,
+    TError,
+    PostChangesChangeIdAiUpdateMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof postChangesChangeIdAiUpdate>>,
+  TError,
+  PostChangesChangeIdAiUpdateMutationVariables,
+  TContext
+> => {
+  const mutationKey = getPostChangesChangeIdAiUpdateMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
 
-  const queryKey = queryOptions?.queryKey ?? getPostChangesChangeIdAiUpdateQueryKey(changeId);
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof postChangesChangeIdAiUpdate>>,
+    PostChangesChangeIdAiUpdateMutationVariables
+  > = (props) => {
+    const { changeId } = props ?? {};
 
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof postChangesChangeIdAiUpdate>>> = ({
-    signal,
-  }) => postChangesChangeIdAiUpdate(changeId, requestOptions, signal);
-
-  return {
-    queryKey,
-    queryFn,
-    enabled: changeId !== null && changeId !== undefined,
-    ...queryOptions,
-  } as UseQueryOptions<Awaited<ReturnType<typeof postChangesChangeIdAiUpdate>>, TError, TData> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
+    return postChangesChangeIdAiUpdate(changeId, requestOptions);
   };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type PostChangesChangeIdAiUpdateQueryResult = NonNullable<
+export type PostChangesChangeIdAiUpdateMutationResult = NonNullable<
   Awaited<ReturnType<typeof postChangesChangeIdAiUpdate>>
 >;
-export type PostChangesChangeIdAiUpdateQueryError = ErrorType<Error>;
 
-export function usePostChangesChangeIdAiUpdate<
-  TData = Awaited<ReturnType<typeof postChangesChangeIdAiUpdate>>,
-  TError = ErrorType<Error>,
->(
-  changeId: string,
-  options: {
-    query: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postChangesChangeIdAiUpdate>>, TError, TData>
-    > &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postChangesChangeIdAiUpdate>>,
-          TError,
-          Awaited<ReturnType<typeof postChangesChangeIdAiUpdate>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostChangesChangeIdAiUpdate<
-  TData = Awaited<ReturnType<typeof postChangesChangeIdAiUpdate>>,
-  TError = ErrorType<Error>,
->(
-  changeId: string,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postChangesChangeIdAiUpdate>>, TError, TData>
-    > &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postChangesChangeIdAiUpdate>>,
-          TError,
-          Awaited<ReturnType<typeof postChangesChangeIdAiUpdate>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostChangesChangeIdAiUpdate<
-  TData = Awaited<ReturnType<typeof postChangesChangeIdAiUpdate>>,
-  TError = ErrorType<Error>,
->(
-  changeId: string,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postChangesChangeIdAiUpdate>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export type PostChangesChangeIdAiUpdateMutationError = ErrorType<Error>;
+export type PostChangesChangeIdAiUpdateMutationVariables = { changeId: string };
+
 /**
  * @summary Trigger an AI doc update for this change (AI module must be enabled)
  */
-
-export function usePostChangesChangeIdAiUpdate<
-  TData = Awaited<ReturnType<typeof postChangesChangeIdAiUpdate>>,
-  TError = ErrorType<Error>,
->(
-  changeId: string,
+export const usePostChangesChangeIdAiUpdate = <TError = ErrorType<Error>, TContext = unknown>(
   options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postChangesChangeIdAiUpdate>>, TError, TData>
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof postChangesChangeIdAiUpdate>>,
+      TError,
+      PostChangesChangeIdAiUpdateMutationVariables,
+      TContext
     >;
     request?: SecondParameter<typeof customInstance>;
   },
   queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getPostChangesChangeIdAiUpdateQueryOptions(changeId, options);
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
+): UseMutationResult<
+  Awaited<ReturnType<typeof postChangesChangeIdAiUpdate>>,
+  TError,
+  PostChangesChangeIdAiUpdateMutationVariables,
+  TContext
+> => {
+  return useMutation(getPostChangesChangeIdAiUpdateMutationOptions(options), queryClient);
+};
 /**
  * On-demand narration of why this change matters, separate from the AI doc-update suggestion. The first call generates and persists the narration on the change record; subsequent calls return the cached text without re-invoking the AI provider.
  * @summary Generate (or return the cached) plain-English narration for a change
@@ -846,122 +645,74 @@ export const postChangesChangeIdExplain = (
   );
 };
 
-export const getPostChangesChangeIdExplainQueryKey = (changeId: string) => {
-  return ['POST', `/changes/${changeId}/explain`] as const;
-};
+export const getPostChangesChangeIdExplainMutationKey = () =>
+  ['postChangesChangeIdExplain'] as const;
 
-export const getPostChangesChangeIdExplainQueryOptions = <
-  TData = Awaited<ReturnType<typeof postChangesChangeIdExplain>>,
+export const getPostChangesChangeIdExplainMutationOptions = <
   TError = ErrorType<NotFoundResponse | Error>,
->(
-  changeId: string,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postChangesChangeIdExplain>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  }
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof postChangesChangeIdExplain>>,
+    TError,
+    PostChangesChangeIdExplainMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof postChangesChangeIdExplain>>,
+  TError,
+  PostChangesChangeIdExplainMutationVariables,
+  TContext
+> => {
+  const mutationKey = getPostChangesChangeIdExplainMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
 
-  const queryKey = queryOptions?.queryKey ?? getPostChangesChangeIdExplainQueryKey(changeId);
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof postChangesChangeIdExplain>>,
+    PostChangesChangeIdExplainMutationVariables
+  > = (props) => {
+    const { changeId } = props ?? {};
 
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof postChangesChangeIdExplain>>> = ({
-    signal,
-  }) => postChangesChangeIdExplain(changeId, requestOptions, signal);
-
-  return {
-    queryKey,
-    queryFn,
-    enabled: changeId !== null && changeId !== undefined,
-    ...queryOptions,
-  } as UseQueryOptions<Awaited<ReturnType<typeof postChangesChangeIdExplain>>, TError, TData> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
+    return postChangesChangeIdExplain(changeId, requestOptions);
   };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type PostChangesChangeIdExplainQueryResult = NonNullable<
+export type PostChangesChangeIdExplainMutationResult = NonNullable<
   Awaited<ReturnType<typeof postChangesChangeIdExplain>>
 >;
-export type PostChangesChangeIdExplainQueryError = ErrorType<NotFoundResponse | Error>;
 
-export function usePostChangesChangeIdExplain<
-  TData = Awaited<ReturnType<typeof postChangesChangeIdExplain>>,
-  TError = ErrorType<NotFoundResponse | Error>,
->(
-  changeId: string,
-  options: {
-    query: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postChangesChangeIdExplain>>, TError, TData>
-    > &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postChangesChangeIdExplain>>,
-          TError,
-          Awaited<ReturnType<typeof postChangesChangeIdExplain>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostChangesChangeIdExplain<
-  TData = Awaited<ReturnType<typeof postChangesChangeIdExplain>>,
-  TError = ErrorType<NotFoundResponse | Error>,
->(
-  changeId: string,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postChangesChangeIdExplain>>, TError, TData>
-    > &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postChangesChangeIdExplain>>,
-          TError,
-          Awaited<ReturnType<typeof postChangesChangeIdExplain>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostChangesChangeIdExplain<
-  TData = Awaited<ReturnType<typeof postChangesChangeIdExplain>>,
-  TError = ErrorType<NotFoundResponse | Error>,
->(
-  changeId: string,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postChangesChangeIdExplain>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export type PostChangesChangeIdExplainMutationError = ErrorType<NotFoundResponse | Error>;
+export type PostChangesChangeIdExplainMutationVariables = { changeId: string };
+
 /**
  * @summary Generate (or return the cached) plain-English narration for a change
  */
-
-export function usePostChangesChangeIdExplain<
-  TData = Awaited<ReturnType<typeof postChangesChangeIdExplain>>,
+export const usePostChangesChangeIdExplain = <
   TError = ErrorType<NotFoundResponse | Error>,
+  TContext = unknown,
 >(
-  changeId: string,
   options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postChangesChangeIdExplain>>, TError, TData>
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof postChangesChangeIdExplain>>,
+      TError,
+      PostChangesChangeIdExplainMutationVariables,
+      TContext
     >;
     request?: SecondParameter<typeof customInstance>;
   },
   queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getPostChangesChangeIdExplainQueryOptions(changeId, options);
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
+): UseMutationResult<
+  Awaited<ReturnType<typeof postChangesChangeIdExplain>>,
+  TError,
+  PostChangesChangeIdExplainMutationVariables,
+  TContext
+> => {
+  return useMutation(getPostChangesChangeIdExplainMutationOptions(options), queryClient);
+};

@@ -5,11 +5,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"strings"
 
-	"github.com/WiseLabz/wiselabz/internal/connector"
+	"github.com/WiseLabz/wiselabz/internal/httpx"
 )
 
 // ollamaEmbedder talks to a local (or self-hosted) Ollama server's batch
@@ -61,14 +60,14 @@ func (e *ollamaEmbedder) Embed(ctx context.Context, texts []string) ([][]float32
 	defer resp.Body.Close() //nolint:errcheck
 
 	if resp.StatusCode >= 300 {
-		b, _ := io.ReadAll(io.LimitReader(resp.Body, connector.MaxResponseBytes))
-		return nil, fmt.Errorf("embedder returned %d: %s", resp.StatusCode, strings.TrimSpace(string(b)))
+		body := httpx.ErrorBody(resp.Body)
+		return nil, fmt.Errorf("embedder returned %d: %s", resp.StatusCode, body)
 	}
 
 	var out struct {
 		Embeddings [][]float32 `json:"embeddings"`
 	}
-	if err := json.NewDecoder(connector.LimitedBody(resp.Body)).Decode(&out); err != nil {
+	if err := json.NewDecoder(httpx.LimitedBody(resp.Body)).Decode(&out); err != nil {
 		return nil, fmt.Errorf("decode embed response: %w", err)
 	}
 	if len(out.Embeddings) != len(texts) {
@@ -130,8 +129,8 @@ func (e *openAIEmbedder) Embed(ctx context.Context, texts []string) ([][]float32
 	defer resp.Body.Close() //nolint:errcheck
 
 	if resp.StatusCode >= 300 {
-		b, _ := io.ReadAll(io.LimitReader(resp.Body, connector.MaxResponseBytes))
-		return nil, fmt.Errorf("embedder returned %d: %s", resp.StatusCode, strings.TrimSpace(string(b)))
+		body := httpx.ErrorBody(resp.Body)
+		return nil, fmt.Errorf("embedder returned %d: %s", resp.StatusCode, body)
 	}
 
 	var out struct {
@@ -140,7 +139,7 @@ func (e *openAIEmbedder) Embed(ctx context.Context, texts []string) ([][]float32
 			Index     int       `json:"index"`
 		} `json:"data"`
 	}
-	if err := json.NewDecoder(connector.LimitedBody(resp.Body)).Decode(&out); err != nil {
+	if err := json.NewDecoder(httpx.LimitedBody(resp.Body)).Decode(&out); err != nil {
 		return nil, fmt.Errorf("decode embed response: %w", err)
 	}
 	if len(out.Data) != len(texts) {

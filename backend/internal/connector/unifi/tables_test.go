@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/WiseLabz/wiselabz/internal/connector"
+	"github.com/WiseLabz/wiselabz/internal/connector/snapshotutil"
 )
 
 // byExternalID indexes entities for assertions.
@@ -258,11 +259,11 @@ func TestBuildersHandleEmptyAndMalformedPayloads(t *testing.T) {
 }
 
 func TestCellEscapesPipes(t *testing.T) {
-	if got := cell("a|b\nc"); got != `a\|b c` {
+	if got := snapshotutil.MDCell("a|b\nc"); got != `a\|b c` {
 		t.Errorf("cell = %q", got)
 	}
-	if got := cell(""); got != "—" {
-		t.Errorf("cell(\"\") = %q", got)
+	if got := snapshotutil.MDCell(""); got != "—" {
+		t.Errorf("snapshotutil.MDCell(\"\") = %q", got)
 	}
 }
 

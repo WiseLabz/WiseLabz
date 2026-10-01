@@ -154,10 +154,25 @@ func (s *Store) DeleteDoc(ctx context.Context, id string) error {
 	return nil
 }
 
+// DocPreviewChars is how much of a doc's content ListDocPreviewsByService
+// returns.
+const DocPreviewChars = 512
+
+// ListDocPreviewsByService is ListDocsByService for callers that only need
+// metadata: Content holds at most the first DocPreviewChars characters
+// instead of the full body.
+func (s *Store) ListDocPreviewsByService(ctx context.Context, serviceID string) ([]DocRecord, error) {
+	return s.listDocsByService(ctx, serviceID, fmt.Sprintf("substr(content, 1, %d)", DocPreviewChars))
+}
+
 // ListDocsByService returns all documentation records for a given service.
 func (s *Store) ListDocsByService(ctx context.Context, serviceID string) ([]DocRecord, error) {
+	return s.listDocsByService(ctx, serviceID, "content")
+}
+
+func (s *Store) listDocsByService(ctx context.Context, serviceID, contentExpr string) ([]DocRecord, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, title, kind, service_id, content, current_version, created_at, updated_at
+		SELECT id, title, kind, service_id, `+contentExpr+`, current_version, created_at, updated_at
 		FROM docs WHERE service_id = ? ORDER BY updated_at DESC
 	`, serviceID)
 	if err != nil {

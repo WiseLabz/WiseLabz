@@ -30,6 +30,10 @@ type Config struct {
 	Retention  RetentionSettings  `mapstructure:"retention"`
 	Backup     BackupSettings     `mapstructure:"backup"`
 	DocExport  DocExportSettings  `mapstructure:"doc_export"`
+
+	// AdminPassword bootstraps the first admin user when no users exist
+	// (env-only: WISELABZ_ADMIN_PASSWORD). Ignored once a user exists.
+	AdminPassword string `mapstructure:"admin_password"`
 }
 
 // Database holds database connection settings.
@@ -408,7 +412,7 @@ func Load() (*Config, error) {
 		"db.driver", "db.dsn",
 		"server.host", "server.port", "server.origin", "server.trusted_proxies", "server.public_url", "server.embed",
 		"server.read_timeout_seconds", "server.write_timeout_seconds", "server.shutdown_timeout_seconds",
-		"encryption.key",
+		"encryption.key", "admin_password",
 		"auth.share_link_max_ttl", "auth.secret", "auth.access_token_ttl", "auth.refresh_token_ttl", "auth.step_up_for_destructive",
 		"auth.webauthn.rp_id", "auth.webauthn.rp_display_name",
 		"ai.enabled", "ai.provider", "ai.model", "ai.api_key", "ai.base_url", "ai.mode",

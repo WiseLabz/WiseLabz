@@ -6,15 +6,18 @@
  *
  * OpenAPI spec version: 0.1.0
  */
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import type {
   DataTag,
   DefinedInitialDataOptions,
   DefinedUseQueryResult,
+  MutationFunction,
   QueryClient,
   QueryFunction,
   QueryKey,
   UndefinedInitialDataOptions,
+  UseMutationOptions,
+  UseMutationResult,
   UseQueryOptions,
   UseQueryResult,
 } from '@tanstack/react-query';
@@ -191,112 +194,76 @@ export const postRunbooks = (
   );
 };
 
-export const getPostRunbooksQueryKey = (runbookCreate?: BodyType<RunbookCreate>) => {
-  return ['POST', `/runbooks`, runbookCreate] as const;
-};
+export const getPostRunbooksMutationKey = () => ['postRunbooks'] as const;
 
-export const getPostRunbooksQueryOptions = <
-  TData = Awaited<ReturnType<typeof postRunbooks>>,
+export const getPostRunbooksMutationOptions = <
   TError = ErrorType<BadRequestResponse | UnauthorizedResponse | ForbiddenResponse>,
->(
-  runbookCreate: BodyType<RunbookCreate>,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof postRunbooks>>, TError, TData>>;
-    request?: SecondParameter<typeof customInstance>;
-  }
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
-
-  const queryKey = queryOptions?.queryKey ?? getPostRunbooksQueryKey(runbookCreate);
-
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof postRunbooks>>> = ({ signal }) =>
-    postRunbooks(runbookCreate, requestOptions, signal);
-
-  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof postRunbooks>>,
     TError,
-    TData
-  > & { queryKey: DataTag<QueryKey, TData, TError> };
+    PostRunbooksMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof postRunbooks>>,
+  TError,
+  PostRunbooksMutationVariables,
+  TContext
+> => {
+  const mutationKey = getPostRunbooksMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof postRunbooks>>,
+    PostRunbooksMutationVariables
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return postRunbooks(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type PostRunbooksQueryResult = NonNullable<Awaited<ReturnType<typeof postRunbooks>>>;
-export type PostRunbooksQueryError = ErrorType<
+export type PostRunbooksMutationResult = NonNullable<Awaited<ReturnType<typeof postRunbooks>>>;
+export type PostRunbooksMutationBody = BodyType<RunbookCreate>;
+export type PostRunbooksMutationError = ErrorType<
   BadRequestResponse | UnauthorizedResponse | ForbiddenResponse
 >;
+export type PostRunbooksMutationVariables = { data: BodyType<RunbookCreate> };
 
-export function usePostRunbooks<
-  TData = Awaited<ReturnType<typeof postRunbooks>>,
-  TError = ErrorType<BadRequestResponse | UnauthorizedResponse | ForbiddenResponse>,
->(
-  runbookCreate: BodyType<RunbookCreate>,
-  options: {
-    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof postRunbooks>>, TError, TData>> &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postRunbooks>>,
-          TError,
-          Awaited<ReturnType<typeof postRunbooks>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostRunbooks<
-  TData = Awaited<ReturnType<typeof postRunbooks>>,
-  TError = ErrorType<BadRequestResponse | UnauthorizedResponse | ForbiddenResponse>,
->(
-  runbookCreate: BodyType<RunbookCreate>,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof postRunbooks>>, TError, TData>> &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postRunbooks>>,
-          TError,
-          Awaited<ReturnType<typeof postRunbooks>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostRunbooks<
-  TData = Awaited<ReturnType<typeof postRunbooks>>,
-  TError = ErrorType<BadRequestResponse | UnauthorizedResponse | ForbiddenResponse>,
->(
-  runbookCreate: BodyType<RunbookCreate>,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof postRunbooks>>, TError, TData>>;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
  * @summary Create a runbook (operator)
  */
-
-export function usePostRunbooks<
-  TData = Awaited<ReturnType<typeof postRunbooks>>,
+export const usePostRunbooks = <
   TError = ErrorType<BadRequestResponse | UnauthorizedResponse | ForbiddenResponse>,
+  TContext = unknown,
 >(
-  runbookCreate: BodyType<RunbookCreate>,
   options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof postRunbooks>>, TError, TData>>;
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof postRunbooks>>,
+      TError,
+      PostRunbooksMutationVariables,
+      TContext
+    >;
     request?: SecondParameter<typeof customInstance>;
   },
   queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getPostRunbooksQueryOptions(runbookCreate, options);
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
+): UseMutationResult<
+  Awaited<ReturnType<typeof postRunbooks>>,
+  TError,
+  PostRunbooksMutationVariables,
+  TContext
+> => {
+  return useMutation(getPostRunbooksMutationOptions(options), queryClient);
+};
 /**
  * @summary One runbook
  */
@@ -448,146 +415,85 @@ export const putRunbooksRunbookId = (
   );
 };
 
-export const getPutRunbooksRunbookIdQueryKey = (
-  runbookId: string,
-  runbookUpdate?: BodyType<RunbookUpdate>
-) => {
-  return ['PUT', `/runbooks/${runbookId}`, runbookUpdate] as const;
-};
+export const getPutRunbooksRunbookIdMutationKey = () => ['putRunbooksRunbookId'] as const;
 
-export const getPutRunbooksRunbookIdQueryOptions = <
-  TData = Awaited<ReturnType<typeof putRunbooksRunbookId>>,
+export const getPutRunbooksRunbookIdMutationOptions = <
   TError = ErrorType<
     BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
   >,
->(
-  runbookId: string,
-  runbookUpdate: BodyType<RunbookUpdate>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof putRunbooksRunbookId>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  }
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof putRunbooksRunbookId>>,
+    TError,
+    PutRunbooksRunbookIdMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof putRunbooksRunbookId>>,
+  TError,
+  PutRunbooksRunbookIdMutationVariables,
+  TContext
+> => {
+  const mutationKey = getPutRunbooksRunbookIdMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
 
-  const queryKey =
-    queryOptions?.queryKey ?? getPutRunbooksRunbookIdQueryKey(runbookId, runbookUpdate);
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof putRunbooksRunbookId>>,
+    PutRunbooksRunbookIdMutationVariables
+  > = (props) => {
+    const { runbookId, data } = props ?? {};
 
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof putRunbooksRunbookId>>> = ({ signal }) =>
-    putRunbooksRunbookId(runbookId, runbookUpdate, requestOptions, signal);
-
-  return {
-    queryKey,
-    queryFn,
-    enabled: runbookId !== null && runbookId !== undefined,
-    ...queryOptions,
-  } as UseQueryOptions<Awaited<ReturnType<typeof putRunbooksRunbookId>>, TError, TData> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
+    return putRunbooksRunbookId(runbookId, data, requestOptions);
   };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type PutRunbooksRunbookIdQueryResult = NonNullable<
+export type PutRunbooksRunbookIdMutationResult = NonNullable<
   Awaited<ReturnType<typeof putRunbooksRunbookId>>
 >;
-export type PutRunbooksRunbookIdQueryError = ErrorType<
+export type PutRunbooksRunbookIdMutationBody = BodyType<RunbookUpdate>;
+export type PutRunbooksRunbookIdMutationError = ErrorType<
   BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
 >;
+export type PutRunbooksRunbookIdMutationVariables = {
+  runbookId: string;
+  data: BodyType<RunbookUpdate>;
+};
 
-export function usePutRunbooksRunbookId<
-  TData = Awaited<ReturnType<typeof putRunbooksRunbookId>>,
-  TError = ErrorType<
-    BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
-  >,
->(
-  runbookId: string,
-  runbookUpdate: BodyType<RunbookUpdate>,
-  options: {
-    query: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof putRunbooksRunbookId>>, TError, TData>
-    > &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof putRunbooksRunbookId>>,
-          TError,
-          Awaited<ReturnType<typeof putRunbooksRunbookId>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePutRunbooksRunbookId<
-  TData = Awaited<ReturnType<typeof putRunbooksRunbookId>>,
-  TError = ErrorType<
-    BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
-  >,
->(
-  runbookId: string,
-  runbookUpdate: BodyType<RunbookUpdate>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof putRunbooksRunbookId>>, TError, TData>
-    > &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof putRunbooksRunbookId>>,
-          TError,
-          Awaited<ReturnType<typeof putRunbooksRunbookId>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePutRunbooksRunbookId<
-  TData = Awaited<ReturnType<typeof putRunbooksRunbookId>>,
-  TError = ErrorType<
-    BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
-  >,
->(
-  runbookId: string,
-  runbookUpdate: BodyType<RunbookUpdate>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof putRunbooksRunbookId>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
  * @summary Update a runbook (operator)
  */
-
-export function usePutRunbooksRunbookId<
-  TData = Awaited<ReturnType<typeof putRunbooksRunbookId>>,
+export const usePutRunbooksRunbookId = <
   TError = ErrorType<
     BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
   >,
+  TContext = unknown,
 >(
-  runbookId: string,
-  runbookUpdate: BodyType<RunbookUpdate>,
   options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof putRunbooksRunbookId>>, TError, TData>
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof putRunbooksRunbookId>>,
+      TError,
+      PutRunbooksRunbookIdMutationVariables,
+      TContext
     >;
     request?: SecondParameter<typeof customInstance>;
   },
   queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getPutRunbooksRunbookIdQueryOptions(runbookId, runbookUpdate, options);
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
+): UseMutationResult<
+  Awaited<ReturnType<typeof putRunbooksRunbookId>>,
+  TError,
+  PutRunbooksRunbookIdMutationVariables,
+  TContext
+> => {
+  return useMutation(getPutRunbooksRunbookIdMutationOptions(options), queryClient);
+};
 /**
  * @summary Delete a runbook (operator)
  */
@@ -599,128 +505,78 @@ export const deleteRunbooksRunbookId = (
   return customInstance<void>({ url: `/runbooks/${runbookId}`, method: 'DELETE', signal }, options);
 };
 
-export const getDeleteRunbooksRunbookIdQueryKey = (runbookId: string) => {
-  return ['DELETE', `/runbooks/${runbookId}`] as const;
-};
+export const getDeleteRunbooksRunbookIdMutationKey = () => ['deleteRunbooksRunbookId'] as const;
 
-export const getDeleteRunbooksRunbookIdQueryOptions = <
-  TData = Awaited<ReturnType<typeof deleteRunbooksRunbookId>>,
+export const getDeleteRunbooksRunbookIdMutationOptions = <
   TError = ErrorType<UnauthorizedResponse | ForbiddenResponse | NotFoundResponse>,
->(
-  runbookId: string,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof deleteRunbooksRunbookId>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  }
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteRunbooksRunbookId>>,
+    TError,
+    DeleteRunbooksRunbookIdMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteRunbooksRunbookId>>,
+  TError,
+  DeleteRunbooksRunbookIdMutationVariables,
+  TContext
+> => {
+  const mutationKey = getDeleteRunbooksRunbookIdMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
 
-  const queryKey = queryOptions?.queryKey ?? getDeleteRunbooksRunbookIdQueryKey(runbookId);
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteRunbooksRunbookId>>,
+    DeleteRunbooksRunbookIdMutationVariables
+  > = (props) => {
+    const { runbookId } = props ?? {};
 
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof deleteRunbooksRunbookId>>> = ({
-    signal,
-  }) => deleteRunbooksRunbookId(runbookId, requestOptions, signal);
-
-  return {
-    queryKey,
-    queryFn,
-    enabled: runbookId !== null && runbookId !== undefined,
-    ...queryOptions,
-  } as UseQueryOptions<Awaited<ReturnType<typeof deleteRunbooksRunbookId>>, TError, TData> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
+    return deleteRunbooksRunbookId(runbookId, requestOptions);
   };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type DeleteRunbooksRunbookIdQueryResult = NonNullable<
+export type DeleteRunbooksRunbookIdMutationResult = NonNullable<
   Awaited<ReturnType<typeof deleteRunbooksRunbookId>>
 >;
-export type DeleteRunbooksRunbookIdQueryError = ErrorType<
+
+export type DeleteRunbooksRunbookIdMutationError = ErrorType<
   UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
 >;
+export type DeleteRunbooksRunbookIdMutationVariables = { runbookId: string };
 
-export function useDeleteRunbooksRunbookId<
-  TData = Awaited<ReturnType<typeof deleteRunbooksRunbookId>>,
-  TError = ErrorType<UnauthorizedResponse | ForbiddenResponse | NotFoundResponse>,
->(
-  runbookId: string,
-  options: {
-    query: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof deleteRunbooksRunbookId>>, TError, TData>
-    > &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof deleteRunbooksRunbookId>>,
-          TError,
-          Awaited<ReturnType<typeof deleteRunbooksRunbookId>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function useDeleteRunbooksRunbookId<
-  TData = Awaited<ReturnType<typeof deleteRunbooksRunbookId>>,
-  TError = ErrorType<UnauthorizedResponse | ForbiddenResponse | NotFoundResponse>,
->(
-  runbookId: string,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof deleteRunbooksRunbookId>>, TError, TData>
-    > &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof deleteRunbooksRunbookId>>,
-          TError,
-          Awaited<ReturnType<typeof deleteRunbooksRunbookId>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function useDeleteRunbooksRunbookId<
-  TData = Awaited<ReturnType<typeof deleteRunbooksRunbookId>>,
-  TError = ErrorType<UnauthorizedResponse | ForbiddenResponse | NotFoundResponse>,
->(
-  runbookId: string,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof deleteRunbooksRunbookId>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
  * @summary Delete a runbook (operator)
  */
-
-export function useDeleteRunbooksRunbookId<
-  TData = Awaited<ReturnType<typeof deleteRunbooksRunbookId>>,
+export const useDeleteRunbooksRunbookId = <
   TError = ErrorType<UnauthorizedResponse | ForbiddenResponse | NotFoundResponse>,
+  TContext = unknown,
 >(
-  runbookId: string,
   options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof deleteRunbooksRunbookId>>, TError, TData>
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof deleteRunbooksRunbookId>>,
+      TError,
+      DeleteRunbooksRunbookIdMutationVariables,
+      TContext
     >;
     request?: SecondParameter<typeof customInstance>;
   },
   queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getDeleteRunbooksRunbookIdQueryOptions(runbookId, options);
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
+): UseMutationResult<
+  Awaited<ReturnType<typeof deleteRunbooksRunbookId>>,
+  TError,
+  DeleteRunbooksRunbookIdMutationVariables,
+  TContext
+> => {
+  return useMutation(getDeleteRunbooksRunbookIdMutationOptions(options), queryClient);
+};
 /**
  * Resolves the target connector, verb, and entityRef from the stored step — the request body is ignored — and runs the exact same dry-run-preview / elevation-gated-mutate path as the connector-level restart/start/stop endpoints (see ADR 0001/0002). Linking a step grants nothing on its own: the caller must additionally hold at least an operator grant on the step's connector, and a real (non dry-run) execution still requires a valid X-Elevation-Token for action `connector.<verb>`. On success, records a `connector.<verb>` audit row whose detail includes this runbookId/stepId in addition to entityRef.
  * @summary Execute (or preview) one runbook step's lifecycle operation
@@ -738,135 +594,79 @@ export const executeRunbookStep = (
   );
 };
 
-export const getExecuteRunbookStepQueryKey = (
-  runbookId: string,
-  stepId: string,
-  params?: ExecuteRunbookStepParams
-) => {
-  return [
-    'POST',
-    `/runbooks/${runbookId}/steps/${stepId}/execute`,
-    ...(params ? [params] : []),
-  ] as const;
-};
+export const getExecuteRunbookStepMutationKey = () => ['executeRunbookStep'] as const;
 
-export const getExecuteRunbookStepQueryOptions = <
-  TData = Awaited<ReturnType<typeof executeRunbookStep>>,
+export const getExecuteRunbookStepMutationOptions = <
   TError = ErrorType<Error | ElevationRequiredResponse | ForbiddenResponse | NotFoundResponse>,
->(
-  runbookId: string,
-  stepId: string,
-  params?: ExecuteRunbookStepParams,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof executeRunbookStep>>, TError, TData>>;
-    request?: SecondParameter<typeof customInstance>;
-  }
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof executeRunbookStep>>,
+    TError,
+    ExecuteRunbookStepMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof executeRunbookStep>>,
+  TError,
+  ExecuteRunbookStepMutationVariables,
+  TContext
+> => {
+  const mutationKey = getExecuteRunbookStepMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
 
-  const queryKey =
-    queryOptions?.queryKey ?? getExecuteRunbookStepQueryKey(runbookId, stepId, params);
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof executeRunbookStep>>,
+    ExecuteRunbookStepMutationVariables
+  > = (props) => {
+    const { runbookId, stepId, params } = props ?? {};
 
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof executeRunbookStep>>> = ({ signal }) =>
-    executeRunbookStep(runbookId, stepId, params, requestOptions, signal);
-
-  return {
-    queryKey,
-    queryFn,
-    enabled:
-      runbookId !== null && runbookId !== undefined && stepId !== null && stepId !== undefined,
-    ...queryOptions,
-  } as UseQueryOptions<Awaited<ReturnType<typeof executeRunbookStep>>, TError, TData> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
+    return executeRunbookStep(runbookId, stepId, params, requestOptions);
   };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type ExecuteRunbookStepQueryResult = NonNullable<
+export type ExecuteRunbookStepMutationResult = NonNullable<
   Awaited<ReturnType<typeof executeRunbookStep>>
 >;
-export type ExecuteRunbookStepQueryError = ErrorType<
+
+export type ExecuteRunbookStepMutationError = ErrorType<
   Error | ElevationRequiredResponse | ForbiddenResponse | NotFoundResponse
 >;
+export type ExecuteRunbookStepMutationVariables = {
+  runbookId: string;
+  stepId: string;
+  params?: ExecuteRunbookStepParams;
+};
 
-export function useExecuteRunbookStep<
-  TData = Awaited<ReturnType<typeof executeRunbookStep>>,
-  TError = ErrorType<Error | ElevationRequiredResponse | ForbiddenResponse | NotFoundResponse>,
->(
-  runbookId: string,
-  stepId: string,
-  params: undefined | ExecuteRunbookStepParams,
-  options: {
-    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof executeRunbookStep>>, TError, TData>> &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof executeRunbookStep>>,
-          TError,
-          Awaited<ReturnType<typeof executeRunbookStep>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function useExecuteRunbookStep<
-  TData = Awaited<ReturnType<typeof executeRunbookStep>>,
-  TError = ErrorType<Error | ElevationRequiredResponse | ForbiddenResponse | NotFoundResponse>,
->(
-  runbookId: string,
-  stepId: string,
-  params?: ExecuteRunbookStepParams,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof executeRunbookStep>>, TError, TData>
-    > &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof executeRunbookStep>>,
-          TError,
-          Awaited<ReturnType<typeof executeRunbookStep>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function useExecuteRunbookStep<
-  TData = Awaited<ReturnType<typeof executeRunbookStep>>,
-  TError = ErrorType<Error | ElevationRequiredResponse | ForbiddenResponse | NotFoundResponse>,
->(
-  runbookId: string,
-  stepId: string,
-  params?: ExecuteRunbookStepParams,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof executeRunbookStep>>, TError, TData>>;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
  * @summary Execute (or preview) one runbook step's lifecycle operation
  */
-
-export function useExecuteRunbookStep<
-  TData = Awaited<ReturnType<typeof executeRunbookStep>>,
+export const useExecuteRunbookStep = <
   TError = ErrorType<Error | ElevationRequiredResponse | ForbiddenResponse | NotFoundResponse>,
+  TContext = unknown,
 >(
-  runbookId: string,
-  stepId: string,
-  params?: ExecuteRunbookStepParams,
   options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof executeRunbookStep>>, TError, TData>>;
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof executeRunbookStep>>,
+      TError,
+      ExecuteRunbookStepMutationVariables,
+      TContext
+    >;
     request?: SecondParameter<typeof customInstance>;
   },
   queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getExecuteRunbookStepQueryOptions(runbookId, stepId, params, options);
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
+): UseMutationResult<
+  Awaited<ReturnType<typeof executeRunbookStep>>,
+  TError,
+  ExecuteRunbookStepMutationVariables,
+  TContext
+> => {
+  return useMutation(getExecuteRunbookStepMutationOptions(options), queryClient);
+};

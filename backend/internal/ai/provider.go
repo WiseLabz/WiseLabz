@@ -173,8 +173,11 @@ func (s *StubProvider) SuggestStream(_ context.Context, _ *SuggestRequest) (<-ch
 	return ch, nil
 }
 
+// llmTimeout bounds a whole request to an LLM or embedding provider.
+const llmTimeout = 60 * time.Second
+
 // sharedHTTPClient is the one client every provider uses, so connections to
 // the vendor APIs are pooled and kept alive across Registry.Get calls.
 var sharedHTTPClient = sync.OnceValue(func() *http.Client {
-	return httpx.NewClient(httpx.Options{Timeout: 60 * time.Second})
+	return httpx.NewClient(httpx.Options{Timeout: llmTimeout})
 })
