@@ -151,3 +151,110 @@ func TestRunRestoreRequiresFileFlag(t *testing.T) {
 		t.Errorf("runRestore(no -file) = %d, want 1", code)
 	}
 }
+
+func TestConfirmYes(t *testing.T) {
+	r, w, _ := os.Pipe()
+	defer func() { _ = r.Close() }()
+
+	go func() {
+		_, _ = w.WriteString("y\n")
+		_ = w.Close()
+	}()
+
+	oldStdin := os.Stdin
+	defer func() { os.Stdin = oldStdin }()
+	os.Stdin = r
+
+	if !confirm("Continue?") {
+		t.Errorf("confirm with 'y' input should return true")
+	}
+}
+
+func TestConfirmYesLong(t *testing.T) {
+	r, w, _ := os.Pipe()
+	defer func() { _ = r.Close() }()
+
+	go func() {
+		_, _ = w.WriteString("yes\n")
+		_ = w.Close()
+	}()
+
+	oldStdin := os.Stdin
+	defer func() { os.Stdin = oldStdin }()
+	os.Stdin = r
+
+	if !confirm("Continue?") {
+		t.Errorf("confirm with 'yes' input should return true")
+	}
+}
+
+func TestConfirmNo(t *testing.T) {
+	r, w, _ := os.Pipe()
+	defer func() { _ = r.Close() }()
+
+	go func() {
+		_, _ = w.WriteString("n\n")
+		_ = w.Close()
+	}()
+
+	oldStdin := os.Stdin
+	defer func() { os.Stdin = oldStdin }()
+	os.Stdin = r
+
+	if confirm("Continue?") {
+		t.Errorf("confirm with 'n' input should return false")
+	}
+}
+
+func TestConfirmEOF(t *testing.T) {
+	r, w, _ := os.Pipe()
+	defer func() { _ = r.Close() }()
+
+	go func() {
+		_ = w.Close()
+	}()
+
+	oldStdin := os.Stdin
+	defer func() { os.Stdin = oldStdin }()
+	os.Stdin = r
+
+	if confirm("Continue?") {
+		t.Errorf("confirm with EOF should return false")
+	}
+}
+
+func TestConfirmEmpty(t *testing.T) {
+	r, w, _ := os.Pipe()
+	defer func() { _ = r.Close() }()
+
+	go func() {
+		_, _ = w.WriteString("\n")
+		_ = w.Close()
+	}()
+
+	oldStdin := os.Stdin
+	defer func() { os.Stdin = oldStdin }()
+	os.Stdin = r
+
+	if confirm("Continue?") {
+		t.Errorf("confirm with empty input should return false")
+	}
+}
+
+func TestConfirmCaseInsensitive(t *testing.T) {
+	r, w, _ := os.Pipe()
+	defer func() { _ = r.Close() }()
+
+	go func() {
+		_, _ = w.WriteString("Y\n")
+		_ = w.Close()
+	}()
+
+	oldStdin := os.Stdin
+	defer func() { os.Stdin = oldStdin }()
+	os.Stdin = r
+
+	if !confirm("Continue?") {
+		t.Errorf("confirm with 'Y' input should return true (case insensitive)")
+	}
+}
