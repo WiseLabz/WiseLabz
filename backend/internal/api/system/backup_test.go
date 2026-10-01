@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -160,22 +161,26 @@ func TestImportBackupTruncatedJSON(t *testing.T) {
 	}
 }
 
-// TestImportBackupRequestTooLarge verifies ImportBackup enforces the 10 MiB limit.
+// TestImportBackupRequestTooLarge verifies ImportBackup enforces the 10 MiB limit deterministically.
 func TestImportBackupRequestTooLarge(t *testing.T) {
 	s := apitest.NewStore(t)
 	h := NewHandler(s.DB(), &config.Config{}, s, nil, t.TempDir(), nil)
 
-	// Create a valid JSON structure with a large array of connectors to exceed 10 MiB.
-	// Each connector record is roughly 200 bytes, so 50k connectors = ~10 MiB+.
+	// Build payload that is deterministically larger than MaxImportBytes.
+	// Each connector record with configData padding is roughly 230 bytes.
+	// Calculate how many we need to exceed the 10 MiB limit (10485760 bytes).
+	recordSize := 230
+	needed := (MaxImportBytes / int64(recordSize)) + 100
+
 	conns := make([]map[string]any, 0)
-	for i := 0; i < 51000; i++ {
+	for i := 0; i < int(needed); i++ {
 		conns = append(conns, map[string]any{
-			"id":         "c" + string(rune(i)),
-			"name":       "connector-" + string(rune(i)),
+			"id":         fmt.Sprintf("c%d", i),
+			"name":       fmt.Sprintf("connector-%d", i),
 			"type":       "proxmox",
 			"category":   "virtualization",
 			"url":        "https://example.com",
-			"configData": strings.Repeat("x", 100),
+			"configData": strings.Repeat("x", 150),
 		})
 	}
 	b := map[string]any{
@@ -184,8 +189,10 @@ func TestImportBackupRequestTooLarge(t *testing.T) {
 		"connectors": conns,
 	}
 	payload, _ := json.Marshal(b)
+
+	// Verify payload is indeed over the limit
 	if int64(len(payload)) <= MaxImportBytes {
-		t.Skipf("test payload only %d bytes, need > %d to trigger limit", len(payload), MaxImportBytes)
+		t.Fatalf("test payload only %d bytes, need > %d to trigger limit; adjust recordSize or needed count", len(payload), MaxImportBytes)
 	}
 
 	req := httptest.NewRequest(http.MethodPost, "/api/system/backup/import", bytes.NewReader(payload))
