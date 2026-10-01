@@ -437,6 +437,20 @@ func TestResetMFA(t *testing.T) {
 	}
 }
 
+func TestResetMFARequiresAdmin(t *testing.T) {
+	th := newTestHandler(t)
+	admin, _ := th.createUser(t, "operator", false)
+	targetUser, _ := th.createUser(t, "viewer", false)
+	th.enrollTOTP(t, targetUser.ID)
+
+	r := httptest.NewRequest(http.MethodPost, "/api/users/"+targetUser.ID+"/reset-mfa", nil)
+	r.SetPathValue("id", targetUser.ID)
+	rr := th.authedRequest(t, r, admin.ID, "operator", th.H.ResetMFA)
+	if rr.Code != http.StatusNoContent {
+		t.Fatalf("admin ResetMFA status = %d, want %d; body=%s", rr.Code, http.StatusNoContent, rr.Body.String())
+	}
+}
+
 // --- Self-disable blocked by policy ---
 
 func TestDeleteFactorBlockedByPolicyWhenLast(t *testing.T) {

@@ -276,3 +276,24 @@ func TestSyncOIDCConnectorGrants(t *testing.T) {
 		t.Fatalf("GetUserConnectorRole() for a local user = %q, want empty (never synced)", role)
 	}
 }
+
+func TestOIDCCallbackRejectsBadNonce(t *testing.T) {
+	h := &Handler{Config: &config.Config{}}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/oidc/callback",
+		strings.NewReader(`{"providerId":"okta","code":"abc","state":"state"}`))
+	req.Header.Set("Content-Type", "application/json")
+
+	cookieRec := httptest.NewRecorder()
+	setOIDCFlowCookie(cookieRec, req, "", "okta", "state", "real-nonce")
+	for _, c := range cookieRec.Result().Cookies() {
+		req.AddCookie(c)
+	}
+
+	rr := httptest.NewRecorder()
+	h.OIDCCallback(rr, req)
+
+	if rr.Code != http.StatusUnauthorized && rr.Code != http.StatusBadRequest {
+		t.Fatalf("OIDCCallback(bad nonce) status = %d, want 401 or 400; body=%s", rr.Code, rr.Body.String())
+	}
+}
