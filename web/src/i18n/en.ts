@@ -84,6 +84,7 @@ export const en = {
     unreadLabel: 'Notifications, {{count}} unread',
   },
   sync: {
+    started: 'Sync started',
     phase: {
       queued: 'Queued',
       fetching: 'Fetching',
@@ -622,7 +623,12 @@ export const en = {
       aiDiffProposed: 'proposed',
       newerBanner: 'A newer version (v{{version}}) was generated while you were editing.',
       loadLatest: 'Load latest',
-      lockBanner: '{{userId}} is currently editing this doc.',
+      lockBanner: '{{name}} is currently editing this doc.',
+      unknownLockHolder: 'Another user',
+      lockError: "Couldn't acquire the editing lock. Your draft is intact — try again.",
+      startEditing: 'Start editing',
+      acquiringLock: 'Acquiring lock…',
+      aiTimeout: 'AI suggestion timed out. Try again.',
     },
     restore: {
       action: 'Restore v{{version}}',

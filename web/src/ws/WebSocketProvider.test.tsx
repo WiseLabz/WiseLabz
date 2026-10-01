@@ -163,9 +163,7 @@ describe('WebSocketProvider', () => {
 
   const send = (frame: Record<string, unknown>) =>
     act(() =>
-      TestWebSocket.last?.onmessage?.(
-        new MessageEvent('message', { data: JSON.stringify(frame) })
-      )
+      TestWebSocket.last?.onmessage?.(new MessageEvent('message', { data: JSON.stringify(frame) }))
     );
 
   const alertFrame = (extra: Record<string, unknown>, alertId: string) => ({
@@ -248,6 +246,7 @@ describe('WebSocketProvider', () => {
             payload: {
               docId: 'doc-1',
               userId: 'user-1',
+              userName: 'Ada',
               acquiredAt: '2026-09-06T12:00:00Z',
               expiresAt: '2026-09-06T12:05:00Z',
             },
@@ -258,6 +257,7 @@ describe('WebSocketProvider', () => {
 
     expect(useLive.getState().docLocks['doc-1']).toEqual({
       userId: 'user-1',
+      userName: 'Ada',
       expiresAt: '2026-09-06T12:05:00Z',
     });
 
@@ -324,9 +324,7 @@ describe('WebSocketProvider', () => {
     await waitFor(() => expect(TestWebSocket.last).toBeDefined());
 
     act(() =>
-      TestWebSocket.last?.onmessage?.(
-        new MessageEvent('message', { data: 'not valid json{{{' })
-      )
+      TestWebSocket.last?.onmessage?.(new MessageEvent('message', { data: 'not valid json{{{' }))
     );
 
     expect(useLive.getState().activity).toEqual([]);
@@ -463,5 +461,19 @@ describe('WebSocketProvider', () => {
 
     expect(invalidatedKeys(invalidateQueries)).toEqual(volatileKeys());
     expect(useLive.getState().jobs).toEqual({});
+  });
+  it('delivers AI results through the cache keyed by document and request', async () => {
+    const client = new QueryClient();
+    await renderProvider(client);
+    const payload = {
+      docId: 'doc-1',
+      requestId: 'req-1',
+      status: 'complete',
+      fullContent: '# Server result',
+    };
+    send({ type: 'doc.ai_suggestion', id: 'ai-1', payload });
+    expect(client.getQueryData(['doc-ai-suggestion', 'doc-1', 'req-1'])).toEqual(payload);
+    expect(client.getQueryData(['doc-ai-suggestion', 'doc-2', 'req-1'])).toBeUndefined();
+    expect(client.getQueryData(['doc-ai-suggestion', 'doc-1', 'req-2'])).toBeUndefined();
   });
 });

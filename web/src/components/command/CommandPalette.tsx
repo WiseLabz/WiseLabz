@@ -15,7 +15,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import { matchSorter } from 'match-sorter';
 import { useUi } from '../../store/ui';
 import { useCanMutate } from '../../hooks/useRole';
-import { triggerMockSync } from '../../ws/triggerSync';
+import { runSync } from '../../lib/runSync';
 import { useTheme } from '../../store/theme';
 import { PRESETS, type PaletteName } from '../../theme';
 import {
@@ -114,7 +114,7 @@ function buildCommands(ctx: CommandCtx, connectors: Connector[], docNodes: DocNo
       hint: t('command.action.syncAllHint'),
       group: 'actions',
       Icon: SyncIcon,
-      run: () => triggerMockSync(null),
+      run: () => runSync(null),
     });
   }
 
@@ -136,7 +136,7 @@ function buildCommands(ctx: CommandCtx, connectors: Connector[], docNodes: DocNo
           label: t('command.action.syncOne', { name: cn.name }),
           group: 'actions',
           Icon: SyncIcon,
-          run: () => triggerMockSync(cn.id),
+          run: () => runSync(cn.id),
         },
         {
           id: `s-toggle-${cn.id}`,

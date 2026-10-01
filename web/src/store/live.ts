@@ -43,8 +43,8 @@ interface LiveState {
   setStatus: (serviceId: string, status: ServiceStatus) => void;
 
   /** advisory doc edit locks keyed by docId */
-  docLocks: Record<string, { userId: string; expiresAt: string } | undefined>;
-  setDocLock: (docId: string, lock: { userId: string; expiresAt: string } | undefined) => void;
+  docLocks: Record<string, { userId: string; userName?: string; expiresAt: string } | undefined>;
+  setDocLock: (docId: string, lock: { userId: string; userName?: string; expiresAt: string } | undefined) => void;
 
   pendingAlerts: number;
   setPendingAlerts: (n: number) => void;

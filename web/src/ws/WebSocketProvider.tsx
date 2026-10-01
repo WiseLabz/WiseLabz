@@ -280,7 +280,7 @@ function handle(frame: WsEvent, qc: ReturnType<typeof useQueryClient>) {
     }
     case 'doc.lock.acquired': {
       const p = frame.payload;
-      s.setDocLock(p.docId, { userId: p.userId, expiresAt: p.expiresAt });
+      s.setDocLock(p.docId, { userId: p.userId, userName: p.userName, expiresAt: p.expiresAt });
       break;
     }
     case 'doc.lock.released': {
@@ -315,8 +315,9 @@ function handle(frame: WsEvent, qc: ReturnType<typeof useQueryClient>) {
       break;
     }
     case 'doc.ai_suggestion': {
-      // Streaming deltas are consumed over REST by the editor; only surface failures.
-      if (frame.payload.status === 'error') toast.error(i18n.t('notify.aiSuggestionFailed'));
+      const p = frame.payload;
+      // Cache by both ids: a result may arrive before the POST response.
+      qc.setQueryData(['doc-ai-suggestion', p.docId, p.requestId], p);
       break;
     }
     default:

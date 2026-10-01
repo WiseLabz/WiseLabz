@@ -137,6 +137,7 @@ export interface DocAiSuggestionPayload {
 export interface DocLockAcquiredPayload {
   docId: string;
   userId: string;
+  userName?: string;
   acquiredAt: string;
   expiresAt: string;
 }

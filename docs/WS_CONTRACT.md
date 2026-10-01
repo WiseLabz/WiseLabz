@@ -308,6 +308,7 @@ An advisory edit lock was acquired on a doc by a user (presence signalling).
 interface DocLockAcquiredPayload {
   docId: string;
   userId: string;
+  userName?: string;   // display name (username fallback)
   acquiredAt: string;  // ISO
   expiresAt: string;   // ISO
 }

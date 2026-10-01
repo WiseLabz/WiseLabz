@@ -13,6 +13,8 @@
 export interface DocLock {
   docId?: string;
   userId?: string;
+  /** Holder display name (username fallback) */
+  userName?: string;
   acquiredAt?: string;
   expiresAt?: string;
 }

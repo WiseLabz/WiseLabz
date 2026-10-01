@@ -4233,6 +4233,7 @@ components:
       properties:
         docId: { type: string }
         userId: { type: string }
+        userName: { type: string, description: "Holder display name (username fallback)" }
         acquiredAt: { type: string, format: date-time }
         expiresAt: { type: string, format: date-time }
     DocSave:
