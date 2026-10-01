@@ -33,7 +33,7 @@ func registerSearchDocs(s *mcpserver.MCPServer, d Deps) {
 		scopeDocID := req.GetString("scopeDocId", "")
 		userID := auth.UserIDFromContext(ctx)
 
-		cfg := d.Settings.LoadAIConfig(ctx)
+		cfg := d.AIConfig.Load(ctx)
 		if !cfg.Enabled || cfg.EmbedProvider == "" {
 			return mcpsdk.NewToolResultError("AI module is not enabled or has no embedding backend configured"), nil
 		}
