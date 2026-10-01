@@ -10,6 +10,7 @@ import (
 
 	"github.com/WiseLabz/wiselabz/internal/api/apitest"
 	"github.com/WiseLabz/wiselabz/internal/api/compliance"
+	_ "github.com/WiseLabz/wiselabz/internal/connector/all"
 	"github.com/WiseLabz/wiselabz/internal/store"
 )
 
@@ -379,5 +380,39 @@ func TestTestRuleValidation(t *testing.T) {
 
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("status %d, want 400: %s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestInstallPack(t *testing.T) {
+	s := apitest.NewStore(t)
+	ev := &mockEvaluator{}
+	h := compliance.NewHandler(s, ev)
+
+	install := func(id string) (*httptest.ResponseRecorder, map[string]int) {
+		r := httptest.NewRequest(http.MethodPost, "/api/compliance/packs/"+id+"/install", nil)
+		r.SetPathValue("id", id)
+		rr := httptest.NewRecorder()
+		h.InstallPack(rr, r)
+		var out map[string]int
+		_ = json.Unmarshal(rr.Body.Bytes(), &out)
+		return rr, out
+	}
+
+	rr, out := install("recommended")
+	if rr.Code != http.StatusOK || out["installed"] == 0 {
+		t.Fatalf("first install: status %d body %s", rr.Code, rr.Body.String())
+	}
+	if ev.evaluateCalls != out["installed"] {
+		t.Fatalf("evaluateCalls = %d, want %d", ev.evaluateCalls, out["installed"])
+	}
+	total := out["installed"] + out["skipped"]
+
+	rr, out = install("recommended")
+	if rr.Code != http.StatusOK || out["installed"] != 0 || out["skipped"] != total {
+		t.Fatalf("second install should be a no-op: %s", rr.Body.String())
+	}
+
+	if rr, _ := install("nope"); rr.Code != http.StatusNotFound {
+		t.Fatalf("unknown pack status %d, want 404", rr.Code)
 	}
 }

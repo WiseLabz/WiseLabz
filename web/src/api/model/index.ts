@@ -71,6 +71,7 @@ export * from './complianceCondition';
 export * from './complianceConditionOp';
 export * from './complianceRule';
 export * from './complianceRuleInput';
+export * from './complianceRulePackInstallResult';
 export * from './complianceRulePage';
 export * from './complianceRuleTestMatch';
 export * from './complianceRuleTestMatchEntitiesItem';

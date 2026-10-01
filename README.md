@@ -96,6 +96,7 @@ use `server config validate` to check deployment settings and `server config pri
 | Docker             | Built-in             |
 | pfSense / OPNsense | Built-in             |
 | Netbird            | Built-in             |
+| Tailscale          | Built-in             |
 | Pi-hole (v5/v6)    | Built-in             |
 | Cloudflare         | Built-in             |
 | Home Assistant     | Built-in             |

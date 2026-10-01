@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 
@@ -364,4 +365,62 @@ func (h *Handler) audit(r *http.Request, action, id string, changed []string) {
 	if err := h.Store.RecordAuditFromContext(r.Context(), action, "compliance_rule", id, map[string]any{"changedFields": changed}); err != nil {
 		slog.Error("failed to record audit", "action", action, "error", err)
 	}
+}
+
+// InstallPack handles POST /api/compliance/packs/{id}/install. It creates every
+// enabled rule of the pack that is not already present (matched by name), so
+// installing twice is a no-op.
+func (h *Handler) InstallPack(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	pack, ok, err := compliance.FindPack(id)
+	if err != nil {
+		httputil.Errorf(w, err)
+		return
+	}
+	if !ok {
+		httputil.Error(w, http.StatusNotFound, "not_found", "Compliance pack not found")
+		return
+	}
+	existing, err := h.Store.ListComplianceRules(r.Context())
+	if err != nil {
+		httputil.Errorf(w, err)
+		return
+	}
+	names := make(map[string]bool, len(existing))
+	for _, rule := range existing {
+		names[rule.Name] = true
+	}
+	installed, skipped := 0, 0
+	for _, rule := range pack.Rules {
+		if names[rule.Name] {
+			skipped++
+			continue
+		}
+		req := ruleRequest{
+			Name: rule.Name, ConnectorType: rule.ConnectorType, EntityKind: rule.EntityKind,
+			Conditions: rule.Conditions, Severity: rule.Severity, Title: rule.Title,
+			RemediationLink: rule.RemediationLink, Enabled: true,
+		}
+		record, err := req.record("")
+		if err == nil {
+			err = validRecord(record)
+		}
+		if err != nil {
+			httputil.Errorf(w, fmt.Errorf("pack %s rule %q: %w", id, rule.Name, err))
+			return
+		}
+		if err := h.Store.CreateComplianceRule(r.Context(), &record); err != nil {
+			httputil.Errorf(w, err)
+			return
+		}
+		if h.Evaluator != nil {
+			if err := h.Evaluator.EvaluateRule(r.Context(), record.ID); err != nil {
+				httputil.Errorf(w, err)
+				return
+			}
+		}
+		h.audit(r, "compliance_rule.create", record.ID, []string{"name", "connectorType", "entityKind", "conditions", "severity", "title", "remediationLink", "enabled"})
+		installed++
+	}
+	httputil.JSON(w, http.StatusOK, map[string]any{"installed": installed, "skipped": skipped})
 }

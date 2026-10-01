@@ -5,6 +5,7 @@ import {
   deleteComplianceRulesId,
   getGetComplianceRulesQueryKey,
   postComplianceRules,
+  postCompliancePacksIdInstall,
   postComplianceRulesTest,
   putComplianceRulesId,
   useGetComplianceRules,
@@ -90,6 +91,11 @@ export function RulesPage() {
     onSuccess: () => { invalidate(); setToDelete(null); toast.success(t('compliance.deleted')); },
     onError: () => toast.error(t('compliance.deleteError')),
   });
+  const installPack = useMutation({
+    mutationFn: () => postCompliancePacksIdInstall('recommended'),
+    onSuccess: () => { invalidate(); toast.success(t('compliance.packInstalled')); },
+    onError: () => toast.error(t('compliance.packInstallError')),
+  });
   const testRule = useMutation({
     mutationFn: () => postComplianceRulesTest(payload()),
     onSuccess: (result) => setPreview(result.items),
@@ -110,7 +116,7 @@ export function RulesPage() {
     <SubHeader title={t('compliance.title')} description={t('compliance.subtitle')} />
     <div className="mb-4 flex justify-end"><Button variant="primary" size="sm" onClick={() => edit('new')}><PlusIcon size={14} />{t('compliance.new')}</Button></div>
     <Panel>
-      {rules.isLoading ? <SkeletonRows rows={4} /> : rules.isError || !rules.data ? <ErrorState description={t('compliance.loadError')} onRetry={() => rules.refetch()} /> : rules.data.items.length === 0 ? <EmptyState title={t('compliance.emptyTitle')} description={t('compliance.emptyDescription')} /> :
+      {rules.isLoading ? <SkeletonRows rows={4} /> : rules.isError || !rules.data ? <ErrorState description={t('compliance.loadError')} onRetry={() => rules.refetch()} /> : rules.data.items.length === 0 ? <EmptyState title={t('compliance.emptyTitle')} description={t('compliance.emptyDescription')} action={<Button variant="secondary" size="sm" disabled={installPack.isPending} onClick={() => installPack.mutate()}>{t('compliance.installRecommended')}</Button>} /> :
         <ul className="divide-y divide-line-soft">{rules.data.items.map((rule) => <li key={rule.id} className="flex items-center gap-3 px-4 py-3">
           <Toggle checked={Boolean(rule.enabled)} onChange={(enabled) => { putComplianceRulesId(rule.id, { ...rule, enabled }).then(invalidate).catch(() => toast.error(t('compliance.saveError'))); }} label={t('compliance.enabledLabel', { name: rule.name })} size="sm" />
           <div className="min-w-0 flex-1"><p className="truncate text-sm font-medium text-ink">{rule.name}</p><p className="font-mono text-2xs text-ink-faint">{rule.connectorType} · {rule.entityKind}</p></div>

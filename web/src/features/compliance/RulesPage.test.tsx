@@ -27,4 +27,16 @@ describe('RulesPage', () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(enabled).toBe(true);
   });
+
+  it('installs the recommended pack from the empty state', async () => {
+    let installed = false;
+    server.use(
+      http.get('/api/compliance/rules', () => HttpResponse.json({ items: installed ? [rule] : [] })),
+      http.post('/api/compliance/packs/recommended/install', () => { installed = true; return HttpResponse.json({ installed: 1, skipped: 0 }); }),
+    );
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Install recommended rules' }));
+    expect(await screen.findByText('No privileged containers')).toBeInTheDocument();
+    expect(installed).toBe(true);
+  });
 });
