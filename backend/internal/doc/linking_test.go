@@ -41,7 +41,7 @@ func TestMatchEntitiesExternalIDPrecedence(t *testing.T) {
 	})
 	connectorID := seedEngineConnectorWithEntities(t, s, "Docker", "containers_paas", "docker", nil)
 
-	links, err := matchEntities(ctx, s, connectorID, []connector.SnapshotEntity{
+	links, err := matchEntities(ctx, s, newSnapshotCache(s), connectorID, []connector.SnapshotEntity{
 		{Kind: "vm", Name: "web-01", ExternalID: "100", IP: "10.0.0.99"},
 	})
 	if err != nil {
@@ -60,7 +60,7 @@ func TestMatchEntitiesIPPrecedence(t *testing.T) {
 	})
 	connectorID := seedEngineConnectorWithEntities(t, s, "pfSense", "networking", "pfsense", nil)
 
-	links, err := matchEntities(ctx, s, connectorID, []connector.SnapshotEntity{
+	links, err := matchEntities(ctx, s, newSnapshotCache(s), connectorID, []connector.SnapshotEntity{
 		{Kind: "rule", Name: "allow-web", IP: "10.0.0.5"},
 	})
 	if err != nil {
@@ -79,7 +79,7 @@ func TestMatchEntitiesHostnamePrecedenceCaseInsensitive(t *testing.T) {
 	})
 	connectorID := seedEngineConnectorWithEntities(t, s, "Proxmox", "virtualization", "proxmox", nil)
 
-	links, err := matchEntities(ctx, s, connectorID, []connector.SnapshotEntity{
+	links, err := matchEntities(ctx, s, newSnapshotCache(s), connectorID, []connector.SnapshotEntity{
 		{Kind: "vm", Name: "web-01", Hostname: "web-01.lab.local"},
 	})
 	if err != nil {
@@ -101,7 +101,7 @@ func TestMatchEntitiesFansOutAcrossConnectors(t *testing.T) {
 	})
 	connectorID := seedEngineConnectorWithEntities(t, s, "Proxmox", "virtualization", "proxmox", nil)
 
-	links, err := matchEntities(ctx, s, connectorID, []connector.SnapshotEntity{
+	links, err := matchEntities(ctx, s, newSnapshotCache(s), connectorID, []connector.SnapshotEntity{
 		{Kind: "vm", Name: "web-01", IP: "10.0.0.5", Hostname: "web-01.lab.local"},
 	})
 	if err != nil {
@@ -175,7 +175,7 @@ func TestMatchEntitiesDedupesExactExternalIDDuplicates(t *testing.T) {
 
 	// Two "mine" entities both matching the same external entity by
 	// ExternalID+Kind should collapse to a single link.
-	links, err := matchEntities(ctx, s, connectorID, []connector.SnapshotEntity{
+	links, err := matchEntities(ctx, s, newSnapshotCache(s), connectorID, []connector.SnapshotEntity{
 		{Kind: "vm", Name: "web-01", ExternalID: "100"},
 		{Kind: "vm", Name: "web-01-alias", ExternalID: "100"},
 	})
@@ -184,5 +184,30 @@ func TestMatchEntitiesDedupesExactExternalIDDuplicates(t *testing.T) {
 	}
 	if len(links) != 1 {
 		t.Fatalf("matchEntities() returned %d links, want 1 deduped link", len(links))
+	}
+}
+
+func TestSnapshotCacheRefreshesOnNewSnapshot(t *testing.T) {
+	ctx := context.Background()
+	s := newEngineTestStore(t)
+	id := seedEngineConnectorWithEntities(t, s, "Proxmox", "virtualization", "proxmox", nil)
+	cache := newSnapshotCache(s)
+
+	first, err := cache.latest(ctx, id)
+	if err != nil {
+		t.Fatalf("latest: %v", err)
+	}
+	again, _ := cache.latest(ctx, id)
+	if first != again {
+		t.Fatal("expected cached snapshot to be reused while unchanged")
+	}
+
+	data, _ := json.Marshal(connector.ServiceSnapshot{ServiceName: "Proxmox", Entities: []connector.SnapshotEntity{{Kind: "vm", Name: "new"}}})
+	if err := s.CreateSnapshot(ctx, &store.SnapshotRecord{ConnectorID: id, Data: string(data), FetchedAt: time.Now().Add(time.Minute).UTC().Format(store.SnapshotTimeFormat)}); err != nil {
+		t.Fatalf("create snapshot: %v", err)
+	}
+	next, err := cache.latest(ctx, id)
+	if err != nil || len(next.Entities) != 1 {
+		t.Fatalf("latest after new snapshot = %+v, %v; want refreshed entities", next, err)
 	}
 }

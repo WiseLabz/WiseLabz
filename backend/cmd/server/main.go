@@ -84,6 +84,12 @@ func main() {
 
 	// Initialize store
 	s := store.New(db, cfg.DB.Driver)
+	readDB, err := store.OpenReadDB(cfg.DB.Driver, cfg.DB.DSN)
+	if err != nil {
+		logger.Error("Failed to open read database", "error", err)
+		os.Exit(1)
+	}
+	s.SetReadDB(readDB)
 
 	// Create root context that cancels on interrupt. This only signals that
 	// shutdown should begin; the lifecycle manager below owns the separate

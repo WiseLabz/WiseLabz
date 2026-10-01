@@ -79,7 +79,7 @@ func (s *Store) GetUserConnectorRole(ctx context.Context, userID, connectorID st
 // (manual or oidc, viewer or operator) on connectorID. Instance admins get no
 // implicit access, matching the REST list filter.
 func (s *Store) ConnectorReaderIDs(ctx context.Context, connectorID string) ([]string, error) {
-	rows, err := s.db.QueryContext(ctx, `
+	rows, err := s.reader().QueryContext(ctx, `
 		SELECT DISTINCT r.user_id
 		FROM user_connector_roles r JOIN users u ON u.id = r.user_id
 		WHERE r.connector_id = ? AND u.disabled = 0`, connectorID)

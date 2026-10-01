@@ -86,7 +86,7 @@ func (s *Store) CreateUser(ctx context.Context, user *User) error {
 func (s *Store) GetUserByID(ctx context.Context, id string) (*User, error) {
 	u := &User{}
 	var disabled, canManageDashboardDefaults int
-	err := s.db.QueryRowContext(ctx, `
+	err := s.reader().QueryRowContext(ctx, `
 		SELECT id, username, display_name, email, instance_admin_role, auth_source, password_hash, disabled, can_manage_dashboard_defaults, created_at, digest_cadence, digest_last_sent_at, digest_timezone, failed_login_attempts, locked_until
 		FROM users WHERE id = ?
 	`, id).Scan(&u.ID, &u.Username, &u.DisplayName, &u.Email, &u.InstanceAdminRole,
@@ -174,7 +174,7 @@ func (s *Store) GetUserRoleStatus(ctx context.Context, userID string) (string, b
 	}
 	var role string
 	var disabled int
-	err := s.db.QueryRowContext(ctx, `SELECT instance_admin_role, disabled FROM users WHERE id = ?`, userID).Scan(&role, &disabled)
+	err := s.reader().QueryRowContext(ctx, `SELECT instance_admin_role, disabled FROM users WHERE id = ?`, userID).Scan(&role, &disabled)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", false, ErrNotFound
 	}
@@ -340,7 +340,7 @@ func (s *Store) UserHasPermission(ctx context.Context, userID, permission string
 		return false, nil
 	}
 	var flag int
-	err := s.db.QueryRowContext(ctx,
+	err := s.reader().QueryRowContext(ctx,
 		`SELECT can_manage_dashboard_defaults FROM users WHERE id = ?`, userID,
 	).Scan(&flag)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -381,7 +381,7 @@ func (s *Store) CreateSession(ctx context.Context, session *Session) error {
 // GetSession retrieves a session by ID.
 func (s *Store) GetSession(ctx context.Context, id string) (*Session, error) {
 	sess := &Session{}
-	err := s.db.QueryRowContext(ctx, `
+	err := s.reader().QueryRowContext(ctx, `
 		SELECT id, user_id, token_hash, auth_provider_id, user_agent, ip, created_at, last_seen_at
 		FROM sessions WHERE id = ?
 	`, id).Scan(&sess.ID, &sess.UserID, &sess.TokenHash, &sess.AuthProviderID, &sess.UserAgent, &sess.IP,
@@ -448,7 +448,7 @@ func (s *Store) RotateSessionToken(ctx context.Context, userID, oldHash, newHash
 // HasSessionTokenHash reports whether an active session owns a refresh token.
 func (s *Store) HasSessionTokenHash(ctx context.Context, userID, tokenHash string) (bool, error) {
 	var found int
-	err := s.db.QueryRowContext(ctx, `SELECT 1 FROM sessions WHERE user_id = ? AND token_hash = ?`, userID, tokenHash).Scan(&found)
+	err := s.reader().QueryRowContext(ctx, `SELECT 1 FROM sessions WHERE user_id = ? AND token_hash = ?`, userID, tokenHash).Scan(&found)
 	if errors.Is(err, sql.ErrNoRows) {
 		return false, nil
 	}

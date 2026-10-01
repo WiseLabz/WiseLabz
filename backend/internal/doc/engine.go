@@ -16,12 +16,13 @@ import (
 
 // Engine generates documentation from templates and connector snapshots.
 type Engine struct {
-	store *store.Store
+	store     *store.Store
+	snapshots *snapshotCache
 }
 
 // NewEngine creates a new doc engine.
 func NewEngine(s *store.Store) *Engine {
-	return &Engine{store: s}
+	return &Engine{store: s, snapshots: newSnapshotCache(s)}
 }
 
 // GenerateResult holds the output of document generation.
@@ -47,17 +48,13 @@ func (e *Engine) render(ctx context.Context, templateID, connectorID string) (*r
 		return nil, fmt.Errorf("get template sections: %w", err)
 	}
 
-	sn, err := e.store.GetLatestSnapshot(ctx, connectorID)
+	snapPtr, err := e.snapshots.latest(ctx, connectorID)
 	if err != nil {
-		return nil, fmt.Errorf("get snapshot: %w", err)
+		return nil, err
 	}
+	snap := *snapPtr
 
-	var snap connector.ServiceSnapshot
-	if err := json.Unmarshal([]byte(sn.Data), &snap); err != nil {
-		return nil, fmt.Errorf("unmarshal snapshot: %w", err)
-	}
-
-	links, err := matchEntities(ctx, e.store, connectorID, snap.Entities)
+	links, err := matchEntities(ctx, e.store, e.snapshots, connectorID, snap.Entities)
 	if err != nil {
 		return nil, fmt.Errorf("match entities: %w", err)
 	}
@@ -206,15 +203,11 @@ func (e *Engine) MatchingConnectors(ctx context.Context, templateID string) ([]s
 // (first-time generation) and RegenerateForConnector (sync-triggered refresh
 // of existing template-less docs).
 func (e *Engine) renderSnapshot(ctx context.Context, connectorID string) (*renderResult, error) {
-	sn, err := e.store.GetLatestSnapshot(ctx, connectorID)
+	snapPtr, err := e.snapshots.latest(ctx, connectorID)
 	if err != nil {
-		return nil, fmt.Errorf("get snapshot: %w", err)
+		return nil, err
 	}
-
-	var snap connector.ServiceSnapshot
-	if err := json.Unmarshal([]byte(sn.Data), &snap); err != nil {
-		return nil, fmt.Errorf("unmarshal snapshot: %w", err)
-	}
+	snap := *snapPtr
 
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf, "# %s\n\n", snap.ServiceName)
@@ -238,7 +231,7 @@ func (e *Engine) renderSnapshot(ctx context.Context, connectorID string) (*rende
 		buf.WriteString("\n")
 	}
 
-	if links, err := matchEntities(ctx, e.store, connectorID, snap.Entities); err == nil && len(links) > 0 {
+	if links, err := matchEntities(ctx, e.store, e.snapshots, connectorID, snap.Entities); err == nil && len(links) > 0 {
 		buf.WriteString("## Related Entities\n\n")
 		buf.WriteString(relatedEntities(snap.ServiceName, links))
 		buf.WriteString("\n")
@@ -379,13 +372,9 @@ func (e *Engine) GenerateLabTopology(ctx context.Context) (*GenerateResult, erro
 
 	var entities []labEntity
 	for _, c := range connectors {
-		sn, err := e.store.GetLatestSnapshot(ctx, c.ID)
+		snap, err := e.snapshots.latest(ctx, c.ID)
 		if err != nil {
 			continue // no snapshot yet; soft-skip
-		}
-		var snap connector.ServiceSnapshot
-		if err := json.Unmarshal([]byte(sn.Data), &snap); err != nil {
-			continue
 		}
 		for _, ent := range snap.Entities {
 			entities = append(entities, labEntity{ConnectorID: c.ID, ConnectorName: c.Name, Entity: ent})

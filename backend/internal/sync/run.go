@@ -1,6 +1,7 @@
 package sync
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha1" //nolint:gosec // non-cryptographic: stable pattern fingerprint, not a security boundary
 	"encoding/hex"
@@ -355,6 +356,20 @@ func (e *Engine) persistSyncSnapshot(ctx context.Context, connectorID string, sn
 			sn.Sections[i].Content = ""
 		}
 	}
+	var old *connector.ServiceSnapshot
+	if prevErr == nil {
+		var parsed connector.ServiceSnapshot
+		if err := json.Unmarshal([]byte(prev.Data), &parsed); err != nil {
+			slog.Error("sync: previous snapshot unparseable, skipping diff", "connector", logsafe.Sanitize(connectorID), "snapshot", prev.ID, "error", logsafe.Sanitize(err.Error()))
+		} else {
+			old = &parsed
+		}
+	}
+	if old != nil && snapshotContentEqual(old, sn) {
+		// Nothing changed since the latest snapshot: reuse it instead of
+		// storing another identical blob.
+		return nil, nil, prev.ID, nil
+	}
 	data, _ := json.Marshal(sn)
 	snapshot := &store.SnapshotRecord{ConnectorID: connectorID, Data: string(data), FetchedAt: sn.FetchedAt.UTC().Format(store.SnapshotTimeFormat)}
 	maintenance, err := e.store.GetActiveMaintenanceWindow(ctx, connectorID)
@@ -367,11 +382,8 @@ func (e *Engine) persistSyncSnapshot(ctx context.Context, connectorID string, sn
 		if err := tx.CreateSnapshot(ctx, snapshot); err != nil {
 			return err
 		}
-		if prevErr == nil && maintenance == nil {
-			var old connector.ServiceSnapshot
-			if err := json.Unmarshal([]byte(prev.Data), &old); err != nil {
-				slog.Error("sync: previous snapshot unparseable, skipping diff", "connector", logsafe.Sanitize(connectorID), "snapshot", prev.ID, "error", logsafe.Sanitize(err.Error()))
-			} else if err := e.createSyncChanges(ctx, tx, connectorID, &old, sn, &changes, &alerts); err != nil {
+		if old != nil && maintenance == nil {
+			if err := e.createSyncChanges(ctx, tx, connectorID, old, sn, &changes, &alerts); err != nil {
 				return err
 			}
 		}
@@ -384,6 +396,16 @@ func (e *Engine) persistSyncSnapshot(ctx context.Context, connectorID string, sn
 		return nil, nil, "", fmt.Errorf("save sync results: %w", err)
 	}
 	return changes, alerts, snapshot.ID, nil
+}
+
+// snapshotContentEqual reports whether two snapshots are identical apart from
+// their fetch time.
+func snapshotContentEqual(a, b *connector.ServiceSnapshot) bool {
+	ac, bc := *a, *b
+	ac.FetchedAt, bc.FetchedAt = time.Time{}, time.Time{}
+	aj, errA := json.Marshal(&ac)
+	bj, errB := json.Marshal(&bc)
+	return errA == nil && errB == nil && bytes.Equal(aj, bj)
 }
 
 func (e *Engine) createSyncChanges(ctx context.Context, tx *store.Store, connectorID string, old, sn *connector.ServiceSnapshot, changes *[]*store.ChangeRecord, alerts *[]*store.AlertRecord) error {

@@ -90,9 +90,9 @@ func TestSyncExcludesConcurrentRuns(t *testing.T) {
 	if _, err := e.RunSync(context.Background(), rec.ID, "after"); err != nil {
 		t.Fatal(err)
 	}
-	snapshots, err := s.GetSnapshotsByConnector(context.Background(), rec.ID, 10)
-	if err != nil || len(snapshots) != 2 {
-		t.Fatalf("snapshots = %d, err = %v; want two actual runs", len(snapshots), err)
+	runs, err := s.ListSyncRunsByConnector(context.Background(), rec.ID, 10)
+	if err != nil || len(runs) != 2 {
+		t.Fatalf("sync runs = %d, err = %v; want two actual runs", len(runs), err)
 	}
 }
 
