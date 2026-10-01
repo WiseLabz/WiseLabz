@@ -31,6 +31,8 @@ auth:
   access_token_ttl: 900
   # Refresh token lifetime in seconds (default 7 days)
   refresh_token_ttl: 604800
+  # Maximum share-link lifetime in seconds (default 30 days)
+  share_link_max_ttl: 2592000
   # Require re-authentication for destructive actions (connector removal)
   step_up_for_destructive: true
   # OIDC providers (defined here, enabled/disabled via Settings UI)

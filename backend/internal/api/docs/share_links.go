@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/WiseLabz/wiselabz/internal/auth"
+	"github.com/WiseLabz/wiselabz/internal/config"
 	"github.com/WiseLabz/wiselabz/internal/httputil"
 	"github.com/WiseLabz/wiselabz/internal/store"
 )
@@ -63,10 +64,6 @@ func (h *Handler) resolveShareLinkNode(w http.ResponseWriter, r *http.Request, d
 	if d.ServiceID == "" {
 		// Lab-wide doc (e.g. Lab Topology): no connector to check against,
 		// share-link creation requires instance-admin instead.
-		if !auth.InstanceAdminFromContext(r.Context()) {
-			httputil.Error(w, http.StatusForbidden, "forbidden", "insufficient permissions")
-			return shareLinkNode{}, false
-		}
 		return shareLinkNode{kind: "doc", docID: d.ID}, true
 	}
 	return shareLinkNode{kind: "doc", connectorIDs: []string{d.ServiceID}, docID: d.ID}, true
@@ -119,8 +116,20 @@ func (h *Handler) CreateShareLink(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	authConfig := config.AuthSettings{}
+	if h.Settings != nil && h.Settings.Config != nil {
+		authConfig = h.Settings.Config.Auth
+	}
+	if expiresAt.After(time.Now().UTC().Add(authConfig.ShareLinkMaxTTLDuration())) {
+		httputil.ErrorWithDetails(w, http.StatusBadRequest, "invalid_request", "expiresAt exceeds the maximum share-link lifetime", []httputil.FieldError{{Field: "expiresAt", Msg: "exceeds the maximum share-link lifetime"}})
+		return
+	}
 	node, ok := h.resolveShareLinkNode(w, r, req.DocTreeRoot)
 	if !ok {
+		return
+	}
+	if node.kind == "doc" && len(node.connectorIDs) == 0 && !auth.InstanceAdminFromContext(r.Context()) {
+		httputil.Error(w, http.StatusForbidden, "forbidden", "insufficient permissions")
 		return
 	}
 	if !h.requireShareCreateAccess(w, r, node.connectorIDs) {
@@ -229,10 +238,35 @@ func (h *Handler) ResolveShareLink(next http.Handler) http.Handler {
 			return
 		}
 
+		creator, err := h.Store.GetUserByID(r.Context(), link.CreatedBy)
+		if errors.Is(err, store.ErrNotFound) || (err == nil && creator.Disabled) {
+			httputil.Error(w, http.StatusGone, "share_link_revoked", "This share link has been revoked")
+			return
+		}
+		if err != nil {
+			httputil.Errorf(w, err)
+			return
+		}
 		node, ok := h.resolveShareLinkNode(w, r, link.DocTreeRoot)
 		if !ok {
 			return
 		}
+
+		allowedIDs, err := h.Store.FilterConnectorIDsByGrant(r.Context(), link.CreatedBy, node.connectorIDs, "operator")
+		if err != nil {
+			httputil.Errorf(w, err)
+			return
+		}
+		labDoc := node.kind == "doc" && len(node.connectorIDs) == 0
+		if labDoc && creator.InstanceAdminRole != "admin" {
+			httputil.Error(w, http.StatusGone, "share_link_revoked", "This share link has been revoked")
+			return
+		}
+		if node.kind != "root" && !labDoc && len(allowedIDs) == 0 {
+			httputil.Error(w, http.StatusGone, "share_link_revoked", "This share link has been revoked")
+			return
+		}
+		node.connectorIDs = allowedIDs
 
 		if err := h.Store.TouchShareLinkLastAccessed(r.Context(), link.ID); err != nil {
 			slog.Error("failed to touch share link last accessed", "id", link.ID, "error", err)

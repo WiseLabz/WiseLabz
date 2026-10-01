@@ -328,6 +328,14 @@ func createTestShareLink(t *testing.T, h *Handler, docTreeRoot, expiresAt string
 		CreatedBy:   apitest.NewUser(t, h.Store, "viewer"),
 		ExpiresAt:   expiresAt,
 	}
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	node, ok := h.resolveShareLinkNode(httptest.NewRecorder(), req, docTreeRoot)
+	if !ok {
+		t.Fatal("resolve test share scope")
+	}
+	for _, id := range node.connectorIDs {
+		apitest.GrantConnectorRole(t, h.Store, link.CreatedBy, id, "operator")
+	}
 	if err := h.Store.CreateShareLink(context.Background(), link); err != nil {
 		t.Fatalf("create share link: %v", err)
 	}
@@ -545,5 +553,158 @@ func TestShareLinkHandlerHasNoWriteMethods(t *testing.T) {
 	}
 	if after.Content != "test content" {
 		t.Errorf("doc content changed via share-link route: got %q", after.Content)
+	}
+}
+
+func TestShareLinksRevalidateCreatorAccess(t *testing.T) {
+	for _, rootKind := range []string{"root", "connector", "doc"} {
+		t.Run(rootKind, func(t *testing.T) {
+			h := newTestHandler(t)
+			conn := seedConnector(t, h.Store)
+			d := seedDoc(t, h.Store, conn.ID)
+			root := conn.ID
+			if rootKind == "root" {
+				root = "root"
+			}
+			if rootKind == "doc" {
+				root = d.ID
+			}
+			token := createTestShareLink(t, h, root, futureExpiry())
+			link, err := h.Store.GetShareLinkByHash(context.Background(), store.HashToken(token))
+			if err != nil {
+				t.Fatal(err)
+			}
+			extra := seedConnector(t, h.Store)
+			extraDoc := seedDoc(t, h.Store, extra.ID)
+			view := func(docID string) *httptest.ResponseRecorder {
+				req := httptest.NewRequest(http.MethodGet, "/api/share/"+token+"/tree", nil)
+				req.SetPathValue("token", token)
+				rr := httptest.NewRecorder()
+				if docID == "" {
+					h.ResolveShareLink(http.HandlerFunc(h.ShareLinkTree)).ServeHTTP(rr, req)
+				} else {
+					req.SetPathValue("docId", docID)
+					h.ResolveShareLink(http.HandlerFunc(h.ShareLinkDoc)).ServeHTTP(rr, req)
+				}
+				return rr
+			}
+			rr := view("")
+			if rr.Code != 200 || strings.Contains(rr.Body.String(), extra.ID) {
+				t.Fatalf("tree leaks connector: %d %s", rr.Code, rr.Body)
+			}
+			if rr := view(extraDoc.ID); rr.Code != 404 {
+				t.Fatalf("ungranted doc: %d %s", rr.Code, rr.Body)
+			}
+			if _, err := h.Store.UpsertConnectorGrant(context.Background(), link.CreatedBy, conn.ID, "viewer"); err != nil {
+				t.Fatal(err)
+			}
+			rr = view(d.ID)
+			if rr.Code == 200 {
+				t.Fatalf("downgraded creator still shares: %s", rr.Body)
+			}
+			if _, err := h.Store.UpsertConnectorGrant(context.Background(), link.CreatedBy, conn.ID, "operator"); err != nil {
+				t.Fatal(err)
+			}
+			if err := h.Store.UpdateUser(context.Background(), link.CreatedBy, map[string]any{"disabled": true}); err != nil {
+				t.Fatal(err)
+			}
+			if rr := view(""); rr.Code != 410 {
+				t.Fatalf("disabled creator: %d %s", rr.Code, rr.Body)
+			}
+			if err := h.Store.UpdateUser(context.Background(), link.CreatedBy, map[string]any{"disabled": false}); err != nil {
+				t.Fatal(err)
+			}
+			if rr := view(""); rr.Code != 410 {
+				t.Fatalf("revoked link resurrected: %d %s", rr.Code, rr.Body)
+			}
+		})
+	}
+}
+
+func TestCreateShareLinkCapsExpiry(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		cap    int
+		expiry time.Duration
+		status int
+	}{
+		{"default rejects over 30 days", 0, 31 * 24 * time.Hour, 400},
+		{"configured cap rejects", 3600, 24 * time.Hour, 400},
+		{"configured cap allows", 3600, 30 * time.Minute, 201},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h := newTestHandler(t)
+			h.Settings.Config.Auth.ShareLinkMaxTTL = tc.cap
+			conn := seedConnector(t, h.Store)
+			user := apitest.NewUser(t, h.Store, "viewer")
+			apitest.GrantConnectorRole(t, h.Store, user, conn.ID, "operator")
+			expiry := time.Now().UTC().Add(tc.expiry).Format(time.RFC3339)
+			req := httptest.NewRequest(http.MethodPost, "/api/docs/share-links", strings.NewReader(`{"docTreeRoot":"`+conn.ID+`","expiresAt":"`+expiry+`"}`))
+			rr := httptest.NewRecorder()
+			h.CreateShareLink(rr, asUser(req, user, false))
+			if rr.Code != tc.status {
+				t.Fatalf("expiry: %d, want %d: %s", rr.Code, tc.status, rr.Body)
+			}
+		})
+	}
+}
+
+func TestShareLinkLabDocRequiresCurrentAdmin(t *testing.T) {
+	h := newTestHandler(t)
+	d := seedDoc(t, h.Store, "")
+	creator := apitest.NewUser(t, h.Store, "operator")
+	body := `{"docTreeRoot":"` + d.ID + `","expiresAt":"` + futureExpiry() + `"}`
+	rr := httptest.NewRecorder()
+	h.CreateShareLink(rr, asUser(httptest.NewRequest(http.MethodPost, "/api/docs/share-links", strings.NewReader(body)), creator, true))
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("create: %d %s", rr.Code, rr.Body)
+	}
+	var link struct {
+		Token string `json:"token"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &link); err != nil {
+		t.Fatal(err)
+	}
+	view := func() int {
+		req := httptest.NewRequest(http.MethodGet, "/api/share/"+link.Token+"/tree", nil)
+		req.SetPathValue("token", link.Token)
+		rr := httptest.NewRecorder()
+		h.ResolveShareLink(http.HandlerFunc(h.ShareLinkTree)).ServeHTTP(rr, req)
+		return rr.Code
+	}
+	if got := view(); got != 200 {
+		t.Fatalf("admin lab doc: %d", got)
+	}
+	if err := h.Store.UpdateUser(t.Context(), creator, map[string]any{"instance_admin_role": "user"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := view(); got != 410 {
+		t.Fatalf("demoted creator: %d", got)
+	}
+	rr = httptest.NewRecorder()
+	h.CreateShareLink(rr, asUser(httptest.NewRequest(http.MethodPost, "/api/docs/share-links", strings.NewReader(body)), creator, false))
+	if rr.Code != 403 {
+		t.Fatalf("non-admin lab doc create: %d %s", rr.Code, rr.Body)
+	}
+}
+
+func TestResolveShareLinkRejectsDisabledCreator(t *testing.T) {
+	h := newTestHandler(t)
+	conn := seedConnector(t, h.Store)
+	token := createTestShareLink(t, h, conn.ID, futureExpiry())
+	link, err := h.Store.GetShareLinkByHash(t.Context(), store.HashToken(token))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Simulate a legacy disabled account whose links have not been revoked.
+	if _, err := h.Store.DB().ExecContext(t.Context(), `UPDATE users SET disabled = 1 WHERE id = ?`, link.CreatedBy); err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/api/share/"+token+"/tree", nil)
+	req.SetPathValue("token", token)
+	rr := httptest.NewRecorder()
+	h.ResolveShareLink(http.HandlerFunc(h.ShareLinkTree)).ServeHTTP(rr, req)
+	if rr.Code != 410 {
+		t.Fatalf("disabled legacy creator: %d %s", rr.Code, rr.Body)
 	}
 }

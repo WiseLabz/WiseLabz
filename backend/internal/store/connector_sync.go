@@ -109,16 +109,36 @@ func (s *Store) ClaimDueConnector(ctx context.Context, id, now, leaseUntil strin
 	return n == 1, nil
 }
 
+// SnapshotTimeFormat keeps UTC timestamps lexicographically sortable, including nanoseconds.
+const SnapshotTimeFormat = "2006-01-02T15:04:05.000000000Z"
+
+func normalizeSnapshotTime(value string) (string, error) {
+	at, err := time.Parse(time.RFC3339Nano, value)
+	if err != nil {
+		return "", fmt.Errorf("parse snapshot timestamp: %w", err)
+	}
+	return at.UTC().Format(SnapshotTimeFormat), nil
+}
+
 // CreateSnapshot inserts a new service snapshot.
 func (s *Store) CreateSnapshot(ctx context.Context, sn *SnapshotRecord) error {
 	if sn.ID == "" {
-		sn.ID = uuid.New().String()
+		id, err := uuid.NewV7()
+		if err != nil {
+			return fmt.Errorf("create snapshot ID: %w", err)
+		}
+		sn.ID = id.String()
 	}
 	if sn.FetchedAt == "" {
-		sn.FetchedAt = time.Now().UTC().Format(time.RFC3339)
+		sn.FetchedAt = time.Now().UTC().Format(SnapshotTimeFormat)
 	}
 
-	_, err := s.db.ExecContext(ctx, `
+	normalized, err := normalizeSnapshotTime(sn.FetchedAt)
+	if err != nil {
+		return err
+	}
+	sn.FetchedAt = normalized
+	_, err = s.db.ExecContext(ctx, `
 		INSERT INTO service_snapshots (id, connector_id, data, fetched_at)
 		VALUES (?, ?, ?, ?)
 	`, sn.ID, sn.ConnectorID, sn.Data, sn.FetchedAt)
@@ -134,7 +154,7 @@ func (s *Store) GetLatestSnapshot(ctx context.Context, connectorID string) (*Sna
 	err := s.db.QueryRowContext(ctx, `
 		SELECT id, connector_id, data, fetched_at
 		FROM service_snapshots WHERE connector_id = ?
-		ORDER BY fetched_at DESC LIMIT 1
+		ORDER BY fetched_at DESC, id DESC LIMIT 1
 	`, connectorID).Scan(&sn.ID, &sn.ConnectorID, &sn.Data, &sn.FetchedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
@@ -150,7 +170,7 @@ func (s *Store) GetSnapshotsByConnector(ctx context.Context, connectorID string,
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, connector_id, data, fetched_at
 		FROM service_snapshots WHERE connector_id = ?
-		ORDER BY fetched_at DESC LIMIT ?
+		ORDER BY fetched_at DESC, id DESC LIMIT ?
 	`, connectorID, limit)
 	if err != nil {
 		return nil, fmt.Errorf("get snapshots: %w", err)

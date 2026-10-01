@@ -67,6 +67,7 @@ func (d *Dispatcher) RunDigestSweep(ctx context.Context, now time.Time, logger *
 
 	channels := d.loadChannels(ctx)
 	routes := d.loadRouting(ctx)
+	summaries := make(map[string]store.NotificationRecord)
 
 	for _, u := range users {
 		if u.Disabled || u.DigestCadence == "off" {
@@ -107,11 +108,19 @@ func (d *Dispatcher) RunDigestSweep(ctx context.Context, now time.Time, logger *
 		}
 
 		title, message := formatDigest(notifications)
-		d.notifyAlert(ctx, channels, routes, "", u.ID, "digest.summary", "", "", title, message, false)
+		id, ok := d.sendInApp(ctx, u.ID, "", "digest.summary", title, message)
+		if ok {
+			if _, exists := summaries[message]; !exists {
+				summaries[message] = store.NotificationRecord{ID: id, Title: title, Message: message}
+			}
+		}
 
 		if err := d.store.UpdateUser(ctx, u.ID, map[string]any{"digest_last_sent_at": nowStr}); err != nil {
 			logger.Error("digest sweep: failed to advance watermark", "userID", u.ID, "error", err)
 		}
+	}
+	for _, summary := range summaries {
+		d.notifyExternalChannels(ctx, summary.ID, channels, routes, "digest.summary", "", "", "", summary.Title, summary.Message)
 	}
 	return nil
 }

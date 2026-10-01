@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"reflect"
 	"strconv"
 	"time"
 
@@ -297,11 +298,12 @@ func (h *Handler) pullInNextRun(w http.ResponseWriter, r *http.Request, id strin
 // authorizeConnectorRepoint guards the fields that decide where and how a
 // connector connects. Repointing one makes the server send its stored
 // credentials to the new endpoint, so changing url, type or verifyTls is an
-// instance-admin action; operators may still send unchanged values. It
+// instance-admin action. Endpoint-defining config keys follow the same rule;
+// operators may still send unchanged values. It
 // writes the error response and reports false when the update must not
 // proceed.
 func (h *Handler) authorizeConnectorRepoint(w http.ResponseWriter, r *http.Request, id string, req *updateConnectorRequest) bool {
-	if req.URL == nil && req.Type == nil && req.VerifyTLS == nil {
+	if req.URL == nil && req.Type == nil && req.VerifyTLS == nil && req.Config == nil {
 		return true
 	}
 	if auth.InstanceAdminFromContext(r.Context()) {
@@ -321,6 +323,25 @@ func (h *Handler) authorizeConnectorRepoint(w http.ResponseWriter, r *http.Reque
 		(req.VerifyTLS != nil && *req.VerifyTLS != current.VerifyTLS) {
 		httputil.Error(w, http.StatusForbidden, "forbidden", "Changing url, type or verifyTls requires an instance admin")
 		return false
+	}
+
+	if req.Config != nil {
+		schema, err := connector.GetTypeSchema(current.Type)
+		if err != nil || len(schema.EndpointConfigKeys) == 0 {
+			return true
+		}
+		oldConfig, err := store.ParseConnectorConfig(current.Type, current.ConfigData, h.Config.Encryption.Key)
+		if err != nil {
+			httputil.Errorf(w, err)
+			return false
+		}
+		for _, key := range schema.EndpointConfigKeys {
+			// Config is replaced, so omitting a key also changes the endpoint.
+			if !reflect.DeepEqual(req.Config[key], oldConfig[key]) {
+				httputil.Error(w, http.StatusForbidden, "forbidden", "Changing endpoint config requires an instance admin")
+				return false
+			}
+		}
 	}
 	return true
 }

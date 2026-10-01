@@ -39,12 +39,16 @@ func (s *Store) batchDelete(ctx context.Context, table, where string, args ...an
 // never deleting a connector's most recent snapshot (GetLatestSnapshot's
 // "current data" for that service).
 func (s *Store) DeleteOldSnapshots(ctx context.Context, cutoff string) (int64, error) {
+	cutoff, err := normalizeSnapshotTime(cutoff)
+	if err != nil {
+		return 0, err
+	}
 	n, err := s.batchDelete(ctx, "service_snapshots", `
 		t.fetched_at < ?
 		AND NOT EXISTS (SELECT 1 FROM golden_snapshots g WHERE g.snapshot_id = t.id)
 		AND EXISTS (
 			SELECT 1 FROM service_snapshots n
-			WHERE n.connector_id = t.connector_id AND n.fetched_at > t.fetched_at
+			WHERE n.connector_id = t.connector_id AND (n.fetched_at, n.id) > (t.fetched_at, t.id)
 		)`, cutoff)
 	if err != nil {
 		return n, fmt.Errorf("delete old snapshots: %w", err)

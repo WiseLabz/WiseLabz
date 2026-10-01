@@ -11,6 +11,7 @@ import { Button } from '../../components/ui/Button';
 import { CopyIcon, CheckIcon } from '../../components/icons';
 import { useCreateShareLink } from '../../api/shareLinks';
 import { toast } from '../../lib/toast';
+import { copyText } from '../../lib/clipboard';
 import { cn } from '../../lib/cn';
 
 const TTL_PRESETS = [
@@ -56,7 +57,7 @@ export function ShareDialog({ open, onClose, node }: ShareDialogProps) {
   const handleCopy = async () => {
     if (!createdUrl) return;
     try {
-      await navigator.clipboard.writeText(createdUrl);
+      await copyText(createdUrl);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {

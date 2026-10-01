@@ -354,6 +354,7 @@ func TestRunbookStepsCanExecuteReflectsOperatorGrant(t *testing.T) {
 
 	rb, _ := createRunbookWithStep(t, app, opToken, "vm.canexecute", connID, "restart", "")
 
+	app.connectorGrant(t, userID, connID, "viewer")
 	rec := app.req(t, http.MethodGet, "/api/runbooks/"+rb.ID, nil, userToken)
 	var got runbookResp
 	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {

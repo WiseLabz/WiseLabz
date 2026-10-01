@@ -162,7 +162,7 @@ func (h *Handler) TestNotificationsConfig(w http.ResponseWriter, r *http.Request
 			secret, err = crypto.Decrypt(enc, key)
 		}
 		if err != nil {
-			slog.Error("settings: decrypt channel secret for test", "channel", logsafe.Sanitize(req.Channel), "error", err)
+			slog.Error("settings: decrypt channel secret for test", "channel", logsafe.Sanitize(req.Channel), "error", logsafe.Err(err))
 			secret = ""
 		}
 	}
@@ -176,7 +176,7 @@ func (h *Handler) TestNotificationsConfig(w http.ResponseWriter, r *http.Request
 		slog.Error("failed to record audit", "action", "notifications.test", "error", err)
 	}
 	if sendErr != nil {
-		slog.Warn("test notification failed", "channel", logsafe.Sanitize(req.Channel), "error", sendErr)
+		slog.Warn("test notification failed", "channel", logsafe.Sanitize(req.Channel), "error", logsafe.Err(sendErr))
 		httputil.JSON(w, http.StatusOK, map[string]any{"ok": false, "message": "Test notification failed: " + sendErr.Error()})
 		return
 	}
