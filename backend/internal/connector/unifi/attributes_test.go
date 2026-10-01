@@ -17,8 +17,10 @@ func TestAttributeCatalogCoversEmittedKeys(t *testing.T) {
 	_, wlans, _ := buildWLANTable([]byte(wlansJSON))
 	_, rules, _ := buildFirewallTable([]byte(firewallJSON))
 
+	ports := buildPoEPorts([]byte(poeDevicesJSON), []byte(poeClientsJSON))
+
 	emitted := map[string]map[string]string{}
-	for _, group := range [][]connector.SnapshotEntity{sites, devices, networks, wlans, rules} {
+	for _, group := range [][]connector.SnapshotEntity{sites, devices, networks, wlans, rules, ports} {
 		for _, e := range group {
 			if emitted[e.Kind] == nil {
 				emitted[e.Kind] = map[string]string{}

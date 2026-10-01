@@ -15,5 +15,7 @@ export interface RestartPreview {
   targetService: string;
   /** @minimum 0 */
   estimatedDowntimeSeconds: number;
+  /** Names of devices the target powers or carries (e.g. the APs and cameras behind a UniFi PoE port); the blast radius of the action. Empty when the target declares none. */
+  affectedEntities?: string[];
   dependentServices: RestartPreviewDependentServicesItem[];
 }

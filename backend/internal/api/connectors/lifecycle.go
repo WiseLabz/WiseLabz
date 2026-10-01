@@ -111,10 +111,12 @@ func (h *Handler) lifecycleOpPreview(w http.ResponseWriter, r *http.Request, con
 	}
 
 	targetService := snap.ServiceName
+	affected := []string{}
 	if entityRef != "" {
 		for _, e := range snap.Entities {
 			if e.ExternalID == entityRef {
 				targetService = e.Name
+				affected = connectedDevices(e)
 				break
 			}
 		}
@@ -134,7 +136,27 @@ func (h *Handler) lifecycleOpPreview(w http.ResponseWriter, r *http.Request, con
 		"targetService":            targetService,
 		"estimatedDowntimeSeconds": downtime,
 		"dependentServices":        dependencies,
+		"affectedEntities":         affected,
 	})
+}
+
+// connectedDevices returns the names an entity powers or carries (its
+// "connectedDevices" attribute, e.g. what hangs off a UniFi PoE port): the
+// blast radius a preview must show alongside the target. Empty when the
+// entity declares none.
+func connectedDevices(e connector.SnapshotEntity) []string {
+	out := []string{}
+	switch v := e.Attributes["connectedDevices"].(type) {
+	case []string:
+		out = append(out, v...)
+	case []any: // snapshot decoded from stored JSON
+		for _, item := range v {
+			if name, ok := item.(string); ok {
+				out = append(out, name)
+			}
+		}
+	}
+	return out
 }
 
 // lifecycleOpMutate handles the real, mutating side of restart/start/stop

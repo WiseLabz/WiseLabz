@@ -97,6 +97,13 @@ var attributeCatalog = map[string][]connector.AttributeSpec{
 		{Name: "role", Type: "string", Description: "Role the authenticated account holds on the site (admin, readonly)"},
 		{Name: "displayName", Type: "string", Description: "Human-readable site description shown in the controller UI"},
 	},
+	"port": {
+		{Name: "switch", Type: "string", Description: "MAC address of the switch the PoE port belongs to"},
+		{Name: "portIndex", Type: "number", Description: "Port number on the switch"},
+		{Name: "portName", Type: "string", Description: "Operator-set port name"},
+		{Name: "poeEnabled", Type: "boolean", Description: "Whether PoE output is enabled on the port"},
+		{Name: "connectedDevices", Type: "string_array", Description: "Adopted devices and wired clients powered through the port (the blast radius of a power-cycle)"},
+	},
 	"device": {
 		{Name: "model", Type: "string", Description: "Hardware model code reported by the controller (U6LR, US8P60, ...)"},
 		{Name: "deviceType", Type: "string", Description: "Device family: uap (access point), usw (switch), ugw/udm (gateway)"},
@@ -146,6 +153,9 @@ type Connector struct {
 	site           string
 	controllerType string
 	client         *http.Client
+	// csrf is the X-Csrf-Token a UniFi OS console hands out on login; it
+	// must accompany every mutating request made with the session cookie.
+	csrf string
 }
 
 func newConnector(config map[string]any) (connector.Connector, error) {
@@ -339,6 +349,9 @@ func (c *Connector) do(req *http.Request) (data []byte, status int, err error) {
 		}
 	}()
 
+	if token := resp.Header.Get("X-Csrf-Token"); token != "" {
+		c.csrf = token
+	}
 	data, err = connector.ReadBody(resp.Body)
 	if err != nil {
 		return nil, 0, fmt.Errorf("read response: %w", err)
@@ -412,6 +425,7 @@ func (c *Connector) Fetch(ctx context.Context, config map[string]any) (snapshot 
 
 	var sections []connector.SnapshotSection
 	var entities []connector.SnapshotEntity
+	raws := map[string][]byte{}
 	for _, sec := range c.sectionFetches() {
 		if !connector.WantsField(fields, sec.field) {
 			continue
@@ -421,12 +435,16 @@ func (c *Connector) Fetch(ctx context.Context, config map[string]any) (snapshot 
 			sections = append(sections, snapshotutil.UnavailableSection(sec.title, err))
 			continue
 		}
+		raws[sec.field] = raw
 		content, ents, meta := sec.build(raw)
 		sections = append(sections, connector.SnapshotSection{Title: sec.title, Content: content})
 		entities = append(entities, ents...)
 		for k, v := range meta {
 			metadata[k] = v
 		}
+	}
+	if rawDevices, ok := raws["devices"]; ok {
+		entities = append(entities, buildPoEPorts(rawDevices, raws["clients"])...)
 	}
 	for kind, n := range countByKind(entities) {
 		metadata[kind+"_count"] = fmt.Sprintf("%d", n)

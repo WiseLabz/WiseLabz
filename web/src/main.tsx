@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client'
 import App from './App'
 import { USE_MOCKS } from './config/env'
 import './index.css'
-import './i18n'
+import { i18nReady } from './i18n'
 import { useTheme } from './store/theme'
 
 // Initializing the theme store applies the persisted palette + fonts to :root
@@ -18,6 +18,9 @@ async function bootstrap() {
     const { enableMocks } = await import('./mocks/enable')
     await enableMocks()
   }
+
+  // Load the user's locale before first render so there is no English flash.
+  await i18nReady
 
   createRoot(document.getElementById('root')!).render(
     <StrictMode>

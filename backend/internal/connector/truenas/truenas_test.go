@@ -72,6 +72,10 @@ const (
 		{"id":2,"dataset":"tank","recursive":false,"enabled":false,"lifetime_value":0,"lifetime_unit":"",
 		 "naming_schema":"","exclude":[],"schedule":{"minute":"*/15","hour":"*","dom":"*","month":"*","dow":"*"}}
 	]`
+	appsJSON = `[
+		{"name":"plex","state":"RUNNING","human_version":"1.41.0_1.0.0"},
+		{"name":"immich","state":"STOPPED","human_version":"1.118.0_1.0.2"}
+	]`
 	replicationTasksJSON = `[
 		{"id":1,"name":"offsite","direction":"PUSH","transport":"SSH","source_datasets":["tank/media"],
 		 "target_dataset":"backup/media","recursive":true,"enabled":true,"auto":true,"retention_policy":"SOURCE"}
@@ -94,6 +98,7 @@ func truenasAPI(t *testing.T, authCheck func(*http.Request) bool) *httptest.Serv
 		pathInterfaces:      interfacesJSON,
 		pathSnapshotTasks:   snapshotTasksJSON,
 		pathReplicationTask: replicationTasksJSON,
+		pathApps:            appsJSON,
 	}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if authCheck != nil && !authCheck(r) {
@@ -240,7 +245,7 @@ func TestFetchHappyPath(t *testing.T) {
 
 	wantSections := []string{
 		"System", "Pools", "Datasets", "Disks", "SMB Shares", "NFS Shares",
-		"Services", "Network Interfaces", "Snapshot Tasks", "Replication Tasks",
+		"Services", "Network Interfaces", "Snapshot Tasks", "Replication Tasks", "Apps",
 	}
 	if len(snapshot.Sections) != len(wantSections) {
 		t.Fatalf("sections = %d, want %d", len(snapshot.Sections), len(wantSections))
@@ -269,6 +274,7 @@ func TestFetchHappyPath(t *testing.T) {
 		"interface_count":        "2",
 		"snapshot_task_count":    "2",
 		"replication_task_count": "1",
+		"app_count":              "2",
 	}
 	for k, want := range wantMetadata {
 		if got := snapshot.Metadata[k]; got != want {
@@ -282,7 +288,7 @@ func TestFetchHappyPath(t *testing.T) {
 	}
 	want := map[string]int{
 		"pool": 2, "dataset": 3, "disk": 2, "share": 4,
-		"service": 3, "interface": 2, "snapshot_task": 2, "replication_task": 1,
+		"service": 3, "interface": 2, "snapshot_task": 2, "replication_task": 1, "app": 2,
 	}
 	for kind, n := range want {
 		if byKind[kind] != n {

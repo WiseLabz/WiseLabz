@@ -5,6 +5,7 @@
  * weight. Everything applies LIVE and persists (theme store, settings store,
  * appearance store). Available to every user.
  */
+import { useState } from 'react';
 import { motion } from 'motion/react';
 import { useTranslation } from 'react-i18next';
 import { useSettings, type MotionPref } from '../../store/settings';
@@ -18,6 +19,8 @@ import {
 import { ThemeControls } from './ThemeControls';
 import { SubHeader, Section, ToggleRow } from './parts';
 import { cn } from '../../lib/cn';
+import { setLanguagePreference } from '../../i18n';
+import { LANGUAGES, getLanguagePreference, type LanguagePreference } from '../../i18n/languages';
 
 /** Generic accessible radio-group of cards. */
 function ChoiceGroup<T extends string>({
@@ -71,6 +74,7 @@ function ChoiceGroup<T extends string>({
 
 export function AppearancePage() {
   const { t } = useTranslation();
+  const [language, setLanguage] = useState<LanguagePreference>(getLanguagePreference);
   const motionPref = useSettings((s) => s.motion);
   const setMotion = useSettings((s) => s.setMotion);
 
@@ -95,6 +99,27 @@ export function AppearancePage() {
       />
 
       <ThemeControls />
+
+      <div className="mt-4">
+        <Section title={t('settings.language.heading')} description={t('settings.language.desc')}>
+          <ChoiceGroup<LanguagePreference>
+            label={t('settings.language.groupLabel')}
+            value={language}
+            onChange={(pref) => {
+              setLanguage(pref);
+              void setLanguagePreference(pref);
+            }}
+            options={[
+              {
+                value: 'auto',
+                label: t('settings.language.auto'),
+                desc: t('settings.language.autoDesc'),
+              },
+              ...Object.entries(LANGUAGES).map(([value, lang]) => ({ value, label: lang.name })),
+            ]}
+          />
+        </Section>
+      </div>
 
       <div className="mt-4">
         <Section title={t('settings.motion.heading')} description={t('settings.motion.desc')}>

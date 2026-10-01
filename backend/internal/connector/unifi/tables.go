@@ -375,3 +375,94 @@ func buildClientSummary(raw []byte) (string, []connector.SnapshotEntity, map[str
 	}
 	return b.String(), nil, metadata
 }
+
+// buildPoEPorts emits one "port" entity per PoE-capable switch port, listing
+// what hangs off it so a power-cycle can show its blast radius: adopted
+// devices uplinked through the port (APs) and wired clients (cameras, ...).
+// rawClients may be nil when the clients section was not fetched.
+func buildPoEPorts(rawDevices, rawClients []byte) []connector.SnapshotEntity {
+	var devices []struct {
+		MAC       string `json:"mac"`
+		Name      string `json:"name"`
+		PortTable []struct {
+			PortIdx   int    `json:"port_idx"`
+			Name      string `json:"name"`
+			PortPoE   bool   `json:"port_poe"`
+			PoEEnable bool   `json:"poe_enable"`
+		} `json:"port_table"`
+		Uplink struct {
+			UplinkMAC        string `json:"uplink_mac"`
+			UplinkRemotePort int    `json:"uplink_remote_port"`
+		} `json:"uplink"`
+	}
+	if err := decode(rawDevices, &devices); err != nil {
+		return nil
+	}
+	var clients []struct {
+		MAC      string `json:"mac"`
+		Name     string `json:"name"`
+		Hostname string `json:"hostname"`
+		IsWired  bool   `json:"is_wired"`
+		SwMAC    string `json:"sw_mac"`
+		SwPort   int    `json:"sw_port"`
+	}
+	if rawClients != nil {
+		_ = decode(rawClients, &clients)
+	}
+
+	type portKey struct {
+		mac  string
+		port int
+	}
+	attached := map[portKey][]string{}
+	for _, d := range devices {
+		if d.Uplink.UplinkMAC == "" || d.Uplink.UplinkRemotePort == 0 {
+			continue
+		}
+		k := portKey{d.Uplink.UplinkMAC, d.Uplink.UplinkRemotePort}
+		attached[k] = append(attached[k], firstNonEmpty(d.Name, d.MAC))
+	}
+	for _, cl := range clients {
+		if !cl.IsWired || cl.SwMAC == "" || cl.SwPort == 0 {
+			continue
+		}
+		k := portKey{cl.SwMAC, cl.SwPort}
+		attached[k] = append(attached[k], firstNonEmpty(cl.Name, cl.Hostname, cl.MAC))
+	}
+
+	var entities []connector.SnapshotEntity
+	for _, d := range devices {
+		switchName := firstNonEmpty(d.Name, d.MAC)
+		for _, p := range d.PortTable {
+			if !p.PortPoE {
+				continue
+			}
+			names := attached[portKey{d.MAC, p.PortIdx}]
+			sort.Strings(names)
+			portName := firstNonEmpty(p.Name, fmt.Sprintf("Port %d", p.PortIdx))
+			attrs := map[string]any{
+				"switch":           d.MAC,
+				"portIndex":        p.PortIdx,
+				"poeEnabled":       p.PoEEnable,
+				"connectedDevices": append([]string{}, names...),
+			}
+			snapshotutil.PutString(attrs, "portName", p.Name)
+			entities = append(entities, connector.SnapshotEntity{
+				Kind:       "port",
+				Name:       switchName + " / " + portName,
+				ExternalID: fmt.Sprintf("%s:%d", d.MAC, p.PortIdx),
+				Attributes: attrs,
+			})
+		}
+	}
+	return entities
+}
+
+func firstNonEmpty(vals ...string) string {
+	for _, v := range vals {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
+}

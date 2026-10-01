@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -271,4 +272,34 @@ func TestActionInvalidConnectorConfig(t *testing.T) {
 	actionResponse(t, h.Sync, actionRequest("missing", `{}`), 404)
 	c := seedCoverageConnector(t, h, "sync", "networking")
 	actionResponse(t, h.Sync, actionRequest(c.ID, `{`), 400)
+}
+
+func TestActionLifecyclePreviewAffectedEntities(t *testing.T) {
+	t.Parallel()
+	h := newTestHandler(t)
+	c := seedCoverageConnector(t, h, "lab", "networking")
+	data := `{"serviceName":"lab","entities":[
+		{"kind":"port","name":"Switch / Port 2","externalId":"aa:bb:cc:00:11:33:2","attributes":{"connectedDevices":["Living Room AP","Porch Camera"]}},
+		{"kind":"device","name":"Switch","externalId":"aa:bb:cc:00:11:33"}]}`
+	if err := h.Store.CreateSnapshot(context.Background(), &store.SnapshotRecord{ConnectorID: c.ID, Data: data, FetchedAt: "2025-01-01T00:00:00Z"}); err != nil {
+		t.Fatal(err)
+	}
+	for ref, want := range map[string][]string{
+		"aa:bb:cc:00:11:33:2": {"Living Room AP", "Porch Camera"},
+		"aa:bb:cc:00:11:33":   {},
+		"":                    {},
+	} {
+		r := actionRequest(c.ID, `{"entityRef":"`+ref+`"}`)
+		r.URL.RawQuery = "dryRun=true"
+		rr := actionResponse(t, h.RestartPreview, r, 200)
+		var result struct {
+			Affected []string `json:"affectedEntities"`
+		}
+		if err := json.Unmarshal(rr.Body.Bytes(), &result); err != nil {
+			t.Fatal(err)
+		}
+		if !reflect.DeepEqual(result.Affected, want) {
+			t.Errorf("ref %q: affectedEntities=%v, want %v", ref, result.Affected, want)
+		}
+	}
 }

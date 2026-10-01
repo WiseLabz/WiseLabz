@@ -24,6 +24,7 @@ func TestAttributeCatalogCoversEmittedKeys(t *testing.T) {
 		{buildInterfaces, interfacesJSON},
 		{buildSnapshotTasks, snapshotTasksJSON},
 		{buildReplicationTasks, replicationTasksJSON},
+		{buildApps, appsJSON},
 	}
 
 	emitted := map[string]map[string]string{}

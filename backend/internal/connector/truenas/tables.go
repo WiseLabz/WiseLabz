@@ -506,6 +506,40 @@ func buildServices(raw []byte) (string, []connector.SnapshotEntity, map[string]s
 	return b.String(), entities, metadata
 }
 
+// buildApps renders /app: the TrueNAS apps (Docker/Kubernetes workloads) and
+// their run state. The state is stable between runs; per-app resource usage
+// is not read.
+func buildApps(raw []byte) (string, []connector.SnapshotEntity, map[string]string) {
+	var apps []struct {
+		Name    string `json:"name"`
+		State   string `json:"state"`
+		Version string `json:"human_version"`
+	}
+	if err := json.Unmarshal(raw, &apps); err != nil {
+		return snapshotutil.MalformedSection("Apps", err), nil, nil
+	}
+	if len(apps) == 0 {
+		return snapshotutil.Empty("apps"), nil, countMeta("app_count", 0)
+	}
+	sort.Slice(apps, func(i, j int) bool { return apps[i].Name < apps[j].Name })
+
+	var b strings.Builder
+	b.WriteString("| App | State | Version |\n")
+	b.WriteString("|-----|-------|---------|\n")
+	entities := make([]connector.SnapshotEntity, 0, len(apps))
+	for _, a := range apps {
+		_, _ = fmt.Fprintf(&b, "| %s | %s | %s |\n", snapshotutil.MDCell(a.Name), snapshotutil.MDCell(a.State), snapshotutil.MDCell(a.Version))
+
+		attrs := map[string]any{}
+		snapshotutil.PutString(attrs, "state", a.State)
+		snapshotutil.PutString(attrs, "version", a.Version)
+		entities = append(entities, connector.SnapshotEntity{
+			Kind: "app", Name: a.Name, ExternalID: a.Name, Attributes: attrs,
+		})
+	}
+	return b.String(), entities, countMeta("app_count", len(apps))
+}
+
 // buildInterfaces renders /interface. Only the configured addresses are
 // read; link state and traffic counters are left out so an idle appliance
 // keeps producing an identical snapshot.

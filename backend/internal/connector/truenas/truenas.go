@@ -16,6 +16,7 @@ package truenas
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"sort"
 	"strings"
@@ -45,6 +46,7 @@ const (
 	pathInterfaces      = "/api/v2.0/interface"
 	pathSnapshotTasks   = "/api/v2.0/pool/snapshottask"
 	pathReplicationTask = "/api/v2.0/replication"
+	pathApps            = "/api/v2.0/app"
 )
 
 func init() {
@@ -111,6 +113,10 @@ var attributeCatalog = map[string][]connector.AttributeSpec{
 	"service": {
 		{Name: "state", Type: "string", Description: "Service state reported by TrueNAS (RUNNING, STOPPED)"},
 		{Name: "startOnBoot", Type: "boolean", Description: "Whether the service is configured to start on boot"},
+	},
+	"app": {
+		{Name: "state", Type: "string", Description: "App state reported by TrueNAS (RUNNING, STOPPED, DEPLOYING, CRASHED)"},
+		{Name: "version", Type: "string", Description: "Human-readable version of the installed app"},
 	},
 	"interface": {
 		{Name: "interfaceType", Type: "string", Description: "Interface type (PHYSICAL, BRIDGE, LINK_AGGREGATION, VLAN)"},
@@ -202,6 +208,7 @@ var sections = []section{
 	{field: "interfaces", title: "Network Interfaces", path: pathInterfaces, build: buildInterfaces},
 	{field: "snapshot_tasks", title: "Snapshot Tasks", path: pathSnapshotTasks, build: buildSnapshotTasks},
 	{field: "replication_tasks", title: "Replication Tasks", path: pathReplicationTask, build: buildReplicationTasks},
+	{field: "apps", title: "Apps", path: pathApps, build: buildApps},
 }
 
 // Fetch retrieves system info, pools, datasets, disks, shares, services,
@@ -272,11 +279,18 @@ func poolDependencies(entities []connector.SnapshotEntity) []connector.ServiceDe
 }
 
 func (c *Connector) doRequest(ctx context.Context, path string) (data []byte, err error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.url+path, nil)
+	return c.doMethod(ctx, http.MethodGet, path, nil)
+}
+
+func (c *Connector) doMethod(ctx context.Context, method, path string, body io.Reader) (data []byte, err error) {
+	req, err := http.NewRequestWithContext(ctx, method, c.url+path, body)
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("Accept", "application/json")
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
 	req.Header.Set("Authorization", "Bearer "+c.apiKey)
 
 	return connector.Do(c.client, req)

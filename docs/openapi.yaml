@@ -5077,6 +5077,10 @@ components:
       properties:
         targetService: { type: string }
         estimatedDowntimeSeconds: { type: integer, minimum: 0, example: 30 }
+        affectedEntities:
+          type: array
+          description: Names of devices the target powers or carries (e.g. the APs and cameras behind a UniFi PoE port); the blast radius of the action. Empty when the target declares none.
+          items: { type: string }
         dependentServices:
           type: array
           items:
