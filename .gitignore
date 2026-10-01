@@ -308,6 +308,11 @@ coverage
 # Local logs
 .logs/
 
+# Local Claude settings and nested development worktrees
+/.claude/settings.json
+/.claude/settings.local.json
+/.claude/worktrees/
+
 # Bower dependency directory (https://bower.io/)
 bower_components
 
