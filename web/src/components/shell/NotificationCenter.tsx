@@ -18,6 +18,7 @@ import type { Notification } from '../../api/model';
 import { IconButton } from '../ui/Button';
 import { TimeAgo } from '../ui/TimeAgo';
 import { BellIcon, CheckIcon } from '../icons';
+import { toast } from '../../lib/toast';
 import { navigateTo } from '../../lib/navigation';
 import { cn } from '../../lib/cn';
 
@@ -38,8 +39,13 @@ export function NotificationCenter() {
 
   const markRead = async (n: Notification) => {
     if (!n.read) {
-      await postNotificationsNotificationIdRead(n.id);
-      invalidate();
+      try {
+        await postNotificationsNotificationIdRead(n.id);
+        invalidate();
+      } catch {
+        // still navigate below; the notification just stays unread
+        toast.error(t('common.actionFailed'));
+      }
     }
     if (n.alertId) {
       navigateTo('/alerts');
@@ -54,8 +60,12 @@ export function NotificationCenter() {
   };
 
   const markAllRead = async () => {
-    await postNotificationsReadAll();
-    invalidate();
+    try {
+      await postNotificationsReadAll();
+      invalidate();
+    } catch {
+      toast.error(t('common.actionFailed'));
+    }
   };
 
   const items = list.data?.items ?? [];
@@ -114,33 +124,38 @@ export function NotificationCenter() {
                   </p>
                 )}
                 {items.map((n) => {
-                  const willNavigate = n.alertId || n.eventType?.startsWith('finding.') || n.eventType === 'report.generated';
+                  const willNavigate =
+                    n.alertId ||
+                    n.eventType?.startsWith('finding.') ||
+                    n.eventType === 'report.generated';
                   return (
-                  <button
-                    key={n.id}
-                    onClick={() => void markRead(n)}
-                    className={cn(
-                      'flex w-full flex-col items-start gap-0.5 rounded-md px-2.5 py-2 text-left transition-colors',
-                      willNavigate && 'hover:bg-surface-raised',
-                      !n.read && 'bg-accent-primary-tint/40',
-                    )}
-                  >
-                    <div className="flex w-full items-center gap-1.5">
-                      {!n.read && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-accent-primary" />}
-                      <span
-                        className={cn(
-                          'flex-1 truncate text-sm',
-                          n.read ? 'text-ink-muted' : 'font-medium text-ink',
+                    <button
+                      key={n.id}
+                      onClick={() => void markRead(n)}
+                      className={cn(
+                        'flex w-full flex-col items-start gap-0.5 rounded-md px-2.5 py-2 text-left transition-colors',
+                        willNavigate && 'hover:bg-surface-raised',
+                        !n.read && 'bg-accent-primary-tint/40'
+                      )}
+                    >
+                      <div className="flex w-full items-center gap-1.5">
+                        {!n.read && (
+                          <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-accent-primary" />
                         )}
-                      >
-                        {n.title}
-                      </span>
-                      <TimeAgo at={n.createdAt} className="shrink-0 text-2xs text-ink-faint" />
-                    </div>
-                    {n.message && (
-                      <p className="line-clamp-2 text-xs text-ink-faint">{n.message}</p>
-                    )}
-                  </button>
+                        <span
+                          className={cn(
+                            'flex-1 truncate text-sm',
+                            n.read ? 'text-ink-muted' : 'font-medium text-ink'
+                          )}
+                        >
+                          {n.title}
+                        </span>
+                        <TimeAgo at={n.createdAt} className="shrink-0 text-2xs text-ink-faint" />
+                      </div>
+                      {n.message && (
+                        <p className="line-clamp-2 text-xs text-ink-faint">{n.message}</p>
+                      )}
+                    </button>
                   );
                 })}
               </div>

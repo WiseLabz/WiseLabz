@@ -2,16 +2,18 @@ import { useState } from 'react';
 import { motion } from 'motion/react';
 import { useTranslation } from 'react-i18next';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import {
-  useGetAttention,
-  getGetAttentionQueryKey,
-} from '../../api/generated/attention/attention';
+import { useGetAttention, getGetAttentionQueryKey } from '../../api/generated/attention/attention';
 import {
   postAlertsAlertIdResolve,
   postAlertsAlertIdDismiss,
   postAlertsAlertIdSnooze,
 } from '../../api/generated/alerts/alerts';
-import { postFindingsFindingIdResolve } from '../../api/generated/findings/findings';
+import { getGetAlertsQueryKey } from '../../api/generated/alerts/alerts';
+import { getGetDashboardOverviewQueryKey } from '../../api/generated/dashboard/dashboard';
+import {
+  getGetFindingsQueryKey,
+  postFindingsFindingIdResolve,
+} from '../../api/generated/findings/findings';
 import { SeverityTag } from '../../components/ui/StatusDot';
 import { Button } from '../../components/ui/Button';
 import { Panel } from '../../components/ui/Panel';
@@ -29,25 +31,36 @@ export function AttentionPage() {
   const { data, isLoading, isError, refetch } = useGetAttention({ page, pageSize });
   const pageCount = data ? Math.max(1, Math.ceil(data.total / data.pageSize)) : 1;
 
+  // Attention actions change alert/finding/dashboard counts too, not just this list.
+  const refreshAfterAction = () =>
+    Promise.all([
+      queryClient.invalidateQueries({ queryKey: getGetAttentionQueryKey() }),
+      queryClient.invalidateQueries({ queryKey: getGetAlertsQueryKey() }),
+      queryClient.invalidateQueries({ queryKey: getGetFindingsQueryKey() }),
+      queryClient.invalidateQueries({ queryKey: getGetDashboardOverviewQueryKey() }),
+    ]);
+
   const resolveAlert = useMutation({
     mutationFn: (alertId: string) => postAlertsAlertIdResolve(alertId),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: getGetAttentionQueryKey() }),
+    onSuccess: refreshAfterAction,
   });
 
   const dismissAlert = useMutation({
     mutationFn: (alertId: string) => postAlertsAlertIdDismiss(alertId),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: getGetAttentionQueryKey() }),
+    onSuccess: refreshAfterAction,
   });
 
   const snoozeAlert = useMutation({
     mutationFn: (alertId: string) =>
-      postAlertsAlertIdSnooze(alertId, { until: new Date(Date.now() + 60 * 60 * 1000).toISOString() }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: getGetAttentionQueryKey() }),
+      postAlertsAlertIdSnooze(alertId, {
+        until: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+      }),
+    onSuccess: refreshAfterAction,
   });
 
   const resolveFinding = useMutation({
     mutationFn: (findingId: string) => postFindingsFindingIdResolve(findingId),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: getGetAttentionQueryKey() }),
+    onSuccess: refreshAfterAction,
   });
 
   return (
@@ -77,7 +90,7 @@ export function AttentionPage() {
         </Panel>
       ) : (
         <div className="flex flex-col gap-3">
-          {data.data.map((item: typeof data.data[number], idx: number) => (
+          {data.data.map((item: (typeof data.data)[number], idx: number) => (
             <motion.div
               key={item.id}
               initial={{ opacity: 0, y: 8 }}
@@ -89,10 +102,16 @@ export function AttentionPage() {
                   <SeverityTag severity={item.severity} className="mt-0.5" />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <span className="inline-block rounded px-2 py-1 text-2xs font-medium" style={{
-                        backgroundColor: item.kind === 'alert' ? 'var(--color-surface-raised)' : 'var(--color-surface)',
-                        color: 'var(--color-ink-muted)',
-                      }}>
+                      <span
+                        className="inline-block rounded px-2 py-1 text-2xs font-medium"
+                        style={{
+                          backgroundColor:
+                            item.kind === 'alert'
+                              ? 'var(--color-surface-raised)'
+                              : 'var(--color-surface)',
+                          color: 'var(--color-ink-muted)',
+                        }}
+                      >
                         {item.kind === 'alert' ? 'Alert' : 'Finding'}
                       </span>
                       <p className="text-sm font-medium text-ink">{item.title}</p>
@@ -151,7 +170,12 @@ export function AttentionPage() {
             </motion.div>
           ))}
           {pageCount > 1 && (
-            <Pagination page={page} pageCount={pageCount} onPage={setPage} className="justify-center pt-1" />
+            <Pagination
+              page={page}
+              pageCount={pageCount}
+              onPage={setPage}
+              className="justify-center pt-1"
+            />
           )}
         </div>
       )}

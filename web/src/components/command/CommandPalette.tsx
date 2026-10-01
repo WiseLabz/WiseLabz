@@ -35,6 +35,7 @@ import {
   SettingsIcon,
   SyncIcon,
 } from '../icons';
+import { toast } from '../../lib/toast';
 import { registeredCommands, type Command, type CommandCtx, type CommandGroup } from './registry';
 
 const GROUP_ORDER: CommandGroup[] = ['navigate', 'actions', 'services', 'docs'];
@@ -245,7 +246,9 @@ function PaletteBody() {
 
   const run = (c: Command) => {
     setOpen(false);
-    c.run(ctx);
+    Promise.resolve()
+      .then(() => c.run(ctx))
+      .catch(() => toast.error(t('common.actionFailed')));
   };
 
   const onKeyDown = (e: React.KeyboardEvent) => {
