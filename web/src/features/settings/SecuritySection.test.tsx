@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AxiosError } from 'axios';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import '../../i18n';
+import { toast } from '../../lib/toast';
 import { ProfilePage } from './ProfilePage';
 
 // jsdom doesn't implement <dialog>'s imperative API (used by ui/Dialog.tsx).
@@ -111,7 +112,11 @@ describe('Settings > Profile > Security (#279 enrollment happy path)', () => {
     });
   });
 
-  afterEach(cleanup);
+  afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
 
   it('walks enrollment from empty state to saved recovery codes', async () => {
     renderProfilePage();
@@ -138,6 +143,30 @@ describe('Settings > Profile > Security (#279 enrollment happy path)', () => {
 
     fireEvent.click(doneButton);
     await waitFor(() => expect(screen.queryByText('abcde-fghjk')).not.toBeInTheDocument());
+  });
+
+  it.each([true, false])('copies recovery codes on HTTP, success=%s', async (success) => {
+    vi.stubGlobal('navigator', { ...navigator, clipboard: undefined });
+    const execCommand = vi.fn(() => {
+      expect(document.querySelector('textarea')?.value).toBe('abcde-fghjk\nklmno-pqrst');
+      return success;
+    });
+    Object.defineProperty(document, 'execCommand', { value: execCommand, configurable: true });
+    const error = vi.spyOn(toast, 'error');
+    renderProfilePage();
+    fireEvent.click(screen.getByRole('button', { name: /set up authenticator app/i }));
+    fireEvent.change(await screen.findByLabelText(/enter the 6-digit code/i), { target: { value: '123456' } });
+    fireEvent.click(screen.getByRole('button', { name: /^confirm$/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /copy all/i }));
+    await waitFor(() => expect(execCommand).toHaveBeenCalledWith('copy'));
+    if (success) {
+      expect(await screen.findByText(/^copied$/i)).toBeInTheDocument();
+      expect(error).not.toHaveBeenCalled();
+    } else {
+      await waitFor(() => expect(error).toHaveBeenCalled());
+      expect(screen.queryByText(/^copied$/i)).not.toBeInTheDocument();
+      expect(screen.getByText('abcde-fghjk')).toBeVisible();
+    }
   });
 
   it('registers a security key and shows the first-factor recovery codes', async () => {

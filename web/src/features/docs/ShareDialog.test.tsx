@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import '../../i18n';
+import { toast } from '../../lib/toast';
 import { ShareDialog } from './ShareDialog';
 
 // jsdom doesn't implement <dialog>'s imperative API (used by ui/Dialog.tsx).
@@ -27,6 +28,8 @@ describe('ShareDialog (#240 PR2)', () => {
   afterEach(() => {
     cleanup();
     vi.clearAllMocks();
+    vi.restoreAllMocks();
+    Object.assign(navigator, { clipboard: { writeText } });
   });
 
   it('renders the subtitle naming the shared node', () => {
@@ -72,6 +75,27 @@ describe('ShareDialog (#240 PR2)', () => {
     fireEvent.click(screen.getByRole('button', { name: /copy/i }));
     await waitFor(() => expect(writeText).toHaveBeenCalledWith(input.value));
     expect(await screen.findByText(/copied/i)).toBeInTheDocument();
+  });
+
+  it.each([true, false])('uses the HTTP fallback and reports copy success=%s', async (success) => {
+    Object.assign(navigator, { clipboard: undefined });
+    const execCommand = vi.fn().mockReturnValue(success);
+    Object.defineProperty(document, 'execCommand', { value: execCommand, configurable: true });
+    const error = vi.spyOn(toast, 'error');
+    createMock.mockImplementation((_body, opts) => opts.onSuccess({ token: 'wlz_share_xyz' }));
+    renderDialog();
+    fireEvent.click(screen.getByRole('button', { name: /create link/i }));
+    const input = screen.getByDisplayValue(/\/share\/wlz_share_xyz$/) as HTMLInputElement;
+    fireEvent.click(screen.getByRole('button', { name: /^copy$/i }));
+    await waitFor(() => expect(execCommand).toHaveBeenCalledWith('copy'));
+    if (success) {
+      expect(await screen.findByText(/copied/i)).toBeInTheDocument();
+      expect(error).not.toHaveBeenCalled();
+    } else {
+      await waitFor(() => expect(error).toHaveBeenCalled());
+      expect(screen.queryByText(/^copied$/i)).not.toBeInTheDocument();
+      expect(input).toBeVisible();
+    }
   });
 
   it('renders nothing when no node is selected', () => {
