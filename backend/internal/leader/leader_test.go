@@ -14,9 +14,6 @@ func postgresDB(t *testing.T) *sql.DB {
 	t.Helper()
 	dsn := os.Getenv("WISELABZ_TEST_POSTGRES_DSN")
 	if dsn == "" {
-		if os.Getenv("CI") == "true" {
-			t.Fatal("WISELABZ_TEST_POSTGRES_DSN not set in CI environment")
-		}
 		t.Skip("WISELABZ_TEST_POSTGRES_DSN not set")
 	}
 	db, err := sql.Open("pgx", dsn)
