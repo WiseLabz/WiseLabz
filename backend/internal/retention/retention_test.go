@@ -4,27 +4,66 @@ import (
 	"context"
 	"database/sql"
 	"log/slog"
+	"net/url"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/WiseLabz/wiselabz/internal/store"
 	"github.com/WiseLabz/wiselabz/internal/store/storetest"
+	"github.com/google/uuid"
+	_ "github.com/jackc/pgx/v5/stdlib"
 
 	_ "modernc.org/sqlite"
 )
 
 func newTestStore(t *testing.T) *store.Store {
 	t.Helper()
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
+	if pgDSN := os.Getenv("WISELABZ_TEST_POSTGRES_DSN"); pgDSN != "" {
+		return newPostgresTestStore(t, pgDSN, logger)
+	}
 	dsn := "file:" + storetest.MigratedSQLite(t) + "?cache=shared"
-
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		t.Fatalf("open db: %v", err)
 	}
 	t.Cleanup(func() { _ = db.Close() })
-
 	return store.New(db, "sqlite")
+}
+
+func newPostgresTestStore(t *testing.T, dsn string, logger *slog.Logger) *store.Store {
+	t.Helper()
+	admin, err := sql.Open("pgx", dsn)
+	if err != nil {
+		t.Fatalf("open postgres: %v", err)
+	}
+	schema := "t_" + strings.ReplaceAll(uuid.NewString(), "-", "")
+	if _, err := admin.Exec("CREATE SCHEMA " + schema); err != nil {
+		_ = admin.Close()
+		t.Fatalf("create schema: %v", err)
+	}
+	u, err := url.Parse(dsn)
+	if err != nil {
+		t.Fatalf("parse postgres dsn: %v", err)
+	}
+	q := u.Query()
+	q.Set("search_path", schema)
+	u.RawQuery = q.Encode()
+	db, err := sql.Open("pgx", u.String())
+	if err != nil {
+		t.Fatalf("open postgres schema db: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = db.Close()
+		_, _ = admin.Exec("DROP SCHEMA " + schema + " CASCADE")
+		_ = admin.Close()
+	})
+	if err := store.RunMigrations(db, "postgres", logger); err != nil {
+		t.Fatalf("RunMigrations() error: %v", err)
+	}
+	return store.New(db, "postgres")
 }
 
 func testLogger() *slog.Logger {
