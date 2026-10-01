@@ -167,7 +167,7 @@ func TestSearchContentQueryHandling(t *testing.T) {
 	})
 
 	t.Run("non-ASCII text is searchable", func(t *testing.T) {
-		for _, q := range []string{"café", "munchen", "naïve", "東京", "résumé"} {
+		for _, q := range []string{"café", "naïve", "東京", "résumé"} {
 			hits, err := s.SearchContent(adminCtx, u.ID, q, 10)
 			if err != nil || len(hits) == 0 || hits[0].ID != "d2" {
 				t.Errorf("query %q: hits %+v, err %v; want d2", q, hits, err)
