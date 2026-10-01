@@ -254,3 +254,105 @@ func portAsFloat(t *testing.T, port string) float64 {
 	}
 	return float64(p)
 }
+
+func TestSendGotifyChannel(t *testing.T) {
+	connector.AllowLoopbackForTest(t)
+	var gotPath, gotKey, gotBody string
+	srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		gotPath, gotKey = r.URL.Path, r.Header.Get("X-Gotify-Key")
+		b, _ := io.ReadAll(r.Body)
+		gotBody = string(b)
+	}))
+	defer srv.Close()
+	cfg := channelCfg{Config: map[string]any{"url": srv.URL + "/", "priority": float64(7)}}
+	if err := sendGotifyChannel(context.Background(), cfg, "tok", "T", "M"); err != nil {
+		t.Fatalf("send: %v", err)
+	}
+	if gotPath != "/message" || gotKey != "tok" {
+		t.Errorf("path=%q key=%q", gotPath, gotKey)
+	}
+	if !strings.Contains(gotBody, `"priority":7`) || !strings.Contains(gotBody, `"title":"T"`) {
+		t.Errorf("body = %s", gotBody)
+	}
+	if err := sendGotifyChannel(context.Background(), channelCfg{Config: map[string]any{"url": srv.URL}}, "", "T", "M"); err == nil {
+		t.Error("expected error for missing token")
+	}
+}
+
+func TestSendPushoverChannel(t *testing.T) {
+	connector.AllowLoopbackForTest(t)
+	var form map[string][]string
+	srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		_ = r.ParseForm()
+		form = r.PostForm
+	}))
+	defer srv.Close()
+	old := pushoverAPIURL
+	pushoverAPIURL = srv.URL
+	defer func() { pushoverAPIURL = old }()
+	cfg := channelCfg{Config: map[string]any{"userKey": "u1", "priority": float64(1)}}
+	if err := sendPushoverChannel(context.Background(), cfg, "apptok", "T", "M"); err != nil {
+		t.Fatalf("send: %v", err)
+	}
+	if form["token"][0] != "apptok" || form["user"][0] != "u1" || form["message"][0] != "M" || form["priority"][0] != "1" {
+		t.Errorf("form = %v", form)
+	}
+	if err := sendPushoverChannel(context.Background(), channelCfg{Config: map[string]any{}}, "apptok", "T", "M"); err == nil {
+		t.Error("expected error for missing user key")
+	}
+}
+
+func TestSendMatrixChannel(t *testing.T) {
+	connector.AllowLoopbackForTest(t)
+	var gotMethod, gotPath, gotAuth, gotBody string
+	srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		gotMethod, gotPath, gotAuth = r.Method, r.URL.EscapedPath(), r.Header.Get("Authorization")
+		b, _ := io.ReadAll(r.Body)
+		gotBody = string(b)
+	}))
+	defer srv.Close()
+	cfg := channelCfg{Config: map[string]any{"url": srv.URL, "roomId": "!room:example.org"}}
+	if err := sendMatrixChannel(context.Background(), cfg, "mtok", "T", "M"); err != nil {
+		t.Fatalf("send: %v", err)
+	}
+	if gotMethod != http.MethodPut || gotAuth != "Bearer mtok" {
+		t.Errorf("method=%q auth=%q", gotMethod, gotAuth)
+	}
+	if !strings.HasPrefix(gotPath, "/_matrix/client/v3/rooms/%21room:example.org/send/m.room.message/wiselabz-") {
+		t.Errorf("path = %q", gotPath)
+	}
+	if !strings.Contains(gotBody, `"msgtype":"m.text"`) {
+		t.Errorf("body = %s", gotBody)
+	}
+	if err := sendMatrixChannel(context.Background(), cfg, "", "T", "M"); err == nil {
+		t.Error("expected error for missing token")
+	}
+}
+
+func TestSendAppriseChannel(t *testing.T) {
+	connector.AllowLoopbackForTest(t)
+	var gotPath, gotBody string
+	srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		b, _ := io.ReadAll(r.Body)
+		gotBody = string(b)
+	}))
+	defer srv.Close()
+	keyed := channelCfg{Config: map[string]any{"url": srv.URL, "configKey": "lab"}}
+	if err := sendAppriseChannel(context.Background(), keyed, "", "T", "M"); err != nil {
+		t.Fatalf("send keyed: %v", err)
+	}
+	if gotPath != "/notify/lab" || !strings.Contains(gotBody, `"body":"M"`) {
+		t.Errorf("keyed path=%q body=%s", gotPath, gotBody)
+	}
+	stateless := channelCfg{Config: map[string]any{"url": srv.URL, "urls": "mailto://a"}}
+	if err := sendAppriseChannel(context.Background(), stateless, "", "T", "M"); err != nil {
+		t.Fatalf("send stateless: %v", err)
+	}
+	if gotPath != "/notify" || !strings.Contains(gotBody, `"urls":"mailto://a"`) {
+		t.Errorf("stateless path=%q body=%s", gotPath, gotBody)
+	}
+	if err := sendAppriseChannel(context.Background(), channelCfg{Config: map[string]any{"url": srv.URL}}, "", "T", "M"); err == nil {
+		t.Error("expected error without configKey or urls")
+	}
+}

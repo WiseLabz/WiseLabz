@@ -16,6 +16,11 @@
  *     via ntfy's HTTP API.
  *   - telegram: { chatId, secret } — secret is the bot token; sends via the Bot API's
  *     sendMessage.
+ *   - gotify: { url (server), priority } — secret is the app token (sent as X-Gotify-Key).
+ *   - pushover: { userKey, device, priority } — secret is the application token.
+ *   - matrix: { url (homeserver), roomId } — secret is the access token.
+ *   - apprise: { url (Apprise API server), configKey or urls, tag } — secret is an optional
+ *     bearer token.
  *   - smtp: { host, port, username, secret, from, to } — secret is the SMTP password;
  *     sent with opportunistic STARTTLS.
  * "secret" is write-only: webhook/Discord/Slack sign deliveries with HMAC-SHA256 (X-WiseLabz-Timestamp and X-WiseLabz-Signature headers) when set; Telegram and SMTP reuse the same field for their own credential (bot token / password). It is stored encrypted and never returned; reads expose secretSet instead.

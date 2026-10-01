@@ -52,6 +52,9 @@ func (c *Config) Validate() error {
 	if c.HA.LeaderElection && c.DB.Driver != "postgres" {
 		errs = append(errs, errors.New("ha.leader_election requires db.driver postgres"))
 	}
+	if c.Metrics.Enabled && c.Metrics.Token == "" {
+		errs = append(errs, errors.New("metrics.token (WISELABZ_METRICS_TOKEN) is required when metrics.enabled is true"))
+	}
 	if err := c.DocExport.Git.Validate(); err != nil {
 		errs = append(errs, err)
 	}
@@ -68,6 +71,7 @@ func (c *Config) Redacted() Config {
 	r.AdminPassword = mask(r.AdminPassword)
 	r.AI.APIKey = mask(r.AI.APIKey)
 	r.AI.EmbedAPIKey = mask(r.AI.EmbedAPIKey)
+	r.Metrics.Token = mask(r.Metrics.Token)
 	r.DocExport.Git.Token = mask(r.DocExport.Git.Token)
 	r.DocExport.Git.Remote = redactDSN(r.DocExport.Git.Remote)
 	if c.Auth.OIDC != nil {

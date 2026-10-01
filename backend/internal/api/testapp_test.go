@@ -54,6 +54,13 @@ func newTestApp(t *testing.T) *testApp {
 // backup directory — used by tests that need it to be unwritable/uncreatable.
 func newTestAppWithBackupDir(t *testing.T, backupDir string) *testApp {
 	t.Helper()
+	return newTestAppWithOptions(t, backupDir, nil)
+}
+
+// newTestAppWithOptions is the shared constructor; tweak, if non-nil, edits the config before the
+// router is built.
+func newTestAppWithOptions(t *testing.T, backupDir string, tweak func(*config.Config)) *testApp {
+	t.Helper()
 
 	dsn := "file:" + storetest.MigratedSQLite(t) + "?cache=shared"
 	db, err := sql.Open("sqlite", dsn)
@@ -116,6 +123,10 @@ func newTestAppWithBackupDir(t *testing.T, backupDir string) *testApp {
 			time.Sleep(10 * time.Millisecond)
 		}
 	})
+
+	if tweak != nil {
+		tweak(cfg)
+	}
 
 	router := api.NewRouter(api.Config{
 		WSHub:         wsHub,

@@ -3,6 +3,9 @@ package api
 import "github.com/go-chi/chi/v5"
 
 func mountRootRoutes(r chi.Router, d routerDeps) {
+	if d.cfg.Config.Metrics.Enabled {
+		r.Get("/metrics", d.sysH.Metrics)
+	}
 	r.Get("/healthz", d.sysH.Liveness)
 	r.Get("/readyz", d.sysH.Readiness)
 }

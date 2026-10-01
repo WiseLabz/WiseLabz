@@ -454,7 +454,7 @@ sooner — `warning` inside `rotation.warn_days` (default 14) of the due date,
 `CredentialRefresher` (self-refreshing credentials, e.g. OAuth2) are always
 skipped. Unlike the other four checks, this one also **notifies**: opening a
 finding, or its severity escalating, dispatches through the same
-`notifications.Dispatcher` alerts use (in-app, SMTP, webhook, Discord, Slack, ntfy, Telegram; see
+`notifications.Dispatcher` alerts use (in-app, SMTP, webhook, Discord, Slack, ntfy, Telegram, Gotify, Pushover, Matrix, Apprise; see
 [NOTIFICATIONS.md](NOTIFICATIONS.md)) via
 `Dispatcher.NotifyFindingCreated` — deduplicated by `notified_severity` so a
 repeat detection at the same severity doesn't re-notify, while a

@@ -46,6 +46,10 @@ const CHANNEL_LABELS: Record<NotificationChannelType, string> = {
   slack: 'Slack',
   ntfy: 'ntfy',
   telegram: 'Telegram',
+  gotify: 'Gotify',
+  pushover: 'Pushover',
+  matrix: 'Matrix',
+  apprise: 'Apprise',
 };
 
 const CHANNEL_DESC_KEYS: Record<NotificationChannelType, string> = {
@@ -56,6 +60,10 @@ const CHANNEL_DESC_KEYS: Record<NotificationChannelType, string> = {
   slack: 'settings.notifications.slackDesc',
   ntfy: 'settings.notifications.ntfyDesc',
   telegram: 'settings.notifications.telegramDesc',
+  gotify: 'settings.notifications.gotifyDesc',
+  pushover: 'settings.notifications.pushoverDesc',
+  matrix: 'settings.notifications.matrixDesc',
+  apprise: 'settings.notifications.appriseDesc',
 };
 
 export function NotificationsPage() {

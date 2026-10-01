@@ -30,10 +30,19 @@ type Config struct {
 	Retention  RetentionSettings  `mapstructure:"retention"`
 	Backup     BackupSettings     `mapstructure:"backup"`
 	DocExport  DocExportSettings  `mapstructure:"doc_export"`
+	Metrics    MetricsSettings    `mapstructure:"metrics"`
 
 	// AdminPassword bootstraps the first admin user when no users exist
 	// (env-only: WISELABZ_ADMIN_PASSWORD). Ignored once a user exists.
 	AdminPassword string `mapstructure:"admin_password"`
+}
+
+// MetricsSettings configures the Prometheus /metrics endpoint. It is off by default; when enabled
+// it is served only to requests presenting Token as a bearer token. Token is a secret and must
+// never be logged.
+type MetricsSettings struct {
+	Enabled bool   `mapstructure:"enabled"`
+	Token   string `mapstructure:"token"`
 }
 
 // Database holds database connection settings.
@@ -392,6 +401,7 @@ func Load() (*Config, error) {
 	v.SetDefault("doc_export.dir", "./data/docexport")
 	v.SetDefault("doc_export.cron_expr", "0 2 * * *") // daily doc export at 2 AM
 	v.SetDefault("doc_export.enabled", false)         // opt-in: operator must configure a target directory
+	v.SetDefault("metrics.enabled", false)            // opt-in: Prometheus /metrics endpoint
 	v.SetDefault("doc_export.git.branch", "main")
 	v.SetDefault("doc_export.git.path", "docs")
 	v.SetDefault("doc_export.git.author_name", "WiseLabz")
@@ -424,6 +434,7 @@ func Load() (*Config, error) {
 		"log.level", "log.format",
 		"retention.snapshot_days", "retention.doc_version_days", "retention.alert_days", "retention.sync_run_days", "retention.audit_days", "retention.health_check_days", "retention.report_days", "retention.cron_expr",
 		"backup.dir", "backup.cron_expr", "backup.max_backups", "backup.max_age_hours", "backup.enabled",
+		"metrics.enabled", "metrics.token",
 		"doc_export.dir", "doc_export.cron_expr", "doc_export.enabled",
 		"doc_export.git.remote", "doc_export.git.branch", "doc_export.git.path",
 		"doc_export.git.author_name", "doc_export.git.author_email", "doc_export.git.token",

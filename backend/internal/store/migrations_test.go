@@ -131,6 +131,11 @@ func TestRunMigrationsDown(t *testing.T) {
 		t.Fatalf("RunMigrations() error: %v", err)
 	}
 
+	assertMoreNotificationChannelsAllowed(t, db, "sqlite", true)
+	if err := RunMigrationsDown(db, "sqlite", logger); err != nil {
+		t.Fatalf("RunMigrationsDown() more_notification_channels error: %v", err)
+	}
+	assertMoreNotificationChannelsAllowed(t, db, "sqlite", false)
 	if err := RunMigrationsDown(db, "sqlite", logger); err != nil {
 		t.Fatalf("RunMigrationsDown() retention_scan_indexes error: %v", err)
 	}
@@ -356,6 +361,9 @@ func TestRunMigrationsDown(t *testing.T) {
 	}
 	if err := db.QueryRow("SELECT name FROM sqlite_master WHERE type='table' AND name='user_mfa_factors'").Scan(&mfaFactorsTable); err != nil {
 		t.Fatalf("user_mfa_factors table missing after reapply: %v", err)
+	}
+	if err := RunMigrationsDown(db, "sqlite", logger); err != nil {
+		t.Fatalf("RunMigrationsDown() more_notification_channels error: %v", err)
 	}
 	if err := RunMigrationsDown(db, "sqlite", logger); err != nil {
 		t.Fatalf("RunMigrationsDown() retention_scan_indexes error: %v", err)
@@ -612,6 +620,11 @@ func TestRunMigrationsDownPostgres(t *testing.T) {
 	if err := RunMigrations(db, "postgres", logger); err != nil {
 		t.Fatalf("RunMigrations() error: %v", err)
 	}
+	assertMoreNotificationChannelsAllowed(t, db, "postgres", true)
+	if err := RunMigrationsDown(db, "postgres", logger); err != nil {
+		t.Fatalf("RunMigrationsDown() more_notification_channels error: %v", err)
+	}
+	assertMoreNotificationChannelsAllowed(t, db, "postgres", false)
 	if err := RunMigrationsDown(db, "postgres", logger); err != nil {
 		t.Fatalf("RunMigrationsDown() retention_scan_indexes error: %v", err)
 	}
@@ -1182,5 +1195,22 @@ func assertNtfyTelegramChannelsAllowed(t *testing.T, db *sql.DB, driver string, 
 	hasNtfy := strings.Contains(definition, "'ntfy'")
 	if hasNtfy != present {
 		t.Errorf("notification_deliveries CHECK constraint ntfy/telegram present=%v, want %v (schema: %s)", hasNtfy, present, definition)
+	}
+}
+
+// assertMoreNotificationChannelsAllowed checks 000048_more_notification_channels' widened CHECK
+// constraint on notification_deliveries.channel in both directions of the migration.
+func assertMoreNotificationChannelsAllowed(t *testing.T, db *sql.DB, driver string, present bool) {
+	t.Helper()
+	query := `SELECT sql FROM sqlite_master WHERE type='table' AND name='notification_deliveries'`
+	if driver == "postgres" {
+		query = `SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'notification_deliveries_channel_check'`
+	}
+	var definition string
+	if err := db.QueryRow(query).Scan(&definition); err != nil {
+		t.Fatalf("read notification_deliveries schema: %v", err)
+	}
+	if has := strings.Contains(definition, "'gotify'"); has != present {
+		t.Errorf("notification_deliveries CHECK constraint gotify present=%v, want %v (schema: %s)", has, present, definition)
 	}
 }

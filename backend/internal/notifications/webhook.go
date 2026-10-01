@@ -92,7 +92,12 @@ func sendWebhook(ctx context.Context, rawURL, secret string, payload any) error 
 // SSRF-guarded dialer, redirect policy, and bounded response read. Errors never embed the URL, since
 // it may carry credentials or tokens and errors are persisted with the delivery record.
 func doHTTPRequest(ctx context.Context, rawURL string, headers map[string]string, body []byte) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, rawURL, bytes.NewReader(body))
+	return doHTTPRequestMethod(ctx, http.MethodPost, rawURL, headers, body)
+}
+
+// doHTTPRequestMethod is doHTTPRequest with an explicit HTTP method (Matrix sends use PUT).
+func doHTTPRequestMethod(ctx context.Context, method, rawURL string, headers map[string]string, body []byte) error {
+	req, err := http.NewRequestWithContext(ctx, method, rawURL, bytes.NewReader(body))
 	if err != nil {
 		return redactURLError(err)
 	}

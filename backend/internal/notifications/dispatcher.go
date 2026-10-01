@@ -1,5 +1,5 @@
 // Package notifications provides notification dispatching (in-app, SMTP, webhook, Discord, Slack,
-// ntfy, Telegram) with per-channel delivery tracking and bounded retry for failed deliveries.
+// ntfy, Telegram, Gotify, Pushover, Matrix, Apprise) with per-channel delivery tracking and bounded retry for failed deliveries.
 package notifications
 
 import (
@@ -361,7 +361,7 @@ func (d *Dispatcher) sendInApp(ctx context.Context, userID, alertID, eventType, 
 
 // externalChannelTypes lists every channel type notifyExternalChannels attempts, in delivery
 // order. Each must have an entry in channelSenders (see channels.go).
-var externalChannelTypes = []string{"smtp", "webhook", "discord", "slack", "ntfy", "telegram"}
+var externalChannelTypes = []string{"smtp", "webhook", "discord", "slack", "ntfy", "telegram", "gotify", "pushover", "matrix", "apprise"}
 
 func (d *Dispatcher) notifyExternalChannels(ctx context.Context, notifID string, channels []channelCfg, routes []routeCfg, eventType, severity, connectorID, _, title, message string) {
 	connectorCategory := d.notificationConnectorCategory(ctx, connectorID)
