@@ -82,14 +82,15 @@ func (c *Connector) Validate(ctx context.Context, _ map[string]any) error {
 }
 
 // Fetch retrieves DNS Resolver host overrides.
-func (c *Connector) Fetch(ctx context.Context, _ map[string]any) (*connector.ServiceSnapshot, error) {
+func (c *Connector) Fetch(ctx context.Context, _ map[string]any) (snapshot *connector.ServiceSnapshot, fetchErr error) {
+	defer func() { snapshot, fetchErr = connector.FinalizeSnapshot(snapshot, fetchErr) }()
 	start := time.Now()
 	var sections []connector.SnapshotSection
 	var entities []connector.SnapshotEntity
 	metadata := map[string]string{"dnsresolver_url": c.url}
 
 	if raw, err := c.doRequest(ctx, "/api/v2/services/dns_resolver/host_override"); err != nil {
-		sections = append(sections, connector.SnapshotSection{Title: "Host Overrides", Content: "_Host overrides unavailable: " + err.Error() + "_"})
+		sections = append(sections, connector.ErrorSection("Host Overrides", err))
 	} else {
 		content, ents := buildHostOverrideTable(raw)
 		sections = append(sections, connector.SnapshotSection{Title: "Host Overrides", Content: content})

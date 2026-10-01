@@ -13,9 +13,10 @@ import (
 // Fetch retrieves engine info, containers, images, volumes, and networks.
 // config may carry a "fields" selective-fetch hint naming a subset of
 // {"containers","images","volumes","networks"} to skip the other calls.
-// The System section always runs. Each section fetch failure is tolerated
-// as a placeholder rather than failing the whole Fetch.
-func (d *Connector) Fetch(ctx context.Context, config map[string]any) (*connector.ServiceSnapshot, error) {
+// The System probe always runs and must succeed. Other failed sections
+// carry error metadata so the engine can retain their previous data.
+func (d *Connector) Fetch(ctx context.Context, config map[string]any) (snapshot *connector.ServiceSnapshot, fetchErr error) {
+	defer func() { snapshot, fetchErr = connector.FinalizeSnapshot(snapshot, fetchErr) }()
 	start := time.Now()
 	fields := connector.RequestedFields(config)
 
@@ -23,34 +24,30 @@ func (d *Connector) Fetch(ctx context.Context, config map[string]any) (*connecto
 	var entities []connector.SnapshotEntity
 	metadata := map[string]string{"docker_host": d.host}
 
-	if raw, err := d.doRequest(ctx, "/info"); err != nil {
-		sections = append(sections, connector.SnapshotSection{Title: "System", Content: "_System info unavailable: " + err.Error() + "_"})
-	} else {
-		var info struct {
-			Name              string `json:"Name"`
-			ServerVersion     string `json:"ServerVersion"`
-			Containers        int    `json:"Containers"`
-			ContainersRunning int    `json:"ContainersRunning"`
-			Images            int    `json:"Images"`
-			NCPU              int    `json:"NCPU"`
-			MemTotal          int64  `json:"MemTotal"`
-		}
-		if err := json.Unmarshal(raw, &info); err != nil {
-			sections = append(sections, connector.SnapshotSection{
-				Title:   "System",
-				Content: "_System info unavailable: " + connector.NewMalformedResponseError(err).Error() + "_",
-			})
-		} else {
-			content := fmt.Sprintf("**Host**: %s\n**Engine Version**: %s\n**Containers**: %d (%d running)\n**Images**: %d\n**CPUs**: %d\n**Memory**: %d bytes\n",
-				info.Name, info.ServerVersion, info.Containers, info.ContainersRunning, info.Images, info.NCPU, info.MemTotal)
-			sections = append(sections, connector.SnapshotSection{Title: "System", Content: content})
-			metadata["engine_version"] = info.ServerVersion
-		}
+	raw, err := d.doRequest(ctx, "/info")
+	if err != nil {
+		return nil, err
 	}
+	var info struct {
+		Name              string `json:"Name"`
+		ServerVersion     string `json:"ServerVersion"`
+		Containers        int    `json:"Containers"`
+		ContainersRunning int    `json:"ContainersRunning"`
+		Images            int    `json:"Images"`
+		NCPU              int    `json:"NCPU"`
+		MemTotal          int64  `json:"MemTotal"`
+	}
+	if err := json.Unmarshal(raw, &info); err != nil {
+		return nil, connector.NewMalformedResponseError(err)
+	}
+	content := fmt.Sprintf("**Host**: %s\n**Engine Version**: %s\n**Containers**: %d (%d running)\n**Images**: %d\n**CPUs**: %d\n**Memory**: %d bytes\n",
+		info.Name, info.ServerVersion, info.Containers, info.ContainersRunning, info.Images, info.NCPU, info.MemTotal)
+	sections = append(sections, connector.SnapshotSection{Title: "System", Content: content})
+	metadata["engine_version"] = info.ServerVersion
 
 	if connector.WantsField(fields, "containers") {
 		if raw, err := d.doRequest(ctx, "/containers/json?all=true"); err != nil {
-			sections = append(sections, connector.SnapshotSection{Title: "Containers", Content: "_Containers unavailable: " + err.Error() + "_"})
+			sections = append(sections, connector.ErrorSection("Containers", err))
 		} else {
 			content, ents := buildContainerTable(raw)
 			d.enrichContainerAttributes(ctx, ents)
@@ -86,7 +83,7 @@ func (d *Connector) Fetch(ctx context.Context, config map[string]any) (*connecto
 func (d *Connector) fetchSection(ctx context.Context, title, path string, build func([]byte) string) connector.SnapshotSection {
 	raw, err := d.doRequest(ctx, path)
 	if err != nil {
-		return connector.SnapshotSection{Title: title, Content: "_" + title + " unavailable: " + err.Error() + "_"}
+		return connector.ErrorSection(title, err)
 	}
 	return connector.SnapshotSection{Title: title, Content: build(raw)}
 }

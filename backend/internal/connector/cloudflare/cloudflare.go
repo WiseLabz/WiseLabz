@@ -93,7 +93,8 @@ func (c *Connector) Validate(ctx context.Context, _ map[string]any) error {
 }
 
 // Fetch retrieves DNS zones/records, Tunnels, and Access policies.
-func (c *Connector) Fetch(ctx context.Context, _ map[string]any) (*connector.ServiceSnapshot, error) {
+func (c *Connector) Fetch(ctx context.Context, _ map[string]any) (snapshot *connector.ServiceSnapshot, fetchErr error) {
+	defer func() { snapshot, fetchErr = connector.FinalizeSnapshot(snapshot, fetchErr) }()
 	start := time.Now()
 	var sections []connector.SnapshotSection
 	var entities []connector.SnapshotEntity
@@ -103,7 +104,7 @@ func (c *Connector) Fetch(ctx context.Context, _ map[string]any) (*connector.Ser
 		sections = append(sections, connector.SnapshotSection{Title: "DNS Zones", Content: content})
 		entities = append(entities, zoneEntities...)
 	} else {
-		sections = append(sections, connector.SnapshotSection{Title: "DNS Zones", Content: "_DNS zones unavailable: " + err.Error() + "_"})
+		sections = append(sections, connector.ErrorSection("DNS Zones", err))
 	}
 
 	if raw, err := c.doRequest(ctx, "GET", "/accounts/"+c.accountID+"/cfd_tunnel"); err == nil {
@@ -111,14 +112,14 @@ func (c *Connector) Fetch(ctx context.Context, _ map[string]any) (*connector.Ser
 		sections = append(sections, connector.SnapshotSection{Title: "Tunnels", Content: content})
 		entities = append(entities, tunnelEntities...)
 	} else {
-		sections = append(sections, connector.SnapshotSection{Title: "Tunnels", Content: "_Tunnels unavailable: " + err.Error() + "_"})
+		sections = append(sections, connector.ErrorSection("Tunnels", err))
 	}
 
 	if content, policyEntities, err := c.fetchAccessSection(ctx); err == nil {
 		sections = append(sections, connector.SnapshotSection{Title: "Access Policies", Content: content})
 		entities = append(entities, policyEntities...)
 	} else {
-		sections = append(sections, connector.SnapshotSection{Title: "Access Policies", Content: "_Access policies unavailable: " + err.Error() + "_"})
+		sections = append(sections, connector.ErrorSection("Access Policies", err))
 	}
 
 	return &connector.ServiceSnapshot{
@@ -156,7 +157,7 @@ func (c *Connector) fetchDNSSection(ctx context.Context) (string, []connector.Sn
 	for _, zone := range zonesResp.Result {
 		recRaw, err := c.doRequest(ctx, "GET", "/zones/"+zone.ID+"/dns_records")
 		if err != nil {
-			continue
+			return "", nil, err
 		}
 		rows, recEntities := buildDNSRecordTable(zone.ID, zone.Name, recRaw)
 		b.WriteString(rows)

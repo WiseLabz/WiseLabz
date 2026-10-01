@@ -25,7 +25,15 @@ func newTestHandler(t *testing.T) *Handler {
 	s := apitest.NewStore(t)
 	cfg := &config.Config{Encryption: config.EncryptionSettings{Key: "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE="}}
 	jwtSvc := auth.NewService("test-secret-test-secret-test-secret", time.Hour, time.Hour)
-	return NewHandler(s, sync.NewEngine(s, nil, nil, nil, cfg.Encryption.Key), cfg, jwtSvc, nil)
+	h := NewHandler(s, sync.NewEngine(s, nil, nil, nil, cfg.Encryption.Key), cfg, jwtSvc, nil)
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := h.SyncEngine.Wait(ctx); err != nil {
+			t.Errorf("drain syncs: %v", err)
+		}
+	})
+	return h
 }
 
 func TestListEmpty(t *testing.T) {

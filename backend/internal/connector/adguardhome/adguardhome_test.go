@@ -499,8 +499,7 @@ func TestFetchDegradesWhenStatusFails(t *testing.T) {
 	}
 }
 
-// TestFetchOnMalformedStatus checks a status body that isn't JSON degrades
-// the section without tripping up the rest of the snapshot.
+// TestFetchOnMalformedStatus rejects a fetch with no usable sections.
 func TestFetchOnMalformedStatus(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte("not json"))
@@ -509,11 +508,9 @@ func TestFetchOnMalformedStatus(t *testing.T) {
 
 	c := newTestConnector(t, map[string]any{"url": server.URL, "auth_mode": authNone})
 	snapshot, err := c.Fetch(context.Background(), map[string]any{"fields": []string{"status", "dhcp"}})
-	if err != nil {
-		t.Fatalf("Fetch: %v", err)
-	}
-	if len(snapshot.Sections) != 1 || !strings.Contains(snapshot.Sections[0].Content, "malformed response") {
-		t.Fatalf("sections = %+v, want a single malformed Status section", snapshot.Sections)
+	var malformed *connector.MalformedResponseError
+	if snapshot != nil || !errors.As(err, &malformed) {
+		t.Fatalf("snapshot = %+v, error = %v", snapshot, err)
 	}
 }
 

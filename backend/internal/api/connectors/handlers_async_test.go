@@ -16,15 +16,6 @@ import (
 	syncengine "github.com/WiseLabz/wiselabz/internal/sync"
 )
 
-// The engine calls this seam after its final database write, so tests can
-// inspect persisted results and clean up without racing a detached sync.
-type completedSync chan string
-
-func (done completedSync) RegenerateForConnector(_ context.Context, id string) error {
-	done <- id
-	return nil
-}
-
 type actionConnector struct {
 	bulkFakeConnector
 	fields  chan []string
@@ -52,14 +43,12 @@ func TestActionAsyncSync(t *testing.T) {
 			h := newTestHandler(t)
 			fields := make(chan []string, 1)
 			release := make(chan struct{})
-			done := make(completedSync, 1)
 			// Unique per subtest: the factory captures this subtest's channels.
 			typ := "action_async/" + t.Name()
 			connector.Register(connector.TypeSchema{Type: typ, Name: "Async", Category: "networking"}, func(map[string]any) (connector.Connector, error) {
 				return &actionConnector{fields: fields, release: release, fail: mode == "single failure"}, nil
 			})
 			h.SyncEngine = syncengine.NewEngine(h.Store, nil, nil, nil, h.Config.Encryption.Key)
-			h.SyncEngine.SetDocRegenerator(done)
 			c := seedCoverageConnector(t, h, "async", "networking")
 			if err := h.Store.UpdateConnector(context.Background(), c.ID, map[string]any{"type": typ, "enabled": true}); err != nil {
 				t.Fatal(err)
@@ -115,14 +104,12 @@ func TestActionAsyncSync(t *testing.T) {
 			if jobID == "" {
 				t.Fatal("missing job ID")
 			}
-			select {
-			case id := <-done:
-				if id != c.ID {
-					t.Fatalf("completed=%s", id)
-				}
-			case <-time.After(10 * time.Second):
-				t.Fatal("sync did not complete")
+			waitCtx, stop := context.WithTimeout(context.Background(), 10*time.Second)
+			defer stop()
+			if err := h.SyncEngine.Wait(waitCtx); err != nil {
+				t.Fatal(err)
 			}
+
 			var gotFields []string
 			select {
 			case gotFields = <-fields:

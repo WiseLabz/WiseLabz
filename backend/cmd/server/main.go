@@ -282,6 +282,7 @@ func main() {
 	// drain HTTP/WS -> stop scheduler -> wait for remaining goroutines ->
 	// wait for in-flight dispatch goroutines -> close the DB last.
 	lifecycle := newLifecycleManager(lifecycleDeps{
+		SyncEngine:      syncEngine,
 		Logger:          logger,
 		HTTPServer:      srv,
 		WSHub:           wsHub,

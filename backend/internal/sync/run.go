@@ -47,6 +47,12 @@ func (e *Engine) runSyncFields(ctx context.Context, connectorID, jobID string, f
 		return nil, ErrAlreadyRunning
 	}
 	defer e.inFlight.Delete(connectorID)
+	select {
+	case e.sem <- struct{}{}:
+		defer func() { <-e.sem }()
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
 	ctx, cancel := context.WithTimeout(ctx, e.timeout)
 	defer cancel()
 	if scheduled {
@@ -147,6 +153,19 @@ func (e *Engine) runSyncFields(ctx context.Context, connectorID, jobID string, f
 		slog.Error("sync transform failed", "connector", logsafe.Sanitize(connectorID), "error", logsafe.Sanitize(err.Error()))
 	}
 
+	// A selective fetch can split a section, so it is not a full baseline.
+	if len(fields) > 0 {
+		result.Status = "success"
+		result.Duration = time.Since(start).String()
+		if sectionErr := connector.SnapshotError(sn); sectionErr != nil {
+			finish("error", sectionErr)
+			return markError(result, start, sectionErr)
+		}
+		finish("success", nil)
+		return result, nil
+	}
+
+	sectionErr := connector.SnapshotError(sn)
 	broadcast("diffing", 60)
 	changes, alerts, snapshotID, err := e.persistSyncSnapshot(ctx, connectorID, sn)
 	if err != nil {
@@ -159,13 +178,10 @@ func (e *Engine) runSyncFields(ctx context.Context, connectorID, jobID string, f
 	e.broadcastSyncResults(connectorID, changes, alerts)
 	e.notifySyncAlerts(ctx, alerts)
 
-	// Update connector status
-	now := time.Now().UTC().Format(time.RFC3339)
-	_ = e.store.UpdateConnector(ctx, connectorID, map[string]any{
-		"status":         "online",
-		"status_message": "Sync successful",
-		"last_sync_at":   now,
-	})
+	if sectionErr != nil {
+		finish("error", sectionErr)
+		return markError(result, start, sectionErr)
+	}
 
 	result.Status = "success"
 	result.Duration = time.Since(start).String()
@@ -232,6 +248,19 @@ func (e *Engine) finishSync(ctx context.Context, connectorID, jobID string, rec 
 		"last_sync_error":       errMsg,
 		"retry_count":           newRetryCount,
 	}
+	if status == "success" {
+		updates["status"] = "online"
+		updates["status_message"] = "Sync successful"
+		updates["last_sync_at"] = time.Now().UTC().Format(time.RFC3339)
+	}
+	if runErr != nil {
+		updates["status"] = "degraded"
+		var authErr *connector.AuthError
+		if errors.As(runErr, &authErr) {
+			updates["status"] = "offline"
+		}
+		updates["status_message"] = runErr.Error()
+	}
 	if nextRunAt != nil {
 		updates["next_run_at"] = nextRunAt.UTC().Format(time.RFC3339)
 	} else {
@@ -245,7 +274,7 @@ func (e *Engine) finishSync(ctx context.Context, connectorID, jobID string, rec 
 			slog.Error("quality check failed", "connector", logsafe.Sanitize(connectorID), "error", logsafe.Sanitize(err.Error()))
 		}
 	}
-	if e.docRegenerator != nil {
+	if status == "success" && result.SnapshotID != "" && e.docRegenerator != nil {
 		if err := e.docRegenerator.RegenerateForConnector(ctx, connectorID); err != nil {
 			slog.Error("doc regeneration failed", "connector", logsafe.Sanitize(connectorID), "error", logsafe.Sanitize(err.Error()))
 		}
@@ -277,12 +306,10 @@ func (e *Engine) refreshSyncCredentials(ctx context.Context, connectorID string,
 	}
 	if _, ok := conn.(connector.CredentialRefresher); !ok {
 		err := connector.NewAuthError(fmt.Errorf("credentials expired at %s", rec.CredentialExpiresAt))
-		_ = e.store.UpdateConnector(ctx, connectorID, map[string]any{"status": "offline", "status_message": err.Error()})
 		return nil, nil, nil, err
 	}
 	if err := e.RefreshCredentials(ctx, connectorID); err != nil {
 		authErr := connector.NewAuthError(fmt.Errorf("credential refresh failed: %w", err))
-		_ = e.store.UpdateConnector(ctx, connectorID, map[string]any{"status": "offline", "status_message": authErr.Error()})
 		return nil, nil, nil, authErr
 	}
 	var err error
@@ -302,10 +329,10 @@ func (e *Engine) fetchSyncSnapshot(ctx context.Context, connectorID, jobID strin
 	_ = e.store.UpdateConnector(ctx, connectorID, map[string]any{"status": "online", "status_message": "Syncing..."})
 	broadcast("fetching", 28)
 	sn, err := conn.Fetch(ctx, cfg)
+	sn, err = connector.FinalizeSnapshot(sn, err)
 	if err == nil {
 		return sn, nil
 	}
-	_ = e.store.UpdateConnector(ctx, connectorID, map[string]any{"status": "degraded", "status_message": fmt.Sprintf("Fetch failed: %v", err)})
 	slog.Error("sync fetch failed", "connector", logsafe.Sanitize(connectorID), "error", logsafe.Sanitize(err.Error()))
 	e.broadcastSyncError(connectorID, jobID, err)
 	return nil, err
@@ -315,6 +342,18 @@ func (e *Engine) persistSyncSnapshot(ctx context.Context, connectorID string, sn
 	prev, prevErr := e.store.GetLatestSnapshot(ctx, connectorID)
 	if prevErr != nil && !errors.Is(prevErr, store.ErrNotFound) {
 		return nil, nil, "", fmt.Errorf("get latest snapshot: %w", prevErr)
+	}
+	if prevErr == nil && connector.SnapshotError(sn) != nil {
+		var old connector.ServiceSnapshot
+		if err := json.Unmarshal([]byte(prev.Data), &old); err != nil {
+			return nil, nil, "", fmt.Errorf("decode baseline for failed sections: %w", err)
+		}
+		preserveFailedSections(&old, sn)
+	}
+	for i := range sn.Sections {
+		if sn.Sections[i].Error != "" && prevErr != nil {
+			sn.Sections[i].Content = ""
+		}
 	}
 	data, _ := json.Marshal(sn)
 	snapshot := &store.SnapshotRecord{ConnectorID: connectorID, Data: string(data), FetchedAt: sn.FetchedAt.Format(time.RFC3339)}
