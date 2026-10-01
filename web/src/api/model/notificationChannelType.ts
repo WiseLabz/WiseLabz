@@ -18,4 +18,8 @@ export const NotificationChannelType = {
   slack: 'slack',
   ntfy: 'ntfy',
   telegram: 'telegram',
+  gotify: 'gotify',
+  pushover: 'pushover',
+  matrix: 'matrix',
+  apprise: 'apprise',
 } as const;

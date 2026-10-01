@@ -25,6 +25,10 @@ const CHANNEL_LABELS: Record<NotificationChannelType, string> = {
   slack: 'Slack',
   ntfy: 'ntfy',
   telegram: 'Telegram',
+  gotify: 'Gotify',
+  pushover: 'Pushover',
+  matrix: 'Matrix',
+  apprise: 'Apprise',
 };
 
 /**

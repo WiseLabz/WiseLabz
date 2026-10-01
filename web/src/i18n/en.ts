@@ -792,6 +792,10 @@ export const en = {
       webhookDesc: 'POST events to an external URL.',
       discordDesc: 'Post events to a Discord channel via incoming webhook.',
       slackDesc: 'Post events to a Slack channel via incoming webhook.',
+      gotifyDesc: 'Push events to a self-hosted Gotify server.',
+      pushoverDesc: 'Push events to devices via Pushover.',
+      matrixDesc: 'Post events to a Matrix room.',
+      appriseDesc: 'Relay events through an Apprise API server to many services.',
       testChannel: 'Test {{channel}}',
       routingTitle: 'Event routing',
       routingDesc:

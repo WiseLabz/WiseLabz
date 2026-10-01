@@ -7,10 +7,12 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/http"
 	"net/smtp"
 	"net/url"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/WiseLabz/wiselabz/internal/connector"
@@ -22,6 +24,9 @@ var defaultNtfyServer = "https://ntfy.sh"
 
 // telegramAPIBase is the Telegram Bot API base URL; the bot token (channel secret) is appended.
 var telegramAPIBase = "https://api.telegram.org/bot"
+
+// pushoverAPIURL is the Pushover messages endpoint; a var only so tests can point it at a local server.
+var pushoverAPIURL = "https://api.pushover.net/1/messages.json"
 
 // smtpTimeout bounds SMTP dial, handshake and send.
 const smtpTimeout = 10 * time.Second
@@ -41,6 +46,10 @@ var channelSenders = map[string]channelSender{
 	"ntfy":     sendNtfyChannel,
 	"telegram": sendTelegramChannel,
 	"smtp":     sendSMTPChannel,
+	"gotify":   sendGotifyChannel,
+	"pushover": sendPushoverChannel,
+	"matrix":   sendMatrixChannel,
+	"apprise":  sendAppriseChannel,
 }
 
 // webhookPayload shapes a title/message pair into the generic webhook body.
@@ -133,6 +142,106 @@ func sendTelegramChannel(ctx context.Context, cfg channelCfg, secret, title, mes
 	}
 	return doHTTPRequest(ctx, telegramAPIBase+secret+"/sendMessage",
 		map[string]string{"Content-Type": "application/json"}, body)
+}
+
+// sendGotifyChannel POSTs to <server>/message with the app token (channel secret) in the
+// X-Gotify-Key header, so the token never appears in a URL or error.
+func sendGotifyChannel(ctx context.Context, cfg channelCfg, secret, title, message string) error {
+	server, _ := cfg.Config["url"].(string)
+	if server == "" {
+		return errors.New("gotify url not configured")
+	}
+	if secret == "" {
+		return errors.New("gotify app token not configured")
+	}
+	payload := map[string]any{"title": title, "message": message}
+	if p, ok := cfg.Config["priority"].(float64); ok {
+		payload["priority"] = int(p)
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+	return doHTTPRequest(ctx, strings.TrimRight(server, "/")+"/message",
+		map[string]string{"Content-Type": "application/json", "X-Gotify-Key": secret}, body)
+}
+
+// sendPushoverChannel posts to the Pushover messages API. The application token rides in the
+// channel secret; the recipient user/group key is the "userKey" config field.
+func sendPushoverChannel(ctx context.Context, cfg channelCfg, secret, title, message string) error {
+	if secret == "" {
+		return errors.New("pushover app token not configured")
+	}
+	userKey, _ := cfg.Config["userKey"].(string)
+	if userKey == "" {
+		return errors.New("pushover user key not configured")
+	}
+	form := url.Values{"token": {secret}, "user": {userKey}, "title": {title}, "message": {message}}
+	if device, _ := cfg.Config["device"].(string); device != "" {
+		form.Set("device", device)
+	}
+	if p, ok := cfg.Config["priority"].(float64); ok {
+		form.Set("priority", strconv.Itoa(int(p)))
+	}
+	return doHTTPRequest(ctx, pushoverAPIURL,
+		map[string]string{"Content-Type": "application/x-www-form-urlencoded"}, []byte(form.Encode()))
+}
+
+// matrixTxnCounter makes each Matrix send transaction ID unique within the process.
+var matrixTxnCounter atomic.Uint64
+
+// sendMatrixChannel sends an m.room.message via the Matrix client-server API. The access token
+// (channel secret) goes in the Authorization header. Matrix requires PUT with a transaction ID.
+func sendMatrixChannel(ctx context.Context, cfg channelCfg, secret, title, message string) error {
+	homeserver, _ := cfg.Config["url"].(string)
+	roomID, _ := cfg.Config["roomId"].(string)
+	if homeserver == "" || roomID == "" {
+		return errors.New("matrix homeserver url or room id not configured")
+	}
+	if secret == "" {
+		return errors.New("matrix access token not configured")
+	}
+	body, err := json.Marshal(map[string]string{"msgtype": "m.text", "body": title + "\n" + message})
+	if err != nil {
+		return err
+	}
+	txn := fmt.Sprintf("wiselabz-%d-%d", time.Now().UnixNano(), matrixTxnCounter.Add(1))
+	fullURL := strings.TrimRight(homeserver, "/") + "/_matrix/client/v3/rooms/" + url.PathEscape(roomID) +
+		"/send/m.room.message/" + url.PathEscape(txn)
+	return doHTTPRequestMethod(ctx, http.MethodPut, fullURL,
+		map[string]string{"Content-Type": "application/json", "Authorization": "Bearer " + secret}, body)
+}
+
+// sendAppriseChannel POSTs to an Apprise API server. With a "configKey" it uses the persistent
+// store endpoint /notify/<key>; otherwise it needs "urls" (comma-separated Apprise service URLs)
+// and uses the stateless /notify endpoint. The optional secret is sent as a Bearer token for
+// reverse-proxied servers that require one.
+func sendAppriseChannel(ctx context.Context, cfg channelCfg, secret, title, message string) error {
+	server, _ := cfg.Config["url"].(string)
+	if server == "" {
+		return errors.New("apprise url not configured")
+	}
+	endpoint := strings.TrimRight(server, "/") + "/notify"
+	payload := map[string]string{"title": title, "body": message}
+	if key, _ := cfg.Config["configKey"].(string); key != "" {
+		endpoint += "/" + url.PathEscape(key)
+		if tag, _ := cfg.Config["tag"].(string); tag != "" {
+			payload["tag"] = tag
+		}
+	} else if urls, _ := cfg.Config["urls"].(string); urls != "" {
+		payload["urls"] = urls
+	} else {
+		return errors.New("apprise config key or urls not configured")
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+	headers := map[string]string{"Content-Type": "application/json"}
+	if secret != "" {
+		headers["Authorization"] = "Bearer " + secret
+	}
+	return doHTTPRequest(ctx, endpoint, headers, body)
 }
 
 // sendSMTPChannel sends title/message as a plain-text email over SMTP with opportunistic

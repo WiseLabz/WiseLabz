@@ -163,3 +163,15 @@ func TestValidateRejectsInvalidDocExportGit(t *testing.T) {
 		t.Fatalf("Validate() error = %v, want doc_export.git.remote error", err)
 	}
 }
+
+func TestValidateMetricsRequiresToken(t *testing.T) {
+	cfg := validConfig()
+	cfg.Metrics.Enabled = true
+	if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "metrics.token") {
+		t.Fatalf("Validate() = %v, want metrics.token error", err)
+	}
+	cfg.Metrics.Token = "t"
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("Validate() with token = %v", err)
+	}
+}

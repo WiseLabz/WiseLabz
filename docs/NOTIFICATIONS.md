@@ -39,10 +39,14 @@ Every `config` field below lives under `NotificationChannel.config` for that cha
 | Slack      | `slack`    | `url`, `secret` (optional)                                 | Slack incoming-webhook URL. Body: `{"text":"*title*\nmessage"}`. |
 | ntfy       | `ntfy`     | `url` (server, default `https://ntfy.sh`), `topic`, `priority` (optional), `tags` (optional) | Publishes to `<url>/<topic>` per [ntfy's HTTP API](https://docs.ntfy.sh/publish/); title/priority/tags ride as `X-Title`/`X-Priority`/`X-Tags` headers, body is the plain-text message. |
 | Telegram   | `telegram` | `chatId`, `secret` (bot token)                              | Posts to the Bot API's `sendMessage` (`https://api.telegram.org/bot<token>/sendMessage`) with Markdown formatting. The bot token rides in the same write-only `secret` field as webhook signing secrets — it's just as sensitive, so it reuses the same encrypted-at-rest storage. |
+| Gotify     | `gotify`   | `url` (server), `priority` (optional), `secret` (app token) | POSTs JSON `{title,message,priority}` to `<url>/message`; the token rides in the `X-Gotify-Key` header. |
+| Pushover   | `pushover` | `userKey`, `device` (optional), `priority` (optional), `secret` (application token) | POSTs a form to `https://api.pushover.net/1/messages.json`. |
+| Matrix     | `matrix`   | `url` (homeserver), `roomId`, `secret` (access token)       | PUTs an `m.text` message to `/_matrix/client/v3/rooms/<roomId>/send/m.room.message/<txn>`; the token goes in the `Authorization: Bearer` header. |
+| Apprise    | `apprise`  | `url` (Apprise API server), `configKey` or `urls`, `tag` (optional with `configKey`), `secret` (optional bearer token) | POSTs `{title,body}` to `<url>/notify/<configKey>`, or to `<url>/notify` with `urls` for stateless use. |
 | SMTP       | `smtp`     | `host`, `port` (default 587), `username` (optional), `secret` (password, optional), `from`, `to` (comma-separated) | Sends a plain-text email with opportunistic STARTTLS. Dials through the same SSRF-guarded dialer as the HTTP channels, since `host` is admin-configured. |
 | In-app     | `in_app`   | — | Always delivered first; not configurable, never fails. |
 
-All HTTP-based channels (webhook, Discord, Slack, ntfy, Telegram) share one guarded transport
+All HTTP-based channels (webhook, Discord, Slack, ntfy, Telegram, Gotify, Pushover, Matrix, Apprise) share one guarded transport
 (`internal/notifications/webhook.go`): a 10s timeout, a dialer that refuses loopback/link-local/
 unspecified/multicast destinations, and no redirect following. Response bodies are read up to 64
 KiB and discarded — never stored or surfaced.

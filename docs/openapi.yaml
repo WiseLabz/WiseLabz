@@ -5170,7 +5170,7 @@ components:
           items: { $ref: '#/components/schemas/NotificationRoute' }
     NotificationChannelType:
       type: string
-      enum: [in_app, smtp, webhook, discord, slack, ntfy, telegram]
+      enum: [in_app, smtp, webhook, discord, slack, ntfy, telegram, gotify, pushover, matrix, apprise]
     NotificationChannel:
       type: object
       required: [type, enabled]
@@ -5190,6 +5190,11 @@ components:
                 via ntfy's HTTP API.
               - telegram: { chatId, secret } — secret is the bot token; sends via the Bot API's
                 sendMessage.
+              - gotify: { url (server), priority } — secret is the app token (sent as X-Gotify-Key).
+              - pushover: { userKey, device, priority } — secret is the application token.
+              - matrix: { url (homeserver), roomId } — secret is the access token.
+              - apprise: { url (Apprise API server), configKey or urls, tag } — secret is an optional
+                bearer token.
               - smtp: { host, port, username, secret, from, to } — secret is the SMTP password;
                 sent with opportunistic STARTTLS.
             "secret" is write-only: webhook/Discord/Slack sign deliveries with HMAC-SHA256
