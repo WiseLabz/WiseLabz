@@ -600,3 +600,41 @@ func TestListAllDocsSearchCaseInsensitiveAndEscaped(t *testing.T) {
 		}
 	}
 }
+
+func TestUpdateDocWithVersionRecordsRevisionAtomically(t *testing.T) {
+	ctx := context.Background()
+	s := newDocTestStore(t)
+
+	d := &DocRecord{Title: "Test Doc", Content: "v1"}
+	if err := s.CreateDoc(ctx, d); err != nil {
+		t.Fatalf("CreateDoc() error: %v", err)
+	}
+
+	rev, err := s.UpdateDocWithVersion(ctx, d.ID, "v2", nil, "", "manual")
+	if err != nil || rev != 2 {
+		t.Fatalf("UpdateDocWithVersion() = %d, %v; want 2, nil", rev, err)
+	}
+	versions, err := s.GetDocVersions(ctx, d.ID)
+	if err != nil || len(versions) != 1 || versions[0].Rev != 2 || versions[0].Content != "v2" {
+		t.Fatalf("versions = %+v, %v; want one row at rev 2", versions, err)
+	}
+
+	// A stale write is rejected and records no version.
+	stale := 1
+	if _, err := s.UpdateDocWithVersion(ctx, d.ID, "v3", &stale, "", "manual"); !errors.Is(err, ErrVersionConflict) {
+		t.Fatalf("stale UpdateDocWithVersion() error = %v, want ErrVersionConflict", err)
+	}
+
+	// A colliding version row rolls the content update back instead of
+	// leaving the doc ahead of its history.
+	if err := s.CreateDocVersion(ctx, &DocVersionRecord{DocID: d.ID, Rev: 3, Content: "x", Trigger: "template"}); err != nil {
+		t.Fatalf("seed colliding version: %v", err)
+	}
+	if _, err := s.UpdateDocWithVersion(ctx, d.ID, "v3", nil, "", "manual"); err == nil {
+		t.Fatal("UpdateDocWithVersion() with colliding rev succeeded, want error")
+	}
+	got, err := s.GetDoc(ctx, d.ID)
+	if err != nil || got.Content != "v2" || got.CurrentVersion != 2 {
+		t.Fatalf("after failed update: %+v, %v; want content v2 version 2", got, err)
+	}
+}

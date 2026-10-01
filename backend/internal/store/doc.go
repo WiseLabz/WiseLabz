@@ -84,6 +84,13 @@ func (s *Store) GetDoc(ctx context.Context, id string) (*DocRecord, error) {
 // (optimistic concurrency); a stale version returns ErrVersionConflict instead
 // of silently overwriting a newer edit.
 func (s *Store) UpdateDoc(ctx context.Context, id, content string, expectedVersion *int) error {
+	_, err := s.updateDocRev(ctx, id, content, expectedVersion)
+	return err
+}
+
+// updateDocRev performs the UPDATE and returns the revision it produced, read
+// atomically via RETURNING so concurrent writers cannot change it in between.
+func (s *Store) updateDocRev(ctx context.Context, id, content string, expectedVersion *int) (int, error) {
 	now := time.Now().UTC().Format(time.RFC3339)
 	query := `UPDATE docs SET content = ?, updated_at = ?, current_version = current_version + 1 WHERE id = ?`
 	args := []any{content, now, id}
@@ -91,24 +98,43 @@ func (s *Store) UpdateDoc(ctx context.Context, id, content string, expectedVersi
 		query += ` AND current_version = ?`
 		args = append(args, *expectedVersion)
 	}
+	query += ` RETURNING current_version`
 
-	result, err := s.db.ExecContext(ctx, query, args...)
-	if err != nil {
-		return fmt.Errorf("update doc: %w", err)
-	}
-	rows, err := result.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("rows affected: %w", err)
-	}
-	if rows == 0 {
+	var rev int
+	err := s.db.QueryRowContext(ctx, query, args...).Scan(&rev)
+	if errors.Is(err, sql.ErrNoRows) {
 		if expectedVersion != nil {
 			if _, getErr := s.GetDoc(ctx, id); getErr == nil {
-				return ErrVersionConflict
+				return 0, ErrVersionConflict
 			}
 		}
-		return ErrNotFound
+		return 0, ErrNotFound
 	}
-	return nil
+	if err != nil {
+		return 0, fmt.Errorf("update doc: %w", err)
+	}
+	return rev, nil
+}
+
+// UpdateDocWithVersion updates a doc's content and records the matching
+// doc_versions row in one transaction, so the history always contains the
+// revision this write produced. It returns that revision.
+func (s *Store) UpdateDocWithVersion(ctx context.Context, id, content string, expectedVersion *int, author, trigger string) (int, error) {
+	var rev int
+	err := s.WithinTransaction(ctx, func(tx *Store) error {
+		r, err := tx.updateDocRev(ctx, id, content, expectedVersion)
+		if err != nil {
+			return err
+		}
+		rev = r
+		return tx.CreateDocVersion(ctx, &DocVersionRecord{
+			DocID: id, Rev: r, Content: content, Author: author, Trigger: trigger,
+		})
+	})
+	if err != nil {
+		return 0, err
+	}
+	return rev, nil
 }
 
 // DeleteDoc removes a documentation record by ID.

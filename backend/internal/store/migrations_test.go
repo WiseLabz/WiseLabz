@@ -941,6 +941,74 @@ func TestRunMigrationsPreservesRowsWithForeignKeys(t *testing.T) {
 	}
 }
 
+// TestRunMigrationsDownPreservesRowsWithForeignKeys rolls a populated database
+// back across the DROP TABLE rebuild migrations (000022, 000024) with
+// foreign_keys=ON and checks no cascade wiped child rows, then re-applies them.
+func TestRunMigrationsDownPreservesRowsWithForeignKeys(t *testing.T) {
+	db, err := OpenDB("sqlite", "file:"+t.TempDir()+"/down.db")
+	if err != nil {
+		t.Fatalf("OpenDB: %v", err)
+	}
+	defer db.Close() //nolint:errcheck
+
+	m, cleanup, err := newMigrator(db, "sqlite")
+	if err != nil {
+		t.Fatalf("newMigrator: %v", err)
+	}
+	defer cleanup()
+	if err := m.Migrate(21); err != nil {
+		t.Fatalf("migrate to 21: %v", err)
+	}
+	seed := []string{
+		`INSERT INTO users (id, username, role, created_at) VALUES ('u1', 'alice', 'operator', 'now')`,
+		`INSERT INTO sessions (id, user_id, token_hash, created_at, last_seen_at) VALUES ('s1', 'u1', 'h', 'now', 'now')`,
+		`INSERT INTO connectors (id, name, category, type, url, created_at, updated_at) VALUES ('c1', 'pve', 'virtualization', 'proxmox', 'http://x', 'now', 'now')`,
+		`INSERT INTO service_snapshots (id, connector_id, data, fetched_at) VALUES ('n1', 'c1', '{}', 'now')`,
+	}
+	for _, q := range seed {
+		if _, err := db.Exec(q); err != nil {
+			t.Fatalf("seed %q: %v", q, err)
+		}
+	}
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
+	if err := RunMigrations(db, "sqlite", logger); err != nil {
+		t.Fatalf("RunMigrations: %v", err)
+	}
+
+	counts := func() {
+		t.Helper()
+		for table, want := range map[string]int{"users": 1, "sessions": 1, "connectors": 1, "service_snapshots": 1} {
+			var got int
+			if err := db.QueryRow("SELECT COUNT(*) FROM " + table).Scan(&got); err != nil {
+				t.Fatalf("count %s: %v", table, err)
+			}
+			if got != want {
+				t.Errorf("%s rows = %d, want %d", table, got, want)
+			}
+		}
+	}
+
+	st, err := GetMigrationStatus(db, "sqlite")
+	if err != nil {
+		t.Fatalf("GetMigrationStatus: %v", err)
+	}
+	for v := st.Current; v > 21; v-- {
+		if err := RunMigrationsDown(db, "sqlite", logger); err != nil {
+			t.Fatalf("RunMigrationsDown from %d: %v", v, err)
+		}
+	}
+	counts()
+	if err := RunMigrations(db, "sqlite", logger); err != nil {
+		t.Fatalf("RunMigrations after down: %v", err)
+	}
+	counts()
+
+	var fk int
+	if err := db.QueryRow("PRAGMA foreign_keys").Scan(&fk); err != nil || fk != 1 {
+		t.Errorf("foreign_keys after down/up = %d, %v; want 1", fk, err)
+	}
+}
+
 func TestGetMigrationStatus(t *testing.T) {
 	db, err := sql.Open("sqlite", "file:"+t.TempDir()+"/status.db?cache=shared")
 	if err != nil {

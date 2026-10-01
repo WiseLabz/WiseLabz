@@ -93,7 +93,7 @@ func (h *Handler) Restore(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.Store.UpdateDoc(r.Context(), docID, target.Content, nil); err != nil {
+	if _, err := h.Store.UpdateDocWithVersion(r.Context(), docID, target.Content, nil, auth.UserIDFromContext(r.Context()), "restore"); err != nil {
 		httputil.Errorf(w, err)
 		return
 	}
@@ -106,13 +106,6 @@ func (h *Handler) Restore(w http.ResponseWriter, r *http.Request) {
 
 	d, err := h.Store.GetDoc(r.Context(), docID)
 	if err != nil {
-		httputil.Errorf(w, err)
-		return
-	}
-	if err := h.Store.CreateDocVersion(r.Context(), &store.DocVersionRecord{
-		DocID: docID, Rev: d.CurrentVersion, Content: d.Content,
-		Author: auth.UserIDFromContext(r.Context()), Trigger: "restore",
-	}); err != nil {
 		httputil.Errorf(w, err)
 		return
 	}

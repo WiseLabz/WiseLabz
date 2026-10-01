@@ -104,6 +104,28 @@ func TestAlertsSnoozeSuccess(t *testing.T) {
 	}
 }
 
+// TestAlertsSnoozeNormalizesToUTC checks a non-UTC offset is stored as UTC so
+// the text comparison in the unsnooze sweep is correct.
+func TestAlertsSnoozeNormalizesToUTC(t *testing.T) {
+	t.Parallel()
+	app := newTestApp(t)
+	opUserID, opToken := app.user(t, "operator")
+	a := seedAlert(t, app)
+	app.connectorGrant(t, opUserID, a.ServiceID, "operator")
+
+	rec := app.req(t, http.MethodPost, "/api/alerts/"+a.ID+"/snooze", map[string]any{"until": "2099-01-01T00:00:00-05:00"}, opToken)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body = %s", rec.Code, rec.Body)
+	}
+	got, err := app.Store.GetAlert(context.Background(), a.ID)
+	if err != nil {
+		t.Fatalf("GetAlert: %v", err)
+	}
+	if got.SnoozedUntil != "2099-01-01T05:00:00Z" {
+		t.Errorf("SnoozedUntil = %q, want 2099-01-01T05:00:00Z", got.SnoozedUntil)
+	}
+}
+
 // TestAlertsBulkSnoozeRoleBoundary verifies a caller without an operator
 // grant on the alert's connector gets a per-item "forbidden" outcome, not a
 // blanket 403 — bulk endpoints report per-ID authorization since a batch can

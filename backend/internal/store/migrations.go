@@ -102,11 +102,16 @@ func RunMigrationsDown(db *sql.DB, driver string, logger *slog.Logger) error {
 	}
 	defer cleanup()
 
-	if err := m.Steps(-1); err != nil && !errors.Is(err, migrate.ErrNoChange) {
-		return fmt.Errorf("run down migration: %w", err)
+	down := func() error {
+		if err := m.Steps(-1); err != nil && !errors.Is(err, migrate.ErrNoChange) {
+			return fmt.Errorf("run down migration: %w", err)
+		}
+		return nil
 	}
-
-	return nil
+	if driver == "sqlite" {
+		return runSQLiteWithForeignKeysOff(db, down)
+	}
+	return down()
 }
 
 // newMigrator reuses the caller-owned *sql.DB and returns a cleanup function
