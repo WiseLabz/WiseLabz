@@ -9,11 +9,12 @@ import type { ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { AnimatePresence, motion } from 'motion/react';
-import { useGetConnectors } from '../../api/generated/connectors/connectors';
+import { useGetConnectors, useGetUptime } from '../../api/generated/connectors/connectors';
 import { useGetDashboardOverview } from '../../api/generated/dashboard/dashboard';
 import { useGetAlerts } from '../../api/generated/alerts/alerts';
 import { useGetDocsTree } from '../../api/generated/docs/docs';
 import { useGetAttention } from '../../api/generated/attention/attention';
+import type { GetUptimeWindow } from '../../api/model';
 import { useDashboard, useRangeDays, useWidgetPolling, type WidgetId } from '../../store/dashboard';
 import { useLive } from '../../store/live';
 import { relativeTime } from '../../lib/time';
@@ -470,6 +471,83 @@ export function AttentionQueueWidget({ title, icon }: WidgetProps) {
               </span>
             </span>
             <span className="line-clamp-2 text-sm text-ink">{item.title}</span>
+          </button>
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <WidgetFrame
+      title={title}
+      icon={icon}
+      onRefresh={() => void refetch()}
+      pollingEnabled={pollingEnabled}
+      onTogglePolling={togglePolling}
+    >
+      {body}
+    </WidgetFrame>
+  );
+}
+
+/* ── Fleet uptime ──────────────────────────────────────────────────────── */
+
+/** The header range preset resolved to the nearest window the uptime API supports. */
+function uptimeWindow(days: number): GetUptimeWindow {
+  if (days <= 1) return '24h';
+  if (days <= 7) return '7d';
+  return '30d';
+}
+
+export function FleetUptimeWidget({ title, icon }: WidgetProps) {
+  const { t } = useTranslation();
+  const navigate = useNavigate();
+  const days = useRangeDays();
+  const win = uptimeWindow(days);
+  const { pollingEnabled, refetchInterval, togglePolling } = useWidgetPolling('uptime');
+  const { data, isLoading, isError, refetch } = useGetUptime(
+    { window: win },
+    { query: { refetchInterval } }
+  );
+
+  let body: ReactNode;
+  if (isLoading) {
+    body = <SkeletonRows rows={4} />;
+  } else if (isError || !data) {
+    body = <ErrorState description={t('widgets.loadUptimeError')} onRetry={() => refetch()} />;
+  } else if (data.connectors.length === 0) {
+    body = (
+      <EmptyState
+        icon={<CheckIcon size={20} />}
+        title={t('widgets.uptime.emptyTitle')}
+        description={t('widgets.uptime.emptyDesc')}
+      />
+    );
+  } else {
+    // Worst availability first; connectors with no checks sink to the bottom.
+    const rows = [...data.connectors].sort((a, b) => {
+      if ((a.checkCount === 0) !== (b.checkCount === 0)) return a.checkCount === 0 ? 1 : -1;
+      return a.availabilityPct - b.availabilityPct;
+    });
+    body = (
+      <div className="min-h-0 flex-1 overflow-y-auto px-2 py-2">
+        <p className="px-2 pb-1 font-mono text-2xs text-ink-faint">
+          {t('widgets.uptime.window')} · {win}
+        </p>
+        {rows.map((c) => (
+          <button
+            key={c.connectorId}
+            onClick={() => navigate(`/services/${c.connectorId}`)}
+            className="flex w-full items-center justify-between gap-2 rounded-md px-2 py-2 text-left transition-colors hover:bg-surface-raised"
+          >
+            <span className="truncate text-sm text-ink">{c.name}</span>
+            {c.checkCount > 0 ? (
+              <span className="nums font-mono text-xs text-ink-muted">
+                {c.availabilityPct.toFixed(2)}%
+              </span>
+            ) : (
+              <span className="text-2xs text-ink-faint">{t('widgets.uptime.noData')}</span>
+            )}
           </button>
         ))}
       </div>

@@ -6,15 +6,10 @@
  *
  * OpenAPI spec version: 0.1.0
  */
+import type { FleetUptimeEntry } from './fleetUptimeEntry';
+import type { FleetUptimeWindow } from './fleetUptimeWindow';
 
-export type WidgetPlacementType = (typeof WidgetPlacementType)[keyof typeof WidgetPlacementType];
-
-export const WidgetPlacementType = {
-  service_status: 'service_status',
-  recent_changes: 'recent_changes',
-  alert_summary: 'alert_summary',
-  sync_activity: 'sync_activity',
-  docs_health: 'docs_health',
-  attention: 'attention',
-  uptime: 'uptime',
-} as const;
+export interface FleetUptime {
+  window: FleetUptimeWindow;
+  connectors: FleetUptimeEntry[];
+}

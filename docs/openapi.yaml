@@ -1244,7 +1244,10 @@ paths:
         between consecutive checks, and MTTR (mean time to recovery) is the
         mean time from an "offline" check to the next check that isn't,
         counting only outages that both started and recovered inside each
-        window.
+        window. Time inside a maintenance window counts as neither uptime
+        nor downtime, and an offline stretch fully inside one is not an outage.
+        Checks are recorded by a scheduler (health.cron_expr, default every
+        60s) as well as by manual checks.
       parameters: [{ $ref: '#/components/parameters/ConnectorId' }]
       responses:
         '200':
@@ -1253,6 +1256,48 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/UptimeReport' }
         '404': { $ref: '#/components/responses/NotFound' }
+  /connectors/{connectorId}/uptime/history:
+    get:
+      tags: [connectors]
+      summary: Downsampled health history buckets for sparklines
+      description: >
+        Health checks grouped into fixed-width buckets (24h = 15m, 7d = 1h,
+        30d = 6h), oldest first, each with its worst status and mean latency.
+        Buckets with no checks are omitted.
+      parameters:
+        - $ref: '#/components/parameters/ConnectorId'
+        - name: window
+          in: query
+          required: false
+          schema: { type: string, enum: ['24h', '7d', '30d'], default: '24h' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UptimeHistory' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /uptime:
+    get:
+      tags: [connectors]
+      summary: Fleet availability for the connectors the caller can view
+      description: >
+        Per-connector availability and MTTR over one window, restricted to
+        connectors the caller holds at least a viewer grant on (and any API-key
+        connector restriction).
+      parameters:
+        - name: window
+          in: query
+          required: false
+          schema: { type: string, enum: ['24h', '7d', '30d'], default: '7d' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FleetUptime' }
+        '400': { $ref: '#/components/responses/BadRequest' }
   /connectors/{connectorId}/test:
     post:
       tags: [connectors]
@@ -3790,7 +3835,7 @@ components:
         id: { type: string }
         type:
           type: string
-          enum: [service_status, recent_changes, alert_summary, sync_activity, docs_health, attention]
+          enum: [service_status, recent_changes, alert_summary, sync_activity, docs_health, attention, uptime]
         x: { type: integer }
         y: { type: integer }
         w: { type: integer }
@@ -4054,12 +4099,12 @@ components:
       properties:
         windowStart: { type: string, format: date-time }
         windowEnd: { type: string, format: date-time }
-        checkCount: { type: integer, description: Number of health_checks rows in this window }
+        checkCount: { type: integer, description: 'Number of health checks that contributed measured (non-maintenance) time in this window; 0 means no data and availabilityPct is meaningless' }
         availabilityPct:
           {
             type: number,
             format: double,
-            description: Time-weighted % of the window spent in a non-offline status; 0 when checkCount is 0,
+            description: Time-weighted % of measured time spent in a non-offline status (a status is only extrapolated a bounded time past its check); 0 when checkCount is 0,
           }
         mttrSeconds:
           {
@@ -4077,6 +4122,44 @@ components:
           type: object
           description: Keyed by window label ("24h", "7d", "30d")
           additionalProperties: { $ref: '#/components/schemas/UptimeWindowStats' }
+    UptimeHistoryBucket:
+      type: object
+      required: [start, status, checkCount]
+      properties:
+        start: { type: string, format: date-time }
+        status: { $ref: '#/components/schemas/ServiceStatus' }
+        avgLatencyMs: { type: integer, format: int64, description: Mean latency of checks in the bucket that reported one }
+        checkCount: { type: integer }
+    UptimeHistory:
+      type: object
+      required: [connectorId, window, windowStart, windowEnd, bucketSeconds, buckets]
+      properties:
+        connectorId: { type: string }
+        window: { type: string, enum: ['24h', '7d', '30d'] }
+        windowStart: { type: string, format: date-time }
+        windowEnd: { type: string, format: date-time }
+        bucketSeconds: { type: integer, description: Width of each bucket; buckets are placed by start time so gaps (no checks) are visible }
+        buckets:
+          type: array
+          items: { $ref: '#/components/schemas/UptimeHistoryBucket' }
+    FleetUptimeEntry:
+      type: object
+      required: [connectorId, name, checkCount, availabilityPct, mttrSeconds, outageCount]
+      properties:
+        connectorId: { type: string }
+        name: { type: string }
+        checkCount: { type: integer, description: 'Checks that contributed measured (non-maintenance) time; zero means no data for the window' }
+        availabilityPct: { type: number, format: double }
+        mttrSeconds: { type: number, format: double }
+        outageCount: { type: integer }
+    FleetUptime:
+      type: object
+      required: [window, connectors]
+      properties:
+        window: { type: string, enum: ['24h', '7d', '30d'] }
+        connectors:
+          type: array
+          items: { $ref: '#/components/schemas/FleetUptimeEntry' }
     SyncJobRef:
       type: object
       required: [jobId]
