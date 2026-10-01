@@ -10,9 +10,9 @@
 export interface UptimeWindowStats {
   windowStart: string;
   windowEnd: string;
-  /** Number of health_checks rows in this window */
+  /** Number of health checks that contributed measured (non-maintenance) time in this window; 0 means no data and availabilityPct is meaningless */
   checkCount: number;
-  /** Time-weighted % of the window spent in a non-offline status; 0 when checkCount is 0 */
+  /** Time-weighted % of measured time spent in a non-offline status (a status is only extrapolated a bounded time past its check); 0 when checkCount is 0 */
   availabilityPct: number;
   /** Mean time to recovery, in seconds, over outages that both started and recovered inside the window; 0 when there were none. */
   mttrSeconds: number;

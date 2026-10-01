@@ -1,7 +1,7 @@
 {
   "race": {
     "all": {
-      "packages": ["./internal/auth", "./internal/config", "./internal/connector/...", "./internal/crypto", "./internal/httputil", "./internal/httpx", "./internal/ai", "./internal/report", "./internal/ttlcache", "./internal/compliance", "./internal/ws/...", "./internal/notifications/...", "./internal/sync/...", "./internal/api/...", "./internal/store", "./internal/quality", "./internal/backup", "./internal/doc", "./internal/docexport", "./internal/scheduler", "./internal/chat", "./internal/mcp", "./internal/retention", "./internal/diagnostics", "./cmd/backup", "./cmd/server"]
+      "packages": ["./internal/auth", "./internal/config", "./internal/connector/...", "./internal/crypto", "./internal/httputil", "./internal/httpx", "./internal/ai", "./internal/report", "./internal/ttlcache", "./internal/compliance", "./internal/ws/...", "./internal/notifications/...", "./internal/sync/...", "./internal/api/...", "./internal/store", "./internal/quality", "./internal/backup", "./internal/doc", "./internal/docexport", "./internal/scheduler", "./internal/health", "./internal/chat", "./internal/mcp", "./internal/retention", "./internal/diagnostics", "./cmd/backup", "./cmd/server"]
     }
   },
   "postgres": {

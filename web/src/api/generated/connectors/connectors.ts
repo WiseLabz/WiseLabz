@@ -39,11 +39,14 @@ import type {
   DeleteConnectorsConnectorIdMaintenanceWindow200,
   ElevationRequiredResponse,
   Error,
+  FleetUptime,
   ForbiddenResponse,
   GetConnectorsConnectorIdPermissions200Item,
   GetConnectorsConnectorIdSnapshotsDiffParams,
   GetConnectorsConnectorIdSnapshotsParams,
   GetConnectorsConnectorIdSyncsParams,
+  GetConnectorsConnectorIdUptimeHistoryParams,
+  GetUptimeParams,
   GoldenSnapshot,
   HealthCheckResult,
   MaintenanceWindow,
@@ -71,6 +74,7 @@ import type {
   SyncRun,
   TestResult,
   UnauthorizedResponse,
+  UptimeHistory,
   UptimeReport,
 } from '../../model';
 
@@ -1581,7 +1585,7 @@ export function useGetConnectorsConnectorIdData<
 }
 
 /**
- * Computed from the health_checks time series recorded by POST /connectors/{connectorId}/health. Availability is time-weighted between consecutive checks, and MTTR (mean time to recovery) is the mean time from an "offline" check to the next check that isn't, counting only outages that both started and recovered inside each window.
+ * Computed from the health_checks time series recorded by POST /connectors/{connectorId}/health. Availability is time-weighted between consecutive checks, and MTTR (mean time to recovery) is the mean time from an "offline" check to the next check that isn't, counting only outages that both started and recovered inside each window. Time inside a maintenance window counts as neither uptime nor downtime, and an offline stretch fully inside one is not an outage. Checks are recorded by a scheduler (health.cron_expr, default every 60s) as well as by manual checks.
  * @summary Availability % and MTTR over 24h/7d/30d windows
  */
 export const getConnectorsConnectorIdUptime = (
@@ -1709,6 +1713,296 @@ export function useGetConnectorsConnectorIdUptime<
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
   const queryOptions = getGetConnectorsConnectorIdUptimeQueryOptions(connectorId, options);
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+/**
+ * Health checks grouped into fixed-width buckets (24h = 15m, 7d = 1h, 30d = 6h), oldest first, each with its worst status and mean latency. Buckets with no checks are omitted.
+ * @summary Downsampled health history buckets for sparklines
+ */
+export const getConnectorsConnectorIdUptimeHistory = (
+  connectorId: string,
+  params?: GetConnectorsConnectorIdUptimeHistoryParams,
+  options?: SecondParameter<typeof customInstance>,
+  signal?: AbortSignal
+) => {
+  return customInstance<UptimeHistory>(
+    { url: `/connectors/${connectorId}/uptime/history`, method: 'GET', params, signal },
+    options
+  );
+};
+
+export const getGetConnectorsConnectorIdUptimeHistoryQueryKey = (
+  connectorId: string,
+  params?: GetConnectorsConnectorIdUptimeHistoryParams
+) => {
+  return [`/connectors/${connectorId}/uptime/history`, ...(params ? [params] : [])] as const;
+};
+
+export const getGetConnectorsConnectorIdUptimeHistoryQueryOptions = <
+  TData = Awaited<ReturnType<typeof getConnectorsConnectorIdUptimeHistory>>,
+  TError = ErrorType<BadRequestResponse | NotFoundResponse>,
+>(
+  connectorId: string,
+  params?: GetConnectorsConnectorIdUptimeHistoryParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getConnectorsConnectorIdUptimeHistory>>,
+        TError,
+        TData
+      >
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  }
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetConnectorsConnectorIdUptimeHistoryQueryKey(connectorId, params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getConnectorsConnectorIdUptimeHistory>>
+  > = ({ signal }) =>
+    getConnectorsConnectorIdUptimeHistory(connectorId, params, requestOptions, signal);
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: connectorId !== null && connectorId !== undefined,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getConnectorsConnectorIdUptimeHistory>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type GetConnectorsConnectorIdUptimeHistoryQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getConnectorsConnectorIdUptimeHistory>>
+>;
+export type GetConnectorsConnectorIdUptimeHistoryQueryError = ErrorType<
+  BadRequestResponse | NotFoundResponse
+>;
+
+export function useGetConnectorsConnectorIdUptimeHistory<
+  TData = Awaited<ReturnType<typeof getConnectorsConnectorIdUptimeHistory>>,
+  TError = ErrorType<BadRequestResponse | NotFoundResponse>,
+>(
+  connectorId: string,
+  params: undefined | GetConnectorsConnectorIdUptimeHistoryParams,
+  options: {
+    query: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getConnectorsConnectorIdUptimeHistory>>,
+        TError,
+        TData
+      >
+    > &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getConnectorsConnectorIdUptimeHistory>>,
+          TError,
+          Awaited<ReturnType<typeof getConnectorsConnectorIdUptimeHistory>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useGetConnectorsConnectorIdUptimeHistory<
+  TData = Awaited<ReturnType<typeof getConnectorsConnectorIdUptimeHistory>>,
+  TError = ErrorType<BadRequestResponse | NotFoundResponse>,
+>(
+  connectorId: string,
+  params?: GetConnectorsConnectorIdUptimeHistoryParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getConnectorsConnectorIdUptimeHistory>>,
+        TError,
+        TData
+      >
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getConnectorsConnectorIdUptimeHistory>>,
+          TError,
+          Awaited<ReturnType<typeof getConnectorsConnectorIdUptimeHistory>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useGetConnectorsConnectorIdUptimeHistory<
+  TData = Awaited<ReturnType<typeof getConnectorsConnectorIdUptimeHistory>>,
+  TError = ErrorType<BadRequestResponse | NotFoundResponse>,
+>(
+  connectorId: string,
+  params?: GetConnectorsConnectorIdUptimeHistoryParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getConnectorsConnectorIdUptimeHistory>>,
+        TError,
+        TData
+      >
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * @summary Downsampled health history buckets for sparklines
+ */
+
+export function useGetConnectorsConnectorIdUptimeHistory<
+  TData = Awaited<ReturnType<typeof getConnectorsConnectorIdUptimeHistory>>,
+  TError = ErrorType<BadRequestResponse | NotFoundResponse>,
+>(
+  connectorId: string,
+  params?: GetConnectorsConnectorIdUptimeHistoryParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getConnectorsConnectorIdUptimeHistory>>,
+        TError,
+        TData
+      >
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getGetConnectorsConnectorIdUptimeHistoryQueryOptions(
+    connectorId,
+    params,
+    options
+  );
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+/**
+ * Per-connector availability and MTTR over one window, restricted to connectors the caller holds at least a viewer grant on (and any API-key connector restriction).
+ * @summary Fleet availability for the connectors the caller can view
+ */
+export const getUptime = (
+  params?: GetUptimeParams,
+  options?: SecondParameter<typeof customInstance>,
+  signal?: AbortSignal
+) => {
+  return customInstance<FleetUptime>({ url: `/uptime`, method: 'GET', params, signal }, options);
+};
+
+export const getGetUptimeQueryKey = (params?: GetUptimeParams) => {
+  return [`/uptime`, ...(params ? [params] : [])] as const;
+};
+
+export const getGetUptimeQueryOptions = <
+  TData = Awaited<ReturnType<typeof getUptime>>,
+  TError = ErrorType<BadRequestResponse>,
+>(
+  params?: GetUptimeParams,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getUptime>>, TError, TData>>;
+    request?: SecondParameter<typeof customInstance>;
+  }
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetUptimeQueryKey(params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getUptime>>> = ({ signal }) =>
+    getUptime(params, requestOptions, signal);
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getUptime>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type GetUptimeQueryResult = NonNullable<Awaited<ReturnType<typeof getUptime>>>;
+export type GetUptimeQueryError = ErrorType<BadRequestResponse>;
+
+export function useGetUptime<
+  TData = Awaited<ReturnType<typeof getUptime>>,
+  TError = ErrorType<BadRequestResponse>,
+>(
+  params: undefined | GetUptimeParams,
+  options: {
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof getUptime>>, TError, TData>> &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getUptime>>,
+          TError,
+          Awaited<ReturnType<typeof getUptime>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useGetUptime<
+  TData = Awaited<ReturnType<typeof getUptime>>,
+  TError = ErrorType<BadRequestResponse>,
+>(
+  params?: GetUptimeParams,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getUptime>>, TError, TData>> &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getUptime>>,
+          TError,
+          Awaited<ReturnType<typeof getUptime>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useGetUptime<
+  TData = Awaited<ReturnType<typeof getUptime>>,
+  TError = ErrorType<BadRequestResponse>,
+>(
+  params?: GetUptimeParams,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getUptime>>, TError, TData>>;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * @summary Fleet availability for the connectors the caller can view
+ */
+
+export function useGetUptime<
+  TData = Awaited<ReturnType<typeof getUptime>>,
+  TError = ErrorType<BadRequestResponse>,
+>(
+  params?: GetUptimeParams,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getUptime>>, TError, TData>>;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getGetUptimeQueryOptions(params, options);
 
   const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
     queryKey: DataTag<QueryKey, TData, TError>;

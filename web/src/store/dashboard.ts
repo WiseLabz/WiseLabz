@@ -26,7 +26,7 @@ type WireWidget = WidgetPlacement & {
   pollingEnabled?: boolean;
 };
 
-export type WidgetId = 'roster' | 'changes' | 'alerts' | 'sync' | 'docs' | 'attention';
+export type WidgetId = 'roster' | 'changes' | 'alerts' | 'sync' | 'docs' | 'attention' | 'uptime';
 
 export interface WidgetDef {
   id: WidgetId;
@@ -60,6 +60,7 @@ export const DEFAULT_LAYOUT: WidgetDef[] = [
   { id: 'docs', enabled: true, span: 6 },
   // disabled by default — existing users shouldn't get a new widget forced on
   { id: 'attention', enabled: false, span: 2 },
+  { id: 'uptime', enabled: false, span: 2 },
 ];
 
 // The OpenAPI contract models widgets as position/size placements
@@ -74,6 +75,7 @@ const WIDGET_TYPE: Record<WidgetId, WidgetPlacementType> = {
   sync: WidgetPlacementType.sync_activity,
   docs: WidgetPlacementType.docs_health,
   attention: WidgetPlacementType.attention,
+  uptime: WidgetPlacementType.uptime,
 };
 
 const STORAGE_KEY = 'wiselabz.dashboard.layout';

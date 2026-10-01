@@ -66,7 +66,7 @@ func (h *Handler) verifyTOTP(ctx context.Context, userID, code string) error {
 	if err != nil {
 		return err
 	}
-	secret, err := crypto.Decrypt(factor.Secret, key)
+	secret, err := mfaDecrypt(factor, key)
 	if err != nil {
 		return err
 	}
@@ -213,7 +213,7 @@ func (h *Handler) PostMFATOTP(w http.ResponseWriter, r *http.Request) {
 		httputil.Errorf(w, err)
 		return
 	}
-	encrypted, err := crypto.Encrypt(secret, key)
+	encrypted, err := crypto.EncryptFor(crypto.PurposeMFA, "totp-secret", secret, key)
 	if err != nil {
 		httputil.Errorf(w, err)
 		return
@@ -269,7 +269,7 @@ func (h *Handler) PostMFATOTPConfirm(w http.ResponseWriter, r *http.Request) {
 		httputil.Errorf(w, err)
 		return
 	}
-	secret, err := crypto.Decrypt(factor.Secret, key)
+	secret, err := mfaDecrypt(factor, key)
 	if err != nil {
 		httputil.Errorf(w, err)
 		return
@@ -415,4 +415,10 @@ func (h *Handler) DeleteMFAFactor(w http.ResponseWriter, r *http.Request) {
 		h.logError("failed to record audit", err)
 	}
 	httputil.NoContent(w)
+}
+
+// mfaDecrypt decrypts a stored TOTP secret (legacy and v2 ciphertexts).
+func mfaDecrypt(factor *store.MFAFactor, key []byte) (string, error) {
+	p, _, err := crypto.DecryptFor(crypto.PurposeMFA, "totp-secret", factor.Secret, key)
+	return p, err
 }

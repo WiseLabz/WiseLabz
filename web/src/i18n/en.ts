@@ -186,6 +186,7 @@ export const en = {
       sync: 'Sync activity',
       docs: 'Documentation',
       attention: 'Attention queue',
+      uptime: 'Fleet uptime',
     },
     range: {
       '24h': '24h',
@@ -230,6 +231,14 @@ export const en = {
       emptyTitle: 'Nothing needs attention',
       emptyDesc: 'All alerts and quality findings are resolved.',
     },
+    uptime: {
+      emptyTitle: 'No services',
+      emptyDesc: 'Connect a service to track its availability.',
+      noData: 'No data',
+      window: 'Window',
+      checks: '{{count}} checks',
+    },
+    loadUptimeError: "Couldn't load fleet uptime.",
   },
   services: {
     snapshots: {
@@ -405,6 +414,18 @@ export const en = {
       healthCheck: 'Health check',
       healthCheckLoading: 'Checking…',
       healthCheckError: "Couldn't run the health check. Try again.",
+      uptime: {
+        title: 'Availability',
+        loadError: "Couldn't load availability.",
+        noData: 'No data',
+        availability: 'availability',
+        mttr: 'MTTR',
+        mttrNone: '—',
+        outages: '{{count}} outages',
+        historyLabel: 'Status and latency, last {{window}}',
+        noHistory: 'No checks recorded in this window.',
+        latencyMax: 'peak {{ms}}ms',
+      },
       configPush: 'Push config',
       configPushTitle: 'Push a config field',
       configPushField: 'Field',

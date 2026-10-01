@@ -62,7 +62,7 @@ func (h *Handler) UpdateAIFallbackProviders(w http.ResponseWriter, r *http.Reque
 		encryptedKey := ""
 		if p.APIKey != "" {
 			var err error
-			encryptedKey, err = crypto.Encrypt(p.APIKey, key)
+			encryptedKey, err = crypto.EncryptFor(crypto.PurposeAI, "api-key", p.APIKey, key)
 			if err != nil {
 				httputil.Errorf(w, fmt.Errorf("encrypt fallback API key: %w", err))
 				return

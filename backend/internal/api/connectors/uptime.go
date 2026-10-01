@@ -22,7 +22,7 @@ var uptimeWindows = []struct {
 
 // Uptime handles GET /api/connectors/{id}/uptime.
 // Returns availability % and MTTR computed from the health_checks time
-// series (populated by Health, see connector/health.go) over the 24h, 7d,
+// series (populated by Health and the scheduled health job, see internal/health) over the 24h, 7d,
 // and 30d windows.
 func (h *Handler) Uptime(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")

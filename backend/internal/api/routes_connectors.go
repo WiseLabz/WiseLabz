@@ -14,6 +14,10 @@ func mountConnectorRoutes(r chi.Router, d routerDeps) {
 	connViewer := auth.RequireConnectorRole(cfg.Store, "viewer", "id")
 	connOperator := auth.RequireConnectorRole(cfg.Store, "operator", "id")
 
+	// Fleet availability: cross-connector, so it filters by grant inside the
+	// handler (like GET /connectors) rather than via a per-{id} middleware.
+	r.Get("/uptime", d.connH.FleetUptime)
+
 	r.Route("/connectors", func(r chi.Router) {
 		// List/maintenance-windows are cross-connector and filter inside
 		// the handler; Get 404s inside the handler on a missing grant
@@ -29,6 +33,7 @@ func mountConnectorRoutes(r chi.Router, d routerDeps) {
 			r.Use(connViewer)
 			r.Get("/{id}/data", d.connH.Data)
 			r.Get("/{id}/uptime", d.connH.Uptime)
+			r.Get("/{id}/uptime/history", d.connH.UptimeHistory)
 			r.Get("/{id}/syncs", d.connH.Syncs)
 			r.Get("/{id}/snapshots", d.connH.Snapshots)
 			r.Get("/{id}/snapshots/diff", d.connH.SnapshotDiff)

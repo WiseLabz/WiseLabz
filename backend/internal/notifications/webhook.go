@@ -61,7 +61,7 @@ func (d *Dispatcher) signingSecret(cfg channelCfg) string {
 	if enc == "" || d.encKey == nil {
 		return ""
 	}
-	secret, err := crypto.Decrypt(enc, d.encKey)
+	secret, _, err := crypto.DecryptFor(crypto.PurposeNotification, "signing-secret", enc, d.encKey)
 	if err != nil {
 		slog.Error("decrypt webhook signing secret", "error", err, "channel", cfg.Type)
 		return ""

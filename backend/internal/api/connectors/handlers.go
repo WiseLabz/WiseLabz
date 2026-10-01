@@ -14,6 +14,7 @@ import (
 	"github.com/WiseLabz/wiselabz/internal/auth"
 	"github.com/WiseLabz/wiselabz/internal/config"
 	"github.com/WiseLabz/wiselabz/internal/connector"
+	"github.com/WiseLabz/wiselabz/internal/health"
 	"github.com/WiseLabz/wiselabz/internal/httputil"
 	"github.com/WiseLabz/wiselabz/internal/store"
 	"github.com/WiseLabz/wiselabz/internal/sync"
@@ -536,52 +537,16 @@ func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cfg, err := store.ParseConnectorConfig(rec.Type, rec.ConfigData, h.Config.Encryption.Key)
+	res, err := health.RunHealthCheck(r.Context(), h.Store, rec, h.Config.Encryption.Key)
 	if err != nil {
 		httputil.Errorf(w, err)
 		return
 	}
-	cfg["url"] = rec.URL
-	cfg["verify_tls"] = rec.VerifyTLS
-
-	start := time.Now()
-	c, connErr := connector.Get(rec.Type, cfg)
-	validateErr := connErr
-	if connErr == nil {
-		validateErr = c.Validate(r.Context(), cfg)
-	}
-	latency := time.Since(start)
-
-	threshold := connector.DegradedLatencyThreshold
-	if schema, err := connector.GetTypeSchema(rec.Type); err == nil {
-		threshold = schema.DegradedLatencyThreshold()
-	}
-	status, message := connector.ClassifyHealth(validateErr, latency, threshold)
-	if err := h.Store.UpdateConnector(r.Context(), id, map[string]any{
-		"status":         status,
-		"status_message": message,
-	}); err != nil {
-		httputil.Errorf(w, err)
-		return
-	}
-
-	latencyMs := latency.Milliseconds()
-	if err := h.Store.RecordHealthCheck(r.Context(), &store.HealthCheckRecord{
-		ConnectorID: id,
-		Status:      status,
-		Message:     message,
-		LatencyMs:   &latencyMs,
-	}); err != nil {
-		// Persisting the time-series point is additive to this endpoint's
-		// existing behavior — a write failure here shouldn't turn an
-		// otherwise-successful health check into an error response.
-		slog.Error("record health check", "connectorId", id, "error", err)
-	}
 
 	httputil.JSON(w, http.StatusOK, map[string]any{
-		"status":    status,
-		"message":   message,
-		"latencyMs": int(latency.Milliseconds()),
+		"status":    res.Status,
+		"message":   res.Message,
+		"latencyMs": int(res.LatencyMs),
 	})
 }
 

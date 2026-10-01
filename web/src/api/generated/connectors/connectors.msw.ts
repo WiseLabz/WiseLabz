@@ -18,6 +18,7 @@ import type {
   ConnectorTypeSchema,
   DeleteConnectorsConnectorIdGoldenSnapshot200,
   DeleteConnectorsConnectorIdMaintenanceWindow200,
+  FleetUptime,
   GetConnectorsConnectorIdPermissions200Item,
   GoldenSnapshot,
   HealthCheckResult,
@@ -32,6 +33,7 @@ import type {
   SyncJobRef,
   SyncRun,
   TestResult,
+  UptimeHistory,
   UptimeReport,
 } from '../../model';
 
@@ -49,10 +51,12 @@ import {
   getGetConnectorsConnectorIdSnapshotsResponseMock,
   getGetConnectorsConnectorIdSnapshotsSnapshotIdResponseMock,
   getGetConnectorsConnectorIdSyncsResponseMock,
+  getGetConnectorsConnectorIdUptimeHistoryResponseMock,
   getGetConnectorsConnectorIdUptimeResponseMock,
   getGetConnectorsMaintenanceWindowsResponseMock,
   getGetConnectorsResponseMock,
   getGetConnectorsSchemaResponseMock,
+  getGetUptimeResponseMock,
   getPostConnectorsBulkReauthResponseMock,
   getPostConnectorsBulkRestartResponseMock,
   getPostConnectorsBulkSyncResponseMock,
@@ -86,6 +90,8 @@ export {
   getPostConnectorsConnectorIdConfigPushResponseMock,
   getGetConnectorsConnectorIdDataResponseMock,
   getGetConnectorsConnectorIdUptimeResponseMock,
+  getGetConnectorsConnectorIdUptimeHistoryResponseMock,
+  getGetUptimeResponseMock,
   getPostConnectorsConnectorIdTestResponseMock,
   getPostConnectorsConnectorIdHealthResponseMock,
   getPostConnectorsConnectorIdSyncResponseMock,
@@ -424,6 +430,52 @@ export const getGetConnectorsConnectorIdUptimeMockHandler = (
             ? await overrideResponse(info)
             : overrideResponse
           : getGetConnectorsConnectorIdUptimeResponseMock(),
+        { status: 200 }
+      );
+    },
+    options
+  );
+};
+
+export const getGetConnectorsConnectorIdUptimeHistoryMockHandler = (
+  overrideResponse?:
+    | UptimeHistory
+    | ((
+        info: Parameters<Parameters<typeof http.get>[1]>[0]
+      ) => Promise<UptimeHistory> | UptimeHistory),
+  options?: RequestHandlerOptions
+) => {
+  return http.get(
+    '*/connectors/:connectorId/uptime/history',
+    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+      return HttpResponse.json(
+        overrideResponse !== undefined
+          ? typeof overrideResponse === 'function'
+            ? await overrideResponse(info)
+            : overrideResponse
+          : getGetConnectorsConnectorIdUptimeHistoryResponseMock(),
+        { status: 200 }
+      );
+    },
+    options
+  );
+};
+
+export const getGetUptimeMockHandler = (
+  overrideResponse?:
+    | FleetUptime
+    | ((info: Parameters<Parameters<typeof http.get>[1]>[0]) => Promise<FleetUptime> | FleetUptime),
+  options?: RequestHandlerOptions
+) => {
+  return http.get(
+    '*/uptime',
+    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+      return HttpResponse.json(
+        overrideResponse !== undefined
+          ? typeof overrideResponse === 'function'
+            ? await overrideResponse(info)
+            : overrideResponse
+          : getGetUptimeResponseMock(),
         { status: 200 }
       );
     },
@@ -969,6 +1021,8 @@ export const getConnectorsMock = () => [
   getPostConnectorsConnectorIdConfigPushMockHandler(),
   getGetConnectorsConnectorIdDataMockHandler(),
   getGetConnectorsConnectorIdUptimeMockHandler(),
+  getGetConnectorsConnectorIdUptimeHistoryMockHandler(),
+  getGetUptimeMockHandler(),
   getPostConnectorsConnectorIdTestMockHandler(),
   getPostConnectorsConnectorIdHealthMockHandler(),
   getPostConnectorsConnectorIdSyncMockHandler(),

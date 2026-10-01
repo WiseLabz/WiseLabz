@@ -80,7 +80,7 @@ func (h *Handler) setWebAuthnFlow(w http.ResponseWriter, flow webAuthnFlow) erro
 	if err != nil {
 		return err
 	}
-	value, err := crypto.Encrypt(string(data), key)
+	value, err := crypto.EncryptFor(crypto.PurposeCookie, webAuthnFlowCookie, string(data), key)
 	if err != nil {
 		return err
 	}
@@ -109,7 +109,7 @@ func (h *Handler) readWebAuthnFlow(w http.ResponseWriter, r *http.Request, userI
 	if err != nil {
 		return webauthn.SessionData{}, "", err
 	}
-	plaintext, err := crypto.Decrypt(cookie.Value, key)
+	plaintext, _, err := crypto.DecryptFor(crypto.PurposeCookie, webAuthnFlowCookie, cookie.Value, key)
 	if err != nil {
 		return webauthn.SessionData{}, "", errInvalidFactor
 	}

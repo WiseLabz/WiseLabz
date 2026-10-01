@@ -16,4 +16,5 @@ export const WidgetPlacementType = {
   sync_activity: 'sync_activity',
   docs_health: 'docs_health',
   attention: 'attention',
+  uptime: 'uptime',
 } as const;

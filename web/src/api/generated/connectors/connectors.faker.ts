@@ -18,6 +18,7 @@ import type {
   ConnectorTypeSchema,
   DeleteConnectorsConnectorIdGoldenSnapshot200,
   DeleteConnectorsConnectorIdMaintenanceWindow200,
+  FleetUptime,
   GetConnectorsConnectorIdPermissions200Item,
   GoldenSnapshot,
   HealthCheckResult,
@@ -32,6 +33,7 @@ import type {
   SyncJobRef,
   SyncRun,
   TestResult,
+  UptimeHistory,
   UptimeReport,
 } from '../../model';
 
@@ -451,6 +453,42 @@ export const getGetConnectorsConnectorIdUptimeResponseMock = (
       outageCount: faker.number.int(),
     },
   },
+  ...overrideResponse,
+});
+
+export const getGetConnectorsConnectorIdUptimeHistoryResponseMock = (
+  overrideResponse: Partial<Extract<UptimeHistory, object>> = {}
+): UptimeHistory => ({
+  connectorId: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  window: faker.helpers.arrayElement(['24h', '7d', '30d'] as const),
+  windowStart: faker.date.past().toISOString().slice(0, 19) + 'Z',
+  windowEnd: faker.date.past().toISOString().slice(0, 19) + 'Z',
+  bucketSeconds: faker.number.int(),
+  buckets: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(
+    () => ({
+      start: faker.date.past().toISOString().slice(0, 19) + 'Z',
+      status: faker.helpers.arrayElement(Object.values(ServiceStatus)),
+      avgLatencyMs: faker.helpers.arrayElement([faker.number.int(), undefined]),
+      checkCount: faker.number.int(),
+    })
+  ),
+  ...overrideResponse,
+});
+
+export const getGetUptimeResponseMock = (
+  overrideResponse: Partial<Extract<FleetUptime, object>> = {}
+): FleetUptime => ({
+  window: faker.helpers.arrayElement(['24h', '7d', '30d'] as const),
+  connectors: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(
+    () => ({
+      connectorId: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      name: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      checkCount: faker.number.int(),
+      availabilityPct: faker.number.float({ fractionDigits: 2 }),
+      mttrSeconds: faker.number.float({ fractionDigits: 2 }),
+      outageCount: faker.number.int(),
+    })
+  ),
   ...overrideResponse,
 });
 
