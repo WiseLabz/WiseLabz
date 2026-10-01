@@ -2,7 +2,6 @@ package auth
 
 import (
 	"crypto/subtle"
-	"encoding/base64"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -12,6 +11,7 @@ import (
 
 	"github.com/WiseLabz/wiselabz/internal/auth"
 	"github.com/WiseLabz/wiselabz/internal/config"
+	"github.com/WiseLabz/wiselabz/internal/crypto"
 	"github.com/WiseLabz/wiselabz/internal/httputil"
 	"github.com/WiseLabz/wiselabz/internal/logsafe"
 	"github.com/WiseLabz/wiselabz/internal/store"
@@ -25,14 +25,15 @@ import (
 const oidcElevateFlowCookie = "oidc_elevate_flow"
 
 // oidcElevateFlow is the flow cookie's payload for OIDC step-up
-// (#279 part 3): who started it, for which action, and the state/nonce
+// (#279 part 3): who started it, for which action, and the state/nonce/code_verifier
 // bound to this browser's authorization request.
 type oidcElevateFlow struct {
-	UserID     string `json:"userId"`
-	ProviderID string `json:"providerId"`
-	Action     string `json:"action"`
-	State      string `json:"state"`
-	Nonce      string `json:"nonce"`
+	UserID       string `json:"userId"`
+	ProviderID   string `json:"providerId"`
+	Action       string `json:"action"`
+	State        string `json:"state"`
+	Nonce        string `json:"nonce"`
+	CodeVerifier string `json:"codeVerifier"`
 }
 
 // ElevateOIDCBegin handles POST /api/auth/elevate/oidc/begin.
@@ -96,16 +97,24 @@ func (h *Handler) ElevateOIDCBegin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	setOIDCElevateFlowCookie(w, r, h.Config.Server.TrustedProxies, oidcElevateFlow{
-		UserID:     userID,
-		ProviderID: provCfg.ID,
-		Action:     req.Action,
-		State:      state,
-		Nonce:      nonce,
-	})
-
-	authURL := prov.AuthURLWithOptions(state, nonce, h.oidcRedirectURL(r),
+	authURL, codeVerifier, err := prov.AuthURLWithOptions(state, nonce, h.oidcRedirectURL(r),
 		oauth2.SetAuthURLParam("prompt", "login"), oauth2.SetAuthURLParam("max_age", "0"))
+	if err != nil {
+		httputil.Errorf(w, err)
+		return
+	}
+
+	if err := h.setOIDCElevateFlowCookie(w, r, oidcElevateFlow{
+		UserID:       userID,
+		ProviderID:   provCfg.ID,
+		Action:       req.Action,
+		State:        state,
+		Nonce:        nonce,
+		CodeVerifier: codeVerifier,
+	}); err != nil {
+		httputil.Errorf(w, err)
+		return
+	}
 
 	httputil.JSON(w, http.StatusOK, map[string]any{"authUrl": authURL})
 }
@@ -131,7 +140,7 @@ func (h *Handler) ElevateOIDCComplete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	flow, ok := readOIDCElevateFlowCookie(r)
+	flow, ok := h.readOIDCElevateFlowCookie(r)
 	clearOIDCElevateFlowCookie(w, r, h.Config.Server.TrustedProxies)
 	if !ok || flow.UserID != userID || subtle.ConstantTimeCompare([]byte(flow.State), []byte(req.State)) != 1 {
 		httputil.Error(w, http.StatusUnauthorized, "oidc_error", "Invalid or expired step-up state")
@@ -143,7 +152,7 @@ func (h *Handler) ElevateOIDCComplete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	claims, err := prov.Exchange(r.Context(), req.Code, flow.Nonce, h.oidcRedirectURL(r))
+	claims, err := prov.Exchange(r.Context(), req.Code, flow.Nonce, flow.CodeVerifier, h.oidcRedirectURL(r))
 	if err != nil {
 		slog.Error("OIDC step-up exchange failed", "error", err, "provider", logsafe.Sanitize(flow.ProviderID))
 		httputil.Error(w, http.StatusUnauthorized, "oidc_error", "Failed to re-authenticate with provider")
@@ -212,33 +221,44 @@ func (h *Handler) findOIDCProviderByIssuer(issuer string) *config.OIDCProvider {
 	return nil
 }
 
-// setOIDCElevateFlowCookie stores flow in a short-lived HttpOnly cookie
-// scoped to the auth endpoints, mirroring setOIDCFlowCookie for login (both
-// go through the shared setFlowCookie).
-func setOIDCElevateFlowCookie(w http.ResponseWriter, r *http.Request, trustedProxies string, flow oidcElevateFlow) {
+// setOIDCElevateFlowCookie stores an encrypted, signed flow in a short-lived HttpOnly cookie
+// scoped to the auth endpoints, matching WebAuthn's approach.
+func (h *Handler) setOIDCElevateFlowCookie(w http.ResponseWriter, r *http.Request, flow oidcElevateFlow) error {
 	data, err := json.Marshal(flow)
 	if err != nil {
-		slog.Error("failed to marshal oidc elevate flow cookie", "error", err)
-		return
+		return err
 	}
-	setFlowCookie(w, r, trustedProxies, oidcElevateFlowCookie, base64.RawURLEncoding.EncodeToString(data), 300)
+	key, err := crypto.DecodeKey(h.Config.Encryption.Key)
+	if err != nil {
+		return err
+	}
+	value, err := crypto.Encrypt(string(data), key)
+	if err != nil {
+		return err
+	}
+	setFlowCookie(w, r, h.Config.Server.TrustedProxies, oidcElevateFlowCookie, value, 300)
+	return nil
 }
 
-// readOIDCElevateFlowCookie returns the flow this browser started, if any.
-func readOIDCElevateFlowCookie(r *http.Request) (oidcElevateFlow, bool) {
+// readOIDCElevateFlowCookie returns the encrypted flow this browser started, if any.
+func (h *Handler) readOIDCElevateFlowCookie(r *http.Request) (oidcElevateFlow, bool) {
 	cookie, err := r.Cookie(oidcElevateFlowCookie)
 	if err != nil {
 		return oidcElevateFlow{}, false
 	}
-	data, err := base64.RawURLEncoding.DecodeString(cookie.Value)
+	key, err := crypto.DecodeKey(h.Config.Encryption.Key)
+	if err != nil {
+		return oidcElevateFlow{}, false
+	}
+	plaintext, err := crypto.Decrypt(cookie.Value, key)
 	if err != nil {
 		return oidcElevateFlow{}, false
 	}
 	var flow oidcElevateFlow
-	if err := json.Unmarshal(data, &flow); err != nil {
+	if err := json.Unmarshal([]byte(plaintext), &flow); err != nil {
 		return oidcElevateFlow{}, false
 	}
-	if flow.UserID == "" || flow.ProviderID == "" || flow.Action == "" || flow.State == "" || flow.Nonce == "" {
+	if flow.UserID == "" || flow.ProviderID == "" || flow.Action == "" || flow.State == "" || flow.Nonce == "" || flow.CodeVerifier == "" {
 		return oidcElevateFlow{}, false
 	}
 	return flow, true

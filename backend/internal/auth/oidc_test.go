@@ -50,7 +50,7 @@ func TestAuthURLBeforeInitialization(t *testing.T) {
 			t.Error("AuthURL() before initialization should panic, but didn't")
 		}
 	}()
-	_ = provider.AuthURL("state123", "nonce123", "http://localhost/callback")
+	_, _, _ = provider.AuthURL("state123", "nonce123", "http://localhost/callback")
 }
 
 func TestExtractGroups(t *testing.T) {
@@ -167,10 +167,16 @@ func TestAuthURLAfterInitialization(t *testing.T) {
 	}
 
 	redirectURL := "http://localhost:8080/callback"
-	authURL := provider.AuthURL("state-abc123", "nonce-abc123", redirectURL)
+	authURL, codeVerifier, err := provider.AuthURL("state-abc123", "nonce-abc123", redirectURL)
+	if err != nil {
+		t.Fatalf("AuthURL() error: %v", err)
+	}
 
 	if authURL == "" {
 		t.Error("AuthURL() returned empty string")
+	}
+	if codeVerifier == "" {
+		t.Error("AuthURL() returned empty code verifier")
 	}
 
 	// Check that URL contains expected parameters
@@ -185,6 +191,12 @@ func TestAuthURLAfterInitialization(t *testing.T) {
 	}
 	if !strings.Contains(authURL, "state=state-abc123") {
 		t.Errorf("AuthURL() missing state parameter: %s", authURL)
+	}
+	if !strings.Contains(authURL, "code_challenge=") {
+		t.Errorf("AuthURL() missing code_challenge parameter: %s", authURL)
+	}
+	if !strings.Contains(authURL, "code_challenge_method=S256") {
+		t.Errorf("AuthURL() missing code_challenge_method parameter: %s", authURL)
 	}
 }
 
