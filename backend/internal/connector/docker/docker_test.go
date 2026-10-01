@@ -183,11 +183,9 @@ func TestFetchSurfacesMalformedSystemResponse(t *testing.T) {
 
 	c := &Connector{host: "tcp://example", baseURL: server.URL, client: server.Client()}
 	snap, err := c.Fetch(context.Background(), map[string]any{"fields": []any{"none"}})
-	if err != nil {
-		t.Fatalf("Fetch() error = %v", err)
-	}
-	if !strings.Contains(snap.Sections[0].Content, "malformed response") {
-		t.Fatalf("System section = %q, want malformed response placeholder", snap.Sections[0].Content)
+	var malformed *connector.MalformedResponseError
+	if snap != nil || !errors.As(err, &malformed) {
+		t.Fatalf("snapshot = %+v, error = %v, want malformed response", snap, err)
 	}
 }
 
@@ -561,14 +559,11 @@ func TestValidateAndFetchWithMalformedJSON(t *testing.T) {
 		t.Errorf("Validate() error = %v, want nil (Validate only checks connectivity)", err)
 	}
 
-	// Fetch should handle malformed /info by creating a malformed response section
+	// A malformed primary probe cannot establish a healthy snapshot.
 	snap, err := c.Fetch(context.Background(), nil)
-	if err != nil {
-		t.Errorf("Fetch() error = %v, want nil (tolerates malformed JSON as placeholder)", err)
-		return
-	}
-	if !strings.Contains(snap.Sections[0].Content, "malformed response") {
-		t.Errorf("System section = %q, want malformed response placeholder", snap.Sections[0].Content)
+	var malformed *connector.MalformedResponseError
+	if snap != nil || !errors.As(err, &malformed) {
+		t.Fatalf("snapshot = %+v, error = %v", snap, err)
 	}
 }
 

@@ -25,6 +25,7 @@ type lifecycleScheduler interface {
 // lifecycleDeps holds everything the lifecycle manager needs to start and
 // stop the server's long-running goroutines.
 type lifecycleDeps struct {
+	SyncEngine      interface{ Wait(context.Context) error }
 	Logger          *slog.Logger
 	HTTPServer      *http.Server
 	WSHub           *ws.Hub
@@ -192,6 +193,12 @@ func (m *lifecycleManager) Shutdown() error {
 
 	// 5. Wait for in-flight notification dispatch goroutines (e.g. an alert
 	// created just before shutdown) so they don't touch a closed DB.
+	if m.deps.SyncEngine != nil {
+		if err := m.deps.SyncEngine.Wait(shutdownCtx); err != nil {
+			logger.Error("sync drain failed", "error", err)
+			return err
+		}
+	}
 	m.deps.Dispatcher.Wait()
 	// Release the session lock before closing the pool.
 	if m.deps.Elector != nil {

@@ -530,10 +530,8 @@ func TestFetchDegradesPerSection(t *testing.T) {
 	}
 }
 
-// TestFetchWithoutSessionDegradesInsteadOfFailing checks an unreachable
-// controller yields a snapshot describing the failure, like the sibling
-// connectors, rather than an error.
-func TestFetchWithoutSessionDegradesInsteadOfFailing(t *testing.T) {
+// TestFetchWithoutSessionFails checks authentication failures reach the engine.
+func TestFetchWithoutSessionFails(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
 		_, _ = w.Write([]byte(`{"meta":{"rc":"error","msg":"api.err.LoginRequired"}}`))
@@ -542,14 +540,9 @@ func TestFetchWithoutSessionDegradesInsteadOfFailing(t *testing.T) {
 
 	c := newTestConnector(t, passwordConfig(server.URL))
 	snapshot, err := c.Fetch(context.Background(), nil)
-	if err != nil {
-		t.Fatalf("Fetch: %v", err)
-	}
-	if len(snapshot.Sections) != 1 || !strings.Contains(snapshot.Sections[0].Content, "auth error") {
-		t.Fatalf("sections = %+v, want a single auth-error placeholder", snapshot.Sections)
-	}
-	if len(snapshot.Entities) != 0 {
-		t.Errorf("entities = %+v, want none", snapshot.Entities)
+	var authErr *connector.AuthError
+	if snapshot != nil || !errors.As(err, &authErr) {
+		t.Fatalf("snapshot = %+v, error = %v, want auth failure", snapshot, err)
 	}
 }
 

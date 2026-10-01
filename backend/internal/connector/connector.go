@@ -242,6 +242,8 @@ type SnapshotEntity struct {
 type SnapshotSection struct {
 	Title   string `json:"title"`
 	Content string `json:"content"`
+	Error   string `json:"error,omitempty"`
+	cause   error
 }
 
 // ServiceDependency is an operational dependency a service relies on: a

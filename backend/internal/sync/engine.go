@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/WiseLabz/wiselabz/internal/logsafe"
@@ -42,6 +43,11 @@ type DocRegenerator interface {
 
 // Engine runs sync jobs against connectors.
 type Engine struct {
+	workerMu       sync.Mutex
+	stopping       bool
+	detached       atomic.Int64
+	workers        sync.WaitGroup
+	sem            chan struct{}
 	inFlight       sync.Map // connector ID -> active run; entries are removed on every exit
 	store          *store.Store
 	hub            *ws.Hub
@@ -63,12 +69,13 @@ type Engine struct {
 
 // NewEngine creates a new sync engine.
 func NewEngine(s *store.Store, h *ws.Hub, notifier AlertNotifier, qualityChecker QualityChecker, encKey string) *Engine {
-	return &Engine{store: s, hub: h, notifier: notifier, qualityChecker: qualityChecker, encKey: encKey, baseCtx: context.Background(), maxConcurrency: defaultMaxSyncConcurrency, dueBatchSize: defaultDueBatchSize, timeout: defaultSyncTimeout}
+	return &Engine{store: s, hub: h, notifier: notifier, qualityChecker: qualityChecker, encKey: encKey, baseCtx: context.Background(), maxConcurrency: defaultMaxSyncConcurrency, sem: make(chan struct{}, defaultMaxSyncConcurrency), dueBatchSize: defaultDueBatchSize, timeout: defaultSyncTimeout}
 }
 
 // SetLimits applies validated sync settings before the engine starts.
 func (e *Engine) SetLimits(maxConcurrency, dueBatchSize int, timeout time.Duration) {
 	e.maxConcurrency, e.dueBatchSize, e.timeout = maxConcurrency, dueBatchSize, timeout
+	e.sem = make(chan struct{}, maxConcurrency)
 }
 
 // SetDocRegenerator wires a DocRegenerator into the engine after
@@ -98,6 +105,9 @@ func (e *Engine) BaseContext() context.Context {
 // Idle reports whether no sync is running. A run counts until its outcome and
 // follow-up writes (schedule state, quality check, doc regeneration) are done.
 func (e *Engine) Idle() bool {
+	if e.detached.Load() != 0 {
+		return false
+	}
 	idle := true
 	e.inFlight.Range(func(any, any) bool {
 		idle = false
@@ -157,4 +167,35 @@ func (e *Engine) RunSyncAll(ctx context.Context, jobID string) ([]RunResult, err
 		}
 	}
 	return results, nil
+}
+
+// Go registers detached work before launch so shutdown can drain queued runs.
+func (e *Engine) Go(work func(context.Context)) {
+	e.workerMu.Lock()
+	defer e.workerMu.Unlock()
+	if e.stopping {
+		return
+	}
+	e.workers.Add(1)
+	e.detached.Add(1)
+	go func() {
+		defer e.workers.Done()
+		defer e.detached.Add(-1)
+		work(e.BaseContext())
+	}()
+}
+
+// Wait stops accepting detached work and drains it within the shutdown deadline.
+func (e *Engine) Wait(ctx context.Context) error {
+	e.workerMu.Lock()
+	e.stopping = true
+	e.workerMu.Unlock()
+	done := make(chan struct{})
+	go func() { e.workers.Wait(); close(done) }()
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }

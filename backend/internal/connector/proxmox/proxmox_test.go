@@ -422,3 +422,32 @@ func TestFetchContentStableAcrossLiveMetrics(t *testing.T) {
 		t.Errorf("memory not rendered in MB:\n%s", first)
 	}
 }
+
+func TestVMFailureStillFetchesContainersAndStorage(t *testing.T) {
+	var containers, storage bool
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/nodes":
+			_, _ = w.Write([]byte(`{"data":[{"node":"pve1","status":"online"}]}`))
+		case "/nodes/pve1/qemu":
+			w.WriteHeader(http.StatusInternalServerError)
+		case "/nodes/pve1/lxc":
+			containers = true
+			_, _ = w.Write([]byte(`{"data":[{"vmid":100,"name":"ct","status":"stopped"}]}`))
+		case "/nodes/pve1/storage":
+			storage = true
+			_, _ = w.Write([]byte(`{"data":[]}`))
+		default:
+			t.Errorf("unexpected path: %s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+	c := &Connector{url: server.URL, tokenID: "user@pam!token", tokenSecret: "secret", client: server.Client()}
+	sn, err := c.Fetch(context.Background(), map[string]any{"fields": []string{"vms", "containers", "storage"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !containers || !storage || len(sn.Entities) != 1 || sn.Sections[0].Error == "" {
+		t.Fatalf("containers=%v storage=%v snapshot=%+v", containers, storage, sn)
+	}
+}

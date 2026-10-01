@@ -94,7 +94,8 @@ func (c *Connector) Validate(ctx context.Context, _ map[string]any) error {
 }
 
 // Fetch retrieves system info, interfaces, firewall rules, and gateways.
-func (c *Connector) Fetch(ctx context.Context, _ map[string]any) (*connector.ServiceSnapshot, error) {
+func (c *Connector) Fetch(ctx context.Context, _ map[string]any) (snapshot *connector.ServiceSnapshot, fetchErr error) {
+	defer func() { snapshot, fetchErr = connector.FinalizeSnapshot(snapshot, fetchErr) }()
 	start := time.Now()
 	var sections []connector.SnapshotSection
 	var dependencies []connector.ServiceDependency
@@ -102,7 +103,7 @@ func (c *Connector) Fetch(ctx context.Context, _ map[string]any) (*connector.Ser
 	metadata := map[string]string{"pfsense_url": c.url}
 
 	if raw, err := c.doRequest(ctx, "/api/v2/system/version"); err != nil {
-		sections = append(sections, connector.SnapshotSection{Title: "System", Content: "_System info unavailable: " + err.Error() + "_"})
+		sections = append(sections, connector.ErrorSection("System", err))
 	} else {
 		content, version := buildSystemContent(raw)
 		sections = append(sections, connector.SnapshotSection{Title: "System", Content: content})
@@ -112,7 +113,7 @@ func (c *Connector) Fetch(ctx context.Context, _ map[string]any) (*connector.Ser
 	}
 
 	if raw, err := c.doRequest(ctx, "/api/v2/interfaces"); err != nil {
-		sections = append(sections, connector.SnapshotSection{Title: "Interfaces", Content: "_Interfaces unavailable: " + err.Error() + "_"})
+		sections = append(sections, connector.ErrorSection("Interfaces", err))
 	} else {
 		content, ifaceEntities := buildInterfaceTable(raw)
 		sections = append(sections, connector.SnapshotSection{Title: "Interfaces", Content: content})
@@ -123,7 +124,7 @@ func (c *Connector) Fetch(ctx context.Context, _ map[string]any) (*connector.Ser
 	}
 
 	if raw, err := c.doRequest(ctx, "/api/v2/firewall/rules"); err != nil {
-		sections = append(sections, connector.SnapshotSection{Title: "Firewall Rules", Content: "_Rules unavailable: " + err.Error() + "_"})
+		sections = append(sections, connector.ErrorSection("Firewall Rules", err))
 	} else {
 		content, ruleEntities := buildRuleTable(raw)
 		sections = append(sections, connector.SnapshotSection{Title: "Firewall Rules", Content: content})
@@ -131,7 +132,7 @@ func (c *Connector) Fetch(ctx context.Context, _ map[string]any) (*connector.Ser
 	}
 
 	if raw, err := c.doRequest(ctx, "/api/v2/routing/gateways"); err != nil {
-		sections = append(sections, connector.SnapshotSection{Title: "Gateways", Content: "_Gateways unavailable: " + err.Error() + "_"})
+		sections = append(sections, connector.ErrorSection("Gateways", err))
 	} else {
 		sections = append(sections, connector.SnapshotSection{Title: "Gateways", Content: buildGatewayTable(raw)})
 		if upstream := primaryGatewayName(raw); upstream != "" {

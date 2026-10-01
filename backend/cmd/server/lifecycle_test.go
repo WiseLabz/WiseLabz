@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"net"
 	"net/http"
@@ -359,5 +360,47 @@ func TestLifecycleManagerWaitsForSchedulerBeforeCancelAndDBClose(t *testing.T) {
 	}
 	if err := lc.deps.Store.Ping(context.Background()); err == nil {
 		t.Fatal("database stayed open after Shutdown")
+	}
+}
+
+type syncDrainer func(context.Context) error
+
+func (drain syncDrainer) Wait(ctx context.Context) error { return drain(ctx) }
+
+func TestShutdownDrainsSyncsBeforeClosingStore(t *testing.T) {
+	lc, _ := newTestLifecycle(t)
+	drained := false
+	lc.deps.SyncEngine = syncDrainer(func(ctx context.Context) error {
+		if ctx.Err() != nil {
+			t.Fatal("shutdown deadline expired before drain")
+		}
+		if lc.workCtx.Err() == nil {
+			t.Fatal("work must be cancelled before draining")
+		}
+		if err := lc.deps.Store.DB().PingContext(ctx); err != nil {
+			t.Fatalf("store closed before sync drain: %v", err)
+		}
+		drained = true
+		return nil
+	})
+	if err := lc.Shutdown(); err != nil {
+		t.Fatal(err)
+	}
+	if !drained {
+		t.Fatal("syncs were not drained")
+	}
+	if err := lc.deps.Store.DB().PingContext(context.Background()); err == nil {
+		t.Fatal("store still open after drain")
+	}
+}
+
+func TestShutdownKeepsStoreOpenIfSyncDrainFails(t *testing.T) {
+	lc, _ := newTestLifecycle(t)
+	lc.deps.SyncEngine = syncDrainer(func(context.Context) error { return context.DeadlineExceeded })
+	if err := lc.Shutdown(); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("Shutdown = %v", err)
+	}
+	if err := lc.deps.Store.DB().PingContext(context.Background()); err != nil {
+		t.Fatalf("closed store while syncs are still using it: %v", err)
 	}
 }

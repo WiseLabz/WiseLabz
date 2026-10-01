@@ -152,7 +152,8 @@ func (c *Connector) Validate(ctx context.Context, _ map[string]any) error {
 // {"environments","stacks","containers","volumes","networks"}. Each section
 // degrades on its own: a failing endpoint (or a single unreachable
 // environment) becomes a placeholder rather than failing the whole Fetch.
-func (c *Connector) Fetch(ctx context.Context, config map[string]any) (*connector.ServiceSnapshot, error) {
+func (c *Connector) Fetch(ctx context.Context, config map[string]any) (snapshot *connector.ServiceSnapshot, fetchErr error) {
+	defer func() { snapshot, fetchErr = connector.FinalizeSnapshot(snapshot, fetchErr) }()
 	start := time.Now()
 	fields := connector.RequestedFields(config)
 	metadata := map[string]string{"portainer_url": c.url}
@@ -240,6 +241,7 @@ func (c *Connector) dockerSection(ctx context.Context, envs []environment, spec 
 	var notes strings.Builder
 	var entities []connector.SnapshotEntity
 	reachable := 0
+	var firstErr error
 
 	for _, env := range envs {
 		if !env.dockerCapable() {
@@ -248,11 +250,17 @@ func (c *Connector) dockerSection(ctx context.Context, envs []environment, spec 
 		reachable++
 		raw, err := c.doRequest(ctx, dockerPath(env.ID, spec.path))
 		if err != nil {
+			if firstErr == nil {
+				firstErr = err
+			}
 			_, _ = fmt.Fprintf(&notes, "_%s for %s unavailable: %s_\n\n", spec.title, cell(env.Name), err.Error())
 			continue
 		}
 		rows, ents, err := spec.rows(env.Name, raw)
 		if err != nil {
+			if firstErr == nil {
+				firstErr = connector.NewMalformedResponseError(err)
+			}
 			_, _ = fmt.Fprintf(&notes, "_%s for %s unavailable: %s_\n\n", spec.title, cell(env.Name), connector.NewMalformedResponseError(err).Error())
 			continue
 		}
@@ -268,6 +276,11 @@ func (c *Connector) dockerSection(ctx context.Context, envs []environment, spec 
 		content += "_No Docker environments to query_"
 	case notes.Len() == 0:
 		content += "_No " + strings.ToLower(spec.title) + " returned_"
+	}
+	if firstErr != nil {
+		section := connector.ErrorSection(spec.title, firstErr)
+		section.Content = strings.TrimRight(content, "\n") + "\n"
+		return section, entities
 	}
 	return connector.SnapshotSection{Title: spec.title, Content: strings.TrimRight(content, "\n") + "\n"}, entities
 }
@@ -346,7 +359,7 @@ func dockerPath(envID int, suffix string) string {
 }
 
 func unavailable(title string, err error) connector.SnapshotSection {
-	return connector.SnapshotSection{Title: title, Content: "_" + title + " unavailable: " + err.Error() + "_"}
+	return connector.ErrorSection(title, err)
 }
 
 func putMetadata(metadata map[string]string, key, value string) {

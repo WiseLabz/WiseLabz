@@ -388,7 +388,8 @@ type sectionFetch struct {
 // client summary from the configured site. Each section degrades
 // independently: an endpoint the controller does not expose (or the account
 // may not read) renders as unavailable instead of failing the snapshot.
-func (c *Connector) Fetch(ctx context.Context, config map[string]any) (*connector.ServiceSnapshot, error) {
+func (c *Connector) Fetch(ctx context.Context, config map[string]any) (snapshot *connector.ServiceSnapshot, fetchErr error) {
+	defer func() { snapshot, fetchErr = connector.FinalizeSnapshot(snapshot, fetchErr) }()
 	start := time.Now()
 	fields := connector.RequestedFields(config)
 	metadata := map[string]string{"unifi_url": c.url, "unifi_site": c.site}
@@ -510,5 +511,5 @@ func networkDependencies(entities []connector.SnapshotEntity) []connector.Servic
 
 // unavailable renders the standard "section could not be fetched" placeholder.
 func unavailable(title string, err error) connector.SnapshotSection {
-	return connector.SnapshotSection{Title: title, Content: "_" + title + " unavailable: " + err.Error() + "_"}
+	return connector.ErrorSection(title, err)
 }

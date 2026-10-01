@@ -307,9 +307,8 @@ func TestFetchConfigIsRequestedOnce(t *testing.T) {
 	}
 }
 
-// TestFetchDegradesPerSection checks a failing endpoint only degrades its
-// own sections instead of failing the whole snapshot.
-func TestFetchDegradesPerSection(t *testing.T) {
+// TestFetchFailsWhenAllSectionsFail rejects an entirely unobserved snapshot.
+func TestFetchFailsWhenAllSectionsFail(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case pathConfig:
@@ -326,31 +325,8 @@ func TestFetchDegradesPerSection(t *testing.T) {
 	connector.AllowLoopbackForTest(t)
 	c := newTestConnector(t, map[string]any{"url": server.URL, "access_token": testToken})
 	snapshot, err := c.Fetch(context.Background(), nil)
-	if err != nil {
-		t.Fatalf("Fetch: %v", err)
-	}
-	if len(snapshot.Sections) != 5 {
-		t.Fatalf("sections = %d, want 5", len(snapshot.Sections))
-	}
-	byTitle := map[string]string{}
-	for _, s := range snapshot.Sections {
-		byTitle[s.Title] = s.Content
-	}
-	for _, title := range []string{"Overview", "Integrations"} {
-		if !strings.Contains(byTitle[title], "API returned 500") {
-			t.Errorf("%s = %q, want the upstream 500 reported", title, byTitle[title])
-		}
-	}
-	for _, title := range []string{"Entity Domains", "Entities"} {
-		if !strings.Contains(byTitle[title], "malformed response") {
-			t.Errorf("%s = %q, want a malformed-response placeholder", title, byTitle[title])
-		}
-	}
-	if !strings.Contains(byTitle["Services"], "API returned 404") {
-		t.Errorf("Services = %q, want the upstream 404 reported", byTitle["Services"])
-	}
-	if _, ok := snapshot.Metadata["home_assistant_version"]; ok {
-		t.Errorf("version metadata should be absent when /api/config fails: %+v", snapshot.Metadata)
+	if snapshot != nil || err == nil {
+		t.Fatalf("snapshot = %+v, error = %v, want failure when every section fails", snapshot, err)
 	}
 }
 

@@ -97,7 +97,8 @@ func (c *Connector) Validate(ctx context.Context, _ map[string]any) error {
 }
 
 // Fetch retrieves firewall rules, interfaces, gateways, and system health.
-func (c *Connector) Fetch(ctx context.Context, _ map[string]any) (*connector.ServiceSnapshot, error) {
+func (c *Connector) Fetch(ctx context.Context, _ map[string]any) (snapshot *connector.ServiceSnapshot, fetchErr error) {
+	defer func() { snapshot, fetchErr = connector.FinalizeSnapshot(snapshot, fetchErr) }()
 	start := time.Now()
 	var sections []connector.SnapshotSection
 	var dependencies []connector.ServiceDependency
@@ -111,10 +112,7 @@ func (c *Connector) Fetch(ctx context.Context, _ map[string]any) (*connector.Ser
 			ProductName string `json:"product_name"`
 		}
 		if err := json.Unmarshal(raw, &info); err != nil {
-			sections = append(sections, connector.SnapshotSection{
-				Title:   "System",
-				Content: "_System info unavailable: " + connector.NewMalformedResponseError(err).Error() + "_",
-			})
+			sections = append(sections, connector.ErrorSection("System", connector.NewMalformedResponseError(err)))
 		} else {
 			content := fmt.Sprintf("**Product**: %s\n**Version**: %s\n", info.ProductName, info.Version)
 			sections = append(sections, connector.SnapshotSection{
@@ -124,10 +122,7 @@ func (c *Connector) Fetch(ctx context.Context, _ map[string]any) (*connector.Ser
 			metadata["version"] = info.Version
 		}
 	} else {
-		sections = append(sections, connector.SnapshotSection{
-			Title:   "System",
-			Content: "_System info unavailable: " + err.Error() + "_",
-		})
+		sections = append(sections, connector.ErrorSection("System", err))
 	}
 
 	// --- Interfaces ---
@@ -142,10 +137,7 @@ func (c *Connector) Fetch(ctx context.Context, _ map[string]any) (*connector.Ser
 			dependencies = append(dependencies, connector.ServiceDependency{Kind: "network", Name: wan})
 		}
 	} else {
-		sections = append(sections, connector.SnapshotSection{
-			Title:   "Interfaces",
-			Content: "_Interfaces unavailable: " + err.Error() + "_",
-		})
+		sections = append(sections, connector.ErrorSection("Interfaces", err))
 	}
 
 	// --- Firewall rules ---
@@ -157,10 +149,7 @@ func (c *Connector) Fetch(ctx context.Context, _ map[string]any) (*connector.Ser
 		})
 		entities = append(entities, ruleEntities...)
 	} else {
-		sections = append(sections, connector.SnapshotSection{
-			Title:   "Firewall Rules",
-			Content: "_Rules unavailable: " + err.Error() + "_",
-		})
+		sections = append(sections, connector.ErrorSection("Firewall Rules", err))
 	}
 
 	// --- Gateways ---
@@ -174,10 +163,7 @@ func (c *Connector) Fetch(ctx context.Context, _ map[string]any) (*connector.Ser
 			dependencies = append(dependencies, connector.ServiceDependency{Kind: "upstream_service", Name: upstream})
 		}
 	} else {
-		sections = append(sections, connector.SnapshotSection{
-			Title:   "Gateways",
-			Content: "_Gateways unavailable: " + err.Error() + "_",
-		})
+		sections = append(sections, connector.ErrorSection("Gateways", err))
 	}
 
 	return &connector.ServiceSnapshot{

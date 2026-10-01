@@ -149,7 +149,8 @@ func (c *Connector) Validate(ctx context.Context, _ map[string]any) error {
 
 // Fetch retrieves the AdGuard Home status plus DNS settings, filter lists,
 // custom rules, DNS rewrites, clients and DHCP configuration.
-func (c *Connector) Fetch(ctx context.Context, config map[string]any) (*connector.ServiceSnapshot, error) {
+func (c *Connector) Fetch(ctx context.Context, config map[string]any) (snapshot *connector.ServiceSnapshot, fetchErr error) {
+	defer func() { snapshot, fetchErr = connector.FinalizeSnapshot(snapshot, fetchErr) }()
 	start := time.Now()
 	fields := connector.RequestedFields(config)
 	metadata := map[string]string{"adguard_url": c.url}
@@ -291,7 +292,7 @@ func upstreamDependencies(upstreams []string) []connector.ServiceDependency {
 }
 
 func unavailable(title string, err error) connector.SnapshotSection {
-	return connector.SnapshotSection{Title: title, Content: "_" + title + " unavailable: " + err.Error() + "_"}
+	return connector.ErrorSection(title, err)
 }
 
 func (c *Connector) doRequest(ctx context.Context, path string) (data []byte, err error) {

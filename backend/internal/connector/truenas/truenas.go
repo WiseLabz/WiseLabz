@@ -208,7 +208,8 @@ var sections = []section{
 // section degrades on its own: an endpoint an appliance does not serve (or
 // an API key without the matching privilege) leaves a placeholder instead
 // of failing the whole snapshot.
-func (c *Connector) Fetch(ctx context.Context, config map[string]any) (*connector.ServiceSnapshot, error) {
+func (c *Connector) Fetch(ctx context.Context, config map[string]any) (snapshot *connector.ServiceSnapshot, fetchErr error) {
+	defer func() { snapshot, fetchErr = connector.FinalizeSnapshot(snapshot, fetchErr) }()
 	start := time.Now()
 	fields := connector.RequestedFields(config)
 	metadata := map[string]string{"truenas_url": c.url}
@@ -270,7 +271,7 @@ func poolDependencies(entities []connector.SnapshotEntity) []connector.ServiceDe
 }
 
 func unavailable(title string, err error) connector.SnapshotSection {
-	return connector.SnapshotSection{Title: title, Content: "_" + title + " unavailable: " + err.Error() + "_"}
+	return connector.ErrorSection(title, err)
 }
 
 func (c *Connector) doRequest(ctx context.Context, path string) (data []byte, err error) {

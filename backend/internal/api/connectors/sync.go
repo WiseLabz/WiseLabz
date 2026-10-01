@@ -43,11 +43,11 @@ func (h *Handler) Sync(w http.ResponseWriter, r *http.Request) {
 	}
 
 	jobID := uuid.New().String()
-	go func() {
-		if _, err := h.SyncEngine.RunSyncFields(h.SyncEngine.BaseContext(), id, jobID, req.Fields); err != nil {
+	h.SyncEngine.Go(func(ctx context.Context) {
+		if _, err := h.SyncEngine.RunSyncFields(ctx, id, jobID, req.Fields); err != nil {
 			slog.Error("sync failed", "connector", logsafe.Sanitize(id), "job", jobID, "error", logsafe.Sanitize(err.Error()))
 		}
-	}()
+	})
 
 	if err := h.Store.RecordAuditFromContext(r.Context(), "connector.sync", "connector", id, map[string]any{
 		"jobId": jobID,
@@ -66,11 +66,11 @@ func (h *Handler) Sync(w http.ResponseWriter, r *http.Request) {
 // the sync itself runs asynchronously.
 func (h *Handler) SyncAll(w http.ResponseWriter, r *http.Request) {
 	jobID := uuid.New().String()
-	go func() {
-		if _, err := h.SyncEngine.RunSyncAll(h.SyncEngine.BaseContext(), jobID); err != nil {
+	h.SyncEngine.Go(func(ctx context.Context) {
+		if _, err := h.SyncEngine.RunSyncAll(ctx, jobID); err != nil {
 			slog.Error("global sync failed", "job", jobID, "error", err)
 		}
-	}()
+	})
 
 	if err := h.Store.RecordAuditFromContext(r.Context(), "connector.sync_all", "connector", "", map[string]any{
 		"jobId": jobID,
@@ -170,11 +170,11 @@ func (h *Handler) BulkSync(w http.ResponseWriter, r *http.Request) {
 	auditRecords := make([]store.AuditRecord, 0, len(allowedIDs))
 	for _, id := range allowedIDs {
 		jobID := uuid.New().String()
-		go func(connectorID, jobID string) {
-			if _, err := h.SyncEngine.RunSyncFields(h.SyncEngine.BaseContext(), connectorID, jobID, nil); err != nil {
-				slog.Error("bulk sync failed", "connector", logsafe.Sanitize(connectorID), "job", jobID, "error", logsafe.Sanitize(err.Error()))
+		h.SyncEngine.Go(func(ctx context.Context) {
+			if _, err := h.SyncEngine.RunSyncFields(ctx, id, jobID, nil); err != nil {
+				slog.Error("bulk sync failed", "connector", logsafe.Sanitize(id), "job", jobID, "error", logsafe.Sanitize(err.Error()))
 			}
-		}(id, jobID)
+		})
 		auditRecords = append(auditRecords, store.AuditRecord{TargetID: id, Detail: fmt.Sprintf(`{"jobId":%q}`, jobID)})
 		results = append(results, bulkItemResult{ID: id, Status: "success", JobID: jobID})
 	}

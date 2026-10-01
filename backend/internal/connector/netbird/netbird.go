@@ -89,7 +89,8 @@ func (c *Connector) Validate(ctx context.Context, _ map[string]any) error {
 }
 
 // Fetch retrieves peers, network routes, and access policies.
-func (c *Connector) Fetch(ctx context.Context, _ map[string]any) (*connector.ServiceSnapshot, error) {
+func (c *Connector) Fetch(ctx context.Context, _ map[string]any) (snapshot *connector.ServiceSnapshot, fetchErr error) {
+	defer func() { snapshot, fetchErr = connector.FinalizeSnapshot(snapshot, fetchErr) }()
 	start := time.Now()
 	var sections []connector.SnapshotSection
 	var entities []connector.SnapshotEntity
@@ -101,13 +102,13 @@ func (c *Connector) Fetch(ctx context.Context, _ map[string]any) (*connector.Ser
 		entities = append(entities, peerEntities...)
 		metadata["peer_count"] = fmt.Sprintf("%d", len(peerEntities))
 	} else {
-		sections = append(sections, connector.SnapshotSection{Title: "Peers", Content: "_Peers unavailable: " + err.Error() + "_"})
+		sections = append(sections, connector.ErrorSection("Peers", err))
 	}
 
 	if raw, err := c.doRequest(ctx, "GET", "/api/routes"); err == nil {
 		sections = append(sections, connector.SnapshotSection{Title: "Network Routes", Content: buildRouteTable(raw)})
 	} else {
-		sections = append(sections, connector.SnapshotSection{Title: "Network Routes", Content: "_Routes unavailable: " + err.Error() + "_"})
+		sections = append(sections, connector.ErrorSection("Network Routes", err))
 	}
 
 	if raw, err := c.doRequest(ctx, "GET", "/api/policies"); err == nil {
@@ -115,7 +116,7 @@ func (c *Connector) Fetch(ctx context.Context, _ map[string]any) (*connector.Ser
 		sections = append(sections, connector.SnapshotSection{Title: "Access Policies", Content: content})
 		entities = append(entities, policyEntities...)
 	} else {
-		sections = append(sections, connector.SnapshotSection{Title: "Access Policies", Content: "_Policies unavailable: " + err.Error() + "_"})
+		sections = append(sections, connector.ErrorSection("Access Policies", err))
 	}
 
 	return &connector.ServiceSnapshot{

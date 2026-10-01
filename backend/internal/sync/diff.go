@@ -55,7 +55,7 @@ func Compare(prev, curr *connector.ServiceSnapshot) []DiffResult {
 	// Check for added sections
 	for _, title := range currTitles {
 		cs := currSections[title]
-		if _, ok := prevSections[title]; !ok {
+		if _, ok := prevSections[title]; !ok && cs.Error == "" {
 			results = append(results, DiffResult{
 				Type:     "added",
 				Severity: "info",
@@ -95,7 +95,7 @@ func Compare(prev, curr *connector.ServiceSnapshot) []DiffResult {
 		if !ok {
 			continue // already handled as "added"
 		}
-		if cs.Content != ps.Content {
+		if cs.Error == "" && cs.Content != ps.Content {
 			results = append(results, DiffResult{
 				Type:     "modified",
 				Severity: severityForChange(ps.Content, cs.Content),

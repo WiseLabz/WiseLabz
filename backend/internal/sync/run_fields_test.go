@@ -26,7 +26,7 @@ func (c *fieldsRecordingConnector) Fetch(_ context.Context, config map[string]an
 	return c.snapshot, nil
 }
 
-func TestRunSyncFieldsPersistsPartialFetchAndChange(t *testing.T) {
+func TestRunSyncFieldsPreservesFullBaseline(t *testing.T) {
 	fetched := &connector.ServiceSnapshot{
 		ServiceName: "svc",
 		Sections:    []connector.SnapshotSection{{Title: "VMs", Content: "vm-2"}},
@@ -46,7 +46,7 @@ func TestRunSyncFieldsPersistsPartialFetchAndChange(t *testing.T) {
 	}
 	if err := s.CreateSnapshot(ctx, &store.SnapshotRecord{
 		ConnectorID: rec.ID,
-		Data:        `{"serviceName":"svc","sections":[{"title":"VMs","content":"vm-1"}]}`,
+		Data:        `{"serviceName":"svc","sections":[{"title":"VMs","content":"vm-1"},{"title":"Storage","content":"pool-1"}]}`,
 		FetchedAt:   time.Now().Add(-time.Hour).Format(time.RFC3339),
 	}); err != nil {
 		t.Fatalf("CreateSnapshot: %v", err)
@@ -59,11 +59,11 @@ func TestRunSyncFieldsPersistsPartialFetchAndChange(t *testing.T) {
 	if got := connector.RequestedFields(recorder.config); len(got) != 1 || got[0] != "vms" {
 		t.Fatalf("requested fields = %v, want [vms]", got)
 	}
-	if result.Status != "success" || result.ChangesCount != 1 {
-		t.Fatalf("result = %#v, want successful sync with one change", result)
+	if result.Status != "success" || result.ChangesCount != 0 {
+		t.Fatalf("result = %#v, want successful sync without changes", result)
 	}
 	runs, err := s.ListSyncRunsByConnector(ctx, rec.ID, 1)
-	if err != nil || len(runs) != 1 || runs[0].SnapshotID == nil || *runs[0].SnapshotID != result.SnapshotID {
+	if err != nil || len(runs) != 1 || runs[0].SnapshotID != nil {
 		t.Fatalf("persisted sync run = %+v, err %v, want snapshot %s", runs, err, result.SnapshotID)
 	}
 
@@ -71,15 +71,15 @@ func TestRunSyncFieldsPersistsPartialFetchAndChange(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetLatestSnapshot: %v", err)
 	}
-	if !strings.Contains(latest.Data, `"vm-2"`) {
-		t.Fatalf("latest snapshot = %s, want partial fetch data", latest.Data)
+	if !strings.Contains(latest.Data, `"vm-1"`) || !strings.Contains(latest.Data, `"pool-1"`) {
+		t.Fatalf("latest snapshot = %s, want unchanged full baseline", latest.Data)
 	}
 	changes, _, err := s.ListChanges(ctx, rec.ID, "", 0, 10)
 	if err != nil {
 		t.Fatalf("ListChanges: %v", err)
 	}
-	if len(changes) != 1 || changes[0].Summary != "Section modified: VMs" {
-		t.Fatalf("changes = %#v, want VMs modification", changes)
+	if len(changes) != 0 {
+		t.Fatalf("changes = %#v, want no drift", changes)
 	}
 }
 

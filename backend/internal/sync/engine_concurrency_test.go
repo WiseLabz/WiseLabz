@@ -128,7 +128,7 @@ func TestSyncCancellationRecordsFailureAndReleasesGuard(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if saved.RetryCount != 1 || saved.LastSyncError == "" || saved.NextRunAt == "" {
+	if saved.Status != "degraded" || saved.StatusMessage == "" || saved.RetryCount != 1 || saved.LastSyncError == "" || saved.NextRunAt == "" {
 		t.Fatalf("failure not persisted: %+v", saved)
 	}
 	close(c.release)
@@ -177,5 +177,31 @@ func TestRunDueSyncsRespectsLimits(t *testing.T) {
 	case <-c.entered:
 		t.Fatal("third connector fetched despite batch limit")
 	default:
+	}
+}
+
+func TestSyncDeadlinePersistsDegradedStatus(t *testing.T) {
+	s := newTestStore(t)
+	c := &blockingConnector{entered: make(chan context.Context, 1), release: make(chan struct{})}
+	connector.Register(connector.TypeSchema{Type: "deadline_sync", Category: "networking"}, func(map[string]any) (connector.Connector, error) { return c, nil })
+	rec := &store.ConnectorRecord{Name: "test", Type: "deadline_sync", Category: "networking", Enabled: true, Status: "online"}
+	if err := s.CreateConnector(context.Background(), rec); err != nil {
+		t.Fatal(err)
+	}
+	e := NewEngine(s, nil, nil, nil, "")
+	e.SetLimits(1, 50, 50*time.Millisecond)
+	if _, err := e.RunSync(context.Background(), rec.ID, "timeout"); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("RunSync = %v", err)
+	}
+	saved, err := s.GetConnector(context.Background(), rec.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if saved.Status != "degraded" || saved.RetryCount != 1 || saved.StatusMessage == "" {
+		t.Fatalf("deadline outcome lost: %+v", saved)
+	}
+	runs, err := s.ListSyncRunsByConnector(context.Background(), rec.ID, 10)
+	if err != nil || len(runs) != 1 || runs[0].Status != store.SyncRunStatusError {
+		t.Fatalf("runs = %+v, err = %v", runs, err)
 	}
 }
