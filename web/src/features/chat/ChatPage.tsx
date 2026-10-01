@@ -56,6 +56,8 @@ export function ChatPage() {
           scopeId: scopeType === 'doc' ? scopeDocId : undefined,
         });
         id = conversation.id;
+        setActiveId(id);
+        queryClient.invalidateQueries({ queryKey: getGetChatConversationsQueryKey() });
       }
       const reply = await postChatConversationsIdMessages(id, { content });
       return { conversationId: id, reply };

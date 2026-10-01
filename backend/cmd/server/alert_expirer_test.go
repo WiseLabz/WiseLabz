@@ -19,6 +19,7 @@ func TestExpireAlertsOnceNotifiesViaDispatcher(t *testing.T) {
 	ctx := context.Background()
 	s := apitest.NewStore(t)
 	userID := apitest.NewUser(t, s, "viewer")
+	apitest.GrantConnectorRole(t, s, userID, "svc-1", "viewer")
 	dispatcher := notifications.NewDispatcher(s, nil)
 
 	past := time.Now().UTC().Add(-time.Hour).Format(time.RFC3339)
