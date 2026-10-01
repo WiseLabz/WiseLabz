@@ -9,7 +9,7 @@
  * to the editor and marks the draft as AI-drafted (provenance); Reject discards it.
  * Operator-gated (the route guards, and the save button respects role too).
  */
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useDeferredValue } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { skipToken, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -118,6 +118,7 @@ function DocEditor() {
   }
 
   const dirty = draft !== null && doc.data != null && draft !== baseContent;
+  const deferredDraft = useDeferredValue(draft ?? '');
 
   const dirtyRef = useRef(dirty);
   useEffect(() => {
@@ -427,7 +428,7 @@ function DocEditor() {
             {t('docs.editor.previewLabel')}
           </div>
           <div className="max-h-[70vh] overflow-y-auto px-5 py-4">
-            <Markdown source={draft ?? ''} />
+            <Markdown source={deferredDraft} />
           </div>
         </Panel>
       </div>

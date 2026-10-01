@@ -7,7 +7,7 @@
  * Inline vs. block code is told apart with a CSS `:not(pre)` selector rather than
  * a JS heuristic, since react-markdown's `code` renderer no longer reports it.
  */
-import { isValidElement } from 'react';
+import { memo, isValidElement } from 'react';
 import ReactMarkdown, { type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Mermaid } from './Mermaid';
@@ -88,7 +88,7 @@ const components: Components = {
   ),
 };
 
-export function Markdown({ source }: { source: string }) {
+export const Markdown = memo(function Markdown({ source }: { source: string }) {
   return (
     <div className="max-w-[68ch]">
       <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
@@ -96,4 +96,4 @@ export function Markdown({ source }: { source: string }) {
       </ReactMarkdown>
     </div>
   );
-}
+});

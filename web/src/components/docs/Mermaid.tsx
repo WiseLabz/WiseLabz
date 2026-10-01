@@ -14,6 +14,9 @@ function cssVar(name: string, fallback: string): string {
   return value || fallback;
 }
 
+// Color resolution cache to avoid DOM probes on every render.
+const colorCache = new Map<string, string>();
+
 // Resolves a CSS custom property to a color format mermaid's own color
 // parser (khroma) understands. The app's palette tokens are oklch(...),
 // which khroma can't parse, so raw getPropertyValue text isn't usable
@@ -21,16 +24,23 @@ function cssVar(name: string, fallback: string): string {
 // valid CSS color resolves through `color` to an rgb()/rgba() string).
 function resolveColor(varName: string, fallback: string): string {
   if (typeof document === 'undefined') return fallback;
+
+  const cached = colorCache.get(varName);
+  if (cached) return cached;
+
   const probe = document.createElement('span');
   probe.style.color = `var(${varName})`;
   document.body.appendChild(probe);
   const resolved = getComputedStyle(probe).color;
   document.body.removeChild(probe);
-  // A CSS engine that can't resolve var()/oklch() (e.g. jsdom in tests)
-  // echoes the property back unparsed rather than erroring — fall back
-  // rather than hand mermaid's color parser something it can't read.
-  return resolved && !resolved.includes('var(') ? resolved : fallback;
+
+  const result = resolved && !resolved.includes('var(') ? resolved : fallback;
+  colorCache.set(varName, result);
+  return result;
 }
+
+// Track current theme to detect changes and clear color cache.
+let lastThemeKey: string | null = null;
 
 export function Mermaid({ chart }: { chart: string }) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -39,13 +49,14 @@ export function Mermaid({ chart }: { chart: string }) {
   const preset = useTheme((s) => s.preset);
   const custom = useTheme((s) => s.custom);
 
+  // Initialize mermaid once per theme change.
   useEffect(() => {
-    let cancelled = false;
-    const container = containerRef.current;
-    if (!container) return;
+    const themeKey = `${mode}-${preset}-${custom}`;
+    if (lastThemeKey !== themeKey) {
+      lastThemeKey = themeKey;
+      colorCache.clear();
 
-    import('mermaid')
-      .then(({ default: mermaid }) => {
+      import('mermaid').then(({ default: mermaid }) => {
         mermaid.initialize({
           startOnLoad: false,
           theme: 'base',
@@ -58,8 +69,18 @@ export function Mermaid({ chart }: { chart: string }) {
             fontFamily: cssVar('--font-mono', 'ui-monospace, monospace'),
           },
         });
-        return mermaid.render(`mermaid-${id}`, chart);
-      })
+      });
+    }
+  }, [mode, preset, custom]);
+
+  // Render diagram on chart change.
+  useEffect(() => {
+    let cancelled = false;
+    const container = containerRef.current;
+    if (!container) return;
+
+    import('mermaid')
+      .then(({ default: mermaid }) => mermaid.render(`mermaid-${id}`, chart))
       .then(({ svg }) => {
         if (!cancelled && containerRef.current) containerRef.current.innerHTML = svg;
       })
@@ -72,7 +93,7 @@ export function Mermaid({ chart }: { chart: string }) {
     return () => {
       cancelled = true;
     };
-  }, [chart, id, mode, preset, custom]);
+  }, [chart, id]);
 
   return (
     <div
