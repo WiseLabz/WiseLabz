@@ -1,6 +1,7 @@
 package docs
 
 import (
+	"context"
 	"errors"
 	"net/http"
 
@@ -26,7 +27,12 @@ func (h *Handler) GetLock(w http.ResponseWriter, r *http.Request) {
 		httputil.Errorf(w, err)
 		return
 	}
-	httputil.JSON(w, http.StatusOK, lock)
+	response, err := h.lockWithName(r.Context(), lock)
+	if err != nil {
+		httputil.Errorf(w, err)
+		return
+	}
+	httputil.JSON(w, http.StatusOK, response)
 }
 
 // AcquireLock handles POST /api/docs/{id}/lock. Acquires or renews the
@@ -50,16 +56,22 @@ func (h *Handler) AcquireLock(w http.ResponseWriter, r *http.Request) {
 	}
 
 	lock, err := h.Store.AcquireDocLock(r.Context(), id, userID)
-	if errors.Is(err, store.ErrLockHeldByOther) {
-		httputil.JSON(w, http.StatusConflict, lock)
+	conflict := errors.Is(err, store.ErrLockHeldByOther)
+	if err != nil && !conflict {
+		httputil.Errorf(w, err)
 		return
 	}
+	response, err := h.lockWithName(r.Context(), lock)
 	if err != nil {
 		httputil.Errorf(w, err)
 		return
 	}
-	h.broadcastDocEvent(existing.ServiceID, ws.EventDocLockAcquired, lock)
-	httputil.JSON(w, http.StatusOK, lock)
+	if conflict {
+		httputil.JSON(w, http.StatusConflict, response)
+		return
+	}
+	h.broadcastDocEvent(existing.ServiceID, ws.EventDocLockAcquired, response)
+	httputil.JSON(w, http.StatusOK, response)
 }
 
 // ReleaseLock handles POST /api/docs/{id}/lock/release. Operator-only.
@@ -99,4 +111,25 @@ func (h *Handler) broadcastDocEvent(connectorID, eventType string, payload any) 
 		return
 	}
 	h.WSHub.BroadcastConnector(connectorID, eventType, payload)
+}
+
+// Include only the holder's public name, without exposing the user directory.
+type docLockResponse struct {
+	*store.DocLockRecord
+	UserName string `json:"userName,omitempty"`
+}
+
+func (h *Handler) lockWithName(ctx context.Context, lock *store.DocLockRecord) (*docLockResponse, error) {
+	user, err := h.Store.GetUserByID(ctx, lock.UserID)
+	if errors.Is(err, store.ErrNotFound) {
+		return &docLockResponse{DocLockRecord: lock}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	name := user.DisplayName
+	if name == "" {
+		name = user.Username
+	}
+	return &docLockResponse{DocLockRecord: lock, UserName: name}, nil
 }

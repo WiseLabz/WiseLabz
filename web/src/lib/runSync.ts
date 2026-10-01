@@ -18,5 +18,6 @@ export async function runSync(connectorId: string | null = null): Promise<void> 
     toast.error(i18n.t('common.actionFailed'));
     return;
   }
+  toast.success(i18n.t('sync.started'));
   triggerMockSync(connectorId);
 }

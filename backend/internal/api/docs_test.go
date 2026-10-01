@@ -135,6 +135,34 @@ func TestDocLockHappyPath(t *testing.T) {
 		t.Fatalf("get (locked) status = %d, want 200; body = %s", rec.Code, rec.Body)
 	}
 
+	var namedLock struct {
+		UserName string `json:"userName"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &namedLock); err != nil {
+		t.Fatalf("unmarshal named lock: %v", err)
+	}
+	holder, err := app.Store.GetUserByID(context.Background(), opID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if namedLock.UserName != holder.DisplayName {
+		t.Errorf("lock holder name = %q, want %q", namedLock.UserName, holder.DisplayName)
+	}
+
+	if err := app.Store.UpdateUser(context.Background(), opID, map[string]any{"display_name": ""}); err != nil {
+		t.Fatal(err)
+	}
+	rec = app.req(t, http.MethodGet, "/api/docs/"+d.ID+"/lock", nil, opToken)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("get lock without display name: status = %d", rec.Code)
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &namedLock); err != nil {
+		t.Fatal(err)
+	}
+	if namedLock.UserName != holder.Username {
+		t.Errorf("fallback name = %q, want %q", namedLock.UserName, holder.Username)
+	}
+
 	rec = app.req(t, http.MethodPost, "/api/docs/"+d.ID+"/lock/release", nil, opToken)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("release status = %d, want 200; body = %s", rec.Code, rec.Body)
@@ -171,6 +199,16 @@ func TestDocLockConflict(t *testing.T) {
 	if rec.Code != http.StatusConflict {
 		t.Fatalf("user2 acquire status = %d, want 409; body = %s", rec.Code, rec.Body)
 	}
+	var namedConflict struct {
+		UserName string `json:"userName"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &namedConflict); err != nil {
+		t.Fatal(err)
+	}
+	if namedConflict.UserName != "Test User" {
+		t.Errorf("conflict holder name = %q, want Test User", namedConflict.UserName)
+	}
+
 	var conflict store.DocLockRecord
 	if err := json.Unmarshal(rec.Body.Bytes(), &conflict); err != nil {
 		t.Fatalf("unmarshal conflict response: %v", err)

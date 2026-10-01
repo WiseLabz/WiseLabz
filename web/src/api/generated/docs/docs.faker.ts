@@ -177,6 +177,10 @@ export const getGetDocsDocIdLockResponseMock = (
     faker.string.alpha({ length: { min: 10, max: 20 } }),
     undefined,
   ]),
+  userName: faker.helpers.arrayElement([
+    faker.string.alpha({ length: { min: 10, max: 20 } }),
+    undefined,
+  ]),
   acquiredAt: faker.helpers.arrayElement([
     faker.date.past().toISOString().slice(0, 19) + 'Z',
     undefined,
@@ -196,6 +200,10 @@ export const getPostDocsDocIdLockResponseMock = (
     undefined,
   ]),
   userId: faker.helpers.arrayElement([
+    faker.string.alpha({ length: { min: 10, max: 20 } }),
+    undefined,
+  ]),
+  userName: faker.helpers.arrayElement([
     faker.string.alpha({ length: { min: 10, max: 20 } }),
     undefined,
   ]),

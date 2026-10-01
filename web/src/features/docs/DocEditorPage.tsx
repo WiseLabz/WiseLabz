@@ -1,19 +1,18 @@
 /**
  * Freehand + AI-assisted doc editor (`/docs/:docId/edit`). CodeMirror 6 on the
  * left, live Markdown preview on the right; save writes a new version
- * (last-write-wins). If the doc is regenerated elsewhere while editing, a
- * non-destructive "newer version available" banner appears — saving still creates
- * a new version over the top.
+ * (with stale-version detection). If the doc is regenerated elsewhere while editing, a
+ * "newer version available" banner offers an explicit reload before saving.
  *
  * AI assist is batched (no streaming, per the plan): "Suggest update" calls the
- * mock once, then renders the proposed revision as a review-diff. Accept applies it
+ * server once, then renders the proposed revision as a review-diff. Accept applies it
  * to the editor and marks the draft as AI-drafted (provenance); Reject discards it.
  * Operator-gated (the route guards, and the save button respects role too).
  */
 import { useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { skipToken, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { isAxiosError } from 'axios';
 import CodeMirror from '@uiw/react-codemirror';
 import { markdown } from '@codemirror/lang-markdown';
@@ -28,6 +27,7 @@ import {
   getGetDocsDocIdVersionsQueryKey,
   getGetDocsTreeQueryKey,
 } from '../../api/generated/docs/docs';
+import type { DocAiSuggestionPayload } from '../../types/ws';
 import { useConnectorRole, useIsInstanceAdmin } from '../../hooks/useRole';
 import { useAuth } from '../../store/auth';
 import { useLive } from '../../store/live';
@@ -50,7 +50,10 @@ import {
 const cmTheme = EditorView.theme(
   {
     '&': { backgroundColor: 'transparent', color: 'var(--color-ink)', fontSize: '13px' },
-    '.cm-content': { fontFamily: 'var(--font-mono, monospace)', caretColor: 'var(--color-accent-primary)' },
+    '.cm-content': {
+      fontFamily: 'var(--font-mono, monospace)',
+      caretColor: 'var(--color-accent-primary)',
+    },
     '.cm-gutters': {
       backgroundColor: 'transparent',
       color: 'var(--color-ink-faint)',
@@ -66,21 +69,12 @@ const cmTheme = EditorView.theme(
 
 type Provenance = 'manual' | 'ai-draft';
 
-/** Deterministic stand-in for an LLM doc revision (mock-only). */
-function synthesizeSuggestion(draft: string): string {
-  const note =
-    '\n\n> _AI draft — reviewed the latest synced state and tightened the wording above._\n';
-  if (!/^##?\s+Summary/im.test(draft)) {
-    const withSummary = draft.replace(
-      /^(#.*\n)/,
-      '$1\n## Summary\n\nAuto-generated overview of this service based on its most recent sync.\n'
-    );
-    return withSummary + note;
-  }
-  return draft + note;
+export function DocEditorPage() {
+  const { docId } = useParams();
+  return <DocEditor key={docId} />;
 }
 
-export function DocEditorPage() {
+function DocEditor() {
   const { t } = useTranslation();
   const { docId = '' } = useParams();
   const navigate = useNavigate();
@@ -98,11 +92,20 @@ export function DocEditorPage() {
 
   const [draft, setDraft] = useState<string | null>(null);
   const [provenance, setProvenance] = useState<Provenance>('manual');
-  const [suggestion, setSuggestion] = useState<string | null>(null);
+  const [requestId, setRequestId] = useState<string | null>(null);
+  const aiResult = useQuery<DocAiSuggestionPayload>({
+    queryKey: ['doc-ai-suggestion', docId, requestId],
+    queryFn: skipToken,
+  });
+  const suggestion =
+    aiResult.data?.status === 'complete' ? (aiResult.data.fullContent ?? null) : null;
+  const [baseContent, setBaseContent] = useState<string | null>(null);
+  const [lockHeld, setLockHeld] = useState(false);
   // State (not refs) so `newerAvailable` can derive from them during render.
   const [baseVersion, setBaseVersion] = useState<number | null>(null);
   const [justSaved, setJustSaved] = useState(false);
   const lockAcquiredRef = useRef(false);
+  const mountedRef = useRef(true);
 
   // Seed the draft once the doc loads; capture the version the edit is based on.
   // Adjusting state during render is the React-blessed alternative to an effect.
@@ -110,15 +113,22 @@ export function DocEditorPage() {
   if (doc.data && !seeded) {
     setSeeded(true);
     setDraft(doc.data.content);
+    setBaseContent(doc.data.content);
     setBaseVersion(doc.data.currentVersion);
   }
 
-  const dirty = draft !== null && doc.data != null && draft !== doc.data.content;
+  const dirty = draft !== null && doc.data != null && draft !== baseContent;
+
+  const dirtyRef = useRef(dirty);
+  useEffect(() => {
+    dirtyRef.current = dirty;
+  }, [dirty]);
 
   // Warn on tab close with unsaved edits; release lock on unload.
   useEffect(() => {
+    mountedRef.current = true;
     const onBeforeUnload = (e: BeforeUnloadEvent) => {
-      if (dirty) {
+      if (dirtyRef.current) {
         e.preventDefault();
       }
       if (lockAcquiredRef.current) {
@@ -127,12 +137,13 @@ export function DocEditorPage() {
     };
     window.addEventListener('beforeunload', onBeforeUnload);
     return () => {
+      mountedRef.current = false;
       window.removeEventListener('beforeunload', onBeforeUnload);
       if (lockAcquiredRef.current) {
         postDocsDocIdLockRelease(docId).catch(() => {});
       }
     };
-  }, [dirty, docId]);
+  }, [docId]);
 
   const save = useMutation({
     mutationFn: () =>
@@ -169,7 +180,8 @@ export function DocEditorPage() {
 
   const suggest = useMutation({
     mutationFn: () => postDocsDocIdAiSuggest(docId, { prompt: 'improve' }),
-    onSuccess: () => setSuggestion(synthesizeSuggestion(draft ?? '')),
+    onMutate: () => setRequestId(null),
+    onSuccess: (response) => setRequestId(response.requestId),
     onError: () => toast.error(t('docs.editor.aiError')),
   });
 
@@ -177,28 +189,58 @@ export function DocEditorPage() {
   const newerAvailable =
     doc.data != null && baseVersion != null && doc.data.currentVersion > baseVersion && !justSaved;
 
-  // Acquire and maintain lock while editing.
-  useEffect(() => {
-    if (!dirty) {
+  const lockedByOther = !!docLock && docLock.userId !== userId;
+  const acquireLock = useMutation({
+    mutationFn: () => postDocsDocIdLock(docId),
+    onSuccess: () => {
+      if (!mountedRef.current) {
+        postDocsDocIdLockRelease(docId).catch(() => {});
+        return;
+      }
+      useLive.getState().setDocLock(docId, undefined);
+      lockAcquiredRef.current = true;
+      setLockHeld(true);
+    },
+    onError: (error) => {
       lockAcquiredRef.current = false;
+      setLockHeld(false);
+      if (isAxiosError(error) && error.response?.status === 409) {
+        const holder = error.response.data;
+        if (holder?.userId && holder?.expiresAt) useLive.getState().setDocLock(docId, holder);
+      }
+      toast.error(t('docs.editor.lockError'));
+    },
+  });
+  const renewLock = acquireLock.mutate;
+  useEffect(() => {
+    if (!lockHeld) return;
+    const heartbeat = setInterval(() => renewLock(), 30_000);
+    return () => clearInterval(heartbeat);
+  }, [lockHeld, renewLock]);
+
+  useEffect(() => {
+    if (!requestId) return;
+    if (aiResult.data?.status === 'complete' && typeof aiResult.data.fullContent === 'string')
+      return;
+    if (aiResult.data?.status === 'error' || aiResult.data?.status === 'complete') {
+      toast.error(t('docs.editor.aiError'));
       return;
     }
+    // The server bounds its provider call at two minutes; allow delivery time.
+    const timeout = setTimeout(() => {
+      setRequestId(null);
+      toast.error(t('docs.editor.aiTimeout'));
+    }, 150_000);
+    return () => clearTimeout(timeout);
+  }, [requestId, aiResult.data?.status, aiResult.data?.fullContent, t]);
 
-    let heartbeat: ReturnType<typeof setInterval> | undefined;
-
-    // Acquire lock on first edit
-    postDocsDocIdLock(docId).catch(() => {});
-    lockAcquiredRef.current = true;
-
-    // Renew lock every 30 seconds
-    heartbeat = setInterval(() => {
-      postDocsDocIdLock(docId).catch(() => {});
-    }, 30000);
-
-    return () => {
-      if (heartbeat) clearInterval(heartbeat);
-    };
-  }, [dirty, docId]);
+  const canEdit = canMutate && lockHeld && !lockedByOther && !acquireLock.isPending;
+  const aiPending =
+    suggest.isPending ||
+    (requestId !== null &&
+      suggestion === null &&
+      aiResult.data?.status !== 'error' &&
+      aiResult.data?.status !== 'complete');
 
   if (doc.isLoading) {
     return (
@@ -248,20 +290,32 @@ export function DocEditorPage() {
           )}
         </div>
         <div className="flex items-center gap-2">
+          {canMutate && !lockHeld && (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => acquireLock.mutate()}
+              disabled={acquireLock.isPending}
+            >
+              {acquireLock.isPending
+                ? t('docs.editor.acquiringLock')
+                : t('docs.editor.startEditing')}
+            </Button>
+          )}
           <Button
             variant="secondary"
             size="sm"
             onClick={() => suggest.mutate()}
-            disabled={suggest.isPending || !canMutate}
+            disabled={aiPending || !canEdit}
           >
             <SparklesIcon size={14} />
-            {suggest.isPending ? t('docs.editor.aiThinking') : t('docs.editor.aiSuggest')}
+            {aiPending ? t('docs.editor.aiThinking') : t('docs.editor.aiSuggest')}
           </Button>
           <Button
             variant="ghost"
             size="sm"
             onClick={() => {
-              setDraft(doc.data!.content);
+              setDraft(baseContent);
               setProvenance('manual');
             }}
             disabled={!dirty || save.isPending}
@@ -272,7 +326,7 @@ export function DocEditorPage() {
             variant="primary"
             size="sm"
             onClick={() => save.mutate()}
-            disabled={!dirty || save.isPending || !canMutate}
+            disabled={!dirty || save.isPending || !canEdit}
           >
             <CheckIcon size={14} />
             {save.isPending ? t('docs.editor.saving') : t('docs.editor.save')}
@@ -287,6 +341,8 @@ export function DocEditorPage() {
             onClick={() => {
               setDraft(doc.data!.content);
               setBaseVersion(doc.data!.currentVersion);
+              setBaseContent(doc.data!.content);
+              setRequestId(null);
               setProvenance('manual');
             }}
             className="rounded-sm font-medium underline-offset-2 hover:underline"
@@ -298,7 +354,11 @@ export function DocEditorPage() {
 
       {docLock && docLock.userId !== userId && (
         <div className="mb-4 rounded-md border border-info bg-info-tint px-3 py-2 text-xs text-info">
-          <span>{t('docs.editor.lockBanner', { userId: docLock.userId })}</span>
+          <span>
+            {t('docs.editor.lockBanner', {
+              name: docLock.userName || t('docs.editor.unknownLockHolder'),
+            })}
+          </span>
         </div>
       )}
 
@@ -311,16 +371,17 @@ export function DocEditorPage() {
               {t('docs.editor.aiReviewTitle')}
             </span>
             <div className="flex items-center gap-2">
-              <Button variant="ghost" size="sm" onClick={() => setSuggestion(null)}>
+              <Button variant="ghost" size="sm" onClick={() => setRequestId(null)}>
                 <XIcon size={14} /> {t('docs.editor.aiReject')}
               </Button>
               <Button
                 variant="primary"
                 size="sm"
+                disabled={!canEdit}
                 onClick={() => {
                   setDraft(suggestion);
                   setProvenance('ai-draft');
-                  setSuggestion(null);
+                  setRequestId(null);
                   toast.success(t('docs.editor.aiAccepted'));
                 }}
               >
@@ -347,10 +408,17 @@ export function DocEditorPage() {
           </div>
           <CodeMirror
             value={draft ?? ''}
-            onChange={(v) => setDraft(v)}
-            extensions={[markdown(), cmTheme, EditorView.lineWrapping]}
+            onChange={(v) => {
+              if (canEdit) setDraft(v);
+            }}
+            extensions={[
+              markdown(),
+              cmTheme,
+              EditorView.lineWrapping,
+              EditorView.contentAttributes.of({ 'aria-label': t('docs.editor.markdownLabel') }),
+            ]}
             basicSetup={{ lineNumbers: true, foldGutter: false, highlightActiveLine: true }}
-            editable={canMutate}
+            editable={canEdit}
             className="min-h-[60vh] text-sm"
           />
         </Panel>
