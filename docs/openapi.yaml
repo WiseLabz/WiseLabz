@@ -868,6 +868,15 @@ paths:
       responses:
         '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ComplianceRuleTestResult' } } } }
         '400': { $ref: '#/components/responses/BadRequest' }
+  /compliance/packs/{id}/install:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    post:
+      tags: [compliance]
+      summary: Install a built-in compliance rule pack, skipping rules whose name already exists (admin only)
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ComplianceRulePackInstallResult' } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
   /connectors/{connectorId}:
     parameters: [{ $ref: '#/components/parameters/ConnectorId' }]
     get:
@@ -4007,6 +4016,12 @@ components:
       required: [items]
       properties:
         items: { type: array, items: { $ref: '#/components/schemas/ComplianceRule' } }
+    ComplianceRulePackInstallResult:
+      type: object
+      required: [installed, skipped]
+      properties:
+        installed: { type: integer, description: Rules created from the pack. }
+        skipped: { type: integer, description: Pack rules left alone because a rule with the same name exists. }
     ComplianceRuleTestMatch:
       type: object
       required: [connectorId, connectorName, entities]

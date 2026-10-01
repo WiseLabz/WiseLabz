@@ -11,6 +11,7 @@ import type { RequestHandlerOptions } from 'msw';
 
 import type {
   ComplianceRule,
+  ComplianceRulePackInstallResult,
   ComplianceRulePage,
   ComplianceRuleTestResult,
   GetComplianceSchema200,
@@ -20,6 +21,7 @@ import {
   getGetComplianceRulesIdResponseMock,
   getGetComplianceRulesResponseMock,
   getGetComplianceSchemaResponseMock,
+  getPostCompliancePacksIdInstallResponseMock,
   getPostComplianceRulesResponseMock,
   getPostComplianceRulesTestResponseMock,
   getPutComplianceRulesIdResponseMock,
@@ -32,6 +34,7 @@ export {
   getGetComplianceRulesIdResponseMock,
   getPutComplianceRulesIdResponseMock,
   getPostComplianceRulesTestResponseMock,
+  getPostCompliancePacksIdInstallResponseMock,
 } from './compliance.faker';
 
 export const getGetComplianceSchemaMockHandler = (
@@ -195,6 +198,30 @@ export const getPostComplianceRulesTestMockHandler = (
     options
   );
 };
+
+export const getPostCompliancePacksIdInstallMockHandler = (
+  overrideResponse?:
+    | ComplianceRulePackInstallResult
+    | ((
+        info: Parameters<Parameters<typeof http.post>[1]>[0]
+      ) => Promise<ComplianceRulePackInstallResult> | ComplianceRulePackInstallResult),
+  options?: RequestHandlerOptions
+) => {
+  return http.post(
+    '*/compliance/packs/:id/install',
+    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+      return HttpResponse.json(
+        overrideResponse !== undefined
+          ? typeof overrideResponse === 'function'
+            ? await overrideResponse(info)
+            : overrideResponse
+          : getPostCompliancePacksIdInstallResponseMock(),
+        { status: 200 }
+      );
+    },
+    options
+  );
+};
 export const getComplianceMock = () => [
   getGetComplianceSchemaMockHandler(),
   getGetComplianceRulesMockHandler(),
@@ -203,4 +230,5 @@ export const getComplianceMock = () => [
   getPutComplianceRulesIdMockHandler(),
   getDeleteComplianceRulesIdMockHandler(),
   getPostComplianceRulesTestMockHandler(),
+  getPostCompliancePacksIdInstallMockHandler(),
 ];

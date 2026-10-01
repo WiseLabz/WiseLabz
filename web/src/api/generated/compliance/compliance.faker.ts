@@ -11,6 +11,7 @@ import { faker } from '@faker-js/faker';
 import { Severity } from '../../model';
 import type {
   ComplianceRule,
+  ComplianceRulePackInstallResult,
   ComplianceRulePage,
   ComplianceRuleTestResult,
   GetComplianceSchema200,
@@ -184,5 +185,13 @@ export const getPostComplianceRulesTestResponseMock = (
       () => ({})
     ),
   })),
+  ...overrideResponse,
+});
+
+export const getPostCompliancePacksIdInstallResponseMock = (
+  overrideResponse: Partial<Extract<ComplianceRulePackInstallResult, object>> = {}
+): ComplianceRulePackInstallResult => ({
+  installed: faker.number.int(),
+  skipped: faker.number.int(),
   ...overrideResponse,
 });

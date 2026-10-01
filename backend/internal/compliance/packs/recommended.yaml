@@ -1,0 +1,79 @@
+id: recommended
+name: Recommended rules
+description: Baseline hardening checks across containers, firewalls, DNS filtering and Tailscale.
+rules:
+  - name: Docker privileged container
+    connectorType: docker
+    entityKind: container
+    severity: critical
+    title: Container runs in privileged mode
+    conditions:
+      - {attribute: privileged, op: eq, value: true}
+  - name: Docker host networking
+    connectorType: docker
+    entityKind: container
+    severity: warning
+    title: Container uses host networking
+    conditions:
+      - {attribute: network_mode, op: eq, value: host}
+  - name: OPNsense WAN allow-any
+    connectorType: opnsense
+    entityKind: rule
+    severity: critical
+    title: WAN firewall rule allows traffic from any source
+    conditions:
+      - {attribute: enabled, op: eq, value: true}
+      - {attribute: action, op: eq, value: pass}
+      - {attribute: interface, op: eq, value: wan}
+      - {attribute: source, op: eq, value: any}
+  - name: pfSense WAN allow-any
+    connectorType: pfsense
+    entityKind: rule
+    severity: critical
+    title: WAN firewall rule allows traffic from any source
+    conditions:
+      - {attribute: enabled, op: eq, value: true}
+      - {attribute: action, op: eq, value: pass}
+      - {attribute: interface, op: eq, value: wan}
+      - {attribute: source, op: eq, value: any}
+  - name: UniFi WAN allow-all
+    connectorType: unifi
+    entityKind: firewall_rule
+    severity: critical
+    title: WAN_IN firewall rule accepts all protocols
+    conditions:
+      - {attribute: enabled, op: eq, value: true}
+      - {attribute: ruleset, op: eq, value: WAN_IN}
+      - {attribute: action, op: eq, value: accept}
+      - {attribute: protocol, op: eq, value: all}
+  - name: Pi-hole blocklist disabled
+    connectorType: pihole
+    entityKind: blocklist
+    severity: warning
+    title: DNS blocklist is disabled
+    conditions:
+      - {attribute: enabled, op: eq, value: false}
+      - {attribute: list_type, op: eq, value: block}
+  - name: AdGuard Home blocklist disabled
+    connectorType: adguardhome
+    entityKind: filter_list
+    severity: warning
+    title: DNS blocklist is disabled
+    conditions:
+      - {attribute: enabled, op: eq, value: false}
+      - {attribute: kind, op: eq, value: blocklist}
+  - name: Tailscale key expired
+    connectorType: tailscale
+    entityKind: device
+    severity: critical
+    title: Tailscale device key has expired
+    conditions:
+      - {attribute: keyExpired, op: eq, value: true}
+  - name: Tailscale key expiring soon
+    connectorType: tailscale
+    entityKind: device
+    severity: warning
+    title: Tailscale device key expires within 14 days
+    conditions:
+      - {attribute: keyExpired, op: eq, value: false}
+      - {attribute: keyExpiresInDays, op: lt, value: 14}

@@ -63,6 +63,7 @@ func TestConnectorFailureContract(t *testing.T) {
 		{"pihole", map[string]any{"password": "bad", "api_version": "v6"}, false},
 		{"portainer", map[string]any{"api_key": "bad"}, false},
 		{"proxmox", map[string]any{"token_id": "bad", "token_secret": "bad"}, false},
+		{"tailscale", map[string]any{"api_key": "bad"}, false},
 		{"traefik", map[string]any{"auth_mode": "none"}, false},
 		{"truenas", map[string]any{"api_key": "bad"}, false},
 		{"unifi", map[string]any{"auth_mode": "api_key", "api_key": "bad", "controller_type": "unifi_os"}, false},

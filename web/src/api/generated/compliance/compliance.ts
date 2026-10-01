@@ -26,6 +26,7 @@ import type {
   BadRequestResponse,
   ComplianceRule,
   ComplianceRuleInput,
+  ComplianceRulePackInstallResult,
   ComplianceRulePage,
   ComplianceRuleTestResult,
   ForbiddenResponse,
@@ -777,4 +778,91 @@ export const usePostComplianceRulesTest = <
   TContext
 > => {
   return useMutation(getPostComplianceRulesTestMutationOptions(options), queryClient);
+};
+/**
+ * @summary Install a built-in compliance rule pack, skipping rules whose name already exists (admin only)
+ */
+export const postCompliancePacksIdInstall = (
+  id: string,
+  options?: SecondParameter<typeof customInstance>,
+  signal?: AbortSignal
+) => {
+  return customInstance<ComplianceRulePackInstallResult>(
+    { url: `/compliance/packs/${id}/install`, method: 'POST', signal },
+    options
+  );
+};
+
+export const getPostCompliancePacksIdInstallMutationKey = () =>
+  ['postCompliancePacksIdInstall'] as const;
+
+export const getPostCompliancePacksIdInstallMutationOptions = <
+  TError = ErrorType<ForbiddenResponse | NotFoundResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof postCompliancePacksIdInstall>>,
+    TError,
+    PostCompliancePacksIdInstallMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof postCompliancePacksIdInstall>>,
+  TError,
+  PostCompliancePacksIdInstallMutationVariables,
+  TContext
+> => {
+  const mutationKey = getPostCompliancePacksIdInstallMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof postCompliancePacksIdInstall>>,
+    PostCompliancePacksIdInstallMutationVariables
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return postCompliancePacksIdInstall(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type PostCompliancePacksIdInstallMutationResult = NonNullable<
+  Awaited<ReturnType<typeof postCompliancePacksIdInstall>>
+>;
+
+export type PostCompliancePacksIdInstallMutationError = ErrorType<
+  ForbiddenResponse | NotFoundResponse
+>;
+export type PostCompliancePacksIdInstallMutationVariables = { id: string };
+
+/**
+ * @summary Install a built-in compliance rule pack, skipping rules whose name already exists (admin only)
+ */
+export const usePostCompliancePacksIdInstall = <
+  TError = ErrorType<ForbiddenResponse | NotFoundResponse>,
+  TContext = unknown,
+>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof postCompliancePacksIdInstall>>,
+      TError,
+      PostCompliancePacksIdInstallMutationVariables,
+      TContext
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseMutationResult<
+  Awaited<ReturnType<typeof postCompliancePacksIdInstall>>,
+  TError,
+  PostCompliancePacksIdInstallMutationVariables,
+  TContext
+> => {
+  return useMutation(getPostCompliancePacksIdInstallMutationOptions(options), queryClient);
 };

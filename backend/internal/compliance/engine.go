@@ -16,22 +16,22 @@ const (
 
 // Rule is a compliance rule stored by the application.
 type Rule struct {
-	ID              string      `json:"id"`
-	Name            string      `json:"name"`
-	ConnectorType   string      `json:"connectorType"`
-	EntityKind      string      `json:"entityKind"`
-	Conditions      []Condition `json:"conditions"`
-	Severity        string      `json:"severity"`
-	Title           string      `json:"title"`
-	RemediationLink string      `json:"remediationLink"`
-	Enabled         bool        `json:"enabled"`
+	ID              string      `json:"id" yaml:"id"`
+	Name            string      `json:"name" yaml:"name"`
+	ConnectorType   string      `json:"connectorType" yaml:"connectorType"`
+	EntityKind      string      `json:"entityKind" yaml:"entityKind"`
+	Conditions      []Condition `json:"conditions" yaml:"conditions"`
+	Severity        string      `json:"severity" yaml:"severity"`
+	Title           string      `json:"title" yaml:"title"`
+	RemediationLink string      `json:"remediationLink" yaml:"remediationLink"`
+	Enabled         bool        `json:"enabled" yaml:"enabled"`
 }
 
 // Condition compares one entity attribute with a value.
 type Condition struct {
-	Attribute string `json:"attribute"`
-	Op        string `json:"op"`
-	Value     any    `json:"value"`
+	Attribute string `json:"attribute" yaml:"attribute"`
+	Op        string `json:"op" yaml:"op"`
+	Value     any    `json:"value" yaml:"value"`
 }
 
 // Catalog describes the attributes emitted by each connector and entity kind.
