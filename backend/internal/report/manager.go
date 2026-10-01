@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"strings"
+	"sync"
 
 	"github.com/WiseLabz/wiselabz/internal/store"
 	"github.com/robfig/cron/v3"
@@ -21,6 +22,7 @@ type Manager struct {
 	Generator *Generator
 	Scheduler Scheduler
 	Notify    func(context.Context, store.ReportRecord, store.ReportDefinitionRecord)
+	mu        sync.Mutex
 	entries   map[string]cron.EntryID
 }
 
@@ -42,7 +44,7 @@ func (m *Manager) Init(ctx context.Context) error {
 		if d.Enabled {
 			if _, e := m.Store.LatestScheduledReport(ctx, d.ID); e == store.ErrNotFound {
 				r, e := m.Generator.Generate(ctx, d, "scheduled")
-				if m.Notify != nil {
+				if m.Notify != nil && r.ID != "" {
 					m.Notify(ctx, r, d)
 				}
 				LogPartial(e)
@@ -54,25 +56,35 @@ func (m *Manager) Init(ctx context.Context) error {
 
 // Register replaces the scheduled job for a report definition.
 func (m *Manager) Register(d store.ReportDefinitionRecord) error {
-	m.Unregister(d.Slug)
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	if !d.Enabled {
+		m.unregister(d.Slug)
 		return nil
 	}
 	id, err := m.Scheduler.AddJob("report:"+d.Slug, "CRON_TZ="+d.Timezone+" "+d.CronExpr, func(ctx context.Context) error {
 		r, e := m.Generator.Generate(ctx, d, "scheduled")
-		if m.Notify != nil {
+		if m.Notify != nil && r.ID != "" {
 			m.Notify(ctx, r, d)
 		}
 		return e
 	})
-	if err == nil {
-		m.entries[d.Slug] = id
+	if err != nil {
+		return err
 	}
-	return err
+	m.unregister(d.Slug)
+	m.entries[d.Slug] = id
+	return nil
 }
 
 // Unregister removes a report schedule by slug.
 func (m *Manager) Unregister(slug string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.unregister(slug)
+}
+
+func (m *Manager) unregister(slug string) {
 	if id, ok := m.entries[slug]; ok {
 		m.Scheduler.RemoveJob(id)
 		delete(m.entries, slug)
@@ -82,7 +94,7 @@ func (m *Manager) Unregister(slug string) {
 // Run generates and notifies for a report on demand.
 func (m *Manager) Run(ctx context.Context, d store.ReportDefinitionRecord) (store.ReportRecord, error) {
 	r, e := m.Generator.Generate(ctx, d, "manual")
-	if m.Notify != nil {
+	if m.Notify != nil && r.ID != "" {
 		m.Notify(ctx, r, d)
 	}
 	return r, e
