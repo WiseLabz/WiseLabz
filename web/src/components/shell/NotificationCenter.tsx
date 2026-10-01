@@ -4,7 +4,7 @@
  * slot; live updates ride the existing WS `alert.created`/`alert.resolved`
  * invalidation of the notifications query in WebSocketProvider.
  */
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQueryClient } from '@tanstack/react-query';
 import { AnimatePresence, motion } from 'motion/react';
@@ -60,10 +60,27 @@ export function NotificationCenter() {
 
   const items = list.data?.items ?? [];
 
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  // Escape closes the popover and returns focus to the bell.
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setOpen(false);
+        triggerRef.current?.focus();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open]);
+
   return (
     <div className="relative">
       <IconButton
-        label={t('notifications.title')}
+        ref={triggerRef}
+        label={unreadCount > 0 ? t('notifications.unreadLabel', { count: unreadCount }) : t('notifications.title')}
+        aria-haspopup="dialog"
+        aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
         className="relative"
       >
@@ -88,6 +105,8 @@ export function NotificationCenter() {
           <>
             <div className="fixed inset-0 z-(--z-dropdown)" onClick={() => setOpen(false)} />
             <motion.div
+              role="dialog"
+              aria-label={t('notifications.title')}
               initial={{ opacity: 0, y: -6, scale: 0.98 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: -6, scale: 0.98 }}

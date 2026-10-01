@@ -175,6 +175,27 @@ func TestTree(t *testing.T) {
 	}
 }
 
+func TestTreeIncludesServiceLessDocs(t *testing.T) {
+	s := apitest.NewStore(t)
+	ctx := context.Background()
+	lab := &store.DocRecord{Title: "Lab Topology", Kind: "lab", Content: "graph"}
+	if err := s.CreateDoc(ctx, lab); err != nil {
+		t.Fatalf("create doc: %v", err)
+	}
+
+	h := NewHandler(s, doc.NewEngine(s), nil, nil, nil, nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/docs/tree", nil)
+	rr := httptest.NewRecorder()
+	h.Tree(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body=%s", rr.Code, http.StatusOK, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), lab.ID) || !strings.Contains(rr.Body.String(), "Lab Topology") {
+		t.Errorf("expected service-less doc in tree: %s", rr.Body.String())
+	}
+}
+
 func TestTreeEmpty(t *testing.T) {
 	s := apitest.NewStore(t)
 

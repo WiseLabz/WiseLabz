@@ -80,6 +80,7 @@ export const en = {
     title: 'Notifications',
     empty: 'No notifications yet.',
     markAllRead: 'Mark all read',
+    unreadLabel: 'Notifications, {{count}} unread',
   },
   sync: {
     phase: {
@@ -1136,7 +1137,9 @@ export const en = {
     startFrom: 'Start from “{{name}}”',
   },
   command: {
+    title: 'Command palette',
     placeholder: 'type a command or search…',
+    results: 'Commands',
     noMatches: 'No matches for “{{query}}”',
     group: {
       navigate: 'Navigate',

@@ -32,7 +32,7 @@ describe('CommandPalette', () => {
       </QueryClientProvider>
     );
 
-    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'no matching command' } });
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'no matching command' } });
     const dialog = screen.getByRole('dialog');
 
     expect(() => {
@@ -42,5 +42,26 @@ describe('CommandPalette', () => {
     }).not.toThrow();
     expect(screen.getByText('No matches for “no matching command”')).toBeInTheDocument();
     expect(useUi.getState().paletteOpen).toBe(true);
+  });
+
+  it('exposes combobox/listbox semantics and closes on Escape from anywhere', () => {
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <MemoryRouter>
+          <CommandPalette />
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+
+    const input = screen.getByRole('combobox');
+    expect(screen.getByRole('dialog')).toHaveAttribute('aria-modal', 'true');
+    expect(input).toHaveAccessibleName();
+    expect(input).toHaveAttribute('aria-controls', screen.getByRole('listbox').id);
+    const active = input.getAttribute('aria-activedescendant');
+    expect(active).toBeTruthy();
+    expect(document.getElementById(active!)).toHaveAttribute('role', 'option');
+
+    fireEvent.keyDown(document.body, { key: 'Escape' });
+    expect(useUi.getState().paletteOpen).toBe(false);
   });
 });

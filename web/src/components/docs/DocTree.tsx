@@ -79,7 +79,7 @@ export function DocTree({ tree, onShare }: DocTreeProps) {
                 </span>
               )}
             </NavLink>
-            {onShare && (
+            {onShare && node.kind !== 'lab' && (
               <RoleGate connectorId={node.docId} minRole="operator">
                 <IconButton
                   label={shareLabel}

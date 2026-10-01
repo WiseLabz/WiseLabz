@@ -6,6 +6,7 @@ import { Button } from './Button';
 export function Skeleton({ className }: { className?: string }) {
   return (
     <div
+      aria-hidden="true"
       className={cn('animate-pulse rounded-md bg-surface-raised', className)}
       style={{ animationDuration: '1.4s' }}
     />
@@ -15,7 +16,7 @@ export function Skeleton({ className }: { className?: string }) {
 /** A row of shimmering lines, for list/table loading. */
 export function SkeletonRows({ rows = 4, className }: { rows?: number; className?: string }) {
   return (
-    <div className={cn('flex flex-col gap-3 p-4', className)}>
+    <div role="status" aria-busy="true" aria-label="Loading" className={cn('flex flex-col gap-3 p-4', className)}>
       {Array.from({ length: rows }).map((_, i) => (
         <div key={i} className="flex items-center gap-3">
           <Skeleton className="h-2 w-2 rounded-full" />
@@ -67,7 +68,7 @@ export function ErrorState({
   onRetry?: () => void;
 }) {
   return (
-    <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 py-12 text-center">
+    <div role="alert" className="flex flex-1 flex-col items-center justify-center gap-3 px-6 py-12 text-center">
       <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-err-tint text-err">
         <svg
           width="20"

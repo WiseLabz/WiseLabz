@@ -158,7 +158,7 @@ export function DocsPage() {
                   <XIcon size={16} />
                 </IconButton>
               </div>
-              <div onClick={() => setDrawerOpen(false)}>{treeContent}</div>
+              <div onClick={() => setDrawerOpen(false)} role="presentation">{treeContent}</div>
             </motion.div>
           </>
         )}

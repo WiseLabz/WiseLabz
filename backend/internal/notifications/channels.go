@@ -239,3 +239,23 @@ func buildEmailMessage(from string, to []string, subject, body string) []byte {
 	b.WriteString("\r\n")
 	return []byte(b.String())
 }
+
+// testSendTimeout bounds a settings-page test send so a dead endpoint can't hang the request.
+const testSendTimeout = 15 * time.Second
+
+// SendTest delivers a short test message through the channel type's real sender using the given
+// stored config and decrypted secret. in_app has no external sender and always succeeds. The
+// returned error comes from the sender, which never embeds URLs or secrets.
+func SendTest(ctx context.Context, channelType string, config map[string]any, secret string) error {
+	if channelType == "in_app" {
+		return nil
+	}
+	sender, ok := channelSenders[channelType]
+	if !ok {
+		return fmt.Errorf("unsupported channel type %q", channelType)
+	}
+	ctx, cancel := context.WithTimeout(ctx, testSendTimeout)
+	defer cancel()
+	return sender(ctx, channelCfg{Type: channelType, Enabled: true, Config: config}, secret,
+		"WiseLabz test notification", "This is a test message from WiseLabz. If you can read it, this channel is working.")
+}

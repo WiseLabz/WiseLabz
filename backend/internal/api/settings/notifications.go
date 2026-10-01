@@ -10,6 +10,7 @@ import (
 	"github.com/WiseLabz/wiselabz/internal/crypto"
 	"github.com/WiseLabz/wiselabz/internal/httputil"
 	"github.com/WiseLabz/wiselabz/internal/logsafe"
+	"github.com/WiseLabz/wiselabz/internal/notifications"
 )
 
 // notificationConfigDoc mirrors the NotificationConfig OpenAPI schema.
@@ -126,9 +127,9 @@ func (h *Handler) UpdateNotificationsConfig(w http.ResponseWriter, r *http.Reque
 	h.GetNotificationsConfig(w, r)
 }
 
-// TestNotificationsConfig handles POST /api/notifications/config/test.
-// in_app has no external dependency and always succeeds; smtp/webhook are
-// stubs (see internal/notifications.Dispatcher) that log and report success.
+// TestNotificationsConfig handles POST /api/notifications/config/test. It sends a real test
+// message through the saved config of the requested channel and reports the sender's actual error
+// (senders never embed URLs or secrets) on failure. The attempt is audit-logged.
 func (h *Handler) TestNotificationsConfig(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Channel string `json:"channel"`
@@ -137,6 +138,47 @@ func (h *Handler) TestNotificationsConfig(w http.ResponseWriter, r *http.Request
 		httputil.ErrorWithDetails(w, http.StatusBadRequest, "invalid_request", "channel is required", []httputil.FieldError{{Field: "channel", Msg: "is required"}})
 		return
 	}
-	slog.Info("test notification requested", "channel", logsafe.Sanitize(req.Channel))
+
+	var conf map[string]any
+	if req.Channel != "in_app" {
+		found := false
+		for _, ch := range h.loadNotificationConfig(r.Context()).Channels {
+			if typ, _ := ch["type"].(string); typ == req.Channel {
+				conf, _ = ch["config"].(map[string]any)
+				found = true
+				break
+			}
+		}
+		if !found {
+			httputil.ErrorWithDetails(w, http.StatusBadRequest, "invalid_request", "channel is not configured; save it first", []httputil.FieldError{{Field: "channel", Msg: "is not configured"}})
+			return
+		}
+	}
+
+	var secret string
+	if enc, _ := conf["secretEncrypted"].(string); enc != "" {
+		key, err := crypto.DecodeKey(h.Config.Encryption.Key)
+		if err == nil {
+			secret, err = crypto.Decrypt(enc, key)
+		}
+		if err != nil {
+			slog.Error("settings: decrypt channel secret for test", "channel", logsafe.Sanitize(req.Channel), "error", err)
+			secret = ""
+		}
+	}
+
+	sendErr := notifications.SendTest(r.Context(), req.Channel, conf, secret)
+	detail := map[string]any{"channel": req.Channel, "ok": sendErr == nil}
+	if sendErr != nil {
+		detail["error"] = sendErr.Error()
+	}
+	if err := h.Store.RecordAuditFromContext(r.Context(), "notifications.test", "notification_channel", req.Channel, detail); err != nil {
+		slog.Error("failed to record audit", "action", "notifications.test", "error", err)
+	}
+	if sendErr != nil {
+		slog.Warn("test notification failed", "channel", logsafe.Sanitize(req.Channel), "error", sendErr)
+		httputil.JSON(w, http.StatusOK, map[string]any{"ok": false, "message": "Test notification failed: " + sendErr.Error()})
+		return
+	}
 	httputil.JSON(w, http.StatusOK, map[string]any{"ok": true, "message": "Test notification sent"})
 }
