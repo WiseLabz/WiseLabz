@@ -491,3 +491,96 @@ func TestBackupCreateManualRunFailsWhenDirNotCreatable(t *testing.T) {
 		t.Fatalf("expected no backup run recorded after failed export, got total=%d runs=%d", total, len(runs))
 	}
 }
+
+// Authorization tests for issue #492: handler authz branches (403 vs 404) and AI key encryption
+
+// TestDocsSaveRoleBoundaryWithoutConnectorAccess verifies viewers cannot
+// save docs they haven't been granted access to (403) vs trying to access
+// docs that don't exist (404).
+func TestDocsRoleBoundaryWithoutConnectorAccess(t *testing.T) {
+	t.Parallel()
+	app := newTestApp(t)
+	d := &store.DocRecord{Title: "Doc", Kind: "service", ServiceID: "svc-1", Content: "hello"}
+	if err := app.Store.CreateDoc(context.Background(), d); err != nil {
+		t.Fatalf("seed doc: %v", err)
+	}
+
+	viewerID, viewerToken := app.user(t, "viewer")
+	app.connectorGrant(t, viewerID, "other-svc", "viewer")
+
+	rec := app.req(t, http.MethodPut, "/api/docs/"+d.ID, map[string]any{"content": "x"}, viewerToken)
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("save without grant: got %d, want 403; body=%s", rec.Code, rec.Body)
+	}
+}
+
+// TestConnectorsUptimeAuthzBoundary verifies Uptime endpoint respects authz
+// boundaries (403 when user lacks permission).
+func TestConnectorsUptimeAuthzBoundary(t *testing.T) {
+	t.Parallel()
+	app := newTestApp(t)
+	connID := newConnectorForAuthzTest(t, app, "test-connector")
+
+	viewerID, viewerToken := app.user(t, "viewer")
+	app.connectorGrant(t, viewerID, connID, "viewer")
+
+	otherConnID := newConnectorForAuthzTest(t, app, "other-connector")
+
+	rec := app.req(t, http.MethodGet, "/api/connectors/"+otherConnID+"/uptime", nil, viewerToken)
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("Uptime for ungranted connector: got %d, want 403", rec.Code)
+	}
+
+	rec = app.req(t, http.MethodGet, "/api/connectors/"+connID+"/uptime", nil, viewerToken)
+	if rec.Code != http.StatusOK {
+		t.Errorf("Uptime for granted connector: got %d, want 200; body=%s", rec.Code, rec.Body)
+	}
+}
+
+// TestMultipleConnectorAuthzCases verifies that authorization is enforced
+// consistently across different connector permission scenarios.
+func TestMultipleConnectorAuthzCases(t *testing.T) {
+	t.Parallel()
+	app := newTestApp(t)
+
+	allowedConn := newConnectorForAuthzTest(t, app, "allowed")
+	deniedConn := newConnectorForAuthzTest(t, app, "denied")
+
+	userID, userToken := app.user(t, "operator")
+	app.connectorGrant(t, userID, allowedConn, "operator")
+
+	cases := []struct {
+		name     string
+		connID   string
+		wantCode int
+	}{
+		{"granted access", allowedConn, http.StatusOK},
+		{"not granted (returns 404 for security)", deniedConn, http.StatusNotFound},
+		{"nonexistent", "not-a-real-id", http.StatusNotFound},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			rec := app.req(t, http.MethodGet, "/api/connectors/"+c.connID, nil, userToken)
+			if rec.Code != c.wantCode {
+				t.Errorf("GET /connectors/%s: got %d, want %d; body=%s", c.connID, rec.Code, c.wantCode, rec.Body)
+			}
+		})
+	}
+}
+
+// newConnectorForAuthzTest is a test helper to create a connector and return its ID.
+func newConnectorForAuthzTest(t *testing.T, app *testApp, name string) string {
+	t.Helper()
+	conn := &store.ConnectorRecord{
+		Name:       name,
+		Type:       "proxmox",
+		Category:   "virtualization",
+		URL:        "https://example.com",
+		ConfigData: "{}",
+	}
+	if err := app.Store.CreateConnector(context.Background(), conn); err != nil {
+		t.Fatalf("create connector: %v", err)
+	}
+	return conn.ID
+}

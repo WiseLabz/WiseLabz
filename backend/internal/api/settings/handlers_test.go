@@ -1,6 +1,7 @@
 package settings
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -339,5 +340,117 @@ func TestNotificationsConfigSigningSecret(t *testing.T) {
 	put(`{"channels":[{"type":"webhook","enabled":true,"config":{"url":"https://x.test/h2","secret":""}}],"routing":[]}`)
 	if strings.Contains(stored(), "secretEncrypted") {
 		t.Error("empty secret should clear the stored one")
+	}
+}
+
+func TestGetAIConfigNeverReturnsPlaintextKey(t *testing.T) {
+	s := apitest.NewStore(t)
+	h := NewHandler(s, testConfig(), ai.NewRegistry())
+
+	req := httptest.NewRequest(http.MethodGet, "/api/ai/config", nil)
+	rr := httptest.NewRecorder()
+	h.GetAIConfig(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rr.Code)
+	}
+
+	response := rr.Body.String()
+	if strings.Contains(response, "api_key") || strings.Contains(response, "apiKey") || strings.Contains(response, "secret") {
+		t.Errorf("GetAIConfig response must not contain API key field names: %s", response)
+	}
+
+	if strings.Contains(response, "sk-") || strings.Contains(response, "sk_") {
+		t.Error("GetAIConfig response must not contain plaintext API keys")
+	}
+}
+
+func TestUpdateAIConfigEncryptsAPIKey(t *testing.T) {
+	s := apitest.NewStore(t)
+	h := NewHandler(s, testConfig(), ai.NewRegistry())
+	ctx := context.Background()
+
+	updateReq := httptest.NewRequest(
+		http.MethodPut,
+		"/api/ai/config",
+		strings.NewReader(`{"enabled":true,"provider":"openai","model":"gpt-4","apiKey":"sk-test-secret-key-1234567890"}`),
+	)
+	updateReq.Header.Set("Content-Type", "application/json")
+	updateRR := httptest.NewRecorder()
+	h.UpdateAIConfig(updateRR, updateReq)
+
+	if updateRR.Code != http.StatusOK {
+		t.Fatalf("update status = %d, want 200; body=%s", updateRR.Code, updateRR.Body.String())
+	}
+
+	var storedConfig struct {
+		Enabled   int
+		Provider  string
+		APIKeyEnc string
+	}
+	err := s.DB().QueryRowContext(ctx, `
+		SELECT enabled, provider, api_key_encrypted FROM ai_config WHERE id = 1
+	`).Scan(&storedConfig.Enabled, &storedConfig.Provider, &storedConfig.APIKeyEnc)
+	if err != nil {
+		t.Fatalf("query stored config: %v", err)
+	}
+
+	if storedConfig.APIKeyEnc == "" {
+		t.Error("API key should be encrypted and stored")
+	}
+
+	if strings.Contains(storedConfig.APIKeyEnc, "sk-test-secret") {
+		t.Error("stored API key must not contain plaintext secret")
+	}
+
+	getReq := httptest.NewRequest(http.MethodGet, "/api/ai/config", nil)
+	getRR := httptest.NewRecorder()
+	h.GetAIConfig(getRR, getReq)
+
+	if strings.Contains(getRR.Body.String(), "sk-test-secret") {
+		t.Error("GetAIConfig must not return plaintext API key in response")
+	}
+}
+
+func TestUpdateAIConfigAcceptsDisabledProvider(t *testing.T) {
+	s := apitest.NewStore(t)
+	h := NewHandler(s, testConfig(), ai.NewRegistry())
+
+	tests := []struct {
+		name    string
+		body    string
+		wantErr bool
+	}{
+		{
+			name:    "valid openai provider",
+			body:    `{"enabled":true,"provider":"openai","model":"gpt-4","apiKey":"sk-test"}`,
+			wantErr: false,
+		},
+		{
+			name:    "disabled provider is accepted",
+			body:    `{"enabled":false,"provider":"","model":"","apiKey":""}`,
+			wantErr: false,
+		},
+		{
+			name:    "invalid json",
+			body:    `{invalid}`,
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPut, "/api/ai/config", strings.NewReader(tt.body))
+			req.Header.Set("Content-Type", "application/json")
+			rr := httptest.NewRecorder()
+			h.UpdateAIConfig(rr, req)
+
+			if tt.wantErr && rr.Code == http.StatusOK {
+				t.Errorf("status = %d, want error; body=%s", rr.Code, rr.Body.String())
+			}
+			if !tt.wantErr && rr.Code != http.StatusOK {
+				t.Errorf("status = %d, want 200; body=%s", rr.Code, rr.Body.String())
+			}
+		})
 	}
 }

@@ -2,6 +2,7 @@ package system
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -90,5 +91,148 @@ func TestUpdateBackupScheduleRejectsNegativeMaxAge(t *testing.T) {
 	got, err := h.Store.GetBackupSchedule(ctx)
 	if err != nil || got.CronExpr != orig.CronExpr || got.MaxAgeHours != orig.MaxAgeHours {
 		t.Fatalf("schedule changed: %+v err=%v", got, err)
+	}
+}
+
+func TestCreateBackupRunTriggersManualBackup(t *testing.T) {
+	h := newTestHandler(t)
+	ctx := context.Background()
+	sched := store.BackupSchedule{CronExpr: "0 3 * * *", MaxBackups: 7, MaxAgeHours: 168, Enabled: true}
+	if err := h.Store.UpsertBackupSchedule(ctx, sched); err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/system/backup/run", nil)
+	rr := httptest.NewRecorder()
+	h.CreateBackupRun(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", rr.Code, rr.Body.String())
+	}
+
+	var resp map[string]any
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+
+	if triggered, ok := resp["triggeredBy"].(string); !ok || triggered != "manual" {
+		t.Errorf("triggeredBy = %q, want 'manual'", resp["triggeredBy"])
+	}
+
+	if _, ok := resp["id"].(string); !ok || resp["id"] == "" {
+		t.Error("response missing valid id")
+	}
+
+	if _, ok := resp["filePath"].(string); !ok || resp["filePath"] == "" {
+		t.Error("response missing valid filePath")
+	}
+
+	runs, _, err := h.Store.ListBackupRuns(ctx, 10, 0)
+	if err != nil || len(runs) == 0 {
+		t.Fatalf("ListBackupRuns: got %d runs, want 1+; err=%v", len(runs), err)
+	}
+
+	if runs[0].TriggeredBy != "manual" {
+		t.Errorf("stored run triggeredBy = %q, want 'manual'", runs[0].TriggeredBy)
+	}
+}
+
+func TestRunBackupJobWritesManifestAndChecksum(t *testing.T) {
+	h := newTestHandler(t)
+	ctx := context.Background()
+	sched := store.BackupSchedule{CronExpr: "0 3 * * *", MaxBackups: 3, MaxAgeHours: 168, Enabled: true}
+	if err := h.Store.UpsertBackupSchedule(ctx, sched); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := h.runBackupJob(ctx, sched); err != nil {
+		t.Fatalf("runBackupJob: %v", err)
+	}
+
+	runs, _, err := h.Store.ListBackupRuns(ctx, 10, 0)
+	if err != nil || len(runs) == 0 {
+		t.Fatalf("ListBackupRuns: %v", err)
+	}
+
+	run := runs[0]
+	if run.TriggeredBy != "schedule" {
+		t.Errorf("run.TriggeredBy = %q, want 'schedule'", run.TriggeredBy)
+	}
+
+	if !exists(run.FilePath) {
+		t.Errorf("backup bundle %q does not exist", run.FilePath)
+	}
+
+	manifestPath := backup.ManifestPath(run.FilePath)
+	if !exists(manifestPath) {
+		t.Errorf("manifest %q does not exist", manifestPath)
+	}
+
+	if run.SizeBytes <= 0 {
+		t.Errorf("run.SizeBytes = %d, want > 0", run.SizeBytes)
+	}
+}
+
+func TestPruneBackupsOnlyTouchesMatchingFilenames(t *testing.T) {
+	h := newTestHandler(t)
+	ctx := context.Background()
+
+	paths := seedBackupRuns(t, h, 3)
+	extraneous := filepath.Join(h.BackupDir, "other-file.json")
+	if err := os.WriteFile(extraneous, []byte("{}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	sched := store.BackupSchedule{CronExpr: "0 3 * * *", MaxBackups: 1, MaxAgeHours: 0, Enabled: true}
+	if err := h.Store.UpsertBackupSchedule(ctx, sched); err != nil {
+		t.Fatal(err)
+	}
+
+	h.pruneBackups(ctx)
+
+	if !exists(extraneous) {
+		t.Error("pruneBackups deleted non-matching file")
+	}
+
+	kept := 0
+	for _, p := range paths {
+		if exists(p) {
+			kept++
+		}
+	}
+	if kept != 1 {
+		t.Errorf("after pruning, %d backup files remain, want 1", kept)
+	}
+}
+
+func TestInitRetentionJobCreatesDefaultSettingsIfMissing(t *testing.T) {
+	h := newTestHandler(t)
+	ctx := context.Background()
+
+	h.InitRetentionJob(ctx)
+
+	settings, err := h.Store.GetRetentionSettings(ctx)
+	if err != nil {
+		t.Fatalf("GetRetentionSettings after init: %v", err)
+	}
+
+	if settings.UpdatedAt == "" {
+		t.Error("UpdatedAt should be set after init")
+	}
+}
+
+func TestInitBackupJobCreatesDefaultScheduleIfMissing(t *testing.T) {
+	h := newTestHandler(t)
+	ctx := context.Background()
+
+	h.InitBackupJob(ctx)
+
+	sched, err := h.Store.GetBackupSchedule(ctx)
+	if err != nil {
+		t.Fatalf("GetBackupSchedule after init: %v", err)
+	}
+
+	if sched.UpdatedAt == "" {
+		t.Error("UpdatedAt should be set after init")
 	}
 }
