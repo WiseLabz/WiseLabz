@@ -56,14 +56,16 @@ func TestMigrationVersionParity(t *testing.T) {
 func sqliteSchemaColumns(t *testing.T, db *sql.DB) []string {
 	t.Helper()
 	rows, err := db.Query(`SELECT m.name, p.name FROM sqlite_master m, pragma_table_info(m.name) p
-		WHERE m.type='table' AND m.name NOT LIKE 'sqlite_%' AND m.name <> 'schema_migrations'`)
+		WHERE m.type='table' AND m.name NOT LIKE 'sqlite_%' AND m.name <> 'schema_migrations'
+		AND m.name NOT LIKE '%\_fts%' ESCAPE '\'`)
 	return collectColumns(t, rows, err)
 }
 
 func postgresSchemaColumns(t *testing.T, db *sql.DB) []string {
 	t.Helper()
 	rows, err := db.Query(`SELECT table_name, column_name FROM information_schema.columns
-		WHERE table_schema = current_schema() AND table_name <> 'schema_migrations'`)
+		WHERE table_schema = current_schema() AND table_name <> 'schema_migrations'
+		AND column_name <> 'search_tsv'`)
 	return collectColumns(t, rows, err)
 }
 

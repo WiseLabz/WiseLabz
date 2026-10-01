@@ -64,6 +64,11 @@ const DocsPage = lazy(() =>
 const AllDocsPage = lazy(() =>
   import('./features/docs/AllDocsPage').then(({ AllDocsPage }) => ({ default: AllDocsPage }))
 );
+const DocProposalsPage = lazy(() =>
+  import('./features/docs/DocProposalsPage').then(({ DocProposalsPage }) => ({
+    default: DocProposalsPage,
+  }))
+);
 const TopologyPage = lazy(() =>
   import('./features/docs/TopologyPage').then(({ TopologyPage }) => ({ default: TopologyPage }))
 );
@@ -211,6 +216,7 @@ const router = createBrowserRouter([
       { path: 'connectors/:id/edit', element: <ConnectorEditPage /> },
       { path: 'docs', element: <DocsPage /> },
       { path: 'docs/all', element: <AllDocsPage /> },
+      { path: 'docs/proposals', element: <DocProposalsPage /> },
       { path: 'topology', element: <TopologyPage /> },
       { path: 'docs/:docId', element: <DocsPage /> },
       { path: 'docs/:docId/edit', element: <DocEditorPage /> },

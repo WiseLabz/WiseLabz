@@ -64,6 +64,9 @@ object, action-specific), and `createdAt`.
 | `auth.config.update` | `PUT /api/auth/config` | auth_config / (none) |
 | `auth.provider.enabled` | `PUT /api/auth/providers/{id}/enabled` | oidc_provider / provider id |
 | `doc.restore` | `POST /api/docs/{id}/versions/{rev}/restore` | doc / doc id |
+| `doc.edit_proposed` | MCP `propose_doc_edit` (full-scope key; `detail` has `proposalId`, `baseVersion`) | doc / doc id |
+| `doc.edit_approved` | `POST /api/docs/edit-proposals/{id}/approve` | doc / doc id |
+| `doc.edit_rejected` | `POST /api/docs/edit-proposals/{id}/reject` | doc / doc id |
 | `change.ack` | `POST /api/changes/{id}/ack` | change / id |
 | `change.dismiss` | `POST /api/changes/{id}/dismiss` | change / id |
 | `change.bulk_ack` | `POST /api/changes/bulk-resolve` (`status: acknowledged`) | change / id — one record per resolved item |

@@ -9,12 +9,13 @@
 import { HttpResponse, http } from 'msw';
 import type { RequestHandlerOptions } from 'msw';
 
-import type { Alert, AlertBulkSnoozeResponse, AlertPage } from '../../model';
+import type { Alert, AlertBulkSnoozeResponse, AlertPage, RunbookDraft } from '../../model';
 
 import {
   getGetAlertsAlertIdResponseMock,
   getGetAlertsResponseMock,
   getPostAlertsAlertIdDismissResponseMock,
+  getPostAlertsAlertIdDraftRunbookResponseMock,
   getPostAlertsAlertIdResolveResponseMock,
   getPostAlertsAlertIdSnoozeResponseMock,
   getPostAlertsBulkSnoozeResponseMock,
@@ -26,6 +27,7 @@ export {
   getPostAlertsAlertIdResolveResponseMock,
   getPostAlertsAlertIdDismissResponseMock,
   getPostAlertsAlertIdSnoozeResponseMock,
+  getPostAlertsAlertIdDraftRunbookResponseMock,
   getPostAlertsBulkSnoozeResponseMock,
 } from './alerts.faker';
 
@@ -135,6 +137,30 @@ export const getPostAlertsAlertIdSnoozeMockHandler = (
   );
 };
 
+export const getPostAlertsAlertIdDraftRunbookMockHandler = (
+  overrideResponse?:
+    | RunbookDraft
+    | ((
+        info: Parameters<Parameters<typeof http.post>[1]>[0]
+      ) => Promise<RunbookDraft> | RunbookDraft),
+  options?: RequestHandlerOptions
+) => {
+  return http.post(
+    '*/alerts/:alertId/draft-runbook',
+    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+      return HttpResponse.json(
+        overrideResponse !== undefined
+          ? typeof overrideResponse === 'function'
+            ? await overrideResponse(info)
+            : overrideResponse
+          : getPostAlertsAlertIdDraftRunbookResponseMock(),
+        { status: 200 }
+      );
+    },
+    options
+  );
+};
+
 export const getPostAlertsBulkSnoozeMockHandler = (
   overrideResponse?:
     | AlertBulkSnoozeResponse
@@ -164,5 +190,6 @@ export const getAlertsMock = () => [
   getPostAlertsAlertIdResolveMockHandler(),
   getPostAlertsAlertIdDismissMockHandler(),
   getPostAlertsAlertIdSnoozeMockHandler(),
+  getPostAlertsAlertIdDraftRunbookMockHandler(),
   getPostAlertsBulkSnoozeMockHandler(),
 ];

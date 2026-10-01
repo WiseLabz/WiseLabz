@@ -12,6 +12,8 @@ import type { RequestHandlerOptions } from 'msw';
 import type {
   AiSuggestRef,
   Doc,
+  DocEditProposal,
+  DocEditProposalPage,
   DocLock,
   DocNode,
   DocPage,
@@ -30,6 +32,7 @@ import {
   getGetDocsDocIdResponseMock,
   getGetDocsDocIdVersionsResponseMock,
   getGetDocsDocIdVersionsRevResponseMock,
+  getGetDocsEditProposalsResponseMock,
   getGetDocsResponseMock,
   getGetDocsServiceConnectorIdResponseMock,
   getGetDocsShareLinksResponseMock,
@@ -40,6 +43,8 @@ import {
   getPostDocsDocIdAiSuggestResponseMock,
   getPostDocsDocIdLockResponseMock,
   getPostDocsDocIdVersionsRevRestoreResponseMock,
+  getPostDocsEditProposalsProposalIdApproveResponseMock,
+  getPostDocsEditProposalsProposalIdRejectResponseMock,
   getPostDocsGenerateResponseMock,
   getPostDocsShareLinksResponseMock,
   getPostDocsTopologyResponseMock,
@@ -58,6 +63,9 @@ export {
   getPostDocsDocIdAiSuggestResponseMock,
   getGetDocsDocIdLockResponseMock,
   getPostDocsDocIdLockResponseMock,
+  getGetDocsEditProposalsResponseMock,
+  getPostDocsEditProposalsProposalIdApproveResponseMock,
+  getPostDocsEditProposalsProposalIdRejectResponseMock,
   getGetDocsTemplateSchemaResponseMock,
   getPostDocsGenerateResponseMock,
   getPostDocsTopologyResponseMock,
@@ -324,6 +332,78 @@ export const getPostDocsDocIdLockReleaseMockHandler = (
   );
 };
 
+export const getGetDocsEditProposalsMockHandler = (
+  overrideResponse?:
+    | DocEditProposalPage
+    | ((
+        info: Parameters<Parameters<typeof http.get>[1]>[0]
+      ) => Promise<DocEditProposalPage> | DocEditProposalPage),
+  options?: RequestHandlerOptions
+) => {
+  return http.get(
+    '*/docs/edit-proposals',
+    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+      return HttpResponse.json(
+        overrideResponse !== undefined
+          ? typeof overrideResponse === 'function'
+            ? await overrideResponse(info)
+            : overrideResponse
+          : getGetDocsEditProposalsResponseMock(),
+        { status: 200 }
+      );
+    },
+    options
+  );
+};
+
+export const getPostDocsEditProposalsProposalIdApproveMockHandler = (
+  overrideResponse?:
+    | DocEditProposal
+    | ((
+        info: Parameters<Parameters<typeof http.post>[1]>[0]
+      ) => Promise<DocEditProposal> | DocEditProposal),
+  options?: RequestHandlerOptions
+) => {
+  return http.post(
+    '*/docs/edit-proposals/:proposalId/approve',
+    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+      return HttpResponse.json(
+        overrideResponse !== undefined
+          ? typeof overrideResponse === 'function'
+            ? await overrideResponse(info)
+            : overrideResponse
+          : getPostDocsEditProposalsProposalIdApproveResponseMock(),
+        { status: 200 }
+      );
+    },
+    options
+  );
+};
+
+export const getPostDocsEditProposalsProposalIdRejectMockHandler = (
+  overrideResponse?:
+    | DocEditProposal
+    | ((
+        info: Parameters<Parameters<typeof http.post>[1]>[0]
+      ) => Promise<DocEditProposal> | DocEditProposal),
+  options?: RequestHandlerOptions
+) => {
+  return http.post(
+    '*/docs/edit-proposals/:proposalId/reject',
+    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+      return HttpResponse.json(
+        overrideResponse !== undefined
+          ? typeof overrideResponse === 'function'
+            ? await overrideResponse(info)
+            : overrideResponse
+          : getPostDocsEditProposalsProposalIdRejectResponseMock(),
+        { status: 200 }
+      );
+    },
+    options
+  );
+};
+
 export const getGetDocsTemplateSchemaMockHandler = (
   overrideResponse?:
     | TemplateSchema
@@ -522,6 +602,9 @@ export const getDocsMock = () => [
   getGetDocsDocIdLockMockHandler(),
   getPostDocsDocIdLockMockHandler(),
   getPostDocsDocIdLockReleaseMockHandler(),
+  getGetDocsEditProposalsMockHandler(),
+  getPostDocsEditProposalsProposalIdApproveMockHandler(),
+  getPostDocsEditProposalsProposalIdRejectMockHandler(),
   getGetDocsTemplateSchemaMockHandler(),
   getPostDocsGenerateMockHandler(),
   getPostDocsTopologyMockHandler(),

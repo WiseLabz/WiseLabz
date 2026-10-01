@@ -105,6 +105,7 @@ func main() {
 	syncEngine.SetLimits(cfg.Sync.MaxConcurrency, cfg.Sync.DueBatchSize, cfg.Sync.Timeout)
 	docEngine := doc.NewEngine(s)
 	syncEngine.SetDocRegenerator(docEngine)
+	syncEngine.SetTopologyBuilder(docEngine)
 
 	aiRegistry, embedRegistry := newAIRegistries()
 

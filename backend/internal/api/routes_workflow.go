@@ -30,6 +30,7 @@ func mountWorkflowRoutes(r chi.Router, d routerDeps) {
 		r.Post("/{id}/resolve", d.alertH.Resolve)
 		r.Post("/{id}/dismiss", d.alertH.Dismiss)
 		r.Post("/{id}/snooze", d.alertH.Snooze)
+		r.Post("/{id}/draft-runbook", d.alertH.DraftRunbook)
 		r.Post("/bulk-snooze", d.alertH.BulkSnooze)
 	})
 

@@ -1,7 +1,9 @@
-// Package mcp exposes a read-only Model Context Protocol server over the
-// existing store/RBAC layer, for a local agent on the same host (issue
-// #277). It never mounts a mutating tool — see the package-level tools in
-// connectors.go, docs.go, findings.go, changes.go and attention.go.
+// Package mcp exposes a Model Context Protocol server over the existing
+// store/RBAC layer, for a local agent on the same host (issues #277, #518).
+// Every tool is a read except propose_doc_edit (proposals.go), which only
+// stores a pending proposal a human must approve over REST and never edits a
+// doc itself. Because /mcp is mounted behind auth.TreatAsSafeMethod, a tool
+// that writes must enforce API-key scope and RBAC itself.
 package mcp
 
 import (
@@ -30,9 +32,9 @@ type Deps struct {
 	Embed    *ai.EmbedRegistry
 }
 
-// newMCPServer builds the MCP server with all five read-only tools
-// registered. Split out from NewHTTPHandler so tests can drive it directly
-// through an in-process client instead of a real HTTP round trip.
+// newMCPServer builds the MCP server with every tool registered. Split out
+// from NewHTTPHandler so tests can drive it directly through an in-process
+// client instead of a real HTTP round trip.
 func newMCPServer(d Deps) *mcpserver.MCPServer {
 	s := mcpserver.NewMCPServer("wiselabz-lab", "1.0.0",
 		mcpserver.WithToolCapabilities(false),
@@ -40,6 +42,11 @@ func newMCPServer(d Deps) *mcpserver.MCPServer {
 
 	registerListConnectors(s, d)
 	registerSearchDocs(s, d)
+	registerSearch(s, d)
+	registerTopologyPath(s, d)
+	registerListRunbooks(s, d)
+	registerGetRunbook(s, d)
+	registerProposeDocEdit(s, d)
 	registerListFindings(s, d)
 	registerListChanges(s, d)
 	registerListAttentionItems(s, d)

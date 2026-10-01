@@ -1796,6 +1796,66 @@ paths:
       responses:
         '200':
           description: OK
+  /docs/edit-proposals:
+    get:
+      tags: [docs]
+      summary: Doc edit proposals the caller can review (operator on the doc's connector; instance admin for lab-wide docs)
+      description: >
+        Proposals are created by the MCP `propose_doc_edit` tool and never applied until approved.
+      parameters:
+        - name: status
+          in: query
+          required: false
+          description: Defaults to pending.
+          schema: { type: string, enum: [pending, approved, rejected, all] }
+        - { $ref: '#/components/parameters/Page' }
+        - { $ref: '#/components/parameters/PageSize' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DocEditProposalPage' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+  /docs/edit-proposals/{proposalId}/approve:
+    post:
+      tags: [docs]
+      summary: Approve a proposal, applying it as a new doc version (operator)
+      parameters: [{ $ref: '#/components/parameters/ProposalId' }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DocEditProposal' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: >
+            Either the proposal was already reviewed (error body), or the doc changed since the
+            proposal's base version (body is the current Doc; the proposal stays pending).
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - { $ref: '#/components/schemas/Doc' }
+                  - { $ref: '#/components/schemas/Error' }
+  /docs/edit-proposals/{proposalId}/reject:
+    post:
+      tags: [docs]
+      summary: Reject a proposal without changing the doc (operator)
+      parameters: [{ $ref: '#/components/parameters/ProposalId' }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DocEditProposal' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Proposal already reviewed
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
   /docs/template-schema:
     get:
       tags: [docs]
@@ -2241,6 +2301,22 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Alert' }
+  /alerts/{alertId}/draft-runbook:
+    post:
+      tags: [alerts]
+      summary: Draft a runbook from an alert (operator; deterministic template, nothing is persisted)
+      description: >
+        Builds a starting-point runbook from the alert, its linked change and any runbook already
+        bound to the target. No AI is involved, so this works with the AI module disabled.
+      parameters: [{ $ref: '#/components/parameters/AlertId' }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RunbookDraft' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
   /alerts/bulk-snooze:
     post:
       tags: [alerts]
@@ -3440,6 +3516,7 @@ components:
     AlertId: { name: alertId, in: path, required: true, schema: { type: string } }
     RunbookId: { name: runbookId, in: path, required: true, schema: { type: string } }
     RunbookStepId: { name: stepId, in: path, required: true, schema: { type: string } }
+    ProposalId: { name: proposalId, in: path, required: true, schema: { type: string } }
     FindingId: { name: findingId, in: path, required: true, schema: { type: string } }
     ReportDefinitionId: { name: reportDefinitionId, in: path, required: true, schema: { type: string } }
     ReportId: { name: reportId, in: path, required: true, schema: { type: string } }
@@ -4358,6 +4435,41 @@ components:
         total: { type: integer }
         page: { type: integer }
         pageSize: { type: integer }
+    DocEditProposal:
+      type: object
+      required: [id, docId, docTitle, baseVersion, content, summary, authorId, status, createdAt]
+      properties:
+        id: { type: string }
+        docId: { type: string }
+        docTitle: { type: string }
+        serviceId: { type: string, description: Empty for lab-wide docs }
+        baseVersion: { type: integer, description: Doc version the proposal was written against }
+        content: { type: string, description: Proposed replacement body }
+        summary: { type: string }
+        authorId: { type: string }
+        status: { type: string, enum: [pending, approved, rejected] }
+        reviewerId: { type: string }
+        reviewedAt: { type: string, format: date-time }
+        createdAt: { type: string, format: date-time }
+    DocEditProposalPage:
+      type: object
+      required: [items, total, page, pageSize]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/DocEditProposal' }
+        total: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
+    RunbookDraft:
+      type: object
+      required: [title, body, targetType, targetValue]
+      properties:
+        title: { type: string }
+        body: { type: string, description: Markdown template built from the alert and linked change }
+        targetType: { type: string, enum: [change_type, alert_severity] }
+        targetValue: { type: string }
+        existingRunbookId: { type: string, description: Set when a runbook is already bound to the suggested target }
     GenerateResult:
       type: object
       required: [docId, title, content]
