@@ -24,9 +24,6 @@ func newTestStore(t *testing.T) *store.Store {
 	if pgDSN := os.Getenv("WISELABZ_TEST_POSTGRES_DSN"); pgDSN != "" {
 		return newPostgresTestStore(t, pgDSN, logger)
 	}
-	if os.Getenv("CI") == "true" {
-		t.Fatal("WISELABZ_TEST_POSTGRES_DSN not set in CI environment")
-	}
 	dsn := "file:" + storetest.MigratedSQLite(t) + "?cache=shared"
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {

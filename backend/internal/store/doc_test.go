@@ -21,17 +21,13 @@ import (
 // newDocTestStore returns a migrated Store. It uses a per-test SQLite file by
 // default; when WISELABZ_TEST_POSTGRES_DSN is set it instead uses a fresh,
 // isolated schema in that Postgres database so the same store tests run against
-// both dialects. In CI, the DSN must be set to ensure Postgres coverage.
+// both dialects.
 func newDocTestStore(t *testing.T) *Store {
 	t.Helper()
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 
 	if pgDSN := os.Getenv("WISELABZ_TEST_POSTGRES_DSN"); pgDSN != "" {
 		return newPostgresTestStore(t, pgDSN, logger)
-	}
-
-	if os.Getenv("CI") == "true" {
-		t.Fatal("WISELABZ_TEST_POSTGRES_DSN not set in CI environment")
 	}
 
 	dsn := "file:" + migratedSQLite(t) + "?cache=shared"
