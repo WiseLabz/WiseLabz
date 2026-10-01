@@ -6,15 +6,18 @@
  *
  * OpenAPI spec version: 0.1.0
  */
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import type {
   DataTag,
   DefinedInitialDataOptions,
   DefinedUseQueryResult,
+  MutationFunction,
   QueryClient,
   QueryFunction,
   QueryKey,
   UndefinedInitialDataOptions,
+  UseMutationOptions,
+  UseMutationResult,
   UseQueryOptions,
   UseQueryResult,
 } from '@tanstack/react-query';
@@ -163,7 +166,7 @@ export function useGetAuthConfig<
 }
 
 /**
- * Cannot create/edit OIDC providers or touch any credential. Accepts only local-login enablement and token lifetimes.
+ * Cannot create/edit OIDC providers or touch any credential. Accepts only local-login enablement and token lifetimes. When `stepUpForDestructive` is enabled, requires an `X-Elevation-Token` for action `authConfig.update`.
  * @summary Update mutable auth settings — operator (toggles + token TTLs only)
  */
 export const putAuthConfig = (
@@ -183,112 +186,73 @@ export const putAuthConfig = (
   );
 };
 
-export const getPutAuthConfigQueryKey = (authSettingsUpdate?: BodyType<AuthSettingsUpdate>) => {
-  return ['PUT', `/auth/config`, authSettingsUpdate] as const;
-};
+export const getPutAuthConfigMutationKey = () => ['putAuthConfig'] as const;
 
-export const getPutAuthConfigQueryOptions = <
-  TData = Awaited<ReturnType<typeof putAuthConfig>>,
+export const getPutAuthConfigMutationOptions = <
   TError = ErrorType<ForbiddenResponse>,
->(
-  authSettingsUpdate: BodyType<AuthSettingsUpdate>,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof putAuthConfig>>, TError, TData>>;
-    request?: SecondParameter<typeof customInstance>;
-  }
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
-
-  const queryKey = queryOptions?.queryKey ?? getPutAuthConfigQueryKey(authSettingsUpdate);
-
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof putAuthConfig>>> = ({ signal }) =>
-    putAuthConfig(authSettingsUpdate, requestOptions, signal);
-
-  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof putAuthConfig>>,
     TError,
-    TData
-  > & { queryKey: DataTag<QueryKey, TData, TError> };
+    PutAuthConfigMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof putAuthConfig>>,
+  TError,
+  PutAuthConfigMutationVariables,
+  TContext
+> => {
+  const mutationKey = getPutAuthConfigMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof putAuthConfig>>,
+    PutAuthConfigMutationVariables
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return putAuthConfig(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type PutAuthConfigQueryResult = NonNullable<Awaited<ReturnType<typeof putAuthConfig>>>;
-export type PutAuthConfigQueryError = ErrorType<ForbiddenResponse>;
+export type PutAuthConfigMutationResult = NonNullable<Awaited<ReturnType<typeof putAuthConfig>>>;
+export type PutAuthConfigMutationBody = BodyType<AuthSettingsUpdate>;
+export type PutAuthConfigMutationError = ErrorType<ForbiddenResponse>;
+export type PutAuthConfigMutationVariables = { data: BodyType<AuthSettingsUpdate> };
 
-export function usePutAuthConfig<
-  TData = Awaited<ReturnType<typeof putAuthConfig>>,
-  TError = ErrorType<ForbiddenResponse>,
->(
-  authSettingsUpdate: BodyType<AuthSettingsUpdate>,
-  options: {
-    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof putAuthConfig>>, TError, TData>> &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof putAuthConfig>>,
-          TError,
-          Awaited<ReturnType<typeof putAuthConfig>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePutAuthConfig<
-  TData = Awaited<ReturnType<typeof putAuthConfig>>,
-  TError = ErrorType<ForbiddenResponse>,
->(
-  authSettingsUpdate: BodyType<AuthSettingsUpdate>,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof putAuthConfig>>, TError, TData>> &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof putAuthConfig>>,
-          TError,
-          Awaited<ReturnType<typeof putAuthConfig>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePutAuthConfig<
-  TData = Awaited<ReturnType<typeof putAuthConfig>>,
-  TError = ErrorType<ForbiddenResponse>,
->(
-  authSettingsUpdate: BodyType<AuthSettingsUpdate>,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof putAuthConfig>>, TError, TData>>;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
  * @summary Update mutable auth settings — operator (toggles + token TTLs only)
  */
-
-export function usePutAuthConfig<
-  TData = Awaited<ReturnType<typeof putAuthConfig>>,
-  TError = ErrorType<ForbiddenResponse>,
->(
-  authSettingsUpdate: BodyType<AuthSettingsUpdate>,
+export const usePutAuthConfig = <TError = ErrorType<ForbiddenResponse>, TContext = unknown>(
   options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof putAuthConfig>>, TError, TData>>;
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof putAuthConfig>>,
+      TError,
+      PutAuthConfigMutationVariables,
+      TContext
+    >;
     request?: SecondParameter<typeof customInstance>;
   },
   queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getPutAuthConfigQueryOptions(authSettingsUpdate, options);
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
+): UseMutationResult<
+  Awaited<ReturnType<typeof putAuthConfig>>,
+  TError,
+  PutAuthConfigMutationVariables,
+  TContext
+> => {
+  return useMutation(getPutAuthConfigMutationOptions(options), queryClient);
+};
 /**
- * The only per-provider mutation exposed. Persists an enable/disable flag in the app DB; the provider definition itself stays in config/env.
+ * The only per-provider mutation exposed. Persists an enable/disable flag in the app DB; the provider definition itself stays in config/env. When `stepUpForDestructive` is enabled, requires an `X-Elevation-Token` for action `authProvider.toggle`, issued with the provider ID as `target`.
  * @summary Enable/disable a file-defined OIDC provider — operator
  */
 export const putAuthProvidersProviderIdEnabled = (
@@ -309,154 +273,83 @@ export const putAuthProvidersProviderIdEnabled = (
   );
 };
 
-export const getPutAuthProvidersProviderIdEnabledQueryKey = (
-  providerId: string,
-  putAuthProvidersProviderIdEnabledBody?: BodyType<PutAuthProvidersProviderIdEnabledBody>
-) => {
-  return [
-    'PUT',
-    `/auth/providers/${providerId}/enabled`,
-    putAuthProvidersProviderIdEnabledBody,
-  ] as const;
-};
+export const getPutAuthProvidersProviderIdEnabledMutationKey = () =>
+  ['putAuthProvidersProviderIdEnabled'] as const;
 
-export const getPutAuthProvidersProviderIdEnabledQueryOptions = <
-  TData = Awaited<ReturnType<typeof putAuthProvidersProviderIdEnabled>>,
+export const getPutAuthProvidersProviderIdEnabledMutationOptions = <
   TError = ErrorType<ForbiddenResponse | NotFoundResponse>,
->(
-  providerId: string,
-  putAuthProvidersProviderIdEnabledBody: BodyType<PutAuthProvidersProviderIdEnabledBody>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof putAuthProvidersProviderIdEnabled>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  }
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
-
-  const queryKey =
-    queryOptions?.queryKey ??
-    getPutAuthProvidersProviderIdEnabledQueryKey(providerId, putAuthProvidersProviderIdEnabledBody);
-
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof putAuthProvidersProviderIdEnabled>>> = ({
-    signal,
-  }) =>
-    putAuthProvidersProviderIdEnabled(
-      providerId,
-      putAuthProvidersProviderIdEnabledBody,
-      requestOptions,
-      signal
-    );
-
-  return {
-    queryKey,
-    queryFn,
-    enabled: providerId !== null && providerId !== undefined,
-    ...queryOptions,
-  } as UseQueryOptions<
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof putAuthProvidersProviderIdEnabled>>,
     TError,
-    TData
-  > & { queryKey: DataTag<QueryKey, TData, TError> };
+    PutAuthProvidersProviderIdEnabledMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof putAuthProvidersProviderIdEnabled>>,
+  TError,
+  PutAuthProvidersProviderIdEnabledMutationVariables,
+  TContext
+> => {
+  const mutationKey = getPutAuthProvidersProviderIdEnabledMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof putAuthProvidersProviderIdEnabled>>,
+    PutAuthProvidersProviderIdEnabledMutationVariables
+  > = (props) => {
+    const { providerId, data } = props ?? {};
+
+    return putAuthProvidersProviderIdEnabled(providerId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type PutAuthProvidersProviderIdEnabledQueryResult = NonNullable<
+export type PutAuthProvidersProviderIdEnabledMutationResult = NonNullable<
   Awaited<ReturnType<typeof putAuthProvidersProviderIdEnabled>>
 >;
-export type PutAuthProvidersProviderIdEnabledQueryError = ErrorType<
+export type PutAuthProvidersProviderIdEnabledMutationBody =
+  BodyType<PutAuthProvidersProviderIdEnabledBody>;
+export type PutAuthProvidersProviderIdEnabledMutationError = ErrorType<
   ForbiddenResponse | NotFoundResponse
 >;
+export type PutAuthProvidersProviderIdEnabledMutationVariables = {
+  providerId: string;
+  data: BodyType<PutAuthProvidersProviderIdEnabledBody>;
+};
 
-export function usePutAuthProvidersProviderIdEnabled<
-  TData = Awaited<ReturnType<typeof putAuthProvidersProviderIdEnabled>>,
-  TError = ErrorType<ForbiddenResponse | NotFoundResponse>,
->(
-  providerId: string,
-  putAuthProvidersProviderIdEnabledBody: BodyType<PutAuthProvidersProviderIdEnabledBody>,
-  options: {
-    query: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof putAuthProvidersProviderIdEnabled>>, TError, TData>
-    > &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof putAuthProvidersProviderIdEnabled>>,
-          TError,
-          Awaited<ReturnType<typeof putAuthProvidersProviderIdEnabled>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePutAuthProvidersProviderIdEnabled<
-  TData = Awaited<ReturnType<typeof putAuthProvidersProviderIdEnabled>>,
-  TError = ErrorType<ForbiddenResponse | NotFoundResponse>,
->(
-  providerId: string,
-  putAuthProvidersProviderIdEnabledBody: BodyType<PutAuthProvidersProviderIdEnabledBody>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof putAuthProvidersProviderIdEnabled>>, TError, TData>
-    > &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof putAuthProvidersProviderIdEnabled>>,
-          TError,
-          Awaited<ReturnType<typeof putAuthProvidersProviderIdEnabled>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePutAuthProvidersProviderIdEnabled<
-  TData = Awaited<ReturnType<typeof putAuthProvidersProviderIdEnabled>>,
-  TError = ErrorType<ForbiddenResponse | NotFoundResponse>,
->(
-  providerId: string,
-  putAuthProvidersProviderIdEnabledBody: BodyType<PutAuthProvidersProviderIdEnabledBody>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof putAuthProvidersProviderIdEnabled>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
  * @summary Enable/disable a file-defined OIDC provider — operator
  */
-
-export function usePutAuthProvidersProviderIdEnabled<
-  TData = Awaited<ReturnType<typeof putAuthProvidersProviderIdEnabled>>,
+export const usePutAuthProvidersProviderIdEnabled = <
   TError = ErrorType<ForbiddenResponse | NotFoundResponse>,
+  TContext = unknown,
 >(
-  providerId: string,
-  putAuthProvidersProviderIdEnabledBody: BodyType<PutAuthProvidersProviderIdEnabledBody>,
   options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof putAuthProvidersProviderIdEnabled>>, TError, TData>
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof putAuthProvidersProviderIdEnabled>>,
+      TError,
+      PutAuthProvidersProviderIdEnabledMutationVariables,
+      TContext
     >;
     request?: SecondParameter<typeof customInstance>;
   },
   queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getPutAuthProvidersProviderIdEnabledQueryOptions(
-    providerId,
-    putAuthProvidersProviderIdEnabledBody,
-    options
-  );
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
+): UseMutationResult<
+  Awaited<ReturnType<typeof putAuthProvidersProviderIdEnabled>>,
+  TError,
+  PutAuthProvidersProviderIdEnabledMutationVariables,
+  TContext
+> => {
+  return useMutation(getPutAuthProvidersProviderIdEnabledMutationOptions(options), queryClient);
+};
 /**
  * @summary AI module config — admin
  */
@@ -584,110 +477,71 @@ export const putAiConfig = (
   );
 };
 
-export const getPutAiConfigQueryKey = (aiConfig?: BodyType<AiConfig>) => {
-  return ['PUT', `/ai/config`, aiConfig] as const;
-};
+export const getPutAiConfigMutationKey = () => ['putAiConfig'] as const;
 
-export const getPutAiConfigQueryOptions = <
-  TData = Awaited<ReturnType<typeof putAiConfig>>,
+export const getPutAiConfigMutationOptions = <
   TError = ErrorType<unknown>,
->(
-  aiConfig: BodyType<AiConfig>,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof putAiConfig>>, TError, TData>>;
-    request?: SecondParameter<typeof customInstance>;
-  }
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
-
-  const queryKey = queryOptions?.queryKey ?? getPutAiConfigQueryKey(aiConfig);
-
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof putAiConfig>>> = ({ signal }) =>
-    putAiConfig(aiConfig, requestOptions, signal);
-
-  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof putAiConfig>>,
     TError,
-    TData
-  > & { queryKey: DataTag<QueryKey, TData, TError> };
+    PutAiConfigMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof putAiConfig>>,
+  TError,
+  PutAiConfigMutationVariables,
+  TContext
+> => {
+  const mutationKey = getPutAiConfigMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof putAiConfig>>,
+    PutAiConfigMutationVariables
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return putAiConfig(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type PutAiConfigQueryResult = NonNullable<Awaited<ReturnType<typeof putAiConfig>>>;
-export type PutAiConfigQueryError = ErrorType<unknown>;
+export type PutAiConfigMutationResult = NonNullable<Awaited<ReturnType<typeof putAiConfig>>>;
+export type PutAiConfigMutationBody = BodyType<AiConfig>;
+export type PutAiConfigMutationError = ErrorType<unknown>;
+export type PutAiConfigMutationVariables = { data: BodyType<AiConfig> };
 
-export function usePutAiConfig<
-  TData = Awaited<ReturnType<typeof putAiConfig>>,
-  TError = ErrorType<unknown>,
->(
-  aiConfig: BodyType<AiConfig>,
-  options: {
-    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof putAiConfig>>, TError, TData>> &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof putAiConfig>>,
-          TError,
-          Awaited<ReturnType<typeof putAiConfig>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePutAiConfig<
-  TData = Awaited<ReturnType<typeof putAiConfig>>,
-  TError = ErrorType<unknown>,
->(
-  aiConfig: BodyType<AiConfig>,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof putAiConfig>>, TError, TData>> &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof putAiConfig>>,
-          TError,
-          Awaited<ReturnType<typeof putAiConfig>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePutAiConfig<
-  TData = Awaited<ReturnType<typeof putAiConfig>>,
-  TError = ErrorType<unknown>,
->(
-  aiConfig: BodyType<AiConfig>,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof putAiConfig>>, TError, TData>>;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
  * @summary Update AI module config — admin
  */
-
-export function usePutAiConfig<
-  TData = Awaited<ReturnType<typeof putAiConfig>>,
-  TError = ErrorType<unknown>,
->(
-  aiConfig: BodyType<AiConfig>,
+export const usePutAiConfig = <TError = ErrorType<unknown>, TContext = unknown>(
   options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof putAiConfig>>, TError, TData>>;
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof putAiConfig>>,
+      TError,
+      PutAiConfigMutationVariables,
+      TContext
+    >;
     request?: SecondParameter<typeof customInstance>;
   },
   queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getPutAiConfigQueryOptions(aiConfig, options);
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
+): UseMutationResult<
+  Awaited<ReturnType<typeof putAiConfig>>,
+  TError,
+  PutAiConfigMutationVariables,
+  TContext
+> => {
+  return useMutation(getPutAiConfigMutationOptions(options), queryClient);
+};
 /**
  * @summary Test the AI provider connection — admin
  */
@@ -698,103 +552,57 @@ export const postAiConfigTest = (
   return customInstance<TestResult>({ url: `/ai/config/test`, method: 'POST', signal }, options);
 };
 
-export const getPostAiConfigTestQueryKey = () => {
-  return ['POST', `/ai/config/test`] as const;
-};
+export const getPostAiConfigTestMutationKey = () => ['postAiConfigTest'] as const;
 
-export const getPostAiConfigTestQueryOptions = <
-  TData = Awaited<ReturnType<typeof postAiConfigTest>>,
+export const getPostAiConfigTestMutationOptions = <
   TError = ErrorType<unknown>,
+  TContext = unknown,
 >(options?: {
-  query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof postAiConfigTest>>, TError, TData>>;
-  request?: SecondParameter<typeof customInstance>;
-}) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
-
-  const queryKey = queryOptions?.queryKey ?? getPostAiConfigTestQueryKey();
-
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof postAiConfigTest>>> = ({ signal }) =>
-    postAiConfigTest(requestOptions, signal);
-
-  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+  mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof postAiConfigTest>>,
     TError,
-    TData
-  > & { queryKey: DataTag<QueryKey, TData, TError> };
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<Awaited<ReturnType<typeof postAiConfigTest>>, TError, void, TContext> => {
+  const mutationKey = getPostAiConfigTestMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<Awaited<ReturnType<typeof postAiConfigTest>>, void> = () => {
+    return postAiConfigTest(requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type PostAiConfigTestQueryResult = NonNullable<Awaited<ReturnType<typeof postAiConfigTest>>>;
-export type PostAiConfigTestQueryError = ErrorType<unknown>;
+export type PostAiConfigTestMutationResult = NonNullable<
+  Awaited<ReturnType<typeof postAiConfigTest>>
+>;
 
-export function usePostAiConfigTest<
-  TData = Awaited<ReturnType<typeof postAiConfigTest>>,
-  TError = ErrorType<unknown>,
->(
-  options: {
-    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof postAiConfigTest>>, TError, TData>> &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postAiConfigTest>>,
-          TError,
-          Awaited<ReturnType<typeof postAiConfigTest>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostAiConfigTest<
-  TData = Awaited<ReturnType<typeof postAiConfigTest>>,
-  TError = ErrorType<unknown>,
->(
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof postAiConfigTest>>, TError, TData>> &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postAiConfigTest>>,
-          TError,
-          Awaited<ReturnType<typeof postAiConfigTest>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostAiConfigTest<
-  TData = Awaited<ReturnType<typeof postAiConfigTest>>,
-  TError = ErrorType<unknown>,
->(
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof postAiConfigTest>>, TError, TData>>;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export type PostAiConfigTestMutationError = ErrorType<unknown>;
+
 /**
  * @summary Test the AI provider connection — admin
  */
-
-export function usePostAiConfigTest<
-  TData = Awaited<ReturnType<typeof postAiConfigTest>>,
-  TError = ErrorType<unknown>,
->(
+export const usePostAiConfigTest = <TError = ErrorType<unknown>, TContext = unknown>(
   options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof postAiConfigTest>>, TError, TData>>;
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof postAiConfigTest>>,
+      TError,
+      void,
+      TContext
+    >;
     request?: SecondParameter<typeof customInstance>;
   },
   queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getPostAiConfigTestQueryOptions(options);
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
+): UseMutationResult<Awaited<ReturnType<typeof postAiConfigTest>>, TError, void, TContext> => {
+  return useMutation(getPostAiConfigTestMutationOptions(options), queryClient);
+};
 /**
  * @summary Ordered fallback providers, tried in order after the primary provider fails — admin
  */
@@ -938,126 +746,79 @@ export const putAiConfigFallbackProviders = (
   );
 };
 
-export const getPutAiConfigFallbackProvidersQueryKey = (
-  aiFallbackProvider?: BodyType<AiFallbackProvider[]>
-) => {
-  return ['PUT', `/ai/config/fallback-providers`, aiFallbackProvider] as const;
-};
+export const getPutAiConfigFallbackProvidersMutationKey = () =>
+  ['putAiConfigFallbackProviders'] as const;
 
-export const getPutAiConfigFallbackProvidersQueryOptions = <
-  TData = Awaited<ReturnType<typeof putAiConfigFallbackProviders>>,
+export const getPutAiConfigFallbackProvidersMutationOptions = <
   TError = ErrorType<BadRequestResponse>,
->(
-  aiFallbackProvider: BodyType<AiFallbackProvider[]>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof putAiConfigFallbackProviders>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  }
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
-
-  const queryKey =
-    queryOptions?.queryKey ?? getPutAiConfigFallbackProvidersQueryKey(aiFallbackProvider);
-
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof putAiConfigFallbackProviders>>> = ({
-    signal,
-  }) => putAiConfigFallbackProviders(aiFallbackProvider, requestOptions, signal);
-
-  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof putAiConfigFallbackProviders>>,
     TError,
-    TData
-  > & { queryKey: DataTag<QueryKey, TData, TError> };
+    PutAiConfigFallbackProvidersMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof putAiConfigFallbackProviders>>,
+  TError,
+  PutAiConfigFallbackProvidersMutationVariables,
+  TContext
+> => {
+  const mutationKey = getPutAiConfigFallbackProvidersMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof putAiConfigFallbackProviders>>,
+    PutAiConfigFallbackProvidersMutationVariables
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return putAiConfigFallbackProviders(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type PutAiConfigFallbackProvidersQueryResult = NonNullable<
+export type PutAiConfigFallbackProvidersMutationResult = NonNullable<
   Awaited<ReturnType<typeof putAiConfigFallbackProviders>>
 >;
-export type PutAiConfigFallbackProvidersQueryError = ErrorType<BadRequestResponse>;
+export type PutAiConfigFallbackProvidersMutationBody = BodyType<AiFallbackProvider[]>;
+export type PutAiConfigFallbackProvidersMutationError = ErrorType<BadRequestResponse>;
+export type PutAiConfigFallbackProvidersMutationVariables = {
+  data: BodyType<AiFallbackProvider[]>;
+};
 
-export function usePutAiConfigFallbackProviders<
-  TData = Awaited<ReturnType<typeof putAiConfigFallbackProviders>>,
-  TError = ErrorType<BadRequestResponse>,
->(
-  aiFallbackProvider: BodyType<AiFallbackProvider[]>,
-  options: {
-    query: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof putAiConfigFallbackProviders>>, TError, TData>
-    > &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof putAiConfigFallbackProviders>>,
-          TError,
-          Awaited<ReturnType<typeof putAiConfigFallbackProviders>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePutAiConfigFallbackProviders<
-  TData = Awaited<ReturnType<typeof putAiConfigFallbackProviders>>,
-  TError = ErrorType<BadRequestResponse>,
->(
-  aiFallbackProvider: BodyType<AiFallbackProvider[]>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof putAiConfigFallbackProviders>>, TError, TData>
-    > &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof putAiConfigFallbackProviders>>,
-          TError,
-          Awaited<ReturnType<typeof putAiConfigFallbackProviders>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePutAiConfigFallbackProviders<
-  TData = Awaited<ReturnType<typeof putAiConfigFallbackProviders>>,
-  TError = ErrorType<BadRequestResponse>,
->(
-  aiFallbackProvider: BodyType<AiFallbackProvider[]>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof putAiConfigFallbackProviders>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
  * @summary Replace the whole ordered fallback provider list — admin
  */
-
-export function usePutAiConfigFallbackProviders<
-  TData = Awaited<ReturnType<typeof putAiConfigFallbackProviders>>,
+export const usePutAiConfigFallbackProviders = <
   TError = ErrorType<BadRequestResponse>,
+  TContext = unknown,
 >(
-  aiFallbackProvider: BodyType<AiFallbackProvider[]>,
   options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof putAiConfigFallbackProviders>>, TError, TData>
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof putAiConfigFallbackProviders>>,
+      TError,
+      PutAiConfigFallbackProvidersMutationVariables,
+      TContext
     >;
     request?: SecondParameter<typeof customInstance>;
   },
   queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getPutAiConfigFallbackProvidersQueryOptions(aiFallbackProvider, options);
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
+): UseMutationResult<
+  Awaited<ReturnType<typeof putAiConfigFallbackProviders>>,
+  TError,
+  PutAiConfigFallbackProvidersMutationVariables,
+  TContext
+> => {
+  return useMutation(getPutAiConfigFallbackProvidersMutationOptions(options), queryClient);
+};
 /**
  * @summary Notification channels + event×channel routing matrix — admin
  */
@@ -1200,124 +961,73 @@ export const putNotificationsConfig = (
   );
 };
 
-export const getPutNotificationsConfigQueryKey = (
-  notificationConfig?: BodyType<NotificationConfig>
-) => {
-  return ['PUT', `/notifications/config`, notificationConfig] as const;
-};
+export const getPutNotificationsConfigMutationKey = () => ['putNotificationsConfig'] as const;
 
-export const getPutNotificationsConfigQueryOptions = <
-  TData = Awaited<ReturnType<typeof putNotificationsConfig>>,
+export const getPutNotificationsConfigMutationOptions = <
   TError = ErrorType<unknown>,
->(
-  notificationConfig: BodyType<NotificationConfig>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof putNotificationsConfig>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  }
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
-
-  const queryKey = queryOptions?.queryKey ?? getPutNotificationsConfigQueryKey(notificationConfig);
-
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof putNotificationsConfig>>> = ({ signal }) =>
-    putNotificationsConfig(notificationConfig, requestOptions, signal);
-
-  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof putNotificationsConfig>>,
     TError,
-    TData
-  > & { queryKey: DataTag<QueryKey, TData, TError> };
+    PutNotificationsConfigMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof putNotificationsConfig>>,
+  TError,
+  PutNotificationsConfigMutationVariables,
+  TContext
+> => {
+  const mutationKey = getPutNotificationsConfigMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof putNotificationsConfig>>,
+    PutNotificationsConfigMutationVariables
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return putNotificationsConfig(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type PutNotificationsConfigQueryResult = NonNullable<
+export type PutNotificationsConfigMutationResult = NonNullable<
   Awaited<ReturnType<typeof putNotificationsConfig>>
 >;
-export type PutNotificationsConfigQueryError = ErrorType<unknown>;
+export type PutNotificationsConfigMutationBody = BodyType<NotificationConfig>;
+export type PutNotificationsConfigMutationError = ErrorType<unknown>;
+export type PutNotificationsConfigMutationVariables = { data: BodyType<NotificationConfig> };
 
-export function usePutNotificationsConfig<
-  TData = Awaited<ReturnType<typeof putNotificationsConfig>>,
-  TError = ErrorType<unknown>,
->(
-  notificationConfig: BodyType<NotificationConfig>,
-  options: {
-    query: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof putNotificationsConfig>>, TError, TData>
-    > &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof putNotificationsConfig>>,
-          TError,
-          Awaited<ReturnType<typeof putNotificationsConfig>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePutNotificationsConfig<
-  TData = Awaited<ReturnType<typeof putNotificationsConfig>>,
-  TError = ErrorType<unknown>,
->(
-  notificationConfig: BodyType<NotificationConfig>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof putNotificationsConfig>>, TError, TData>
-    > &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof putNotificationsConfig>>,
-          TError,
-          Awaited<ReturnType<typeof putNotificationsConfig>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePutNotificationsConfig<
-  TData = Awaited<ReturnType<typeof putNotificationsConfig>>,
-  TError = ErrorType<unknown>,
->(
-  notificationConfig: BodyType<NotificationConfig>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof putNotificationsConfig>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
  * @summary Update notification config — admin
  */
-
-export function usePutNotificationsConfig<
-  TData = Awaited<ReturnType<typeof putNotificationsConfig>>,
-  TError = ErrorType<unknown>,
->(
-  notificationConfig: BodyType<NotificationConfig>,
+export const usePutNotificationsConfig = <TError = ErrorType<unknown>, TContext = unknown>(
   options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof putNotificationsConfig>>, TError, TData>
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof putNotificationsConfig>>,
+      TError,
+      PutNotificationsConfigMutationVariables,
+      TContext
     >;
     request?: SecondParameter<typeof customInstance>;
   },
   queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getPutNotificationsConfigQueryOptions(notificationConfig, options);
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
+): UseMutationResult<
+  Awaited<ReturnType<typeof putNotificationsConfig>>,
+  TError,
+  PutNotificationsConfigMutationVariables,
+  TContext
+> => {
+  return useMutation(getPutNotificationsConfigMutationOptions(options), queryClient);
+};
 /**
  * @summary Send a test notification on a channel — admin
  */
@@ -1338,126 +1048,73 @@ export const postNotificationsConfigTest = (
   );
 };
 
-export const getPostNotificationsConfigTestQueryKey = (
-  postNotificationsConfigTestBody?: BodyType<PostNotificationsConfigTestBody>
-) => {
-  return ['POST', `/notifications/config/test`, postNotificationsConfigTestBody] as const;
-};
+export const getPostNotificationsConfigTestMutationKey = () =>
+  ['postNotificationsConfigTest'] as const;
 
-export const getPostNotificationsConfigTestQueryOptions = <
-  TData = Awaited<ReturnType<typeof postNotificationsConfigTest>>,
+export const getPostNotificationsConfigTestMutationOptions = <
   TError = ErrorType<unknown>,
->(
-  postNotificationsConfigTestBody: BodyType<PostNotificationsConfigTestBody>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postNotificationsConfigTest>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  }
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
-
-  const queryKey =
-    queryOptions?.queryKey ??
-    getPostNotificationsConfigTestQueryKey(postNotificationsConfigTestBody);
-
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof postNotificationsConfigTest>>> = ({
-    signal,
-  }) => postNotificationsConfigTest(postNotificationsConfigTestBody, requestOptions, signal);
-
-  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof postNotificationsConfigTest>>,
     TError,
-    TData
-  > & { queryKey: DataTag<QueryKey, TData, TError> };
+    PostNotificationsConfigTestMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof postNotificationsConfigTest>>,
+  TError,
+  PostNotificationsConfigTestMutationVariables,
+  TContext
+> => {
+  const mutationKey = getPostNotificationsConfigTestMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof postNotificationsConfigTest>>,
+    PostNotificationsConfigTestMutationVariables
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return postNotificationsConfigTest(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type PostNotificationsConfigTestQueryResult = NonNullable<
+export type PostNotificationsConfigTestMutationResult = NonNullable<
   Awaited<ReturnType<typeof postNotificationsConfigTest>>
 >;
-export type PostNotificationsConfigTestQueryError = ErrorType<unknown>;
+export type PostNotificationsConfigTestMutationBody = BodyType<PostNotificationsConfigTestBody>;
+export type PostNotificationsConfigTestMutationError = ErrorType<unknown>;
+export type PostNotificationsConfigTestMutationVariables = {
+  data: BodyType<PostNotificationsConfigTestBody>;
+};
 
-export function usePostNotificationsConfigTest<
-  TData = Awaited<ReturnType<typeof postNotificationsConfigTest>>,
-  TError = ErrorType<unknown>,
->(
-  postNotificationsConfigTestBody: BodyType<PostNotificationsConfigTestBody>,
-  options: {
-    query: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postNotificationsConfigTest>>, TError, TData>
-    > &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postNotificationsConfigTest>>,
-          TError,
-          Awaited<ReturnType<typeof postNotificationsConfigTest>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostNotificationsConfigTest<
-  TData = Awaited<ReturnType<typeof postNotificationsConfigTest>>,
-  TError = ErrorType<unknown>,
->(
-  postNotificationsConfigTestBody: BodyType<PostNotificationsConfigTestBody>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postNotificationsConfigTest>>, TError, TData>
-    > &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postNotificationsConfigTest>>,
-          TError,
-          Awaited<ReturnType<typeof postNotificationsConfigTest>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostNotificationsConfigTest<
-  TData = Awaited<ReturnType<typeof postNotificationsConfigTest>>,
-  TError = ErrorType<unknown>,
->(
-  postNotificationsConfigTestBody: BodyType<PostNotificationsConfigTestBody>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postNotificationsConfigTest>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
  * @summary Send a test notification on a channel — admin
  */
-
-export function usePostNotificationsConfigTest<
-  TData = Awaited<ReturnType<typeof postNotificationsConfigTest>>,
-  TError = ErrorType<unknown>,
->(
-  postNotificationsConfigTestBody: BodyType<PostNotificationsConfigTestBody>,
+export const usePostNotificationsConfigTest = <TError = ErrorType<unknown>, TContext = unknown>(
   options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postNotificationsConfigTest>>, TError, TData>
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof postNotificationsConfigTest>>,
+      TError,
+      PostNotificationsConfigTestMutationVariables,
+      TContext
     >;
     request?: SecondParameter<typeof customInstance>;
   },
   queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getPostNotificationsConfigTestQueryOptions(
-    postNotificationsConfigTestBody,
-    options
-  );
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
+): UseMutationResult<
+  Awaited<ReturnType<typeof postNotificationsConfigTest>>,
+  TError,
+  PostNotificationsConfigTestMutationVariables,
+  TContext
+> => {
+  return useMutation(getPostNotificationsConfigTestMutationOptions(options), queryClient);
+};

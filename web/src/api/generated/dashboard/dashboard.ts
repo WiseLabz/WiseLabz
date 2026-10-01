@@ -6,15 +6,18 @@
  *
  * OpenAPI spec version: 0.1.0
  */
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import type {
   DataTag,
   DefinedInitialDataOptions,
   DefinedUseQueryResult,
+  MutationFunction,
   QueryClient,
   QueryFunction,
   QueryKey,
   UndefinedInitialDataOptions,
+  UseMutationOptions,
+  UseMutationResult,
   UseQueryOptions,
   UseQueryResult,
 } from '@tanstack/react-query';
@@ -310,114 +313,73 @@ export const putDashboardLayout = (
   );
 };
 
-export const getPutDashboardLayoutQueryKey = (dashboardLayout?: BodyType<DashboardLayout>) => {
-  return ['PUT', `/dashboard/layout`, dashboardLayout] as const;
-};
+export const getPutDashboardLayoutMutationKey = () => ['putDashboardLayout'] as const;
 
-export const getPutDashboardLayoutQueryOptions = <
-  TData = Awaited<ReturnType<typeof putDashboardLayout>>,
+export const getPutDashboardLayoutMutationOptions = <
   TError = ErrorType<unknown>,
->(
-  dashboardLayout: BodyType<DashboardLayout>,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof putDashboardLayout>>, TError, TData>>;
-    request?: SecondParameter<typeof customInstance>;
-  }
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
-
-  const queryKey = queryOptions?.queryKey ?? getPutDashboardLayoutQueryKey(dashboardLayout);
-
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof putDashboardLayout>>> = ({ signal }) =>
-    putDashboardLayout(dashboardLayout, requestOptions, signal);
-
-  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof putDashboardLayout>>,
     TError,
-    TData
-  > & { queryKey: DataTag<QueryKey, TData, TError> };
+    PutDashboardLayoutMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof putDashboardLayout>>,
+  TError,
+  PutDashboardLayoutMutationVariables,
+  TContext
+> => {
+  const mutationKey = getPutDashboardLayoutMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof putDashboardLayout>>,
+    PutDashboardLayoutMutationVariables
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return putDashboardLayout(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type PutDashboardLayoutQueryResult = NonNullable<
+export type PutDashboardLayoutMutationResult = NonNullable<
   Awaited<ReturnType<typeof putDashboardLayout>>
 >;
-export type PutDashboardLayoutQueryError = ErrorType<unknown>;
+export type PutDashboardLayoutMutationBody = BodyType<DashboardLayout>;
+export type PutDashboardLayoutMutationError = ErrorType<unknown>;
+export type PutDashboardLayoutMutationVariables = { data: BodyType<DashboardLayout> };
 
-export function usePutDashboardLayout<
-  TData = Awaited<ReturnType<typeof putDashboardLayout>>,
-  TError = ErrorType<unknown>,
->(
-  dashboardLayout: BodyType<DashboardLayout>,
-  options: {
-    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof putDashboardLayout>>, TError, TData>> &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof putDashboardLayout>>,
-          TError,
-          Awaited<ReturnType<typeof putDashboardLayout>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePutDashboardLayout<
-  TData = Awaited<ReturnType<typeof putDashboardLayout>>,
-  TError = ErrorType<unknown>,
->(
-  dashboardLayout: BodyType<DashboardLayout>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof putDashboardLayout>>, TError, TData>
-    > &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof putDashboardLayout>>,
-          TError,
-          Awaited<ReturnType<typeof putDashboardLayout>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePutDashboardLayout<
-  TData = Awaited<ReturnType<typeof putDashboardLayout>>,
-  TError = ErrorType<unknown>,
->(
-  dashboardLayout: BodyType<DashboardLayout>,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof putDashboardLayout>>, TError, TData>>;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
  * @summary Persist current user's widget layout (per-user, §8.5)
  */
-
-export function usePutDashboardLayout<
-  TData = Awaited<ReturnType<typeof putDashboardLayout>>,
-  TError = ErrorType<unknown>,
->(
-  dashboardLayout: BodyType<DashboardLayout>,
+export const usePutDashboardLayout = <TError = ErrorType<unknown>, TContext = unknown>(
   options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof putDashboardLayout>>, TError, TData>>;
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof putDashboardLayout>>,
+      TError,
+      PutDashboardLayoutMutationVariables,
+      TContext
+    >;
     request?: SecondParameter<typeof customInstance>;
   },
   queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getPutDashboardLayoutQueryOptions(dashboardLayout, options);
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
+): UseMutationResult<
+  Awaited<ReturnType<typeof putDashboardLayout>>,
+  TError,
+  PutDashboardLayoutMutationVariables,
+  TContext
+> => {
+  return useMutation(getPutDashboardLayoutMutationOptions(options), queryClient);
+};
 /**
  * Retrieve the system-wide default dashboard layout configured by operators.
  * @summary Admin-default dashboard layout (operator)
@@ -563,126 +525,77 @@ export const putDashboardLayoutAdminDefault = (
   );
 };
 
-export const getPutDashboardLayoutAdminDefaultQueryKey = (
-  dashboardLayout?: BodyType<DashboardLayout>
-) => {
-  return ['PUT', `/dashboard/layout/admin-default`, dashboardLayout] as const;
-};
+export const getPutDashboardLayoutAdminDefaultMutationKey = () =>
+  ['putDashboardLayoutAdminDefault'] as const;
 
-export const getPutDashboardLayoutAdminDefaultQueryOptions = <
-  TData = Awaited<ReturnType<typeof putDashboardLayoutAdminDefault>>,
+export const getPutDashboardLayoutAdminDefaultMutationOptions = <
   TError = ErrorType<ForbiddenResponse>,
->(
-  dashboardLayout: BodyType<DashboardLayout>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof putDashboardLayoutAdminDefault>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  }
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
-
-  const queryKey =
-    queryOptions?.queryKey ?? getPutDashboardLayoutAdminDefaultQueryKey(dashboardLayout);
-
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof putDashboardLayoutAdminDefault>>> = ({
-    signal,
-  }) => putDashboardLayoutAdminDefault(dashboardLayout, requestOptions, signal);
-
-  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof putDashboardLayoutAdminDefault>>,
     TError,
-    TData
-  > & { queryKey: DataTag<QueryKey, TData, TError> };
+    PutDashboardLayoutAdminDefaultMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof putDashboardLayoutAdminDefault>>,
+  TError,
+  PutDashboardLayoutAdminDefaultMutationVariables,
+  TContext
+> => {
+  const mutationKey = getPutDashboardLayoutAdminDefaultMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof putDashboardLayoutAdminDefault>>,
+    PutDashboardLayoutAdminDefaultMutationVariables
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return putDashboardLayoutAdminDefault(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type PutDashboardLayoutAdminDefaultQueryResult = NonNullable<
+export type PutDashboardLayoutAdminDefaultMutationResult = NonNullable<
   Awaited<ReturnType<typeof putDashboardLayoutAdminDefault>>
 >;
-export type PutDashboardLayoutAdminDefaultQueryError = ErrorType<ForbiddenResponse>;
+export type PutDashboardLayoutAdminDefaultMutationBody = BodyType<DashboardLayout>;
+export type PutDashboardLayoutAdminDefaultMutationError = ErrorType<ForbiddenResponse>;
+export type PutDashboardLayoutAdminDefaultMutationVariables = { data: BodyType<DashboardLayout> };
 
-export function usePutDashboardLayoutAdminDefault<
-  TData = Awaited<ReturnType<typeof putDashboardLayoutAdminDefault>>,
-  TError = ErrorType<ForbiddenResponse>,
->(
-  dashboardLayout: BodyType<DashboardLayout>,
-  options: {
-    query: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof putDashboardLayoutAdminDefault>>, TError, TData>
-    > &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof putDashboardLayoutAdminDefault>>,
-          TError,
-          Awaited<ReturnType<typeof putDashboardLayoutAdminDefault>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePutDashboardLayoutAdminDefault<
-  TData = Awaited<ReturnType<typeof putDashboardLayoutAdminDefault>>,
-  TError = ErrorType<ForbiddenResponse>,
->(
-  dashboardLayout: BodyType<DashboardLayout>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof putDashboardLayoutAdminDefault>>, TError, TData>
-    > &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof putDashboardLayoutAdminDefault>>,
-          TError,
-          Awaited<ReturnType<typeof putDashboardLayoutAdminDefault>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePutDashboardLayoutAdminDefault<
-  TData = Awaited<ReturnType<typeof putDashboardLayoutAdminDefault>>,
-  TError = ErrorType<ForbiddenResponse>,
->(
-  dashboardLayout: BodyType<DashboardLayout>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof putDashboardLayoutAdminDefault>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
  * @summary Update admin-default dashboard layout (operator)
  */
-
-export function usePutDashboardLayoutAdminDefault<
-  TData = Awaited<ReturnType<typeof putDashboardLayoutAdminDefault>>,
+export const usePutDashboardLayoutAdminDefault = <
   TError = ErrorType<ForbiddenResponse>,
+  TContext = unknown,
 >(
-  dashboardLayout: BodyType<DashboardLayout>,
   options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof putDashboardLayoutAdminDefault>>, TError, TData>
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof putDashboardLayoutAdminDefault>>,
+      TError,
+      PutDashboardLayoutAdminDefaultMutationVariables,
+      TContext
     >;
     request?: SecondParameter<typeof customInstance>;
   },
   queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getPutDashboardLayoutAdminDefaultQueryOptions(dashboardLayout, options);
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
+): UseMutationResult<
+  Awaited<ReturnType<typeof putDashboardLayoutAdminDefault>>,
+  TError,
+  PutDashboardLayoutAdminDefaultMutationVariables,
+  TContext
+> => {
+  return useMutation(getPutDashboardLayoutAdminDefaultMutationOptions(options), queryClient);
+};
 /**
  * Overwrite the current user's layout with the system-wide admin default.
  * @summary Reset to admin-default dashboard layout
@@ -697,112 +610,67 @@ export const postDashboardLayoutReset = (
   );
 };
 
-export const getPostDashboardLayoutResetQueryKey = () => {
-  return ['POST', `/dashboard/layout/reset`] as const;
-};
+export const getPostDashboardLayoutResetMutationKey = () => ['postDashboardLayoutReset'] as const;
 
-export const getPostDashboardLayoutResetQueryOptions = <
-  TData = Awaited<ReturnType<typeof postDashboardLayoutReset>>,
+export const getPostDashboardLayoutResetMutationOptions = <
   TError = ErrorType<unknown>,
+  TContext = unknown,
 >(options?: {
-  query?: Partial<
-    UseQueryOptions<Awaited<ReturnType<typeof postDashboardLayoutReset>>, TError, TData>
-  >;
-  request?: SecondParameter<typeof customInstance>;
-}) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
-
-  const queryKey = queryOptions?.queryKey ?? getPostDashboardLayoutResetQueryKey();
-
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof postDashboardLayoutReset>>> = ({
-    signal,
-  }) => postDashboardLayoutReset(requestOptions, signal);
-
-  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+  mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof postDashboardLayoutReset>>,
     TError,
-    TData
-  > & { queryKey: DataTag<QueryKey, TData, TError> };
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof postDashboardLayoutReset>>,
+  TError,
+  void,
+  TContext
+> => {
+  const mutationKey = getPostDashboardLayoutResetMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof postDashboardLayoutReset>>,
+    void
+  > = () => {
+    return postDashboardLayoutReset(requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type PostDashboardLayoutResetQueryResult = NonNullable<
+export type PostDashboardLayoutResetMutationResult = NonNullable<
   Awaited<ReturnType<typeof postDashboardLayoutReset>>
 >;
-export type PostDashboardLayoutResetQueryError = ErrorType<unknown>;
 
-export function usePostDashboardLayoutReset<
-  TData = Awaited<ReturnType<typeof postDashboardLayoutReset>>,
-  TError = ErrorType<unknown>,
->(
-  options: {
-    query: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postDashboardLayoutReset>>, TError, TData>
-    > &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postDashboardLayoutReset>>,
-          TError,
-          Awaited<ReturnType<typeof postDashboardLayoutReset>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostDashboardLayoutReset<
-  TData = Awaited<ReturnType<typeof postDashboardLayoutReset>>,
-  TError = ErrorType<unknown>,
->(
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postDashboardLayoutReset>>, TError, TData>
-    > &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postDashboardLayoutReset>>,
-          TError,
-          Awaited<ReturnType<typeof postDashboardLayoutReset>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostDashboardLayoutReset<
-  TData = Awaited<ReturnType<typeof postDashboardLayoutReset>>,
-  TError = ErrorType<unknown>,
->(
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postDashboardLayoutReset>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export type PostDashboardLayoutResetMutationError = ErrorType<unknown>;
+
 /**
  * @summary Reset to admin-default dashboard layout
  */
-
-export function usePostDashboardLayoutReset<
-  TData = Awaited<ReturnType<typeof postDashboardLayoutReset>>,
-  TError = ErrorType<unknown>,
->(
+export const usePostDashboardLayoutReset = <TError = ErrorType<unknown>, TContext = unknown>(
   options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postDashboardLayoutReset>>, TError, TData>
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof postDashboardLayoutReset>>,
+      TError,
+      void,
+      TContext
     >;
     request?: SecondParameter<typeof customInstance>;
   },
   queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getPostDashboardLayoutResetQueryOptions(options);
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
+): UseMutationResult<
+  Awaited<ReturnType<typeof postDashboardLayoutReset>>,
+  TError,
+  void,
+  TContext
+> => {
+  return useMutation(getPostDashboardLayoutResetMutationOptions(options), queryClient);
+};

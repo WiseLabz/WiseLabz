@@ -30,6 +30,7 @@ func TestValidationErrorDetails(t *testing.T) {
 		path    string
 		body    any
 		details []httputil.FieldError
+		elevate string // step-up action the route demands before it validates
 	}{
 		{
 			name: "savedviews list surface", role: "viewer",
@@ -38,7 +39,7 @@ func TestValidationErrorDetails(t *testing.T) {
 		},
 		{
 			name: "apikeys create name", role: "viewer",
-			method: "POST", path: "/api/auth/api-keys", body: map[string]any{},
+			method: "POST", path: "/api/auth/api-keys", body: map[string]any{}, elevate: "apiKey.create",
 			details: []httputil.FieldError{{Field: "name", Msg: "is required"}},
 		},
 		{
@@ -90,7 +91,7 @@ func TestValidationErrorDetails(t *testing.T) {
 		},
 		{
 			name: "users create required fields", role: "operator",
-			method: "POST", path: "/api/users", body: map[string]any{},
+			method: "POST", path: "/api/users", body: map[string]any{}, elevate: "user.create",
 			details: []httputil.FieldError{
 				{Field: "username", Msg: "is required"},
 				{Field: "password", Msg: "is required"},
@@ -148,6 +149,13 @@ func TestValidationErrorDetails(t *testing.T) {
 			}
 
 			req := app.newRequest(t, tc.method, tc.path, tc.body, token)
+			if tc.elevate != "" {
+				claims, err := app.JWT.ValidateAccess(token)
+				if err != nil {
+					t.Fatalf("validate access token: %v", err)
+				}
+				req.Header.Set("X-Elevation-Token", app.elevationToken(t, claims.UserID, tc.elevate))
+			}
 			rec := app.serve(req)
 			if rec.Code != http.StatusBadRequest {
 				t.Fatalf("%s %s: got %d, want 400 (body: %s)", tc.method, tc.path, rec.Code, rec.Body.String())

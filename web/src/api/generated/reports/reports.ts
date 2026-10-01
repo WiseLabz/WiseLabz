@@ -6,15 +6,18 @@
  *
  * OpenAPI spec version: 0.1.0
  */
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import type {
   DataTag,
   DefinedInitialDataOptions,
   DefinedUseQueryResult,
+  MutationFunction,
   QueryClient,
   QueryFunction,
   QueryKey,
   UndefinedInitialDataOptions,
+  UseMutationOptions,
+  UseMutationResult,
   UseQueryOptions,
   UseQueryResult,
 } from '@tanstack/react-query';
@@ -193,125 +196,76 @@ export const postReportsDefinitions = (
   );
 };
 
-export const getPostReportsDefinitionsQueryKey = (
-  reportDefinitionInput?: BodyType<ReportDefinitionInput>
-) => {
-  return ['POST', `/reports/definitions`, reportDefinitionInput] as const;
-};
+export const getPostReportsDefinitionsMutationKey = () => ['postReportsDefinitions'] as const;
 
-export const getPostReportsDefinitionsQueryOptions = <
-  TData = Awaited<ReturnType<typeof postReportsDefinitions>>,
+export const getPostReportsDefinitionsMutationOptions = <
   TError = ErrorType<BadRequestResponse | ForbiddenResponse>,
->(
-  reportDefinitionInput: BodyType<ReportDefinitionInput>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postReportsDefinitions>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  }
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
-
-  const queryKey =
-    queryOptions?.queryKey ?? getPostReportsDefinitionsQueryKey(reportDefinitionInput);
-
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof postReportsDefinitions>>> = ({ signal }) =>
-    postReportsDefinitions(reportDefinitionInput, requestOptions, signal);
-
-  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof postReportsDefinitions>>,
     TError,
-    TData
-  > & { queryKey: DataTag<QueryKey, TData, TError> };
+    PostReportsDefinitionsMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof postReportsDefinitions>>,
+  TError,
+  PostReportsDefinitionsMutationVariables,
+  TContext
+> => {
+  const mutationKey = getPostReportsDefinitionsMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof postReportsDefinitions>>,
+    PostReportsDefinitionsMutationVariables
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return postReportsDefinitions(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type PostReportsDefinitionsQueryResult = NonNullable<
+export type PostReportsDefinitionsMutationResult = NonNullable<
   Awaited<ReturnType<typeof postReportsDefinitions>>
 >;
-export type PostReportsDefinitionsQueryError = ErrorType<BadRequestResponse | ForbiddenResponse>;
+export type PostReportsDefinitionsMutationBody = BodyType<ReportDefinitionInput>;
+export type PostReportsDefinitionsMutationError = ErrorType<BadRequestResponse | ForbiddenResponse>;
+export type PostReportsDefinitionsMutationVariables = { data: BodyType<ReportDefinitionInput> };
 
-export function usePostReportsDefinitions<
-  TData = Awaited<ReturnType<typeof postReportsDefinitions>>,
-  TError = ErrorType<BadRequestResponse | ForbiddenResponse>,
->(
-  reportDefinitionInput: BodyType<ReportDefinitionInput>,
-  options: {
-    query: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postReportsDefinitions>>, TError, TData>
-    > &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postReportsDefinitions>>,
-          TError,
-          Awaited<ReturnType<typeof postReportsDefinitions>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostReportsDefinitions<
-  TData = Awaited<ReturnType<typeof postReportsDefinitions>>,
-  TError = ErrorType<BadRequestResponse | ForbiddenResponse>,
->(
-  reportDefinitionInput: BodyType<ReportDefinitionInput>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postReportsDefinitions>>, TError, TData>
-    > &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postReportsDefinitions>>,
-          TError,
-          Awaited<ReturnType<typeof postReportsDefinitions>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostReportsDefinitions<
-  TData = Awaited<ReturnType<typeof postReportsDefinitions>>,
-  TError = ErrorType<BadRequestResponse | ForbiddenResponse>,
->(
-  reportDefinitionInput: BodyType<ReportDefinitionInput>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postReportsDefinitions>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
  * @summary Create a report definition (operator). Registers a cron job named `report:<slug>`. `slug` must be unique (code `slug_taken` otherwise); `cronExpr` is validated the same way as other scheduled jobs; `timezone` must be a valid IANA zone name (applied as a `CRON_TZ=` prefix on the cron expression). Audited as `report.definition.create`.
  */
-
-export function usePostReportsDefinitions<
-  TData = Awaited<ReturnType<typeof postReportsDefinitions>>,
+export const usePostReportsDefinitions = <
   TError = ErrorType<BadRequestResponse | ForbiddenResponse>,
+  TContext = unknown,
 >(
-  reportDefinitionInput: BodyType<ReportDefinitionInput>,
   options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postReportsDefinitions>>, TError, TData>
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof postReportsDefinitions>>,
+      TError,
+      PostReportsDefinitionsMutationVariables,
+      TContext
     >;
     request?: SecondParameter<typeof customInstance>;
   },
   queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getPostReportsDefinitionsQueryOptions(reportDefinitionInput, options);
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
+): UseMutationResult<
+  Awaited<ReturnType<typeof postReportsDefinitions>>,
+  TError,
+  PostReportsDefinitionsMutationVariables,
+  TContext
+> => {
+  return useMutation(getPostReportsDefinitionsMutationOptions(options), queryClient);
+};
 /**
  * @summary Update a report definition (operator). Re-registers the cron job if `cronExpr`/`timezone`/`enabled` changed. `slug` is immutable; a different value is rejected with `400` (code `slug_immutable`). Audited as `report.definition.update`.
  */
@@ -333,170 +287,85 @@ export const putReportsDefinitionsReportDefinitionId = (
   );
 };
 
-export const getPutReportsDefinitionsReportDefinitionIdQueryKey = (
-  reportDefinitionId: string,
-  reportDefinitionInput?: BodyType<ReportDefinitionInput>
-) => {
-  return ['PUT', `/reports/definitions/${reportDefinitionId}`, reportDefinitionInput] as const;
-};
+export const getPutReportsDefinitionsReportDefinitionIdMutationKey = () =>
+  ['putReportsDefinitionsReportDefinitionId'] as const;
 
-export const getPutReportsDefinitionsReportDefinitionIdQueryOptions = <
-  TData = Awaited<ReturnType<typeof putReportsDefinitionsReportDefinitionId>>,
+export const getPutReportsDefinitionsReportDefinitionIdMutationOptions = <
   TError = ErrorType<BadRequestResponse | ForbiddenResponse | NotFoundResponse>,
->(
-  reportDefinitionId: string,
-  reportDefinitionInput: BodyType<ReportDefinitionInput>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<
-        Awaited<ReturnType<typeof putReportsDefinitionsReportDefinitionId>>,
-        TError,
-        TData
-      >
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  }
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
-
-  const queryKey =
-    queryOptions?.queryKey ??
-    getPutReportsDefinitionsReportDefinitionIdQueryKey(reportDefinitionId, reportDefinitionInput);
-
-  const queryFn: QueryFunction<
-    Awaited<ReturnType<typeof putReportsDefinitionsReportDefinitionId>>
-  > = ({ signal }) =>
-    putReportsDefinitionsReportDefinitionId(
-      reportDefinitionId,
-      reportDefinitionInput,
-      requestOptions,
-      signal
-    );
-
-  return {
-    queryKey,
-    queryFn,
-    enabled: reportDefinitionId !== null && reportDefinitionId !== undefined,
-    ...queryOptions,
-  } as UseQueryOptions<
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof putReportsDefinitionsReportDefinitionId>>,
     TError,
-    TData
-  > & { queryKey: DataTag<QueryKey, TData, TError> };
+    PutReportsDefinitionsReportDefinitionIdMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof putReportsDefinitionsReportDefinitionId>>,
+  TError,
+  PutReportsDefinitionsReportDefinitionIdMutationVariables,
+  TContext
+> => {
+  const mutationKey = getPutReportsDefinitionsReportDefinitionIdMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof putReportsDefinitionsReportDefinitionId>>,
+    PutReportsDefinitionsReportDefinitionIdMutationVariables
+  > = (props) => {
+    const { reportDefinitionId, data } = props ?? {};
+
+    return putReportsDefinitionsReportDefinitionId(reportDefinitionId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type PutReportsDefinitionsReportDefinitionIdQueryResult = NonNullable<
+export type PutReportsDefinitionsReportDefinitionIdMutationResult = NonNullable<
   Awaited<ReturnType<typeof putReportsDefinitionsReportDefinitionId>>
 >;
-export type PutReportsDefinitionsReportDefinitionIdQueryError = ErrorType<
+export type PutReportsDefinitionsReportDefinitionIdMutationBody = BodyType<ReportDefinitionInput>;
+export type PutReportsDefinitionsReportDefinitionIdMutationError = ErrorType<
   BadRequestResponse | ForbiddenResponse | NotFoundResponse
 >;
+export type PutReportsDefinitionsReportDefinitionIdMutationVariables = {
+  reportDefinitionId: string;
+  data: BodyType<ReportDefinitionInput>;
+};
 
-export function usePutReportsDefinitionsReportDefinitionId<
-  TData = Awaited<ReturnType<typeof putReportsDefinitionsReportDefinitionId>>,
-  TError = ErrorType<BadRequestResponse | ForbiddenResponse | NotFoundResponse>,
->(
-  reportDefinitionId: string,
-  reportDefinitionInput: BodyType<ReportDefinitionInput>,
-  options: {
-    query: Partial<
-      UseQueryOptions<
-        Awaited<ReturnType<typeof putReportsDefinitionsReportDefinitionId>>,
-        TError,
-        TData
-      >
-    > &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof putReportsDefinitionsReportDefinitionId>>,
-          TError,
-          Awaited<ReturnType<typeof putReportsDefinitionsReportDefinitionId>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePutReportsDefinitionsReportDefinitionId<
-  TData = Awaited<ReturnType<typeof putReportsDefinitionsReportDefinitionId>>,
-  TError = ErrorType<BadRequestResponse | ForbiddenResponse | NotFoundResponse>,
->(
-  reportDefinitionId: string,
-  reportDefinitionInput: BodyType<ReportDefinitionInput>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<
-        Awaited<ReturnType<typeof putReportsDefinitionsReportDefinitionId>>,
-        TError,
-        TData
-      >
-    > &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof putReportsDefinitionsReportDefinitionId>>,
-          TError,
-          Awaited<ReturnType<typeof putReportsDefinitionsReportDefinitionId>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePutReportsDefinitionsReportDefinitionId<
-  TData = Awaited<ReturnType<typeof putReportsDefinitionsReportDefinitionId>>,
-  TError = ErrorType<BadRequestResponse | ForbiddenResponse | NotFoundResponse>,
->(
-  reportDefinitionId: string,
-  reportDefinitionInput: BodyType<ReportDefinitionInput>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<
-        Awaited<ReturnType<typeof putReportsDefinitionsReportDefinitionId>>,
-        TError,
-        TData
-      >
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
  * @summary Update a report definition (operator). Re-registers the cron job if `cronExpr`/`timezone`/`enabled` changed. `slug` is immutable; a different value is rejected with `400` (code `slug_immutable`). Audited as `report.definition.update`.
  */
-
-export function usePutReportsDefinitionsReportDefinitionId<
-  TData = Awaited<ReturnType<typeof putReportsDefinitionsReportDefinitionId>>,
+export const usePutReportsDefinitionsReportDefinitionId = <
   TError = ErrorType<BadRequestResponse | ForbiddenResponse | NotFoundResponse>,
+  TContext = unknown,
 >(
-  reportDefinitionId: string,
-  reportDefinitionInput: BodyType<ReportDefinitionInput>,
   options?: {
-    query?: Partial<
-      UseQueryOptions<
-        Awaited<ReturnType<typeof putReportsDefinitionsReportDefinitionId>>,
-        TError,
-        TData
-      >
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof putReportsDefinitionsReportDefinitionId>>,
+      TError,
+      PutReportsDefinitionsReportDefinitionIdMutationVariables,
+      TContext
     >;
     request?: SecondParameter<typeof customInstance>;
   },
   queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getPutReportsDefinitionsReportDefinitionIdQueryOptions(
-    reportDefinitionId,
-    reportDefinitionInput,
-    options
+): UseMutationResult<
+  Awaited<ReturnType<typeof putReportsDefinitionsReportDefinitionId>>,
+  TError,
+  PutReportsDefinitionsReportDefinitionIdMutationVariables,
+  TContext
+> => {
+  return useMutation(
+    getPutReportsDefinitionsReportDefinitionIdMutationOptions(options),
+    queryClient
   );
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
+};
 /**
  * @summary Delete a report definition (operator). Unregisters its cron job and deletes its `job_health` row (`report:<slug>`); previously generated reports are kept with `definitionId` set to null. Audited as `report.definition.delete`.
  */
@@ -511,158 +380,84 @@ export const deleteReportsDefinitionsReportDefinitionId = (
   );
 };
 
-export const getDeleteReportsDefinitionsReportDefinitionIdQueryKey = (
-  reportDefinitionId: string
-) => {
-  return ['DELETE', `/reports/definitions/${reportDefinitionId}`] as const;
-};
+export const getDeleteReportsDefinitionsReportDefinitionIdMutationKey = () =>
+  ['deleteReportsDefinitionsReportDefinitionId'] as const;
 
-export const getDeleteReportsDefinitionsReportDefinitionIdQueryOptions = <
-  TData = Awaited<ReturnType<typeof deleteReportsDefinitionsReportDefinitionId>>,
+export const getDeleteReportsDefinitionsReportDefinitionIdMutationOptions = <
   TError = ErrorType<ForbiddenResponse | NotFoundResponse>,
->(
-  reportDefinitionId: string,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<
-        Awaited<ReturnType<typeof deleteReportsDefinitionsReportDefinitionId>>,
-        TError,
-        TData
-      >
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  }
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
-
-  const queryKey =
-    queryOptions?.queryKey ??
-    getDeleteReportsDefinitionsReportDefinitionIdQueryKey(reportDefinitionId);
-
-  const queryFn: QueryFunction<
-    Awaited<ReturnType<typeof deleteReportsDefinitionsReportDefinitionId>>
-  > = ({ signal }) =>
-    deleteReportsDefinitionsReportDefinitionId(reportDefinitionId, requestOptions, signal);
-
-  return {
-    queryKey,
-    queryFn,
-    enabled: reportDefinitionId !== null && reportDefinitionId !== undefined,
-    ...queryOptions,
-  } as UseQueryOptions<
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof deleteReportsDefinitionsReportDefinitionId>>,
     TError,
-    TData
-  > & { queryKey: DataTag<QueryKey, TData, TError> };
+    DeleteReportsDefinitionsReportDefinitionIdMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteReportsDefinitionsReportDefinitionId>>,
+  TError,
+  DeleteReportsDefinitionsReportDefinitionIdMutationVariables,
+  TContext
+> => {
+  const mutationKey = getDeleteReportsDefinitionsReportDefinitionIdMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteReportsDefinitionsReportDefinitionId>>,
+    DeleteReportsDefinitionsReportDefinitionIdMutationVariables
+  > = (props) => {
+    const { reportDefinitionId } = props ?? {};
+
+    return deleteReportsDefinitionsReportDefinitionId(reportDefinitionId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type DeleteReportsDefinitionsReportDefinitionIdQueryResult = NonNullable<
+export type DeleteReportsDefinitionsReportDefinitionIdMutationResult = NonNullable<
   Awaited<ReturnType<typeof deleteReportsDefinitionsReportDefinitionId>>
 >;
-export type DeleteReportsDefinitionsReportDefinitionIdQueryError = ErrorType<
+
+export type DeleteReportsDefinitionsReportDefinitionIdMutationError = ErrorType<
   ForbiddenResponse | NotFoundResponse
 >;
+export type DeleteReportsDefinitionsReportDefinitionIdMutationVariables = {
+  reportDefinitionId: string;
+};
 
-export function useDeleteReportsDefinitionsReportDefinitionId<
-  TData = Awaited<ReturnType<typeof deleteReportsDefinitionsReportDefinitionId>>,
-  TError = ErrorType<ForbiddenResponse | NotFoundResponse>,
->(
-  reportDefinitionId: string,
-  options: {
-    query: Partial<
-      UseQueryOptions<
-        Awaited<ReturnType<typeof deleteReportsDefinitionsReportDefinitionId>>,
-        TError,
-        TData
-      >
-    > &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof deleteReportsDefinitionsReportDefinitionId>>,
-          TError,
-          Awaited<ReturnType<typeof deleteReportsDefinitionsReportDefinitionId>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function useDeleteReportsDefinitionsReportDefinitionId<
-  TData = Awaited<ReturnType<typeof deleteReportsDefinitionsReportDefinitionId>>,
-  TError = ErrorType<ForbiddenResponse | NotFoundResponse>,
->(
-  reportDefinitionId: string,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<
-        Awaited<ReturnType<typeof deleteReportsDefinitionsReportDefinitionId>>,
-        TError,
-        TData
-      >
-    > &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof deleteReportsDefinitionsReportDefinitionId>>,
-          TError,
-          Awaited<ReturnType<typeof deleteReportsDefinitionsReportDefinitionId>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function useDeleteReportsDefinitionsReportDefinitionId<
-  TData = Awaited<ReturnType<typeof deleteReportsDefinitionsReportDefinitionId>>,
-  TError = ErrorType<ForbiddenResponse | NotFoundResponse>,
->(
-  reportDefinitionId: string,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<
-        Awaited<ReturnType<typeof deleteReportsDefinitionsReportDefinitionId>>,
-        TError,
-        TData
-      >
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
  * @summary Delete a report definition (operator). Unregisters its cron job and deletes its `job_health` row (`report:<slug>`); previously generated reports are kept with `definitionId` set to null. Audited as `report.definition.delete`.
  */
-
-export function useDeleteReportsDefinitionsReportDefinitionId<
-  TData = Awaited<ReturnType<typeof deleteReportsDefinitionsReportDefinitionId>>,
+export const useDeleteReportsDefinitionsReportDefinitionId = <
   TError = ErrorType<ForbiddenResponse | NotFoundResponse>,
+  TContext = unknown,
 >(
-  reportDefinitionId: string,
   options?: {
-    query?: Partial<
-      UseQueryOptions<
-        Awaited<ReturnType<typeof deleteReportsDefinitionsReportDefinitionId>>,
-        TError,
-        TData
-      >
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof deleteReportsDefinitionsReportDefinitionId>>,
+      TError,
+      DeleteReportsDefinitionsReportDefinitionIdMutationVariables,
+      TContext
     >;
     request?: SecondParameter<typeof customInstance>;
   },
   queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getDeleteReportsDefinitionsReportDefinitionIdQueryOptions(
-    reportDefinitionId,
-    options
+): UseMutationResult<
+  Awaited<ReturnType<typeof deleteReportsDefinitionsReportDefinitionId>>,
+  TError,
+  DeleteReportsDefinitionsReportDefinitionIdMutationVariables,
+  TContext
+> => {
+  return useMutation(
+    getDeleteReportsDefinitionsReportDefinitionIdMutationOptions(options),
+    queryClient
   );
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
+};
 /**
  * @summary Generate a report immediately (operator). Uses the same window as the next scheduled run (previous scheduled report's `periodEnd` → now, or the last 7 days on a definition's first run; capped at 31 days) but does NOT advance the definition's schedule watermark, so the next scheduled tick still covers the period this manual run also covered. Delivers to the definition's configured channels the same as a scheduled run. Audited as `report.definition.run`.
  */
@@ -677,158 +472,84 @@ export const postReportsDefinitionsReportDefinitionIdRun = (
   );
 };
 
-export const getPostReportsDefinitionsReportDefinitionIdRunQueryKey = (
-  reportDefinitionId: string
-) => {
-  return ['POST', `/reports/definitions/${reportDefinitionId}/run`] as const;
-};
+export const getPostReportsDefinitionsReportDefinitionIdRunMutationKey = () =>
+  ['postReportsDefinitionsReportDefinitionIdRun'] as const;
 
-export const getPostReportsDefinitionsReportDefinitionIdRunQueryOptions = <
-  TData = Awaited<ReturnType<typeof postReportsDefinitionsReportDefinitionIdRun>>,
+export const getPostReportsDefinitionsReportDefinitionIdRunMutationOptions = <
   TError = ErrorType<ForbiddenResponse | NotFoundResponse>,
->(
-  reportDefinitionId: string,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<
-        Awaited<ReturnType<typeof postReportsDefinitionsReportDefinitionIdRun>>,
-        TError,
-        TData
-      >
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  }
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
-
-  const queryKey =
-    queryOptions?.queryKey ??
-    getPostReportsDefinitionsReportDefinitionIdRunQueryKey(reportDefinitionId);
-
-  const queryFn: QueryFunction<
-    Awaited<ReturnType<typeof postReportsDefinitionsReportDefinitionIdRun>>
-  > = ({ signal }) =>
-    postReportsDefinitionsReportDefinitionIdRun(reportDefinitionId, requestOptions, signal);
-
-  return {
-    queryKey,
-    queryFn,
-    enabled: reportDefinitionId !== null && reportDefinitionId !== undefined,
-    ...queryOptions,
-  } as UseQueryOptions<
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof postReportsDefinitionsReportDefinitionIdRun>>,
     TError,
-    TData
-  > & { queryKey: DataTag<QueryKey, TData, TError> };
+    PostReportsDefinitionsReportDefinitionIdRunMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof postReportsDefinitionsReportDefinitionIdRun>>,
+  TError,
+  PostReportsDefinitionsReportDefinitionIdRunMutationVariables,
+  TContext
+> => {
+  const mutationKey = getPostReportsDefinitionsReportDefinitionIdRunMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof postReportsDefinitionsReportDefinitionIdRun>>,
+    PostReportsDefinitionsReportDefinitionIdRunMutationVariables
+  > = (props) => {
+    const { reportDefinitionId } = props ?? {};
+
+    return postReportsDefinitionsReportDefinitionIdRun(reportDefinitionId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type PostReportsDefinitionsReportDefinitionIdRunQueryResult = NonNullable<
+export type PostReportsDefinitionsReportDefinitionIdRunMutationResult = NonNullable<
   Awaited<ReturnType<typeof postReportsDefinitionsReportDefinitionIdRun>>
 >;
-export type PostReportsDefinitionsReportDefinitionIdRunQueryError = ErrorType<
+
+export type PostReportsDefinitionsReportDefinitionIdRunMutationError = ErrorType<
   ForbiddenResponse | NotFoundResponse
 >;
+export type PostReportsDefinitionsReportDefinitionIdRunMutationVariables = {
+  reportDefinitionId: string;
+};
 
-export function usePostReportsDefinitionsReportDefinitionIdRun<
-  TData = Awaited<ReturnType<typeof postReportsDefinitionsReportDefinitionIdRun>>,
-  TError = ErrorType<ForbiddenResponse | NotFoundResponse>,
->(
-  reportDefinitionId: string,
-  options: {
-    query: Partial<
-      UseQueryOptions<
-        Awaited<ReturnType<typeof postReportsDefinitionsReportDefinitionIdRun>>,
-        TError,
-        TData
-      >
-    > &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postReportsDefinitionsReportDefinitionIdRun>>,
-          TError,
-          Awaited<ReturnType<typeof postReportsDefinitionsReportDefinitionIdRun>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostReportsDefinitionsReportDefinitionIdRun<
-  TData = Awaited<ReturnType<typeof postReportsDefinitionsReportDefinitionIdRun>>,
-  TError = ErrorType<ForbiddenResponse | NotFoundResponse>,
->(
-  reportDefinitionId: string,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<
-        Awaited<ReturnType<typeof postReportsDefinitionsReportDefinitionIdRun>>,
-        TError,
-        TData
-      >
-    > &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postReportsDefinitionsReportDefinitionIdRun>>,
-          TError,
-          Awaited<ReturnType<typeof postReportsDefinitionsReportDefinitionIdRun>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostReportsDefinitionsReportDefinitionIdRun<
-  TData = Awaited<ReturnType<typeof postReportsDefinitionsReportDefinitionIdRun>>,
-  TError = ErrorType<ForbiddenResponse | NotFoundResponse>,
->(
-  reportDefinitionId: string,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<
-        Awaited<ReturnType<typeof postReportsDefinitionsReportDefinitionIdRun>>,
-        TError,
-        TData
-      >
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
  * @summary Generate a report immediately (operator). Uses the same window as the next scheduled run (previous scheduled report's `periodEnd` → now, or the last 7 days on a definition's first run; capped at 31 days) but does NOT advance the definition's schedule watermark, so the next scheduled tick still covers the period this manual run also covered. Delivers to the definition's configured channels the same as a scheduled run. Audited as `report.definition.run`.
  */
-
-export function usePostReportsDefinitionsReportDefinitionIdRun<
-  TData = Awaited<ReturnType<typeof postReportsDefinitionsReportDefinitionIdRun>>,
+export const usePostReportsDefinitionsReportDefinitionIdRun = <
   TError = ErrorType<ForbiddenResponse | NotFoundResponse>,
+  TContext = unknown,
 >(
-  reportDefinitionId: string,
   options?: {
-    query?: Partial<
-      UseQueryOptions<
-        Awaited<ReturnType<typeof postReportsDefinitionsReportDefinitionIdRun>>,
-        TError,
-        TData
-      >
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof postReportsDefinitionsReportDefinitionIdRun>>,
+      TError,
+      PostReportsDefinitionsReportDefinitionIdRunMutationVariables,
+      TContext
     >;
     request?: SecondParameter<typeof customInstance>;
   },
   queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getPostReportsDefinitionsReportDefinitionIdRunQueryOptions(
-    reportDefinitionId,
-    options
+): UseMutationResult<
+  Awaited<ReturnType<typeof postReportsDefinitionsReportDefinitionIdRun>>,
+  TError,
+  PostReportsDefinitionsReportDefinitionIdRunMutationVariables,
+  TContext
+> => {
+  return useMutation(
+    getPostReportsDefinitionsReportDefinitionIdRunMutationOptions(options),
+    queryClient
   );
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
+};
 /**
  * @summary List generated reports, newest first
  */

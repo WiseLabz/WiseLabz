@@ -2,7 +2,6 @@ package doc
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -20,12 +19,12 @@ type EntityLink struct {
 	Reason        string // "external ID", "IP address", or "hostname"
 }
 
-// matchEntities loads the latest snapshot of every other connector and
+// matchEntities reads the (cached) latest snapshot of every other connector and
 // matches its entities against entities, in precedence order (first hit
 // wins per pair): matching ExternalID+Kind, then matching IP, then matching
 // Hostname (case-insensitive). Matches across different connectors are all
 // kept; only exact (ConnectorID, ExternalID) duplicates are dropped.
-func matchEntities(ctx context.Context, s *store.Store, connectorID string, entities []connector.SnapshotEntity) ([]EntityLink, error) {
+func matchEntities(ctx context.Context, s *store.Store, cache *snapshotCache, connectorID string, entities []connector.SnapshotEntity) ([]EntityLink, error) {
 	if len(entities) == 0 {
 		return nil, nil
 	}
@@ -41,13 +40,9 @@ func matchEntities(ctx context.Context, s *store.Store, connectorID string, enti
 		if c.ID == connectorID {
 			continue
 		}
-		sn, err := s.GetLatestSnapshot(ctx, c.ID)
+		snap, err := cache.latest(ctx, c.ID)
 		if err != nil {
-			continue // no snapshot yet for this connector; soft-skip
-		}
-		var snap connector.ServiceSnapshot
-		if err := json.Unmarshal([]byte(sn.Data), &snap); err != nil {
-			continue
+			continue // no snapshot yet or unparseable; soft-skip
 		}
 		for _, other := range snap.Entities {
 			for _, mine := range entities {

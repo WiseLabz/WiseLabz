@@ -257,7 +257,14 @@ func openStore(cfg *config.Config, logger *slog.Logger) *store.Store {
 		os.Exit(1)
 	}
 
-	return store.New(db, cfg.DB.Driver)
+	s := store.New(db, cfg.DB.Driver)
+	readDB, err := store.OpenReadDB(cfg.DB.Driver, cfg.DB.DSN)
+	if err != nil {
+		logger.Error("Failed to open read database", "error", err)
+		os.Exit(1)
+	}
+	s.SetReadDB(readDB)
+	return s
 }
 
 // registerJobs adds the fixed-cadence background jobs to the scheduler,

@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-chi/chi/v5"
+
 	"github.com/WiseLabz/wiselabz/internal/httputil"
 )
 
@@ -65,6 +67,16 @@ func MFAEnrollOnlyFromContext(ctx context.Context) bool {
 		return false
 	}
 	return claims.MFAEnrollOnly
+}
+
+// SessionIDFromContext returns the login session the request's access token
+// belongs to, or "" for tokens that predate session IDs and for API keys.
+func SessionIDFromContext(ctx context.Context) string {
+	claims, _ := ctx.Value(ctxClaims).(*Claims)
+	if claims == nil {
+		return ""
+	}
+	return claims.SessionID
 }
 
 // APIKeyChecker looks up opaque API keys without coupling auth to the store
@@ -286,9 +298,24 @@ func RequirePermission(checker PermissionChecker, permission string) func(http.H
 // RequireElevation checks for a valid elevation token scoped to the given action.
 // Destructive endpoints chain this after RequireRole("operator") for step-up auth.
 func RequireElevation(jwtSvc *Service, recorder AuditRecorder, action string) func(http.Handler) http.Handler {
+	return requireElevation(jwtSvc, recorder, action, "")
+}
+
+// RequireElevationForTarget is RequireElevation for actions on one resource:
+// the token must have been issued for the resource named by the targetParam
+// URL path parameter, so it can't be replayed against another one.
+func RequireElevationForTarget(jwtSvc *Service, recorder AuditRecorder, action, targetParam string) func(http.Handler) http.Handler {
+	return requireElevation(jwtSvc, recorder, action, targetParam)
+}
+
+func requireElevation(jwtSvc *Service, recorder AuditRecorder, action, targetParam string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if err := ValidateElevationHeader(jwtSvc, recorder, action, r); err != nil {
+			target := ""
+			if targetParam != "" {
+				target = chi.URLParam(r, targetParam)
+			}
+			if err := ValidateElevationHeaderFor(jwtSvc, recorder, action, target, r); err != nil {
 				WriteElevationError(w, err)
 				return
 			}
@@ -357,6 +384,12 @@ func (e *elevationError) Error() string { return e.msg }
 // describing the HTTP response to send (use WriteElevationError, or inspect
 // via errors.As for a custom response).
 func ValidateElevationHeader(jwtSvc *Service, recorder AuditRecorder, action string, r *http.Request) error {
+	return ValidateElevationHeaderFor(jwtSvc, recorder, action, "", r)
+}
+
+// ValidateElevationHeaderFor is ValidateElevationHeader for a token that must
+// be bound to target. A valid token is spent: it authorizes this one request.
+func ValidateElevationHeaderFor(jwtSvc *Service, recorder AuditRecorder, action, target string, r *http.Request) error {
 	// The instance-wide step-up toggle covers destructive actions only;
 	// MFA management always requires a fresh second factor.
 	if action != "mfa.manage" && !jwtSvc.StepUpEnabled() {
@@ -375,7 +408,10 @@ func ValidateElevationHeader(jwtSvc *Service, recorder AuditRecorder, action str
 		token = values[0]
 	}
 	recordElevationAudit(r.Context(), recorder, "auth.elevation_requested", action, nil)
-	_, err := jwtSvc.ValidateElevation(token, action, UserIDFromContext(r.Context()))
+	_, err := jwtSvc.ConsumeElevation(token, action, UserIDFromContext(r.Context()), ElevationBinding{
+		SessionID: SessionIDFromContext(r.Context()),
+		Target:    target,
+	})
 	if err != nil {
 		recordElevationAudit(r.Context(), recorder, "auth.elevation_denied", action, map[string]any{
 			"action": action,

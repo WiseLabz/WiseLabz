@@ -157,11 +157,11 @@ func newRouterDeps(cfg Config) routerDeps {
 		dashH:       dashhandler.NewHandler(cfg.Store),
 		docH:        dochandler.NewHandler(cfg.Store, cfg.DocEngine, settingH, cfg.AIRegistry, cfg.EmbedRegistry, cfg.WSHub),
 		savedViewH:  savedviewhandler.NewHandler(cfg.Store),
-		chatH:       chathandler.NewHandler(cfg.Store, settingH, cfg.AIRegistry, cfg.EmbedRegistry),
+		chatH:       chathandler.NewHandler(cfg.Store, settingH.AIConfig, cfg.AIRegistry, cfg.EmbedRegistry),
 		complianceH: compliancehandler.NewHandler(cfg.Store, ruleEvaluator),
 		reportH:     reporthandler.NewHandler(cfg.Store, cfg.ReportManager),
 		mcpH: internalmcp.NewHTTPHandler(internalmcp.Deps{
-			Store: cfg.Store, Settings: settingH, Embed: cfg.EmbedRegistry,
+			Store: cfg.Store, AIConfig: settingH.AIConfig, Embed: cfg.EmbedRegistry,
 		}),
 	}
 }

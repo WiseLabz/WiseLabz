@@ -6,15 +6,18 @@
  *
  * OpenAPI spec version: 0.1.0
  */
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import type {
   DataTag,
   DefinedInitialDataOptions,
   DefinedUseQueryResult,
+  MutationFunction,
   QueryClient,
   QueryFunction,
   QueryKey,
   UndefinedInitialDataOptions,
+  UseMutationOptions,
+  UseMutationResult,
   UseQueryOptions,
   UseQueryResult,
 } from '@tanstack/react-query';
@@ -193,110 +196,74 @@ export const postAuthLogin = (
   );
 };
 
-export const getPostAuthLoginQueryKey = (loginRequest?: BodyType<LoginRequest>) => {
-  return ['POST', `/auth/login`, loginRequest] as const;
-};
+export const getPostAuthLoginMutationKey = () => ['postAuthLogin'] as const;
 
-export const getPostAuthLoginQueryOptions = <
-  TData = Awaited<ReturnType<typeof postAuthLogin>>,
+export const getPostAuthLoginMutationOptions = <
   TError = ErrorType<BadRequestResponse | UnauthorizedResponse>,
->(
-  loginRequest: BodyType<LoginRequest>,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof postAuthLogin>>, TError, TData>>;
-    request?: SecondParameter<typeof customInstance>;
-  }
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
-
-  const queryKey = queryOptions?.queryKey ?? getPostAuthLoginQueryKey(loginRequest);
-
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof postAuthLogin>>> = ({ signal }) =>
-    postAuthLogin(loginRequest, requestOptions, signal);
-
-  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof postAuthLogin>>,
     TError,
-    TData
-  > & { queryKey: DataTag<QueryKey, TData, TError> };
+    PostAuthLoginMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof postAuthLogin>>,
+  TError,
+  PostAuthLoginMutationVariables,
+  TContext
+> => {
+  const mutationKey = getPostAuthLoginMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof postAuthLogin>>,
+    PostAuthLoginMutationVariables
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return postAuthLogin(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type PostAuthLoginQueryResult = NonNullable<Awaited<ReturnType<typeof postAuthLogin>>>;
-export type PostAuthLoginQueryError = ErrorType<BadRequestResponse | UnauthorizedResponse>;
+export type PostAuthLoginMutationResult = NonNullable<Awaited<ReturnType<typeof postAuthLogin>>>;
+export type PostAuthLoginMutationBody = BodyType<LoginRequest>;
+export type PostAuthLoginMutationError = ErrorType<BadRequestResponse | UnauthorizedResponse>;
+export type PostAuthLoginMutationVariables = { data: BodyType<LoginRequest> };
 
-export function usePostAuthLogin<
-  TData = Awaited<ReturnType<typeof postAuthLogin>>,
-  TError = ErrorType<BadRequestResponse | UnauthorizedResponse>,
->(
-  loginRequest: BodyType<LoginRequest>,
-  options: {
-    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof postAuthLogin>>, TError, TData>> &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postAuthLogin>>,
-          TError,
-          Awaited<ReturnType<typeof postAuthLogin>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostAuthLogin<
-  TData = Awaited<ReturnType<typeof postAuthLogin>>,
-  TError = ErrorType<BadRequestResponse | UnauthorizedResponse>,
->(
-  loginRequest: BodyType<LoginRequest>,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof postAuthLogin>>, TError, TData>> &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postAuthLogin>>,
-          TError,
-          Awaited<ReturnType<typeof postAuthLogin>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostAuthLogin<
-  TData = Awaited<ReturnType<typeof postAuthLogin>>,
-  TError = ErrorType<BadRequestResponse | UnauthorizedResponse>,
->(
-  loginRequest: BodyType<LoginRequest>,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof postAuthLogin>>, TError, TData>>;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
  * @summary Local username/password login
  */
-
-export function usePostAuthLogin<
-  TData = Awaited<ReturnType<typeof postAuthLogin>>,
+export const usePostAuthLogin = <
   TError = ErrorType<BadRequestResponse | UnauthorizedResponse>,
+  TContext = unknown,
 >(
-  loginRequest: BodyType<LoginRequest>,
   options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof postAuthLogin>>, TError, TData>>;
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof postAuthLogin>>,
+      TError,
+      PostAuthLoginMutationVariables,
+      TContext
+    >;
     request?: SecondParameter<typeof customInstance>;
   },
   queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getPostAuthLoginQueryOptions(loginRequest, options);
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
+): UseMutationResult<
+  Awaited<ReturnType<typeof postAuthLogin>>,
+  TError,
+  PostAuthLoginMutationVariables,
+  TContext
+> => {
+  return useMutation(getPostAuthLoginMutationOptions(options), queryClient);
+};
 /**
  * Second step of login for a user with a confirmed factor (#279). Exactly one of `totp` or `recoveryCode` proves the second factor; failures count toward the same lockout as a bad password.
  * @summary Finish a login that required a second factor
@@ -318,110 +285,76 @@ export const postAuthLoginMfa = (
   );
 };
 
-export const getPostAuthLoginMfaQueryKey = (loginMfaRequest?: BodyType<LoginMfaRequest>) => {
-  return ['POST', `/auth/login/mfa`, loginMfaRequest] as const;
-};
+export const getPostAuthLoginMfaMutationKey = () => ['postAuthLoginMfa'] as const;
 
-export const getPostAuthLoginMfaQueryOptions = <
-  TData = Awaited<ReturnType<typeof postAuthLoginMfa>>,
+export const getPostAuthLoginMfaMutationOptions = <
   TError = ErrorType<BadRequestResponse | UnauthorizedResponse>,
->(
-  loginMfaRequest: BodyType<LoginMfaRequest>,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof postAuthLoginMfa>>, TError, TData>>;
-    request?: SecondParameter<typeof customInstance>;
-  }
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
-
-  const queryKey = queryOptions?.queryKey ?? getPostAuthLoginMfaQueryKey(loginMfaRequest);
-
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof postAuthLoginMfa>>> = ({ signal }) =>
-    postAuthLoginMfa(loginMfaRequest, requestOptions, signal);
-
-  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof postAuthLoginMfa>>,
     TError,
-    TData
-  > & { queryKey: DataTag<QueryKey, TData, TError> };
+    PostAuthLoginMfaMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof postAuthLoginMfa>>,
+  TError,
+  PostAuthLoginMfaMutationVariables,
+  TContext
+> => {
+  const mutationKey = getPostAuthLoginMfaMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof postAuthLoginMfa>>,
+    PostAuthLoginMfaMutationVariables
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return postAuthLoginMfa(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type PostAuthLoginMfaQueryResult = NonNullable<Awaited<ReturnType<typeof postAuthLoginMfa>>>;
-export type PostAuthLoginMfaQueryError = ErrorType<BadRequestResponse | UnauthorizedResponse>;
+export type PostAuthLoginMfaMutationResult = NonNullable<
+  Awaited<ReturnType<typeof postAuthLoginMfa>>
+>;
+export type PostAuthLoginMfaMutationBody = BodyType<LoginMfaRequest>;
+export type PostAuthLoginMfaMutationError = ErrorType<BadRequestResponse | UnauthorizedResponse>;
+export type PostAuthLoginMfaMutationVariables = { data: BodyType<LoginMfaRequest> };
 
-export function usePostAuthLoginMfa<
-  TData = Awaited<ReturnType<typeof postAuthLoginMfa>>,
-  TError = ErrorType<BadRequestResponse | UnauthorizedResponse>,
->(
-  loginMfaRequest: BodyType<LoginMfaRequest>,
-  options: {
-    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof postAuthLoginMfa>>, TError, TData>> &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postAuthLoginMfa>>,
-          TError,
-          Awaited<ReturnType<typeof postAuthLoginMfa>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostAuthLoginMfa<
-  TData = Awaited<ReturnType<typeof postAuthLoginMfa>>,
-  TError = ErrorType<BadRequestResponse | UnauthorizedResponse>,
->(
-  loginMfaRequest: BodyType<LoginMfaRequest>,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof postAuthLoginMfa>>, TError, TData>> &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postAuthLoginMfa>>,
-          TError,
-          Awaited<ReturnType<typeof postAuthLoginMfa>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostAuthLoginMfa<
-  TData = Awaited<ReturnType<typeof postAuthLoginMfa>>,
-  TError = ErrorType<BadRequestResponse | UnauthorizedResponse>,
->(
-  loginMfaRequest: BodyType<LoginMfaRequest>,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof postAuthLoginMfa>>, TError, TData>>;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
  * @summary Finish a login that required a second factor
  */
-
-export function usePostAuthLoginMfa<
-  TData = Awaited<ReturnType<typeof postAuthLoginMfa>>,
+export const usePostAuthLoginMfa = <
   TError = ErrorType<BadRequestResponse | UnauthorizedResponse>,
+  TContext = unknown,
 >(
-  loginMfaRequest: BodyType<LoginMfaRequest>,
   options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof postAuthLoginMfa>>, TError, TData>>;
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof postAuthLoginMfa>>,
+      TError,
+      PostAuthLoginMfaMutationVariables,
+      TContext
+    >;
     request?: SecondParameter<typeof customInstance>;
   },
   queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getPostAuthLoginMfaQueryOptions(loginMfaRequest, options);
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
+): UseMutationResult<
+  Awaited<ReturnType<typeof postAuthLoginMfa>>,
+  TError,
+  PostAuthLoginMfaMutationVariables,
+  TContext
+> => {
+  return useMutation(getPostAuthLoginMfaMutationOptions(options), queryClient);
+};
 /**
  * @summary Begin a WebAuthn second-factor login ceremony
  */
@@ -442,130 +375,79 @@ export const postAuthLoginMfaWebauthnBegin = (
   );
 };
 
-export const getPostAuthLoginMfaWebauthnBeginQueryKey = (
-  postAuthLoginMfaWebauthnBeginBody?: BodyType<PostAuthLoginMfaWebauthnBeginBody>
-) => {
-  return ['POST', `/auth/login/mfa/webauthn/begin`, postAuthLoginMfaWebauthnBeginBody] as const;
-};
+export const getPostAuthLoginMfaWebauthnBeginMutationKey = () =>
+  ['postAuthLoginMfaWebauthnBegin'] as const;
 
-export const getPostAuthLoginMfaWebauthnBeginQueryOptions = <
-  TData = Awaited<ReturnType<typeof postAuthLoginMfaWebauthnBegin>>,
+export const getPostAuthLoginMfaWebauthnBeginMutationOptions = <
   TError = ErrorType<UnauthorizedResponse | void>,
->(
-  postAuthLoginMfaWebauthnBeginBody: BodyType<PostAuthLoginMfaWebauthnBeginBody>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postAuthLoginMfaWebauthnBegin>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  }
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
-
-  const queryKey =
-    queryOptions?.queryKey ??
-    getPostAuthLoginMfaWebauthnBeginQueryKey(postAuthLoginMfaWebauthnBeginBody);
-
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof postAuthLoginMfaWebauthnBegin>>> = ({
-    signal,
-  }) => postAuthLoginMfaWebauthnBegin(postAuthLoginMfaWebauthnBeginBody, requestOptions, signal);
-
-  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof postAuthLoginMfaWebauthnBegin>>,
     TError,
-    TData
-  > & { queryKey: DataTag<QueryKey, TData, TError> };
+    PostAuthLoginMfaWebauthnBeginMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof postAuthLoginMfaWebauthnBegin>>,
+  TError,
+  PostAuthLoginMfaWebauthnBeginMutationVariables,
+  TContext
+> => {
+  const mutationKey = getPostAuthLoginMfaWebauthnBeginMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof postAuthLoginMfaWebauthnBegin>>,
+    PostAuthLoginMfaWebauthnBeginMutationVariables
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return postAuthLoginMfaWebauthnBegin(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type PostAuthLoginMfaWebauthnBeginQueryResult = NonNullable<
+export type PostAuthLoginMfaWebauthnBeginMutationResult = NonNullable<
   Awaited<ReturnType<typeof postAuthLoginMfaWebauthnBegin>>
 >;
-export type PostAuthLoginMfaWebauthnBeginQueryError = ErrorType<UnauthorizedResponse | void>;
+export type PostAuthLoginMfaWebauthnBeginMutationBody = BodyType<PostAuthLoginMfaWebauthnBeginBody>;
+export type PostAuthLoginMfaWebauthnBeginMutationError = ErrorType<UnauthorizedResponse | void>;
+export type PostAuthLoginMfaWebauthnBeginMutationVariables = {
+  data: BodyType<PostAuthLoginMfaWebauthnBeginBody>;
+};
 
-export function usePostAuthLoginMfaWebauthnBegin<
-  TData = Awaited<ReturnType<typeof postAuthLoginMfaWebauthnBegin>>,
-  TError = ErrorType<UnauthorizedResponse | void>,
->(
-  postAuthLoginMfaWebauthnBeginBody: BodyType<PostAuthLoginMfaWebauthnBeginBody>,
-  options: {
-    query: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postAuthLoginMfaWebauthnBegin>>, TError, TData>
-    > &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postAuthLoginMfaWebauthnBegin>>,
-          TError,
-          Awaited<ReturnType<typeof postAuthLoginMfaWebauthnBegin>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostAuthLoginMfaWebauthnBegin<
-  TData = Awaited<ReturnType<typeof postAuthLoginMfaWebauthnBegin>>,
-  TError = ErrorType<UnauthorizedResponse | void>,
->(
-  postAuthLoginMfaWebauthnBeginBody: BodyType<PostAuthLoginMfaWebauthnBeginBody>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postAuthLoginMfaWebauthnBegin>>, TError, TData>
-    > &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postAuthLoginMfaWebauthnBegin>>,
-          TError,
-          Awaited<ReturnType<typeof postAuthLoginMfaWebauthnBegin>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostAuthLoginMfaWebauthnBegin<
-  TData = Awaited<ReturnType<typeof postAuthLoginMfaWebauthnBegin>>,
-  TError = ErrorType<UnauthorizedResponse | void>,
->(
-  postAuthLoginMfaWebauthnBeginBody: BodyType<PostAuthLoginMfaWebauthnBeginBody>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postAuthLoginMfaWebauthnBegin>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
  * @summary Begin a WebAuthn second-factor login ceremony
  */
-
-export function usePostAuthLoginMfaWebauthnBegin<
-  TData = Awaited<ReturnType<typeof postAuthLoginMfaWebauthnBegin>>,
+export const usePostAuthLoginMfaWebauthnBegin = <
   TError = ErrorType<UnauthorizedResponse | void>,
+  TContext = unknown,
 >(
-  postAuthLoginMfaWebauthnBeginBody: BodyType<PostAuthLoginMfaWebauthnBeginBody>,
   options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postAuthLoginMfaWebauthnBegin>>, TError, TData>
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof postAuthLoginMfaWebauthnBegin>>,
+      TError,
+      PostAuthLoginMfaWebauthnBeginMutationVariables,
+      TContext
     >;
     request?: SecondParameter<typeof customInstance>;
   },
   queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getPostAuthLoginMfaWebauthnBeginQueryOptions(
-    postAuthLoginMfaWebauthnBeginBody,
-    options
-  );
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
+): UseMutationResult<
+  Awaited<ReturnType<typeof postAuthLoginMfaWebauthnBegin>>,
+  TError,
+  PostAuthLoginMfaWebauthnBeginMutationVariables,
+  TContext
+> => {
+  return useMutation(getPostAuthLoginMfaWebauthnBeginMutationOptions(options), queryClient);
+};
 /**
  * @summary Exchange an OIDC authorization code for a WiseLabz session
  */
@@ -586,124 +468,76 @@ export const postAuthOidcCallback = (
   );
 };
 
-export const getPostAuthOidcCallbackQueryKey = (
-  oidcCallbackRequest?: BodyType<OidcCallbackRequest>
-) => {
-  return ['POST', `/auth/oidc/callback`, oidcCallbackRequest] as const;
-};
+export const getPostAuthOidcCallbackMutationKey = () => ['postAuthOidcCallback'] as const;
 
-export const getPostAuthOidcCallbackQueryOptions = <
-  TData = Awaited<ReturnType<typeof postAuthOidcCallback>>,
+export const getPostAuthOidcCallbackMutationOptions = <
   TError = ErrorType<UnauthorizedResponse>,
->(
-  oidcCallbackRequest: BodyType<OidcCallbackRequest>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postAuthOidcCallback>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  }
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
-
-  const queryKey = queryOptions?.queryKey ?? getPostAuthOidcCallbackQueryKey(oidcCallbackRequest);
-
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof postAuthOidcCallback>>> = ({ signal }) =>
-    postAuthOidcCallback(oidcCallbackRequest, requestOptions, signal);
-
-  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof postAuthOidcCallback>>,
     TError,
-    TData
-  > & { queryKey: DataTag<QueryKey, TData, TError> };
+    PostAuthOidcCallbackMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof postAuthOidcCallback>>,
+  TError,
+  PostAuthOidcCallbackMutationVariables,
+  TContext
+> => {
+  const mutationKey = getPostAuthOidcCallbackMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof postAuthOidcCallback>>,
+    PostAuthOidcCallbackMutationVariables
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return postAuthOidcCallback(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type PostAuthOidcCallbackQueryResult = NonNullable<
+export type PostAuthOidcCallbackMutationResult = NonNullable<
   Awaited<ReturnType<typeof postAuthOidcCallback>>
 >;
-export type PostAuthOidcCallbackQueryError = ErrorType<UnauthorizedResponse>;
+export type PostAuthOidcCallbackMutationBody = BodyType<OidcCallbackRequest>;
+export type PostAuthOidcCallbackMutationError = ErrorType<UnauthorizedResponse>;
+export type PostAuthOidcCallbackMutationVariables = { data: BodyType<OidcCallbackRequest> };
 
-export function usePostAuthOidcCallback<
-  TData = Awaited<ReturnType<typeof postAuthOidcCallback>>,
-  TError = ErrorType<UnauthorizedResponse>,
->(
-  oidcCallbackRequest: BodyType<OidcCallbackRequest>,
-  options: {
-    query: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postAuthOidcCallback>>, TError, TData>
-    > &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postAuthOidcCallback>>,
-          TError,
-          Awaited<ReturnType<typeof postAuthOidcCallback>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostAuthOidcCallback<
-  TData = Awaited<ReturnType<typeof postAuthOidcCallback>>,
-  TError = ErrorType<UnauthorizedResponse>,
->(
-  oidcCallbackRequest: BodyType<OidcCallbackRequest>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postAuthOidcCallback>>, TError, TData>
-    > &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postAuthOidcCallback>>,
-          TError,
-          Awaited<ReturnType<typeof postAuthOidcCallback>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostAuthOidcCallback<
-  TData = Awaited<ReturnType<typeof postAuthOidcCallback>>,
-  TError = ErrorType<UnauthorizedResponse>,
->(
-  oidcCallbackRequest: BodyType<OidcCallbackRequest>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postAuthOidcCallback>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
  * @summary Exchange an OIDC authorization code for a WiseLabz session
  */
-
-export function usePostAuthOidcCallback<
-  TData = Awaited<ReturnType<typeof postAuthOidcCallback>>,
+export const usePostAuthOidcCallback = <
   TError = ErrorType<UnauthorizedResponse>,
+  TContext = unknown,
 >(
-  oidcCallbackRequest: BodyType<OidcCallbackRequest>,
   options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postAuthOidcCallback>>, TError, TData>
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof postAuthOidcCallback>>,
+      TError,
+      PostAuthOidcCallbackMutationVariables,
+      TContext
     >;
     request?: SecondParameter<typeof customInstance>;
   },
   queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getPostAuthOidcCallbackQueryOptions(oidcCallbackRequest, options);
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
+): UseMutationResult<
+  Awaited<ReturnType<typeof postAuthOidcCallback>>,
+  TError,
+  PostAuthOidcCallbackMutationVariables,
+  TContext
+> => {
+  return useMutation(getPostAuthOidcCallbackMutationOptions(options), queryClient);
+};
 /**
  * @summary Silent refresh — mints a new access token from the refresh cookie
  */
@@ -714,103 +548,57 @@ export const postAuthRefresh = (
   return customInstance<AuthSession>({ url: `/auth/refresh`, method: 'POST', signal }, options);
 };
 
-export const getPostAuthRefreshQueryKey = () => {
-  return ['POST', `/auth/refresh`] as const;
-};
+export const getPostAuthRefreshMutationKey = () => ['postAuthRefresh'] as const;
 
-export const getPostAuthRefreshQueryOptions = <
-  TData = Awaited<ReturnType<typeof postAuthRefresh>>,
+export const getPostAuthRefreshMutationOptions = <
   TError = ErrorType<UnauthorizedResponse>,
+  TContext = unknown,
 >(options?: {
-  query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof postAuthRefresh>>, TError, TData>>;
-  request?: SecondParameter<typeof customInstance>;
-}) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
-
-  const queryKey = queryOptions?.queryKey ?? getPostAuthRefreshQueryKey();
-
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof postAuthRefresh>>> = ({ signal }) =>
-    postAuthRefresh(requestOptions, signal);
-
-  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+  mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof postAuthRefresh>>,
     TError,
-    TData
-  > & { queryKey: DataTag<QueryKey, TData, TError> };
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<Awaited<ReturnType<typeof postAuthRefresh>>, TError, void, TContext> => {
+  const mutationKey = getPostAuthRefreshMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<Awaited<ReturnType<typeof postAuthRefresh>>, void> = () => {
+    return postAuthRefresh(requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type PostAuthRefreshQueryResult = NonNullable<Awaited<ReturnType<typeof postAuthRefresh>>>;
-export type PostAuthRefreshQueryError = ErrorType<UnauthorizedResponse>;
+export type PostAuthRefreshMutationResult = NonNullable<
+  Awaited<ReturnType<typeof postAuthRefresh>>
+>;
 
-export function usePostAuthRefresh<
-  TData = Awaited<ReturnType<typeof postAuthRefresh>>,
-  TError = ErrorType<UnauthorizedResponse>,
->(
-  options: {
-    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof postAuthRefresh>>, TError, TData>> &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postAuthRefresh>>,
-          TError,
-          Awaited<ReturnType<typeof postAuthRefresh>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostAuthRefresh<
-  TData = Awaited<ReturnType<typeof postAuthRefresh>>,
-  TError = ErrorType<UnauthorizedResponse>,
->(
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof postAuthRefresh>>, TError, TData>> &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postAuthRefresh>>,
-          TError,
-          Awaited<ReturnType<typeof postAuthRefresh>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostAuthRefresh<
-  TData = Awaited<ReturnType<typeof postAuthRefresh>>,
-  TError = ErrorType<UnauthorizedResponse>,
->(
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof postAuthRefresh>>, TError, TData>>;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export type PostAuthRefreshMutationError = ErrorType<UnauthorizedResponse>;
+
 /**
  * @summary Silent refresh — mints a new access token from the refresh cookie
  */
-
-export function usePostAuthRefresh<
-  TData = Awaited<ReturnType<typeof postAuthRefresh>>,
-  TError = ErrorType<UnauthorizedResponse>,
->(
+export const usePostAuthRefresh = <TError = ErrorType<UnauthorizedResponse>, TContext = unknown>(
   options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof postAuthRefresh>>, TError, TData>>;
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof postAuthRefresh>>,
+      TError,
+      void,
+      TContext
+    >;
     request?: SecondParameter<typeof customInstance>;
   },
   queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getPostAuthRefreshQueryOptions(options);
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
+): UseMutationResult<Awaited<ReturnType<typeof postAuthRefresh>>, TError, void, TContext> => {
+  return useMutation(getPostAuthRefreshMutationOptions(options), queryClient);
+};
 /**
  * @summary Invalidate the refresh token and clear the cookie
  */
@@ -821,105 +609,52 @@ export const postAuthLogout = (
   return customInstance<void>({ url: `/auth/logout`, method: 'POST', signal }, options);
 };
 
-export const getPostAuthLogoutQueryKey = () => {
-  return ['POST', `/auth/logout`] as const;
-};
+export const getPostAuthLogoutMutationKey = () => ['postAuthLogout'] as const;
 
-export const getPostAuthLogoutQueryOptions = <
-  TData = Awaited<ReturnType<typeof postAuthLogout>>,
+export const getPostAuthLogoutMutationOptions = <
   TError = ErrorType<unknown>,
+  TContext = unknown,
 >(options?: {
-  query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof postAuthLogout>>, TError, TData>>;
+  mutation?: UseMutationOptions<Awaited<ReturnType<typeof postAuthLogout>>, TError, void, TContext>;
   request?: SecondParameter<typeof customInstance>;
-}) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
+}): UseMutationOptions<Awaited<ReturnType<typeof postAuthLogout>>, TError, void, TContext> => {
+  const mutationKey = getPostAuthLogoutMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
 
-  const queryKey = queryOptions?.queryKey ?? getPostAuthLogoutQueryKey();
+  const mutationFn: MutationFunction<Awaited<ReturnType<typeof postAuthLogout>>, void> = () => {
+    return postAuthLogout(requestOptions);
+  };
 
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof postAuthLogout>>> = ({ signal }) =>
-    postAuthLogout(requestOptions, signal);
-
-  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
-    Awaited<ReturnType<typeof postAuthLogout>>,
-    TError,
-    TData
-  > & { queryKey: DataTag<QueryKey, TData, TError> };
+  return { mutationFn, ...mutationOptions };
 };
 
-export type PostAuthLogoutQueryResult = NonNullable<Awaited<ReturnType<typeof postAuthLogout>>>;
-export type PostAuthLogoutQueryError = ErrorType<unknown>;
+export type PostAuthLogoutMutationResult = NonNullable<Awaited<ReturnType<typeof postAuthLogout>>>;
 
-export function usePostAuthLogout<
-  TData = Awaited<ReturnType<typeof postAuthLogout>>,
-  TError = ErrorType<unknown>,
->(
-  options: {
-    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof postAuthLogout>>, TError, TData>> &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postAuthLogout>>,
-          TError,
-          Awaited<ReturnType<typeof postAuthLogout>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostAuthLogout<
-  TData = Awaited<ReturnType<typeof postAuthLogout>>,
-  TError = ErrorType<unknown>,
->(
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof postAuthLogout>>, TError, TData>> &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postAuthLogout>>,
-          TError,
-          Awaited<ReturnType<typeof postAuthLogout>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostAuthLogout<
-  TData = Awaited<ReturnType<typeof postAuthLogout>>,
-  TError = ErrorType<unknown>,
->(
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof postAuthLogout>>, TError, TData>>;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export type PostAuthLogoutMutationError = ErrorType<unknown>;
+
 /**
  * @summary Invalidate the refresh token and clear the cookie
  */
-
-export function usePostAuthLogout<
-  TData = Awaited<ReturnType<typeof postAuthLogout>>,
-  TError = ErrorType<unknown>,
->(
+export const usePostAuthLogout = <TError = ErrorType<unknown>, TContext = unknown>(
   options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof postAuthLogout>>, TError, TData>>;
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof postAuthLogout>>,
+      TError,
+      void,
+      TContext
+    >;
     request?: SecondParameter<typeof customInstance>;
   },
   queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getPostAuthLogoutQueryOptions(options);
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
+): UseMutationResult<Awaited<ReturnType<typeof postAuthLogout>>, TError, void, TContext> => {
+  return useMutation(getPostAuthLogoutMutationOptions(options), queryClient);
+};
 /**
- * Re-authenticates the current operator (password, or TOTP when configured) and mints a short-lived elevation token scoped to one destructive action (ARCHITECTURE.md 2026-06-27). The token is replayed in the `X-Elevation-Token` header on the destructive request (e.g. connector removal). Only required when `stepUpForDestructive` is enabled.
+ * Re-authenticates the current operator (password, or TOTP when configured) and mints a short-lived elevation token scoped to one destructive action (ARCHITECTURE.md 2026-06-27). The token is replayed in the `X-Elevation-Token` header on the destructive request (e.g. connector removal). It is bound to the session that earned it and to `target`, and is spent by one request. Only required when `stepUpForDestructive` is enabled.
  * @summary Step-up re-authentication for a single destructive action
  */
 export const postAuthElevate = (
@@ -939,110 +674,76 @@ export const postAuthElevate = (
   );
 };
 
-export const getPostAuthElevateQueryKey = (elevationRequest?: BodyType<ElevationRequest>) => {
-  return ['POST', `/auth/elevate`, elevationRequest] as const;
-};
+export const getPostAuthElevateMutationKey = () => ['postAuthElevate'] as const;
 
-export const getPostAuthElevateQueryOptions = <
-  TData = Awaited<ReturnType<typeof postAuthElevate>>,
+export const getPostAuthElevateMutationOptions = <
   TError = ErrorType<Error | UnauthorizedResponse | void>,
->(
-  elevationRequest: BodyType<ElevationRequest>,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof postAuthElevate>>, TError, TData>>;
-    request?: SecondParameter<typeof customInstance>;
-  }
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
-
-  const queryKey = queryOptions?.queryKey ?? getPostAuthElevateQueryKey(elevationRequest);
-
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof postAuthElevate>>> = ({ signal }) =>
-    postAuthElevate(elevationRequest, requestOptions, signal);
-
-  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof postAuthElevate>>,
     TError,
-    TData
-  > & { queryKey: DataTag<QueryKey, TData, TError> };
+    PostAuthElevateMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof postAuthElevate>>,
+  TError,
+  PostAuthElevateMutationVariables,
+  TContext
+> => {
+  const mutationKey = getPostAuthElevateMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof postAuthElevate>>,
+    PostAuthElevateMutationVariables
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return postAuthElevate(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type PostAuthElevateQueryResult = NonNullable<Awaited<ReturnType<typeof postAuthElevate>>>;
-export type PostAuthElevateQueryError = ErrorType<Error | UnauthorizedResponse | void>;
+export type PostAuthElevateMutationResult = NonNullable<
+  Awaited<ReturnType<typeof postAuthElevate>>
+>;
+export type PostAuthElevateMutationBody = BodyType<ElevationRequest>;
+export type PostAuthElevateMutationError = ErrorType<Error | UnauthorizedResponse | void>;
+export type PostAuthElevateMutationVariables = { data: BodyType<ElevationRequest> };
 
-export function usePostAuthElevate<
-  TData = Awaited<ReturnType<typeof postAuthElevate>>,
-  TError = ErrorType<Error | UnauthorizedResponse | void>,
->(
-  elevationRequest: BodyType<ElevationRequest>,
-  options: {
-    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof postAuthElevate>>, TError, TData>> &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postAuthElevate>>,
-          TError,
-          Awaited<ReturnType<typeof postAuthElevate>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostAuthElevate<
-  TData = Awaited<ReturnType<typeof postAuthElevate>>,
-  TError = ErrorType<Error | UnauthorizedResponse | void>,
->(
-  elevationRequest: BodyType<ElevationRequest>,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof postAuthElevate>>, TError, TData>> &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postAuthElevate>>,
-          TError,
-          Awaited<ReturnType<typeof postAuthElevate>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostAuthElevate<
-  TData = Awaited<ReturnType<typeof postAuthElevate>>,
-  TError = ErrorType<Error | UnauthorizedResponse | void>,
->(
-  elevationRequest: BodyType<ElevationRequest>,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof postAuthElevate>>, TError, TData>>;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
  * @summary Step-up re-authentication for a single destructive action
  */
-
-export function usePostAuthElevate<
-  TData = Awaited<ReturnType<typeof postAuthElevate>>,
+export const usePostAuthElevate = <
   TError = ErrorType<Error | UnauthorizedResponse | void>,
+  TContext = unknown,
 >(
-  elevationRequest: BodyType<ElevationRequest>,
   options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof postAuthElevate>>, TError, TData>>;
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof postAuthElevate>>,
+      TError,
+      PostAuthElevateMutationVariables,
+      TContext
+    >;
     request?: SecondParameter<typeof customInstance>;
   },
   queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getPostAuthElevateQueryOptions(elevationRequest, options);
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
+): UseMutationResult<
+  Awaited<ReturnType<typeof postAuthElevate>>,
+  TError,
+  PostAuthElevateMutationVariables,
+  TContext
+> => {
+  return useMutation(getPostAuthElevateMutationOptions(options), queryClient);
+};
 /**
  * `["password"]` for a local account without a confirmed factor, `["totp","recovery"]` once one is confirmed (#279 part 1), or `["oidc"]` for an account that signs in through an identity provider (#279 part 3). PR 2 appends `"webauthn"` alongside totp/recovery.
  * @summary Which step-up method(s) POST /auth/elevate expects
@@ -1186,130 +887,76 @@ export const postAuthElevateWebauthnBegin = (
   );
 };
 
-export const getPostAuthElevateWebauthnBeginQueryKey = (
-  postAuthElevateWebauthnBeginBody?: BodyType<PostAuthElevateWebauthnBeginBody>
-) => {
-  return ['POST', `/auth/elevate/webauthn/begin`, postAuthElevateWebauthnBeginBody] as const;
-};
+export const getPostAuthElevateWebauthnBeginMutationKey = () =>
+  ['postAuthElevateWebauthnBegin'] as const;
 
-export const getPostAuthElevateWebauthnBeginQueryOptions = <
-  TData = Awaited<ReturnType<typeof postAuthElevateWebauthnBegin>>,
+export const getPostAuthElevateWebauthnBeginMutationOptions = <
   TError = ErrorType<void>,
->(
-  postAuthElevateWebauthnBeginBody: BodyType<PostAuthElevateWebauthnBeginBody>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postAuthElevateWebauthnBegin>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  }
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
-
-  const queryKey =
-    queryOptions?.queryKey ??
-    getPostAuthElevateWebauthnBeginQueryKey(postAuthElevateWebauthnBeginBody);
-
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof postAuthElevateWebauthnBegin>>> = ({
-    signal,
-  }) => postAuthElevateWebauthnBegin(postAuthElevateWebauthnBeginBody, requestOptions, signal);
-
-  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof postAuthElevateWebauthnBegin>>,
     TError,
-    TData
-  > & { queryKey: DataTag<QueryKey, TData, TError> };
+    PostAuthElevateWebauthnBeginMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof postAuthElevateWebauthnBegin>>,
+  TError,
+  PostAuthElevateWebauthnBeginMutationVariables,
+  TContext
+> => {
+  const mutationKey = getPostAuthElevateWebauthnBeginMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof postAuthElevateWebauthnBegin>>,
+    PostAuthElevateWebauthnBeginMutationVariables
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return postAuthElevateWebauthnBegin(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type PostAuthElevateWebauthnBeginQueryResult = NonNullable<
+export type PostAuthElevateWebauthnBeginMutationResult = NonNullable<
   Awaited<ReturnType<typeof postAuthElevateWebauthnBegin>>
 >;
-export type PostAuthElevateWebauthnBeginQueryError = ErrorType<void>;
+export type PostAuthElevateWebauthnBeginMutationBody = BodyType<PostAuthElevateWebauthnBeginBody>;
+export type PostAuthElevateWebauthnBeginMutationError = ErrorType<void>;
+export type PostAuthElevateWebauthnBeginMutationVariables = {
+  data: BodyType<PostAuthElevateWebauthnBeginBody>;
+};
 
-export function usePostAuthElevateWebauthnBegin<
-  TData = Awaited<ReturnType<typeof postAuthElevateWebauthnBegin>>,
-  TError = ErrorType<void>,
->(
-  postAuthElevateWebauthnBeginBody: BodyType<PostAuthElevateWebauthnBeginBody>,
-  options: {
-    query: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postAuthElevateWebauthnBegin>>, TError, TData>
-    > &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postAuthElevateWebauthnBegin>>,
-          TError,
-          Awaited<ReturnType<typeof postAuthElevateWebauthnBegin>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostAuthElevateWebauthnBegin<
-  TData = Awaited<ReturnType<typeof postAuthElevateWebauthnBegin>>,
-  TError = ErrorType<void>,
->(
-  postAuthElevateWebauthnBeginBody: BodyType<PostAuthElevateWebauthnBeginBody>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postAuthElevateWebauthnBegin>>, TError, TData>
-    > &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postAuthElevateWebauthnBegin>>,
-          TError,
-          Awaited<ReturnType<typeof postAuthElevateWebauthnBegin>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostAuthElevateWebauthnBegin<
-  TData = Awaited<ReturnType<typeof postAuthElevateWebauthnBegin>>,
-  TError = ErrorType<void>,
->(
-  postAuthElevateWebauthnBeginBody: BodyType<PostAuthElevateWebauthnBeginBody>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postAuthElevateWebauthnBegin>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
  * @summary Begin WebAuthn step-up for one action
  */
-
-export function usePostAuthElevateWebauthnBegin<
-  TData = Awaited<ReturnType<typeof postAuthElevateWebauthnBegin>>,
-  TError = ErrorType<void>,
->(
-  postAuthElevateWebauthnBeginBody: BodyType<PostAuthElevateWebauthnBeginBody>,
+export const usePostAuthElevateWebauthnBegin = <TError = ErrorType<void>, TContext = unknown>(
   options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postAuthElevateWebauthnBegin>>, TError, TData>
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof postAuthElevateWebauthnBegin>>,
+      TError,
+      PostAuthElevateWebauthnBeginMutationVariables,
+      TContext
     >;
     request?: SecondParameter<typeof customInstance>;
   },
   queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getPostAuthElevateWebauthnBeginQueryOptions(
-    postAuthElevateWebauthnBeginBody,
-    options
-  );
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
+): UseMutationResult<
+  Awaited<ReturnType<typeof postAuthElevateWebauthnBegin>>,
+  TError,
+  PostAuthElevateWebauthnBeginMutationVariables,
+  TContext
+> => {
+  return useMutation(getPostAuthElevateWebauthnBeginMutationOptions(options), queryClient);
+};
 /**
  * For a caller whose account signs in through an IdP and has no password to confirm with POST /auth/elevate. Returns an authorize URL — opened in a popup — that forces the IdP to re-prompt for credentials (`prompt=login`, `max_age=0`) instead of silently reusing an existing IdP session. Uses the normal `/auth/callback` redirect URL, so no new IdP redirect URI registration is needed.
  * @summary Start OIDC step-up re-authentication (#279 part 3)
@@ -1331,131 +978,80 @@ export const postAuthElevateOidcBegin = (
   );
 };
 
-export const getPostAuthElevateOidcBeginQueryKey = (
-  postAuthElevateOidcBeginBody?: BodyType<PostAuthElevateOidcBeginBody>
-) => {
-  return ['POST', `/auth/elevate/oidc/begin`, postAuthElevateOidcBeginBody] as const;
-};
+export const getPostAuthElevateOidcBeginMutationKey = () => ['postAuthElevateOidcBegin'] as const;
 
-export const getPostAuthElevateOidcBeginQueryOptions = <
-  TData = Awaited<ReturnType<typeof postAuthElevateOidcBegin>>,
+export const getPostAuthElevateOidcBeginMutationOptions = <
   TError = ErrorType<BadRequestResponse | UnauthorizedResponse | ForbiddenResponse>,
->(
-  postAuthElevateOidcBeginBody: BodyType<PostAuthElevateOidcBeginBody>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postAuthElevateOidcBegin>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  }
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
-
-  const queryKey =
-    queryOptions?.queryKey ?? getPostAuthElevateOidcBeginQueryKey(postAuthElevateOidcBeginBody);
-
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof postAuthElevateOidcBegin>>> = ({
-    signal,
-  }) => postAuthElevateOidcBegin(postAuthElevateOidcBeginBody, requestOptions, signal);
-
-  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof postAuthElevateOidcBegin>>,
     TError,
-    TData
-  > & { queryKey: DataTag<QueryKey, TData, TError> };
+    PostAuthElevateOidcBeginMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof postAuthElevateOidcBegin>>,
+  TError,
+  PostAuthElevateOidcBeginMutationVariables,
+  TContext
+> => {
+  const mutationKey = getPostAuthElevateOidcBeginMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof postAuthElevateOidcBegin>>,
+    PostAuthElevateOidcBeginMutationVariables
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return postAuthElevateOidcBegin(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type PostAuthElevateOidcBeginQueryResult = NonNullable<
+export type PostAuthElevateOidcBeginMutationResult = NonNullable<
   Awaited<ReturnType<typeof postAuthElevateOidcBegin>>
 >;
-export type PostAuthElevateOidcBeginQueryError = ErrorType<
+export type PostAuthElevateOidcBeginMutationBody = BodyType<PostAuthElevateOidcBeginBody>;
+export type PostAuthElevateOidcBeginMutationError = ErrorType<
   BadRequestResponse | UnauthorizedResponse | ForbiddenResponse
 >;
+export type PostAuthElevateOidcBeginMutationVariables = {
+  data: BodyType<PostAuthElevateOidcBeginBody>;
+};
 
-export function usePostAuthElevateOidcBegin<
-  TData = Awaited<ReturnType<typeof postAuthElevateOidcBegin>>,
-  TError = ErrorType<BadRequestResponse | UnauthorizedResponse | ForbiddenResponse>,
->(
-  postAuthElevateOidcBeginBody: BodyType<PostAuthElevateOidcBeginBody>,
-  options: {
-    query: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postAuthElevateOidcBegin>>, TError, TData>
-    > &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postAuthElevateOidcBegin>>,
-          TError,
-          Awaited<ReturnType<typeof postAuthElevateOidcBegin>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostAuthElevateOidcBegin<
-  TData = Awaited<ReturnType<typeof postAuthElevateOidcBegin>>,
-  TError = ErrorType<BadRequestResponse | UnauthorizedResponse | ForbiddenResponse>,
->(
-  postAuthElevateOidcBeginBody: BodyType<PostAuthElevateOidcBeginBody>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postAuthElevateOidcBegin>>, TError, TData>
-    > &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postAuthElevateOidcBegin>>,
-          TError,
-          Awaited<ReturnType<typeof postAuthElevateOidcBegin>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostAuthElevateOidcBegin<
-  TData = Awaited<ReturnType<typeof postAuthElevateOidcBegin>>,
-  TError = ErrorType<BadRequestResponse | UnauthorizedResponse | ForbiddenResponse>,
->(
-  postAuthElevateOidcBeginBody: BodyType<PostAuthElevateOidcBeginBody>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postAuthElevateOidcBegin>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
  * @summary Start OIDC step-up re-authentication (#279 part 3)
  */
-
-export function usePostAuthElevateOidcBegin<
-  TData = Awaited<ReturnType<typeof postAuthElevateOidcBegin>>,
+export const usePostAuthElevateOidcBegin = <
   TError = ErrorType<BadRequestResponse | UnauthorizedResponse | ForbiddenResponse>,
+  TContext = unknown,
 >(
-  postAuthElevateOidcBeginBody: BodyType<PostAuthElevateOidcBeginBody>,
   options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postAuthElevateOidcBegin>>, TError, TData>
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof postAuthElevateOidcBegin>>,
+      TError,
+      PostAuthElevateOidcBeginMutationVariables,
+      TContext
     >;
     request?: SecondParameter<typeof customInstance>;
   },
   queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getPostAuthElevateOidcBeginQueryOptions(
-    postAuthElevateOidcBeginBody,
-    options
-  );
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
+): UseMutationResult<
+  Awaited<ReturnType<typeof postAuthElevateOidcBegin>>,
+  TError,
+  PostAuthElevateOidcBeginMutationVariables,
+  TContext
+> => {
+  return useMutation(getPostAuthElevateOidcBeginMutationOptions(options), queryClient);
+};
 /**
  * Exchanges the popup's authorization code, requires the re-authenticated `iss`/`sub` to match the caller's linked OIDC identity, and requires `auth_time` to be present and within 120s of now. Returns `401 {code: "oidc_reauth_unsupported"}` when the IdP omits `auth_time`. On success, mints the same elevation token POST /auth/elevate would.
  * @summary Finish OIDC step-up re-authentication (#279 part 3)
@@ -1477,130 +1073,79 @@ export const postAuthElevateOidcComplete = (
   );
 };
 
-export const getPostAuthElevateOidcCompleteQueryKey = (
-  postAuthElevateOidcCompleteBody?: BodyType<PostAuthElevateOidcCompleteBody>
-) => {
-  return ['POST', `/auth/elevate/oidc/complete`, postAuthElevateOidcCompleteBody] as const;
-};
+export const getPostAuthElevateOidcCompleteMutationKey = () =>
+  ['postAuthElevateOidcComplete'] as const;
 
-export const getPostAuthElevateOidcCompleteQueryOptions = <
-  TData = Awaited<ReturnType<typeof postAuthElevateOidcComplete>>,
+export const getPostAuthElevateOidcCompleteMutationOptions = <
   TError = ErrorType<UnauthorizedResponse>,
->(
-  postAuthElevateOidcCompleteBody: BodyType<PostAuthElevateOidcCompleteBody>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postAuthElevateOidcComplete>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  }
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
-
-  const queryKey =
-    queryOptions?.queryKey ??
-    getPostAuthElevateOidcCompleteQueryKey(postAuthElevateOidcCompleteBody);
-
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof postAuthElevateOidcComplete>>> = ({
-    signal,
-  }) => postAuthElevateOidcComplete(postAuthElevateOidcCompleteBody, requestOptions, signal);
-
-  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof postAuthElevateOidcComplete>>,
     TError,
-    TData
-  > & { queryKey: DataTag<QueryKey, TData, TError> };
+    PostAuthElevateOidcCompleteMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof postAuthElevateOidcComplete>>,
+  TError,
+  PostAuthElevateOidcCompleteMutationVariables,
+  TContext
+> => {
+  const mutationKey = getPostAuthElevateOidcCompleteMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof postAuthElevateOidcComplete>>,
+    PostAuthElevateOidcCompleteMutationVariables
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return postAuthElevateOidcComplete(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type PostAuthElevateOidcCompleteQueryResult = NonNullable<
+export type PostAuthElevateOidcCompleteMutationResult = NonNullable<
   Awaited<ReturnType<typeof postAuthElevateOidcComplete>>
 >;
-export type PostAuthElevateOidcCompleteQueryError = ErrorType<UnauthorizedResponse>;
+export type PostAuthElevateOidcCompleteMutationBody = BodyType<PostAuthElevateOidcCompleteBody>;
+export type PostAuthElevateOidcCompleteMutationError = ErrorType<UnauthorizedResponse>;
+export type PostAuthElevateOidcCompleteMutationVariables = {
+  data: BodyType<PostAuthElevateOidcCompleteBody>;
+};
 
-export function usePostAuthElevateOidcComplete<
-  TData = Awaited<ReturnType<typeof postAuthElevateOidcComplete>>,
-  TError = ErrorType<UnauthorizedResponse>,
->(
-  postAuthElevateOidcCompleteBody: BodyType<PostAuthElevateOidcCompleteBody>,
-  options: {
-    query: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postAuthElevateOidcComplete>>, TError, TData>
-    > &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postAuthElevateOidcComplete>>,
-          TError,
-          Awaited<ReturnType<typeof postAuthElevateOidcComplete>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostAuthElevateOidcComplete<
-  TData = Awaited<ReturnType<typeof postAuthElevateOidcComplete>>,
-  TError = ErrorType<UnauthorizedResponse>,
->(
-  postAuthElevateOidcCompleteBody: BodyType<PostAuthElevateOidcCompleteBody>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postAuthElevateOidcComplete>>, TError, TData>
-    > &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postAuthElevateOidcComplete>>,
-          TError,
-          Awaited<ReturnType<typeof postAuthElevateOidcComplete>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostAuthElevateOidcComplete<
-  TData = Awaited<ReturnType<typeof postAuthElevateOidcComplete>>,
-  TError = ErrorType<UnauthorizedResponse>,
->(
-  postAuthElevateOidcCompleteBody: BodyType<PostAuthElevateOidcCompleteBody>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postAuthElevateOidcComplete>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
  * @summary Finish OIDC step-up re-authentication (#279 part 3)
  */
-
-export function usePostAuthElevateOidcComplete<
-  TData = Awaited<ReturnType<typeof postAuthElevateOidcComplete>>,
+export const usePostAuthElevateOidcComplete = <
   TError = ErrorType<UnauthorizedResponse>,
+  TContext = unknown,
 >(
-  postAuthElevateOidcCompleteBody: BodyType<PostAuthElevateOidcCompleteBody>,
   options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postAuthElevateOidcComplete>>, TError, TData>
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof postAuthElevateOidcComplete>>,
+      TError,
+      PostAuthElevateOidcCompleteMutationVariables,
+      TContext
     >;
     request?: SecondParameter<typeof customInstance>;
   },
   queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getPostAuthElevateOidcCompleteQueryOptions(
-    postAuthElevateOidcCompleteBody,
-    options
-  );
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
+): UseMutationResult<
+  Awaited<ReturnType<typeof postAuthElevateOidcComplete>>,
+  TError,
+  PostAuthElevateOidcCompleteMutationVariables,
+  TContext
+> => {
+  return useMutation(getPostAuthElevateOidcCompleteMutationOptions(options), queryClient);
+};
 /**
  * @summary List the current user's API keys
  */
@@ -1709,7 +1254,7 @@ export function useGetAuthApiKeys<
 }
 
 /**
- * The opaque token is returned once and cannot be retrieved again.
+ * The opaque token is returned once and cannot be retrieved again. When `stepUpForDestructive` is enabled, requires an `X-Elevation-Token` for action `apiKey.create`.
  * @summary Create an API key for the current user
  */
 export const postAuthApiKeys = (
@@ -1729,110 +1274,76 @@ export const postAuthApiKeys = (
   );
 };
 
-export const getPostAuthApiKeysQueryKey = (apiKeyCreate?: BodyType<ApiKeyCreate>) => {
-  return ['POST', `/auth/api-keys`, apiKeyCreate] as const;
-};
+export const getPostAuthApiKeysMutationKey = () => ['postAuthApiKeys'] as const;
 
-export const getPostAuthApiKeysQueryOptions = <
-  TData = Awaited<ReturnType<typeof postAuthApiKeys>>,
+export const getPostAuthApiKeysMutationOptions = <
   TError = ErrorType<BadRequestResponse | ForbiddenResponse>,
->(
-  apiKeyCreate: BodyType<ApiKeyCreate>,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof postAuthApiKeys>>, TError, TData>>;
-    request?: SecondParameter<typeof customInstance>;
-  }
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
-
-  const queryKey = queryOptions?.queryKey ?? getPostAuthApiKeysQueryKey(apiKeyCreate);
-
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof postAuthApiKeys>>> = ({ signal }) =>
-    postAuthApiKeys(apiKeyCreate, requestOptions, signal);
-
-  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof postAuthApiKeys>>,
     TError,
-    TData
-  > & { queryKey: DataTag<QueryKey, TData, TError> };
+    PostAuthApiKeysMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof postAuthApiKeys>>,
+  TError,
+  PostAuthApiKeysMutationVariables,
+  TContext
+> => {
+  const mutationKey = getPostAuthApiKeysMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof postAuthApiKeys>>,
+    PostAuthApiKeysMutationVariables
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return postAuthApiKeys(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type PostAuthApiKeysQueryResult = NonNullable<Awaited<ReturnType<typeof postAuthApiKeys>>>;
-export type PostAuthApiKeysQueryError = ErrorType<BadRequestResponse | ForbiddenResponse>;
+export type PostAuthApiKeysMutationResult = NonNullable<
+  Awaited<ReturnType<typeof postAuthApiKeys>>
+>;
+export type PostAuthApiKeysMutationBody = BodyType<ApiKeyCreate>;
+export type PostAuthApiKeysMutationError = ErrorType<BadRequestResponse | ForbiddenResponse>;
+export type PostAuthApiKeysMutationVariables = { data: BodyType<ApiKeyCreate> };
 
-export function usePostAuthApiKeys<
-  TData = Awaited<ReturnType<typeof postAuthApiKeys>>,
-  TError = ErrorType<BadRequestResponse | ForbiddenResponse>,
->(
-  apiKeyCreate: BodyType<ApiKeyCreate>,
-  options: {
-    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof postAuthApiKeys>>, TError, TData>> &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postAuthApiKeys>>,
-          TError,
-          Awaited<ReturnType<typeof postAuthApiKeys>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostAuthApiKeys<
-  TData = Awaited<ReturnType<typeof postAuthApiKeys>>,
-  TError = ErrorType<BadRequestResponse | ForbiddenResponse>,
->(
-  apiKeyCreate: BodyType<ApiKeyCreate>,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof postAuthApiKeys>>, TError, TData>> &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postAuthApiKeys>>,
-          TError,
-          Awaited<ReturnType<typeof postAuthApiKeys>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostAuthApiKeys<
-  TData = Awaited<ReturnType<typeof postAuthApiKeys>>,
-  TError = ErrorType<BadRequestResponse | ForbiddenResponse>,
->(
-  apiKeyCreate: BodyType<ApiKeyCreate>,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof postAuthApiKeys>>, TError, TData>>;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
  * @summary Create an API key for the current user
  */
-
-export function usePostAuthApiKeys<
-  TData = Awaited<ReturnType<typeof postAuthApiKeys>>,
+export const usePostAuthApiKeys = <
   TError = ErrorType<BadRequestResponse | ForbiddenResponse>,
+  TContext = unknown,
 >(
-  apiKeyCreate: BodyType<ApiKeyCreate>,
   options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof postAuthApiKeys>>, TError, TData>>;
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof postAuthApiKeys>>,
+      TError,
+      PostAuthApiKeysMutationVariables,
+      TContext
+    >;
     request?: SecondParameter<typeof customInstance>;
   },
   queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getPostAuthApiKeysQueryOptions(apiKeyCreate, options);
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
+): UseMutationResult<
+  Awaited<ReturnType<typeof postAuthApiKeys>>,
+  TError,
+  PostAuthApiKeysMutationVariables,
+  TContext
+> => {
+  return useMutation(getPostAuthApiKeysMutationOptions(options), queryClient);
+};
 /**
  * @summary Revoke one of the current user's API keys
  */
@@ -1844,121 +1355,73 @@ export const deleteAuthApiKeysId = (
   return customInstance<void>({ url: `/auth/api-keys/${id}`, method: 'DELETE', signal }, options);
 };
 
-export const getDeleteAuthApiKeysIdQueryKey = (id: string) => {
-  return ['DELETE', `/auth/api-keys/${id}`] as const;
-};
+export const getDeleteAuthApiKeysIdMutationKey = () => ['deleteAuthApiKeysId'] as const;
 
-export const getDeleteAuthApiKeysIdQueryOptions = <
-  TData = Awaited<ReturnType<typeof deleteAuthApiKeysId>>,
+export const getDeleteAuthApiKeysIdMutationOptions = <
   TError = ErrorType<ForbiddenResponse | NotFoundResponse>,
->(
-  id: string,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof deleteAuthApiKeysId>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  }
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteAuthApiKeysId>>,
+    TError,
+    DeleteAuthApiKeysIdMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteAuthApiKeysId>>,
+  TError,
+  DeleteAuthApiKeysIdMutationVariables,
+  TContext
+> => {
+  const mutationKey = getDeleteAuthApiKeysIdMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
 
-  const queryKey = queryOptions?.queryKey ?? getDeleteAuthApiKeysIdQueryKey(id);
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteAuthApiKeysId>>,
+    DeleteAuthApiKeysIdMutationVariables
+  > = (props) => {
+    const { id } = props ?? {};
 
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof deleteAuthApiKeysId>>> = ({ signal }) =>
-    deleteAuthApiKeysId(id, requestOptions, signal);
-
-  return {
-    queryKey,
-    queryFn,
-    enabled: id !== null && id !== undefined,
-    ...queryOptions,
-  } as UseQueryOptions<Awaited<ReturnType<typeof deleteAuthApiKeysId>>, TError, TData> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
+    return deleteAuthApiKeysId(id, requestOptions);
   };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type DeleteAuthApiKeysIdQueryResult = NonNullable<
+export type DeleteAuthApiKeysIdMutationResult = NonNullable<
   Awaited<ReturnType<typeof deleteAuthApiKeysId>>
 >;
-export type DeleteAuthApiKeysIdQueryError = ErrorType<ForbiddenResponse | NotFoundResponse>;
 
-export function useDeleteAuthApiKeysId<
-  TData = Awaited<ReturnType<typeof deleteAuthApiKeysId>>,
-  TError = ErrorType<ForbiddenResponse | NotFoundResponse>,
->(
-  id: string,
-  options: {
-    query: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof deleteAuthApiKeysId>>, TError, TData>
-    > &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof deleteAuthApiKeysId>>,
-          TError,
-          Awaited<ReturnType<typeof deleteAuthApiKeysId>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function useDeleteAuthApiKeysId<
-  TData = Awaited<ReturnType<typeof deleteAuthApiKeysId>>,
-  TError = ErrorType<ForbiddenResponse | NotFoundResponse>,
->(
-  id: string,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof deleteAuthApiKeysId>>, TError, TData>
-    > &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof deleteAuthApiKeysId>>,
-          TError,
-          Awaited<ReturnType<typeof deleteAuthApiKeysId>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function useDeleteAuthApiKeysId<
-  TData = Awaited<ReturnType<typeof deleteAuthApiKeysId>>,
-  TError = ErrorType<ForbiddenResponse | NotFoundResponse>,
->(
-  id: string,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof deleteAuthApiKeysId>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export type DeleteAuthApiKeysIdMutationError = ErrorType<ForbiddenResponse | NotFoundResponse>;
+export type DeleteAuthApiKeysIdMutationVariables = { id: string };
+
 /**
  * @summary Revoke one of the current user's API keys
  */
-
-export function useDeleteAuthApiKeysId<
-  TData = Awaited<ReturnType<typeof deleteAuthApiKeysId>>,
+export const useDeleteAuthApiKeysId = <
   TError = ErrorType<ForbiddenResponse | NotFoundResponse>,
+  TContext = unknown,
 >(
-  id: string,
   options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof deleteAuthApiKeysId>>, TError, TData>
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof deleteAuthApiKeysId>>,
+      TError,
+      DeleteAuthApiKeysIdMutationVariables,
+      TContext
     >;
     request?: SecondParameter<typeof customInstance>;
   },
   queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getDeleteAuthApiKeysIdQueryOptions(id, options);
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
+): UseMutationResult<
+  Awaited<ReturnType<typeof deleteAuthApiKeysId>>,
+  TError,
+  DeleteAuthApiKeysIdMutationVariables,
+  TContext
+> => {
+  return useMutation(getDeleteAuthApiKeysIdMutationOptions(options), queryClient);
+};

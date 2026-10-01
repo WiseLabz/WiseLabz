@@ -232,7 +232,8 @@ describe('ProfilePage API keys (#278 scopes)', () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(createApiKeyMock).toHaveBeenCalledWith(
-      expect.objectContaining({ name: 'ci', scope: 'read', connectorIds: ['c2'] })
+      expect.objectContaining({ name: 'ci', scope: 'read', connectorIds: ['c2'] }),
+      undefined
     );
   });
 
@@ -245,7 +246,8 @@ describe('ProfilePage API keys (#278 scopes)', () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(createApiKeyMock).toHaveBeenCalledWith(
-      expect.objectContaining({ name: 'ci', scope: 'full', connectorIds: undefined })
+      expect.objectContaining({ name: 'ci', scope: 'full', connectorIds: undefined }),
+      undefined
     );
   });
 });

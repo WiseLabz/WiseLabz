@@ -6,15 +6,18 @@
  *
  * OpenAPI spec version: 0.1.0
  */
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import type {
   DataTag,
   DefinedInitialDataOptions,
   DefinedUseQueryResult,
+  MutationFunction,
   QueryClient,
   QueryFunction,
   QueryKey,
   UndefinedInitialDataOptions,
+  UseMutationOptions,
+  UseMutationResult,
   UseQueryOptions,
   UseQueryResult,
 } from '@tanstack/react-query';
@@ -177,116 +180,73 @@ export const postNotificationsReadAll = (
   return customInstance<void>({ url: `/notifications/read-all`, method: 'POST', signal }, options);
 };
 
-export const getPostNotificationsReadAllQueryKey = () => {
-  return ['POST', `/notifications/read-all`] as const;
-};
+export const getPostNotificationsReadAllMutationKey = () => ['postNotificationsReadAll'] as const;
 
-export const getPostNotificationsReadAllQueryOptions = <
-  TData = Awaited<ReturnType<typeof postNotificationsReadAll>>,
+export const getPostNotificationsReadAllMutationOptions = <
   TError = ErrorType<UnauthorizedResponse>,
+  TContext = unknown,
 >(options?: {
-  query?: Partial<
-    UseQueryOptions<Awaited<ReturnType<typeof postNotificationsReadAll>>, TError, TData>
-  >;
-  request?: SecondParameter<typeof customInstance>;
-}) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
-
-  const queryKey = queryOptions?.queryKey ?? getPostNotificationsReadAllQueryKey();
-
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof postNotificationsReadAll>>> = ({
-    signal,
-  }) => postNotificationsReadAll(requestOptions, signal);
-
-  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+  mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof postNotificationsReadAll>>,
     TError,
-    TData
-  > & { queryKey: DataTag<QueryKey, TData, TError> };
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof postNotificationsReadAll>>,
+  TError,
+  void,
+  TContext
+> => {
+  const mutationKey = getPostNotificationsReadAllMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof postNotificationsReadAll>>,
+    void
+  > = () => {
+    return postNotificationsReadAll(requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type PostNotificationsReadAllQueryResult = NonNullable<
+export type PostNotificationsReadAllMutationResult = NonNullable<
   Awaited<ReturnType<typeof postNotificationsReadAll>>
 >;
-export type PostNotificationsReadAllQueryError = ErrorType<UnauthorizedResponse>;
 
-export function usePostNotificationsReadAll<
-  TData = Awaited<ReturnType<typeof postNotificationsReadAll>>,
-  TError = ErrorType<UnauthorizedResponse>,
->(
-  options: {
-    query: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postNotificationsReadAll>>, TError, TData>
-    > &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postNotificationsReadAll>>,
-          TError,
-          Awaited<ReturnType<typeof postNotificationsReadAll>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostNotificationsReadAll<
-  TData = Awaited<ReturnType<typeof postNotificationsReadAll>>,
-  TError = ErrorType<UnauthorizedResponse>,
->(
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postNotificationsReadAll>>, TError, TData>
-    > &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postNotificationsReadAll>>,
-          TError,
-          Awaited<ReturnType<typeof postNotificationsReadAll>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostNotificationsReadAll<
-  TData = Awaited<ReturnType<typeof postNotificationsReadAll>>,
-  TError = ErrorType<UnauthorizedResponse>,
->(
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postNotificationsReadAll>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export type PostNotificationsReadAllMutationError = ErrorType<UnauthorizedResponse>;
+
 /**
  * @summary Mark all of the current user's notifications as read
  */
-
-export function usePostNotificationsReadAll<
-  TData = Awaited<ReturnType<typeof postNotificationsReadAll>>,
+export const usePostNotificationsReadAll = <
   TError = ErrorType<UnauthorizedResponse>,
+  TContext = unknown,
 >(
   options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postNotificationsReadAll>>, TError, TData>
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof postNotificationsReadAll>>,
+      TError,
+      void,
+      TContext
     >;
     request?: SecondParameter<typeof customInstance>;
   },
   queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getPostNotificationsReadAllQueryOptions(options);
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
+): UseMutationResult<
+  Awaited<ReturnType<typeof postNotificationsReadAll>>,
+  TError,
+  void,
+  TContext
+> => {
+  return useMutation(getPostNotificationsReadAllMutationOptions(options), queryClient);
+};
 /**
  * @summary Mark one notification as read
  */
@@ -301,151 +261,79 @@ export const postNotificationsNotificationIdRead = (
   );
 };
 
-export const getPostNotificationsNotificationIdReadQueryKey = (notificationId: string) => {
-  return ['POST', `/notifications/${notificationId}/read`] as const;
-};
+export const getPostNotificationsNotificationIdReadMutationKey = () =>
+  ['postNotificationsNotificationIdRead'] as const;
 
-export const getPostNotificationsNotificationIdReadQueryOptions = <
-  TData = Awaited<ReturnType<typeof postNotificationsNotificationIdRead>>,
+export const getPostNotificationsNotificationIdReadMutationOptions = <
   TError = ErrorType<UnauthorizedResponse | NotFoundResponse>,
->(
-  notificationId: string,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<
-        Awaited<ReturnType<typeof postNotificationsNotificationIdRead>>,
-        TError,
-        TData
-      >
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  }
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
-
-  const queryKey =
-    queryOptions?.queryKey ?? getPostNotificationsNotificationIdReadQueryKey(notificationId);
-
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof postNotificationsNotificationIdRead>>> = ({
-    signal,
-  }) => postNotificationsNotificationIdRead(notificationId, requestOptions, signal);
-
-  return {
-    queryKey,
-    queryFn,
-    enabled: notificationId !== null && notificationId !== undefined,
-    ...queryOptions,
-  } as UseQueryOptions<
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof postNotificationsNotificationIdRead>>,
     TError,
-    TData
-  > & { queryKey: DataTag<QueryKey, TData, TError> };
+    PostNotificationsNotificationIdReadMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof postNotificationsNotificationIdRead>>,
+  TError,
+  PostNotificationsNotificationIdReadMutationVariables,
+  TContext
+> => {
+  const mutationKey = getPostNotificationsNotificationIdReadMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof postNotificationsNotificationIdRead>>,
+    PostNotificationsNotificationIdReadMutationVariables
+  > = (props) => {
+    const { notificationId } = props ?? {};
+
+    return postNotificationsNotificationIdRead(notificationId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type PostNotificationsNotificationIdReadQueryResult = NonNullable<
+export type PostNotificationsNotificationIdReadMutationResult = NonNullable<
   Awaited<ReturnType<typeof postNotificationsNotificationIdRead>>
 >;
-export type PostNotificationsNotificationIdReadQueryError = ErrorType<
+
+export type PostNotificationsNotificationIdReadMutationError = ErrorType<
   UnauthorizedResponse | NotFoundResponse
 >;
+export type PostNotificationsNotificationIdReadMutationVariables = { notificationId: string };
 
-export function usePostNotificationsNotificationIdRead<
-  TData = Awaited<ReturnType<typeof postNotificationsNotificationIdRead>>,
-  TError = ErrorType<UnauthorizedResponse | NotFoundResponse>,
->(
-  notificationId: string,
-  options: {
-    query: Partial<
-      UseQueryOptions<
-        Awaited<ReturnType<typeof postNotificationsNotificationIdRead>>,
-        TError,
-        TData
-      >
-    > &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postNotificationsNotificationIdRead>>,
-          TError,
-          Awaited<ReturnType<typeof postNotificationsNotificationIdRead>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostNotificationsNotificationIdRead<
-  TData = Awaited<ReturnType<typeof postNotificationsNotificationIdRead>>,
-  TError = ErrorType<UnauthorizedResponse | NotFoundResponse>,
->(
-  notificationId: string,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<
-        Awaited<ReturnType<typeof postNotificationsNotificationIdRead>>,
-        TError,
-        TData
-      >
-    > &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postNotificationsNotificationIdRead>>,
-          TError,
-          Awaited<ReturnType<typeof postNotificationsNotificationIdRead>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostNotificationsNotificationIdRead<
-  TData = Awaited<ReturnType<typeof postNotificationsNotificationIdRead>>,
-  TError = ErrorType<UnauthorizedResponse | NotFoundResponse>,
->(
-  notificationId: string,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<
-        Awaited<ReturnType<typeof postNotificationsNotificationIdRead>>,
-        TError,
-        TData
-      >
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
  * @summary Mark one notification as read
  */
-
-export function usePostNotificationsNotificationIdRead<
-  TData = Awaited<ReturnType<typeof postNotificationsNotificationIdRead>>,
+export const usePostNotificationsNotificationIdRead = <
   TError = ErrorType<UnauthorizedResponse | NotFoundResponse>,
+  TContext = unknown,
 >(
-  notificationId: string,
   options?: {
-    query?: Partial<
-      UseQueryOptions<
-        Awaited<ReturnType<typeof postNotificationsNotificationIdRead>>,
-        TError,
-        TData
-      >
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof postNotificationsNotificationIdRead>>,
+      TError,
+      PostNotificationsNotificationIdReadMutationVariables,
+      TContext
     >;
     request?: SecondParameter<typeof customInstance>;
   },
   queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getPostNotificationsNotificationIdReadQueryOptions(notificationId, options);
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
+): UseMutationResult<
+  Awaited<ReturnType<typeof postNotificationsNotificationIdRead>>,
+  TError,
+  PostNotificationsNotificationIdReadMutationVariables,
+  TContext
+> => {
+  return useMutation(getPostNotificationsNotificationIdReadMutationOptions(options), queryClient);
+};
 /**
  * @summary List per-channel notification delivery attempts — operator
  */

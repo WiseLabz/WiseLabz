@@ -3,6 +3,7 @@ package auth
 
 import (
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -31,6 +32,9 @@ type Claims struct {
 	UserID        string `json:"uid"`
 	InstanceAdmin bool   `json:"admin"`
 	MFAEnrollOnly bool   `json:"mfa_enroll,omitempty"`
+	// SessionID identifies the login session across access/refresh rotation;
+	// elevation tokens are bound to it. Empty on tokens minted before it existed.
+	SessionID string `json:"sid,omitempty"`
 }
 
 // MFAClaims represents a short-lived ticket issued after a correct password
@@ -51,6 +55,8 @@ type IssuePairOptions struct {
 	// MFAEnrollOnly stamps both tokens of the pair with the enrollment-only
 	// claim (see Claims.MFAEnrollOnly).
 	MFAEnrollOnly bool
+	// SessionID continues an existing session (refresh); empty starts a new one.
+	SessionID string
 }
 
 // APIKeyClaims represents the identity and lifecycle fields needed to
@@ -73,10 +79,23 @@ type ElevationClaims struct {
 	jwt.RegisteredClaims
 	UserID string `json:"uid"`
 	Action string `json:"action"` // e.g. "connector.delete"
+	// SessionID and Target bind the token to the session that earned it and to
+	// the one resource it was issued for ("" for actions with no target).
+	SessionID string `json:"sid,omitempty"`
+	Target    string `json:"tgt,omitempty"`
+}
+
+// ElevationBinding narrows an elevation token to one session and one target.
+type ElevationBinding struct {
+	SessionID string
+	Target    string
 }
 
 // TokenPair is the response for a successful login or refresh.
 type TokenPair struct {
+	// SessionID is the session the pair belongs to; callers persist it as the
+	// session row's ID so refresh rotation keeps it stable.
+	SessionID    string `json:"-"`
 	AccessToken  string `json:"accessToken"`
 	RefreshToken string `json:"refreshToken,omitempty"`
 	ExpiresIn    int    `json:"expiresIn"` // seconds until access token expires
@@ -95,6 +114,9 @@ type Service struct {
 	refreshTTL   time.Duration
 	elevationTTL time.Duration
 	settings     func() (RuntimeSettings, bool)
+
+	usedMu      sync.Mutex
+	usedElevate map[string]time.Time // spent elevation jti -> token expiry
 }
 
 // RuntimeSettings are the operator-editable auth settings that override the
@@ -162,6 +184,10 @@ func (s *Service) IssuePair(userID string, instanceAdmin bool) (*TokenPair, erro
 func (s *Service) IssuePairWithOptions(userID string, instanceAdmin bool, opts IssuePairOptions) (*TokenPair, error) {
 	now := time.Now()
 	accessTTL, refreshTTL := s.ttls()
+	sessionID := opts.SessionID
+	if sessionID == "" {
+		sessionID = newTokenID()
+	}
 
 	access, err := s.issue(Claims{
 		RegisteredClaims: jwt.RegisteredClaims{
@@ -173,6 +199,7 @@ func (s *Service) IssuePairWithOptions(userID string, instanceAdmin bool, opts I
 		UserID:        userID,
 		InstanceAdmin: instanceAdmin,
 		MFAEnrollOnly: opts.MFAEnrollOnly,
+		SessionID:     sessionID,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("issue access token: %w", err)
@@ -188,12 +215,14 @@ func (s *Service) IssuePairWithOptions(userID string, instanceAdmin bool, opts I
 		UserID:        userID,
 		InstanceAdmin: instanceAdmin,
 		MFAEnrollOnly: opts.MFAEnrollOnly,
+		SessionID:     sessionID,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("issue refresh token: %w", err)
 	}
 
 	return &TokenPair{
+		SessionID:    sessionID,
 		AccessToken:  access,
 		RefreshToken: refresh,
 		ExpiresIn:    int(accessTTL.Seconds()),
@@ -264,6 +293,11 @@ func (s *Service) ValidateRefresh(tokenString string) (*Claims, error) {
 
 // IssueElevation creates a short-lived elevation token scoped to a single action.
 func (s *Service) IssueElevation(userID, action string) (*ElevationToken, error) {
+	return s.IssueElevationBound(userID, action, ElevationBinding{})
+}
+
+// IssueElevationBound is IssueElevation with the token bound to a session and target.
+func (s *Service) IssueElevationBound(userID, action string, b ElevationBinding) (*ElevationToken, error) {
 	now := time.Now()
 	expiresAt := now.Add(s.elevationTTL)
 
@@ -274,8 +308,10 @@ func (s *Service) IssueElevation(userID, action string) (*ElevationToken, error)
 			ExpiresAt: jwt.NewNumericDate(expiresAt),
 			ID:        newTokenID(),
 		},
-		UserID: userID,
-		Action: action,
+		UserID:    userID,
+		Action:    action,
+		SessionID: b.SessionID,
+		Target:    b.Target,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("issue elevation token: %w", err)
@@ -299,6 +335,44 @@ func (s *Service) ValidateElevation(tokenString, action, userID string) (*Elevat
 	if claims.UserID != userID {
 		return nil, fmt.Errorf("elevation token belongs to a different user")
 	}
+	return claims, nil
+}
+
+// ConsumeElevation is ValidateElevation plus the checks that make a token
+// spendable once: it must carry the caller's session and the request's target,
+// and its jti is recorded so a replay inside the TTL is refused. The token is
+// only spent after every other check passed.
+func (s *Service) ConsumeElevation(tokenString, action, userID string, b ElevationBinding) (*ElevationClaims, error) {
+	claims, err := s.ValidateElevation(tokenString, action, userID)
+	if err != nil {
+		return nil, err
+	}
+	if claims.SessionID != b.SessionID {
+		return nil, fmt.Errorf("elevation token belongs to a different session")
+	}
+	if claims.Target != b.Target {
+		return nil, fmt.Errorf("elevation token is for a different target")
+	}
+
+	now := time.Now()
+	s.usedMu.Lock()
+	defer s.usedMu.Unlock()
+	if s.usedElevate == nil {
+		s.usedElevate = make(map[string]time.Time)
+	}
+	for id, exp := range s.usedElevate {
+		if now.After(exp) {
+			delete(s.usedElevate, id)
+		}
+	}
+	if _, spent := s.usedElevate[claims.ID]; spent {
+		return nil, fmt.Errorf("elevation token already used")
+	}
+	exp := now.Add(s.elevationTTL)
+	if claims.ExpiresAt != nil {
+		exp = claims.ExpiresAt.Time
+	}
+	s.usedElevate[claims.ID] = exp
 	return claims, nil
 }
 

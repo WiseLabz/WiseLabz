@@ -20,6 +20,7 @@ export function ElevationConfirm({
                                       open,
                                       resourceName,
                                       action,
+                                      target,
                                       title,
                                       description,
                                       confirmLabel = 'Confirm',
@@ -30,6 +31,8 @@ export function ElevationConfirm({
     open: boolean;
     resourceName: string;
     action: string;
+    /** Resource the elevation token is bound to (the user for user.delete). */
+    target?: string;
     title: string;
     description?: string;
     confirmLabel?: string;
@@ -86,7 +89,7 @@ export function ElevationConfirm({
 
                 {/* Step-up (only once the name matches, to keep focus ordered) */}
                 {stepUpRequired && nameMatches && !token && (
-                    <StepUp action={action} onElevated={setToken}/>
+                    <StepUp action={action} target={target} onElevated={setToken}/>
                 )}
                 {stepUpRequired && token && (
                     <p className="text-2xs text-ok">Re-authenticated — ready to continue.</p>

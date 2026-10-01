@@ -11,7 +11,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/WiseLabz/wiselabz/internal/ai"
-	"github.com/WiseLabz/wiselabz/internal/api/settings"
+	"github.com/WiseLabz/wiselabz/internal/aicfg"
 	"github.com/WiseLabz/wiselabz/internal/auth"
 	"github.com/WiseLabz/wiselabz/internal/chat"
 	"github.com/WiseLabz/wiselabz/internal/httputil"
@@ -24,14 +24,14 @@ const topN = 5
 // Handler holds dependencies for chat endpoints.
 type Handler struct {
 	Store    *store.Store
-	Settings *settings.Handler
+	AIConfig *aicfg.Loader
 	AI       *ai.Registry
 	Embed    *ai.EmbedRegistry
 }
 
 // NewHandler creates a new chat handler.
-func NewHandler(s *store.Store, settingsH *settings.Handler, aiRegistry *ai.Registry, embedRegistry *ai.EmbedRegistry) *Handler {
-	return &Handler{Store: s, Settings: settingsH, AI: aiRegistry, Embed: embedRegistry}
+func NewHandler(s *store.Store, aiConfig *aicfg.Loader, aiRegistry *ai.Registry, embedRegistry *ai.EmbedRegistry) *Handler {
+	return &Handler{Store: s, AIConfig: aiConfig, AI: aiRegistry, Embed: embedRegistry}
 }
 
 // CreateConversation handles POST /api/chat/conversations.
@@ -137,7 +137,7 @@ func (h *Handler) PostMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cfg := h.Settings.LoadAIConfig(r.Context())
+	cfg := h.AIConfig.Load(r.Context())
 	if !cfg.Enabled || len(cfg.Providers) == 0 {
 		httputil.Error(w, http.StatusConflict, "ai_disabled", "AI module is not enabled")
 		return

@@ -14,10 +14,10 @@ func TestAPIKeyRoutesEndToEnd(t *testing.T) {
 	userID, token := app.user(t, "operator")
 	expiresAt := time.Now().UTC().Add(time.Hour).Format(time.RFC3339)
 
-	rec := app.req(t, http.MethodPost, "/api/auth/api-keys", map[string]any{
+	rec := app.reqElevated(t, http.MethodPost, "/api/auth/api-keys", map[string]any{
 		"name":      "CI",
 		"expiresAt": expiresAt,
-	}, token)
+	}, token, "apiKey.create")
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create API key status = %d: %s", rec.Code, rec.Body)
 	}
@@ -89,7 +89,7 @@ func TestAPIKeyCreateRejectsInvalidExpiryAndEmptyName(t *testing.T) {
 		"invalid timestamp": map[string]any{"name": "CI", "expiresAt": "not-a-time"},
 	} {
 		t.Run(name, func(t *testing.T) {
-			rec := app.req(t, http.MethodPost, "/api/auth/api-keys", body, token)
+			rec := app.reqElevated(t, http.MethodPost, "/api/auth/api-keys", body, token, "apiKey.create")
 			if rec.Code != http.StatusBadRequest {
 				t.Fatalf("status = %d, want 400: %s", rec.Code, rec.Body)
 			}

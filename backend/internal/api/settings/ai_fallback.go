@@ -5,8 +5,6 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/google/uuid"
-
 	"github.com/WiseLabz/wiselabz/internal/crypto"
 	"github.com/WiseLabz/wiselabz/internal/httputil"
 	"github.com/WiseLabz/wiselabz/internal/store"
@@ -24,7 +22,7 @@ type fallbackProviderDoc struct {
 // GetAIFallbackProviders handles GET /api/ai/config/fallback-providers:
 // the ordered list of extra providers tried after the primary one fails.
 func (h *Handler) GetAIFallbackProviders(w http.ResponseWriter, r *http.Request) {
-	providers := h.loadFallbackProviders(r.Context())
+	providers := h.AIConfig.FallbackProviders(r.Context())
 	out := make([]fallbackProviderDoc, len(providers))
 	for i, p := range providers {
 		out[i] = fallbackProviderDoc{Provider: p.Name, Model: p.Model, BaseURL: p.BaseURL}
@@ -59,30 +57,20 @@ func (h *Handler) UpdateAIFallbackProviders(w http.ResponseWriter, r *http.Reque
 		}
 	}
 
-	err := h.Store.WithinTransaction(r.Context(), func(tx *store.Store) error {
-		if _, err := tx.DB().ExecContext(r.Context(), `DELETE FROM ai_config_providers WHERE config_id = 1`); err != nil {
-			return err
-		}
-		for i, p := range req {
-			encryptedKey := ""
-			if p.APIKey != "" {
-				var err error
-				encryptedKey, err = crypto.Encrypt(p.APIKey, key)
-				if err != nil {
-					return fmt.Errorf("encrypt fallback API key: %w", err)
-				}
-			}
-			_, err := tx.DB().ExecContext(r.Context(), `
-				INSERT INTO ai_config_providers (id, config_id, priority, provider, model, api_key_encrypted, base_url)
-				VALUES (?, 1, ?, ?, ?, ?, ?)
-			`, uuid.New().String(), i+2, p.Provider, p.Model, encryptedKey, p.BaseURL)
+	records := make([]store.AIFallbackProviderRecord, len(req))
+	for i, p := range req {
+		encryptedKey := ""
+		if p.APIKey != "" {
+			var err error
+			encryptedKey, err = crypto.Encrypt(p.APIKey, key)
 			if err != nil {
-				return err
+				httputil.Errorf(w, fmt.Errorf("encrypt fallback API key: %w", err))
+				return
 			}
 		}
-		return nil
-	})
-	if err != nil {
+		records[i] = store.AIFallbackProviderRecord{Provider: p.Provider, Model: p.Model, APIKeyEncrypted: encryptedKey, BaseURL: p.BaseURL}
+	}
+	if err := h.Store.ReplaceAIFallbackProviders(r.Context(), records); err != nil {
 		httputil.Errorf(w, err)
 		return
 	}

@@ -6,15 +6,18 @@
  *
  * OpenAPI spec version: 0.1.0
  */
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import type {
   DataTag,
   DefinedInitialDataOptions,
   DefinedUseQueryResult,
+  MutationFunction,
   QueryClient,
   QueryFunction,
   QueryKey,
   UndefinedInitialDataOptions,
+  UseMutationOptions,
+  UseMutationResult,
   UseQueryOptions,
   UseQueryResult,
 } from '@tanstack/react-query';
@@ -178,110 +181,71 @@ export const postTemplates = (
   );
 };
 
-export const getPostTemplatesQueryKey = (templateInput?: BodyType<TemplateInput>) => {
-  return ['POST', `/templates`, templateInput] as const;
-};
+export const getPostTemplatesMutationKey = () => ['postTemplates'] as const;
 
-export const getPostTemplatesQueryOptions = <
-  TData = Awaited<ReturnType<typeof postTemplates>>,
+export const getPostTemplatesMutationOptions = <
   TError = ErrorType<BadRequestResponse>,
->(
-  templateInput: BodyType<TemplateInput>,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof postTemplates>>, TError, TData>>;
-    request?: SecondParameter<typeof customInstance>;
-  }
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
-
-  const queryKey = queryOptions?.queryKey ?? getPostTemplatesQueryKey(templateInput);
-
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof postTemplates>>> = ({ signal }) =>
-    postTemplates(templateInput, requestOptions, signal);
-
-  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof postTemplates>>,
     TError,
-    TData
-  > & { queryKey: DataTag<QueryKey, TData, TError> };
+    PostTemplatesMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof postTemplates>>,
+  TError,
+  PostTemplatesMutationVariables,
+  TContext
+> => {
+  const mutationKey = getPostTemplatesMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof postTemplates>>,
+    PostTemplatesMutationVariables
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return postTemplates(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type PostTemplatesQueryResult = NonNullable<Awaited<ReturnType<typeof postTemplates>>>;
-export type PostTemplatesQueryError = ErrorType<BadRequestResponse>;
+export type PostTemplatesMutationResult = NonNullable<Awaited<ReturnType<typeof postTemplates>>>;
+export type PostTemplatesMutationBody = BodyType<TemplateInput>;
+export type PostTemplatesMutationError = ErrorType<BadRequestResponse>;
+export type PostTemplatesMutationVariables = { data: BodyType<TemplateInput> };
 
-export function usePostTemplates<
-  TData = Awaited<ReturnType<typeof postTemplates>>,
-  TError = ErrorType<BadRequestResponse>,
->(
-  templateInput: BodyType<TemplateInput>,
-  options: {
-    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof postTemplates>>, TError, TData>> &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postTemplates>>,
-          TError,
-          Awaited<ReturnType<typeof postTemplates>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostTemplates<
-  TData = Awaited<ReturnType<typeof postTemplates>>,
-  TError = ErrorType<BadRequestResponse>,
->(
-  templateInput: BodyType<TemplateInput>,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof postTemplates>>, TError, TData>> &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postTemplates>>,
-          TError,
-          Awaited<ReturnType<typeof postTemplates>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostTemplates<
-  TData = Awaited<ReturnType<typeof postTemplates>>,
-  TError = ErrorType<BadRequestResponse>,
->(
-  templateInput: BodyType<TemplateInput>,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof postTemplates>>, TError, TData>>;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
  * @summary Create a template (editor+)
  */
-
-export function usePostTemplates<
-  TData = Awaited<ReturnType<typeof postTemplates>>,
-  TError = ErrorType<BadRequestResponse>,
->(
-  templateInput: BodyType<TemplateInput>,
+export const usePostTemplates = <TError = ErrorType<BadRequestResponse>, TContext = unknown>(
   options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof postTemplates>>, TError, TData>>;
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof postTemplates>>,
+      TError,
+      PostTemplatesMutationVariables,
+      TContext
+    >;
     request?: SecondParameter<typeof customInstance>;
   },
   queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getPostTemplatesQueryOptions(templateInput, options);
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
+): UseMutationResult<
+  Awaited<ReturnType<typeof postTemplates>>,
+  TError,
+  PostTemplatesMutationVariables,
+  TContext
+> => {
+  return useMutation(getPostTemplatesMutationOptions(options), queryClient);
+};
 /**
  * @summary One template
  */
@@ -436,134 +400,76 @@ export const putTemplatesTemplateId = (
   );
 };
 
-export const getPutTemplatesTemplateIdQueryKey = (
-  templateId: string,
-  templateInput?: BodyType<TemplateInput>
-) => {
-  return ['PUT', `/templates/${templateId}`, templateInput] as const;
-};
+export const getPutTemplatesTemplateIdMutationKey = () => ['putTemplatesTemplateId'] as const;
 
-export const getPutTemplatesTemplateIdQueryOptions = <
-  TData = Awaited<ReturnType<typeof putTemplatesTemplateId>>,
+export const getPutTemplatesTemplateIdMutationOptions = <
   TError = ErrorType<unknown>,
->(
-  templateId: string,
-  templateInput: BodyType<TemplateInput>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof putTemplatesTemplateId>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  }
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof putTemplatesTemplateId>>,
+    TError,
+    PutTemplatesTemplateIdMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof putTemplatesTemplateId>>,
+  TError,
+  PutTemplatesTemplateIdMutationVariables,
+  TContext
+> => {
+  const mutationKey = getPutTemplatesTemplateIdMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
 
-  const queryKey =
-    queryOptions?.queryKey ?? getPutTemplatesTemplateIdQueryKey(templateId, templateInput);
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof putTemplatesTemplateId>>,
+    PutTemplatesTemplateIdMutationVariables
+  > = (props) => {
+    const { templateId, data } = props ?? {};
 
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof putTemplatesTemplateId>>> = ({ signal }) =>
-    putTemplatesTemplateId(templateId, templateInput, requestOptions, signal);
-
-  return {
-    queryKey,
-    queryFn,
-    enabled: templateId !== null && templateId !== undefined,
-    ...queryOptions,
-  } as UseQueryOptions<Awaited<ReturnType<typeof putTemplatesTemplateId>>, TError, TData> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
+    return putTemplatesTemplateId(templateId, data, requestOptions);
   };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type PutTemplatesTemplateIdQueryResult = NonNullable<
+export type PutTemplatesTemplateIdMutationResult = NonNullable<
   Awaited<ReturnType<typeof putTemplatesTemplateId>>
 >;
-export type PutTemplatesTemplateIdQueryError = ErrorType<unknown>;
+export type PutTemplatesTemplateIdMutationBody = BodyType<TemplateInput>;
+export type PutTemplatesTemplateIdMutationError = ErrorType<unknown>;
+export type PutTemplatesTemplateIdMutationVariables = {
+  templateId: string;
+  data: BodyType<TemplateInput>;
+};
 
-export function usePutTemplatesTemplateId<
-  TData = Awaited<ReturnType<typeof putTemplatesTemplateId>>,
-  TError = ErrorType<unknown>,
->(
-  templateId: string,
-  templateInput: BodyType<TemplateInput>,
-  options: {
-    query: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof putTemplatesTemplateId>>, TError, TData>
-    > &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof putTemplatesTemplateId>>,
-          TError,
-          Awaited<ReturnType<typeof putTemplatesTemplateId>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePutTemplatesTemplateId<
-  TData = Awaited<ReturnType<typeof putTemplatesTemplateId>>,
-  TError = ErrorType<unknown>,
->(
-  templateId: string,
-  templateInput: BodyType<TemplateInput>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof putTemplatesTemplateId>>, TError, TData>
-    > &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof putTemplatesTemplateId>>,
-          TError,
-          Awaited<ReturnType<typeof putTemplatesTemplateId>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePutTemplatesTemplateId<
-  TData = Awaited<ReturnType<typeof putTemplatesTemplateId>>,
-  TError = ErrorType<unknown>,
->(
-  templateId: string,
-  templateInput: BodyType<TemplateInput>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof putTemplatesTemplateId>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
  * @summary Update a template (editor+)
  */
-
-export function usePutTemplatesTemplateId<
-  TData = Awaited<ReturnType<typeof putTemplatesTemplateId>>,
-  TError = ErrorType<unknown>,
->(
-  templateId: string,
-  templateInput: BodyType<TemplateInput>,
+export const usePutTemplatesTemplateId = <TError = ErrorType<unknown>, TContext = unknown>(
   options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof putTemplatesTemplateId>>, TError, TData>
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof putTemplatesTemplateId>>,
+      TError,
+      PutTemplatesTemplateIdMutationVariables,
+      TContext
     >;
     request?: SecondParameter<typeof customInstance>;
   },
   queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getPutTemplatesTemplateIdQueryOptions(templateId, templateInput, options);
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
+): UseMutationResult<
+  Awaited<ReturnType<typeof putTemplatesTemplateId>>,
+  TError,
+  PutTemplatesTemplateIdMutationVariables,
+  TContext
+> => {
+  return useMutation(getPutTemplatesTemplateIdMutationOptions(options), queryClient);
+};
 /**
  * Destructive. When `stepUpForDestructive` is enabled, requires a valid `X-Elevation-Token` from POST /auth/elevate; absent or expired tokens get a 403 `elevation-required`.
  * @summary Delete a template (editor+)
@@ -579,126 +485,76 @@ export const deleteTemplatesTemplateId = (
   );
 };
 
-export const getDeleteTemplatesTemplateIdQueryKey = (templateId: string) => {
-  return ['DELETE', `/templates/${templateId}`] as const;
-};
+export const getDeleteTemplatesTemplateIdMutationKey = () => ['deleteTemplatesTemplateId'] as const;
 
-export const getDeleteTemplatesTemplateIdQueryOptions = <
-  TData = Awaited<ReturnType<typeof deleteTemplatesTemplateId>>,
+export const getDeleteTemplatesTemplateIdMutationOptions = <
   TError = ErrorType<ElevationRequiredResponse>,
->(
-  templateId: string,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof deleteTemplatesTemplateId>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  }
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteTemplatesTemplateId>>,
+    TError,
+    DeleteTemplatesTemplateIdMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteTemplatesTemplateId>>,
+  TError,
+  DeleteTemplatesTemplateIdMutationVariables,
+  TContext
+> => {
+  const mutationKey = getDeleteTemplatesTemplateIdMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
 
-  const queryKey = queryOptions?.queryKey ?? getDeleteTemplatesTemplateIdQueryKey(templateId);
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteTemplatesTemplateId>>,
+    DeleteTemplatesTemplateIdMutationVariables
+  > = (props) => {
+    const { templateId } = props ?? {};
 
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof deleteTemplatesTemplateId>>> = ({
-    signal,
-  }) => deleteTemplatesTemplateId(templateId, requestOptions, signal);
-
-  return {
-    queryKey,
-    queryFn,
-    enabled: templateId !== null && templateId !== undefined,
-    ...queryOptions,
-  } as UseQueryOptions<Awaited<ReturnType<typeof deleteTemplatesTemplateId>>, TError, TData> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
+    return deleteTemplatesTemplateId(templateId, requestOptions);
   };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type DeleteTemplatesTemplateIdQueryResult = NonNullable<
+export type DeleteTemplatesTemplateIdMutationResult = NonNullable<
   Awaited<ReturnType<typeof deleteTemplatesTemplateId>>
 >;
-export type DeleteTemplatesTemplateIdQueryError = ErrorType<ElevationRequiredResponse>;
 
-export function useDeleteTemplatesTemplateId<
-  TData = Awaited<ReturnType<typeof deleteTemplatesTemplateId>>,
-  TError = ErrorType<ElevationRequiredResponse>,
->(
-  templateId: string,
-  options: {
-    query: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof deleteTemplatesTemplateId>>, TError, TData>
-    > &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof deleteTemplatesTemplateId>>,
-          TError,
-          Awaited<ReturnType<typeof deleteTemplatesTemplateId>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function useDeleteTemplatesTemplateId<
-  TData = Awaited<ReturnType<typeof deleteTemplatesTemplateId>>,
-  TError = ErrorType<ElevationRequiredResponse>,
->(
-  templateId: string,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof deleteTemplatesTemplateId>>, TError, TData>
-    > &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof deleteTemplatesTemplateId>>,
-          TError,
-          Awaited<ReturnType<typeof deleteTemplatesTemplateId>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function useDeleteTemplatesTemplateId<
-  TData = Awaited<ReturnType<typeof deleteTemplatesTemplateId>>,
-  TError = ErrorType<ElevationRequiredResponse>,
->(
-  templateId: string,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof deleteTemplatesTemplateId>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export type DeleteTemplatesTemplateIdMutationError = ErrorType<ElevationRequiredResponse>;
+export type DeleteTemplatesTemplateIdMutationVariables = { templateId: string };
+
 /**
  * @summary Delete a template (editor+)
  */
-
-export function useDeleteTemplatesTemplateId<
-  TData = Awaited<ReturnType<typeof deleteTemplatesTemplateId>>,
+export const useDeleteTemplatesTemplateId = <
   TError = ErrorType<ElevationRequiredResponse>,
+  TContext = unknown,
 >(
-  templateId: string,
   options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof deleteTemplatesTemplateId>>, TError, TData>
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof deleteTemplatesTemplateId>>,
+      TError,
+      DeleteTemplatesTemplateIdMutationVariables,
+      TContext
     >;
     request?: SecondParameter<typeof customInstance>;
   },
   queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getDeleteTemplatesTemplateIdQueryOptions(templateId, options);
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
+): UseMutationResult<
+  Awaited<ReturnType<typeof deleteTemplatesTemplateId>>,
+  TError,
+  DeleteTemplatesTemplateIdMutationVariables,
+  TContext
+> => {
+  return useMutation(getDeleteTemplatesTemplateIdMutationOptions(options), queryClient);
+};
 /**
  * Lists matching connectors and, when connectorId is supplied, renders a detailed preview. This operation does not create or update documents or versions.
  * @summary Preview this template's impact without persisting changes
@@ -721,148 +577,78 @@ export const postTemplatesTemplateIdPreview = (
   );
 };
 
-export const getPostTemplatesTemplateIdPreviewQueryKey = (
-  templateId: string,
-  postTemplatesTemplateIdPreviewBody?: BodyType<PostTemplatesTemplateIdPreviewBody>
-) => {
-  return ['POST', `/templates/${templateId}/preview`, postTemplatesTemplateIdPreviewBody] as const;
-};
+export const getPostTemplatesTemplateIdPreviewMutationKey = () =>
+  ['postTemplatesTemplateIdPreview'] as const;
 
-export const getPostTemplatesTemplateIdPreviewQueryOptions = <
-  TData = Awaited<ReturnType<typeof postTemplatesTemplateIdPreview>>,
+export const getPostTemplatesTemplateIdPreviewMutationOptions = <
   TError = ErrorType<unknown>,
->(
-  templateId: string,
-  postTemplatesTemplateIdPreviewBody?: BodyType<PostTemplatesTemplateIdPreviewBody>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postTemplatesTemplateIdPreview>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  }
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
-
-  const queryKey =
-    queryOptions?.queryKey ??
-    getPostTemplatesTemplateIdPreviewQueryKey(templateId, postTemplatesTemplateIdPreviewBody);
-
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof postTemplatesTemplateIdPreview>>> = ({
-    signal,
-  }) =>
-    postTemplatesTemplateIdPreview(
-      templateId,
-      postTemplatesTemplateIdPreviewBody,
-      requestOptions,
-      signal
-    );
-
-  return {
-    queryKey,
-    queryFn,
-    enabled: templateId !== null && templateId !== undefined,
-    ...queryOptions,
-  } as UseQueryOptions<
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof postTemplatesTemplateIdPreview>>,
     TError,
-    TData
-  > & { queryKey: DataTag<QueryKey, TData, TError> };
+    PostTemplatesTemplateIdPreviewMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof postTemplatesTemplateIdPreview>>,
+  TError,
+  PostTemplatesTemplateIdPreviewMutationVariables,
+  TContext
+> => {
+  const mutationKey = getPostTemplatesTemplateIdPreviewMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof postTemplatesTemplateIdPreview>>,
+    PostTemplatesTemplateIdPreviewMutationVariables
+  > = (props) => {
+    const { templateId, data } = props ?? {};
+
+    return postTemplatesTemplateIdPreview(templateId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type PostTemplatesTemplateIdPreviewQueryResult = NonNullable<
+export type PostTemplatesTemplateIdPreviewMutationResult = NonNullable<
   Awaited<ReturnType<typeof postTemplatesTemplateIdPreview>>
 >;
-export type PostTemplatesTemplateIdPreviewQueryError = ErrorType<unknown>;
+export type PostTemplatesTemplateIdPreviewMutationBody =
+  BodyType<PostTemplatesTemplateIdPreviewBody> | undefined;
+export type PostTemplatesTemplateIdPreviewMutationError = ErrorType<unknown>;
+export type PostTemplatesTemplateIdPreviewMutationVariables = {
+  templateId: string;
+  data?: BodyType<PostTemplatesTemplateIdPreviewBody>;
+};
 
-export function usePostTemplatesTemplateIdPreview<
-  TData = Awaited<ReturnType<typeof postTemplatesTemplateIdPreview>>,
-  TError = ErrorType<unknown>,
->(
-  templateId: string,
-  postTemplatesTemplateIdPreviewBody: undefined | BodyType<PostTemplatesTemplateIdPreviewBody>,
-  options: {
-    query: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postTemplatesTemplateIdPreview>>, TError, TData>
-    > &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postTemplatesTemplateIdPreview>>,
-          TError,
-          Awaited<ReturnType<typeof postTemplatesTemplateIdPreview>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostTemplatesTemplateIdPreview<
-  TData = Awaited<ReturnType<typeof postTemplatesTemplateIdPreview>>,
-  TError = ErrorType<unknown>,
->(
-  templateId: string,
-  postTemplatesTemplateIdPreviewBody?: BodyType<PostTemplatesTemplateIdPreviewBody>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postTemplatesTemplateIdPreview>>, TError, TData>
-    > &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postTemplatesTemplateIdPreview>>,
-          TError,
-          Awaited<ReturnType<typeof postTemplatesTemplateIdPreview>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostTemplatesTemplateIdPreview<
-  TData = Awaited<ReturnType<typeof postTemplatesTemplateIdPreview>>,
-  TError = ErrorType<unknown>,
->(
-  templateId: string,
-  postTemplatesTemplateIdPreviewBody?: BodyType<PostTemplatesTemplateIdPreviewBody>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postTemplatesTemplateIdPreview>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
  * @summary Preview this template's impact without persisting changes
  */
-
-export function usePostTemplatesTemplateIdPreview<
-  TData = Awaited<ReturnType<typeof postTemplatesTemplateIdPreview>>,
-  TError = ErrorType<unknown>,
->(
-  templateId: string,
-  postTemplatesTemplateIdPreviewBody?: BodyType<PostTemplatesTemplateIdPreviewBody>,
+export const usePostTemplatesTemplateIdPreview = <TError = ErrorType<unknown>, TContext = unknown>(
   options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postTemplatesTemplateIdPreview>>, TError, TData>
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof postTemplatesTemplateIdPreview>>,
+      TError,
+      PostTemplatesTemplateIdPreviewMutationVariables,
+      TContext
     >;
     request?: SecondParameter<typeof customInstance>;
   },
   queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getPostTemplatesTemplateIdPreviewQueryOptions(
-    templateId,
-    postTemplatesTemplateIdPreviewBody,
-    options
-  );
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
+): UseMutationResult<
+  Awaited<ReturnType<typeof postTemplatesTemplateIdPreview>>,
+  TError,
+  PostTemplatesTemplateIdPreviewMutationVariables,
+  TContext
+> => {
+  return useMutation(getPostTemplatesTemplateIdPreviewMutationOptions(options), queryClient);
+};
 /**
  * @summary Version history list for a template
  */
@@ -1157,158 +943,80 @@ export const postTemplatesTemplateIdVersionsRevRestore = (
   );
 };
 
-export const getPostTemplatesTemplateIdVersionsRevRestoreQueryKey = (
-  templateId: string,
-  rev: number
-) => {
-  return ['POST', `/templates/${templateId}/versions/${rev}/restore`] as const;
-};
+export const getPostTemplatesTemplateIdVersionsRevRestoreMutationKey = () =>
+  ['postTemplatesTemplateIdVersionsRevRestore'] as const;
 
-export const getPostTemplatesTemplateIdVersionsRevRestoreQueryOptions = <
-  TData = Awaited<ReturnType<typeof postTemplatesTemplateIdVersionsRevRestore>>,
+export const getPostTemplatesTemplateIdVersionsRevRestoreMutationOptions = <
   TError = ErrorType<unknown>,
->(
-  templateId: string,
-  rev: number,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<
-        Awaited<ReturnType<typeof postTemplatesTemplateIdVersionsRevRestore>>,
-        TError,
-        TData
-      >
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  }
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
-
-  const queryKey =
-    queryOptions?.queryKey ?? getPostTemplatesTemplateIdVersionsRevRestoreQueryKey(templateId, rev);
-
-  const queryFn: QueryFunction<
-    Awaited<ReturnType<typeof postTemplatesTemplateIdVersionsRevRestore>>
-  > = ({ signal }) =>
-    postTemplatesTemplateIdVersionsRevRestore(templateId, rev, requestOptions, signal);
-
-  return {
-    queryKey,
-    queryFn,
-    enabled: templateId !== null && templateId !== undefined && rev !== null && rev !== undefined,
-    ...queryOptions,
-  } as UseQueryOptions<
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof postTemplatesTemplateIdVersionsRevRestore>>,
     TError,
-    TData
-  > & { queryKey: DataTag<QueryKey, TData, TError> };
+    PostTemplatesTemplateIdVersionsRevRestoreMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof postTemplatesTemplateIdVersionsRevRestore>>,
+  TError,
+  PostTemplatesTemplateIdVersionsRevRestoreMutationVariables,
+  TContext
+> => {
+  const mutationKey = getPostTemplatesTemplateIdVersionsRevRestoreMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof postTemplatesTemplateIdVersionsRevRestore>>,
+    PostTemplatesTemplateIdVersionsRevRestoreMutationVariables
+  > = (props) => {
+    const { templateId, rev } = props ?? {};
+
+    return postTemplatesTemplateIdVersionsRevRestore(templateId, rev, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type PostTemplatesTemplateIdVersionsRevRestoreQueryResult = NonNullable<
+export type PostTemplatesTemplateIdVersionsRevRestoreMutationResult = NonNullable<
   Awaited<ReturnType<typeof postTemplatesTemplateIdVersionsRevRestore>>
 >;
-export type PostTemplatesTemplateIdVersionsRevRestoreQueryError = ErrorType<unknown>;
 
-export function usePostTemplatesTemplateIdVersionsRevRestore<
-  TData = Awaited<ReturnType<typeof postTemplatesTemplateIdVersionsRevRestore>>,
-  TError = ErrorType<unknown>,
->(
-  templateId: string,
-  rev: number,
-  options: {
-    query: Partial<
-      UseQueryOptions<
-        Awaited<ReturnType<typeof postTemplatesTemplateIdVersionsRevRestore>>,
-        TError,
-        TData
-      >
-    > &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postTemplatesTemplateIdVersionsRevRestore>>,
-          TError,
-          Awaited<ReturnType<typeof postTemplatesTemplateIdVersionsRevRestore>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostTemplatesTemplateIdVersionsRevRestore<
-  TData = Awaited<ReturnType<typeof postTemplatesTemplateIdVersionsRevRestore>>,
-  TError = ErrorType<unknown>,
->(
-  templateId: string,
-  rev: number,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<
-        Awaited<ReturnType<typeof postTemplatesTemplateIdVersionsRevRestore>>,
-        TError,
-        TData
-      >
-    > &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postTemplatesTemplateIdVersionsRevRestore>>,
-          TError,
-          Awaited<ReturnType<typeof postTemplatesTemplateIdVersionsRevRestore>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostTemplatesTemplateIdVersionsRevRestore<
-  TData = Awaited<ReturnType<typeof postTemplatesTemplateIdVersionsRevRestore>>,
-  TError = ErrorType<unknown>,
->(
-  templateId: string,
-  rev: number,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<
-        Awaited<ReturnType<typeof postTemplatesTemplateIdVersionsRevRestore>>,
-        TError,
-        TData
-      >
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export type PostTemplatesTemplateIdVersionsRevRestoreMutationError = ErrorType<unknown>;
+export type PostTemplatesTemplateIdVersionsRevRestoreMutationVariables = {
+  templateId: string;
+  rev: number;
+};
+
 /**
  * @summary Restore a past template revision as a new current version (editor+)
  */
-
-export function usePostTemplatesTemplateIdVersionsRevRestore<
-  TData = Awaited<ReturnType<typeof postTemplatesTemplateIdVersionsRevRestore>>,
+export const usePostTemplatesTemplateIdVersionsRevRestore = <
   TError = ErrorType<unknown>,
+  TContext = unknown,
 >(
-  templateId: string,
-  rev: number,
   options?: {
-    query?: Partial<
-      UseQueryOptions<
-        Awaited<ReturnType<typeof postTemplatesTemplateIdVersionsRevRestore>>,
-        TError,
-        TData
-      >
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof postTemplatesTemplateIdVersionsRevRestore>>,
+      TError,
+      PostTemplatesTemplateIdVersionsRevRestoreMutationVariables,
+      TContext
     >;
     request?: SecondParameter<typeof customInstance>;
   },
   queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getPostTemplatesTemplateIdVersionsRevRestoreQueryOptions(
-    templateId,
-    rev,
-    options
+): UseMutationResult<
+  Awaited<ReturnType<typeof postTemplatesTemplateIdVersionsRevRestore>>,
+  TError,
+  PostTemplatesTemplateIdVersionsRevRestoreMutationVariables,
+  TContext
+> => {
+  return useMutation(
+    getPostTemplatesTemplateIdVersionsRevRestoreMutationOptions(options),
+    queryClient
   );
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
+};

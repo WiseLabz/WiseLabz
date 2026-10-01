@@ -6,15 +6,18 @@
  *
  * OpenAPI spec version: 0.1.0
  */
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import type {
   DataTag,
   DefinedInitialDataOptions,
   DefinedUseQueryResult,
+  MutationFunction,
   QueryClient,
   QueryFunction,
   QueryKey,
   UndefinedInitialDataOptions,
+  UseMutationOptions,
+  UseMutationResult,
   UseQueryOptions,
   UseQueryResult,
 } from '@tanstack/react-query';
@@ -561,126 +564,77 @@ export const putSystemSettingsRetention = (
   );
 };
 
-export const getPutSystemSettingsRetentionQueryKey = (
-  retentionSettings?: BodyType<RetentionSettings>
-) => {
-  return ['PUT', `/system/settings/retention`, retentionSettings] as const;
-};
+export const getPutSystemSettingsRetentionMutationKey = () =>
+  ['putSystemSettingsRetention'] as const;
 
-export const getPutSystemSettingsRetentionQueryOptions = <
-  TData = Awaited<ReturnType<typeof putSystemSettingsRetention>>,
+export const getPutSystemSettingsRetentionMutationOptions = <
   TError = ErrorType<Error | ForbiddenResponse>,
->(
-  retentionSettings: BodyType<RetentionSettings>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof putSystemSettingsRetention>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  }
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
-
-  const queryKey =
-    queryOptions?.queryKey ?? getPutSystemSettingsRetentionQueryKey(retentionSettings);
-
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof putSystemSettingsRetention>>> = ({
-    signal,
-  }) => putSystemSettingsRetention(retentionSettings, requestOptions, signal);
-
-  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof putSystemSettingsRetention>>,
     TError,
-    TData
-  > & { queryKey: DataTag<QueryKey, TData, TError> };
+    PutSystemSettingsRetentionMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof putSystemSettingsRetention>>,
+  TError,
+  PutSystemSettingsRetentionMutationVariables,
+  TContext
+> => {
+  const mutationKey = getPutSystemSettingsRetentionMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof putSystemSettingsRetention>>,
+    PutSystemSettingsRetentionMutationVariables
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return putSystemSettingsRetention(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type PutSystemSettingsRetentionQueryResult = NonNullable<
+export type PutSystemSettingsRetentionMutationResult = NonNullable<
   Awaited<ReturnType<typeof putSystemSettingsRetention>>
 >;
-export type PutSystemSettingsRetentionQueryError = ErrorType<Error | ForbiddenResponse>;
+export type PutSystemSettingsRetentionMutationBody = BodyType<RetentionSettings>;
+export type PutSystemSettingsRetentionMutationError = ErrorType<Error | ForbiddenResponse>;
+export type PutSystemSettingsRetentionMutationVariables = { data: BodyType<RetentionSettings> };
 
-export function usePutSystemSettingsRetention<
-  TData = Awaited<ReturnType<typeof putSystemSettingsRetention>>,
-  TError = ErrorType<Error | ForbiddenResponse>,
->(
-  retentionSettings: BodyType<RetentionSettings>,
-  options: {
-    query: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof putSystemSettingsRetention>>, TError, TData>
-    > &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof putSystemSettingsRetention>>,
-          TError,
-          Awaited<ReturnType<typeof putSystemSettingsRetention>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePutSystemSettingsRetention<
-  TData = Awaited<ReturnType<typeof putSystemSettingsRetention>>,
-  TError = ErrorType<Error | ForbiddenResponse>,
->(
-  retentionSettings: BodyType<RetentionSettings>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof putSystemSettingsRetention>>, TError, TData>
-    > &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof putSystemSettingsRetention>>,
-          TError,
-          Awaited<ReturnType<typeof putSystemSettingsRetention>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePutSystemSettingsRetention<
-  TData = Awaited<ReturnType<typeof putSystemSettingsRetention>>,
-  TError = ErrorType<Error | ForbiddenResponse>,
->(
-  retentionSettings: BodyType<RetentionSettings>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof putSystemSettingsRetention>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
  * @summary Update the data-retention cleanup configuration — operator. Each `*Days` field must be >= 0 (0 disables cleanup for that category, rejected otherwise with code `invalid_days`); `cronExpr` must be a valid 5-field or 6-field cron expression (code `invalid_cron` otherwise). Re-registers the retention cron job with the new schedule. Audited as `retention.settings.update`.
  */
-
-export function usePutSystemSettingsRetention<
-  TData = Awaited<ReturnType<typeof putSystemSettingsRetention>>,
+export const usePutSystemSettingsRetention = <
   TError = ErrorType<Error | ForbiddenResponse>,
+  TContext = unknown,
 >(
-  retentionSettings: BodyType<RetentionSettings>,
   options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof putSystemSettingsRetention>>, TError, TData>
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof putSystemSettingsRetention>>,
+      TError,
+      PutSystemSettingsRetentionMutationVariables,
+      TContext
     >;
     request?: SecondParameter<typeof customInstance>;
   },
   queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getPutSystemSettingsRetentionQueryOptions(retentionSettings, options);
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
+): UseMutationResult<
+  Awaited<ReturnType<typeof putSystemSettingsRetention>>,
+  TError,
+  PutSystemSettingsRetentionMutationVariables,
+  TContext
+> => {
+  return useMutation(getPutSystemSettingsRetentionMutationOptions(options), queryClient);
+};
 /**
  * @summary Export a portable backup bundle (connectors, docs+versions, templates+sections, an informational AI config summary) — operator. Connector secret fields and the AI API key are never included; see docs/BACKUP.md.
  */
@@ -823,122 +777,76 @@ export const postSystemBackupImport = (
   );
 };
 
-export const getPostSystemBackupImportQueryKey = (backupBundle?: BodyType<BackupBundle>) => {
-  return ['POST', `/system/backup/import`, backupBundle] as const;
-};
+export const getPostSystemBackupImportMutationKey = () => ['postSystemBackupImport'] as const;
 
-export const getPostSystemBackupImportQueryOptions = <
-  TData = Awaited<ReturnType<typeof postSystemBackupImport>>,
+export const getPostSystemBackupImportMutationOptions = <
   TError = ErrorType<Error | ForbiddenResponse>,
->(
-  backupBundle: BodyType<BackupBundle>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postSystemBackupImport>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  }
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
-
-  const queryKey = queryOptions?.queryKey ?? getPostSystemBackupImportQueryKey(backupBundle);
-
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof postSystemBackupImport>>> = ({ signal }) =>
-    postSystemBackupImport(backupBundle, requestOptions, signal);
-
-  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof postSystemBackupImport>>,
     TError,
-    TData
-  > & { queryKey: DataTag<QueryKey, TData, TError> };
+    PostSystemBackupImportMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof postSystemBackupImport>>,
+  TError,
+  PostSystemBackupImportMutationVariables,
+  TContext
+> => {
+  const mutationKey = getPostSystemBackupImportMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof postSystemBackupImport>>,
+    PostSystemBackupImportMutationVariables
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return postSystemBackupImport(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type PostSystemBackupImportQueryResult = NonNullable<
+export type PostSystemBackupImportMutationResult = NonNullable<
   Awaited<ReturnType<typeof postSystemBackupImport>>
 >;
-export type PostSystemBackupImportQueryError = ErrorType<Error | ForbiddenResponse>;
+export type PostSystemBackupImportMutationBody = BodyType<BackupBundle>;
+export type PostSystemBackupImportMutationError = ErrorType<Error | ForbiddenResponse>;
+export type PostSystemBackupImportMutationVariables = { data: BodyType<BackupBundle> };
 
-export function usePostSystemBackupImport<
-  TData = Awaited<ReturnType<typeof postSystemBackupImport>>,
-  TError = ErrorType<Error | ForbiddenResponse>,
->(
-  backupBundle: BodyType<BackupBundle>,
-  options: {
-    query: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postSystemBackupImport>>, TError, TData>
-    > &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postSystemBackupImport>>,
-          TError,
-          Awaited<ReturnType<typeof postSystemBackupImport>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostSystemBackupImport<
-  TData = Awaited<ReturnType<typeof postSystemBackupImport>>,
-  TError = ErrorType<Error | ForbiddenResponse>,
->(
-  backupBundle: BodyType<BackupBundle>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postSystemBackupImport>>, TError, TData>
-    > &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postSystemBackupImport>>,
-          TError,
-          Awaited<ReturnType<typeof postSystemBackupImport>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostSystemBackupImport<
-  TData = Awaited<ReturnType<typeof postSystemBackupImport>>,
-  TError = ErrorType<Error | ForbiddenResponse>,
->(
-  backupBundle: BodyType<BackupBundle>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postSystemBackupImport>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
  * @summary Import a backup bundle — operator. Validates referential integrity and format version before writing anything; existing records (by ID) are left untouched and counted as skipped. The AI config summary, if present, is never applied. Requests are limited to 10 MiB.
  */
-
-export function usePostSystemBackupImport<
-  TData = Awaited<ReturnType<typeof postSystemBackupImport>>,
+export const usePostSystemBackupImport = <
   TError = ErrorType<Error | ForbiddenResponse>,
+  TContext = unknown,
 >(
-  backupBundle: BodyType<BackupBundle>,
   options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postSystemBackupImport>>, TError, TData>
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof postSystemBackupImport>>,
+      TError,
+      PostSystemBackupImportMutationVariables,
+      TContext
     >;
     request?: SecondParameter<typeof customInstance>;
   },
   queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getPostSystemBackupImportQueryOptions(backupBundle, options);
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
+): UseMutationResult<
+  Awaited<ReturnType<typeof postSystemBackupImport>>,
+  TError,
+  PostSystemBackupImportMutationVariables,
+  TContext
+> => {
+  return useMutation(getPostSystemBackupImportMutationOptions(options), queryClient);
+};
 /**
  * @summary Current scheduled-backup configuration — operator. A default schedule is seeded at startup, so this always returns a value.
  */
@@ -1082,123 +990,76 @@ export const putSystemBackupSchedule = (
   );
 };
 
-export const getPutSystemBackupScheduleQueryKey = (backupSchedule?: BodyType<BackupSchedule>) => {
-  return ['PUT', `/system/backup/schedule`, backupSchedule] as const;
-};
+export const getPutSystemBackupScheduleMutationKey = () => ['putSystemBackupSchedule'] as const;
 
-export const getPutSystemBackupScheduleQueryOptions = <
-  TData = Awaited<ReturnType<typeof putSystemBackupSchedule>>,
+export const getPutSystemBackupScheduleMutationOptions = <
   TError = ErrorType<Error | ForbiddenResponse>,
->(
-  backupSchedule: BodyType<BackupSchedule>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof putSystemBackupSchedule>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  }
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
-
-  const queryKey = queryOptions?.queryKey ?? getPutSystemBackupScheduleQueryKey(backupSchedule);
-
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof putSystemBackupSchedule>>> = ({
-    signal,
-  }) => putSystemBackupSchedule(backupSchedule, requestOptions, signal);
-
-  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof putSystemBackupSchedule>>,
     TError,
-    TData
-  > & { queryKey: DataTag<QueryKey, TData, TError> };
+    PutSystemBackupScheduleMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof putSystemBackupSchedule>>,
+  TError,
+  PutSystemBackupScheduleMutationVariables,
+  TContext
+> => {
+  const mutationKey = getPutSystemBackupScheduleMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof putSystemBackupSchedule>>,
+    PutSystemBackupScheduleMutationVariables
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return putSystemBackupSchedule(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type PutSystemBackupScheduleQueryResult = NonNullable<
+export type PutSystemBackupScheduleMutationResult = NonNullable<
   Awaited<ReturnType<typeof putSystemBackupSchedule>>
 >;
-export type PutSystemBackupScheduleQueryError = ErrorType<Error | ForbiddenResponse>;
+export type PutSystemBackupScheduleMutationBody = BodyType<BackupSchedule>;
+export type PutSystemBackupScheduleMutationError = ErrorType<Error | ForbiddenResponse>;
+export type PutSystemBackupScheduleMutationVariables = { data: BodyType<BackupSchedule> };
 
-export function usePutSystemBackupSchedule<
-  TData = Awaited<ReturnType<typeof putSystemBackupSchedule>>,
-  TError = ErrorType<Error | ForbiddenResponse>,
->(
-  backupSchedule: BodyType<BackupSchedule>,
-  options: {
-    query: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof putSystemBackupSchedule>>, TError, TData>
-    > &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof putSystemBackupSchedule>>,
-          TError,
-          Awaited<ReturnType<typeof putSystemBackupSchedule>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePutSystemBackupSchedule<
-  TData = Awaited<ReturnType<typeof putSystemBackupSchedule>>,
-  TError = ErrorType<Error | ForbiddenResponse>,
->(
-  backupSchedule: BodyType<BackupSchedule>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof putSystemBackupSchedule>>, TError, TData>
-    > &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof putSystemBackupSchedule>>,
-          TError,
-          Awaited<ReturnType<typeof putSystemBackupSchedule>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePutSystemBackupSchedule<
-  TData = Awaited<ReturnType<typeof putSystemBackupSchedule>>,
-  TError = ErrorType<Error | ForbiddenResponse>,
->(
-  backupSchedule: BodyType<BackupSchedule>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof putSystemBackupSchedule>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
  * @summary Update the scheduled-backup configuration — operator. `cronExpr` must be a valid 5-field or 6-field cron expression; an invalid one is rejected (code `invalid_cron`) before it's persisted or handed to the scheduler. Re-registers the backup cron job with the new schedule. Audited as `backup.schedule.update`.
  */
-
-export function usePutSystemBackupSchedule<
-  TData = Awaited<ReturnType<typeof putSystemBackupSchedule>>,
+export const usePutSystemBackupSchedule = <
   TError = ErrorType<Error | ForbiddenResponse>,
+  TContext = unknown,
 >(
-  backupSchedule: BodyType<BackupSchedule>,
   options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof putSystemBackupSchedule>>, TError, TData>
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof putSystemBackupSchedule>>,
+      TError,
+      PutSystemBackupScheduleMutationVariables,
+      TContext
     >;
     request?: SecondParameter<typeof customInstance>;
   },
   queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getPutSystemBackupScheduleQueryOptions(backupSchedule, options);
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
+): UseMutationResult<
+  Awaited<ReturnType<typeof putSystemBackupSchedule>>,
+  TError,
+  PutSystemBackupScheduleMutationVariables,
+  TContext
+> => {
+  return useMutation(getPutSystemBackupScheduleMutationOptions(options), queryClient);
+};
 /**
  * @summary Paginated history of backups created by the schedule or on demand — operator
  */
@@ -1339,113 +1200,60 @@ export const postSystemBackupRun = (
   return customInstance<BackupRun>({ url: `/system/backup/run`, method: 'POST', signal }, options);
 };
 
-export const getPostSystemBackupRunQueryKey = () => {
-  return ['POST', `/system/backup/run`] as const;
-};
+export const getPostSystemBackupRunMutationKey = () => ['postSystemBackupRun'] as const;
 
-export const getPostSystemBackupRunQueryOptions = <
-  TData = Awaited<ReturnType<typeof postSystemBackupRun>>,
+export const getPostSystemBackupRunMutationOptions = <
   TError = ErrorType<ForbiddenResponse>,
+  TContext = unknown,
 >(options?: {
-  query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof postSystemBackupRun>>, TError, TData>>;
-  request?: SecondParameter<typeof customInstance>;
-}) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
-
-  const queryKey = queryOptions?.queryKey ?? getPostSystemBackupRunQueryKey();
-
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof postSystemBackupRun>>> = ({ signal }) =>
-    postSystemBackupRun(requestOptions, signal);
-
-  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+  mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof postSystemBackupRun>>,
     TError,
-    TData
-  > & { queryKey: DataTag<QueryKey, TData, TError> };
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<Awaited<ReturnType<typeof postSystemBackupRun>>, TError, void, TContext> => {
+  const mutationKey = getPostSystemBackupRunMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof postSystemBackupRun>>,
+    void
+  > = () => {
+    return postSystemBackupRun(requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type PostSystemBackupRunQueryResult = NonNullable<
+export type PostSystemBackupRunMutationResult = NonNullable<
   Awaited<ReturnType<typeof postSystemBackupRun>>
 >;
-export type PostSystemBackupRunQueryError = ErrorType<ForbiddenResponse>;
 
-export function usePostSystemBackupRun<
-  TData = Awaited<ReturnType<typeof postSystemBackupRun>>,
-  TError = ErrorType<ForbiddenResponse>,
->(
-  options: {
-    query: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postSystemBackupRun>>, TError, TData>
-    > &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postSystemBackupRun>>,
-          TError,
-          Awaited<ReturnType<typeof postSystemBackupRun>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostSystemBackupRun<
-  TData = Awaited<ReturnType<typeof postSystemBackupRun>>,
-  TError = ErrorType<ForbiddenResponse>,
->(
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postSystemBackupRun>>, TError, TData>
-    > &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postSystemBackupRun>>,
-          TError,
-          Awaited<ReturnType<typeof postSystemBackupRun>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostSystemBackupRun<
-  TData = Awaited<ReturnType<typeof postSystemBackupRun>>,
-  TError = ErrorType<ForbiddenResponse>,
->(
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postSystemBackupRun>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export type PostSystemBackupRunMutationError = ErrorType<ForbiddenResponse>;
+
 /**
  * @summary Trigger a backup immediately (`triggeredBy: "manual"`) — operator. Writes the bundle to the configured backup directory, records the run, and applies the current retention policy (same pruning as scheduled backups). Audited as `backup.run.created`, and as `backup.run.pruned` if the retention policy removes any older runs.
  */
-
-export function usePostSystemBackupRun<
-  TData = Awaited<ReturnType<typeof postSystemBackupRun>>,
-  TError = ErrorType<ForbiddenResponse>,
->(
+export const usePostSystemBackupRun = <TError = ErrorType<ForbiddenResponse>, TContext = unknown>(
   options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postSystemBackupRun>>, TError, TData>
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof postSystemBackupRun>>,
+      TError,
+      void,
+      TContext
     >;
     request?: SecondParameter<typeof customInstance>;
   },
   queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getPostSystemBackupRunQueryOptions(options);
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
+): UseMutationResult<Awaited<ReturnType<typeof postSystemBackupRun>>, TError, void, TContext> => {
+  return useMutation(getPostSystemBackupRunMutationOptions(options), queryClient);
+};
 /**
  * @summary Sanitized diagnostics bundle (health, versions, secret-free config, recent failures) — operator. See docs/DIAGNOSTICS.md.
  */
@@ -2007,99 +1815,45 @@ export const postWsTicket = (
   return customInstance<PostWsTicket200>({ url: `/ws/ticket`, method: 'POST', signal }, options);
 };
 
-export const getPostWsTicketQueryKey = () => {
-  return ['POST', `/ws/ticket`] as const;
-};
+export const getPostWsTicketMutationKey = () => ['postWsTicket'] as const;
 
-export const getPostWsTicketQueryOptions = <
-  TData = Awaited<ReturnType<typeof postWsTicket>>,
+export const getPostWsTicketMutationOptions = <
   TError = ErrorType<UnauthorizedResponse | ForbiddenResponse>,
+  TContext = unknown,
 >(options?: {
-  query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof postWsTicket>>, TError, TData>>;
+  mutation?: UseMutationOptions<Awaited<ReturnType<typeof postWsTicket>>, TError, void, TContext>;
   request?: SecondParameter<typeof customInstance>;
-}) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
+}): UseMutationOptions<Awaited<ReturnType<typeof postWsTicket>>, TError, void, TContext> => {
+  const mutationKey = getPostWsTicketMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
 
-  const queryKey = queryOptions?.queryKey ?? getPostWsTicketQueryKey();
+  const mutationFn: MutationFunction<Awaited<ReturnType<typeof postWsTicket>>, void> = () => {
+    return postWsTicket(requestOptions);
+  };
 
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof postWsTicket>>> = ({ signal }) =>
-    postWsTicket(requestOptions, signal);
-
-  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
-    Awaited<ReturnType<typeof postWsTicket>>,
-    TError,
-    TData
-  > & { queryKey: DataTag<QueryKey, TData, TError> };
+  return { mutationFn, ...mutationOptions };
 };
 
-export type PostWsTicketQueryResult = NonNullable<Awaited<ReturnType<typeof postWsTicket>>>;
-export type PostWsTicketQueryError = ErrorType<UnauthorizedResponse | ForbiddenResponse>;
+export type PostWsTicketMutationResult = NonNullable<Awaited<ReturnType<typeof postWsTicket>>>;
 
-export function usePostWsTicket<
-  TData = Awaited<ReturnType<typeof postWsTicket>>,
-  TError = ErrorType<UnauthorizedResponse | ForbiddenResponse>,
->(
-  options: {
-    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof postWsTicket>>, TError, TData>> &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postWsTicket>>,
-          TError,
-          Awaited<ReturnType<typeof postWsTicket>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostWsTicket<
-  TData = Awaited<ReturnType<typeof postWsTicket>>,
-  TError = ErrorType<UnauthorizedResponse | ForbiddenResponse>,
->(
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof postWsTicket>>, TError, TData>> &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postWsTicket>>,
-          TError,
-          Awaited<ReturnType<typeof postWsTicket>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostWsTicket<
-  TData = Awaited<ReturnType<typeof postWsTicket>>,
-  TError = ErrorType<UnauthorizedResponse | ForbiddenResponse>,
->(
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof postWsTicket>>, TError, TData>>;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export type PostWsTicketMutationError = ErrorType<UnauthorizedResponse | ForbiddenResponse>;
+
 /**
  * @summary Mint a one-time WebSocket ticket for the authenticated caller
  */
-
-export function usePostWsTicket<
-  TData = Awaited<ReturnType<typeof postWsTicket>>,
+export const usePostWsTicket = <
   TError = ErrorType<UnauthorizedResponse | ForbiddenResponse>,
+  TContext = unknown,
 >(
   options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof postWsTicket>>, TError, TData>>;
+    mutation?: UseMutationOptions<Awaited<ReturnType<typeof postWsTicket>>, TError, void, TContext>;
     request?: SecondParameter<typeof customInstance>;
   },
   queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getPostWsTicketQueryOptions(options);
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
+): UseMutationResult<Awaited<ReturnType<typeof postWsTicket>>, TError, void, TContext> => {
+  return useMutation(getPostWsTicketMutationOptions(options), queryClient);
+};

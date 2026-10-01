@@ -51,15 +51,15 @@ func mountAuthRoutes(r chi.Router, d routerDeps) {
 			})
 			r.Route("/api-keys", func(r chi.Router) {
 				r.Get("/", d.apiKeyH.List)
-				r.Post("/", d.apiKeyH.Create)
+				r.With(rejectRestrictedAPIKey, auth.RequireElevation(cfg.JWT, cfg.Store, "apiKey.create")).Post("/", d.apiKeyH.Create)
 				r.Delete("/{id}", d.apiKeyH.Revoke)
 			})
 
 			r.Group(func(r chi.Router) {
 				r.Use(auth.RequireInstanceAdmin)
 				r.Get("/config", d.settingH.GetAuthConfig)
-				r.Put("/config", d.settingH.UpdateAuthConfig)
-				r.Put("/providers/{providerId}/enabled", d.settingH.UpdateProviderEnabled)
+				r.With(auth.RequireElevation(cfg.JWT, cfg.Store, "authConfig.update")).Put("/config", d.settingH.UpdateAuthConfig)
+				r.With(auth.RequireElevationForTarget(cfg.JWT, cfg.Store, "authProvider.toggle", "providerId")).Put("/providers/{providerId}/enabled", d.settingH.UpdateProviderEnabled)
 			})
 		})
 	})
@@ -103,22 +103,33 @@ func mountUserRoutes(r chi.Router, d routerDeps) {
 
 	r.Route("/users", func(r chi.Router) {
 		r.Get("/", d.authH.ListUsers)
-		r.Post("/", d.authH.CreateUser)
-		r.Patch("/{id}", d.authH.UpdateUser)
+		r.With(auth.RequireElevation(cfg.JWT, cfg.Store, "user.create")).Post("/", d.authH.CreateUser)
+		r.With(auth.RequireElevationForTarget(cfg.JWT, cfg.Store, "user.update", "id")).Patch("/{id}", d.authH.UpdateUser)
 
 		r.Group(func(r chi.Router) {
-			r.Use(auth.RequireElevation(cfg.JWT, cfg.Store, "user.delete"))
+			r.Use(auth.RequireElevationForTarget(cfg.JWT, cfg.Store, "user.delete", "id"))
 			r.Delete("/{id}", d.authH.DeleteUser)
 		})
 
 		r.Group(func(r chi.Router) {
-			r.Use(auth.RequireElevation(cfg.JWT, cfg.Store, "user.resetPassword"))
+			r.Use(auth.RequireElevationForTarget(cfg.JWT, cfg.Store, "user.resetPassword", "id"))
 			r.Post("/{id}/reset-password", d.authH.ResetPassword)
 		})
 
 		r.Group(func(r chi.Router) {
-			r.Use(auth.RequireElevation(cfg.JWT, cfg.Store, "user.resetMfa"))
+			r.Use(auth.RequireElevationForTarget(cfg.JWT, cfg.Store, "user.resetMfa", "id"))
 			r.Post("/{id}/reset-mfa", d.authH.ResetMFA)
 		})
+	})
+}
+
+// rejectRestrictedAPIKey 403s a scoped key before step-up is asked of it, so it
+// gets the same answer it would from the handler instead of a prompt it can't satisfy.
+func rejectRestrictedAPIKey(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if auth.RejectRestrictedAPIKey(w, r) {
+			return
+		}
+		next.ServeHTTP(w, r)
 	})
 }
