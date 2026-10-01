@@ -244,6 +244,7 @@ func TestCreateStepsValidation(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, "/api/runbooks", strings.NewReader(body))
 		user := apitest.NewUser(t, h.Store, "viewer")
 		req = req.WithContext(auth.ContextWithUser(req.Context(), user, false))
+		apitest.GrantConnectorRole(t, h.Store, user, connID, "viewer")
 		rr := httptest.NewRecorder()
 		h.Create(rr, req)
 		if rr.Code != http.StatusCreated {
@@ -320,5 +321,36 @@ func TestExecuteStepNotFound(t *testing.T) {
 	h.ExecuteStep(rr, req)
 	if rr.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404; body=%s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestStepsRedactedWithoutViewerGrant(t *testing.T) {
+	h := newTestHandler(t)
+	connID := seedProxmoxConnector(t, h)
+	body := `{"title":"t","targetType":"change_type","targetValue":"redact","steps":[{"title":"Restart it","connectorId":"` + connID + `","verb":"restart","entityRef":"100"}]}`
+	createReq := httptest.NewRequest(http.MethodPost, "/api/runbooks", strings.NewReader(body))
+	createRR := httptest.NewRecorder()
+	h.Create(createRR, createReq)
+	if createRR.Code != http.StatusCreated {
+		t.Fatalf("create status = %d; body=%s", createRR.Code, createRR.Body.String())
+	}
+	var created runbookResponse
+	if err := json.Unmarshal(createRR.Body.Bytes(), &created); err != nil {
+		t.Fatal(err)
+	}
+
+	stranger := apitest.NewUser(t, h.Store, "viewer")
+	req := httptest.NewRequest(http.MethodGet, "/api/runbooks/"+created.ID, nil)
+	req.SetPathValue("id", created.ID)
+	req = req.WithContext(auth.ContextWithUser(req.Context(), stranger, false))
+	rr := httptest.NewRecorder()
+	h.Get(rr, req)
+	var got runbookResponse
+	if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	st := got.Steps[0]
+	if st.ConnectorID != "" || st.ConnectorName != "" || st.EntityRef != "" || st.Verb != "" || st.Title == "Restart it" || st.CanExecute {
+		t.Errorf("step not redacted: %+v", st)
 	}
 }

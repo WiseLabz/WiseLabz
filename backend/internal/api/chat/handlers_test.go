@@ -104,8 +104,8 @@ func TestCreateConversationDocVisibility(t *testing.T) {
 	if got := create(granted, scoped.ID); got != http.StatusCreated {
 		t.Errorf("connector-scoped doc with viewer grant: status = %d, want 201", got)
 	}
-	if got := create(stranger, unscoped.ID); got != http.StatusCreated {
-		t.Errorf("unscoped doc: status = %d, want 201", got)
+	if got := create(stranger, unscoped.ID); got != http.StatusNotFound {
+		t.Errorf("unscoped doc for non-admin: status = %d, want 404", got)
 	}
 }
 

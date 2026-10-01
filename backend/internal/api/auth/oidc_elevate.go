@@ -57,6 +57,11 @@ func (h *Handler) ElevateOIDCBegin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !validElevationAction(req.Action) {
+		httputil.Error(w, http.StatusBadRequest, "invalid_request", "unknown action")
+		return
+	}
+
 	identity, err := h.Store.GetOIDCIdentityByUserID(r.Context(), userID)
 	if err != nil {
 		if err == store.ErrNotFound {
@@ -83,6 +88,8 @@ func (h *Handler) ElevateOIDCBegin(w http.ResponseWriter, r *http.Request) {
 		httputil.Errorf(w, err)
 		return
 	}
+	// The callback uses this marker to route the popup without sessionStorage.
+	state = "wiselabz:oidc-step-up:" + state
 	nonce, err := randomOIDCToken()
 	if err != nil {
 		httputil.Errorf(w, err)

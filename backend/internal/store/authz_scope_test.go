@@ -3,6 +3,8 @@ package store
 import (
 	"context"
 	"testing"
+
+	"github.com/WiseLabz/wiselabz/internal/auth"
 )
 
 func seedScopeFixture(t *testing.T) (*Store, string, string, string) {
@@ -75,8 +77,21 @@ func TestListDocSectionEmbeddingsFiltersByGrant(t *testing.T) {
 	for _, r := range got {
 		seen[r.DocID] = true
 	}
-	if !seen["doc-granted"] || !seen["doc-lab"] || seen["doc-denied"] {
+	if !seen["doc-granted"] || seen["doc-lab"] || seen["doc-denied"] {
 		t.Fatalf("unexpected visible docs: %v", seen)
+	}
+
+	// Lab-wide docs aggregate every connector, so instance admins only.
+	got, err = s.ListDocSectionEmbeddings(auth.ContextWithUser(ctx, userID, true), userID, "")
+	if err != nil {
+		t.Fatalf("ListDocSectionEmbeddings (admin): %v", err)
+	}
+	seen = map[string]bool{}
+	for _, r := range got {
+		seen[r.DocID] = true
+	}
+	if !seen["doc-lab"] {
+		t.Fatalf("admin should see the lab-wide doc: %v", seen)
 	}
 
 	got, err = s.ListDocSectionEmbeddings(ctx, userID, "doc-denied")

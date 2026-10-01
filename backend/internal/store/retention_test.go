@@ -34,7 +34,7 @@ func TestDeleteOldSnapshotsProtectsLatest(t *testing.T) {
 	}
 
 	// Add a newer snapshot; now the old one is no longer latest and should be purged.
-	recent := time.Now().UTC().Format(time.RFC3339)
+	recent := time.Now().UTC().Format(SnapshotTimeFormat)
 	if err := s.CreateSnapshot(ctx, &SnapshotRecord{ConnectorID: connectorID, Data: "{}", FetchedAt: recent}); err != nil {
 		t.Fatalf("CreateSnapshot(recent) error: %v", err)
 	}

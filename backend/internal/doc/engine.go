@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"text/template"
 	"time"
@@ -268,7 +269,7 @@ func (e *Engine) GenerateFromSnapshot(ctx context.Context, connectorID string) (
 		DocID:   docID,
 		Rev:     1,
 		Content: rendered.Content,
-		Trigger: "manual",
+		Trigger: "snapshot",
 	})
 
 	return &GenerateResult{
@@ -278,13 +279,9 @@ func (e *Engine) GenerateFromSnapshot(ctx context.Context, connectorID string) (
 	}, nil
 }
 
-// RegenerateForConnector re-renders every existing doc for a connector via
-// the template-less snapshot path and, for any whose content actually
-// changed, updates it and records a new "sync" doc version. Docs generated
-// from a template are re-rendered the same way (DocRecord has no
-// TemplateID to look up), so a template-derived doc's next manual
-// regeneration will re-apply its template; sync only refreshes snapshot
-// content in between. A connector with no existing docs is a no-op.
+// RegenerateForConnector refreshes snapshot-only docs. Human edits, template
+// layouts, and docs without matching version history are preserved and flagged
+// for review until section ownership and template identity are persisted.
 func (e *Engine) RegenerateForConnector(ctx context.Context, connectorID string) error {
 	docs, err := e.store.ListDocsByService(ctx, connectorID)
 	if err != nil {
@@ -303,26 +300,67 @@ func (e *Engine) RegenerateForConnector(ctx context.Context, connectorID string)
 		if d.Content == rendered.Content {
 			continue
 		}
-		if err := e.store.WithinTransaction(ctx, func(tx *store.Store) error {
-			if err := tx.UpdateDoc(ctx, d.ID, rendered.Content, nil); err != nil {
-				return fmt.Errorf("update doc: %w", err)
+		versions, err := e.store.GetDocVersions(ctx, d.ID)
+		if err != nil {
+			return fmt.Errorf("get doc versions: %w", err)
+		}
+		safe := false
+		if len(versions) > 0 {
+			latest := versions[0]
+			generated := latest.Trigger == "sync" || latest.Trigger == "snapshot"
+			matchesCurrent := latest.Rev == d.CurrentVersion && latest.Content == d.Content
+			safe = generated && latest.Author == "" && matchesCurrent
+		}
+		if !safe {
+			if err := e.reviewRegeneration(ctx, d, rendered.Content); err != nil {
+				return err
 			}
-			updated, err := tx.GetDoc(ctx, d.ID)
-			if err != nil {
-				return fmt.Errorf("get updated doc: %w", err)
+			continue
+		}
+		if _, err := e.store.UpdateDocWithVersion(ctx, d.ID, rendered.Content, &d.CurrentVersion, "", "sync"); err != nil {
+			// A save during rendering wins; the next sync will flag it for review.
+			if errors.Is(err, store.ErrVersionConflict) {
+				continue
 			}
-			if err := tx.CreateDocVersion(ctx, &store.DocVersionRecord{
-				DocID: d.ID, Rev: updated.CurrentVersion, Content: rendered.Content, Trigger: "sync",
-			}); err != nil {
-				return fmt.Errorf("create doc version: %w", err)
-			}
-			return nil
-		}); err != nil {
 			return fmt.Errorf("regenerate doc %s: %w", d.ID, err)
 		}
 	}
 
 	return nil
+}
+
+// reviewRegeneration keeps a single review item for each unchanged proposal.
+func (e *Engine) reviewRegeneration(ctx context.Context, d store.DocRecord, content string) error {
+	patch, err := json.Marshal([]map[string]string{{"section": d.Title, "old": d.Content, "new": content}})
+	if err != nil {
+		return fmt.Errorf("marshal regeneration diff: %w", err)
+	}
+	affected, err := json.Marshal([]string{d.ID})
+	if err != nil {
+		return fmt.Errorf("marshal affected docs: %w", err)
+	}
+	cursor := store.Keyset{}
+	for {
+		changes, _, err := e.store.ListChangesKeyset(ctx, d.ServiceID, "", cursor, 100)
+		if err != nil {
+			return fmt.Errorf("list regeneration changes: %w", err)
+		}
+		for _, change := range changes {
+			if change.ChangeType == "doc_regeneration" && change.AffectedDocIDs == string(affected) && change.Diff == string(patch) {
+				return nil
+			}
+		}
+		if len(changes) < 100 {
+			break
+		}
+		last := changes[len(changes)-1]
+		cursor = store.Keyset{Sort: last.DetectedAt, ID: last.ID}
+	}
+	return e.store.CreateChange(ctx, &store.ChangeRecord{
+		ServiceID: d.ServiceID, ChangeType: "doc_regeneration", Severity: "warning",
+		Summary: "Review snapshot refresh for " + d.Title + ": existing documentation preserved",
+		Diff:    string(patch), AffectedDocIDs: string(affected),
+	})
 }
 
 // labTopologyTitle is the fixed title of the single lab-wide topology doc;

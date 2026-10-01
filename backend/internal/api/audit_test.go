@@ -495,3 +495,38 @@ func slicesEqual(a, b []string) bool {
 	}
 	return true
 }
+
+func TestAuditCSVNeutralizesFormulas(t *testing.T) {
+	t.Parallel()
+	app := newTestApp(t)
+	actor, token := app.user(t, "operator")
+	for _, value := range []string{"=1+1", "+1", "-1", "@SUM(1)", " \t=1+1"} {
+		a := &store.AuditRecord{ActorUserID: actor, ActorRole: value, Action: value, TargetType: value, TargetID: value, Detail: value}
+		if err := app.Store.CreateAuditRecord(context.Background(), a); err != nil {
+			t.Fatal(err)
+		}
+	}
+	rec := app.req(t, http.MethodGet, "/api/system/audit/export?format=csv", nil, token)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d: %s", rec.Code, rec.Body)
+	}
+	rows, err := csv.NewReader(strings.NewReader(rec.Body.String())).ReadAll()
+	if err != nil {
+		t.Fatal(err)
+	}
+	count := 0
+	for _, row := range rows[1:] {
+		if row[1] != actor {
+			continue
+		}
+		count++
+		for _, col := range []int{2, 3, 4, 5, 6} {
+			if !strings.HasPrefix(row[col], "'") {
+				t.Errorf("unsafe CSV cell %q", row[col])
+			}
+		}
+	}
+	if count != 5 {
+		t.Fatalf("got %d formula rows, want 5", count)
+	}
+}

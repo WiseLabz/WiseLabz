@@ -259,6 +259,11 @@ func (h *Handler) PostWebAuthnElevateBegin(w http.ResponseWriter, r *http.Reques
 		httputil.Error(w, http.StatusBadRequest, "invalid_request", "action is required")
 		return
 	}
+	if !validElevationAction(req.Action) {
+		httputil.Error(w, http.StatusBadRequest, "invalid_request", "unknown action")
+		return
+	}
+
 	user, err := h.Store.GetUserByID(r.Context(), auth.UserIDFromContext(r.Context()))
 	if err != nil || user.Disabled || user.AuthSource != "local" {
 		httputil.Error(w, http.StatusUnauthorized, "unauthorized", "Invalid user")

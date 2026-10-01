@@ -1,6 +1,6 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 import '../../i18n';
 import { ChatPage } from './ChatPage';
@@ -65,6 +65,26 @@ function renderChat() {
 }
 
 describe('ChatPage', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('reuses a created conversation after a failed first send', async () => {
+    postChatConversationsIdMessages.mockRejectedValueOnce(new Error('Send failed'));
+    renderChat();
+    const input = screen.getByPlaceholderText('Ask a question…');
+    const ask = screen.getByRole('button', { name: /Ask/ });
+    fireEvent.change(input, { target: { value: 'Which host runs Proxmox?' } });
+    fireEvent.click(ask);
+    await waitFor(() => expect(postChatConversationsIdMessages).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(ask).toBeEnabled());
+    expect(input).toHaveValue('Which host runs Proxmox?');
+    fireEvent.click(ask);
+    await waitFor(() => expect(input).toHaveValue(''));
+    expect(postChatConversations).toHaveBeenCalledTimes(1);
+    expect(postChatConversationsIdMessages).toHaveBeenNthCalledWith(2, 'conv-1', {
+      content: 'Which host runs Proxmox?',
+    });
+  });
+
   it('asks a lab-scoped question and renders the answer with its history', async () => {
     renderChat();
 

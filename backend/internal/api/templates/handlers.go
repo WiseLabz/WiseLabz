@@ -431,6 +431,24 @@ func (h *Handler) Preview(w http.ResponseWriter, r *http.Request) {
 		httputil.Errorf(w, err)
 		return
 	}
+
+	connectorIDs := make([]string, len(connectors))
+	for i, c := range connectors {
+		connectorIDs[i] = c.ID
+	}
+	allowedIDs, err := h.Store.FilterConnectorIDsByGrant(r.Context(), auth.UserIDFromContext(r.Context()), connectorIDs, "viewer")
+	if err != nil {
+		httputil.Errorf(w, err)
+		return
+	}
+	allowed := make(map[string]bool, len(allowedIDs))
+	for _, id := range allowedIDs {
+		allowed[id] = true
+	}
+	if req.ConnectorID != "" && !allowed[req.ConnectorID] {
+		httputil.Error(w, http.StatusNotFound, "not_found", "Connector not found")
+		return
+	}
 	type affectedConnector struct {
 		ConnectorID    string  `json:"connectorId"`
 		ConnectorName  string  `json:"connectorName"`
@@ -441,6 +459,9 @@ func (h *Handler) Preview(w http.ResponseWriter, r *http.Request) {
 	affected := make([]affectedConnector, 0, len(connectors))
 	previews := make(map[string]*doc.GenerateResult, len(connectors))
 	for _, connector := range connectors {
+		if !allowed[connector.ID] {
+			continue
+		}
 		item := affectedConnector{ConnectorID: connector.ID, ConnectorName: connector.Name}
 		docs, err := h.Store.ListDocsByService(r.Context(), connector.ID)
 		if err != nil {

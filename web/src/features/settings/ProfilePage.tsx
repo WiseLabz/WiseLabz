@@ -43,6 +43,7 @@ import { Dialog } from '../../components/ui/Dialog';
 import { ElevationConfirm } from '../../components/manager/ElevationConfirm';
 import { TimeAgo } from '../../components/ui/TimeAgo';
 import { ToneTag } from '../../components/ui/ToneTag';
+import { copyText } from '../../lib/clipboard';
 import { toast } from '../../lib/toast';
 import { SubHeader, Section, Field, TextInput, Select } from './parts';
 import { UserIcon, KeyIcon, CopyIcon, ShieldIcon, DownloadIcon } from '../../components/icons';
@@ -380,8 +381,12 @@ function NewApiKeyDialog({ token, onClose }: { token: string | null; onClose: ()
 
   const copy = async () => {
     if (!token) return;
-    await navigator.clipboard.writeText(token);
-    setCopied(true);
+    try {
+      await copyText(token);
+      setCopied(true);
+    } catch {
+      toast.error(t('common.copyError', { defaultValue: 'Could not copy. Select and copy the text manually.' }));
+    }
   };
 
   return (
@@ -398,7 +403,7 @@ function NewApiKeyDialog({ token, onClose }: { token: string | null; onClose: ()
         {t('settings.profile.apiKeys.createdDesc')}
       </p>
       <div className="mt-3 flex items-center gap-2 rounded-md border border-line-soft bg-canvas-sunken p-2">
-        <code className="flex-1 overflow-x-auto whitespace-nowrap font-mono text-xs text-ink">
+        <code className="flex-1 select-text overflow-x-auto whitespace-nowrap font-mono text-xs text-ink">
           {token}
         </code>
         <Button variant="ghost" size="sm" onClick={() => void copy()}>
@@ -796,6 +801,16 @@ function MfaEnrollDialog({
 function SavedRecoveryCodes({ codes, onDone }: { codes: string[]; onDone: () => void }) {
   const { t } = useTranslation();
   const [saved, setSaved] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const copy = async () => {
+    try {
+      await copyText(codes.join('\n'));
+      setCopied(true);
+    } catch {
+      toast.error(t('common.copyError', { defaultValue: 'Could not copy. Select and copy the text manually.' }));
+    }
+  };
 
   function download() {
     const blob = new Blob([codes.join('\n') + '\n'], { type: 'text/plain' });
@@ -814,7 +829,7 @@ function SavedRecoveryCodes({ codes, onDone }: { codes: string[]; onDone: () => 
           defaultValue: 'Save these recovery codes somewhere safe. Each one can be used once if you lose access to your authenticator app. They will not be shown again.',
         })}
       </p>
-      <div className="grid grid-cols-2 gap-2 rounded-md border border-line-soft bg-canvas-sunken p-3 font-mono text-xs text-ink">
+      <div className="grid select-text grid-cols-2 gap-2 rounded-md border border-line-soft bg-canvas-sunken p-3 font-mono text-xs text-ink">
         {codes.map((c) => (
           <span key={c}>{c}</span>
         ))}
@@ -823,10 +838,10 @@ function SavedRecoveryCodes({ codes, onDone }: { codes: string[]; onDone: () => 
         <Button
           variant="ghost"
           size="sm"
-          onClick={() => void navigator.clipboard.writeText(codes.join('\n'))}
+          onClick={() => void copy()}
         >
           <CopyIcon size={14} />
-          {t('settings.security.copyAll', { defaultValue: 'Copy all' })}
+          {copied ? t('settings.profile.apiKeys.copied') : t('settings.security.copyAll', { defaultValue: 'Copy all' })}
         </Button>
         <Button variant="ghost" size="sm" onClick={download}>
           <DownloadIcon size={14} />
