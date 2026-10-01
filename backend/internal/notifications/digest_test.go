@@ -117,11 +117,28 @@ func TestDigestDue(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := digestDue(tt.cadence, tt.lastSent, tt.localHour, tt.now)
+			got := digestDue(tt.cadence, tt.lastSent, tt.localHour, tt.now, time.UTC)
 			if got != tt.want {
 				t.Errorf("digestDue(%q, %q, %d, %v) = %v, want %v",
 					tt.cadence, tt.lastSent, tt.localHour, tt.now, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestDigestDueWeeklyAcrossSpringDST(t *testing.T) {
+	loc, err := time.LoadLocation("America/New_York")
+	if err != nil {
+		t.Skipf("tzdata unavailable: %v", err)
+	}
+	// Sent Sunday 2025-03-02 08:00 EST; DST starts 2025-03-09, so the next
+	// 08:00 EDT send is only 167 elapsed hours later but exactly 7 calendar days.
+	last := time.Date(2025, 3, 2, 8, 0, 0, 0, loc)
+	now := time.Date(2025, 3, 9, 8, 0, 0, 0, loc)
+	if !digestDue("weekly", last.Format(time.RFC3339), 8, now, loc) {
+		t.Error("weekly digest skipped across spring DST, want due")
+	}
+	if digestDue("weekly", last.Format(time.RFC3339), 8, now.AddDate(0, 0, -1), loc) {
+		t.Error("weekly digest due after 6 calendar days, want not due")
 	}
 }

@@ -16,10 +16,10 @@ import (
 const digestSendHour = 8
 
 // digestDue is a pure function (no DB, no real clock) so digest eligibility
-// is unit-testable in isolation. now and the parsed lastSentAt are compared
-// as elapsed time, not calendar day-of-week, so a late or restarted sweep
-// still catches up correctly instead of silently missing a week.
-func digestDue(cadence, lastSentAt string, localHour int, now time.Time) bool {
+// is unit-testable in isolation. The weekly cadence compares calendar dates in
+// the user's timezone (not elapsed hours) so a 23-hour DST day cannot push the
+// 08:00 send a week out, while a late or restarted sweep still catches up.
+func digestDue(cadence, lastSentAt string, localHour int, now time.Time, loc *time.Location) bool {
 	if cadence == "off" {
 		return false
 	}
@@ -37,9 +37,19 @@ func digestDue(cadence, lastSentAt string, localHour int, now time.Time) bool {
 		if err != nil {
 			return true
 		}
-		return now.Sub(last) >= 7*24*time.Hour
+		return calendarDaysBetween(last.In(loc), now.In(loc)) >= 7
 	}
 	return false
+}
+
+// calendarDaysBetween returns the number of local calendar days from a to b,
+// both already expressed in the same location.
+func calendarDaysBetween(a, b time.Time) int {
+	ay, am, ad := a.Date()
+	by, bm, bd := b.Date()
+	da := time.Date(ay, am, ad, 0, 0, 0, 0, time.UTC)
+	db := time.Date(by, bm, bd, 0, 0, 0, 0, time.UTC)
+	return int(db.Sub(da).Hours() / 24)
 }
 
 // RunDigestSweep runs one pass of the hourly digest job: for every user with
@@ -68,11 +78,21 @@ func (d *Dispatcher) RunDigestSweep(ctx context.Context, now time.Time, logger *
 			continue
 		}
 		localHour := now.In(loc).Hour()
-		if !digestDue(u.DigestCadence, u.DigestLastSentAt, localHour, now) {
+		if !digestDue(u.DigestCadence, u.DigestLastSentAt, localHour, now, loc) {
 			continue
 		}
 
-		notifications, err := d.store.ListNotificationsSince(ctx, u.ID, u.DigestLastSentAt, []string{"alert.created", "finding.created", EventSystemJobFailed})
+		// With no watermark yet (first digest), bound the window to one
+		// cadence period instead of summarising the user's whole history.
+		since := u.DigestLastSentAt
+		if since == "" {
+			window := 24 * time.Hour
+			if u.DigestCadence == "weekly" {
+				window = 7 * 24 * time.Hour
+			}
+			since = now.Add(-window).UTC().Format(time.RFC3339)
+		}
+		notifications, err := d.store.ListNotificationsSince(ctx, u.ID, since, []string{"alert.created", "finding.created", EventSystemJobFailed})
 		if err != nil {
 			logger.Error("digest sweep: failed to list notifications", "userID", u.ID, "error", err)
 			continue

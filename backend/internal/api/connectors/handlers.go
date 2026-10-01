@@ -218,6 +218,9 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	applyConnectorScalarUpdates(updates, &req)
+	if !h.pullInNextRun(w, r, id, updates) {
+		return
+	}
 	if !h.applyConnectorConfigUpdate(w, r, id, &req, updates) {
 		return
 	}
@@ -240,6 +243,36 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 
 	c, _ := h.Store.GetConnector(r.Context(), id)
 	httputil.JSON(w, http.StatusOK, c)
+}
+
+// pullInNextRun makes a new, shorter schedule take effect immediately: when
+// the update sets scheduleSeconds it caps next_run_at at now + the new cadence
+// (never pushing an earlier run later). It writes the error response and
+// reports false on failure.
+func (h *Handler) pullInNextRun(w http.ResponseWriter, r *http.Request, id string, updates map[string]any) bool {
+	v, ok := updates["schedule_seconds"]
+	if !ok {
+		return true
+	}
+	secs, _ := v.(*int)
+	if secs == nil {
+		return true
+	}
+	current, err := h.Store.GetConnector(r.Context(), id)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			httputil.Error(w, http.StatusNotFound, "not_found", "Connector not found")
+			return false
+		}
+		httputil.Errorf(w, err)
+		return false
+	}
+	candidate := time.Now().UTC().Add(time.Duration(*secs) * time.Second)
+	if cur, perr := time.Parse(time.RFC3339, current.NextRunAt); current.NextRunAt != "" && perr == nil && !cur.After(candidate) {
+		return true
+	}
+	updates["next_run_at"] = candidate.Format(time.RFC3339)
+	return true
 }
 
 // authorizeConnectorRepoint guards the fields that decide where and how a
@@ -708,6 +741,13 @@ func (h *Handler) ConfigFields(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, pusher.WritableFields())
 }
 
+// Bounds for a connector's auto-sync cadence. Zero or negative values would
+// make the connector due on every scheduler poll.
+const (
+	minScheduleSeconds = 60
+	maxScheduleSeconds = 30 * 24 * 60 * 60
+)
+
 // parseScheduleUpdates decodes the raw-JSON scheduleSeconds, userExpiresAt and
 // rotationMaxAgeDays fields of an Update request into store column updates and
 // validates the rotation fields. An absent (nil) field is left out of the
@@ -719,6 +759,9 @@ func parseScheduleUpdates(scheduleSeconds, userExpiresAtRaw, rotationMaxAgeDaysR
 		var v *int
 		if err := json.Unmarshal(scheduleSeconds, &v); err != nil {
 			return nil, []httputil.FieldError{{Field: "scheduleSeconds", Msg: "must be a number or null"}}
+		}
+		if v != nil && (*v < minScheduleSeconds || *v > maxScheduleSeconds) {
+			return nil, []httputil.FieldError{{Field: "scheduleSeconds", Msg: fmt.Sprintf("must be between %d and %d seconds", minScheduleSeconds, maxScheduleSeconds)}}
 		}
 		updates["schedule_seconds"] = v
 	}

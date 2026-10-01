@@ -42,6 +42,17 @@ func TestParseScheduleUpdates(t *testing.T) {
 			t.Error("rotation_max_age_days missing")
 		}
 	})
+	t.Run("schedule out of range", func(t *testing.T) {
+		for _, v := range []string{"0", "-5", "59", "999999999999"} {
+			_, errs := parseScheduleUpdates(raw(v), nil, nil)
+			if msg := onlyField(t, errs, "scheduleSeconds"); msg == "" {
+				t.Errorf("scheduleSeconds %s accepted, want field error", v)
+			}
+		}
+		if _, errs := parseScheduleUpdates(raw("60"), nil, nil); len(errs) != 0 {
+			t.Errorf("scheduleSeconds 60 rejected: %+v", errs)
+		}
+	})
 	t.Run("invalid schedule", func(t *testing.T) {
 		_, errs := parseScheduleUpdates(raw(`"x"`), nil, nil)
 		if msg := onlyField(t, errs, "scheduleSeconds"); msg == "" {

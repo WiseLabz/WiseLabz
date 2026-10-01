@@ -58,7 +58,7 @@ func (s *Store) ListNotifications(ctx context.Context, userID string, unreadOnly
 const notificationColumns = `id, user_id, alert_id, event_type, title, message, read, created_at`
 
 // ListNotificationsSince returns a user's notifications with the given event
-// types created at or after `since` (RFC3339), most recent first. Used by the
+// types created after `since` (RFC3339), most recent first. Used by the
 // digest sweep to pull everything accumulated since the user's last digest.
 // If since is empty, returns all notifications of the given event types.
 func (s *Store) ListNotificationsSince(ctx context.Context, userID, since string, eventTypes []string) ([]NotificationRecord, error) {
@@ -77,7 +77,7 @@ func (s *Store) ListNotificationsSince(ctx context.Context, userID, since string
 		WHERE user_id = ? AND event_type IN (` + strings.Join(placeholders, ",") + `)`
 
 	if since != "" {
-		query += ` AND created_at >= ?`
+		query += ` AND created_at > ?`
 		args = append(args, since)
 	}
 

@@ -3,7 +3,6 @@ package docs
 
 import (
 	"errors"
-	"log/slog"
 	"net/http"
 
 	"github.com/WiseLabz/wiselabz/internal/ai"
@@ -233,7 +232,11 @@ func (h *Handler) Save(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.Store.UpdateDoc(r.Context(), id, req.Content, req.BaseVersion); err != nil {
+	trigger := req.Trigger
+	if trigger == "" {
+		trigger = "manual"
+	}
+	if _, err := h.Store.UpdateDocWithVersion(r.Context(), id, req.Content, req.BaseVersion, auth.UserIDFromContext(r.Context()), trigger); err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			httputil.Error(w, http.StatusNotFound, "not_found", "Doc not found")
 			return
@@ -251,25 +254,7 @@ func (h *Handler) Save(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Create version
 	d, _ := h.Store.GetDoc(r.Context(), id)
-	userID := auth.UserIDFromContext(r.Context())
-	if d != nil {
-		trigger := req.Trigger
-		if trigger == "" {
-			trigger = "manual"
-		}
-		if err := h.Store.CreateDocVersion(r.Context(), &store.DocVersionRecord{
-			DocID:   id,
-			Rev:     d.CurrentVersion,
-			Content: req.Content,
-			Author:  userID,
-			Trigger: trigger,
-		}); err != nil {
-			slog.Error("failed to record doc version", "docId", id, "rev", d.CurrentVersion, "error", err)
-		}
-	}
-
 	if d != nil {
 		h.syncDocEmbeddings(r.Context(), d.ID, d.Content)
 	}

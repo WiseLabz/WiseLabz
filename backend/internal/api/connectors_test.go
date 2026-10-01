@@ -202,6 +202,34 @@ func TestConnectorsUpdateScheduleSeconds(t *testing.T) {
 		}
 	})
 
+	t.Run("rejects out-of-range schedule", func(t *testing.T) {
+		for _, v := range []int{0, -1, 10} {
+			rec := app.req(t, http.MethodPut, "/api/connectors/"+conn.ID, map[string]any{"scheduleSeconds": v}, opToken)
+			if rec.Code != http.StatusBadRequest {
+				t.Fatalf("scheduleSeconds %d: status = %d, want 400; body = %s", v, rec.Code, rec.Body)
+			}
+		}
+	})
+
+	t.Run("shorter schedule pulls next_run_at forward", func(t *testing.T) {
+		far := time.Now().UTC().Add(24 * time.Hour).Format(time.RFC3339)
+		if err := app.Store.UpdateConnector(context.Background(), conn.ID, map[string]any{"next_run_at": far}); err != nil {
+			t.Fatalf("seed next_run_at: %v", err)
+		}
+		rec := app.req(t, http.MethodPut, "/api/connectors/"+conn.ID, map[string]any{"scheduleSeconds": 300}, opToken)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200; body = %s", rec.Code, rec.Body)
+		}
+		got, err := app.Store.GetConnector(context.Background(), conn.ID)
+		if err != nil {
+			t.Fatalf("GetConnector: %v", err)
+		}
+		next, err := time.Parse(time.RFC3339, got.NextRunAt)
+		if err != nil || time.Until(next) > 6*time.Minute {
+			t.Fatalf("NextRunAt = %q (%v), want within ~5m", got.NextRunAt, err)
+		}
+	})
+
 	t.Run("explicit null clears schedule to manual-only", func(t *testing.T) {
 		rec := app.req(t, http.MethodPut, "/api/connectors/"+conn.ID, map[string]any{"scheduleSeconds": nil}, opToken)
 		if rec.Code != http.StatusOK {

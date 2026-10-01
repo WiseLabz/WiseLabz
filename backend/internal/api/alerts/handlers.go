@@ -241,10 +241,13 @@ func (h *Handler) Snooze(w http.ResponseWriter, r *http.Request) {
 		httputil.ErrorWithDetails(w, http.StatusBadRequest, "invalid_request", "until is required", []httputil.FieldError{{Field: "until", Msg: "is required"}})
 		return
 	}
-	if _, err := time.Parse(time.RFC3339, req.Until); err != nil {
+	until, err := time.Parse(time.RFC3339, req.Until)
+	if err != nil {
 		httputil.ErrorWithDetails(w, http.StatusBadRequest, "invalid_request", "until must be an RFC3339 timestamp", []httputil.FieldError{{Field: "until", Msg: "must be an RFC3339 timestamp"}})
 		return
 	}
+	// Stored as text and compared lexically, so normalise to UTC.
+	req.Until = until.UTC().Format(time.RFC3339)
 
 	a, err := h.Store.GetAlert(r.Context(), id)
 	if errors.Is(err, store.ErrNotFound) {
@@ -304,10 +307,13 @@ func (h *Handler) BulkSnooze(w http.ResponseWriter, r *http.Request) {
 		httputil.ErrorWithDetails(w, http.StatusBadRequest, "invalid_request", "until is required", []httputil.FieldError{{Field: "until", Msg: "is required"}})
 		return
 	}
-	if _, err := time.Parse(time.RFC3339, req.Until); err != nil {
+	until, err := time.Parse(time.RFC3339, req.Until)
+	if err != nil {
 		httputil.ErrorWithDetails(w, http.StatusBadRequest, "invalid_request", "until must be an RFC3339 timestamp", []httputil.FieldError{{Field: "until", Msg: "must be an RFC3339 timestamp"}})
 		return
 	}
+	// Stored as text and compared lexically, so normalise to UTC.
+	req.Until = until.UTC().Format(time.RFC3339)
 	if len(req.IDs) == 0 {
 		httputil.ErrorWithDetails(w, http.StatusBadRequest, "invalid_request", "ids must be a non-empty array", []httputil.FieldError{{Field: "ids", Msg: "must be a non-empty array"}})
 		return
