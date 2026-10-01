@@ -1,5 +1,7 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { ReactNode } from 'react';
 import '../../i18n';
 import { ShareLinksPage } from './ShareLinksPage';
 
@@ -12,6 +14,17 @@ vi.mock('../../api/generated/docs/docs', () => ({
   getGetDocsShareLinksQueryKey: () => ['/docs/share-links'],
 }));
 
+function Wrapper({ children }: { children: ReactNode }) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return (
+    <QueryClientProvider client={queryClient}>
+      {children}
+    </QueryClientProvider>
+  );
+}
+
 describe('ShareLinksPage (#240 PR2)', () => {
   afterEach(() => {
     cleanup();
@@ -20,7 +33,7 @@ describe('ShareLinksPage (#240 PR2)', () => {
 
   it('shows an empty state with no links', () => {
     links = [];
-    render(<ShareLinksPage />);
+    render(<ShareLinksPage />, { wrapper: Wrapper });
     expect(screen.getByText(/no share links yet/i)).toBeInTheDocument();
   });
 
@@ -36,7 +49,7 @@ describe('ShareLinksPage (#240 PR2)', () => {
         lastAccessedAt: '',
       },
     ];
-    render(<ShareLinksPage />);
+    render(<ShareLinksPage />, { wrapper: Wrapper });
     expect(screen.getByText('c1')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /revoke/i })).toBeInTheDocument();
   });
@@ -53,7 +66,7 @@ describe('ShareLinksPage (#240 PR2)', () => {
         lastAccessedAt: '',
       },
     ];
-    render(<ShareLinksPage />);
+    render(<ShareLinksPage />, { wrapper: Wrapper });
     expect(screen.getByText(/expired/i)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /revoke/i })).not.toBeInTheDocument();
   });
@@ -70,7 +83,7 @@ describe('ShareLinksPage (#240 PR2)', () => {
         lastAccessedAt: '',
       },
     ];
-    render(<ShareLinksPage />);
+    render(<ShareLinksPage />, { wrapper: Wrapper });
     expect(screen.getByText(/revoked/i)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /revoke/i })).not.toBeInTheDocument();
   });
@@ -88,7 +101,7 @@ describe('ShareLinksPage (#240 PR2)', () => {
       },
     ];
     revokeMock.mockResolvedValue(undefined);
-    render(<ShareLinksPage />);
+    render(<ShareLinksPage />, { wrapper: Wrapper });
     fireEvent.click(screen.getByRole('button', { name: /revoke/i }));
     // Note: the actual mutation function is deleteDocsShareLinksId, which is mocked.
     // When the revoke mutation is called with 's1', it calls deleteDocsShareLinksId('s1')

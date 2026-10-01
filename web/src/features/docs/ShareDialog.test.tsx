@@ -1,5 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { ReactNode } from 'react';
 import '../../i18n';
 import { toast } from '../../lib/toast';
 import { ShareDialog } from './ShareDialog';
@@ -21,8 +23,22 @@ vi.mock('../../api/generated/docs/docs', () => ({
 const writeText = vi.fn().mockResolvedValue(undefined);
 Object.assign(navigator, { clipboard: { writeText } });
 
+function Wrapper({ children }: { children: ReactNode }) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return (
+    <QueryClientProvider client={queryClient}>
+      {children}
+    </QueryClientProvider>
+  );
+}
+
 function renderDialog(open = true) {
-  return render(<ShareDialog open={open} onClose={vi.fn()} node={{ docId: 'c1', title: 'Connector One' }} />);
+  return render(
+    <ShareDialog open={open} onClose={vi.fn()} node={{ docId: 'c1', title: 'Connector One' }} />,
+    { wrapper: Wrapper }
+  );
 }
 
 describe('ShareDialog (#240 PR2)', () => {
