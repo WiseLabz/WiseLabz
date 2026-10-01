@@ -107,12 +107,21 @@ type EncryptionSettings struct {
 
 // AuthSettings holds authentication settings.
 type AuthSettings struct {
+	ShareLinkMaxTTL      int              `mapstructure:"share_link_max_ttl"` // maximum lifetime in seconds
 	Secret               string           `mapstructure:"secret"`
 	AccessTokenTTL       int              `mapstructure:"access_token_ttl"`
 	RefreshTokenTTL      int              `mapstructure:"refresh_token_ttl"`
 	StepUpForDestructive bool             `mapstructure:"step_up_for_destructive"`
 	OIDC                 []OIDCProvider   `mapstructure:"oidc"`
 	WebAuthn             WebAuthnSettings `mapstructure:"webauthn"`
+}
+
+// ShareLinkMaxTTLDuration returns the maximum share-link lifetime, defaulting to 30 days.
+func (a AuthSettings) ShareLinkMaxTTLDuration() time.Duration {
+	if a.ShareLinkMaxTTL <= 0 {
+		return 30 * 24 * time.Hour
+	}
+	return time.Duration(a.ShareLinkMaxTTL) * time.Second
 }
 
 // WebAuthnSettings optionally overrides the relying-party ID/name WebAuthn
@@ -344,6 +353,7 @@ func Load() (*Config, error) {
 	v.SetDefault("db.conn_max_lifetime_seconds", 1800) // 30 minutes
 	v.SetDefault("db.conn_max_idle_time_seconds", 300) // 5 minutes
 	v.SetDefault("auth.access_token_ttl", 900)         // 15 minutes
+	v.SetDefault("auth.share_link_max_ttl", 2592000)   // 30 days
 	v.SetDefault("auth.refresh_token_ttl", 604800)     // 7 days
 	v.SetDefault("auth.step_up_for_destructive", true)
 	v.SetDefault("ai.enabled", false)
@@ -399,7 +409,7 @@ func Load() (*Config, error) {
 		"server.host", "server.port", "server.origin", "server.trusted_proxies", "server.public_url", "server.embed",
 		"server.read_timeout_seconds", "server.write_timeout_seconds", "server.shutdown_timeout_seconds",
 		"encryption.key",
-		"auth.secret", "auth.access_token_ttl", "auth.refresh_token_ttl", "auth.step_up_for_destructive",
+		"auth.share_link_max_ttl", "auth.secret", "auth.access_token_ttl", "auth.refresh_token_ttl", "auth.step_up_for_destructive",
 		"auth.webauthn.rp_id", "auth.webauthn.rp_display_name",
 		"ai.enabled", "ai.provider", "ai.model", "ai.api_key", "ai.base_url", "ai.mode",
 		"ai.embed_provider", "ai.embed_model", "ai.embed_api_key", "ai.embed_base_url",

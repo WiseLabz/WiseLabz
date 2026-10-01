@@ -67,10 +67,12 @@ func seedPreviewConnector(t *testing.T, app *testApp, name, category, connectorT
 func TestTemplatesPreviewDoesNotCreateDoc(t *testing.T) {
 	t.Parallel()
 	app := newTestApp(t)
-	_, opToken := app.user(t, "operator")
-	_, viewerToken := app.user(t, "viewer")
+	opID, opToken := app.user(t, "operator")
+	viewerID, viewerToken := app.user(t, "viewer")
 	template := seedTemplate(t, app, opToken, map[string]any{"category": "virtualization", "type": "proxmox"})
 	connectorID := seedPreviewConnector(t, app, "pve-1", "virtualization", "proxmox", true)
+	app.connectorGrant(t, viewerID, connectorID, "viewer")
+	app.connectorGrant(t, opID, connectorID, "operator")
 
 	before, err := app.Store.CountDocs(context.Background())
 	if err != nil {
@@ -112,10 +114,12 @@ func TestTemplatesPreviewAffectedConnectors(t *testing.T) {
 	t.Parallel()
 	app := newTestApp(t)
 	_, opToken := app.user(t, "operator")
-	_, viewerToken := app.user(t, "viewer")
+	viewerID, viewerToken := app.user(t, "viewer")
 	template := seedTemplate(t, app, opToken, map[string]any{"category": "virtualization", "type": "proxmox"})
-	seedPreviewConnector(t, app, "pve-1", "virtualization", "proxmox", true)
-	seedPreviewConnector(t, app, "pve-2", "virtualization", "proxmox", true)
+	first := seedPreviewConnector(t, app, "pve-1", "virtualization", "proxmox", true)
+	second := seedPreviewConnector(t, app, "pve-2", "virtualization", "proxmox", true)
+	app.connectorGrant(t, viewerID, first, "viewer")
+	app.connectorGrant(t, viewerID, second, "viewer")
 	seedPreviewConnector(t, app, "docker-1", "containers_paas", "docker", true)
 
 	rec := app.req(t, http.MethodPost, "/api/templates/"+template.ID+"/preview", map[string]any{}, viewerToken)
@@ -151,9 +155,10 @@ func TestTemplatesPreviewCapturesMissingSnapshot(t *testing.T) {
 	t.Parallel()
 	app := newTestApp(t)
 	_, opToken := app.user(t, "operator")
-	_, viewerToken := app.user(t, "viewer")
+	viewerID, viewerToken := app.user(t, "viewer")
 	template := seedTemplate(t, app, opToken, map[string]any{"category": "virtualization"})
 	connectorID := seedPreviewConnector(t, app, "pve-1", "virtualization", "proxmox", false)
+	app.connectorGrant(t, viewerID, connectorID, "viewer")
 	if err := app.Store.CreateDoc(context.Background(), &store.DocRecord{
 		Title: "Existing", Kind: "service", ServiceID: connectorID, Content: "old",
 	}); err != nil {
@@ -384,5 +389,54 @@ func TestTemplatesRestoreRoleBoundary(t *testing.T) {
 	rec := app.req(t, http.MethodPost, "/api/templates/"+template.ID+"/versions/1/restore", nil, viewerToken)
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("status = %d, want 403; body = %s", rec.Code, rec.Body)
+	}
+}
+
+func TestTemplatesPreviewEnforcesConnectorAccess(t *testing.T) {
+	t.Parallel()
+	app := newTestApp(t)
+	_, adminToken := app.user(t, "operator")
+	userID, userToken := app.user(t, "viewer")
+	_, grantlessToken := app.user(t, "viewer")
+	tmpl := seedTemplate(t, app, adminToken, map[string]any{"type": "proxmox"})
+	visible := seedPreviewConnector(t, app, "visible", "virtualization", "proxmox", true)
+	hidden := seedPreviewConnector(t, app, "hidden", "virtualization", "proxmox", true)
+	app.connectorGrant(t, userID, visible, "viewer")
+	app.connectorGrant(t, userID, hidden, "viewer")
+	key := mintAPIKey(t, app, userID, "full", []string{visible})
+	for _, tc := range []struct {
+		name, token, connector string
+		status, count          int
+	}{
+		{"grantless list", grantlessToken, "", 200, 0},
+		{"grantless detail", grantlessToken, visible, 404, 0},
+		{"restricted list", key, "", 200, 1},
+		{"restricted detail", key, hidden, 404, 0},
+		{"allowed detail", key, visible, 200, 1},
+		{"unknown detail", userToken, "unknown", 404, 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rec := app.req(t, http.MethodPost, "/api/templates/"+tmpl.ID+"/preview", map[string]any{"connectorId": tc.connector}, tc.token)
+			if rec.Code != tc.status {
+				t.Fatalf("status = %d, want %d: %s", rec.Code, tc.status, rec.Body)
+			}
+			if tc.status != 200 {
+				return
+			}
+			var body struct {
+				Affected []struct {
+					ConnectorID string `json:"connectorId"`
+				} `json:"affected"`
+			}
+			if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+				t.Fatal(err)
+			}
+			if len(body.Affected) != tc.count {
+				t.Fatalf("affected = %s", rec.Body)
+			}
+			if tc.count == 1 && body.Affected[0].ConnectorID != visible {
+				t.Fatalf("leaked hidden connector: %s", rec.Body)
+			}
+		})
 	}
 }

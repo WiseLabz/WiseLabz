@@ -198,6 +198,17 @@ func (s *Store) GetUserRoleStatus(ctx context.Context, userID string) (string, b
 
 // UpdateUser updates fields on an existing user.
 func (s *Store) UpdateUser(ctx context.Context, id string, updates map[string]any) error {
+	if disabled, _ := updates["disabled"].(bool); disabled {
+		switch s.db.(type) {
+		case transactionDB, pgTransactionDB:
+			// The caller's transaction already covers both writes.
+		default:
+			return s.WithinTransaction(ctx, func(tx *Store) error {
+				return tx.UpdateUser(ctx, id, updates)
+			})
+		}
+	}
+
 	// Build dynamic UPDATE for simplicity
 	query := `UPDATE users SET `
 	args := make([]any, 0)
@@ -266,6 +277,11 @@ func (s *Store) UpdateUser(ctx context.Context, id string, updates map[string]an
 	}
 	if rows == 0 {
 		return ErrNotFound
+	}
+	if disabled, _ := updates["disabled"].(bool); disabled {
+		if err := s.RevokeShareLinksForUser(ctx, id); err != nil {
+			return err
+		}
 	}
 	s.invalidateUserStatuses()
 	return nil

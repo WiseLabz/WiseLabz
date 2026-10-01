@@ -573,3 +573,41 @@ func TestResponsesOmitConfigData(t *testing.T) {
 		}
 	}
 }
+
+func TestUpdateDockerEndpointConfigRequiresInstanceAdmin(t *testing.T) {
+	t.Parallel()
+	h := newTestHandler(t)
+	rr := httptest.NewRecorder()
+	h.Create(rr, httptest.NewRequest(http.MethodPost, "/api/connectors", strings.NewReader(`{"name":"Docker","category":"containers_paas","type":"docker","url":"https://docker.example.com","config":{"host":"tcp://original:2375","verify_tls":true}}`)))
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("create: %d %s", rr.Code, rr.Body)
+	}
+	var created struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &created); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name, body string
+		admin      bool
+		status     int
+	}{
+		{"repoint", `{"config":{"host":"unix:///var/run/docker.sock","verify_tls":true}}`, false, 403},
+		{"remove host", `{"config":{"verify_tls":true}}`, false, 403},
+		{"disable TLS", `{"config":{"host":"tcp://original:2375","verify_tls":false}}`, false, 403},
+		{"unchanged target", `{"config":{"host":"tcp://original:2375","verify_tls":true,"ssh_user":"updated"}}`, false, 200},
+		{"admin repoint", `{"config":{"host":"unix:///var/run/docker.sock","verify_tls":true}}`, true, 200},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPut, "/api/connectors/"+created.ID, strings.NewReader(tc.body))
+			req.SetPathValue("id", created.ID)
+			req = req.WithContext(auth.ContextWithUser(req.Context(), "operator", tc.admin))
+			rr := httptest.NewRecorder()
+			h.Update(rr, req)
+			if rr.Code != tc.status {
+				t.Fatalf("status = %d, want %d: %s", rr.Code, tc.status, rr.Body)
+			}
+		})
+	}
+}
