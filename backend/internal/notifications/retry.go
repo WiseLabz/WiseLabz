@@ -45,13 +45,14 @@ func (d *Dispatcher) retryDueDeliveries(ctx context.Context, logger *slog.Logger
 	for _, del := range due {
 		notif, err := d.store.GetNotificationByID(ctx, del.NotificationID)
 		if err != nil {
-			logger.Error("get notification for retry", "error", err, "deliveryId", del.ID)
+			d.failTerminalDelivery(ctx, del, "notification unavailable: "+err.Error(), logger)
 			continue
 		}
 
 		if _, ok := channelSenders[del.Channel]; !ok {
 			// in_app never fails, so it never lands in the failed+due set; anything else here
 			// is a channel type no longer supported by this build.
+			d.failTerminalDelivery(ctx, del, "unsupported channel type: "+del.Channel, logger)
 			continue
 		}
 		sendErr := d.retryChannel(ctx, notif, del.Channel)
@@ -87,4 +88,10 @@ func (d *Dispatcher) retryChannel(ctx context.Context, notif *store.Notification
 		return errors.New("unsupported channel type: " + channelType)
 	}
 	return sender(ctx, cfg, d.signingSecret(cfg), notif.Title, notif.Message)
+}
+
+func (d *Dispatcher) failTerminalDelivery(ctx context.Context, del store.DeliveryRecord, reason string, logger *slog.Logger) {
+	if err := d.store.UpdateDeliveryResult(ctx, del.ID, store.DeliveryStatusFailed, del.Attempts, reason, ""); err != nil {
+		logger.Error("mark delivery terminally failed", "error", err, "deliveryId", del.ID)
+	}
 }

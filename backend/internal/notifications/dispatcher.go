@@ -148,18 +148,7 @@ func (d *Dispatcher) NotifyAlertsCreated(ctx context.Context, alerts []store.Ale
 }
 
 func (d *Dispatcher) notifyAlertCreated(users []store.User, channels []channelCfg, routes []routeCfg, alertID, severity, connectorID, title, message string) {
-	for _, u := range users {
-		if u.Disabled {
-			continue
-		}
-		d.fanoutSem <- struct{}{}
-		d.inflight.Add(1)
-		go func(userID string, skipExternal bool) {
-			defer d.inflight.Done()
-			defer func() { <-d.fanoutSem }()
-			d.notifyAlert(context.Background(), channels, routes, alertID, userID, "alert.created", severity, connectorID, title, message, skipExternal)
-		}(u.ID, u.DigestCadence != "off")
-	}
+	d.fanOut(users, channels, routes, alertID, "alert.created", severity, connectorID, title, message)
 }
 
 // NotifyFindingCreated dispatches a quality finding notification (a newly
@@ -197,7 +186,7 @@ func (d *Dispatcher) NotifyFindingCreated(ctx context.Context, findingID, title,
 // notification/WS payload has no finding deep-link yet — add one (a real
 // findingId column) if the UI needs to navigate straight to it.
 func (d *Dispatcher) notifyFindingCreated(users []store.User, channels []channelCfg, routes []routeCfg, severity, connectorID, title, message string) {
-	d.fanOut(users, channels, routes, "finding.created", severity, connectorID, title, message)
+	d.fanOut(users, channels, routes, "", "finding.created", severity, connectorID, title, message)
 }
 
 // EventSystemJobFailed is sent when a scheduled background job starts failing
@@ -218,7 +207,7 @@ func (d *Dispatcher) NotifySystemEvent(ctx context.Context, eventType, severity,
 	d.inflight.Add(1)
 	go func() {
 		defer d.inflight.Done()
-		d.fanOut(users, channels, routes, eventType, severity, "", title, message)
+		d.fanOut(users, channels, routes, "", eventType, severity, "", title, message)
 	}()
 }
 
@@ -236,41 +225,43 @@ func (d *Dispatcher) NotifyReport(ctx context.Context, title, message string, se
 	for _, typ := range selected {
 		want[typ] = true
 	}
+	var selectedChannels []channelCfg
+	for _, cfg := range channels {
+		if want[cfg.Type] {
+			selectedChannels = append(selectedChannels, cfg)
+		}
+	}
 	d.inflight.Add(1)
 	go func() {
 		defer d.inflight.Done()
-		for _, u := range users {
-			if u.Disabled {
-				continue
-			}
-			notificationID, ok := d.sendInApp(context.Background(), u.ID, "", "report.generated", title, message)
-			if !ok || u.DigestCadence != "off" {
-				continue
-			}
-			for typ := range want {
-				if cfg, enabled := findChannel(channels, typ); enabled {
-					d.attemptChannel(context.Background(), notificationID, typ, cfg, title, message)
-				}
-			}
-		}
+		d.fanOut(users, selectedChannels, nil, "", "report.generated", "", "", title, message)
 	}()
 }
 
-// fanOut sends one alert-less event to every active user, bounded by
-// fanoutSem. Users with a digest cadence get it in-app only; external
-// channels see it in their digest.
-func (d *Dispatcher) fanOut(users []store.User, channels []channelCfg, routes []routeCfg, eventType, severity, connectorID, title, message string) {
+// fanOut keeps in-app notifications per user and sends global channels once,
+// using one immediate recipient's notification row for delivery tracking/retries.
+func (d *Dispatcher) fanOut(users []store.User, channels []channelCfg, routes []routeCfg, alertID, eventType, severity, connectorID, title, message string) {
+	externalIDs := make(chan string, len(users))
+	var pending sync.WaitGroup
 	for _, u := range users {
 		if u.Disabled {
 			continue
 		}
 		d.fanoutSem <- struct{}{}
-		d.inflight.Add(1)
-		go func(userID string, skipExternal bool) {
-			defer d.inflight.Done()
+		pending.Add(1)
+		go func(user store.User) {
+			defer pending.Done()
 			defer func() { <-d.fanoutSem }()
-			d.notifyAlert(context.Background(), channels, routes, "", userID, eventType, severity, connectorID, title, message, skipExternal)
-		}(u.ID, u.DigestCadence != "off")
+			id, ok := d.sendInApp(context.Background(), user.ID, alertID, eventType, title, message)
+			if ok && user.DigestCadence == "off" {
+				externalIDs <- id
+			}
+		}(u)
+	}
+	pending.Wait()
+	close(externalIDs)
+	if id, ok := <-externalIDs; ok {
+		d.notifyExternalChannels(context.Background(), id, channels, routes, eventType, severity, connectorID, "", title, message)
 	}
 }
 
