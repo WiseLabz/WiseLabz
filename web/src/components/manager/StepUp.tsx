@@ -24,9 +24,12 @@ type Mode = 'password' | 'totp' | 'recovery' | 'webauthn';
 export function StepUp({
   onElevated,
   action,
+  target,
 }: {
   onElevated: (token: string) => void;
   action: string;
+  /** Resource the token is bound to, for actions on one (e.g. the user for user.delete). */
+  target?: string;
 }) {
   const { t } = useTranslation();
   const { data, isLoading } = useGetAuthElevateMethods();
@@ -47,14 +50,14 @@ export function StepUp({
       if (activeMode === 'webauthn') {
         const options = await postAuthElevateWebauthnBegin({ action });
         const assertion = await authenticateWebAuthn(options);
-        return postAuthElevate({ action, webauthn: assertion as unknown as WebAuthnResponse });
+        return postAuthElevate({ action, target, webauthn: assertion as unknown as WebAuthnResponse });
       }
       return postAuthElevate(
         activeMode === 'password'
-          ? { password: value, action }
+          ? { password: value, action, target }
           : activeMode === 'recovery'
-            ? { recoveryCode: value, action }
-            : { totp: value, action }
+            ? { recoveryCode: value, action, target }
+            : { totp: value, action, target }
       );
     },
     onSuccess: (res) => onElevated(res.token),
@@ -65,7 +68,7 @@ export function StepUp({
   }
 
   if (methods.includes('oidc')) {
-    return <OIDCStepUp action={action} onElevated={onElevated} />;
+    return <OIDCStepUp action={action} target={target} onElevated={onElevated} />;
   }
 
   const label =

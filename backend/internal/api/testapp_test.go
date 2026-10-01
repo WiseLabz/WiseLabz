@@ -39,6 +39,10 @@ type testApp struct {
 	Scheduler *scheduler.Runner
 	BackupDir string
 	WSHub     *ws.Hub
+
+	// sessions maps a seeded user to the session of the access token user()
+	// returned, so elevationToken can bind to it like Elevate does.
+	sessions map[string]string
 }
 
 func newTestApp(t *testing.T) *testApp {
@@ -161,6 +165,10 @@ func (a *testApp) user(t *testing.T, role string) (userID, accessToken string) {
 	if err != nil {
 		t.Fatalf("issue pair: %v", err)
 	}
+	if a.sessions == nil {
+		a.sessions = map[string]string{}
+	}
+	a.sessions[u.ID] = pair.SessionID
 	return u.ID, pair.AccessToken
 }
 
@@ -173,13 +181,32 @@ func (a *testApp) connectorGrant(t *testing.T, userID, connectorID, role string)
 	}
 }
 
-func (a *testApp) elevationToken(t *testing.T, userID, action string) string {
+// elevationToken mints a step-up token for userID's seeded session, bound to
+// target for actions on one resource (omit it for actions with none).
+func (a *testApp) elevationToken(t *testing.T, userID, action string, target ...string) string {
 	t.Helper()
-	tok, err := a.JWT.IssueElevation(userID, action)
+	b := auth.ElevationBinding{SessionID: a.sessions[userID]}
+	if len(target) > 0 {
+		b.Target = target[0]
+	}
+	tok, err := a.JWT.IssueElevationBound(userID, action, b)
 	if err != nil {
 		t.Fatalf("issue elevation: %v", err)
 	}
 	return tok.Token
+}
+
+// reqElevated is req with a fresh step-up token for action (and target),
+// bound to the session of the access token.
+func (a *testApp) reqElevated(t *testing.T, method, path string, body any, token, action string, target ...string) *httptest.ResponseRecorder {
+	t.Helper()
+	claims, err := a.JWT.ValidateAccess(token)
+	if err != nil {
+		t.Fatalf("validate access token: %v", err)
+	}
+	r := a.newRequest(t, method, path, body, token)
+	r.Header.Set("X-Elevation-Token", a.elevationToken(t, claims.UserID, action, target...))
+	return a.serve(r)
 }
 
 // req performs an HTTP request against the router. If body is non-nil it is

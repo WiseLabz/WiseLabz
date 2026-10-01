@@ -230,7 +230,7 @@ func TestUsersCreateSuccess(t *testing.T) {
 	app := newTestApp(t)
 	_, opToken := app.user(t, "operator")
 
-	rec := app.req(t, http.MethodPost, "/api/users", map[string]any{"username": "bob", "password": "password123"}, opToken)
+	rec := app.reqElevated(t, http.MethodPost, "/api/users", map[string]any{"username": "bob", "password": "password123"}, opToken, "user.create")
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("status = %d, want 201; body = %s", rec.Code, rec.Body)
 	}
@@ -250,7 +250,7 @@ func TestUsersDeleteElevationBoundary(t *testing.T) {
 	})
 
 	t.Run("self-delete blocked even with valid elevation", func(t *testing.T) {
-		tok := app.elevationToken(t, opID, "user.delete")
+		tok := app.elevationToken(t, opID, "user.delete", opID)
 		req := app.newRequest(t, http.MethodDelete, "/api/users/"+opID, nil, opToken)
 		req.Header.Set("X-Elevation-Token", tok)
 		rec := app.serve(req)
@@ -260,7 +260,7 @@ func TestUsersDeleteElevationBoundary(t *testing.T) {
 	})
 
 	t.Run("valid elevation token succeeds", func(t *testing.T) {
-		tok := app.elevationToken(t, opID, "user.delete")
+		tok := app.elevationToken(t, opID, "user.delete", targetID)
 		req := app.newRequest(t, http.MethodDelete, "/api/users/"+targetID, nil, opToken)
 		req.Header.Set("X-Elevation-Token", tok)
 		rec := app.serve(req)
@@ -284,7 +284,7 @@ func TestUsersResetPasswordElevationBoundary(t *testing.T) {
 	})
 
 	t.Run("valid elevation token succeeds", func(t *testing.T) {
-		tok := app.elevationToken(t, opID, "user.resetPassword")
+		tok := app.elevationToken(t, opID, "user.resetPassword", targetID)
 		req := app.newRequest(t, http.MethodPost, "/api/users/"+targetID+"/reset-password", map[string]any{"newPassword": "new-password-123"}, opToken)
 		req.Header.Set("X-Elevation-Token", tok)
 		rec := app.serve(req)
@@ -561,7 +561,7 @@ func TestUpdateUserSuccess(t *testing.T) {
 	_, opToken := app.user(t, "operator")
 	targetID, _ := app.user(t, "viewer")
 
-	rec := app.req(t, http.MethodPatch, "/api/users/"+targetID, map[string]any{"displayName": "Updated Name"}, opToken)
+	rec := app.reqElevated(t, http.MethodPatch, "/api/users/"+targetID, map[string]any{"displayName": "Updated Name"}, opToken, "user.update", targetID)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body = %s", rec.Code, rec.Body)
 	}

@@ -31,6 +31,7 @@ type oidcElevateFlow struct {
 	UserID       string `json:"userId"`
 	ProviderID   string `json:"providerId"`
 	Action       string `json:"action"`
+	Target       string `json:"target,omitempty"`
 	State        string `json:"state"`
 	Nonce        string `json:"nonce"`
 	CodeVerifier string `json:"codeVerifier"`
@@ -49,6 +50,7 @@ func (h *Handler) ElevateOIDCBegin(w http.ResponseWriter, r *http.Request) {
 
 	req, ok := httputil.DecodeJSON[struct {
 		Action string `json:"action"`
+		Target string `json:"target"`
 	}](w, r)
 	if !ok {
 		return
@@ -108,6 +110,7 @@ func (h *Handler) ElevateOIDCBegin(w http.ResponseWriter, r *http.Request) {
 		UserID:       userID,
 		ProviderID:   provCfg.ID,
 		Action:       req.Action,
+		Target:       req.Target,
 		State:        state,
 		Nonce:        nonce,
 		CodeVerifier: codeVerifier,
@@ -183,7 +186,7 @@ func (h *Handler) ElevateOIDCComplete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	token, err := h.JWT.IssueElevation(userID, flow.Action)
+	token, err := h.JWT.IssueElevationBound(userID, flow.Action, auth.ElevationBinding{SessionID: auth.SessionIDFromContext(r.Context()), Target: flow.Target})
 	if err != nil {
 		httputil.Errorf(w, err)
 		return

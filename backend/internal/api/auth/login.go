@@ -287,6 +287,7 @@ func (h *Handler) issueSession(w http.ResponseWriter, r *http.Request, user *sto
 		return nil, fmt.Errorf("issue token pair: %w", err)
 	}
 	session := &store.Session{
+		ID:        pair.SessionID,
 		UserID:    user.ID,
 		TokenHash: store.HashToken(pair.RefreshToken),
 		UserAgent: r.UserAgent(),
@@ -421,6 +422,7 @@ func (h *Handler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.Store.CreateSession(r.Context(), &store.Session{
+		ID:        pair.SessionID,
 		UserID:    userID,
 		TokenHash: store.HashToken(pair.RefreshToken),
 		UserAgent: r.UserAgent(),

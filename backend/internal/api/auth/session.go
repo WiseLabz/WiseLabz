@@ -61,7 +61,7 @@ func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Issue new pair (rotate refresh token)
-	pair, err := h.JWT.IssuePairWithOptions(user.ID, user.InstanceAdminRole == "admin", auth.IssuePairOptions{MFAEnrollOnly: enrollOnly})
+	pair, err := h.JWT.IssuePairWithOptions(user.ID, user.InstanceAdminRole == "admin", auth.IssuePairOptions{MFAEnrollOnly: enrollOnly, SessionID: claims.SessionID})
 	if err != nil {
 		httputil.Errorf(w, err)
 		return
@@ -122,6 +122,7 @@ func (h *Handler) Elevate(w http.ResponseWriter, r *http.Request) {
 	req, ok := httputil.DecodeJSON[struct {
 		Password     string          `json:"password"`
 		Action       string          `json:"action"` // e.g. "connector.delete"
+		Target       string          `json:"target"` // resource the token is bound to, when the action has one
 		TOTP         string          `json:"totp"`
 		RecoveryCode string          `json:"recoveryCode"`
 		WebAuthn     json.RawMessage `json:"webauthn"`
@@ -190,7 +191,7 @@ func (h *Handler) Elevate(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	token, err := h.JWT.IssueElevation(userID, req.Action)
+	token, err := h.JWT.IssueElevationBound(userID, req.Action, auth.ElevationBinding{SessionID: auth.SessionIDFromContext(r.Context()), Target: req.Target})
 	if err != nil {
 		httputil.Errorf(w, err)
 		return
@@ -293,7 +294,8 @@ func validElevationAction(action string) bool {
 	switch action {
 	case "connector.delete", "connector.restart", "connector.start", "connector.stop",
 		"connector.bulkRestart", "connector.configPush", "template.delete", "user.delete",
-		"user.resetPassword", "user.resetMfa", "mfa.manage":
+		"user.resetPassword", "user.resetMfa", "user.create", "user.update", "apiKey.create",
+		"authConfig.update", "authProvider.toggle", "mfa.manage":
 		return true
 	default:
 		return false

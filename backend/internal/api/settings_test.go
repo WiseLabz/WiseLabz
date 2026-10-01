@@ -31,7 +31,7 @@ func TestAuthConfigGetAndUpdateSuccess(t *testing.T) {
 		t.Fatalf("get status = %d, want 200; body = %s", rec.Code, rec.Body)
 	}
 
-	rec = app.req(t, http.MethodPut, "/api/auth/config", map[string]any{"stepUpForDestructive": false}, opToken)
+	rec = app.reqElevated(t, http.MethodPut, "/api/auth/config", map[string]any{"stepUpForDestructive": false}, opToken, "authConfig.update")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("update status = %d, want 200; body = %s", rec.Code, rec.Body)
 	}
@@ -42,7 +42,7 @@ func TestAuthConfigUpdateValidation(t *testing.T) {
 	app := newTestApp(t)
 	_, opToken := app.user(t, "operator")
 
-	rec := app.req(t, http.MethodPut, "/api/auth/config", map[string]any{}, opToken)
+	rec := app.reqElevated(t, http.MethodPut, "/api/auth/config", map[string]any{}, opToken, "authConfig.update")
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400; body = %s", rec.Code, rec.Body)
 	}
@@ -71,7 +71,7 @@ func TestProviderDisableRevokesMatchingSessionsAndAuditsCount(t *testing.T) {
 		}
 	}
 
-	rec := app.req(t, http.MethodPut, "/api/auth/providers/authentik/enabled", map[string]any{"enabled": false}, opToken)
+	rec := app.reqElevated(t, http.MethodPut, "/api/auth/providers/authentik/enabled", map[string]any{"enabled": false}, opToken, "authProvider.toggle", "authentik")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body = %s", rec.Code, rec.Body)
 	}
@@ -125,7 +125,7 @@ func TestProviderEnableDoesNotRevokeSessions(t *testing.T) {
 		t.Fatalf("CreateSession() error: %v", err)
 	}
 
-	rec := app.req(t, http.MethodPut, "/api/auth/providers/authentik/enabled", map[string]any{"enabled": true}, opToken)
+	rec := app.reqElevated(t, http.MethodPut, "/api/auth/providers/authentik/enabled", map[string]any{"enabled": true}, opToken, "authProvider.toggle", "authentik")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body = %s", rec.Code, rec.Body)
 	}

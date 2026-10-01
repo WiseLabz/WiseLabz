@@ -6,15 +6,18 @@
  *
  * OpenAPI spec version: 0.1.0
  */
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import type {
   DataTag,
   DefinedInitialDataOptions,
   DefinedUseQueryResult,
+  MutationFunction,
   QueryClient,
   QueryFunction,
   QueryKey,
   UndefinedInitialDataOptions,
+  UseMutationOptions,
+  UseMutationResult,
   UseQueryOptions,
   UseQueryResult,
 } from '@tanstack/react-query';
@@ -559,118 +562,74 @@ export const putDocsDocId = (
   );
 };
 
-export const getPutDocsDocIdQueryKey = (docId: string, docSave?: BodyType<DocSave>) => {
-  return ['PUT', `/docs/${docId}`, docSave] as const;
-};
+export const getPutDocsDocIdMutationKey = () => ['putDocsDocId'] as const;
 
-export const getPutDocsDocIdQueryOptions = <
-  TData = Awaited<ReturnType<typeof putDocsDocId>>,
+export const getPutDocsDocIdMutationOptions = <
   TError = ErrorType<ForbiddenResponse | NotFoundResponse | Doc>,
->(
-  docId: string,
-  docSave: BodyType<DocSave>,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof putDocsDocId>>, TError, TData>>;
-    request?: SecondParameter<typeof customInstance>;
-  }
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof putDocsDocId>>,
+    TError,
+    PutDocsDocIdMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof putDocsDocId>>,
+  TError,
+  PutDocsDocIdMutationVariables,
+  TContext
+> => {
+  const mutationKey = getPutDocsDocIdMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
 
-  const queryKey = queryOptions?.queryKey ?? getPutDocsDocIdQueryKey(docId, docSave);
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof putDocsDocId>>,
+    PutDocsDocIdMutationVariables
+  > = (props) => {
+    const { docId, data } = props ?? {};
 
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof putDocsDocId>>> = ({ signal }) =>
-    putDocsDocId(docId, docSave, requestOptions, signal);
-
-  return {
-    queryKey,
-    queryFn,
-    enabled: docId !== null && docId !== undefined,
-    ...queryOptions,
-  } as UseQueryOptions<Awaited<ReturnType<typeof putDocsDocId>>, TError, TData> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
+    return putDocsDocId(docId, data, requestOptions);
   };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type PutDocsDocIdQueryResult = NonNullable<Awaited<ReturnType<typeof putDocsDocId>>>;
-export type PutDocsDocIdQueryError = ErrorType<ForbiddenResponse | NotFoundResponse | Doc>;
+export type PutDocsDocIdMutationResult = NonNullable<Awaited<ReturnType<typeof putDocsDocId>>>;
+export type PutDocsDocIdMutationBody = BodyType<DocSave>;
+export type PutDocsDocIdMutationError = ErrorType<ForbiddenResponse | NotFoundResponse | Doc>;
+export type PutDocsDocIdMutationVariables = { docId: string; data: BodyType<DocSave> };
 
-export function usePutDocsDocId<
-  TData = Awaited<ReturnType<typeof putDocsDocId>>,
-  TError = ErrorType<ForbiddenResponse | NotFoundResponse | Doc>,
->(
-  docId: string,
-  docSave: BodyType<DocSave>,
-  options: {
-    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof putDocsDocId>>, TError, TData>> &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof putDocsDocId>>,
-          TError,
-          Awaited<ReturnType<typeof putDocsDocId>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePutDocsDocId<
-  TData = Awaited<ReturnType<typeof putDocsDocId>>,
-  TError = ErrorType<ForbiddenResponse | NotFoundResponse | Doc>,
->(
-  docId: string,
-  docSave: BodyType<DocSave>,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof putDocsDocId>>, TError, TData>> &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof putDocsDocId>>,
-          TError,
-          Awaited<ReturnType<typeof putDocsDocId>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePutDocsDocId<
-  TData = Awaited<ReturnType<typeof putDocsDocId>>,
-  TError = ErrorType<ForbiddenResponse | NotFoundResponse | Doc>,
->(
-  docId: string,
-  docSave: BodyType<DocSave>,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof putDocsDocId>>, TError, TData>>;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
  * @summary Save doc content (creates a new version; editor+)
  */
-
-export function usePutDocsDocId<
-  TData = Awaited<ReturnType<typeof putDocsDocId>>,
+export const usePutDocsDocId = <
   TError = ErrorType<ForbiddenResponse | NotFoundResponse | Doc>,
+  TContext = unknown,
 >(
-  docId: string,
-  docSave: BodyType<DocSave>,
   options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof putDocsDocId>>, TError, TData>>;
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof putDocsDocId>>,
+      TError,
+      PutDocsDocIdMutationVariables,
+      TContext
+    >;
     request?: SecondParameter<typeof customInstance>;
   },
   queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getPutDocsDocIdQueryOptions(docId, docSave, options);
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
+): UseMutationResult<
+  Awaited<ReturnType<typeof putDocsDocId>>,
+  TError,
+  PutDocsDocIdMutationVariables,
+  TContext
+> => {
+  return useMutation(getPutDocsDocIdMutationOptions(options), queryClient);
+};
 /**
  * @summary Version history list for a doc node
  */
@@ -959,133 +918,74 @@ export const postDocsDocIdVersionsRevRestore = (
   );
 };
 
-export const getPostDocsDocIdVersionsRevRestoreQueryKey = (docId: string, rev: number) => {
-  return ['POST', `/docs/${docId}/versions/${rev}/restore`] as const;
-};
+export const getPostDocsDocIdVersionsRevRestoreMutationKey = () =>
+  ['postDocsDocIdVersionsRevRestore'] as const;
 
-export const getPostDocsDocIdVersionsRevRestoreQueryOptions = <
-  TData = Awaited<ReturnType<typeof postDocsDocIdVersionsRevRestore>>,
+export const getPostDocsDocIdVersionsRevRestoreMutationOptions = <
   TError = ErrorType<unknown>,
->(
-  docId: string,
-  rev: number,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postDocsDocIdVersionsRevRestore>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  }
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
-
-  const queryKey = queryOptions?.queryKey ?? getPostDocsDocIdVersionsRevRestoreQueryKey(docId, rev);
-
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof postDocsDocIdVersionsRevRestore>>> = ({
-    signal,
-  }) => postDocsDocIdVersionsRevRestore(docId, rev, requestOptions, signal);
-
-  return {
-    queryKey,
-    queryFn,
-    enabled: docId !== null && docId !== undefined && rev !== null && rev !== undefined,
-    ...queryOptions,
-  } as UseQueryOptions<
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof postDocsDocIdVersionsRevRestore>>,
     TError,
-    TData
-  > & { queryKey: DataTag<QueryKey, TData, TError> };
+    PostDocsDocIdVersionsRevRestoreMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof postDocsDocIdVersionsRevRestore>>,
+  TError,
+  PostDocsDocIdVersionsRevRestoreMutationVariables,
+  TContext
+> => {
+  const mutationKey = getPostDocsDocIdVersionsRevRestoreMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof postDocsDocIdVersionsRevRestore>>,
+    PostDocsDocIdVersionsRevRestoreMutationVariables
+  > = (props) => {
+    const { docId, rev } = props ?? {};
+
+    return postDocsDocIdVersionsRevRestore(docId, rev, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type PostDocsDocIdVersionsRevRestoreQueryResult = NonNullable<
+export type PostDocsDocIdVersionsRevRestoreMutationResult = NonNullable<
   Awaited<ReturnType<typeof postDocsDocIdVersionsRevRestore>>
 >;
-export type PostDocsDocIdVersionsRevRestoreQueryError = ErrorType<unknown>;
 
-export function usePostDocsDocIdVersionsRevRestore<
-  TData = Awaited<ReturnType<typeof postDocsDocIdVersionsRevRestore>>,
-  TError = ErrorType<unknown>,
->(
-  docId: string,
-  rev: number,
-  options: {
-    query: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postDocsDocIdVersionsRevRestore>>, TError, TData>
-    > &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postDocsDocIdVersionsRevRestore>>,
-          TError,
-          Awaited<ReturnType<typeof postDocsDocIdVersionsRevRestore>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostDocsDocIdVersionsRevRestore<
-  TData = Awaited<ReturnType<typeof postDocsDocIdVersionsRevRestore>>,
-  TError = ErrorType<unknown>,
->(
-  docId: string,
-  rev: number,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postDocsDocIdVersionsRevRestore>>, TError, TData>
-    > &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postDocsDocIdVersionsRevRestore>>,
-          TError,
-          Awaited<ReturnType<typeof postDocsDocIdVersionsRevRestore>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostDocsDocIdVersionsRevRestore<
-  TData = Awaited<ReturnType<typeof postDocsDocIdVersionsRevRestore>>,
-  TError = ErrorType<unknown>,
->(
-  docId: string,
-  rev: number,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postDocsDocIdVersionsRevRestore>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export type PostDocsDocIdVersionsRevRestoreMutationError = ErrorType<unknown>;
+export type PostDocsDocIdVersionsRevRestoreMutationVariables = { docId: string; rev: number };
+
 /**
  * @summary Restore a past revision as a new current version (editor+)
  */
-
-export function usePostDocsDocIdVersionsRevRestore<
-  TData = Awaited<ReturnType<typeof postDocsDocIdVersionsRevRestore>>,
-  TError = ErrorType<unknown>,
->(
-  docId: string,
-  rev: number,
+export const usePostDocsDocIdVersionsRevRestore = <TError = ErrorType<unknown>, TContext = unknown>(
   options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postDocsDocIdVersionsRevRestore>>, TError, TData>
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof postDocsDocIdVersionsRevRestore>>,
+      TError,
+      PostDocsDocIdVersionsRevRestoreMutationVariables,
+      TContext
     >;
     request?: SecondParameter<typeof customInstance>;
   },
   queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getPostDocsDocIdVersionsRevRestoreQueryOptions(docId, rev, options);
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
+): UseMutationResult<
+  Awaited<ReturnType<typeof postDocsDocIdVersionsRevRestore>>,
+  TError,
+  PostDocsDocIdVersionsRevRestoreMutationVariables,
+  TContext
+> => {
+  return useMutation(getPostDocsDocIdVersionsRevRestoreMutationOptions(options), queryClient);
+};
 /**
  * Only available when the AI module is enabled (§2). Returns a request id to correlate with WS events.
  * @summary Request an AI suggestion for the doc (result streams via doc.ai_suggestion WS)
@@ -1108,134 +1008,76 @@ export const postDocsDocIdAiSuggest = (
   );
 };
 
-export const getPostDocsDocIdAiSuggestQueryKey = (
-  docId: string,
-  aiSuggestRequest?: BodyType<AiSuggestRequest>
-) => {
-  return ['POST', `/docs/${docId}/ai-suggest`, aiSuggestRequest] as const;
-};
+export const getPostDocsDocIdAiSuggestMutationKey = () => ['postDocsDocIdAiSuggest'] as const;
 
-export const getPostDocsDocIdAiSuggestQueryOptions = <
-  TData = Awaited<ReturnType<typeof postDocsDocIdAiSuggest>>,
+export const getPostDocsDocIdAiSuggestMutationOptions = <
   TError = ErrorType<Error>,
->(
-  docId: string,
-  aiSuggestRequest: BodyType<AiSuggestRequest>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postDocsDocIdAiSuggest>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  }
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof postDocsDocIdAiSuggest>>,
+    TError,
+    PostDocsDocIdAiSuggestMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof postDocsDocIdAiSuggest>>,
+  TError,
+  PostDocsDocIdAiSuggestMutationVariables,
+  TContext
+> => {
+  const mutationKey = getPostDocsDocIdAiSuggestMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
 
-  const queryKey =
-    queryOptions?.queryKey ?? getPostDocsDocIdAiSuggestQueryKey(docId, aiSuggestRequest);
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof postDocsDocIdAiSuggest>>,
+    PostDocsDocIdAiSuggestMutationVariables
+  > = (props) => {
+    const { docId, data } = props ?? {};
 
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof postDocsDocIdAiSuggest>>> = ({ signal }) =>
-    postDocsDocIdAiSuggest(docId, aiSuggestRequest, requestOptions, signal);
-
-  return {
-    queryKey,
-    queryFn,
-    enabled: docId !== null && docId !== undefined,
-    ...queryOptions,
-  } as UseQueryOptions<Awaited<ReturnType<typeof postDocsDocIdAiSuggest>>, TError, TData> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
+    return postDocsDocIdAiSuggest(docId, data, requestOptions);
   };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type PostDocsDocIdAiSuggestQueryResult = NonNullable<
+export type PostDocsDocIdAiSuggestMutationResult = NonNullable<
   Awaited<ReturnType<typeof postDocsDocIdAiSuggest>>
 >;
-export type PostDocsDocIdAiSuggestQueryError = ErrorType<Error>;
+export type PostDocsDocIdAiSuggestMutationBody = BodyType<AiSuggestRequest>;
+export type PostDocsDocIdAiSuggestMutationError = ErrorType<Error>;
+export type PostDocsDocIdAiSuggestMutationVariables = {
+  docId: string;
+  data: BodyType<AiSuggestRequest>;
+};
 
-export function usePostDocsDocIdAiSuggest<
-  TData = Awaited<ReturnType<typeof postDocsDocIdAiSuggest>>,
-  TError = ErrorType<Error>,
->(
-  docId: string,
-  aiSuggestRequest: BodyType<AiSuggestRequest>,
-  options: {
-    query: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postDocsDocIdAiSuggest>>, TError, TData>
-    > &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postDocsDocIdAiSuggest>>,
-          TError,
-          Awaited<ReturnType<typeof postDocsDocIdAiSuggest>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostDocsDocIdAiSuggest<
-  TData = Awaited<ReturnType<typeof postDocsDocIdAiSuggest>>,
-  TError = ErrorType<Error>,
->(
-  docId: string,
-  aiSuggestRequest: BodyType<AiSuggestRequest>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postDocsDocIdAiSuggest>>, TError, TData>
-    > &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postDocsDocIdAiSuggest>>,
-          TError,
-          Awaited<ReturnType<typeof postDocsDocIdAiSuggest>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostDocsDocIdAiSuggest<
-  TData = Awaited<ReturnType<typeof postDocsDocIdAiSuggest>>,
-  TError = ErrorType<Error>,
->(
-  docId: string,
-  aiSuggestRequest: BodyType<AiSuggestRequest>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postDocsDocIdAiSuggest>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
  * @summary Request an AI suggestion for the doc (result streams via doc.ai_suggestion WS)
  */
-
-export function usePostDocsDocIdAiSuggest<
-  TData = Awaited<ReturnType<typeof postDocsDocIdAiSuggest>>,
-  TError = ErrorType<Error>,
->(
-  docId: string,
-  aiSuggestRequest: BodyType<AiSuggestRequest>,
+export const usePostDocsDocIdAiSuggest = <TError = ErrorType<Error>, TContext = unknown>(
   options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postDocsDocIdAiSuggest>>, TError, TData>
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof postDocsDocIdAiSuggest>>,
+      TError,
+      PostDocsDocIdAiSuggestMutationVariables,
+      TContext
     >;
     request?: SecondParameter<typeof customInstance>;
   },
   queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getPostDocsDocIdAiSuggestQueryOptions(docId, aiSuggestRequest, options);
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
+): UseMutationResult<
+  Awaited<ReturnType<typeof postDocsDocIdAiSuggest>>,
+  TError,
+  PostDocsDocIdAiSuggestMutationVariables,
+  TContext
+> => {
+  return useMutation(getPostDocsDocIdAiSuggestMutationOptions(options), queryClient);
+};
 /**
  * @summary Current advisory edit lock on the doc, if any (any authenticated user)
  */
@@ -1365,115 +1207,73 @@ export const postDocsDocIdLock = (
   return customInstance<DocLock>({ url: `/docs/${docId}/lock`, method: 'POST', signal }, options);
 };
 
-export const getPostDocsDocIdLockQueryKey = (docId: string) => {
-  return ['POST', `/docs/${docId}/lock`] as const;
-};
+export const getPostDocsDocIdLockMutationKey = () => ['postDocsDocIdLock'] as const;
 
-export const getPostDocsDocIdLockQueryOptions = <
-  TData = Awaited<ReturnType<typeof postDocsDocIdLock>>,
+export const getPostDocsDocIdLockMutationOptions = <
   TError = ErrorType<DocLock>,
->(
-  docId: string,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof postDocsDocIdLock>>, TError, TData>>;
-    request?: SecondParameter<typeof customInstance>;
-  }
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof postDocsDocIdLock>>,
+    TError,
+    PostDocsDocIdLockMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof postDocsDocIdLock>>,
+  TError,
+  PostDocsDocIdLockMutationVariables,
+  TContext
+> => {
+  const mutationKey = getPostDocsDocIdLockMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
 
-  const queryKey = queryOptions?.queryKey ?? getPostDocsDocIdLockQueryKey(docId);
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof postDocsDocIdLock>>,
+    PostDocsDocIdLockMutationVariables
+  > = (props) => {
+    const { docId } = props ?? {};
 
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof postDocsDocIdLock>>> = ({ signal }) =>
-    postDocsDocIdLock(docId, requestOptions, signal);
-
-  return {
-    queryKey,
-    queryFn,
-    enabled: docId !== null && docId !== undefined,
-    ...queryOptions,
-  } as UseQueryOptions<Awaited<ReturnType<typeof postDocsDocIdLock>>, TError, TData> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
+    return postDocsDocIdLock(docId, requestOptions);
   };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type PostDocsDocIdLockQueryResult = NonNullable<
+export type PostDocsDocIdLockMutationResult = NonNullable<
   Awaited<ReturnType<typeof postDocsDocIdLock>>
 >;
-export type PostDocsDocIdLockQueryError = ErrorType<DocLock>;
 
-export function usePostDocsDocIdLock<
-  TData = Awaited<ReturnType<typeof postDocsDocIdLock>>,
-  TError = ErrorType<DocLock>,
->(
-  docId: string,
-  options: {
-    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof postDocsDocIdLock>>, TError, TData>> &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postDocsDocIdLock>>,
-          TError,
-          Awaited<ReturnType<typeof postDocsDocIdLock>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostDocsDocIdLock<
-  TData = Awaited<ReturnType<typeof postDocsDocIdLock>>,
-  TError = ErrorType<DocLock>,
->(
-  docId: string,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof postDocsDocIdLock>>, TError, TData>> &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postDocsDocIdLock>>,
-          TError,
-          Awaited<ReturnType<typeof postDocsDocIdLock>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostDocsDocIdLock<
-  TData = Awaited<ReturnType<typeof postDocsDocIdLock>>,
-  TError = ErrorType<DocLock>,
->(
-  docId: string,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof postDocsDocIdLock>>, TError, TData>>;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export type PostDocsDocIdLockMutationError = ErrorType<DocLock>;
+export type PostDocsDocIdLockMutationVariables = { docId: string };
+
 /**
  * @summary Acquire or renew the advisory edit lock (editor+). Advisory only — never blocks Save.
  */
-
-export function usePostDocsDocIdLock<
-  TData = Awaited<ReturnType<typeof postDocsDocIdLock>>,
-  TError = ErrorType<DocLock>,
->(
-  docId: string,
+export const usePostDocsDocIdLock = <TError = ErrorType<DocLock>, TContext = unknown>(
   options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof postDocsDocIdLock>>, TError, TData>>;
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof postDocsDocIdLock>>,
+      TError,
+      PostDocsDocIdLockMutationVariables,
+      TContext
+    >;
     request?: SecondParameter<typeof customInstance>;
   },
   queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getPostDocsDocIdLockQueryOptions(docId, options);
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
+): UseMutationResult<
+  Awaited<ReturnType<typeof postDocsDocIdLock>>,
+  TError,
+  PostDocsDocIdLockMutationVariables,
+  TContext
+> => {
+  return useMutation(getPostDocsDocIdLockMutationOptions(options), queryClient);
+};
 /**
  * @summary Release the advisory edit lock if held by the caller (editor+)
  */
@@ -1488,126 +1288,73 @@ export const postDocsDocIdLockRelease = (
   );
 };
 
-export const getPostDocsDocIdLockReleaseQueryKey = (docId: string) => {
-  return ['POST', `/docs/${docId}/lock/release`] as const;
-};
+export const getPostDocsDocIdLockReleaseMutationKey = () => ['postDocsDocIdLockRelease'] as const;
 
-export const getPostDocsDocIdLockReleaseQueryOptions = <
-  TData = Awaited<ReturnType<typeof postDocsDocIdLockRelease>>,
+export const getPostDocsDocIdLockReleaseMutationOptions = <
   TError = ErrorType<unknown>,
->(
-  docId: string,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postDocsDocIdLockRelease>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  }
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof postDocsDocIdLockRelease>>,
+    TError,
+    PostDocsDocIdLockReleaseMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof postDocsDocIdLockRelease>>,
+  TError,
+  PostDocsDocIdLockReleaseMutationVariables,
+  TContext
+> => {
+  const mutationKey = getPostDocsDocIdLockReleaseMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
 
-  const queryKey = queryOptions?.queryKey ?? getPostDocsDocIdLockReleaseQueryKey(docId);
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof postDocsDocIdLockRelease>>,
+    PostDocsDocIdLockReleaseMutationVariables
+  > = (props) => {
+    const { docId } = props ?? {};
 
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof postDocsDocIdLockRelease>>> = ({
-    signal,
-  }) => postDocsDocIdLockRelease(docId, requestOptions, signal);
-
-  return {
-    queryKey,
-    queryFn,
-    enabled: docId !== null && docId !== undefined,
-    ...queryOptions,
-  } as UseQueryOptions<Awaited<ReturnType<typeof postDocsDocIdLockRelease>>, TError, TData> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
+    return postDocsDocIdLockRelease(docId, requestOptions);
   };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type PostDocsDocIdLockReleaseQueryResult = NonNullable<
+export type PostDocsDocIdLockReleaseMutationResult = NonNullable<
   Awaited<ReturnType<typeof postDocsDocIdLockRelease>>
 >;
-export type PostDocsDocIdLockReleaseQueryError = ErrorType<unknown>;
 
-export function usePostDocsDocIdLockRelease<
-  TData = Awaited<ReturnType<typeof postDocsDocIdLockRelease>>,
-  TError = ErrorType<unknown>,
->(
-  docId: string,
-  options: {
-    query: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postDocsDocIdLockRelease>>, TError, TData>
-    > &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postDocsDocIdLockRelease>>,
-          TError,
-          Awaited<ReturnType<typeof postDocsDocIdLockRelease>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostDocsDocIdLockRelease<
-  TData = Awaited<ReturnType<typeof postDocsDocIdLockRelease>>,
-  TError = ErrorType<unknown>,
->(
-  docId: string,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postDocsDocIdLockRelease>>, TError, TData>
-    > &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postDocsDocIdLockRelease>>,
-          TError,
-          Awaited<ReturnType<typeof postDocsDocIdLockRelease>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostDocsDocIdLockRelease<
-  TData = Awaited<ReturnType<typeof postDocsDocIdLockRelease>>,
-  TError = ErrorType<unknown>,
->(
-  docId: string,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postDocsDocIdLockRelease>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export type PostDocsDocIdLockReleaseMutationError = ErrorType<unknown>;
+export type PostDocsDocIdLockReleaseMutationVariables = { docId: string };
+
 /**
  * @summary Release the advisory edit lock if held by the caller (editor+)
  */
-
-export function usePostDocsDocIdLockRelease<
-  TData = Awaited<ReturnType<typeof postDocsDocIdLockRelease>>,
-  TError = ErrorType<unknown>,
->(
-  docId: string,
+export const usePostDocsDocIdLockRelease = <TError = ErrorType<unknown>, TContext = unknown>(
   options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postDocsDocIdLockRelease>>, TError, TData>
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof postDocsDocIdLockRelease>>,
+      TError,
+      PostDocsDocIdLockReleaseMutationVariables,
+      TContext
     >;
     request?: SecondParameter<typeof customInstance>;
   },
   queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getPostDocsDocIdLockReleaseQueryOptions(docId, options);
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
+): UseMutationResult<
+  Awaited<ReturnType<typeof postDocsDocIdLockRelease>>,
+  TError,
+  PostDocsDocIdLockReleaseMutationVariables,
+  TContext
+> => {
+  return useMutation(getPostDocsDocIdLockReleaseMutationOptions(options), queryClient);
+};
 /**
  * @summary Available templateData field paths and filter functions, for editor reference
  */
@@ -1750,112 +1497,76 @@ export const postDocsGenerate = (
   );
 };
 
-export const getPostDocsGenerateQueryKey = (
-  postDocsGenerateBody?: BodyType<PostDocsGenerateBody>
-) => {
-  return ['POST', `/docs/generate`, postDocsGenerateBody] as const;
-};
+export const getPostDocsGenerateMutationKey = () => ['postDocsGenerate'] as const;
 
-export const getPostDocsGenerateQueryOptions = <
-  TData = Awaited<ReturnType<typeof postDocsGenerate>>,
+export const getPostDocsGenerateMutationOptions = <
   TError = ErrorType<BadRequestResponse | void>,
->(
-  postDocsGenerateBody: BodyType<PostDocsGenerateBody>,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof postDocsGenerate>>, TError, TData>>;
-    request?: SecondParameter<typeof customInstance>;
-  }
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
-
-  const queryKey = queryOptions?.queryKey ?? getPostDocsGenerateQueryKey(postDocsGenerateBody);
-
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof postDocsGenerate>>> = ({ signal }) =>
-    postDocsGenerate(postDocsGenerateBody, requestOptions, signal);
-
-  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof postDocsGenerate>>,
     TError,
-    TData
-  > & { queryKey: DataTag<QueryKey, TData, TError> };
+    PostDocsGenerateMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof postDocsGenerate>>,
+  TError,
+  PostDocsGenerateMutationVariables,
+  TContext
+> => {
+  const mutationKey = getPostDocsGenerateMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof postDocsGenerate>>,
+    PostDocsGenerateMutationVariables
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return postDocsGenerate(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type PostDocsGenerateQueryResult = NonNullable<Awaited<ReturnType<typeof postDocsGenerate>>>;
-export type PostDocsGenerateQueryError = ErrorType<BadRequestResponse | void>;
+export type PostDocsGenerateMutationResult = NonNullable<
+  Awaited<ReturnType<typeof postDocsGenerate>>
+>;
+export type PostDocsGenerateMutationBody = BodyType<PostDocsGenerateBody>;
+export type PostDocsGenerateMutationError = ErrorType<BadRequestResponse | void>;
+export type PostDocsGenerateMutationVariables = { data: BodyType<PostDocsGenerateBody> };
 
-export function usePostDocsGenerate<
-  TData = Awaited<ReturnType<typeof postDocsGenerate>>,
-  TError = ErrorType<BadRequestResponse | void>,
->(
-  postDocsGenerateBody: BodyType<PostDocsGenerateBody>,
-  options: {
-    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof postDocsGenerate>>, TError, TData>> &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postDocsGenerate>>,
-          TError,
-          Awaited<ReturnType<typeof postDocsGenerate>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostDocsGenerate<
-  TData = Awaited<ReturnType<typeof postDocsGenerate>>,
-  TError = ErrorType<BadRequestResponse | void>,
->(
-  postDocsGenerateBody: BodyType<PostDocsGenerateBody>,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof postDocsGenerate>>, TError, TData>> &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postDocsGenerate>>,
-          TError,
-          Awaited<ReturnType<typeof postDocsGenerate>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostDocsGenerate<
-  TData = Awaited<ReturnType<typeof postDocsGenerate>>,
-  TError = ErrorType<BadRequestResponse | void>,
->(
-  postDocsGenerateBody: BodyType<PostDocsGenerateBody>,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof postDocsGenerate>>, TError, TData>>;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
  * @summary Generate a doc from a template applied to a connector's live snapshot
  */
-
-export function usePostDocsGenerate<
-  TData = Awaited<ReturnType<typeof postDocsGenerate>>,
+export const usePostDocsGenerate = <
   TError = ErrorType<BadRequestResponse | void>,
+  TContext = unknown,
 >(
-  postDocsGenerateBody: BodyType<PostDocsGenerateBody>,
   options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof postDocsGenerate>>, TError, TData>>;
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof postDocsGenerate>>,
+      TError,
+      PostDocsGenerateMutationVariables,
+      TContext
+    >;
     request?: SecondParameter<typeof customInstance>;
   },
   queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getPostDocsGenerateQueryOptions(postDocsGenerateBody, options);
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
+): UseMutationResult<
+  Awaited<ReturnType<typeof postDocsGenerate>>,
+  TError,
+  PostDocsGenerateMutationVariables,
+  TContext
+> => {
+  return useMutation(getPostDocsGenerateMutationOptions(options), queryClient);
+};
 /**
  * @summary (Re)generate the single lab-wide topology doc from every connector's latest snapshot
  */
@@ -1866,103 +1577,57 @@ export const postDocsTopology = (
   return customInstance<GenerateResult>({ url: `/docs/topology`, method: 'POST', signal }, options);
 };
 
-export const getPostDocsTopologyQueryKey = () => {
-  return ['POST', `/docs/topology`] as const;
-};
+export const getPostDocsTopologyMutationKey = () => ['postDocsTopology'] as const;
 
-export const getPostDocsTopologyQueryOptions = <
-  TData = Awaited<ReturnType<typeof postDocsTopology>>,
+export const getPostDocsTopologyMutationOptions = <
   TError = ErrorType<unknown>,
+  TContext = unknown,
 >(options?: {
-  query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof postDocsTopology>>, TError, TData>>;
-  request?: SecondParameter<typeof customInstance>;
-}) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
-
-  const queryKey = queryOptions?.queryKey ?? getPostDocsTopologyQueryKey();
-
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof postDocsTopology>>> = ({ signal }) =>
-    postDocsTopology(requestOptions, signal);
-
-  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+  mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof postDocsTopology>>,
     TError,
-    TData
-  > & { queryKey: DataTag<QueryKey, TData, TError> };
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<Awaited<ReturnType<typeof postDocsTopology>>, TError, void, TContext> => {
+  const mutationKey = getPostDocsTopologyMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<Awaited<ReturnType<typeof postDocsTopology>>, void> = () => {
+    return postDocsTopology(requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type PostDocsTopologyQueryResult = NonNullable<Awaited<ReturnType<typeof postDocsTopology>>>;
-export type PostDocsTopologyQueryError = ErrorType<unknown>;
+export type PostDocsTopologyMutationResult = NonNullable<
+  Awaited<ReturnType<typeof postDocsTopology>>
+>;
 
-export function usePostDocsTopology<
-  TData = Awaited<ReturnType<typeof postDocsTopology>>,
-  TError = ErrorType<unknown>,
->(
-  options: {
-    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof postDocsTopology>>, TError, TData>> &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postDocsTopology>>,
-          TError,
-          Awaited<ReturnType<typeof postDocsTopology>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostDocsTopology<
-  TData = Awaited<ReturnType<typeof postDocsTopology>>,
-  TError = ErrorType<unknown>,
->(
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof postDocsTopology>>, TError, TData>> &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postDocsTopology>>,
-          TError,
-          Awaited<ReturnType<typeof postDocsTopology>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostDocsTopology<
-  TData = Awaited<ReturnType<typeof postDocsTopology>>,
-  TError = ErrorType<unknown>,
->(
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof postDocsTopology>>, TError, TData>>;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export type PostDocsTopologyMutationError = ErrorType<unknown>;
+
 /**
  * @summary (Re)generate the single lab-wide topology doc from every connector's latest snapshot
  */
-
-export function usePostDocsTopology<
-  TData = Awaited<ReturnType<typeof postDocsTopology>>,
-  TError = ErrorType<unknown>,
->(
+export const usePostDocsTopology = <TError = ErrorType<unknown>, TContext = unknown>(
   options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof postDocsTopology>>, TError, TData>>;
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof postDocsTopology>>,
+      TError,
+      void,
+      TContext
+    >;
     request?: SecondParameter<typeof customInstance>;
   },
   queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getPostDocsTopologyQueryOptions(options);
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
+): UseMutationResult<Awaited<ReturnType<typeof postDocsTopology>>, TError, void, TContext> => {
+  return useMutation(getPostDocsTopologyMutationOptions(options), queryClient);
+};
 /**
  * @summary List the caller's read-only doc share links
  */
@@ -2096,118 +1761,78 @@ export const postDocsShareLinks = (
   );
 };
 
-export const getPostDocsShareLinksQueryKey = (
-  postDocsShareLinksBody?: BodyType<PostDocsShareLinksBody>
-) => {
-  return ['POST', `/docs/share-links`, postDocsShareLinksBody] as const;
-};
+export const getPostDocsShareLinksMutationKey = () => ['postDocsShareLinks'] as const;
 
-export const getPostDocsShareLinksQueryOptions = <
-  TData = Awaited<ReturnType<typeof postDocsShareLinks>>,
+export const getPostDocsShareLinksMutationOptions = <
   TError = ErrorType<BadRequestResponse | ForbiddenResponse | NotFoundResponse>,
->(
-  postDocsShareLinksBody: BodyType<PostDocsShareLinksBody>,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof postDocsShareLinks>>, TError, TData>>;
-    request?: SecondParameter<typeof customInstance>;
-  }
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
-
-  const queryKey = queryOptions?.queryKey ?? getPostDocsShareLinksQueryKey(postDocsShareLinksBody);
-
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof postDocsShareLinks>>> = ({ signal }) =>
-    postDocsShareLinks(postDocsShareLinksBody, requestOptions, signal);
-
-  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof postDocsShareLinks>>,
     TError,
-    TData
-  > & { queryKey: DataTag<QueryKey, TData, TError> };
+    PostDocsShareLinksMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof postDocsShareLinks>>,
+  TError,
+  PostDocsShareLinksMutationVariables,
+  TContext
+> => {
+  const mutationKey = getPostDocsShareLinksMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof postDocsShareLinks>>,
+    PostDocsShareLinksMutationVariables
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return postDocsShareLinks(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type PostDocsShareLinksQueryResult = NonNullable<
+export type PostDocsShareLinksMutationResult = NonNullable<
   Awaited<ReturnType<typeof postDocsShareLinks>>
 >;
-export type PostDocsShareLinksQueryError = ErrorType<
+export type PostDocsShareLinksMutationBody = BodyType<PostDocsShareLinksBody>;
+export type PostDocsShareLinksMutationError = ErrorType<
   BadRequestResponse | ForbiddenResponse | NotFoundResponse
 >;
+export type PostDocsShareLinksMutationVariables = { data: BodyType<PostDocsShareLinksBody> };
 
-export function usePostDocsShareLinks<
-  TData = Awaited<ReturnType<typeof postDocsShareLinks>>,
-  TError = ErrorType<BadRequestResponse | ForbiddenResponse | NotFoundResponse>,
->(
-  postDocsShareLinksBody: BodyType<PostDocsShareLinksBody>,
-  options: {
-    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof postDocsShareLinks>>, TError, TData>> &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postDocsShareLinks>>,
-          TError,
-          Awaited<ReturnType<typeof postDocsShareLinks>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostDocsShareLinks<
-  TData = Awaited<ReturnType<typeof postDocsShareLinks>>,
-  TError = ErrorType<BadRequestResponse | ForbiddenResponse | NotFoundResponse>,
->(
-  postDocsShareLinksBody: BodyType<PostDocsShareLinksBody>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postDocsShareLinks>>, TError, TData>
-    > &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postDocsShareLinks>>,
-          TError,
-          Awaited<ReturnType<typeof postDocsShareLinks>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostDocsShareLinks<
-  TData = Awaited<ReturnType<typeof postDocsShareLinks>>,
-  TError = ErrorType<BadRequestResponse | ForbiddenResponse | NotFoundResponse>,
->(
-  postDocsShareLinksBody: BodyType<PostDocsShareLinksBody>,
-  options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof postDocsShareLinks>>, TError, TData>>;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
  * @summary Create a read-only share link for a doc or doc subtree
  */
-
-export function usePostDocsShareLinks<
-  TData = Awaited<ReturnType<typeof postDocsShareLinks>>,
+export const usePostDocsShareLinks = <
   TError = ErrorType<BadRequestResponse | ForbiddenResponse | NotFoundResponse>,
+  TContext = unknown,
 >(
-  postDocsShareLinksBody: BodyType<PostDocsShareLinksBody>,
   options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof postDocsShareLinks>>, TError, TData>>;
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof postDocsShareLinks>>,
+      TError,
+      PostDocsShareLinksMutationVariables,
+      TContext
+    >;
     request?: SecondParameter<typeof customInstance>;
   },
   queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getPostDocsShareLinksQueryOptions(postDocsShareLinksBody, options);
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
+): UseMutationResult<
+  Awaited<ReturnType<typeof postDocsShareLinks>>,
+  TError,
+  PostDocsShareLinksMutationVariables,
+  TContext
+> => {
+  return useMutation(getPostDocsShareLinksMutationOptions(options), queryClient);
+};
 /**
  * @summary Revoke a share link (creator or instance admin)
  */
@@ -2222,125 +1847,73 @@ export const deleteDocsShareLinksId = (
   );
 };
 
-export const getDeleteDocsShareLinksIdQueryKey = (id: string) => {
-  return ['DELETE', `/docs/share-links/${id}`] as const;
-};
+export const getDeleteDocsShareLinksIdMutationKey = () => ['deleteDocsShareLinksId'] as const;
 
-export const getDeleteDocsShareLinksIdQueryOptions = <
-  TData = Awaited<ReturnType<typeof deleteDocsShareLinksId>>,
+export const getDeleteDocsShareLinksIdMutationOptions = <
   TError = ErrorType<NotFoundResponse>,
->(
-  id: string,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof deleteDocsShareLinksId>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  }
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteDocsShareLinksId>>,
+    TError,
+    DeleteDocsShareLinksIdMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteDocsShareLinksId>>,
+  TError,
+  DeleteDocsShareLinksIdMutationVariables,
+  TContext
+> => {
+  const mutationKey = getDeleteDocsShareLinksIdMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
 
-  const queryKey = queryOptions?.queryKey ?? getDeleteDocsShareLinksIdQueryKey(id);
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteDocsShareLinksId>>,
+    DeleteDocsShareLinksIdMutationVariables
+  > = (props) => {
+    const { id } = props ?? {};
 
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof deleteDocsShareLinksId>>> = ({ signal }) =>
-    deleteDocsShareLinksId(id, requestOptions, signal);
-
-  return {
-    queryKey,
-    queryFn,
-    enabled: id !== null && id !== undefined,
-    ...queryOptions,
-  } as UseQueryOptions<Awaited<ReturnType<typeof deleteDocsShareLinksId>>, TError, TData> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
+    return deleteDocsShareLinksId(id, requestOptions);
   };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type DeleteDocsShareLinksIdQueryResult = NonNullable<
+export type DeleteDocsShareLinksIdMutationResult = NonNullable<
   Awaited<ReturnType<typeof deleteDocsShareLinksId>>
 >;
-export type DeleteDocsShareLinksIdQueryError = ErrorType<NotFoundResponse>;
 
-export function useDeleteDocsShareLinksId<
-  TData = Awaited<ReturnType<typeof deleteDocsShareLinksId>>,
-  TError = ErrorType<NotFoundResponse>,
->(
-  id: string,
-  options: {
-    query: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof deleteDocsShareLinksId>>, TError, TData>
-    > &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof deleteDocsShareLinksId>>,
-          TError,
-          Awaited<ReturnType<typeof deleteDocsShareLinksId>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function useDeleteDocsShareLinksId<
-  TData = Awaited<ReturnType<typeof deleteDocsShareLinksId>>,
-  TError = ErrorType<NotFoundResponse>,
->(
-  id: string,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof deleteDocsShareLinksId>>, TError, TData>
-    > &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof deleteDocsShareLinksId>>,
-          TError,
-          Awaited<ReturnType<typeof deleteDocsShareLinksId>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function useDeleteDocsShareLinksId<
-  TData = Awaited<ReturnType<typeof deleteDocsShareLinksId>>,
-  TError = ErrorType<NotFoundResponse>,
->(
-  id: string,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof deleteDocsShareLinksId>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export type DeleteDocsShareLinksIdMutationError = ErrorType<NotFoundResponse>;
+export type DeleteDocsShareLinksIdMutationVariables = { id: string };
+
 /**
  * @summary Revoke a share link (creator or instance admin)
  */
-
-export function useDeleteDocsShareLinksId<
-  TData = Awaited<ReturnType<typeof deleteDocsShareLinksId>>,
-  TError = ErrorType<NotFoundResponse>,
->(
-  id: string,
+export const useDeleteDocsShareLinksId = <TError = ErrorType<NotFoundResponse>, TContext = unknown>(
   options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof deleteDocsShareLinksId>>, TError, TData>
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof deleteDocsShareLinksId>>,
+      TError,
+      DeleteDocsShareLinksIdMutationVariables,
+      TContext
     >;
     request?: SecondParameter<typeof customInstance>;
   },
   queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getDeleteDocsShareLinksIdQueryOptions(id, options);
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
+): UseMutationResult<
+  Awaited<ReturnType<typeof deleteDocsShareLinksId>>,
+  TError,
+  DeleteDocsShareLinksIdMutationVariables,
+  TContext
+> => {
+  return useMutation(getDeleteDocsShareLinksIdMutationOptions(options), queryClient);
+};
 /**
  * @summary Doc tree visible through a share link (unauthenticated)
  */
