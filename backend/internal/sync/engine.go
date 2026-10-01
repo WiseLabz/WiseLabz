@@ -41,6 +41,12 @@ type DocRegenerator interface {
 	RegenerateForConnector(ctx context.Context, connectorID string) error
 }
 
+// TopologyBuilder rebuilds a connector's persisted topology edges from its
+// latest snapshot after a successful sync.
+type TopologyBuilder interface {
+	RebuildTopologyForConnector(ctx context.Context, connectorID string) error
+}
+
 // Engine runs sync jobs against connectors.
 type Engine struct {
 	workerMu       sync.Mutex
@@ -54,6 +60,7 @@ type Engine struct {
 	notifier       AlertNotifier
 	qualityChecker QualityChecker
 	docRegenerator DocRegenerator
+	topology       TopologyBuilder
 	// encKey is the base64-encoded AES-256 key (config.Encryption.Key) used
 	// to decrypt/re-encrypt secret-bearing connector config fields via
 	// store.ParseConnectorConfig/MarshalConnectorConfig.
@@ -84,6 +91,12 @@ func (e *Engine) SetLimits(maxConcurrency, dueBatchSize int, timeout time.Durati
 // simply skips sync-triggered doc regeneration.
 func (e *Engine) SetDocRegenerator(dr DocRegenerator) {
 	e.docRegenerator = dr
+}
+
+// SetTopologyBuilder wires a TopologyBuilder into the engine after
+// construction; nil (the default) skips topology edge rebuilds.
+func (e *Engine) SetTopologyBuilder(tb TopologyBuilder) {
+	e.topology = tb
 }
 
 // SetBaseContext sets the context that detached syncs derive from. main wires

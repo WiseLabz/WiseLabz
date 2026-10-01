@@ -1,0 +1,10 @@
+DROP TABLE doc_edit_proposals;
+DROP TABLE topology_edges;
+DROP TRIGGER runbooks_fts_ad;
+DROP TRIGGER runbooks_fts_au;
+DROP TRIGGER runbooks_fts_ai;
+DROP TABLE runbooks_fts;
+DROP TRIGGER docs_fts_ad;
+DROP TRIGGER docs_fts_au;
+DROP TRIGGER docs_fts_ai;
+DROP TABLE docs_fts;

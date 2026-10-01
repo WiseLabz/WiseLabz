@@ -97,10 +97,12 @@ func mountAPIRoutes(r chi.Router, d routerDeps) {
 	// The MCP endpoint gets its own authenticated group (rather than sharing
 	// the one above) so auth.TreatAsSafeMethod can run ahead of
 	// AuthMiddleware: mcp-go's StreamableHTTP transport always POSTs, even
-	// for a pure tools/call read, and every tool this server exposes is a
-	// read (see internal/mcp) - so a "read"-scope API key must not be
+	// for a pure tools/call read, and nearly every tool this server exposes
+	// is a read (see internal/mcp) - so a "read"-scope API key must not be
 	// blocked by AuthMiddleware's generic non-GET/HEAD/OPTIONS-is-mutating
-	// heuristic here.
+	// heuristic here. The one exception is propose_doc_edit, which stores a
+	// reviewable proposal (never edits a doc) and therefore rejects
+	// read-only keys and checks operator access itself.
 	r.Group(func(r chi.Router) {
 		r.Use(auth.TreatAsSafeMethod)
 		r.Use(d.cfg.AuthMiddleware())

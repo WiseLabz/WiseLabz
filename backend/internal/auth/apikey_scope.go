@@ -86,13 +86,16 @@ const ctxTreatAsSafeMethod contextKey = "treatAsSafeMethod"
 
 // TreatAsSafeMethod marks every request through it as "safe" for
 // AuthMiddleware's read-only-key gate, regardless of its actual HTTP verb.
-// For routes that are inherently read-only no matter what verb they're
-// called with (the MCP JSON-RPC endpoint always POSTs, even for a pure
-// tools/call read - see internal/mcp, permanently read-only per #277), the
-// generic "non-GET/HEAD/OPTIONS ⇒ mutating" heuristic is a false positive
-// that would otherwise 403 a "read"-scope key before it ever reaches the
-// handler. Mount it ahead of AuthMiddleware in that route's own group (it
-// must run first, so AuthMiddleware sees the flag already set).
+// For routes that are read-only no matter what verb they're called with (the
+// MCP JSON-RPC endpoint always POSTs, even for a pure tools/call read - see
+// internal/mcp), the generic "non-GET/HEAD/OPTIONS ⇒ mutating" heuristic is
+// a false positive that would otherwise 403 a "read"-scope key before it ever
+// reaches the handler. Mount it ahead of AuthMiddleware in that route's own
+// group (it must run first, so AuthMiddleware sees the flag already set).
+//
+// Marking a route safe moves the read-only-key check into the handlers, so it
+// is only appropriate where any write is enforced there: the one MCP tool that
+// writes, propose_doc_edit, rejects read-only keys itself.
 func TreatAsSafeMethod(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), ctxTreatAsSafeMethod, true)))

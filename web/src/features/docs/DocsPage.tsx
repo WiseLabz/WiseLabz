@@ -110,6 +110,13 @@ export function DocsPage() {
             <SearchIcon size={14} />
             {t('docs.searchAllLink')}
           </Link>
+          <Link
+            to="/docs/proposals"
+            className="mb-1 flex items-center gap-2 rounded-md px-2.5 py-2 text-xs text-ink-muted transition-colors hover:bg-surface-raised hover:text-ink"
+          >
+            <FileTextIcon size={14} />
+            {t('docs.reviewProposalsLink')}
+          </Link>
           {treeContent}
         </Panel>
       </aside>

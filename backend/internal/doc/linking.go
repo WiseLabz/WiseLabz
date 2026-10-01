@@ -14,6 +14,7 @@ import (
 // live at doc-render time (see matchEntities).
 type EntityLink struct {
 	Entity        connector.SnapshotEntity
+	Local         connector.SnapshotEntity // the current service's entity that matched Entity
 	ConnectorID   string
 	ConnectorName string
 	Reason        string // "external ID", "IP address", or "hostname"
@@ -57,6 +58,7 @@ func matchEntities(ctx context.Context, s *store.Store, cache *snapshotCache, co
 				seen[key] = true
 				links = append(links, EntityLink{
 					Entity:        other,
+					Local:         mine,
 					ConnectorID:   c.ID,
 					ConnectorName: c.Name,
 					Reason:        reason,

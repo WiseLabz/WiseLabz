@@ -9,7 +9,7 @@
 import { faker } from '@faker-js/faker';
 
 import { AlertStatus, Severity } from '../../model';
-import type { Alert, AlertBulkSnoozeResponse, AlertPage } from '../../model';
+import type { Alert, AlertBulkSnoozeResponse, AlertPage, RunbookDraft } from '../../model';
 
 export const getGetAlertsResponseMock = (
   overrideResponse: Partial<Extract<AlertPage, object>> = {}
@@ -152,6 +152,20 @@ export const getPostAlertsAlertIdSnoozeResponseMock = (
   snoozedUntil: faker.helpers.arrayElement([
     faker.date.past().toISOString().slice(0, 19) + 'Z',
     null,
+  ]),
+  ...overrideResponse,
+});
+
+export const getPostAlertsAlertIdDraftRunbookResponseMock = (
+  overrideResponse: Partial<Extract<RunbookDraft, object>> = {}
+): RunbookDraft => ({
+  title: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  body: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  targetType: faker.helpers.arrayElement(['change_type', 'alert_severity'] as const),
+  targetValue: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  existingRunbookId: faker.helpers.arrayElement([
+    faker.string.alpha({ length: { min: 10, max: 20 } }),
+    undefined,
   ]),
   ...overrideResponse,
 });

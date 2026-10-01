@@ -28,9 +28,11 @@ import type {
   AlertBulkSnoozeResponse,
   AlertPage,
   BadRequestResponse,
+  ForbiddenResponse,
   GetAlertsParams,
   NotFoundResponse,
   PostAlertsAlertIdSnoozeBody,
+  RunbookDraft,
 } from '../../model';
 
 import { customInstance } from '../../axios-instance';
@@ -538,6 +540,94 @@ export const usePostAlertsAlertIdSnooze = <TError = ErrorType<unknown>, TContext
   TContext
 > => {
   return useMutation(getPostAlertsAlertIdSnoozeMutationOptions(options), queryClient);
+};
+/**
+ * Builds a starting-point runbook from the alert, its linked change and any runbook already bound to the target. No AI is involved, so this works with the AI module disabled.
+ * @summary Draft a runbook from an alert (operator; deterministic template, nothing is persisted)
+ */
+export const postAlertsAlertIdDraftRunbook = (
+  alertId: string,
+  options?: SecondParameter<typeof customInstance>,
+  signal?: AbortSignal
+) => {
+  return customInstance<RunbookDraft>(
+    { url: `/alerts/${alertId}/draft-runbook`, method: 'POST', signal },
+    options
+  );
+};
+
+export const getPostAlertsAlertIdDraftRunbookMutationKey = () =>
+  ['postAlertsAlertIdDraftRunbook'] as const;
+
+export const getPostAlertsAlertIdDraftRunbookMutationOptions = <
+  TError = ErrorType<ForbiddenResponse | NotFoundResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof postAlertsAlertIdDraftRunbook>>,
+    TError,
+    PostAlertsAlertIdDraftRunbookMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof postAlertsAlertIdDraftRunbook>>,
+  TError,
+  PostAlertsAlertIdDraftRunbookMutationVariables,
+  TContext
+> => {
+  const mutationKey = getPostAlertsAlertIdDraftRunbookMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof postAlertsAlertIdDraftRunbook>>,
+    PostAlertsAlertIdDraftRunbookMutationVariables
+  > = (props) => {
+    const { alertId } = props ?? {};
+
+    return postAlertsAlertIdDraftRunbook(alertId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type PostAlertsAlertIdDraftRunbookMutationResult = NonNullable<
+  Awaited<ReturnType<typeof postAlertsAlertIdDraftRunbook>>
+>;
+
+export type PostAlertsAlertIdDraftRunbookMutationError = ErrorType<
+  ForbiddenResponse | NotFoundResponse
+>;
+export type PostAlertsAlertIdDraftRunbookMutationVariables = { alertId: string };
+
+/**
+ * @summary Draft a runbook from an alert (operator; deterministic template, nothing is persisted)
+ */
+export const usePostAlertsAlertIdDraftRunbook = <
+  TError = ErrorType<ForbiddenResponse | NotFoundResponse>,
+  TContext = unknown,
+>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof postAlertsAlertIdDraftRunbook>>,
+      TError,
+      PostAlertsAlertIdDraftRunbookMutationVariables,
+      TContext
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseMutationResult<
+  Awaited<ReturnType<typeof postAlertsAlertIdDraftRunbook>>,
+  TError,
+  PostAlertsAlertIdDraftRunbookMutationVariables,
+  TContext
+> => {
+  return useMutation(getPostAlertsAlertIdDraftRunbookMutationOptions(options), queryClient);
 };
 /**
  * @summary Snooze multiple alerts

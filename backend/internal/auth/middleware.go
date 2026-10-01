@@ -42,9 +42,16 @@ func ContextWithUser(ctx context.Context, userID string, instanceAdmin bool) con
 // flat, non-connector-scoped instance-admin role. Per-connector access is
 // never carried in the request context; look it up per-request via
 // store.UserHasConnectorRole instead (see RequireConnectorRole).
+//
+// A connector-restricted API key never counts as instance admin, even if the
+// context value was set some other way: lab-wide resources (no connector)
+// cannot honor a connector allow-list, so the restriction wins. AuthMiddleware
+// already does this when it builds the context; checking here too keeps the
+// invariant for every caller (MCP tools, store queries) regardless of how the
+// context was assembled.
 func InstanceAdminFromContext(ctx context.Context) bool {
 	admin, _ := ctx.Value(ctxInstanceAdmin).(bool)
-	return admin
+	return admin && len(APIKeyRestrictionFromContext(ctx).ConnectorIDs) == 0
 }
 
 // APIKeyIDFromContext returns the ID of the API key that authenticated the

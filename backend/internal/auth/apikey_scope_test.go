@@ -34,3 +34,20 @@ func TestClampConnectorRole(t *testing.T) {
 		})
 	}
 }
+
+// A connector-restricted key never counts as instance admin, regardless of
+// how the context was assembled.
+func TestInstanceAdminFromContextIgnoresRestrictedKeys(t *testing.T) {
+	base := ContextWithUser(context.Background(), "u1", true)
+	if !InstanceAdminFromContext(base) {
+		t.Fatal("unrestricted admin should be admin")
+	}
+	restricted := ContextWithAPIKeyRestriction(base, APIKeyRestriction{ConnectorIDs: []string{"c1"}})
+	if InstanceAdminFromContext(restricted) {
+		t.Fatal("connector-restricted key must not be instance admin")
+	}
+	readOnly := ContextWithAPIKeyRestriction(base, APIKeyRestriction{ReadOnly: true})
+	if !InstanceAdminFromContext(readOnly) {
+		t.Fatal("read-only (but unrestricted) key keeps instance admin")
+	}
+}

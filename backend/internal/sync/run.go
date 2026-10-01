@@ -280,6 +280,11 @@ func (e *Engine) finishSync(ctx context.Context, connectorID, jobID string, rec 
 			slog.Error("doc regeneration failed", "connector", logsafe.Sanitize(connectorID), "error", logsafe.Sanitize(err.Error()))
 		}
 	}
+	if status == "success" && result.SnapshotID != "" && e.topology != nil {
+		if err := e.topology.RebuildTopologyForConnector(ctx, connectorID); err != nil {
+			slog.Error("topology rebuild failed", "connector", logsafe.Sanitize(connectorID), "error", logsafe.Sanitize(err.Error()))
+		}
+	}
 }
 
 func snapshotIDOrNil(id string) *string {

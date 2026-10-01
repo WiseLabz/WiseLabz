@@ -31,6 +31,13 @@ func mountDocRoutes(r chi.Router, d routerDeps) {
 		r.Get("/tree", d.docH.Tree)
 		r.Get("/template-schema", d.docH.TemplateSchema)
 		r.Get("/service/{id}", d.docH.ByService)
+		// Doc edit proposals (from MCP propose_doc_edit): review access is
+		// resolved in-handler per proposal (operator on the doc's connector,
+		// instance admin for lab-wide docs). Static paths win over /{id}.
+		r.Get("/edit-proposals", d.docH.ListProposals)
+		r.Get("/edit-proposals/{id}", d.docH.GetProposal)
+		r.Post("/edit-proposals/{id}/approve", d.docH.ApproveProposal)
+		r.Post("/edit-proposals/{id}/reject", d.docH.RejectProposal)
 		r.Get("/{id}", d.docH.Get)
 		r.Get("/{id}/versions", d.docH.Versions)
 		r.Get("/{id}/versions/{rev}", d.docH.Version)

@@ -131,6 +131,9 @@ func TestRunMigrationsDown(t *testing.T) {
 		t.Fatalf("RunMigrations() error: %v", err)
 	}
 
+	if err := RunMigrationsDown(db, "sqlite", logger); err != nil {
+		t.Fatalf("RunMigrationsDown() mcp_knowledge error: %v", err)
+	}
 	assertMoreNotificationChannelsAllowed(t, db, "sqlite", true)
 	if err := RunMigrationsDown(db, "sqlite", logger); err != nil {
 		t.Fatalf("RunMigrationsDown() more_notification_channels error: %v", err)
@@ -361,6 +364,9 @@ func TestRunMigrationsDown(t *testing.T) {
 	}
 	if err := db.QueryRow("SELECT name FROM sqlite_master WHERE type='table' AND name='user_mfa_factors'").Scan(&mfaFactorsTable); err != nil {
 		t.Fatalf("user_mfa_factors table missing after reapply: %v", err)
+	}
+	if err := RunMigrationsDown(db, "sqlite", logger); err != nil {
+		t.Fatalf("RunMigrationsDown() mcp_knowledge error: %v", err)
 	}
 	if err := RunMigrationsDown(db, "sqlite", logger); err != nil {
 		t.Fatalf("RunMigrationsDown() more_notification_channels error: %v", err)
@@ -619,6 +625,9 @@ func TestRunMigrationsDownPostgres(t *testing.T) {
 
 	if err := RunMigrations(db, "postgres", logger); err != nil {
 		t.Fatalf("RunMigrations() error: %v", err)
+	}
+	if err := RunMigrationsDown(db, "postgres", logger); err != nil {
+		t.Fatalf("RunMigrationsDown() mcp_knowledge error: %v", err)
 	}
 	assertMoreNotificationChannelsAllowed(t, db, "postgres", true)
 	if err := RunMigrationsDown(db, "postgres", logger); err != nil {

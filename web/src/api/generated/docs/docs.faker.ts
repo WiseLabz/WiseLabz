@@ -11,6 +11,8 @@ import { faker } from '@faker-js/faker';
 import type {
   AiSuggestRef,
   Doc,
+  DocEditProposal,
+  DocEditProposalPage,
   DocLock,
   DocNode,
   DocPage,
@@ -215,6 +217,131 @@ export const getPostDocsDocIdLockResponseMock = (
     faker.date.past().toISOString().slice(0, 19) + 'Z',
     undefined,
   ]),
+  ...overrideResponse,
+});
+
+export const getGetDocsEditProposalsResponseMock = (
+  overrideResponse: Partial<Extract<DocEditProposalPage, object>> = {}
+): DocEditProposalPage => ({
+  items: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() => ({
+    id: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    docId: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    docTitle: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    serviceId: faker.helpers.arrayElement([
+      faker.string.alpha({ length: { min: 10, max: 20 } }),
+      undefined,
+    ]),
+    baseVersion: faker.number.int(),
+    content: faker.helpers.arrayElement([
+      faker.string.alpha({ length: { min: 10, max: 20 } }),
+      undefined,
+    ]),
+    summary: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    authorId: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    status: faker.helpers.arrayElement(['pending', 'approved', 'rejected'] as const),
+    reviewerId: faker.helpers.arrayElement([
+      faker.string.alpha({ length: { min: 10, max: 20 } }),
+      undefined,
+    ]),
+    reviewedAt: faker.helpers.arrayElement([
+      faker.date.past().toISOString().slice(0, 19) + 'Z',
+      undefined,
+    ]),
+    createdAt: faker.date.past().toISOString().slice(0, 19) + 'Z',
+  })),
+  total: faker.number.int(),
+  page: faker.number.int(),
+  pageSize: faker.number.int(),
+  ...overrideResponse,
+});
+
+export const getGetDocsEditProposalsProposalIdResponseMock = (
+  overrideResponse: Partial<Extract<DocEditProposal, object>> = {}
+): DocEditProposal => ({
+  id: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  docId: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  docTitle: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  serviceId: faker.helpers.arrayElement([
+    faker.string.alpha({ length: { min: 10, max: 20 } }),
+    undefined,
+  ]),
+  baseVersion: faker.number.int(),
+  content: faker.helpers.arrayElement([
+    faker.string.alpha({ length: { min: 10, max: 20 } }),
+    undefined,
+  ]),
+  summary: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  authorId: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  status: faker.helpers.arrayElement(['pending', 'approved', 'rejected'] as const),
+  reviewerId: faker.helpers.arrayElement([
+    faker.string.alpha({ length: { min: 10, max: 20 } }),
+    undefined,
+  ]),
+  reviewedAt: faker.helpers.arrayElement([
+    faker.date.past().toISOString().slice(0, 19) + 'Z',
+    undefined,
+  ]),
+  createdAt: faker.date.past().toISOString().slice(0, 19) + 'Z',
+  ...overrideResponse,
+});
+
+export const getPostDocsEditProposalsProposalIdApproveResponseMock = (
+  overrideResponse: Partial<Extract<DocEditProposal, object>> = {}
+): DocEditProposal => ({
+  id: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  docId: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  docTitle: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  serviceId: faker.helpers.arrayElement([
+    faker.string.alpha({ length: { min: 10, max: 20 } }),
+    undefined,
+  ]),
+  baseVersion: faker.number.int(),
+  content: faker.helpers.arrayElement([
+    faker.string.alpha({ length: { min: 10, max: 20 } }),
+    undefined,
+  ]),
+  summary: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  authorId: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  status: faker.helpers.arrayElement(['pending', 'approved', 'rejected'] as const),
+  reviewerId: faker.helpers.arrayElement([
+    faker.string.alpha({ length: { min: 10, max: 20 } }),
+    undefined,
+  ]),
+  reviewedAt: faker.helpers.arrayElement([
+    faker.date.past().toISOString().slice(0, 19) + 'Z',
+    undefined,
+  ]),
+  createdAt: faker.date.past().toISOString().slice(0, 19) + 'Z',
+  ...overrideResponse,
+});
+
+export const getPostDocsEditProposalsProposalIdRejectResponseMock = (
+  overrideResponse: Partial<Extract<DocEditProposal, object>> = {}
+): DocEditProposal => ({
+  id: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  docId: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  docTitle: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  serviceId: faker.helpers.arrayElement([
+    faker.string.alpha({ length: { min: 10, max: 20 } }),
+    undefined,
+  ]),
+  baseVersion: faker.number.int(),
+  content: faker.helpers.arrayElement([
+    faker.string.alpha({ length: { min: 10, max: 20 } }),
+    undefined,
+  ]),
+  summary: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  authorId: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  status: faker.helpers.arrayElement(['pending', 'approved', 'rejected'] as const),
+  reviewerId: faker.helpers.arrayElement([
+    faker.string.alpha({ length: { min: 10, max: 20 } }),
+    undefined,
+  ]),
+  reviewedAt: faker.helpers.arrayElement([
+    faker.date.past().toISOString().slice(0, 19) + 'Z',
+    undefined,
+  ]),
+  createdAt: faker.date.past().toISOString().slice(0, 19) + 'Z',
   ...overrideResponse,
 });
 
