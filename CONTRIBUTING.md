@@ -79,10 +79,31 @@ ci: add go vet to pre-commit hook
 
 WiseLabz uses `lefthook` to run automated checks on every commit:
 
-| Hook         | What runs                                |
-|--------------|------------------------------------------|
-| `pre-commit` | Lint (Go + frontend) and fast unit tests |
-| `commit-msg` | Validates Conventional Commits format    |
+| Hook         | What runs                                                   |
+|--------------|-------------------------------------------------------------|
+| `pre-commit` | Lint (Go + frontend) and fast unit tests, for what you changed |
+| `commit-msg` | Validates Conventional Commits format                       |
+
+`pre-commit` only runs the checks your staged files need. It classifies them with the
+same rules CI uses (`scripts/ci/changes.sh`, via `scripts/hooks/areas.sh`), so "skipped
+locally" and "skipped in CI" mean the same thing:
+
+| Staged changes                                              | Runs                       |
+|-------------------------------------------------------------|----------------------------|
+| Only docs, markdown, `openspec/` and similar                | nothing (one-line notice)  |
+| Only `backend/**`                                           | `gofmt`, `golangci-lint`, `go test -short` |
+| Only `web/**` or `docs/openapi.yaml`                        | frontend lint (after regenerating the API client, if the spec changed) |
+| `.github/workflows/**`                                      | `actionlint`, if installed |
+| `go.mod`, `.golangci.yml`, an unclassified file, or both trees | everything              |
+
+`gofmt` checks only the staged Go files and `golangci-lint` reports only issues new since
+`HEAD`; CI still runs the full linter. To run every check regardless of what is staged:
+
+```bash
+LEFTHOOK_FULL=1 git commit
+```
+
+The frontend hooks use `bun` (as CI does), so install it locally.
 
 Install the hooks after cloning:
 
