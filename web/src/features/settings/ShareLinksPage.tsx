@@ -4,7 +4,13 @@
  */
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useListShareLinks, useRevokeShareLink } from '../../api/shareLinks';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import {
+  useGetDocsShareLinks,
+  deleteDocsShareLinksId,
+  getGetDocsShareLinksQueryKey,
+} from '../../api/generated/docs/docs';
+import type { GetDocsShareLinks200Item } from '../../api/model';
 import { Panel } from '../../components/ui/Panel';
 import { Button } from '../../components/ui/Button';
 import { SkeletonRows, ErrorState, EmptyState } from '../../components/ui/states';
@@ -13,16 +19,21 @@ import { fullDate } from '../../lib/time';
 
 export function ShareLinksPage() {
   const { t } = useTranslation();
-  const links = useListShareLinks();
-  const revoke = useRevokeShareLink();
+  const queryClient = useQueryClient();
+  const { data: links = [], isLoading, isError, refetch } = useGetDocsShareLinks();
   // Lazy init: read "now" once at mount, not on every render
   // (react-hooks/purity forbids calling Date.now() during render).
   const [nowIso] = useState(() => new Date().toISOString());
 
+  const revoke = useMutation({
+    mutationFn: (id: string) => deleteDocsShareLinksId(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: getGetDocsShareLinksQueryKey() }),
+    onError: () =>
+      toast.error(t('settings.shareLinks.revokeError', { defaultValue: 'Could not revoke link' })),
+  });
+
   const onRevoke = (id: string) => {
-    revoke.mutate(id, {
-      onError: () => toast.error(t('settings.shareLinks.revokeError', { defaultValue: 'Could not revoke link' })),
-    });
+    revoke.mutate(id);
   };
 
   return (
@@ -36,32 +47,32 @@ export function ShareLinksPage() {
         })}
       </p>
 
-      {links.isLoading ? (
+      {isLoading ? (
         <SkeletonRows rows={3} />
-      ) : links.isError ? (
+      ) : isError ? (
         <ErrorState
           description={t('settings.shareLinks.loadError', { defaultValue: 'Could not load share links' })}
-          onRetry={() => links.refetch()}
+          onRetry={() => refetch()}
         />
-      ) : (links.data ?? []).length === 0 ? (
+      ) : links.length === 0 ? (
         <EmptyState title={t('settings.shareLinks.empty', { defaultValue: 'No share links yet' })} />
       ) : (
         <ul className="divide-y divide-line-soft">
-          {(links.data ?? []).map((link) => {
-            const revoked = !!link.revokedAt;
-            const expired = !revoked && link.expiresAt <= nowIso;
+          {links.map((link: GetDocsShareLinks200Item) => {
+            const revoked = !!(link as Record<string, unknown>).revokedAt;
+            const expired = !revoked && (link as Record<string, unknown>).expiresAt <= nowIso;
             return (
-              <li key={link.id} className="flex items-center justify-between gap-3 py-2.5">
+              <li key={(link as Record<string, unknown>).id} className="flex items-center justify-between gap-3 py-2.5">
                 <div className="min-w-0">
-                  <p className="truncate font-mono text-sm text-ink">{link.docTreeRoot}</p>
+                  <p className="truncate font-mono text-sm text-ink">{(link as Record<string, unknown>).docTreeRoot}</p>
                   <p className="truncate text-2xs text-ink-faint">
-                    {t('settings.shareLinks.created', { defaultValue: 'Created' })} {fullDate(link.createdAt)}
+                    {t('settings.shareLinks.created', { defaultValue: 'Created' })} {fullDate((link as Record<string, unknown>).createdAt)}
                     {' · '}
                     {revoked
                       ? t('settings.shareLinks.revoked', { defaultValue: 'Revoked' })
                       : expired
                         ? t('settings.shareLinks.expired', { defaultValue: 'Expired' })
-                        : `${t('settings.shareLinks.expires', { defaultValue: 'Expires' })} ${fullDate(link.expiresAt)}`}
+                        : `${t('settings.shareLinks.expires', { defaultValue: 'Expires' })} ${fullDate((link as Record<string, unknown>).expiresAt)}`}
                   </p>
                 </div>
                 {!revoked && !expired && (
@@ -69,7 +80,7 @@ export function ShareLinksPage() {
                     variant="ghost"
                     size="sm"
                     disabled={revoke.isPending}
-                    onClick={() => onRevoke(link.id)}
+                    onClick={() => onRevoke((link as Record<string, unknown>).id)}
                     className="shrink-0"
                   >
                     {t('settings.shareLinks.revoke', { defaultValue: 'Revoke' })}

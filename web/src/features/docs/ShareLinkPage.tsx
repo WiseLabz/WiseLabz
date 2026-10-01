@@ -8,19 +8,25 @@
 import { useState, type ReactNode } from 'react';
 import { useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { isAxiosError } from 'axios';
 import {
-  useShareLinkTree,
-  useShareLinkDoc,
-  shareLinkErrorCode,
-  type ShareTreeNode,
-} from '../../api/shareLinks';
+  useGetShareTokenTree,
+  useGetShareTokenDocsDocId,
+} from '../../api/generated/docs/docs';
 import { Panel } from '../../components/ui/Panel';
 import { Markdown } from '../../components/docs/Markdown';
 import { Skeleton, SkeletonRows, EmptyState } from '../../components/ui/states';
 import { FileTextIcon, LayersIcon, ClockIcon } from '../../components/icons';
 import { cn } from '../../lib/cn';
 
-function findFirstDoc(node: ShareTreeNode): string | undefined {
+type ShareTree = {
+  docId: string;
+  title: string;
+  kind: string;
+  children?: ShareTree[];
+};
+
+function findFirstDoc(node: ShareTree): string | undefined {
   if (!node.children || node.children.length === 0) return node.kind !== 'lab' && node.kind !== 'service' ? node.docId : undefined;
   for (const child of node.children) {
     if (child.kind !== 'lab' && child.kind !== 'service') return child.docId;
@@ -30,14 +36,30 @@ function findFirstDoc(node: ShareTreeNode): string | undefined {
   return undefined;
 }
 
+type ShareLinkErrorCode = 'share_link_expired' | 'share_link_revoked' | 'not_found' | 'unknown';
+
+function shareLinkErrorCode(error: unknown): ShareLinkErrorCode {
+  if (isAxiosError(error)) {
+    const code = (error.response?.data as { code?: string } | undefined)?.code;
+    if (code === 'share_link_expired' || code === 'share_link_revoked' || code === 'not_found') {
+      return code;
+    }
+  }
+  return 'unknown';
+}
+
 export function ShareLinkPage() {
   const { t } = useTranslation();
   const { token, docId: routeDocId } = useParams<{ token: string; docId?: string }>();
-  const tree = useShareLinkTree(token);
+  const tree = useGetShareTokenTree(token ?? '', {
+    query: { enabled: !!token, retry: false },
+  });
   const [selectedDocId, setSelectedDocId] = useState<string | undefined>(routeDocId);
 
-  const activeDocId = selectedDocId ?? (tree.data ? findFirstDoc(tree.data) : undefined);
-  const doc = useShareLinkDoc(token, activeDocId);
+  const activeDocId = selectedDocId ?? (tree.data ? findFirstDoc(tree.data as ShareTree) : undefined);
+  const doc = useGetShareTokenDocsDocId(token ?? '', activeDocId ?? '', {
+    query: { enabled: !!token && !!activeDocId, retry: false },
+  });
 
   if (tree.isLoading) {
     return (
@@ -53,11 +75,13 @@ export function ShareLinkPage() {
 
   if (!tree.data) return null;
 
+  const treeData = tree.data as ShareTree;
+
   return (
     <ShareShell>
       <div className="flex gap-6">
         <aside className="hidden w-56 shrink-0 md:block">
-          <ShareTree node={tree.data} activeDocId={activeDocId} onSelect={setSelectedDocId} />
+          <ShareTree node={treeData} activeDocId={activeDocId} onSelect={setSelectedDocId} />
         </aside>
         <section className="min-w-0 flex-1">
           {doc.isLoading ? (
@@ -74,8 +98,8 @@ export function ShareLinkPage() {
             </Panel>
           ) : (
             <Panel className="p-6">
-              <h1 className="mb-4 font-mono text-lg font-semibold text-ink">{doc.data.title}</h1>
-              <Markdown source={doc.data.content} />
+              <h1 className="mb-4 font-mono text-lg font-semibold text-ink">{(doc.data as Record<string, unknown>)?.title}</h1>
+              <Markdown source={(doc.data as Record<string, unknown>)?.content} />
             </Panel>
           )}
         </section>
@@ -89,7 +113,7 @@ function ShareTree({
   activeDocId,
   onSelect,
 }: {
-  node: ShareTreeNode;
+  node: ShareTree;
   activeDocId: string | undefined;
   onSelect: (docId: string) => void;
 }) {

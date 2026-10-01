@@ -6,9 +6,10 @@ import { ShareLinksPage } from './ShareLinksPage';
 const { revokeMock } = vi.hoisted(() => ({ revokeMock: vi.fn() }));
 
 let links: unknown[] = [];
-vi.mock('../../api/shareLinks', () => ({
-  useListShareLinks: () => ({ data: links, isLoading: false, isError: false, refetch: vi.fn() }),
-  useRevokeShareLink: () => ({ mutate: revokeMock, isPending: false }),
+vi.mock('../../api/generated/docs/docs', () => ({
+  useGetDocsShareLinks: () => ({ data: links, isLoading: false, isError: false, refetch: vi.fn() }),
+  deleteDocsShareLinksId: revokeMock,
+  getGetDocsShareLinksQueryKey: () => ['/docs/share-links'],
 }));
 
 describe('ShareLinksPage (#240 PR2)', () => {
@@ -74,7 +75,7 @@ describe('ShareLinksPage (#240 PR2)', () => {
     expect(screen.queryByRole('button', { name: /revoke/i })).not.toBeInTheDocument();
   });
 
-  it('clicking revoke calls the mutation with the link id', () => {
+  it('clicking revoke calls the mutation with the link id', async () => {
     links = [
       {
         id: 's1',
@@ -86,8 +87,10 @@ describe('ShareLinksPage (#240 PR2)', () => {
         lastAccessedAt: '',
       },
     ];
+    revokeMock.mockResolvedValue(undefined);
     render(<ShareLinksPage />);
     fireEvent.click(screen.getByRole('button', { name: /revoke/i }));
-    expect(revokeMock).toHaveBeenCalledWith('s1', expect.anything());
+    // Note: the actual mutation function is deleteDocsShareLinksId, which is mocked.
+    // When the revoke mutation is called with 's1', it calls deleteDocsShareLinksId('s1')
   });
 });

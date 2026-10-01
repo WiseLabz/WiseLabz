@@ -12,8 +12,9 @@ import {
   deleteUsersUserId,
   postUsersUserIdResetPassword,
   postUsersUserIdResetMfa,
+  patchUsersUserId,
+  postUsers,
 } from '../../api/generated/users/users';
-import { patchUserInstanceAdmin, postUserInstanceAdmin, type InstanceAdminRole } from '../../api/permissions';
 import { useGetMe } from '../../api/generated/me/me';
 import type { User } from '../../api/model';
 import { Button } from '../../components/ui/Button';
@@ -26,8 +27,7 @@ import { toast } from '../../lib/toast';
 import { SubHeader, Field, TextInput } from './parts';
 import { PlusIcon, LayersIcon } from '../../components/icons';
 
-// TODO: fold into docs/openapi.yaml once the backend PR1 spec update lands.
-type UserWithInstanceAdmin = User & { instanceAdminRole?: InstanceAdminRole };
+type UserWithInstanceAdmin = User & { instanceAdminRole?: 'admin' | 'user' };
 
 export function UsersPage() {
   const { t } = useTranslation();
@@ -49,10 +49,14 @@ export function UsersPage() {
       canManageDashboardDefaults,
     }: {
       id: string;
-      instanceAdminRole?: InstanceAdminRole;
+      instanceAdminRole?: 'admin' | 'user';
       disabled?: boolean;
       canManageDashboardDefaults?: boolean;
-    }) => patchUserInstanceAdmin(id, { instanceAdminRole, disabled, canManageDashboardDefaults }),
+    }) => patchUsersUserId(id, {
+      instanceAdminRole,
+      disabled,
+      canManageDashboardDefaults,
+    } as Parameters<typeof patchUsersUserId>[1]),
     onSuccess: () => {
       invalidate();
       toast.success(t('settings.users.updated'));
@@ -266,20 +270,22 @@ function InviteDialog({
   onCreated: () => void;
 }) {
   const { t } = useTranslation();
+  const queryClient = useQueryClient();
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
-  const [instanceAdminRole, setInstanceAdminRole] = useState<InstanceAdminRole>('user');
+  const [instanceAdminRole, setInstanceAdminRole] = useState<'admin' | 'user'>('user');
   const [canManageDashboardDefaults, setCanManageDashboardDefaults] = useState(false);
 
   const create = useMutation({
     mutationFn: () =>
-      postUserInstanceAdmin({
+      postUsers({
         username,
         email: email || undefined,
         instanceAdminRole,
         canManageDashboardDefaults: instanceAdminRole === 'admin' ? canManageDashboardDefaults : undefined,
-      }),
+      } as unknown as Parameters<typeof postUsers>[0]),
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: getGetUsersQueryKey() });
       onCreated();
       toast.success(t('settings.users.created'));
       setUsername('');
