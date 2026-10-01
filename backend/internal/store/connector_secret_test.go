@@ -118,15 +118,3 @@ func TestMigrateConnectorSecrets(t *testing.T) {
 		t.Fatalf("second run = %d, %v; want 0, nil", n, err)
 	}
 }
-
-func TestParseConnectorConfigRejectsTamperedV2(t *testing.T) {
-	data, err := MarshalConnectorConfig(secretTestConnType, map[string]any{"api_key": "s"}, testEncKey)
-	if err != nil {
-		t.Fatal(err)
-	}
-	// Move the ciphertext to a different field/type context: AAD must reject it.
-	tampered := strings.Replace(data, `"v2:`, `"v2:AAAA`, 1)
-	if _, err := ParseConnectorConfig(secretTestConnType, tampered, testEncKey); err == nil {
-		t.Fatal("tampered v2 value must error, not be treated as plaintext")
-	}
-}

@@ -60,7 +60,10 @@ func ParseConnectorConfig(connType, data, encKeyB64 string) (map[string]any, err
 			cfg[f.Key] = plaintext
 		case crypto.IsV2(raw):
 			// A v2 ciphertext that fails authentication was tampered with or
-			// moved between fields; never treat it as plaintext.
+			// moved between fields; never treat it as plaintext. Callers see
+			// the wrapped crypto error ("decrypt connector config field %q:
+			// decrypt: cipher: message authentication failed"); it is not
+			// covered by a dedicated test yet.
 			return nil, fmt.Errorf("decrypt connector config field %q: %w", f.Key, err)
 		}
 		// else: not valid ciphertext, treat as legacy plaintext and leave as-is.
