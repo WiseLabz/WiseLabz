@@ -107,6 +107,7 @@ func main() {
 		cfg.Auth.AccessTokenTTLDuration(),
 		cfg.Auth.RefreshTokenTTLDuration(),
 	)
+	jwtSvc.SetSettingsSource(authSettingsSource(s))
 
 	// Initialize WebSocket hub (must be created before sync engine so sync
 	// can broadcast progress events). Started by the lifecycle manager below.
@@ -405,4 +406,20 @@ func splitOrigins(raw string) []string {
 		}
 	}
 	return out
+}
+
+// authSettingsSource enforces the TTLs and step-up toggle saved under
+// /api/auth/config; ok=false falls back to the static config.
+func authSettingsSource(s *store.Store) func() (auth.RuntimeSettings, bool) {
+	return func() (auth.RuntimeSettings, bool) {
+		as, ok, err := s.GetAuthRuntimeSettings(context.Background())
+		if err != nil || !ok {
+			return auth.RuntimeSettings{}, false
+		}
+		return auth.RuntimeSettings{
+			AccessTTL:            time.Duration(as.AccessTokenTTL) * time.Second,
+			RefreshTTL:           time.Duration(as.RefreshTokenTTL) * time.Second,
+			StepUpForDestructive: as.StepUpForDestructive,
+		}, true
+	}
 }

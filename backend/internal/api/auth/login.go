@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
@@ -34,6 +35,50 @@ func mustHashDummyPassword() string {
 	return hash
 }
 
+// forceLocalLoginEnv is the break-glass switch: when "true" local password
+// login stays available even if an admin disabled it in the auth settings, so
+// a broken IdP can't lock everyone out.
+const forceLocalLoginEnv = "WISELABZ_FORCE_LOCAL_LOGIN"
+
+// localLoginEnabled reports whether local password login is allowed: the
+// persisted auth setting, unless the break-glass env flag overrides it.
+func (h *Handler) localLoginEnabled(ctx context.Context) bool {
+	if os.Getenv(forceLocalLoginEnv) == "true" {
+		return true
+	}
+	settings, ok, err := h.Store.GetAuthRuntimeSettings(ctx)
+	if err != nil {
+		h.logError("failed to read auth settings", err)
+		return true
+	}
+	return !ok || settings.LocalEnabled
+}
+
+func errLocalLoginDisabled(w http.ResponseWriter) {
+	httputil.Error(w, http.StatusForbidden, "local_login_disabled", "Local password login is disabled; sign in through your identity provider")
+}
+
+// userLocked reports whether the account is inside a failed-attempt lockout.
+func userLocked(user *store.User) bool {
+	if user.LockedUntil == "" {
+		return false
+	}
+	lockedUntil, err := time.Parse(time.RFC3339, user.LockedUntil)
+	return err == nil && time.Now().UTC().Before(lockedUntil)
+}
+
+// registerSecondFactorFailure counts a failed second-factor attempt (login or
+// step-up) toward the account lockout shared with password failures.
+func (h *Handler) registerSecondFactorFailure(ctx context.Context, user *store.User) {
+	if locked, lockErr := h.Store.RegisterFailedLogin(ctx, user.ID, maxFailedLoginAttempts, loginLockoutDuration); lockErr != nil {
+		h.logError("failed to register failed login", lockErr)
+	} else if locked {
+		if auditErr := h.Store.RecordAuditFromContext(ctx, "auth.account_locked", "user", user.ID, map[string]any{"username": user.Username}); auditErr != nil {
+			h.logError("failed to record audit", auditErr)
+		}
+	}
+}
+
 // Login handles POST /api/auth/login.
 // Validates local credentials and returns a JWT token pair.
 func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
@@ -42,6 +87,10 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		Password string `json:"password"`
 	}](w, r)
 	if !ok {
+		return
+	}
+	if !h.localLoginEnabled(r.Context()) {
+		errLocalLoginDisabled(w)
 		return
 	}
 	if fieldErrs := httputil.MissingFields("username", req.Username, "password", req.Password); len(fieldErrs) > 0 {
@@ -58,12 +107,10 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if user.LockedUntil != "" {
-		if lockedUntil, parseErr := time.Parse(time.RFC3339, user.LockedUntil); parseErr == nil && time.Now().UTC().Before(lockedUntil) {
-			_ = bcrypt.CompareHashAndPassword([]byte(dummyPasswordHash), []byte(req.Password))
-			httputil.Error(w, http.StatusUnauthorized, "unauthorized", "Invalid credentials")
-			return
-		}
+	if userLocked(user) {
+		_ = bcrypt.CompareHashAndPassword([]byte(dummyPasswordHash), []byte(req.Password))
+		httputil.Error(w, http.StatusUnauthorized, "unauthorized", "Invalid credentials")
+		return
 	}
 
 	// Verify the password before checking account status, so a disabled or
@@ -155,6 +202,10 @@ func (h *Handler) LoginMFA(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	if !h.localLoginEnabled(r.Context()) {
+		errLocalLoginDisabled(w)
+		return
+	}
 	if req.Ticket == "" {
 		httputil.ErrorWithDetails(w, http.StatusBadRequest, "invalid_request", "ticket is required", []httputil.FieldError{{Field: "ticket", Msg: "is required"}})
 		return
@@ -172,14 +223,16 @@ func (h *Handler) LoginMFA(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// A locked account can't keep guessing second factors with one ticket:
+	// failures below count toward the same lockout as password failures, so
+	// the ticket is good for at most maxFailedLoginAttempts wrong codes.
+	if userLocked(user) {
+		httputil.Error(w, http.StatusUnauthorized, "unauthorized", "Invalid or expired ticket")
+		return
+	}
+
 	if err := h.verifySecondFactor(w, r, user.ID, secondFactorInput{TOTP: req.TOTP, RecoveryCode: req.RecoveryCode, WebAuthn: req.WebAuthn, Purpose: "login"}); err != nil {
-		if locked, lockErr := h.Store.RegisterFailedLogin(r.Context(), user.ID, maxFailedLoginAttempts, loginLockoutDuration); lockErr != nil {
-			h.logError("failed to register failed login", lockErr)
-		} else if locked {
-			if auditErr := h.Store.RecordAuditFromContext(r.Context(), "auth.account_locked", "user", user.ID, map[string]any{"username": user.Username}); auditErr != nil {
-				h.logError("failed to record audit", auditErr)
-			}
-		}
+		h.registerSecondFactorFailure(r.Context(), user)
 		if auditErr := h.Store.RecordAuditFromContext(r.Context(), "auth.mfa.failed", "user", user.ID, nil); auditErr != nil {
 			h.logError("failed to record audit", auditErr)
 		}
@@ -242,7 +295,7 @@ func (h *Handler) issueSession(w http.ResponseWriter, r *http.Request, user *sto
 	if err := h.Store.CreateSession(r.Context(), session); err != nil {
 		return nil, fmt.Errorf("create session: %w", err)
 	}
-	setRefreshCookie(w, r, h.Config.Server.TrustedProxies, pair.RefreshToken, h.Config.Auth.RefreshTokenTTLDuration())
+	setRefreshCookie(w, r, h.Config.Server.TrustedProxies, pair.RefreshToken, h.JWT.RefreshTTL())
 	return pair, nil
 }
 
@@ -376,7 +429,7 @@ func (h *Handler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 		httputil.Errorf(w, err)
 		return
 	}
-	setRefreshCookie(w, r, h.Config.Server.TrustedProxies, pair.RefreshToken, h.Config.Auth.RefreshTokenTTLDuration())
+	setRefreshCookie(w, r, h.Config.Server.TrustedProxies, pair.RefreshToken, h.JWT.RefreshTTL())
 
 	httputil.JSON(w, http.StatusOK, map[string]any{
 		"accessToken": pair.AccessToken,

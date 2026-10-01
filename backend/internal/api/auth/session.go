@@ -71,7 +71,7 @@ func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	setRefreshCookie(w, r, h.Config.Server.TrustedProxies, pair.RefreshToken, h.Config.Auth.RefreshTokenTTLDuration())
+	setRefreshCookie(w, r, h.Config.Server.TrustedProxies, pair.RefreshToken, h.JWT.RefreshTTL())
 
 	httputil.JSON(w, http.StatusOK, map[string]any{
 		"accessToken": pair.AccessToken,
@@ -149,6 +149,11 @@ func (h *Handler) Elevate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if userLocked(user) {
+		httputil.Error(w, http.StatusUnauthorized, "unauthorized", "Invalid code")
+		return
+	}
+
 	hasMFA, err := h.Store.UserHasMFA(r.Context(), userID)
 	if err != nil {
 		httputil.Errorf(w, err)
@@ -160,15 +165,21 @@ func (h *Handler) Elevate(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if err := h.verifySecondFactor(w, r, userID, secondFactorInput{TOTP: req.TOTP, RecoveryCode: req.RecoveryCode, WebAuthn: req.WebAuthn, Purpose: "elevate:" + req.Action}); err != nil {
+			h.registerSecondFactorFailure(r.Context(), user)
 			httputil.Error(w, http.StatusUnauthorized, "unauthorized", "Invalid code")
 			return
 		}
 	} else {
+		if !h.localLoginEnabled(r.Context()) {
+			errLocalLoginDisabled(w)
+			return
+		}
 		if req.Password == "" {
 			httputil.ErrorWithDetails(w, http.StatusBadRequest, "invalid_request", "password is required", []httputil.FieldError{{Field: "password", Msg: "is required"}})
 			return
 		}
 		if err := auth.VerifyPassword(user.PasswordHash, req.Password); err != nil {
+			h.registerSecondFactorFailure(r.Context(), user)
 			httputil.Error(w, http.StatusUnauthorized, "unauthorized", "Invalid password")
 			return
 		}

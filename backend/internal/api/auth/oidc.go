@@ -285,7 +285,7 @@ func (h *Handler) completeOIDCLogin(w http.ResponseWriter, r *http.Request, user
 		return
 	}
 
-	setRefreshCookie(w, r, h.Config.Server.TrustedProxies, pair.RefreshToken, h.Config.Auth.RefreshTokenTTLDuration())
+	setRefreshCookie(w, r, h.Config.Server.TrustedProxies, pair.RefreshToken, h.JWT.RefreshTTL())
 
 	httputil.JSON(w, http.StatusOK, map[string]any{
 		"accessToken": pair.AccessToken,
@@ -343,7 +343,7 @@ func (h *Handler) Providers(w http.ResponseWriter, r *http.Request) {
 
 	httputil.JSON(w, http.StatusOK, map[string]any{
 		"oidc":         oidc,
-		"localEnabled": true,
+		"localEnabled": h.localLoginEnabled(r.Context()),
 	})
 }
 

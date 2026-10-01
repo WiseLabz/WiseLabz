@@ -357,6 +357,11 @@ func (e *elevationError) Error() string { return e.msg }
 // describing the HTTP response to send (use WriteElevationError, or inspect
 // via errors.As for a custom response).
 func ValidateElevationHeader(jwtSvc *Service, recorder AuditRecorder, action string, r *http.Request) error {
+	// The instance-wide step-up toggle covers destructive actions only;
+	// MFA management always requires a fresh second factor.
+	if action != "mfa.manage" && !jwtSvc.StepUpEnabled() {
+		return nil
+	}
 	values, ok := r.Header["X-Elevation-Token"]
 	if !ok {
 		return &elevationError{

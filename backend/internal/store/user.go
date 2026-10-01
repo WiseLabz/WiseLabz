@@ -87,10 +87,10 @@ func (s *Store) GetUserByID(ctx context.Context, id string) (*User, error) {
 	u := &User{}
 	var disabled, canManageDashboardDefaults int
 	err := s.db.QueryRowContext(ctx, `
-		SELECT id, username, display_name, email, instance_admin_role, auth_source, password_hash, disabled, can_manage_dashboard_defaults, created_at, digest_cadence, digest_last_sent_at, digest_timezone
+		SELECT id, username, display_name, email, instance_admin_role, auth_source, password_hash, disabled, can_manage_dashboard_defaults, created_at, digest_cadence, digest_last_sent_at, digest_timezone, failed_login_attempts, locked_until
 		FROM users WHERE id = ?
 	`, id).Scan(&u.ID, &u.Username, &u.DisplayName, &u.Email, &u.InstanceAdminRole,
-		&u.AuthSource, &u.PasswordHash, &disabled, &canManageDashboardDefaults, &u.CreatedAt, &u.DigestCadence, &u.DigestLastSentAt, &u.DigestTimezone)
+		&u.AuthSource, &u.PasswordHash, &disabled, &canManageDashboardDefaults, &u.CreatedAt, &u.DigestCadence, &u.DigestLastSentAt, &u.DigestTimezone, &u.FailedLoginAttempts, &u.LockedUntil)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}

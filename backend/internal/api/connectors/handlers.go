@@ -61,6 +61,25 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 type connectorWithRole struct {
 	store.ConnectorRecord
 	MyRole string `json:"myRole"`
+	// ConfigData shadows the embedded record's field so it is never serialized:
+	// it holds non-secret credentials and secret ciphertexts (or legacy
+	// plaintext) that no viewer should receive.
+	ConfigData string `json:"configData,omitempty"`
+}
+
+// connectorView is a connector record without its stored config, for
+// responses that carry no role.
+type connectorView struct {
+	store.ConnectorRecord
+	ConfigData string `json:"configData,omitempty"`
+}
+
+// viewOf wraps a possibly-nil record for a config-free response.
+func viewOf(c *store.ConnectorRecord) any {
+	if c == nil {
+		return nil
+	}
+	return connectorView{ConnectorRecord: *c}
 }
 
 // Create handles POST /api/connectors.
@@ -242,7 +261,7 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	h.recordConnectorUpdateAudit(r, id, updates)
 
 	c, _ := h.Store.GetConnector(r.Context(), id)
-	httputil.JSON(w, http.StatusOK, c)
+	httputil.JSON(w, http.StatusOK, viewOf(c))
 }
 
 // pullInNextRun makes a new, shorter schedule take effect immediately: when
@@ -892,5 +911,5 @@ func (h *Handler) ToggleEnabled(w http.ResponseWriter, r *http.Request) {
 	}
 
 	c, _ := h.Store.GetConnector(r.Context(), id)
-	httputil.JSON(w, http.StatusOK, c)
+	httputil.JSON(w, http.StatusOK, viewOf(c))
 }

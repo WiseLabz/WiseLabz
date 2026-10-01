@@ -1,7 +1,9 @@
 package middleware
 
 import (
+	"net"
 	"net/http"
+	"net/netip"
 	"sync"
 	"time"
 
@@ -33,6 +35,32 @@ func RateLimit(ratePerSecond float64, burst int, keyFunc func(*http.Request) str
 	}
 }
 
+// maxLimiters bounds the limiter map so a flood of distinct keys can't grow
+// it without limit. Once full (after an eager sweep), new keys are rejected.
+const maxLimiters = 100_000
+
+// IPKey normalizes a client IP into a rate-limit key: IPv6 addresses collapse
+// to their /64 (one subscriber's whole allocation shares a bucket, so rotating
+// addresses within it buys nothing); IPv4 and unparsable values pass through.
+func IPKey(ip string) string {
+	addr, err := netip.ParseAddr(ip)
+	if err != nil {
+		if host, _, splitErr := net.SplitHostPort(ip); splitErr == nil {
+			addr, err = netip.ParseAddr(host)
+		}
+		if err != nil {
+			return ip
+		}
+	}
+	addr = addr.Unmap()
+	if addr.Is6() {
+		if p, err := addr.Prefix(64); err == nil {
+			return p.String()
+		}
+	}
+	return addr.String()
+}
+
 type visitor struct {
 	limiter  *rate.Limiter
 	lastSeen time.Time
@@ -49,6 +77,13 @@ func (l *limiterStore) allow(key string) bool {
 	l.mu.Lock()
 	v, ok := l.limiters[key]
 	if !ok {
+		if len(l.limiters) >= maxLimiters {
+			l.sweepLocked()
+			if len(l.limiters) >= maxLimiters {
+				l.mu.Unlock()
+				return false
+			}
+		}
 		v = &visitor{limiter: rate.NewLimiter(l.rate, l.burst)}
 		l.limiters[key] = v
 	}
@@ -60,11 +95,15 @@ func (l *limiterStore) allow(key string) bool {
 func (l *limiterStore) sweepLoop() {
 	for range time.Tick(10 * time.Minute) {
 		l.mu.Lock()
-		for key, v := range l.limiters {
-			if time.Since(v.lastSeen) > 10*time.Minute {
-				delete(l.limiters, key)
-			}
-		}
+		l.sweepLocked()
 		l.mu.Unlock()
+	}
+}
+
+func (l *limiterStore) sweepLocked() {
+	for key, v := range l.limiters {
+		if time.Since(v.lastSeen) > 10*time.Minute {
+			delete(l.limiters, key)
+		}
 	}
 }
