@@ -32,18 +32,28 @@ connectors into importable standalone libraries later without breaking the inter
 ```
 WiseLabz/
 ├── backend/
-│   ├── cmd/server/          # entrypoint — main.go
-│   └── internal/
-│       ├── connector/       # Connector interface + implementations
-│       │   ├── proxmox/
-│       │   ├── docker/
-│       │   ├── pfsense/
-│       │   └── custom/      # example connector for contributors
+│   ├── cmd/
+│   │   ├── server/          # entrypoint, HTTP server, WebSocket handler
+│   │   ├── migrate/         # migration tool (golang-migrate wrapper)
+│   │   └── backup/          # backup/restore CLI
+│   └── internal/            # ~30 internal packages:
+│       ├── connector/       # Connector interface + ~15 implementations
+│       │   ├── proxmox/, docker/, pfsense/, custom/, ...
+│       ├── store/           # repositories, migrations, database access
+│       ├── api/             # REST handlers (~20 sub-packages by domain)
 │       ├── sync/            # scheduler, diff engine
 │       ├── doc/             # template engine, renderer
-│       ├── api/             # REST handlers + WebSocket
-│       ├── auth/            # JWT + OIDC provider
-│       └── store/           # repositories, migrations
+│       ├── auth/            # JWT + OIDC
+│       ├── httputil/        # HTTP response helpers (API layer)
+│       ├── httpx/           # hardened outbound HTTP clients
+│       ├── notifications/   # dispatch system (SMTP, webhook, Discord, Slack, etc.)
+│       ├── quality/         # documentation quality checks
+│       ├── retention/       # historical data cleanup
+│       ├── leader/          # PostgreSQL active/passive leader election
+│       ├── scheduler/       # background job scheduling
+│       ├── ai/              # LLM integration (provider-agnostic)
+│       ├── crypto/          # encryption utilities
+│       └── ... (backup, chat, compliance, config, diagnostics, docexport, etc.)
 ├── web/
 │   └── src/
 │       ├── components/      # reusable UI
@@ -74,7 +84,7 @@ WiseLabz/
 | HTTP router      | `chi`                                 | idiomatic middleware composition, no magic, lightweight                                                         |
 | WebSocket        | `gorilla/websocket`                   | de facto standard in Go, well-maintained                                                                        |
 | Auth             | Local JWT + OIDC via `coreos/go-oidc` | single session logic covers both local and external providers                                                   |
-| Database queries | `sqlc`                                | type-safe generated code, no ORM, fully auditable SQL                                                           |
+| Database queries | `database/sql` (hand-written)         | type-safe, fully auditable SQL, no code generation                                                              |
 | Migrations       | `golang-migrate`                      | simple, supports SQLite and PostgreSQL, low contributor friction                                                |
 | Config           | `viper`                               | YAML file for traditional installs; all values overridable via WISELABZ_ env vars, friendly to PaaS deployments |
 | Logging          | `slog` (stdlib)                       | no external dependency, JSON output in production                                                               |
@@ -332,6 +342,27 @@ just its isolated state.
 
 ---
 
+## HTTP utilities: inbound vs. outbound
+
+Two distinct packages handle HTTP concerns to avoid confusion and support different requirements:
+
+**`httputil`** — inbound HTTP response helpers for the API layer (`internal/api/`). Provides:
+- Response JSON encoding / error formatting
+- Request-scoped context utilities (logger injection)
+- Cursor pagination support
+- Client IP extraction
+
+**`httpx`** — hardened outbound HTTP clients for every external call: connectors, AI
+providers, notification webhooks, doc export Git operations, etc. Provides:
+- Enforced TLS 1.2+, no redirect following, bounded timeouts
+- Retry transport for idempotent requests (with exponential backoff)
+- Pluggable dialer for security checks (e.g. `connector.GuardedDialer` blocks loopback/link-local)
+- Consistent timeout and error handling across the app
+
+Each connector's `NewHTTPClient()` uses `httpx` so dial guards and retry logic are uniform.
+
+---
+
 ## API design
 
 - **REST** — all data reads and state mutations. Schema exported as OpenAPI, used to generate the TypeScript REST client in `web/src/api/`.
@@ -347,13 +378,13 @@ The API itself is implemented entirely in Go.
 - **PostgreSQL** — recommended for multi-user or higher-reliability deployments. Configured via
   `config.yaml`.
 
-`sqlc` generates type-safe Go code from plain `.sql` query files. Migrations are managed by `golang-migrate` and run automatically on startup.
-Both SQLite and PostgreSQL dialects are supported.  
-Database connection is configured via environment variables (recommended for PaaS and container platforms like Dokploy, Coolify, and Portainer)
-or via `config.yaml` for traditional installs. Environment variables always take precedence over the config file. The `WISELABZ_` prefix is used
-for all env overrides (e.g. `WISELABZ_DB_DSN`, `WISELABZ_DB_DRIVER`).  
-`golang-migrate` and run automatically on startup. Both SQLite and PostgreSQL dialects are
-supported.
+Queries are hand-written against the `database/sql` stdlib package. Migrations are managed by
+`golang-migrate` and run automatically on startup. Both SQLite and PostgreSQL dialects are supported.
+
+Database connection is configured via environment variables (recommended for PaaS and container
+platforms like Dokploy, Coolify, and Portainer) or via `config.yaml` for traditional installs.
+Environment variables always take precedence over the config file. The `WISELABZ_` prefix is used
+for all env overrides (e.g. `WISELABZ_DB_DSN`, `WISELABZ_DB_DRIVER`).
 
 Operators can roll back the most recently applied migration with the `migrate` CLI
 (`go run ./cmd/migrate down`), which delegates to golang-migrate's `Steps(-1)` and supports
