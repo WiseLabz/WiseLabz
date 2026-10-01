@@ -68,10 +68,18 @@ func (h *Handler) UpdateAuthConfig(w http.ResponseWriter, r *http.Request) {
 		args = append(args, boolToInt(*req.LocalEnabled))
 	}
 	if req.AccessTokenTTL != nil {
+		if *req.AccessTokenTTL <= 0 {
+			httputil.ErrorWithDetails(w, http.StatusBadRequest, "invalid_request", "accessTokenTtl must be a positive number of seconds", []httputil.FieldError{{Field: "accessTokenTtl", Msg: "must be positive"}})
+			return
+		}
 		parts = append(parts, "access_token_ttl = ?")
 		args = append(args, *req.AccessTokenTTL)
 	}
 	if req.RefreshTokenTTL != nil {
+		if *req.RefreshTokenTTL <= 0 {
+			httputil.ErrorWithDetails(w, http.StatusBadRequest, "invalid_request", "refreshTokenTtl must be a positive number of seconds", []httputil.FieldError{{Field: "refreshTokenTtl", Msg: "must be positive"}})
+			return
+		}
 		parts = append(parts, "refresh_token_ttl = ?")
 		args = append(args, *req.RefreshTokenTTL)
 	}

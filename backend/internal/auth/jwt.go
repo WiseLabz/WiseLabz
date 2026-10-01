@@ -94,6 +94,52 @@ type Service struct {
 	accessTTL    time.Duration
 	refreshTTL   time.Duration
 	elevationTTL time.Duration
+	settings     func() (RuntimeSettings, bool)
+}
+
+// RuntimeSettings are the operator-editable auth settings that override the
+// static config TTLs and the step-up default.
+type RuntimeSettings struct {
+	AccessTTL            time.Duration
+	RefreshTTL           time.Duration
+	StepUpForDestructive bool
+}
+
+// SetSettingsSource installs a provider of runtime settings (the persisted
+// auth_config). Call once at startup, before serving. When the provider
+// reports !ok or a non-positive TTL, the constructor values apply.
+func (s *Service) SetSettingsSource(fn func() (RuntimeSettings, bool)) { s.settings = fn }
+
+func (s *Service) ttls() (access, refresh time.Duration) {
+	access, refresh = s.accessTTL, s.refreshTTL
+	if s.settings != nil {
+		if rs, ok := s.settings(); ok {
+			if rs.AccessTTL > 0 {
+				access = rs.AccessTTL
+			}
+			if rs.RefreshTTL > 0 {
+				refresh = rs.RefreshTTL
+			}
+		}
+	}
+	return access, refresh
+}
+
+// RefreshTTL returns the refresh-token lifetime currently in force.
+func (s *Service) RefreshTTL() time.Duration {
+	_, refresh := s.ttls()
+	return refresh
+}
+
+// StepUpEnabled reports whether destructive actions require step-up. It
+// defaults to true when no settings source is installed.
+func (s *Service) StepUpEnabled() bool {
+	if s.settings != nil {
+		if rs, ok := s.settings(); ok {
+			return rs.StepUpForDestructive
+		}
+	}
+	return true
 }
 
 // NewService creates a new Service.
@@ -115,12 +161,13 @@ func (s *Service) IssuePair(userID string, instanceAdmin bool) (*TokenPair, erro
 // opts to both tokens.
 func (s *Service) IssuePairWithOptions(userID string, instanceAdmin bool, opts IssuePairOptions) (*TokenPair, error) {
 	now := time.Now()
+	accessTTL, refreshTTL := s.ttls()
 
 	access, err := s.issue(Claims{
 		RegisteredClaims: jwt.RegisteredClaims{
 			Audience:  jwt.ClaimStrings{tokenAudienceAccess},
 			IssuedAt:  jwt.NewNumericDate(now),
-			ExpiresAt: jwt.NewNumericDate(now.Add(s.accessTTL)),
+			ExpiresAt: jwt.NewNumericDate(now.Add(accessTTL)),
 			ID:        newTokenID(),
 		},
 		UserID:        userID,
@@ -135,7 +182,7 @@ func (s *Service) IssuePairWithOptions(userID string, instanceAdmin bool, opts I
 		RegisteredClaims: jwt.RegisteredClaims{
 			Audience:  jwt.ClaimStrings{tokenAudienceRefresh},
 			IssuedAt:  jwt.NewNumericDate(now),
-			ExpiresAt: jwt.NewNumericDate(now.Add(s.refreshTTL)),
+			ExpiresAt: jwt.NewNumericDate(now.Add(refreshTTL)),
 			ID:        newTokenID(),
 		},
 		UserID:        userID,
@@ -149,7 +196,7 @@ func (s *Service) IssuePairWithOptions(userID string, instanceAdmin bool, opts I
 	return &TokenPair{
 		AccessToken:  access,
 		RefreshToken: refresh,
-		ExpiresIn:    int(s.accessTTL.Seconds()),
+		ExpiresIn:    int(accessTTL.Seconds()),
 	}, nil
 }
 

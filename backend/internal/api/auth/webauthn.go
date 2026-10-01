@@ -237,6 +237,10 @@ func (h *Handler) PostWebAuthnLoginBegin(w http.ResponseWriter, r *http.Request)
 		httputil.Error(w, http.StatusUnauthorized, "unauthorized", "Invalid or expired ticket")
 		return
 	}
+	if userLocked(user) {
+		httputil.Error(w, http.StatusUnauthorized, "unauthorized", "Invalid or expired ticket")
+		return
+	}
 	h.beginWebAuthnAssertion(w, r, user, "login")
 }
 

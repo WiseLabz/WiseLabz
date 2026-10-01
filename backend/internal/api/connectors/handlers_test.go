@@ -540,3 +540,36 @@ func TestUpdateEndpointChangeRequiresInstanceAdmin(t *testing.T) {
 		t.Errorf("admin url change: status = %d, want 200", got)
 	}
 }
+
+func TestResponsesOmitConfigData(t *testing.T) {
+	t.Parallel()
+	h := newTestHandler(t)
+
+	body := `{"name":"Svc","category":"virtualization","type":"custom","url":"https://svc.example.com","config":{"token_id":"tok-abc"}}`
+	rr := httptest.NewRecorder()
+	h.Create(rr, httptest.NewRequest(http.MethodPost, "/api/connectors", strings.NewReader(body)))
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("create status = %d; body=%s", rr.Code, rr.Body.String())
+	}
+	var created map[string]any
+	if err := json.Unmarshal(rr.Body.Bytes(), &created); err != nil {
+		t.Fatal(err)
+	}
+	id, _ := created["id"].(string)
+
+	upd := httptest.NewRequest(http.MethodPut, "/api/connectors/"+id, strings.NewReader(`{"name":"Renamed"}`))
+	upd.SetPathValue("id", id)
+	updRR := httptest.NewRecorder()
+	h.Update(updRR, upd)
+
+	get := httptest.NewRequest(http.MethodGet, "/api/connectors/"+id, nil)
+	get.SetPathValue("id", id)
+	getRR := httptest.NewRecorder()
+	h.Get(getRR, get)
+
+	for name, r := range map[string]*httptest.ResponseRecorder{"create": rr, "update": updRR, "get": getRR} {
+		if strings.Contains(r.Body.String(), "configData") || strings.Contains(r.Body.String(), "tok-abc") {
+			t.Errorf("%s response leaks stored config: %s", name, r.Body.String())
+		}
+	}
+}
