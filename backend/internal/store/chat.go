@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/WiseLabz/wiselabz/internal/auth"
 	"github.com/google/uuid"
 )
 
@@ -52,17 +53,21 @@ func (s *Store) DeleteDocSectionEmbeddings(ctx context.Context, docID string) er
 }
 
 // ListDocSectionEmbeddings returns embedded sections for retrieval, limited to
-// docs userID may view: lab-wide docs (no service) plus docs on connectors the
-// user holds a grant on. An empty docID lists across all visible docs (lab
+// docs userID may view: docs on connectors the user holds a grant on, plus
+// lab-wide docs (no service) for instance admins only. An empty docID lists across all visible docs (lab
 // scope); a non-empty docID filters to that doc (doc scope).
 func (s *Store) ListDocSectionEmbeddings(ctx context.Context, userID, docID string) ([]DocSectionEmbeddingRecord, error) {
 	query := `SELECT e.doc_id, e.section_key, e.content, e.vector, e.model, e.updated_at
 		FROM doc_section_embeddings e
 		JOIN docs d ON d.id = e.doc_id
-		WHERE (d.service_id IS NULL OR d.service_id = ''
-			OR (d.service_id IN (SELECT connector_id FROM user_connector_roles WHERE user_id = ?)%s))`
+		WHERE (%s
+			(d.service_id IN (SELECT connector_id FROM user_connector_roles WHERE user_id = ?)%s))`
 	keyFilter, keyArgs := apiKeyConnectorFilter(ctx, "d.service_id")
-	query = fmt.Sprintf(query, keyFilter)
+	labDocs := ""
+	if auth.InstanceAdminFromContext(ctx) {
+		labDocs = "d.service_id IS NULL OR d.service_id = '' OR"
+	}
+	query = fmt.Sprintf(query, labDocs, keyFilter)
 	args := append([]any{userID}, keyArgs...)
 	if docID != "" {
 		query += ` AND e.doc_id = ?`

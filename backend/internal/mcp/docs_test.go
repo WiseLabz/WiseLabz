@@ -6,6 +6,7 @@ import (
 
 	mcpsdk "github.com/mark3labs/mcp-go/mcp"
 
+	"github.com/WiseLabz/wiselabz/internal/auth"
 	"github.com/WiseLabz/wiselabz/internal/chat"
 	"github.com/WiseLabz/wiselabz/internal/store"
 )
@@ -53,7 +54,7 @@ func TestSearchDocs(t *testing.T) {
 		var out struct {
 			Matches []chat.Match `json:"matches"`
 		}
-		h.callTool(userCtx(userID), t, "search_docs", map[string]any{"question": "how do I reset the router?"}, &out)
+		h.callTool(auth.ContextWithUser(context.Background(), userID, true), t, "search_docs", map[string]any{"question": "how do I reset the router?"}, &out)
 		if len(out.Matches) != 1 || out.Matches[0].DocID != "doc-1" {
 			t.Fatalf("got %+v, want one match on doc-1", out.Matches)
 		}

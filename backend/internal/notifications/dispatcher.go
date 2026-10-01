@@ -64,7 +64,34 @@ func (d *Dispatcher) SetEncryptionKey(b64 string) {
 // ponytail: fine for a self-hosted ops tool's user count; paginate if that changes.
 const maxNotifyUsers = 1000
 
-// NotifyAlertCreated dispatches a newly created alert to every active user.
+// connectorAudience narrows users to those holding a grant on connectorID so a
+// notification's title/description never reaches someone who can't view the
+// connector (#527). An empty connectorID is not connector-scoped and keeps
+// every user; a lookup failure fails closed (no recipients).
+func (d *Dispatcher) connectorAudience(ctx context.Context, users []store.User, connectorID string) []store.User {
+	if connectorID == "" {
+		return users
+	}
+	ids, err := d.store.ConnectorReaderIDs(ctx, connectorID)
+	if err != nil {
+		slog.Error("failed to resolve connector audience for notification", "error", err, "connectorID", logsafe.Sanitize(connectorID))
+		return nil
+	}
+	allowed := make(map[string]bool, len(ids))
+	for _, id := range ids {
+		allowed[id] = true
+	}
+	out := make([]store.User, 0, len(ids))
+	for _, u := range users {
+		if allowed[u.ID] {
+			out = append(out, u)
+		}
+	}
+	return out
+}
+
+// NotifyAlertCreated dispatches a newly created alert to every active user
+// who can view the alert's connector.
 func (d *Dispatcher) NotifyAlertCreated(ctx context.Context, alertID, title, message string) {
 	users, _, err := d.store.ListUsers(ctx, 0, maxNotifyUsers)
 	if err != nil {
@@ -83,6 +110,7 @@ func (d *Dispatcher) NotifyAlertCreated(ctx context.Context, alertID, title, mes
 			connectorID = alert.ServiceID
 		}
 	}
+	users = d.connectorAudience(ctx, users, connectorID)
 	d.inflight.Add(1)
 	go func() {
 		defer d.inflight.Done()
@@ -104,11 +132,17 @@ func (d *Dispatcher) NotifyAlertsCreated(ctx context.Context, alerts []store.Ale
 	channels := d.loadChannels(ctx)
 	routes := d.loadRouting(ctx)
 	batch := append([]store.AlertRecord(nil), alerts...)
+	audiences := map[string][]store.User{}
+	for _, alert := range batch {
+		if _, ok := audiences[alert.ServiceID]; !ok {
+			audiences[alert.ServiceID] = d.connectorAudience(ctx, users, alert.ServiceID)
+		}
+	}
 	d.inflight.Add(1)
 	go func() {
 		defer d.inflight.Done()
 		for _, alert := range batch {
-			d.notifyAlertCreated(users, channels, routes, alert.ID, alert.Severity, alert.ServiceID, alert.Title, alert.Description)
+			d.notifyAlertCreated(audiences[alert.ServiceID], channels, routes, alert.ID, alert.Severity, alert.ServiceID, alert.Title, alert.Description)
 		}
 	}()
 }
@@ -150,6 +184,7 @@ func (d *Dispatcher) NotifyFindingCreated(ctx context.Context, findingID, title,
 			connectorID = finding.ConnectorID
 		}
 	}
+	users = d.connectorAudience(ctx, users, connectorID)
 	d.inflight.Add(1)
 	go func() {
 		defer d.inflight.Done()

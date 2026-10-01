@@ -6,6 +6,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/WiseLabz/wiselabz/internal/auth"
 	"github.com/WiseLabz/wiselabz/internal/store"
 	"github.com/WiseLabz/wiselabz/internal/store/storetest"
 )
@@ -66,7 +67,7 @@ func TestPackUnpackVectorRoundTrips(t *testing.T) {
 }
 
 func TestSyncDocEmbeddingsKeepsOldRowsWhenEmbedFails(t *testing.T) {
-	ctx := context.Background()
+	ctx := auth.ContextWithUser(context.Background(), "", true) // lab-wide docs are admin-only
 	db, err := sql.Open("sqlite", "file:"+storetest.MigratedSQLite(t)+"?cache=shared")
 	if err != nil {
 		t.Fatalf("open db: %v", err)
