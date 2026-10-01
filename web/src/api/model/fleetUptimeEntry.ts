@@ -10,7 +10,7 @@
 export interface FleetUptimeEntry {
   connectorId: string;
   name: string;
-  /** Zero means no data for the window */
+  /** Checks that contributed measured (non-maintenance) time; zero means no data for the window */
   checkCount: number;
   availabilityPct: number;
   mttrSeconds: number;

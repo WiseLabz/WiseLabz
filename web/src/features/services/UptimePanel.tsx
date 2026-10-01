@@ -9,11 +9,12 @@ import {
   useGetConnectorsConnectorIdUptime,
   useGetConnectorsConnectorIdUptimeHistory,
 } from '../../api/generated/connectors/connectors';
-import type { UptimeHistoryBucket, UptimeWindowStats } from '../../api/model';
+import type { UptimeHistory, UptimeWindowStats } from '../../api/model';
 import { Panel } from '../../components/ui/Panel';
 import { SkeletonRows, ErrorState } from '../../components/ui/states';
 import { toneColor, statusMeta } from '../../components/ui/status';
 import { durationLabel } from '../../lib/time';
+import { H, W, sparkGeometry } from './sparkGeometry';
 
 const WINDOWS = ['24h', '7d', '30d'] as const;
 type Window = (typeof WINDOWS)[number];
@@ -71,7 +72,7 @@ export function UptimePanel({ id }: Readonly<{ id: string }>) {
         ) : (history.data?.buckets.length ?? 0) === 0 ? (
           <p className="text-2xs text-ink-faint">{t('services.detail.uptime.noHistory')}</p>
         ) : (
-          <Sparkline buckets={history.data!.buckets} />
+          <Sparkline history={history.data!} />
         )}
       </div>
     </Panel>
@@ -102,20 +103,12 @@ function WindowStat({ label, stats }: Readonly<{ label: string; stats?: UptimeWi
   );
 }
 
-const W = 280;
-const H = 48;
 const STRIP_H = 6;
 
-/** Latency polyline over a per-bucket status strip (colour + title, not colour alone). */
-function Sparkline({ buckets }: Readonly<{ buckets: UptimeHistoryBucket[] }>) {
+/** Latency line over a per-bucket status strip (colour + title, not colour alone). */
+function Sparkline({ history }: Readonly<{ history: UptimeHistory }>) {
   const { t } = useTranslation();
-  const lats = buckets.map((b) => b.avgLatencyMs ?? 0);
-  const max = Math.max(1, ...lats);
-  const step = buckets.length > 1 ? W / (buckets.length - 1) : 0;
-  const points = buckets
-    .map((b, i) => `${(i * step).toFixed(1)},${(H - ((b.avgLatencyMs ?? 0) / max) * (H - 4) - 2).toFixed(1)}`)
-    .join(' ');
-  const cell = W / buckets.length;
+  const { x, cell, segments, maxLatency } = sparkGeometry(history);
 
   return (
     <div>
@@ -123,14 +116,35 @@ function Sparkline({ buckets }: Readonly<{ buckets: UptimeHistoryBucket[] }>) {
         viewBox={`0 0 ${W} ${H + STRIP_H + 2}`}
         className="h-16 w-full"
         role="img"
-        aria-label={t('services.detail.uptime.latencyMax', { ms: max })}
+        aria-label={t('services.detail.uptime.latencyMax', { ms: maxLatency })}
         preserveAspectRatio="none"
       >
-        <polyline points={points} fill="none" stroke="var(--color-accent-primary)" strokeWidth="1.5" />
-        {buckets.map((b, i) => (
+        {segments.map((seg) =>
+          seg.length > 1 ? (
+            <polyline
+              key={seg[0].x}
+              data-testid="latency-segment"
+              points={seg.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ')}
+              fill="none"
+              stroke="var(--color-accent-primary)"
+              strokeWidth="1.5"
+            />
+          ) : (
+            <circle
+              key={seg[0].x}
+              data-testid="latency-segment"
+              cx={seg[0].x}
+              cy={seg[0].y}
+              r="1.5"
+              fill="var(--color-accent-primary)"
+            />
+          )
+        )}
+        {history.buckets.map((b) => (
           <rect
             key={b.start}
-            x={i * cell}
+            data-testid="status-cell"
+            x={x(b.start)}
             y={H + 2}
             width={Math.max(cell - 0.5, 0.5)}
             height={STRIP_H}
@@ -141,7 +155,7 @@ function Sparkline({ buckets }: Readonly<{ buckets: UptimeHistoryBucket[] }>) {
         ))}
       </svg>
       <p className="font-mono text-2xs text-ink-faint">
-        {t('services.detail.uptime.latencyMax', { ms: max })}
+        {t('services.detail.uptime.latencyMax', { ms: maxLatency })}
       </p>
     </div>
   );

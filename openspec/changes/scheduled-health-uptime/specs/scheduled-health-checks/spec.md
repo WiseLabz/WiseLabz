@@ -29,6 +29,14 @@ The system SHALL run a health check for every enabled connector on a configurabl
 - **WHEN** `health.cron_expr` is not a valid cron expression
 - **THEN** configuration validation fails at startup
 
+#### Scenario: Cancellation is not an outage
+- **WHEN** the process is shutting down or a manual check's client disconnects mid-check
+- **THEN** no status or history row is written; only the check's own timeout is recorded as offline
+
+#### Scenario: Unchanged status
+- **WHEN** a check result has the same status and message as the connector's current ones
+- **THEN** the connector row is not rewritten, but the history row is still recorded
+
 ### Requirement: Manual and scheduled parity
 Manual and scheduled checks SHALL share the same classification, thresholds and recording behaviour.
 

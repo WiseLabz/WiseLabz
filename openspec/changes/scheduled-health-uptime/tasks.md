@@ -22,3 +22,10 @@
 ## 4. Integration
 
 - [x] 4.1 Run backend and web test suites and `openspec validate scheduled-health-uptime`; run app locally and confirm rows accrue every interval; run `graphify update .`
+
+## 5. Review fixes
+
+- [x] 5.1 Cancellation writes nothing, timeout records offline; skip unchanged status writes; tests
+- [x] 5.2 "No data" when no measured time; bounded gap extrapolation; store and handler tests
+- [x] 5.3 Sparkline by time with gaps; history response carries window bounds; vitest
+- [x] 5.4 Fleet restricted-key test, exact 403 for hidden connector history; store tests run in the existing postgres shards (`^Test[A-G]`, `^Test[H-Q]`, rest)

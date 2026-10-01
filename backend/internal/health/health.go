@@ -5,6 +5,7 @@ package health
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
@@ -25,8 +26,10 @@ type Result struct {
 // no snapshot, no docs) for rec, persists the resulting status on the
 // connector row, and records a health_checks history row. A failure to
 // record the history row is logged, not returned: it is additive to the
-// status update. An error is returned only when config parsing or the status
-// update fails.
+// status update. The status write is skipped when status and message are
+// unchanged from rec. An error is returned when config parsing or the status
+// update fails, or ctx was cancelled (nothing is written then; a deadline
+// expiry is not cancellation and is recorded as offline).
 func RunHealthCheck(ctx context.Context, s *store.Store, rec *store.ConnectorRecord, encKey string) (Result, error) {
 	cfg, err := store.ParseConnectorConfig(rec.Type, rec.ConfigData, encKey)
 	if err != nil {
@@ -49,15 +52,27 @@ func RunHealthCheck(ctx context.Context, s *store.Store, rec *store.ConnectorRec
 	}
 	status, message := connector.ClassifyHealth(validateErr, latency, threshold)
 
-	// Persist even if the check itself timed out or the caller went away, so a
-	// hung connector is recorded as offline rather than silently skipped.
+	// A cancelled parent (shutdown, client disconnect) says nothing about the
+	// connector: write nothing rather than a false offline. Only the check's
+	// own deadline (a hung connector) is recorded as offline.
+	if errors.Is(ctx.Err(), context.Canceled) {
+		return Result{}, ctx.Err()
+	}
+
+	// Persist even if the check's deadline expired, so a hung connector is
+	// recorded as offline rather than silently skipped.
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 	defer cancel()
-	if err := s.UpdateConnector(ctx, rec.ID, map[string]any{
-		"status":         status,
-		"status_message": message,
-	}); err != nil {
-		return Result{}, err
+	// Skip the write when nothing changed: the scheduled job runs every
+	// interval and an unconditional UpdateConnector would bump updated_at on
+	// every connector each time.
+	if rec.Status != status || rec.StatusMessage != message {
+		if err := s.UpdateConnector(ctx, rec.ID, map[string]any{
+			"status":         status,
+			"status_message": message,
+		}); err != nil {
+			return Result{}, err
+		}
 	}
 
 	latencyMs := latency.Milliseconds()
@@ -115,7 +130,7 @@ loop:
 			defer func() { <-sem }()
 			checkCtx, cancel := context.WithTimeout(ctx, timeout)
 			defer cancel()
-			if _, err := RunHealthCheck(checkCtx, r.Store, rec, r.EncKey); err != nil {
+			if _, err := RunHealthCheck(checkCtx, r.Store, rec, r.EncKey); err != nil && !errors.Is(err, context.Canceled) {
 				logger.Error("scheduled health check failed", "connector", rec.ID, "error", err)
 			}
 		}(&conns[i])

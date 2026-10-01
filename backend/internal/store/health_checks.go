@@ -46,8 +46,8 @@ type UptimeStats struct {
 	ConnectorID     string  `json:"connectorId"`
 	WindowStart     string  `json:"windowStart"`
 	WindowEnd       string  `json:"windowEnd"`
-	CheckCount      int     `json:"checkCount"`
-	AvailabilityPct float64 `json:"availabilityPct"` // 0 when CheckCount == 0
+	CheckCount      int     `json:"checkCount"`      // checks that contributed measured time; 0 means no data
+	AvailabilityPct float64 `json:"availabilityPct"` // meaningless (0) when CheckCount == 0
 	MTTRSeconds     float64 `json:"mttrSeconds"`     // mean time to recovery; 0 when no resolved outage
 	OutageCount     int     `json:"outageCount"`     // resolved outages the MTTR mean is over
 }
@@ -68,6 +68,11 @@ type UptimeStats struct {
 // An outage still ongoing at `until` has no recovery time yet and is
 // excluded from the mean, consistent with the usual MTTR definition (mean
 // time to recover from *resolved* incidents).
+//
+// Gaps are not extrapolated: a status is only assumed to hold for a bounded
+// time after its check (see maxExtension), so a disabled connector or a
+// stopped server does not count as up or down for the whole gap. The
+// unmeasured remainder is excluded from availability and from outages.
 //
 // Maintenance windows are excluded: time inside one counts toward neither
 // availability nor downtime, and an offline stretch lying entirely inside one
@@ -228,6 +233,24 @@ func outsideMaintenance(a, b time.Time, maint []span) time.Duration {
 	return total
 }
 
+const minExtension = 5 * time.Minute
+
+// maxExtension bounds how long a check's status is assumed to hold: 3x the
+// median gap between the window's consecutive checks (the effective check
+// interval), but at least minExtension. With fewer than two checks there is no
+// interval to infer, so minExtension applies.
+func maxExtension(points []healthPoint) time.Duration {
+	if len(points) < 2 {
+		return minExtension
+	}
+	gaps := make([]time.Duration, 0, len(points)-1)
+	for i := 1; i < len(points); i++ {
+		gaps = append(gaps, points[i].checkedAt.Sub(points[i-1].checkedAt))
+	}
+	sort.Slice(gaps, func(i, j int) bool { return gaps[i] < gaps[j] })
+	return max(3*gaps[len(gaps)/2], minExtension)
+}
+
 // computeUptime derives UptimeStats from the window's ascending points,
 // excluding the maintenance spans from availability and outages.
 func computeUptime(connectorID string, points []healthPoint, maint []span, since, until time.Time) UptimeStats {
@@ -236,10 +259,10 @@ func computeUptime(connectorID string, points []healthPoint, maint []span, since
 		WindowStart: since.UTC().Format(time.RFC3339),
 		WindowEnd:   until.UTC().Format(time.RFC3339),
 	}
-	stats.CheckCount = len(points)
 	if len(points) == 0 {
 		return stats
 	}
+	limit := maxExtension(points)
 
 	var upDuration, totalDuration time.Duration
 	var outageDur time.Duration
@@ -250,6 +273,9 @@ func computeUptime(connectorID string, points []healthPoint, maint []span, since
 		windowEnd := until
 		if i+1 < len(points) {
 			windowEnd = points[i+1].checkedAt
+		}
+		if limitAt := p.checkedAt.Add(limit); windowEnd.After(limitAt) {
+			windowEnd = limitAt
 		}
 		// Only the part of the segment outside maintenance counts.
 		segment := outsideMaintenance(p.checkedAt, windowEnd, maint)
@@ -274,9 +300,13 @@ func computeUptime(connectorID string, points []healthPoint, maint []span, since
 		}
 	}
 
-	if totalDuration > 0 {
-		stats.AvailabilityPct = float64(upDuration) / float64(totalDuration) * 100
+	if totalDuration <= 0 {
+		// Every check fell in maintenance or at the window edge: nothing was
+		// measured, so report "no data" rather than 0% availability.
+		return stats
 	}
+	stats.CheckCount = len(points)
+	stats.AvailabilityPct = float64(upDuration) / float64(totalDuration) * 100
 	stats.OutageCount = len(recoveries)
 	if len(recoveries) > 0 {
 		var sum time.Duration

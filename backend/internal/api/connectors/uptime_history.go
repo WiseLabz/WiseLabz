@@ -46,15 +46,19 @@ func (h *Handler) UptimeHistory(w http.ResponseWriter, r *http.Request) {
 	}
 
 	now := time.Now().UTC()
-	buckets, err := h.Store.GetHealthHistory(r.Context(), id, now.Add(-win.d), now, win.buckets)
+	since := now.Add(-win.d)
+	buckets, err := h.Store.GetHealthHistory(r.Context(), id, since, now, win.buckets)
 	if err != nil {
 		httputil.Errorf(w, err)
 		return
 	}
 	httputil.JSON(w, http.StatusOK, map[string]any{
-		"connectorId": id,
-		"window":      label,
-		"buckets":     buckets,
+		"connectorId":   id,
+		"window":        label,
+		"windowStart":   since.Format(time.RFC3339),
+		"windowEnd":     now.Format(time.RFC3339),
+		"bucketSeconds": int64((win.d / time.Duration(win.buckets)).Seconds()),
+		"buckets":       buckets,
 	})
 }
 

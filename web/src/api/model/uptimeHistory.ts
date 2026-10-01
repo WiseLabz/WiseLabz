@@ -12,5 +12,9 @@ import type { UptimeHistoryWindow } from './uptimeHistoryWindow';
 export interface UptimeHistory {
   connectorId: string;
   window: UptimeHistoryWindow;
+  windowStart: string;
+  windowEnd: string;
+  /** Width of each bucket; buckets are placed by start time so gaps (no checks) are visible */
+  bucketSeconds: number;
   buckets: UptimeHistoryBucket[];
 }

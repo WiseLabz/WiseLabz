@@ -203,3 +203,103 @@ func TestGetFleetUptime(t *testing.T) {
 		t.Errorf("b = %+v, want no checks", got[1])
 	}
 }
+
+type chk = struct {
+	offset time.Duration
+	status string
+}
+
+// Only checks inside maintenance: nothing measured, so "no data" (count 0),
+// not 0% availability.
+func TestUptimeAllChecksInMaintenanceIsNoData(t *testing.T) {
+	ctx := context.Background()
+	s := newDocTestStore(t)
+	id := createTestConnector(ctx, t, s)
+	t0 := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+
+	recordChecks(ctx, t, s, id, t0, []chk{{time.Hour, "online"}})
+	addMaintenance(ctx, t, s, id, t0, t0.Add(6*time.Hour))
+
+	stats, err := s.GetConnectorUptime(ctx, id, t0, t0.Add(6*time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stats.CheckCount != 0 || stats.AvailabilityPct != 0 {
+		t.Errorf("stats = %+v, want no data (CheckCount 0)", stats)
+	}
+}
+
+// A check at exactly `until` is outside the window: no data.
+func TestUptimeCheckAtWindowEndIsNoData(t *testing.T) {
+	ctx := context.Background()
+	s := newDocTestStore(t)
+	id := createTestConnector(ctx, t, s)
+	t0 := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	until := t0.Add(time.Hour)
+
+	recordChecks(ctx, t, s, id, until, []chk{{0, "offline"}})
+	stats, err := s.GetConnectorUptime(ctx, id, t0, until)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stats.CheckCount != 0 {
+		t.Errorf("CheckCount = %d, want 0", stats.CheckCount)
+	}
+}
+
+// The last status is not extrapolated to the window end: after the extension
+// cap the time is unknown and counts as neither up nor down.
+func TestUptimeStaleLastStatusIsCapped(t *testing.T) {
+	ctx := context.Background()
+	s := newDocTestStore(t)
+	id := createTestConnector(ctx, t, s)
+	t0 := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+
+	// 1-minute checks for 10 minutes (online), then the last one is offline
+	// and nothing is recorded for the next 20 hours.
+	var cs []chk
+	for i := range 10 {
+		cs = append(cs, chk{time.Duration(i) * time.Minute, "online"})
+	}
+	cs = append(cs, chk{10 * time.Minute, "offline"})
+	recordChecks(ctx, t, s, id, t0, cs)
+
+	stats, err := s.GetConnectorUptime(ctx, id, t0, t0.Add(20*time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 10 min online + 5 min (min cap) offline; the remaining ~20h is unknown.
+	want := 10.0 / 15.0 * 100
+	if d := stats.AvailabilityPct - want; d > 0.01 || d < -0.01 {
+		t.Errorf("AvailabilityPct = %v, want ~%v", stats.AvailabilityPct, want)
+	}
+	if stats.OutageCount != 0 {
+		t.Errorf("OutageCount = %d, want 0 (outage unresolved)", stats.OutageCount)
+	}
+}
+
+// A long gap between checks (connector disabled, server down) is bounded too.
+func TestUptimeGapBetweenChecksIsCapped(t *testing.T) {
+	ctx := context.Background()
+	s := newDocTestStore(t)
+	id := createTestConnector(ctx, t, s)
+	t0 := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+
+	var cs []chk
+	for i := range 5 {
+		cs = append(cs, chk{time.Duration(i) * time.Minute, "online"})
+	}
+	// 10h gap, then offline checks.
+	cs = append(cs, chk{10 * time.Hour, "offline"}, chk{10*time.Hour + time.Minute, "offline"})
+	recordChecks(ctx, t, s, id, t0, cs)
+
+	stats, err := s.GetConnectorUptime(ctx, id, t0, t0.Add(11*time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Up: 4 min + 5 min cap = 9 min. Down: 1 min + 5 min cap = 6 min.
+	want := 9.0 / 15.0 * 100
+	if d := stats.AvailabilityPct - want; d > 0.01 || d < -0.01 {
+		t.Errorf("AvailabilityPct = %v, want ~%v", stats.AvailabilityPct, want)
+	}
+}

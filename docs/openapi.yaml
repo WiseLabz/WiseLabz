@@ -4099,12 +4099,12 @@ components:
       properties:
         windowStart: { type: string, format: date-time }
         windowEnd: { type: string, format: date-time }
-        checkCount: { type: integer, description: Number of health_checks rows in this window }
+        checkCount: { type: integer, description: 'Number of health checks that contributed measured (non-maintenance) time in this window; 0 means no data and availabilityPct is meaningless' }
         availabilityPct:
           {
             type: number,
             format: double,
-            description: Time-weighted % of the window spent in a non-offline status; 0 when checkCount is 0,
+            description: Time-weighted % of measured time spent in a non-offline status (a status is only extrapolated a bounded time past its check); 0 when checkCount is 0,
           }
         mttrSeconds:
           {
@@ -4132,10 +4132,13 @@ components:
         checkCount: { type: integer }
     UptimeHistory:
       type: object
-      required: [connectorId, window, buckets]
+      required: [connectorId, window, windowStart, windowEnd, bucketSeconds, buckets]
       properties:
         connectorId: { type: string }
         window: { type: string, enum: ['24h', '7d', '30d'] }
+        windowStart: { type: string, format: date-time }
+        windowEnd: { type: string, format: date-time }
+        bucketSeconds: { type: integer, description: Width of each bucket; buckets are placed by start time so gaps (no checks) are visible }
         buckets:
           type: array
           items: { $ref: '#/components/schemas/UptimeHistoryBucket' }
@@ -4145,7 +4148,7 @@ components:
       properties:
         connectorId: { type: string }
         name: { type: string }
-        checkCount: { type: integer, description: Zero means no data for the window }
+        checkCount: { type: integer, description: 'Checks that contributed measured (non-maintenance) time; zero means no data for the window' }
         availabilityPct: { type: number, format: double }
         mttrSeconds: { type: number, format: double }
         outageCount: { type: integer }

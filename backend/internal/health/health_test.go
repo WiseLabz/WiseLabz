@@ -152,3 +152,68 @@ func TestRunDueChecksTimeoutIsolation(t *testing.T) {
 		t.Error("timed-out check should be recorded")
 	}
 }
+
+func TestRunHealthCheckParentCancelWritesNothing(t *testing.T) {
+	s := newStore(t)
+	typ := register(t, &fakeConn{hang: true})
+	c := seed(t, s, typ, "svc", true)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	time.AfterFunc(50*time.Millisecond, cancel)
+	_, err := RunHealthCheck(ctx, s, c, "")
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("err = %v, want context.Canceled", err)
+	}
+	if count(t, s, c.ID) != 0 {
+		t.Error("cancelled check must not record a history row")
+	}
+	got, _ := s.GetConnector(context.Background(), c.ID)
+	if got.Status != c.Status || got.StatusMessage != c.StatusMessage {
+		t.Errorf("status changed to %q/%q on cancel", got.Status, got.StatusMessage)
+	}
+}
+
+func TestRunHealthCheckTimeoutRecordsOffline(t *testing.T) {
+	s := newStore(t)
+	typ := register(t, &fakeConn{hang: true})
+	c := seed(t, s, typ, "svc", true)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	res, err := RunHealthCheck(ctx, s, c, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Status != "offline" {
+		t.Errorf("status = %q, want offline", res.Status)
+	}
+	if count(t, s, c.ID) != 1 {
+		t.Error("timed-out check should be recorded")
+	}
+	got, _ := s.GetConnector(context.Background(), c.ID)
+	if got.Status != "offline" {
+		t.Errorf("persisted status = %q, want offline", got.Status)
+	}
+}
+
+func TestRunHealthCheckSkipsUnchangedStatusWrite(t *testing.T) {
+	s := newStore(t)
+	typ := register(t, &fakeConn{err: errors.New("boom")})
+	c := seed(t, s, typ, "svc", true)
+
+	if _, err := RunHealthCheck(context.Background(), s, c, ""); err != nil {
+		t.Fatal(err)
+	}
+	first, _ := s.GetConnector(context.Background(), c.ID)
+	time.Sleep(1100 * time.Millisecond) // updated_at has 1s resolution
+	if _, err := RunHealthCheck(context.Background(), s, first, ""); err != nil {
+		t.Fatal(err)
+	}
+	second, _ := s.GetConnector(context.Background(), c.ID)
+	if second.UpdatedAt != first.UpdatedAt {
+		t.Errorf("updated_at bumped %q -> %q despite unchanged status", first.UpdatedAt, second.UpdatedAt)
+	}
+	if count(t, s, c.ID) != 2 {
+		t.Error("history row must still be recorded")
+	}
+}
