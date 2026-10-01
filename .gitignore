@@ -305,13 +305,7 @@ coverage
 # Grunt intermediate storage (https://gruntjs.com/creating-plugins#storing-task-files)
 .grunt
 
-# AI generated files
-skills-lock.json
-/openspec/
-.agents/
-.claude/
-.codex/
-.gemini/
+# Local logs
 .logs/
 
 # Bower dependency directory (https://bower.io/)
@@ -558,10 +552,7 @@ $RECYCLE.BIN/
 # End of https://www.toptal.com/developers/gitignore/api/webstorm,goland,react,go,node,linux,macos,windows,jetbrains,visualstudiocode
 # graphify generated cache (AST cache is regenerated locally; not source)
 graphify-out/cache/
-.impeccable/
 prototypes/
-CLAUDE.md
-.context.xml
 
 
 # Stray compiled binaries (accidentally committed previously, now untracked)
