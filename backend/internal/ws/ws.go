@@ -126,6 +126,12 @@ type Revalidator func(ctx context.Context, id Identity) bool
 // ticketTTL bounds how long an issued ticket can wait to be redeemed.
 const ticketTTL = 30 * time.Second
 
+// readDeadline bounds the WebSocket read operation deadline.
+const readDeadline = 60 * time.Second
+
+// writeDeadline bounds the WebSocket write operation deadline.
+const writeDeadline = 10 * time.Second
+
 type ticket struct {
 	id      Identity
 	expires time.Time
@@ -444,9 +450,9 @@ func (c *Client) readPump() {
 	}()
 
 	c.conn.SetReadLimit(512)
-	c.conn.SetReadDeadline(time.Now().Add(60 * time.Second)) //nolint:errcheck
+	c.conn.SetReadDeadline(time.Now().Add(readDeadline)) //nolint:errcheck
 	c.conn.SetPongHandler(func(string) error {
-		c.conn.SetReadDeadline(time.Now().Add(60 * time.Second)) //nolint:errcheck
+		c.conn.SetReadDeadline(time.Now().Add(readDeadline)) //nolint:errcheck
 		return nil
 	})
 
@@ -469,7 +475,7 @@ func (c *Client) writePump() {
 	for {
 		select {
 		case message, ok := <-c.send:
-			c.conn.SetWriteDeadline(time.Now().Add(10 * time.Second)) //nolint:errcheck
+			c.conn.SetWriteDeadline(time.Now().Add(writeDeadline)) //nolint:errcheck
 			if !ok {
 				c.conn.WriteMessage(websocket.CloseMessage, []byte{}) //nolint:errcheck
 				return
@@ -479,7 +485,7 @@ func (c *Client) writePump() {
 			}
 
 		case <-ticker.C:
-			c.conn.SetWriteDeadline(time.Now().Add(10 * time.Second)) //nolint:errcheck
+			c.conn.SetWriteDeadline(time.Now().Add(writeDeadline)) //nolint:errcheck
 			if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
 				return
 			}
