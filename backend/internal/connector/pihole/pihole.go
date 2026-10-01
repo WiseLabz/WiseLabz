@@ -132,6 +132,7 @@ func (c *Connector) Validate(ctx context.Context, _ map[string]any) error {
 	if err != nil {
 		return err
 	}
+	defer c.release(s)
 	_, err = c.get(ctx, s, resourceHosts)
 	return err
 }
@@ -159,6 +160,25 @@ func (c *Connector) session(ctx context.Context) (session, error) {
 	}
 }
 
+// release ends a v6 session so repeated syncs do not exhaust Pi-hole's
+// limited session slots. It is best-effort and uses its own deadline because
+// the caller's context may already be done.
+func (c *Connector) release(s session) {
+	if s.version != version6 || s.sid == "" {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, "DELETE", c.url+"/api/auth", nil)
+	if err != nil {
+		return
+	}
+	req.Header.Set("sid", s.sid)
+	if resp, err := c.client.Do(req); err == nil {
+		_ = resp.Body.Close()
+	}
+}
+
 // get fetches a normalised resource using whichever API the session resolved.
 func (c *Connector) get(ctx context.Context, s session, resource string) ([]byte, error) {
 	if s.version == version5 {
@@ -181,14 +201,9 @@ func (c *Connector) Fetch(ctx context.Context, _ map[string]any) (*connector.Ser
 
 	s, err := c.session(ctx)
 	if err != nil {
-		return &connector.ServiceSnapshot{
-			ServiceName: "Pi-hole",
-			Type:        typeName,
-			Sections:    []connector.SnapshotSection{unavailable("Local DNS Records", err)},
-			Metadata:    metadata,
-			FetchedAt:   start,
-		}, nil
+		return nil, err
 	}
+	defer c.release(s)
 	metadata["pihole_api_version"] = s.version
 
 	section, entities := c.fetchHosts(ctx, s)
@@ -324,6 +339,7 @@ func (c *Connector) Restart(ctx context.Context, _ map[string]any, _ string) err
 	if err != nil {
 		return err
 	}
+	defer c.release(s)
 	if s.version == version5 {
 		return fmt.Errorf("restart is not exposed by the Pi-hole v5 API")
 	}
@@ -356,6 +372,7 @@ func (c *Connector) setBlocking(ctx context.Context, blocking bool) error {
 	if err != nil {
 		return err
 	}
+	defer c.release(s)
 	if s.version == version5 {
 		return c.setBlockingV5(ctx, blocking)
 	}
@@ -402,6 +419,7 @@ func (c *Connector) ConfigPush(ctx context.Context, _ map[string]any, entityRef,
 	if err != nil {
 		return err
 	}
+	defer c.release(s)
 	if raw, err := c.get(ctx, s, resourceHosts); err == nil {
 		_, entities := parseHosts(s.version, raw)
 		for _, e := range entities {

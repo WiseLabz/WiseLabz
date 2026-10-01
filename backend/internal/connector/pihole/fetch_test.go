@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/WiseLabz/wiselabz/internal/connector"
@@ -190,7 +191,7 @@ func TestFetchDegradesPerSection(t *testing.T) {
 	}
 }
 
-func TestFetchAuthFailureReturnsPlaceholderSnapshot(t *testing.T) {
+func TestFetchAuthFailureReturnsError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
 		_, _ = w.Write([]byte(`{"session":{"valid":false,"message":"bad password"}}`))
@@ -199,14 +200,37 @@ func TestFetchAuthFailureReturnsPlaceholderSnapshot(t *testing.T) {
 
 	c := &Connector{url: server.URL, password: "nope", client: server.Client()}
 	snap, err := c.Fetch(context.Background(), nil)
-	if err != nil {
+	if err == nil || !strings.Contains(err.Error(), "auth error") {
+		t.Fatalf("Fetch() = %+v, %v; want an auth error and no snapshot", snap, err)
+	}
+	if snap != nil {
+		t.Errorf("snapshot = %+v, want nil", snap)
+	}
+}
+
+func TestFetchReleasesV6Session(t *testing.T) {
+	var deleted atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/api/auth" && r.Method == http.MethodPost:
+			_, _ = w.Write([]byte(`{"session":{"sid":"abc","valid":true}}`))
+		case r.URL.Path == "/api/auth" && r.Method == http.MethodDelete:
+			if r.Header.Get("sid") == "abc" {
+				deleted.Add(1)
+			}
+			w.WriteHeader(http.StatusNoContent)
+		default:
+			_, _ = w.Write([]byte(`{}`))
+		}
+	}))
+	defer server.Close()
+
+	c := &Connector{url: server.URL, password: "pw", apiVersion: version6, client: server.Client()}
+	if _, err := c.Fetch(context.Background(), nil); err != nil {
 		t.Fatalf("Fetch() error = %v", err)
 	}
-	if len(snap.Sections) != 1 || !strings.Contains(snap.Sections[0].Content, "auth error") {
-		t.Fatalf("sections = %+v, want a single auth-error placeholder", snap.Sections)
-	}
-	if _, ok := snap.Metadata["pihole_api_version"]; ok {
-		t.Error("metadata reports an API version although no version answered")
+	if deleted.Load() != 1 {
+		t.Errorf("DELETE /api/auth calls = %d, want 1", deleted.Load())
 	}
 }
 

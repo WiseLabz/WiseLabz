@@ -3,6 +3,7 @@ package proxmox
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -19,7 +20,7 @@ func TestFetchIncludesHostAndStorageDependencies(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
 		case "/nodes":
-			_, _ = w.Write([]byte(`{"data":[{"node":"pve1","status":"online","uptime":100,"cpu":0.1,"mem":{"used":1,"total":2}}]}`))
+			_, _ = w.Write([]byte(`{"data":[{"node":"pve1","status":"online","uptime":100,"cpu":0.1,"mem":1073741824,"maxmem":8589934592,"maxcpu":4}]}`))
 		case "/nodes/pve1/qemu":
 			_, _ = w.Write([]byte(`{"data":[]}`))
 		case "/nodes/pve1/lxc":
@@ -56,9 +57,9 @@ func TestFetchWithFieldsHintSkipsUnrequestedCalls(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
 		case "/nodes":
-			_, _ = w.Write([]byte(`{"data":[{"node":"pve1","status":"online","uptime":100,"cpu":0.1,"mem":{"used":1,"total":2}}]}`))
+			_, _ = w.Write([]byte(`{"data":[{"node":"pve1","status":"online","uptime":100,"cpu":0.1,"mem":1073741824,"maxmem":8589934592,"maxcpu":4}]}`))
 		case "/nodes/pve1/qemu":
-			_, _ = w.Write([]byte(`{"data":[{"vmid":100,"name":"vm1","status":"running","cpus":2,"mem":1024,"uptime":10}]}`))
+			_, _ = w.Write([]byte(`{"data":[{"vmid":100,"name":"vm1","status":"running","cpus":2,"mem":1024000,"maxmem":1073741824,"uptime":10}]}`))
 		default:
 			t.Fatalf("unexpected request path %s: selective fetch should only hit /nodes and /nodes/pve1/qemu", r.URL.Path)
 		}
@@ -385,5 +386,39 @@ func TestDoRequestContextTimeout(t *testing.T) {
 	var timeoutErr *connector.TimeoutError
 	if !errors.As(err, &timeoutErr) {
 		t.Errorf("doRequest() error = %v, want *connector.TimeoutError", err)
+	}
+}
+
+// Live metrics (uptime, CPU, used memory) must not appear in section content,
+// or every sync would register as drift.
+func TestFetchContentStableAcrossLiveMetrics(t *testing.T) {
+	var tick int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/nodes":
+			_, _ = fmt.Fprintf(w, `{"data":[{"node":"pve1","status":"online","uptime":%d,"cpu":0.%d,"mem":%d,"maxmem":8589934592}]}`, 100+tick, tick, 1000+tick)
+		case "/nodes/pve1/qemu":
+			_, _ = fmt.Fprintf(w, `{"data":[{"vmid":100,"name":"vm1","status":"running","cpus":2,"mem":%d,"maxmem":2147483648,"uptime":%d}]}`, 5000+tick, 10+tick)
+		default:
+			_, _ = w.Write([]byte(`{"data":[]}`))
+		}
+	}))
+	defer server.Close()
+
+	c := &Connector{url: server.URL, tokenID: "u@pam!t", tokenSecret: "s", client: server.Client()}
+	fetch := func() string {
+		snap, err := c.Fetch(context.Background(), nil)
+		if err != nil {
+			t.Fatalf("Fetch() error = %v", err)
+		}
+		return snap.Sections[0].Content
+	}
+	first := fetch()
+	tick = 7
+	if second := fetch(); first != second {
+		t.Errorf("content changed with live metrics:\n%s\n---\n%s", first, second)
+	}
+	if !strings.Contains(first, "8192 MB") || !strings.Contains(first, "| 2048 |") {
+		t.Errorf("memory not rendered in MB:\n%s", first)
 	}
 }
