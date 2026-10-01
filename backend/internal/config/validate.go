@@ -65,6 +65,7 @@ func (c *Config) Redacted() Config {
 	r.DB.DSN = redactDSN(r.DB.DSN)
 	r.Encryption.Key = mask(r.Encryption.Key)
 	r.Auth.Secret = mask(r.Auth.Secret)
+	r.AdminPassword = mask(r.AdminPassword)
 	r.AI.APIKey = mask(r.AI.APIKey)
 	r.AI.EmbedAPIKey = mask(r.AI.EmbedAPIKey)
 	r.DocExport.Git.Token = mask(r.DocExport.Git.Token)

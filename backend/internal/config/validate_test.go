@@ -110,7 +110,10 @@ func TestEveryKeyEnvOverridable(t *testing.T) {
 	setEnv = func(prefix string, rt reflect.Type) {
 		for j := 0; j < rt.NumField(); j++ {
 			f := rt.Field(j)
-			name := prefix + "_" + f.Tag.Get("mapstructure")
+			name := f.Tag.Get("mapstructure")
+			if prefix != "" {
+				name = prefix + "_" + name
+			}
 			switch {
 			case f.Type.Kind() == reflect.Struct:
 				setEnv(name, f.Type)
@@ -130,11 +133,7 @@ func TestEveryKeyEnvOverridable(t *testing.T) {
 			}
 		}
 	}
-	rt := reflect.TypeOf(Config{})
-	for i := 0; i < rt.NumField(); i++ {
-		sec := rt.Field(i)
-		setEnv(sec.Tag.Get("mapstructure"), sec.Type)
-	}
+	setEnv("", reflect.TypeOf(Config{}))
 	cfg, err := Load()
 	if err != nil {
 		t.Fatal(err)
@@ -153,10 +152,7 @@ func TestEveryKeyEnvOverridable(t *testing.T) {
 			}
 		}
 	}
-	v := reflect.ValueOf(*cfg)
-	for i := 0; i < v.NumField(); i++ {
-		check(v.Type().Field(i).Name, v.Field(i))
-	}
+	check("Config", reflect.ValueOf(*cfg))
 }
 
 func TestValidateRejectsInvalidDocExportGit(t *testing.T) {

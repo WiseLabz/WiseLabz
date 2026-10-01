@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/WiseLabz/wiselabz/internal/connector"
+	"github.com/WiseLabz/wiselabz/internal/connector/snapshotutil"
 )
 
 // deviceStates maps the controller's numeric device state onto the label the
@@ -46,23 +47,6 @@ func (f *flexInt) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// cell escapes a value for use inside a Markdown table cell; controller
-// fields such as firewall addresses may legitimately contain '|'.
-func cell(s string) string {
-	if s == "" {
-		return "—"
-	}
-	s = strings.ReplaceAll(s, "\n", " ")
-	return strings.ReplaceAll(s, "|", `\|`)
-}
-
-func yesNo(b bool) string {
-	if b {
-		return "yes"
-	}
-	return "no"
-}
-
 // boolOr resolves an optional controller boolean, which is absent on older
 // firmware, to its documented default.
 func boolOr(v *bool, fallback bool) bool {
@@ -70,14 +54,6 @@ func boolOr(v *bool, fallback bool) bool {
 		return fallback
 	}
 	return *v
-}
-
-func malformed(title string, err error) string {
-	return "_" + title + " unavailable: " + connector.NewMalformedResponseError(err).Error() + "_"
-}
-
-func empty(noun string) string {
-	return "_No " + noun + " returned_"
 }
 
 // decode unwraps the UniFi response envelope ({"meta":..., "data":[...]})
@@ -95,12 +71,6 @@ func decode(raw []byte, out any) error {
 	return json.Unmarshal(envelope.Data, out)
 }
 
-func putString(attrs map[string]any, key, value string) {
-	if value != "" {
-		attrs[key] = value
-	}
-}
-
 // buildSiteTable renders /api/self/sites: every site the account can read,
 // which is how an operator finds the internal name to configure.
 func buildSiteTable(raw []byte) (string, []connector.SnapshotEntity, map[string]string) {
@@ -110,10 +80,10 @@ func buildSiteTable(raw []byte) (string, []connector.SnapshotEntity, map[string]
 		Role string `json:"role"`
 	}
 	if err := decode(raw, &sites); err != nil {
-		return malformed("Sites", err), nil, nil
+		return snapshotutil.MalformedSection("Sites", err), nil, nil
 	}
 	if len(sites) == 0 {
-		return empty("sites"), nil, nil
+		return snapshotutil.Empty("sites"), nil, nil
 	}
 
 	var b strings.Builder
@@ -121,10 +91,10 @@ func buildSiteTable(raw []byte) (string, []connector.SnapshotEntity, map[string]
 	b.WriteString("|------|------|------|\n")
 	entities := make([]connector.SnapshotEntity, 0, len(sites))
 	for _, s := range sites {
-		_, _ = fmt.Fprintf(&b, "| %s | %s | %s |\n", cell(s.Desc), cell(s.Name), cell(s.Role))
+		_, _ = fmt.Fprintf(&b, "| %s | %s | %s |\n", snapshotutil.MDCell(s.Desc), snapshotutil.MDCell(s.Name), snapshotutil.MDCell(s.Role))
 		attrs := map[string]any{}
-		putString(attrs, "role", s.Role)
-		putString(attrs, "displayName", s.Desc)
+		snapshotutil.PutString(attrs, "role", s.Role)
+		snapshotutil.PutString(attrs, "displayName", s.Desc)
 		entities = append(entities, connector.SnapshotEntity{
 			Kind: "site", Name: s.Name, ExternalID: s.Name, Attributes: attrs,
 		})
@@ -149,10 +119,10 @@ func buildDeviceTable(raw []byte) (string, []connector.SnapshotEntity, map[strin
 		State    flexInt `json:"state"`
 	}
 	if err := decode(raw, &devices); err != nil {
-		return malformed("Devices", err), nil, nil
+		return snapshotutil.MalformedSection("Devices", err), nil, nil
 	}
 	if len(devices) == 0 {
-		return empty("devices"), nil, nil
+		return snapshotutil.Empty("devices"), nil, nil
 	}
 
 	var b strings.Builder
@@ -166,14 +136,14 @@ func buildDeviceTable(raw []byte) (string, []connector.SnapshotEntity, map[strin
 			name = d.MAC
 		}
 		_, _ = fmt.Fprintf(&b, "| %s | %s | %s | %s | %s | %s | %s |\n",
-			cell(name), cell(d.Model), cell(d.Type), cell(d.IP), cell(d.Version),
-			yesNo(d.Adopted), cell(state))
+			snapshotutil.MDCell(name), snapshotutil.MDCell(d.Model), snapshotutil.MDCell(d.Type), snapshotutil.MDCell(d.IP), snapshotutil.MDCell(d.Version),
+			snapshotutil.YesNo(d.Adopted), snapshotutil.MDCell(state))
 
 		attrs := map[string]any{"adopted": d.Adopted, "disabled": d.Disabled}
-		putString(attrs, "model", d.Model)
-		putString(attrs, "deviceType", d.Type)
-		putString(attrs, "firmwareVersion", d.Version)
-		putString(attrs, "state", state)
+		snapshotutil.PutString(attrs, "model", d.Model)
+		snapshotutil.PutString(attrs, "deviceType", d.Type)
+		snapshotutil.PutString(attrs, "firmwareVersion", d.Version)
+		snapshotutil.PutString(attrs, "state", state)
 		entities = append(entities, connector.SnapshotEntity{
 			Kind: "device", Name: name, IP: d.IP, Hostname: d.Name, ExternalID: d.MAC, Attributes: attrs,
 		})
@@ -206,10 +176,10 @@ func buildNetworkTable(raw []byte) (string, []connector.SnapshotEntity, map[stri
 		Enabled      *bool   `json:"enabled"`
 	}
 	if err := decode(raw, &networks); err != nil {
-		return malformed("Networks", err), nil, nil
+		return snapshotutil.MalformedSection("Networks", err), nil, nil
 	}
 	if len(networks) == 0 {
-		return empty("networks"), nil, nil
+		return snapshotutil.Empty("networks"), nil, nil
 	}
 
 	var b strings.Builder
@@ -223,16 +193,16 @@ func buildNetworkTable(raw []byte) (string, []connector.SnapshotEntity, map[stri
 		}
 		enabled := boolOr(n.Enabled, true)
 		_, _ = fmt.Fprintf(&b, "| %s | %s | %s | %s | %s | %s |\n",
-			cell(n.Name), cell(n.Purpose), vlan, cell(n.Subnet), yesNo(n.DHCPEnabled), yesNo(enabled))
+			snapshotutil.MDCell(n.Name), snapshotutil.MDCell(n.Purpose), vlan, snapshotutil.MDCell(n.Subnet), snapshotutil.YesNo(n.DHCPEnabled), snapshotutil.YesNo(enabled))
 
 		attrs := map[string]any{
 			"enabled":     enabled,
 			"vlanEnabled": n.VLANEnabled,
 			"dhcpEnabled": n.DHCPEnabled,
 		}
-		putString(attrs, "purpose", n.Purpose)
-		putString(attrs, "subnet", n.Subnet)
-		putString(attrs, "networkGroup", n.NetworkGroup)
+		snapshotutil.PutString(attrs, "purpose", n.Purpose)
+		snapshotutil.PutString(attrs, "subnet", n.Subnet)
+		snapshotutil.PutString(attrs, "networkGroup", n.NetworkGroup)
 		if n.VLAN.Set {
 			attrs["vlan"] = n.VLAN.Value
 		}
@@ -259,10 +229,10 @@ func buildWLANTable(raw []byte) (string, []connector.SnapshotEntity, map[string]
 		PMFMode          string `json:"pmf_mode"`
 	}
 	if err := decode(raw, &wlans); err != nil {
-		return malformed("WLANs", err), nil, nil
+		return snapshotutil.MalformedSection("WLANs", err), nil, nil
 	}
 	if len(wlans) == 0 {
-		return empty("WLANs"), nil, nil
+		return snapshotutil.Empty("WLANs"), nil, nil
 	}
 
 	var b strings.Builder
@@ -272,8 +242,8 @@ func buildWLANTable(raw []byte) (string, []connector.SnapshotEntity, map[string]
 	for _, w := range wlans {
 		enabled := boolOr(w.Enabled, true)
 		_, _ = fmt.Fprintf(&b, "| %s | %s | %s | %s | %s | %s | %s |\n",
-			cell(w.Name), cell(w.Security), cell(w.WPAMode), yesNo(w.IsGuest),
-			yesNo(w.HideSSID), yesNo(w.MACFilterEnabled), yesNo(enabled))
+			snapshotutil.MDCell(w.Name), snapshotutil.MDCell(w.Security), snapshotutil.MDCell(w.WPAMode), snapshotutil.YesNo(w.IsGuest),
+			snapshotutil.YesNo(w.HideSSID), snapshotutil.YesNo(w.MACFilterEnabled), snapshotutil.YesNo(enabled))
 
 		attrs := map[string]any{
 			"enabled":          enabled,
@@ -281,10 +251,10 @@ func buildWLANTable(raw []byte) (string, []connector.SnapshotEntity, map[string]
 			"hideSsid":         w.HideSSID,
 			"macFilterEnabled": w.MACFilterEnabled,
 		}
-		putString(attrs, "security", w.Security)
-		putString(attrs, "wpaMode", w.WPAMode)
-		putString(attrs, "macFilterPolicy", w.MACFilterPolicy)
-		putString(attrs, "pmfMode", w.PMFMode)
+		snapshotutil.PutString(attrs, "security", w.Security)
+		snapshotutil.PutString(attrs, "wpaMode", w.WPAMode)
+		snapshotutil.PutString(attrs, "macFilterPolicy", w.MACFilterPolicy)
+		snapshotutil.PutString(attrs, "pmfMode", w.PMFMode)
 		entities = append(entities, connector.SnapshotEntity{
 			Kind: "wlan", Name: w.Name, ExternalID: w.ID, Attributes: attrs,
 		})
@@ -309,10 +279,10 @@ func buildFirewallTable(raw []byte) (string, []connector.SnapshotEntity, map[str
 		DstAddress string  `json:"dst_address"`
 	}
 	if err := decode(raw, &rules); err != nil {
-		return malformed("Firewall Rules", err), nil, nil
+		return snapshotutil.MalformedSection("Firewall Rules", err), nil, nil
 	}
 	if len(rules) == 0 {
-		return empty("firewall rules"), nil, nil
+		return snapshotutil.Empty("firewall rules"), nil, nil
 	}
 	sort.SliceStable(rules, func(i, j int) bool {
 		if rules[i].Ruleset != rules[j].Ruleset {
@@ -332,15 +302,15 @@ func buildFirewallTable(raw []byte) (string, []connector.SnapshotEntity, map[str
 		}
 		enabled := boolOr(r.Enabled, true)
 		_, _ = fmt.Fprintf(&b, "| %s | %s | %s | %s | %s | %s | %s | %s |\n",
-			cell(r.Ruleset), index, cell(r.Name), cell(r.Action), cell(r.Protocol),
-			cell(r.SrcAddress), cell(r.DstAddress), yesNo(enabled))
+			snapshotutil.MDCell(r.Ruleset), index, snapshotutil.MDCell(r.Name), snapshotutil.MDCell(r.Action), snapshotutil.MDCell(r.Protocol),
+			snapshotutil.MDCell(r.SrcAddress), snapshotutil.MDCell(r.DstAddress), snapshotutil.YesNo(enabled))
 
 		attrs := map[string]any{"enabled": enabled, "logging": r.Logging}
-		putString(attrs, "action", r.Action)
-		putString(attrs, "ruleset", r.Ruleset)
-		putString(attrs, "protocol", r.Protocol)
-		putString(attrs, "sourceAddress", r.SrcAddress)
-		putString(attrs, "destinationAddress", r.DstAddress)
+		snapshotutil.PutString(attrs, "action", r.Action)
+		snapshotutil.PutString(attrs, "ruleset", r.Ruleset)
+		snapshotutil.PutString(attrs, "protocol", r.Protocol)
+		snapshotutil.PutString(attrs, "sourceAddress", r.SrcAddress)
+		snapshotutil.PutString(attrs, "destinationAddress", r.DstAddress)
 		if r.RuleIndex.Set {
 			attrs["ruleIndex"] = r.RuleIndex.Value
 		}
@@ -363,10 +333,10 @@ func buildClientSummary(raw []byte) (string, []connector.SnapshotEntity, map[str
 		Network string `json:"network"`
 	}
 	if err := decode(raw, &clients); err != nil {
-		return malformed("Clients", err), nil, nil
+		return snapshotutil.MalformedSection("Clients", err), nil, nil
 	}
 	if len(clients) == 0 {
-		return empty("clients"), nil, map[string]string{
+		return snapshotutil.Empty("clients"), nil, map[string]string{
 			"client_count": "0", "wired_client_count": "0", "wireless_client_count": "0",
 		}
 	}
@@ -395,7 +365,7 @@ func buildClientSummary(raw []byte) (string, []connector.SnapshotEntity, map[str
 	b.WriteString("| SSID / Network | Clients |\n")
 	b.WriteString("|----------------|---------|\n")
 	for _, g := range groups {
-		_, _ = fmt.Fprintf(&b, "| %s | %d |\n", cell(g), byConnection[g])
+		_, _ = fmt.Fprintf(&b, "| %s | %d |\n", snapshotutil.MDCell(g), byConnection[g])
 	}
 
 	metadata := map[string]string{

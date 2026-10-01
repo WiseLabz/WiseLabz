@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/WiseLabz/wiselabz/internal/connector"
+	"github.com/WiseLabz/wiselabz/internal/connector/snapshotutil"
 )
 
 const (
@@ -222,7 +223,7 @@ func (c *Connector) Fetch(ctx context.Context, config map[string]any) (snapshot 
 		}
 		raw, err := c.doRequest(ctx, s.path)
 		if err != nil {
-			snapshotSections = append(snapshotSections, unavailable(s.title, err))
+			snapshotSections = append(snapshotSections, snapshotutil.UnavailableSection(s.title, err))
 			continue
 		}
 		content, ents, meta := s.build(raw)
@@ -270,10 +271,6 @@ func poolDependencies(entities []connector.SnapshotEntity) []connector.ServiceDe
 	return deps
 }
 
-func unavailable(title string, err error) connector.SnapshotSection {
-	return connector.ErrorSection(title, err)
-}
-
 func (c *Connector) doRequest(ctx context.Context, path string) (data []byte, err error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.url+path, nil)
 	if err != nil {
@@ -282,24 +279,5 @@ func (c *Connector) doRequest(ctx context.Context, path string) (data []byte, er
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Authorization", "Bearer "+c.apiKey)
 
-	resp, err := c.client.Do(req)
-	if err != nil {
-		return nil, connector.MapTransportError(err)
-	}
-	defer func() {
-		if cerr := resp.Body.Close(); cerr != nil && err == nil {
-			err = cerr
-		}
-	}()
-
-	data, err = connector.ReadBody(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("read response: %w", err)
-	}
-
-	if statusErr := connector.CheckStatus(resp.StatusCode, data); statusErr != nil {
-		return nil, statusErr
-	}
-
-	return data, nil
+	return connector.Do(c.client, req)
 }

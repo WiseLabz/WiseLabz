@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/WiseLabz/wiselabz/internal/connector"
+	"github.com/WiseLabz/wiselabz/internal/connector/snapshotutil"
 )
 
 // builders indexes every section builder by the empty-state text it renders
@@ -387,10 +388,10 @@ func TestZFSPropDecodesBothShapes(t *testing.T) {
 }
 
 func TestCell(t *testing.T) {
-	if got := cell(""); got != "—" {
-		t.Errorf("cell(\"\") = %q, want an em dash", got)
+	if got := snapshotutil.MDCell(""); got != "—" {
+		t.Errorf("snapshotutil.MDCell(\"\") = %q, want an em dash", got)
 	}
-	if got := cell("a|b\nc"); got != `a\|b c` {
+	if got := snapshotutil.MDCell("a|b\nc"); got != `a\|b c` {
 		t.Errorf("cell = %q", got)
 	}
 }

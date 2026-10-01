@@ -164,3 +164,21 @@ func TestNewClientUsesCustomDialContext(t *testing.T) {
 		})
 	}
 }
+
+func TestNewTransportTLSConfigAndKeepAlives(t *testing.T) {
+	base := &tls.Config{ServerName: "docker.test", MinVersion: tls.VersionTLS10}
+	tr := NewTransport(Options{TLSConfig: base, InsecureSkipVerify: true, DisableKeepAlives: true})
+	got := tr.TLSClientConfig
+	if got == base {
+		t.Fatal("TLSConfig was not cloned")
+	}
+	if got.ServerName != "docker.test" || got.MinVersion != tls.VersionTLS12 || !got.InsecureSkipVerify {
+		t.Errorf("TLSClientConfig = %+v", got)
+	}
+	if base.MinVersion != tls.VersionTLS10 {
+		t.Error("caller's TLSConfig was mutated")
+	}
+	if !tr.DisableKeepAlives {
+		t.Error("DisableKeepAlives not applied")
+	}
+}

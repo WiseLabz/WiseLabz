@@ -11,8 +11,6 @@ import (
 	"net"
 	"net/http"
 	"strings"
-	"syscall"
-	"time"
 
 	"github.com/WiseLabz/wiselabz/internal/connector"
 	"github.com/WiseLabz/wiselabz/internal/httpx"
@@ -102,13 +100,12 @@ func newDockerClient(host string, config map[string]any) (*http.Client, string, 
 		if err := connector.ValidateUnixSocketPath(socketPath); err != nil {
 			return nil, "", err
 		}
-		transport := &http.Transport{
+		return newClient(httpx.Options{
 			DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
 				var d net.Dialer
 				return d.DialContext(ctx, "unix", socketPath)
 			},
-		}
-		return &http.Client{Timeout: 30 * time.Second, Transport: httpx.RetryTransport(transport, httpx.RetryPolicy{})}, "http://unix", nil
+		}), "http://unix", nil
 
 	case strings.HasPrefix(host, "tcp://"):
 		return newTCPDockerClient(strings.TrimPrefix(host, "tcp://"), config)
@@ -121,35 +118,31 @@ func newDockerClient(host string, config map[string]any) (*http.Client, string, 
 	}
 }
 
-func newTCPDockerClient(addr string, config map[string]any) (*http.Client, string, error) {
-	dialer := &net.Dialer{
-		Timeout: 30 * time.Second,
-		Control: func(_, address string, _ syscall.RawConn) error {
-			h, _, err := net.SplitHostPort(address)
-			if err != nil {
-				return fmt.Errorf("split address %q: %w", address, err)
-			}
-			ip := net.ParseIP(h)
-			if ip == nil {
-				return fmt.Errorf("unresolvable address %q", h)
-			}
-			if connector.IsDangerousIP(ip) {
-				return fmt.Errorf("connection to blocked address %s denied", ip)
-			}
-			return nil
-		},
+// newClient wraps httpx's hardened transport in the shared client shape:
+// connector.DefaultHTTPTimeout, no redirects, and idempotent requests retried
+// on transient errors.
+func newClient(o httpx.Options) *http.Client {
+	o.Timeout = connector.DefaultHTTPTimeout
+	return &http.Client{
+		Timeout:       connector.DefaultHTTPTimeout,
+		Transport:     httpx.RetryTransport(httpx.NewTransport(o), httpx.RetryPolicy{}),
+		CheckRedirect: httpx.NoRedirect,
 	}
+}
 
+func newTCPDockerClient(addr string, config map[string]any) (*http.Client, string, error) {
 	tlsConfig, err := buildDockerTLSConfig(config)
 	if err != nil {
 		return nil, "", err
 	}
-	if tlsConfig == nil {
-		transport := &http.Transport{DialContext: dialer.DialContext}
-		return &http.Client{Timeout: 30 * time.Second, Transport: httpx.RetryTransport(transport, httpx.RetryPolicy{})}, "http://" + addr, nil
+	scheme := "http://"
+	if tlsConfig != nil {
+		scheme = "https://"
 	}
-	transport := &http.Transport{DialContext: dialer.DialContext, TLSClientConfig: tlsConfig}
-	return &http.Client{Timeout: 30 * time.Second, Transport: httpx.RetryTransport(transport, httpx.RetryPolicy{})}, "https://" + addr, nil
+	return newClient(httpx.Options{
+		DialContext: connector.GuardedDialer(connector.DefaultHTTPTimeout).DialContext,
+		TLSConfig:   tlsConfig,
+	}), scheme + addr, nil
 }
 
 // buildDockerTLSConfig builds the mutual-TLS config for a tcp:// Docker host

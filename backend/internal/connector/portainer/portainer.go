@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/WiseLabz/wiselabz/internal/connector"
+	"github.com/WiseLabz/wiselabz/internal/connector/snapshotutil"
 )
 
 const typeName = "portainer"
@@ -170,7 +171,7 @@ func (c *Connector) Fetch(ctx context.Context, config map[string]any) (snapshot 
 	envs, envErr := c.fetchEnvironments(ctx, fields)
 	if connector.WantsField(fields, "environments") {
 		if envErr != nil {
-			sections = append(sections, unavailable("Environments", envErr))
+			sections = append(sections, snapshotutil.UnavailableSection("Environments", envErr))
 		} else {
 			content, ents := buildEnvironmentTable(envs)
 			sections = append(sections, connector.SnapshotSection{Title: "Environments", Content: content})
@@ -182,7 +183,7 @@ func (c *Connector) Fetch(ctx context.Context, config map[string]any) (snapshot 
 	if connector.WantsField(fields, "stacks") {
 		raw, err := c.doRequest(ctx, pathStacks)
 		if err != nil {
-			sections = append(sections, unavailable("Stacks", err))
+			sections = append(sections, snapshotutil.UnavailableSection("Stacks", err))
 		} else {
 			content, ents := buildStackTable(raw, environmentNames(envs))
 			sections = append(sections, connector.SnapshotSection{Title: "Stacks", Content: content})
@@ -196,7 +197,7 @@ func (c *Connector) Fetch(ctx context.Context, config map[string]any) (snapshot 
 			continue
 		}
 		if envErr != nil {
-			sections = append(sections, unavailable(proxy.title, envErr))
+			sections = append(sections, snapshotutil.UnavailableSection(proxy.title, envErr))
 			continue
 		}
 		section, ents := c.dockerSection(ctx, envs, proxy)
@@ -253,7 +254,7 @@ func (c *Connector) dockerSection(ctx context.Context, envs []environment, spec 
 			if firstErr == nil {
 				firstErr = err
 			}
-			_, _ = fmt.Fprintf(&notes, "_%s for %s unavailable: %s_\n\n", spec.title, cell(env.Name), err.Error())
+			_, _ = fmt.Fprintf(&notes, "_%s for %s unavailable: %s_\n\n", spec.title, snapshotutil.MDCell(env.Name), err.Error())
 			continue
 		}
 		rows, ents, err := spec.rows(env.Name, raw)
@@ -261,7 +262,7 @@ func (c *Connector) dockerSection(ctx context.Context, envs []environment, spec 
 			if firstErr == nil {
 				firstErr = connector.NewMalformedResponseError(err)
 			}
-			_, _ = fmt.Fprintf(&notes, "_%s for %s unavailable: %s_\n\n", spec.title, cell(env.Name), connector.NewMalformedResponseError(err).Error())
+			_, _ = fmt.Fprintf(&notes, "_%s for %s unavailable: %s_\n\n", spec.title, snapshotutil.MDCell(env.Name), connector.NewMalformedResponseError(err).Error())
 			continue
 		}
 		body.WriteString(rows)
@@ -358,10 +359,6 @@ func dockerPath(envID int, suffix string) string {
 	return fmt.Sprintf("%s/%d/docker%s", pathEndpoints, envID, suffix)
 }
 
-func unavailable(title string, err error) connector.SnapshotSection {
-	return connector.ErrorSection(title, err)
-}
-
 func putMetadata(metadata map[string]string, key, value string) {
 	if value != "" {
 		metadata[key] = value
@@ -378,24 +375,5 @@ func (c *Connector) doRequest(ctx context.Context, path string) (data []byte, er
 		req.Header.Set("X-API-Key", c.apiKey)
 	}
 
-	resp, err := c.client.Do(req)
-	if err != nil {
-		return nil, connector.MapTransportError(err)
-	}
-	defer func() {
-		if cerr := resp.Body.Close(); cerr != nil && err == nil {
-			err = cerr
-		}
-	}()
-
-	data, err = connector.ReadBody(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("read response: %w", err)
-	}
-
-	if statusErr := connector.CheckStatus(resp.StatusCode, data); statusErr != nil {
-		return nil, statusErr
-	}
-
-	return data, nil
+	return connector.Do(c.client, req)
 }

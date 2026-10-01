@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/WiseLabz/wiselabz/internal/connector"
+	"github.com/WiseLabz/wiselabz/internal/connector/snapshotutil"
 )
 
 const (
@@ -180,10 +181,10 @@ func (c *Connector) Fetch(ctx context.Context, config map[string]any) (snapshot 
 		switch {
 		case err != nil:
 			if wantOverview {
-				sections = append(sections, unavailable("Overview", err))
+				sections = append(sections, snapshotutil.UnavailableSection("Overview", err))
 			}
 			if wantIntegrations {
-				sections = append(sections, unavailable("Integrations", err))
+				sections = append(sections, snapshotutil.UnavailableSection("Integrations", err))
 			}
 		default:
 			if wantOverview {
@@ -205,7 +206,7 @@ func (c *Connector) Fetch(ctx context.Context, config map[string]any) (snapshot 
 	if connector.WantsField(fields, "entities") {
 		raw, err := c.doRequest(ctx, pathStates)
 		if err != nil {
-			sections = append(sections, unavailable("Entity Domains", err), unavailable("Entities", err))
+			sections = append(sections, snapshotutil.UnavailableSection("Entity Domains", err), snapshotutil.UnavailableSection("Entities", err))
 		} else {
 			result := buildEntities(raw, c.maxEntities)
 			sections = append(sections,
@@ -222,7 +223,7 @@ func (c *Connector) Fetch(ctx context.Context, config map[string]any) (snapshot 
 	if connector.WantsField(fields, "services") {
 		raw, err := c.doRequest(ctx, pathServices)
 		if err != nil {
-			sections = append(sections, unavailable("Services", err))
+			sections = append(sections, snapshotutil.UnavailableSection("Services", err))
 		} else {
 			content, meta := buildServices(raw)
 			sections = append(sections, connector.SnapshotSection{Title: "Services", Content: content})
@@ -242,10 +243,6 @@ func (c *Connector) Fetch(ctx context.Context, config map[string]any) (snapshot 
 	}, nil
 }
 
-func unavailable(title string, err error) connector.SnapshotSection {
-	return connector.ErrorSection(title, err)
-}
-
 func (c *Connector) doRequest(ctx context.Context, path string) (data []byte, err error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.url+path, nil)
 	if err != nil {
@@ -254,24 +251,5 @@ func (c *Connector) doRequest(ctx context.Context, path string) (data []byte, er
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Authorization", "Bearer "+c.accessToken)
 
-	resp, err := c.client.Do(req)
-	if err != nil {
-		return nil, connector.MapTransportError(err)
-	}
-	defer func() {
-		if cerr := resp.Body.Close(); cerr != nil && err == nil {
-			err = cerr
-		}
-	}()
-
-	data, err = connector.ReadBody(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("read response: %w", err)
-	}
-
-	if statusErr := connector.CheckStatus(resp.StatusCode, data); statusErr != nil {
-		return nil, statusErr
-	}
-
-	return data, nil
+	return connector.Do(c.client, req)
 }

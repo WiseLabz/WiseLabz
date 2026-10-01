@@ -33,6 +33,7 @@ import (
 	"time"
 
 	"github.com/WiseLabz/wiselabz/internal/connector"
+	"github.com/WiseLabz/wiselabz/internal/connector/snapshotutil"
 )
 
 const typeName = "unifi"
@@ -399,7 +400,7 @@ func (c *Connector) Fetch(ctx context.Context, config map[string]any) (snapshot 
 		return &connector.ServiceSnapshot{
 			ServiceName: "UniFi",
 			Type:        typeName,
-			Sections:    []connector.SnapshotSection{unavailable("Devices", err)},
+			Sections:    []connector.SnapshotSection{snapshotutil.UnavailableSection("Devices", err)},
 			Metadata:    metadata,
 			FetchedAt:   start,
 		}, nil
@@ -417,7 +418,7 @@ func (c *Connector) Fetch(ctx context.Context, config map[string]any) (snapshot 
 		}
 		raw, err := c.get(ctx, s, sec.path)
 		if err != nil {
-			sections = append(sections, unavailable(sec.title, err))
+			sections = append(sections, snapshotutil.UnavailableSection(sec.title, err))
 			continue
 		}
 		content, ents, meta := sec.build(raw)
@@ -507,9 +508,4 @@ func networkDependencies(entities []connector.SnapshotEntity) []connector.Servic
 		deps = append(deps, connector.ServiceDependency{Kind: "network", Name: n})
 	}
 	return deps
-}
-
-// unavailable renders the standard "section could not be fetched" placeholder.
-func unavailable(title string, err error) connector.SnapshotSection {
-	return connector.ErrorSection(title, err)
 }

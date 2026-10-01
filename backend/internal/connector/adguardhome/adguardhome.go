@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/WiseLabz/wiselabz/internal/connector"
+	"github.com/WiseLabz/wiselabz/internal/connector/snapshotutil"
 )
 
 const typeName = "adguardhome"
@@ -166,7 +167,7 @@ func (c *Connector) Fetch(ctx context.Context, config map[string]any) (snapshot 
 		switch {
 		case err != nil:
 			if connector.WantsField(fields, "status") {
-				sections = append(sections, unavailable("Status", err))
+				sections = append(sections, snapshotutil.UnavailableSection("Status", err))
 			}
 		default:
 			var content string
@@ -183,7 +184,7 @@ func (c *Connector) Fetch(ctx context.Context, config map[string]any) (snapshot 
 	if connector.WantsField(fields, "dns_config") {
 		raw, err := c.doRequest(ctx, pathDNSInfo)
 		if err != nil {
-			sections = append(sections, unavailable("DNS Configuration", err))
+			sections = append(sections, snapshotutil.UnavailableSection("DNS Configuration", err))
 		} else {
 			content, ups, meta := buildDNSInfo(raw)
 			sections = append(sections, connector.SnapshotSection{Title: "DNS Configuration", Content: content})
@@ -198,8 +199,8 @@ func (c *Connector) Fetch(ctx context.Context, config map[string]any) (snapshot 
 		raw, err := c.doRequest(ctx, pathFilteringStatus)
 		if err != nil {
 			sections = append(sections,
-				unavailable("Filter Lists", err),
-				unavailable("Custom Filtering Rules", err))
+				snapshotutil.UnavailableSection("Filter Lists", err),
+				snapshotutil.UnavailableSection("Custom Filtering Rules", err))
 		} else {
 			listContent, rulesContent, ents, meta := buildFiltering(raw)
 			sections = append(sections,
@@ -215,7 +216,7 @@ func (c *Connector) Fetch(ctx context.Context, config map[string]any) (snapshot 
 	if connector.WantsField(fields, "rewrites") {
 		raw, err := c.doRequest(ctx, pathRewriteList)
 		if err != nil {
-			sections = append(sections, unavailable("DNS Rewrites", err))
+			sections = append(sections, snapshotutil.UnavailableSection("DNS Rewrites", err))
 		} else {
 			content, ents := buildRewriteTable(raw)
 			sections = append(sections, connector.SnapshotSection{Title: "DNS Rewrites", Content: content})
@@ -227,7 +228,7 @@ func (c *Connector) Fetch(ctx context.Context, config map[string]any) (snapshot 
 	if connector.WantsField(fields, "clients") {
 		raw, err := c.doRequest(ctx, pathClients)
 		if err != nil {
-			sections = append(sections, unavailable("Clients", err))
+			sections = append(sections, snapshotutil.UnavailableSection("Clients", err))
 		} else {
 			content, ents := buildClientTable(raw)
 			sections = append(sections, connector.SnapshotSection{Title: "Clients", Content: content})
@@ -242,7 +243,7 @@ func (c *Connector) Fetch(ctx context.Context, config map[string]any) (snapshot 
 	if connector.WantsField(fields, "dhcp") && status.dhcpAvailable {
 		raw, err := c.doRequest(ctx, pathDHCPStatus)
 		if err != nil {
-			sections = append(sections, unavailable("DHCP", err))
+			sections = append(sections, snapshotutil.UnavailableSection("DHCP", err))
 		} else {
 			content, ents, meta := buildDHCP(raw)
 			sections = append(sections, connector.SnapshotSection{Title: "DHCP", Content: content})
@@ -291,10 +292,6 @@ func upstreamDependencies(upstreams []string) []connector.ServiceDependency {
 	return deps
 }
 
-func unavailable(title string, err error) connector.SnapshotSection {
-	return connector.ErrorSection(title, err)
-}
-
 func (c *Connector) doRequest(ctx context.Context, path string) (data []byte, err error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.url+path, nil)
 	if err != nil {
@@ -305,24 +302,5 @@ func (c *Connector) doRequest(ctx context.Context, path string) (data []byte, er
 		req.SetBasicAuth(c.username, c.password)
 	}
 
-	resp, err := c.client.Do(req)
-	if err != nil {
-		return nil, connector.MapTransportError(err)
-	}
-	defer func() {
-		if cerr := resp.Body.Close(); cerr != nil && err == nil {
-			err = cerr
-		}
-	}()
-
-	data, err = connector.ReadBody(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("read response: %w", err)
-	}
-
-	if statusErr := connector.CheckStatus(resp.StatusCode, data); statusErr != nil {
-		return nil, statusErr
-	}
-
-	return data, nil
+	return connector.Do(c.client, req)
 }

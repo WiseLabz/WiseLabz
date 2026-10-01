@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/WiseLabz/wiselabz/internal/connector"
+	"github.com/WiseLabz/wiselabz/internal/connector/snapshotutil"
 )
 
 // volatileDomains are entity domains whose state is a continuously changing
@@ -26,20 +27,6 @@ var volatileDomains = map[string]bool{
 // lists before it is summarised; the homeassistant and script domains alone
 // can carry dozens.
 const maxServiceNamesPerRow = 15
-
-// cell escapes a value for use inside a Markdown table cell. Friendly names
-// and service descriptions are free-form user text and may contain '|'.
-func cell(s string) string {
-	if s == "" {
-		return "—"
-	}
-	s = strings.ReplaceAll(s, "\n", " ")
-	return strings.ReplaceAll(s, "|", `\|`)
-}
-
-func malformed(title string, err error) string {
-	return "_" + title + " unavailable: " + connector.NewMalformedResponseError(err).Error() + "_"
-}
 
 // configPayload is the subset of /api/config this connector reports. The
 // latitude/longitude the endpoint also returns are deliberately not
@@ -76,7 +63,7 @@ type configPayload struct {
 func buildOverview(raw []byte) (string, map[string]string) {
 	var cfg configPayload
 	if err := json.Unmarshal(raw, &cfg); err != nil {
-		return malformed("Overview", err), nil
+		return snapshotutil.MalformedSection("Overview", err), nil
 	}
 
 	rows := []struct{ key, value string }{
@@ -102,7 +89,7 @@ func buildOverview(raw []byte) (string, map[string]string) {
 	b.WriteString("| Setting | Value |\n")
 	b.WriteString("|---------|-------|\n")
 	for _, r := range rows {
-		_, _ = fmt.Fprintf(&b, "| %s | %s |\n", r.key, cell(r.value))
+		_, _ = fmt.Fprintf(&b, "| %s | %s |\n", r.key, snapshotutil.MDCell(r.value))
 	}
 	b.WriteString("\n_Areas, devices and config entries are not exposed by the Home Assistant REST API (they are WebSocket-only), so this snapshot describes integrations and entities instead._\n")
 
@@ -133,7 +120,7 @@ func unitSystemSummary(cfg configPayload) string {
 func buildIntegrations(raw []byte) (string, []connector.SnapshotEntity) {
 	var cfg configPayload
 	if err := json.Unmarshal(raw, &cfg); err != nil {
-		return malformed("Integrations", err), nil
+		return snapshotutil.MalformedSection("Integrations", err), nil
 	}
 	if len(cfg.Components) == 0 {
 		return "_No integrations reported_", nil
@@ -166,10 +153,10 @@ func buildIntegrations(raw []byte) (string, []connector.SnapshotEntity) {
 	for _, name := range names {
 		loaded := platforms[name]
 		sort.Strings(loaded)
-		_, _ = fmt.Fprintf(&b, "| %s | %s |\n", cell(name), cell(strings.Join(loaded, ", ")))
+		_, _ = fmt.Fprintf(&b, "| %s | %s |\n", snapshotutil.MDCell(name), snapshotutil.MDCell(strings.Join(loaded, ", ")))
 
 		attrs := map[string]any{}
-		putStrings(attrs, "platforms", loaded)
+		snapshotutil.PutStrings(attrs, "platforms", loaded)
 		entities = append(entities, connector.SnapshotEntity{
 			Kind: "integration", Name: name, ExternalID: name, Attributes: attrs,
 		})
@@ -198,7 +185,7 @@ type statePayload struct {
 func buildEntities(raw []byte, maxEntities int) entityResult {
 	var states []statePayload
 	if err := json.Unmarshal(raw, &states); err != nil {
-		msg := malformed("Entities", err)
+		msg := snapshotutil.MalformedSection("Entities", err)
 		return entityResult{domains: msg, entityTable: msg}
 	}
 	if len(states) == 0 {
@@ -238,7 +225,7 @@ func buildEntities(raw []byte, maxEntities int) entityResult {
 	summary.WriteString("| Domain | Entities | Unavailable |\n")
 	summary.WriteString("|--------|----------|-------------|\n")
 	for _, d := range domains {
-		_, _ = fmt.Fprintf(&summary, "| %s | %d | %d |\n", cell(d), counts[d].total, counts[d].unavailable)
+		_, _ = fmt.Fprintf(&summary, "| %s | %d | %d |\n", snapshotutil.MDCell(d), counts[d].total, counts[d].unavailable)
 	}
 
 	shown := states
@@ -258,12 +245,12 @@ func buildEntities(raw []byte, maxEntities int) entityResult {
 		unit := attrString(s.Attributes, "unit_of_measurement")
 
 		_, _ = fmt.Fprintf(&table, "| %s | %s | %s | %s | %s | %s |\n",
-			cell(s.EntityID), cell(name), cell(domain), cell(state), cell(deviceClass), cell(unit))
+			snapshotutil.MDCell(s.EntityID), snapshotutil.MDCell(name), snapshotutil.MDCell(domain), snapshotutil.MDCell(state), snapshotutil.MDCell(deviceClass), snapshotutil.MDCell(unit))
 
 		attrs := map[string]any{"domain": domain, "state": state, "available": isAvailable(s.State)}
-		putString(attrs, "deviceClass", deviceClass)
-		putString(attrs, "unitOfMeasurement", unit)
-		putString(attrs, "entityCategory", attrString(s.Attributes, "entity_category"))
+		snapshotutil.PutString(attrs, "deviceClass", deviceClass)
+		snapshotutil.PutString(attrs, "unitOfMeasurement", unit)
+		snapshotutil.PutString(attrs, "entityCategory", attrString(s.Attributes, "entity_category"))
 		if features, ok := attrNumber(s.Attributes, "supported_features"); ok {
 			attrs["supportedFeatures"] = features
 		}
@@ -349,7 +336,7 @@ func buildServices(raw []byte) (string, map[string]string) {
 		Services map[string]json.RawMessage `json:"services"`
 	}
 	if err := json.Unmarshal(raw, &domains); err != nil {
-		return malformed("Services", err), nil
+		return snapshotutil.MalformedSection("Services", err), nil
 	}
 	if len(domains) == 0 {
 		return "_No services returned_", map[string]string{"service_domain_count": "0", "service_count": "0"}
@@ -368,7 +355,7 @@ func buildServices(raw []byte) (string, map[string]string) {
 		}
 		sort.Strings(names)
 		total += len(names)
-		_, _ = fmt.Fprintf(&b, "| %s | %d | %s |\n", cell(d.Domain), len(names), cell(truncateNames(names)))
+		_, _ = fmt.Fprintf(&b, "| %s | %d | %s |\n", snapshotutil.MDCell(d.Domain), len(names), snapshotutil.MDCell(truncateNames(names)))
 	}
 
 	return b.String(), map[string]string{
@@ -409,17 +396,5 @@ func attrIP(attrs map[string]any, key string) string {
 func putMeta(metadata map[string]string, key, value string) {
 	if value != "" {
 		metadata[key] = value
-	}
-}
-
-func putString(attrs map[string]any, key, value string) {
-	if value != "" {
-		attrs[key] = value
-	}
-}
-
-func putStrings(attrs map[string]any, key string, values []string) {
-	if len(values) > 0 {
-		attrs[key] = values
 	}
 }

@@ -12,6 +12,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/WiseLabz/wiselabz/internal/connector"
+	"github.com/WiseLabz/wiselabz/internal/httpx"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -56,17 +58,16 @@ func newSSHDockerClient(host string, config map[string]any) (*http.Client, strin
 		User:            user,
 		Auth:            auth,
 		HostKeyCallback: ssh.FixedHostKey(hostPublicKey),
-		Timeout:         30 * time.Second,
+		Timeout:         connector.DefaultHTTPTimeout,
 	}
-	transport := &http.Transport{
+	return newClient(httpx.Options{
 		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
 			return dialSSHStdio(ctx, addr, sshConfig)
 		},
 		// Each request gets its own SSH connection that the transport closes
 		// as soon as the response is consumed, so nothing outlives the client.
 		DisableKeepAlives: true,
-	}
-	return &http.Client{Timeout: 30 * time.Second, Transport: transport}, "http://docker", nil
+	}), "http://docker", nil
 }
 
 // dialSSHStdio opens an SSH connection and starts "docker system dial-stdio"
