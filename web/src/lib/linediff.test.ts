@@ -57,8 +57,8 @@ describe('lineDiff', () => {
 
   it('assigns correct line numbers', () => {
     const result = lineDiff('a\nb\nc', 'x\na\ny\nb\nz\nc');
-    const beforeLines = result.filter((l) => l.before !== undefined).map((l) => l.before);
-    const afterLines = result.filter((l) => l.after !== undefined).map((l) => l.after);
+    const beforeLines = result.filter((l) => l.before !== undefined).map((l) => l.before!);
+    const afterLines = result.filter((l) => l.after !== undefined).map((l) => l.after!);
     expect(Math.max(...beforeLines)).toBe(3);
     expect(Math.max(...afterLines)).toBe(6);
   });

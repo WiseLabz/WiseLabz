@@ -43,7 +43,7 @@ describe('downloadBlob', () => {
     vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
 
     const clickSpy = vi.fn();
-    vi.spyOn(document.body, 'appendChild').mockImplementation((el: HTMLElement) => {
+    vi.spyOn(document.body, 'appendChild').mockImplementation((el: Node) => {
       if (el instanceof HTMLAnchorElement) {
         el.click = clickSpy;
       }
@@ -61,7 +61,7 @@ describe('downloadBlob', () => {
     vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
 
     let capturedAnchor: HTMLAnchorElement | null = null;
-    vi.spyOn(document.body, 'appendChild').mockImplementation((el: HTMLElement) => {
+    vi.spyOn(document.body, 'appendChild').mockImplementation((el: Node) => {
       if (el instanceof HTMLAnchorElement) {
         capturedAnchor = el;
         el.click = vi.fn();

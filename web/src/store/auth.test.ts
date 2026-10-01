@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi, beforeEach } from 'vitest';
+import type { AuthSession, User } from '../api/model';
 
 vi.mock('../api/generated/auth/auth', async (orig) => ({
   ...(await orig<object>()),
@@ -39,13 +40,17 @@ const mockOidc = vi.mocked(postAuthOidcCallback);
 const mockSetAccessToken = vi.mocked(setAccessToken);
 const mockClearQueryClient = vi.mocked(queryClient.clear);
 
-const mockSession = {
+const mockSession: AuthSession = {
   accessToken: 'test-token',
+  expiresIn: 3600,
   user: {
     id: 'user123',
-    name: 'Test User',
+    username: 'testuser',
     email: 'test@example.com',
-  },
+    role: 'operator',
+    authSource: 'local',
+    createdAt: '2026-10-01T00:00:00Z',
+  } as User,
 };
 
 beforeEach(() => {
@@ -102,12 +107,12 @@ describe('useAuth', () => {
       mockLogin.mockResolvedValue({
         mfaRequired: true,
         ticket: 'mfa-ticket-123',
-        methods: ['totp', 'recovery_code'],
+        methods: ['totp', 'recovery'],
       });
       await useAuth.getState().login('user@example.com', 'password123');
       expect(useAuth.getState().status).toBe('unknown');
       expect(useAuth.getState().mfaTicket).toBe('mfa-ticket-123');
-      expect(useAuth.getState().mfaMethods).toEqual(['totp', 'recovery_code']);
+      expect(useAuth.getState().mfaMethods).toEqual(['totp', 'recovery']);
     });
 
     it('does not set access token when MFA is required', async () => {
@@ -181,14 +186,14 @@ describe('useAuth', () => {
   describe('loginOidc', () => {
     it('authenticates via OIDC callback', async () => {
       mockOidc.mockResolvedValue(mockSession);
-      await useAuth.getState().loginOidc({ code: 'auth-code', state: 'state-value' });
+      await useAuth.getState().loginOidc({ providerId: 'okta', code: 'auth-code', state: 'state-value' });
       expect(useAuth.getState().status).toBe('authenticated');
       expect(useAuth.getState().user).toEqual(mockSession.user);
     });
 
     it('sets access token on successful OIDC login', async () => {
       mockOidc.mockResolvedValue(mockSession);
-      await useAuth.getState().loginOidc({ code: 'auth-code', state: 'state-value' });
+      await useAuth.getState().loginOidc({ providerId: 'okta', code: 'auth-code', state: 'state-value' });
       expect(mockSetAccessToken).toHaveBeenCalledWith('test-token');
     });
   });
