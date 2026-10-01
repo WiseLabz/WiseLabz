@@ -594,6 +594,7 @@ func TestNotifyAlertCreated_NoChannelsConfigured(t *testing.T) {
 	if err := s.CreateUser(context.Background(), u); err != nil {
 		t.Fatalf("create user: %v", err)
 	}
+	grantReader(t, s, u.ID, "service-1")
 
 	// Dispatch alert to all users.
 	d.NotifyAlertCreated(context.Background(), "alert-1", "Test Alert", "This is a test alert")
@@ -737,6 +738,7 @@ func TestNotifyAlert_RoutingAboveSeverityDelivers(t *testing.T) {
 	if err := s.CreateUser(context.Background(), u); err != nil {
 		t.Fatalf("create user: %v", err)
 	}
+	grantReader(t, s, u.ID, "service-1")
 
 	// Create an alert with "critical" severity
 	alert := &store.AlertRecord{
@@ -801,6 +803,7 @@ func TestNotifyAlert_ConnectorCategoryFilterMatches(t *testing.T) {
 	if err := s.CreateUser(context.Background(), u); err != nil {
 		t.Fatalf("create user: %v", err)
 	}
+	grantReader(t, s, u.ID, connector.ID)
 
 	// Create an alert tied to the networking connector.
 	alert := &store.AlertRecord{
@@ -865,6 +868,7 @@ func TestNotifyAlert_ConnectorCategoryFilterMismatch(t *testing.T) {
 	if err := s.CreateUser(context.Background(), u); err != nil {
 		t.Fatalf("create user: %v", err)
 	}
+	grantReader(t, s, u.ID, connector.ID)
 
 	// Create an alert tied to the dns connector.
 	alert := &store.AlertRecord{
@@ -923,6 +927,7 @@ func TestNotifyAlert_ConnectorIDFilterMatches(t *testing.T) {
 	if err := s.CreateUser(context.Background(), u); err != nil {
 		t.Fatalf("create user: %v", err)
 	}
+	grantReader(t, s, u.ID, connector.ID)
 
 	// Create an alert tied to this connector.
 	alert := &store.AlertRecord{
@@ -998,6 +1003,7 @@ func TestNotifyAlert_ConnectorIDFilterMismatch(t *testing.T) {
 	if err := s.CreateUser(context.Background(), u); err != nil {
 		t.Fatalf("create user: %v", err)
 	}
+	grantReader(t, s, u.ID, connector2.ID)
 
 	// Create an alert tied to connector2 (different from the route's filter).
 	alert := &store.AlertRecord{
@@ -1056,6 +1062,7 @@ func TestNotifyAlert_ConnectorCategoryAndIDFilterBothMatch(t *testing.T) {
 	if err := s.CreateUser(context.Background(), u); err != nil {
 		t.Fatalf("create user: %v", err)
 	}
+	grantReader(t, s, u.ID, connector.ID)
 
 	// Create an alert tied to this connector (both filters should match).
 	alert := &store.AlertRecord{
@@ -1131,6 +1138,7 @@ func TestNotifyAlert_ConnectorCategoryAndIDFilterPartialMismatch(t *testing.T) {
 	if err := s.CreateUser(context.Background(), u); err != nil {
 		t.Fatalf("create user: %v", err)
 	}
+	grantReader(t, s, u.ID, connector2.ID)
 
 	// Create an alert tied to connector2 (category matches but ID doesn't).
 	alert := &store.AlertRecord{
@@ -1189,6 +1197,7 @@ func TestNotifyAlert_ConnectorFiltersWildcard(t *testing.T) {
 	if err := s.CreateUser(context.Background(), u); err != nil {
 		t.Fatalf("create user: %v", err)
 	}
+	grantReader(t, s, u.ID, connector.ID)
 
 	// Create an alert tied to any connector.
 	alert := &store.AlertRecord{
@@ -1344,6 +1353,8 @@ func TestNotifyAlertsCreatedBatch(t *testing.T) {
 	if err := s.CreateUser(ctx, disabled); err != nil {
 		t.Fatal(err)
 	}
+	grantReader(t, s, user.ID, "service-batch")
+	grantReader(t, s, disabled.ID, "service-batch")
 	setChannelAndRoutingConfig(t, s, "smtp", "", `[{"eventType":"alert.created","channel":"smtp","enabled":true,"minSeverity":"critical","connectorId":"service-batch"}]`)
 	// No alert rows are needed: the batch already supplies routing metadata.
 	d := NewDispatcher(s, nil)
@@ -1421,5 +1432,42 @@ func TestNotifySystemEvent_FansOutAndHonoursRouting(t *testing.T) {
 	defer mu.Unlock()
 	if hits != 1 {
 		t.Errorf("webhook hits = %d, want 1 (warning routed, info below minSeverity)", hits)
+	}
+}
+
+// grantReader gives userID a viewer grant on connectorID so connector-scoped
+// notifications reach them (#527).
+func grantReader(t *testing.T, s *store.Store, userID, connectorID string) {
+	t.Helper()
+	if _, err := s.UpsertConnectorGrant(context.Background(), userID, connectorID, "viewer"); err != nil {
+		t.Fatalf("grant %s on %s: %v", userID, connectorID, err)
+	}
+}
+
+// TestNotifyAlertCreated_OnlyConnectorReaders verifies an alert's notification
+// reaches users with a grant on its connector and nobody else (#527).
+func TestNotifyAlertCreated_OnlyConnectorReaders(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	reader := &store.User{Username: "reader", Email: "reader@example.com"}
+	stranger := &store.User{Username: "stranger", Email: "stranger@example.com"}
+	for _, u := range []*store.User{reader, stranger} {
+		if err := s.CreateUser(ctx, u); err != nil {
+			t.Fatal(err)
+		}
+	}
+	grantReader(t, s, reader.ID, "service-scoped")
+
+	d := NewDispatcher(s, nil)
+	d.NotifyAlertsCreated(ctx, []store.AlertRecord{
+		{ID: "scoped-alert", ServiceID: "service-scoped", Severity: "warning", Title: "Secret", Description: "hidden"},
+	})
+	waitForDispatch(t, d)
+
+	if _, total, err := s.ListNotifications(ctx, reader.ID, false, 0, 10); err != nil || total != 1 {
+		t.Fatalf("reader: total=%d err=%v, want 1", total, err)
+	}
+	if _, total, err := s.ListNotifications(ctx, stranger.ID, false, 0, 10); err != nil || total != 0 {
+		t.Fatalf("stranger: total=%d err=%v, want 0", total, err)
 	}
 }

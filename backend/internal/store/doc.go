@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/WiseLabz/wiselabz/internal/auth"
 	"github.com/google/uuid"
 )
 
@@ -245,6 +246,23 @@ func scanDoc(row rowScanner) (DocRecord, error) {
 // body is needed.
 func (s *Store) ListAllDocs(ctx context.Context, search string, offset, limit int) ([]DocRecord, int, error) {
 	where, args := docSearchWhere(search)
+	return paginatedQuery(ctx, s.db, "docs", docSummaryColumns, where, args, "updated_at DESC", limit, offset, scanDocSummary)
+}
+
+// ListViewableDocs is ListAllDocs limited to docs the caller may view, with the
+// total computed over that same set (so it can't reveal hidden docs): docs on
+// connectors userID holds a grant on, plus lab-wide docs (no connector) for
+// instance admins only, since those aggregate every connector's data.
+func (s *Store) ListViewableDocs(ctx context.Context, userID, search string, offset, limit int) ([]DocRecord, int, error) {
+	where, args := docSearchWhere(search)
+	keyFilter, keyArgs := apiKeyConnectorFilter(ctx, "service_id")
+	where += ` AND (service_id IN (SELECT connector_id FROM user_connector_roles WHERE user_id = ?` + keyFilter + `)`
+	args = append(args, userID)
+	args = append(args, keyArgs...)
+	if auth.InstanceAdminFromContext(ctx) {
+		where += ` OR service_id IS NULL OR service_id = ''`
+	}
+	where += `)`
 	return paginatedQuery(ctx, s.db, "docs", docSummaryColumns, where, args, "updated_at DESC", limit, offset, scanDocSummary)
 }
 

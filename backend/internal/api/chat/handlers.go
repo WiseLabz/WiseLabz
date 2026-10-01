@@ -66,6 +66,9 @@ func (h *Handler) CreateConversation(w http.ResponseWriter, r *http.Request) {
 				httputil.Errorf(w, err)
 				return
 			}
+		} else if visible {
+			// Lab-wide docs (e.g. Lab Topology) are instance-admin only.
+			visible = auth.InstanceAdminFromContext(r.Context())
 		}
 		if !visible {
 			httputil.Error(w, http.StatusNotFound, "not_found", "Doc not found")
