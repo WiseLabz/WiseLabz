@@ -74,6 +74,7 @@ go.work	bmp
 go.work.sum	bmp
 backend/*	b
 .golangci.yml	b
+scripts/hooks/*	-
 scripts/ci/*	bp
 .github/actions/go-cache-*	bwp
 web/*	f

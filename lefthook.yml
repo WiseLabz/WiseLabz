@@ -1,41 +1,65 @@
+# Which checks run is decided by scripts/hooks/areas.sh, which reuses the CI
+# classifier (scripts/ci/changes.sh). LEFTHOOK_FULL=1 forces every check.
 pre-commit:
   parallel: true
   commands:
-    gen-api:
+    skip-notice:
       priority: 1
-      glob: "docs/openapi.yaml"
-      run: |
-        npm --prefix web run gen:api
-        git add web/src/api/generated web/src/api/model
+      skip:
+        - run: "! scripts/hooks/areas.sh skip-all"
+      run: scripts/hooks/areas.sh notice
     gofmt:
       priority: 2
+      glob: "*.go"
+      skip:
+        - run: scripts/hooks/areas.sh skip backend
       run: |
-        gofiles=$(find ./backend -name '*.go' -type f)
-        if [ -n "$gofiles" ]; then
-          unformatted=$(gofmt -l $gofiles)
-          if [ -n "$unformatted" ]; then
-            echo "Unformatted Go files:"
-            echo "$unformatted"
-            exit 1
-          fi
+        unformatted=$(gofmt -l {staged_files})
+        if [ -n "$unformatted" ]; then
+          echo "Unformatted Go files:"
+          echo "$unformatted"
+          exit 1
         fi
     golangci-lint:
       priority: 2
+      skip:
+        - run: scripts/hooks/areas.sh skip backend
       run: |
         if [ -n "$(find ./backend -name '*.go' -type f)" ]; then
-          golangci-lint run ./backend/...
+          golangci-lint run --new-from-rev=HEAD ./backend/...
         fi
     go-test:
       priority: 2
+      skip:
+        - run: scripts/hooks/areas.sh skip backend
       run: |
         if [ -n "$(find ./backend -name '*_test.go' -type f)" ]; then
           go test -short ./backend/...
         else
           echo "No test files yet, skipping"
         fi
-    npm-lint:
+    web-lint:
       priority: 2
-      run: npm --prefix web run lint
+      skip:
+        - run: scripts/hooks/areas.sh skip frontend
+      # Regenerate the API client first when the spec is staged, so the lint
+      # never reads files that are being rewritten.
+      run: |
+        if ! git diff --cached --quiet -- docs/openapi.yaml; then
+          bun run --cwd web gen:api
+          git add web/src/api/generated web/src/api/model
+        fi
+        bun run --cwd web lint
+    actionlint:
+      priority: 2
+      skip:
+        - run: scripts/hooks/areas.sh skip workflows
+      run: |
+        if command -v actionlint >/dev/null 2>&1; then
+          actionlint
+        else
+          echo "actionlint not installed, skipping workflow lint"
+        fi
 
 commit-msg:
   commands:
