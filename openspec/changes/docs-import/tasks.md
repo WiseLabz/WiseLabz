@@ -21,4 +21,4 @@
 ## 4. Delivery
 
 - [x] 4.1 Update ARCHITECTURE.md and the roadmap PR 4 status; full Go and frontend checks; strict OpenSpec validation.
-- [ ] 4.2 Refresh and commit graphify output; open the PR with `Closes #514`; file the BookStack/Wiki.js follow-up issue; fix CI until green.
+- [x] 4.2 Refresh and commit graphify output; open the PR with `Closes #514`; file the BookStack/Wiki.js follow-up issue; fix CI until green.
