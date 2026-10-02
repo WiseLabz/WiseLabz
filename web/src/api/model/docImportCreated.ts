@@ -7,13 +7,9 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export type DocVersionMetaTrigger =
-  (typeof DocVersionMetaTrigger)[keyof typeof DocVersionMetaTrigger];
-
-export const DocVersionMetaTrigger = {
-  ai: 'ai',
-  template: 'template',
-  manual: 'manual',
-  sync: 'sync',
-  import: 'import',
-} as const;
+export interface DocImportCreated {
+  docId: string;
+  title: string;
+  parentId: string;
+  serviceId: string;
+}

@@ -15,6 +15,8 @@ import type {
   DocAttachment,
   DocEditProposal,
   DocEditProposalPage,
+  DocImportCreated,
+  DocImportPreview,
   DocLock,
   DocNode,
   DocPage,
@@ -53,6 +55,8 @@ import {
   getPostDocsEditProposalsProposalIdApproveResponseMock,
   getPostDocsEditProposalsProposalIdRejectResponseMock,
   getPostDocsGenerateResponseMock,
+  getPostDocsImportImportIdCommitResponseMock,
+  getPostDocsImportResponseMock,
   getPostDocsResponseMock,
   getPostDocsShareLinksResponseMock,
   getPostDocsTopologyResponseMock,
@@ -63,6 +67,8 @@ export {
   getGetDocsResponseMock,
   getPostDocsResponseMock,
   getGetDocsTrashResponseMock,
+  getPostDocsImportResponseMock,
+  getPostDocsImportImportIdCommitResponseMock,
   getPostDocsDocIdRestoreResponseMock,
   getGetDocsTreeResponseMock,
   getGetDocsServiceConnectorIdResponseMock,
@@ -148,6 +154,54 @@ export const getGetDocsTrashMockHandler = (
             : overrideResponse
           : getGetDocsTrashResponseMock(),
         { status: 200 }
+      );
+    },
+    options
+  );
+};
+
+export const getPostDocsImportMockHandler = (
+  overrideResponse?:
+    | DocImportPreview
+    | ((
+        info: Parameters<Parameters<typeof http.post>[1]>[0]
+      ) => Promise<DocImportPreview> | DocImportPreview),
+  options?: RequestHandlerOptions
+) => {
+  return http.post(
+    '*/docs/import',
+    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+      return HttpResponse.json(
+        overrideResponse !== undefined
+          ? typeof overrideResponse === 'function'
+            ? await overrideResponse(info)
+            : overrideResponse
+          : getPostDocsImportResponseMock(),
+        { status: 201 }
+      );
+    },
+    options
+  );
+};
+
+export const getPostDocsImportImportIdCommitMockHandler = (
+  overrideResponse?:
+    | DocImportCreated[]
+    | ((
+        info: Parameters<Parameters<typeof http.post>[1]>[0]
+      ) => Promise<DocImportCreated[]> | DocImportCreated[]),
+  options?: RequestHandlerOptions
+) => {
+  return http.post(
+    '*/docs/import/:importId/commit',
+    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+      return HttpResponse.json(
+        overrideResponse !== undefined
+          ? typeof overrideResponse === 'function'
+            ? await overrideResponse(info)
+            : overrideResponse
+          : getPostDocsImportImportIdCommitResponseMock(),
+        { status: 201 }
       );
     },
     options
@@ -821,6 +875,8 @@ export const getDocsMock = () => [
   getGetDocsMockHandler(),
   getPostDocsMockHandler(),
   getGetDocsTrashMockHandler(),
+  getPostDocsImportMockHandler(),
+  getPostDocsImportImportIdCommitMockHandler(),
   getPostDocsDocIdRestoreMockHandler(),
   getGetDocsTreeMockHandler(),
   getGetDocsServiceConnectorIdMockHandler(),

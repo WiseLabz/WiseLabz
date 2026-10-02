@@ -23,6 +23,7 @@ import (
 	"github.com/WiseLabz/wiselabz/internal/config"
 	"github.com/WiseLabz/wiselabz/internal/doc"
 	"github.com/WiseLabz/wiselabz/internal/docexport"
+	"github.com/WiseLabz/wiselabz/internal/docimport"
 	"github.com/WiseLabz/wiselabz/internal/health"
 	"github.com/WiseLabz/wiselabz/internal/leader"
 	"github.com/WiseLabz/wiselabz/internal/logsafe"
@@ -312,6 +313,14 @@ func registerJobs(
 		return notifDispatcher.RunDigestSweep(jobCtx, time.Now().UTC(), logger)
 	}); err != nil {
 		logger.Error("Failed to add digest job", "error", err)
+		os.Exit(1)
+	}
+	// Staged Markdown/Obsidian imports expire after an hour; sweep the leftovers.
+	importStage := docimport.NewStage(cfg.Attachments.ImportDir)
+	if _, err := jobRunner.AddJob("docImportSweep", "*/10 * * * *", func(context.Context) error {
+		return importStage.Sweep(time.Now())
+	}); err != nil {
+		logger.Error("Failed to add doc import sweep job", "error", err)
 		os.Exit(1)
 	}
 	if _, err := jobRunner.AddJob("alertExpirer", "0 * * * * *", func(jobCtx context.Context) error {

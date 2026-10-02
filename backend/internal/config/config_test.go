@@ -286,6 +286,7 @@ func TestLoadEnvOverrideAllFields(t *testing.T) {
 		"WISELABZ_BACKUP_MAX_AGE_HOURS":                 "2",
 		"WISELABZ_ATTACHMENTS_DIR":                      "/tmp/env-blobs",
 		"WISELABZ_ATTACHMENTS_MAX_BYTES":                "12345",
+		"WISELABZ_ATTACHMENTS_IMPORT_DIR":               "/tmp/env-imports",
 		"WISELABZ_BACKUP_MAX_IMPORT_BYTES":              "67890",
 		"WISELABZ_DOC_EXPORT_INCLUDE_ATTACHMENTS":       "false",
 		"WISELABZ_DOC_EXPORT_MAX_ATTACHMENT_BYTES":      "24680",
@@ -316,7 +317,7 @@ func TestLoadEnvOverrideAllFields(t *testing.T) {
 	}
 
 	want := Config{
-		Attachments: AttachmentSettings{Dir: "/tmp/env-blobs", MaxBytes: 12345},
+		Attachments: AttachmentSettings{Dir: "/tmp/env-blobs", MaxBytes: 12345, ImportDir: "/tmp/env-imports"},
 		DB:          Database{Driver: "postgres", DSN: "postgres://x", MaxOpenConns: 7, MaxIdleConns: 3, ConnMaxLifetimeSeconds: 60, ConnMaxIdleTimeSeconds: 30},
 		Server:      Server{Host: "127.0.0.1", Port: 9090, Origin: "https://example.com", TrustedProxies: "10.0.0.0/8", PublicURL: "https://reports.example.com", Embed: true, ReadTimeoutSeconds: 5, WriteTimeoutSeconds: 6, ShutdownTimeoutSeconds: 7},
 		Encryption:  EncryptionSettings{Key: "env-key"},
@@ -709,7 +710,7 @@ func TestAttachmentSettingsDefaultsAndEnvironment(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Attachments.Dir != "/data/attachments" || cfg.Attachments.MaxBytes != 25<<20 || cfg.Backup.MaxImportBytes != 1<<30 || !cfg.DocExport.IncludeAttachments || cfg.DocExport.MaxAttachmentBytes != 25<<20 {
+	if cfg.Attachments.Dir != "/data/attachments" || cfg.Attachments.MaxBytes != 25<<20 || cfg.Attachments.ImportDir != "/data/imports" || cfg.Backup.MaxImportBytes != 1<<30 || !cfg.DocExport.IncludeAttachments || cfg.DocExport.MaxAttachmentBytes != 25<<20 {
 		t.Fatalf("defaults %+v %+v %+v", cfg.Attachments, cfg.Backup, cfg.DocExport)
 	}
 	t.Setenv("WISELABZ_ATTACHMENTS_DIR", "/tmp/attachments-test")

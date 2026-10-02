@@ -43,6 +43,8 @@ type Config struct {
 type AttachmentSettings struct {
 	Dir      string `mapstructure:"dir"`
 	MaxBytes int64  `mapstructure:"max_bytes"`
+	// ImportDir stages uploaded Markdown/Obsidian imports until they are committed or expire.
+	ImportDir string `mapstructure:"import_dir"`
 }
 
 // MetricsSettings configures the Prometheus /metrics endpoint. It is off by default; when enabled
@@ -374,6 +376,7 @@ func Load() (*Config, error) {
 	// Set defaults
 	v.SetDefault("attachments.dir", "/data/attachments")
 	v.SetDefault("attachments.max_bytes", 25<<20)
+	v.SetDefault("attachments.import_dir", "/data/imports")
 	v.SetDefault("backup.max_import_bytes", 1<<30)
 	v.SetDefault("doc_export.include_attachments", true)
 	v.SetDefault("doc_export.max_attachment_bytes", 25<<20)
@@ -459,7 +462,7 @@ func Load() (*Config, error) {
 		"log.level", "log.format",
 		"retention.snapshot_days", "retention.doc_version_days", "retention.alert_days", "retention.sync_run_days", "retention.audit_days", "retention.health_check_days", "retention.report_days", "retention.deleted_docs_days", "retention.cron_expr",
 		"backup.dir", "backup.cron_expr", "backup.max_backups", "backup.max_age_hours", "backup.enabled", "backup.max_import_bytes",
-		"attachments.dir", "attachments.max_bytes",
+		"attachments.dir", "attachments.max_bytes", "attachments.import_dir",
 		"metrics.enabled", "metrics.token",
 		"doc_export.dir", "doc_export.cron_expr", "doc_export.enabled", "doc_export.include_attachments", "doc_export.max_attachment_bytes",
 		"doc_export.git.remote", "doc_export.git.branch", "doc_export.git.path",
