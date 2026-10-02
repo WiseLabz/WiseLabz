@@ -118,7 +118,7 @@ func TestEveryKeyEnvOverridable(t *testing.T) {
 			case f.Type.Kind() == reflect.Struct:
 				setEnv(name, f.Type)
 			case f.Type.Kind() == reflect.Slice: // OIDC providers: file-only
-			case f.Type.Kind() == reflect.Int:
+			case f.Type.Kind() == reflect.Int || (f.Type.Kind() == reflect.Int64 && f.Type != reflect.TypeOf(time.Duration(0))):
 				t.Setenv("WISELABZ_"+strings.ToUpper(name), "7")
 			case f.Type == reflect.TypeOf(time.Duration(0)):
 				t.Setenv("WISELABZ_"+strings.ToUpper(name), "7s")

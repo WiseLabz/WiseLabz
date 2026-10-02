@@ -127,13 +127,14 @@ func runRestore(args []string) int {
 	}
 
 	s := store.New(db, cfg.DB.Driver)
-	result, err := backup.ImportFromFile(context.Background(), s, *file)
+	result, err := backup.ImportFromFile(context.Background(), s, *file, backup.ArchiveOptions{BlobDir: cfg.Attachments.Dir, MaxImportBytes: cfg.Backup.MaxImportBytes, MaxAttachmentBytes: cfg.Attachments.MaxBytes})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "restore: import: %v\n", err)
 		return 1
 	}
 
 	fmt.Println("Restore complete.")
+	fmt.Printf("  attachments: imported=%d skipped=%d\n", result.Attachments.Imported, result.Attachments.Skipped)
 	fmt.Printf("  connectors:       imported=%d skipped=%d\n", result.Connectors.Imported, result.Connectors.Skipped)
 	fmt.Printf("  docs:             imported=%d skipped=%d\n", result.Docs.Imported, result.Docs.Skipped)
 	fmt.Printf("  docVersions:      imported=%d skipped=%d\n", result.DocVersions.Imported, result.DocVersions.Skipped)
@@ -155,7 +156,7 @@ func formatCounts(counts map[string]int) string {
 		return "(no counts)"
 	}
 	parts := make([]string, 0, len(counts))
-	for _, entity := range []string{"connectors", "docs", "docVersions", "templates", "templateSections"} {
+	for _, entity := range []string{"attachments", "connectors", "docs", "docVersions", "templates", "templateSections"} {
 		if v, ok := counts[entity]; ok {
 			parts = append(parts, fmt.Sprintf("%s=%d", entity, v))
 		}

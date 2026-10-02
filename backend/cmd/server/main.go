@@ -19,6 +19,7 @@ import (
 	syshandler "github.com/WiseLabz/wiselabz/internal/api/system"
 	"github.com/WiseLabz/wiselabz/internal/auth"
 	"github.com/WiseLabz/wiselabz/internal/backup"
+	"github.com/WiseLabz/wiselabz/internal/blobstore"
 	"github.com/WiseLabz/wiselabz/internal/config"
 	"github.com/WiseLabz/wiselabz/internal/doc"
 	"github.com/WiseLabz/wiselabz/internal/docexport"
@@ -342,6 +343,7 @@ func registerJobs(
 	// tracking (#384) — see jobRunner.SetHealthTracking above.
 	if cfg.DocExport.Enabled {
 		docExporter := docexport.NewExporter(s)
+		docExporter.ConfigureAttachments(blobstore.New(cfg.Attachments.Dir, cfg.Attachments.MaxBytes), cfg.DocExport.IncludeAttachments, cfg.DocExport.MaxAttachmentBytes)
 		if g := cfg.DocExport.Git; g.Enabled() {
 			if err := docExporter.ConfigureGit(docexport.GitOptions{
 				Remote: g.Remote, Branch: g.Branch, Path: g.Path,

@@ -34,8 +34,9 @@ export default defineConfig({
       },
     },
     hooks: {
-      // Format generated output so it passes the repo's eslint/prettier gate.
-      afterAllFilesWrite: 'prettier --write',
+      // Patch binary (Blob) mocks that orval emits as `{}`, then run prettier so
+      // the output passes the repo's eslint/prettier gate. See the script header.
+      afterAllFilesWrite: 'node scripts/fix-binary-mocks.mjs',
     },
   },
 });

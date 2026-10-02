@@ -131,6 +131,15 @@ func TestRunMigrationsDown(t *testing.T) {
 		t.Fatalf("RunMigrations() error: %v", err)
 	}
 
+	if !attachmentTableExists(t, db, "sqlite", "doc_attachments") {
+		t.Fatal("doc_attachments missing")
+	}
+	if err := RunMigrationsDown(db, "sqlite", logger); err != nil {
+		t.Fatalf("rollback doc_attachments: %v", err)
+	}
+	if attachmentTableExists(t, db, "sqlite", "doc_attachments") {
+		t.Fatal("doc_attachments remains after rollback")
+	}
 	for _, col := range []string{"parent_id", "deleted_at", "created_by"} {
 		if !hasColumn(t, db, "sqlite", "docs", col) {
 			t.Fatalf("docs.%s missing", col)
@@ -392,6 +401,15 @@ func TestRunMigrationsDown(t *testing.T) {
 	}
 	if err := db.QueryRow("SELECT name FROM sqlite_master WHERE type='table' AND name='user_mfa_factors'").Scan(&mfaFactorsTable); err != nil {
 		t.Fatalf("user_mfa_factors table missing after reapply: %v", err)
+	}
+	if !attachmentTableExists(t, db, "sqlite", "doc_attachments") {
+		t.Fatal("doc_attachments missing")
+	}
+	if err := RunMigrationsDown(db, "sqlite", logger); err != nil {
+		t.Fatalf("rollback doc_attachments: %v", err)
+	}
+	if attachmentTableExists(t, db, "sqlite", "doc_attachments") {
+		t.Fatal("doc_attachments remains after rollback")
 	}
 	for _, col := range []string{"parent_id", "deleted_at", "created_by"} {
 		if !hasColumn(t, db, "sqlite", "docs", col) {
@@ -679,6 +697,15 @@ func TestRunMigrationsDownPostgres(t *testing.T) {
 	if err := RunMigrations(db, "postgres", logger); err != nil {
 		t.Fatalf("RunMigrations() error: %v", err)
 	}
+	if !attachmentTableExists(t, db, "postgres", "doc_attachments") {
+		t.Fatal("doc_attachments missing")
+	}
+	if err := RunMigrationsDown(db, "postgres", logger); err != nil {
+		t.Fatalf("rollback doc_attachments: %v", err)
+	}
+	if attachmentTableExists(t, db, "postgres", "doc_attachments") {
+		t.Fatal("doc_attachments remains after rollback")
+	}
 	for _, col := range []string{"parent_id", "deleted_at", "created_by"} {
 		if !hasColumn(t, db, "postgres", "docs", col) {
 			t.Fatalf("docs.%s missing", col)
@@ -928,7 +955,7 @@ func hasColumn(t *testing.T, db *sql.DB, driver, table, column string) bool {
 		err := db.QueryRow(`
 			SELECT COUNT(*)
 			FROM information_schema.columns
-			WHERE table_name = $1 AND column_name = $2
+			WHERE table_schema = current_schema() AND table_name = $1 AND column_name = $2
 		`, table, column).Scan(&count)
 		if err != nil {
 			t.Fatalf("information_schema.columns(%s.%s): %v", table, column, err)
@@ -1297,4 +1324,17 @@ func assertMoreNotificationChannelsAllowed(t *testing.T, db *sql.DB, driver stri
 	if has := strings.Contains(definition, "'gotify'"); has != present {
 		t.Errorf("notification_deliveries CHECK constraint gotify present=%v, want %v (schema: %s)", has, present, definition)
 	}
+}
+
+func attachmentTableExists(t *testing.T, db *sql.DB, driver, table string) bool {
+	t.Helper()
+	var n int
+	query := "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?"
+	if driver == "postgres" {
+		query = "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=current_schema() AND table_name=$1"
+	}
+	if err := db.QueryRow(query, table).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	return n > 0
 }

@@ -17,25 +17,32 @@ import (
 
 // Config is the top-level configuration structure.
 type Config struct {
-	DB         Database           `mapstructure:"db"`
-	Server     Server             `mapstructure:"server"`
-	Encryption EncryptionSettings `mapstructure:"encryption"`
-	Auth       AuthSettings       `mapstructure:"auth"`
-	AI         AISettings         `mapstructure:"ai"`
-	Sync       SyncSettings       `mapstructure:"sync"`
-	HA         HASettings         `mapstructure:"ha"`
-	Quality    QualitySettings    `mapstructure:"quality"`
-	Health     HealthSettings     `mapstructure:"health"`
-	Rotation   RotationSettings   `mapstructure:"rotation"`
-	Log        LogSettings        `mapstructure:"log"`
-	Retention  RetentionSettings  `mapstructure:"retention"`
-	Backup     BackupSettings     `mapstructure:"backup"`
-	DocExport  DocExportSettings  `mapstructure:"doc_export"`
-	Metrics    MetricsSettings    `mapstructure:"metrics"`
+	Attachments AttachmentSettings `mapstructure:"attachments"`
+	DB          Database           `mapstructure:"db"`
+	Server      Server             `mapstructure:"server"`
+	Encryption  EncryptionSettings `mapstructure:"encryption"`
+	Auth        AuthSettings       `mapstructure:"auth"`
+	AI          AISettings         `mapstructure:"ai"`
+	Sync        SyncSettings       `mapstructure:"sync"`
+	HA          HASettings         `mapstructure:"ha"`
+	Quality     QualitySettings    `mapstructure:"quality"`
+	Health      HealthSettings     `mapstructure:"health"`
+	Rotation    RotationSettings   `mapstructure:"rotation"`
+	Log         LogSettings        `mapstructure:"log"`
+	Retention   RetentionSettings  `mapstructure:"retention"`
+	Backup      BackupSettings     `mapstructure:"backup"`
+	DocExport   DocExportSettings  `mapstructure:"doc_export"`
+	Metrics     MetricsSettings    `mapstructure:"metrics"`
 
 	// AdminPassword bootstraps the first admin user when no users exist
 	// (env-only: WISELABZ_ADMIN_PASSWORD). Ignored once a user exists.
 	AdminPassword string `mapstructure:"admin_password"`
+}
+
+// AttachmentSettings configures persistent blobs and the upload size limit.
+type AttachmentSettings struct {
+	Dir      string `mapstructure:"dir"`
+	MaxBytes int64  `mapstructure:"max_bytes"`
 }
 
 // MetricsSettings configures the Prometheus /metrics endpoint. It is off by default; when enabled
@@ -252,21 +259,24 @@ type RetentionSettings struct {
 
 // BackupSettings holds scheduled backup configuration.
 type BackupSettings struct {
-	Dir         string `mapstructure:"dir"`           // directory where backups are written
-	CronExpr    string `mapstructure:"cron_expr"`     // cron expression for scheduled backups
-	MaxBackups  int    `mapstructure:"max_backups"`   // keep at most this many recent backups
-	MaxAgeHours int    `mapstructure:"max_age_hours"` // delete backups older than this
-	Enabled     bool   `mapstructure:"enabled"`       // enable/disable scheduled backups
+	MaxImportBytes int64  `mapstructure:"max_import_bytes"`
+	Dir            string `mapstructure:"dir"`           // directory where backups are written
+	CronExpr       string `mapstructure:"cron_expr"`     // cron expression for scheduled backups
+	MaxBackups     int    `mapstructure:"max_backups"`   // keep at most this many recent backups
+	MaxAgeHours    int    `mapstructure:"max_age_hours"` // delete backups older than this
+	Enabled        bool   `mapstructure:"enabled"`       // enable/disable scheduled backups
 }
 
 // DocExportSettings holds scheduled doc export configuration: writing every
 // generated doc as Markdown to a local directory on a cron schedule, and
 // optionally committing and pushing it to a Git remote (see Git).
 type DocExportSettings struct {
-	Dir      string               `mapstructure:"dir"`       // directory where exported Markdown docs are written (the persistent clone in Git mode)
-	CronExpr string               `mapstructure:"cron_expr"` // cron expression for scheduled export
-	Enabled  bool                 `mapstructure:"enabled"`   // enable/disable scheduled doc export
-	Git      DocExportGitSettings `mapstructure:"git"`       // optional Git remote target; disabled while Remote is empty
+	IncludeAttachments bool                 `mapstructure:"include_attachments"`
+	MaxAttachmentBytes int64                `mapstructure:"max_attachment_bytes"`
+	Dir                string               `mapstructure:"dir"`       // directory where exported Markdown docs are written (the persistent clone in Git mode)
+	CronExpr           string               `mapstructure:"cron_expr"` // cron expression for scheduled export
+	Enabled            bool                 `mapstructure:"enabled"`   // enable/disable scheduled doc export
+	Git                DocExportGitSettings `mapstructure:"git"`       // optional Git remote target; disabled while Remote is empty
 }
 
 // DocExportGitSettings configures pushing the doc export to a Git remote.
@@ -362,6 +372,11 @@ func Load() (*Config, error) {
 	v.AddConfigPath("./deploy/")
 
 	// Set defaults
+	v.SetDefault("attachments.dir", "/data/attachments")
+	v.SetDefault("attachments.max_bytes", 25<<20)
+	v.SetDefault("backup.max_import_bytes", 1<<30)
+	v.SetDefault("doc_export.include_attachments", true)
+	v.SetDefault("doc_export.max_attachment_bytes", 25<<20)
 	v.SetDefault("server.host", "0.0.0.0")
 	v.SetDefault("server.port", 8080)
 	v.SetDefault("server.embed", false)
@@ -443,9 +458,10 @@ func Load() (*Config, error) {
 		"rotation.max_age_days", "rotation.warn_days",
 		"log.level", "log.format",
 		"retention.snapshot_days", "retention.doc_version_days", "retention.alert_days", "retention.sync_run_days", "retention.audit_days", "retention.health_check_days", "retention.report_days", "retention.deleted_docs_days", "retention.cron_expr",
-		"backup.dir", "backup.cron_expr", "backup.max_backups", "backup.max_age_hours", "backup.enabled",
+		"backup.dir", "backup.cron_expr", "backup.max_backups", "backup.max_age_hours", "backup.enabled", "backup.max_import_bytes",
+		"attachments.dir", "attachments.max_bytes",
 		"metrics.enabled", "metrics.token",
-		"doc_export.dir", "doc_export.cron_expr", "doc_export.enabled",
+		"doc_export.dir", "doc_export.cron_expr", "doc_export.enabled", "doc_export.include_attachments", "doc_export.max_attachment_bytes",
 		"doc_export.git.remote", "doc_export.git.branch", "doc_export.git.path",
 		"doc_export.git.author_name", "doc_export.git.author_email", "doc_export.git.token",
 		"doc_export.git.ssh_key_path", "doc_export.git.ssh_known_hosts", "doc_export.git.insecure_skip_host_key",

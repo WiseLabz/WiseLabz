@@ -3,7 +3,6 @@ package backup
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -65,7 +64,7 @@ func LatestBundle(dir string) (string, error) {
 		// Manifest sidecars also end in ".json" (see ManifestPath) —
 		// exclude them explicitly rather than just matching the bundle
 		// suffix.
-		if strings.HasPrefix(name, bundleFilePrefix) && strings.HasSuffix(name, bundleFileSuffix) && !strings.HasSuffix(name, manifestFileSuffix) {
+		if strings.HasPrefix(name, bundleFilePrefix) && (strings.HasSuffix(name, bundleFileSuffix) || strings.HasSuffix(name, ".zip")) && !strings.HasSuffix(name, manifestFileSuffix) {
 			candidates = append(candidates, name)
 		}
 	}
@@ -88,11 +87,11 @@ func VerifyBundleFile(ctx context.Context, bundlePath string) VerificationResult
 		StartedAt:  time.Now().UTC().Format(time.RFC3339),
 	}
 
-	data, err := os.ReadFile(bundlePath)
+	checksum, _, err := checksumFile(bundlePath)
 	if err != nil {
 		return failVerification(res, fmt.Errorf("read bundle file: %w", err))
 	}
-	res.Checksum = ChecksumBytes(data)
+	res.Checksum = checksum
 
 	manifest, mErr := ReadManifest(ManifestPath(bundlePath))
 	hasManifest := mErr == nil
@@ -110,29 +109,31 @@ func VerifyBundleFile(ctx context.Context, bundlePath string) VerificationResult
 		return failVerification(res, fmt.Errorf("read manifest: %w", mErr))
 	}
 
-	var bundle Bundle
-	if err := json.Unmarshal(data, &bundle); err != nil {
-		return failVerification(res, fmt.Errorf("parse bundle: %w", err))
-	}
-	if err := ValidateBundle(&bundle); err != nil {
-		return failVerification(res, fmt.Errorf("validate bundle: %w", err))
-	}
-	if !hasManifest {
-		res.ExpectedCounts = BundleCounts(&bundle)
-	}
-
 	scratch, err := newScratchStore(ctx)
 	if err != nil {
 		return failVerification(res, fmt.Errorf("create scratch database: %w", err))
 	}
 	defer func() { _ = scratch.Close() }()
 
-	importResult, err := Import(ctx, scratch, &bundle)
+	blobDir, err := os.MkdirTemp("", "wiselabz-verify-*")
+	if err != nil {
+		return failVerification(res, err)
+	}
+	defer func() { _ = os.RemoveAll(blobDir) }()
+	importResult, err := ImportFromFile(ctx, scratch, bundlePath, ArchiveOptions{BlobDir: blobDir})
 	if err != nil {
 		return failVerification(res, fmt.Errorf("import into scratch database: %w", err))
 	}
 
+	if !hasManifest {
+		bundle, err := Export(ctx, scratch)
+		if err != nil {
+			return failVerification(res, err)
+		}
+		res.ExpectedCounts = BundleCounts(bundle)
+	}
 	res.ActualCounts = map[string]int{
+		"attachments":      importResult.Attachments.Imported,
 		"connectors":       importResult.Connectors.Imported,
 		"docs":             importResult.Docs.Imported,
 		"docVersions":      importResult.DocVersions.Imported,

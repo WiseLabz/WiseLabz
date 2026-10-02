@@ -120,7 +120,7 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 		}
 		docs, svcErr := h.Store.ListDocsByService(r.Context(), id)
 		if svcErr == nil && len(docs) > 0 {
-			httputil.JSON(w, http.StatusOK, docs[0])
+			h.writeDoc(w, r, &docs[0])
 			return
 		}
 		if svcErr == nil {
@@ -144,7 +144,7 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 	if !h.requireDocViewer(w, r, d.ServiceID, d.Origin) {
 		return
 	}
-	httputil.JSON(w, http.StatusOK, d)
+	h.writeDoc(w, r, d)
 }
 
 // ByService handles GET /api/docs/service/{connectorId}.
@@ -169,7 +169,7 @@ func (h *Handler) ByService(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	httputil.JSON(w, http.StatusOK, docs[0])
+	h.writeDoc(w, r, &docs[0])
 }
 
 // Save handles PUT /api/docs/{id}.
@@ -223,5 +223,5 @@ func (h *Handler) Save(w http.ResponseWriter, r *http.Request) {
 	if d != nil {
 		h.SyncEmbeddings(r.Context(), d.ID, d.Content)
 	}
-	httputil.JSON(w, http.StatusOK, d)
+	h.writeDoc(w, r, d)
 }

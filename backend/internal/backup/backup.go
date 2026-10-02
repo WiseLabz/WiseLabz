@@ -1,4 +1,4 @@
-// Package backup exports and imports a portable JSON bundle of WiseLabz
+// Package backup exports and imports portable ZIP backups (and legacy JSON) of WiseLabz
 // configuration and content (connectors, docs, templates) for disaster
 // recovery and migration between instances.
 //
@@ -22,13 +22,14 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/WiseLabz/wiselabz/internal/blobstore"
 	"github.com/WiseLabz/wiselabz/internal/connector"
 	"github.com/WiseLabz/wiselabz/internal/store"
 )
 
 // BundleVersion is the current backup format version. ValidateBundle rejects
-// any bundle whose Version doesn't match.
-const BundleVersion = 1
+// bundles outside the supported v1/v2 formats.
+const BundleVersion = 2
 
 const exportPageSize = 1000
 
@@ -54,6 +55,7 @@ type AIConfigSummary struct {
 
 // Bundle is the full portable backup format.
 type Bundle struct {
+	Attachments      []store.DocAttachment         `json:"attachments,omitempty"`
 	Version          int                           `json:"version"`
 	ExportedAt       string                        `json:"exportedAt"`
 	Connectors       []store.ConnectorRecord       `json:"connectors"`
@@ -68,6 +70,7 @@ type Bundle struct {
 // Result reports how many records of each entity were imported vs. skipped
 // (skipped = an existing record with the same ID was found, left untouched).
 type Result struct {
+	Attachments      Counts `json:"attachments"`
 	Connectors       Counts `json:"connectors"`
 	Docs             Counts `json:"docs"`
 	DocVersions      Counts `json:"docVersions"`
@@ -137,7 +140,12 @@ func exportWithin(ctx context.Context, s *store.Store) (*Bundle, error) {
 		return nil, fmt.Errorf("export template sections: %w", err)
 	}
 
+	attachments, err := s.ListDocAttachments(ctx, "")
+	if err != nil {
+		return nil, fmt.Errorf("export attachments: %w", err)
+	}
 	return &Bundle{
+		Attachments:      attachments,
 		Version:          BundleVersion,
 		ExportedAt:       time.Now().UTC().Format(time.RFC3339),
 		Connectors:       connectors,
@@ -211,7 +219,7 @@ func LoadAIConfigSummary(ctx context.Context, s *store.Store) *AIConfigSummary {
 // ValidateBundle checks referential integrity and format version without
 // touching the database. It returns the first problem found.
 func ValidateBundle(b *Bundle) error {
-	if b.Version != BundleVersion {
+	if b.Version != 1 && b.Version != BundleVersion {
 		return fmt.Errorf("unsupported backup version: got %d, expected %d", b.Version, BundleVersion)
 	}
 
@@ -246,6 +254,17 @@ func ValidateBundle(b *Bundle) error {
 		}
 	}
 
+	seenAttachments := map[string]bool{}
+	for _, a := range b.Attachments {
+		invalid := !docIDs[a.DocID] || !blobstore.ValidHash(a.SHA256) || a.Size < 0
+		if invalid || a.ID == "" || seenAttachments[a.ID] {
+			return fmt.Errorf("invalid attachment %q", a.ID)
+		}
+		if !blobstore.Allowed(a.ContentType, nil) {
+			return fmt.Errorf("unsupported attachment type %q", a.ContentType)
+		}
+		seenAttachments[a.ID] = true
+	}
 	templateIDs := make(map[string]bool, len(b.Templates))
 	for _, t := range b.Templates {
 		templateIDs[t.ID] = true
@@ -361,6 +380,20 @@ func importBundle(ctx context.Context, s *store.Store, b *Bundle) (Result, error
 	// already stored for the bundle's docs instead, in one bulk query.
 	if err := importDocVersions(ctx, s, b.DocVersions, docIDs(b.Docs), &res); err != nil {
 		return res, err
+	}
+	for _, a := range b.Attachments {
+		_, err := s.GetDocAttachment(ctx, a.ID)
+		if err == nil {
+			res.Attachments.Skipped++
+			continue
+		}
+		if !errors.Is(err, store.ErrNotFound) {
+			return res, err
+		}
+		if err := s.CreateDocAttachment(ctx, &a); err != nil {
+			return res, err
+		}
+		res.Attachments.Imported++
 	}
 	return res, nil
 }
@@ -485,14 +518,14 @@ type Run struct {
 	Checksum     string `json:"checksumSha256,omitempty"`
 }
 
-// ExportToFile calls Export, marshals the bundle to JSON, writes it to
-// {dir}/wiselabz-backup-{RFC3339 timestamp}.json, writes a manifest sidecar
+// ExportToFile writes a v2 ZIP archive with attachment bytes to
+// {dir}/wiselabz-backup-{timestamp}.zip and writes a manifest sidecar
 // (see BuildManifest) recording per-entity row counts, app/schema version,
 // and the bundle's sha256 checksum, and returns metadata about the created
 // files. The directory is created if it does not exist (0o700), and both
 // files are written 0o600 since the bundle is a full infrastructure
 // inventory even with secrets redacted.
-func ExportToFile(ctx context.Context, s *store.Store, dir string) (Run, error) {
+func ExportToFile(ctx context.Context, s *store.Store, dir string, options ...ArchiveOptions) (Run, error) {
 	var run Run
 	run.ID = uuid.New().String()
 	run.TriggeredBy = "schedule" // default; caller may override
@@ -510,24 +543,25 @@ func ExportToFile(ctx context.Context, s *store.Store, dir string) (Run, error) 
 		return run, fmt.Errorf("create backup directory: %w", err)
 	}
 
-	// Marshal to JSON
-	data, err := json.MarshalIndent(bundle, "", "  ")
-	if err != nil {
-		return run, fmt.Errorf("marshal bundle: %w", err)
-	}
-
-	// Write to file with RFC3339 timestamp (using format safe for filenames)
+	opts := archiveOptions(options)
 	timestamp := time.Now().UTC().Format("20060102-150405")
-	filename := fmt.Sprintf("wiselabz-backup-%s.json", timestamp)
-	path := filepath.Join(dir, filename)
-
-	if err := os.WriteFile(path, data, 0o600); err != nil {
-		return run, fmt.Errorf("write backup file: %w", err)
+	path := filepath.Join(dir, fmt.Sprintf("wiselabz-backup-%s.zip", timestamp))
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
+	if err != nil {
+		return run, err
 	}
-
-	// Populate run metadata
+	writeErr := WriteArchive(ctx, s, blobstore.New(opts.BlobDir, opts.MaxAttachmentBytes), f, bundle)
+	closeErr := f.Close()
+	if err := errors.Join(writeErr, closeErr); err != nil {
+		_ = os.Remove(path)
+		return run, err
+	}
+	checksum, size, err := checksumFile(path)
+	if err != nil {
+		return run, err
+	}
 	run.FilePath = path
-	run.SizeBytes = int64(len(data))
+	run.SizeBytes = size
 	run.CreatedAt = time.Now().UTC().Format(time.RFC3339)
 
 	// Write the manifest sidecar. schemaVersion falls back to 0 (unknown)
@@ -539,7 +573,8 @@ func ExportToFile(ctx context.Context, s *store.Store, dir string) (Run, error) 
 	} else {
 		slog.Warn("backup export: could not read migration status for manifest", "error", err)
 	}
-	manifest := BuildManifest(bundle, data, AppVersion(), schemaVersion)
+	manifest := BuildManifest(bundle, nil, AppVersion(), schemaVersion)
+	manifest.Checksum = checksum
 	manifestPath := ManifestPath(path)
 	if err := WriteManifest(manifestPath, manifest); err != nil {
 		return run, fmt.Errorf("write manifest: %w", err)
@@ -556,23 +591,22 @@ func ExportToFile(ctx context.Context, s *store.Store, dir string) (Run, error) 
 // a hand-edited bundle) is not an error — the checksum check is simply
 // skipped, matching Import's existing tolerance of externally-authored
 // bundles.
-func ImportFromFile(ctx context.Context, s *store.Store, bundlePath string) (Result, error) {
-	data, err := os.ReadFile(bundlePath)
+func ImportFromFile(ctx context.Context, s *store.Store, bundlePath string, options ...ArchiveOptions) (Result, error) {
+	checksum, _, err := checksumFile(bundlePath)
 	if err != nil {
-		return Result{}, fmt.Errorf("read bundle file: %w", err)
+		return Result{}, err
 	}
-
 	if manifest, mErr := ReadManifest(ManifestPath(bundlePath)); mErr == nil {
-		if got := ChecksumBytes(data); got != manifest.Checksum {
-			return Result{}, fmt.Errorf("checksum mismatch: bundle file may be corrupted or modified (manifest expects %s, got %s)", manifest.Checksum, got)
+		if checksum != manifest.Checksum {
+			return Result{}, errors.New("checksum mismatch: bundle file may be corrupted or modified")
 		}
 	} else if !errors.Is(mErr, os.ErrNotExist) {
-		return Result{}, fmt.Errorf("read manifest: %w", mErr)
+		return Result{}, mErr
 	}
-
-	var b Bundle
-	if err := json.Unmarshal(data, &b); err != nil {
-		return Result{}, fmt.Errorf("parse bundle: %w", err)
+	f, err := os.Open(bundlePath)
+	if err != nil {
+		return Result{}, err
 	}
-	return Import(ctx, s, &b)
+	defer func() { _ = f.Close() }()
+	return ImportStream(ctx, s, f, archiveOptions(options))
 }

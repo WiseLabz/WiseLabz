@@ -11,6 +11,7 @@ import { faker } from '@faker-js/faker';
 import type {
   AiSuggestRef,
   Doc,
+  DocAttachment,
   DocEditProposal,
   DocEditProposalPage,
   DocLock,
@@ -20,7 +21,6 @@ import type {
   DocVersionMeta,
   GenerateResult,
   GetDocsShareLinks200Item,
-  GetShareTokenDocsDocId200,
   GetShareTokenTree200,
   PostDocsShareLinks201,
   TemplateSchema,
@@ -62,6 +62,23 @@ export const getGetDocsResponseMock = (
     ]),
     templateId: faker.helpers.arrayElement([
       faker.string.alpha({ length: { min: 10, max: 20 } }),
+      undefined,
+    ]),
+    attachments: faker.helpers.arrayElement([
+      Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() => ({
+        id: faker.string.alpha({ length: { min: 10, max: 20 } }),
+        docId: faker.string.alpha({ length: { min: 10, max: 20 } }),
+        sha256: faker.string.alpha({ length: { min: 10, max: 20 } }),
+        filename: faker.string.alpha({ length: { min: 10, max: 20 } }),
+        contentType: faker.string.alpha({ length: { min: 10, max: 20 } }),
+        size: faker.number.int(),
+        createdBy: faker.string.alpha({ length: { min: 10, max: 20 } }),
+        createdAt: faker.date.past().toISOString().slice(0, 19) + 'Z',
+        url: faker.helpers.arrayElement([
+          faker.string.alpha({ length: { min: 10, max: 20 } }),
+          undefined,
+        ]),
+      })),
       undefined,
     ]),
     lastSyncedAt: faker.helpers.arrayElement([
@@ -112,6 +129,23 @@ export const getPostDocsResponseMock = (
     faker.string.alpha({ length: { min: 10, max: 20 } }),
     undefined,
   ]),
+  attachments: faker.helpers.arrayElement([
+    Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() => ({
+      id: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      docId: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      sha256: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      filename: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      contentType: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      size: faker.number.int(),
+      createdBy: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      createdAt: faker.date.past().toISOString().slice(0, 19) + 'Z',
+      url: faker.helpers.arrayElement([
+        faker.string.alpha({ length: { min: 10, max: 20 } }),
+        undefined,
+      ]),
+    })),
+    undefined,
+  ]),
   lastSyncedAt: faker.helpers.arrayElement([
     faker.string.alpha({ length: { min: 10, max: 20 } }),
     undefined,
@@ -155,6 +189,23 @@ export const getGetDocsTrashResponseMock = (): Doc[] =>
       faker.string.alpha({ length: { min: 10, max: 20 } }),
       undefined,
     ]),
+    attachments: faker.helpers.arrayElement([
+      Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() => ({
+        id: faker.string.alpha({ length: { min: 10, max: 20 } }),
+        docId: faker.string.alpha({ length: { min: 10, max: 20 } }),
+        sha256: faker.string.alpha({ length: { min: 10, max: 20 } }),
+        filename: faker.string.alpha({ length: { min: 10, max: 20 } }),
+        contentType: faker.string.alpha({ length: { min: 10, max: 20 } }),
+        size: faker.number.int(),
+        createdBy: faker.string.alpha({ length: { min: 10, max: 20 } }),
+        createdAt: faker.date.past().toISOString().slice(0, 19) + 'Z',
+        url: faker.helpers.arrayElement([
+          faker.string.alpha({ length: { min: 10, max: 20 } }),
+          undefined,
+        ]),
+      })),
+      undefined,
+    ]),
     lastSyncedAt: faker.helpers.arrayElement([
       faker.string.alpha({ length: { min: 10, max: 20 } }),
       undefined,
@@ -196,6 +247,23 @@ export const getPostDocsDocIdRestoreResponseMock = (
   ]),
   templateId: faker.helpers.arrayElement([
     faker.string.alpha({ length: { min: 10, max: 20 } }),
+    undefined,
+  ]),
+  attachments: faker.helpers.arrayElement([
+    Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() => ({
+      id: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      docId: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      sha256: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      filename: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      contentType: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      size: faker.number.int(),
+      createdBy: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      createdAt: faker.date.past().toISOString().slice(0, 19) + 'Z',
+      url: faker.helpers.arrayElement([
+        faker.string.alpha({ length: { min: 10, max: 20 } }),
+        undefined,
+      ]),
+    })),
     undefined,
   ]),
   lastSyncedAt: faker.helpers.arrayElement([
@@ -286,6 +354,23 @@ export const getGetDocsServiceConnectorIdResponseMock = (
     faker.string.alpha({ length: { min: 10, max: 20 } }),
     undefined,
   ]),
+  attachments: faker.helpers.arrayElement([
+    Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() => ({
+      id: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      docId: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      sha256: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      filename: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      contentType: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      size: faker.number.int(),
+      createdBy: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      createdAt: faker.date.past().toISOString().slice(0, 19) + 'Z',
+      url: faker.helpers.arrayElement([
+        faker.string.alpha({ length: { min: 10, max: 20 } }),
+        undefined,
+      ]),
+    })),
+    undefined,
+  ]),
   lastSyncedAt: faker.helpers.arrayElement([
     faker.string.alpha({ length: { min: 10, max: 20 } }),
     undefined,
@@ -328,6 +413,23 @@ export const getGetDocsDocIdResponseMock = (
   ]),
   templateId: faker.helpers.arrayElement([
     faker.string.alpha({ length: { min: 10, max: 20 } }),
+    undefined,
+  ]),
+  attachments: faker.helpers.arrayElement([
+    Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() => ({
+      id: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      docId: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      sha256: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      filename: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      contentType: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      size: faker.number.int(),
+      createdBy: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      createdAt: faker.date.past().toISOString().slice(0, 19) + 'Z',
+      url: faker.helpers.arrayElement([
+        faker.string.alpha({ length: { min: 10, max: 20 } }),
+        undefined,
+      ]),
+    })),
     undefined,
   ]),
   lastSyncedAt: faker.helpers.arrayElement([
@@ -374,6 +476,23 @@ export const getPutDocsDocIdResponseMock = (
     faker.string.alpha({ length: { min: 10, max: 20 } }),
     undefined,
   ]),
+  attachments: faker.helpers.arrayElement([
+    Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() => ({
+      id: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      docId: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      sha256: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      filename: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      contentType: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      size: faker.number.int(),
+      createdBy: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      createdAt: faker.date.past().toISOString().slice(0, 19) + 'Z',
+      url: faker.helpers.arrayElement([
+        faker.string.alpha({ length: { min: 10, max: 20 } }),
+        undefined,
+      ]),
+    })),
+    undefined,
+  ]),
   lastSyncedAt: faker.helpers.arrayElement([
     faker.string.alpha({ length: { min: 10, max: 20 } }),
     undefined,
@@ -418,12 +537,65 @@ export const getPatchDocsDocIdResponseMock = (
     faker.string.alpha({ length: { min: 10, max: 20 } }),
     undefined,
   ]),
+  attachments: faker.helpers.arrayElement([
+    Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() => ({
+      id: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      docId: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      sha256: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      filename: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      contentType: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      size: faker.number.int(),
+      createdBy: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      createdAt: faker.date.past().toISOString().slice(0, 19) + 'Z',
+      url: faker.helpers.arrayElement([
+        faker.string.alpha({ length: { min: 10, max: 20 } }),
+        undefined,
+      ]),
+    })),
+    undefined,
+  ]),
   lastSyncedAt: faker.helpers.arrayElement([
     faker.string.alpha({ length: { min: 10, max: 20 } }),
     undefined,
   ]),
   ...overrideResponse,
 });
+
+export const getGetDocsDocIdAttachmentsResponseMock = (): DocAttachment[] =>
+  Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() => ({
+    id: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    docId: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    sha256: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    filename: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    contentType: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    size: faker.number.int(),
+    createdBy: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    createdAt: faker.date.past().toISOString().slice(0, 19) + 'Z',
+    url: faker.helpers.arrayElement([
+      faker.string.alpha({ length: { min: 10, max: 20 } }),
+      undefined,
+    ]),
+  }));
+
+export const getPostDocsDocIdAttachmentsResponseMock = (
+  overrideResponse: Partial<Extract<DocAttachment, object>> = {}
+): DocAttachment => ({
+  id: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  docId: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  sha256: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  filename: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  contentType: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  size: faker.number.int(),
+  createdBy: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  createdAt: faker.date.past().toISOString().slice(0, 19) + 'Z',
+  url: faker.helpers.arrayElement([
+    faker.string.alpha({ length: { min: 10, max: 20 } }),
+    undefined,
+  ]),
+  ...overrideResponse,
+});
+
+export const getGetAttachmentsAidRawResponseMock = (): Blob => new Blob();
 
 export const getGetDocsDocIdVersionsResponseMock = (): DocVersionMeta[] =>
   Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() => ({
@@ -484,6 +656,23 @@ export const getPostDocsDocIdVersionsRevRestoreResponseMock = (
   ]),
   templateId: faker.helpers.arrayElement([
     faker.string.alpha({ length: { min: 10, max: 20 } }),
+    undefined,
+  ]),
+  attachments: faker.helpers.arrayElement([
+    Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() => ({
+      id: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      docId: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      sha256: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      filename: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      contentType: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      size: faker.number.int(),
+      createdBy: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      createdAt: faker.date.past().toISOString().slice(0, 19) + 'Z',
+      url: faker.helpers.arrayElement([
+        faker.string.alpha({ length: { min: 10, max: 20 } }),
+        undefined,
+      ]),
+    })),
     undefined,
   ]),
   lastSyncedAt: faker.helpers.arrayElement([
@@ -722,4 +911,63 @@ export const getPostDocsShareLinksResponseMock = (): PostDocsShareLinks201 => ({
 
 export const getGetShareTokenTreeResponseMock = (): GetShareTokenTree200 => ({});
 
-export const getGetShareTokenDocsDocIdResponseMock = (): GetShareTokenDocsDocId200 => ({});
+export const getGetShareTokenDocsDocIdResponseMock = (
+  overrideResponse: Partial<Extract<Doc, object>> = {}
+): Doc => ({
+  docId: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  title: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  kind: faker.helpers.arrayElement(['lab', 'service'] as const),
+  serviceId: faker.helpers.arrayElement([
+    faker.string.alpha({ length: { min: 10, max: 20 } }),
+    null,
+  ]),
+  parentId: faker.helpers.arrayElement([
+    faker.string.alpha({ length: { min: 10, max: 20 } }),
+    undefined,
+  ]),
+  deletedAt: faker.helpers.arrayElement([
+    faker.string.alpha({ length: { min: 10, max: 20 } }),
+    undefined,
+  ]),
+  createdBy: faker.helpers.arrayElement([
+    faker.string.alpha({ length: { min: 10, max: 20 } }),
+    undefined,
+  ]),
+  createdAt: faker.helpers.arrayElement([
+    faker.date.past().toISOString().slice(0, 19) + 'Z',
+    undefined,
+  ]),
+  content: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  currentVersion: faker.number.int(),
+  updatedAt: faker.date.past().toISOString().slice(0, 19) + 'Z',
+  origin: faker.helpers.arrayElement([
+    faker.helpers.arrayElement(['generated', 'human'] as const),
+    undefined,
+  ]),
+  templateId: faker.helpers.arrayElement([
+    faker.string.alpha({ length: { min: 10, max: 20 } }),
+    undefined,
+  ]),
+  attachments: faker.helpers.arrayElement([
+    Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() => ({
+      id: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      docId: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      sha256: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      filename: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      contentType: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      size: faker.number.int(),
+      createdBy: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      createdAt: faker.date.past().toISOString().slice(0, 19) + 'Z',
+      url: faker.helpers.arrayElement([
+        faker.string.alpha({ length: { min: 10, max: 20 } }),
+        undefined,
+      ]),
+    })),
+    undefined,
+  ]),
+  lastSyncedAt: faker.helpers.arrayElement([
+    faker.string.alpha({ length: { min: 10, max: 20 } }),
+    undefined,
+  ]),
+  ...overrideResponse,
+});

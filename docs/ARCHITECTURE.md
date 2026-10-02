@@ -484,8 +484,30 @@ The existing scheduled retention job purges trash after
 `retention.deleted_docs_days` (default 30; `0` disables purge), cascading versions,
 locks and embeddings. The parent FK uses SET NULL so purging an older parent does
 not prematurely purge more recent trash. Retention is persisted and editable in
-Settings. V1 JSON backups include hierarchy, creator and trash metadata; import
+Settings. V2 ZIP backups include hierarchy, creator, trash and attachment metadata
+and bytes; legacy v1 JSON imports remain supported. Import
 validates scope/cycles/depth and restores parents after inserting all docs.
+
+## Doc attachments (#519)
+
+`doc_attachments` owns metadata under a cascading doc FK and inherits that doc's
+origin-aware lab or connector ACL. Operators upload/delete; viewers list.
+`internal/blobstore` streams bounded uploads to temporary disk, sniffs png/jpeg/
+gif/webp/pdf/text (no SVG), hashes SHA256 and atomically publishes under
+`attachments.dir/ab/cd/<sha256>` (default `/data/attachments`, 25 MiB limit).
+The existing retention job collects only blobs without metadata references.
+
+Markdown uses `attachment:<id>`. Doc GET and scoped share responses sign only
+owned attachment IDs with fifteen-minute HMAC URLs, using an HKDF-separated key
+from `auth.secret` and label `wiselabz-attachment-url`. Raw serving rejects
+expired/tampered URLs and deleted docs, sets nosniff, private caching and sandbox
+CSP with same-origin frame ancestors, and serves inline only images/PDFs.
+The app CSP permits same-origin PDF iframes. Viewers provide image lightbox and
+PDF Open/Preview; CodeMirror handles drop/paste placeholders and attachment
+management, with query refresh before URL expiry.
+
+See [BACKUP.md](BACKUP.md) for ZIP portability and [DOC_EXPORT.md](DOC_EXPORT.md)
+for attachment file/link export configuration.
 
 ## Data retention (decided 2026-09-05)
 
