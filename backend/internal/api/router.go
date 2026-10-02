@@ -140,6 +140,15 @@ func newRouterDeps(cfg Config) routerDeps {
 
 	connH := connhandler.NewHandler(cfg.Store, cfg.SyncEngine, cfg.Config, cfg.JWT, cfg.WSHub)
 
+	docH := dochandler.NewHandler(cfg.Store, cfg.DocEngine, settingH, cfg.AIRegistry, cfg.EmbedRegistry, cfg.WSHub)
+	changeH := changehandler.NewHandler(cfg.Store, settingH, cfg.AIRegistry, cfg.WSHub)
+	if cfg.DocEngine != nil {
+		// Sync merges and doc-Change resolutions rewrite docs outside the
+		// docs handler; keep their chat embeddings fresh too.
+		cfg.DocEngine.SetOnDocUpdated(docH.SyncEmbeddings)
+		changeH.DocEngine = cfg.DocEngine
+	}
+
 	return routerDeps{
 		cfg:         cfg,
 		sysH:        sysH,
@@ -148,14 +157,14 @@ func newRouterDeps(cfg Config) routerDeps {
 		settingH:    settingH,
 		connH:       connH,
 		tmplH:       tmplhandler.NewHandler(cfg.Store, cfg.DocEngine),
-		changeH:     changehandler.NewHandler(cfg.Store, settingH, cfg.AIRegistry, cfg.WSHub),
+		changeH:     changeH,
 		alertH:      alerthandler.NewHandler(cfg.Store),
 		attentionH:  attentionhandler.NewHandler(cfg.Store),
 		findingH:    findinghandler.NewHandler(cfg.Store),
 		notifH:      notifhandler.NewHandler(cfg.Store),
 		runbookH:    runbookhandler.NewHandler(cfg.Store, connH),
 		dashH:       dashhandler.NewHandler(cfg.Store),
-		docH:        dochandler.NewHandler(cfg.Store, cfg.DocEngine, settingH, cfg.AIRegistry, cfg.EmbedRegistry, cfg.WSHub),
+		docH:        docH,
 		savedViewH:  savedviewhandler.NewHandler(cfg.Store),
 		chatH:       chathandler.NewHandler(cfg.Store, settingH.AIConfig, cfg.AIRegistry, cfg.EmbedRegistry),
 		complianceH: compliancehandler.NewHandler(cfg.Store, ruleEvaluator),

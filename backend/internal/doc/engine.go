@@ -5,8 +5,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
+	"strings"
 	"text/template"
 	"time"
 
@@ -18,6 +18,20 @@ import (
 type Engine struct {
 	store     *store.Store
 	snapshots *snapshotCache
+	// onDocUpdated, when set, runs after sync or a Change resolution rewrites
+	// a doc's content (wired to embedding refresh; a hook avoids doc→chat).
+	onDocUpdated func(ctx context.Context, docID, content string)
+}
+
+// SetOnDocUpdated registers the hook run after the engine rewrites a doc.
+func (e *Engine) SetOnDocUpdated(fn func(ctx context.Context, docID, content string)) {
+	e.onDocUpdated = fn
+}
+
+func (e *Engine) docUpdated(ctx context.Context, docID, content string) {
+	if e.onDocUpdated != nil {
+		e.onDocUpdated(ctx, docID, content)
+	}
 }
 
 // NewEngine creates a new doc engine.
@@ -32,9 +46,30 @@ type GenerateResult struct {
 	Content string `json:"content"`
 }
 
+// renderResult is one render: the doc title and its generated blocks.
 type renderResult struct {
-	Title   string
-	Content string
+	Title  string
+	Blocks []Block
+}
+
+// content lays the blocks out as a fresh doc.
+func (r *renderResult) content() string { return renderFresh(r.Blocks) }
+
+// plain is the render without ownership markers, for previews that are
+// never stored.
+func (r *renderResult) plain() string {
+	bodies := make([]string, len(r.Blocks))
+	for i, b := range r.Blocks {
+		bodies[i] = b.Body
+	}
+	return strings.Join(bodies, "\n\n") + "\n"
+}
+
+// genKeys is the JSON array of the render's block keys, stored on the doc so
+// a later merge can tell new upstream sections from ones a user deleted.
+func (r *renderResult) genKeys() string {
+	b, _ := json.Marshal(blockKeys(r.Blocks))
+	return string(b)
 }
 
 // render executes a template against a connector's latest snapshot without persisting it.
@@ -59,7 +94,6 @@ func (e *Engine) render(ctx context.Context, templateID, connectorID string) (*r
 		return nil, fmt.Errorf("match entities: %w", err)
 	}
 
-	var buf bytes.Buffer
 	data := templateData{
 		ServiceName:  snap.ServiceName,
 		Type:         snap.Type,
@@ -70,28 +104,30 @@ func (e *Engine) render(ctx context.Context, templateID, connectorID string) (*r
 		GeneratedAt:  time.Now().UTC().Format(time.RFC3339),
 	}
 
-	fmt.Fprintf(&buf, "# %s\n\n", snap.ServiceName)
+	head := "# " + snap.ServiceName
 	if tmpl.Description != "" {
-		fmt.Fprintf(&buf, "> %s\n\n", tmpl.Description)
+		head += "\n\n> " + tmpl.Description
 	}
+	blocks := []Block{NewBlock("head", head)}
 
-	for _, sec := range sections {
+	titles := make([]string, len(sections))
+	for i, sec := range sections {
+		titles[i] = sec.Title
+	}
+	keys := slugKeys("tpl", titles)
+	for i, sec := range sections {
+		var buf bytes.Buffer
+		fmt.Fprintf(&buf, "## %s\n\n", sec.Title)
 		sectionTemplate, err := template.New("section").Funcs(TemplateFuncs()).Parse(sec.Body)
 		if err != nil {
-			fmt.Fprintf(&buf, "## %s\n\n_Template error: %v_\n\n", sec.Title, err)
-			continue
+			fmt.Fprintf(&buf, "_Template error: %v_", err)
+		} else if err := sectionTemplate.Execute(&buf, data); err != nil {
+			fmt.Fprintf(&buf, "\n_Template error: %v_", err)
 		}
-		fmt.Fprintf(&buf, "## %s\n\n", sec.Title)
-		if err := sectionTemplate.Execute(&buf, data); err != nil {
-			fmt.Fprintf(&buf, "\n_Template error: %v_\n", err)
-		}
-		buf.WriteString("\n")
+		blocks = append(blocks, NewBlock(keys[i], strings.TrimRight(buf.String(), "\n")))
 	}
 
-	return &renderResult{
-		Title:   snap.ServiceName,
-		Content: buf.String(),
-	}, nil
+	return &renderResult{Title: snap.ServiceName, Blocks: blocks}, nil
 }
 
 // PreviewFromTemplate renders a document without persisting it.
@@ -103,63 +139,75 @@ func (e *Engine) PreviewFromTemplate(ctx context.Context, templateID, connectorI
 
 	return &GenerateResult{
 		Title:   rendered.Title,
-		Content: rendered.Content,
+		Content: rendered.plain(),
 	}, nil
 }
 
-// GenerateFromTemplate generates and persists a document using a template and a snapshot.
+// GenerateFromTemplate generates and persists a document using a template
+// and a snapshot. An existing generated doc of the connector is re-rendered
+// through the template, keeping human-owned text (see Merge); otherwise a new
+// doc is created. The template is recorded so later syncs re-apply it.
 func (e *Engine) GenerateFromTemplate(ctx context.Context, templateID, connectorID string) (*GenerateResult, error) {
 	rendered, err := e.render(ctx, templateID, connectorID)
 	if err != nil {
 		return nil, err
 	}
 
-	var docID string
+	existingDocs, err := e.store.ListDocsByService(ctx, connectorID)
+	if err != nil {
+		return nil, fmt.Errorf("list existing docs: %w", err)
+	}
+	for _, d := range existingDocs {
+		if d.Origin == store.DocOriginHuman {
+			continue
+		}
+		content := rendered.content()
+		if d.GenKeys != nil {
+			var prev []string
+			_ = json.Unmarshal([]byte(*d.GenKeys), &prev)
+			out, _ := Merge(ParseBlocks(d.Content), prev, rendered.Blocks)
+			content = RenderSegments(out)
+		}
+		v := d.CurrentVersion
+		if _, err := e.store.ApplyGeneratedRender(ctx, d.ID, store.GeneratedRender{
+			Content: content, GenKeys: rendered.genKeys(), ExpectedVersion: &v,
+			Trigger: "template", Origin: store.DocOriginGenerated, TemplateID: &templateID,
+		}); err != nil {
+			return nil, fmt.Errorf("update doc: %w", err)
+		}
+		return &GenerateResult{DocID: d.ID, Title: rendered.Title, Content: content}, nil
+	}
+
+	docID, err := e.createGeneratedDoc(ctx, connectorID, templateID, rendered, "template")
+	if err != nil {
+		return nil, err
+	}
+	return &GenerateResult{DocID: docID, Title: rendered.Title, Content: rendered.content()}, nil
+}
+
+// createGeneratedDoc inserts a new marked-up generated doc and its first
+// version in one transaction.
+func (e *Engine) createGeneratedDoc(ctx context.Context, connectorID, templateID string, rendered *renderResult, trigger string) (string, error) {
+	keys := rendered.genKeys()
+	doc := &store.DocRecord{
+		Title: rendered.Title, Kind: "service", ServiceID: connectorID, Content: rendered.content(),
+		Origin: store.DocOriginGenerated, TemplateID: templateID, GenKeys: &keys,
+		LastSyncedAt: time.Now().UTC().Format(time.RFC3339),
+	}
 	if err := e.store.WithinTransaction(ctx, func(tx *store.Store) error {
-		existingDocs, err := tx.ListDocsByService(ctx, connectorID)
-		if err != nil {
-			return fmt.Errorf("list existing docs: %w", err)
-		}
-
-		if len(existingDocs) > 0 {
-			docID = existingDocs[0].ID
-			if err := tx.UpdateDoc(ctx, docID, rendered.Content, nil); err != nil {
-				return fmt.Errorf("update doc: %w", err)
-			}
-			doc, err := tx.GetDoc(ctx, docID)
-			if err != nil {
-				return fmt.Errorf("get updated doc: %w", err)
-			}
-			if err := tx.CreateDocVersion(ctx, &store.DocVersionRecord{
-				DocID: docID, Rev: doc.CurrentVersion, Content: rendered.Content, Trigger: "template",
-			}); err != nil {
-				return fmt.Errorf("create doc version: %w", err)
-			}
-			return nil
-		}
-
-		doc := &store.DocRecord{
-			Title: rendered.Title, Kind: "service", ServiceID: connectorID, Content: rendered.Content,
-		}
 		if err := tx.CreateDoc(ctx, doc); err != nil {
 			return fmt.Errorf("create doc: %w", err)
 		}
-		docID = doc.ID
 		if err := tx.CreateDocVersion(ctx, &store.DocVersionRecord{
-			DocID: docID, Rev: 1, Content: rendered.Content, Trigger: "template",
+			DocID: doc.ID, Rev: 1, Content: doc.Content, Trigger: trigger,
 		}); err != nil {
 			return fmt.Errorf("create doc version: %w", err)
 		}
 		return nil
 	}); err != nil {
-		return nil, err
+		return "", err
 	}
-
-	return &GenerateResult{
-		DocID:   docID,
-		Title:   rendered.Title,
-		Content: rendered.Content,
-	}, nil
+	return doc.ID, nil
 }
 
 // MatchingConnectors returns connectors covered by a template's applicability scope.
@@ -209,35 +257,37 @@ func (e *Engine) renderSnapshot(ctx context.Context, connectorID string) (*rende
 	}
 	snap := *snapPtr
 
-	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "# %s\n\n", snap.ServiceName)
-	fmt.Fprintf(&buf, "**Type:** %s\n", snap.Type)
-	fmt.Fprintf(&buf, "**Fetched:** %s\n\n", snap.FetchedAt.Format(time.RFC3339))
+	// The fetch time is deliberately not rendered: it changes every sync and
+	// would turn every sync into a new doc version. It is tracked as the
+	// doc's last_synced_at instead.
+	blocks := []Block{NewBlock("head", fmt.Sprintf("# %s\n\n**Type:** %s", snap.ServiceName, snap.Type))}
 
-	for _, sec := range snap.Sections {
-		buf.WriteString(sec.Content)
-		buf.WriteString("\n")
+	titles := make([]string, len(snap.Sections))
+	for i, sec := range snap.Sections {
+		titles[i] = sec.Title
+	}
+	for i, key := range slugKeys("snap", titles) {
+		blocks = append(blocks, NewBlock(key, strings.TrimRight(snap.Sections[i].Content, "\n")))
 	}
 
 	if len(snap.Dependencies) > 0 {
-		buf.WriteString("## Dependencies\n\n")
+		var buf strings.Builder
+		buf.WriteString("## Dependencies\n")
 		for _, dep := range snap.Dependencies {
-			fmt.Fprintf(&buf, "- **%s**: %s", dep.Kind, dep.Name)
+			fmt.Fprintf(&buf, "\n- **%s**: %s", dep.Kind, dep.Name)
 			if dep.Ref != "" {
 				fmt.Fprintf(&buf, " (%s)", dep.Ref)
 			}
-			buf.WriteString("\n")
 		}
-		buf.WriteString("\n")
+		blocks = append(blocks, NewBlock("deps", buf.String()))
 	}
 
 	if links, err := matchEntities(ctx, e.store, e.snapshots, connectorID, snap.Entities); err == nil && len(links) > 0 {
-		buf.WriteString("## Related Entities\n\n")
-		buf.WriteString(relatedEntities(snap.ServiceName, links))
-		buf.WriteString("\n")
+		blocks = append(blocks, NewBlock("related",
+			"## Related Entities\n\n"+strings.TrimRight(relatedEntities(snap.ServiceName, links), "\n")))
 	}
 
-	return &renderResult{Title: snap.ServiceName, Content: buf.String()}, nil
+	return &renderResult{Title: snap.ServiceName, Blocks: blocks}, nil
 }
 
 // GenerateFromSnapshot generates a raw document from a snapshot without a template.
@@ -246,114 +296,11 @@ func (e *Engine) GenerateFromSnapshot(ctx context.Context, connectorID string) (
 	if err != nil {
 		return nil, err
 	}
-
-	doc := &store.DocRecord{
-		Title:     rendered.Title,
-		Kind:      "service",
-		ServiceID: connectorID,
-		Content:   rendered.Content,
-	}
-	if err := e.store.CreateDoc(ctx, doc); err != nil {
-		return nil, fmt.Errorf("create doc: %w", err)
-	}
-
-	docID := doc.ID
-	_ = e.store.CreateDocVersion(ctx, &store.DocVersionRecord{
-		DocID:   docID,
-		Rev:     1,
-		Content: rendered.Content,
-		Trigger: "snapshot",
-	})
-
-	return &GenerateResult{
-		DocID:   docID,
-		Title:   rendered.Title,
-		Content: rendered.Content,
-	}, nil
-}
-
-// RegenerateForConnector refreshes snapshot-only docs. Human edits, template
-// layouts, and docs without matching version history are preserved and flagged
-// for review until section ownership and template identity are persisted.
-func (e *Engine) RegenerateForConnector(ctx context.Context, connectorID string) error {
-	docs, err := e.store.ListDocsByService(ctx, connectorID)
+	docID, err := e.createGeneratedDoc(ctx, connectorID, "", rendered, "snapshot")
 	if err != nil {
-		return fmt.Errorf("list docs by service: %w", err)
+		return nil, err
 	}
-	if len(docs) == 0 {
-		return nil
-	}
-
-	rendered, err := e.renderSnapshot(ctx, connectorID)
-	if err != nil {
-		return err
-	}
-
-	for _, d := range docs {
-		if d.Content == rendered.Content {
-			continue
-		}
-		versions, err := e.store.GetDocVersions(ctx, d.ID)
-		if err != nil {
-			return fmt.Errorf("get doc versions: %w", err)
-		}
-		safe := false
-		if len(versions) > 0 {
-			latest := versions[0]
-			generated := latest.Trigger == "sync" || latest.Trigger == "snapshot"
-			matchesCurrent := latest.Rev == d.CurrentVersion && latest.Content == d.Content
-			safe = generated && latest.Author == "" && matchesCurrent
-		}
-		if !safe {
-			if err := e.reviewRegeneration(ctx, d, rendered.Content); err != nil {
-				return err
-			}
-			continue
-		}
-		if _, err := e.store.UpdateDocWithVersion(ctx, d.ID, rendered.Content, &d.CurrentVersion, "", "sync"); err != nil {
-			// A save during rendering wins; the next sync will flag it for review.
-			if errors.Is(err, store.ErrVersionConflict) {
-				continue
-			}
-			return fmt.Errorf("regenerate doc %s: %w", d.ID, err)
-		}
-	}
-
-	return nil
-}
-
-// reviewRegeneration keeps a single review item for each unchanged proposal.
-func (e *Engine) reviewRegeneration(ctx context.Context, d store.DocRecord, content string) error {
-	patch, err := json.Marshal([]map[string]string{{"section": d.Title, "old": d.Content, "new": content}})
-	if err != nil {
-		return fmt.Errorf("marshal regeneration diff: %w", err)
-	}
-	affected, err := json.Marshal([]string{d.ID})
-	if err != nil {
-		return fmt.Errorf("marshal affected docs: %w", err)
-	}
-	cursor := store.Keyset{}
-	for {
-		changes, _, err := e.store.ListChangesKeyset(ctx, d.ServiceID, "", cursor, 100)
-		if err != nil {
-			return fmt.Errorf("list regeneration changes: %w", err)
-		}
-		for _, change := range changes {
-			if change.ChangeType == "doc_regeneration" && change.AffectedDocIDs == string(affected) && change.Diff == string(patch) {
-				return nil
-			}
-		}
-		if len(changes) < 100 {
-			break
-		}
-		last := changes[len(changes)-1]
-		cursor = store.Keyset{Sort: last.DetectedAt, ID: last.ID}
-	}
-	return e.store.CreateChange(ctx, &store.ChangeRecord{
-		ServiceID: d.ServiceID, ChangeType: "doc_regeneration", Severity: "warning",
-		Summary: "Review snapshot refresh for " + d.Title + ": existing documentation preserved",
-		Diff:    string(patch), AffectedDocIDs: string(affected),
-	})
+	return &GenerateResult{DocID: docID, Title: rendered.Title, Content: rendered.content()}, nil
 }
 
 // labTopologyTitle is the fixed title of the single lab-wide topology doc;

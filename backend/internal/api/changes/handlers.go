@@ -17,6 +17,7 @@ import (
 	"github.com/WiseLabz/wiselabz/internal/ai"
 	"github.com/WiseLabz/wiselabz/internal/api/settings"
 	"github.com/WiseLabz/wiselabz/internal/auth"
+	"github.com/WiseLabz/wiselabz/internal/doc"
 	"github.com/WiseLabz/wiselabz/internal/httputil"
 	"github.com/WiseLabz/wiselabz/internal/store"
 	"github.com/WiseLabz/wiselabz/internal/sync"
@@ -29,6 +30,8 @@ type Handler struct {
 	Settings *settings.Handler
 	AI       *ai.Registry
 	WSHub    *ws.Hub
+	// DocEngine resolves doc Changes; nil falls back to a store-only engine.
+	DocEngine *doc.Engine
 }
 
 // NewHandler creates a new change handler.

@@ -241,7 +241,7 @@ func (h *Handler) Save(w http.ResponseWriter, r *http.Request) {
 
 	d, _ := h.Store.GetDoc(r.Context(), id)
 	if d != nil {
-		h.syncDocEmbeddings(r.Context(), d.ID, d.Content)
+		h.SyncEmbeddings(r.Context(), d.ID, d.Content)
 	}
 	httputil.JSON(w, http.StatusOK, d)
 }

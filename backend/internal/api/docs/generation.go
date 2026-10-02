@@ -29,7 +29,7 @@ func (h *Handler) Generate(w http.ResponseWriter, r *http.Request) {
 		httputil.Errorf(w, err)
 		return
 	}
-	h.syncDocEmbeddings(r.Context(), result.DocID, result.Content)
+	h.SyncEmbeddings(r.Context(), result.DocID, result.Content)
 	httputil.JSON(w, http.StatusCreated, result)
 }
 
@@ -43,7 +43,7 @@ func (h *Handler) GenerateTopology(w http.ResponseWriter, r *http.Request) {
 		httputil.Errorf(w, err)
 		return
 	}
-	h.syncDocEmbeddings(r.Context(), result.DocID, result.Content)
+	h.SyncEmbeddings(r.Context(), result.DocID, result.Content)
 	httputil.JSON(w, http.StatusOK, result)
 }
 

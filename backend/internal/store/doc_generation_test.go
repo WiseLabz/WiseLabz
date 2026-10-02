@@ -47,7 +47,10 @@ func TestApplyGeneratedRender(t *testing.T) {
 		t.Fatalf("CreateDoc() error: %v", err)
 	}
 	v := 1
-	rev, err := s.ApplyGeneratedRender(ctx, d.ID, "v2", `["a"]`, &v, "", "sync")
+	tmpl := ""
+	rev, err := s.ApplyGeneratedRender(ctx, d.ID, GeneratedRender{
+		Content: "v2", GenKeys: `["a"]`, ExpectedVersion: &v, Trigger: "sync", Origin: DocOriginGenerated, TemplateID: &tmpl,
+	})
 	if err != nil || rev != 2 {
 		t.Fatalf("ApplyGeneratedRender() = %d, %v; want 2, nil", rev, err)
 	}
@@ -61,7 +64,9 @@ func TestApplyGeneratedRender(t *testing.T) {
 	}
 
 	// Stale version: nothing lands, gen_keys unchanged.
-	if _, err := s.ApplyGeneratedRender(ctx, d.ID, "v3", `["b"]`, &v, "", "sync"); !errors.Is(err, ErrVersionConflict) {
+	if _, err := s.ApplyGeneratedRender(ctx, d.ID, GeneratedRender{
+		Content: "v3", GenKeys: `["b"]`, ExpectedVersion: &v, Trigger: "sync",
+	}); !errors.Is(err, ErrVersionConflict) {
 		t.Fatalf("stale ApplyGeneratedRender() = %v, want ErrVersionConflict", err)
 	}
 	got, _ = s.GetDoc(ctx, d.ID)
@@ -77,11 +82,11 @@ func TestTouchDocSyncedKeepsUpdatedAt(t *testing.T) {
 	if err := s.CreateDoc(ctx, d); err != nil {
 		t.Fatalf("CreateDoc() error: %v", err)
 	}
-	if err := s.TouchDocSynced(ctx, d.ID); err != nil {
+	if err := s.TouchDocSynced(ctx, d.ID, `["a"]`); err != nil {
 		t.Fatalf("TouchDocSynced() error: %v", err)
 	}
 	got, _ := s.GetDoc(ctx, d.ID)
-	if got.UpdatedAt != "2020-01-01T00:00:00Z" || got.LastSyncedAt == "" || got.CurrentVersion != 1 {
+	if got.UpdatedAt != "2020-01-01T00:00:00Z" || got.LastSyncedAt == "" || got.CurrentVersion != 1 || *got.GenKeys != `["a"]` {
 		t.Fatalf("after touch = %+v", got)
 	}
 }

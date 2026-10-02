@@ -10,21 +10,21 @@
 - [x] 1.4 Run `go test ./internal/store/...`, including the migration parity tests (sqlite only; Postgres parity needs WISELABZ_TEST_POSTGRES_DSN, not yet run)
 
 ## 2. Block model
-- [ ] 2.1 `backend/internal/doc/blocks.go`: `Block`, `Segment`, `ParseBlocks`, `RenderSegments`, `hashBody`
-- [ ] 2.2 Round-trip tests plus a fuzz test (malformed, nested, unclosed and CRLF markers)
-- [ ] 2.3 `backend/internal/doc/merge.go`: pure `Merge` with a table-driven test matrix (unedited, edited-only, both-changed, new key, removed unedited, removed edited, user-deleted not re-added, insertion order)
+- [x] 2.1 `backend/internal/doc/blocks.go`: `Block`, `Segment`, `ParseBlocks`, `RenderSegments`, `hashBody`
+- [x] 2.2 Round-trip tests plus a fuzz test (malformed, nested, unclosed and CRLF markers)
+- [x] 2.3 `backend/internal/doc/merge.go`: pure `Merge` with a table-driven test matrix (unedited, edited-only, both-changed, new key, removed unedited, removed edited, user-deleted not re-added, insertion order)
 
 ## 3. Render paths
-- [ ] 3.1 `renderSnapshot` returns blocks (`head`, `snap.<slug>`, `deps`, `related`) and drops the Fetched line
-- [ ] 3.2 Template `render` returns blocks (`head`, `tpl.<slug>`). `PreviewFromTemplate` still returns plain content (markers are OK).
-- [ ] 3.3 `GenerateFromTemplate` and `GenerateFromSnapshot` write marked content and set `template_id`, `gen_keys` and `origin`
+- [x] 3.1 `renderSnapshot` returns blocks (`head`, `snap.<slug>`, `deps`, `related`) and drops the Fetched line
+- [x] 3.2 Template `render` returns blocks (`head`, `tpl.<slug>`). `PreviewFromTemplate` still returns plain content (markers are OK).
+- [x] 3.3 `GenerateFromTemplate` and `GenerateFromSnapshot` write marked content and set `template_id`, `gen_keys` and `origin`
 
 ## 4. Sync merge
-- [ ] 4.1 Rewrite `RegenerateForConnector`: skip human or locked docs, pick the template path, merge, use `ApplyGeneratedRender` with an expected version, handle `ErrVersionConflict`, `TouchDocsSynced`
-- [ ] 4.2 Legacy upgrade path (`gen_keys IS NULL`), classified by the latest version's author, plus a `doc_adopt` Change
-- [ ] 4.3 Conflict Changes with pattern dedup and supersede
-- [ ] 4.4 `Engine.OnDocUpdated` hook wired to `chat.SyncDocEmbeddings` in `cmd/server/main.go`
-- [ ] 4.5 Update `engine_test.go` (the existing RegenerateForConnector tests) and add sync merge integration tests (locked doc, version race, human origin, legacy author vs system)
+- [x] 4.1 Rewrite `RegenerateForConnector`: skip human or locked docs, pick the template path, merge, use `ApplyGeneratedRender` with an expected version, handle `ErrVersionConflict`, `TouchDocsSynced`
+- [x] 4.2 Legacy upgrade path (`gen_keys IS NULL`), classified by the latest version's author, plus a `doc_adopt` Change
+- [x] 4.3 Conflict Changes with pattern dedup and supersede
+- [x] 4.4 `Engine.OnDocUpdated` hook wired to `chat.SyncDocEmbeddings` in `cmd/server/main.go`
+- [x] 4.5 Update `engine_test.go` (the existing RegenerateForConnector tests) and add sync merge integration tests (locked doc, version race, human origin, legacy author vs system)
 
 ## 5. Changes API
 - [ ] 5.1 `diffToSpec` handles the doc object form

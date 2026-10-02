@@ -15,27 +15,45 @@ const (
 	DocOriginHuman     = "human"
 )
 
+// GeneratedRender is one ApplyGeneratedRender write.
+type GeneratedRender struct {
+	Content         string
+	GenKeys         string // JSON array of the render's block keys
+	ExpectedVersion *int   // non-nil: fail with ErrVersionConflict on a concurrent save
+	Author          string // "" for system writes
+	Trigger         string
+	Origin          string  // "" leaves origin unchanged
+	TemplateID      *string // nil leaves template_id unchanged; "" clears it
+}
+
 // ApplyGeneratedRender writes a sync/regeneration result: content, the
-// rendered block keys and last_synced_at, plus the matching doc_versions row,
-// in one transaction. With a non-nil expectedVersion a concurrent save makes
-// it return ErrVersionConflict instead of overwriting.
-func (s *Store) ApplyGeneratedRender(ctx context.Context, id, content, genKeys string, expectedVersion *int, author, trigger string) (int, error) {
+// rendered block keys and last_synced_at (plus origin/template when set),
+// and the matching doc_versions row, in one transaction.
+func (s *Store) ApplyGeneratedRender(ctx context.Context, id string, r GeneratedRender) (int, error) {
 	var rev int
 	err := s.WithinTransaction(ctx, func(tx *Store) error {
-		r, err := tx.updateDocRev(ctx, id, content, expectedVersion)
+		v, err := tx.updateDocRev(ctx, id, r.Content, r.ExpectedVersion)
 		if err != nil {
 			return err
 		}
-		rev = r
+		rev = v
 		if err := tx.CreateDocVersion(ctx, &DocVersionRecord{
-			DocID: id, Rev: r, Content: content, Author: author, Trigger: trigger,
+			DocID: id, Rev: v, Content: r.Content, Author: r.Author, Trigger: r.Trigger,
 		}); err != nil {
 			return err
 		}
-		now := time.Now().UTC().Format(time.RFC3339)
-		_, err = tx.db.ExecContext(ctx, `UPDATE docs SET gen_keys = ?, last_synced_at = ? WHERE id = ?`, genKeys, now, id)
-		if err != nil {
-			return fmt.Errorf("set doc gen keys: %w", err)
+		query := `UPDATE docs SET gen_keys = ?, last_synced_at = ?`
+		args := []any{r.GenKeys, time.Now().UTC().Format(time.RFC3339)}
+		if r.Origin != "" {
+			query += `, origin = ?`
+			args = append(args, r.Origin)
+		}
+		if r.TemplateID != nil {
+			query += `, template_id = ?`
+			args = append(args, nilToStr(*r.TemplateID))
+		}
+		if _, err := tx.db.ExecContext(ctx, query+` WHERE id = ?`, append(args, id)...); err != nil {
+			return fmt.Errorf("set doc generation: %w", err)
 		}
 		return nil
 	})
@@ -86,11 +104,12 @@ func (s *Store) SetDocOrigin(ctx context.Context, id, origin string) error {
 	return nil
 }
 
-// TouchDocSynced stamps last_synced_at without changing content, so a sync
-// with nothing new doesn't bump updated_at or write a version.
-func (s *Store) TouchDocSynced(ctx context.Context, id string) error {
-	_, err := s.db.ExecContext(ctx, `UPDATE docs SET last_synced_at = ? WHERE id = ?`,
-		time.Now().UTC().Format(time.RFC3339), id)
+// TouchDocSynced stamps last_synced_at and records the render's block keys
+// without changing content, so a sync with nothing new doesn't bump
+// updated_at or write a version.
+func (s *Store) TouchDocSynced(ctx context.Context, id, genKeys string) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE docs SET last_synced_at = ?, gen_keys = ? WHERE id = ?`,
+		time.Now().UTC().Format(time.RFC3339), genKeys, id)
 	if err != nil {
 		return fmt.Errorf("touch doc synced: %w", err)
 	}

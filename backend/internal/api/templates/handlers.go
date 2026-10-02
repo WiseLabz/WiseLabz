@@ -477,7 +477,7 @@ func (h *Handler) Preview(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		previews[connector.ID] = preview
-		item.WouldChange = len(docs) == 0 || docs[0].Content != preview.Content
+		item.WouldChange = len(docs) == 0 || doc.StripMarkers(docs[0].Content) != preview.Content
 		affected = append(affected, item)
 	}
 	var detail *doc.GenerateResult
