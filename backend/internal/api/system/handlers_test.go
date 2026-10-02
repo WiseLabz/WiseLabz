@@ -201,6 +201,26 @@ func TestUpdateRetentionSettings(t *testing.T) {
 			t.Fatalf("status = %d, want %d; body=%s", rr.Code, http.StatusOK, rr.Body.String())
 		}
 	})
+
+	t.Run("omitted deletedDocsDays keeps stored value", func(t *testing.T) {
+		for _, body := range []string{
+			`{"cronExpr":"0 0 * * *","deletedDocsDays":7}`,
+			`{"cronExpr":"0 0 * * *","snapshotDays":30}`,
+		} {
+			rr := httptest.NewRecorder()
+			h.UpdateRetentionSettings(rr, httptest.NewRequest(http.MethodPut, "/api/system/settings/retention", strings.NewReader(body)))
+			if rr.Code != http.StatusOK {
+				t.Fatalf("status = %d, want %d; body=%s", rr.Code, http.StatusOK, rr.Body.String())
+			}
+		}
+		rs, err := h.Store.GetRetentionSettings(t.Context())
+		if err != nil {
+			t.Fatalf("GetRetentionSettings() error: %v", err)
+		}
+		if rs.DeletedDocsDays != 7 {
+			t.Fatalf("DeletedDocsDays = %d, want 7", rs.DeletedDocsDays)
+		}
+	})
 }
 
 func TestGetBackupScheduleDefault(t *testing.T) {

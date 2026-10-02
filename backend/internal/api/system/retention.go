@@ -87,9 +87,12 @@ func (h *Handler) UpdateRetentionSettings(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	// Omitting deletedDocsDays keeps the stored value so older clients don't reset it.
 	deletedDays := 30
 	if req.DeletedDocsDays != nil {
 		deletedDays = *req.DeletedDocsDays
+	} else if current, err := h.Store.GetRetentionSettings(r.Context()); err == nil {
+		deletedDays = current.DeletedDocsDays
 	}
 	var dayErrs []httputil.FieldError
 	for _, f := range []struct {
