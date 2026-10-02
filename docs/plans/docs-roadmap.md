@@ -6,7 +6,7 @@
 > Status:
 > - PR 1 (#478): **merged as #598, archived.** Spec: `openspec/specs/doc-section-ownership/spec.md`;
 >   change history: `openspec/changes/archive/2026-10-02-doc-section-ownership/`.
-> - PR 2 (#494): **implemented; awaiting PR/CI verification.** Change: `openspec/changes/human-docs/`.
+> - PR 2 (#494): **implemented in [PR #600](https://github.com/WiseLabz/WiseLabz/pull/600); CI passed.** Change: `openspec/changes/human-docs/`.
 > - PR 3–4: not started. Create each change with `/opsx:propose` (or by hand under `openspec/changes/<name>/`)
 >   from the matching section below, then implement it with `/opsx:apply`.
 >

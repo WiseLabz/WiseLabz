@@ -21,4 +21,4 @@
 ## 4. Integration
 
 - [x] 4.1 Run full backend/frontend checks and strict OpenSpec validation, refresh and commit graphify output; verify all tasks and requirements with fresh evidence.
-- [ ] 4.2 Push conventional commits, open PR with template and Closes #494, and fix CI until green; verify PR URL and gh pr checks.
+- [x] 4.2 Push conventional commits, open PR with template and Closes #494, and fix CI until green; verify PR URL and gh pr checks.
