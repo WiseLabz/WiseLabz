@@ -67,7 +67,7 @@ When a human-edited block's upstream section also changed, the system SHALL leav
 - `affectedDocIds` containing the doc;
 - a diff of format `doc` whose `baseText` is the human-edited body and whose `headText` is the newly generated body.
 
-There SHALL be at most one open conflict Change per doc and block key. A newer upstream body SHALL replace the older open Change instead of adding another.
+There SHALL be at most one open conflict Change per doc and block key. A newer upstream body SHALL replace the older open Change instead of adding another. A proposal identical to the latest Change for that block SHALL NOT be raised again, even if that Change was dismissed.
 
 #### Scenario: Both sides changed
 - **WHEN** a user edited a generated block and the upstream data for that block then changes

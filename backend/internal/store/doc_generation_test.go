@@ -91,24 +91,29 @@ func TestTouchDocSyncedKeepsUpdatedAt(t *testing.T) {
 	}
 }
 
-func TestGetOpenChangeByPattern(t *testing.T) {
+func TestGetLatestChangeByPattern(t *testing.T) {
 	ctx := context.Background()
 	s := newDocTestStore(t)
-	if _, err := s.GetOpenChangeByPattern(ctx, "p1"); !errors.Is(err, ErrNotFound) {
-		t.Fatalf("empty GetOpenChangeByPattern() = %v, want ErrNotFound", err)
+	if _, err := s.GetLatestChangeByPattern(ctx, "p1"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("empty GetLatestChangeByPattern() = %v, want ErrNotFound", err)
 	}
 	c := &ChangeRecord{ChangeType: "doc_conflict", Severity: "info", Summary: "s", PatternID: "p1"}
 	if err := s.CreateChange(ctx, c); err != nil {
 		t.Fatalf("CreateChange() error: %v", err)
 	}
-	got, err := s.GetOpenChangeByPattern(ctx, "p1")
-	if err != nil || got.ID != c.ID {
-		t.Fatalf("GetOpenChangeByPattern() = %+v, %v", got, err)
-	}
 	if err := s.UpdateChangeStatus(ctx, c.ID, "dismissed"); err != nil {
 		t.Fatalf("UpdateChangeStatus() error: %v", err)
 	}
-	if _, err := s.GetOpenChangeByPattern(ctx, "p1"); !errors.Is(err, ErrNotFound) {
-		t.Fatalf("after dismiss = %v, want ErrNotFound", err)
+	got, err := s.GetLatestChangeByPattern(ctx, "p1")
+	if err != nil || got.ID != c.ID || got.Status != "dismissed" {
+		t.Fatalf("GetLatestChangeByPattern() = %+v, %v; want the dismissed change", got, err)
+	}
+	newer := &ChangeRecord{ChangeType: "doc_conflict", Severity: "info", Summary: "s", PatternID: "p1",
+		DetectedAt: "2999-01-01T00:00:00Z"}
+	if err := s.CreateChange(ctx, newer); err != nil {
+		t.Fatalf("CreateChange() error: %v", err)
+	}
+	if got, _ := s.GetLatestChangeByPattern(ctx, "p1"); got.ID != newer.ID {
+		t.Fatalf("latest = %s, want %s", got.ID, newer.ID)
 	}
 }

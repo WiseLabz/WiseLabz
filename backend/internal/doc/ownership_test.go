@@ -376,3 +376,25 @@ func TestOnDocUpdatedHookRuns(t *testing.T) {
 		t.Fatalf("hook calls = %v, want [%s]", calls, docID)
 	}
 }
+
+func TestDismissedConflictIsNotReraisedForSameUpstream(t *testing.T) {
+	ctx := context.Background()
+	s, e, connectorID, docID := ownershipFixture(t)
+	d := mustGetDoc(t, s, docID)
+	humanSave(t, s, d, strings.Replace(d.Content, "healthy", "mine", 1))
+	pushSnapshot(t, s, connectorID, "Node one", connector.SnapshotSection{Title: "Status", Content: "degraded"})
+	runSync(t, e, connectorID)
+	changes := docChanges(t, s, connectorID)
+	if err := s.UpdateChangeStatus(ctx, changes[0].ID, "dismissed"); err != nil {
+		t.Fatalf("UpdateChangeStatus() error: %v", err)
+	}
+	runSync(t, e, connectorID)
+	if n := len(docChanges(t, s, connectorID)); n != 1 {
+		t.Fatalf("doc changes after re-sync = %d, want 1 (dismissal sticks)", n)
+	}
+	pushSnapshot(t, s, connectorID, "Node one", connector.SnapshotSection{Title: "Status", Content: "down"})
+	runSync(t, e, connectorID)
+	if n := len(docChanges(t, s, connectorID)); n != 2 {
+		t.Fatalf("doc changes after new upstream = %d, want 2", n)
+	}
+}

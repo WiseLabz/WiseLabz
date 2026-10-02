@@ -79,9 +79,9 @@ One doc failing does not abort the others. Errors are collected with `errors.Joi
 ### 6. Conflict and adopt Changes
 - Stored `changes.diff` is a JSON **object** for doc Changes, which tells it apart from the infra `[]DiffPatch` array:
   `{"format":"doc","docId":…,"key":…,"human":…,"generated":…,"genHash":…}`. For adopt, `key` is `""` and `human`/`generated` hold whole-doc content.
-- `pattern_id` = `doc_conflict:<docId>:<key>` or `doc_adopt:<docId>`. Dedup uses a new store method, `GetOpenChangeByPattern(patternID)` (status `new`):
-  - Same `genHash`: skip.
-  - Different `genHash`: dismiss the old Change and create a new one.
+- `pattern_id` = `doc_conflict:<docId>:<key>` or `doc_adopt:<docId>`. Dedup uses a new store method, `GetLatestChangeByPattern(patternID)` (any status):
+  - Same `genHash` as the latest Change: skip, so a dismissal sticks until upstream changes again.
+  - Different `genHash`: dismiss the latest Change if it is still open, then create a new one.
 - Fields: `change_type` = `doc_conflict` | `doc_adopt`, `severity` = `info`, `service_id` = connector, `affected_doc_ids` = `[docId]`. No AlertRecord is created.
 - `diffToSpec` in `api/changes/handlers.go` detects the object form and returns:
   `{format:"doc", baseText: human, headText: generated, baseLabel:"Current doc", headLabel:"Generated", headTrigger:"sync", language:"md"}`.

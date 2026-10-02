@@ -178,8 +178,10 @@ func (e *Engine) upgradeLegacyDoc(ctx context.Context, d store.DocRecord, render
 }
 
 // raiseDocChange records a doc Change, keeping at most one open Change per
-// doc (and block): an identical open one is left alone, an outdated one is
-// dismissed in favour of the new proposal.
+// doc (and block). A proposal identical to the latest one is not raised
+// again, whatever happened to that one (so dismissing it sticks until
+// upstream changes again); an outdated open one is dismissed in favour of
+// the new proposal.
 func (e *Engine) raiseDocChange(ctx context.Context, d store.DocRecord, changeType string, diff ChangeDiff) error {
 	diff.Format, diff.DocID = "doc", d.ID
 	pattern := changeType + ":" + d.ID
@@ -189,14 +191,16 @@ func (e *Engine) raiseDocChange(ctx context.Context, d store.DocRecord, changeTy
 		summary = fmt.Sprintf("Doc %q: edited section %q also changed upstream", d.Title, diff.Key)
 	}
 
-	open, err := e.store.GetOpenChangeByPattern(ctx, pattern)
+	latest, err := e.store.GetLatestChangeByPattern(ctx, pattern)
 	switch {
 	case err == nil:
-		if prev, ok := ParseChangeDiff(open.Diff); ok && prev.GenHash == diff.GenHash {
+		if prev, ok := ParseChangeDiff(latest.Diff); ok && prev.GenHash == diff.GenHash {
 			return nil
 		}
-		if err := e.store.UpdateChangeStatus(ctx, open.ID, "dismissed"); err != nil {
-			return err
+		if latest.Status == "new" {
+			if err := e.store.UpdateChangeStatus(ctx, latest.ID, "dismissed"); err != nil {
+				return err
+			}
 		}
 	case !errors.Is(err, store.ErrNotFound):
 		return err

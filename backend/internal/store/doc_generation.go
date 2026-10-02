@@ -116,19 +116,19 @@ func (s *Store) TouchDocSynced(ctx context.Context, id, genKeys string) error {
 	return nil
 }
 
-// GetOpenChangeByPattern returns the newest still-open ("new") change with
-// patternID, or ErrNotFound.
-func (s *Store) GetOpenChangeByPattern(ctx context.Context, patternID string) (*ChangeRecord, error) {
+// GetLatestChangeByPattern returns the most recently detected change with
+// patternID, whatever its status, or ErrNotFound.
+func (s *Store) GetLatestChangeByPattern(ctx context.Context, patternID string) (*ChangeRecord, error) {
 	c, err := scanChange(s.db.QueryRowContext(ctx, `
 		SELECT `+changeColumns+` FROM changes
-		WHERE pattern_id = ? AND status = 'new'
-		ORDER BY detected_at DESC LIMIT 1
+		WHERE pattern_id = ?
+		ORDER BY detected_at DESC, id DESC LIMIT 1
 	`, patternID))
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
 	if err != nil {
-		return nil, fmt.Errorf("get open change by pattern: %w", err)
+		return nil, fmt.Errorf("get latest change by pattern: %w", err)
 	}
 	return &c, nil
 }
