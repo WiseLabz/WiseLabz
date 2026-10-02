@@ -660,7 +660,7 @@ export const getGetDocsDocIdVersionsResponseMock = (): DocVersionMeta[] =>
       faker.string.alpha({ length: { min: 10, max: 20 } }),
       null,
     ]),
-    trigger: faker.helpers.arrayElement(['ai', 'template', 'manual', 'sync'] as const),
+    trigger: faker.helpers.arrayElement(['ai', 'template', 'manual', 'sync', 'import'] as const),
   }));
 
 export const getGetDocsDocIdVersionsRevResponseMock = (): DocVersion => ({
@@ -671,7 +671,7 @@ export const getGetDocsDocIdVersionsRevResponseMock = (): DocVersion => ({
       faker.string.alpha({ length: { min: 10, max: 20 } }),
       null,
     ]),
-    trigger: faker.helpers.arrayElement(['ai', 'template', 'manual', 'sync'] as const),
+    trigger: faker.helpers.arrayElement(['ai', 'template', 'manual', 'sync', 'import'] as const),
   },
   ...{ content: faker.string.alpha({ length: { min: 10, max: 20 } }) },
 });

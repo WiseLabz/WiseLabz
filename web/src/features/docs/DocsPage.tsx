@@ -11,6 +11,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useCanMutate, useIsInstanceAdmin } from '../../hooks/useRole';
 import { NewDocDialog } from '../../components/docs/NewDocDialog';
+import { ImportDocsDialog } from '../../components/docs/ImportDocsDialog';
 import { toast } from '../../lib/toast';
 import { patchDocsDocId, useGetDocsTree, useGetDocsDocId } from '../../api/generated/docs/docs';
 import { Panel } from '../../components/ui/Panel';
@@ -208,11 +209,24 @@ export function DocsPage() {
           setSearchParams(next);
         }}
       />
+      <ImportDocsDialog
+        open={admin && searchParams.has('import')}
+        onClose={() => {
+          const next = new URLSearchParams(searchParams);
+          next.delete('import');
+          setSearchParams(next);
+        }}
+      />
       {/* Content */}
       <section className="min-w-0 flex-1">
         <div className="mb-3 flex justify-end gap-3">
           {admin && (
             <Link to="/docs/trash">{t('docs.human.trash', { defaultValue: 'Trash' })}</Link>
+          )}
+          {admin && (
+            <Button size="sm" variant="secondary" onClick={() => setSearchParams({ import: '1' })}>
+              {t('docs.import.action')}
+            </Button>
           )}
           {canMutate && (
             <Button size="sm" onClick={() => setSearchParams({ new: '1' })}>

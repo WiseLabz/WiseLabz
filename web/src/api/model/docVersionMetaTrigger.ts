@@ -15,4 +15,5 @@ export const DocVersionMetaTrigger = {
   template: 'template',
   manual: 'manual',
   sync: 'sync',
+  import: 'import',
 } as const;

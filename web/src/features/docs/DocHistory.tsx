@@ -28,6 +28,7 @@ import {
   FileTextIcon,
   UserIcon,
   SyncIcon,
+  DownloadIcon,
   HistoryIcon as RestoreIcon,
 } from '../../components/icons';
 import type { DocVersionMetaTrigger } from '../../api/model';
@@ -40,6 +41,7 @@ const TRIGGER: Record<
   template: { Icon: FileTextIcon, tone: 'var(--color-accent-primary-bright)' },
   manual: { Icon: UserIcon, tone: 'var(--color-ink-muted)' },
   sync: { Icon: SyncIcon, tone: 'var(--color-ink-muted)' },
+  import: { Icon: DownloadIcon, tone: 'var(--color-ink-muted)' },
 };
 
 export function DocHistory({
@@ -107,7 +109,8 @@ export function DocHistory({
       {/* Version rail */}
       <ol className="flex flex-col gap-1">
         {metas.map((v) => {
-          const trig = TRIGGER[v.trigger];
+          // Older servers may send triggers the client has no style for.
+          const trig = TRIGGER[v.trigger] ?? TRIGGER.manual;
           const active = v.rev === selected;
           return (
             <li key={v.rev}>
@@ -136,7 +139,7 @@ export function DocHistory({
                     )}
                   </span>
                   <span className="block text-2xs text-ink-faint">
-                    {t(`docs.trigger.${v.trigger}`)} ·{' '}
+                    {t(`docs.trigger.${v.trigger}`, { defaultValue: v.trigger })} ·{' '}
                     {t('common.ago', { time: relativeTime(v.createdAt) })}
                   </span>
                 </span>
