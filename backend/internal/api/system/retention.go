@@ -9,6 +9,7 @@ import (
 
 	"github.com/robfig/cron/v3"
 
+	"github.com/WiseLabz/wiselabz/internal/blobstore"
 	"github.com/WiseLabz/wiselabz/internal/httputil"
 	"github.com/WiseLabz/wiselabz/internal/retention"
 	"github.com/WiseLabz/wiselabz/internal/store"
@@ -199,7 +200,12 @@ func (h *Handler) reregisterRetentionJob(rs store.RetentionSettings) {
 	}
 
 	id, err := h.Scheduler.AddJob("retention", rs.CronExpr, func(jobCtx context.Context) error {
-		return retention.RunCleanupOnce(jobCtx, h.Store, rs, slog.Default())
+		blobstore.PublicationMu.Lock()
+		defer blobstore.PublicationMu.Unlock()
+		purgeErr := retention.RunCleanupOnce(jobCtx, h.Store, rs, slog.Default())
+		blobs := blobstore.New(h.Config.Attachments.Dir, h.Config.Attachments.MaxBytes)
+		gcErr := blobs.Sweep(func(hash string) (bool, error) { return h.Store.BlobReferenced(jobCtx, hash) })
+		return errors.Join(purgeErr, gcErr)
 	})
 	if err != nil {
 		// err wraps rs.CronExpr (user-controlled via PUT /settings/retention);

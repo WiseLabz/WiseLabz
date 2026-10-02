@@ -16,6 +16,7 @@ const contentSecurityPolicy = "default-src 'self'; " +
 	"img-src 'self' data: blob:; " +
 	"font-src 'self' data:; " +
 	"connect-src 'self'; " +
+	"frame-src 'self'; " +
 	"frame-ancestors 'none'; " +
 	"base-uri 'self'; " +
 	"object-src 'none'; " +

@@ -61,6 +61,7 @@ func mountAPIRoutes(r chi.Router, d routerDeps) {
 
 	mountAuthRoutes(r, d)
 	mountShareRoutes(r, d)
+	r.Get("/attachments/{aid}/raw", d.docH.RawAttachment)
 
 	// --- Protected routes (authenticated) ---
 	r.Group(func(r chi.Router) {

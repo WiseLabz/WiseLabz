@@ -366,7 +366,7 @@ func (h *Handler) ShareLinkDoc(w http.ResponseWriter, r *http.Request) {
 			httputil.HandleStoreError(w, err)
 			return
 		}
-		httputil.JSON(w, http.StatusOK, d)
+		h.writeDoc(w, r, d)
 		return
 	}
 
@@ -392,5 +392,5 @@ func (h *Handler) ShareLinkDoc(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	httputil.JSON(w, http.StatusOK, d)
+	h.writeDoc(w, r, d)
 }
