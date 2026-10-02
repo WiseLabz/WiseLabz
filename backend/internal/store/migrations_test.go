@@ -131,6 +131,19 @@ func TestRunMigrationsDown(t *testing.T) {
 		t.Fatalf("RunMigrations() error: %v", err)
 	}
 
+	for _, col := range []string{"parent_id", "deleted_at", "created_by"} {
+		if !hasColumn(t, db, "sqlite", "docs", col) {
+			t.Fatalf("docs.%s missing", col)
+		}
+	}
+	if err := RunMigrationsDown(db, "sqlite", logger); err != nil {
+		t.Fatalf("rollback human_docs: %v", err)
+	}
+	for _, col := range []string{"parent_id", "deleted_at", "created_by"} {
+		if hasColumn(t, db, "sqlite", "docs", col) {
+			t.Fatalf("docs.%s remains after rollback", col)
+		}
+	}
 	// 000050_doc_section_ownership is the latest migration.
 	for _, col := range []string{"origin", "template_id", "last_synced_at", "gen_keys"} {
 		if !hasColumn(t, db, "sqlite", "docs", col) {
@@ -379,6 +392,19 @@ func TestRunMigrationsDown(t *testing.T) {
 	}
 	if err := db.QueryRow("SELECT name FROM sqlite_master WHERE type='table' AND name='user_mfa_factors'").Scan(&mfaFactorsTable); err != nil {
 		t.Fatalf("user_mfa_factors table missing after reapply: %v", err)
+	}
+	for _, col := range []string{"parent_id", "deleted_at", "created_by"} {
+		if !hasColumn(t, db, "sqlite", "docs", col) {
+			t.Fatalf("docs.%s missing", col)
+		}
+	}
+	if err := RunMigrationsDown(db, "sqlite", logger); err != nil {
+		t.Fatalf("rollback human_docs: %v", err)
+	}
+	for _, col := range []string{"parent_id", "deleted_at", "created_by"} {
+		if hasColumn(t, db, "sqlite", "docs", col) {
+			t.Fatalf("docs.%s remains after rollback", col)
+		}
 	}
 	// 000050_doc_section_ownership is the latest migration again after the
 	// reapply above, so it is rolled back first — same order as the very
@@ -652,6 +678,19 @@ func TestRunMigrationsDownPostgres(t *testing.T) {
 
 	if err := RunMigrations(db, "postgres", logger); err != nil {
 		t.Fatalf("RunMigrations() error: %v", err)
+	}
+	for _, col := range []string{"parent_id", "deleted_at", "created_by"} {
+		if !hasColumn(t, db, "postgres", "docs", col) {
+			t.Fatalf("docs.%s missing", col)
+		}
+	}
+	if err := RunMigrationsDown(db, "postgres", logger); err != nil {
+		t.Fatalf("rollback human_docs: %v", err)
+	}
+	for _, col := range []string{"parent_id", "deleted_at", "created_by"} {
+		if hasColumn(t, db, "postgres", "docs", col) {
+			t.Fatalf("docs.%s remains after rollback", col)
+		}
 	}
 	if !hasColumn(t, db, "postgres", "docs", "gen_keys") {
 		t.Fatal("docs.gen_keys missing after migrations")

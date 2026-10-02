@@ -245,6 +245,7 @@ type RetentionSettings struct {
 	SyncRunDays     int    `mapstructure:"sync_run_days"`
 	AuditDays       int    `mapstructure:"audit_days"`
 	HealthCheckDays int    `mapstructure:"health_check_days"`
+	DeletedDocsDays int    `mapstructure:"deleted_docs_days"`
 	ReportDays      int    `mapstructure:"report_days"`
 	CronExpr        string `mapstructure:"cron_expr"` // cron expression for cleanup schedule
 }
@@ -399,6 +400,7 @@ func Load() (*Config, error) {
 	v.SetDefault("retention.audit_days", 180)
 	v.SetDefault("retention.health_check_days", 90)
 	v.SetDefault("retention.report_days", 90)
+	v.SetDefault("retention.deleted_docs_days", 30)
 	v.SetDefault("retention.cron_expr", "0 0 * * *") // daily retention cleanup at midnight
 	v.SetDefault("backup.dir", "./data/backups")     // backups subdirectory in data folder
 	v.SetDefault("backup.cron_expr", "0 3 * * *")    // daily backups at 3 AM
@@ -440,7 +442,7 @@ func Load() (*Config, error) {
 		"health.cron_expr",
 		"rotation.max_age_days", "rotation.warn_days",
 		"log.level", "log.format",
-		"retention.snapshot_days", "retention.doc_version_days", "retention.alert_days", "retention.sync_run_days", "retention.audit_days", "retention.health_check_days", "retention.report_days", "retention.cron_expr",
+		"retention.snapshot_days", "retention.doc_version_days", "retention.alert_days", "retention.sync_run_days", "retention.audit_days", "retention.health_check_days", "retention.report_days", "retention.deleted_docs_days", "retention.cron_expr",
 		"backup.dir", "backup.cron_expr", "backup.max_backups", "backup.max_age_hours", "backup.enabled",
 		"metrics.enabled", "metrics.token",
 		"doc_export.dir", "doc_export.cron_expr", "doc_export.enabled",

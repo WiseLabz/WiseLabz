@@ -37,6 +37,22 @@ export const getGetDocsResponseMock = (
       faker.string.alpha({ length: { min: 10, max: 20 } }),
       null,
     ]),
+    parentId: faker.helpers.arrayElement([
+      faker.string.alpha({ length: { min: 10, max: 20 } }),
+      undefined,
+    ]),
+    deletedAt: faker.helpers.arrayElement([
+      faker.string.alpha({ length: { min: 10, max: 20 } }),
+      undefined,
+    ]),
+    createdBy: faker.helpers.arrayElement([
+      faker.string.alpha({ length: { min: 10, max: 20 } }),
+      undefined,
+    ]),
+    createdAt: faker.helpers.arrayElement([
+      faker.date.past().toISOString().slice(0, 19) + 'Z',
+      undefined,
+    ]),
     content: faker.string.alpha({ length: { min: 10, max: 20 } }),
     currentVersion: faker.number.int(),
     updatedAt: faker.date.past().toISOString().slice(0, 19) + 'Z',
@@ -59,6 +75,136 @@ export const getGetDocsResponseMock = (
   ...overrideResponse,
 });
 
+export const getPostDocsResponseMock = (
+  overrideResponse: Partial<Extract<Doc, object>> = {}
+): Doc => ({
+  docId: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  title: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  kind: faker.helpers.arrayElement(['lab', 'service'] as const),
+  serviceId: faker.helpers.arrayElement([
+    faker.string.alpha({ length: { min: 10, max: 20 } }),
+    null,
+  ]),
+  parentId: faker.helpers.arrayElement([
+    faker.string.alpha({ length: { min: 10, max: 20 } }),
+    undefined,
+  ]),
+  deletedAt: faker.helpers.arrayElement([
+    faker.string.alpha({ length: { min: 10, max: 20 } }),
+    undefined,
+  ]),
+  createdBy: faker.helpers.arrayElement([
+    faker.string.alpha({ length: { min: 10, max: 20 } }),
+    undefined,
+  ]),
+  createdAt: faker.helpers.arrayElement([
+    faker.date.past().toISOString().slice(0, 19) + 'Z',
+    undefined,
+  ]),
+  content: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  currentVersion: faker.number.int(),
+  updatedAt: faker.date.past().toISOString().slice(0, 19) + 'Z',
+  origin: faker.helpers.arrayElement([
+    faker.helpers.arrayElement(['generated', 'human'] as const),
+    undefined,
+  ]),
+  templateId: faker.helpers.arrayElement([
+    faker.string.alpha({ length: { min: 10, max: 20 } }),
+    undefined,
+  ]),
+  lastSyncedAt: faker.helpers.arrayElement([
+    faker.string.alpha({ length: { min: 10, max: 20 } }),
+    undefined,
+  ]),
+  ...overrideResponse,
+});
+
+export const getGetDocsTrashResponseMock = (): Doc[] =>
+  Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() => ({
+    docId: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    title: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    kind: faker.helpers.arrayElement(['lab', 'service'] as const),
+    serviceId: faker.helpers.arrayElement([
+      faker.string.alpha({ length: { min: 10, max: 20 } }),
+      null,
+    ]),
+    parentId: faker.helpers.arrayElement([
+      faker.string.alpha({ length: { min: 10, max: 20 } }),
+      undefined,
+    ]),
+    deletedAt: faker.helpers.arrayElement([
+      faker.string.alpha({ length: { min: 10, max: 20 } }),
+      undefined,
+    ]),
+    createdBy: faker.helpers.arrayElement([
+      faker.string.alpha({ length: { min: 10, max: 20 } }),
+      undefined,
+    ]),
+    createdAt: faker.helpers.arrayElement([
+      faker.date.past().toISOString().slice(0, 19) + 'Z',
+      undefined,
+    ]),
+    content: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    currentVersion: faker.number.int(),
+    updatedAt: faker.date.past().toISOString().slice(0, 19) + 'Z',
+    origin: faker.helpers.arrayElement([
+      faker.helpers.arrayElement(['generated', 'human'] as const),
+      undefined,
+    ]),
+    templateId: faker.helpers.arrayElement([
+      faker.string.alpha({ length: { min: 10, max: 20 } }),
+      undefined,
+    ]),
+    lastSyncedAt: faker.helpers.arrayElement([
+      faker.string.alpha({ length: { min: 10, max: 20 } }),
+      undefined,
+    ]),
+  }));
+
+export const getPostDocsDocIdRestoreResponseMock = (
+  overrideResponse: Partial<Extract<Doc, object>> = {}
+): Doc => ({
+  docId: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  title: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  kind: faker.helpers.arrayElement(['lab', 'service'] as const),
+  serviceId: faker.helpers.arrayElement([
+    faker.string.alpha({ length: { min: 10, max: 20 } }),
+    null,
+  ]),
+  parentId: faker.helpers.arrayElement([
+    faker.string.alpha({ length: { min: 10, max: 20 } }),
+    undefined,
+  ]),
+  deletedAt: faker.helpers.arrayElement([
+    faker.string.alpha({ length: { min: 10, max: 20 } }),
+    undefined,
+  ]),
+  createdBy: faker.helpers.arrayElement([
+    faker.string.alpha({ length: { min: 10, max: 20 } }),
+    undefined,
+  ]),
+  createdAt: faker.helpers.arrayElement([
+    faker.date.past().toISOString().slice(0, 19) + 'Z',
+    undefined,
+  ]),
+  content: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  currentVersion: faker.number.int(),
+  updatedAt: faker.date.past().toISOString().slice(0, 19) + 'Z',
+  origin: faker.helpers.arrayElement([
+    faker.helpers.arrayElement(['generated', 'human'] as const),
+    undefined,
+  ]),
+  templateId: faker.helpers.arrayElement([
+    faker.string.alpha({ length: { min: 10, max: 20 } }),
+    undefined,
+  ]),
+  lastSyncedAt: faker.helpers.arrayElement([
+    faker.string.alpha({ length: { min: 10, max: 20 } }),
+    undefined,
+  ]),
+  ...overrideResponse,
+});
+
 export const getGetDocsTreeResponseMock = (
   overrideResponse: Partial<Extract<DocNode, object>> = {}
 ): DocNode => ({
@@ -69,6 +215,15 @@ export const getGetDocsTreeResponseMock = (
     faker.string.alpha({ length: { min: 10, max: 20 } }),
     null,
   ]),
+  parentId: faker.helpers.arrayElement([
+    faker.string.alpha({ length: { min: 10, max: 20 } }),
+    undefined,
+  ]),
+  origin: faker.helpers.arrayElement([
+    faker.helpers.arrayElement(['generated', 'human'] as const),
+    undefined,
+  ]),
+  branch: faker.helpers.arrayElement([faker.datatype.boolean(), undefined]),
   children: faker.helpers.arrayElement([
     Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() => ({
       docId: faker.string.alpha({ length: { min: 10, max: 20 } }),
@@ -78,6 +233,15 @@ export const getGetDocsTreeResponseMock = (
         faker.string.alpha({ length: { min: 10, max: 20 } }),
         null,
       ]),
+      parentId: faker.helpers.arrayElement([
+        faker.string.alpha({ length: { min: 10, max: 20 } }),
+        undefined,
+      ]),
+      origin: faker.helpers.arrayElement([
+        faker.helpers.arrayElement(['generated', 'human'] as const),
+        undefined,
+      ]),
+      branch: faker.helpers.arrayElement([faker.datatype.boolean(), undefined]),
       children: faker.helpers.arrayElement([[], undefined]),
     })),
     undefined,
@@ -94,6 +258,22 @@ export const getGetDocsServiceConnectorIdResponseMock = (
   serviceId: faker.helpers.arrayElement([
     faker.string.alpha({ length: { min: 10, max: 20 } }),
     null,
+  ]),
+  parentId: faker.helpers.arrayElement([
+    faker.string.alpha({ length: { min: 10, max: 20 } }),
+    undefined,
+  ]),
+  deletedAt: faker.helpers.arrayElement([
+    faker.string.alpha({ length: { min: 10, max: 20 } }),
+    undefined,
+  ]),
+  createdBy: faker.helpers.arrayElement([
+    faker.string.alpha({ length: { min: 10, max: 20 } }),
+    undefined,
+  ]),
+  createdAt: faker.helpers.arrayElement([
+    faker.date.past().toISOString().slice(0, 19) + 'Z',
+    undefined,
   ]),
   content: faker.string.alpha({ length: { min: 10, max: 20 } }),
   currentVersion: faker.number.int(),
@@ -123,6 +303,22 @@ export const getGetDocsDocIdResponseMock = (
     faker.string.alpha({ length: { min: 10, max: 20 } }),
     null,
   ]),
+  parentId: faker.helpers.arrayElement([
+    faker.string.alpha({ length: { min: 10, max: 20 } }),
+    undefined,
+  ]),
+  deletedAt: faker.helpers.arrayElement([
+    faker.string.alpha({ length: { min: 10, max: 20 } }),
+    undefined,
+  ]),
+  createdBy: faker.helpers.arrayElement([
+    faker.string.alpha({ length: { min: 10, max: 20 } }),
+    undefined,
+  ]),
+  createdAt: faker.helpers.arrayElement([
+    faker.date.past().toISOString().slice(0, 19) + 'Z',
+    undefined,
+  ]),
   content: faker.string.alpha({ length: { min: 10, max: 20 } }),
   currentVersion: faker.number.int(),
   updatedAt: faker.date.past().toISOString().slice(0, 19) + 'Z',
@@ -150,6 +346,66 @@ export const getPutDocsDocIdResponseMock = (
   serviceId: faker.helpers.arrayElement([
     faker.string.alpha({ length: { min: 10, max: 20 } }),
     null,
+  ]),
+  parentId: faker.helpers.arrayElement([
+    faker.string.alpha({ length: { min: 10, max: 20 } }),
+    undefined,
+  ]),
+  deletedAt: faker.helpers.arrayElement([
+    faker.string.alpha({ length: { min: 10, max: 20 } }),
+    undefined,
+  ]),
+  createdBy: faker.helpers.arrayElement([
+    faker.string.alpha({ length: { min: 10, max: 20 } }),
+    undefined,
+  ]),
+  createdAt: faker.helpers.arrayElement([
+    faker.date.past().toISOString().slice(0, 19) + 'Z',
+    undefined,
+  ]),
+  content: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  currentVersion: faker.number.int(),
+  updatedAt: faker.date.past().toISOString().slice(0, 19) + 'Z',
+  origin: faker.helpers.arrayElement([
+    faker.helpers.arrayElement(['generated', 'human'] as const),
+    undefined,
+  ]),
+  templateId: faker.helpers.arrayElement([
+    faker.string.alpha({ length: { min: 10, max: 20 } }),
+    undefined,
+  ]),
+  lastSyncedAt: faker.helpers.arrayElement([
+    faker.string.alpha({ length: { min: 10, max: 20 } }),
+    undefined,
+  ]),
+  ...overrideResponse,
+});
+
+export const getPatchDocsDocIdResponseMock = (
+  overrideResponse: Partial<Extract<Doc, object>> = {}
+): Doc => ({
+  docId: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  title: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  kind: faker.helpers.arrayElement(['lab', 'service'] as const),
+  serviceId: faker.helpers.arrayElement([
+    faker.string.alpha({ length: { min: 10, max: 20 } }),
+    null,
+  ]),
+  parentId: faker.helpers.arrayElement([
+    faker.string.alpha({ length: { min: 10, max: 20 } }),
+    undefined,
+  ]),
+  deletedAt: faker.helpers.arrayElement([
+    faker.string.alpha({ length: { min: 10, max: 20 } }),
+    undefined,
+  ]),
+  createdBy: faker.helpers.arrayElement([
+    faker.string.alpha({ length: { min: 10, max: 20 } }),
+    undefined,
+  ]),
+  createdAt: faker.helpers.arrayElement([
+    faker.date.past().toISOString().slice(0, 19) + 'Z',
+    undefined,
   ]),
   content: faker.string.alpha({ length: { min: 10, max: 20 } }),
   currentVersion: faker.number.int(),
@@ -202,6 +458,22 @@ export const getPostDocsDocIdVersionsRevRestoreResponseMock = (
   serviceId: faker.helpers.arrayElement([
     faker.string.alpha({ length: { min: 10, max: 20 } }),
     null,
+  ]),
+  parentId: faker.helpers.arrayElement([
+    faker.string.alpha({ length: { min: 10, max: 20 } }),
+    undefined,
+  ]),
+  deletedAt: faker.helpers.arrayElement([
+    faker.string.alpha({ length: { min: 10, max: 20 } }),
+    undefined,
+  ]),
+  createdBy: faker.helpers.arrayElement([
+    faker.string.alpha({ length: { min: 10, max: 20 } }),
+    undefined,
+  ]),
+  createdAt: faker.helpers.arrayElement([
+    faker.date.past().toISOString().slice(0, 19) + 'Z',
+    undefined,
   ]),
   content: faker.string.alpha({ length: { min: 10, max: 20 } }),
   currentVersion: faker.number.int(),

@@ -113,6 +113,8 @@ doc_export:
 # (never delete). Always protects a connector's latest snapshot, a doc's
 # current revision, and any pending/snoozed alert regardless of age.
 retention:
+  # Permanently purge deleted docs after 30 days; 0 disables purge.
+  deleted_docs_days: 30
   # service_snapshots older than this (days) are purged, except each
   # connector's latest snapshot
   snapshot_days: 90

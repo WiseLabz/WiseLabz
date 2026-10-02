@@ -15,6 +15,11 @@ export interface Doc {
   kind: DocKind;
   /** @nullable */
   serviceId?: string | null;
+  parentId?: string;
+  /** Empty for active docs; UTC deletion batch timestamp otherwise */
+  deletedAt?: string;
+  createdBy?: string;
+  createdAt?: string;
   /** Markdown body. Sync-owned sections are wrapped in `<!-- wl:gen key="…" h="…" -->` … `<!-- /wl:gen -->` comment markers; everything outside them is human-owned. */
   content: string;
   currentVersion: number;

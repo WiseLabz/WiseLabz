@@ -219,6 +219,27 @@ func ValidateBundle(b *Bundle) error {
 	for _, d := range b.Docs {
 		docIDs[d.ID] = true
 	}
+	docsByID := map[string]store.DocRecord{}
+	for _, d := range b.Docs {
+		docsByID[d.ID] = d
+	}
+	for _, d := range b.Docs {
+		seen := map[string]bool{d.ID: true}
+		depth := 1
+		for parentID := d.ParentID; parentID != ""; {
+			parent, ok := docsByID[parentID]
+			if !ok || parent.ServiceID != d.ServiceID || seen[parentID] || (d.DeletedAt == "" && parent.DeletedAt != "") {
+				return fmt.Errorf("invalid parent of doc %q", d.ID)
+			}
+			seen[parentID] = true
+			depth++
+			if depth > 5 {
+				return fmt.Errorf("doc %q exceeds maximum depth five", d.ID)
+			}
+			parentID = parent.ParentID
+		}
+	}
+
 	for _, v := range b.DocVersions {
 		if !docIDs[v.DocID] {
 			return fmt.Errorf("doc version %q references unknown doc %q", v.ID, v.DocID)
@@ -265,7 +286,7 @@ func Import(ctx context.Context, s *store.Store, b *Bundle) (Result, error) {
 func exportDocs(ctx context.Context, s *store.Store) ([]store.DocRecord, error) {
 	docs := []store.DocRecord{}
 	for offset := 0; ; offset += exportPageSize {
-		page, total, err := s.ListAllDocsWithContent(ctx, "", offset, exportPageSize)
+		page, total, err := s.ListBackupDocs(ctx, offset, exportPageSize)
 		if err != nil {
 			return nil, err
 		}
@@ -320,10 +341,20 @@ func importBundle(ctx context.Context, s *store.Store, b *Bundle) (Result, error
 			res.Docs.Skipped++
 			continue
 		}
+		d.ParentID = ""
 		if err := s.CreateDoc(ctx, &d); err != nil {
 			return res, fmt.Errorf("import doc %q: %w", d.ID, err)
 		}
 		res.Docs.Imported++
+	}
+
+	for _, d := range b.Docs {
+		if existingDocs[d.ID] || d.ParentID == "" {
+			continue
+		}
+		if _, err := s.DB().ExecContext(ctx, `UPDATE docs SET parent_id = ? WHERE id = ?`, d.ParentID, d.ID); err != nil {
+			return res, fmt.Errorf("import doc parent: %w", err)
+		}
 	}
 
 	// No Get-by-ID for doc versions; check existence against the versions

@@ -106,6 +106,12 @@ func RunCleanupOnce(ctx context.Context, s *store.Store, cfg store.RetentionSett
 		}
 	}
 
+	if cfg.DeletedDocsDays > 0 {
+		if _, err := s.PurgeDeletedDocs(ctx, cutoff(cfg.DeletedDocsDays)); err != nil {
+			errs = append(errs, fmt.Errorf("purge deleted docs: %w", err))
+		}
+	}
+
 	// Tables without a configurable *Days setting use fixed windows.
 	fixed := []struct {
 		name   string

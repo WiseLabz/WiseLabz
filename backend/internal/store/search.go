@@ -90,7 +90,7 @@ func ftsMatchExpr(tokens []string) string {
 // SearchContent runs a full-text search over docs and runbooks and returns at
 // most limit hits ranked by relevance. Docs are limited to those userID may
 // view (same rule as ListViewableDocs: a viewer grant on the doc's connector,
-// honouring any API-key restriction, plus lab-wide docs for instance admins).
+// honouring API-key restrictions, plus human lab notes and admin-only inventory).
 // Runbooks are global, like the runbooks REST list; their connector-bound
 // steps are redacted by the caller, not matched here.
 func (s *Store) SearchContent(ctx context.Context, userID, query string, limit int) ([]SearchHit, error) {
@@ -159,7 +159,10 @@ func (s *Store) searchDocs(ctx context.Context, userID string, tokens []string, 
 	if auth.InstanceAdminFromContext(ctx) {
 		viewable += ` OR d.service_id IS NULL OR d.service_id = ''`
 	}
-	viewable += `)`
+	if !auth.InstanceAdminFromContext(ctx) {
+		viewable += ` OR ((d.service_id IS NULL OR d.service_id = '') AND d.origin = 'human')`
+	}
+	viewable += `) AND d.deleted_at IS NULL`
 
 	var sqlText string
 	var args []any

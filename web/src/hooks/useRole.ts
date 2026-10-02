@@ -18,7 +18,8 @@ type ConnectorWithRole = Connector & { myRole?: 'viewer' | 'operator' | '' };
 /** True for the flat, non-connector-scoped instance-admin role. */
 export function useIsInstanceAdmin(): boolean {
   const { data } = useGetMe();
-  return (data as UserWithInstanceAdmin | undefined)?.instanceAdminRole === 'admin';
+  const user = data as UserWithInstanceAdmin | undefined;
+  return (user?.instanceAdminRole ?? user?.role) === 'admin';
 }
 
 /** The current user's role on one connector, or undefined if no grant. */

@@ -13,6 +13,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { AnimatePresence, motion } from 'motion/react';
 import { matchSorter } from 'match-sorter';
+import { flattenDocTree } from '../../lib/docTree';
 import { useUi } from '../../store/ui';
 import { useCanMutate } from '../../hooks/useRole';
 import { runSync } from '../../lib/runSync';
@@ -108,6 +109,13 @@ function buildCommands(ctx: CommandCtx, connectors: Connector[], docNodes: DocNo
   ];
   // Mutating actions only surface for operators — the server still enforces it.
   if (canMutate) {
+    actions.push({
+      id: 'a-new-doc',
+      label: t('docs.human.new', { defaultValue: 'New doc' }),
+      group: 'actions',
+      Icon: FileTextIcon,
+      run: (c) => c.navigate('/docs?new=1'),
+    });
     actions.unshift({
       id: 'a-sync',
       label: t('command.action.syncAll'),
@@ -212,7 +220,12 @@ function PaletteBody() {
     [navigate, t, canMutate, queryClient]
   );
   const commands = useMemo(
-    () => buildCommands(ctx, connectorsQuery.data ?? [], docsTreeQuery.data?.children ?? []),
+    () =>
+      buildCommands(
+        ctx,
+        connectorsQuery.data ?? [],
+        flattenDocTree(docsTreeQuery.data).filter((n) => !n.branch && n.docId !== 'root')
+      ),
     [ctx, connectorsQuery.data, docsTreeQuery.data]
   );
   const [query, setQuery] = useState('');

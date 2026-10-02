@@ -98,6 +98,7 @@ export const getGetSystemSettingsRetentionResponseMock = (
   syncRunDays: faker.number.int(),
   auditDays: faker.number.int(),
   healthCheckDays: faker.number.int(),
+  deletedDocsDays: faker.number.int({ min: 0 }),
   reportDays: faker.number.int(),
   cronExpr: faker.string.alpha({ length: { min: 10, max: 20 } }),
   updatedAt: faker.helpers.arrayElement([
@@ -116,6 +117,7 @@ export const getPutSystemSettingsRetentionResponseMock = (
   syncRunDays: faker.number.int(),
   auditDays: faker.number.int(),
   healthCheckDays: faker.number.int(),
+  deletedDocsDays: faker.number.int({ min: 0 }),
   reportDays: faker.number.int(),
   cronExpr: faker.string.alpha({ length: { min: 10, max: 20 } }),
   updatedAt: faker.helpers.arrayElement([
@@ -188,6 +190,22 @@ export const getGetSystemBackupExportResponseMock = (
     serviceId: faker.helpers.arrayElement([
       faker.string.alpha({ length: { min: 10, max: 20 } }),
       null,
+    ]),
+    parentId: faker.helpers.arrayElement([
+      faker.string.alpha({ length: { min: 10, max: 20 } }),
+      undefined,
+    ]),
+    deletedAt: faker.helpers.arrayElement([
+      faker.string.alpha({ length: { min: 10, max: 20 } }),
+      undefined,
+    ]),
+    createdBy: faker.helpers.arrayElement([
+      faker.string.alpha({ length: { min: 10, max: 20 } }),
+      undefined,
+    ]),
+    createdAt: faker.helpers.arrayElement([
+      faker.date.past().toISOString().slice(0, 19) + 'Z',
+      undefined,
     ]),
     content: faker.string.alpha({ length: { min: 10, max: 20 } }),
     currentVersion: faker.number.int(),

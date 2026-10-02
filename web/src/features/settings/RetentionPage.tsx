@@ -26,6 +26,7 @@ interface FormState {
   auditDays: string;
   healthCheckDays: string;
   reportDays: string;
+  deletedDocsDays: string;
   cronExpr: string;
 }
 
@@ -37,6 +38,7 @@ function toForm(data: {
   auditDays: number;
   healthCheckDays: number;
   reportDays: number;
+  deletedDocsDays?: number;
   cronExpr: string;
 }): FormState {
   return {
@@ -47,6 +49,7 @@ function toForm(data: {
     auditDays: String(data.auditDays),
     healthCheckDays: String(data.healthCheckDays),
     reportDays: String(data.reportDays),
+    deletedDocsDays: String(data.deletedDocsDays ?? 30),
     cronExpr: data.cronExpr,
   };
 }
@@ -95,11 +98,13 @@ export function RetentionPage() {
     form.auditDays !== String(data.auditDays) ||
     form.healthCheckDays !== String(data.healthCheckDays) ||
     form.reportDays !== String(data.reportDays) ||
+    form.deletedDocsDays !== String(data.deletedDocsDays ?? 30) ||
     form.cronExpr !== data.cronExpr;
 
   // Empty or non-numeric day fields must not silently coerce to 0 (which
   // would disable that retention category) when saved.
-  const isValidDays = (v: string) => v.trim() !== '' && Number.isInteger(Number(v)) && Number(v) >= 0;
+  const isValidDays = (v: string) =>
+    v.trim() !== '' && Number.isInteger(Number(v)) && Number(v) >= 0;
   const daysValid =
     isValidDays(form.snapshotDays) &&
     isValidDays(form.docVersionDays) &&
@@ -107,7 +112,8 @@ export function RetentionPage() {
     isValidDays(form.syncRunDays) &&
     isValidDays(form.auditDays) &&
     isValidDays(form.healthCheckDays) &&
-    isValidDays(form.reportDays);
+    isValidDays(form.reportDays) &&
+    isValidDays(form.deletedDocsDays);
 
   const set = (field: keyof FormState) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm((f) => (f ? { ...f, [field]: e.target.value } : f));
@@ -178,8 +184,26 @@ export function RetentionPage() {
               onChange={set('healthCheckDays')}
             />
           </Field>
+          <Field
+            label={t('docs.human.deletedDays', { defaultValue: 'Deleted docs (days)' })}
+            htmlFor="ret-deleted-docs-days"
+          >
+            <TextInput
+              id="ret-deleted-docs-days"
+              type="number"
+              min={0}
+              value={form.deletedDocsDays}
+              onChange={set('deletedDocsDays')}
+            />
+          </Field>
           <Field label={t('settings.retention.reportDays')} htmlFor="ret-report-days">
-            <TextInput id="ret-report-days" type="number" min={0} value={form.reportDays} onChange={set('reportDays')} />
+            <TextInput
+              id="ret-report-days"
+              type="number"
+              min={0}
+              value={form.reportDays}
+              onChange={set('reportDays')}
+            />
           </Field>
           <Field
             label={t('settings.retention.cronExpr')}
@@ -208,6 +232,7 @@ export function RetentionPage() {
                 auditDays: Number(form.auditDays),
                 healthCheckDays: Number(form.healthCheckDays),
                 reportDays: Number(form.reportDays),
+                deletedDocsDays: Number(form.deletedDocsDays),
                 cronExpr: form.cronExpr,
               })
             }

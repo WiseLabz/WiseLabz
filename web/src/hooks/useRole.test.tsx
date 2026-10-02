@@ -25,6 +25,14 @@ function wrapper({ children }: { children: ReactNode }) {
 }
 
 describe('useRole hooks (#240 PR1)', () => {
+  it('recognizes the live backend administrator role and prefers explicit instance roles', () => {
+    meData = { role: 'admin' };
+    expect(renderHook(() => useIsInstanceAdmin(), { wrapper }).result.current).toBe(true);
+    meData = { role: 'user' };
+    expect(renderHook(() => useIsInstanceAdmin(), { wrapper }).result.current).toBe(false);
+    meData = { role: 'admin', instanceAdminRole: 'user' };
+    expect(renderHook(() => useIsInstanceAdmin(), { wrapper }).result.current).toBe(false);
+  });
   it('useIsInstanceAdmin reads instanceAdminRole off /me', () => {
     meData = { instanceAdminRole: 'admin' };
     expect(renderHook(() => useIsInstanceAdmin(), { wrapper }).result.current).toBe(true);

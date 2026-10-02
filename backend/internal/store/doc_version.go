@@ -45,7 +45,7 @@ func (s *Store) CreateDocVersion(ctx context.Context, v *DocVersionRecord) error
 func (s *Store) GetDocVersions(ctx context.Context, docID string) ([]DocVersionRecord, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, doc_id, rev, content, author, trigger, created_at
-		FROM doc_versions WHERE doc_id = ? ORDER BY rev DESC
+		FROM doc_versions WHERE doc_id = ? AND EXISTS (SELECT 1 FROM docs WHERE docs.id = doc_id AND deleted_at IS NULL) ORDER BY rev DESC
 	`, docID)
 	if err != nil {
 		return nil, fmt.Errorf("get doc versions: %w", err)
@@ -116,7 +116,7 @@ func (s *Store) ListDocVersionsAfter(ctx context.Context, afterByDoc map[string]
 	// only needed if retained history makes this scan expensive.
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT v.id, v.doc_id, v.rev, v.content, v.author, v.trigger, v.created_at
-		FROM doc_versions v JOIN docs d ON d.id = v.doc_id
+		FROM doc_versions v JOIN docs d ON d.id = v.doc_id WHERE d.deleted_at IS NULL
 		ORDER BY v.created_at, v.doc_id, v.rev
 	`)
 	if err != nil {

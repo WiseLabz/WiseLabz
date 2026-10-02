@@ -221,7 +221,7 @@ func (s *Store) CountSnapshotsByConnector(ctx context.Context, connectorID strin
 // CountDocsByConnector returns the number of docs linked to a connector.
 func (s *Store) CountDocsByConnector(ctx context.Context, connectorID string) (int, error) {
 	var count int
-	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM docs WHERE service_id = ?`, connectorID).Scan(&count)
+	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM docs WHERE service_id = ? AND deleted_at IS NULL`, connectorID).Scan(&count)
 	return count, err
 }
 

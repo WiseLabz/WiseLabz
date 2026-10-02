@@ -111,7 +111,7 @@ func connectorFilter(raw string) (string, []any) {
 }
 func (g *Generator) docs(ctx context.Context, d *ReportData, ids string) error {
 	f, a := connectorFilter(ids)
-	rows, e := g.Store.DB().QueryContext(ctx, `SELECT d.id,d.title,COALESCE(d.service_id,''),COALESCE(c.name,''),v.rev,v.created_at FROM doc_versions v JOIN docs d ON d.id=v.doc_id LEFT JOIN connectors c ON c.id=d.service_id WHERE v.created_at>=? AND v.created_at<?`+f+` ORDER BY v.created_at DESC`, append([]any{d.PeriodStart.Format(time.RFC3339), d.PeriodEnd.Format(time.RFC3339)}, a...)...)
+	rows, e := g.Store.DB().QueryContext(ctx, `SELECT d.id,d.title,COALESCE(d.service_id,''),COALESCE(c.name,''),v.rev,v.created_at FROM doc_versions v JOIN docs d ON d.id=v.doc_id LEFT JOIN connectors c ON c.id=d.service_id WHERE d.deleted_at IS NULL AND v.created_at>=? AND v.created_at<?`+f+` ORDER BY v.created_at DESC`, append([]any{d.PeriodStart.Format(time.RFC3339), d.PeriodEnd.Format(time.RFC3339)}, a...)...)
 	if e != nil {
 		return e
 	}

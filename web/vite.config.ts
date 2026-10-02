@@ -4,6 +4,8 @@ import tailwindcss from '@tailwindcss/vite'
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  // CodeMirror extensions must share the same state/view constructors.
+  resolve: { dedupe: ['@codemirror/state', '@codemirror/view'] },
   server: {
     proxy: {
       '/api/ws': {

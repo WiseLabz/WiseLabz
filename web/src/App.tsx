@@ -72,6 +72,9 @@ const DocProposalsPage = lazy(() =>
 const TopologyPage = lazy(() =>
   import('./features/docs/TopologyPage').then(({ TopologyPage }) => ({ default: TopologyPage }))
 );
+const TrashPage = lazy(() =>
+  import('./features/docs/TrashPage').then(({ TrashPage }) => ({ default: TrashPage }))
+);
 const DocEditorPage = lazy(() =>
   import('./features/docs/DocEditorPage').then(({ DocEditorPage }) => ({ default: DocEditorPage }))
 );
@@ -87,7 +90,9 @@ const ChangeDetailPage = lazy(() =>
   }))
 );
 const AttentionPage = lazy(() =>
-  import('./features/attention/AttentionPage').then(({ AttentionPage }) => ({ default: AttentionPage }))
+  import('./features/attention/AttentionPage').then(({ AttentionPage }) => ({
+    default: AttentionPage,
+  }))
 );
 const AlertsPage = lazy(() =>
   import('./features/alerts/AlertsPage').then(({ AlertsPage }) => ({ default: AlertsPage }))
@@ -216,6 +221,14 @@ const router = createBrowserRouter([
       { path: 'connectors/:id/edit', element: <ConnectorEditPage /> },
       { path: 'docs', element: <DocsPage /> },
       { path: 'docs/all', element: <AllDocsPage /> },
+      {
+        path: 'docs/trash',
+        element: (
+          <RequireInstanceAdmin>
+            <TrashPage />
+          </RequireInstanceAdmin>
+        ),
+      },
       { path: 'docs/proposals', element: <DocProposalsPage /> },
       { path: 'topology', element: <TopologyPage /> },
       { path: 'docs/:docId', element: <DocsPage /> },

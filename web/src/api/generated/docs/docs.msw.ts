@@ -38,15 +38,19 @@ import {
   getGetDocsServiceConnectorIdResponseMock,
   getGetDocsShareLinksResponseMock,
   getGetDocsTemplateSchemaResponseMock,
+  getGetDocsTrashResponseMock,
   getGetDocsTreeResponseMock,
   getGetShareTokenDocsDocIdResponseMock,
   getGetShareTokenTreeResponseMock,
+  getPatchDocsDocIdResponseMock,
   getPostDocsDocIdAiSuggestResponseMock,
   getPostDocsDocIdLockResponseMock,
+  getPostDocsDocIdRestoreResponseMock,
   getPostDocsDocIdVersionsRevRestoreResponseMock,
   getPostDocsEditProposalsProposalIdApproveResponseMock,
   getPostDocsEditProposalsProposalIdRejectResponseMock,
   getPostDocsGenerateResponseMock,
+  getPostDocsResponseMock,
   getPostDocsShareLinksResponseMock,
   getPostDocsTopologyResponseMock,
   getPutDocsDocIdResponseMock,
@@ -54,10 +58,14 @@ import {
 
 export {
   getGetDocsResponseMock,
+  getPostDocsResponseMock,
+  getGetDocsTrashResponseMock,
+  getPostDocsDocIdRestoreResponseMock,
   getGetDocsTreeResponseMock,
   getGetDocsServiceConnectorIdResponseMock,
   getGetDocsDocIdResponseMock,
   getPutDocsDocIdResponseMock,
+  getPatchDocsDocIdResponseMock,
   getGetDocsDocIdVersionsResponseMock,
   getGetDocsDocIdVersionsRevResponseMock,
   getPostDocsDocIdVersionsRevRestoreResponseMock,
@@ -91,6 +99,69 @@ export const getGetDocsMockHandler = (
             ? await overrideResponse(info)
             : overrideResponse
           : getGetDocsResponseMock(),
+        { status: 200 }
+      );
+    },
+    options
+  );
+};
+
+export const getPostDocsMockHandler = (
+  overrideResponse?:
+    Doc | ((info: Parameters<Parameters<typeof http.post>[1]>[0]) => Promise<Doc> | Doc),
+  options?: RequestHandlerOptions
+) => {
+  return http.post(
+    '*/docs',
+    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+      return HttpResponse.json(
+        overrideResponse !== undefined
+          ? typeof overrideResponse === 'function'
+            ? await overrideResponse(info)
+            : overrideResponse
+          : getPostDocsResponseMock(),
+        { status: 201 }
+      );
+    },
+    options
+  );
+};
+
+export const getGetDocsTrashMockHandler = (
+  overrideResponse?:
+    Doc[] | ((info: Parameters<Parameters<typeof http.get>[1]>[0]) => Promise<Doc[]> | Doc[]),
+  options?: RequestHandlerOptions
+) => {
+  return http.get(
+    '*/docs/trash',
+    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+      return HttpResponse.json(
+        overrideResponse !== undefined
+          ? typeof overrideResponse === 'function'
+            ? await overrideResponse(info)
+            : overrideResponse
+          : getGetDocsTrashResponseMock(),
+        { status: 200 }
+      );
+    },
+    options
+  );
+};
+
+export const getPostDocsDocIdRestoreMockHandler = (
+  overrideResponse?:
+    Doc | ((info: Parameters<Parameters<typeof http.post>[1]>[0]) => Promise<Doc> | Doc),
+  options?: RequestHandlerOptions
+) => {
+  return http.post(
+    '*/docs/:docId/restore',
+    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+      return HttpResponse.json(
+        overrideResponse !== undefined
+          ? typeof overrideResponse === 'function'
+            ? await overrideResponse(info)
+            : overrideResponse
+          : getPostDocsDocIdRestoreResponseMock(),
         { status: 200 }
       );
     },
@@ -177,6 +248,45 @@ export const getPutDocsDocIdMockHandler = (
           : getPutDocsDocIdResponseMock(),
         { status: 200 }
       );
+    },
+    options
+  );
+};
+
+export const getPatchDocsDocIdMockHandler = (
+  overrideResponse?:
+    Doc | ((info: Parameters<Parameters<typeof http.patch>[1]>[0]) => Promise<Doc> | Doc),
+  options?: RequestHandlerOptions
+) => {
+  return http.patch(
+    '*/docs/:docId',
+    async (info: Parameters<Parameters<typeof http.patch>[1]>[0]) => {
+      return HttpResponse.json(
+        overrideResponse !== undefined
+          ? typeof overrideResponse === 'function'
+            ? await overrideResponse(info)
+            : overrideResponse
+          : getPatchDocsDocIdResponseMock(),
+        { status: 200 }
+      );
+    },
+    options
+  );
+};
+
+export const getDeleteDocsDocIdMockHandler = (
+  overrideResponse?:
+    void | ((info: Parameters<Parameters<typeof http.delete>[1]>[0]) => Promise<void> | void),
+  options?: RequestHandlerOptions
+) => {
+  return http.delete(
+    '*/docs/:docId',
+    async (info: Parameters<Parameters<typeof http.delete>[1]>[0]) => {
+      if (typeof overrideResponse === 'function') {
+        await overrideResponse(info);
+      }
+
+      return new HttpResponse(null, { status: 204 });
     },
     options
   );
@@ -617,10 +727,15 @@ export const getGetShareTokenDocsDocIdMockHandler = (
 };
 export const getDocsMock = () => [
   getGetDocsMockHandler(),
+  getPostDocsMockHandler(),
+  getGetDocsTrashMockHandler(),
+  getPostDocsDocIdRestoreMockHandler(),
   getGetDocsTreeMockHandler(),
   getGetDocsServiceConnectorIdMockHandler(),
   getGetDocsDocIdMockHandler(),
   getPutDocsDocIdMockHandler(),
+  getPatchDocsDocIdMockHandler(),
+  getDeleteDocsDocIdMockHandler(),
   getGetDocsDocIdVersionsMockHandler(),
   getGetDocsDocIdVersionsRevMockHandler(),
   getPostDocsDocIdVersionsRevRestoreMockHandler(),

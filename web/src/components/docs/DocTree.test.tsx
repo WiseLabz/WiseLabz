@@ -64,6 +64,80 @@ describe('DocTree Share affordance (#240 PR2)', () => {
     const onShare = vi.fn();
     renderTree(onShare);
     fireEvent.click(screen.getByRole('button', { name: /share/i }));
-    expect(onShare).toHaveBeenCalledWith({ docId: 'c1', title: 'Connector One', connectorId: 'c1' });
+    expect(onShare).toHaveBeenCalledWith({
+      docId: 'c1',
+      title: 'Connector One',
+      connectorId: 'c1',
+    });
+  });
+});
+
+describe('DocTree hierarchy', () => {
+  afterEach(() => {
+    cleanup();
+    isInstanceAdmin = false;
+    connectorRole = undefined;
+  });
+  const nested: DocNode = {
+    docId: 'root',
+    title: 'Docs',
+    kind: 'lab',
+    branch: true,
+    children: [
+      {
+        docId: 'lab',
+        title: 'Lab',
+        kind: 'lab',
+        branch: true,
+        children: [
+          {
+            docId: 'a',
+            title: 'Parent',
+            kind: 'lab',
+            origin: 'human',
+            children: [{ docId: 'child', title: 'Nested child', kind: 'lab', origin: 'human' }],
+          },
+          { docId: 'b', title: 'Destination', kind: 'lab', origin: 'human' },
+        ],
+      },
+    ],
+  };
+  it('renders nested docs and moves a dragged doc below the target', () => {
+    isInstanceAdmin = true;
+    const move = vi.fn();
+    render(
+      <MemoryRouter>
+        <DocTree tree={nested} onReparent={move} />
+      </MemoryRouter>
+    );
+    expect(screen.getByRole('link', { name: 'Nested child' })).toBeInTheDocument();
+    const payloads = new Map<string, string>();
+    const dataTransfer = {
+      setData: (key: string, value: string) => payloads.set(key, value),
+      getData: (key: string) => payloads.get(key) ?? '',
+    };
+    fireEvent.dragStart(screen.getByRole('link', { name: 'Nested child' }).parentElement!, {
+      dataTransfer,
+    });
+    fireEvent.drop(screen.getByRole('link', { name: 'Destination' }).parentElement!, {
+      dataTransfer,
+    });
+    expect(move).toHaveBeenCalledWith('child', 'b');
+    fireEvent.drop(screen.getByRole('link', { name: 'Lab' }).parentElement!, { dataTransfer });
+    expect(move).toHaveBeenLastCalledWith('child', '');
+  });
+  it('does not allow lab moves by ordinary users', () => {
+    const move = vi.fn();
+    render(
+      <MemoryRouter>
+        <DocTree tree={nested} onReparent={move} />
+      </MemoryRouter>
+    );
+    const source = screen.getByRole('link', { name: 'Nested child' }).parentElement!;
+    expect(source).toHaveAttribute('draggable', 'false');
+    fireEvent.drop(source, {
+      dataTransfer: { getData: () => JSON.stringify({ id: 'b', scope: '' }) },
+    });
+    expect(move).not.toHaveBeenCalled();
   });
 });

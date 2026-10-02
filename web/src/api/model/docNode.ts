@@ -7,6 +7,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { DocNodeKind } from './docNodeKind';
+import type { DocNodeOrigin } from './docNodeOrigin';
 
 /**
  * Tree node (recursive)
@@ -17,5 +18,9 @@ export interface DocNode {
   kind: DocNodeKind;
   /** @nullable */
   serviceId?: string | null;
+  parentId?: string;
+  origin?: DocNodeOrigin;
+  /** True for virtual scope groups */
+  branch?: boolean;
   children?: DocNode[];
 }

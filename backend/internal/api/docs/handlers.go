@@ -56,46 +56,19 @@ func (h *Handler) Tree(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	type TreeNode struct {
-		ID       string     `json:"docId"`
-		Title    string     `json:"title"`
-		Kind     string     `json:"kind"`
-		Children []TreeNode `json:"children,omitempty"`
-	}
-
-	root := TreeNode{
-		ID:    "root",
-		Title: "Lab Documentation",
-		Kind:  "lab",
-	}
-
-	// Service-less docs (e.g. "Lab Topology") hang directly off the lab root. They follow the
-	// same rule as List: visible to any authenticated viewer.
+	root := DocTreeNode{ID: "root", Title: "Lab Documentation", Kind: "lab", Branch: true}
+	labDocs := []store.DocRecord{}
 	for _, d := range docsByService[""] {
-		root.Children = append(root.Children, TreeNode{ID: d.ID, Title: d.Title, Kind: d.Kind})
+		if d.Origin == store.DocOriginHuman || auth.InstanceAdminFromContext(r.Context()) {
+			labDocs = append(labDocs, d)
+		}
 	}
-
+	root.Children = append(root.Children, DocTreeNode{ID: "lab", Title: "Lab", Kind: "lab", Branch: true, Children: nestedDocNodes(labDocs, "")})
 	for _, c := range connectors {
 		if !isAllowed[c.ID] {
 			continue
 		}
-		connNode := TreeNode{
-			ID:    c.ID,
-			Title: c.Name,
-			Kind:  "service",
-		}
-		for _, d := range docsByService[c.ID] {
-			connNode.Children = append(connNode.Children, TreeNode{
-				ID:    d.ID,
-				Title: d.Title,
-				Kind:  d.Kind,
-			})
-		}
-		root.Children = append(root.Children, connNode)
-	}
-
-	if root.Children == nil {
-		root.Children = []TreeNode{}
+		root.Children = append(root.Children, DocTreeNode{ID: c.ID, Title: c.Name, Kind: "service", ServiceID: c.ID, Branch: true, Children: nestedDocNodes(docsByService[c.ID], "")})
 	}
 
 	httputil.JSON(w, http.StatusOK, root)
@@ -120,7 +93,7 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 
 	// The tree returns docId "root" for the lab overview. There is no real doc
 	// with that ID — return a synthetic placeholder.
-	if id == "root" {
+	if id == "root" || id == "lab" {
 		httputil.JSON(w, http.StatusOK, map[string]any{
 			"docId":          "root",
 			"title":          "Lab Documentation",
@@ -134,6 +107,13 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 
 	d, err := h.Store.GetDoc(r.Context(), id)
 	if errors.Is(err, store.ErrNotFound) {
+		if _, deletedErr := h.Store.GetDeletedDoc(r.Context(), id); deletedErr == nil {
+			httputil.Error(w, http.StatusNotFound, "not_found", "Doc not found")
+			return
+		} else if !errors.Is(deletedErr, store.ErrNotFound) {
+			httputil.Errorf(w, deletedErr)
+			return
+		}
 		// Not a doc ID — maybe it's a connector ID. Fall back to service lookup.
 		if !h.requireDocViewer(w, r, id) {
 			return
@@ -161,7 +141,7 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 		httputil.Errorf(w, err)
 		return
 	}
-	if !h.requireDocViewer(w, r, d.ServiceID) {
+	if !h.requireDocViewer(w, r, d.ServiceID, d.Origin) {
 		return
 	}
 	httputil.JSON(w, http.StatusOK, d)

@@ -16,6 +16,7 @@ import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../store/auth';
 import { useIsInstanceAdmin } from '../../hooks/useRole';
 import { useGetConnectors } from '../../api/generated/connectors/connectors';
+import { useGetMe } from '../../api/generated/me/me';
 import { setMfaEnrollmentRequiredHandler } from '../../api/axios-instance';
 import { EmptyState, SkeletonRows } from '../../components/ui/states';
 
@@ -61,6 +62,8 @@ export function RequireAuth({ children }: { children: ReactNode }) {
 
 export function RequireInstanceAdmin({ children }: { children: ReactNode }) {
   const isInstanceAdmin = useIsInstanceAdmin();
+  const { isLoading } = useGetMe();
+  if (isLoading) return <Splash />;
   if (!isInstanceAdmin) {
     return <Navigate to="/forbidden" replace />;
   }
@@ -69,6 +72,9 @@ export function RequireInstanceAdmin({ children }: { children: ReactNode }) {
 
 export function RequireOnboarded({ children }: { children: ReactNode }) {
   const { data, isLoading } = useGetConnectors();
+  const { pathname } = useLocation();
+  // Human lab notes are available even before a user has any service grants.
+  if (pathname === '/docs' || pathname.startsWith('/docs/')) return <>{children}</>;
   if (isLoading) return <SkeletonRows rows={6} className="m-6 max-w-2xl" />;
   if (Array.isArray(data) && data.length === 0) {
     return <Navigate to="/onboarding" replace />;
