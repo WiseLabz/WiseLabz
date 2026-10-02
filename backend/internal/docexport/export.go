@@ -11,7 +11,9 @@ package docexport
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -19,6 +21,8 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/WiseLabz/wiselabz/internal/blobstore"
+	"github.com/WiseLabz/wiselabz/internal/doc"
 	"github.com/WiseLabz/wiselabz/internal/store"
 )
 
@@ -33,7 +37,10 @@ const exportPageSize = 1000
 // Exporter renders every doc in the store to Markdown files in a target
 // directory.
 type Exporter struct {
-	store *store.Store
+	blobs              *blobstore.Store
+	includeAttachments bool
+	maxAttachmentBytes int64
+	store              *store.Store
 
 	git *gitTarget // nil: local-directory mode
 
@@ -42,7 +49,7 @@ type Exporter struct {
 
 // NewExporter creates a new Exporter backed by s.
 func NewExporter(s *store.Store) *Exporter {
-	return &Exporter{store: s}
+	return &Exporter{store: s, blobs: blobstore.New("", 0), includeAttachments: true, maxAttachmentBytes: blobstore.DefaultMaxBytes}
 }
 
 // Result summarizes a completed export run.
@@ -74,6 +81,7 @@ func (e *Exporter) ExportAll(ctx context.Context, dir string) (Result, error) {
 
 	files := make([]string, 0, len(docs))
 	seen := make(map[string]bool, len(docs))
+	attachmentFiles := map[string]bool{}
 	for _, d := range docs {
 		name := fileName(d)
 		if seen[name] {
@@ -83,7 +91,11 @@ func (e *Exporter) ExportAll(ctx context.Context, dir string) (Result, error) {
 		}
 		seen[name] = true
 
-		if err := os.WriteFile(filepath.Join(dir, name), []byte(d.Content), 0o644); err != nil {
+		content, err := e.exportContent(ctx, dir, d.ID, d.Content, attachmentFiles)
+		if err != nil {
+			return Result{}, err
+		}
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o644); err != nil {
 			return Result{}, fmt.Errorf("write doc %q: %w", d.ID, err)
 		}
 		files = append(files, name)
@@ -94,6 +106,11 @@ func (e *Exporter) ExportAll(ctx context.Context, dir string) (Result, error) {
 		return Result{}, fmt.Errorf("prune stale files: %w", err)
 	}
 
+	staleAttachments, err := pruneAttachmentFiles(dir, attachmentFiles)
+	if err != nil {
+		return Result{}, fmt.Errorf("prune stale attachments: %w", err)
+	}
+	removed = append(removed, staleAttachments...)
 	return Result{Dir: dir, Count: len(files), Files: files, Removed: removed}, nil
 }
 
@@ -217,4 +234,84 @@ func RunExportOnce(ctx context.Context, e *Exporter, dir string, logger *slog.Lo
 		return fmt.Errorf("doc export: %w", err)
 	}
 	return nil
+}
+
+// ConfigureAttachments applies the configured inclusion flag and Git size cap.
+func (e *Exporter) ConfigureAttachments(blobs *blobstore.Store, include bool, maxBytes int64) {
+	e.blobs = blobs
+	e.includeAttachments = include
+	if maxBytes > 0 {
+		e.maxAttachmentBytes = maxBytes
+	}
+}
+
+var attachmentLink = regexp.MustCompile(`attachment:([a-zA-Z0-9-]+)`)
+
+func (e *Exporter) exportContent(ctx context.Context, dir, docID, content string, keep ...map[string]bool) (string, error) {
+	content = doc.StripMarkers(content)
+	if !e.includeAttachments {
+		return content, nil
+	}
+	attachments, err := e.store.ListDocAttachments(ctx, docID)
+	if err != nil {
+		return "", err
+	}
+	paths := map[string]string{}
+	for _, a := range attachments {
+		if e.git != nil && a.Size > e.maxAttachmentBytes {
+			continue
+		}
+		name := "attachments/" + a.SHA256 + blobstore.Extension(a.ContentType)
+		if err := os.MkdirAll(filepath.Join(dir, "attachments"), 0o755); err != nil {
+			return "", err
+		}
+		source, err := e.blobs.Open(a.SHA256)
+		if err != nil {
+			return "", fmt.Errorf("open export attachment: %w", err)
+		}
+		target, err := os.Create(filepath.Join(dir, filepath.FromSlash(name)))
+		if err != nil {
+			_ = source.Close()
+			return "", err
+		}
+		_, copyErr := io.Copy(target, source)
+		err = errors.Join(copyErr, target.Close(), source.Close())
+		if err != nil {
+			return "", err
+		}
+		paths[a.ID] = name
+		if len(keep) > 0 {
+			keep[0][name] = true
+		}
+	}
+	return attachmentLink.ReplaceAllStringFunc(content, func(link string) string {
+		if path, ok := paths[strings.TrimPrefix(link, "attachment:")]; ok {
+			return path
+		}
+		return link
+	}), nil
+}
+
+var generatedAttachmentName = regexp.MustCompile(`^[a-f0-9]{64}\.(png|jpg|gif|webp|pdf|txt)$`)
+
+func pruneAttachmentFiles(dir string, keep map[string]bool) ([]string, error) {
+	entries, err := os.ReadDir(filepath.Join(dir, "attachments"))
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	removed := []string{}
+	for _, entry := range entries {
+		name := "attachments/" + entry.Name()
+		if entry.IsDir() || !generatedAttachmentName.MatchString(entry.Name()) || keep[name] {
+			continue
+		}
+		if err := os.Remove(filepath.Join(dir, filepath.FromSlash(name))); err != nil {
+			return nil, err
+		}
+		removed = append(removed, name)
+	}
+	return removed, nil
 }

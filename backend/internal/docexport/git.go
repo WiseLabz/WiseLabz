@@ -310,7 +310,11 @@ func (e *Exporter) runPerRevision(ctx context.Context, dir string, repo *git.Rep
 				return total, len(docs), err
 			}
 		}
-		if err := os.WriteFile(filepath.Join(exportDir, name), []byte(v.Content), 0o644); err != nil {
+		content, err := e.exportContent(ctx, exportDir, v.DocID, v.Content)
+		if err != nil {
+			return total, len(docs), err
+		}
+		if err := os.WriteFile(filepath.Join(exportDir, name), []byte(content), 0o644); err != nil {
 			return total, len(docs), fmt.Errorf("write revision: %w", err)
 		}
 		state.Docs[v.DocID] = exportCursor{Rev: v.Rev, File: name}
