@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -196,6 +197,34 @@ func TestCreateDocAuthz(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+func TestNestedDocNodesKeepsOrderAndNesting(t *testing.T) {
+	docs := []store.DocRecord{
+		{ID: "c2", Title: "C2", ParentID: "a"},
+		{ID: "a", Title: "A"},
+		{ID: "orphan", Title: "Orphan", ParentID: "hidden"},
+		{ID: "c1", Title: "C1", ParentID: "a"},
+		{ID: "g", Title: "G", ParentID: "c1"},
+		{ID: "b", Title: "B"},
+	}
+	got := nestedDocNodes(docs, "")
+	want := []DocTreeNode{
+		{ID: "a", Title: "A", Children: []DocTreeNode{
+			{ID: "c2", Title: "C2", ParentID: "a", Children: []DocTreeNode{}},
+			{ID: "c1", Title: "C1", ParentID: "a", Children: []DocTreeNode{
+				{ID: "g", Title: "G", ParentID: "c1", Children: []DocTreeNode{}},
+			}},
+		}},
+		{ID: "orphan", Title: "Orphan", ParentID: "hidden", Children: []DocTreeNode{}},
+		{ID: "b", Title: "B", Children: []DocTreeNode{}},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("nesting:\n got %+v\nwant %+v", got, want)
+	}
+	if sub := nestedDocNodes(docs, "c1"); len(sub) != 1 || sub[0].ID != "g" {
+		t.Fatalf("subtree: %+v", sub)
 	}
 }
 

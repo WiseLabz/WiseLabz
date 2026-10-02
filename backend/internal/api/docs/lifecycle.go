@@ -23,27 +23,35 @@ type DocTreeNode struct {
 	Children  []DocTreeNode `json:"children,omitempty"`
 }
 
+// nestedDocNodes nests docs under their parents, keeping input order among
+// siblings. Docs whose parent is not in the list (hidden or missing) become
+// roots. The parent index is built once, so nesting is O(n).
 func nestedDocNodes(docs []store.DocRecord, parent string) []DocTreeNode {
-	nodes := []DocTreeNode{}
-	visible := map[string]bool{}
+	visible := make(map[string]bool, len(docs))
 	for _, d := range docs {
 		visible[d.ID] = true
 	}
-	for _, d := range docs {
-		effectiveParent := d.ParentID
+	children := make(map[string][]*store.DocRecord, len(docs))
+	for i := range docs {
+		effectiveParent := docs[i].ParentID
 		if !visible[effectiveParent] {
 			effectiveParent = ""
 		}
-		if effectiveParent != parent {
-			continue
-		}
-		nodes = append(nodes, DocTreeNode{
-			ID: d.ID, Title: d.Title, Kind: d.Kind,
-			ServiceID: d.ServiceID, ParentID: d.ParentID, Origin: d.Origin,
-			Children: nestedDocNodes(docs, d.ID),
-		})
+		children[effectiveParent] = append(children[effectiveParent], &docs[i])
 	}
-	return nodes
+	var build func(parent string) []DocTreeNode
+	build = func(parent string) []DocTreeNode {
+		nodes := []DocTreeNode{}
+		for _, d := range children[parent] {
+			nodes = append(nodes, DocTreeNode{
+				ID: d.ID, Title: d.Title, Kind: d.Kind,
+				ServiceID: d.ServiceID, ParentID: d.ParentID, Origin: d.Origin,
+				Children: build(d.ID),
+			})
+		}
+		return nodes
+	}
+	return build(parent)
 }
 
 func (h *Handler) lifecycleError(w http.ResponseWriter, err error) {
