@@ -8,6 +8,7 @@
  * a JS heuristic, since react-markdown's `code` renderer no longer reports it.
  */
 import { memo, isValidElement, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import ReactMarkdown, { defaultUrlTransform, type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { remarkStripGenMarkers } from '../../lib/genMarkers';
@@ -104,16 +105,17 @@ function AttachmentPDF({
   attachment: DocAttachment;
   children: React.ReactNode;
 }) {
+  const { t } = useTranslation();
   const [preview, setPreview] = useState(false);
   return (
     <span className="my-2 inline-flex max-w-full flex-col gap-2 rounded border border-line-soft p-3">
       <span>{children || attachment.filename}</span>
       <span className="flex gap-3">
         <a href={attachment.url} target="_blank" rel="noopener noreferrer">
-          Open PDF
+          {t('docs.attachments.openPdf')}
         </a>
         <button type="button" onClick={() => setPreview(!preview)} aria-expanded={preview}>
-          {preview ? 'Hide preview' : 'Preview PDF'}
+          {preview ? t('docs.attachments.hidePreview') : t('docs.attachments.previewPdf')}
         </button>
       </span>
       {preview && (
@@ -130,6 +132,7 @@ export const Markdown = memo(function Markdown({
   source: string;
   attachments?: DocAttachment[];
 }) {
+  const { t } = useTranslation();
   const [image, setImage] = useState<{ url: string; alt: string } | null>(null);
   const owned = new Map(attachments.map((a) => [a.id, a]));
   const byURL = new Map(attachments.filter((a) => a.url).map((a) => [a.url, a]));
@@ -148,7 +151,7 @@ export const Markdown = memo(function Markdown({
             if (src === 'attachment:missing')
               return (
                 <span role="img" aria-label={alt}>
-                  Attachment unavailable: {alt}
+                  {t('docs.attachments.unavailable')}: {alt}
                 </span>
               );
             const url = typeof src === 'string' ? src : '';
@@ -159,7 +162,7 @@ export const Markdown = memo(function Markdown({
               <button
                 type="button"
                 onClick={() => setImage({ url, alt })}
-                aria-label={`Enlarge ${alt}`}
+                aria-label={t('docs.attachments.enlarge', { name: alt })}
               >
                 <img src={src} alt={alt} className="max-w-full rounded" loading="lazy" />
               </button>
@@ -167,7 +170,11 @@ export const Markdown = memo(function Markdown({
           },
           a: ({ href, children }) => {
             if (href === 'attachment:missing')
-              return <span>Attachment unavailable: {children}</span>;
+              return (
+                <span>
+                  {t('docs.attachments.unavailable')}: {children}
+                </span>
+              );
             const attachment = byURL.get(href);
             if (attachment?.contentType === 'application/pdf')
               return <AttachmentPDF attachment={attachment}>{children}</AttachmentPDF>;
@@ -184,14 +191,14 @@ export const Markdown = memo(function Markdown({
       <Dialog
         open={image !== null}
         onClose={() => setImage(null)}
-        title={image?.alt || 'Image preview'}
+        title={image?.alt || t('docs.attachments.imagePreview')}
         size="lg"
       >
         {image && (
           <img src={image.url} alt={image.alt} className="max-h-[80vh] w-full object-contain" />
         )}
         <button type="button" onClick={() => setImage(null)}>
-          Close image
+          {t('docs.attachments.closeImage')}
         </button>
       </Dialog>
     </div>
