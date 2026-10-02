@@ -12,7 +12,6 @@ import type { RequestHandlerOptions } from 'msw';
 import type {
   AuditPage,
   AuditRecord,
-  BackupBundle,
   BackupImportResult,
   BackupRun,
   BackupRunPage,
@@ -187,10 +186,7 @@ export const getPutSystemSettingsRetentionMockHandler = (
 
 export const getGetSystemBackupExportMockHandler = (
   overrideResponse?:
-    | BackupBundle
-    | ((
-        info: Parameters<Parameters<typeof http.get>[1]>[0]
-      ) => Promise<BackupBundle> | BackupBundle),
+    Blob | ((info: Parameters<Parameters<typeof http.get>[1]>[0]) => Promise<Blob> | Blob),
   options?: RequestHandlerOptions
 ) => {
   return http.get(

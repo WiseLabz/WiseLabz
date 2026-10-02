@@ -6,13 +6,16 @@
  *
  * OpenAPI spec version: 0.1.0
  */
-import type { BackupCounts } from './backupCounts';
 
-export interface BackupImportResult {
-  attachments?: BackupCounts;
-  connectors: BackupCounts;
-  docs: BackupCounts;
-  docVersions: BackupCounts;
-  templates: BackupCounts;
-  templateSections: BackupCounts;
+export interface DocAttachment {
+  id: string;
+  docId: string;
+  sha256: string;
+  filename: string;
+  contentType: string;
+  size: number;
+  createdBy: string;
+  createdAt: string;
+  /** Signed URL expiring after fifteen minutes */
+  url?: string;
 }

@@ -12,6 +12,7 @@ import type { RequestHandlerOptions } from 'msw';
 import type {
   AiSuggestRef,
   Doc,
+  DocAttachment,
   DocEditProposal,
   DocEditProposalPage,
   DocLock,
@@ -21,13 +22,14 @@ import type {
   DocVersionMeta,
   GenerateResult,
   GetDocsShareLinks200Item,
-  GetShareTokenDocsDocId200,
   GetShareTokenTree200,
   PostDocsShareLinks201,
   TemplateSchema,
 } from '../../model';
 
 import {
+  getGetAttachmentsAidRawResponseMock,
+  getGetDocsDocIdAttachmentsResponseMock,
   getGetDocsDocIdLockResponseMock,
   getGetDocsDocIdResponseMock,
   getGetDocsDocIdVersionsResponseMock,
@@ -44,6 +46,7 @@ import {
   getGetShareTokenTreeResponseMock,
   getPatchDocsDocIdResponseMock,
   getPostDocsDocIdAiSuggestResponseMock,
+  getPostDocsDocIdAttachmentsResponseMock,
   getPostDocsDocIdLockResponseMock,
   getPostDocsDocIdRestoreResponseMock,
   getPostDocsDocIdVersionsRevRestoreResponseMock,
@@ -66,6 +69,9 @@ export {
   getGetDocsDocIdResponseMock,
   getPutDocsDocIdResponseMock,
   getPatchDocsDocIdResponseMock,
+  getGetDocsDocIdAttachmentsResponseMock,
+  getPostDocsDocIdAttachmentsResponseMock,
+  getGetAttachmentsAidRawResponseMock,
   getGetDocsDocIdVersionsResponseMock,
   getGetDocsDocIdVersionsRevResponseMock,
   getPostDocsDocIdVersionsRevRestoreResponseMock,
@@ -287,6 +293,95 @@ export const getDeleteDocsDocIdMockHandler = (
       }
 
       return new HttpResponse(null, { status: 204 });
+    },
+    options
+  );
+};
+
+export const getGetDocsDocIdAttachmentsMockHandler = (
+  overrideResponse?:
+    | DocAttachment[]
+    | ((
+        info: Parameters<Parameters<typeof http.get>[1]>[0]
+      ) => Promise<DocAttachment[]> | DocAttachment[]),
+  options?: RequestHandlerOptions
+) => {
+  return http.get(
+    '*/docs/:docId/attachments',
+    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+      return HttpResponse.json(
+        overrideResponse !== undefined
+          ? typeof overrideResponse === 'function'
+            ? await overrideResponse(info)
+            : overrideResponse
+          : getGetDocsDocIdAttachmentsResponseMock(),
+        { status: 200 }
+      );
+    },
+    options
+  );
+};
+
+export const getPostDocsDocIdAttachmentsMockHandler = (
+  overrideResponse?:
+    | DocAttachment
+    | ((
+        info: Parameters<Parameters<typeof http.post>[1]>[0]
+      ) => Promise<DocAttachment> | DocAttachment),
+  options?: RequestHandlerOptions
+) => {
+  return http.post(
+    '*/docs/:docId/attachments',
+    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+      return HttpResponse.json(
+        overrideResponse !== undefined
+          ? typeof overrideResponse === 'function'
+            ? await overrideResponse(info)
+            : overrideResponse
+          : getPostDocsDocIdAttachmentsResponseMock(),
+        { status: 201 }
+      );
+    },
+    options
+  );
+};
+
+export const getDeleteDocsDocIdAttachmentsAidMockHandler = (
+  overrideResponse?:
+    void | ((info: Parameters<Parameters<typeof http.delete>[1]>[0]) => Promise<void> | void),
+  options?: RequestHandlerOptions
+) => {
+  return http.delete(
+    '*/docs/:docId/attachments/:aid',
+    async (info: Parameters<Parameters<typeof http.delete>[1]>[0]) => {
+      if (typeof overrideResponse === 'function') {
+        await overrideResponse(info);
+      }
+
+      return new HttpResponse(null, { status: 204 });
+    },
+    options
+  );
+};
+
+export const getGetAttachmentsAidRawMockHandler = (
+  overrideResponse?:
+    Blob | ((info: Parameters<Parameters<typeof http.get>[1]>[0]) => Promise<Blob> | Blob),
+  options?: RequestHandlerOptions
+) => {
+  return http.get(
+    '*/attachments/:aid/raw',
+    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+      const binaryBody =
+        overrideResponse !== undefined
+          ? typeof overrideResponse === 'function'
+            ? await overrideResponse(info)
+            : overrideResponse
+          : getGetAttachmentsAidRawResponseMock();
+      return new HttpResponse(binaryBody, {
+        status: 200,
+        headers: { 'Content-Type': 'application/octet-stream' },
+      });
     },
     options
   );
@@ -704,10 +799,7 @@ export const getGetShareTokenTreeMockHandler = (
 
 export const getGetShareTokenDocsDocIdMockHandler = (
   overrideResponse?:
-    | GetShareTokenDocsDocId200
-    | ((
-        info: Parameters<Parameters<typeof http.get>[1]>[0]
-      ) => Promise<GetShareTokenDocsDocId200> | GetShareTokenDocsDocId200),
+    Doc | ((info: Parameters<Parameters<typeof http.get>[1]>[0]) => Promise<Doc> | Doc),
   options?: RequestHandlerOptions
 ) => {
   return http.get(
@@ -736,6 +828,10 @@ export const getDocsMock = () => [
   getPutDocsDocIdMockHandler(),
   getPatchDocsDocIdMockHandler(),
   getDeleteDocsDocIdMockHandler(),
+  getGetDocsDocIdAttachmentsMockHandler(),
+  getPostDocsDocIdAttachmentsMockHandler(),
+  getDeleteDocsDocIdAttachmentsAidMockHandler(),
+  getGetAttachmentsAidRawMockHandler(),
   getGetDocsDocIdVersionsMockHandler(),
   getGetDocsDocIdVersionsRevMockHandler(),
   getPostDocsDocIdVersionsRevRestoreMockHandler(),

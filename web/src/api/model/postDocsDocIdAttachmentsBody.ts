@@ -6,13 +6,7 @@
  *
  * OpenAPI spec version: 0.1.0
  */
-import type { BackupCounts } from './backupCounts';
 
-export interface BackupImportResult {
-  attachments?: BackupCounts;
-  connectors: BackupCounts;
-  docs: BackupCounts;
-  docVersions: BackupCounts;
-  templates: BackupCounts;
-  templateSections: BackupCounts;
-}
+export type PostDocsDocIdAttachmentsBody = {
+  file: Blob | File;
+};

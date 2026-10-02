@@ -9,16 +9,19 @@
 import type { BackupBundleAiConfig } from './backupBundleAiConfig';
 import type { BackupBundleTemplateSectionsItem } from './backupBundleTemplateSectionsItem';
 import type { BackupBundleTemplatesItem } from './backupBundleTemplatesItem';
+import type { BackupBundleVersion } from './backupBundleVersion';
 import type { Connector } from './connector';
 import type { Doc } from './doc';
+import type { DocAttachment } from './docAttachment';
 import type { DocVersion } from './docVersion';
 
 /**
  * Portable backup format (docs/BACKUP.md). Connector secret fields (per each connector type's schema) are redacted from `configData`; `aiConfig` never includes the provider API key; notification channel config is not included at all.
  */
 export interface BackupBundle {
-  /** Backup format version; import rejects a mismatch */
-  version: number;
+  attachments?: DocAttachment[];
+  /** v1 JSON or v2 ZIP bundle metadata */
+  version: BackupBundleVersion;
   exportedAt: string;
   connectors: Connector[];
   docs: Doc[];

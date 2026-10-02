@@ -6,6 +6,7 @@
  *
  * OpenAPI spec version: 0.1.0
  */
+import type { DocAttachment } from './docAttachment';
 import type { DocKind } from './docKind';
 import type { DocOrigin } from './docOrigin';
 
@@ -28,6 +29,7 @@ export interface Doc {
   origin?: DocOrigin;
   /** Template the doc is rendered through on sync; empty for the plain snapshot render */
   templateId?: string;
+  attachments?: DocAttachment[];
   /** RFC3339 time sync last merged this doc; empty if never */
   lastSyncedAt?: string;
 }

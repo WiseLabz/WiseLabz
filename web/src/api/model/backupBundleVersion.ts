@@ -6,13 +6,13 @@
  *
  * OpenAPI spec version: 0.1.0
  */
-import type { BackupCounts } from './backupCounts';
 
-export interface BackupImportResult {
-  attachments?: BackupCounts;
-  connectors: BackupCounts;
-  docs: BackupCounts;
-  docVersions: BackupCounts;
-  templates: BackupCounts;
-  templateSections: BackupCounts;
-}
+/**
+ * v1 JSON or v2 ZIP bundle metadata
+ */
+export type BackupBundleVersion = (typeof BackupBundleVersion)[keyof typeof BackupBundleVersion];
+
+export const BackupBundleVersion = {
+  NUMBER_1: 1,
+  NUMBER_2: 2,
+} as const;

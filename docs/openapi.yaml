@@ -1818,6 +1818,88 @@ paths:
         '204': { description: Subtree moved to trash }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+  /docs/{docId}/attachments:
+    parameters: [{ $ref: '#/components/parameters/DocId' }]
+    get:
+      tags: [docs]
+      summary: List doc attachments with fifteen-minute signed URLs (viewer)
+      responses:
+        '200':
+          description: Attachments owned by this doc
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/DocAttachment' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [docs]
+      summary: Upload a sniffed image, PDF or text attachment (operator)
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+      responses:
+        '201':
+          description: Uploaded
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DocAttachment' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '413': { description: Attachment exceeds configured size limit (25 MiB default) }
+        '415': { description: 'Unsupported content, including SVG' }
+  /docs/{docId}/attachments/{aid}:
+    parameters:
+      - { $ref: '#/components/parameters/DocId' }
+      - name: aid
+        in: path
+        required: true
+        schema: { type: string }
+    delete:
+      tags: [docs]
+      summary: Delete doc attachment metadata (operator)
+      responses:
+        '204': { description: Deleted; unreferenced bytes are garbage-collected }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /attachments/{aid}/raw:
+    get:
+      tags: [docs]
+      security: []
+      summary: Read attachment bytes using a signed URL
+      parameters:
+        - name: aid
+          in: path
+          required: true
+          schema: { type: string }
+        - name: exp
+          in: query
+          required: true
+          schema: { type: string }
+        - name: sig
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Sniffed bytes; private cache, nosniff and sandbox CSP
+          content:
+            application/octet-stream:
+              schema: { type: string, format: binary }
+        '206':
+          description: Partial content
+          content:
+            application/octet-stream:
+              schema: { type: string, format: binary }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
   /docs/{docId}/versions:
     get:
       tags: [docs]
@@ -3163,10 +3245,10 @@ paths:
           headers:
             Content-Disposition:
               schema: { type: string }
-              description: 'attachment; filename="wiselabz-backup-<timestamp>.json"'
+              description: 'attachment; filename="wiselabz-backup-<timestamp>.zip"'
           content:
-            application/json:
-              schema: { $ref: '#/components/schemas/BackupBundle' }
+            application/zip:
+              schema: { type: string, format: binary }
         '403': { $ref: '#/components/responses/Forbidden' }
   /system/backup/import:
     post:
@@ -3175,10 +3257,12 @@ paths:
         Import a backup bundle — operator. Validates referential integrity
         and format version before writing anything; existing records (by ID)
         are left untouched and counted as skipped. The AI config summary, if
-        present, is never applied. Requests are limited to 10 MiB.
+        present, is never applied. Accepts v1 JSON and v2 ZIP; configurable limit defaults to 1 GiB.
       requestBody:
         required: true
         content:
+          application/zip:
+            schema: { type: string, format: binary }
           application/json:
             schema: { $ref: '#/components/schemas/BackupBundle' }
       responses:
@@ -3193,7 +3277,7 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
         '413':
-          description: Backup upload exceeds the 10 MiB request limit
+          description: Backup upload exceeds the configured import limit (1 GiB default)
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
@@ -3631,7 +3715,7 @@ paths:
           description: OK
           content:
             application/json:
-              schema: { type: object, additionalProperties: true }
+              schema: { $ref: '#/components/schemas/Doc' }
         '404': { $ref: '#/components/responses/NotFound' }
         '410': { description: Share link revoked or expired }
 
@@ -4563,6 +4647,19 @@ components:
         children:
           type: array
           items: { $ref: '#/components/schemas/DocNode' }
+    DocAttachment:
+      type: object
+      required: [id, docId, sha256, filename, contentType, size, createdBy, createdAt]
+      properties:
+        id: { type: string }
+        docId: { type: string }
+        sha256: { type: string }
+        filename: { type: string }
+        contentType: { type: string }
+        size: { type: integer, format: int64 }
+        createdBy: { type: string }
+        createdAt: { type: string, format: date-time }
+        url: { type: string, description: Signed URL expiring after fifteen minutes }
     Doc:
       type: object
       required: [docId, title, kind, content, currentVersion, updatedAt]
@@ -4588,6 +4685,9 @@ components:
           enum: [generated, human]
           description: generated docs have their marked sections refreshed by sync; human docs are never touched by sync
         templateId: { type: string, description: Template the doc is rendered through on sync; empty for the plain snapshot render }
+        attachments:
+          type: array
+          items: { $ref: '#/components/schemas/DocAttachment' }
         lastSyncedAt: { type: string, description: 'RFC3339 time sync last merged this doc; empty if never' }
     ResolveDocChange:
       type: object
@@ -5649,7 +5749,10 @@ components:
         config is not included at all.
       required: [version, exportedAt, connectors, docs, docVersions, templates, templateSections]
       properties:
-        version: { type: integer, description: Backup format version; import rejects a mismatch }
+        attachments:
+          type: array
+          items: { $ref: '#/components/schemas/DocAttachment' }
+        version: { type: integer, enum: [1, 2], description: v1 JSON or v2 ZIP bundle metadata }
         exportedAt: { type: string, format: date-time }
         connectors:
           type: array
@@ -5701,6 +5804,7 @@ components:
       type: object
       required: [connectors, docs, docVersions, templates, templateSections]
       properties:
+        attachments: { $ref: '#/components/schemas/BackupCounts' }
         connectors: { $ref: '#/components/schemas/BackupCounts' }
         docs: { $ref: '#/components/schemas/BackupCounts' }
         docVersions: { $ref: '#/components/schemas/BackupCounts' }

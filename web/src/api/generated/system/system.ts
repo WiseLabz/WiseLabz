@@ -642,8 +642,8 @@ export const getSystemBackupExport = (
   options?: SecondParameter<typeof customInstance>,
   signal?: AbortSignal
 ) => {
-  return customInstance<BackupBundle>(
-    { url: `/system/backup/export`, method: 'GET', signal },
+  return customInstance<Blob>(
+    { url: `/system/backup/export`, method: 'GET', responseType: 'blob', signal },
     options
   );
 };
@@ -758,21 +758,15 @@ export function useGetSystemBackupExport<
 }
 
 /**
- * @summary Import a backup bundle — operator. Validates referential integrity and format version before writing anything; existing records (by ID) are left untouched and counted as skipped. The AI config summary, if present, is never applied. Requests are limited to 10 MiB.
+ * @summary Import a backup bundle — operator. Validates referential integrity and format version before writing anything; existing records (by ID) are left untouched and counted as skipped. The AI config summary, if present, is never applied. Accepts v1 JSON and v2 ZIP; configurable limit defaults to 1 GiB.
  */
 export const postSystemBackupImport = (
-  backupBundle: BodyType<BackupBundle>,
+  postSystemBackupImportBody: BodyType<Blob | BackupBundle>,
   options?: SecondParameter<typeof customInstance>,
   signal?: AbortSignal
 ) => {
   return customInstance<BackupImportResult>(
-    {
-      url: `/system/backup/import`,
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      data: backupBundle,
-      signal,
-    },
+    { url: `/system/backup/import`, method: 'POST', data: postSystemBackupImportBody, signal },
     options
   );
 };
@@ -818,12 +812,12 @@ export const getPostSystemBackupImportMutationOptions = <
 export type PostSystemBackupImportMutationResult = NonNullable<
   Awaited<ReturnType<typeof postSystemBackupImport>>
 >;
-export type PostSystemBackupImportMutationBody = BodyType<BackupBundle>;
+export type PostSystemBackupImportMutationBody = BodyType<Blob | BackupBundle>;
 export type PostSystemBackupImportMutationError = ErrorType<Error | ForbiddenResponse>;
-export type PostSystemBackupImportMutationVariables = { data: BodyType<BackupBundle> };
+export type PostSystemBackupImportMutationVariables = { data: BodyType<Blob | BackupBundle> };
 
 /**
- * @summary Import a backup bundle — operator. Validates referential integrity and format version before writing anything; existing records (by ID) are left untouched and counted as skipped. The AI config summary, if present, is never applied. Requests are limited to 10 MiB.
+ * @summary Import a backup bundle — operator. Validates referential integrity and format version before writing anything; existing records (by ID) are left untouched and counted as skipped. The AI config summary, if present, is never applied. Accepts v1 JSON and v2 ZIP; configurable limit defaults to 1 GiB.
  */
 export const usePostSystemBackupImport = <
   TError = ErrorType<Error | ForbiddenResponse>,

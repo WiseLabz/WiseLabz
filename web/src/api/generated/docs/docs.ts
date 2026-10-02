@@ -27,6 +27,7 @@ import type {
   AiSuggestRequest,
   BadRequestResponse,
   Doc,
+  DocAttachment,
   DocCreate,
   DocEditProposal,
   DocEditProposalPage,
@@ -40,12 +41,13 @@ import type {
   Error,
   ForbiddenResponse,
   GenerateResult,
+  GetAttachmentsAidRawParams,
   GetDocsEditProposalsParams,
   GetDocsParams,
   GetDocsShareLinks200Item,
-  GetShareTokenDocsDocId200,
   GetShareTokenTree200,
   NotFoundResponse,
+  PostDocsDocIdAttachmentsBody,
   PostDocsGenerateBody,
   PostDocsShareLinks201,
   PostDocsShareLinksBody,
@@ -1085,6 +1087,469 @@ export const useDeleteDocsDocId = <
 > => {
   return useMutation(getDeleteDocsDocIdMutationOptions(options), queryClient);
 };
+/**
+ * @summary List doc attachments with fifteen-minute signed URLs (viewer)
+ */
+export const getDocsDocIdAttachments = (
+  docId: string,
+  options?: SecondParameter<typeof customInstance>,
+  signal?: AbortSignal
+) => {
+  return customInstance<DocAttachment[]>(
+    { url: `/docs/${docId}/attachments`, method: 'GET', signal },
+    options
+  );
+};
+
+export const getGetDocsDocIdAttachmentsQueryKey = (docId: string) => {
+  return [`/docs/${docId}/attachments`] as const;
+};
+
+export const getGetDocsDocIdAttachmentsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getDocsDocIdAttachments>>,
+  TError = ErrorType<NotFoundResponse>,
+>(
+  docId: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getDocsDocIdAttachments>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  }
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetDocsDocIdAttachmentsQueryKey(docId);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getDocsDocIdAttachments>>> = ({
+    signal,
+  }) => getDocsDocIdAttachments(docId, requestOptions, signal);
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: docId !== null && docId !== undefined,
+    ...queryOptions,
+  } as UseQueryOptions<Awaited<ReturnType<typeof getDocsDocIdAttachments>>, TError, TData> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+};
+
+export type GetDocsDocIdAttachmentsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getDocsDocIdAttachments>>
+>;
+export type GetDocsDocIdAttachmentsQueryError = ErrorType<NotFoundResponse>;
+
+export function useGetDocsDocIdAttachments<
+  TData = Awaited<ReturnType<typeof getDocsDocIdAttachments>>,
+  TError = ErrorType<NotFoundResponse>,
+>(
+  docId: string,
+  options: {
+    query: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getDocsDocIdAttachments>>, TError, TData>
+    > &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getDocsDocIdAttachments>>,
+          TError,
+          Awaited<ReturnType<typeof getDocsDocIdAttachments>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useGetDocsDocIdAttachments<
+  TData = Awaited<ReturnType<typeof getDocsDocIdAttachments>>,
+  TError = ErrorType<NotFoundResponse>,
+>(
+  docId: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getDocsDocIdAttachments>>, TError, TData>
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getDocsDocIdAttachments>>,
+          TError,
+          Awaited<ReturnType<typeof getDocsDocIdAttachments>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useGetDocsDocIdAttachments<
+  TData = Awaited<ReturnType<typeof getDocsDocIdAttachments>>,
+  TError = ErrorType<NotFoundResponse>,
+>(
+  docId: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getDocsDocIdAttachments>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * @summary List doc attachments with fifteen-minute signed URLs (viewer)
+ */
+
+export function useGetDocsDocIdAttachments<
+  TData = Awaited<ReturnType<typeof getDocsDocIdAttachments>>,
+  TError = ErrorType<NotFoundResponse>,
+>(
+  docId: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getDocsDocIdAttachments>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getGetDocsDocIdAttachmentsQueryOptions(docId, options);
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+/**
+ * @summary Upload a sniffed image, PDF or text attachment (operator)
+ */
+export const postDocsDocIdAttachments = (
+  docId: string,
+  postDocsDocIdAttachmentsBody: BodyType<PostDocsDocIdAttachmentsBody>,
+  options?: SecondParameter<typeof customInstance>,
+  signal?: AbortSignal
+) => {
+  const formData = new FormData();
+  formData.append(`file`, postDocsDocIdAttachmentsBody.file);
+
+  return customInstance<DocAttachment>(
+    {
+      url: `/docs/${docId}/attachments`,
+      method: 'POST',
+      headers: { 'Content-Type': 'multipart/form-data' },
+      data: formData,
+      signal,
+    },
+    options
+  );
+};
+
+export const getPostDocsDocIdAttachmentsMutationKey = () => ['postDocsDocIdAttachments'] as const;
+
+export const getPostDocsDocIdAttachmentsMutationOptions = <
+  TError = ErrorType<BadRequestResponse | ForbiddenResponse | NotFoundResponse | void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof postDocsDocIdAttachments>>,
+    TError,
+    PostDocsDocIdAttachmentsMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof postDocsDocIdAttachments>>,
+  TError,
+  PostDocsDocIdAttachmentsMutationVariables,
+  TContext
+> => {
+  const mutationKey = getPostDocsDocIdAttachmentsMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof postDocsDocIdAttachments>>,
+    PostDocsDocIdAttachmentsMutationVariables
+  > = (props) => {
+    const { docId, data } = props ?? {};
+
+    return postDocsDocIdAttachments(docId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type PostDocsDocIdAttachmentsMutationResult = NonNullable<
+  Awaited<ReturnType<typeof postDocsDocIdAttachments>>
+>;
+export type PostDocsDocIdAttachmentsMutationBody = BodyType<PostDocsDocIdAttachmentsBody>;
+export type PostDocsDocIdAttachmentsMutationError = ErrorType<
+  BadRequestResponse | ForbiddenResponse | NotFoundResponse | void
+>;
+export type PostDocsDocIdAttachmentsMutationVariables = {
+  docId: string;
+  data: BodyType<PostDocsDocIdAttachmentsBody>;
+};
+
+/**
+ * @summary Upload a sniffed image, PDF or text attachment (operator)
+ */
+export const usePostDocsDocIdAttachments = <
+  TError = ErrorType<BadRequestResponse | ForbiddenResponse | NotFoundResponse | void>,
+  TContext = unknown,
+>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof postDocsDocIdAttachments>>,
+      TError,
+      PostDocsDocIdAttachmentsMutationVariables,
+      TContext
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseMutationResult<
+  Awaited<ReturnType<typeof postDocsDocIdAttachments>>,
+  TError,
+  PostDocsDocIdAttachmentsMutationVariables,
+  TContext
+> => {
+  return useMutation(getPostDocsDocIdAttachmentsMutationOptions(options), queryClient);
+};
+/**
+ * @summary Delete doc attachment metadata (operator)
+ */
+export const deleteDocsDocIdAttachmentsAid = (
+  docId: string,
+  aid: string,
+  options?: SecondParameter<typeof customInstance>,
+  signal?: AbortSignal
+) => {
+  return customInstance<void>(
+    { url: `/docs/${docId}/attachments/${aid}`, method: 'DELETE', signal },
+    options
+  );
+};
+
+export const getDeleteDocsDocIdAttachmentsAidMutationKey = () =>
+  ['deleteDocsDocIdAttachmentsAid'] as const;
+
+export const getDeleteDocsDocIdAttachmentsAidMutationOptions = <
+  TError = ErrorType<ForbiddenResponse | NotFoundResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteDocsDocIdAttachmentsAid>>,
+    TError,
+    DeleteDocsDocIdAttachmentsAidMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteDocsDocIdAttachmentsAid>>,
+  TError,
+  DeleteDocsDocIdAttachmentsAidMutationVariables,
+  TContext
+> => {
+  const mutationKey = getDeleteDocsDocIdAttachmentsAidMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteDocsDocIdAttachmentsAid>>,
+    DeleteDocsDocIdAttachmentsAidMutationVariables
+  > = (props) => {
+    const { docId, aid } = props ?? {};
+
+    return deleteDocsDocIdAttachmentsAid(docId, aid, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteDocsDocIdAttachmentsAidMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteDocsDocIdAttachmentsAid>>
+>;
+
+export type DeleteDocsDocIdAttachmentsAidMutationError = ErrorType<
+  ForbiddenResponse | NotFoundResponse
+>;
+export type DeleteDocsDocIdAttachmentsAidMutationVariables = { docId: string; aid: string };
+
+/**
+ * @summary Delete doc attachment metadata (operator)
+ */
+export const useDeleteDocsDocIdAttachmentsAid = <
+  TError = ErrorType<ForbiddenResponse | NotFoundResponse>,
+  TContext = unknown,
+>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof deleteDocsDocIdAttachmentsAid>>,
+      TError,
+      DeleteDocsDocIdAttachmentsAidMutationVariables,
+      TContext
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseMutationResult<
+  Awaited<ReturnType<typeof deleteDocsDocIdAttachmentsAid>>,
+  TError,
+  DeleteDocsDocIdAttachmentsAidMutationVariables,
+  TContext
+> => {
+  return useMutation(getDeleteDocsDocIdAttachmentsAidMutationOptions(options), queryClient);
+};
+/**
+ * @summary Read attachment bytes using a signed URL
+ */
+export const getAttachmentsAidRaw = (
+  aid: string,
+  params: GetAttachmentsAidRawParams,
+  options?: SecondParameter<typeof customInstance>,
+  signal?: AbortSignal
+) => {
+  return customInstance<Blob>(
+    { url: `/attachments/${aid}/raw`, method: 'GET', params, responseType: 'blob', signal },
+    options
+  );
+};
+
+export const getGetAttachmentsAidRawQueryKey = (
+  aid: string,
+  params?: GetAttachmentsAidRawParams
+) => {
+  return [`/attachments/${aid}/raw`, ...(params ? [params] : [])] as const;
+};
+
+export const getGetAttachmentsAidRawQueryOptions = <
+  TData = Awaited<ReturnType<typeof getAttachmentsAidRaw>>,
+  TError = ErrorType<ForbiddenResponse | NotFoundResponse>,
+>(
+  aid: string,
+  params: GetAttachmentsAidRawParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getAttachmentsAidRaw>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  }
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetAttachmentsAidRawQueryKey(aid, params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getAttachmentsAidRaw>>> = ({ signal }) =>
+    getAttachmentsAidRaw(aid, params, requestOptions, signal);
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: aid !== null && aid !== undefined,
+    ...queryOptions,
+  } as UseQueryOptions<Awaited<ReturnType<typeof getAttachmentsAidRaw>>, TError, TData> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+};
+
+export type GetAttachmentsAidRawQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getAttachmentsAidRaw>>
+>;
+export type GetAttachmentsAidRawQueryError = ErrorType<ForbiddenResponse | NotFoundResponse>;
+
+export function useGetAttachmentsAidRaw<
+  TData = Awaited<ReturnType<typeof getAttachmentsAidRaw>>,
+  TError = ErrorType<ForbiddenResponse | NotFoundResponse>,
+>(
+  aid: string,
+  params: GetAttachmentsAidRawParams,
+  options: {
+    query: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getAttachmentsAidRaw>>, TError, TData>
+    > &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getAttachmentsAidRaw>>,
+          TError,
+          Awaited<ReturnType<typeof getAttachmentsAidRaw>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useGetAttachmentsAidRaw<
+  TData = Awaited<ReturnType<typeof getAttachmentsAidRaw>>,
+  TError = ErrorType<ForbiddenResponse | NotFoundResponse>,
+>(
+  aid: string,
+  params: GetAttachmentsAidRawParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getAttachmentsAidRaw>>, TError, TData>
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getAttachmentsAidRaw>>,
+          TError,
+          Awaited<ReturnType<typeof getAttachmentsAidRaw>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useGetAttachmentsAidRaw<
+  TData = Awaited<ReturnType<typeof getAttachmentsAidRaw>>,
+  TError = ErrorType<ForbiddenResponse | NotFoundResponse>,
+>(
+  aid: string,
+  params: GetAttachmentsAidRawParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getAttachmentsAidRaw>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * @summary Read attachment bytes using a signed URL
+ */
+
+export function useGetAttachmentsAidRaw<
+  TData = Awaited<ReturnType<typeof getAttachmentsAidRaw>>,
+  TError = ErrorType<ForbiddenResponse | NotFoundResponse>,
+>(
+  aid: string,
+  params: GetAttachmentsAidRawParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getAttachmentsAidRaw>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getGetAttachmentsAidRawQueryOptions(aid, params, options);
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
 /**
  * @summary Version history list for a doc node
  */
@@ -2945,7 +3410,7 @@ export const getShareTokenDocsDocId = (
   options?: SecondParameter<typeof customInstance>,
   signal?: AbortSignal
 ) => {
-  return customInstance<GetShareTokenDocsDocId200>(
+  return customInstance<Doc>(
     { url: `/share/${token}/docs/${docId}`, method: 'GET', signal },
     options
   );

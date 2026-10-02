@@ -7,4 +7,7 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export type GetShareTokenDocsDocId200 = { [key: string]: unknown };
+export type GetAttachmentsAidRawParams = {
+  exp: string;
+  sig: string;
+};
