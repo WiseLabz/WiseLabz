@@ -4,9 +4,8 @@
 > #478 → #494 → #519 → #514, shipped as **4 sequential PRs**. Each PR gets its own OpenSpec change under `openspec/changes/`.
 >
 > Status:
-> - PR 1 (#478): **implemented, open as #598.** OpenSpec change `doc-section-ownership`, branch `feat/doc-section-ownership` (rebased on main; migration is `000050`).
->   All tasks are ticked in `openspec/changes/doc-section-ownership/tasks.md`.
->   Archive the change with `/opsx:archive` once the PR merges.
+> - PR 1 (#478): **merged as #598, archived.** Spec: `openspec/specs/doc-section-ownership/spec.md`;
+>   change history: `openspec/changes/archive/2026-10-02-doc-section-ownership/`.
 > - PR 2–4: not started. Create each change with `/opsx:propose` (or by hand under `openspec/changes/<name>/`)
 >   from the matching section below, then implement it with `/opsx:apply`.
 >
