@@ -14,11 +14,15 @@ The API SHALL create human-origin docs with a nonempty title, optional content, 
 - **THEN** its origin is human and revision one records the creator and content
 
 ### Requirement: Scope-aware access
-Human lab docs SHALL be viewable by authenticated users and mutable only by instance admins. Generated lab docs SHALL be admin-only. Service docs SHALL require connector viewer for reads and operator for mutations. Hidden docs SHALL return 404 on reads and SHALL never leak titles in trees, search or retrieval.
+Human lab docs SHALL be viewable by authenticated users and mutable only by instance admins. Generated lab docs SHALL be admin-only. Service docs SHALL require connector viewer for reads and operator for mutations. Hidden docs SHALL return 404 on reads, renames, moves and deletions, and SHALL never leak titles in trees, search or retrieval. Callers who can view a doc but not change it SHALL get 403. A move below a parent in another scope SHALL fail exactly like a move below a missing parent.
 
 #### Scenario: Ordinary user reads lab docs
 - **WHEN** an ordinary authenticated user lists docs
 - **THEN** human lab notes are visible and generated lab inventory is absent
+
+#### Scenario: Mutating a hidden doc
+- **WHEN** a user without viewer access renames or deletes a service doc
+- **THEN** the API answers 404 as if the doc did not exist, while a viewer without operator access gets 403
 
 ### Requirement: Bounded hierarchy
 Rename and re-parent SHALL preserve scope, reject cycles and limit hierarchy depth to five including the moved subtree. Tree responses SHALL nest children and include a Lab branch.
@@ -28,11 +32,15 @@ Rename and re-parent SHALL preserve scope, reject cycles and limit hierarchy dep
 - **THEN** the operation fails without changing the hierarchy
 
 ### Requirement: Recoverable subtree deletion
-Deletion SHALL atomically soft-delete the active subtree with one shared timestamp. Administrator trash SHALL list deleted docs. Restore SHALL recover the selected doc and its descendants from that deletion batch, preserving older separately deleted descendants and leaving no active doc under a deleted parent.
+Deletion SHALL atomically soft-delete the active subtree with one shared timestamp. Administrator trash SHALL list deleted docs. Restore SHALL recover the selected doc and its descendants from that deletion batch, preserving older separately deleted descendants and leaving no active doc under a deleted parent. Restore SHALL be refused with a conflict, leaving the whole batch in trash, when the batch holds a generated lab doc and an active generated lab doc with the same title exists, so the generator never owns two copies of a doc such as Lab Topology.
 
 #### Scenario: Restore a deletion batch
 - **WHEN** an administrator restores a deleted subtree root
 - **THEN** docs deleted with that root return and earlier independently deleted descendants remain in trash
+
+#### Scenario: Restore an old generated topology
+- **WHEN** an administrator restores a deleted generated Lab Topology doc while a newer generated Lab Topology doc is active
+- **THEN** the restore fails with a conflict, the old doc stays in trash, and a human lab note with the same title does not count as a clash
 
 ### Requirement: Deleted docs are invisible
 Every ordinary doc read, list, version, share, quality, export, chat, MCP, full-text search and embedding retrieval SHALL exclude deleted docs. Backups SHALL carry parent, creator and deletion metadata in the existing v1 JSON format.

@@ -460,6 +460,10 @@ serialize validation and writes in one transaction on SQLite and PostgreSQL.
 | Generated lab inventory | Instance admin | Instance admin |
 | Service | Connector viewer | Connector operator |
 
+Rename, move and delete check read access first: a caller who cannot read the
+doc gets 404, the same as for a missing doc, and only a caller who can read it
+but not change it gets 403. A parent in another scope is reported as not found.
+
 The docs tree contains a Lab branch and connector branches, recursively nesting
 docs beneath their parent. Hidden generated lab titles never reach ordinary
 users. The creation dialog and command palette expose New doc; the tree supports
@@ -472,6 +476,9 @@ Administrators use `/docs/trash` (`GET /api/docs/trash`) and
 `POST /api/docs/{id}/restore` to restore the selected subtree's deletion batch;
 previously deleted descendants stay in trash. A restored root whose parent
 remains deleted is detached to its scope root. Invalid restored depth is rejected.
+Restoring a batch that holds a generated lab doc (e.g. an old Lab Topology) is
+refused with 409 `generated_doc_exists` while a newer active generated lab doc
+has the same title; delete the newer one first. Human notes never clash.
 
 The existing scheduled retention job purges trash after
 `retention.deleted_docs_days` (default 30; `0` disables purge), cascading versions,
