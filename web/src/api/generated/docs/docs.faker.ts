@@ -14,6 +14,8 @@ import type {
   DocAttachment,
   DocEditProposal,
   DocEditProposalPage,
+  DocImportCreated,
+  DocImportPreview,
   DocLock,
   DocNode,
   DocPage,
@@ -210,6 +212,59 @@ export const getGetDocsTrashResponseMock = (): Doc[] =>
       faker.string.alpha({ length: { min: 10, max: 20 } }),
       undefined,
     ]),
+  }));
+
+export const getPostDocsImportResponseMock = (
+  overrideResponse: Partial<Extract<DocImportPreview, object>> = {}
+): DocImportPreview => ({
+  id: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  expiresAt: faker.date.past().toISOString().slice(0, 19) + 'Z',
+  tree: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() => ({
+    docId: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    title: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    path: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    serviceId: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    folder: faker.datatype.boolean(),
+    attachmentCount: faker.number.int(),
+    children: [],
+  })),
+  docCount: faker.number.int(),
+  attachmentCount: faker.number.int(),
+  mappings: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(
+    () => ({
+      source: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      link: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      target: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    })
+  ),
+  warnings: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(
+    () => ({
+      path: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      message: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    })
+  ),
+  skipped: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(
+    () => ({
+      path: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      message: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    })
+  ),
+  collisions: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(
+    () => ({
+      path: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      title: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      newTitle: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    })
+  ),
+  ...overrideResponse,
+});
+
+export const getPostDocsImportImportIdCommitResponseMock = (): DocImportCreated[] =>
+  Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() => ({
+    docId: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    title: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    parentId: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    serviceId: faker.string.alpha({ length: { min: 10, max: 20 } }),
   }));
 
 export const getPostDocsDocIdRestoreResponseMock = (

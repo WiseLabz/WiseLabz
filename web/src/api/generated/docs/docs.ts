@@ -31,6 +31,8 @@ import type {
   DocCreate,
   DocEditProposal,
   DocEditProposalPage,
+  DocImportCreated,
+  DocImportPreview,
   DocLock,
   DocNode,
   DocPage,
@@ -49,6 +51,7 @@ import type {
   NotFoundResponse,
   PostDocsDocIdAttachmentsBody,
   PostDocsGenerateBody,
+  PostDocsImportBody,
   PostDocsShareLinks201,
   PostDocsShareLinksBody,
   TemplateSchema,
@@ -384,6 +387,185 @@ export function useGetDocsTrash<
   return withQueryKey(query, queryOptions.queryKey);
 }
 
+/**
+ * Stages the zip (100 MB cap; at most 2000 entries, 500 MB unzipped and a 100:1 compression ratio) for one hour and returns the docs it would create. Nothing is written to the docs until the commit.
+ * @summary Stage a Markdown/Obsidian vault zip and preview the import (instance admin)
+ */
+export const postDocsImport = (
+  postDocsImportBody: BodyType<PostDocsImportBody>,
+  options?: SecondParameter<typeof customInstance>,
+  signal?: AbortSignal
+) => {
+  const formData = new FormData();
+  formData.append(`file`, postDocsImportBody.file);
+
+  return customInstance<DocImportPreview>(
+    {
+      url: `/docs/import`,
+      method: 'POST',
+      headers: { 'Content-Type': 'multipart/form-data' },
+      data: formData,
+      signal,
+    },
+    options
+  );
+};
+
+export const getPostDocsImportMutationKey = () => ['postDocsImport'] as const;
+
+export const getPostDocsImportMutationOptions = <
+  TError = ErrorType<BadRequestResponse | ForbiddenResponse | void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof postDocsImport>>,
+    TError,
+    PostDocsImportMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof postDocsImport>>,
+  TError,
+  PostDocsImportMutationVariables,
+  TContext
+> => {
+  const mutationKey = getPostDocsImportMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof postDocsImport>>,
+    PostDocsImportMutationVariables
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return postDocsImport(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type PostDocsImportMutationResult = NonNullable<Awaited<ReturnType<typeof postDocsImport>>>;
+export type PostDocsImportMutationBody = BodyType<PostDocsImportBody>;
+export type PostDocsImportMutationError = ErrorType<BadRequestResponse | ForbiddenResponse | void>;
+export type PostDocsImportMutationVariables = { data: BodyType<PostDocsImportBody> };
+
+/**
+ * @summary Stage a Markdown/Obsidian vault zip and preview the import (instance admin)
+ */
+export const usePostDocsImport = <
+  TError = ErrorType<BadRequestResponse | ForbiddenResponse | void>,
+  TContext = unknown,
+>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof postDocsImport>>,
+      TError,
+      PostDocsImportMutationVariables,
+      TContext
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseMutationResult<
+  Awaited<ReturnType<typeof postDocsImport>>,
+  TError,
+  PostDocsImportMutationVariables,
+  TContext
+> => {
+  return useMutation(getPostDocsImportMutationOptions(options), queryClient);
+};
+/**
+ * @summary Create every doc of a staged import in one transaction (instance admin)
+ */
+export const postDocsImportImportIdCommit = (
+  importId: string,
+  options?: SecondParameter<typeof customInstance>,
+  signal?: AbortSignal
+) => {
+  return customInstance<DocImportCreated[]>(
+    { url: `/docs/import/${importId}/commit`, method: 'POST', signal },
+    options
+  );
+};
+
+export const getPostDocsImportImportIdCommitMutationKey = () =>
+  ['postDocsImportImportIdCommit'] as const;
+
+export const getPostDocsImportImportIdCommitMutationOptions = <
+  TError = ErrorType<BadRequestResponse | ForbiddenResponse | NotFoundResponse | void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof postDocsImportImportIdCommit>>,
+    TError,
+    PostDocsImportImportIdCommitMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof postDocsImportImportIdCommit>>,
+  TError,
+  PostDocsImportImportIdCommitMutationVariables,
+  TContext
+> => {
+  const mutationKey = getPostDocsImportImportIdCommitMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof postDocsImportImportIdCommit>>,
+    PostDocsImportImportIdCommitMutationVariables
+  > = (props) => {
+    const { importId } = props ?? {};
+
+    return postDocsImportImportIdCommit(importId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type PostDocsImportImportIdCommitMutationResult = NonNullable<
+  Awaited<ReturnType<typeof postDocsImportImportIdCommit>>
+>;
+
+export type PostDocsImportImportIdCommitMutationError = ErrorType<
+  BadRequestResponse | ForbiddenResponse | NotFoundResponse | void
+>;
+export type PostDocsImportImportIdCommitMutationVariables = { importId: string };
+
+/**
+ * @summary Create every doc of a staged import in one transaction (instance admin)
+ */
+export const usePostDocsImportImportIdCommit = <
+  TError = ErrorType<BadRequestResponse | ForbiddenResponse | NotFoundResponse | void>,
+  TContext = unknown,
+>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof postDocsImportImportIdCommit>>,
+      TError,
+      PostDocsImportImportIdCommitMutationVariables,
+      TContext
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseMutationResult<
+  Awaited<ReturnType<typeof postDocsImportImportIdCommit>>,
+  TError,
+  PostDocsImportImportIdCommitMutationVariables,
+  TContext
+> => {
+  return useMutation(getPostDocsImportImportIdCommitMutationOptions(options), queryClient);
+};
 /**
  * @summary Restore a deleted subtree batch (instance admin)
  */

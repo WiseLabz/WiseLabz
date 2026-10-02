@@ -1719,6 +1719,50 @@ paths:
                 type: array
                 items: { $ref: '#/components/schemas/Doc' }
         '403': { $ref: '#/components/responses/Forbidden' }
+  /docs/import:
+    post:
+      tags: [docs]
+      summary: Stage a Markdown/Obsidian vault zip and preview the import (instance admin)
+      description: >-
+        Stages the zip (100 MB cap; at most 2000 entries, 500 MB unzipped and a
+        100:1 compression ratio) for one hour and returns the docs it would
+        create. Nothing is written to the docs until the commit.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+      responses:
+        '201':
+          description: Staged; preview of the import
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DocImportPreview' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '413': { description: Upload exceeds 100 MB or the archive expands beyond 500 MB }
+  /docs/import/{importId}/commit:
+    post:
+      tags: [docs]
+      summary: Create every doc of a staged import in one transaction (instance admin)
+      parameters:
+        - { name: importId, in: path, required: true, schema: { type: string } }
+      responses:
+        '201':
+          description: Created docs, parents first
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/DocImportCreated' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: A connector named by the import no longer exists }
   /docs/{docId}/restore:
     post:
       tags: [docs]
@@ -4647,6 +4691,68 @@ components:
         children:
           type: array
           items: { $ref: '#/components/schemas/DocNode' }
+    DocImportIssue:
+      type: object
+      required: [path, message]
+      properties:
+        path: { type: string }
+        message: { type: string }
+    DocImportNode:
+      type: object
+      required: [docId, title, path, serviceId, folder, attachmentCount, children]
+      properties:
+        docId: { type: string }
+        title: { type: string }
+        path: { type: string, description: Archive path of the note or folder }
+        serviceId: { type: string, description: Empty for lab docs }
+        folder: { type: boolean }
+        attachmentCount: { type: integer }
+        children:
+          type: array
+          items: { $ref: '#/components/schemas/DocImportNode' }
+    DocImportPreview:
+      type: object
+      required: [id, expiresAt, tree, docCount, attachmentCount, mappings, warnings, skipped, collisions]
+      properties:
+        id: { type: string }
+        expiresAt: { type: string, format: date-time }
+        tree:
+          type: array
+          items: { $ref: '#/components/schemas/DocImportNode' }
+        docCount: { type: integer }
+        attachmentCount: { type: integer }
+        mappings:
+          type: array
+          items:
+            type: object
+            required: [source, link, target]
+            properties:
+              source: { type: string }
+              link: { type: string, description: The link as written in the note }
+              target: { type: string, description: '/docs/<id> or attachment:<id>' }
+        warnings:
+          type: array
+          items: { $ref: '#/components/schemas/DocImportIssue' }
+        skipped:
+          type: array
+          items: { $ref: '#/components/schemas/DocImportIssue' }
+        collisions:
+          type: array
+          items:
+            type: object
+            required: [path, title, newTitle]
+            properties:
+              path: { type: string }
+              title: { type: string }
+              newTitle: { type: string }
+    DocImportCreated:
+      type: object
+      required: [docId, title, parentId, serviceId]
+      properties:
+        docId: { type: string }
+        title: { type: string }
+        parentId: { type: string }
+        serviceId: { type: string }
     DocAttachment:
       type: object
       required: [id, docId, sha256, filename, contentType, size, createdBy, createdAt]
