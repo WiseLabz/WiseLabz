@@ -303,6 +303,14 @@ func importBundle(ctx context.Context, s *store.Store, b *Bundle) (Result, error
 		return res, err
 	}
 
+	// Templates first: a doc may reference its template (docs.template_id).
+	if err := importTemplates(ctx, s, b.Templates, &res); err != nil {
+		return res, err
+	}
+	if err := importTemplateSections(ctx, s, b.TemplateSections, templateIDs(b.Templates), &res); err != nil {
+		return res, err
+	}
+
 	existingDocs, err := s.ExistingDocIDs(ctx, docIDs(b.Docs))
 	if err != nil {
 		return res, fmt.Errorf("check existing docs: %w", err)
@@ -321,12 +329,6 @@ func importBundle(ctx context.Context, s *store.Store, b *Bundle) (Result, error
 	// No Get-by-ID for doc versions; check existence against the versions
 	// already stored for the bundle's docs instead, in one bulk query.
 	if err := importDocVersions(ctx, s, b.DocVersions, docIDs(b.Docs), &res); err != nil {
-		return res, err
-	}
-	if err := importTemplates(ctx, s, b.Templates, &res); err != nil {
-		return res, err
-	}
-	if err := importTemplateSections(ctx, s, b.TemplateSections, templateIDs(b.Templates), &res); err != nil {
 		return res, err
 	}
 	return res, nil

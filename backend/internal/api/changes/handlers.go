@@ -17,6 +17,7 @@ import (
 	"github.com/WiseLabz/wiselabz/internal/ai"
 	"github.com/WiseLabz/wiselabz/internal/api/settings"
 	"github.com/WiseLabz/wiselabz/internal/auth"
+	"github.com/WiseLabz/wiselabz/internal/doc"
 	"github.com/WiseLabz/wiselabz/internal/httputil"
 	"github.com/WiseLabz/wiselabz/internal/store"
 	"github.com/WiseLabz/wiselabz/internal/sync"
@@ -29,6 +30,8 @@ type Handler struct {
 	Settings *settings.Handler
 	AI       *ai.Registry
 	WSHub    *ws.Hub
+	// DocEngine resolves doc Changes; nil falls back to a store-only engine.
+	DocEngine *doc.Engine
 }
 
 // NewHandler creates a new change handler.
@@ -39,8 +42,21 @@ func NewHandler(s *store.Store, settingsH *settings.Handler, aiRegistry *ai.Regi
 // aiSuggestTimeout bounds detached AI suggestion calls. Keep in sync with api/docs/ai.go.
 const aiSuggestTimeout = 2 * time.Minute
 
-// diffToSpec converts the stored []sync.DiffPatch JSON into the spec's Diff{format,hunks} shape.
+// diffToSpec converts a stored diff into the spec's Diff shape: doc Changes
+// (a JSON object, see doc.ChangeDiff) become format "doc" with the human and
+// generated text as base/head; infra changes ([]sync.DiffPatch) become hunks.
 func diffToSpec(raw string) map[string]any {
+	if d, ok := doc.ParseChangeDiff(raw); ok {
+		return map[string]any{
+			"format":      "doc",
+			"baseText":    d.Human,
+			"headText":    d.Generated,
+			"baseLabel":   "Current doc",
+			"headLabel":   "Generated",
+			"headTrigger": "sync",
+			"language":    "md",
+		}
+	}
 	var patches []sync.DiffPatch
 	if err := json.Unmarshal([]byte(raw), &patches); err != nil {
 		slog.Warn("changes: invalid stored diff patches", "error", err)
@@ -281,6 +297,70 @@ func (h *Handler) Dismiss(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := h.Store.RecordAuditFromContext(r.Context(), "change.dismiss", "change", id, nil); err != nil {
 		slog.Error("failed to record audit", "action", "change.dismiss", "error", err)
+	}
+	detail, err := h.changeDetail(r.Context(), id)
+	if err != nil {
+		httputil.Errorf(w, err)
+		return
+	}
+	httputil.JSON(w, http.StatusOK, detail)
+}
+
+// resolveDocRequest is the body of POST /api/changes/{id}/resolve-doc.
+type resolveDocRequest struct {
+	Action string `json:"action"`
+}
+
+// ResolveDoc handles POST /api/changes/{id}/resolve-doc: accept the generated
+// text of a doc_conflict/doc_adopt Change, or keep the human version (which
+// detaches a conflicting block for good). Requires an operator grant on the
+// Change's connector; callers without a viewer grant get 404.
+func (h *Handler) ResolveDoc(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	c, err := h.Store.GetChange(r.Context(), id)
+	if errors.Is(err, store.ErrNotFound) {
+		httputil.Error(w, http.StatusNotFound, "not_found", "Change not found")
+		return
+	}
+	if err != nil {
+		httputil.Errorf(w, err)
+		return
+	}
+	if !h.viewerOrNotFound(w, r, c.ServiceID) || !h.operatorOrForbidden(w, r, c.ServiceID) {
+		return
+	}
+	req, ok := httputil.DecodeJSON[resolveDocRequest](w, r)
+	if !ok {
+		return
+	}
+	if req.Action != doc.ResolveAccept && req.Action != doc.ResolveKeep {
+		httputil.ErrorWithDetails(w, http.StatusBadRequest, "invalid_request", "action must be accept or keep",
+			[]httputil.FieldError{{Field: "action", Msg: "must be accept or keep"}})
+		return
+	}
+
+	engine := h.DocEngine
+	if engine == nil {
+		engine = doc.NewEngine(h.Store)
+	}
+	docID, err := engine.ResolveChange(r.Context(), c, req.Action, auth.UserIDFromContext(r.Context()))
+	switch {
+	case errors.Is(err, doc.ErrNotResolvable):
+		httputil.Error(w, http.StatusConflict, "not_resolvable", "Change is not an open doc change")
+		return
+	case errors.Is(err, doc.ErrBlockGone):
+		httputil.Error(w, http.StatusConflict, "block_gone", "The generated section no longer exists in the doc")
+		return
+	case errors.Is(err, store.ErrVersionConflict):
+		httputil.Error(w, http.StatusConflict, "version_conflict", "The doc changed meanwhile; reload and retry")
+		return
+	case err != nil:
+		httputil.Errorf(w, err)
+		return
+	}
+	if err := h.Store.RecordAuditFromContext(r.Context(), "change.resolve_doc", "change", id,
+		map[string]any{"action": req.Action, "docId": docID}); err != nil {
+		slog.Error("failed to record audit", "action", "change.resolve_doc", "error", err)
 	}
 	detail, err := h.changeDetail(r.Context(), id)
 	if err != nil {

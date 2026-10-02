@@ -10,9 +10,11 @@ import {
   postChangesChangeIdDismiss,
   postChangesChangeIdAiUpdate,
   postChangesChangeIdExplain,
+  postChangesChangeIdResolveDoc,
   getGetChangesChangeIdQueryKey,
 } from '../../api/generated/changes/changes';
 import { getGetChangesQueryKey } from '../../api/generated/changes/changes';
+import { getGetDocsDocIdQueryKey } from '../../api/generated/docs/docs';
 import { DiffViewer } from '../../components/diff/DiffViewer';
 import { RunbookPanel } from '../../components/runbook/RunbookPanel';
 import { SeverityTag } from '../../components/ui/StatusDot';
@@ -53,7 +55,24 @@ export function ChangeDetailPage() {
       }
     },
   });
-  const pending = resolve.isPending;
+  // Doc ownership reviews (#478): sync found a human edit it won't overwrite.
+  // Accept applies the generated text; keep detaches the section for good.
+  const isDocReview = data?.changeType === 'doc_conflict' || data?.changeType === 'doc_adopt';
+  const resolveDoc = useMutation({
+    mutationFn: (action: 'accept' | 'keep') => postChangesChangeIdResolveDoc(changeId ?? '', { action }),
+    onSuccess: () => {
+      setResolved('acknowledged');
+      queryClient.invalidateQueries({ queryKey: getGetChangesQueryKey() });
+      if (changeId) {
+        queryClient.invalidateQueries({ queryKey: getGetChangesChangeIdQueryKey(changeId) });
+      }
+      // The doc content changed; refetch any open view of it.
+      for (const id of data?.affectedDocIds ?? []) {
+        queryClient.invalidateQueries({ queryKey: getGetDocsDocIdQueryKey(id) });
+      }
+    },
+  });
+  const pending = resolve.isPending || resolveDoc.isPending;
 
   // Fire-and-forget AI update request; the WS doc.ai_suggestion event and the
   // backend's willTriggerAi flag are wired separately — this just queues it.
@@ -211,33 +230,59 @@ export function ChangeDetailPage() {
                 </div>
 
                 <div className="flex items-center justify-end gap-2 border-t border-line-soft px-6 py-4">
-                  {aiQueued && (
-                    <span className="text-2xs text-ink-faint">{t('changes.aiUpdateQueued')}</span>
+                  {isDocReview ? (
+                    <>
+                      {resolveDoc.isError && (
+                        <span className="text-2xs text-err">{t('changes.docResolveFailed')}</span>
+                      )}
+                      <Button
+                        variant="ghost"
+                        size="md"
+                        disabled={pending}
+                        onClick={() => resolveDoc.mutate('keep')}
+                      >
+                        <XIcon size={15} /> {t('changes.docKeepMine')}
+                      </Button>
+                      <Button
+                        variant="primary"
+                        size="md"
+                        disabled={pending}
+                        onClick={() => resolveDoc.mutate('accept')}
+                      >
+                        <CheckIcon size={15} /> {t('changes.docAcceptGenerated')}
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      {aiQueued && (
+                        <span className="text-2xs text-ink-faint">{t('changes.aiUpdateQueued')}</span>
+                      )}
+                      <Button
+                        variant="ghost"
+                        size="md"
+                        disabled={aiUpdate.isPending || aiQueued}
+                        onClick={() => aiUpdate.mutate()}
+                      >
+                        <SparklesIcon size={15} /> {t('changes.aiUpdate')}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="md"
+                        disabled={pending}
+                        onClick={() => resolve.mutate('dismiss')}
+                      >
+                        <XIcon size={15} /> {t('common.dismiss')}
+                      </Button>
+                      <Button
+                        variant="primary"
+                        size="md"
+                        disabled={pending}
+                        onClick={() => resolve.mutate('ack')}
+                      >
+                        <CheckIcon size={15} /> {t('common.acknowledge')}
+                      </Button>
+                    </>
                   )}
-                  <Button
-                    variant="ghost"
-                    size="md"
-                    disabled={aiUpdate.isPending || aiQueued}
-                    onClick={() => aiUpdate.mutate()}
-                  >
-                    <SparklesIcon size={15} /> {t('changes.aiUpdate')}
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="md"
-                    disabled={pending}
-                    onClick={() => resolve.mutate('dismiss')}
-                  >
-                    <XIcon size={15} /> {t('common.dismiss')}
-                  </Button>
-                  <Button
-                    variant="primary"
-                    size="md"
-                    disabled={pending}
-                    onClick={() => resolve.mutate('ack')}
-                  >
-                    <CheckIcon size={15} /> {t('common.acknowledge')}
-                  </Button>
                 </div>
               </Panel>
             </motion.div>

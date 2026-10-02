@@ -30,8 +30,10 @@ import type {
   ChangeDetail,
   ChangePage,
   Error,
+  ForbiddenResponse,
   GetChangesParams,
   NotFoundResponse,
+  ResolveDocChange,
 } from '../../model';
 
 import { customInstance } from '../../axios-instance';
@@ -456,6 +458,104 @@ export const usePostChangesChangeIdDismiss = <TError = ErrorType<unknown>, TCont
   TContext
 > => {
   return useMutation(getPostChangesChangeIdDismissMutationOptions(options), queryClient);
+};
+/**
+ * `accept` applies the generated text (a conflict's block body, or the whole generated layout for an adopt). `keep` keeps the human version; for a conflict this detaches the block so sync never touches it again. Requires an operator grant on the change's connector. The change is acknowledged on success.
+ * @summary Resolve a doc_conflict or doc_adopt change
+ */
+export const postChangesChangeIdResolveDoc = (
+  changeId: string,
+  resolveDocChange: BodyType<ResolveDocChange>,
+  options?: SecondParameter<typeof customInstance>,
+  signal?: AbortSignal
+) => {
+  return customInstance<ChangeDetail>(
+    {
+      url: `/changes/${changeId}/resolve-doc`,
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      data: resolveDocChange,
+      signal,
+    },
+    options
+  );
+};
+
+export const getPostChangesChangeIdResolveDocMutationKey = () =>
+  ['postChangesChangeIdResolveDoc'] as const;
+
+export const getPostChangesChangeIdResolveDocMutationOptions = <
+  TError = ErrorType<BadRequestResponse | ForbiddenResponse | NotFoundResponse | Error>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof postChangesChangeIdResolveDoc>>,
+    TError,
+    PostChangesChangeIdResolveDocMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof postChangesChangeIdResolveDoc>>,
+  TError,
+  PostChangesChangeIdResolveDocMutationVariables,
+  TContext
+> => {
+  const mutationKey = getPostChangesChangeIdResolveDocMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof postChangesChangeIdResolveDoc>>,
+    PostChangesChangeIdResolveDocMutationVariables
+  > = (props) => {
+    const { changeId, data } = props ?? {};
+
+    return postChangesChangeIdResolveDoc(changeId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type PostChangesChangeIdResolveDocMutationResult = NonNullable<
+  Awaited<ReturnType<typeof postChangesChangeIdResolveDoc>>
+>;
+export type PostChangesChangeIdResolveDocMutationBody = BodyType<ResolveDocChange>;
+export type PostChangesChangeIdResolveDocMutationError = ErrorType<
+  BadRequestResponse | ForbiddenResponse | NotFoundResponse | Error
+>;
+export type PostChangesChangeIdResolveDocMutationVariables = {
+  changeId: string;
+  data: BodyType<ResolveDocChange>;
+};
+
+/**
+ * @summary Resolve a doc_conflict or doc_adopt change
+ */
+export const usePostChangesChangeIdResolveDoc = <
+  TError = ErrorType<BadRequestResponse | ForbiddenResponse | NotFoundResponse | Error>,
+  TContext = unknown,
+>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof postChangesChangeIdResolveDoc>>,
+      TError,
+      PostChangesChangeIdResolveDocMutationVariables,
+      TContext
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseMutationResult<
+  Awaited<ReturnType<typeof postChangesChangeIdResolveDoc>>,
+  TError,
+  PostChangesChangeIdResolveDocMutationVariables,
+  TContext
+> => {
+  return useMutation(getPostChangesChangeIdResolveDocMutationOptions(options), queryClient);
 };
 /**
  * Bulk review action for low-risk changes (issue #27). The caller must supply an explicit list of change IDs — there is no "all matching the current filter" option, by design. "Low-risk" is enforced server-side as severity != critical; the client's selection is never trusted. Each ID is independently verified (exists, not critical) and resolved on its own — one bad ID never aborts the batch. The response reports a per-item outcome, and one audit record is written per successfully-resolved item.

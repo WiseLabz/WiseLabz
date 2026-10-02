@@ -15,19 +15,21 @@ import (
 	"github.com/WiseLabz/wiselabz/internal/ai"
 	"github.com/WiseLabz/wiselabz/internal/auth"
 	"github.com/WiseLabz/wiselabz/internal/chat"
+	"github.com/WiseLabz/wiselabz/internal/doc"
 	"github.com/WiseLabz/wiselabz/internal/httputil"
 	"github.com/WiseLabz/wiselabz/internal/store"
 	"github.com/WiseLabz/wiselabz/internal/ws"
 )
 
-// syncDocEmbeddings recomputes chat-retrieval embeddings for a doc so "ask
+// SyncEmbeddings recomputes chat-retrieval embeddings for a doc so "ask
 // your lab" search stays current after every generate/save. Best-effort: an
 // embedding-backend failure is logged, not surfaced, so it never blocks the
 // doc write it's attached to.
-func (h *Handler) syncDocEmbeddings(ctx context.Context, docID, content string) {
+func (h *Handler) SyncEmbeddings(ctx context.Context, docID, content string) {
 	if h.Embed == nil || docID == "" {
 		return
 	}
+	content = doc.StripMarkers(content)
 	cfg := h.Settings.LoadAIConfig(ctx)
 	if !cfg.Enabled || cfg.EmbedProvider == "" {
 		return

@@ -19,6 +19,7 @@ import {
   getPostChangesChangeIdAiUpdateResponseMock,
   getPostChangesChangeIdDismissResponseMock,
   getPostChangesChangeIdExplainResponseMock,
+  getPostChangesChangeIdResolveDocResponseMock,
 } from './changes.faker';
 
 export {
@@ -26,6 +27,7 @@ export {
   getGetChangesChangeIdResponseMock,
   getPostChangesChangeIdAckResponseMock,
   getPostChangesChangeIdDismissResponseMock,
+  getPostChangesChangeIdResolveDocResponseMock,
   getPostChangesBulkResolveResponseMock,
   getPostChangesChangeIdAiUpdateResponseMock,
   getPostChangesChangeIdExplainResponseMock,
@@ -125,6 +127,30 @@ export const getPostChangesChangeIdDismissMockHandler = (
   );
 };
 
+export const getPostChangesChangeIdResolveDocMockHandler = (
+  overrideResponse?:
+    | ChangeDetail
+    | ((
+        info: Parameters<Parameters<typeof http.post>[1]>[0]
+      ) => Promise<ChangeDetail> | ChangeDetail),
+  options?: RequestHandlerOptions
+) => {
+  return http.post(
+    '*/changes/:changeId/resolve-doc',
+    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+      return HttpResponse.json(
+        overrideResponse !== undefined
+          ? typeof overrideResponse === 'function'
+            ? await overrideResponse(info)
+            : overrideResponse
+          : getPostChangesChangeIdResolveDocResponseMock(),
+        { status: 200 }
+      );
+    },
+    options
+  );
+};
+
 export const getPostChangesBulkResolveMockHandler = (
   overrideResponse?:
     | BulkResolveResponse
@@ -201,6 +227,7 @@ export const getChangesMock = () => [
   getGetChangesChangeIdMockHandler(),
   getPostChangesChangeIdAckMockHandler(),
   getPostChangesChangeIdDismissMockHandler(),
+  getPostChangesChangeIdResolveDocMockHandler(),
   getPostChangesBulkResolveMockHandler(),
   getPostChangesChangeIdAiUpdateMockHandler(),
   getPostChangesChangeIdExplainMockHandler(),

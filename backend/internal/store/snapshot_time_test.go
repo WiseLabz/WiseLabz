@@ -60,8 +60,9 @@ func TestSnapshotUTCDataMigration(t *testing.T) {
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	// Roll back mcp_knowledge, more_notification_channels, retention_scan_indexes, then snapshot_utc itself.
-	for range 4 {
+	// Roll back doc_section_ownership, mcp_knowledge, more_notification_channels,
+	// retention_scan_indexes, then snapshot_utc itself.
+	for range 5 {
 		if err := RunMigrationsDown(s.rawDB, s.driver, logger); err != nil {
 			t.Fatal(err)
 		}

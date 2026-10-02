@@ -2212,6 +2212,36 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ChangeDetail' }
+  /changes/{changeId}/resolve-doc:
+    post:
+      tags: [changes]
+      summary: Resolve a doc_conflict or doc_adopt change
+      description: >
+        `accept` applies the generated text (a conflict's block body, or the
+        whole generated layout for an adopt). `keep` keeps the human version;
+        for a conflict this detaches the block so sync never touches it again.
+        Requires an operator grant on the change's connector. The change is
+        acknowledged on success.
+      parameters: [{ $ref: '#/components/parameters/ChangeId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ResolveDocChange' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ChangeDetail' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Not an open doc change, the block is gone, or the doc changed meanwhile
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
   /changes/bulk-resolve:
     post:
       tags: [changes]
@@ -4454,9 +4484,25 @@ components:
         title: { type: string }
         kind: { type: string, enum: [lab, service] }
         serviceId: { type: string, nullable: true }
-        content: { type: string, description: Rendered/markdown body }
+        content:
+          type: string
+          description: >
+            Markdown body. Sync-owned sections are wrapped in
+            `<!-- wl:gen key="…" h="…" -->` … `<!-- /wl:gen -->` comment
+            markers; everything outside them is human-owned.
         currentVersion: { type: integer }
         updatedAt: { type: string, format: date-time }
+        origin:
+          type: string
+          enum: [generated, human]
+          description: generated docs have their marked sections refreshed by sync; human docs are never touched by sync
+        templateId: { type: string, description: Template the doc is rendered through on sync; empty for the plain snapshot render }
+        lastSyncedAt: { type: string, description: 'RFC3339 time sync last merged this doc; empty if never' }
+    ResolveDocChange:
+      type: object
+      required: [action]
+      properties:
+        action: { type: string, enum: [accept, keep] }
     DocLock:
       type: object
       description: Advisory editing lock on a doc. Empty object means unlocked/expired.
@@ -4710,7 +4756,7 @@ components:
         id: { type: string }
         serviceId: { type: string }
         serviceName: { type: string }
-        changeType: { type: string, description: 'e.g. vm.created, firewall.rule.modified' }
+        changeType: { type: string, description: 'e.g. vm.created, firewall.rule.modified; doc_conflict / doc_adopt for doc ownership reviews' }
         severity: { $ref: '#/components/schemas/Severity' }
         summary: { type: string }
         willTriggerAi: { type: boolean }

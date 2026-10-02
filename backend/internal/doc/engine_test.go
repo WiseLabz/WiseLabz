@@ -293,7 +293,7 @@ func TestPreviewFromTemplateWithZeroSections(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PreviewFromTemplate() error: %v", err)
 	}
-	want := "# Bare node\n\n> Generated from the latest snapshot\n\n"
+	want := "# Bare node\n\n> Generated from the latest snapshot\n"
 	if result.Content != want {
 		t.Fatalf("PreviewFromTemplate() content = %q, want %q", result.Content, want)
 	}
@@ -492,12 +492,11 @@ func TestRegeneratePreservesHumanAndTemplateDocs(t *testing.T) {
 			if err != nil || after.Content != before.Content || after.CurrentVersion != before.CurrentVersion {
 				t.Fatalf("protected doc changed: %+v, %v", after, err)
 			}
+			// The rewrite deleted every generated block, which sync respects
+			// (section ownership, #478): nothing is re-added or flagged.
 			changes, total, err := s.ListChanges(ctx, connectorID, "", 0, 10)
-			if err != nil || total != 1 || len(changes) != 1 {
-				t.Fatalf("review changes = %+v, %d, %v; want one", changes, total, err)
-			}
-			if changes[0].Status != "new" || !strings.Contains(changes[0].AffectedDocIDs, generated.DocID) || !strings.Contains(changes[0].Diff, "Human notes") {
-				t.Fatalf("review change = %+v", changes[0])
+			if err != nil || total != 0 {
+				t.Fatalf("changes = %+v, %d, %v; want none", changes, total, err)
 			}
 		})
 	}
@@ -520,8 +519,10 @@ func TestRegeneratePreservesInitialTemplateLayout(t *testing.T) {
 	if err != nil || d.Content != generated.Content || d.CurrentVersion != 1 {
 		t.Fatalf("template layout lost: %+v, %v", d, err)
 	}
+	// Sync re-renders through the recorded template, so nothing changes and
+	// nothing needs review.
 	changes, total, err := s.ListChanges(ctx, connectorID, "", 0, 10)
-	if err != nil || total != 1 || len(changes) != 1 {
-		t.Fatalf("template review = %+v, %d, %v", changes, total, err)
+	if err != nil || total != 0 {
+		t.Fatalf("changes = %+v, %d, %v; want none", changes, total, err)
 	}
 }
