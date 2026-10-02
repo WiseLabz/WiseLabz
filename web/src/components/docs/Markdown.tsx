@@ -10,6 +10,7 @@
 import { memo, isValidElement } from 'react';
 import ReactMarkdown, { type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { remarkStripGenMarkers } from '../../lib/genMarkers';
 import { Mermaid } from './Mermaid';
 
 const headingClass: Record<'h1' | 'h2' | 'h3' | 'h4', string> = {
@@ -91,7 +92,7 @@ const components: Components = {
 export const Markdown = memo(function Markdown({ source }: { source: string }) {
   return (
     <div className="max-w-[68ch]">
-      <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
+      <ReactMarkdown remarkPlugins={[remarkGfm, remarkStripGenMarkers]} components={components}>
         {source}
       </ReactMarkdown>
     </div>

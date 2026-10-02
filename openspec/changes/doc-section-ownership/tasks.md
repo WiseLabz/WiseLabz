@@ -34,8 +34,8 @@
 
 ## 6. Web
 - [x] 6.1 `npm run gen:api`
-- [ ] 6.2 `Markdown.tsx`: remark plugin strips the wl:gen markers, plus a test
-- [ ] 6.3 `DocEditorPage.tsx`: generated-range tint plugin, plus "Synced <time>" in the header
+- [x] 6.2 `Markdown.tsx`: remark plugin strips the wl:gen markers, plus a test
+- [x] 6.3 `DocEditorPage.tsx`: generated-range tint plugin, plus "Synced <time>" in the header
 - [ ] 6.4 `ChangeDetailPage.tsx`: Accept generated / Keep mine for doc Changes, plus tests with MSW handlers in `src/mocks`
 - [ ] 6.5 `npm run lint && npm test`
 

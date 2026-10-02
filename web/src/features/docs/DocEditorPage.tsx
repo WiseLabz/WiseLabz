@@ -9,7 +9,7 @@
  * to the editor and marks the draft as AI-drafted (provenance); Reject discards it.
  * Operator-gated (the route guards, and the save button respects role too).
  */
-import { useEffect, useRef, useState, useDeferredValue } from 'react';
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { skipToken, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -35,8 +35,10 @@ import { Button } from '../../components/ui/Button';
 import { Panel } from '../../components/ui/Panel';
 import { Skeleton, SkeletonRows, ErrorState } from '../../components/ui/states';
 import { Markdown } from '../../components/docs/Markdown';
+import { genBlockHighlight } from '../../components/docs/genBlockHighlight';
 import { DocDiff } from '../../components/diff/DiffViewer';
 import { toast } from '../../lib/toast';
+import { fullDate, relativeTime } from '../../lib/time';
 import {
   ArrowRightIcon,
   SparklesIcon,
@@ -85,6 +87,16 @@ function DocEditor() {
   const docLock = useLive((s) => s.docLocks[docId]);
 
   const doc = useGetDocsDocId(docId);
+  const extensions = useMemo(
+    () => [
+      markdown(),
+      cmTheme,
+      EditorView.lineWrapping,
+      EditorView.contentAttributes.of({ 'aria-label': t('docs.editor.markdownLabel') }),
+      genBlockHighlight(t('docs.editor.generatedHint')),
+    ],
+    [t]
+  );
   // Service docs are gated on that connector's operator role; the lab
   // overview doc has no owning connector, so it falls back to instance-admin.
   const connectorRole = useConnectorRole(doc.data?.serviceId ?? undefined);
@@ -283,6 +295,11 @@ function DocEditor() {
               <SparklesIcon size={11} /> {t('docs.editor.aiDrafted')}
             </span>
           )}
+          {doc.data.lastSyncedAt && (
+            <span className="text-2xs text-ink-faint" title={fullDate(doc.data.lastSyncedAt)}>
+              {t('docs.editor.synced', { when: relativeTime(doc.data.lastSyncedAt) })}
+            </span>
+          )}
           {dirty && (
             <span className="inline-flex items-center gap-1 text-2xs text-ink-faint">
               <span className="h-1.5 w-1.5 rounded-sm bg-warn" aria-hidden />{' '}
@@ -412,12 +429,7 @@ function DocEditor() {
             onChange={(v) => {
               if (canEdit) setDraft(v);
             }}
-            extensions={[
-              markdown(),
-              cmTheme,
-              EditorView.lineWrapping,
-              EditorView.contentAttributes.of({ 'aria-label': t('docs.editor.markdownLabel') }),
-            ]}
+            extensions={extensions}
             basicSetup={{ lineNumbers: true, foldGutter: false, highlightActiveLine: true }}
             editable={canEdit}
             className="min-h-[60vh] text-sm"

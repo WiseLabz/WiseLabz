@@ -31,4 +31,23 @@ describe('Markdown', () => {
       expect(container.querySelector('svg')).toBeInTheDocument();
     }, { timeout: 4000 });
   });
+
+  it('hides sync ownership markers but keeps the generated content', () => {
+    const source = [
+      '<!-- wl:gen key="head" h="3fa9c0d1e2b4" -->',
+      '# Node one',
+      '<!-- /wl:gen -->',
+      '',
+      'Human notes',
+      '<!-- wl:gen key="snap.status" h="aaaaaaaaaaaa" -->',
+      'healthy',
+      '<!-- /wl:gen -->',
+      '',
+    ].join('\n');
+    const { container } = render(<Markdown source={source} />);
+    expect(screen.getByRole('heading', { name: 'Node one' })).toBeInTheDocument();
+    expect(screen.getByText('healthy')).toBeInTheDocument();
+    expect(screen.getByText('Human notes')).toBeInTheDocument();
+    expect(container.textContent).not.toContain('wl:gen');
+  });
 });
