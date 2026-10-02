@@ -481,141 +481,82 @@ export const postChangesChangeIdResolveDoc = (
   );
 };
 
-export const getPostChangesChangeIdResolveDocQueryKey = (
-  changeId: string,
-  resolveDocChange?: BodyType<ResolveDocChange>
-) => {
-  return ['POST', `/changes/${changeId}/resolve-doc`, resolveDocChange] as const;
-};
+export const getPostChangesChangeIdResolveDocMutationKey = () =>
+  ['postChangesChangeIdResolveDoc'] as const;
 
-export const getPostChangesChangeIdResolveDocQueryOptions = <
-  TData = Awaited<ReturnType<typeof postChangesChangeIdResolveDoc>>,
+export const getPostChangesChangeIdResolveDocMutationOptions = <
   TError = ErrorType<BadRequestResponse | ForbiddenResponse | NotFoundResponse | Error>,
->(
-  changeId: string,
-  resolveDocChange: BodyType<ResolveDocChange>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postChangesChangeIdResolveDoc>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  }
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof postChangesChangeIdResolveDoc>>,
+    TError,
+    PostChangesChangeIdResolveDocMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof postChangesChangeIdResolveDoc>>,
+  TError,
+  PostChangesChangeIdResolveDocMutationVariables,
+  TContext
+> => {
+  const mutationKey = getPostChangesChangeIdResolveDocMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
 
-  const queryKey =
-    queryOptions?.queryKey ?? getPostChangesChangeIdResolveDocQueryKey(changeId, resolveDocChange);
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof postChangesChangeIdResolveDoc>>,
+    PostChangesChangeIdResolveDocMutationVariables
+  > = (props) => {
+    const { changeId, data } = props ?? {};
 
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof postChangesChangeIdResolveDoc>>> = ({
-    signal,
-  }) => postChangesChangeIdResolveDoc(changeId, resolveDocChange, requestOptions, signal);
-
-  return {
-    queryKey,
-    queryFn,
-    enabled: changeId !== null && changeId !== undefined,
-    ...queryOptions,
-  } as UseQueryOptions<Awaited<ReturnType<typeof postChangesChangeIdResolveDoc>>, TError, TData> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
+    return postChangesChangeIdResolveDoc(changeId, data, requestOptions);
   };
+
+  return { mutationFn, ...mutationOptions };
 };
 
-export type PostChangesChangeIdResolveDocQueryResult = NonNullable<
+export type PostChangesChangeIdResolveDocMutationResult = NonNullable<
   Awaited<ReturnType<typeof postChangesChangeIdResolveDoc>>
 >;
-export type PostChangesChangeIdResolveDocQueryError = ErrorType<
+export type PostChangesChangeIdResolveDocMutationBody = BodyType<ResolveDocChange>;
+export type PostChangesChangeIdResolveDocMutationError = ErrorType<
   BadRequestResponse | ForbiddenResponse | NotFoundResponse | Error
 >;
+export type PostChangesChangeIdResolveDocMutationVariables = {
+  changeId: string;
+  data: BodyType<ResolveDocChange>;
+};
 
-export function usePostChangesChangeIdResolveDoc<
-  TData = Awaited<ReturnType<typeof postChangesChangeIdResolveDoc>>,
-  TError = ErrorType<BadRequestResponse | ForbiddenResponse | NotFoundResponse | Error>,
->(
-  changeId: string,
-  resolveDocChange: BodyType<ResolveDocChange>,
-  options: {
-    query: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postChangesChangeIdResolveDoc>>, TError, TData>
-    > &
-      Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postChangesChangeIdResolveDoc>>,
-          TError,
-          Awaited<ReturnType<typeof postChangesChangeIdResolveDoc>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostChangesChangeIdResolveDoc<
-  TData = Awaited<ReturnType<typeof postChangesChangeIdResolveDoc>>,
-  TError = ErrorType<BadRequestResponse | ForbiddenResponse | NotFoundResponse | Error>,
->(
-  changeId: string,
-  resolveDocChange: BodyType<ResolveDocChange>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postChangesChangeIdResolveDoc>>, TError, TData>
-    > &
-      Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof postChangesChangeIdResolveDoc>>,
-          TError,
-          Awaited<ReturnType<typeof postChangesChangeIdResolveDoc>>
-        >,
-        'initialData'
-      >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function usePostChangesChangeIdResolveDoc<
-  TData = Awaited<ReturnType<typeof postChangesChangeIdResolveDoc>>,
-  TError = ErrorType<BadRequestResponse | ForbiddenResponse | NotFoundResponse | Error>,
->(
-  changeId: string,
-  resolveDocChange: BodyType<ResolveDocChange>,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postChangesChangeIdResolveDoc>>, TError, TData>
-    >;
-    request?: SecondParameter<typeof customInstance>;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
  * @summary Resolve a doc_conflict or doc_adopt change
  */
-
-export function usePostChangesChangeIdResolveDoc<
-  TData = Awaited<ReturnType<typeof postChangesChangeIdResolveDoc>>,
+export const usePostChangesChangeIdResolveDoc = <
   TError = ErrorType<BadRequestResponse | ForbiddenResponse | NotFoundResponse | Error>,
+  TContext = unknown,
 >(
-  changeId: string,
-  resolveDocChange: BodyType<ResolveDocChange>,
   options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof postChangesChangeIdResolveDoc>>, TError, TData>
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof postChangesChangeIdResolveDoc>>,
+      TError,
+      PostChangesChangeIdResolveDocMutationVariables,
+      TContext
     >;
     request?: SecondParameter<typeof customInstance>;
   },
   queryClient?: QueryClient
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getPostChangesChangeIdResolveDocQueryOptions(
-    changeId,
-    resolveDocChange,
-    options
-  );
-
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
+): UseMutationResult<
+  Awaited<ReturnType<typeof postChangesChangeIdResolveDoc>>,
+  TError,
+  PostChangesChangeIdResolveDocMutationVariables,
+  TContext
+> => {
+  return useMutation(getPostChangesChangeIdResolveDocMutationOptions(options), queryClient);
+};
 /**
  * Bulk review action for low-risk changes (issue #27). The caller must supply an explicit list of change IDs — there is no "all matching the current filter" option, by design. "Low-risk" is enforced server-side as severity != critical; the client's selection is never trusted. Each ID is independently verified (exists, not critical) and resolved on its own — one bad ID never aborts the batch. The response reports a per-item outcome, and one audit record is written per successfully-resolved item.
  * @summary Acknowledge or dismiss an explicit list of changes in one request

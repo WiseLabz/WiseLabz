@@ -409,7 +409,7 @@ func TestMarkedDocWithoutGenKeysIsMergedNotUpgraded(t *testing.T) {
 		t.Fatalf("SetDocGeneration() error: %v", err)
 	}
 	pushSnapshot(t, s, connectorID, "Node one", connector.SnapshotSection{Title: "Status", Content: "degraded"})
-	sync(t, e, connectorID)
+	runSync(t, e, connectorID)
 	got := mustGetDoc(t, s, docID)
 	if got.Origin != store.DocOriginGenerated || !strings.Contains(got.Content, "notes") || !strings.Contains(got.Content, "degraded") {
 		t.Fatalf("restored doc not merged normally: %+v", got)
