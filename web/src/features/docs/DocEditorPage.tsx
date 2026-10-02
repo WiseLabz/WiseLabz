@@ -268,7 +268,7 @@ function DocEditor() {
             queryKey: getGetDocsDocIdAttachmentsQueryKey(docId),
           });
         },
-        error: () => toast.error('Could not upload attachment'),
+        error: () => toast.error(t('docs.attachments.uploadError')),
       }),
       cmTheme,
       EditorView.lineWrapping,
