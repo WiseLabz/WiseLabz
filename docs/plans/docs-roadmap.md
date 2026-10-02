@@ -7,7 +7,7 @@
 > - PR 1 (#478): **merged as #598, archived.** Spec: `openspec/specs/doc-section-ownership/spec.md`;
 >   change history: `openspec/changes/archive/2026-10-02-doc-section-ownership/`.
 > - PR 2 (#494): **merged as #600, archived.** Spec: `openspec/specs/human-docs/spec.md`; change history: `openspec/changes/archive/2026-10-02-human-docs/`. Review follow-ups filed as #601, #602, #603.
-> - PR 3 (#519): **in review as [PR #605](https://github.com/WiseLabz/WiseLabz/pull/605), targeting `main`;** change: `openspec/changes/doc-attachments/`.
+> - PR 3 (#519): **merged as [PR #605](https://github.com/WiseLabz/WiseLabz/pull/605);** change: `openspec/changes/doc-attachments/`.
 > - PR 4 (#514): **in review as [PR #610](https://github.com/WiseLabz/WiseLabz/pull/610), targeting `main`;** change: `openspec/changes/docs-import/`. BookStack/Wiki.js import follow-up: #611.
 > - Each change was created with `/opsx:propose` (or by hand under `openspec/changes/<name>/`)
 >   from the matching section below, then implemented with `/opsx:apply`.
