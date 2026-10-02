@@ -4,10 +4,10 @@
 > Tick each box as you finish it, so whoever picks this up next (Claude or Codex) can resume.
 
 ## 1. Schema and store
-- [ ] 1.1 Add migration `000046_doc_section_ownership` (up/down, sqlite + postgres): `docs.origin`, `docs.template_id`, `docs.last_synced_at`, `docs.gen_keys`
-- [ ] 1.2 Extend `DocRecord` and every doc SELECT/scan in `backend/internal/store/doc.go` with Origin, TemplateID, LastSyncedAt, GenKeys. `CreateDoc` persists them.
-- [ ] 1.3 Add store methods `ApplyGeneratedRender`, `TouchDocsSynced`, `SetDocOrigin` and `GetOpenChangeByPattern`, with store tests
-- [ ] 1.4 Run `go test ./internal/store/...`, including the migration parity tests
+- [x] 1.1 Add migration `000050_doc_section_ownership` (up/down, sqlite + postgres): `docs.origin`, `docs.template_id`, `docs.last_synced_at`, `docs.gen_keys`
+- [x] 1.2 Extend `DocRecord` and every doc SELECT/scan in `backend/internal/store/doc.go` with Origin, TemplateID, LastSyncedAt, GenKeys. `CreateDoc` persists them.
+- [x] 1.3 Add store methods `ApplyGeneratedRender`, `TouchDocsSynced`, `SetDocOrigin` and `GetOpenChangeByPattern`, with store tests
+- [x] 1.4 Run `go test ./internal/store/...`, including the migration parity tests (sqlite only; Postgres parity needs WISELABZ_TEST_POSTGRES_DSN, not yet run)
 
 ## 2. Block model
 - [ ] 2.1 `backend/internal/doc/blocks.go`: `Block`, `Segment`, `ParseBlocks`, `RenderSegments`, `hashBody`

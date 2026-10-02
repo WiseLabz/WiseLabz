@@ -131,6 +131,21 @@ func TestRunMigrationsDown(t *testing.T) {
 		t.Fatalf("RunMigrations() error: %v", err)
 	}
 
+	// 000050_doc_section_ownership is the latest migration.
+	for _, col := range []string{"origin", "template_id", "last_synced_at", "gen_keys"} {
+		if !hasColumn(t, db, "sqlite", "docs", col) {
+			t.Fatalf("docs.%s missing after migrations", col)
+		}
+	}
+	if err := RunMigrationsDown(db, "sqlite", logger); err != nil {
+		t.Fatalf("RunMigrationsDown() doc_section_ownership error: %v", err)
+	}
+	for _, col := range []string{"origin", "template_id", "last_synced_at", "gen_keys"} {
+		if hasColumn(t, db, "sqlite", "docs", col) {
+			t.Errorf("docs.%s should not exist after rollback", col)
+		}
+	}
+
 	if err := RunMigrationsDown(db, "sqlite", logger); err != nil {
 		t.Fatalf("RunMigrationsDown() mcp_knowledge error: %v", err)
 	}
@@ -364,6 +379,18 @@ func TestRunMigrationsDown(t *testing.T) {
 	}
 	if err := db.QueryRow("SELECT name FROM sqlite_master WHERE type='table' AND name='user_mfa_factors'").Scan(&mfaFactorsTable); err != nil {
 		t.Fatalf("user_mfa_factors table missing after reapply: %v", err)
+	}
+	// 000050_doc_section_ownership is the latest migration again after the
+	// reapply above, so it is rolled back first — same order as the very
+	// first rollbacks earlier in this test.
+	if !hasColumn(t, db, "sqlite", "docs", "gen_keys") {
+		t.Fatal("docs.gen_keys missing after reapply")
+	}
+	if err := RunMigrationsDown(db, "sqlite", logger); err != nil {
+		t.Fatalf("RunMigrationsDown() after reapply, doc_section_ownership error: %v", err)
+	}
+	if hasColumn(t, db, "sqlite", "docs", "gen_keys") {
+		t.Error("docs.gen_keys should not exist after rolling back its migration again")
 	}
 	if err := RunMigrationsDown(db, "sqlite", logger); err != nil {
 		t.Fatalf("RunMigrationsDown() mcp_knowledge error: %v", err)

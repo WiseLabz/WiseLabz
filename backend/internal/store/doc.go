@@ -22,6 +22,17 @@ type DocRecord struct {
 	CurrentVersion int    `json:"currentVersion"`
 	CreatedAt      string `json:"createdAt"`
 	UpdatedAt      string `json:"updatedAt"`
+	// Origin is "generated" (sync may merge generated blocks) or "human"
+	// (sync never touches it). "" is treated as "generated" on insert.
+	Origin string `json:"origin"`
+	// TemplateID is the template the doc was generated from; "" means the
+	// template-less snapshot render.
+	TemplateID string `json:"templateId"`
+	// LastSyncedAt is when sync last merged this doc ("" = never).
+	LastSyncedAt string `json:"lastSyncedAt"`
+	// GenKeys is the raw JSON array of block keys in the last applied
+	// render; nil means the doc predates wl:gen markers.
+	GenKeys *string `json:"-"`
 }
 
 // --- Doc CRUD ---
@@ -44,11 +55,16 @@ func (s *Store) CreateDoc(ctx context.Context, d *DocRecord) error {
 	if d.Kind == "" {
 		d.Kind = "lab"
 	}
+	if d.Origin == "" {
+		d.Origin = DocOriginGenerated
+	}
 
 	_, err := s.db.ExecContext(ctx, `
-		INSERT INTO docs (id, title, kind, service_id, content, current_version, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-	`, d.ID, d.Title, d.Kind, nilToStr(d.ServiceID), d.Content, d.CurrentVersion, d.CreatedAt, d.UpdatedAt)
+		INSERT INTO docs (id, title, kind, service_id, content, current_version, created_at, updated_at,
+			origin, template_id, last_synced_at, gen_keys)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, d.ID, d.Title, d.Kind, nilToStr(d.ServiceID), d.Content, d.CurrentVersion, d.CreatedAt, d.UpdatedAt,
+		d.Origin, nilToStr(d.TemplateID), nilToStr(d.LastSyncedAt), d.GenKeys)
 	if err != nil {
 		return fmt.Errorf("create doc: %w", err)
 	}
@@ -63,21 +79,14 @@ func (s *Store) ExistingDocIDs(ctx context.Context, ids []string) (map[string]bo
 
 // GetDoc retrieves a single documentation record by ID.
 func (s *Store) GetDoc(ctx context.Context, id string) (*DocRecord, error) {
-	d := &DocRecord{}
-	var serviceID sql.NullString
-	err := s.db.QueryRowContext(ctx, `
-		SELECT id, title, kind, service_id, content, current_version, created_at, updated_at
-		FROM docs WHERE id = ?
-	`, id).Scan(&d.ID, &d.Title, &d.Kind, &serviceID, &d.Content,
-		&d.CurrentVersion, &d.CreatedAt, &d.UpdatedAt)
+	d, err := scanDoc(s.db.QueryRowContext(ctx, `SELECT `+docColumns+` FROM docs WHERE id = ?`, id))
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
 	if err != nil {
 		return nil, fmt.Errorf("get doc: %w", err)
 	}
-	d.ServiceID = serviceID.String
-	return d, nil
+	return &d, nil
 }
 
 // UpdateDoc updates the content of a documentation record. If expectedVersion
@@ -172,7 +181,8 @@ func (s *Store) ListDocsByService(ctx context.Context, serviceID string) ([]DocR
 
 func (s *Store) listDocsByService(ctx context.Context, serviceID, contentExpr string) ([]DocRecord, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, title, kind, service_id, `+contentExpr+`, current_version, created_at, updated_at
+		SELECT id, title, kind, service_id, `+contentExpr+`, current_version, created_at, updated_at,
+			origin, template_id, last_synced_at, gen_keys
 		FROM docs WHERE service_id = ? ORDER BY updated_at DESC
 	`, serviceID)
 	if err != nil {
@@ -182,13 +192,10 @@ func (s *Store) listDocsByService(ctx context.Context, serviceID, contentExpr st
 
 	var docs []DocRecord
 	for rows.Next() {
-		var d DocRecord
-		var svcID sql.NullString
-		if err := rows.Scan(&d.ID, &d.Title, &d.Kind, &svcID, &d.Content,
-			&d.CurrentVersion, &d.CreatedAt, &d.UpdatedAt); err != nil {
+		d, err := scanDoc(rows)
+		if err != nil {
 			return nil, fmt.Errorf("scan: %w", err)
 		}
-		d.ServiceID = svcID.String
 		docs = append(docs, d)
 	}
 	if err := rows.Err(); err != nil {
@@ -215,12 +222,10 @@ func (s *Store) ListDocsGroupedByService(ctx context.Context) (map[string][]DocR
 
 	docsByService := map[string][]DocRecord{}
 	for rows.Next() {
-		var d DocRecord
-		var svcID sql.NullString
-		if err := rows.Scan(&d.ID, &d.Title, &d.Kind, &svcID, &d.CurrentVersion, &d.CreatedAt, &d.UpdatedAt); err != nil {
+		d, err := scanDocSummary(rows)
+		if err != nil {
 			return nil, fmt.Errorf("scan: %w", err)
 		}
-		d.ServiceID = svcID.String
 		docsByService[d.ServiceID] = append(docsByService[d.ServiceID], d)
 	}
 	if err := rows.Err(); err != nil {
@@ -230,29 +235,34 @@ func (s *Store) ListDocsGroupedByService(ctx context.Context) (map[string][]DocR
 }
 
 // docColumns is the full column list, including the (potentially large) content.
-const docColumns = `id, title, kind, service_id, content, current_version, created_at, updated_at`
+const docColumns = `id, title, kind, service_id, content, current_version, created_at, updated_at, origin, template_id, last_synced_at, gen_keys`
 
 // docSummaryColumns omits content for list/tree views that never render it.
-const docSummaryColumns = `id, title, kind, service_id, current_version, created_at, updated_at`
+const docSummaryColumns = `id, title, kind, service_id, current_version, created_at, updated_at, origin, template_id, last_synced_at`
 
 func scanDocSummary(row rowScanner) (DocRecord, error) {
 	var d DocRecord
-	var svcID sql.NullString
-	if err := row.Scan(&d.ID, &d.Title, &d.Kind, &svcID, &d.CurrentVersion, &d.CreatedAt, &d.UpdatedAt); err != nil {
+	var svcID, tmplID, synced sql.NullString
+	if err := row.Scan(&d.ID, &d.Title, &d.Kind, &svcID, &d.CurrentVersion, &d.CreatedAt, &d.UpdatedAt,
+		&d.Origin, &tmplID, &synced); err != nil {
 		return DocRecord{}, err
 	}
-	d.ServiceID = svcID.String
+	d.ServiceID, d.TemplateID, d.LastSyncedAt = svcID.String, tmplID.String, synced.String
 	return d, nil
 }
 
 func scanDoc(row rowScanner) (DocRecord, error) {
 	var d DocRecord
-	var svcID sql.NullString
-	err := row.Scan(&d.ID, &d.Title, &d.Kind, &svcID, &d.Content, &d.CurrentVersion, &d.CreatedAt, &d.UpdatedAt)
+	var svcID, tmplID, synced, genKeys sql.NullString
+	err := row.Scan(&d.ID, &d.Title, &d.Kind, &svcID, &d.Content, &d.CurrentVersion, &d.CreatedAt, &d.UpdatedAt,
+		&d.Origin, &tmplID, &synced, &genKeys)
 	if err != nil {
 		return DocRecord{}, err
 	}
-	d.ServiceID = svcID.String
+	d.ServiceID, d.TemplateID, d.LastSyncedAt = svcID.String, tmplID.String, synced.String
+	if genKeys.Valid {
+		d.GenKeys = &genKeys.String
+	}
 	return d, nil
 }
 

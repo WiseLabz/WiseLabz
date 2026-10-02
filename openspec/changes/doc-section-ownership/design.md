@@ -35,7 +35,7 @@
 
 Keys come from section titles rather than template section row IDs, so they survive template re-saves. `GeneratedAt` stays available to templates. A template that prints it will refresh its block on every sync; this is documented in the template schema help text.
 
-### 3. Schema (migration `000046_doc_section_ownership`, sqlite + postgres)
+### 3. Schema (migration `000050_doc_section_ownership`, sqlite + postgres)
 - `docs.origin TEXT NOT NULL DEFAULT 'generated' CHECK (origin IN ('generated','human'))`
 - `docs.template_id TEXT NULL REFERENCES templates(id) ON DELETE SET NULL`
 - `docs.last_synced_at TEXT NULL`
