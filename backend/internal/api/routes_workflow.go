@@ -19,6 +19,7 @@ func mountWorkflowRoutes(r chi.Router, d routerDeps) {
 		r.Get("/{id}", d.changeH.Get)
 		r.Post("/{id}/ack", d.changeH.Acknowledge)
 		r.Post("/{id}/dismiss", d.changeH.Dismiss)
+		r.Post("/{id}/resolve-doc", d.changeH.ResolveDoc)
 		r.Post("/{id}/ai-update", d.changeH.AIUpdate)
 		r.Post("/{id}/explain", d.changeH.Explain)
 		r.Post("/bulk-resolve", d.changeH.BulkResolve)

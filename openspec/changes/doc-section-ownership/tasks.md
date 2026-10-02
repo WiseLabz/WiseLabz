@@ -27,10 +27,10 @@
 - [x] 4.5 Update `engine_test.go` (the existing RegenerateForConnector tests) and add sync merge integration tests (locked doc, version race, human origin, legacy author vs system)
 
 ## 5. Changes API
-- [ ] 5.1 `diffToSpec` handles the doc object form
-- [ ] 5.2 `ResolveDoc` handler and route `POST /api/changes/{id}/resolve-doc`, with audit
-- [ ] 5.3 Handler tests: accept and keep for conflict and adopt, 403 viewer, 404 no grant, 409 not resolvable, 409 block gone, 400 bad action
-- [ ] 5.4 `docs/openapi.yaml`: Doc fields (`origin`, `templateId`, `lastSyncedAt`), the resolve-doc path, `changeType` doc values. `TestOpenAPIMatchesRouter` passes.
+- [x] 5.1 `diffToSpec` handles the doc object form
+- [x] 5.2 `ResolveDoc` handler and route `POST /api/changes/{id}/resolve-doc`, with audit
+- [x] 5.3 Handler tests: accept and keep for conflict and adopt, 403 viewer, 404 no grant, 409 not resolvable, 409 block gone, 400 bad action
+- [x] 5.4 `docs/openapi.yaml`: Doc fields (`origin`, `templateId`, `lastSyncedAt`), the resolve-doc path, `changeType` doc values. `TestOpenAPIMatchesRouter` passes.
 
 ## 6. Web
 - [ ] 6.1 `npm run gen:api`
