@@ -398,3 +398,23 @@ func TestDismissedConflictIsNotReraisedForSameUpstream(t *testing.T) {
 		t.Fatalf("doc changes after new upstream = %d, want 2", n)
 	}
 }
+
+func TestMarkedDocWithoutGenKeysIsMergedNotUpgraded(t *testing.T) {
+	ctx := context.Background()
+	s, e, connectorID, docID := ownershipFixture(t)
+	d := mustGetDoc(t, s, docID)
+	humanSave(t, s, d, d.Content+"\nnotes\n")
+	// Simulate a backup restore, which drops gen_keys.
+	if err := s.SetDocGeneration(ctx, docID, store.DocGeneration{Origin: store.DocOriginGenerated}); err != nil {
+		t.Fatalf("SetDocGeneration() error: %v", err)
+	}
+	pushSnapshot(t, s, connectorID, "Node one", connector.SnapshotSection{Title: "Status", Content: "degraded"})
+	sync(t, e, connectorID)
+	got := mustGetDoc(t, s, docID)
+	if got.Origin != store.DocOriginGenerated || !strings.Contains(got.Content, "notes") || !strings.Contains(got.Content, "degraded") {
+		t.Fatalf("restored doc not merged normally: %+v", got)
+	}
+	if len(docChanges(t, s, connectorID)) != 0 {
+		t.Fatal("restored marked doc should not raise an adopt change")
+	}
+}

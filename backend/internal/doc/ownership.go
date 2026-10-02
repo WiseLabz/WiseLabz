@@ -107,14 +107,21 @@ func (e *Engine) renderFor(ctx context.Context, d store.DocRecord) (*renderResul
 
 // syncDoc merges one render into one doc.
 func (e *Engine) syncDoc(ctx context.Context, d store.DocRecord, rendered *renderResult) error {
-	if d.GenKeys == nil {
+	existing := ParseBlocks(d.Content)
+	var prev []string
+	switch {
+	case d.GenKeys != nil:
+		if err := json.Unmarshal([]byte(*d.GenKeys), &prev); err != nil {
+			slog.Warn("doc: invalid stored gen_keys, treating as empty", "docId", d.ID, "error", err)
+		}
+	case len(blocksOf(existing)) > 0:
+		// Marked content without stored keys (e.g. restored from a backup,
+		// which doesn't carry gen_keys): the blocks present are the baseline.
+		prev = blockKeys(blocksOf(existing))
+	default:
 		return e.upgradeLegacyDoc(ctx, d, rendered)
 	}
-	var prev []string
-	if err := json.Unmarshal([]byte(*d.GenKeys), &prev); err != nil {
-		slog.Warn("doc: invalid stored gen_keys, treating as empty", "docId", d.ID, "error", err)
-	}
-	out, conflicts := Merge(ParseBlocks(d.Content), prev, rendered.Blocks)
+	out, conflicts := Merge(existing, prev, rendered.Blocks)
 	content := RenderSegments(out)
 
 	if content == d.Content {

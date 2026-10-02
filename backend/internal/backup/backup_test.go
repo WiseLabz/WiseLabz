@@ -444,3 +444,34 @@ func TestExportToFilePermissions(t *testing.T) {
 		t.Errorf("backup file permissions = %o, want 0600", perm)
 	}
 }
+
+// Round-trips the doc provenance columns. Templates are imported before docs
+// so docs.template_id resolves; SQLite tests don't enforce that FK, Postgres does.
+func TestImportRestoresDocTemplateAndOrigin(t *testing.T) {
+	ctx := context.Background()
+	src := newTestStore(t)
+	tmpl := &store.TemplateRecord{Name: "Template 1"}
+	if err := src.CreateTemplate(ctx, tmpl); err != nil {
+		t.Fatalf("create template: %v", err)
+	}
+	doc := &store.DocRecord{Title: "Doc 1", Kind: "lab", Content: "x", TemplateID: tmpl.ID, Origin: store.DocOriginHuman}
+	if err := src.CreateDoc(ctx, doc); err != nil {
+		t.Fatalf("create doc: %v", err)
+	}
+	b, err := backup.Export(ctx, src)
+	if err != nil {
+		t.Fatalf("Export() error: %v", err)
+	}
+
+	dst := newTestStore(t)
+	if _, err := backup.Import(ctx, dst, b); err != nil {
+		t.Fatalf("Import() error: %v", err)
+	}
+	got, err := dst.GetDoc(ctx, doc.ID)
+	if err != nil {
+		t.Fatalf("GetDoc() error: %v", err)
+	}
+	if got.TemplateID != tmpl.ID || got.Origin != store.DocOriginHuman {
+		t.Fatalf("restored doc = %+v, want template %s and human origin", got, tmpl.ID)
+	}
+}
