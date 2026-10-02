@@ -9,11 +9,9 @@ import { useState, type ReactNode } from 'react';
 import { useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { isAxiosError } from 'axios';
-import {
-  useGetShareTokenTree,
-  useGetShareTokenDocsDocId,
-} from '../../api/generated/docs/docs';
+import { useGetShareTokenTree, useGetShareTokenDocsDocId } from '../../api/generated/docs/docs';
 import { Panel } from '../../components/ui/Panel';
+import { attachmentQueryOptions } from '../../components/docs/attachmentUpload';
 import { Markdown } from '../../components/docs/Markdown';
 import { Skeleton, SkeletonRows, EmptyState } from '../../components/ui/states';
 import { FileTextIcon, LayersIcon, ClockIcon } from '../../components/icons';
@@ -27,7 +25,8 @@ type ShareTree = {
 };
 
 function findFirstDoc(node: ShareTree): string | undefined {
-  if (!node.children || node.children.length === 0) return node.kind !== 'lab' && node.kind !== 'service' ? node.docId : undefined;
+  if (!node.children || node.children.length === 0)
+    return node.kind !== 'lab' && node.kind !== 'service' ? node.docId : undefined;
   for (const child of node.children) {
     if (child.kind !== 'lab' && child.kind !== 'service') return child.docId;
     const nested = findFirstDoc(child);
@@ -56,9 +55,10 @@ export function ShareLinkPage() {
   });
   const [selectedDocId, setSelectedDocId] = useState<string | undefined>(routeDocId);
 
-  const activeDocId = selectedDocId ?? (tree.data ? findFirstDoc(tree.data as ShareTree) : undefined);
+  const activeDocId =
+    selectedDocId ?? (tree.data ? findFirstDoc(tree.data as ShareTree) : undefined);
   const doc = useGetShareTokenDocsDocId(token ?? '', activeDocId ?? '', {
-    query: { enabled: !!token && !!activeDocId, retry: false },
+    query: { ...attachmentQueryOptions, enabled: !!token && !!activeDocId, retry: false },
   });
 
   if (tree.isLoading) {
@@ -98,10 +98,8 @@ export function ShareLinkPage() {
             </Panel>
           ) : (
             <Panel className="p-6">
-              {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-              <h1 className="mb-4 font-mono text-lg font-semibold text-ink">{(doc.data as any)?.title}</h1>
-              {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-              <Markdown source={(doc.data as any)?.content} />
+              <h1 className="mb-4 font-mono text-lg font-semibold text-ink">{doc.data.title}</h1>
+              <Markdown source={doc.data.content} attachments={doc.data.attachments} />
             </Panel>
           )}
         </section>
@@ -192,7 +190,9 @@ function ShareErrorState({ error }: { error: unknown }) {
     },
     unknown: {
       title: t('docs.share.viewer.errorTitle', { defaultValue: 'Something went wrong' }),
-      description: t('docs.share.viewer.errorDesc', { defaultValue: 'Could not load this share link.' }),
+      description: t('docs.share.viewer.errorDesc', {
+        defaultValue: 'Could not load this share link.',
+      }),
     },
   };
   const { title, description } = copy[code];

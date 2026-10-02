@@ -18,6 +18,7 @@ import { Button } from '../../components/ui/Button';
 import { IconButton } from '../../components/ui/Button';
 import { RoleGate } from '../../components/ui/RoleGate';
 import { Skeleton, SkeletonRows, ErrorState, EmptyState } from '../../components/ui/states';
+import { attachmentQueryOptions } from '../../components/docs/attachmentUpload';
 import { Markdown } from '../../components/docs/Markdown';
 import { DocTree } from '../../components/docs/DocTree';
 import { DocHistory } from './DocHistory';
@@ -240,7 +241,9 @@ function DocReader({ docId }: { docId: string }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
-  const { data, isLoading, isError, refetch } = useGetDocsDocId(docId);
+  const { data, isLoading, isError, refetch } = useGetDocsDocId(docId, {
+    query: attachmentQueryOptions,
+  });
   const tab: Tab = location.pathname.endsWith('/history') ? 'history' : 'read';
 
   const triggerLabel = useMemo(() => {
@@ -326,7 +329,7 @@ function DocReader({ docId }: { docId: string }) {
                   {t('docs.labBanner')}
                 </div>
               )}
-              <Markdown source={data.content} />
+              <Markdown source={data.content} attachments={data.attachments} />
               <p className="mt-8 border-t border-line-soft pt-3 text-2xs text-ink-faint">
                 {data.origin === 'human'
                   ? t('docs.human.updatedFooter', {

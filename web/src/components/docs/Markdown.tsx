@@ -7,11 +7,13 @@
  * Inline vs. block code is told apart with a CSS `:not(pre)` selector rather than
  * a JS heuristic, since react-markdown's `code` renderer no longer reports it.
  */
-import { memo, isValidElement } from 'react';
-import ReactMarkdown, { type Components } from 'react-markdown';
+import { memo, isValidElement, useState } from 'react';
+import ReactMarkdown, { defaultUrlTransform, type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { remarkStripGenMarkers } from '../../lib/genMarkers';
 import { Mermaid } from './Mermaid';
+import { Dialog } from '../ui/Dialog';
+import type { DocAttachment } from '../../api/model';
 
 const headingClass: Record<'h1' | 'h2' | 'h3' | 'h4', string> = {
   h1: 'mt-1 mb-3 font-mono text-2xl font-semibold tracking-tight text-balance text-ink',
@@ -25,7 +27,9 @@ const components: Components = {
   h2: ({ children }) => <h2 className={headingClass.h2}>{children}</h2>,
   h3: ({ children }) => <h3 className={headingClass.h3}>{children}</h3>,
   h4: ({ children }) => <h4 className={headingClass.h4}>{children}</h4>,
-  p: ({ children }) => <p className="my-2.5 text-sm leading-relaxed text-ink-muted text-pretty">{children}</p>,
+  p: ({ children }) => (
+    <p className="my-2.5 text-sm leading-relaxed text-ink-muted text-pretty">{children}</p>
+  ),
   strong: ({ children }) => <strong className="font-semibold text-ink">{children}</strong>,
   blockquote: ({ children }) => (
     <blockquote className="my-3 flex gap-2.5 rounded-sm border border-line-soft bg-canvas-sunken px-4 py-2.5 text-sm text-ink-muted">
@@ -34,7 +38,11 @@ const components: Components = {
     </blockquote>
   ),
   ul: ({ children }) => <ul className="my-3 space-y-1.5 pl-1">{children}</ul>,
-  ol: ({ children }) => <ol className="my-3 space-y-1.5 pl-5 text-sm text-ink-muted [list-style:decimal]">{children}</ol>,
+  ol: ({ children }) => (
+    <ol className="my-3 space-y-1.5 pl-5 text-sm text-ink-muted [list-style:decimal]">
+      {children}
+    </ol>
+  ),
   li: ({ children, className }) => {
     // Task-list items (remark-gfm) get a "task-list-item" className and render
     // their own checkbox — keep those bare, dot-prefix everything else.
@@ -89,12 +97,103 @@ const components: Components = {
   ),
 };
 
-export const Markdown = memo(function Markdown({ source }: { source: string }) {
+function AttachmentPDF({
+  attachment,
+  children,
+}: {
+  attachment: DocAttachment;
+  children: React.ReactNode;
+}) {
+  const [preview, setPreview] = useState(false);
+  return (
+    <span className="my-2 inline-flex max-w-full flex-col gap-2 rounded border border-line-soft p-3">
+      <span>{children || attachment.filename}</span>
+      <span className="flex gap-3">
+        <a href={attachment.url} target="_blank" rel="noopener noreferrer">
+          Open PDF
+        </a>
+        <button type="button" onClick={() => setPreview(!preview)} aria-expanded={preview}>
+          {preview ? 'Hide preview' : 'Preview PDF'}
+        </button>
+      </span>
+      {preview && (
+        <iframe src={attachment.url} title={attachment.filename} className="h-96 w-full" />
+      )}
+    </span>
+  );
+}
+
+export const Markdown = memo(function Markdown({
+  source,
+  attachments = [],
+}: {
+  source: string;
+  attachments?: DocAttachment[];
+}) {
+  const [image, setImage] = useState<{ url: string; alt: string } | null>(null);
+  const owned = new Map(attachments.map((a) => [a.id, a]));
+  const byURL = new Map(attachments.filter((a) => a.url).map((a) => [a.url, a]));
+  const transform = (url: string) => {
+    if (url.startsWith('attachment:')) return owned.get(url.slice(11))?.url ?? 'attachment:missing';
+    return defaultUrlTransform(url);
+  };
   return (
     <div className="max-w-[68ch]">
-      <ReactMarkdown remarkPlugins={[remarkGfm, remarkStripGenMarkers]} components={components}>
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm, remarkStripGenMarkers]}
+        urlTransform={transform}
+        components={{
+          ...components,
+          img: ({ src, alt = '' }) => {
+            if (src === 'attachment:missing')
+              return (
+                <span role="img" aria-label={alt}>
+                  Attachment unavailable: {alt}
+                </span>
+              );
+            const url = typeof src === 'string' ? src : '';
+            const attachment = byURL.get(url);
+            if (attachment?.contentType === 'application/pdf')
+              return <AttachmentPDF attachment={attachment}>{alt}</AttachmentPDF>;
+            return (
+              <button
+                type="button"
+                onClick={() => setImage({ url, alt })}
+                aria-label={`Enlarge ${alt}`}
+              >
+                <img src={src} alt={alt} className="max-w-full rounded" loading="lazy" />
+              </button>
+            );
+          },
+          a: ({ href, children }) => {
+            if (href === 'attachment:missing')
+              return <span>Attachment unavailable: {children}</span>;
+            const attachment = byURL.get(href);
+            if (attachment?.contentType === 'application/pdf')
+              return <AttachmentPDF attachment={attachment}>{children}</AttachmentPDF>;
+            return (
+              <a href={href} className="text-accent-primary underline">
+                {children}
+              </a>
+            );
+          },
+        }}
+      >
         {source}
       </ReactMarkdown>
+      <Dialog
+        open={image !== null}
+        onClose={() => setImage(null)}
+        title={image?.alt || 'Image preview'}
+        size="lg"
+      >
+        {image && (
+          <img src={image.url} alt={image.alt} className="max-h-[80vh] w-full object-contain" />
+        )}
+        <button type="button" onClick={() => setImage(null)}>
+          Close image
+        </button>
+      </Dialog>
     </div>
   );
 });

@@ -69,6 +69,7 @@ const newSession = () => ({
 });
 
 export const curatedHandlers = [
+  http.get('*/docs/:docId/attachments', () => HttpResponse.json([])),
   http.get('*/auth/providers', async () => {
     await delay(LATENCY);
     return HttpResponse.json({

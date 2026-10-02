@@ -19,6 +19,8 @@ import { markdown } from '@codemirror/lang-markdown';
 import { EditorView } from '@codemirror/view';
 import {
   useGetDocsDocId,
+  useGetDocsDocIdAttachments,
+  getGetDocsDocIdAttachmentsQueryKey,
   deleteDocsDocId,
   putDocsDocId,
   postDocsDocIdAiSuggest,
@@ -37,6 +39,8 @@ import { DocMetadataDialog } from '../../components/docs/NewDocDialog';
 import { Button } from '../../components/ui/Button';
 import { Panel } from '../../components/ui/Panel';
 import { Skeleton, SkeletonRows, ErrorState } from '../../components/ui/states';
+import { AttachmentsPanel } from '../../components/docs/AttachmentsPanel';
+import { attachmentUpload, attachmentQueryOptions } from '../../components/docs/attachmentUpload';
 import { Markdown } from '../../components/docs/Markdown';
 import { genBlockHighlight } from '../../components/docs/genBlockHighlight';
 import { DocDiff } from '../../components/diff/DiffViewer';
@@ -100,17 +104,9 @@ function DocEditor() {
   const userId = useAuth((s) => s.user?.id);
   const docLock = useLive((s) => s.docLocks[docId]);
 
-  const doc = useGetDocsDocId(docId);
-  const extensions = useMemo(
-    () => [
-      markdown(),
-      cmTheme,
-      EditorView.lineWrapping,
-      EditorView.contentAttributes.of({ 'aria-label': t('docs.editor.markdownLabel') }),
-      genBlockHighlight(t('docs.editor.generatedHint')),
-    ],
-    [t]
-  );
+  const doc = useGetDocsDocId(docId, { query: attachmentQueryOptions });
+  const attachments = useGetDocsDocIdAttachments(docId, { query: attachmentQueryOptions });
+  const editorRef = useRef<EditorView | null>(null);
   // Service docs are gated on that connector's operator role; the lab
   // overview doc has no owning connector, so it falls back to instance-admin.
   const connectorRole = useConnectorRole(doc.data?.serviceId ?? undefined);
@@ -262,6 +258,25 @@ function DocEditor() {
   }, [requestId, aiResult.data?.status, aiResult.data?.fullContent, t]);
 
   const canEdit = canMutate && lockHeld && !lockedByOther && !acquireLock.isPending;
+  const extensions = useMemo(
+    () => [
+      markdown(),
+      attachmentUpload(docId, {
+        enabled: () => canEdit,
+        complete: () => {
+          void queryClient.invalidateQueries({
+            queryKey: getGetDocsDocIdAttachmentsQueryKey(docId),
+          });
+        },
+        error: () => toast.error('Could not upload attachment'),
+      }),
+      cmTheme,
+      EditorView.lineWrapping,
+      EditorView.contentAttributes.of({ 'aria-label': t('docs.editor.markdownLabel') }),
+      genBlockHighlight(t('docs.editor.generatedHint')),
+    ],
+    [t, docId, queryClient, canEdit]
+  );
   const aiPending =
     suggest.isPending ||
     (requestId !== null &&
@@ -463,6 +478,19 @@ function DocEditor() {
         </Panel>
       )}
 
+      <AttachmentsPanel
+        docId={docId}
+        attachments={attachments.data ?? doc.data.attachments ?? []}
+        content={draft ?? ''}
+        editable={canEdit}
+        onInsert={(text) => {
+          const view = editorRef.current;
+          if (!view) return;
+          const { from, to } = view.state.selection.main;
+          view.dispatch({ changes: { from, to, insert: text } });
+          view.focus();
+        }}
+      />
       {/* Editor + preview */}
       <div className="grid gap-4 lg:grid-cols-2">
         <Panel className="overflow-hidden">
@@ -470,6 +498,9 @@ function DocEditor() {
             {t('docs.editor.markdownLabel')}
           </div>
           <CodeMirror
+            onCreateEditor={(view) => {
+              editorRef.current = view;
+            }}
             value={draft ?? ''}
             onChange={(v) => {
               if (canEdit) setDraft(v);
@@ -485,7 +516,10 @@ function DocEditor() {
             {t('docs.editor.previewLabel')}
           </div>
           <div className="max-h-[70vh] overflow-y-auto px-5 py-4">
-            <Markdown source={deferredDraft} />
+            <Markdown
+              source={deferredDraft}
+              attachments={attachments.data ?? doc.data.attachments}
+            />
           </div>
         </Panel>
       </div>
