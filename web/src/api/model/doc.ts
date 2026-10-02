@@ -7,6 +7,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { DocKind } from './docKind';
+import type { DocOrigin } from './docOrigin';
 
 export interface Doc {
   docId: string;
@@ -14,8 +15,14 @@ export interface Doc {
   kind: DocKind;
   /** @nullable */
   serviceId?: string | null;
-  /** Rendered/markdown body */
+  /** Markdown body. Sync-owned sections are wrapped in `<!-- wl:gen key="…" h="…" -->` … `<!-- /wl:gen -->` comment markers; everything outside them is human-owned. */
   content: string;
   currentVersion: number;
   updatedAt: string;
+  /** generated docs have their marked sections refreshed by sync; human docs are never touched by sync */
+  origin?: DocOrigin;
+  /** Template the doc is rendered through on sync; empty for the plain snapshot render */
+  templateId?: string;
+  /** RFC3339 time sync last merged this doc; empty if never */
+  lastSyncedAt?: string;
 }

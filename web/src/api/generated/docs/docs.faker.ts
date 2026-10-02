@@ -40,6 +40,18 @@ export const getGetDocsResponseMock = (
     content: faker.string.alpha({ length: { min: 10, max: 20 } }),
     currentVersion: faker.number.int(),
     updatedAt: faker.date.past().toISOString().slice(0, 19) + 'Z',
+    origin: faker.helpers.arrayElement([
+      faker.helpers.arrayElement(['generated', 'human'] as const),
+      undefined,
+    ]),
+    templateId: faker.helpers.arrayElement([
+      faker.string.alpha({ length: { min: 10, max: 20 } }),
+      undefined,
+    ]),
+    lastSyncedAt: faker.helpers.arrayElement([
+      faker.string.alpha({ length: { min: 10, max: 20 } }),
+      undefined,
+    ]),
   })),
   total: faker.number.int(),
   page: faker.number.int(),
@@ -86,6 +98,18 @@ export const getGetDocsServiceConnectorIdResponseMock = (
   content: faker.string.alpha({ length: { min: 10, max: 20 } }),
   currentVersion: faker.number.int(),
   updatedAt: faker.date.past().toISOString().slice(0, 19) + 'Z',
+  origin: faker.helpers.arrayElement([
+    faker.helpers.arrayElement(['generated', 'human'] as const),
+    undefined,
+  ]),
+  templateId: faker.helpers.arrayElement([
+    faker.string.alpha({ length: { min: 10, max: 20 } }),
+    undefined,
+  ]),
+  lastSyncedAt: faker.helpers.arrayElement([
+    faker.string.alpha({ length: { min: 10, max: 20 } }),
+    undefined,
+  ]),
   ...overrideResponse,
 });
 
@@ -102,6 +126,18 @@ export const getGetDocsDocIdResponseMock = (
   content: faker.string.alpha({ length: { min: 10, max: 20 } }),
   currentVersion: faker.number.int(),
   updatedAt: faker.date.past().toISOString().slice(0, 19) + 'Z',
+  origin: faker.helpers.arrayElement([
+    faker.helpers.arrayElement(['generated', 'human'] as const),
+    undefined,
+  ]),
+  templateId: faker.helpers.arrayElement([
+    faker.string.alpha({ length: { min: 10, max: 20 } }),
+    undefined,
+  ]),
+  lastSyncedAt: faker.helpers.arrayElement([
+    faker.string.alpha({ length: { min: 10, max: 20 } }),
+    undefined,
+  ]),
   ...overrideResponse,
 });
 
@@ -118,6 +154,18 @@ export const getPutDocsDocIdResponseMock = (
   content: faker.string.alpha({ length: { min: 10, max: 20 } }),
   currentVersion: faker.number.int(),
   updatedAt: faker.date.past().toISOString().slice(0, 19) + 'Z',
+  origin: faker.helpers.arrayElement([
+    faker.helpers.arrayElement(['generated', 'human'] as const),
+    undefined,
+  ]),
+  templateId: faker.helpers.arrayElement([
+    faker.string.alpha({ length: { min: 10, max: 20 } }),
+    undefined,
+  ]),
+  lastSyncedAt: faker.helpers.arrayElement([
+    faker.string.alpha({ length: { min: 10, max: 20 } }),
+    undefined,
+  ]),
   ...overrideResponse,
 });
 
@@ -158,6 +206,18 @@ export const getPostDocsDocIdVersionsRevRestoreResponseMock = (
   content: faker.string.alpha({ length: { min: 10, max: 20 } }),
   currentVersion: faker.number.int(),
   updatedAt: faker.date.past().toISOString().slice(0, 19) + 'Z',
+  origin: faker.helpers.arrayElement([
+    faker.helpers.arrayElement(['generated', 'human'] as const),
+    undefined,
+  ]),
+  templateId: faker.helpers.arrayElement([
+    faker.string.alpha({ length: { min: 10, max: 20 } }),
+    undefined,
+  ]),
+  lastSyncedAt: faker.helpers.arrayElement([
+    faker.string.alpha({ length: { min: 10, max: 20 } }),
+    undefined,
+  ]),
   ...overrideResponse,
 });
 

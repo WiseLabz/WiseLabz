@@ -6,16 +6,13 @@
  *
  * OpenAPI spec version: 0.1.0
  */
-import type { Severity } from './severity';
 
-export interface ChangeSummary {
-  id: string;
-  serviceId: string;
-  serviceName?: string;
-  /** e.g. vm.created, firewall.rule.modified; doc_conflict / doc_adopt for doc ownership reviews */
-  changeType: string;
-  severity: Severity;
-  summary: string;
-  willTriggerAi?: boolean;
-  detectedAt: string;
-}
+/**
+ * generated docs have their marked sections refreshed by sync; human docs are never touched by sync
+ */
+export type DocOrigin = (typeof DocOrigin)[keyof typeof DocOrigin];
+
+export const DocOrigin = {
+  generated: 'generated',
+  human: 'human',
+} as const;

@@ -6,16 +6,8 @@
  *
  * OpenAPI spec version: 0.1.0
  */
-import type { Severity } from './severity';
+import type { ResolveDocChangeAction } from './resolveDocChangeAction';
 
-export interface ChangeSummary {
-  id: string;
-  serviceId: string;
-  serviceName?: string;
-  /** e.g. vm.created, firewall.rule.modified; doc_conflict / doc_adopt for doc ownership reviews */
-  changeType: string;
-  severity: Severity;
-  summary: string;
-  willTriggerAi?: boolean;
-  detectedAt: string;
+export interface ResolveDocChange {
+  action: ResolveDocChangeAction;
 }

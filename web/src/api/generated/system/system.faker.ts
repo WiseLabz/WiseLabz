@@ -192,6 +192,18 @@ export const getGetSystemBackupExportResponseMock = (
     content: faker.string.alpha({ length: { min: 10, max: 20 } }),
     currentVersion: faker.number.int(),
     updatedAt: faker.date.past().toISOString().slice(0, 19) + 'Z',
+    origin: faker.helpers.arrayElement([
+      faker.helpers.arrayElement(['generated', 'human'] as const),
+      undefined,
+    ]),
+    templateId: faker.helpers.arrayElement([
+      faker.string.alpha({ length: { min: 10, max: 20 } }),
+      undefined,
+    ]),
+    lastSyncedAt: faker.helpers.arrayElement([
+      faker.string.alpha({ length: { min: 10, max: 20 } }),
+      undefined,
+    ]),
   })),
   docVersions: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(
     () => ({

@@ -33,7 +33,7 @@
 - [x] 5.4 `docs/openapi.yaml`: Doc fields (`origin`, `templateId`, `lastSyncedAt`), the resolve-doc path, `changeType` doc values. `TestOpenAPIMatchesRouter` passes.
 
 ## 6. Web
-- [ ] 6.1 `npm run gen:api`
+- [x] 6.1 `npm run gen:api`
 - [ ] 6.2 `Markdown.tsx`: remark plugin strips the wl:gen markers, plus a test
 - [ ] 6.3 `DocEditorPage.tsx`: generated-range tint plugin, plus "Synced <time>" in the header
 - [ ] 6.4 `ChangeDetailPage.tsx`: Accept generated / Keep mine for doc Changes, plus tests with MSW handlers in `src/mocks`
