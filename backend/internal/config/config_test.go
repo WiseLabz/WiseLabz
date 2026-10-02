@@ -284,6 +284,11 @@ func TestLoadEnvOverrideAllFields(t *testing.T) {
 		"WISELABZ_BACKUP_CRON_EXPR":                     "0 5 * * *",
 		"WISELABZ_BACKUP_MAX_BACKUPS":                   "1",
 		"WISELABZ_BACKUP_MAX_AGE_HOURS":                 "2",
+		"WISELABZ_ATTACHMENTS_DIR":                      "/tmp/env-blobs",
+		"WISELABZ_ATTACHMENTS_MAX_BYTES":                "12345",
+		"WISELABZ_BACKUP_MAX_IMPORT_BYTES":              "67890",
+		"WISELABZ_DOC_EXPORT_INCLUDE_ATTACHMENTS":       "false",
+		"WISELABZ_DOC_EXPORT_MAX_ATTACHMENT_BYTES":      "24680",
 		"WISELABZ_BACKUP_ENABLED":                       "false",
 		"WISELABZ_DOC_EXPORT_DIR":                       "/tmp/docexport",
 		"WISELABZ_DOC_EXPORT_CRON_EXPR":                 "0 6 * * *",
@@ -311,10 +316,11 @@ func TestLoadEnvOverrideAllFields(t *testing.T) {
 	}
 
 	want := Config{
-		DB:         Database{Driver: "postgres", DSN: "postgres://x", MaxOpenConns: 7, MaxIdleConns: 3, ConnMaxLifetimeSeconds: 60, ConnMaxIdleTimeSeconds: 30},
-		Server:     Server{Host: "127.0.0.1", Port: 9090, Origin: "https://example.com", TrustedProxies: "10.0.0.0/8", PublicURL: "https://reports.example.com", Embed: true, ReadTimeoutSeconds: 5, WriteTimeoutSeconds: 6, ShutdownTimeoutSeconds: 7},
-		Encryption: EncryptionSettings{Key: "env-key"},
-		Auth:       AuthSettings{ShareLinkMaxTTL: 3600, Secret: "env-secret", AccessTokenTTL: 60, RefreshTokenTTL: 120, StepUpForDestructive: false, WebAuthn: WebAuthnSettings{RPID: "example.com", RPDisplayName: "WiseLabz Test"}},
+		Attachments: AttachmentSettings{Dir: "/tmp/env-blobs", MaxBytes: 12345},
+		DB:          Database{Driver: "postgres", DSN: "postgres://x", MaxOpenConns: 7, MaxIdleConns: 3, ConnMaxLifetimeSeconds: 60, ConnMaxIdleTimeSeconds: 30},
+		Server:      Server{Host: "127.0.0.1", Port: 9090, Origin: "https://example.com", TrustedProxies: "10.0.0.0/8", PublicURL: "https://reports.example.com", Embed: true, ReadTimeoutSeconds: 5, WriteTimeoutSeconds: 6, ShutdownTimeoutSeconds: 7},
+		Encryption:  EncryptionSettings{Key: "env-key"},
+		Auth:        AuthSettings{ShareLinkMaxTTL: 3600, Secret: "env-secret", AccessTokenTTL: 60, RefreshTokenTTL: 120, StepUpForDestructive: false, WebAuthn: WebAuthnSettings{RPID: "example.com", RPDisplayName: "WiseLabz Test"}},
 		AI: AISettings{
 			Enabled: true, Provider: "openai", Model: "gpt-x", APIKey: "key", BaseURL: "http://localhost", Mode: "auto_update",
 			EmbedProvider: "openai", EmbedModel: "text-embedding-3-small", EmbedAPIKey: "embed-key", EmbedBaseURL: "http://embed-host",
@@ -326,8 +332,8 @@ func TestLoadEnvOverrideAllFields(t *testing.T) {
 		Rotation:  RotationSettings{MaxAgeDays: 45, WarnDays: 7},
 		Log:       LogSettings{Level: "debug", Format: "json"},
 		Retention: RetentionSettings{SnapshotDays: 1, DocVersionDays: 2, AlertDays: 3, SyncRunDays: 4, AuditDays: 5, HealthCheckDays: 6, ReportDays: 7, DeletedDocsDays: 8, CronExpr: "0 4 * * *"},
-		Backup:    BackupSettings{Dir: "/tmp/backups", CronExpr: "0 5 * * *", MaxBackups: 1, MaxAgeHours: 2, Enabled: false},
-		DocExport: DocExportSettings{Dir: "/tmp/docexport", CronExpr: "0 6 * * *", Enabled: true, Git: DocExportGitSettings{
+		Backup:    BackupSettings{MaxImportBytes: 67890, Dir: "/tmp/backups", CronExpr: "0 5 * * *", MaxBackups: 1, MaxAgeHours: 2, Enabled: false},
+		DocExport: DocExportSettings{IncludeAttachments: false, MaxAttachmentBytes: 24680, Dir: "/tmp/docexport", CronExpr: "0 6 * * *", Enabled: true, Git: DocExportGitSettings{
 			Remote: "https://git.example.com/org/docs.git", Branch: "export", Path: "lab/docs",
 			AuthorName: "Bot", AuthorEmail: "bot@example.com", Token: "tok", CommitMode: "per_revision", AuthorFromUser: true, MaxRevisionsPerRun: 25,
 		}},
@@ -694,5 +700,28 @@ func TestShareLinkMaxTTLConfig(t *testing.T) {
 		if got := (AuthSettings{ShareLinkMaxTTL: value}).ShareLinkMaxTTLDuration(); got != 30*24*time.Hour {
 			t.Fatalf("fallback = %v", got)
 		}
+	}
+}
+
+func TestAttachmentSettingsDefaultsAndEnvironment(t *testing.T) {
+	t.Chdir(t.TempDir())
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Attachments.Dir != "/data/attachments" || cfg.Attachments.MaxBytes != 25<<20 || cfg.Backup.MaxImportBytes != 1<<30 || !cfg.DocExport.IncludeAttachments || cfg.DocExport.MaxAttachmentBytes != 25<<20 {
+		t.Fatalf("defaults %+v %+v %+v", cfg.Attachments, cfg.Backup, cfg.DocExport)
+	}
+	t.Setenv("WISELABZ_ATTACHMENTS_DIR", "/tmp/attachments-test")
+	t.Setenv("WISELABZ_ATTACHMENTS_MAX_BYTES", "1234")
+	t.Setenv("WISELABZ_BACKUP_MAX_IMPORT_BYTES", "5678")
+	t.Setenv("WISELABZ_DOC_EXPORT_INCLUDE_ATTACHMENTS", "false")
+	t.Setenv("WISELABZ_DOC_EXPORT_MAX_ATTACHMENT_BYTES", "9012")
+	cfg, err = Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Attachments.Dir != "/tmp/attachments-test" || cfg.Attachments.MaxBytes != 1234 || cfg.Backup.MaxImportBytes != 5678 || cfg.DocExport.IncludeAttachments || cfg.DocExport.MaxAttachmentBytes != 9012 {
+		t.Fatalf("env %+v %+v %+v", cfg.Attachments, cfg.Backup, cfg.DocExport)
 	}
 }
