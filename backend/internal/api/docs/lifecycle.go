@@ -122,7 +122,7 @@ func (h *Handler) Patch(w http.ResponseWriter, r *http.Request) {
 		h.lifecycleError(w, err)
 		return
 	}
-	if !h.requireDocOperator(w, r, d.ServiceID) {
+	if !h.requireDocEditor(w, r, d) {
 		return
 	}
 	if err := h.Store.UpdateDocMetadata(r.Context(), id, req.Title, req.ParentID); err != nil {
@@ -145,7 +145,7 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 		h.lifecycleError(w, err)
 		return
 	}
-	if !h.requireDocOperator(w, r, d.ServiceID) {
+	if !h.requireDocEditor(w, r, d) {
 		return
 	}
 	if err := h.Store.SoftDeleteDoc(r.Context(), id); err != nil {

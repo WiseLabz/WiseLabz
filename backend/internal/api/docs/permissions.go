@@ -59,6 +59,13 @@ func (h *Handler) requireDocViewer(w http.ResponseWriter, r *http.Request, conne
 	return true
 }
 
+// requireDocEditor checks view access before edit access, so callers who
+// cannot see the doc get the same 404 as for a missing one, and only callers
+// who can see it but not change it get 403.
+func (h *Handler) requireDocEditor(w http.ResponseWriter, r *http.Request, d *store.DocRecord) bool {
+	return h.requireDocViewer(w, r, d.ServiceID, d.Origin) && h.requireDocOperator(w, r, d.ServiceID)
+}
+
 // loadDocForViewer loads the doc and enforces viewer access on its connector,
 // writing a 404 and returning false if it is missing or not viewable.
 func (h *Handler) loadDocForViewer(w http.ResponseWriter, r *http.Request, id string) bool {

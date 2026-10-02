@@ -41,7 +41,9 @@ func (s *Store) validateDocParent(ctx context.Context, d *DocRecord, parentID st
 			return err
 		}
 		if parent.ServiceID != d.ServiceID {
-			return fmt.Errorf("%w: parent must have the same scope", ErrDocHierarchy)
+			// Same message as a missing parent: the caller may not be allowed
+			// to see docs in the other scope, so don't confirm the ID exists.
+			return fmt.Errorf("%w: parent not found", ErrDocHierarchy)
 		}
 		if d.ServiceID == "" && d.Origin == DocOriginHuman && parent.Origin != DocOriginHuman {
 			return fmt.Errorf("%w: human lab docs require a human parent", ErrDocHierarchy)

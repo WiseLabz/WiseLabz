@@ -73,6 +73,9 @@ func TestDocLifecycleAuthzMatrix(t *testing.T) {
 					expected = 403
 					if canWrite {
 						expected = mutation.success
+					} else if !canRead && mutation.method != "PUT" {
+						// PATCH/DELETE must not confirm that a hidden doc exists.
+						expected = 404
 					}
 					if rr.Code != expected {
 						t.Fatalf("%s: %d want %d %s", mutation.method, rr.Code, expected, rr.Body.String())
@@ -193,5 +196,35 @@ func TestCreateDocAuthz(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+func TestPatchParentInOtherScopeLooksMissing(t *testing.T) {
+	h := newTestHandler(t)
+	ctx := context.Background()
+	conn := &store.ConnectorRecord{Name: "svc", Category: "virtualization", Type: "proxmox", URL: "http://example.com"}
+	if err := h.Store.CreateConnector(ctx, conn); err != nil {
+		t.Fatal(err)
+	}
+	hidden := &store.DocRecord{Title: "hidden", ServiceID: conn.ID, Kind: "service", Origin: store.DocOriginHuman}
+	note := &store.DocRecord{Title: "note", Origin: store.DocOriginHuman}
+	for _, d := range []*store.DocRecord{hidden, note} {
+		if err := h.Store.CreateDoc(ctx, d); err != nil {
+			t.Fatal(err)
+		}
+	}
+	admin := auth.ContextWithUser(ctx, apitest.NewUser(t, h.Store, "viewer"), true)
+	patch := func(parent string) string {
+		r := httptest.NewRequest("PATCH", "/api/docs/"+note.ID, strings.NewReader(`{"parentId":"`+parent+`"}`)).WithContext(admin)
+		r.SetPathValue("id", note.ID)
+		rr := httptest.NewRecorder()
+		h.Patch(rr, r)
+		if rr.Code != 400 {
+			t.Fatalf("patch %s: %d %s", parent, rr.Code, rr.Body.String())
+		}
+		return rr.Body.String()
+	}
+	if cross, missing := patch(hidden.ID), patch("does-not-exist"); cross != missing {
+		t.Fatalf("cross-scope parent distinguishable from missing:\n%s\n%s", cross, missing)
 	}
 }
