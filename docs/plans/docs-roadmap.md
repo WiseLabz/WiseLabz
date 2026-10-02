@@ -4,12 +4,27 @@
 > #478 → #494 → #519 → #514, shipped as **4 sequential PRs**. Each PR gets its own OpenSpec change under `openspec/changes/`.
 >
 > Status:
-> - PR 1 (#478): OpenSpec change `doc-section-ownership`, branch `feat/doc-section-ownership`.
->   Track progress in `openspec/changes/doc-section-ownership/tasks.md` (checkboxes).
+> - PR 1 (#478): **implemented.** OpenSpec change `doc-section-ownership`, branch `feat/doc-section-ownership`.
+>   All tasks are ticked in `openspec/changes/doc-section-ownership/tasks.md`.
+>   Archive the change with `/opsx:archive` once the PR merges.
 > - PR 2–4: not started. Create each change with `/opsx:propose` (or by hand under `openspec/changes/<name>/`)
 >   from the matching section below, then implement it with `/opsx:apply`.
 >
 > Every decision in the table below was made explicitly by the maintainer. Don't re-litigate them.
+>
+> Gotchas found while building PR 1:
+> - **API client regeneration.** Before editing `docs/openapi.yaml`, run `cd web && bun install --frozen-lockfile`.
+>   A stale `node_modules` (orval 8.19, or the `typescript` npm alias) makes `gen:api` fail *after* it has
+>   already cleaned `web/src/api`. The pre-commit hook then stages the wiped folder.
+>   Always check `git show --stat HEAD` after a commit that touches the spec.
+> - **No nested transactions.** `store.WithinTransaction` doesn't nest: inside a tx, call the tx-scoped
+>   helpers (`updateDocRev`, `CreateDocVersion`) directly.
+> - **New migrations need two test updates.** Each new latest migration needs a step in `TestRunMigrationsDown`
+>   (`backend/internal/store/migrations_test.go`), in both the first rollback pass and the reapply pass.
+> - **Doc content now carries `wl:gen` markers.** Code that compares or displays raw doc content should use
+>   `doc.StripMarkers` (backend) or `remarkStripGenMarkers` / `findGenBlocks` (`web/src/lib/genMarkers.ts`).
+> - **PR 2 must set `origin=human` on created docs.** Human docs (#494) must be created with
+>   `Origin: store.DocOriginHuman`, or sync will treat them as legacy generated docs.
 
 # Plan: Human docs, attachments, Markdown import (#478 → #494 → #519 → #514)
 

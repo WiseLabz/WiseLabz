@@ -40,7 +40,7 @@
 - [x] 6.5 `npm run lint && npm test`
 
 ## 7. Wrap-up
-- [ ] 7.1 `cd backend && go vet ./... && go test ./...`
-- [ ] 7.2 Update `docs/ARCHITECTURE.md` and `docs/DOC_EXPORT.md` notes on markers and ownership
-- [ ] 7.3 `graphify update .`
+- [x] 7.1 `cd backend && go vet ./... && go test ./...`
+- [x] 7.2 Update `docs/ARCHITECTURE.md` and `docs/DOC_EXPORT.md` notes on markers and ownership
+- [x] 7.3 `graphify update .`
 - [ ] 7.4 Commit (no Claude attribution) and open the PR referencing #478

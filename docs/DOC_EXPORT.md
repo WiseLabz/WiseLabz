@@ -11,6 +11,9 @@ This is distinct from `GET /api/system/backup/export` (a single JSON bundle
 meant for restoring into another WiseLabz instance): doc export writes one
 `.md` file per doc, using exactly the content the doc engine already
 generates and persists (`store.DocRecord.Content`) — no re-rendering.
+That content includes the `<!-- wl:gen … -->` section-ownership markers
+(see "Doc section ownership" in `ARCHITECTURE.md`). They are plain HTML
+comments, so any Markdown renderer hides them.
 
 ## Configuration
 

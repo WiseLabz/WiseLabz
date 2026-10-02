@@ -403,6 +403,48 @@ render without creating or updating `docs` or `doc_versions`.
 
 ---
 
+## Doc section ownership (decided 2026-10-01, #478)
+
+Sync never overwrites human text in docs. Generated content is wrapped in
+HTML-comment block markers:
+
+```
+<!-- wl:gen key="snap.containers" h="3fa9c0d1e2b4" -->
+…generated body…
+<!-- /wl:gen -->
+```
+
+`h` is a hash of the body as last generated, so a body that no longer
+matches it was edited by a human. Text outside blocks is human-owned. The
+parser (`internal/doc/blocks.go`) is lossless and fails safe: any malformed
+marker is treated as plain text.
+
+On each sync, `doc.Engine.RegenerateForConnector` re-renders every
+`origin=generated` doc of the connector, through `docs.template_id` when one
+is set, and merges it block by block (`internal/doc/merge.go`):
+
+| Block state | Result |
+|---|---|
+| Unedited | Refreshed |
+| Edited, upstream unchanged | Left alone |
+| Edited, upstream changed | Left alone, plus a `doc_conflict` Change (diff format `doc`) |
+| Gone upstream | Removed if unedited; markers stripped (body kept) if edited |
+| New upstream section | Inserted, unless its key is in `docs.gen_keys` (meaning the user deleted it) |
+
+The write is guarded:
+- Writes use the doc's current version, so a concurrent human save wins.
+- Docs under a live edit lock are skipped until the next sync.
+- `origin=human` docs are never touched.
+
+The fetch time is not part of the content; it is stored in
+`docs.last_synced_at`, so an unchanged sync writes no version and doesn't
+bump `updated_at`. Doc Changes are resolved with
+`POST /api/changes/{id}/resolve-doc`: `accept` applies the generated text,
+`keep` detaches the block. Docs from before this change are upgraded on
+their first sync:
+- latest version system-authored → re-rendered with markers;
+- latest version human-saved → `origin=human`, plus one `doc_adopt` Change.
+
 ## Data retention (decided 2026-09-05)
 
 A background job (`internal/retention`, registered with the shared cron
