@@ -12,6 +12,63 @@
   `{ field, msg }` objects instead of a free-form object. Nothing had ever
   populated it, so no client can have depended on the previous shape.
 
+## 2.0.0 (2026-10-02)
+
+## What's Changed
+* Add the make targets CONTRIBUTING.md already documents by @wufangyong973 in https://github.com/WiseLabz/WiseLabz/pull/551
+* chore(agents): track shared tooling and prune unused skills by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/554
+* fix(backup): disable age pruning when maxAgeHours <= 0 by @ChangedRuby in https://github.com/WiseLabz/WiseLabz/pull/555
+* fix(docs): require viewer access for doc history and lock reads by @ChangedRuby in https://github.com/WiseLabz/WiseLabz/pull/556
+* fix(dashboard): scope the overview to connectors the caller can view by @ChangedRuby in https://github.com/WiseLabz/WiseLabz/pull/558
+* fix(auth): require step-up to start MFA enrollment and block API keys by @ChangedRuby in https://github.com/WiseLabz/WiseLabz/pull/559
+* chore(dx): skip unaffected checks in lefthook using the CI change classifier by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/562
+* chore(ci): harden agent-only change skips and exclude tooling from build contexts by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/563
+* fix(web): surface mutation errors, single-flight token refresh, and handle WS events by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/564
+* fix(connector): Pi-hole token leak and sessions, Proxmox mem decode and drift by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/565
+* fix(backend): store, docs and scheduling correctness fixes by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/566
+* fix: real test notifications, lab docs in tree, a11y for dialogs/palette/notifications by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/567
+* fix(auth): enforce MFA lockout and auth settings, stop leaking connector config by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/568
+* fix(security): enforce connector grants in notifications, runbooks, docs and attention cache by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/569
+* fix(security): sanitize errors in test-notification logs by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/570
+* fix(web): repair HTTP copying, chat retries, and OIDC step-up by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/571
+* fix(api): close connector authorization gaps by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/572
+* fix(backend): correct notification delivery, reports and audit exports by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/573
+* fix(backend): preserve docs and correct snapshot and report persistence by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/574
+* fix(docs): restore sync and document editing workflows by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/575
+* fix(sync): preserve baselines and drain bounded sync jobs by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/576
+* test: add command-line entrypoint tests for issues #489 and #493 by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/579
+* test: comprehensive coverage for reports, compliance, and auth handlers by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/580
+* test(web): add unit tests for lib helpers and auth store by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/577
+* test: add comprehensive backup scheduling, authz and AI encryption tests by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/581
+* test: add concurrent cache tests and postgres testing for backup/retention by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/578
+* docs: fix README config section and remove dead store/sqlc by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/583
+* perf: add HTTP compression, cache headers, and optimize doc editor rendering by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/582
+* fix(security): add placeholder secret validation and PKCE to OIDC by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/586
+* chore: small backend cleanups and request-scoped logging foundation by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/585
+* chore(web): replace leftover API clients and i18n reports by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/584
+* refactor(backend): move AI config SQL into store, decouple mcp/chat, consolidate ai HTTP helpers by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/587
+* perf(backend): sync/linking snapshot reuse and SQLite read pool by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/588
+* feat(auth): step-up on admin/auth-policy actions, single-use bound elevation tokens; web deps cleanup by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/591
+* refactor(backend): share connector helpers and split oversized functions by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/589
+* perf: coalesce WS event bursts and trim hot-path queries by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/590
+* feat(compliance): Tailscale connector and recommended rule pack by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/592
+* feat: connector lifecycle actions and UI language picker by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/593
+* feat: Prometheus /metrics endpoint and more notification channels by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/594
+* fix(security): purpose-bound keys and AAD for stored secrets (#531) by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/595
+* feat(health): scheduled connector health checks and uptime reporting by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/596
+* feat(mcp): FTS search, topology path, runbook tools and doc edit proposals by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/597
+* feat(docs): section ownership — sync merges generated blocks instead of overwriting human edits (#478) by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/598
+* chore(openspec): archive doc-section-ownership and sync its spec by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/599
+* feat(docs): human-written docs — create, delete, nest and trash (#494) by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/600
+* chore(openspec): archive human-docs and sync its spec by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/604
+* feat(docs): doc attachments — upload, signed serving, backups and export (#519) by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/605
+* feat(docs): import Markdown/Obsidian vaults (#514) by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/610
+
+## New Contributors
+* @wufangyong973 made their first contribution in https://github.com/WiseLabz/WiseLabz/pull/551
+
+**Full Changelog**: https://github.com/WiseLabz/WiseLabz/compare/v1.0.0...v2.0.0
+
 ## 1.0.0 (2026-10-01)
 
 ## What's Changed
