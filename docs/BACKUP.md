@@ -13,10 +13,10 @@ excludes secrets by default, and no separate DB tooling is needed.
 Both are operator-only (403 for `viewer`), not step-up-gated (no elevation
 token required — this isn't a destructive action):
 
-- `GET /api/system/backup/export` — returns the bundle as JSON, with
-  `Content-Disposition: attachment; filename="wiselabz-backup-<timestamp>.json"`.
-- `POST /api/system/backup/import` — accepts a bundle (as exported, or
-  hand-edited) in the request body.
+- `GET /api/system/backup/export` — returns a v2 ZIP archive, with
+  `Content-Disposition: attachment; filename="wiselabz-backup-<timestamp>.zip"`.
+- `POST /api/system/backup/import` — accepts v2 ZIP or legacy v1 JSON in the request body.
+  The configurable `backup.max_import_bytes` defaults to 1 GiB.
 
 ## What's included
 
@@ -24,6 +24,7 @@ token required — this isn't a destructive action):
   Redaction below).
 - **Docs** — all documentation records, plus every historical version of
   each (`GET /api/docs/{id}/versions` equivalent).
+- **Attachments** — metadata plus deduplicated file bytes, including attachments of trash docs.
 - **Templates** — all template records, plus every section of each.
 - **AI config summary** (`aiConfig`) — `enabled`, `provider`, `model`,
   `baseUrl`, `mode`. Informational only (see Exclusions).
@@ -47,16 +48,20 @@ token required — this isn't a destructive action):
 
 ## Bundle format
 
-Top-level JSON fields: `version` (integer, currently `1`), `exportedAt`
+V2 archives contain `bundle.json`, one `attachments/<sha256>` entry per distinct
+blob, and `manifest.json` mapping each entry to its SHA256 checksum. ZIP paths,
+expanded sizes, blob hashes, sniffed MIME types and metadata references are
+validated before database writes; temporary staging files are removed afterwards.
+
+Top-level bundle JSON fields: `version` (integer, currently `2`), `exportedAt`
 (RFC3339 timestamp), `connectors`, `docs`, `docVersions`, `templates`,
 `templateSections` (arrays mirroring the corresponding store records), and
-optionally `aiConfig`. See `docs/openapi.yaml` (`BackupBundle` schema) for
+`attachments` and optionally `aiConfig`. See `docs/openapi.yaml` (`BackupBundle` schema) for
 the exact shape.
 
 ## Import behavior
 
-- **Validates before writing anything.** `version` must match the format
-  version this instance supports; every `docVersions[].docId` must reference
+- **Validates before writing anything.** `version` must be 1 or 2; every `docVersions[].docId` must reference
   a `docs[].id` present in the bundle; every `templateSections[].templateId`
   must reference a `templates[].id` present in the bundle; every
   `connectors[].category` must be one of `virtualization`, `containers_paas`,
@@ -82,3 +87,19 @@ actually comes back intact; and `backup verify`/`backup restore` (a new
 actual restore. See [BACKUP_RECOVERY.md](BACKUP_RECOVERY.md) for the full
 verify/restore workflow and, since secrets are redacted (see Exclusions
 above), what has to be manually re-entered after a restore.
+
+## Attachment storage configuration
+
+```yaml
+attachments:
+  dir: /data/attachments
+  max_bytes: 26214400         # 25 MiB per attachment
+backup:
+  max_import_bytes: 1073741824 # 1 GiB per archive, including expanded data
+```
+
+Keep `attachments.dir` on persistent storage alongside the database. ZIP backups
+carry the attachment bytes; a direct database backup also needs this directory.
+The retention job keeps blobs referenced by live or trash metadata and removes
+unreferenced blobs after document purge. Signed attachment URLs are temporary and
+are generated again after restore using the destination instance's auth secret.

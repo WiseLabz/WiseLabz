@@ -1,8 +1,8 @@
 # Scheduled Doc Export
 
-Writes every generated doc to a local directory as Markdown on a schedule,
+Writes every active doc to a local directory as Markdown on a schedule,
 so documentation survives outside the tool — and doubles as a lightweight,
-human-readable secondary backup alongside the JSON bundle described in
+human-readable secondary backup alongside the ZIP archive described in
 [BACKUP.md](BACKUP.md). Optionally, the directory is a clone of a Git
 remote and every run commits and pushes the changes, giving the docs a real
 Git history outside WiseLabz. Implemented in `backend/internal/docexport/`.
@@ -11,9 +11,9 @@ This is distinct from `GET /api/system/backup/export` (a single JSON bundle
 meant for restoring into another WiseLabz instance): doc export writes one
 `.md` file per doc, using exactly the content the doc engine already
 generates and persists (`store.DocRecord.Content`) — no re-rendering.
-That content includes the `<!-- wl:gen … -->` section-ownership markers
-(see "Doc section ownership" in `ARCHITECTURE.md`). They are plain HTML
-comments, so any Markdown renderer hides them.
+Export strips `<!-- wl:gen … -->` ownership markers, preserving the rendered
+content. Doc-owned `attachment:<id>` links become relative
+`attachments/<sha256>.<ext>` paths; extensions follow sniffed MIME types.
 
 ## Configuration
 
@@ -27,6 +27,8 @@ doc_export:
   enabled: false            # opt-in; default false
   dir: ./data/docexport     # target directory (the persistent clone in Git mode)
   cron_expr: "0 2 * * *"    # daily at 2 AM by default
+  include_attachments: true # write attachment files and rewrite links
+  max_attachment_bytes: 26214400 # Git mode skips files larger than 25 MiB
   git:                      # optional; Git mode is on when remote is set
     remote: https://github.com/acme/lab-docs.git
     branch: main            # default main
@@ -47,6 +49,8 @@ doc_export:
 | `doc_export.enabled` | `WISELABZ_DOC_EXPORT_ENABLED` | `false` | |
 | `doc_export.dir` | `WISELABZ_DOC_EXPORT_DIR` | `./data/docexport` | In Git mode: the persistent clone |
 | `doc_export.cron_expr` | `WISELABZ_DOC_EXPORT_CRON_EXPR` | `0 2 * * *` | 5- or 6-field cron |
+| `doc_export.include_attachments` | `WISELABZ_DOC_EXPORT_INCLUDE_ATTACHMENTS` | `true` | Include owned attachments and rewrite links |
+| `doc_export.max_attachment_bytes` | `WISELABZ_DOC_EXPORT_MAX_ATTACHMENT_BYTES` | `26214400` | Git mode size cap; skipped links remain attachment references |
 | `doc_export.git.remote` | `WISELABZ_DOC_EXPORT_GIT_REMOTE` | empty (local mode) | `https://…`, `ssh://…` or scp-style `git@host:org/repo.git`. No credentials in the URL |
 | `doc_export.git.branch` | `WISELABZ_DOC_EXPORT_GIT_BRANCH` | `main` | Created by the first push if missing |
 | `doc_export.git.path` | `WISELABZ_DOC_EXPORT_GIT_PATH` | `docs` | Relative, inside the repo |
