@@ -1,10 +1,11 @@
 package system
 
 import (
+	"archive/zip"
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -87,8 +88,26 @@ func TestExportBackupRedactsConnectorSecrets(t *testing.T) {
 	}
 
 	// Parse the exported bundle to verify structure
+	archive, err := zip.NewReader(bytes.NewReader(rr.Body.Bytes()), int64(rr.Body.Len()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var data []byte
+	for _, entry := range archive.File {
+		if entry.Name == "bundle.json" {
+			r, err := entry.Open()
+			if err != nil {
+				t.Fatal(err)
+			}
+			data, err = io.ReadAll(r)
+			_ = r.Close()
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
 	var b backup.Bundle
-	if err := json.Unmarshal(rr.Body.Bytes(), &b); err != nil {
+	if err := json.Unmarshal(data, &b); err != nil {
 		t.Fatalf("unmarshal exported bundle: %v", err)
 	}
 
@@ -140,8 +159,8 @@ func TestImportBackupCorruptJSON(t *testing.T) {
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d", rr.Code, http.StatusBadRequest)
 	}
-	if !strings.Contains(rr.Body.String(), "Invalid JSON") {
-		t.Errorf("expected 'Invalid JSON' error, got: %s", rr.Body.String())
+	if !strings.Contains(rr.Body.String(), "Invalid backup") {
+		t.Errorf("expected 'Invalid backup' error, got: %s", rr.Body.String())
 	}
 }
 
@@ -161,53 +180,19 @@ func TestImportBackupTruncatedJSON(t *testing.T) {
 	}
 }
 
-// TestImportBackupRequestTooLarge verifies ImportBackup enforces the 10 MiB limit deterministically.
+// TestImportBackupRequestTooLarge uses a small configured cap to avoid allocating the default 1 GiB.
 func TestImportBackupRequestTooLarge(t *testing.T) {
 	s := apitest.NewStore(t)
-	h := NewHandler(s.DB(), &config.Config{}, s, nil, t.TempDir(), nil)
-
-	// Build payload that is deterministically larger than MaxImportBytes.
-	// Each connector record with configData padding is roughly 230 bytes.
-	// Calculate how many we need to exceed the 10 MiB limit (10485760 bytes).
-	recordSize := 230
-	needed := (MaxImportBytes / int64(recordSize)) + 100
-
-	conns := make([]map[string]any, 0)
-	for i := 0; i < int(needed); i++ {
-		conns = append(conns, map[string]any{
-			"id":         fmt.Sprintf("c%d", i),
-			"name":       fmt.Sprintf("connector-%d", i),
-			"type":       "proxmox",
-			"category":   "virtualization",
-			"url":        "https://example.com",
-			"configData": strings.Repeat("x", 150),
-		})
-	}
-	b := map[string]any{
-		"version":    1,
-		"exportedAt": "2024-01-01T00:00:00Z",
-		"connectors": conns,
-	}
-	payload, _ := json.Marshal(b)
-
-	// Verify payload is indeed over the limit
-	if int64(len(payload)) <= MaxImportBytes {
-		t.Fatalf("test payload only %d bytes, need > %d to trigger limit; adjust recordSize or needed count", len(payload), MaxImportBytes)
-	}
-
-	req := httptest.NewRequest(http.MethodPost, "/api/system/backup/import", bytes.NewReader(payload))
+	cfg := &config.Config{Backup: config.BackupSettings{MaxImportBytes: 1024}}
+	h := NewHandler(s.DB(), cfg, s, nil, t.TempDir(), nil)
+	req := httptest.NewRequest(http.MethodPost, "/api/system/backup/import", strings.NewReader(strings.Repeat(" ", 1025)))
 	rr := httptest.NewRecorder()
 	h.ImportBackup(rr, req)
-
 	if rr.Code != http.StatusRequestEntityTooLarge {
-		t.Fatalf("status = %d, want %d; body=%s", rr.Code, http.StatusRequestEntityTooLarge, rr.Body.String())
-	}
-	if !strings.Contains(rr.Body.String(), "10 MiB") {
-		t.Errorf("expected '10 MiB' error message, got: %s", rr.Body.String())
+		t.Fatalf("status %d: %s", rr.Code, rr.Body.String())
 	}
 }
 
-// TestImportBackupWrongVersion verifies ImportBackup rejects incompatible bundle versions.
 func TestImportBackupWrongVersion(t *testing.T) {
 	s := apitest.NewStore(t)
 	h := NewHandler(s.DB(), &config.Config{}, s, nil, t.TempDir(), nil)
@@ -224,7 +209,7 @@ func TestImportBackupWrongVersion(t *testing.T) {
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d", rr.Code, http.StatusBadRequest)
 	}
-	if !strings.Contains(rr.Body.String(), "unsupported backup version") {
+	if !strings.Contains(rr.Body.String(), `"code":"invalid_backup"`) {
 		t.Errorf("expected version error, got: %s", rr.Body.String())
 	}
 }
@@ -255,7 +240,7 @@ func TestImportBackupInvalidCategory(t *testing.T) {
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d; body=%s", rr.Code, http.StatusBadRequest, rr.Body.String())
 	}
-	if !strings.Contains(rr.Body.String(), "invalid category") {
+	if !strings.Contains(rr.Body.String(), `"code":"invalid_backup"`) {
 		t.Errorf("expected invalid category error, got: %s", rr.Body.String())
 	}
 }
@@ -282,7 +267,7 @@ func TestImportBackupOrphanDocVersion(t *testing.T) {
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d", rr.Code, http.StatusBadRequest)
 	}
-	if !strings.Contains(rr.Body.String(), "unknown doc") {
+	if !strings.Contains(rr.Body.String(), `"code":"invalid_backup"`) {
 		t.Errorf("expected orphan doc version error, got: %s", rr.Body.String())
 	}
 }
@@ -309,7 +294,7 @@ func TestImportBackupOrphanTemplateSection(t *testing.T) {
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d", rr.Code, http.StatusBadRequest)
 	}
-	if !strings.Contains(rr.Body.String(), "unknown template") {
+	if !strings.Contains(rr.Body.String(), `"code":"invalid_backup"`) {
 		t.Errorf("expected orphan template section error, got: %s", rr.Body.String())
 	}
 }

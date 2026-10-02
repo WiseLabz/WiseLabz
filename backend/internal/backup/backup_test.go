@@ -1,10 +1,12 @@
 package backup_test
 
 import (
+	"archive/zip"
 	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/url"
 	"os"
@@ -342,14 +344,29 @@ func TestExportToFile(t *testing.T) {
 		t.Error("Run.CreatedAt is empty")
 	}
 
-	// Verify file exists and is valid JSON
+	// Verify the v2 ZIP contains a valid bundle.
 	if _, err := os.Stat(run.FilePath); err != nil {
 		t.Fatalf("backup file not created: %v", err)
 	}
 
-	data, err := os.ReadFile(run.FilePath)
+	archive, err := zip.OpenReader(run.FilePath)
 	if err != nil {
-		t.Fatalf("read backup file: %v", err)
+		t.Fatal(err)
+	}
+	defer func() { _ = archive.Close() }()
+	var data []byte
+	for _, entry := range archive.File {
+		if entry.Name == "bundle.json" {
+			r, err := entry.Open()
+			if err != nil {
+				t.Fatal(err)
+			}
+			data, err = io.ReadAll(r)
+			_ = r.Close()
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
 	}
 
 	var b backup.Bundle

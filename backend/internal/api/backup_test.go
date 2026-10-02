@@ -9,7 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/WiseLabz/wiselabz/internal/api/system"
+	"github.com/WiseLabz/wiselabz/internal/config"
+
 	"github.com/WiseLabz/wiselabz/internal/backup"
 	"github.com/WiseLabz/wiselabz/internal/store"
 )
@@ -175,9 +176,9 @@ func TestBackupUpdateScheduleAcceptsValidCronAndPersists(t *testing.T) {
 
 func TestBackupImportRejectsOversizedBody(t *testing.T) {
 	t.Parallel()
-	app := newTestApp(t)
+	app := newTestAppWithOptions(t, t.TempDir(), func(cfg *config.Config) { cfg.Backup.MaxImportBytes = 1024 })
 	_, opToken := app.user(t, "operator")
-	body := bytes.Repeat([]byte(" "), system.MaxImportBytes+1)
+	body := bytes.Repeat([]byte(" "), 1025)
 	req := httptest.NewRequest(http.MethodPost, "/api/system/backup/import", bytes.NewReader(body))
 	req.Header.Set("Authorization", "Bearer "+opToken)
 	rec := app.serve(req)
@@ -219,16 +220,15 @@ func TestBackupExportImportRoundTrip(t *testing.T) {
 	if exportRec.Code != http.StatusOK {
 		t.Fatalf("export status = %d, want 200; body = %s", exportRec.Code, exportRec.Body)
 	}
-	var bundle backup.Bundle
-	if err := json.Unmarshal(exportRec.Body.Bytes(), &bundle); err != nil {
-		t.Fatalf("decode export body: %v", err)
-	}
 
 	// Import into a fresh second app/store so nothing already exists.
 	app2 := newTestApp(t)
 	_, opToken2 := app2.user(t, "operator")
 
-	importRec := app2.req(t, http.MethodPost, "/api/system/backup/import", bundle, opToken2)
+	req := httptest.NewRequest(http.MethodPost, "/api/system/backup/import", bytes.NewReader(exportRec.Body.Bytes()))
+	req.Header.Set("Authorization", "Bearer "+opToken2)
+	req.Header.Set("Content-Type", "application/zip")
+	importRec := app2.serve(req)
 	if importRec.Code != http.StatusOK {
 		t.Fatalf("import status = %d, want 200; body = %s", importRec.Code, importRec.Body)
 	}

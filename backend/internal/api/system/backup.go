@@ -3,12 +3,12 @@ package system
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -22,41 +22,46 @@ import (
 
 // MaxImportBytes bounds a backup upload before decoding to prevent a single
 // request from consuming unbounded server memory.
-const MaxImportBytes = 10 << 20
+const MaxImportBytes = backup.DefaultMaxImportBytes
 
-// ExportBackup handles GET /api/system/backup/export. Operator-only.
+func (h *Handler) backupOptions() backup.ArchiveOptions {
+	return backup.ArchiveOptions{BlobDir: h.Config.Attachments.Dir, MaxImportBytes: h.Config.Backup.MaxImportBytes, MaxAttachmentBytes: h.Config.Attachments.MaxBytes}
+}
+
+// ExportBackup streams the v2 ZIP, staging it before sending response headers.
 func (h *Handler) ExportBackup(w http.ResponseWriter, r *http.Request) {
-	b, err := backup.Export(r.Context(), h.Store)
+	dir, err := os.MkdirTemp("", "wiselabz-export-*")
 	if err != nil {
 		httputil.Errorf(w, err)
 		return
 	}
-
-	filename := fmt.Sprintf("wiselabz-backup-%s.json", time.Now().UTC().Format("20060102-150405"))
-	w.Header().Set("Content-Disposition", `attachment; filename="`+filename+`"`)
-	httputil.JSON(w, http.StatusOK, b)
+	defer func() { _ = os.RemoveAll(dir) }()
+	run, err := backup.ExportToFile(r.Context(), h.Store, dir, h.backupOptions())
+	if err != nil {
+		httputil.Errorf(w, err)
+		return
+	}
+	w.Header().Set("Content-Type", "application/zip")
+	w.Header().Set("Content-Disposition", `attachment; filename="`+filepath.Base(run.FilePath)+`"`)
+	http.ServeFile(w, r, run.FilePath)
 }
 
-// ImportBackup handles POST /api/system/backup/import. Operator-only.
+// ImportBackup accepts bounded v1 JSON or v2 ZIP streams.
 func (h *Handler) ImportBackup(w http.ResponseWriter, r *http.Request) {
-	var b backup.Bundle
-	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, MaxImportBytes))
-	if err := decoder.Decode(&b); err != nil {
-		var maxBytesErr *http.MaxBytesError
-		if errors.As(err, &maxBytesErr) {
-			httputil.Error(w, http.StatusRequestEntityTooLarge, "request_too_large", "Backup upload exceeds the 10 MiB limit")
+	limit := h.Config.Backup.MaxImportBytes
+	if limit <= 0 {
+		limit = MaxImportBytes
+	}
+	result, err := backup.ImportStream(r.Context(), h.Store, http.MaxBytesReader(w, r.Body, limit), h.backupOptions())
+	if err != nil {
+		var maxErr *http.MaxBytesError
+		if errors.Is(err, backup.ErrImportTooLarge) || errors.As(err, &maxErr) {
+			httputil.Error(w, 413, "request_too_large", "Backup exceeds configured import limit")
 			return
 		}
-		httputil.Error(w, http.StatusBadRequest, "invalid_request", "Invalid JSON body")
+		httputil.Error(w, 400, "invalid_backup", "Invalid backup archive or bundle")
 		return
 	}
-
-	result, err := backup.Import(r.Context(), h.Store, &b)
-	if err != nil {
-		httputil.Error(w, http.StatusBadRequest, "invalid_backup", err.Error())
-		return
-	}
-
 	httputil.JSON(w, http.StatusOK, result)
 }
 
@@ -225,7 +230,7 @@ func (h *Handler) ListBackupRuns(w http.ResponseWriter, r *http.Request) {
 // Triggers a manual backup now.
 func (h *Handler) CreateBackupRun(w http.ResponseWriter, r *http.Request) {
 	// Export to file
-	run, err := backup.ExportToFile(r.Context(), h.Store, h.BackupDir)
+	run, err := backup.ExportToFile(r.Context(), h.Store, h.BackupDir, h.backupOptions())
 	if err != nil {
 		httputil.Errorf(w, err)
 		return
@@ -378,7 +383,7 @@ func (h *Handler) reregisterBackupJob(sched store.BackupSchedule) {
 
 // runBackupJob is the actual backup job that runs on schedule.
 func (h *Handler) runBackupJob(ctx context.Context, sched store.BackupSchedule) error {
-	run, err := backup.ExportToFile(ctx, h.Store, h.BackupDir)
+	run, err := backup.ExportToFile(ctx, h.Store, h.BackupDir, h.backupOptions())
 	if err != nil {
 		return fmt.Errorf("backup export to file: %w", err)
 	}

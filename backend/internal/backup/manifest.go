@@ -33,6 +33,7 @@ type Manifest struct {
 // verifying a bundle that predates the manifest sidecar.
 func BundleCounts(b *Bundle) map[string]int {
 	return map[string]int{
+		"attachments":      len(b.Attachments),
 		"connectors":       len(b.Connectors),
 		"docs":             len(b.Docs),
 		"docVersions":      len(b.DocVersions),
@@ -65,7 +66,7 @@ func BuildManifest(b *Bundle, bundleData []byte, appVersion string, schemaVersio
 // e.g. ".../wiselabz-backup-20260101-000000.json" ->
 // ".../wiselabz-backup-20260101-000000.manifest.json".
 func ManifestPath(bundlePath string) string {
-	return strings.TrimSuffix(bundlePath, ".json") + ".manifest.json"
+	return strings.TrimSuffix(strings.TrimSuffix(bundlePath, ".json"), ".zip") + ".manifest.json"
 }
 
 // WriteManifest writes m as indented JSON to path (0o600: same privacy
