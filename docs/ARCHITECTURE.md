@@ -509,6 +509,35 @@ management, with query refresh before URL expiry.
 See [BACKUP.md](BACKUP.md) for ZIP portability and [DOC_EXPORT.md](DOC_EXPORT.md)
 for attachment file/link export configuration.
 
+## Markdown/Obsidian import (#514)
+
+Instance admins import a vault zip in two steps. `POST /api/docs/import`
+streams the upload (100 MB) to `attachments.import_dir/<id>/upload.zip`
+(default `/data/imports`) and `internal/docimport` analyses it into a
+`plan.json` that the response previews. `OpenArchive` rejects absolute,
+drive-qualified and `..` entry names, more than 2000 entries, more than 500 MB
+unzipped (declared, and counted again while reading) and entries above a 100:1
+compression ratio. Only `.md`/`.markdown` notes (5 MiB each) and attachments
+that pass the blobstore sniff are read; hidden folders, SVG and everything else
+are skipped and reported.
+
+Front-matter `title:`/`connector:` (by ID or name) is parsed and stripped;
+titles fall back to the first H1, then the filename. Folders become parent docs
+whose content comes from `index.md`, `README.md` or `<folder>.md`. A connector
+doc under a lab folder moves to its connector's root, and nesting deeper than
+five levels is clamped, both with warnings. A second pass rewrites Obsidian
+embeds and relative image links to `attachment:<id>` and wikilinks/relative
+`.md` links to `/docs/<id>`, resolving by path, then basename (same folder,
+then the unique shortest path); ambiguous and unresolved links stay as text and
+are reported. Code spans and fences are left untouched.
+
+`POST /api/docs/import/{id}/commit` claims the staging directory with an atomic
+rename, publishes blobs under `blobstore.PublicationMu`, and `store.ImportDocs`
+creates every doc (origin `human`, version trigger `import`) and attachment row
+in one transaction, suffixing sibling title collisions with " (imported)".
+Embeddings sync in the background afterwards. Plans expire after an hour; the
+`docImportSweep` job removes stale staging every ten minutes.
+
 ## Data retention (decided 2026-09-05)
 
 A background job (`internal/retention`, registered with the shared cron

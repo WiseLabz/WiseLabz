@@ -94,6 +94,7 @@ above), what has to be manually re-entered after a restore.
 attachments:
   dir: /data/attachments
   max_bytes: 26214400         # 25 MiB per attachment
+  import_dir: /data/imports   # staged Markdown/Obsidian imports, removed after 1 hour
 backup:
   max_import_bytes: 1073741824 # 1 GiB per archive, including expanded data
 ```
