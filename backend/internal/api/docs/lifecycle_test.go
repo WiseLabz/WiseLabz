@@ -257,3 +257,43 @@ func TestPatchParentInOtherScopeLooksMissing(t *testing.T) {
 		t.Fatalf("cross-scope parent distinguishable from missing:\n%s\n%s", cross, missing)
 	}
 }
+
+func TestRestoreOldGeneratedTopologyConflicts(t *testing.T) {
+	h := newTestHandler(t)
+	ctx := context.Background()
+	old := &store.DocRecord{Title: "Lab Topology", Kind: "lab", Content: "old", Origin: store.DocOriginGenerated}
+	if err := h.Store.CreateDoc(ctx, old); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.Store.SoftDeleteDoc(ctx, old.ID); err != nil {
+		t.Fatal(err)
+	}
+	admin := auth.ContextWithUser(ctx, apitest.NewUser(t, h.Store, "viewer"), true)
+	restore := func() *httptest.ResponseRecorder {
+		r := httptest.NewRequest("POST", "/api/docs/"+old.ID+"/restore", nil).WithContext(admin)
+		r.SetPathValue("id", old.ID)
+		rr := httptest.NewRecorder()
+		h.RestoreDeleted(rr, r)
+		return rr
+	}
+	// A human note with the same title doesn't compete with generated docs.
+	note := &store.DocRecord{Title: "Lab Topology", Kind: "lab", Origin: store.DocOriginHuman}
+	newer := &store.DocRecord{Title: "Lab Topology", Kind: "lab", Content: "new", Origin: store.DocOriginGenerated}
+	for _, d := range []*store.DocRecord{note, newer} {
+		if err := h.Store.CreateDoc(ctx, d); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if rr := restore(); rr.Code != http.StatusConflict || !strings.Contains(rr.Body.String(), "generated_doc_exists") {
+		t.Fatalf("restore with newer generated doc: %d %s", rr.Code, rr.Body.String())
+	}
+	if _, err := h.Store.GetDeletedDoc(ctx, old.ID); err != nil {
+		t.Fatalf("refused restore must leave the doc in trash: %v", err)
+	}
+	if err := h.Store.SoftDeleteDoc(ctx, newer.ID); err != nil {
+		t.Fatal(err)
+	}
+	if rr := restore(); rr.Code != 200 {
+		t.Fatalf("restore after deleting newer: %d %s", rr.Code, rr.Body.String())
+	}
+}

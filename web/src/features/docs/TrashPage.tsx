@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
+import { isAxiosError } from 'axios';
 import { useGetDocsTrash, postDocsDocIdRestore } from '../../api/generated/docs/docs';
 import { Panel } from '../../components/ui/Panel';
 import { Button } from '../../components/ui/Button';
@@ -17,8 +18,20 @@ export function TrashPage() {
     onSuccess: () => {
       void queryClient.invalidateQueries();
     },
-    onError: () =>
-      toast.error(t('docs.human.restoreError', { defaultValue: 'Could not restore doc' })),
+    onError: (error) => {
+      if (isAxiosError(error) && error.response?.status === 409) {
+        // An old generated doc (e.g. Lab Topology) can't come back while the
+        // generator has already made a newer one.
+        toast.error(
+          t('docs.human.restoreGeneratedConflict', {
+            defaultValue:
+              'A newer generated doc with this title exists. Delete it first to restore this one.',
+          })
+        );
+        return;
+      }
+      toast.error(t('docs.human.restoreError', { defaultValue: 'Could not restore doc' }));
+    },
   });
   return (
     <div className="mx-auto max-w-205 px-6 py-6">

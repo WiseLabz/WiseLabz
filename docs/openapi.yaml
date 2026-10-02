@@ -1733,6 +1733,10 @@ paths:
         '400': { $ref: '#/components/responses/BadRequest' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: >-
+            The batch holds a generated lab doc (e.g. Lab Topology) and a newer
+            active generated lab doc with the same title exists
   /docs/tree:
     get:
       tags: [docs]

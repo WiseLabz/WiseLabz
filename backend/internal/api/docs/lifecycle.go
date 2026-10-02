@@ -60,6 +60,8 @@ func (h *Handler) lifecycleError(w http.ResponseWriter, err error) {
 		httputil.Error(w, http.StatusNotFound, "not_found", "Doc not found")
 	case errors.Is(err, store.ErrDocHierarchy):
 		httputil.Error(w, http.StatusBadRequest, "invalid_parent", err.Error())
+	case errors.Is(err, store.ErrGeneratedDocExists):
+		httputil.Error(w, http.StatusConflict, "generated_doc_exists", err.Error())
 	default:
 		httputil.Errorf(w, err)
 	}

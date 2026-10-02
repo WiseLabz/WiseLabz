@@ -11,6 +11,10 @@ import (
 // ErrDocHierarchy indicates an invalid scope, cycle or depth in a doc tree.
 var ErrDocHierarchy = errors.New("invalid doc hierarchy")
 
+// ErrGeneratedDocExists blocks restoring a generated lab doc (e.g. Lab
+// Topology) while a newer active generated lab doc with the same title exists.
+var ErrGeneratedDocExists = errors.New("a newer generated lab doc with the same title exists; delete it before restoring this one")
+
 // lockDocHierarchy serializes validation and writes. The harmless UPDATE takes
 // SQLite's writer lock before any reads; Postgres uses a table lock so root
 // creation and moves cannot independently validate incompatible trees.
@@ -178,6 +182,21 @@ func (s *Store) RestoreDeletedDoc(ctx context.Context, id string) error {
 			} else if err != nil {
 				return err
 			}
+		}
+		// The generator owns one generated lab doc per title; restoring an old
+		// copy next to the regenerated one would leave two.
+		var clashes int
+		err = tx.db.QueryRowContext(ctx, `WITH RECURSIVE batch(id) AS (
+   SELECT id FROM docs WHERE id = ? AND deleted_at = ?
+   UNION ALL SELECT d.id FROM docs d JOIN batch b ON d.parent_id = b.id WHERE d.deleted_at = ?
+  ) SELECT COUNT(*) FROM docs r JOIN batch b ON r.id = b.id
+  JOIN docs a ON a.title = r.title AND a.kind = 'lab' AND a.origin <> ? AND a.deleted_at IS NULL
+  WHERE r.kind = 'lab' AND r.origin <> ?`, id, d.DeletedAt, d.DeletedAt, DocOriginHuman, DocOriginHuman).Scan(&clashes)
+		if err != nil {
+			return fmt.Errorf("check generated doc clash: %w", err)
+		}
+		if clashes > 0 {
+			return ErrGeneratedDocExists
 		}
 		_, err = tx.db.ExecContext(ctx, `WITH RECURSIVE batch(id) AS (
    SELECT id FROM docs WHERE id = ? AND deleted_at = ?

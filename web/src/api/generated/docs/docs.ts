@@ -396,7 +396,7 @@ export const postDocsDocIdRestore = (
 export const getPostDocsDocIdRestoreMutationKey = () => ['postDocsDocIdRestore'] as const;
 
 export const getPostDocsDocIdRestoreMutationOptions = <
-  TError = ErrorType<BadRequestResponse | ForbiddenResponse | NotFoundResponse>,
+  TError = ErrorType<BadRequestResponse | ForbiddenResponse | NotFoundResponse | void>,
   TContext = unknown,
 >(options?: {
   mutation?: UseMutationOptions<
@@ -436,7 +436,7 @@ export type PostDocsDocIdRestoreMutationResult = NonNullable<
 >;
 
 export type PostDocsDocIdRestoreMutationError = ErrorType<
-  BadRequestResponse | ForbiddenResponse | NotFoundResponse
+  BadRequestResponse | ForbiddenResponse | NotFoundResponse | void
 >;
 export type PostDocsDocIdRestoreMutationVariables = { docId: string };
 
@@ -444,7 +444,7 @@ export type PostDocsDocIdRestoreMutationVariables = { docId: string };
  * @summary Restore a deleted subtree batch (instance admin)
  */
 export const usePostDocsDocIdRestore = <
-  TError = ErrorType<BadRequestResponse | ForbiddenResponse | NotFoundResponse>,
+  TError = ErrorType<BadRequestResponse | ForbiddenResponse | NotFoundResponse | void>,
   TContext = unknown,
 >(
   options?: {
