@@ -19,6 +19,7 @@ import { markdown } from '@codemirror/lang-markdown';
 import { EditorView } from '@codemirror/view';
 import {
   useGetDocsDocId,
+  deleteDocsDocId,
   putDocsDocId,
   postDocsDocIdAiSuggest,
   postDocsDocIdLock,
@@ -31,6 +32,8 @@ import type { DocAiSuggestionPayload } from '../../types/ws';
 import { useConnectorRole, useIsInstanceAdmin } from '../../hooks/useRole';
 import { useAuth } from '../../store/auth';
 import { useLive } from '../../store/live';
+import { Dialog } from '../../components/ui/Dialog';
+import { DocMetadataDialog } from '../../components/docs/NewDocDialog';
 import { Button } from '../../components/ui/Button';
 import { Panel } from '../../components/ui/Panel';
 import { Skeleton, SkeletonRows, ErrorState } from '../../components/ui/states';
@@ -82,6 +85,17 @@ function DocEditor() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const isInstanceAdmin = useIsInstanceAdmin();
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [metadataOpen, setMetadataOpen] = useState(false);
+  const remove = useMutation({
+    mutationFn: () => deleteDocsDocId(docId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries();
+      navigate('/docs');
+    },
+    onError: () =>
+      toast.error(t('docs.human.deleteError', { defaultValue: 'Could not delete doc' })),
+  });
 
   const userId = useAuth((s) => s.user?.id);
   const docLock = useLive((s) => s.docLocks[docId]);
@@ -307,7 +321,17 @@ function DocEditor() {
             </span>
           )}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {canMutate && (
+            <Button variant="secondary" size="sm" onClick={() => setMetadataOpen(true)}>
+              {t('docs.human.organize', { defaultValue: 'Rename or move doc' })}
+            </Button>
+          )}
+          {canMutate && (
+            <Button variant="secondary" size="sm" onClick={() => setDeleteOpen(true)}>
+              {t('docs.human.delete', { defaultValue: 'Delete doc' })}
+            </Button>
+          )}
           {canMutate && !lockHeld && (
             <Button
               variant="secondary"
@@ -352,6 +376,27 @@ function DocEditor() {
         </div>
       </header>
 
+      {metadataOpen && <DocMetadataDialog doc={doc.data} onClose={() => setMetadataOpen(false)} />}
+      <Dialog
+        open={deleteOpen}
+        onClose={() => setDeleteOpen(false)}
+        title={t('docs.human.delete', { defaultValue: 'Delete doc' })}
+      >
+        <p className="mb-4">
+          {t('docs.human.deleteConfirm', {
+            defaultValue:
+              'Move this doc and its children to trash? An instance admin can restore them.',
+          })}
+        </p>
+        <div className="flex justify-end gap-2">
+          <Button variant="secondary" onClick={() => setDeleteOpen(false)}>
+            {t('common.cancel')}
+          </Button>
+          <Button disabled={remove.isPending} onClick={() => remove.mutate()}>
+            {t('docs.human.delete', { defaultValue: 'Delete doc' })}
+          </Button>
+        </div>
+      </Dialog>
       {newerAvailable && (
         <div className="mb-4 flex items-center justify-between gap-3 rounded-md border border-warn bg-warn-tint px-3 py-2 text-xs text-warn">
           <span>{t('docs.editor.newerBanner', { version: doc.data.currentVersion })}</span>

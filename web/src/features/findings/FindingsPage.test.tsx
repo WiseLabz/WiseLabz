@@ -67,7 +67,7 @@ describe('FindingsPage credential_rotation (#239 PR1)', () => {
   it('shows compliance in the filter and links an admin to its rule', async () => {
     server.use(
       http.get('/api/findings', () => HttpResponse.json({ items: [{ id: 'f1', connectorId: 'c1', connectorName: 'docker', docId: null, ruleId: 'r1', checkType: 'compliance', severity: 'warning', title: 'Host network', description: 'container', remediationLink: '/services/c1', status: 'open', detectedCount: 1, firstDetectedAt: '2026-01-01T00:00:00Z', lastSeenAt: '2026-01-01T00:00:00Z', resolvedAt: null }], total: 1, page: 1, pageSize: 20 })),
-      http.get('/api/me', () => HttpResponse.json({ id: 'u1', username: 'admin', role: 'admin', instanceAdminRole: 'admin' })),
+      http.get('/api/me', () => HttpResponse.json({ id: 'u1', username: 'admin', role: 'admin' })),
     );
     renderFindings();
     expect(await screen.findByRole('option', { name: 'Compliance' })).toBeInTheDocument();

@@ -111,7 +111,7 @@ func (s *Store) CreateDocEditProposal(ctx context.Context, p *DocEditProposal) e
 func (s *Store) GetDocEditProposal(ctx context.Context, id string) (*DocEditProposal, error) {
 	p, err := scanDocEditProposal(s.db.QueryRowContext(ctx, `
 		SELECT `+docEditProposalColumns+`
-		FROM doc_edit_proposals p JOIN docs d ON d.id = p.doc_id WHERE p.id = ?`, id))
+		FROM doc_edit_proposals p JOIN docs d ON d.id = p.doc_id WHERE p.id = ? AND d.deleted_at IS NULL`, id))
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return nil, err
@@ -136,7 +136,7 @@ type ProposalScope struct {
 // paging happen in SQL, and Content is left empty (use GetDocEditProposal for
 // the body) so a long queue of large proposals is never loaded into memory.
 func (s *Store) ListDocEditProposals(ctx context.Context, status string, scope ProposalScope, limit, offset int) ([]DocEditProposal, int, error) {
-	where := ` WHERE 1 = 1`
+	where := ` WHERE d.deleted_at IS NULL`
 	var args []any
 	if status != "" {
 		where += ` AND p.status = ?`

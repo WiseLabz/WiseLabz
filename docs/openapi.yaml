@@ -1690,6 +1690,53 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/DocPage' }
+    post:
+      tags: [docs]
+      summary: Create a human doc (lab admin or connector operator)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DocCreate' }
+      responses:
+        '201':
+          description: Created with revision one
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Doc' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /docs/trash:
+    get:
+      tags: [docs]
+      summary: List deleted docs (instance admin)
+      responses:
+        '200':
+          description: Deleted docs including deletion batch metadata
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Doc' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /docs/{docId}/restore:
+    post:
+      tags: [docs]
+      summary: Restore a deleted subtree batch (instance admin)
+      parameters: [{ $ref: '#/components/parameters/DocId' }]
+      responses:
+        '200':
+          description: Restored root doc
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Doc' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: >-
+            The batch holds a generated lab doc (e.g. Lab Topology) and a newer
+            active generated lab doc with the same title exists
   /docs/tree:
     get:
       tags: [docs]
@@ -1747,6 +1794,30 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Doc' }
+    patch:
+      tags: [docs]
+      summary: Rename or re-parent a doc in the same scope (maximum depth five)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DocPatch' }
+      responses:
+        '200':
+          description: Updated metadata
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Doc' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [docs]
+      summary: Soft-delete doc and its active descendants
+      responses:
+        '204': { description: Subtree moved to trash }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
   /docs/{docId}/versions:
     get:
       tags: [docs]
@@ -4464,6 +4535,19 @@ components:
         change: { type: string, enum: [added, removed] }
 
     # ── docs ──
+    DocCreate:
+      type: object
+      required: [title]
+      properties:
+        title: { type: string, minLength: 1, maxLength: 500 }
+        serviceId: { type: string, description: Empty or omitted for lab scope }
+        parentId: { type: string, description: Same-scope active parent; omitted for root }
+        content: { type: string }
+    DocPatch:
+      type: object
+      properties:
+        title: { type: string, minLength: 1, maxLength: 500 }
+        parentId: { type: string, description: Empty string moves to scope root }
     DocNode:
       type: object
       description: Tree node (recursive)
@@ -4473,6 +4557,9 @@ components:
         title: { type: string }
         kind: { type: string, enum: [lab, service] }
         serviceId: { type: string, nullable: true }
+        parentId: { type: string }
+        origin: { type: string, enum: [generated, human] }
+        branch: { type: boolean, description: True for virtual scope groups }
         children:
           type: array
           items: { $ref: '#/components/schemas/DocNode' }
@@ -4484,6 +4571,10 @@ components:
         title: { type: string }
         kind: { type: string, enum: [lab, service] }
         serviceId: { type: string, nullable: true }
+        parentId: { type: string }
+        deletedAt: { type: string, description: Empty for active docs; UTC deletion batch timestamp otherwise }
+        createdBy: { type: string }
+        createdAt: { type: string, format: date-time }
         content:
           type: string
           description: >
@@ -5625,6 +5716,7 @@ components:
         syncRunDays: { type: integer, description: Delete sync run history older than this many days; 0 disables cleanup for this category }
         auditDays: { type: integer, description: Delete audit log records older than this many days; 0 disables cleanup for this category }
         healthCheckDays: { type: integer, description: Delete health-check time-series rows older than this many days; 0 disables cleanup for this category }
+        deletedDocsDays: { type: integer, minimum: 0, default: 30, description: Permanently purge trash older than this many days; 0 disables cleanup }
         reportDays: { type: integer, description: Delete generated reports older than this many days; 0 disables cleanup for this category }
         cronExpr: { type: string, description: 5-field or 6-field (with leading seconds) cron expression, example: '0 0 * * *' }
         updatedAt: { type: string, format: date-time }

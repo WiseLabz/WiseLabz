@@ -26,8 +26,10 @@ func mountDocRoutes(r chi.Router, d routerDeps) {
 	r.Route("/docs", func(r chi.Router) {
 		// GET routes are default-deny inside the handlers (List/Tree
 		// filter, Get/ByService 404 on a missing grant); lab-wide docs
-		// (no connector) stay visible to any authenticated user.
+		// (no connector) expose human notes to users and generated inventory to admins.
 		r.Get("/", d.docH.List)
+		r.Post("/", d.docH.Create)
+		r.With(auth.RequireInstanceAdmin).Get("/trash", d.docH.Trash)
 		r.Get("/tree", d.docH.Tree)
 		r.Get("/template-schema", d.docH.TemplateSchema)
 		r.Get("/service/{id}", d.docH.ByService)
@@ -50,6 +52,9 @@ func mountDocRoutes(r chi.Router, d routerDeps) {
 		// connector ID directly from the path.
 		r.Post("/generate", d.docH.Generate)
 		r.Put("/{id}", d.docH.Save)
+		r.Patch("/{id}", d.docH.Patch)
+		r.Delete("/{id}", d.docH.Delete)
+		r.With(auth.RequireInstanceAdmin).Post("/{id}/restore", d.docH.RestoreDeleted)
 		r.Post("/{id}/versions/{rev}/restore", d.docH.Restore)
 		r.Post("/{id}/ai-suggest", d.docH.AISuggest)
 		r.Post("/{id}/lock", d.docH.AcquireLock)

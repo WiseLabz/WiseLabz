@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { ReactNode } from 'react';
 import { useCanMutate, useConnectorRole, useIsInstanceAdmin, useOperatorConnectorIds } from './useRole';
 
-let meData: unknown = { id: 'u1', instanceAdminRole: 'user' };
+let meData: unknown = { id: 'u1', role: 'user' };
 let connectorsData: unknown = [
   { id: 'c1', myRole: 'operator' },
   { id: 'c2', myRole: 'viewer' },
@@ -25,11 +25,14 @@ function wrapper({ children }: { children: ReactNode }) {
 }
 
 describe('useRole hooks (#240 PR1)', () => {
-  it('useIsInstanceAdmin reads instanceAdminRole off /me', () => {
-    meData = { instanceAdminRole: 'admin' };
+  it('useIsInstanceAdmin reads the instance-admin role that /me sends as role', () => {
+    meData = { id: 'u1', role: 'admin' };
     expect(renderHook(() => useIsInstanceAdmin(), { wrapper }).result.current).toBe(true);
 
-    meData = { instanceAdminRole: 'user' };
+    meData = { id: 'u1', role: 'user' };
+    expect(renderHook(() => useIsInstanceAdmin(), { wrapper }).result.current).toBe(false);
+
+    meData = undefined;
     expect(renderHook(() => useIsInstanceAdmin(), { wrapper }).result.current).toBe(false);
   });
 
@@ -54,19 +57,19 @@ describe('useRole hooks (#240 PR1)', () => {
   });
 
   it('useCanMutate is true for an instance admin with zero connector grants', () => {
-    meData = { instanceAdminRole: 'admin' };
+    meData = { role: 'admin' };
     connectorsData = [];
     expect(renderHook(() => useCanMutate(), { wrapper }).result.current).toBe(true);
   });
 
   it('useCanMutate is true for a non-admin with at least one operator grant', () => {
-    meData = { instanceAdminRole: 'user' };
+    meData = { role: 'user' };
     connectorsData = [{ id: 'c1', myRole: 'operator' }];
     expect(renderHook(() => useCanMutate(), { wrapper }).result.current).toBe(true);
   });
 
   it('useCanMutate is false for a non-admin viewer with no operator grants', () => {
-    meData = { instanceAdminRole: 'user' };
+    meData = { role: 'user' };
     connectorsData = [{ id: 'c1', myRole: 'viewer' }];
     expect(renderHook(() => useCanMutate(), { wrapper }).result.current).toBe(false);
   });

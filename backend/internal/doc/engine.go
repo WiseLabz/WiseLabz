@@ -360,7 +360,8 @@ func (e *Engine) GenerateLabTopology(ctx context.Context) (*GenerateResult, erro
 	}
 	var existing *store.DocRecord
 	for i := range docs {
-		if docs[i].Kind == "lab" && docs[i].Title == labTopologyTitle {
+		// A human lab note may share the title; only the generated doc is ours.
+		if docs[i].Kind == "lab" && docs[i].Title == labTopologyTitle && docs[i].Origin != store.DocOriginHuman {
 			existing = &docs[i]
 			break
 		}

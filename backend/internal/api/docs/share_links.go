@@ -310,7 +310,7 @@ func (h *Handler) ShareLinkTree(w http.ResponseWriter, r *http.Request) {
 		// connector — even if the doc happens to have connector siblings.
 		d, err := h.Store.GetDoc(r.Context(), node.docID)
 		if err != nil {
-			httputil.Errorf(w, err)
+			httputil.HandleStoreError(w, err)
 			return
 		}
 		root.Children = []TreeNode{{ID: d.ID, Title: d.Title, Kind: d.Kind}}
@@ -324,12 +324,12 @@ func (h *Handler) ShareLinkTree(w http.ResponseWriter, r *http.Request) {
 	}
 	connectors, err := h.Store.ListConnectorNames(r.Context())
 	if err != nil {
-		httputil.Errorf(w, err)
+		httputil.HandleStoreError(w, err)
 		return
 	}
 	docsByService, err := h.Store.ListDocsGroupedByService(r.Context())
 	if err != nil {
-		httputil.Errorf(w, err)
+		httputil.HandleStoreError(w, err)
 		return
 	}
 	for _, c := range connectors {
@@ -363,7 +363,7 @@ func (h *Handler) ShareLinkDoc(w http.ResponseWriter, r *http.Request) {
 		}
 		d, err := h.Store.GetDoc(r.Context(), docID)
 		if err != nil {
-			httputil.Errorf(w, err)
+			httputil.HandleStoreError(w, err)
 			return
 		}
 		httputil.JSON(w, http.StatusOK, d)
@@ -376,7 +376,7 @@ func (h *Handler) ShareLinkDoc(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		httputil.Errorf(w, err)
+		httputil.HandleStoreError(w, err)
 		return
 	}
 

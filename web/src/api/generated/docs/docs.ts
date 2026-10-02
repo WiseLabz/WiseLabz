@@ -27,11 +27,13 @@ import type {
   AiSuggestRequest,
   BadRequestResponse,
   Doc,
+  DocCreate,
   DocEditProposal,
   DocEditProposalPage,
   DocLock,
   DocNode,
   DocPage,
+  DocPatch,
   DocSave,
   DocVersion,
   DocVersionMeta,
@@ -185,6 +187,284 @@ export function useGetDocs<
   return withQueryKey(query, queryOptions.queryKey);
 }
 
+/**
+ * @summary Create a human doc (lab admin or connector operator)
+ */
+export const postDocs = (
+  docCreate: BodyType<DocCreate>,
+  options?: SecondParameter<typeof customInstance>,
+  signal?: AbortSignal
+) => {
+  return customInstance<Doc>(
+    {
+      url: `/docs`,
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      data: docCreate,
+      signal,
+    },
+    options
+  );
+};
+
+export const getPostDocsMutationKey = () => ['postDocs'] as const;
+
+export const getPostDocsMutationOptions = <
+  TError = ErrorType<BadRequestResponse | ForbiddenResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof postDocs>>,
+    TError,
+    PostDocsMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof postDocs>>,
+  TError,
+  PostDocsMutationVariables,
+  TContext
+> => {
+  const mutationKey = getPostDocsMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof postDocs>>,
+    PostDocsMutationVariables
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return postDocs(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type PostDocsMutationResult = NonNullable<Awaited<ReturnType<typeof postDocs>>>;
+export type PostDocsMutationBody = BodyType<DocCreate>;
+export type PostDocsMutationError = ErrorType<BadRequestResponse | ForbiddenResponse>;
+export type PostDocsMutationVariables = { data: BodyType<DocCreate> };
+
+/**
+ * @summary Create a human doc (lab admin or connector operator)
+ */
+export const usePostDocs = <
+  TError = ErrorType<BadRequestResponse | ForbiddenResponse>,
+  TContext = unknown,
+>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof postDocs>>,
+      TError,
+      PostDocsMutationVariables,
+      TContext
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseMutationResult<
+  Awaited<ReturnType<typeof postDocs>>,
+  TError,
+  PostDocsMutationVariables,
+  TContext
+> => {
+  return useMutation(getPostDocsMutationOptions(options), queryClient);
+};
+/**
+ * @summary List deleted docs (instance admin)
+ */
+export const getDocsTrash = (
+  options?: SecondParameter<typeof customInstance>,
+  signal?: AbortSignal
+) => {
+  return customInstance<Doc[]>({ url: `/docs/trash`, method: 'GET', signal }, options);
+};
+
+export const getGetDocsTrashQueryKey = () => {
+  return [`/docs/trash`] as const;
+};
+
+export const getGetDocsTrashQueryOptions = <
+  TData = Awaited<ReturnType<typeof getDocsTrash>>,
+  TError = ErrorType<ForbiddenResponse>,
+>(options?: {
+  query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getDocsTrash>>, TError, TData>>;
+  request?: SecondParameter<typeof customInstance>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetDocsTrashQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getDocsTrash>>> = ({ signal }) =>
+    getDocsTrash(requestOptions, signal);
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getDocsTrash>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type GetDocsTrashQueryResult = NonNullable<Awaited<ReturnType<typeof getDocsTrash>>>;
+export type GetDocsTrashQueryError = ErrorType<ForbiddenResponse>;
+
+export function useGetDocsTrash<
+  TData = Awaited<ReturnType<typeof getDocsTrash>>,
+  TError = ErrorType<ForbiddenResponse>,
+>(
+  options: {
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof getDocsTrash>>, TError, TData>> &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getDocsTrash>>,
+          TError,
+          Awaited<ReturnType<typeof getDocsTrash>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useGetDocsTrash<
+  TData = Awaited<ReturnType<typeof getDocsTrash>>,
+  TError = ErrorType<ForbiddenResponse>,
+>(
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getDocsTrash>>, TError, TData>> &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getDocsTrash>>,
+          TError,
+          Awaited<ReturnType<typeof getDocsTrash>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useGetDocsTrash<
+  TData = Awaited<ReturnType<typeof getDocsTrash>>,
+  TError = ErrorType<ForbiddenResponse>,
+>(
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getDocsTrash>>, TError, TData>>;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * @summary List deleted docs (instance admin)
+ */
+
+export function useGetDocsTrash<
+  TData = Awaited<ReturnType<typeof getDocsTrash>>,
+  TError = ErrorType<ForbiddenResponse>,
+>(
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getDocsTrash>>, TError, TData>>;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getGetDocsTrashQueryOptions(options);
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+/**
+ * @summary Restore a deleted subtree batch (instance admin)
+ */
+export const postDocsDocIdRestore = (
+  docId: string,
+  options?: SecondParameter<typeof customInstance>,
+  signal?: AbortSignal
+) => {
+  return customInstance<Doc>({ url: `/docs/${docId}/restore`, method: 'POST', signal }, options);
+};
+
+export const getPostDocsDocIdRestoreMutationKey = () => ['postDocsDocIdRestore'] as const;
+
+export const getPostDocsDocIdRestoreMutationOptions = <
+  TError = ErrorType<BadRequestResponse | ForbiddenResponse | NotFoundResponse | void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof postDocsDocIdRestore>>,
+    TError,
+    PostDocsDocIdRestoreMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof postDocsDocIdRestore>>,
+  TError,
+  PostDocsDocIdRestoreMutationVariables,
+  TContext
+> => {
+  const mutationKey = getPostDocsDocIdRestoreMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof postDocsDocIdRestore>>,
+    PostDocsDocIdRestoreMutationVariables
+  > = (props) => {
+    const { docId } = props ?? {};
+
+    return postDocsDocIdRestore(docId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type PostDocsDocIdRestoreMutationResult = NonNullable<
+  Awaited<ReturnType<typeof postDocsDocIdRestore>>
+>;
+
+export type PostDocsDocIdRestoreMutationError = ErrorType<
+  BadRequestResponse | ForbiddenResponse | NotFoundResponse | void
+>;
+export type PostDocsDocIdRestoreMutationVariables = { docId: string };
+
+/**
+ * @summary Restore a deleted subtree batch (instance admin)
+ */
+export const usePostDocsDocIdRestore = <
+  TError = ErrorType<BadRequestResponse | ForbiddenResponse | NotFoundResponse | void>,
+  TContext = unknown,
+>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof postDocsDocIdRestore>>,
+      TError,
+      PostDocsDocIdRestoreMutationVariables,
+      TContext
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseMutationResult<
+  Awaited<ReturnType<typeof postDocsDocIdRestore>>,
+  TError,
+  PostDocsDocIdRestoreMutationVariables,
+  TContext
+> => {
+  return useMutation(getPostDocsDocIdRestoreMutationOptions(options), queryClient);
+};
 /**
  * @summary Hierarchical doc tree (lab root + per-service children)
  */
@@ -632,6 +912,178 @@ export const usePutDocsDocId = <
   TContext
 > => {
   return useMutation(getPutDocsDocIdMutationOptions(options), queryClient);
+};
+/**
+ * @summary Rename or re-parent a doc in the same scope (maximum depth five)
+ */
+export const patchDocsDocId = (
+  docId: string,
+  docPatch: BodyType<DocPatch>,
+  options?: SecondParameter<typeof customInstance>,
+  signal?: AbortSignal
+) => {
+  return customInstance<Doc>(
+    {
+      url: `/docs/${docId}`,
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      data: docPatch,
+      signal,
+    },
+    options
+  );
+};
+
+export const getPatchDocsDocIdMutationKey = () => ['patchDocsDocId'] as const;
+
+export const getPatchDocsDocIdMutationOptions = <
+  TError = ErrorType<BadRequestResponse | ForbiddenResponse | NotFoundResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof patchDocsDocId>>,
+    TError,
+    PatchDocsDocIdMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof patchDocsDocId>>,
+  TError,
+  PatchDocsDocIdMutationVariables,
+  TContext
+> => {
+  const mutationKey = getPatchDocsDocIdMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof patchDocsDocId>>,
+    PatchDocsDocIdMutationVariables
+  > = (props) => {
+    const { docId, data } = props ?? {};
+
+    return patchDocsDocId(docId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type PatchDocsDocIdMutationResult = NonNullable<Awaited<ReturnType<typeof patchDocsDocId>>>;
+export type PatchDocsDocIdMutationBody = BodyType<DocPatch>;
+export type PatchDocsDocIdMutationError = ErrorType<
+  BadRequestResponse | ForbiddenResponse | NotFoundResponse
+>;
+export type PatchDocsDocIdMutationVariables = { docId: string; data: BodyType<DocPatch> };
+
+/**
+ * @summary Rename or re-parent a doc in the same scope (maximum depth five)
+ */
+export const usePatchDocsDocId = <
+  TError = ErrorType<BadRequestResponse | ForbiddenResponse | NotFoundResponse>,
+  TContext = unknown,
+>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof patchDocsDocId>>,
+      TError,
+      PatchDocsDocIdMutationVariables,
+      TContext
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseMutationResult<
+  Awaited<ReturnType<typeof patchDocsDocId>>,
+  TError,
+  PatchDocsDocIdMutationVariables,
+  TContext
+> => {
+  return useMutation(getPatchDocsDocIdMutationOptions(options), queryClient);
+};
+/**
+ * @summary Soft-delete doc and its active descendants
+ */
+export const deleteDocsDocId = (
+  docId: string,
+  options?: SecondParameter<typeof customInstance>,
+  signal?: AbortSignal
+) => {
+  return customInstance<void>({ url: `/docs/${docId}`, method: 'DELETE', signal }, options);
+};
+
+export const getDeleteDocsDocIdMutationKey = () => ['deleteDocsDocId'] as const;
+
+export const getDeleteDocsDocIdMutationOptions = <
+  TError = ErrorType<ForbiddenResponse | NotFoundResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteDocsDocId>>,
+    TError,
+    DeleteDocsDocIdMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteDocsDocId>>,
+  TError,
+  DeleteDocsDocIdMutationVariables,
+  TContext
+> => {
+  const mutationKey = getDeleteDocsDocIdMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteDocsDocId>>,
+    DeleteDocsDocIdMutationVariables
+  > = (props) => {
+    const { docId } = props ?? {};
+
+    return deleteDocsDocId(docId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteDocsDocIdMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteDocsDocId>>
+>;
+
+export type DeleteDocsDocIdMutationError = ErrorType<ForbiddenResponse | NotFoundResponse>;
+export type DeleteDocsDocIdMutationVariables = { docId: string };
+
+/**
+ * @summary Soft-delete doc and its active descendants
+ */
+export const useDeleteDocsDocId = <
+  TError = ErrorType<ForbiddenResponse | NotFoundResponse>,
+  TContext = unknown,
+>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof deleteDocsDocId>>,
+      TError,
+      DeleteDocsDocIdMutationVariables,
+      TContext
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseMutationResult<
+  Awaited<ReturnType<typeof deleteDocsDocId>>,
+  TError,
+  DeleteDocsDocIdMutationVariables,
+  TContext
+> => {
+  return useMutation(getDeleteDocsDocIdMutationOptions(options), queryClient);
 };
 /**
  * @summary Version history list for a doc node

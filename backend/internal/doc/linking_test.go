@@ -211,3 +211,30 @@ func TestSnapshotCacheRefreshesOnNewSnapshot(t *testing.T) {
 		t.Fatalf("latest after new snapshot = %+v, %v; want refreshed entities", next, err)
 	}
 }
+
+func TestGenerateLabTopologyLeavesHumanNoteWithSameTitle(t *testing.T) {
+	ctx := context.Background()
+	s := newEngineTestStore(t)
+	seedEngineConnectorWithEntities(t, s, "Proxmox", "virtualization", "proxmox", []connector.SnapshotEntity{
+		{Kind: "vm", Name: "web-01", IP: "10.0.0.5"},
+	})
+	note := &store.DocRecord{Title: labTopologyTitle, Content: "my notes"}
+	if err := s.CreateHumanDoc(ctx, note); err != nil {
+		t.Fatalf("CreateHumanDoc() error: %v", err)
+	}
+
+	result, err := NewEngine(s).GenerateLabTopology(ctx)
+	if err != nil {
+		t.Fatalf("GenerateLabTopology() error: %v", err)
+	}
+	if result.DocID == note.ID {
+		t.Fatal("GenerateLabTopology() reused the human note")
+	}
+	got, err := s.GetDoc(ctx, note.ID)
+	if err != nil {
+		t.Fatalf("GetDoc() error: %v", err)
+	}
+	if got.Content != "my notes" || got.Origin != store.DocOriginHuman {
+		t.Fatalf("human note changed: origin=%q content=%q", got.Origin, got.Content)
+	}
+}

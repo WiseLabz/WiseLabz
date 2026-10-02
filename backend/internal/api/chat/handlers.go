@@ -67,8 +67,8 @@ func (h *Handler) CreateConversation(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		} else if visible {
-			// Lab-wide docs (e.g. Lab Topology) are instance-admin only.
-			visible = auth.InstanceAdminFromContext(r.Context())
+			// Generated lab docs are instance-admin only; human notes are shared.
+			visible = d.Origin == store.DocOriginHuman || auth.InstanceAdminFromContext(r.Context())
 		}
 		if !visible {
 			httputil.Error(w, http.StatusNotFound, "not_found", "Doc not found")

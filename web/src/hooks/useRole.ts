@@ -1,8 +1,9 @@
 /**
  * Role helpers (#240 PR1). Access is now per-connector: a user's role on a
  * connector comes from `myRole` on the fetched connector, not a flat
- * instance-wide role. A separate `instanceAdminRole` on `/me` covers
- * non-connector actions (user management, API keys, granting permissions).
+ * instance-wide role. The instance-admin role, which `/me` serializes as
+ * `role: 'admin' | 'user'`, covers non-connector actions (user management,
+ * API keys, granting permissions).
  * The UI uses these only to hide controls the user can't action — the server
  * enforces the real boundary on every mutating endpoint (ARCHITECTURE.md).
  */
@@ -12,13 +13,15 @@ import type { Connector, User } from '../api/model';
 
 // TODO: fold into docs/openapi.yaml once the backend PR1 spec update lands —
 // see src/api/permissions.ts for why these are hand-typed for now.
-type UserWithInstanceAdmin = User & { instanceAdminRole?: 'admin' | 'user' };
+// The generated Role enum (viewer/operator) is stale: /me sends the
+// instance-admin role as `role`.
+type MeUser = Omit<User, 'role'> & { role?: 'admin' | 'user' };
 type ConnectorWithRole = Connector & { myRole?: 'viewer' | 'operator' | '' };
 
 /** True for the flat, non-connector-scoped instance-admin role. */
 export function useIsInstanceAdmin(): boolean {
   const { data } = useGetMe();
-  return (data as UserWithInstanceAdmin | undefined)?.instanceAdminRole === 'admin';
+  return (data as MeUser | undefined)?.role === 'admin';
 }
 
 /** The current user's role on one connector, or undefined if no grant. */

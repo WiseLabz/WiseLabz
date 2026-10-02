@@ -564,3 +564,25 @@ func TestComplianceSnapshotUnavailablePreservesFindings(t *testing.T) {
 		})
 	}
 }
+
+func TestDeletedDocsExcludedFromQualityChecks(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	conn := createConnector(t, s, "platform-team")
+	d := &store.DocRecord{Title: "Old empty note", ServiceID: conn.ID, UpdatedAt: time.Now().UTC().AddDate(0, 0, -40).Format(time.RFC3339)}
+	if err := s.CreateHumanDoc(ctx, d); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SoftDeleteDoc(ctx, d.ID); err != nil {
+		t.Fatal(err)
+	}
+	checker := NewChecker(s, nil, nil, RotationConfig{})
+	if err := checker.RunForConnector(ctx, conn.ID); err != nil {
+		t.Fatal(err)
+	}
+	for _, check := range []string{"stale", "empty"} {
+		if got := findings(t, s, conn.ID, check, "open"); len(got) != 0 {
+			t.Fatalf("deleted doc finding %s: %+v", check, got)
+		}
+	}
+}

@@ -708,3 +708,28 @@ func TestResolveShareLinkRejectsDisabledCreator(t *testing.T) {
 		t.Fatalf("disabled legacy creator: %d %s", rr.Code, rr.Body)
 	}
 }
+
+func TestSharedConnectorOmitsDeletedDoc(t *testing.T) {
+	h := newTestHandler(t)
+	conn := seedConnector(t, h.Store)
+	d := seedDoc(t, h.Store, conn.ID)
+	if err := h.Store.SoftDeleteDoc(context.Background(), d.ID); err != nil {
+		t.Fatal(err)
+	}
+	scope := shareLinkScope{node: shareLinkNode{kind: "connector", connectorIDs: []string{conn.ID}}}
+	r := httptest.NewRequest("GET", "/api/share/test/tree", nil)
+	r = r.WithContext(contextWithShareLink(r.Context(), &scope))
+	rr := httptest.NewRecorder()
+	h.ShareLinkTree(rr, r)
+	if rr.Code != 200 || strings.Contains(rr.Body.String(), d.ID) {
+		t.Fatalf("tree: %d %s", rr.Code, rr.Body.String())
+	}
+	r = httptest.NewRequest("GET", "/api/share/test/docs/"+d.ID, nil)
+	r.SetPathValue("docId", d.ID)
+	r = r.WithContext(contextWithShareLink(r.Context(), &scope))
+	rr = httptest.NewRecorder()
+	h.ShareLinkDoc(rr, r)
+	if rr.Code != 404 {
+		t.Fatalf("doc: %d %s", rr.Code, rr.Body.String())
+	}
+}

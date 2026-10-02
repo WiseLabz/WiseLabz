@@ -295,6 +295,7 @@ func TestLoadEnvOverrideAllFields(t *testing.T) {
 		"WISELABZ_DOC_EXPORT_GIT_AUTHOR_EMAIL":          "bot@example.com",
 		"WISELABZ_DOC_EXPORT_GIT_TOKEN":                 "tok",
 		"WISELABZ_RETENTION_REPORT_DAYS":                "7",
+		"WISELABZ_RETENTION_DELETED_DOCS_DAYS":          "8",
 		"WISELABZ_SERVER_PUBLIC_URL":                    "https://reports.example.com",
 		"WISELABZ_DOC_EXPORT_GIT_COMMIT_MODE":           "per_revision",
 		"WISELABZ_DOC_EXPORT_GIT_AUTHOR_FROM_USER":      "true",
@@ -324,7 +325,7 @@ func TestLoadEnvOverrideAllFields(t *testing.T) {
 		Health:    HealthSettings{CronExpr: "*/30 * * * * *"},
 		Rotation:  RotationSettings{MaxAgeDays: 45, WarnDays: 7},
 		Log:       LogSettings{Level: "debug", Format: "json"},
-		Retention: RetentionSettings{SnapshotDays: 1, DocVersionDays: 2, AlertDays: 3, SyncRunDays: 4, AuditDays: 5, HealthCheckDays: 6, ReportDays: 7, CronExpr: "0 4 * * *"},
+		Retention: RetentionSettings{SnapshotDays: 1, DocVersionDays: 2, AlertDays: 3, SyncRunDays: 4, AuditDays: 5, HealthCheckDays: 6, ReportDays: 7, DeletedDocsDays: 8, CronExpr: "0 4 * * *"},
 		Backup:    BackupSettings{Dir: "/tmp/backups", CronExpr: "0 5 * * *", MaxBackups: 1, MaxAgeHours: 2, Enabled: false},
 		DocExport: DocExportSettings{Dir: "/tmp/docexport", CronExpr: "0 6 * * *", Enabled: true, Git: DocExportGitSettings{
 			Remote: "https://git.example.com/org/docs.git", Branch: "export", Path: "lab/docs",

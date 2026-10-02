@@ -271,3 +271,22 @@ func TestRunCleanupIdempotent(t *testing.T) {
 		t.Fatalf("sync runs after second cleanup = %d, want 0", len(runs))
 	}
 }
+
+func TestCleanupPurgesOldTrash(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	old := &store.DocRecord{Title: "Old", Origin: store.DocOriginHuman, DeletedAt: time.Now().UTC().AddDate(0, 0, -31).Format(time.RFC3339)}
+	recent := &store.DocRecord{Title: "Recent", Origin: store.DocOriginHuman, DeletedAt: time.Now().UTC().Format(time.RFC3339)}
+	for _, d := range []*store.DocRecord{old, recent} {
+		if err := s.CreateDoc(ctx, d); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := RunCleanupOnce(ctx, s, store.RetentionSettings{DeletedDocsDays: 30}, testLogger()); err != nil {
+		t.Fatal(err)
+	}
+	trash, err := s.ListDeletedDocs(ctx)
+	if err != nil || len(trash) != 1 || trash[0].ID != recent.ID {
+		t.Fatalf("trash: %+v %v", trash, err)
+	}
+}

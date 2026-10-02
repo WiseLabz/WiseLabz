@@ -34,6 +34,7 @@ func (h *Handler) GetRetentionSettings(w http.ResponseWriter, r *http.Request) {
 			AuditDays:       180,
 			HealthCheckDays: 90,
 			ReportDays:      90,
+			DeletedDocsDays: 30,
 			CronExpr:        "0 0 * * *",
 		}
 	}
@@ -46,6 +47,7 @@ func (h *Handler) GetRetentionSettings(w http.ResponseWriter, r *http.Request) {
 		"auditDays":       rs.AuditDays,
 		"healthCheckDays": rs.HealthCheckDays,
 		"reportDays":      rs.ReportDays,
+		"deletedDocsDays": rs.DeletedDocsDays,
 		"cronExpr":        rs.CronExpr,
 		"updatedAt":       rs.UpdatedAt,
 	})
@@ -59,6 +61,7 @@ type RetentionSettingsRequest struct {
 	SyncRunDays     int    `json:"syncRunDays"`
 	AuditDays       int    `json:"auditDays"`
 	HealthCheckDays int    `json:"healthCheckDays"`
+	DeletedDocsDays *int   `json:"deletedDocsDays"`
 	ReportDays      int    `json:"reportDays"`
 	CronExpr        string `json:"cronExpr"`
 }
@@ -84,6 +87,13 @@ func (h *Handler) UpdateRetentionSettings(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	// Omitting deletedDocsDays keeps the stored value so older clients don't reset it.
+	deletedDays := 30
+	if req.DeletedDocsDays != nil {
+		deletedDays = *req.DeletedDocsDays
+	} else if current, err := h.Store.GetRetentionSettings(r.Context()); err == nil {
+		deletedDays = current.DeletedDocsDays
+	}
 	var dayErrs []httputil.FieldError
 	for _, f := range []struct {
 		name string
@@ -96,6 +106,7 @@ func (h *Handler) UpdateRetentionSettings(w http.ResponseWriter, r *http.Request
 		{"auditDays", req.AuditDays},
 		{"healthCheckDays", req.HealthCheckDays},
 		{"reportDays", req.ReportDays},
+		{"deletedDocsDays", deletedDays},
 	} {
 		if f.days < 0 {
 			dayErrs = append(dayErrs, httputil.FieldError{Field: f.name, Msg: "must be >= 0 (0 disables cleanup)"})
@@ -114,6 +125,7 @@ func (h *Handler) UpdateRetentionSettings(w http.ResponseWriter, r *http.Request
 		AuditDays:       req.AuditDays,
 		HealthCheckDays: req.HealthCheckDays,
 		ReportDays:      req.ReportDays,
+		DeletedDocsDays: deletedDays,
 		CronExpr:        req.CronExpr,
 	}
 	if err := h.Store.UpsertRetentionSettings(r.Context(), newSettings); err != nil {
@@ -135,6 +147,7 @@ func (h *Handler) UpdateRetentionSettings(w http.ResponseWriter, r *http.Request
 		"auditDays":       newSettings.AuditDays,
 		"healthCheckDays": newSettings.HealthCheckDays,
 		"reportDays":      newSettings.ReportDays,
+		"deletedDocsDays": newSettings.DeletedDocsDays,
 		"cronExpr":        newSettings.CronExpr,
 		"updatedAt":       newSettings.UpdatedAt,
 	})
@@ -161,6 +174,7 @@ func (h *Handler) InitRetentionJob(ctx context.Context) {
 			AuditDays:       h.Config.Retention.AuditDays,
 			HealthCheckDays: h.Config.Retention.HealthCheckDays,
 			ReportDays:      h.Config.Retention.ReportDays,
+			DeletedDocsDays: h.Config.Retention.DeletedDocsDays,
 			CronExpr:        h.Config.Retention.CronExpr,
 		}
 		if err := h.Store.UpsertRetentionSettings(ctx, rs); err != nil {

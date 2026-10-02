@@ -475,3 +475,40 @@ func TestImportRestoresDocTemplateAndOrigin(t *testing.T) {
 		t.Fatalf("restored doc = %+v, want template %s and human origin", got, tmpl.ID)
 	}
 }
+
+func TestHumanDocsBackupHierarchyAndTrash(t *testing.T) {
+	ctx := context.Background()
+	source := newTestStore(t)
+	parent := &store.DocRecord{ID: "z-parent", Title: "Parent", Origin: store.DocOriginHuman, CreatedBy: "writer"}
+	if err := source.CreateHumanDoc(ctx, parent); err != nil {
+		t.Fatal(err)
+	}
+	child := &store.DocRecord{ID: "a-child", Title: "Child", ParentID: parent.ID, CreatedBy: "writer"}
+	if err := source.CreateHumanDoc(ctx, child); err != nil {
+		t.Fatal(err)
+	}
+	if err := source.SoftDeleteDoc(ctx, parent.ID); err != nil {
+		t.Fatal(err)
+	}
+	bundle, err := backup.Export(ctx, source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(bundle.Docs) != 2 || bundle.Docs[0].ID != child.ID {
+		t.Fatalf("backup: %+v", bundle.Docs)
+	}
+	target := newTestStore(t)
+	if _, err := backup.Import(ctx, target, bundle); err != nil {
+		t.Fatal(err)
+	}
+	restored, err := target.GetDeletedDoc(ctx, child.ID)
+	if err != nil || restored.ParentID != parent.ID || restored.CreatedBy != "writer" || restored.Origin != store.DocOriginHuman {
+		t.Fatalf("metadata: %+v %v", restored, err)
+	}
+	if err := target.RestoreDeletedDoc(ctx, parent.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := target.GetDoc(ctx, child.ID); err != nil {
+		t.Fatal(err)
+	}
+}

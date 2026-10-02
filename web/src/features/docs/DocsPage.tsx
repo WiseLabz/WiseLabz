@@ -5,10 +5,14 @@
  * changed between revisions, the same view the changes feed links into.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useParams, useNavigate, useLocation } from 'react-router-dom';
+import { Link, useParams, useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { AnimatePresence, motion } from 'motion/react';
-import { useGetDocsTree, useGetDocsDocId } from '../../api/generated/docs/docs';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useCanMutate, useIsInstanceAdmin } from '../../hooks/useRole';
+import { NewDocDialog } from '../../components/docs/NewDocDialog';
+import { toast } from '../../lib/toast';
+import { patchDocsDocId, useGetDocsTree, useGetDocsDocId } from '../../api/generated/docs/docs';
 import { Panel } from '../../components/ui/Panel';
 import { Button } from '../../components/ui/Button';
 import { IconButton } from '../../components/ui/Button';
@@ -36,6 +40,24 @@ export function DocsPage() {
   const { t } = useTranslation();
   const { docId } = useParams<{ docId: string }>();
   const tree = useGetDocsTree();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const canMutate = useCanMutate();
+  const admin = useIsInstanceAdmin();
+  const queryClient = useQueryClient();
+  const move = useMutation({
+    mutationFn: ({ id, parentId }: { id: string; parentId: string }) =>
+      patchDocsDocId(id, { parentId }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries();
+    },
+    onError: () =>
+      toast.error(
+        t('docs.human.moveError', {
+          defaultValue:
+            'Could not move doc. Parents must share its scope and depth cannot exceed five.',
+        })
+      ),
+  });
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [shareNode, setShareNode] = useState<{ docId: string; title: string } | null>(null);
   const drawerTriggerRef = useRef<HTMLButtonElement>(null);
@@ -95,7 +117,11 @@ export function DocsPage() {
   ) : tree.isError || !tree.data ? (
     <ErrorState description={t('docs.treeLoadError')} onRetry={() => tree.refetch()} />
   ) : (
-    <DocTree tree={tree.data} onShare={setShareNode} />
+    <DocTree
+      tree={tree.data}
+      onShare={setShareNode}
+      onReparent={(id, parentId) => move.mutate({ id, parentId })}
+    />
   );
 
   return (
@@ -165,14 +191,34 @@ export function DocsPage() {
                   <XIcon size={16} />
                 </IconButton>
               </div>
-              <div onClick={() => setDrawerOpen(false)} role="presentation">{treeContent}</div>
+              <div onClick={() => setDrawerOpen(false)} role="presentation">
+                {treeContent}
+              </div>
             </motion.div>
           </>
         )}
       </AnimatePresence>
 
+      <NewDocDialog
+        open={canMutate && searchParams.has('new')}
+        onClose={() => {
+          const next = new URLSearchParams(searchParams);
+          next.delete('new');
+          setSearchParams(next);
+        }}
+      />
       {/* Content */}
       <section className="min-w-0 flex-1">
+        <div className="mb-3 flex justify-end gap-3">
+          {admin && (
+            <Link to="/docs/trash">{t('docs.human.trash', { defaultValue: 'Trash' })}</Link>
+          )}
+          {canMutate && (
+            <Button size="sm" onClick={() => setSearchParams({ new: '1' })}>
+              {t('docs.human.new', { defaultValue: 'New doc' })}
+            </Button>
+          )}
+        </div>
         {activeId ? (
           <DocReader key={activeId} docId={activeId} />
         ) : (
@@ -255,7 +301,7 @@ function DocReader({ docId }: { docId: string }) {
               {t('docs.history')}
             </TabButton>
           </div>
-          <RoleGate connectorId={data.serviceId ?? undefined}>
+          <RoleGate connectorId={data.serviceId || undefined}>
             <Button variant="secondary" size="sm" onClick={() => navigate(`/docs/${docId}/edit`)}>
               <EditIcon size={14} />
               {t('docs.editAction')}
@@ -274,7 +320,7 @@ function DocReader({ docId }: { docId: string }) {
               exit={{ opacity: 0, y: -8 }}
               transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
             >
-              {data.kind === 'lab' && (
+              {data.kind === 'lab' && data.origin !== 'human' && (
                 <div className="mb-4 flex items-center gap-2 rounded-md bg-accent-primary-tint px-3 py-2 text-xs text-accent-primary">
                   <SparklesIcon size={14} />
                   {t('docs.labBanner')}
@@ -282,7 +328,12 @@ function DocReader({ docId }: { docId: string }) {
               )}
               <Markdown source={data.content} />
               <p className="mt-8 border-t border-line-soft pt-3 text-2xs text-ink-faint">
-                {t('docs.reconciledFooter', { date: fullDate(data.updatedAt) })}
+                {data.origin === 'human'
+                  ? t('docs.human.updatedFooter', {
+                      defaultValue: 'Last edited {{date}}',
+                      date: fullDate(data.updatedAt),
+                    })
+                  : t('docs.reconciledFooter', { date: fullDate(data.updatedAt) })}
               </p>
             </motion.div>
           ) : (
@@ -293,7 +344,11 @@ function DocReader({ docId }: { docId: string }) {
               exit={{ opacity: 0, y: -8 }}
               transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
             >
-              <DocHistory docId={docId} currentVersion={data.currentVersion} connectorId={data.serviceId ?? undefined} />
+              <DocHistory
+                docId={docId}
+                currentVersion={data.currentVersion}
+                connectorId={data.serviceId ?? undefined}
+              />
             </motion.div>
           )}
         </AnimatePresence>

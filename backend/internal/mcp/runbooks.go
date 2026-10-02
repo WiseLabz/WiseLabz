@@ -166,7 +166,7 @@ func docViewable(ctx context.Context, s *store.Store, userID, docID string) (boo
 		return false, err
 	}
 	if doc.ServiceID == "" {
-		return auth.InstanceAdminFromContext(ctx), nil
+		return doc.Origin == store.DocOriginHuman || auth.InstanceAdminFromContext(ctx), nil
 	}
 	return s.UserHasConnectorRole(ctx, userID, doc.ServiceID, "viewer")
 }

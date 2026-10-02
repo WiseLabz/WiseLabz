@@ -32,18 +32,17 @@ const hrsAgo = (h: number) => new Date(Date.now() - h * 3_600_000).toISOString()
 const daysAgo = (d: number) => new Date(Date.now() - d * 86_400_000).toISOString();
 const minsFromNow = (m: number) => new Date(Date.now() + m * 60_000).toISOString();
 
-// TODO: fold instanceAdminRole into the generated User type once the OpenAPI
-// spec is updated for #240 PR1 — see src/hooks/useRole.ts.
+// `role` is the instance-admin role, matching /me; the generated Role enum
+// (viewer/operator) is stale — see src/hooks/useRole.ts.
 export const user = {
   id: 'usr-1',
   username: 'ops',
   displayName: 'Ada',
   email: 'ada@homelab.lan',
-  role: 'operator',
-  instanceAdminRole: 'admin',
+  role: 'admin',
   authSource: 'local',
   createdAt: daysAgo(212),
-} satisfies User & { instanceAdminRole: 'admin' | 'user' };
+} satisfies Omit<User, 'role'> & { role: 'admin' | 'user' };
 
 // TODO: fold myRole into the generated Connector type once the OpenAPI spec
 // is updated for #240 PR1 — see src/hooks/useRole.ts. Every fixture connector

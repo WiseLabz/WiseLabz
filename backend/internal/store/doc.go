@@ -14,6 +14,9 @@ import (
 
 // DocRecord represents a row in the docs table.
 type DocRecord struct {
+	ParentID       string `json:"parentId"`
+	DeletedAt      string `json:"deletedAt"`
+	CreatedBy      string `json:"createdBy"`
 	ID             string `json:"docId"`
 	Title          string `json:"title"`
 	Kind           string `json:"kind"`
@@ -61,10 +64,10 @@ func (s *Store) CreateDoc(ctx context.Context, d *DocRecord) error {
 
 	_, err := s.db.ExecContext(ctx, `
 		INSERT INTO docs (id, title, kind, service_id, content, current_version, created_at, updated_at,
-			origin, template_id, last_synced_at, gen_keys)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			origin, template_id, last_synced_at, gen_keys, parent_id, deleted_at, created_by)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`, d.ID, d.Title, d.Kind, nilToStr(d.ServiceID), d.Content, d.CurrentVersion, d.CreatedAt, d.UpdatedAt,
-		d.Origin, nilToStr(d.TemplateID), nilToStr(d.LastSyncedAt), d.GenKeys)
+		d.Origin, nilToStr(d.TemplateID), nilToStr(d.LastSyncedAt), d.GenKeys, nilToStr(d.ParentID), nilToStr(d.DeletedAt), nilToStr(d.CreatedBy))
 	if err != nil {
 		return fmt.Errorf("create doc: %w", err)
 	}
@@ -79,7 +82,7 @@ func (s *Store) ExistingDocIDs(ctx context.Context, ids []string) (map[string]bo
 
 // GetDoc retrieves a single documentation record by ID.
 func (s *Store) GetDoc(ctx context.Context, id string) (*DocRecord, error) {
-	d, err := scanDoc(s.db.QueryRowContext(ctx, `SELECT `+docColumns+` FROM docs WHERE id = ?`, id))
+	d, err := scanDoc(s.db.QueryRowContext(ctx, `SELECT `+docColumns+` FROM docs WHERE id = ? AND deleted_at IS NULL`, id))
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -102,7 +105,7 @@ func (s *Store) UpdateDoc(ctx context.Context, id, content string, expectedVersi
 // atomically via RETURNING so concurrent writers cannot change it in between.
 func (s *Store) updateDocRev(ctx context.Context, id, content string, expectedVersion *int) (int, error) {
 	now := time.Now().UTC().Format(time.RFC3339)
-	query := `UPDATE docs SET content = ?, updated_at = ?, current_version = current_version + 1 WHERE id = ?`
+	query := `UPDATE docs SET content = ?, updated_at = ?, current_version = current_version + 1 WHERE id = ? AND deleted_at IS NULL`
 	args := []any{content, now, id}
 	if expectedVersion != nil {
 		query += ` AND current_version = ?`
@@ -182,8 +185,8 @@ func (s *Store) ListDocsByService(ctx context.Context, serviceID string) ([]DocR
 func (s *Store) listDocsByService(ctx context.Context, serviceID, contentExpr string) ([]DocRecord, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, title, kind, service_id, `+contentExpr+`, current_version, created_at, updated_at,
-			origin, template_id, last_synced_at, gen_keys
-		FROM docs WHERE service_id = ? ORDER BY updated_at DESC
+			origin, template_id, last_synced_at, gen_keys, parent_id, deleted_at, created_by
+		FROM docs WHERE service_id = ? AND deleted_at IS NULL ORDER BY updated_at DESC
 	`, serviceID)
 	if err != nil {
 		return nil, fmt.Errorf("list docs by service: %w", err)
@@ -213,7 +216,7 @@ func (s *Store) listDocsByService(ctx context.Context, serviceID, contentExpr st
 func (s *Store) ListDocsGroupedByService(ctx context.Context) (map[string][]DocRecord, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT `+docSummaryColumns+`
-		FROM docs ORDER BY service_id, updated_at DESC
+		FROM docs WHERE deleted_at IS NULL ORDER BY service_id, updated_at DESC
 	`)
 	if err != nil {
 		return nil, fmt.Errorf("list docs grouped by service: %w", err)
@@ -235,31 +238,33 @@ func (s *Store) ListDocsGroupedByService(ctx context.Context) (map[string][]DocR
 }
 
 // docColumns is the full column list, including the (potentially large) content.
-const docColumns = `id, title, kind, service_id, content, current_version, created_at, updated_at, origin, template_id, last_synced_at, gen_keys`
+const docColumns = `id, title, kind, service_id, content, current_version, created_at, updated_at, origin, template_id, last_synced_at, gen_keys, parent_id, deleted_at, created_by`
 
 // docSummaryColumns omits content for list/tree views that never render it.
-const docSummaryColumns = `id, title, kind, service_id, current_version, created_at, updated_at, origin, template_id, last_synced_at`
+const docSummaryColumns = `id, title, kind, service_id, current_version, created_at, updated_at, origin, template_id, last_synced_at, parent_id, deleted_at, created_by`
 
 func scanDocSummary(row rowScanner) (DocRecord, error) {
 	var d DocRecord
-	var svcID, tmplID, synced sql.NullString
+	var svcID, tmplID, synced, parent, deleted, creator sql.NullString
 	if err := row.Scan(&d.ID, &d.Title, &d.Kind, &svcID, &d.CurrentVersion, &d.CreatedAt, &d.UpdatedAt,
-		&d.Origin, &tmplID, &synced); err != nil {
+		&d.Origin, &tmplID, &synced, &parent, &deleted, &creator); err != nil {
 		return DocRecord{}, err
 	}
 	d.ServiceID, d.TemplateID, d.LastSyncedAt = svcID.String, tmplID.String, synced.String
+	d.ParentID, d.DeletedAt, d.CreatedBy = parent.String, deleted.String, creator.String
 	return d, nil
 }
 
 func scanDoc(row rowScanner) (DocRecord, error) {
 	var d DocRecord
-	var svcID, tmplID, synced, genKeys sql.NullString
+	var svcID, tmplID, synced, genKeys, parent, deleted, creator sql.NullString
 	err := row.Scan(&d.ID, &d.Title, &d.Kind, &svcID, &d.Content, &d.CurrentVersion, &d.CreatedAt, &d.UpdatedAt,
-		&d.Origin, &tmplID, &synced, &genKeys)
+		&d.Origin, &tmplID, &synced, &genKeys, &parent, &deleted, &creator)
 	if err != nil {
 		return DocRecord{}, err
 	}
 	d.ServiceID, d.TemplateID, d.LastSyncedAt = svcID.String, tmplID.String, synced.String
+	d.ParentID, d.DeletedAt, d.CreatedBy = parent.String, deleted.String, creator.String
 	if genKeys.Valid {
 		d.GenKeys = &genKeys.String
 	}
@@ -276,8 +281,8 @@ func (s *Store) ListAllDocs(ctx context.Context, search string, offset, limit in
 
 // ListViewableDocs is ListAllDocs limited to docs the caller may view, with the
 // total computed over that same set (so it can't reveal hidden docs): docs on
-// connectors userID holds a grant on, plus lab-wide docs (no connector) for
-// instance admins only, since those aggregate every connector's data.
+// connectors userID holds a grant on, plus human lab notes for all users
+// and generated lab inventory for instance admins.
 func (s *Store) ListViewableDocs(ctx context.Context, userID, search string, offset, limit int) ([]DocRecord, int, error) {
 	where, args := docSearchWhere(search)
 	keyFilter, keyArgs := apiKeyConnectorFilter(ctx, "service_id")
@@ -286,6 +291,9 @@ func (s *Store) ListViewableDocs(ctx context.Context, userID, search string, off
 	args = append(args, keyArgs...)
 	if auth.InstanceAdminFromContext(ctx) {
 		where += ` OR service_id IS NULL OR service_id = ''`
+	}
+	if !auth.InstanceAdminFromContext(ctx) {
+		where += ` OR ((service_id IS NULL OR service_id = '') AND origin = 'human')`
 	}
 	where += `)`
 	return paginatedQuery(ctx, s.db, "docs", docSummaryColumns, where, args, "updated_at DESC", limit, offset, scanDocSummary)
@@ -304,7 +312,7 @@ var likeEscaper = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
 func escapeLike(s string) string { return likeEscaper.Replace(s) }
 
 func docSearchWhere(search string) (string, []any) {
-	where := "WHERE 1=1"
+	where := "WHERE deleted_at IS NULL"
 	var args []any
 	if search != "" {
 		where += ` AND LOWER(title) LIKE LOWER(?) ESCAPE '\'`
@@ -316,6 +324,6 @@ func docSearchWhere(search string) (string, []any) {
 // CountDocs returns total number of docs.
 func (s *Store) CountDocs(ctx context.Context) (int, error) {
 	var count int
-	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM docs`).Scan(&count)
+	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM docs WHERE deleted_at IS NULL`).Scan(&count)
 	return count, err
 }

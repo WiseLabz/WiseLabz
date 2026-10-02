@@ -185,6 +185,7 @@ func TestTreeIncludesServiceLessDocs(t *testing.T) {
 
 	h := NewHandler(s, doc.NewEngine(s), nil, nil, nil, nil)
 	req := httptest.NewRequest(http.MethodGet, "/api/docs/tree", nil)
+	req = req.WithContext(auth.ContextWithUser(req.Context(), "admin", true))
 	rr := httptest.NewRecorder()
 	h.Tree(rr, req)
 

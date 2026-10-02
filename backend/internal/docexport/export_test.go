@@ -291,3 +291,24 @@ func TestExportAllKeepsOperatorFiles(t *testing.T) {
 		}
 	}
 }
+
+func TestExportOmitsSoftDeletedDocs(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	d := &store.DocRecord{ID: id1, Title: "Human note"}
+	if err := s.CreateHumanDoc(ctx, d); err != nil {
+		t.Fatal(err)
+	}
+	exporter := docexport.NewExporter(s)
+	dir := t.TempDir()
+	if _, err := exporter.ExportAll(ctx, dir); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SoftDeleteDoc(ctx, d.ID); err != nil {
+		t.Fatal(err)
+	}
+	result, err := exporter.ExportAll(ctx, dir)
+	if err != nil || result.Count != 0 || len(result.Removed) != 1 {
+		t.Fatalf("export: %+v %v", result, err)
+	}
+}
