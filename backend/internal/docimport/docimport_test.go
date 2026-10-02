@@ -314,3 +314,26 @@ func TestStageClaimAndSweep(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestSymlinkEntriesAreSkipped(t *testing.T) {
+	var buf bytes.Buffer
+	w := zip.NewWriter(&buf)
+	h := &zip.FileHeader{Name: "link.md"}
+	h.SetMode(os.ModeSymlink | 0o777)
+	f, err := w.CreateHeader(h)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = f.Write([]byte("/etc/passwd"))
+	f, _ = w.Create("ok.md")
+	_, _ = f.Write([]byte("ok"))
+	_ = w.Close()
+	zr, err := zip.NewReader(bytes.NewReader(buf.Bytes()), int64(buf.Len()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan := analyze(t, zr, DefaultLimits())
+	if len(plan.Docs) != 1 || plan.Docs[0].Path != "ok.md" || !hasIssue(plan.Skipped, "link.md", "symbolic") {
+		t.Fatalf("plan %+v", plan)
+	}
+}

@@ -136,6 +136,9 @@ func hiddenRoot(p string) string {
 // read classifies archive files, reading notes and sniffing attachments.
 func (p *planner) read() error {
 	hiddenSeen := map[string]bool{}
+	for _, l := range p.archive.links {
+		p.skip(l, "symbolic links are not imported")
+	}
 	for _, fp := range p.archive.Paths() {
 		if h := hiddenRoot(fp); h != "" {
 			if !hiddenSeen[h] {

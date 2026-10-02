@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"path"
 	"sort"
 	"strings"
@@ -50,6 +51,7 @@ var (
 type Archive struct {
 	files  map[string]*zip.File
 	paths  []string
+	links  []string // symlink entries, never read
 	limits Limits
 	read   int64
 }
@@ -69,6 +71,10 @@ func OpenArchive(zr *zip.Reader, limits Limits) (*Archive, error) {
 		if strings.HasSuffix(f.Name, "/") || f.FileInfo().IsDir() || name == "." {
 			continue
 		}
+		if f.Mode()&os.ModeSymlink != 0 {
+			a.links = append(a.links, name)
+			continue
+		}
 		size := f.UncompressedSize64
 		if size > ratioFloor && size/max(f.CompressedSize64, 1) > limits.MaxRatio {
 			return nil, fmt.Errorf("%w: %s", ErrCompressionRatio, name)
@@ -84,6 +90,7 @@ func OpenArchive(zr *zip.Reader, limits Limits) (*Archive, error) {
 		a.paths = append(a.paths, name)
 	}
 	sort.Strings(a.paths)
+	sort.Strings(a.links)
 	return a, nil
 }
 
