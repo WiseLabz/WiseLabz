@@ -653,6 +653,15 @@ func TestRunMigrationsDownPostgres(t *testing.T) {
 	if err := RunMigrations(db, "postgres", logger); err != nil {
 		t.Fatalf("RunMigrations() error: %v", err)
 	}
+	if !hasColumn(t, db, "postgres", "docs", "gen_keys") {
+		t.Fatal("docs.gen_keys missing after migrations")
+	}
+	if err := RunMigrationsDown(db, "postgres", logger); err != nil {
+		t.Fatalf("RunMigrationsDown() doc_section_ownership error: %v", err)
+	}
+	if hasColumn(t, db, "postgres", "docs", "gen_keys") {
+		t.Error("docs.gen_keys should not exist after rollback")
+	}
 	if err := RunMigrationsDown(db, "postgres", logger); err != nil {
 		t.Fatalf("RunMigrationsDown() mcp_knowledge error: %v", err)
 	}

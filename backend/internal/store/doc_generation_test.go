@@ -94,10 +94,14 @@ func TestTouchDocSyncedKeepsUpdatedAt(t *testing.T) {
 func TestGetLatestChangeByPattern(t *testing.T) {
 	ctx := context.Background()
 	s := newDocTestStore(t)
+	conn := &ConnectorRecord{Name: "n", Category: "virtualization", Type: "proxmox", URL: "https://example.test"}
+	if err := s.CreateConnector(ctx, conn); err != nil {
+		t.Fatalf("CreateConnector() error: %v", err)
+	}
 	if _, err := s.GetLatestChangeByPattern(ctx, "p1"); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("empty GetLatestChangeByPattern() = %v, want ErrNotFound", err)
 	}
-	c := &ChangeRecord{ChangeType: "doc_conflict", Severity: "info", Summary: "s", PatternID: "p1"}
+	c := &ChangeRecord{ServiceID: conn.ID, ChangeType: "doc_conflict", Severity: "info", Summary: "s", PatternID: "p1"}
 	if err := s.CreateChange(ctx, c); err != nil {
 		t.Fatalf("CreateChange() error: %v", err)
 	}
@@ -108,7 +112,7 @@ func TestGetLatestChangeByPattern(t *testing.T) {
 	if err != nil || got.ID != c.ID || got.Status != "dismissed" {
 		t.Fatalf("GetLatestChangeByPattern() = %+v, %v; want the dismissed change", got, err)
 	}
-	newer := &ChangeRecord{ChangeType: "doc_conflict", Severity: "info", Summary: "s", PatternID: "p1",
+	newer := &ChangeRecord{ServiceID: conn.ID, ChangeType: "doc_conflict", Severity: "info", Summary: "s", PatternID: "p1",
 		DetectedAt: "2999-01-01T00:00:00Z"}
 	if err := s.CreateChange(ctx, newer); err != nil {
 		t.Fatalf("CreateChange() error: %v", err)
