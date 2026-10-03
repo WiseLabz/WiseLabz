@@ -17,7 +17,7 @@ Goals: preserve notes independently of source lifecycles, enforce permissions be
 - GET /api/timeline uses the shared paginated envelope with nextCursor. POST /api/journal and PUT/DELETE /api/journal/{id} perform in-handler checks and RecordAuditFromContext. Connector operators create; lab-wide creation requires instance admin. Authors and admins edit/delete after read access; moving an entry requires write permission on the destination. Optional docs must be visible and match entry scope, so links cannot disclose another connector.
 - JournalPage uses useInfiniteQuery, URL filters and rail-and-dot activity rows linking to source pages. The entry dialog uses a native datetime input, scope select, EntityPicker, optional doc and Markdown preview, with edit/delete affordances for authors/admins.
 
-- Owner follow-up decision: include serviceName in the Changes list response and send Changes/Alerts severity (and pending alert status) to server filters before pagination, with page reset on changes.
+- Owner follow-up decision: include serviceName in the Changes/Alerts list responses and send Changes/Alerts severity (and pending alert status) to server filters before pagination, with page reset on changes.
 
 ## Risks / Trade-offs
 

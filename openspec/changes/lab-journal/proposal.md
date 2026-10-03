@@ -10,7 +10,7 @@ Issue #501 needs one chronological record of lab activity and the manual context
 - Add backdatable, editable and deletable Markdown entries with connector, optional document and optional entity links.
 - Preserve manual entries in backups and indefinitely through retention.
 - Add a Journal page, navigation, command palette entry and English/Portuguese strings.
-- Correct Changes list service names and server-side severity filtering on Changes/Alerts; file AI window narration and grant-scoped non-admin audit visibility as separate follow-ups.
+- Correct Changes/Alerts list service names and server-side severity filtering on Changes/Alerts; file AI window narration and grant-scoped non-admin audit visibility as separate follow-ups.
 
 ## Capabilities
 

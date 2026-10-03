@@ -20,4 +20,4 @@
 ## 4. Delivery
 
 - [x] 4.1 Run strict OpenSpec validation, full Go tests/lint and web tests/lint/typecheck sequentially with low-memory settings; record evidence.
-- [ ] 4.2 Refresh graphify, commit, file two follow-ups and open labeled/assigned PR closing #501; verify PR and CI started.
+- [x] 4.2 Refresh graphify, commit, file two follow-ups and open labeled/assigned PR closing #501; verify PR and CI started.
