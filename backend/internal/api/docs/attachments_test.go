@@ -75,7 +75,7 @@ func TestAttachmentACLAndServing(t *testing.T) {
 	if rr.Code != 200 || rr.Body.String() != "%PDF-1.7\nhello" {
 		t.Fatalf("raw %d %s", rr.Code, rr.Body.String())
 	}
-	for key, want := range map[string]string{"X-Content-Type-Options": "nosniff", "Content-Security-Policy": "sandbox; frame-ancestors 'self'", "Cache-Control": "private, no-store"} {
+	for key, want := range map[string]string{"X-Content-Type-Options": "nosniff", "Content-Security-Policy": "frame-ancestors 'self'", "Cache-Control": "private, no-store"} {
 		if rr.Header().Get(key) != want {
 			t.Fatalf("%s=%s", key, rr.Header().Get(key))
 		}
@@ -260,5 +260,34 @@ func TestAttachmentDeleteOwnershipAndPurgeGC(t *testing.T) {
 	if f, err := h.attachmentStore().Open(b.SHA256); err == nil {
 		_ = f.Close()
 		t.Fatal("orphan survived GC")
+	}
+}
+
+func TestRawAttachmentSandboxesNonPDF(t *testing.T) {
+	h := newTestHandler(t)
+	h.Settings.Config.Attachments.Dir = t.TempDir()
+	h.Settings.Config.Auth.Secret = "test-secret"
+	conn := seedConnector(t, h.Store)
+	d := seedDoc(t, h.Store, conn.ID)
+	user := apitest.NewUser(t, h.Store, "operator")
+	apitest.GrantConnectorRole(t, h.Store, user, conn.ID, "operator")
+	rr := httptest.NewRecorder()
+	h.UploadAttachment(rr, asUser(uploadRequest(t, d.ID, "note.txt", "hello"), user, false))
+	if rr.Code != 201 {
+		t.Fatalf("upload %d %s", rr.Code, rr.Body.String())
+	}
+	var a store.DocAttachment
+	if err := json.Unmarshal(rr.Body.Bytes(), &a); err != nil {
+		t.Fatal(err)
+	}
+	r := httptest.NewRequest("GET", a.URL, nil)
+	r.SetPathValue("aid", a.ID)
+	rr = httptest.NewRecorder()
+	h.RawAttachment(rr, r)
+	if got := rr.Header().Get("Content-Security-Policy"); got != "sandbox; frame-ancestors 'self'" {
+		t.Fatalf("csp %q", got)
+	}
+	if got := rr.Header().Get("Content-Disposition"); !strings.HasPrefix(got, "attachment") {
+		t.Fatalf("disposition %q", got)
 	}
 }

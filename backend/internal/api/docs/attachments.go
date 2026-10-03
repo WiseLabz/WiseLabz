@@ -166,7 +166,14 @@ func (h *Handler) RawAttachment(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Disposition", mime.FormatMediaType(disposition, map[string]string{"filename": a.Filename}))
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("X-Frame-Options", "SAMEORIGIN")
-	w.Header().Set("Content-Security-Policy", "sandbox; frame-ancestors 'self'")
+	// Chrome refuses to render PDFs inside a CSP-sandboxed document, so the inline
+	// preview needs the sandbox dropped. PDFs are sniffed, served nosniff and never
+	// parsed as HTML, so frame-ancestors alone is enough.
+	csp := "sandbox; frame-ancestors 'self'"
+	if a.ContentType == "application/pdf" {
+		csp = "frame-ancestors 'self'"
+	}
+	w.Header().Set("Content-Security-Policy", csp)
 	w.Header().Set("Cache-Control", "private, no-store")
 	http.ServeContent(w, r, a.Filename, time.Time{}, file)
 }
