@@ -90,6 +90,11 @@ export function ConnectorPermissionsTab({ connectorId }: { connectorId: string }
             // silently overwritten at the user's next login anyway.
             /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
             const isSSO = (g as any).source === 'oidc';
+            // 'config' grants come from the connector's config.yaml entry (#500)
+            // and are reconciled at startup, so they are read-only here too.
+            /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+            const isConfig = (g as any).source === 'config';
+            const readOnly = isSSO || isConfig;
             return (
               /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
               <li key={(g as any).id} className="flex items-center justify-between gap-3 py-2.5">
@@ -97,19 +102,19 @@ export function ConnectorPermissionsTab({ connectorId }: { connectorId: string }
                   <div className="flex items-center gap-1.5">
                     {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
                     <p className="truncate text-sm text-ink">{user?.displayName || user?.username || (g as any).userId}</p>
-                    {isSSO && (
+                    {readOnly && (
                       <span
-                        title={t('connectors.permissions.viaSsoHint')}
+                        title={t(isSSO ? 'connectors.permissions.viaSsoHint' : 'connectors.permissions.viaConfigHint')}
                         className="shrink-0 rounded-full bg-canvas px-1.5 py-0.5 text-2xs text-ink-faint"
                       >
-                        {t('connectors.permissions.viaSso')}
+                        {t(isSSO ? 'connectors.permissions.viaSso' : 'connectors.permissions.viaConfig')}
                       </span>
                     )}
                   </div>
                   {user?.username && <p className="truncate text-2xs text-ink-faint">{user.username}</p>}
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
-                  {isSSO ? (
+                  {readOnly ? (
                     <span className="rounded-md border border-line-soft px-2 py-1 text-xs text-ink-muted">
                       {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
                       {(g as any).role === 'operator' ? t('connectors.permissions.operator') : t('connectors.permissions.viewer')}

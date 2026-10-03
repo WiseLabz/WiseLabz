@@ -14,6 +14,8 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/google/uuid"
+
 	"github.com/WiseLabz/wiselabz/internal/auth"
 	"github.com/WiseLabz/wiselabz/internal/config"
 	"github.com/WiseLabz/wiselabz/internal/httputil"
@@ -84,15 +86,18 @@ func (h *Handler) syncOIDCConnectorGrants(r *http.Request, user *store.User, gro
 		return
 	}
 	ctx := r.Context()
-	allConnectorIDs, err := h.Store.ListConnectorIDs(ctx)
+	refs, err := h.Store.ListConnectorRefs(ctx)
 	if err != nil {
 		slog.Error("failed to list connectors for oidc grant sync", "error", err)
 		return
 	}
-	knownConnectorIDs := make(map[string]bool, len(allConnectorIDs))
-	for _, id := range allConnectorIDs {
-		knownConnectorIDs[id] = true
+	allConnectorIDs := make([]string, len(refs))
+	knownConnectorIDs := make(map[string]bool, len(refs))
+	for i, ref := range refs {
+		allConnectorIDs[i] = ref.ID
+		knownConnectorIDs[ref.ID] = true
 	}
+	mapping = resolveConnectorNames(mapping, refs)
 
 	desired := oidcConnectorRolesForGroups(groups, mapping, allConnectorIDs)
 	var unknown []string
@@ -525,6 +530,45 @@ func oidcConnectorRolesForGroups(groups []string, mapping map[string]map[string]
 		}
 	}
 	return result
+}
+
+// resolveConnectorNames returns mapping with every connector key that is
+// neither "*" nor a UUID replaced by the ID of the connector with that name
+// (#614). Names match case-insensitively, because viper lowercases config map
+// keys. A name matching no connector, or more than one, is dropped with a
+// warning so one bad key never blocks the rest of the mapping. When a name and
+// a UUID in the same group resolve to the same connector, the higher role wins.
+func resolveConnectorNames(mapping map[string]map[string]string, refs []store.ConnectorRef) map[string]map[string]string {
+	byName := make(map[string][]string, len(refs))
+	for _, ref := range refs {
+		key := strings.ToLower(ref.Name)
+		byName[key] = append(byName[key], ref.ID)
+	}
+	out := make(map[string]map[string]string, len(mapping))
+	for group, connectorRoles := range mapping {
+		resolved := make(map[string]string, len(connectorRoles))
+		for key, role := range connectorRoles {
+			id := key
+			if _, err := uuid.Parse(key); key != "*" && err != nil {
+				ids := byName[strings.ToLower(key)]
+				if len(ids) != 1 {
+					reason := "no connector has that name"
+					if len(ids) > 1 {
+						reason = "more than one connector has that name"
+					}
+					slog.Warn("oidc group_connector_roles connector name skipped", "group", group, "connector", key, "reason", reason)
+					continue
+				}
+				id = ids[0]
+			}
+			if existing, ok := resolved[id]; ok && !connectorRoleLess(strings.ToLower(existing), strings.ToLower(role)) {
+				continue
+			}
+			resolved[id] = role
+		}
+		out[group] = resolved
+	}
+	return out
 }
 
 // connectorRoleLess reports whether role a ranks below role b ("viewer" <

@@ -16,4 +16,5 @@ export type GetConnectorsConnectorIdPermissions200ItemSource =
 export const GetConnectorsConnectorIdPermissions200ItemSource = {
   manual: 'manual',
   oidc: 'oidc',
+  config: 'config',
 } as const;

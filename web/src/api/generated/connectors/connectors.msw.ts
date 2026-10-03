@@ -64,6 +64,7 @@ import {
   getPostConnectorsConnectorIdGoldenSnapshotResponseMock,
   getPostConnectorsConnectorIdHealthResponseMock,
   getPostConnectorsConnectorIdMaintenanceWindowResponseMock,
+  getPostConnectorsConnectorIdReleaseResponseMock,
   getPostConnectorsConnectorIdRestartResponseMock,
   getPostConnectorsConnectorIdStartResponseMock,
   getPostConnectorsConnectorIdStopResponseMock,
@@ -82,6 +83,7 @@ export {
   getGetConnectorsSchemaResponseMock,
   getGetConnectorsConnectorIdResponseMock,
   getPutConnectorsConnectorIdResponseMock,
+  getPostConnectorsConnectorIdReleaseResponseMock,
   getGetConnectorsConnectorIdRemovalImpactResponseMock,
   getPostConnectorsConnectorIdRestartResponseMock,
   getPostConnectorsConnectorIdStartResponseMock,
@@ -240,6 +242,28 @@ export const getDeleteConnectorsConnectorIdMockHandler = (
       }
 
       return new HttpResponse(null, { status: 204 });
+    },
+    options
+  );
+};
+
+export const getPostConnectorsConnectorIdReleaseMockHandler = (
+  overrideResponse?:
+    | Connector
+    | ((info: Parameters<Parameters<typeof http.post>[1]>[0]) => Promise<Connector> | Connector),
+  options?: RequestHandlerOptions
+) => {
+  return http.post(
+    '*/connectors/:connectorId/release',
+    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+      return HttpResponse.json(
+        overrideResponse !== undefined
+          ? typeof overrideResponse === 'function'
+            ? await overrideResponse(info)
+            : overrideResponse
+          : getPostConnectorsConnectorIdReleaseResponseMock(),
+        { status: 200 }
+      );
     },
     options
   );
@@ -1013,6 +1037,7 @@ export const getConnectorsMock = () => [
   getGetConnectorsConnectorIdMockHandler(),
   getPutConnectorsConnectorIdMockHandler(),
   getDeleteConnectorsConnectorIdMockHandler(),
+  getPostConnectorsConnectorIdReleaseMockHandler(),
   getGetConnectorsConnectorIdRemovalImpactMockHandler(),
   getPostConnectorsConnectorIdRestartMockHandler(),
   getPostConnectorsConnectorIdStartMockHandler(),

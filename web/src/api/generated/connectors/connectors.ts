@@ -571,7 +571,7 @@ export const putConnectorsConnectorId = (
 export const getPutConnectorsConnectorIdMutationKey = () => ['putConnectorsConnectorId'] as const;
 
 export const getPutConnectorsConnectorIdMutationOptions = <
-  TError = ErrorType<BadRequestResponse | ForbiddenResponse | NotFoundResponse>,
+  TError = ErrorType<BadRequestResponse | ForbiddenResponse | NotFoundResponse | void>,
   TContext = unknown,
 >(options?: {
   mutation?: UseMutationOptions<
@@ -611,7 +611,7 @@ export type PutConnectorsConnectorIdMutationResult = NonNullable<
 >;
 export type PutConnectorsConnectorIdMutationBody = BodyType<ConnectorUpdate>;
 export type PutConnectorsConnectorIdMutationError = ErrorType<
-  BadRequestResponse | ForbiddenResponse | NotFoundResponse
+  BadRequestResponse | ForbiddenResponse | NotFoundResponse | void
 >;
 export type PutConnectorsConnectorIdMutationVariables = {
   connectorId: string;
@@ -622,7 +622,7 @@ export type PutConnectorsConnectorIdMutationVariables = {
  * @summary Update a connector (operator)
  */
 export const usePutConnectorsConnectorId = <
-  TError = ErrorType<BadRequestResponse | ForbiddenResponse | NotFoundResponse>,
+  TError = ErrorType<BadRequestResponse | ForbiddenResponse | NotFoundResponse | void>,
   TContext = unknown,
 >(
   options?: {
@@ -662,7 +662,7 @@ export const getDeleteConnectorsConnectorIdMutationKey = () =>
   ['deleteConnectorsConnectorId'] as const;
 
 export const getDeleteConnectorsConnectorIdMutationOptions = <
-  TError = ErrorType<ElevationRequiredResponse>,
+  TError = ErrorType<ElevationRequiredResponse | void>,
   TContext = unknown,
 >(options?: {
   mutation?: UseMutationOptions<
@@ -701,14 +701,14 @@ export type DeleteConnectorsConnectorIdMutationResult = NonNullable<
   Awaited<ReturnType<typeof deleteConnectorsConnectorId>>
 >;
 
-export type DeleteConnectorsConnectorIdMutationError = ErrorType<ElevationRequiredResponse>;
+export type DeleteConnectorsConnectorIdMutationError = ErrorType<ElevationRequiredResponse | void>;
 export type DeleteConnectorsConnectorIdMutationVariables = { connectorId: string };
 
 /**
  * @summary Remove a connector (operator, destructive)
  */
 export const useDeleteConnectorsConnectorId = <
-  TError = ErrorType<ElevationRequiredResponse>,
+  TError = ErrorType<ElevationRequiredResponse | void>,
   TContext = unknown,
 >(
   options?: {
@@ -728,6 +728,94 @@ export const useDeleteConnectorsConnectorId = <
   TContext
 > => {
   return useMutation(getDeleteConnectorsConnectorIdMutationOptions(options), queryClient);
+};
+/**
+ * A connector whose config.yaml entry was removed is disabled and marked `config-orphaned`. Releasing it sets `managedBy` back to `ui` so it can be edited normally; it stays disabled.
+ * @summary Release an orphaned connector to UI management (operator)
+ */
+export const postConnectorsConnectorIdRelease = (
+  connectorId: string,
+  options?: SecondParameter<typeof customInstance>,
+  signal?: AbortSignal
+) => {
+  return customInstance<Connector>(
+    { url: `/connectors/${connectorId}/release`, method: 'POST', signal },
+    options
+  );
+};
+
+export const getPostConnectorsConnectorIdReleaseMutationKey = () =>
+  ['postConnectorsConnectorIdRelease'] as const;
+
+export const getPostConnectorsConnectorIdReleaseMutationOptions = <
+  TError = ErrorType<ForbiddenResponse | NotFoundResponse | void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof postConnectorsConnectorIdRelease>>,
+    TError,
+    PostConnectorsConnectorIdReleaseMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof postConnectorsConnectorIdRelease>>,
+  TError,
+  PostConnectorsConnectorIdReleaseMutationVariables,
+  TContext
+> => {
+  const mutationKey = getPostConnectorsConnectorIdReleaseMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof postConnectorsConnectorIdRelease>>,
+    PostConnectorsConnectorIdReleaseMutationVariables
+  > = (props) => {
+    const { connectorId } = props ?? {};
+
+    return postConnectorsConnectorIdRelease(connectorId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type PostConnectorsConnectorIdReleaseMutationResult = NonNullable<
+  Awaited<ReturnType<typeof postConnectorsConnectorIdRelease>>
+>;
+
+export type PostConnectorsConnectorIdReleaseMutationError = ErrorType<
+  ForbiddenResponse | NotFoundResponse | void
+>;
+export type PostConnectorsConnectorIdReleaseMutationVariables = { connectorId: string };
+
+/**
+ * @summary Release an orphaned connector to UI management (operator)
+ */
+export const usePostConnectorsConnectorIdRelease = <
+  TError = ErrorType<ForbiddenResponse | NotFoundResponse | void>,
+  TContext = unknown,
+>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof postConnectorsConnectorIdRelease>>,
+      TError,
+      PostConnectorsConnectorIdReleaseMutationVariables,
+      TContext
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseMutationResult<
+  Awaited<ReturnType<typeof postConnectorsConnectorIdRelease>>,
+  TError,
+  PostConnectorsConnectorIdReleaseMutationVariables,
+  TContext
+> => {
+  return useMutation(getPostConnectorsConnectorIdReleaseMutationOptions(options), queryClient);
 };
 /**
  * Computes the concrete dependents a removal destroys, so the UI can state them exactly before the user commits (machine-honest confirm pattern).
@@ -3220,7 +3308,7 @@ export const getPutConnectorsConnectorIdEnabledMutationKey = () =>
   ['putConnectorsConnectorIdEnabled'] as const;
 
 export const getPutConnectorsConnectorIdEnabledMutationOptions = <
-  TError = ErrorType<unknown>,
+  TError = ErrorType<void>,
   TContext = unknown,
 >(options?: {
   mutation?: UseMutationOptions<
@@ -3260,7 +3348,7 @@ export type PutConnectorsConnectorIdEnabledMutationResult = NonNullable<
 >;
 export type PutConnectorsConnectorIdEnabledMutationBody =
   BodyType<PutConnectorsConnectorIdEnabledBody>;
-export type PutConnectorsConnectorIdEnabledMutationError = ErrorType<unknown>;
+export type PutConnectorsConnectorIdEnabledMutationError = ErrorType<void>;
 export type PutConnectorsConnectorIdEnabledMutationVariables = {
   connectorId: string;
   data: BodyType<PutConnectorsConnectorIdEnabledBody>;
@@ -3269,7 +3357,7 @@ export type PutConnectorsConnectorIdEnabledMutationVariables = {
 /**
  * @summary Enable/disable a connector
  */
-export const usePutConnectorsConnectorIdEnabled = <TError = ErrorType<unknown>, TContext = unknown>(
+export const usePutConnectorsConnectorIdEnabled = <TError = ErrorType<void>, TContext = unknown>(
   options?: {
     mutation?: UseMutationOptions<
       Awaited<ReturnType<typeof putConnectorsConnectorIdEnabled>>,
@@ -4160,7 +4248,7 @@ export const usePostSync = <TError = ErrorType<unknown>, TContext = unknown>(
   return useMutation(getPostSyncMutationOptions(options), queryClient);
 };
 /**
- * One row per (user, source) pair — a user with both a manual grant and an OIDC group->connector-role sync can appear twice, once per `source` (#279 part 3). `source: "oidc"` rows are read-only: they're revoked by the user's IdP group membership at their next login, not by this API.
+ * One row per (user, source) pair — a user with both a manual grant and an OIDC group->connector-role sync can appear twice, once per `source` (#279 part 3). `source: "oidc"` rows are read-only: they're revoked by the user's IdP group membership at their next login, not by this API. `source: "config"` rows are read-only too: they come from the connector's `grants` in config.yaml and are reconciled at startup.
  * @summary List per-connector access grants (instance-admin only)
  */
 export const getConnectorsConnectorIdPermissions = (

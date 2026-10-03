@@ -83,6 +83,10 @@ export const getGetConnectorsResponseMock = (): Connector[] =>
       undefined,
     ]),
     rotationMaxAgeDays: faker.helpers.arrayElement([faker.number.int(), null]),
+    managedBy: faker.helpers.arrayElement([
+      faker.helpers.arrayElement(['ui', 'config', 'config-orphaned'] as const),
+      undefined,
+    ]),
   }));
 
 export const getPostConnectorsResponseMock = (
@@ -132,6 +136,10 @@ export const getPostConnectorsResponseMock = (
     undefined,
   ]),
   rotationMaxAgeDays: faker.helpers.arrayElement([faker.number.int(), null]),
+  managedBy: faker.helpers.arrayElement([
+    faker.helpers.arrayElement(['ui', 'config', 'config-orphaned'] as const),
+    undefined,
+  ]),
   ...overrideResponse,
 });
 
@@ -246,6 +254,10 @@ export const getGetConnectorsConnectorIdResponseMock = (
     undefined,
   ]),
   rotationMaxAgeDays: faker.helpers.arrayElement([faker.number.int(), null]),
+  managedBy: faker.helpers.arrayElement([
+    faker.helpers.arrayElement(['ui', 'config', 'config-orphaned'] as const),
+    undefined,
+  ]),
   ...overrideResponse,
 });
 
@@ -296,6 +308,64 @@ export const getPutConnectorsConnectorIdResponseMock = (
     undefined,
   ]),
   rotationMaxAgeDays: faker.helpers.arrayElement([faker.number.int(), null]),
+  managedBy: faker.helpers.arrayElement([
+    faker.helpers.arrayElement(['ui', 'config', 'config-orphaned'] as const),
+    undefined,
+  ]),
+  ...overrideResponse,
+});
+
+export const getPostConnectorsConnectorIdReleaseResponseMock = (
+  overrideResponse: Partial<Extract<Connector, object>> = {}
+): Connector => ({
+  id: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  name: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  owner: faker.helpers.arrayElement([faker.string.alpha({ length: { min: 10, max: 20 } }), null]),
+  category: faker.helpers.arrayElement(Object.values(ConnectorCategory)),
+  type: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  enabled: faker.datatype.boolean(),
+  status: faker.helpers.arrayElement(Object.values(ServiceStatus)),
+  url: faker.helpers.arrayElement([
+    faker.string.alpha({ length: { min: 10, max: 20 } }),
+    undefined,
+  ]),
+  verifyTls: faker.helpers.arrayElement([faker.datatype.boolean(), undefined]),
+  lastSyncAt: faker.helpers.arrayElement([
+    faker.helpers.fromRegExp('^$|^[0-9]{4}-[0-9]{2}-[0-9]{2}T'),
+    undefined,
+  ]),
+  statusMessage: faker.helpers.arrayElement([
+    faker.string.alpha({ length: { min: 10, max: 20 } }),
+    undefined,
+  ]),
+  scheduleSeconds: faker.helpers.arrayElement([faker.number.int(), null]),
+  nextRunAt: faker.helpers.arrayElement([
+    faker.helpers.fromRegExp('^$|^[0-9]{4}-[0-9]{2}-[0-9]{2}T'),
+    undefined,
+  ]),
+  lastSyncDurationMs: faker.helpers.arrayElement([faker.number.int(), null]),
+  lastSyncError: faker.helpers.arrayElement([
+    faker.string.alpha({ length: { min: 10, max: 20 } }),
+    undefined,
+  ]),
+  retryCount: faker.helpers.arrayElement([faker.number.int(), undefined]),
+  credentialExpiresAt: faker.helpers.arrayElement([
+    faker.helpers.fromRegExp('^$|^[0-9]{4}-[0-9]{2}-[0-9]{2}T'),
+    undefined,
+  ]),
+  secretRotatedAt: faker.helpers.arrayElement([
+    faker.date.past().toISOString().slice(0, 19) + 'Z',
+    undefined,
+  ]),
+  userExpiresAt: faker.helpers.arrayElement([
+    faker.helpers.fromRegExp('^$|^[0-9]{4}-[0-9]{2}-[0-9]{2}T'),
+    undefined,
+  ]),
+  rotationMaxAgeDays: faker.helpers.arrayElement([faker.number.int(), null]),
+  managedBy: faker.helpers.arrayElement([
+    faker.helpers.arrayElement(['ui', 'config', 'config-orphaned'] as const),
+    undefined,
+  ]),
   ...overrideResponse,
 });
 
@@ -794,6 +864,10 @@ export const getPutConnectorsConnectorIdEnabledResponseMock = (
     undefined,
   ]),
   rotationMaxAgeDays: faker.helpers.arrayElement([faker.number.int(), null]),
+  managedBy: faker.helpers.arrayElement([
+    faker.helpers.arrayElement(['ui', 'config', 'config-orphaned'] as const),
+    undefined,
+  ]),
   ...overrideResponse,
 });
 
@@ -883,7 +957,7 @@ export const getGetConnectorsConnectorIdPermissionsResponseMock =
   (): GetConnectorsConnectorIdPermissions200Item[] =>
     Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() => ({
       source: faker.helpers.arrayElement([
-        faker.helpers.arrayElement(['manual', 'oidc'] as const),
+        faker.helpers.arrayElement(['manual', 'oidc', 'config'] as const),
         undefined,
       ]),
     }));
@@ -892,7 +966,7 @@ export const getPutConnectorsConnectorIdPermissionsUserIdResponseMock = (
   overrideResponse: Partial<Extract<PutConnectorsConnectorIdPermissionsUserId200, object>> = {}
 ): PutConnectorsConnectorIdPermissionsUserId200 => ({
   source: faker.helpers.arrayElement([
-    faker.helpers.arrayElement(['manual', 'oidc'] as const),
+    faker.helpers.arrayElement(['manual', 'oidc', 'config'] as const),
     undefined,
   ]),
   ...overrideResponse,

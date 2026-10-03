@@ -24,7 +24,7 @@ type ConnectorGrant struct {
 	UserID      string `json:"userId"`
 	ConnectorID string `json:"connectorId"`
 	Role        string `json:"role"`
-	Source      string `json:"source"` // "manual" or "oidc"
+	Source      string `json:"source"` // "manual", "oidc" or "config"
 	CreatedAt   string `json:"createdAt"`
 	UpdatedAt   string `json:"updatedAt"`
 }
@@ -224,11 +224,13 @@ func (s *Store) FilterConnectorIDsByGrant(ctx context.Context, userID string, id
 	return out, nil
 }
 
-// connectorGrantSourceManual and connectorGrantSourceOIDC are the two values
-// user_connector_roles.source can hold (#279 part 3).
+// The values user_connector_roles.source can hold: a grant made by hand, one
+// synced from IdP groups at login (#279 part 3), or one declared for a
+// connector in config.yaml (#500).
 const (
 	connectorGrantSourceManual = "manual"
 	connectorGrantSourceOIDC   = "oidc"
+	connectorGrantSourceConfig = "config"
 )
 
 // UpsertConnectorGrant creates or updates a user's manually-granted role on a
@@ -294,8 +296,8 @@ func (s *Store) DeleteConnectorGrant(ctx context.Context, userID, connectorID st
 	return nil
 }
 
-// ConnectorGrantDiff is what changed in a call to SyncOIDCConnectorGrants,
-// for the audit log.
+// ConnectorGrantDiff is what changed in a call to SyncOIDCConnectorGrants or
+// SyncConfigConnectorGrants, for the audit log.
 type ConnectorGrantDiff struct {
 	Added   []ConnectorGrant
 	Removed []ConnectorGrant
@@ -346,6 +348,54 @@ func (s *Store) SyncOIDCConnectorGrants(ctx context.Context, userID string, desi
 	return diff, nil
 }
 
+// SyncConfigConnectorGrants replaces connectorID's 'config'-sourced grants
+// with desired (user ID -> role), in one transaction: the grants declared for
+// the connector in config.yaml (#500). Rows not in desired are deleted, rows
+// in desired are upserted (skipped if already correct), and 'manual' and
+// 'oidc' rows are never touched.
+func (s *Store) SyncConfigConnectorGrants(ctx context.Context, connectorID string, desired map[string]string) (ConnectorGrantDiff, error) {
+	var diff ConnectorGrantDiff
+	err := s.WithinTransaction(ctx, func(tx *Store) error {
+		existing, err := scanAll(ctx, tx.db, "config connector grants", `
+			SELECT id, user_id, connector_id, role, source, created_at, updated_at
+			FROM user_connector_roles WHERE connector_id = ? AND source = ?
+		`, []any{connectorID, connectorGrantSourceConfig}, func(row rowScanner) (ConnectorGrant, error) {
+			var g ConnectorGrant
+			err := row.Scan(&g.ID, &g.UserID, &g.ConnectorID, &g.Role, &g.Source, &g.CreatedAt, &g.UpdatedAt)
+			return g, err
+		})
+		if err != nil {
+			return err
+		}
+		current := make(map[string]string, len(existing))
+		for _, g := range existing {
+			current[g.UserID] = g.Role
+			if _, wanted := desired[g.UserID]; wanted {
+				continue
+			}
+			if _, err := tx.db.ExecContext(ctx, `DELETE FROM user_connector_roles WHERE id = ?`, g.ID); err != nil {
+				return fmt.Errorf("delete stale config connector grant: %w", err)
+			}
+			diff.Removed = append(diff.Removed, g)
+		}
+		for userID, role := range desired {
+			if current[userID] == role {
+				continue // already correct, no-op
+			}
+			g, err := upsertConnectorGrant(ctx, tx.db, userID, connectorID, role, connectorGrantSourceConfig)
+			if err != nil {
+				return fmt.Errorf("upsert config connector grant: %w", err)
+			}
+			diff.Added = append(diff.Added, g)
+		}
+		return nil
+	})
+	if err != nil {
+		return ConnectorGrantDiff{}, err
+	}
+	return diff, nil
+}
+
 // ListConnectorIDs returns every connector's ID, for expanding the "*"
 // wildcard in an OIDC provider's group_connector_roles mapping.
 func (s *Store) ListConnectorIDs(ctx context.Context) ([]string, error) {
@@ -366,4 +416,32 @@ func (s *Store) ListConnectorIDs(ctx context.Context) ([]string, error) {
 		return nil, fmt.Errorf("iterate connector ids: %w", err)
 	}
 	return ids, nil
+}
+
+// ConnectorRef is a connector's ID and display name.
+type ConnectorRef struct {
+	ID   string
+	Name string
+}
+
+// ListConnectorRefs returns every connector's ID and name, for resolving
+// connector names in an OIDC provider's group_connector_roles mapping (#614).
+func (s *Store) ListConnectorRefs(ctx context.Context) ([]ConnectorRef, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT id, name FROM connectors`)
+	if err != nil {
+		return nil, fmt.Errorf("list connector refs: %w", err)
+	}
+	defer rows.Close() //nolint:errcheck
+	refs := make([]ConnectorRef, 0)
+	for rows.Next() {
+		var r ConnectorRef
+		if err := rows.Scan(&r.ID, &r.Name); err != nil {
+			return nil, fmt.Errorf("scan connector ref: %w", err)
+		}
+		refs = append(refs, r)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate connector refs: %w", err)
+	}
+	return refs, nil
 }

@@ -22,6 +22,7 @@ import {
   postConnectorsConnectorIdStop,
   postConnectorsConnectorIdConfigPush,
   postConnectorsConnectorIdHealth,
+  postConnectorsConnectorIdRelease,
   putConnectorsConnectorIdEnabled,
   putConnectorsConnectorId,
   getGetConnectorsQueryKey,
@@ -43,6 +44,7 @@ import { relativeTime, durationLabel } from '../../lib/time';
 import { StatusPill, SeverityTag } from '../../components/ui/StatusDot';
 import { toneColor, type Tone } from '../../components/ui/status';
 import { Button } from '../../components/ui/Button';
+import { ToneTag } from '../../components/ui/ToneTag';
 import { Panel } from '../../components/ui/Panel';
 import { Dialog } from '../../components/ui/Dialog';
 import { SkeletonRows, ErrorState, EmptyState } from '../../components/ui/states';
@@ -116,6 +118,15 @@ export function ServiceDetailPage() {
   const startOp = useLifecycleOp(id, postConnectorsConnectorIdStart, onOpSuccess);
   const stopOp = useLifecycleOp(id, postConnectorsConnectorIdStop, onOpSuccess);
 
+  const release = useMutation({
+    mutationFn: () => postConnectorsConnectorIdRelease(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: getGetConnectorsQueryKey() });
+      void connector.refetch();
+    },
+    onError: () => toast.error(t('connectors.managed.releaseError')),
+  });
+
   const healthCheck = useMutation({
     mutationFn: () => postConnectorsConnectorIdHealth(id),
     onSuccess: () => {
@@ -148,6 +159,11 @@ export function ServiceDetailPage() {
 
   const c = connector.data;
   const status = (overrides[c.id] ?? c.status) as ServiceStatus;
+  // A connector declared in config.yaml takes its settings from that file, and
+  // one orphaned from it can only be released or removed (#500).
+  const managed = c.managedBy === 'config';
+  const orphaned = c.managedBy === 'config-orphaned';
+  const editable = !managed && !orphaned;
 
   return (
     <div className="mx-auto max-w-275 px-6 py-6">
@@ -165,7 +181,14 @@ export function ServiceDetailPage() {
           <div className="flex items-center gap-3">
             <h1 className="text-xl font-semibold tracking-tight text-ink">{c.name}</h1>
             <StatusPill status={status} />
+            {managed && <ToneTag tone="idle" label={t('connectors.managed.tag')} />}
+            {orphaned && <ToneTag tone="warn" label={t('connectors.managed.orphanedTag')} />}
           </div>
+          {(managed || orphaned) && (
+            <p className="mt-1 max-w-prose text-2xs text-ink-muted">
+              {t(managed ? 'connectors.managed.hint' : 'connectors.managed.orphanedHint')}
+            </p>
+          )}
           <p className="mt-1 font-mono text-2xs text-ink-faint">
             {c.type} · {c.url?.replace(/^https?:\/\//, '')} ·{' '}
             {t('services.detail.lastSync', { time: relativeTime(c.lastSyncAt) })}
@@ -189,9 +212,19 @@ export function ServiceDetailPage() {
           </p>
           {c.lastSyncError && <p className="mt-1 text-2xs text-err">{c.lastSyncError}</p>}
         </div>
-        {canMutate && (
+        {canMutate && orphaned && (
           <div className="flex items-center gap-2">
-            <label className="flex items-center gap-1.5 text-2xs text-ink-faint">
+            <Button size="sm" variant="secondary" onClick={() => release.mutate()} disabled={release.isPending}>
+              {t('connectors.managed.release')}
+            </Button>
+            <Button size="sm" variant="danger" onClick={() => setRemoving(true)}>
+              {t('common.remove')}
+            </Button>
+          </div>
+        )}
+        {canMutate && !orphaned && (
+          <div className="flex items-center gap-2">
+            <label className={editable ? 'flex items-center gap-1.5 text-2xs text-ink-faint' : 'hidden'}>
               {t('services.detail.scheduleLabel')}
               <div className="relative">
                 <select
@@ -255,20 +288,26 @@ export function ServiceDetailPage() {
                 ? t('services.detail.healthCheckLoading')
                 : t('services.detail.healthCheck')}
             </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => toggleEnabled.mutate(!c.enabled)}
-              disabled={toggleEnabled.isPending}
-            >
-              {c.enabled ? t('common.disable') : t('common.enable')}
-            </Button>
-            <Button size="sm" variant="ghost" onClick={() => navigate(`/connectors/${c.id}/edit`)}>
-              {t('common.edit')}
-            </Button>
-            <Button size="sm" variant="danger" onClick={() => setRemoving(true)}>
-              {t('common.remove')}
-            </Button>
+            {editable && (
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => toggleEnabled.mutate(!c.enabled)}
+                disabled={toggleEnabled.isPending}
+              >
+                {c.enabled ? t('common.disable') : t('common.enable')}
+              </Button>
+            )}
+            {editable && (
+              <Button size="sm" variant="ghost" onClick={() => navigate(`/connectors/${c.id}/edit`)}>
+                {t('common.edit')}
+              </Button>
+            )}
+            {editable && (
+              <Button size="sm" variant="danger" onClick={() => setRemoving(true)}>
+                {t('common.remove')}
+              </Button>
+            )}
           </div>
         )}
       </header>

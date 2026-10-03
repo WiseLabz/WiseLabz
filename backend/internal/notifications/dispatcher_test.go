@@ -1471,3 +1471,34 @@ func TestNotifyAlertCreated_OnlyConnectorReaders(t *testing.T) {
 		t.Fatalf("stranger: total=%d err=%v, want 0", total, err)
 	}
 }
+
+func TestNotifyAdmins_SkipsNonAdmins(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	admin := &store.User{Username: "notify-admin", InstanceAdminRole: "admin"}
+	user := &store.User{Username: "notify-user", InstanceAdminRole: "user"}
+	for _, u := range []*store.User{admin, user} {
+		if err := s.CreateUser(ctx, u); err != nil {
+			t.Fatalf("create user: %v", err)
+		}
+	}
+
+	d := NewDispatcher(s, nil)
+	d.NotifyAdmins(ctx, EventSystemJobFailed, "warning", "Connectors in config.yaml need attention", "Skipped \"pve\"")
+	waitForDispatch(t, d)
+
+	got, _, err := s.ListNotifications(ctx, admin.ID, false, 0, 10)
+	if err != nil {
+		t.Fatalf("list notifications: %v", err)
+	}
+	if len(got) != 1 || got[0].EventType != EventSystemJobFailed {
+		t.Fatalf("admin notifications = %+v, want one system event", got)
+	}
+	got, _, err = s.ListNotifications(ctx, user.ID, false, 0, 10)
+	if err != nil {
+		t.Fatalf("list notifications: %v", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("non-admin received %d notifications, want none", len(got))
+	}
+}

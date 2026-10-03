@@ -96,3 +96,65 @@ func TestConfigSchema(t *testing.T) {
 		t.Fatalf("extra argument: code = %d, stdout = %s", code, out.String())
 	}
 }
+
+func TestConfigValidateDeclaredConnectors(t *testing.T) {
+	t.Chdir(t.TempDir())
+	setValidEnv(t)
+	t.Setenv("PVE_SECRET", "declared-secret-value")
+	write := func(yaml string) {
+		t.Helper()
+		if err := os.WriteFile("config.yaml", []byte(yaml), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	const valid = `
+connectors:
+  - name: pve
+    type: proxmox
+    url: https://pve.lan:8006
+    config:
+      token_id: root@pam!wl
+      token_secret: ${PVE_SECRET}
+`
+	tests := []struct {
+		name string
+		yaml string
+		want string // stderr substring; empty means exit 0
+	}{
+		{name: "valid", yaml: valid},
+		{name: "unknown key", yaml: valid + "      tokn: x\n", want: `"pve": field "tokn"`},
+		{name: "unknown type", yaml: strings.Replace(valid, "type: proxmox", "type: nope", 1), want: `"pve": unknown connector type`},
+		{name: "missing required", yaml: strings.Replace(valid, "      token_id: root@pam!wl\n", "", 1), want: `field "token_id": is required`},
+		{name: "unset variable", yaml: strings.Replace(valid, "PVE_SECRET", "WL_TEST_UNSET", 1), want: "WL_TEST_UNSET is not set"},
+		{name: "duplicate name", yaml: valid + strings.TrimPrefix(valid, "\nconnectors:\n"), want: "declared more than once"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			write(tt.yaml)
+			var out, errOut bytes.Buffer
+			code := runConfigCommand([]string{"validate"}, &out, &errOut)
+			if tt.want == "" {
+				if code != 0 {
+					t.Fatalf("code = %d, want 0 (stderr: %s)", code, errOut.String())
+				}
+				return
+			}
+			if code != 1 || !strings.Contains(errOut.String(), tt.want) {
+				t.Fatalf("code = %d, stderr = %q, want 1 mentioning %q", code, errOut.String(), tt.want)
+			}
+		})
+	}
+
+	// A literal secret in the file must not survive `config print --redacted`.
+	write(strings.Replace(valid, "${PVE_SECRET}", "literal-declared-secret", 1))
+	var out, errOut bytes.Buffer
+	if code := runConfigCommand([]string{"print", "--redacted"}, &out, &errOut); code != 0 {
+		t.Fatalf("print: code = %d (stderr: %s)", code, errOut.String())
+	}
+	if strings.Contains(out.String(), "literal-declared-secret") {
+		t.Errorf("print --redacted leaks a declared connector secret: %s", out.String())
+	}
+	if !strings.Contains(out.String(), "pve.lan") {
+		t.Errorf("declared connector missing from output: %s", out.String())
+	}
+}

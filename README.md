@@ -55,11 +55,12 @@ docker compose up -d
 ```
 
 Open `http://localhost:8080` and register your first service. The `deploy/config.example.yaml`
-file includes commented examples for every supported service.
+file documents the configuration keys, including an example of declaring a connector.
 
 ## Configuration
 
-WiseLabz reads settings from a `config.yaml` file at the repository root. Every key in
+WiseLabz reads settings from a `config.yaml` file in `/etc/wiselabz/`, the working
+directory or `./deploy/`. Every scalar key in
 the YAML file can be overridden with an environment variable prefixed with `WISELABZ_`.
 Environment variables always take precedence over the file, so you can keep secrets out of
 your config file and tune settings per deployment without editing YAML.
@@ -74,18 +75,21 @@ db:
   dsn: file:/data/wiselabz.db?cache=shared
 ```
 
-Service connectors (Proxmox, Docker, pfSense, custom, etc.) are created and configured
-through the web UI, not in the config file. See the [Supported services](#supported-services)
-section below for the complete list.
+Service connectors (Proxmox, Docker, pfSense, custom, etc.) are created in the web UI, or
+declared under `connectors:` in the config file so they can be kept in Git, with secrets
+taken from environment variables or files. See
+[docs/CONNECTORS_IN_CONFIG.md](docs/CONNECTORS_IN_CONFIG.md), and the
+[Supported services](#supported-services) section below for the complete list.
 
 For a full list of configuration keys, see [deploy/config.example.yaml](deploy/config.example.yaml).
 Run `server config schema` to print a JSON Schema generated from the server's `Config`
 struct (for example, `server config schema > config.schema.json`). Each scalar key has
 an `x-env` annotation naming its `WISELABZ_*` override. OIDC providers (`auth.oidc`)
-are file-only collections, marked `x-config-file-only`; their item fields have no env
-annotation. The schema describes key names and types, includes secret field names,
+and declared connectors (`connectors`) are file-only collections, marked
+`x-config-file-only`; their item fields have no env annotation. The schema describes key names and types, includes secret field names,
 and never loads or prints configured values. It does not replace semantic validation:
-use `server config validate` to check deployment settings and `server config print
+use `server config validate` to check deployment settings (including declared
+connectors against their type's fields) and `server config print
 --redacted` to inspect them with secrets masked.
 
 ## Supported services

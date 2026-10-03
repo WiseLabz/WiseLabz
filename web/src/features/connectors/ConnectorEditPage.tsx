@@ -24,6 +24,7 @@ import { SkeletonRows, ErrorState } from '../../components/ui/states';
 import { toast } from '../../lib/toast';
 import { ArrowRightIcon, CheckIcon } from '../../components/icons';
 import { useConnectorRole } from '../../hooks/useRole';
+import { isSecretField, isToggleField, isTopLevelField, isVerifyTlsField } from './schemaFields';
 
 type FormValues = Record<string, string | boolean>;
 
@@ -69,8 +70,9 @@ export function ConnectorEditPage() {
   const save = useMutation({
     mutationFn: () => {
       const config: Record<string, unknown> = {};
+      const tlsField = schema?.fields.find(isVerifyTlsField);
       for (const f of schema?.fields ?? []) {
-        if (f.name === 'url' || f.name === 'verifyTls') continue;
+        if (isTopLevelField(f)) continue;
         // Only send secret/config fields the user actually re-entered.
         if (values[f.name] !== undefined && String(values[f.name]).length > 0) config[f.name] = values[f.name];
       }
@@ -78,7 +80,7 @@ export function ConnectorEditPage() {
         name: nameValue,
         owner: ownerValue,
         url: values.url !== undefined ? String(values.url) : connector.data?.url,
-        verifyTls: values.verifyTls !== undefined ? Boolean(values.verifyTls) : connector.data?.verifyTls,
+        verifyTls: tlsField && values[tlsField.name] !== undefined ? Boolean(values[tlsField.name]) : connector.data?.verifyTls,
         config,
         ...(userExpiresAt !== null && {
           userExpiresAt: userExpiresAt ? `${userExpiresAt}T00:00:00Z` : null,
@@ -116,6 +118,21 @@ export function ConnectorEditPage() {
   }
 
   const c = connector.data;
+
+  if (c.managedBy === 'config' || c.managedBy === 'config-orphaned') {
+    return (
+      <div className="mx-auto max-w-170 px-6 py-6">
+        <Panel className="min-h-[30vh]">
+          <ErrorState
+            title={t('connectors.managed.editTitle')}
+            description={t(
+              c.managedBy === 'config' ? 'connectors.managed.editDesc' : 'connectors.managed.orphanedEditDesc',
+            )}
+          />
+        </Panel>
+      </div>
+    );
+  }
 
   if (!canEdit) {
     return (
@@ -160,14 +177,14 @@ export function ConnectorEditPage() {
           {schema?.fields.map((f) => (
             <Field
               key={f.name}
-              field={f.secret ? { ...f, placeholder: t('connectors.edit.secretPlaceholder') } : f}
+              field={isSecretField(f) ? { ...f, placeholder: t('connectors.edit.secretPlaceholder') } : f}
               value={
                 values[f.name] ??
                 (f.name === 'url'
                   ? (c.url ?? '')
-                  : f.name === 'verifyTls'
+                  : isVerifyTlsField(f)
                     ? Boolean(c.verifyTls)
-                    : f.kind === 'boolean'
+                    : isToggleField(f)
                       ? false
                       : '')
               }

@@ -22,6 +22,7 @@ import { Panel } from '../../components/ui/Panel';
 import { ErrorState, SkeletonRows } from '../../components/ui/states';
 import { categoryIcon } from '../../components/categoryIcon';
 import { CheckIcon } from '../../components/icons';
+import { fieldDefault, isSecretField, isToggleField, isTopLevelField, isVerifyTlsField } from './schemaFields';
 
 type FormValues = Record<string, string | boolean>;
 
@@ -51,11 +52,13 @@ export function ConnectorForm({
     mutationFn: () => {
       if (!schema) throw new Error('no type selected');
       const url = String(values.url ?? '');
-      const verifyTls = Boolean(values.verifyTls ?? false);
+      const tlsField = schema.fields.find(isVerifyTlsField);
+      // Verify TLS is on unless the user switched it off.
+      const verifyTls = tlsField ? Boolean(values[tlsField.name] ?? fieldDefault(tlsField)) : true;
       const config: Record<string, unknown> = {};
       for (const f of schema.fields) {
-        if (f.name === 'url' || f.name === 'verifyTls') continue;
-        config[f.name] = values[f.name] ?? '';
+        if (isTopLevelField(f)) continue;
+        config[f.name] = values[f.name] ?? fieldDefault(f);
       }
       return postConnectors({ name, owner: owner || undefined, category: schema.category, type: schema.type, url, verifyTls, config });
     },
@@ -132,7 +135,7 @@ export function ConnectorForm({
               <Field
                 key={f.name}
                 field={f}
-                value={values[f.name] ?? (f.kind === 'boolean' ? false : '')}
+                value={values[f.name] ?? fieldDefault(f)}
                 onChange={(v) => setValues((s) => ({ ...s, [f.name]: v }))}
               />
             ))}
@@ -205,7 +208,7 @@ export function Field({
   value: string | boolean;
   onChange: (v: string | boolean) => void;
 }) {
-  if (field.kind === 'boolean') {
+  if (isToggleField(field)) {
     return (
       <label className="flex items-center justify-between gap-3">
         <span className="text-sm text-ink">{field.label}</span>
@@ -243,7 +246,7 @@ export function Field({
     );
   }
   const type =
-    field.kind === 'password' || field.secret
+    isSecretField(field)
       ? 'password'
       : field.kind === 'number'
         ? 'number'

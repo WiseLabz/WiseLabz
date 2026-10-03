@@ -459,3 +459,78 @@ func TestConnectorReaderIDs(t *testing.T) {
 		t.Errorf("ConnectorReaderIDs() = %v, want %v", got, want)
 	}
 }
+
+func TestSyncConfigConnectorGrants(t *testing.T) {
+	s := newDocTestStore(t)
+	ctx := context.Background()
+	alice := newTestUser(t, s, "config-grant-alice")
+	bob := newTestUser(t, s, "config-grant-bob")
+	c := newTestConnector(t, s, "conn-config-grants")
+
+	// Grants from the other sources must survive every sync.
+	if _, err := s.UpsertConnectorGrant(ctx, alice.ID, c.ID, "viewer"); err != nil {
+		t.Fatalf("UpsertConnectorGrant() error: %v", err)
+	}
+	if _, err := upsertConnectorGrant(ctx, s.db, bob.ID, c.ID, "viewer", connectorGrantSourceOIDC); err != nil {
+		t.Fatalf("upsertConnectorGrant(oidc) error: %v", err)
+	}
+
+	diff, err := s.SyncConfigConnectorGrants(ctx, c.ID, map[string]string{alice.ID: "operator", bob.ID: "viewer"})
+	if err != nil {
+		t.Fatalf("SyncConfigConnectorGrants() error: %v", err)
+	}
+	if len(diff.Added) != 2 || len(diff.Removed) != 0 {
+		t.Fatalf("first sync diff = %+v, want 2 added", diff)
+	}
+	if role, _ := s.GetUserConnectorRole(ctx, alice.ID, c.ID); role != "operator" {
+		t.Errorf("alice role = %q, want operator (config grant outranks manual viewer)", role)
+	}
+
+	diff, err = s.SyncConfigConnectorGrants(ctx, c.ID, map[string]string{alice.ID: "operator", bob.ID: "viewer"})
+	if err != nil || !diff.Empty() {
+		t.Fatalf("unchanged sync: diff = %+v, err = %v, want empty", diff, err)
+	}
+
+	// Alice's declared grant is removed and Bob's role changes.
+	diff, err = s.SyncConfigConnectorGrants(ctx, c.ID, map[string]string{bob.ID: "operator"})
+	if err != nil {
+		t.Fatalf("SyncConfigConnectorGrants() error: %v", err)
+	}
+	if len(diff.Removed) != 1 || diff.Removed[0].UserID != alice.ID || len(diff.Added) != 1 || diff.Added[0].Role != "operator" {
+		t.Fatalf("second sync diff = %+v", diff)
+	}
+	if role, _ := s.GetUserConnectorRole(ctx, alice.ID, c.ID); role != "viewer" {
+		t.Errorf("alice role = %q, want her manual viewer grant to remain", role)
+	}
+
+	if _, err := s.SyncConfigConnectorGrants(ctx, c.ID, nil); err != nil {
+		t.Fatalf("SyncConfigConnectorGrants(nil) error: %v", err)
+	}
+	grants, err := s.ListConnectorGrants(ctx, c.ID)
+	if err != nil {
+		t.Fatalf("ListConnectorGrants() error: %v", err)
+	}
+	sources := map[string]bool{}
+	for _, g := range grants {
+		sources[g.Source] = true
+	}
+	if len(grants) != 2 || !sources["manual"] || !sources["oidc"] {
+		t.Errorf("after clearing config grants, grants = %+v, want only the manual and oidc rows", grants)
+	}
+}
+
+func TestListConnectorRefs(t *testing.T) {
+	s := newDocTestStore(t)
+	c := newTestConnector(t, s, "conn-list-refs")
+
+	refs, err := s.ListConnectorRefs(context.Background())
+	if err != nil {
+		t.Fatalf("ListConnectorRefs() error: %v", err)
+	}
+	for _, r := range refs {
+		if r.ID == c.ID && r.Name == "conn-list-refs" {
+			return
+		}
+	}
+	t.Fatalf("ListConnectorRefs() = %v, want it to include %q named conn-list-refs", refs, c.ID)
+}

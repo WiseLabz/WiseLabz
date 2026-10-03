@@ -119,7 +119,8 @@ func decodeBulkRequest(w http.ResponseWriter, r *http.Request) (bulkRequest, boo
 // splitByConnectorGrant looks up which of the requested ids exist, then
 // partitions the existing ones into ones the caller has at least operator on
 // and the rest. Nonexistent ids are surfaced as "not_found" and unauthorized
-// existing ids as "forbidden", both pre-rendered as bulkItemResults so
+// existing ids as "forbidden" (and orphaned ones as "orphaned"), all
+// pre-rendered as bulkItemResults so
 // callers can append them straight into their results slice alongside the
 // outcomes for the ids they go on to process.
 func (h *Handler) splitByConnectorGrant(ctx context.Context, ids []string) (allowed []string, found map[string]store.ConnectorRecord, results []bulkItemResult, err error) {
@@ -129,10 +130,15 @@ func (h *Handler) splitByConnectorGrant(ctx context.Context, ids []string) (allo
 	}
 	existing := make([]string, 0, len(found))
 	for _, id := range ids {
-		if _, ok := found[id]; ok {
-			existing = append(existing, id)
-		} else {
+		c, ok := found[id]
+		switch {
+		case !ok:
 			results = append(results, bulkItemResult{ID: id, Status: "error", Reason: "not_found"})
+		case c.ManagedBy == store.ManagedByConfigOrphaned:
+			// Orphaned connectors can only be deleted or released (#500).
+			results = append(results, bulkItemResult{ID: id, Status: "error", Reason: "orphaned"})
+		default:
+			existing = append(existing, id)
 		}
 	}
 	allowed, err = h.Store.FilterConnectorIDsByGrant(ctx, auth.UserIDFromContext(ctx), existing, "operator")
