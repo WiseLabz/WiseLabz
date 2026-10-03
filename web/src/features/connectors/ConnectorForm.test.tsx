@@ -42,7 +42,7 @@ async function fillAndSubmit(toggleTls: boolean) {
   if (toggleTls) fireEvent.click(tls);
   fireEvent.click(screen.getByRole('button', { name: /connect|create|add/i }));
   await waitFor(() => expect(postConnectors).toHaveBeenCalled());
-  return postConnectors.mock.calls.at(-1)![0] as Record<string, unknown>;
+  return postConnectors.mock.calls[postConnectors.mock.calls.length - 1][0] as Record<string, unknown>;
 }
 
 describe('ConnectorForm verify_tls (#613)', () => {
