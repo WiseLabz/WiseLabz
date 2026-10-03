@@ -198,6 +198,32 @@ toggles**:
 - Enable/disable a provider (`PUT /api/auth/providers/{id}/enabled`) — persisted as a DB flag; the definition stays in config.
 - Toggle local login and set access/refresh token TTLs (`PUT /api/auth/config`).
 
+### Connectors declared in config (#500: reconciled into the database)
+
+Unlike OIDC providers, connectors declared under `connectors:` are **copied into the
+database** at startup, because everything else (sync history, docs, grants, API-key and
+report scoping) references a connector by its row ID. `internal/connector/reconcile` runs
+after migrations and admin seeding and before the scheduler starts:
+
+- Entries are matched by `name`. A UI-created connector with the same name is adopted in
+  place, keeping its ID; an ambiguous name skips the entry.
+- `connectors.managed_by` is `ui`, `config` or `config-orphaned`. The API refuses changes
+  to a `config` connector's settings (`409 connector_managed`) and allows only delete and
+  release on an orphaned one. Operational routes stay open.
+- `connectors.config_hash` is a keyed fingerprint of the entry last applied. An unchanged
+  entry writes nothing, which is what keeps runtime-refreshed credentials from being
+  overwritten on every restart.
+- `${VAR}` and `<field>_file` are resolved only inside `connectors:` and only by the
+  reconciler and `server config validate`, never by `config.Load()`: the migrate, backup
+  and healthcheck commands share `Load()` and must not fail on a missing secret.
+- An invalid entry is skipped, logged and reported to instance admins; it never blocks
+  startup. Removing an entry disables and orphans the connector instead of deleting it.
+- Every replica runs the reconciler. Each entry is applied in its own transaction, and on
+  PostgreSQL that transaction takes an advisory lock so two replicas cannot both create
+  the same connector.
+
+Operator documentation: `docs/CONNECTORS_IN_CONFIG.md`.
+
 This supersedes the frontend plan's original §8.6 ("add/edit OIDC provider via UI"),
 which has been amended accordingly. Endpoint contract: `docs/openapi.yaml`
 (`/auth/config`, `/auth/providers/{providerId}/enabled`).

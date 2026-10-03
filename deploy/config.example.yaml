@@ -129,8 +129,28 @@ retention:
   # health_checks (connector health-check time series) older than this
   # (days) are purged
   health_check_days: 90
-  # how often the cleanup job runs, in hours
-  interval_hours: 24
+  # cron expression for the cleanup job (default: daily at midnight)
+  cron_expr: "0 0 * * *"
+
+# Connectors declared in this file (optional). They are applied to the database
+# at every start and are read-only in the UI; see docs/CONNECTORS_IN_CONFIG.md.
+# Inside this list only, ${VAR} is read from the environment and <field>_file
+# reads a field from a file. Check the list with `server config validate`.
+# connectors:
+#   - name: pve
+#     type: proxmox
+#     url: https://pve.lan:8006/api2/json
+#     verify_tls: true
+#     enabled: true
+#     # Auto-sync interval in seconds; omit for manual sync only.
+#     schedule_seconds: 900
+#     config:
+#       token_id: root@pam!wiselabz
+#       token_secret: ${PVE_TOKEN_SECRET}
+#       # or: token_secret_file: /run/secrets/pve_token
+#     grants:
+#       - user: alice
+#         role: viewer
 
 # Logging
 log:
