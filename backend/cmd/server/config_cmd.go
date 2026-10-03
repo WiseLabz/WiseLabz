@@ -1,11 +1,22 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 
 	"github.com/WiseLabz/wiselabz/internal/config"
+	"github.com/WiseLabz/wiselabz/internal/connector"
+	"github.com/WiseLabz/wiselabz/internal/connector/reconcile"
+	"github.com/WiseLabz/wiselabz/internal/notifications"
+	"github.com/WiseLabz/wiselabz/internal/store"
+
+	// Registers every connector type so declared connectors can be checked
+	// against their schemas without going through the API package.
+	_ "github.com/WiseLabz/wiselabz/internal/connector/all"
 )
 
 const configUsage = "Usage: server config <validate|print --redacted|schema>\n"
@@ -40,7 +51,7 @@ func runConfigCommand(args []string, stdout, stderr io.Writer) int {
 			_, _ = fmt.Fprintf(stderr, "Config invalid: %v\n", err)
 			return 1
 		}
-		if err := cfg.Validate(); err != nil {
+		if err := errors.Join(cfg.Validate(), declaredConnectorErrors(cfg)); err != nil {
 			_, _ = fmt.Fprintf(stderr, "Config invalid:\n%v\n", err)
 			return 1
 		}
@@ -68,5 +79,36 @@ func runConfigCommand(args []string, stdout, stderr io.Writer) int {
 	default:
 		_, _ = fmt.Fprintf(stderr, "Unknown config command: %s\n%s", args[0], configUsage)
 		return 2
+	}
+}
+
+// declaredConnectorErrors checks every connector declared in config.yaml
+// against its type's schema, without touching the database. Each problem is
+// prefixed with the entry so it can be found in the file.
+func declaredConnectorErrors(cfg *config.Config) error {
+	var errs []error
+	for i, c := range cfg.ResolveConnectors() {
+		err := c.Err
+		if err == nil {
+			err = connector.ValidateDeclared(c.Type, c.Config)
+		}
+		if err != nil {
+			errs = append(errs, fmt.Errorf("connectors[%d] %q: %w", i, c.Name, err))
+		}
+	}
+	return errors.Join(errs...)
+}
+
+// reconcileDeclaredConnectors applies the connectors declared in config.yaml
+// to the database. Invalid entries are skipped and reported to the instance
+// admins; they never stop the server from starting.
+func reconcileDeclaredConnectors(ctx context.Context, cfg *config.Config, s *store.Store, d *notifications.Dispatcher, logger *slog.Logger) {
+	entries := cfg.ResolveConnectors()
+	notify := func(ctx context.Context, title, message string) {
+		d.NotifyAdmins(ctx, notifications.EventSystemJobFailed, "warning", title, message)
+	}
+	results := reconcile.Run(ctx, s, cfg.Encryption.Key, entries, logger, notify)
+	if len(results) > 0 {
+		logger.Info("Declared connectors reconciled", "entries", len(entries), "results", len(results))
 	}
 }

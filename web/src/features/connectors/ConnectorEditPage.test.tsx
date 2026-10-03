@@ -85,3 +85,21 @@ describe('ConnectorEditPage rotation fields (#239 PR1)', () => {
     );
   });
 });
+
+describe('ConnectorEditPage config-managed connectors (#500)', () => {
+  it.each([
+    ['config', /declared in config\.yaml/],
+    ['config-orphaned', /removed from config\.yaml/],
+  ])('replaces the form for a %s connector', (managedBy, message) => {
+    const original = connectorData;
+    connectorData = { ...connectorData, managedBy };
+    try {
+      renderPage();
+      expect(screen.getByText('Managed by config')).toBeInTheDocument();
+      expect(screen.getByText(message)).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /save/i })).not.toBeInTheDocument();
+    } finally {
+      connectorData = original;
+    }
+  });
+});

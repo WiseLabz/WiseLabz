@@ -33,6 +33,8 @@ type Config struct {
 	Backup      BackupSettings     `mapstructure:"backup"`
 	DocExport   DocExportSettings  `mapstructure:"doc_export"`
 	Metrics     MetricsSettings    `mapstructure:"metrics"`
+	// Connectors declares connectors reconciled into the database at startup (#500).
+	Connectors []ConnectorEntry `mapstructure:"connectors"`
 
 	// AdminPassword bootstraps the first admin user when no users exist
 	// (env-only: WISELABZ_ADMIN_PASSWORD). Ignored once a user exists.
@@ -488,6 +490,7 @@ func Load() (*Config, error) {
 	if err := v.Unmarshal(&cfg); err != nil {
 		return nil, fmt.Errorf("unmarshal config: %w", err)
 	}
+	applyConnectorDefaults(v.Get("connectors"), cfg.Connectors)
 
 	// Validate cron expressions
 	if err := cfg.validateCronExpressions(); err != nil {

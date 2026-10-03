@@ -81,6 +81,7 @@ func (c *Config) Redacted() Config {
 			r.Auth.OIDC[i].ClientSecret = mask(r.Auth.OIDC[i].ClientSecret)
 		}
 	}
+	r.Connectors = redactConnectors(c.Connectors)
 	return r
 }
 

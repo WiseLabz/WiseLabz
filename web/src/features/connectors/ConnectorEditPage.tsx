@@ -117,6 +117,21 @@ export function ConnectorEditPage() {
 
   const c = connector.data;
 
+  if (c.managedBy === 'config' || c.managedBy === 'config-orphaned') {
+    return (
+      <div className="mx-auto max-w-170 px-6 py-6">
+        <Panel className="min-h-[30vh]">
+          <ErrorState
+            title={t('connectors.managed.editTitle')}
+            description={t(
+              c.managedBy === 'config' ? 'connectors.managed.editDesc' : 'connectors.managed.orphanedEditDesc',
+            )}
+          />
+        </Panel>
+      </div>
+    );
+  }
+
   if (!canEdit) {
     return (
       <div className="mx-auto max-w-170 px-6 py-6">

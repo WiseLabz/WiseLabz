@@ -60,6 +60,8 @@ func schemaFor(t reflect.Type, path string, env bool) (map[string]any, error) {
 		if env {
 			schema["x-env"] = "WISELABZ_" + strings.ToUpper(strings.ReplaceAll(path, ".", "_"))
 		}
+	case reflect.Interface:
+		// Free-form value (a connector's type-specific config): any JSON type.
 	default:
 		return nil, fmt.Errorf("config schema: unsupported type %s at %s", t, path)
 	}

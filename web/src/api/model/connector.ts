@@ -7,6 +7,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { ConnectorCategory } from './connectorCategory';
+import type { ConnectorManagedBy } from './connectorManagedBy';
 import type { ServiceStatus } from './serviceStatus';
 
 export interface Connector {
@@ -60,4 +61,6 @@ export interface Connector {
    * @nullable
    */
   rotationMaxAgeDays?: number | null;
+  /** Who owns the connector's settings. `config`: declared in config.yaml and reconciled at startup, so edits, enable/disable and delete are rejected with 409. `config-orphaned`: its config entry was removed; it is disabled and can only be deleted or released. */
+  readonly managedBy?: ConnectorManagedBy;
 }

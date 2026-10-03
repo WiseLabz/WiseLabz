@@ -101,6 +101,10 @@ func main() {
 	notifDispatcher := notifications.NewDispatcher(s, wsHub)
 	notifDispatcher.SetEncryptionKey(cfg.Encryption.Key)
 
+	// Apply the connectors declared in config.yaml (#500) before anything
+	// that reads connectors starts.
+	reconcileDeclaredConnectors(ctx, cfg, s, notifDispatcher, logger)
+
 	// Initialize engines
 	qualityChecker := quality.NewChecker(s, wsHub, notifDispatcher,
 		quality.RotationConfig{MaxAgeDays: cfg.Rotation.MaxAgeDays, WarnDays: cfg.Rotation.WarnDays})

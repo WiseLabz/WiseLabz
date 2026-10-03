@@ -27,31 +27,10 @@ func (s *Store) ListConnectorsByID(ctx context.Context, ids []string) (map[strin
 	defer rows.Close() //nolint:errcheck
 
 	for rows.Next() {
-		var c ConnectorRecord
-		var verifyTLS, enabled int
-		var owner, lastSyncAt, nextRunAt, lastSyncError, credentialExpiresAt sql.NullString
-		var scheduleSeconds, lastSyncDurationMs sql.NullInt64
-		var secretRotatedAt, userExpiresAt sql.NullString
-		var rotationMaxAgeDays sql.NullInt64
-		if err := rows.Scan(&c.ID, &c.Name, &c.Category, &c.Type, &c.URL, &owner, &verifyTLS, &c.ConfigData,
-			&enabled, &c.Status, &c.StatusMessage, &lastSyncAt,
-			&scheduleSeconds, &nextRunAt, &lastSyncDurationMs, &lastSyncError, &c.RetryCount, &credentialExpiresAt,
-			&secretRotatedAt, &userExpiresAt, &rotationMaxAgeDays,
-			&c.CreatedAt, &c.UpdatedAt); err != nil {
+		c, err := scanConnector(rows)
+		if err != nil {
 			return nil, fmt.Errorf("scan: %w", err)
 		}
-		c.VerifyTLS = verifyTLS != 0
-		c.Owner = nullStrToStr(owner)
-		c.Enabled = enabled != 0
-		c.LastSyncAt = nullStrToStr(lastSyncAt)
-		c.NextRunAt = nullStrToStr(nextRunAt)
-		c.LastSyncError = nullStrToStr(lastSyncError)
-		c.ScheduleSeconds = nullInt64ToIntPtr(scheduleSeconds)
-		c.LastSyncDurationMs = nullInt64ToIntPtr(lastSyncDurationMs)
-		c.CredentialExpiresAt = nullStrToStr(credentialExpiresAt)
-		c.SecretRotatedAt = nullStrToStr(secretRotatedAt)
-		c.UserExpiresAt = nullStrToStr(userExpiresAt)
-		c.RotationMaxAgeDays = nullInt64ToIntPtr(rotationMaxAgeDays)
 		connectors[c.ID] = c
 	}
 	if err := rows.Err(); err != nil {
@@ -177,7 +156,7 @@ func scanConnector(row rowScanner) (ConnectorRecord, error) {
 		&enabled, &c.Status, &c.StatusMessage, &lastSyncAt,
 		&scheduleSeconds, &nextRunAt, &lastSyncDurationMs, &lastSyncError, &c.RetryCount, &credentialExpiresAt,
 		&secretRotatedAt, &userExpiresAt, &rotationMaxAgeDays,
-		&c.CreatedAt, &c.UpdatedAt); err != nil {
+		&c.ManagedBy, &c.ConfigHash, &c.CreatedAt, &c.UpdatedAt); err != nil {
 		return ConnectorRecord{}, err
 	}
 	c.VerifyTLS = verifyTLS != 0

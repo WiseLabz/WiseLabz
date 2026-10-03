@@ -4,6 +4,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/WiseLabz/wiselabz/internal/auth"
+	"github.com/WiseLabz/wiselabz/internal/store"
 )
 
 // mountConnectorRoutes registers the /connectors tree. It must be called on an
@@ -63,21 +64,35 @@ func mountConnectorRoutes(r chi.Router, d routerDeps) {
 
 		r.Group(func(r chi.Router) {
 			r.Use(connOperator)
-			r.Post("/{id}/test", d.connH.Test)
-			r.Post("/{id}/health", d.connH.Health)
-			r.Post("/{id}/restart", d.connH.RestartPreview)
-			r.Post("/{id}/start", d.connH.StartPreview)
-			r.Post("/{id}/stop", d.connH.StopPreview)
-			r.Post("/{id}/config-push", d.connH.ConfigPush)
-			r.Put("/{id}", d.connH.Update)
-			r.Put("/{id}/enabled", d.connH.ToggleEnabled)
-			r.Post("/{id}/sync", d.connH.Sync)
-			r.Post("/{id}/maintenance-window", d.connH.OpenMaintenanceWindow) // no elevation: reversible and time-boxed
-			r.Delete("/{id}/maintenance-window", d.connH.CloseMaintenanceWindow)
-			r.Post("/{id}/golden-snapshot", d.connH.PinGoldenSnapshot)
-			r.Delete("/{id}/golden-snapshot", d.connH.UnpinGoldenSnapshot)
+
+			// Operating a connector is allowed whether its settings come
+			// from the UI or from config.yaml, but not once it is orphaned.
+			r.Group(func(r chi.Router) {
+				r.Use(d.connH.RequireManagedBy(store.ManagedByUI, store.ManagedByConfig))
+				r.Post("/{id}/test", d.connH.Test)
+				r.Post("/{id}/health", d.connH.Health)
+				r.Post("/{id}/restart", d.connH.RestartPreview)
+				r.Post("/{id}/start", d.connH.StartPreview)
+				r.Post("/{id}/stop", d.connH.StopPreview)
+				r.Post("/{id}/config-push", d.connH.ConfigPush)
+				r.Post("/{id}/sync", d.connH.Sync)
+				r.Post("/{id}/maintenance-window", d.connH.OpenMaintenanceWindow) // no elevation: reversible and time-boxed
+				r.Delete("/{id}/maintenance-window", d.connH.CloseMaintenanceWindow)
+				r.Post("/{id}/golden-snapshot", d.connH.PinGoldenSnapshot)
+				r.Delete("/{id}/golden-snapshot", d.connH.UnpinGoldenSnapshot)
+			})
+
+			// Settings of a config-managed connector live in config.yaml (#500).
+			r.Group(func(r chi.Router) {
+				r.Use(d.connH.RequireManagedBy(store.ManagedByUI))
+				r.Put("/{id}", d.connH.Update)
+				r.Put("/{id}/enabled", d.connH.ToggleEnabled)
+			})
+
+			r.With(d.connH.RequireManagedBy(store.ManagedByConfigOrphaned)).Post("/{id}/release", d.connH.Release)
 
 			r.Group(func(r chi.Router) {
+				r.Use(d.connH.RequireManagedBy(store.ManagedByUI, store.ManagedByConfigOrphaned))
 				r.Use(auth.RequireElevation(cfg.JWT, cfg.Store, "connector.delete"))
 				r.Delete("/{id}", d.connH.Delete)
 			})

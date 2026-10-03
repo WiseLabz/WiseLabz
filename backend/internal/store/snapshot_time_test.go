@@ -62,13 +62,15 @@ func TestSnapshotUTCDataMigration(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	// Roll back doc_section_ownership, mcp_knowledge, more_notification_channels,
 	// retention_scan_indexes, then snapshot_utc itself.
-	for range 7 {
+	for range 8 {
 		if err := RunMigrationsDown(s.rawDB, s.driver, logger); err != nil {
 			t.Fatal(err)
 		}
 	}
-	c := ConnectorRecord{Name: "legacy", Category: "virtualization", Type: "proxmox", URL: "https://example.test"}
-	if err := s.CreateConnector(ctx, &c); err != nil {
+	// Inserted by hand: CreateConnector writes columns this older schema lacks.
+	c := ConnectorRecord{ID: "legacy-connector"}
+	if _, err := s.db.ExecContext(ctx, `INSERT INTO connectors (id, name, category, type, url, created_at, updated_at)
+		VALUES (?, 'legacy', 'virtualization', 'proxmox', 'https://example.test', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')`, c.ID); err != nil {
 		t.Fatal(err)
 	}
 	cases := []struct{ input, want string }{

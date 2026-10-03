@@ -253,6 +253,22 @@ export function ServicesPage() {
                             >
                               {c.name}
                             </button>
+                            {c.managedBy === 'config' && (
+                              <span
+                                title={t('connectors.managed.hint')}
+                                className="rounded bg-idle-tint px-1.5 py-0.5 text-2xs font-medium text-ink-faint"
+                              >
+                                {t('connectors.managed.tag')}
+                              </span>
+                            )}
+                            {c.managedBy === 'config-orphaned' && (
+                              <span
+                                title={t('connectors.managed.orphanedHint')}
+                                className="rounded bg-warn-tint px-1.5 py-0.5 text-2xs font-medium text-warn"
+                              >
+                                {t('connectors.managed.orphanedTag')}
+                              </span>
+                            )}
                             {!c.enabled && (
                               <span className="rounded bg-idle-tint px-1.5 py-0.5 text-2xs font-medium text-ink-faint">
                                 {t('services.disabledTag')}
@@ -292,7 +308,7 @@ export function ServicesPage() {
                             size="sm"
                             variant="ghost"
                             onClick={() => runSync(c.id)}
-                            disabled={!c.enabled}
+                            disabled={!c.enabled || c.managedBy === 'config-orphaned'}
                           >
                             <SyncIcon size={14} /> {t('common.sync')}
                           </Button>
@@ -300,7 +316,8 @@ export function ServicesPage() {
                             size="sm"
                             variant="ghost"
                             onClick={() => toggleEnabled.mutate({ id: c.id, enabled: !c.enabled })}
-                            disabled={toggleEnabled.isPending}
+                            // A config-managed or orphaned connector cannot be toggled here (#500).
+                            disabled={toggleEnabled.isPending || (c.managedBy ?? 'ui') !== 'ui'}
                           >
                             {c.enabled ? t('common.disable') : t('common.enable')}
                           </Button>
@@ -308,6 +325,7 @@ export function ServicesPage() {
                           <IconButton
                             label={t('services.removeLabel', { name: c.name })}
                             onClick={() => setRemoving(c)}
+                            disabled={c.managedBy === 'config'}
                             className="hover:bg-err-tint hover:text-err"
                           >
                             <XIcon size={15} />
