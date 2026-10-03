@@ -20,4 +20,4 @@
 
 - [x] 3.1 Update export/reports docs and validate OpenSpec strictly.
 - [x] 3.2 Sequential low-memory Go tests/lint and web generation/lint/typecheck/vitest; server export/report checks (in-browser verification waived by coordinator for shared-host memory).
-- [ ] 3.3 Refresh graphify, Conventional Commit, file two deferred follow-ups and open labeled assigned PR with CI started.
+- [x] 3.3 Refresh graphify, Conventional Commit, file two deferred follow-ups and open labeled assigned PR with CI started.

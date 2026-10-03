@@ -1,6 +1,6 @@
 # Verification
 
-Branch: `feat/lab-book-export`. Migration: `000053_report_lab_book`, identical SQLite/PostgreSQL filenames; latest origin/main remains 000052, while #500 plans a conflicting 000053, so renumber after rebase if needed.
+PR: [#621](https://github.com/WiseLabz/WiseLabz/pull/621), against main, assigned to gsaraiva2109 with all requested labels; CI started. Branch: `feat/lab-book-export`. Migration: `000053_report_lab_book`, identical SQLite/PostgreSQL filenames; latest origin/main remains 000052, while #500 plans a conflicting 000053, so renumber after rebase if needed.
 
 ## Checks
 
@@ -9,7 +9,7 @@ Branch: `feat/lab-book-export`. Migration: `000053_report_lab_book`, identical S
 - `GOFLAGS=-p=2 GOMAXPROCS=2 golangci-lint run --concurrency 2 ./backend/...`: passed.
 - `bun run gen:api`, `bun run lint --concurrency 2`, `bun run typecheck`: passed.
 - `bun run test --maxWorkers=2`: 58 files, 328 tests passed.
-- Commit hooks use a temporary copy of the repository configuration with parallel mode disabled and lint concurrency 2, preserving the checks on the shared 6 GB host.
+- `pre-commit` and `commit-msg` hooks passed. Hooks use a temporary copy of the repository configuration with parallel mode disabled and lint concurrency 2, preserving the checks on the shared 6 GB host.
 
 ## Behavioral coverage
 
@@ -22,3 +22,5 @@ Transport tests parse multipart MIME and exercise a real SMTP test server, Disco
 In-browser offline Mermaid rendering, print preview and downloads from a running Docs page were not verified: the coordinator stopped browser verification to protect the shared host's memory. Browser/test-server processes were stopped; static asset and print behavior are covered by Go tests. PostgreSQL live-instance tests and delivery to external email/Discord providers were not run. Existing delivery retries remain text-only and do not reconstruct the Lab Book snapshot.
 
 Deferred follow-ups: #619 (server PDF and pre-rendered SVG) and #620 (Slack/generic webhook file delivery). The report filename follow-up was implemented in this PR per the owner's revised instruction.
+
+`graphify update .` succeeded and refreshed output is committed (8765 nodes, 26580 edges); its existing missing-SQL-parser warning means SQL files are not represented by AST extraction. The vendored Mermaid bundle is retained verbatim, including upstream whitespace, and excluded from graph extraction.
