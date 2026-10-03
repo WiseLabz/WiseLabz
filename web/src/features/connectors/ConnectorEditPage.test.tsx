@@ -103,3 +103,35 @@ describe('ConnectorEditPage config-managed connectors (#500)', () => {
     }
   });
 });
+
+describe('ConnectorEditPage verify_tls (#613)', () => {
+  it('shows the stored verifyTls on the switch and sends changes top-level, not in config', async () => {
+    const original = schemas;
+    schemas = [
+      {
+        type: 'proxmox',
+        category: 'virtualization',
+        displayName: 'Proxmox',
+        isCredentialRefresher: false,
+        fields: [
+          { name: 'url', label: 'API URL', kind: 'text', required: true },
+          { name: 'verify_tls', label: 'Verify TLS', kind: 'toggle', required: false },
+        ],
+      },
+    ];
+    try {
+      putConnectorsConnectorId.mockClear();
+      renderPage();
+      const tls = screen.getByRole('switch', { name: /verify tls/i });
+      expect(tls).toHaveAttribute('aria-checked', 'true');
+      fireEvent.click(tls);
+      fireEvent.click(screen.getByRole('button', { name: /save/i }));
+      await waitFor(() => expect(putConnectorsConnectorId).toHaveBeenCalled());
+      const body = putConnectorsConnectorId.mock.calls[0][1] as { verifyTls: boolean; config: object };
+      expect(body.verifyTls).toBe(false);
+      expect(body.config).not.toHaveProperty('verify_tls');
+    } finally {
+      schemas = original;
+    }
+  });
+});
