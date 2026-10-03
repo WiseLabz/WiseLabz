@@ -95,10 +95,13 @@ func TestOrphanedConnectorAllowsOnlyReleaseAndDelete(t *testing.T) {
 	t.Parallel()
 	app := newTestApp(t)
 	opID, opToken := app.user(t, "operator")
-	_, viewerToken := app.user(t, "viewer")
+	viewerID, viewerToken := app.user(t, "viewer")
 
 	conn := seedManagedConnector(t, app, store.ManagedByConfigOrphaned)
 	app.connectorGrant(t, opID, conn.ID, "operator")
+	if _, err := app.Store.SyncConfigConnectorGrants(context.Background(), conn.ID, map[string]string{viewerID: "viewer"}); err != nil {
+		t.Fatalf("seed config grant: %v", err)
+	}
 	base := "/api/connectors/" + conn.ID
 
 	for _, tt := range []struct {
@@ -147,6 +150,11 @@ func TestOrphanedConnectorAllowsOnlyReleaseAndDelete(t *testing.T) {
 		rec = app.req(t, http.MethodPut, base+"/enabled", map[string]any{"enabled": true}, opToken)
 		if rec.Code != http.StatusOK {
 			t.Fatalf("enable after release: status = %d; body = %s", rec.Code, rec.Body)
+		}
+		var cfgGrants int
+		if err := app.Store.DB().QueryRowContext(context.Background(),
+			`SELECT COUNT(*) FROM user_connector_roles WHERE connector_id = ? AND source = 'config'`, conn.ID).Scan(&cfgGrants); err != nil || cfgGrants != 0 {
+			t.Fatalf("config grants after release = %d (%v), want 0", cfgGrants, err)
 		}
 		var actions int
 		if err := app.Store.DB().QueryRowContext(context.Background(),

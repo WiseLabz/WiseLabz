@@ -1,7 +1,7 @@
 # Graph Report - WiseLabz  (2026-10-03)
 
 ## Corpus Check
-- 1160 files · ~788,473 words
+- 1160 files · ~788,570 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 23 file(s) not represented in the graph (top: (none) 12, .toml 2, .tmpl 2)
 
@@ -11,7 +11,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `e07f1216`
+- Built from commit: `e6ac7af7`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -1793,7 +1793,7 @@ _Questions this graph is uniquely positioned to answer:_
 - **What is the exact relationship between `Topbar Notification Center (deferred from V1)` and `Notification / NotificationPage Schemas`?**
   _Edge tagged AMBIGUOUS (relation: conceptually_related_to) - confidence is low._
 - **Why does `gitFixture` connect `gitFixture` to `Store`, `context.Context`, `Store`, `log/slog.Logger`, `testing.T`, `go_pkg_os`?**
-  _High betweenness centrality (0.010) - this node is a cross-community bridge._
+  _High betweenness centrality (0.009) - this node is a cross-community bridge._
 - **Why does `routerDeps` connect `middleware.go` to `Store`, `ErrorWithDetails`, `sync.Mutex`, `Handler`, `UserIDFromContext`, `net/http.Request`, `router.go`, `Handler`, `Handler`?**
   _High betweenness centrality (0.008) - this node is a cross-community bridge._
 - **Why does `Store` connect `Store` to `ErrorWithDetails`, `reports/handlers_test.go`, `NewChecker`, `NewEngine`, `ExportToFile`, `DBTX`, `Store`, `time.Time`, `DecodeKey`, `NewStore`, `log/slog.Logger`, `Dispatcher`, `system/backup_test.go`, `rewritePlaceholders`, `newTestHandler`, `notifications/handlers_test.go`, `testApp`, `matchEntities`, `Store`, `Engine`, `newTestHarness`, `.call`, `go_pkg_context`, `New`, `net/http.Request`, `Engine`, `store/backup_test.go`, `Handler`, `lifecycleManager`, `ownership_test.go`, `NewUser`, `Service`, `dispatcher_test.go`, `docs/handlers_test.go`, `.call`, `sync.Mutex`, `Manager`, `newTestHandler`, `ReportData`, `health/health_test.go`, `NewEngine`, `alerts/handlers_test.go`, `Handler`, `NewRegistry`, `reconcile_test.go`, `UserIDFromContext`, `chat/chat.go`, `backup/backup.go`, `Handler`, `.runPerRevision`, `gitFixture`, `export_test.go`, `diagnostics/diagnostics.go`?**

@@ -47,11 +47,17 @@ func writeManagedConflict(w http.ResponseWriter, managedBy string) {
 }
 
 // Release handles POST /api/connectors/{id}/release: it returns an orphaned
-// connector to UI management. The connector stays disabled; whoever releases
+// connector to UI management and drops its config-sourced grants. The connector stays disabled; whoever releases
 // it decides whether to enable it again.
 func (h *Handler) Release(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if err := h.Store.UpdateConnector(r.Context(), id, map[string]any{"managed_by": store.ManagedByUI}); err != nil {
+		httputil.Errorf(w, err)
+		return
+	}
+	// Grants declared in config.yaml can only be changed there; once the
+	// connector is released nothing would ever remove them.
+	if _, err := h.Store.SyncConfigConnectorGrants(r.Context(), id, nil); err != nil {
 		httputil.Errorf(w, err)
 		return
 	}
