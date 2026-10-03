@@ -314,7 +314,7 @@ func viewableDocWhere(ctx context.Context, userID, search string) (string, []any
 // (e.g. for backup export).
 func (s *Store) ListAllDocsWithContent(ctx context.Context, search string, offset, limit int) ([]DocRecord, int, error) {
 	where, args := docSearchWhere(search)
-	return paginatedQuery(ctx, s.db, "docs", docColumns, where, args, "updated_at DESC", limit, offset, scanDoc)
+	return paginatedQuery(ctx, s.db, "docs", docColumns, where, args, "updated_at DESC, id DESC", limit, offset, scanDoc)
 }
 
 // likeEscaper escapes LIKE wildcards and the escape character itself.

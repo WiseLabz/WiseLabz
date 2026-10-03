@@ -45,6 +45,9 @@ func TestHTMLPortableHierarchy(t *testing.T) {
 			t.Errorf("missing %q", want)
 		}
 	}
+	if !strings.Contains(html, `globalThis["mermaid"]`) || !strings.Contains(html, "default-src 'none'") {
+		t.Error("Mermaid bundle not inlined or CSP missing")
+	}
 	if strings.Contains(html, "wl:gen") || strings.Contains(html, "attachment:pdf") || strings.Contains(html, "data:application/pdf") {
 		t.Fatal("ownership markers or nonimage bytes leaked")
 	}
