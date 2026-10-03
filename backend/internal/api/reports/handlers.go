@@ -25,14 +25,15 @@ type Handler struct {
 func NewHandler(s *store.Store, m *report.Manager) *Handler { return &Handler{Store: s, Manager: m} }
 
 type input struct {
-	Slug         string   `json:"slug"`
-	Name         string   `json:"name"`
-	Enabled      bool     `json:"enabled"`
-	CronExpr     string   `json:"cronExpr"`
-	Timezone     string   `json:"timezone"`
-	Sections     []string `json:"sections"`
-	ConnectorIDs []string `json:"connectorIds"`
-	Channels     []string `json:"channels"`
+	AttachLabBook bool     `json:"attachLabBook"`
+	Slug          string   `json:"slug"`
+	Name          string   `json:"name"`
+	Enabled       bool     `json:"enabled"`
+	CronExpr      string   `json:"cronExpr"`
+	Timezone      string   `json:"timezone"`
+	Sections      []string `json:"sections"`
+	ConnectorIDs  []string `json:"connectorIds"`
+	Channels      []string `json:"channels"`
 }
 
 var slugRE = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,62}$`)
@@ -56,7 +57,7 @@ func valid(in input) string {
 		}
 	}
 	for _, c := range in.Channels {
-		if c != "slack" && c != "discord" && c != "webhook" {
+		if c != "slack" && c != "discord" && c != "webhook" && c != "email" {
 			return "invalid channel"
 		}
 	}
@@ -66,14 +67,14 @@ func record(in input, old store.ReportDefinitionRecord) store.ReportDefinitionRe
 	sec, _ := json.Marshal(in.Sections)
 	ids, _ := json.Marshal(in.ConnectorIDs)
 	ch, _ := json.Marshal(in.Channels)
-	return store.ReportDefinitionRecord{ID: old.ID, Slug: in.Slug, Name: in.Name, Enabled: in.Enabled, CronExpr: in.CronExpr, Timezone: in.Timezone, Sections: string(sec), ConnectorIDs: string(ids), Channels: string(ch), CreatedBy: old.CreatedBy, CreatedAt: old.CreatedAt, UpdatedAt: old.UpdatedAt}
+	return store.ReportDefinitionRecord{AttachLabBook: in.AttachLabBook, ID: old.ID, Slug: in.Slug, Name: in.Name, Enabled: in.Enabled, CronExpr: in.CronExpr, Timezone: in.Timezone, Sections: string(sec), ConnectorIDs: string(ids), Channels: string(ch), CreatedBy: old.CreatedBy, CreatedAt: old.CreatedAt, UpdatedAt: old.UpdatedAt}
 }
 func definition(r store.ReportDefinitionRecord) map[string]any {
 	var s, ids, ch []string
 	_ = json.Unmarshal([]byte(r.Sections), &s)
 	_ = json.Unmarshal([]byte(r.ConnectorIDs), &ids)
 	_ = json.Unmarshal([]byte(r.Channels), &ch)
-	return map[string]any{"id": r.ID, "slug": r.Slug, "name": r.Name, "enabled": r.Enabled, "cronExpr": r.CronExpr, "timezone": r.Timezone, "sections": s, "connectorIds": ids, "channels": ch, "createdBy": r.CreatedBy, "createdAt": r.CreatedAt, "updatedAt": r.UpdatedAt}
+	return map[string]any{"attachLabBook": r.AttachLabBook, "id": r.ID, "slug": r.Slug, "name": r.Name, "enabled": r.Enabled, "cronExpr": r.CronExpr, "timezone": r.Timezone, "sections": s, "connectorIds": ids, "channels": ch, "createdBy": r.CreatedBy, "createdAt": r.CreatedAt, "updatedAt": r.UpdatedAt}
 }
 func reportJSON(r store.ReportRecord, full bool) map[string]any {
 	x := map[string]any{"id": r.ID, "definitionId": nil, "definitionName": r.DefinitionName, "trigger": r.Trigger, "periodStart": r.PeriodStart, "periodEnd": r.PeriodEnd, "truncated": r.Truncated, "status": r.Status, "createdAt": r.CreatedAt}
@@ -255,15 +256,25 @@ func (h *Handler) Download(w http.ResponseWriter, r *http.Request) {
 		httputil.Error(w, 400, "invalid_request", "format must be md or html")
 		return
 	}
+	var data report.ReportData
+	if e = json.Unmarshal([]byte(x.Data), &data); e != nil {
+		httputil.Errorf(w, e)
+		return
+	}
+	slug := data.Definition.Slug
+	if !slugRE.MatchString(slug) {
+		slug = x.ID
+	}
+	date, e := time.Parse(time.RFC3339, x.PeriodEnd)
+	if e != nil {
+		httputil.Errorf(w, e)
+		return
+	}
+	filename := "report-" + slug + "-" + date.UTC().Format("2006-01-02") + "." + format
 	body := x.Markdown
 	ct := "text/markdown; charset=utf-8"
 	if format == "html" {
-		var d report.ReportData
-		if e = json.Unmarshal([]byte(x.Data), &d); e != nil {
-			httputil.Errorf(w, e)
-			return
-		}
-		body, e = report.RenderHTML(d)
+		body, e = report.RenderHTML(data)
 		if e != nil {
 			httputil.Errorf(w, e)
 			return
@@ -271,6 +282,6 @@ func (h *Handler) Download(w http.ResponseWriter, r *http.Request) {
 		ct = "text/html; charset=utf-8"
 	}
 	w.Header().Set("Content-Type", ct)
-	w.Header().Set("Content-Disposition", `attachment; filename="report-`+x.ID+`.`+format+`"`)
+	w.Header().Set("Content-Disposition", `attachment; filename="`+filename+`"`)
 	_, _ = w.Write([]byte(body))
 }

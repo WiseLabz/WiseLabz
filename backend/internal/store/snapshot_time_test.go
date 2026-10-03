@@ -60,13 +60,21 @@ func TestSnapshotUTCDataMigration(t *testing.T) {
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	// Roll back doc_section_ownership, mcp_knowledge, more_notification_channels,
-	// retention_scan_indexes, then snapshot_utc itself.
-	for range 7 {
+	// Roll back to the version before snapshot_utc, regardless of later migrations.
+	status, err := GetMigrationStatus(s.rawDB, s.driver)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for status.Current >= 46 {
 		if err := RunMigrationsDown(s.rawDB, s.driver, logger); err != nil {
 			t.Fatal(err)
 		}
+		status, err = GetMigrationStatus(s.rawDB, s.driver)
+		if err != nil {
+			t.Fatal(err)
+		}
 	}
+
 	c := ConnectorRecord{Name: "legacy", Category: "virtualization", Type: "proxmox", URL: "https://example.test"}
 	if err := s.CreateConnector(ctx, &c); err != nil {
 		t.Fatal(err)

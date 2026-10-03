@@ -2,6 +2,19 @@ import type { Catalog } from '../languages';
 
 /** Brazilian Portuguese. Partial: untranslated keys fall back to English. */
 export const ptBR: Catalog = {
+  docs: {
+    export: {
+      action: 'Exportar livro do laboratório',
+      pending: 'Exportando…',
+      format: 'Formato do livro do laboratório',
+      html: 'HTML offline',
+      markdown: 'Arquivo zip de Markdown',
+      error: 'Não foi possível exportar o livro do laboratório.',
+    },
+  },
+  reports: {
+    attachLabBook: 'Anexar livro do laboratório offline (email e Discord)',
+  },
   app: {
     tagline: 'Documentação sábia para o seu homelab',
   },

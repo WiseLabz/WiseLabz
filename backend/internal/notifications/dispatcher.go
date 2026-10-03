@@ -214,7 +214,7 @@ func (d *Dispatcher) NotifySystemEvent(ctx context.Context, eventType, severity,
 // NotifyReport delivers a generated report to every active user's in-app
 // inbox and directly to the enabled channel types selected by its definition.
 // Report delivery intentionally bypasses notification routing rules.
-func (d *Dispatcher) NotifyReport(ctx context.Context, title, message string, selected []string) {
+func (d *Dispatcher) NotifyReport(ctx context.Context, title, message string, selected []string, attachments ...*Attachment) {
 	users, _, err := d.store.ListUsers(ctx, 0, maxNotifyUsers)
 	if err != nil {
 		slog.Error("failed to list users for report notification", "error", err)
@@ -223,6 +223,9 @@ func (d *Dispatcher) NotifyReport(ctx context.Context, title, message string, se
 	channels := d.loadChannels(ctx)
 	want := map[string]bool{}
 	for _, typ := range selected {
+		if typ == "email" {
+			typ = "smtp"
+		}
 		want[typ] = true
 	}
 	var selectedChannels []channelCfg
@@ -234,13 +237,13 @@ func (d *Dispatcher) NotifyReport(ctx context.Context, title, message string, se
 	d.inflight.Add(1)
 	go func() {
 		defer d.inflight.Done()
-		d.fanOut(users, selectedChannels, nil, "", "report.generated", "", "", title, message)
+		d.fanOut(users, selectedChannels, nil, "", "report.generated", "", "", title, message, attachments...)
 	}()
 }
 
 // fanOut keeps in-app notifications per user and sends global channels once,
 // using one immediate recipient's notification row for delivery tracking/retries.
-func (d *Dispatcher) fanOut(users []store.User, channels []channelCfg, routes []routeCfg, alertID, eventType, severity, connectorID, title, message string) {
+func (d *Dispatcher) fanOut(users []store.User, channels []channelCfg, routes []routeCfg, alertID, eventType, severity, connectorID, title, message string, attachments ...*Attachment) {
 	externalIDs := make(chan string, len(users))
 	var pending sync.WaitGroup
 	for _, u := range users {
@@ -253,7 +256,7 @@ func (d *Dispatcher) fanOut(users []store.User, channels []channelCfg, routes []
 			defer pending.Done()
 			defer func() { <-d.fanoutSem }()
 			id, ok := d.sendInApp(context.Background(), user.ID, alertID, eventType, title, message)
-			if ok && user.DigestCadence == "off" {
+			if ok && (user.DigestCadence == "off" || eventType == "report.generated") {
 				externalIDs <- id
 			}
 		}(u)
@@ -261,7 +264,7 @@ func (d *Dispatcher) fanOut(users []store.User, channels []channelCfg, routes []
 	pending.Wait()
 	close(externalIDs)
 	if id, ok := <-externalIDs; ok {
-		d.notifyExternalChannels(context.Background(), id, channels, routes, eventType, severity, connectorID, "", title, message)
+		d.notifyExternalChannels(context.Background(), id, channels, routes, eventType, severity, connectorID, "", title, message, attachments...)
 	}
 }
 
@@ -363,7 +366,7 @@ func (d *Dispatcher) sendInApp(ctx context.Context, userID, alertID, eventType, 
 // order. Each must have an entry in channelSenders (see channels.go).
 var externalChannelTypes = []string{"smtp", "webhook", "discord", "slack", "ntfy", "telegram", "gotify", "pushover", "matrix", "apprise"}
 
-func (d *Dispatcher) notifyExternalChannels(ctx context.Context, notifID string, channels []channelCfg, routes []routeCfg, eventType, severity, connectorID, _, title, message string) {
+func (d *Dispatcher) notifyExternalChannels(ctx context.Context, notifID string, channels []channelCfg, routes []routeCfg, eventType, severity, connectorID, _, title, message string, attachments ...*Attachment) {
 	connectorCategory := d.notificationConnectorCategory(ctx, connectorID)
 	shouldSkip := func(channel string) bool {
 		return shouldSkipRoute(routes, eventType, channel, severity, connectorCategory, connectorID)
@@ -373,7 +376,7 @@ func (d *Dispatcher) notifyExternalChannels(ctx context.Context, notifID string,
 			continue
 		}
 		if cfg, enabled := findChannel(channels, channelType); enabled {
-			d.attemptChannel(ctx, notifID, channelType, cfg, title, message)
+			d.attemptChannel(ctx, notifID, channelType, cfg, title, message, attachments...)
 		}
 	}
 }
@@ -471,13 +474,13 @@ func (d *Dispatcher) recordDelivery(ctx context.Context, notificationID, channel
 
 // attemptChannel sends title/message to the given channel type using its channelSenders entry
 // and records the resulting delivery status under channelType.
-func (d *Dispatcher) attemptChannel(ctx context.Context, notificationID, channelType string, cfg channelCfg, title, message string) {
+func (d *Dispatcher) attemptChannel(ctx context.Context, notificationID, channelType string, cfg channelCfg, title, message string, attachments ...*Attachment) {
 	sender, ok := channelSenders[channelType]
 	if !ok {
 		d.recordDelivery(ctx, notificationID, channelType, store.DeliveryStatusFailed, "unsupported channel type")
 		return
 	}
-	if err := sender(ctx, cfg, d.signingSecret(cfg), title, message); err != nil {
+	if err := sender(ctx, cfg, d.signingSecret(cfg), title, message, attachments...); err != nil {
 		d.recordDelivery(ctx, notificationID, channelType, store.DeliveryStatusFailed, err.Error())
 		return
 	}

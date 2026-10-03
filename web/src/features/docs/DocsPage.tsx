@@ -11,6 +11,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useCanMutate, useIsInstanceAdmin } from '../../hooks/useRole';
 import { NewDocDialog } from '../../components/docs/NewDocDialog';
+import { ExportLabBook } from './ExportLabBook';
 import { ImportDocsDialog } from '../../components/docs/ImportDocsDialog';
 import { toast } from '../../lib/toast';
 import { patchDocsDocId, useGetDocsTree, useGetDocsDocId } from '../../api/generated/docs/docs';
@@ -219,7 +220,8 @@ export function DocsPage() {
       />
       {/* Content */}
       <section className="min-w-0 flex-1">
-        <div className="mb-3 flex justify-end gap-3">
+        <div className="mb-3 flex flex-wrap justify-end gap-3">
+          <ExportLabBook />
           {admin && (
             <Link to="/docs/trash">{t('docs.human.trash', { defaultValue: 'Trash' })}</Link>
           )}

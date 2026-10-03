@@ -45,6 +45,7 @@ import type {
   GenerateResult,
   GetAttachmentsAidRawParams,
   GetDocsEditProposalsParams,
+  GetDocsExportParams,
   GetDocsParams,
   GetDocsShareLinks200Item,
   GetShareTokenTree200,
@@ -55,6 +56,7 @@ import type {
   PostDocsShareLinks201,
   PostDocsShareLinksBody,
   TemplateSchema,
+  UnauthorizedResponse,
 } from '../../model';
 
 import { customInstance } from '../../axios-instance';
@@ -379,6 +381,125 @@ export function useGetDocsTrash<
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
   const queryOptions = getGetDocsTrashQueryOptions(options);
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+/**
+ * Includes only active docs the signed-in caller may view. HTML embeds Mermaid, CSS and images for offline use; md.zip preserves hierarchy and attachments for Markdown import.
+ * @summary Download a permission-scoped offline Lab Book
+ */
+export const getDocsExport = (
+  params: GetDocsExportParams,
+  options?: SecondParameter<typeof customInstance>,
+  signal?: AbortSignal
+) => {
+  return customInstance<unknown | Blob>(
+    { url: `/docs/export`, method: 'GET', params, responseType: 'blob', signal },
+    options
+  );
+};
+
+export const getGetDocsExportQueryKey = (params?: GetDocsExportParams) => {
+  return [`/docs/export`, ...(params ? [params] : [])] as const;
+};
+
+export const getGetDocsExportQueryOptions = <
+  TData = Awaited<ReturnType<typeof getDocsExport>>,
+  TError = ErrorType<BadRequestResponse | UnauthorizedResponse>,
+>(
+  params: GetDocsExportParams,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getDocsExport>>, TError, TData>>;
+    request?: SecondParameter<typeof customInstance>;
+  }
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetDocsExportQueryKey(params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getDocsExport>>> = ({ signal }) =>
+    getDocsExport(params, requestOptions, signal);
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getDocsExport>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type GetDocsExportQueryResult = NonNullable<Awaited<ReturnType<typeof getDocsExport>>>;
+export type GetDocsExportQueryError = ErrorType<BadRequestResponse | UnauthorizedResponse>;
+
+export function useGetDocsExport<
+  TData = Awaited<ReturnType<typeof getDocsExport>>,
+  TError = ErrorType<BadRequestResponse | UnauthorizedResponse>,
+>(
+  params: GetDocsExportParams,
+  options: {
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof getDocsExport>>, TError, TData>> &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getDocsExport>>,
+          TError,
+          Awaited<ReturnType<typeof getDocsExport>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useGetDocsExport<
+  TData = Awaited<ReturnType<typeof getDocsExport>>,
+  TError = ErrorType<BadRequestResponse | UnauthorizedResponse>,
+>(
+  params: GetDocsExportParams,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getDocsExport>>, TError, TData>> &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getDocsExport>>,
+          TError,
+          Awaited<ReturnType<typeof getDocsExport>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useGetDocsExport<
+  TData = Awaited<ReturnType<typeof getDocsExport>>,
+  TError = ErrorType<BadRequestResponse | UnauthorizedResponse>,
+>(
+  params: GetDocsExportParams,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getDocsExport>>, TError, TData>>;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * @summary Download a permission-scoped offline Lab Book
+ */
+
+export function useGetDocsExport<
+  TData = Awaited<ReturnType<typeof getDocsExport>>,
+  TError = ErrorType<BadRequestResponse | UnauthorizedResponse>,
+>(
+  params: GetDocsExportParams,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getDocsExport>>, TError, TData>>;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getGetDocsExportQueryOptions(params, options);
 
   const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
     queryKey: DataTag<QueryKey, TData, TError>;

@@ -33,6 +33,7 @@ func mountDocRoutes(r chi.Router, d routerDeps) {
 		// Markdown/Obsidian vault import: stage + preview, then commit.
 		r.With(auth.RequireInstanceAdmin).Post("/import", d.docH.StageImport)
 		r.With(auth.RequireInstanceAdmin).Post("/import/{id}/commit", d.docH.CommitImport)
+		r.Get("/export", d.docH.Export)
 		r.Get("/tree", d.docH.Tree)
 		r.Get("/template-schema", d.docH.TemplateSchema)
 		r.Get("/service/{id}", d.docH.ByService)

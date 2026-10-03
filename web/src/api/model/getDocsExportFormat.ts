@@ -7,14 +7,9 @@
  * OpenAPI spec version: 0.1.0
  */
 
-/**
- * Channel TYPES a report definition delivers to (plan Q13) — channels have no IDs; delivery bypasses the normal routing rules and goes straight to every enabled channel of these types.
- */
-export type ReportChannelType = (typeof ReportChannelType)[keyof typeof ReportChannelType];
+export type GetDocsExportFormat = (typeof GetDocsExportFormat)[keyof typeof GetDocsExportFormat];
 
-export const ReportChannelType = {
-  slack: 'slack',
-  discord: 'discord',
-  webhook: 'webhook',
-  email: 'email',
+export const GetDocsExportFormat = {
+  html: 'html',
+  mdzip: 'md.zip',
 } as const;

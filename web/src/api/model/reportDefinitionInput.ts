@@ -13,6 +13,8 @@ export interface ReportDefinitionInput {
   slug: string;
   name: string;
   enabled: boolean;
+  /** Attach a scoped offline HTML Lab Book to email and Discord deliveries; oversized attachments fall back to text. */
+  attachLabBook?: boolean;
   cronExpr: string;
   timezone: string;
   /** @minItems 1 */

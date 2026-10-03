@@ -37,6 +37,7 @@ const emptyDefinition = (): ReportDefinitionInput => ({
   sections: [...sections],
   connectorIds: [],
   channels: [],
+  attachLabBook: false,
 });
 
 const when = (value: string) => new Date(value).toLocaleString();
@@ -291,6 +292,7 @@ function DefinitionDialog({
           sections: definition.sections,
           connectorIds: definition.connectorIds,
           channels: definition.channels,
+          attachLabBook: definition.attachLabBook ?? false,
         }
       : emptyDefinition()
   );
@@ -358,6 +360,17 @@ function DefinitionDialog({
             }
           />
           {t('reports.enabledLabel')}
+        </label>
+
+        <label className="flex items-center gap-2 text-sm text-ink sm:col-span-2">
+          <input
+            type="checkbox"
+            checked={form.attachLabBook ?? false}
+            onChange={(event) =>
+              setForm({ ...form, attachLabBook: event.target.checked })
+            }
+          />
+          {t('reports.attachLabBook')}
         </label>
 
         <fieldset className="sm:col-span-2">

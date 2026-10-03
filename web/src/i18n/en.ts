@@ -590,6 +590,7 @@ export const en = {
     emptyDesc: 'All alerts and quality findings are resolved.',
   },
   reports: {
+    attachLabBook: 'Attach offline Lab Book (email and Discord)',
     title: 'Reports',
     subtitle: 'Scheduled snapshots of your lab, available to download and review.',
     schedulesHeader: 'Schedules',
@@ -631,6 +632,15 @@ export const en = {
     delete: 'Delete "{{name}}"',
   },
   docs: {
+    export: {
+      action: 'Export Lab Book',
+      pending: 'Exporting…',
+      format: 'Lab Book format',
+      html: 'Offline HTML',
+      markdown: 'Markdown zip',
+      error: 'Could not export Lab Book.',
+    },
+
     selectTitle: 'Select a document',
     selectDesc: 'Pick a service from the tree to read its live documentation.',
     treeLoadError: "Couldn't load the doc tree.",
