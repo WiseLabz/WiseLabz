@@ -7,7 +7,12 @@ Lets operators declare connectors in the config file so a lab's integrations can
 ## ADDED Requirements
 
 ### Requirement: Declaring connectors in the config file
-The config file SHALL accept a `connectors` list. Each entry SHALL have a `name`, a `type` and a `url`, and MAY have `verify_tls`, `enabled` (default true), `schedule_seconds`, a type-specific `config` map and a `grants` list of `user` (username) and `role` (`viewer` or `operator`). The connector category SHALL be derived from the type and SHALL NOT be declared.
+The config file SHALL accept a `connectors` list. Each entry SHALL have a `name`, a `type` and a `url`, and MAY have `verify_tls`, `enabled` (default true), `schedule_seconds`, `owner`, `user_expires_at` (RFC3339), `rotation_max_age_days` (positive integer), a type-specific `config` map and a `grants` list of `user` (username) and `role` (`viewer` or `operator`). The connector category SHALL be derived from the type and SHALL NOT be declared.
+
+#### Scenario: Ownership and rotation settings
+- **WHEN** an entry sets `owner`, `user_expires_at` and `rotation_max_age_days`
+- **THEN** the connector is created or updated with those values, a later change to any of them is applied on the next start, and removing them clears the stored values
+- **AND** a `user_expires_at` that is not RFC3339, or a non-positive `rotation_max_age_days`, makes the entry invalid, exactly as the API rejects the same values
 
 #### Scenario: Minimal entry
 - **WHEN** the config declares a connector with only `name`, `type`, `url` and the type's required `config` fields
@@ -113,3 +118,15 @@ An entry SHALL be invalid when its type is unknown, a required field is missing,
 #### Scenario: Valid config
 - **WHEN** every entry is valid
 - **THEN** `server config validate` prints its success message and exits zero
+
+
+### Requirement: Connector names in OIDC group mappings
+`auth.oidc[].group_connector_roles` keys SHALL accept a connector name as well as a UUID or `*`. Names SHALL be resolved at login, case-insensitively. A name matching no connector, or more than one, SHALL be skipped with a warning and SHALL NOT affect the other keys.
+
+#### Scenario: Name key
+- **WHEN** a group maps `Plex: viewer` and exactly one connector is named Plex
+- **THEN** a user in that group is granted `viewer` on it at login
+
+#### Scenario: Ambiguous or unknown name
+- **WHEN** a key names no connector or two connectors
+- **THEN** it is skipped with a warning and the remaining keys still apply

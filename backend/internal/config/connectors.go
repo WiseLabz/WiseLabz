@@ -6,6 +6,7 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"time"
 )
 
 // ConnectorEntry declares a connector in config.yaml (#500). The list is
@@ -17,12 +18,17 @@ type ConnectorEntry struct {
 	Type string `mapstructure:"type"`
 	URL  string `mapstructure:"url"`
 	// URLFile names a file holding the URL, for URLs that embed a credential.
-	URLFile         string                `mapstructure:"url_file"`
-	VerifyTLS       bool                  `mapstructure:"verify_tls"`       // defaults to true
-	Enabled         bool                  `mapstructure:"enabled"`          // defaults to true
-	ScheduleSeconds int                   `mapstructure:"schedule_seconds"` // 0 means manual sync only
-	Config          map[string]any        `mapstructure:"config"`           // type-specific fields; `<field>_file` reads the value from a file
-	Grants          []ConnectorGrantEntry `mapstructure:"grants"`
+	URLFile         string         `mapstructure:"url_file"`
+	VerifyTLS       bool           `mapstructure:"verify_tls"`       // defaults to true
+	Enabled         bool           `mapstructure:"enabled"`          // defaults to true
+	ScheduleSeconds int            `mapstructure:"schedule_seconds"` // 0 means manual sync only
+	Config          map[string]any `mapstructure:"config"`           // type-specific fields; `<field>_file` reads the value from a file
+	// Owner, UserExpiresAt and RotationMaxAgeDays mirror the API's optional
+	// connector fields of the same meaning (#615).
+	Owner              string                `mapstructure:"owner"`
+	UserExpiresAt      string                `mapstructure:"user_expires_at"`       // RFC3339 credential expiry; empty means none
+	RotationMaxAgeDays int                   `mapstructure:"rotation_max_age_days"` // 0 uses the global rotation.max_age_days
+	Grants             []ConnectorGrantEntry `mapstructure:"grants"`
 }
 
 // ConnectorGrantEntry grants a user a role on a declared connector.
@@ -59,6 +65,34 @@ func applyConnectorDefaults(raw any, entries []ConnectorEntry) {
 			entries[i].Enabled = true
 		}
 	}
+}
+
+// stringifyConnectorTimestamps rewrites an unquoted `user_expires_at` that
+// YAML read as a timestamp back into an RFC3339 string, so the field can stay
+// a string. It reports whether anything changed; the input is not modified.
+func stringifyConnectorTimestamps(raw any) ([]any, bool) {
+	list, _ := raw.([]any)
+	var out []any
+	for i, item := range list {
+		m, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		t, ok := m["user_expires_at"].(time.Time)
+		if !ok {
+			continue
+		}
+		if out == nil {
+			out = append([]any(nil), list...)
+		}
+		cp := make(map[string]any, len(m))
+		for k, v := range m {
+			cp[k] = v
+		}
+		cp["user_expires_at"] = t.UTC().Format(time.RFC3339)
+		out[i] = cp
+	}
+	return out, out != nil
 }
 
 func rawKeys(v any) map[string]bool {
@@ -98,6 +132,14 @@ func (c *Config) ResolveConnectors() []ResolvedConnector {
 		}
 		if e.ScheduleSeconds < 0 {
 			errs = append(errs, errors.New("schedule_seconds must not be negative"))
+		}
+		if e.UserExpiresAt != "" {
+			if _, err := time.Parse(time.RFC3339, e.UserExpiresAt); err != nil {
+				errs = append(errs, errors.New("user_expires_at must be an RFC3339 timestamp"))
+			}
+		}
+		if e.RotationMaxAgeDays < 0 {
+			errs = append(errs, errors.New("rotation_max_age_days must be a positive number of days"))
 		}
 		for _, g := range e.Grants {
 			if g.User == "" {

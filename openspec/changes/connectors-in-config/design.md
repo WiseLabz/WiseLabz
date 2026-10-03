@@ -24,7 +24,6 @@ See proposal.md for motivation. Constraints found in the code:
 - Global `${VAR}` interpolation for the rest of the config file.
 - A unique constraint on connector names.
 - Live reload of `connectors:` without a restart.
-- Referencing config-declared connectors by name in OIDC `group_connector_roles` (follow-up issue).
 
 ## Decisions
 
@@ -50,13 +49,17 @@ See proposal.md for motivation. Constraints found in the code:
 
 **API guard.** A `RequireManagedBy` middleware on the connector routes returns 409 `connector_managed` for `config` rows on Update, ToggleEnabled and Delete, and 409 `connector_orphaned` for everything except Delete and the new `POST /connectors/{id}/release` on `config-orphaned` rows. Operational routes stay open for `config` rows. The bulk routes are all operational (sync, reauth, restart); they report an orphaned ID as an `orphaned` item error.
 
+**Owner and rotation fields.** `owner`, `user_expires_at` and `rotation_max_age_days` are declared per entry, validated with the API's rules (RFC3339, positive days), written on create and update, and included in the fingerprint. Empty/zero clears the column. YAML reads an unquoted timestamp as a time value, so `Load()` turns it back into an RFC3339 string before decoding.
+
+**OIDC role mappings by name.** `syncOIDCConnectorGrants` resolves any key that is neither `*` nor a UUID against connector names at login (case-insensitive, since viper lowercases map keys). A name matching zero or several connectors is skipped with a warning; config validation only rejects empty keys.
+
 ## Risks / Trade-offs
 
 - [Adoption silently overwrites a UI connector's settings] → logged, audited as `connector.adopt` with the changed field names, and documented.
 - [Two replicas reconcile at once] → per-entry transactions and idempotent comparison; the name lookup and write share a transaction.
 - [Credential-refresher types rewrite a declared secret at runtime] → the fingerprint compares the entry with what was last applied, not with the live value; covered by a test.
 - [A missing or unmounted config file reads as an empty list and orphans every managed connector] → orphaning only disables, restoring the file adopts them back, and the behaviour is documented.
-- [Owner and rotation settings of a config-managed connector cannot be edited, since the whole update route is locked and the entry does not declare them] → filed as a follow-up issue.
+- [Owner and rotation settings of a config-managed connector cannot be edited in the UI, since the whole update route is locked] → the entry declares them (`owner`, `user_expires_at`, `rotation_max_age_days`, validated like the API and part of the fingerprint), so they are managed from the file.
 - [A skipped entry goes unnoticed] → error log, admin notification, and `server config validate` for CI.
 - [Stricter validation rejects entries the UI would accept] → intended; it applies only to declared connectors.
 

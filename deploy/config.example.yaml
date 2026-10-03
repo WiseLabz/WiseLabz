@@ -147,6 +147,10 @@ retention:
 #     enabled: true
 #     # Auto-sync interval in seconds; omit for manual sync only.
 #     schedule_seconds: 900
+#     owner: alice
+#     # RFC3339 credential expiry and a per-connector rotation reminder (days).
+#     user_expires_at: "2027-01-01T00:00:00Z"
+#     rotation_max_age_days: 90
 #     config:
 #       token_id: root@pam!wiselabz
 #       token_secret: ${PVE_TOKEN_SECRET}

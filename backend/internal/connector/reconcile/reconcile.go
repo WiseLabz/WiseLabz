@@ -179,16 +179,19 @@ func create(ctx context.Context, tx *store.Store, encKey string, e config.Resolv
 		return err
 	}
 	rec := &store.ConnectorRecord{
-		Name:            e.Name,
-		Category:        category,
-		Type:            e.Type,
-		URL:             e.URL,
-		VerifyTLS:       e.VerifyTLS,
-		ConfigData:      data,
-		Enabled:         e.Enabled,
-		ScheduleSeconds: schedule(e.ScheduleSeconds),
-		ManagedBy:       store.ManagedByConfig,
-		ConfigHash:      hash,
+		Name:               e.Name,
+		Category:           category,
+		Type:               e.Type,
+		URL:                e.URL,
+		VerifyTLS:          e.VerifyTLS,
+		ConfigData:         data,
+		Enabled:            e.Enabled,
+		ScheduleSeconds:    schedule(e.ScheduleSeconds),
+		Owner:              e.Owner,
+		UserExpiresAt:      e.UserExpiresAt,
+		RotationMaxAgeDays: rotationDays(e.RotationMaxAgeDays),
+		ManagedBy:          store.ManagedByConfig,
+		ConfigHash:         hash,
 	}
 	if err := tx.CreateConnector(ctx, rec); err != nil {
 		return err
@@ -229,15 +232,18 @@ func update(ctx context.Context, tx *store.Store, encKey string, e config.Resolv
 
 	// database/sql stores a nil *int as NULL.
 	updates := map[string]any{
-		"type":             e.Type,
-		"category":         category,
-		"url":              e.URL,
-		"verify_tls":       e.VerifyTLS,
-		"enabled":          e.Enabled,
-		"schedule_seconds": schedule(e.ScheduleSeconds),
-		"config_data":      data,
-		"managed_by":       store.ManagedByConfig,
-		"config_hash":      hash,
+		"type":                  e.Type,
+		"category":              category,
+		"url":                   e.URL,
+		"verify_tls":            e.VerifyTLS,
+		"enabled":               e.Enabled,
+		"schedule_seconds":      schedule(e.ScheduleSeconds),
+		"owner":                 e.Owner,
+		"user_expires_at":       nilIfEmpty(e.UserExpiresAt),
+		"rotation_max_age_days": rotationDays(e.RotationMaxAgeDays),
+		"config_data":           data,
+		"managed_by":            store.ManagedByConfig,
+		"config_hash":           hash,
 	}
 	if !sameSchedule(rec.ScheduleSeconds, e.ScheduleSeconds) {
 		// Due on the next poll under the new cadence.
@@ -279,6 +285,9 @@ func changedFields(rec *store.ConnectorRecord, e config.ResolvedConnector, secre
 	add(rec.VerifyTLS != e.VerifyTLS, "verifyTls")
 	add(rec.Enabled != e.Enabled, "enabled")
 	add(!sameSchedule(rec.ScheduleSeconds, e.ScheduleSeconds), "scheduleSeconds")
+	add(rec.Owner != e.Owner, "owner")
+	add(rec.UserExpiresAt != e.UserExpiresAt, "userExpiresAt")
+	add(!sameSchedule(rec.RotationMaxAgeDays, e.RotationMaxAgeDays), "rotationMaxAgeDays")
 	add(secretChanged, "config.secret")
 	return fields
 }
@@ -408,6 +417,7 @@ func fingerprint(e config.ConnectorEntry, encKey string) (string, error) {
 	data, err := json.Marshal(map[string]any{
 		"type": e.Type, "url": e.URL, "verify_tls": e.VerifyTLS, "enabled": e.Enabled,
 		"schedule_seconds": e.ScheduleSeconds, "config": e.Config,
+		"owner": e.Owner, "user_expires_at": e.UserExpiresAt, "rotation_max_age_days": e.RotationMaxAgeDays,
 	})
 	if err != nil {
 		return "", fmt.Errorf("marshal connector entry: %w", err)
@@ -425,6 +435,18 @@ func schedule(seconds int) *int {
 		return nil
 	}
 	return &seconds
+}
+
+// rotationDays maps rotation_max_age_days to the column: 0 means "use the
+// global default", stored as NULL.
+func rotationDays(days int) *int { return schedule(days) }
+
+// nilIfEmpty stores an empty string as NULL.
+func nilIfEmpty(s string) any {
+	if s == "" {
+		return nil
+	}
+	return s
 }
 
 func sameSchedule(current *int, declared int) bool {

@@ -485,6 +485,10 @@ func Load() (*Config, error) {
 		fmt.Fprintf(os.Stderr, "No config file found, using environment variables and defaults\n")
 	}
 
+	if list, ok := stringifyConnectorTimestamps(v.Get("connectors")); ok {
+		v.Set("connectors", list)
+	}
+
 	var cfg Config
 	if err := v.Unmarshal(&cfg); err != nil {
 		return nil, fmt.Errorf("unmarshal config: %w", err)

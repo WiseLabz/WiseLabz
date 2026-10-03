@@ -482,3 +482,36 @@ func TestRunOrphansRemovedEntryAndAdoptsItBack(t *testing.T) {
 		t.Errorf("audit actions = %v", got)
 	}
 }
+
+func TestRunAppliesOwnerExpiryAndRotation(t *testing.T) {
+	s := newStore(t)
+	e := entry("pve")
+	e.Owner, e.UserExpiresAt, e.RotationMaxAgeDays = "alice", "2027-01-01T00:00:00Z", 90
+	run(t, s, nil, e)
+
+	rec := only(t, s, "pve")
+	if rec.Owner != "alice" || rec.UserExpiresAt != "2027-01-01T00:00:00Z" || rec.RotationMaxAgeDays == nil || *rec.RotationMaxAgeDays != 90 {
+		t.Fatalf("after create: %+v", rec)
+	}
+	if res := run(t, s, nil, e); res[0].Action != reconcile.Unchanged {
+		t.Fatalf("same entry: action = %s, want unchanged", res[0].Action)
+	}
+
+	// Each field is part of the fingerprint, so changing one is applied.
+	e.Owner, e.UserExpiresAt, e.RotationMaxAgeDays = "bob", "2028-02-02T00:00:00Z", 30
+	if res := run(t, s, nil, e); res[0].Action != reconcile.Updated {
+		t.Fatalf("changed entry: action = %s, want updated", res[0].Action)
+	}
+	rec = only(t, s, "pve")
+	if rec.Owner != "bob" || rec.UserExpiresAt != "2028-02-02T00:00:00Z" || *rec.RotationMaxAgeDays != 30 {
+		t.Fatalf("after update: %+v", rec)
+	}
+
+	// Removing them clears the columns again.
+	e.Owner, e.UserExpiresAt, e.RotationMaxAgeDays = "", "", 0
+	run(t, s, nil, e)
+	rec = only(t, s, "pve")
+	if rec.Owner != "" || rec.UserExpiresAt != "" || rec.RotationMaxAgeDays != nil {
+		t.Fatalf("after clearing: %+v", rec)
+	}
+}

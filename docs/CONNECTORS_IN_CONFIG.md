@@ -28,6 +28,9 @@ connectors:
 | `verify_tls` | no | Defaults to `true`. |
 | `enabled` | no | Defaults to `true`. |
 | `schedule_seconds` | no | Auto-sync interval. Omitted or `0` means manual sync only. |
+| `owner` | no | Owner shown on the connector. Empty clears it. |
+| `user_expires_at` | no | Credential expiry as an RFC3339 timestamp, e.g. `2027-01-01T00:00:00Z`. Empty clears it. |
+| `rotation_max_age_days` | no | Positive number of days after which the secret is due for rotation; overrides the global `rotation.max_age_days`. Omitted or `0` uses the global value. |
 | `config` | depends on type | The type's own fields (tokens, usernames and so on). |
 | `grants` | no | Users (`user` is the username) and their `role`, `viewer` or `operator`. |
 
@@ -125,3 +128,17 @@ services:
     environment:
       PVE_TOKEN_SECRET: ${PVE_TOKEN_SECRET}
 ```
+
+## Referencing declared connectors from SSO group mappings
+
+`auth.oidc[].group_connector_roles` accepts a connector name as a key, so a
+declared connector can be granted to an IdP group without knowing its ID:
+
+```yaml
+group_connector_roles:
+  homelab-ops:
+    pve: operator
+```
+
+Names are resolved at login and match case-insensitively. A name matching no
+connector, or more than one, is skipped with a warning.

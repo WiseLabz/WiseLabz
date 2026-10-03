@@ -45,4 +45,10 @@
 ## 8. Delivery
 
 - [x] 8.1 Run the full Go and frontend checks with the low-memory settings and `openspec validate connectors-in-config --strict`.
-- [x] 8.2 Refresh graphify output, open the PR with `Closes #500`, and file the two follow-up issues (connector form `verifyTls`/`toggle` mismatch; OIDC role mappings by connector name).
+- [x] 8.2 Refresh graphify output, open the PR with `Closes #500`, and implement the three follow-ups (#613, #614, #615).
+
+## 9. Follow-ups
+
+- [x] 9.1 Make the connector create/edit forms follow the backend `toggle` kind and `verify_tls` key; vitest covers create and edit (#613).
+- [x] 9.2 Resolve connector names in `group_connector_roles` at login, skipping unknown or ambiguous names with a warning; tests cover config validation, resolution and the login sync (#614).
+- [x] 9.3 Add `owner`, `user_expires_at` and `rotation_max_age_days` to connector entries, validated like the API, applied by the reconciler and covered by the fingerprint; tests cover config and reconcile (#615).

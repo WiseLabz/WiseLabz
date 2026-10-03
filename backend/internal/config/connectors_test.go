@@ -179,3 +179,34 @@ func TestRedactedMasksConnectorSecrets(t *testing.T) {
 		t.Error("Redacted must not modify the original config")
 	}
 }
+
+func TestConnectorOwnerAndRotationFields(t *testing.T) {
+	// The expiry is deliberately unquoted: YAML may read it as a timestamp.
+	cfg := loadYAML(t, `
+connectors:
+  - name: pve
+    type: proxmox
+    url: https://pve.lan:8006
+    owner: alice
+    user_expires_at: 2027-01-01T00:00:00Z
+    rotation_max_age_days: 90
+`)
+	e := cfg.Connectors[0]
+	if e.Owner != "alice" || e.UserExpiresAt != "2027-01-01T00:00:00Z" || e.RotationMaxAgeDays != 90 {
+		t.Fatalf("entry = %+v", e)
+	}
+	if got := cfg.ResolveConnectors()[0]; got.Err != nil {
+		t.Fatalf("valid entry rejected: %v", got.Err)
+	}
+
+	bad := &Config{Connectors: []ConnectorEntry{
+		{Name: "a", Type: "proxmox", URL: "https://x", UserExpiresAt: "2027-01-01"},
+		{Name: "b", Type: "proxmox", URL: "https://x", RotationMaxAgeDays: -3},
+	}}
+	got := bad.ResolveConnectors()
+	for i, want := range []string{"user_expires_at must be an RFC3339", "rotation_max_age_days must be a positive"} {
+		if got[i].Err == nil || !strings.Contains(got[i].Err.Error(), want) {
+			t.Errorf("entry %d: err = %v, want %q", i, got[i].Err, want)
+		}
+	}
+}
