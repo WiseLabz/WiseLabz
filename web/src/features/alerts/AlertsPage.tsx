@@ -42,13 +42,18 @@ export function AlertsPage() {
   const pageSize = 20;
   const queryClient = useQueryClient();
   const operatorIds = useOperatorConnectorIds();
-  const { data, isLoading, isError, refetch } = useGetAlerts({ page, pageSize });
-  const pending = (data?.items ?? []).filter(
-    (a) => a.status === 'pending' && (severity === 'all' || a.severity === severity)
-  );
+  const { data, isLoading, isError, refetch } = useGetAlerts({
+    page,
+    pageSize,
+    status: 'pending',
+    severity: severity === 'all' ? undefined : severity,
+  });
+  const pending = data?.items ?? [];
   const pageCount = data ? Math.max(1, Math.ceil(data.total / data.pageSize)) : 1;
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [bulkUntil, setBulkUntil] = useState(() => toLocalInputValue(new Date(Date.now() + 60 * 60 * 1000)));
+  const [bulkUntil, setBulkUntil] = useState(() =>
+    toLocalInputValue(new Date(Date.now() + 60 * 60 * 1000))
+  );
 
   const toggleSelected = (id: string) =>
     setSelected((prev) => {
@@ -87,7 +92,9 @@ export function AlertsPage() {
   });
   const snoozeAlert = useMutation({
     mutationFn: (alertId: string) =>
-      postAlertsAlertIdSnooze(alertId, { until: new Date(Date.now() + 60 * 60 * 1000).toISOString() }),
+      postAlertsAlertIdSnooze(alertId, {
+        until: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+      }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: getGetAlertsQueryKey() }),
   });
 
@@ -103,7 +110,11 @@ export function AlertsPage() {
             {FILTERS.map((f) => (
               <button
                 key={f.value}
-                onClick={() => setSeverity(f.value)}
+                onClick={() => {
+                  setSeverity(f.value);
+                  setPage(1);
+                  setSelected(new Set());
+                }}
                 className="relative rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors"
                 style={{
                   color: severity === f.value ? 'var(--color-ink)' : 'var(--color-ink-muted)',
@@ -123,7 +134,11 @@ export function AlertsPage() {
           <SavedViewsMenu
             surface="alerts"
             filters={{ severity }}
-            onApply={(f) => setSeverity(f.severity ?? 'all')}
+            onApply={(f) => {
+              setSeverity(f.severity ?? 'all');
+              setPage(1);
+              setSelected(new Set());
+            }}
           />
         </div>
       </header>
@@ -231,7 +246,12 @@ export function AlertsPage() {
             </motion.div>
           ))}
           {pageCount > 1 && (
-            <Pagination page={page} pageCount={pageCount} onPage={setPage} className="justify-center pt-1" />
+            <Pagination
+              page={page}
+              pageCount={pageCount}
+              onPage={setPage}
+              className="justify-center pt-1"
+            />
           )}
         </div>
       )}

@@ -10,18 +10,21 @@ import {
   useGetConnectorsConnectorIdSnapshots,
   useGetConnectorsConnectorIdSnapshotsSnapshotId,
 } from '../../api/generated/connectors/connectors';
+import type { SnapshotEntity } from '../../api/model';
 import { ChevronDownIcon } from '../icons';
 
 export function EntityPicker({
   connectorId,
   value,
   onChange,
+  onEntityChange,
   id,
   label,
 }: {
   connectorId: string;
   value: string;
   onChange: (entityRef: string) => void;
+  onEntityChange?: (entity: SnapshotEntity | undefined) => void;
   id?: string;
   label?: string;
 }) {
@@ -47,7 +50,10 @@ export function EntityPicker({
           id={id}
           aria-label={pickerLabel}
           value={value}
-          onChange={(e) => onChange(e.target.value)}
+          onChange={(e) => {
+            onChange(e.target.value);
+            onEntityChange?.(entities.find((entity) => entity.externalId === e.target.value));
+          }}
           className="h-8 w-full appearance-none rounded-sm border border-line bg-surface pl-2.5 pr-7 text-xs text-ink outline-none focus-visible:border-accent-primary-soft"
         >
           <option value="">{t('entityPicker.wholeService')}</option>

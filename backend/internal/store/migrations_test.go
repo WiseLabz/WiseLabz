@@ -131,6 +131,15 @@ func TestRunMigrationsDown(t *testing.T) {
 		t.Fatalf("RunMigrations() error: %v", err)
 	}
 
+	if !attachmentTableExists(t, db, "sqlite", "journal_entries") {
+		t.Fatal("journal_entries missing")
+	}
+	if err := RunMigrationsDown(db, "sqlite", logger); err != nil {
+		t.Fatalf("rollback journal_entries: %v", err)
+	}
+	if attachmentTableExists(t, db, "sqlite", "journal_entries") {
+		t.Fatal("journal_entries remains after rollback")
+	}
 	if !hasColumn(t, db, "sqlite", "connectors", "managed_by") {
 		t.Fatal("connectors.managed_by missing")
 	}
@@ -433,6 +442,15 @@ func TestRunMigrationsDown(t *testing.T) {
 	}
 	if err := db.QueryRow("SELECT name FROM sqlite_master WHERE type='table' AND name='user_mfa_factors'").Scan(&mfaFactorsTable); err != nil {
 		t.Fatalf("user_mfa_factors table missing after reapply: %v", err)
+	}
+	if !attachmentTableExists(t, db, "sqlite", "journal_entries") {
+		t.Fatal("journal_entries missing")
+	}
+	if err := RunMigrationsDown(db, "sqlite", logger); err != nil {
+		t.Fatalf("rollback journal_entries: %v", err)
+	}
+	if attachmentTableExists(t, db, "sqlite", "journal_entries") {
+		t.Fatal("journal_entries remains after rollback")
 	}
 	if !hasColumn(t, db, "sqlite", "connectors", "managed_by") {
 		t.Fatal("connectors.managed_by missing")
@@ -737,6 +755,15 @@ func TestRunMigrationsDownPostgres(t *testing.T) {
 
 	if err := RunMigrations(db, "postgres", logger); err != nil {
 		t.Fatalf("RunMigrations() error: %v", err)
+	}
+	if !attachmentTableExists(t, db, "postgres", "journal_entries") {
+		t.Fatal("journal_entries missing")
+	}
+	if err := RunMigrationsDown(db, "postgres", logger); err != nil {
+		t.Fatalf("rollback journal_entries: %v", err)
+	}
+	if attachmentTableExists(t, db, "postgres", "journal_entries") {
+		t.Fatal("journal_entries remains after rollback")
 	}
 	if !hasColumn(t, db, "postgres", "connectors", "managed_by") {
 		t.Fatal("connectors.managed_by missing")

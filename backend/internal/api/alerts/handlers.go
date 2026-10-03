@@ -82,7 +82,28 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 		httputil.Errorf(w, err)
 		return
 	}
-	httputil.WritePaginated(w, alerts, page, pageSize, total)
+	type alertSummary struct {
+		store.AlertRecord
+		ServiceName string `json:"serviceName"`
+	}
+	items := make([]alertSummary, 0, len(alerts))
+	names := make(map[string]string)
+	for _, a := range alerts {
+		name, cached := names[a.ServiceID]
+		if !cached {
+			conn, err := h.Store.GetConnector(r.Context(), a.ServiceID)
+			if err != nil && !errors.Is(err, store.ErrNotFound) {
+				httputil.Errorf(w, err)
+				return
+			}
+			if conn != nil {
+				name = conn.Name
+			}
+			names[a.ServiceID] = name
+		}
+		items = append(items, alertSummary{AlertRecord: a, ServiceName: name})
+	}
+	httputil.WritePaginated(w, items, page, pageSize, total)
 }
 
 // filterByGrant keeps only alerts whose connector the caller has at least a

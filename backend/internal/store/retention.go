@@ -5,6 +5,8 @@ import (
 	"fmt"
 )
 
+// Manual journal entries are never pruned: they cannot be regenerated.
+
 // retentionBatchSize bounds how many rows a single retention DELETE removes,
 // so one statement never holds the (single, on SQLite) connection or a
 // Postgres transaction for long.

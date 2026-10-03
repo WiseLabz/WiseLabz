@@ -55,6 +55,7 @@ type AIConfigSummary struct {
 
 // Bundle is the full portable backup format.
 type Bundle struct {
+	JournalEntries   []store.JournalEntry          `json:"journalEntries,omitempty"`
 	Attachments      []store.DocAttachment         `json:"attachments,omitempty"`
 	Version          int                           `json:"version"`
 	ExportedAt       string                        `json:"exportedAt"`
@@ -70,6 +71,7 @@ type Bundle struct {
 // Result reports how many records of each entity were imported vs. skipped
 // (skipped = an existing record with the same ID was found, left untouched).
 type Result struct {
+	JournalEntries   Counts `json:"journalEntries"`
 	Attachments      Counts `json:"attachments"`
 	Connectors       Counts `json:"connectors"`
 	Docs             Counts `json:"docs"`
@@ -144,7 +146,12 @@ func exportWithin(ctx context.Context, s *store.Store) (*Bundle, error) {
 	if err != nil {
 		return nil, fmt.Errorf("export attachments: %w", err)
 	}
+	journal, err := s.ListJournalEntries(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("export journal: %w", err)
+	}
 	return &Bundle{
+		JournalEntries:   journal,
 		Attachments:      attachments,
 		Version:          BundleVersion,
 		ExportedAt:       time.Now().UTC().Format(time.RFC3339),
@@ -264,6 +271,21 @@ func ValidateBundle(b *Bundle) error {
 			return fmt.Errorf("unsupported attachment type %q", a.ContentType)
 		}
 		seenAttachments[a.ID] = true
+	}
+	connectorIDs := map[string]bool{}
+	for _, c := range b.Connectors {
+		connectorIDs[c.ID] = true
+	}
+	seenJournal := map[string]bool{}
+	for _, e := range b.JournalEntries {
+		if e.ID == "" || seenJournal[e.ID] || (e.ConnectorID != "" && !connectorIDs[e.ConnectorID]) ||
+			(e.DocID != "" && !docIDs[e.DocID]) {
+			return fmt.Errorf("invalid journal entry %q", e.ID)
+		}
+		if _, err := time.Parse(time.RFC3339Nano, e.OccurredAt); err != nil {
+			return fmt.Errorf("invalid journal occurrence time: %w", err)
+		}
+		seenJournal[e.ID] = true
 	}
 	templateIDs := make(map[string]bool, len(b.Templates))
 	for _, t := range b.Templates {
@@ -394,6 +416,20 @@ func importBundle(ctx context.Context, s *store.Store, b *Bundle) (Result, error
 			return res, err
 		}
 		res.Attachments.Imported++
+	}
+	for _, e := range b.JournalEntries {
+		_, err := s.GetJournalEntry(ctx, e.ID)
+		if err == nil {
+			res.JournalEntries.Skipped++
+			continue
+		}
+		if !errors.Is(err, store.ErrNotFound) {
+			return res, err
+		}
+		if err := s.CreateJournalEntry(ctx, &e); err != nil {
+			return res, err
+		}
+		res.JournalEntries.Imported++
 	}
 	return res, nil
 }

@@ -1,6 +1,8 @@
 package alerts
 
 import (
+	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -9,6 +11,8 @@ import (
 	"time"
 
 	"github.com/WiseLabz/wiselabz/internal/api/apitest"
+	"github.com/WiseLabz/wiselabz/internal/auth"
+	"github.com/WiseLabz/wiselabz/internal/store"
 )
 
 func TestListEmpty(t *testing.T) {
@@ -189,4 +193,39 @@ func TestBulkSnooze(t *testing.T) {
 			t.Errorf("expected per-item not_found reasons, got: %s", rr.Body.String())
 		}
 	})
+}
+
+func TestListServiceNameAndServerSeverity(t *testing.T) {
+	s := apitest.NewStore(t)
+	h := NewHandler(s)
+	ctx := context.Background()
+	c := store.ConnectorRecord{Name: "Router cluster", Category: "virtualization", Type: "proxmox", URL: "https://example.com"}
+	if err := s.CreateConnector(ctx, &c); err != nil {
+		t.Fatal(err)
+	}
+	user := apitest.NewUser(t, s, "viewer")
+	apitest.GrantConnectorRole(t, s, user, c.ID, "viewer")
+	for _, severity := range []string{"info", "warning", "critical"} {
+		alert := store.AlertRecord{ServiceID: c.ID, Severity: severity, Title: severity}
+		if err := s.CreateAlert(ctx, &alert); err != nil {
+			t.Fatal(err)
+		}
+	}
+	req := httptest.NewRequest(http.MethodGet, "/api/alerts?severity=critical&status=pending&pageSize=1", nil)
+	req = req.WithContext(auth.ContextWithUser(ctx, user, false))
+	rec := httptest.NewRecorder()
+	h.List(rec, req)
+	var page struct {
+		Items []struct {
+			ServiceName string `json:"serviceName"`
+			Severity    string `json:"severity"`
+		} `json:"items"`
+		Total int `json:"total"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &page); err != nil {
+		t.Fatal(err)
+	}
+	if rec.Code != 200 || page.Total != 1 || len(page.Items) != 1 || page.Items[0].ServiceName != c.Name || page.Items[0].Severity != "critical" {
+		t.Fatalf("list %s", rec.Body.String())
+	}
 }
