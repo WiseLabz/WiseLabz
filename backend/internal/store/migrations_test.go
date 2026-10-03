@@ -722,6 +722,15 @@ func TestRunMigrationsDownPostgres(t *testing.T) {
 	if err := RunMigrations(db, "postgres", logger); err != nil {
 		t.Fatalf("RunMigrations() error: %v", err)
 	}
+	if !hasColumn(t, db, "postgres", "report_definitions", "attach_lab_book") {
+		t.Fatal("report_definitions.attach_lab_book missing")
+	}
+	if err := RunMigrationsDown(db, "postgres", logger); err != nil {
+		t.Fatalf("rollback report_lab_book: %v", err)
+	}
+	if hasColumn(t, db, "postgres", "report_definitions", "attach_lab_book") {
+		t.Fatal("report_definitions.attach_lab_book remains after rollback")
+	}
 	if !attachmentTableExists(t, db, "postgres", "doc_attachments") {
 		t.Fatal("doc_attachments missing")
 	}

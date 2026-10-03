@@ -1,7 +1,7 @@
 # Graph Report - lab-book-export  (2026-10-03)
 
 ## Corpus Check
-- 1163 files · ~779,773 words
+- 1163 files · ~779,808 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 26 file(s) not represented in the graph (top: (none) 14, .tmpl 3, .toml 2)
 
@@ -11,7 +11,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `50a83998`
+- Built from commit: `e9b9652b`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
