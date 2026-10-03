@@ -45,4 +45,4 @@
 ## 8. Delivery
 
 - [x] 8.1 Run the full Go and frontend checks with the low-memory settings and `openspec validate connectors-in-config --strict`.
-- [ ] 8.2 Refresh graphify output, open the PR with `Closes #500`, and file the two follow-up issues (connector form `verifyTls`/`toggle` mismatch; OIDC role mappings by connector name).
+- [x] 8.2 Refresh graphify output, open the PR with `Closes #500`, and file the two follow-up issues (connector form `verifyTls`/`toggle` mismatch; OIDC role mappings by connector name).
