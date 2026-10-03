@@ -297,3 +297,27 @@ func TestOIDCCallbackRejectsBadNonce(t *testing.T) {
 		t.Fatalf("OIDCCallback(bad nonce) status = %d, want 401 or 400; body=%s", rr.Code, rr.Body.String())
 	}
 }
+
+// TestSyncOIDCConnectorGrantsByName covers #614: a group_connector_roles key
+// may be a connector name, resolved at login.
+func TestSyncOIDCConnectorGrantsByName(t *testing.T) {
+	th := newTestHandler(t)
+	ctx := context.Background()
+	conn := &store.ConnectorRecord{Name: "Plex", Category: "virtualization", Type: "proxmox", URL: "https://example.com"}
+	if err := th.Store.CreateConnector(ctx, conn); err != nil {
+		t.Fatalf("CreateConnector() error: %v", err)
+	}
+	user := &store.User{Username: "oidc-name-user", AuthSource: "oidc"}
+	if err := th.Store.CreateUser(ctx, user); err != nil {
+		t.Fatalf("CreateUser() error: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/oidc/callback", nil)
+
+	// Viper lowercases map keys, so the name arrives lowercased.
+	th.H.syncOIDCConnectorGrants(req, user, []string{"ops"}, map[string]map[string]string{"ops": {"plex": "operator", "no-such": "viewer"}})
+
+	role, err := th.Store.GetUserConnectorRole(ctx, user.ID, conn.ID)
+	if err != nil || role != "operator" {
+		t.Fatalf("role by name = %q (%v), want operator", role, err)
+	}
+}

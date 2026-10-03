@@ -232,9 +232,12 @@ which has been amended accordingly. Endpoint contract: `docs/openapi.yaml`
 
 An IdP group can grant per-connector `viewer`/`operator` roles, alongside the
 flat instance-admin `group_role_mapping` above: `auth.oidc[].group_connector_roles`
-maps a group name to `{connectorId: role}`, where the connector key is a UUID
-or `"*"` for every connector (see `deploy/config.example.yaml`). Group names
-are matched case-insensitively — viper lowercases config map keys read from
+maps a group name to `{connectorId: role}`, where the connector key is a UUID,
+a connector name (so connectors declared in `config.yaml` can be referenced
+without knowing their ID), or `"*"` for every connector (see
+`deploy/config.example.yaml`). Names are resolved at login; a name matching no
+connector, or more than one, is skipped with a warning log. Group and connector
+names are matched case-insensitively — viper lowercases config map keys read from
 YAML, so the same caveat that applies to `group_role_mapping` applies here.
 
 Grants carry a `source` (`manual`/`oidc`). The manual-grant admin API

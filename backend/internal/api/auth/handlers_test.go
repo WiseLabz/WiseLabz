@@ -3,6 +3,8 @@ package auth
 import (
 	"reflect"
 	"testing"
+
+	"github.com/WiseLabz/wiselabz/internal/store"
 )
 
 func TestEmailDomainAllowed(t *testing.T) {
@@ -114,4 +116,18 @@ func TestOIDCConnectorRolesForGroups(t *testing.T) {
 			t.Fatalf("oidcConnectorRolesForGroups() = %v, want empty (invalid role skipped)", got)
 		}
 	})
+}
+
+func TestResolveConnectorNames(t *testing.T) {
+	id1 := "3f1c1e2a-1111-4c22-8b33-aaaaaaaaaaaa"
+	id2 := "3f1c1e2a-2222-4c22-8b33-bbbbbbbbbbbb"
+	refs := []store.ConnectorRef{{ID: id1, Name: "Plex"}, {ID: id2, Name: "Dup"}, {ID: "x", Name: "dup"}}
+
+	got := resolveConnectorNames(map[string]map[string]string{
+		"ops": {"plex": "viewer", id1: "operator", "*": "viewer", "dup": "viewer", "missing": "viewer", id2: "viewer"},
+	}, refs)
+	want := map[string]map[string]string{"ops": {id1: "operator", "*": "viewer", id2: "viewer"}}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("resolveConnectorNames() = %v, want %v", got, want)
+	}
 }

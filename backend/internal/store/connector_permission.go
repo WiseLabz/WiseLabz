@@ -417,3 +417,31 @@ func (s *Store) ListConnectorIDs(ctx context.Context) ([]string, error) {
 	}
 	return ids, nil
 }
+
+// ConnectorRef is a connector's ID and display name.
+type ConnectorRef struct {
+	ID   string
+	Name string
+}
+
+// ListConnectorRefs returns every connector's ID and name, for resolving
+// connector names in an OIDC provider's group_connector_roles mapping (#614).
+func (s *Store) ListConnectorRefs(ctx context.Context) ([]ConnectorRef, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT id, name FROM connectors`)
+	if err != nil {
+		return nil, fmt.Errorf("list connector refs: %w", err)
+	}
+	defer rows.Close() //nolint:errcheck
+	refs := make([]ConnectorRef, 0)
+	for rows.Next() {
+		var r ConnectorRef
+		if err := rows.Scan(&r.ID, &r.Name); err != nil {
+			return nil, fmt.Errorf("scan connector ref: %w", err)
+		}
+		refs = append(refs, r)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate connector refs: %w", err)
+	}
+	return refs, nil
+}

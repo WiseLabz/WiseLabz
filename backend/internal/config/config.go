@@ -10,7 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/robfig/cron/v3"
 	"github.com/spf13/viper"
 )
@@ -184,7 +183,7 @@ type OIDCProvider struct {
 	GroupsClaim      string            `mapstructure:"groups_claim"`
 	GroupRoleMapping map[string]string `mapstructure:"group_role_mapping"`
 	// GroupConnectorRoles maps an IdP group to per-connector roles, keyed by
-	// connector UUID or "*" for every connector (#279 part 3). Distinct from
+	// connector UUID, connector name (#614) or "*" for every connector (#279 part 3). Distinct from
 	// GroupRoleMapping, which only ever grants the flat instance-admin role.
 	GroupConnectorRoles  map[string]map[string]string `mapstructure:"group_connector_roles"`
 	EmailDomainAllowlist []string                     `mapstructure:"email_domain_allowlist"`
@@ -542,17 +541,17 @@ func (c *Config) validateCronExpressions() error {
 }
 
 // validateOIDCGroupConnectorRoles checks every auth.oidc[].group_connector_roles
-// entry: the connector key must be "*" or a UUID, and the role must be
+// entry: the connector key must be "*", a UUID or a connector name, and the role must be
 // "viewer" or "operator" (#279 part 3). Fails startup on the first invalid
 // value, the same way validateCronExpressions rejects a bad cron expression.
 func (c *Config) validateOIDCGroupConnectorRoles() error {
 	for _, provider := range c.Auth.OIDC {
 		for group, connectorRoles := range provider.GroupConnectorRoles {
 			for connectorID, role := range connectorRoles {
-				if connectorID != "*" {
-					if _, err := uuid.Parse(connectorID); err != nil {
-						return fmt.Errorf("auth.oidc[%s].group_connector_roles[%s]: connector key %q must be \"*\" or a UUID", provider.ID, group, connectorID)
-					}
+				// A key is "*", a connector UUID or a connector name. Names are
+				// resolved at login, so only an empty key can be rejected here.
+				if strings.TrimSpace(connectorID) == "" {
+					return fmt.Errorf("auth.oidc[%s].group_connector_roles[%s]: connector key must be \"*\", a UUID or a connector name", provider.ID, group)
 				}
 				if !strings.EqualFold(role, "viewer") && !strings.EqualFold(role, "operator") {
 					return fmt.Errorf("auth.oidc[%s].group_connector_roles[%s][%s]: role %q must be \"viewer\" or \"operator\"", provider.ID, group, connectorID, role)

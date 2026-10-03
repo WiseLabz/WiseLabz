@@ -518,3 +518,19 @@ func TestSyncConfigConnectorGrants(t *testing.T) {
 		t.Errorf("after clearing config grants, grants = %+v, want only the manual and oidc rows", grants)
 	}
 }
+
+func TestListConnectorRefs(t *testing.T) {
+	s := newDocTestStore(t)
+	c := newTestConnector(t, s, "conn-list-refs")
+
+	refs, err := s.ListConnectorRefs(context.Background())
+	if err != nil {
+		t.Fatalf("ListConnectorRefs() error: %v", err)
+	}
+	for _, r := range refs {
+		if r.ID == c.ID && r.Name == "conn-list-refs" {
+			return
+		}
+	}
+	t.Fatalf("ListConnectorRefs() = %v, want it to include %q named conn-list-refs", refs, c.ID)
+}

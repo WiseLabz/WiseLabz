@@ -475,7 +475,7 @@ auth:
       client_secret: secret123
       group_connector_roles:
         homelab-ops:
-          not-a-uuid-or-star: viewer
+          "": viewer
 `
 	configPath := filepath.Join(dir, "config.yaml")
 	if err := os.WriteFile(configPath, []byte(yamlContent), 0o644); err != nil {
@@ -487,7 +487,40 @@ auth:
 	defer os.Chdir(oldDir) //nolint:errcheck
 
 	if _, err := Load(); err == nil {
-		t.Fatal("Load() error = nil, want error for group_connector_roles key \"not-a-uuid-or-star\"")
+		t.Fatal("Load() error = nil, want error for group_connector_roles key \"empty\"")
+	}
+}
+
+func TestLoadAcceptsConnectorNameInGroupConnectorRoles(t *testing.T) {
+	dir := t.TempDir()
+
+	yamlContent := `
+auth:
+  secret: test-secret-key
+  oidc:
+    - id: authentik
+      issuer_url: https://auth.example.com
+      client_id: abc123
+      client_secret: secret123
+      group_connector_roles:
+        homelab-ops:
+          Plex Media: viewer
+`
+	configPath := filepath.Join(dir, "config.yaml")
+	if err := os.WriteFile(configPath, []byte(yamlContent), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	oldDir, _ := os.Getwd()
+	os.Chdir(dir)          //nolint:errcheck
+	defer os.Chdir(oldDir) //nolint:errcheck
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v, want a connector name accepted as a key", err)
+	}
+	if got := cfg.Auth.OIDC[0].GroupConnectorRoles["homelab-ops"]["plex media"]; got != "viewer" {
+		t.Errorf("group_connector_roles[homelab-ops][plex media] = %q, want viewer", got)
 	}
 }
 
