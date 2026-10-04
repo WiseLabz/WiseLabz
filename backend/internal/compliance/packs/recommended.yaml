@@ -1,6 +1,6 @@
 id: recommended
 name: Recommended rules
-description: Baseline hardening checks across containers, firewalls, DNS filtering and Tailscale.
+description: Baseline hardening checks across containers, firewalls, DNS filtering, Tailscale and Proxmox backups.
 rules:
   - name: Docker privileged container
     connectorType: docker
@@ -77,3 +77,33 @@ rules:
     conditions:
       - {attribute: keyExpired, op: eq, value: false}
       - {attribute: keyExpiresInDays, op: lt, value: 14}
+  - name: Proxmox VM has no recent backup
+    connectorType: proxmox
+    entityKind: vm
+    severity: warning
+    title: Virtual machine has no Proxmox Backup Server backup in the last 7 days
+    conditions:
+      - {attribute: template, op: eq, value: false}
+      - {attribute: tags, op: not_contains, value: no-backup}
+    related:
+      - mode: requires
+        connectorType: pbs
+        entityKind: vm
+        join: {sourceField: external_id, relatedField: external_id}
+        conditions:
+          - {attribute: last_backup_age_days, op: lt, value: 7}
+  - name: Proxmox container has no recent backup
+    connectorType: proxmox
+    entityKind: container
+    severity: warning
+    title: Container has no Proxmox Backup Server backup in the last 7 days
+    conditions:
+      - {attribute: template, op: eq, value: false}
+      - {attribute: tags, op: not_contains, value: no-backup}
+    related:
+      - mode: requires
+        connectorType: pbs
+        entityKind: container
+        join: {sourceField: external_id, relatedField: external_id}
+        conditions:
+          - {attribute: last_backup_age_days, op: lt, value: 7}
