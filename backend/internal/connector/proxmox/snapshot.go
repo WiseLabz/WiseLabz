@@ -124,6 +124,7 @@ type guestList struct {
 		Status string `json:"status"`
 		CPU    int    `json:"cpus"`
 		MaxMem int64  `json:"maxmem"`
+		Tags   string `json:"tags"`
 	} `json:"data"`
 }
 
@@ -160,6 +161,7 @@ func (p *Connector) fetchVMs(ctx context.Context, node string, wantEntities bool
 		}
 		attrs := map[string]any{"status": vm.Status}
 		if wantEntities {
+			attrs["tags"] = parseTags(vm.Tags)
 			if vm.Status == "running" {
 				ent.IP = p.fetchQemuIP(ctx, node, vm.VMID)
 			}
@@ -205,6 +207,7 @@ func (p *Connector) fetchContainers(ctx context.Context, node string, wantEntiti
 		}
 		attrs := map[string]any{"status": ct.Status}
 		if wantEntities {
+			attrs["tags"] = parseTags(ct.Tags)
 			if ct.Status == "running" {
 				ent.IP = p.fetchLxcIP(ctx, node, ct.VMID)
 			}
