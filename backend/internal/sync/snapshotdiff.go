@@ -3,6 +3,7 @@ package sync
 import (
 	"fmt"
 	"reflect"
+	"slices"
 	"sort"
 	"strings"
 
@@ -128,7 +129,12 @@ func CompareEntities(prev, curr []connector.SnapshotEntity) []EntityChange {
 		addField("ip", old.IP, newer.IP, true, true)
 		addField("hostname", old.Hostname, newer.Hostname, true, true)
 		addField("mac", old.MAC, newer.MAC, true, true)
-		addField("aliases", old.Aliases, newer.Aliases, true, true)
+		oldAliases, newAliases := slices.Clone(old.Aliases), slices.Clone(newer.Aliases)
+		slices.Sort(oldAliases)
+		slices.Sort(newAliases)
+		if !slices.Equal(oldAliases, newAliases) {
+			addField("aliases", old.Aliases, newer.Aliases, true, true)
+		}
 		attributeKeys := make([]string, 0, len(old.Attributes)+len(newer.Attributes))
 		attributeSeen := make(map[string]bool)
 		for attr := range old.Attributes {

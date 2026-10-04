@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useGetSearch } from '../../api/generated/search/search';
@@ -22,10 +22,17 @@ export function SearchPage() {
   const type: GetSearchType | undefined =
     rawType === 'doc' || rawType === 'runbook' || rawType === 'entity' ? rawType : undefined;
   const connector = params.get('connector') || undefined;
-  const kind = params.get('kind') || undefined;
-  const enabled = query.trim().length >= 2 && debouncedQuery === query.trim();
+  const rawKind = params.get('kind') ?? '';
+  const kind = rawKind.trim().toLowerCase() || undefined;
+  const [debouncedKind, setDebouncedKind] = useState(kind);
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedKind(kind), 300);
+    return () => clearTimeout(timer);
+  }, [kind]);
+  const enabled =
+    query.trim().length >= 2 && debouncedQuery === query.trim() && debouncedKind === kind;
   const search = useGetSearch(
-    { q: debouncedQuery, type, connector, kind, limit: 100 },
+    { q: debouncedQuery, type, connector, kind: debouncedKind, limit: 100 },
     {
       query: { enabled },
     }
@@ -43,6 +50,13 @@ export function SearchPage() {
     data && data.docs.length + data.runbooks.length + data.entities.length
   );
   const selectedRunbook = params.get('runbook');
+  const runbookRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (selectedRunbook) {
+      runbookRef.current?.scrollIntoView({ block: 'start' });
+      runbookRef.current?.focus();
+    }
+  }, [selectedRunbook]);
   return (
     <div className="space-y-5">
       <h1 className="text-xl font-semibold text-ink">{t('search.title')}</h1>
@@ -89,92 +103,98 @@ export function SearchPage() {
           {t('search.kind')}
           <input
             className={fieldClass}
-            value={kind ?? ''}
+            value={rawKind}
             placeholder={t('search.allKinds')}
             onChange={(e) => setFilter('kind', e.target.value)}
           />
         </label>
       </div>
-      {query.trim().length < 2 ? (
-        <EmptyState title={t('search.prompt')} />
-      ) : !enabled || search.isLoading ? (
-        <SkeletonRows />
-      ) : search.isError ? (
-        <ErrorState title={t('search.loadError')} onRetry={() => void search.refetch()} />
-      ) : !hasResults ? (
-        <EmptyState title={t('search.empty')} />
-      ) : (
-        <div className="space-y-6" aria-live="polite">
-          {(['docs', 'runbooks'] as const).map(
-            (group) =>
-              data &&
-              data[group].length > 0 && (
-                <section key={group} aria-label={t(`search.${group}`)}>
-                  <h2 className="mb-2 text-sm font-semibold text-ink">{t(`search.${group}`)}</h2>
-                  <ul className="space-y-2">
-                    {data[group].map((hit) => (
-                      <li key={hit.id} className="rounded-md border border-line-soft p-3">
-                        <Link
-                          className="text-sm text-accent-secondary-bright"
-                          to={
-                            group === 'docs'
-                              ? `/docs/${encodeURIComponent(hit.id)}`
-                              : `/search?${new URLSearchParams({ ...Object.fromEntries(params), runbook: hit.id })}`
-                          }
-                        >
-                          {hit.title}
-                        </Link>
-                        <p className="mt-1 text-xs text-ink-muted">{hit.snippet}</p>
-                      </li>
-                    ))}
-                  </ul>
-                </section>
-              )
-          )}
-          {data && data.entities.length > 0 && (
-            <section aria-label={t('search.entities')}>
-              <h2 className="mb-2 text-sm font-semibold text-ink">{t('search.entities')}</h2>
-              <ul className="space-y-2">
-                {data.entities.map((hit, index) => (
-                  <li
-                    key={`${hit.connectorId}-${index}`}
-                    className="rounded-md border border-line-soft p-3"
-                  >
-                    <Link
-                      className="text-sm text-accent-secondary-bright"
-                      to={
-                        hit.docId
-                          ? `/docs/${encodeURIComponent(hit.docId)}`
-                          : `/services/${encodeURIComponent(hit.connectorId)}`
-                      }
-                    >
-                      {hit.name}
-                    </Link>
-                    <p className="mt-1 text-xs text-ink-muted">
-                      {[
-                        hit.connectorName,
-                        hit.kind,
-                        hit.externalId,
-                        hit.ip,
-                        hit.hostname,
-                        hit.mac,
-                        ...hit.aliases,
-                      ]
-                        .filter(Boolean)
-                        .join(' · ')}
-                    </p>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          )}
-          {data &&
-            [data.docs, data.runbooks, data.entities].some((group) => group.length === 100) && (
-              <p className="text-xs text-ink-muted">{t('search.limited', { count: 100 })}</p>
-            )}
+      {selectedRunbook && (
+        <div ref={runbookRef} tabIndex={-1} aria-label={t('search.runbooks')}>
+          <RunbookPanel runbookId={selectedRunbook} />
         </div>
       )}
-      {selectedRunbook && <RunbookPanel runbookId={selectedRunbook} />}
+      <div aria-live="polite">
+        {query.trim().length < 2 ? (
+          <EmptyState title={t('search.prompt')} />
+        ) : !enabled || search.isLoading ? (
+          <SkeletonRows />
+        ) : search.isError ? (
+          <ErrorState title={t('search.loadError')} onRetry={() => void search.refetch()} />
+        ) : !hasResults ? (
+          <EmptyState title={t('search.empty')} />
+        ) : (
+          <div className="space-y-6">
+            {(['docs', 'runbooks'] as const).map(
+              (group) =>
+                data &&
+                data[group].length > 0 && (
+                  <section key={group} aria-label={t(`search.${group}`)}>
+                    <h2 className="mb-2 text-sm font-semibold text-ink">{t(`search.${group}`)}</h2>
+                    <ul className="space-y-2">
+                      {data[group].map((hit) => (
+                        <li key={hit.id} className="rounded-md border border-line-soft p-3">
+                          <Link
+                            className="text-sm text-accent-secondary-bright"
+                            to={
+                              group === 'docs'
+                                ? `/docs/${encodeURIComponent(hit.id)}`
+                                : `/search?${new URLSearchParams({ ...Object.fromEntries(params), runbook: hit.id })}`
+                            }
+                          >
+                            {hit.title}
+                          </Link>
+                          <p className="mt-1 text-xs text-ink-muted">{hit.snippet}</p>
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                )
+            )}
+            {data && data.entities.length > 0 && (
+              <section aria-label={t('search.entities')}>
+                <h2 className="mb-2 text-sm font-semibold text-ink">{t('search.entities')}</h2>
+                <ul className="space-y-2">
+                  {data.entities.map((hit, index) => (
+                    <li
+                      key={`${hit.connectorId}-${index}`}
+                      className="rounded-md border border-line-soft p-3"
+                    >
+                      <Link
+                        className="text-sm text-accent-secondary-bright"
+                        to={
+                          hit.docId
+                            ? `/docs/${encodeURIComponent(hit.docId)}`
+                            : `/services/${encodeURIComponent(hit.connectorId)}`
+                        }
+                      >
+                        {hit.name}
+                      </Link>
+                      <p className="mt-1 text-xs text-ink-muted">
+                        {[
+                          hit.connectorName,
+                          hit.kind,
+                          hit.externalId,
+                          hit.ip,
+                          hit.hostname,
+                          hit.mac,
+                          ...hit.aliases,
+                        ]
+                          .filter(Boolean)
+                          .join(' · ')}
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+            {data &&
+              [data.docs, data.runbooks, data.entities].some((group) => group.length === 100) && (
+                <p className="text-xs text-ink-muted">{t('search.limited', { count: 100 })}</p>
+              )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

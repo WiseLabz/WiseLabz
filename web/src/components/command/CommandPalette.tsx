@@ -336,7 +336,12 @@ function PaletteBody() {
       });
     }
     // Keep keyboard traversal in the same order as the displayed groups.
-    return GROUP_ORDER.flatMap((group) => items.filter((c) => c.group === group));
+    return [
+      ...GROUP_ORDER.flatMap((group) =>
+        items.filter((c) => c.group === group && c.id !== 'search-all')
+      ),
+      ...items.filter((c) => c.id === 'search-all'),
+    ];
   }, [commands, query, debouncedQuery, searchQuery.data, t]);
 
   // Clamp the cursor at render time instead of in an effect.
@@ -345,6 +350,7 @@ function PaletteBody() {
   const groups = useMemo(() => {
     const map = new Map<CommandGroup, Command[]>();
     for (const c of filtered) {
+      if (c.id === 'search-all') continue;
       const arr = map.get(c.group) ?? [];
       arr.push(c);
       map.set(c.group, arr);
@@ -381,6 +387,34 @@ function PaletteBody() {
   useEffect(() => {
     listRef.current?.querySelector('[data-active="true"]')?.scrollIntoView({ block: 'nearest' });
   }, [cursor]);
+
+  const renderOption = (c: Command) => {
+    // Index into the flat `filtered` list — the same ordering the
+    // cursor/Enter handlers use — so the highlight always matches.
+    const idx = filtered.indexOf(c);
+    const isActive = idx === cursor;
+    return (
+      <button
+        key={c.id}
+        id={optionId(c.id)}
+        role="option"
+        aria-selected={isActive}
+        tabIndex={-1}
+        data-active={isActive}
+        onMouseMove={() => setActive(idx)}
+        onClick={() => run(c)}
+        className="flex w-full items-center gap-3 rounded-sm px-2.5 py-2 text-left font-mono text-sm transition-colors"
+        style={{
+          backgroundColor: isActive ? 'var(--color-accent-primary-tint)' : 'transparent',
+          color: isActive ? 'var(--color-ink)' : 'var(--color-ink-muted)',
+        }}
+      >
+        <c.Icon size={16} className="shrink-0 opacity-80" />
+        <span className="flex-1">{c.label}</span>
+        {c.hint && <span className="font-mono text-2xs text-ink-faint">{c.hint}</span>}
+      </button>
+    );
+  };
 
   return (
     <motion.div
@@ -449,7 +483,7 @@ function PaletteBody() {
           aria-label={t('command.results')}
           className="max-h-[52vh] overflow-y-auto p-2"
         >
-          {filtered.length === 0 && (
+          {filtered.every((c) => c.id === 'search-all') && (
             <p className="px-3 py-8 text-center text-sm text-ink-faint">
               {t('command.noMatches', { query })}
             </p>
@@ -459,37 +493,10 @@ function PaletteBody() {
               <p aria-hidden="true" className="px-2.5 py-1.5 text-2xs font-semibold text-ink-faint">
                 {t(`command.group.${group}`)}
               </p>
-              {items.map((c) => {
-                // Index into the flat `filtered` list — the same ordering the
-                // cursor/Enter handlers use — so the highlight always matches.
-                const idx = filtered.indexOf(c);
-                const isActive = idx === cursor;
-                return (
-                  <button
-                    key={c.id}
-                    id={optionId(c.id)}
-                    role="option"
-                    aria-selected={isActive}
-                    tabIndex={-1}
-                    data-active={isActive}
-                    onMouseMove={() => setActive(idx)}
-                    onClick={() => run(c)}
-                    className="flex w-full items-center gap-3 rounded-sm px-2.5 py-2 text-left font-mono text-sm transition-colors"
-                    style={{
-                      backgroundColor: isActive
-                        ? 'var(--color-accent-primary-tint)'
-                        : 'transparent',
-                      color: isActive ? 'var(--color-ink)' : 'var(--color-ink-muted)',
-                    }}
-                  >
-                    <c.Icon size={16} className="shrink-0 opacity-80" />
-                    <span className="flex-1">{c.label}</span>
-                    {c.hint && <span className="font-mono text-2xs text-ink-faint">{c.hint}</span>}
-                  </button>
-                );
-              })}
+              {items.map(renderOption)}
             </div>
           ))}
+          {filtered.filter((c) => c.id === 'search-all').map(renderOption)}
         </div>
       </motion.div>
     </motion.div>

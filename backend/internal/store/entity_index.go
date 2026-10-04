@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -46,9 +47,19 @@ func (s *Store) ReplaceEntityIndexForConnector(ctx context.Context, connectorID 
 		if err != nil {
 			return fmt.Errorf("encode entity aliases: %w", err)
 		}
+		foldedAliases := make([]string, len(aliases))
+		for i, alias := range aliases {
+			foldedAliases[i] = strings.ToLower(alias)
+		}
+		foldedData, err := json.Marshal(foldedAliases)
+		if err != nil {
+			return fmt.Errorf("encode folded entity aliases: %w", err)
+		}
 		_, err = s.db.ExecContext(ctx, `INSERT INTO entity_index
- (connector_id, kind, name, external_id, ip, hostname, mac, aliases) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-			connectorID, e.Kind, e.Name, e.ExternalID, e.IP, e.Hostname, e.MAC, string(data))
+ (connector_id, kind, name, external_id, ip, hostname, mac, aliases, kind_folded, name_folded, external_id_folded, ip_folded, hostname_folded, mac_folded, aliases_folded) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			connectorID, e.Kind, e.Name, e.ExternalID, e.IP, e.Hostname, e.MAC, string(data),
+			strings.ToLower(e.Kind), strings.ToLower(e.Name), strings.ToLower(e.ExternalID),
+			strings.ToLower(e.IP), strings.ToLower(e.Hostname), strings.ToLower(e.MAC), string(foldedData))
 		if err != nil {
 			return fmt.Errorf("insert entity index: %w", err)
 		}
@@ -75,28 +86,39 @@ func (s *Store) SearchEntities(ctx context.Context, userID, query string, filter
 		args = append(args, filters.ConnectorID)
 	}
 	if filters.Kind != "" {
-		where += ` AND e.kind = ?`
-		args = append(args, filters.Kind)
+		where += ` AND e.kind_folded = ?`
+		args = append(args, strings.ToLower(strings.TrimSpace(filters.Kind)))
 	}
-	columns := []string{"e.name", "e.external_id", "e.ip", "e.hostname", "e.mac"}
+	columns := []string{"e.name_folded", "e.external_id_folded", "e.ip_folded", "e.hostname_folded", "e.mac_folded"}
 	matches, exact := []string{}, []string{}
+	exactArgs := []any{}
 	for _, col := range columns {
-		matches = append(matches, `LOWER(`+col+`) LIKE ? ESCAPE '\'`)
+		matches = append(matches, col+` LIKE ? ESCAPE '\'`)
 		args = append(args, "%"+escapeLike(query)+"%")
-		exact = append(exact, `LOWER(`+col+`) = ?`)
+		exact = append(exact, col+` = ?`)
+		exactArgs = append(exactArgs, query)
 	}
-	aliases := `json_each(e.aliases) AS alias`
+	// MAC fragments may use colon, dash, Cisco-dot, or bare hex notation.
+	if strings.Trim(query, "0123456789abcdef:-.") == "" {
+		compact := strings.NewReplacer(":", "", "-", "", ".", "").Replace(query)
+		if compact != "" {
+			matches = append(matches, `REPLACE(e.mac_folded, ':', '') LIKE ? ESCAPE '\'`)
+			args = append(args, "%"+escapeLike(compact)+"%")
+			exact = append(exact, `REPLACE(e.mac_folded, ':', '') = ?`)
+			exactArgs = append(exactArgs, compact)
+		}
+	}
+	aliases := `json_each(e.aliases_folded) AS alias`
 	if s.driver == "postgres" {
-		aliases = `jsonb_array_elements_text(e.aliases::jsonb) AS alias(value)`
+		aliases = `jsonb_array_elements_text(e.aliases_folded::jsonb) AS alias(value)`
 	}
 	matches = append(matches, `EXISTS (SELECT 1 FROM `+aliases+`
- WHERE LOWER(alias.value) LIKE ? ESCAPE '\')`)
+ WHERE alias.value LIKE ? ESCAPE '\')`)
 	args = append(args, "%"+escapeLike(query)+"%")
-	for range columns {
-		args = append(args, query)
-	}
-	exact = append(exact, `EXISTS (SELECT 1 FROM `+aliases+` WHERE LOWER(alias.value) = ?)`)
-	args = append(args, query, limit)
+	exact = append(exact, `EXISTS (SELECT 1 FROM `+aliases+` WHERE alias.value = ?)`)
+	exactArgs = append(exactArgs, query)
+	args = append(args, exactArgs...)
+	args = append(args, limit)
 	rows, err := s.db.QueryContext(ctx, `SELECT e.connector_id, c.name,
  COALESCE((SELECT d.id FROM docs d WHERE d.service_id = e.connector_id AND d.deleted_at IS NULL
  AND d.kind = 'service' ORDER BY d.id LIMIT 1), ''),
@@ -104,7 +126,7 @@ func (s *Store) SearchEntities(ctx context.Context, userID, query string, filter
  FROM entity_index e JOIN connectors c ON c.id = e.connector_id
  WHERE `+where+` AND (`+strings.Join(matches, " OR ")+`)
  ORDER BY CASE WHEN (`+strings.Join(exact, " OR ")+`) THEN 0 ELSE 1 END,
- LOWER(e.name), e.connector_id, e.kind, e.external_id, e.ip, e.hostname, e.mac, e.aliases LIMIT ?`, args...)
+ e.name_folded, e.connector_id, e.kind, e.external_id, e.ip, e.hostname, e.mac, e.aliases LIMIT ?`, args...)
 	if err != nil {
 		return nil, fmt.Errorf("search entities: %w", err)
 	}
@@ -181,10 +203,9 @@ func (s *Store) BackfillEntityIndex(ctx context.Context) (int, error) {
 			if s.driver == "postgres" {
 				var locked string
 				if err := tx.db.QueryRowContext(ctx, `SELECT id FROM connectors WHERE id = ? FOR UPDATE`, id).Scan(&locked); err != nil {
-					return fmt.Errorf("lock entity backfill connector: %w", err)
-				}
-			} else {
-				if _, err := tx.db.ExecContext(ctx, `UPDATE connectors SET id = id WHERE id = ?`, id); err != nil {
+					if errors.Is(err, sql.ErrNoRows) {
+						return nil
+					}
 					return fmt.Errorf("lock entity backfill connector: %w", err)
 				}
 			}

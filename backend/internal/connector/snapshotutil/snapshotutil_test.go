@@ -45,3 +45,20 @@ func TestSections(t *testing.T) {
 		t.Errorf("UnavailableSection = %+v", got)
 	}
 }
+
+func TestNormalizeMAC(t *testing.T) {
+	for _, tc := range []struct{ input, want string }{
+		{"aa:bb:cc:dd:ee:ff", "aa:bb:cc:dd:ee:ff"},
+		{"AA:BB:CC:DD:EE:FF", "aa:bb:cc:dd:ee:ff"},
+		{"AA-BB-CC-DD-EE-FF", "aa:bb:cc:dd:ee:ff"},
+		{"aabb.ccdd.eeff", "aa:bb:cc:dd:ee:ff"},
+		{"  AA-BB-CC-DD-EE-FF  ", "aa:bb:cc:dd:ee:ff"},
+		{"invalid", ""}, {"", ""},
+	} {
+		t.Run(tc.input, func(t *testing.T) {
+			if got := NormalizeMAC(tc.input); got != tc.want {
+				t.Fatalf("NormalizeMAC(%q) = %q, want %q", tc.input, got, tc.want)
+			}
+		})
+	}
+}

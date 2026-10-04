@@ -38,6 +38,8 @@ func TestEntityIndexSearch(t *testing.T) {
 	entities := []connector.SnapshotEntity{
 		{Kind: "device", Name: "a-router-extra", IP: "10.0.0.11"},
 		{Kind: "device", Name: "ROUTER", IP: "10.0.0.1", Hostname: "Gateway.LAB", ExternalID: "100", MAC: snapshotutil.NormalizeMAC("AA-BB-CC-DD-EE-FF"), Aliases: []string{"dns.lab", `alias%_\name`}},
+		{Kind: "device", Name: "ÜBER-NAS", Hostname: "HÖST.LAB", Aliases: []string{"ÄLIAS.LAB"}},
+		{Kind: "device", Name: "a-mac-fragment", MAC: "00:aa:bb:cc:dd:ee:ff:11"},
 		{Kind: "vm", Name: `literal%_\name`},
 	}
 	replace := func(id string, es []connector.SnapshotEntity) {
@@ -64,6 +66,23 @@ func TestEntityIndexSearch(t *testing.T) {
 	for _, q := range []string{"10.0.0.1", "gateway", "AA:BB:CC:DD:EE:FF", "100", "dns.lab"} {
 		if hits := search(userCtx, q, SearchFilter{ConnectorID: a.ID, Kind: "device"}, 10); len(hits) == 0 {
 			t.Fatalf("missing query %q", q)
+		}
+	}
+	for _, q := range []string{"AA-BB-CC-DD-EE-FF", "aabb.ccdd.eeff", "aabbccddeeff", "AA:BB:CC:DD:EE:FF"} {
+		hits := search(userCtx, q, SearchFilter{}, 10)
+		if len(hits) != 2 || hits[0].Name != "ROUTER" {
+			t.Fatalf("MAC exact ordering %q: %+v", q, hits)
+		}
+	}
+	for _, q := range []string{"BB-CC-DD", "bbcc.dd", "bbccdd", "bb:cc:dd"} {
+		if hits := search(userCtx, q, SearchFilter{}, 10); len(hits) != 2 {
+			t.Fatalf("MAC substring %q: %+v", q, hits)
+		}
+	}
+	for _, q := range []string{"ÜBER", "über", "HÖST", "höst", "ÄLIAS", "älias"} {
+		hits := search(userCtx, q, SearchFilter{Kind: "DEVICE"}, 10)
+		if len(hits) != 1 || hits[0].Name != "ÜBER-NAS" || hits[0].Aliases[0] != "ÄLIAS.LAB" {
+			t.Fatalf("Unicode query %q: %+v", q, hits)
 		}
 	}
 	for _, q := range []string{`%_\`, `alias%_\name`} {

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/WiseLabz/wiselabz/internal/api/apitest"
@@ -28,7 +29,7 @@ func TestSearch(t *testing.T) {
 			t.Fatal(err)
 		}
 		if err := s.WithinTransaction(ctx, func(tx *store.Store) error {
-			return tx.ReplaceEntityIndexForConnector(ctx, c.ID, []connector.SnapshotEntity{{Kind: "device", Name: "router", IP: "10.0.0.1"}})
+			return tx.ReplaceEntityIndexForConnector(ctx, c.ID, []connector.SnapshotEntity{{Kind: "device", Name: "router", IP: "10.0.0.1"}, {Kind: "device", Name: "router-extra", IP: "10.0.0.2"}})
 		}); err != nil {
 			t.Fatal(err)
 		}
@@ -45,25 +46,35 @@ func TestSearch(t *testing.T) {
 	for _, tc := range []struct {
 		query                            string
 		docs, runbooks, entities, status int
+		restricted                       bool
 	}{
-		{"q=router", 1, 1, 1, 200},
-		{"q=router&type=doc", 1, 0, 0, 200},
-		{"q=router&type=runbook", 0, 1, 0, 200},
-		{"q=router&type=entity", 0, 0, 1, 200},
-		{"q=router&connector=" + a.ID, 1, 0, 1, 200},
-		{"q=router&connector=" + b.ID, 0, 0, 0, 200},
-		{"q=router&kind=device", 0, 0, 1, 200},
-		{"q=router&kind=vm", 0, 0, 0, 200},
-		{"q=" + url.QueryEscape("  "), 0, 0, 0, 200},
-		{"q=router&limit=1", 1, 1, 1, 200},
-		{"q=router&type=bogus", 0, 0, 0, 400},
-		{"q=router&limit=0", 0, 0, 0, 400},
-		{"q=router&limit=101", 0, 0, 0, 400},
-		{"q=router&limit=no", 0, 0, 0, 400},
+		{"q=router", 1, 1, 2, 200, false},
+		{"q=router&type=doc", 1, 0, 0, 200, false},
+		{"q=router&type=runbook", 0, 1, 0, 200, false},
+		{"q=router&type=entity", 0, 0, 2, 200, false},
+		{"q=router&connector=" + a.ID, 1, 0, 2, 200, false},
+		{"q=router&connector=" + b.ID, 0, 0, 0, 200, false},
+		{"q=router&kind=device", 0, 0, 2, 200, false},
+		{"q=router&kind=vm", 0, 0, 0, 200, false},
+		{"q=" + url.QueryEscape("  "), 0, 0, 0, 200, false},
+		{"q=router&limit=1", 1, 1, 1, 200, false},
+		{"q=router&type=bogus", 0, 0, 0, 400, false},
+		{"q=router&limit=0", 0, 0, 0, 400, false},
+		{"q=router&limit=101", 0, 0, 0, 400, false},
+		{"q=router&limit=no", 0, 0, 0, 400, false},
+		{"q=" + strings.Repeat("a", 501), 0, 0, 0, 400, false},
+		{"q=router&connector=" + strings.Repeat("a", 129), 0, 0, 0, 400, false},
+		{"q=router&kind=" + strings.Repeat("a", 101), 0, 0, 0, 400, false},
+		{"q=router", 0, 1, 0, 200, true},
+		{"q=router&connector=" + a.ID, 0, 0, 0, 200, true},
+		{"q=router&kind=DEVICE", 0, 0, 2, 200, false},
 	} {
 		t.Run(tc.query, func(t *testing.T) {
 			r := httptest.NewRequest("GET", "/api/search?"+tc.query, nil)
 			r = r.WithContext(auth.ContextWithUser(r.Context(), user, true))
+			if tc.restricted {
+				r = r.WithContext(auth.ContextWithAPIKeyRestriction(r.Context(), auth.APIKeyRestriction{ConnectorIDs: []string{b.ID}}))
+			}
 			w := httptest.NewRecorder()
 			h.List(w, r)
 			if w.Code != tc.status {

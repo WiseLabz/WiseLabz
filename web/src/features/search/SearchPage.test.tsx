@@ -54,6 +54,7 @@ function mount(path = '/search?q=router') {
 describe('SearchPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    HTMLElement.prototype.scrollIntoView = vi.fn();
     view.mockReturnValue({ data: results, isLoading: false, isError: false, refetch: vi.fn() });
   });
   it('renders all groups and links entities to the generated doc', () => {
@@ -64,7 +65,13 @@ describe('SearchPage', () => {
     expect(screen.getByRole('link', { name: 'router' })).toHaveAttribute('href', '/docs/d');
     expect(screen.getByText(/aa:bb:cc:dd:ee:ff/)).toHaveTextContent('dns.lab');
     fireEvent.click(screen.getByRole('link', { name: 'Recovery' }));
-    expect(screen.getByText('Runbook viewer r')).toBeInTheDocument();
+    const panel = screen.getByText('Runbook viewer r').parentElement!;
+    expect(panel).toHaveFocus();
+    expect(panel.scrollIntoView).toHaveBeenCalledWith({ block: 'start' });
+    expect(
+      panel.compareDocumentPosition(screen.getByRole('region', { name: 'Docs' })) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
   });
   it('initializes filters from the URL and keeps edits in it', async () => {
     mount('/search?q=router&type=entity&connector=c&kind=device');
@@ -96,6 +103,32 @@ describe('SearchPage', () => {
     expect(get.mock.lastCall?.[1]).toEqual({ query: { enabled: false } });
     await waitFor(() => expect(get.mock.lastCall?.[0]).toHaveProperty('q', 'host'));
     expect(get.mock.lastCall?.[1]).toEqual({ query: { enabled: true } });
+  });
+  it('debounces and lowercases the kind filter', async () => {
+    mount();
+    fireEvent.change(screen.getByLabelText('Entity kind'), { target: { value: 'DEVICE' } });
+    expect(get.mock.lastCall?.[1]).toEqual({ query: { enabled: false } });
+    expect(get.mock.lastCall?.[0]).toHaveProperty('kind', undefined);
+    await waitFor(() => expect(get.mock.lastCall?.[0]).toHaveProperty('kind', 'device'));
+    expect(get.mock.lastCall?.[1]).toEqual({ query: { enabled: true } });
+  });
+  it('focuses and scrolls a runbook selected by the URL, including a changed selection', () => {
+    mount('/search?q=router&runbook=other');
+    const initialPanel = screen.getByText('Runbook viewer other').parentElement!;
+    expect(initialPanel).toHaveFocus();
+    expect(initialPanel.scrollIntoView).toHaveBeenCalledOnce();
+    fireEvent.click(screen.getByRole('link', { name: 'Recovery' }));
+    expect(screen.getByText('Runbook viewer r').parentElement).toHaveFocus();
+    expect(initialPanel.scrollIntoView).toHaveBeenCalledTimes(2);
+  });
+  it('keeps its live region mounted when results become empty', () => {
+    const rendered = mount();
+    const live = screen.getByRole('region', { name: 'Docs' }).closest('[aria-live]');
+    expect(live).toHaveAttribute('aria-live', 'polite');
+    view.mockReturnValue({ data: { docs: [], runbooks: [], entities: [] } });
+    fireEvent.change(screen.getByLabelText('Type'), { target: { value: 'doc' } });
+    expect(screen.getByText('No results found').closest('[aria-live]')).toBe(live);
+    rendered.unmount();
   });
   it('shows empty, loading, and error states', () => {
     view.mockReturnValue({ data: { docs: [], runbooks: [], entities: [] } });

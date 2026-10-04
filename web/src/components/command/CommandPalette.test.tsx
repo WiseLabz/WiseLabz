@@ -53,7 +53,7 @@ describe('CommandPalette', () => {
   });
   afterEach(() => useUi.setState({ paletteOpen: false }));
 
-  it('ignores navigation and Enter when a search has no matches', () => {
+  it('shows no matches for a server query and keeps See all results ungrouped', async () => {
     render(
       <QueryClientProvider client={new QueryClient()}>
         <MemoryRouter>
@@ -62,15 +62,17 @@ describe('CommandPalette', () => {
       </QueryClientProvider>
     );
 
-    fireEvent.change(screen.getByRole('combobox'), { target: { value: '☃' } });
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: '☃☃' } });
     const dialog = screen.getByRole('dialog');
 
-    expect(() => {
-      fireEvent.keyDown(dialog, { key: 'ArrowDown' });
-      fireEvent.keyDown(dialog, { key: 'ArrowUp' });
-      fireEvent.keyDown(dialog, { key: 'Enter' });
-    }).not.toThrow();
-    expect(screen.getByText('No matches for “☃”')).toBeInTheDocument();
+    await waitFor(() => expect(searchHook.mock.lastCall?.[0]).toHaveProperty('q', '☃☃'));
+    expect(screen.getByText('No matches for “☃☃”')).toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: 'Entities' })).not.toBeInTheDocument();
+    const all = screen.getByRole('option', { name: 'See all results' });
+    expect(all.closest('[role="group"]')).toBeNull();
+    fireEvent.keyDown(dialog, { key: 'ArrowDown' });
+    fireEvent.keyDown(dialog, { key: 'ArrowUp' });
+    expect(screen.getByRole('combobox')).toHaveAttribute('aria-activedescendant', all.id);
     expect(useUi.getState().paletteOpen).toBe(true);
   });
 
@@ -176,6 +178,7 @@ describe('CommandPalette', () => {
       </QueryClientProvider>
     );
     fireEvent.change(screen.getByRole('combobox'), { target: { value: 'host & ip' } });
+    expect(screen.queryByRole('group', { name: 'Entities' })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('option', { name: 'See all results' }));
     await waitFor(() =>
       expect(screen.getByTestId('location')).toHaveTextContent('/search?q=host+%26+ip')

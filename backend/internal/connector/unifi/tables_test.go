@@ -43,6 +43,9 @@ func TestBuildDeviceTable(t *testing.T) {
 		t.Fatalf("entities = %d, want 3", len(entities))
 	}
 	ap := byExternalID(entities)["aa:bb:cc:00:11:22"]
+	if ap.MAC != "aa:bb:cc:00:11:22" {
+		t.Errorf("ap MAC = %q", ap.MAC)
+	}
 	if ap.Kind != "device" || ap.Name != "Living Room AP" || ap.IP != "10.0.1.20" || ap.Hostname != "Living Room AP" {
 		t.Errorf("ap = %+v", ap)
 	}
