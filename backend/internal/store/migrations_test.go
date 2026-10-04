@@ -131,6 +131,15 @@ func TestRunMigrationsDown(t *testing.T) {
 		t.Fatalf("RunMigrations() error: %v", err)
 	}
 
+	if !attachmentTableExists(t, db, "sqlite", "entity_index") {
+		t.Fatal("entity_index missing")
+	}
+	if err := RunMigrationsDown(db, "sqlite", logger); err != nil {
+		t.Fatal(err)
+	}
+	if attachmentTableExists(t, db, "sqlite", "entity_index") {
+		t.Fatal("entity_index remains after rollback")
+	}
 	rollbackLabBook := func() {
 		if !hasColumn(t, db, "sqlite", "report_definitions", "attach_lab_book") {
 			t.Fatal("report_definitions.attach_lab_book missing")
@@ -456,6 +465,9 @@ func TestRunMigrationsDown(t *testing.T) {
 	if err := db.QueryRow("SELECT name FROM sqlite_master WHERE type='table' AND name='user_mfa_factors'").Scan(&mfaFactorsTable); err != nil {
 		t.Fatalf("user_mfa_factors table missing after reapply: %v", err)
 	}
+	if err := RunMigrationsDown(db, "sqlite", logger); err != nil {
+		t.Fatal(err)
+	}
 	rollbackLabBook()
 
 	if !attachmentTableExists(t, db, "sqlite", "journal_entries") {
@@ -770,6 +782,15 @@ func TestRunMigrationsDownPostgres(t *testing.T) {
 
 	if err := RunMigrations(db, "postgres", logger); err != nil {
 		t.Fatalf("RunMigrations() error: %v", err)
+	}
+	if !attachmentTableExists(t, db, "postgres", "entity_index") {
+		t.Fatal("entity_index missing")
+	}
+	if err := RunMigrationsDown(db, "postgres", logger); err != nil {
+		t.Fatalf("rollback entity_index: %v", err)
+	}
+	if attachmentTableExists(t, db, "postgres", "entity_index") {
+		t.Fatal("entity_index remains after rollback")
 	}
 	if !hasColumn(t, db, "postgres", "report_definitions", "attach_lab_book") {
 		t.Fatal("report_definitions.attach_lab_book missing")

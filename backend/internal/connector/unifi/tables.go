@@ -145,7 +145,7 @@ func buildDeviceTable(raw []byte) (string, []connector.SnapshotEntity, map[strin
 		snapshotutil.PutString(attrs, "firmwareVersion", d.Version)
 		snapshotutil.PutString(attrs, "state", state)
 		entities = append(entities, connector.SnapshotEntity{
-			Kind: "device", Name: name, IP: d.IP, Hostname: d.Name, ExternalID: d.MAC, Attributes: attrs,
+			Kind: "device", Name: name, IP: d.IP, Hostname: d.Name, ExternalID: d.MAC, MAC: snapshotutil.NormalizeMAC(d.MAC), Attributes: attrs,
 		})
 	}
 	return b.String(), entities, nil

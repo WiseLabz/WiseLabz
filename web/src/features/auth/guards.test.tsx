@@ -99,7 +99,7 @@ describe('route guards', () => {
   });
 
   it('allows lab notes without service grants while preserving onboarding elsewhere', () => {
-    for (const path of ['/docs', '/docs/handbook', '/dashboard']) {
+    for (const path of ['/docs', '/docs/handbook', '/dashboard', '/search']) {
       const view = render(
         <MemoryRouter initialEntries={[path]}>
           <Routes>
@@ -108,7 +108,7 @@ describe('route guards', () => {
           </Routes>
         </MemoryRouter>,
       );
-      expect(screen.queryByText('lab notes') !== null).toBe(path.startsWith('/docs'));
+      expect(screen.queryByText('lab notes') !== null).toBe(path.startsWith('/docs') || path === '/search');
       expect(screen.queryByText('/onboarding') !== null).toBe(path === '/dashboard');
       view.unmount();
     }

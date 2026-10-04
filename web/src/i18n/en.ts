@@ -4,6 +4,26 @@
  * namespaced object; keep keys stable (they are the contract for translations).
  */
 export const en = {
+  search: {
+    title: 'Search the lab',
+    query: 'Search',
+    placeholder: 'Name, IP, hostname, MAC, or documentation…',
+    type: 'Type',
+    connector: 'Connector',
+    kind: 'Entity kind',
+    allTypes: 'All types',
+    allConnectors: 'All connectors',
+    allKinds: 'All kinds',
+    docs: 'Docs',
+    runbooks: 'Runbooks',
+    entities: 'Entities',
+    seeAll: 'See all results',
+    empty: 'No results found',
+    prompt: 'Enter at least two characters to search',
+    loadError: 'Could not search the lab',
+    limited:
+      'Showing up to {{count}} results per group. Refine your search for more specific results.',
+  },
   app: {
     name: 'WiseLabz',
     tagline: 'Wise homelab documentation',
@@ -1367,6 +1387,8 @@ export const en = {
       actions: 'Actions',
       services: 'Services',
       docs: 'Docs',
+      runbooks: 'Runbooks',
+      entities: 'Entities',
     },
     nav: {
       dashboard: 'Dashboard',

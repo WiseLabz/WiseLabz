@@ -280,6 +280,9 @@ func TestBuildDHCP(t *testing.T) {
 		t.Fatalf("entities = %d, want 2", len(entities))
 	}
 	static := entities[0]
+	if static.MAC != "aa:bb:cc:dd:ee:ff" {
+		t.Errorf("lease MAC = %q", static.MAC)
+	}
 	if static.Kind != "dhcp_lease" || static.Name != "laptop" || static.IP != "192.168.1.50" ||
 		static.Hostname != "laptop" || static.ExternalID != "aa:bb:cc:dd:ee:ff" {
 		t.Errorf("static lease entity = %+v", static)

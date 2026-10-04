@@ -73,8 +73,9 @@ export function RequireInstanceAdmin({ children }: { children: ReactNode }) {
 export function RequireOnboarded({ children }: { children: ReactNode }) {
   const { data, isLoading } = useGetConnectors();
   const { pathname } = useLocation();
-  // Human lab notes are available even before a user has any service grants.
-  if (pathname === '/docs' || pathname.startsWith('/docs/')) return <>{children}</>;
+  // Human lab notes and global search are available before any service grants.
+  if (pathname === '/search' || pathname === '/docs' || pathname.startsWith('/docs/'))
+    return <>{children}</>;
   if (isLoading) return <SkeletonRows rows={6} className="m-6 max-w-2xl" />;
   if (Array.isArray(data) && data.length === 0) {
     return <Navigate to="/onboarding" replace />;

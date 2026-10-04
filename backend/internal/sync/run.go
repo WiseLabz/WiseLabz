@@ -387,6 +387,9 @@ func (e *Engine) persistSyncSnapshot(ctx context.Context, connectorID string, sn
 		if err := tx.CreateSnapshot(ctx, snapshot); err != nil {
 			return err
 		}
+		if err := tx.ReplaceEntityIndexForConnector(ctx, connectorID, sn.Entities); err != nil {
+			return err
+		}
 		if old != nil && maintenance == nil {
 			if err := e.createSyncChanges(ctx, tx, connectorID, old, sn, &changes, &alerts); err != nil {
 				return err

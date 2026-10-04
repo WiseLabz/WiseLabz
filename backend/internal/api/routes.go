@@ -20,6 +20,7 @@ import (
 	reporthandler "github.com/WiseLabz/wiselabz/internal/api/reports"
 	runbookhandler "github.com/WiseLabz/wiselabz/internal/api/runbooks"
 	savedviewhandler "github.com/WiseLabz/wiselabz/internal/api/savedviews"
+	searchhandler "github.com/WiseLabz/wiselabz/internal/api/search"
 	settinghandler "github.com/WiseLabz/wiselabz/internal/api/settings"
 	syshandler "github.com/WiseLabz/wiselabz/internal/api/system"
 	tmplhandler "github.com/WiseLabz/wiselabz/internal/api/templates"
@@ -41,6 +42,7 @@ type routerDeps struct {
 	tmplH       *tmplhandler.Handler
 	changeH     *changehandler.Handler
 	timelineH   *timelinehandler.Handler
+	searchH     *searchhandler.Handler
 	alertH      *alerthandler.Handler
 	attentionH  *attentionhandler.Handler
 	findingH    *findinghandler.Handler
@@ -81,6 +83,7 @@ func mountAPIRoutes(r chi.Router, d routerDeps) {
 		mountChatRoutes(r, d)
 		mountTemplateRoutes(r, d)
 		mountWorkflowRoutes(r, d)
+		r.Get("/search", d.searchH.List)
 		r.Get("/timeline", d.timelineH.List)
 		r.Post("/journal", d.timelineH.Create)
 		r.Put("/journal/{id}", d.timelineH.Update)

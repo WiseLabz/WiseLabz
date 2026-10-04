@@ -9,7 +9,7 @@ import type { NavigateFunction } from 'react-router-dom';
 import type { QueryClient } from '@tanstack/react-query';
 import type { TFunction } from 'i18next';
 
-export type CommandGroup = 'navigate' | 'actions' | 'services' | 'docs';
+export type CommandGroup = 'navigate' | 'actions' | 'services' | 'docs' | 'runbooks' | 'entities';
 
 export interface CommandCtx {
   navigate: NavigateFunction;

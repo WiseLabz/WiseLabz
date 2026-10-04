@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, render, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { getGetAlertsQueryKey } from '../api/generated/alerts/alerts';
+import { getGetSearchQueryKey } from '../api/generated/search/search';
 import { getGetChangesQueryKey } from '../api/generated/changes/changes';
 import { getGetConnectorsQueryKey } from '../api/generated/connectors/connectors';
 import { getGetDashboardOverviewQueryKey } from '../api/generated/dashboard/dashboard';
@@ -82,6 +83,7 @@ describe('WebSocketProvider', () => {
 
     expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: getGetDashboardOverviewQueryKey() });
     expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: getGetChangesQueryKey() });
+    expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: getGetSearchQueryKey() });
     expect(useLive.getState().activity[0]).toMatchObject({
       label: 'Sync complete',
       detail: '0 change(s) · 0 alert(s)',
@@ -379,6 +381,7 @@ describe('WebSocketProvider', () => {
 
   const volatileKeys = () => [
     getGetAlertsQueryKey(),
+    getGetSearchQueryKey(),
     getGetChangesQueryKey(),
     getGetConnectorsQueryKey(),
     getGetDashboardOverviewQueryKey(),

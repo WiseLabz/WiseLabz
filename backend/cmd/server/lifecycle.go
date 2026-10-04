@@ -38,8 +38,9 @@ type lifecycleDeps struct {
 	// TopologyBackfill, when set, runs once in the background whenever this
 	// instance holds leadership, rebuilding topology edges for connectors that
 	// synced before edge building existed. Optional.
-	TopologyBackfill func(context.Context) (int, error)
-	ShutdownTimeout  time.Duration
+	TopologyBackfill    func(context.Context) (int, error)
+	EntityIndexBackfill func(context.Context) (int, error)
+	ShutdownTimeout     time.Duration
 }
 
 // lifecycleManager starts every long-running server goroutine (HTTP server,
@@ -155,6 +156,16 @@ func (m *lifecycleManager) startLeaderWorkers() {
 		notifications.RunDeliveryRetries(m.workCtx, m.deps.Dispatcher, logger)
 		return nil
 	})
+	if backfill := m.deps.EntityIndexBackfill; backfill != nil {
+		m.group.Go(func() error {
+			if n, err := backfill(m.workCtx); err != nil {
+				logger.Error("entity index backfill failed", "error", err)
+			} else if n > 0 {
+				logger.Info("entity index backfill complete", "connectors", n)
+			}
+			return nil
+		})
+	}
 	if backfill := m.deps.TopologyBackfill; backfill != nil {
 		m.group.Go(func() error {
 			if n, err := backfill(m.workCtx); err != nil {

@@ -140,3 +140,33 @@ func TestSnapshotDiffCSVNeutralizesFormulaCellsOnly(t *testing.T) {
 		t.Fatalf("HTML changed: %s %v", htmlBytes, err)
 	}
 }
+
+func TestCompareEntitiesMACAndAliases(t *testing.T) {
+	before := []connector.SnapshotEntity{{Kind: "device", Name: "router", MAC: "aa:bb:cc:dd:ee:ff", Aliases: []string{"old.lab"}}}
+	after := []connector.SnapshotEntity{{Kind: "device", Name: "router", MAC: "11:22:33:44:55:66", Aliases: []string{"new.lab"}}}
+	changes := CompareEntities(before, after)
+	if len(changes) != 2 || changes[0].Field != "aliases" || changes[1].Field != "mac" {
+		t.Fatalf("changes: %+v", changes)
+	}
+	if changes[0].Change != "modified" || changes[1].Old != before[0].MAC || changes[1].New != after[0].MAC {
+		t.Fatalf("values: %+v", changes)
+	}
+}
+
+func TestCompareEntitiesAliasesEquivalent(t *testing.T) {
+	for _, tc := range []struct {
+		name          string
+		before, after []string
+	}{
+		{"nil and empty", nil, []string{}},
+		{"reordered", []string{"a.lab", "b.lab"}, []string{"b.lab", "a.lab"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			before := []connector.SnapshotEntity{{Kind: "device", Name: "router", Aliases: tc.before}}
+			after := []connector.SnapshotEntity{{Kind: "device", Name: "router", Aliases: tc.after}}
+			if changes := CompareEntities(before, after); len(changes) != 0 {
+				t.Fatalf("spurious alias diff: %+v", changes)
+			}
+		})
+	}
+}

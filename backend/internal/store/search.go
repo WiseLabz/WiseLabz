@@ -102,7 +102,7 @@ func (s *Store) SearchContent(ctx context.Context, userID, query string, limit i
 		limit = 20
 	}
 
-	docs, err := s.searchDocs(ctx, userID, tokens, limit)
+	docs, err := s.searchDocs(ctx, userID, tokens, limit, "")
 	if err != nil {
 		return nil, err
 	}
@@ -153,7 +153,7 @@ func interleaveHits(docs, runbooks []SearchHit, limit int) []SearchHit {
 	return out
 }
 
-func (s *Store) searchDocs(ctx context.Context, userID string, tokens []string, limit int) ([]SearchHit, error) {
+func (s *Store) searchDocs(ctx context.Context, userID string, tokens []string, limit int, connectorID string) ([]SearchHit, error) {
 	keyFilter, keyArgs := apiKeyConnectorFilter(ctx, "d.service_id")
 	viewable := `(d.service_id IN (SELECT connector_id FROM user_connector_roles WHERE user_id = ?` + keyFilter + `)`
 	if auth.InstanceAdminFromContext(ctx) {
@@ -164,6 +164,9 @@ func (s *Store) searchDocs(ctx context.Context, userID string, tokens []string, 
 	}
 	viewable += `) AND d.deleted_at IS NULL`
 
+	if connectorID != "" {
+		viewable += ` AND d.service_id = ?`
+	}
 	var sqlText string
 	var args []any
 	if s.driver == "postgres" {
@@ -180,6 +183,9 @@ func (s *Store) searchDocs(ctx context.Context, userID string, tokens []string, 
 		args = append(args, ftsMatchExpr(tokens), userID)
 	}
 	args = append(args, keyArgs...)
+	if connectorID != "" {
+		args = append(args, connectorID)
+	}
 	args = append(args, limit)
 
 	rows, err := s.db.QueryContext(ctx, sqlText, args...)

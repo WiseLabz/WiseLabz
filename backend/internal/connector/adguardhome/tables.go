@@ -391,6 +391,7 @@ func buildDHCP(raw []byte) (string, []connector.SnapshotEntity, map[string]strin
 					Hostname:   l.Hostname,
 					IP:         l.IP,
 					ExternalID: l.MAC,
+					MAC:        snapshotutil.NormalizeMAC(l.MAC),
 					Attributes: attrs,
 				})
 			}
