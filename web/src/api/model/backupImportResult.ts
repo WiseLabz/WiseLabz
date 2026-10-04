@@ -9,6 +9,7 @@
 import type { BackupCounts } from './backupCounts';
 
 export interface BackupImportResult {
+  journalEntries?: BackupCounts;
   attachments?: BackupCounts;
   connectors: BackupCounts;
   docs: BackupCounts;

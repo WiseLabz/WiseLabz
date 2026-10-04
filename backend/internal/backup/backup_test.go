@@ -529,3 +529,59 @@ func TestHumanDocsBackupHierarchyAndTrash(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestJournalBackupRoundTrip(t *testing.T) {
+	ctx := context.Background()
+	src := newTestStore(t)
+	dst := newTestStore(t)
+	c := store.ConnectorRecord{Name: "Notes", Category: "virtualization", Type: "proxmox", URL: "https://example.com"}
+	if err := src.CreateConnector(ctx, &c); err != nil {
+		t.Fatal(err)
+	}
+	d := store.DocRecord{Title: "Context", Kind: "service", ServiceID: c.ID, Origin: store.DocOriginHuman}
+	if err := src.CreateDoc(ctx, &d); err != nil {
+		t.Fatal(err)
+	}
+	e := store.JournalEntry{Body: "Backdated **note**", OccurredAt: "2020-01-01T00:00:00Z", CreatedBy: "former-user", ConnectorID: c.ID, DocID: d.ID, EntityKind: "vm", EntityName: "router", EntityRef: "vm/100"}
+	if err := src.CreateJournalEntry(ctx, &e); err != nil {
+		t.Fatal(err)
+	}
+	b, err := backup.Export(ctx, src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := json.Marshal(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var restored backup.Bundle
+	if err := json.Unmarshal(raw, &restored); err != nil {
+		t.Fatal(err)
+	}
+	res, err := backup.Import(ctx, dst, &restored)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.JournalEntries.Imported != 1 {
+		t.Fatalf("counts %+v", res.JournalEntries)
+	}
+	got, err := dst.GetJournalEntry(ctx, e.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	run, err := backup.ExportToFile(ctx, src, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	verified := backup.VerifyBundleFile(ctx, run.FilePath)
+	if verified.Status != "pass" || verified.ActualCounts["journalEntries"] != 1 || verified.ExpectedCounts["journalEntries"] != 1 {
+		t.Fatalf("journal archive verification: %+v", verified)
+	}
+	if got != e {
+		t.Fatalf("got %+v want %+v", got, e)
+	}
+	res, err = backup.Import(ctx, dst, &restored)
+	if err != nil || res.JournalEntries.Skipped != 1 {
+		t.Fatalf("idempotence %+v: %v", res, err)
+	}
+}

@@ -20,6 +20,9 @@ token required — this isn't a destructive action):
 
 ## What's included
 
+Manual journal entries are included with their original occurrence time, author
+text and connector/doc/entity links. Import restores them additively by ID.
+
 - **Connectors** — all fields except secret configuration fields (see
   Redaction below).
 - **Docs** — all documentation records, plus every historical version of

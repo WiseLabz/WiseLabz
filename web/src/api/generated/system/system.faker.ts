@@ -131,6 +131,10 @@ export const getGetSystemBackupExportResponseMock = (): Blob => new Blob();
 export const getPostSystemBackupImportResponseMock = (
   overrideResponse: Partial<Extract<BackupImportResult, object>> = {}
 ): BackupImportResult => ({
+  journalEntries: faker.helpers.arrayElement([
+    { imported: faker.number.int(), skipped: faker.number.int() },
+    undefined,
+  ]),
   attachments: faker.helpers.arrayElement([
     { imported: faker.number.int(), skipped: faker.number.int() },
     undefined,

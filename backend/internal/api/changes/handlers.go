@@ -175,10 +175,27 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	for _, id := range allowed {
 		isAllowed[id] = true
 	}
-	filtered := make([]store.ChangeRecord, 0, len(changes))
+	type changeSummary struct {
+		store.ChangeRecord
+		ServiceName string `json:"serviceName"`
+	}
+	filtered := make([]changeSummary, 0, len(changes))
+	names := make(map[string]string)
 	for _, c := range changes {
 		if isAllowed[c.ServiceID] {
-			filtered = append(filtered, c)
+			name, cached := names[c.ServiceID]
+			if !cached {
+				conn, err := h.Store.GetConnector(r.Context(), c.ServiceID)
+				if err != nil && !errors.Is(err, store.ErrNotFound) {
+					httputil.Errorf(w, err)
+					return
+				}
+				if conn != nil {
+					name = conn.Name
+				}
+				names[c.ServiceID] = name
+			}
+			filtered = append(filtered, changeSummary{ChangeRecord: c, ServiceName: name})
 		}
 	}
 	httputil.WritePaginatedCursor(w, filtered, page, pageSize, total, next)

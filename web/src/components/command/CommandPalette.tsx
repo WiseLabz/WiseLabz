@@ -75,6 +75,13 @@ function buildCommands(ctx: CommandCtx, connectors: Connector[], docNodes: DocNo
       run: (c) => c.navigate('/docs'),
     },
     {
+      id: 'n-journal',
+      label: t('command.nav.journal'),
+      group: 'navigate',
+      Icon: FileTextIcon,
+      run: (c) => c.navigate('/journal'),
+    },
+    {
       id: 'n-chg',
       label: t('command.nav.changes'),
       group: 'navigate',

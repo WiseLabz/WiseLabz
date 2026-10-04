@@ -26,6 +26,7 @@ tags:
   - name: chat
   - name: templates
   - name: changes
+  - name: journal
   - name: attention
   - name: alerts
   - name: runbooks
@@ -2377,6 +2378,94 @@ paths:
               schema: { $ref: '#/components/schemas/Template' }
 
   # ───────────────────────── changes ─────────────────────────
+  /timeline:
+    get:
+      tags: [journal]
+      summary: Merged lab journal (always cursor paginated)
+      parameters:
+        - { $ref: '#/components/parameters/PageSize' }
+        - { $ref: '#/components/parameters/Cursor' }
+        - name: connectorId
+          in: query
+          schema: { type: string }
+        - name: after
+          in: query
+          schema: { type: string, format: date-time }
+        - name: before
+          in: query
+          schema: { type: string, format: date-time }
+        - name: kinds
+          in: query
+          description: Comma-separated change, sync, alert, doc, journal or audit
+          schema: { type: string }
+        - name: allSyncRuns
+          in: query
+          schema: { type: boolean, default: false }
+      responses:
+        '200':
+          description: Visible lab activity, newest first
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TimelinePage' }
+        '400':
+          description: Invalid filter or cursor
+  /journal:
+    post:
+      tags: [journal]
+      summary: Create a manual entry (connector operator or lab-wide instance admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/JournalEntryInput' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/JournalEntry' }
+        '400':
+          description: Invalid entry or link scope
+        '403':
+          description: Insufficient permissions
+        '404':
+          description: Linked resource not found
+  /journal/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+    put:
+      tags: [journal]
+      summary: Replace an entry (author or admin with read access)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/JournalEntryInput' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/JournalEntry' }
+        '400':
+          description: Invalid entry or link scope
+        '403':
+          description: Insufficient permissions
+        '404':
+          description: Entry or linked resource not found
+    delete:
+      tags: [journal]
+      summary: Delete an entry (author or admin with read access)
+      responses:
+        '204':
+          description: Deleted
+        '403':
+          description: Insufficient permissions
+        '404':
+          description: Entry not found
   /changes:
     get:
       tags: [changes]
@@ -5137,6 +5226,60 @@ components:
           minItems: 1
           items: { type: integer, minimum: 1 }
           description: Changed line numbers in Diff.headText.
+    JournalEntryInput:
+      type: object
+      required: [body]
+      properties:
+        body: { type: string, minLength: 1, maxLength: 50000 }
+        occurredAt:
+          type: string
+          format: date-time
+          description: Defaults to now; supports backdated entries
+        connectorId: { type: string, maxLength: 128 }
+        docId: { type: string, maxLength: 128 }
+        entityKind: { type: string, maxLength: 100 }
+        entityName: { type: string, maxLength: 500 }
+        entityRef: { type: string, maxLength: 2048 }
+    JournalEntry:
+      allOf:
+        - { $ref: '#/components/schemas/JournalEntryInput' }
+        - type: object
+          required: [id, occurredAt, createdAt, updatedAt, createdBy]
+          properties:
+            id: { type: string }
+            occurredAt: { type: string, format: date-time }
+            createdAt: { type: string, format: date-time }
+            updatedAt: { type: string, format: date-time }
+            createdBy: { type: string }
+    TimelineItem:
+      type: object
+      required: [id, kind, timestamp, title, body, connectorId, docId, createdBy, entityKind, entityName, entityRef, status]
+      properties:
+        id: { type: string }
+        kind: { type: string, enum: [change, sync, alert, doc, journal, audit] }
+        timestamp: { type: string, format: date-time }
+        title: { type: string }
+        body: { type: string }
+        connectorId: { type: string }
+        docId: { type: string }
+        createdBy: { type: string }
+        entityKind: { type: string }
+        entityName: { type: string }
+        entityRef: { type: string }
+        status: { type: string }
+    TimelinePage:
+      type: object
+      required: [items, total, page, pageSize]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/TimelineItem' }
+        total: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
+        nextCursor:
+          type: string
+          description: Opaque next page cursor, omitted on the last page
     ChangePage:
       type: object
       required: [items, total, page, pageSize]
@@ -5887,6 +6030,9 @@ components:
         config is not included at all.
       required: [version, exportedAt, connectors, docs, docVersions, templates, templateSections]
       properties:
+        journalEntries:
+          type: array
+          items: { $ref: '#/components/schemas/JournalEntry' }
         attachments:
           type: array
           items: { $ref: '#/components/schemas/DocAttachment' }
@@ -5942,6 +6088,7 @@ components:
       type: object
       required: [connectors, docs, docVersions, templates, templateSections]
       properties:
+        journalEntries: { $ref: '#/components/schemas/BackupCounts' }
         attachments: { $ref: '#/components/schemas/BackupCounts' }
         connectors: { $ref: '#/components/schemas/BackupCounts' }
         docs: { $ref: '#/components/schemas/BackupCounts' }

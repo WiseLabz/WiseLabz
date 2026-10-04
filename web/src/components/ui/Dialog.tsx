@@ -6,7 +6,7 @@
  * is a quiet opacity/scale transition — covered by the global [data-motion='off']
  * rule, so it self-disables when motion is turned off.
  */
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { cn } from '../../lib/cn';
 
@@ -44,7 +44,9 @@ export function Dialog({ open, onClose, title, children, size = 'md' }: DialogPr
     return () => cancelAnimationFrame(id);
   }, [open]);
 
-  useEffect(() => {
+  // Open synchronously in the commit: a passive effect leaves the mounted
+  // <dialog> closed (display: none) for a tick, which observers can catch.
+  useLayoutEffect(() => {
     const dlg = dialogRef.current;
     if (!dlg || !render) return;
     if (!dlg.open) dlg.showModal();

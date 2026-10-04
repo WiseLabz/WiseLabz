@@ -23,6 +23,7 @@ import (
 	settinghandler "github.com/WiseLabz/wiselabz/internal/api/settings"
 	syshandler "github.com/WiseLabz/wiselabz/internal/api/system"
 	tmplhandler "github.com/WiseLabz/wiselabz/internal/api/templates"
+	timelinehandler "github.com/WiseLabz/wiselabz/internal/api/timeline"
 	"github.com/WiseLabz/wiselabz/internal/auth"
 )
 
@@ -39,6 +40,7 @@ type routerDeps struct {
 	connH       *connhandler.Handler
 	tmplH       *tmplhandler.Handler
 	changeH     *changehandler.Handler
+	timelineH   *timelinehandler.Handler
 	alertH      *alerthandler.Handler
 	attentionH  *attentionhandler.Handler
 	findingH    *findinghandler.Handler
@@ -79,6 +81,10 @@ func mountAPIRoutes(r chi.Router, d routerDeps) {
 		mountChatRoutes(r, d)
 		mountTemplateRoutes(r, d)
 		mountWorkflowRoutes(r, d)
+		r.Get("/timeline", d.timelineH.List)
+		r.Post("/journal", d.timelineH.Create)
+		r.Put("/journal/{id}", d.timelineH.Update)
+		r.Delete("/journal/{id}", d.timelineH.Delete)
 		mountDashboardRoutes(r, d)
 		mountReportRoutes(r, d)
 
