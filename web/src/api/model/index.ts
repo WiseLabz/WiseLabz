@@ -180,6 +180,8 @@ export * from './getConnectorsConnectorIdUptimeHistoryWindow';
 export * from './getDashboardOverviewParams';
 export * from './getDocsEditProposalsParams';
 export * from './getDocsEditProposalsStatus';
+export * from './getDocsExportFormat';
+export * from './getDocsExportParams';
 export * from './getDocsParams';
 export * from './getDocsShareLinks200Item';
 export * from './getFindingsParams';

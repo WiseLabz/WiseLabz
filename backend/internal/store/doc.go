@@ -284,6 +284,17 @@ func (s *Store) ListAllDocs(ctx context.Context, search string, offset, limit in
 // connectors userID holds a grant on, plus human lab notes for all users
 // and generated lab inventory for instance admins.
 func (s *Store) ListViewableDocs(ctx context.Context, userID, search string, offset, limit int) ([]DocRecord, int, error) {
+	where, args := viewableDocWhere(ctx, userID, search)
+	return paginatedQuery(ctx, s.db, "docs", docSummaryColumns, where, args, "updated_at DESC, id DESC", limit, offset, scanDocSummary)
+}
+
+// ListViewableDocsWithContent loads bodies with exactly the docs API's view permissions.
+func (s *Store) ListViewableDocsWithContent(ctx context.Context, userID, search string, offset, limit int) ([]DocRecord, int, error) {
+	where, args := viewableDocWhere(ctx, userID, search)
+	return paginatedQuery(ctx, s.db, "docs", docColumns, where, args, "updated_at DESC, id DESC", limit, offset, scanDoc)
+}
+
+func viewableDocWhere(ctx context.Context, userID, search string) (string, []any) {
 	where, args := docSearchWhere(search)
 	keyFilter, keyArgs := apiKeyConnectorFilter(ctx, "service_id")
 	where += ` AND (service_id IN (SELECT connector_id FROM user_connector_roles WHERE user_id = ?` + keyFilter + `)`
@@ -296,14 +307,14 @@ func (s *Store) ListViewableDocs(ctx context.Context, userID, search string, off
 		where += ` OR ((service_id IS NULL OR service_id = '') AND origin = 'human')`
 	}
 	where += `)`
-	return paginatedQuery(ctx, s.db, "docs", docSummaryColumns, where, args, "updated_at DESC", limit, offset, scanDocSummary)
+	return where, args
 }
 
 // ListAllDocsWithContent is like ListAllDocs but also loads each doc's content
 // (e.g. for backup export).
 func (s *Store) ListAllDocsWithContent(ctx context.Context, search string, offset, limit int) ([]DocRecord, int, error) {
 	where, args := docSearchWhere(search)
-	return paginatedQuery(ctx, s.db, "docs", docColumns, where, args, "updated_at DESC", limit, offset, scanDoc)
+	return paginatedQuery(ctx, s.db, "docs", docColumns, where, args, "updated_at DESC, id DESC", limit, offset, scanDoc)
 }
 
 // likeEscaper escapes LIKE wildcards and the escape character itself.

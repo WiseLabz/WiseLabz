@@ -1741,6 +1741,30 @@ paths:
                 type: array
                 items: { $ref: '#/components/schemas/Doc' }
         '403': { $ref: '#/components/responses/Forbidden' }
+  /docs/export:
+    get:
+      tags: [docs]
+      summary: Download a permission-scoped offline Lab Book
+      description: Includes only active docs the signed-in caller may view. HTML embeds Mermaid, CSS and images for offline use; md.zip preserves hierarchy and attachments for Markdown import.
+      parameters:
+        - in: query
+          name: format
+          required: true
+          schema: { type: string, enum: [html, md.zip] }
+      responses:
+        '200':
+          description: Portable Lab Book
+          headers:
+            Content-Disposition:
+              schema: { type: string }
+              description: Dated lab-book filename with attachment disposition
+          content:
+            text/html:
+              schema: { type: string, format: binary }
+            application/zip:
+              schema: { type: string, format: binary }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
   /docs/import:
     post:
       tags: [docs]
@@ -6243,7 +6267,7 @@ components:
         Channel TYPES a report definition delivers to (plan Q13) — channels
         have no IDs; delivery bypasses the normal routing rules and goes
         straight to every enabled channel of these types.
-      enum: [slack, discord, webhook]
+      enum: [slack, discord, webhook, email]
     ReportTrigger:
       type: string
       enum: [scheduled, manual]
@@ -6260,6 +6284,7 @@ components:
         slug: { type: string, description: Immutable after creation; used in the cron job name `report:<slug>` and in download filenames. }
         name: { type: string }
         enabled: { type: boolean }
+        attachLabBook: { type: boolean, default: false, description: Attach a scoped offline HTML Lab Book to email and Discord deliveries; oversized attachments fall back to text. }
         cronExpr: { type: string, description: 5-field or 6-field (with leading seconds) cron expression, example: '0 6 * * 1' }
         timezone: { type: string, description: 'IANA zone name, e.g. "America/New_York". Applied as a CRON_TZ= prefix on cronExpr.' }
         sections:
@@ -6284,6 +6309,7 @@ components:
         slug: { type: string }
         name: { type: string }
         enabled: { type: boolean }
+        attachLabBook: { type: boolean, default: false, description: Attach a scoped offline HTML Lab Book to email and Discord deliveries; oversized attachments fall back to text. }
         cronExpr: { type: string }
         timezone: { type: string }
         sections:

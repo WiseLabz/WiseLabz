@@ -38,6 +38,7 @@ import {
   getGetDocsDocIdVersionsRevResponseMock,
   getGetDocsEditProposalsProposalIdResponseMock,
   getGetDocsEditProposalsResponseMock,
+  getGetDocsExportResponseMock,
   getGetDocsResponseMock,
   getGetDocsServiceConnectorIdResponseMock,
   getGetDocsShareLinksResponseMock,
@@ -67,6 +68,7 @@ export {
   getGetDocsResponseMock,
   getPostDocsResponseMock,
   getGetDocsTrashResponseMock,
+  getGetDocsExportResponseMock,
   getPostDocsImportResponseMock,
   getPostDocsImportImportIdCommitResponseMock,
   getPostDocsDocIdRestoreResponseMock,
@@ -153,6 +155,31 @@ export const getGetDocsTrashMockHandler = (
             ? await overrideResponse(info)
             : overrideResponse
           : getGetDocsTrashResponseMock(),
+        { status: 200 }
+      );
+    },
+    options
+  );
+};
+
+export const getGetDocsExportMockHandler = (
+  overrideResponse?:
+    | unknown
+    | Blob
+    | ((
+        info: Parameters<Parameters<typeof http.get>[1]>[0]
+      ) => Promise<unknown | Blob> | unknown | Blob),
+  options?: RequestHandlerOptions
+) => {
+  return http.get(
+    '*/docs/export',
+    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+      return HttpResponse.json(
+        overrideResponse !== undefined
+          ? typeof overrideResponse === 'function'
+            ? await overrideResponse(info)
+            : overrideResponse
+          : getGetDocsExportResponseMock(),
         { status: 200 }
       );
     },
@@ -875,6 +902,7 @@ export const getDocsMock = () => [
   getGetDocsMockHandler(),
   getPostDocsMockHandler(),
   getGetDocsTrashMockHandler(),
+  getGetDocsExportMockHandler(),
   getPostDocsImportMockHandler(),
   getPostDocsImportImportIdCommitMockHandler(),
   getPostDocsDocIdRestoreMockHandler(),

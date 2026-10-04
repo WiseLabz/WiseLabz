@@ -638,3 +638,29 @@ func TestUpdateDocWithVersionRecordsRevisionAtomically(t *testing.T) {
 		t.Fatalf("after failed update: %+v, %v; want content v2 version 2", got, err)
 	}
 }
+
+func TestListAllDocsWithContentPagesStablyOnTimestampTies(t *testing.T) {
+	s := newDocTestStore(t)
+	ctx := context.Background()
+	for _, id := range []string{"a", "b", "c", "d", "e"} {
+		if err := s.CreateDoc(ctx, &DocRecord{ID: id, Title: id, Kind: "lab", Content: id, UpdatedAt: "2026-01-01T00:00:00Z"}); err != nil {
+			t.Fatalf("CreateDoc() error: %v", err)
+		}
+	}
+	seen := map[string]bool{}
+	for offset := 0; offset < 5; offset += 2 {
+		page, _, err := s.ListAllDocsWithContent(ctx, "", offset, 2)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, d := range page {
+			if seen[d.ID] {
+				t.Fatalf("doc %s repeated across pages", d.ID)
+			}
+			seen[d.ID] = true
+		}
+	}
+	if len(seen) != 5 {
+		t.Fatalf("paged %d of 5 docs", len(seen))
+	}
+}

@@ -14,6 +14,7 @@ import (
 type ReportDefinitionRecord struct {
 	ID, Slug, Name, CronExpr, Timezone, Sections, ConnectorIDs, Channels, CreatedBy, CreatedAt, UpdatedAt string
 	Enabled                                                                                               bool
+	AttachLabBook                                                                                         bool
 }
 
 // ReportRecord is one generated, immutable report snapshot.
@@ -24,7 +25,7 @@ type ReportRecord struct {
 
 // ListReportDefinitions returns configured schedules ordered by display name.
 func (s *Store) ListReportDefinitions(ctx context.Context) ([]ReportDefinitionRecord, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id, slug, name, enabled, cron_expr, timezone, sections, connector_ids, channels, created_by, created_at, updated_at FROM report_definitions ORDER BY name`)
+	rows, err := s.db.QueryContext(ctx, `SELECT id, slug, name, enabled, cron_expr, timezone, sections, connector_ids, channels, attach_lab_book, created_by, created_at, updated_at FROM report_definitions ORDER BY name`)
 	if err != nil {
 		return nil, fmt.Errorf("list report definitions: %w", err)
 	}
@@ -32,7 +33,7 @@ func (s *Store) ListReportDefinitions(ctx context.Context) ([]ReportDefinitionRe
 	var out []ReportDefinitionRecord
 	for rows.Next() {
 		var r ReportDefinitionRecord
-		if err := rows.Scan(&r.ID, &r.Slug, &r.Name, &r.Enabled, &r.CronExpr, &r.Timezone, &r.Sections, &r.ConnectorIDs, &r.Channels, &r.CreatedBy, &r.CreatedAt, &r.UpdatedAt); err != nil {
+		if err := rows.Scan(&r.ID, &r.Slug, &r.Name, &r.Enabled, &r.CronExpr, &r.Timezone, &r.Sections, &r.ConnectorIDs, &r.Channels, &r.AttachLabBook, &r.CreatedBy, &r.CreatedAt, &r.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("scan report definition: %w", err)
 		}
 		out = append(out, r)
@@ -46,7 +47,7 @@ func (s *Store) ListReportDefinitions(ctx context.Context) ([]ReportDefinitionRe
 // GetReportDefinition retrieves one schedule by ID.
 func (s *Store) GetReportDefinition(ctx context.Context, id string) (ReportDefinitionRecord, error) {
 	var r ReportDefinitionRecord
-	err := s.db.QueryRowContext(ctx, `SELECT id, slug, name, enabled, cron_expr, timezone, sections, connector_ids, channels, created_by, created_at, updated_at FROM report_definitions WHERE id = ?`, id).Scan(&r.ID, &r.Slug, &r.Name, &r.Enabled, &r.CronExpr, &r.Timezone, &r.Sections, &r.ConnectorIDs, &r.Channels, &r.CreatedBy, &r.CreatedAt, &r.UpdatedAt)
+	err := s.db.QueryRowContext(ctx, `SELECT id, slug, name, enabled, cron_expr, timezone, sections, connector_ids, channels, attach_lab_book, created_by, created_at, updated_at FROM report_definitions WHERE id = ?`, id).Scan(&r.ID, &r.Slug, &r.Name, &r.Enabled, &r.CronExpr, &r.Timezone, &r.Sections, &r.ConnectorIDs, &r.Channels, &r.AttachLabBook, &r.CreatedBy, &r.CreatedAt, &r.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return r, ErrNotFound
 	}
@@ -68,7 +69,7 @@ func (s *Store) CreateReportDefinition(ctx context.Context, r *ReportDefinitionR
 	if r.UpdatedAt == "" {
 		r.UpdatedAt = now
 	}
-	_, err := s.db.ExecContext(ctx, `INSERT INTO report_definitions (id,slug,name,enabled,cron_expr,timezone,sections,connector_ids,channels,created_by,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`, r.ID, r.Slug, r.Name, r.Enabled, r.CronExpr, r.Timezone, r.Sections, r.ConnectorIDs, r.Channels, r.CreatedBy, r.CreatedAt, r.UpdatedAt)
+	_, err := s.db.ExecContext(ctx, `INSERT INTO report_definitions (id,slug,name,enabled,cron_expr,timezone,sections,connector_ids,channels,attach_lab_book,created_by,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`, r.ID, r.Slug, r.Name, r.Enabled, r.CronExpr, r.Timezone, r.Sections, r.ConnectorIDs, r.Channels, r.AttachLabBook, r.CreatedBy, r.CreatedAt, r.UpdatedAt)
 	if isUniqueViolation(err) {
 		return ErrConflict
 	}
@@ -81,7 +82,7 @@ func (s *Store) CreateReportDefinition(ctx context.Context, r *ReportDefinitionR
 // UpdateReportDefinition updates a schedule's mutable fields.
 func (s *Store) UpdateReportDefinition(ctx context.Context, r ReportDefinitionRecord) error {
 	r.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
-	res, err := s.db.ExecContext(ctx, `UPDATE report_definitions SET name=?,enabled=?,cron_expr=?,timezone=?,sections=?,connector_ids=?,channels=?,updated_at=? WHERE id=?`, r.Name, r.Enabled, r.CronExpr, r.Timezone, r.Sections, r.ConnectorIDs, r.Channels, r.UpdatedAt, r.ID)
+	res, err := s.db.ExecContext(ctx, `UPDATE report_definitions SET name=?,enabled=?,cron_expr=?,timezone=?,sections=?,connector_ids=?,channels=?,attach_lab_book=?,updated_at=? WHERE id=?`, r.Name, r.Enabled, r.CronExpr, r.Timezone, r.Sections, r.ConnectorIDs, r.Channels, r.AttachLabBook, r.UpdatedAt, r.ID)
 	if err != nil {
 		return fmt.Errorf("update report definition: %w", err)
 	}

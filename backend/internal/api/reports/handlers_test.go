@@ -347,3 +347,35 @@ func TestDownloadReportNotFound(t *testing.T) {
 		t.Fatalf("status %d, want 404: %s", rr.Code, rr.Body.String())
 	}
 }
+
+func TestDownloadReportSnapshotFilename(t *testing.T) {
+	s := apitest.NewStore(t)
+	ctx := context.Background()
+	def := store.ReportDefinitionRecord{Slug: "weekly-lab", Name: "Weekly lab", Sections: "[]", ConnectorIDs: "[]", Channels: "[]"}
+	if err := s.CreateReportDefinition(ctx, &def); err != nil {
+		t.Fatal(err)
+	}
+	data := report.ReportData{Definition: report.DefinitionSummary{Slug: def.Slug, Name: def.Name}}
+	raw, err := json.Marshal(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := store.ReportRecord{DefinitionID: def.ID, DefinitionName: def.Name, Trigger: "manual", PeriodStart: "2026-10-01T00:00:00Z", PeriodEnd: "2026-10-03T23:00:00-03:00", Data: string(raw), Markdown: "report", Status: "ok"}
+	if err := s.CreateReport(ctx, &rec); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.DeleteReportDefinition(ctx, def.ID); err != nil {
+		t.Fatal(err)
+	}
+	h := reports.NewHandler(s, nil)
+	for _, format := range []string{"md", "html"} {
+		r := httptest.NewRequest("GET", "/reports/"+rec.ID+"/download?format="+format, nil)
+		r.SetPathValue("id", rec.ID)
+		rr := httptest.NewRecorder()
+		h.Download(rr, r)
+		want := `attachment; filename="report-weekly-lab-2026-10-04.` + format + `"`
+		if rr.Code != 200 || rr.Header().Get("Content-Disposition") != want {
+			t.Fatalf("download %d %s", rr.Code, rr.Header().Get("Content-Disposition"))
+		}
+	}
+}

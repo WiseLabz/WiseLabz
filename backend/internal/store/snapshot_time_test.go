@@ -72,6 +72,10 @@ func TestSnapshotUTCDataMigration(t *testing.T) {
 		if err := RunMigrationsDown(s.rawDB, s.driver, logger); err != nil {
 			t.Fatal(err)
 		}
+		status, err = GetMigrationStatus(s.rawDB, s.driver)
+		if err != nil {
+			t.Fatal(err)
+		}
 	}
 	// Inserted by hand: CreateConnector writes columns this older schema lacks.
 	c := ConnectorRecord{ID: "legacy-connector"}

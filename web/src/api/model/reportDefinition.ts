@@ -15,6 +15,8 @@ export interface ReportDefinition {
   slug: string;
   name: string;
   enabled: boolean;
+  /** Attach a scoped offline HTML Lab Book to email and Discord deliveries; oversized attachments fall back to text. */
+  attachLabBook?: boolean;
   /** 5-field or 6-field (with leading seconds) cron expression */
   cronExpr: string;
   /** IANA zone name, e.g. "America/New_York". Applied as a CRON_TZ= prefix on cronExpr. */

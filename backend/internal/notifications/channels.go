@@ -1,11 +1,15 @@
 package notifications
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"mime"
+	"mime/multipart"
 	"net"
 	"net/http"
 	"net/smtp"
@@ -14,6 +18,8 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
+
+	"github.com/google/uuid"
 
 	"github.com/WiseLabz/wiselabz/internal/connector"
 )
@@ -31,10 +37,16 @@ var pushoverAPIURL = "https://api.pushover.net/1/messages.json"
 // smtpTimeout bounds SMTP dial, handshake and send.
 const smtpTimeout = 10 * time.Second
 
+// Attachment is an optional portable file delivered alongside report text.
+type Attachment struct {
+	Filename, ContentType string
+	Data                  []byte
+}
+
 // channelSender sends title/message to one channel type using its resolved config and decrypted
 // secret (signing secret, bot token, or SMTP password depending on channel type — see each
 // implementation). It returns a non-URL-leaking error on failure.
-type channelSender func(ctx context.Context, cfg channelCfg, secret, title, message string) error
+type channelSender func(ctx context.Context, cfg channelCfg, secret, title, message string, attachments ...*Attachment) error
 
 // channelSenders maps every externally-delivered channel type to its sender. Adding a channel type
 // means adding an entry here plus (if it should appear in the config UI) NotificationChannelType in
@@ -70,7 +82,7 @@ func slackPayload(title, message string) any {
 	return map[string]string{"text": fmt.Sprintf("*%s*\n%s", title, message)}
 }
 
-func sendGenericWebhookChannel(ctx context.Context, cfg channelCfg, secret, title, message string) error {
+func sendGenericWebhookChannel(ctx context.Context, cfg channelCfg, secret, title, message string, _ ...*Attachment) error {
 	rawURL, _ := cfg.Config["url"].(string)
 	if rawURL == "" {
 		return errors.New("webhook url not configured")
@@ -78,15 +90,38 @@ func sendGenericWebhookChannel(ctx context.Context, cfg channelCfg, secret, titl
 	return sendWebhook(ctx, rawURL, secret, webhookPayload(title, message))
 }
 
-func sendDiscordChannel(ctx context.Context, cfg channelCfg, secret, title, message string) error {
+func sendDiscordChannel(ctx context.Context, cfg channelCfg, secret, title, message string, attachments ...*Attachment) error {
 	rawURL, _ := cfg.Config["url"].(string)
 	if rawURL == "" {
 		return errors.New("discord url not configured")
 	}
-	return sendWebhook(ctx, rawURL, secret, discordPayload(title, message))
+	attachment, message := attachmentForChannel("discord", message, attachments)
+	if attachment == nil {
+		return sendWebhook(ctx, rawURL, secret, discordPayload(title, message))
+	}
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	payload, err := json.Marshal(discordPayload(title, message))
+	if err != nil {
+		return err
+	}
+	if err = writer.WriteField("payload_json", string(payload)); err != nil {
+		return err
+	}
+	part, err := writer.CreateFormFile("files[0]", attachment.Filename)
+	if err != nil {
+		return err
+	}
+	if _, err = part.Write(attachment.Data); err != nil {
+		return err
+	}
+	if err = writer.Close(); err != nil {
+		return err
+	}
+	return doHTTPRequest(ctx, rawURL, map[string]string{"Content-Type": writer.FormDataContentType()}, body.Bytes())
 }
 
-func sendSlackChannel(ctx context.Context, cfg channelCfg, secret, title, message string) error {
+func sendSlackChannel(ctx context.Context, cfg channelCfg, secret, title, message string, _ ...*Attachment) error {
 	rawURL, _ := cfg.Config["url"].(string)
 	if rawURL == "" {
 		return errors.New("slack url not configured")
@@ -97,7 +132,7 @@ func sendSlackChannel(ctx context.Context, cfg channelCfg, secret, title, messag
 // sendNtfyChannel POSTs the message body to <server>/<topic> using ntfy's publish-by-HTTP API
 // (https://docs.ntfy.sh/publish/). Title/priority/tags ride as headers rather than in the body,
 // per ntfy convention.
-func sendNtfyChannel(ctx context.Context, cfg channelCfg, _, title, message string) error {
+func sendNtfyChannel(ctx context.Context, cfg channelCfg, _, title, message string, _ ...*Attachment) error {
 	server, _ := cfg.Config["url"].(string)
 	if server == "" {
 		server = defaultNtfyServer
@@ -124,7 +159,7 @@ func sendNtfyChannel(ctx context.Context, cfg channelCfg, _, title, message stri
 // sendTelegramChannel posts to the Telegram Bot API's sendMessage method. The bot token rides in
 // the channel's shared "secret"/secretEncrypted field, same as webhook/Discord/Slack signing
 // secrets — it's just as sensitive and reuses the same encrypted-at-rest storage.
-func sendTelegramChannel(ctx context.Context, cfg channelCfg, secret, title, message string) error {
+func sendTelegramChannel(ctx context.Context, cfg channelCfg, secret, title, message string, _ ...*Attachment) error {
 	if secret == "" {
 		return errors.New("telegram bot token not configured")
 	}
@@ -146,7 +181,7 @@ func sendTelegramChannel(ctx context.Context, cfg channelCfg, secret, title, mes
 
 // sendGotifyChannel POSTs to <server>/message with the app token (channel secret) in the
 // X-Gotify-Key header, so the token never appears in a URL or error.
-func sendGotifyChannel(ctx context.Context, cfg channelCfg, secret, title, message string) error {
+func sendGotifyChannel(ctx context.Context, cfg channelCfg, secret, title, message string, _ ...*Attachment) error {
 	server, _ := cfg.Config["url"].(string)
 	if server == "" {
 		return errors.New("gotify url not configured")
@@ -168,7 +203,7 @@ func sendGotifyChannel(ctx context.Context, cfg channelCfg, secret, title, messa
 
 // sendPushoverChannel posts to the Pushover messages API. The application token rides in the
 // channel secret; the recipient user/group key is the "userKey" config field.
-func sendPushoverChannel(ctx context.Context, cfg channelCfg, secret, title, message string) error {
+func sendPushoverChannel(ctx context.Context, cfg channelCfg, secret, title, message string, _ ...*Attachment) error {
 	if secret == "" {
 		return errors.New("pushover app token not configured")
 	}
@@ -192,7 +227,7 @@ var matrixTxnCounter atomic.Uint64
 
 // sendMatrixChannel sends an m.room.message via the Matrix client-server API. The access token
 // (channel secret) goes in the Authorization header. Matrix requires PUT with a transaction ID.
-func sendMatrixChannel(ctx context.Context, cfg channelCfg, secret, title, message string) error {
+func sendMatrixChannel(ctx context.Context, cfg channelCfg, secret, title, message string, _ ...*Attachment) error {
 	homeserver, _ := cfg.Config["url"].(string)
 	roomID, _ := cfg.Config["roomId"].(string)
 	if homeserver == "" || roomID == "" {
@@ -216,7 +251,7 @@ func sendMatrixChannel(ctx context.Context, cfg channelCfg, secret, title, messa
 // store endpoint /notify/<key>; otherwise it needs "urls" (comma-separated Apprise service URLs)
 // and uses the stateless /notify endpoint. The optional secret is sent as a Bearer token for
 // reverse-proxied servers that require one.
-func sendAppriseChannel(ctx context.Context, cfg channelCfg, secret, title, message string) error {
+func sendAppriseChannel(ctx context.Context, cfg channelCfg, secret, title, message string, _ ...*Attachment) error {
 	server, _ := cfg.Config["url"].(string)
 	if server == "" {
 		return errors.New("apprise url not configured")
@@ -248,7 +283,7 @@ func sendAppriseChannel(ctx context.Context, cfg channelCfg, secret, title, mess
 // STARTTLS. The dial goes through the same SSRF-guarded dialer as the HTTP channels, since the
 // host is admin-configured and could otherwise be pointed at internal services. The password (if
 // any) rides in the channel's shared "secret"/secretEncrypted field.
-func sendSMTPChannel(ctx context.Context, cfg channelCfg, secret, title, message string) error {
+func sendSMTPChannel(ctx context.Context, cfg channelCfg, secret, title, message string, attachments ...*Attachment) error {
 	host, _ := cfg.Config["host"].(string)
 	from, _ := cfg.Config["from"].(string)
 	toRaw, _ := cfg.Config["to"].(string)
@@ -311,7 +346,7 @@ func sendSMTPChannel(ctx context.Context, cfg channelCfg, secret, title, message
 	if err != nil {
 		return fmt.Errorf("smtp data: %w", err)
 	}
-	if _, err := w.Write(buildEmailMessage(from, recipients, title, message)); err != nil {
+	if _, err := w.Write(buildEmailMessage(from, recipients, title, message, attachments...)); err != nil {
 		return fmt.Errorf("smtp write: %w", err)
 	}
 	if err := w.Close(); err != nil {
@@ -332,9 +367,10 @@ func splitRecipients(to string) []string {
 	return out
 }
 
-// buildEmailMessage renders a minimal RFC 5322 plain-text message. The subject is stripped of
+// buildEmailMessage renders an RFC 5322 message with an optional MIME attachment. The subject is stripped of
 // CR/LF so a title containing newlines can't inject extra headers into the message.
-func buildEmailMessage(from string, to []string, subject, body string) []byte {
+func buildEmailMessage(from string, to []string, subject, body string, attachments ...*Attachment) []byte {
+	attachment, body := attachmentForChannel("smtp", body, attachments)
 	subject = strings.NewReplacer("\r", " ", "\n", " ").Replace(subject)
 	var b strings.Builder
 	fmt.Fprintf(&b, "From: %s\r\n", from)
@@ -342,6 +378,17 @@ func buildEmailMessage(from string, to []string, subject, body string) []byte {
 	fmt.Fprintf(&b, "Subject: %s\r\n", subject)
 	fmt.Fprintf(&b, "Date: %s\r\n", time.Now().UTC().Format(time.RFC1123Z))
 	b.WriteString("MIME-Version: 1.0\r\n")
+	if attachment != nil {
+		boundary := "wiselabz-" + uuid.NewString()
+		fmt.Fprintf(&b, "Content-Type: multipart/mixed; boundary=%q\r\n\r\n", boundary)
+		fmt.Fprintf(&b, "--%s\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Transfer-Encoding: base64\r\n\r\n", boundary)
+		b.WriteString(mimeBase64([]byte(body)))
+		fmt.Fprintf(&b, "--%s\r\nContent-Type: %s\r\nContent-Disposition: %s\r\nContent-Transfer-Encoding: base64\r\n\r\n", boundary,
+			mime.FormatMediaType(attachment.ContentType, nil), mime.FormatMediaType("attachment", map[string]string{"filename": attachment.Filename}))
+		b.WriteString(mimeBase64(attachment.Data))
+		fmt.Fprintf(&b, "--%s--\r\n", boundary)
+		return []byte(b.String())
+	}
 	b.WriteString("Content-Type: text/plain; charset=\"utf-8\"\r\n")
 	b.WriteString("\r\n")
 	b.WriteString(body)
@@ -367,4 +414,34 @@ func SendTest(ctx context.Context, channelType string, config map[string]any, se
 	defer cancel()
 	return sender(ctx, channelCfg{Type: channelType, Enabled: true, Config: config}, secret,
 		"WiseLabz test notification", "This is a test message from WiseLabz. If you can read it, this channel is working.")
+}
+
+// Conservative limits leave room for the multipart envelope and email base64 overhead.
+const discordAttachmentLimit = 8 << 20
+const emailAttachmentLimit = 10 << 20
+
+func attachmentForChannel(channel, message string, attachments []*Attachment) (*Attachment, string) {
+	if len(attachments) == 0 || attachments[0] == nil {
+		return nil, message
+	}
+	limit := emailAttachmentLimit
+	if channel == "discord" {
+		limit = discordAttachmentLimit
+	}
+	if len(attachments[0].Data) > limit {
+		return nil, message + "\n\nLab Book omitted: attachment exceeds this channel's file size limit."
+	}
+	return attachments[0], message
+}
+func mimeBase64(data []byte) string {
+	encoded := base64.StdEncoding.EncodeToString(data)
+	var b strings.Builder
+	for len(encoded) > 76 {
+		b.WriteString(encoded[:76])
+		b.WriteString("\r\n")
+		encoded = encoded[76:]
+	}
+	b.WriteString(encoded)
+	b.WriteString("\r\n")
+	return b.String()
 }

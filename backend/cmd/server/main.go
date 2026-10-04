@@ -2,9 +2,11 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/fs"
 	"log/slog"
 	"net/http"
@@ -25,6 +27,7 @@ import (
 	"github.com/WiseLabz/wiselabz/internal/docexport"
 	"github.com/WiseLabz/wiselabz/internal/docimport"
 	"github.com/WiseLabz/wiselabz/internal/health"
+	"github.com/WiseLabz/wiselabz/internal/labbook"
 	"github.com/WiseLabz/wiselabz/internal/leader"
 	"github.com/WiseLabz/wiselabz/internal/logsafe"
 	"github.com/WiseLabz/wiselabz/internal/notifications"
@@ -134,7 +137,7 @@ func main() {
 	// transition, reported via system.job_failed (#384) — see
 	// scheduler.Runner.SetHealthTracking.
 	jobRunner.SetHealthTracking(s, notifDispatcher)
-	reportManager := newReportManager(s, jobRunner, notifDispatcher)
+	reportManager := newReportManager(s, jobRunner, notifDispatcher, blobstore.New(cfg.Attachments.Dir, cfg.Attachments.MaxBytes))
 	if err := reportManager.Init(ctx); err != nil {
 		logger.Error("Failed to initialize report schedules", "error", err)
 		os.Exit(1)
@@ -236,14 +239,38 @@ func newAIRegistries() (*ai.Registry, *ai.EmbedRegistry) {
 
 // newReportManager builds the report manager, notifying the report's
 // channels whenever a scheduled report completes.
-func newReportManager(s *store.Store, jobRunner *scheduler.Runner, d *notifications.Dispatcher) *report.Manager {
+func newReportManager(s *store.Store, jobRunner *scheduler.Runner, d *notifications.Dispatcher, blobs *blobstore.Store) *report.Manager {
 	reportGenerator := report.NewGenerator(s)
 	return report.NewManager(s, reportGenerator, jobRunner, func(ctx context.Context, rec store.ReportRecord, def store.ReportDefinitionRecord) {
 		var channels []string
 		_ = json.Unmarshal([]byte(def.Channels), &channels)
 		var data report.ReportData
 		_ = json.Unmarshal([]byte(rec.Data), &data)
-		d.NotifyReport(ctx, "Report: "+def.Name, report.Summary(data), channels)
+		message := report.Summary(data)
+		var attachment *notifications.Attachment
+		if def.AttachLabBook {
+			var ids []string
+			err := json.Unmarshal([]byte(def.ConnectorIDs), &ids)
+			var docs []store.DocRecord
+			if err == nil {
+				docs, err = labbook.ReportDocs(ctx, s, ids)
+			}
+			var book *labbook.Book
+			if err == nil {
+				book, err = labbook.Load(ctx, s, docs, func(hash string) (io.ReadCloser, error) { return blobs.Open(hash) })
+			}
+			var buf bytes.Buffer
+			if err == nil {
+				err = book.Write(&buf, "html")
+			}
+			if err != nil {
+				slog.Error("build report lab book", "error", err)
+				message += "\n\nLab Book omitted: export failed."
+			} else {
+				attachment = &notifications.Attachment{Filename: "lab-book-" + time.Now().UTC().Format("2006-01-02") + ".html", ContentType: "text/html", Data: buf.Bytes()}
+			}
+		}
+		d.NotifyReport(ctx, "Report: "+def.Name, message, channels, attachment)
 	})
 }
 

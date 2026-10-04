@@ -1,4 +1,4 @@
-# Scheduled Doc Export
+# Offline Lab Book and Scheduled Doc Export
 
 Writes every active doc to a local directory as Markdown on a schedule,
 so documentation survives outside the tool — and doubles as a lightweight,
@@ -15,10 +15,31 @@ Export strips `<!-- wl:gen … -->` ownership markers, preserving the rendered
 content. Doc-owned `attachment:<id>` links become relative
 `attachments/<sha256>.<ext>` paths; extensions follow sniffed MIME types.
 
+## Download an offline Lab Book
+
+The Docs page offers **Export Lab Book** to every signed-in user. Choose offline
+HTML or Markdown zip. The authenticated API is
+`GET /api/docs/export?format=html|md.zip`; it downloads a dated
+`lab-book-YYYY-MM-DD.<format>` file containing only active docs the caller may
+view. Human lab notes are visible to all users; generated lab inventory requires
+instance admin, and connector docs require the existing viewer grant.
+
+HTML contains a hierarchy-based table of contents, GFM tables, inline images,
+CSS and Mermaid 12.0.0. Open it with the network disabled: diagrams render in the
+browser without fetching a bundle. Use the browser print command and **Save as
+PDF** for a PDF copy. PDF/text attachments are listed by filename rather than
+embedded. Remote images are omitted, and raw HTML is omitted for offline safety.
+The Markdown zip stores hierarchy folders with `index.md`, title/connector front
+matter, relative doc links and attachments, and can be imported with the
+Markdown/Obsidian importer.
+
+Scheduled reports can attach an HTML Lab Book to email and Discord; see
+[REPORTS.md](REPORTS.md) for scope, channel configuration and size limits.
+
 ## Configuration
 
-Config-file (or env) only — there's no operator-facing API to change it at
-runtime, matching the "quality"/"digest"/"backup-verify" scheduled jobs in
+The scheduled directory/Git export remains config-file (or env) only; the
+Lab Book download API does not change its configuration, matching the "quality"/"digest"/"backup-verify" scheduled jobs in
 `cmd/server/main.go` rather than the schedule-via-API pattern used for the
 primary backup job.
 

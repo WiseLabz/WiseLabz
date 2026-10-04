@@ -15,15 +15,16 @@ func TestReportBooleanRoundTrip(t *testing.T) {
 	}
 	for _, enabled := range []bool{true, false} {
 		def.Enabled = enabled
+		def.AttachLabBook = enabled
 		if err := s.UpdateReportDefinition(ctx, def); err != nil {
 			t.Fatal(err)
 		}
 		got, err := s.GetReportDefinition(ctx, def.ID)
-		if err != nil || got.Enabled != enabled {
+		if err != nil || got.Enabled != enabled || got.AttachLabBook != enabled {
 			t.Fatalf("get enabled = %v, %v; want %v", got.Enabled, err, enabled)
 		}
 		defs, err := s.ListReportDefinitions(ctx)
-		if err != nil || len(defs) != 1 || defs[0].Enabled != enabled {
+		if err != nil || len(defs) != 1 || defs[0].Enabled != enabled || defs[0].AttachLabBook != enabled {
 			t.Fatalf("list definitions = %+v, %v", defs, err)
 		}
 		report := ReportRecord{DefinitionID: def.ID, DefinitionName: def.Name, Trigger: "scheduled", PeriodStart: "2026-01-01T00:00:00Z", PeriodEnd: "2026-01-02T00:00:00Z", Truncated: enabled, Data: "{}", Markdown: "report", Status: "ok"}

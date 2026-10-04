@@ -131,6 +131,19 @@ func TestRunMigrationsDown(t *testing.T) {
 		t.Fatalf("RunMigrations() error: %v", err)
 	}
 
+	rollbackLabBook := func() {
+		if !hasColumn(t, db, "sqlite", "report_definitions", "attach_lab_book") {
+			t.Fatal("report_definitions.attach_lab_book missing")
+		}
+		if err := RunMigrationsDown(db, "sqlite", logger); err != nil {
+			t.Fatal(err)
+		}
+		if hasColumn(t, db, "sqlite", "report_definitions", "attach_lab_book") {
+			t.Fatal("report_definitions.attach_lab_book remains after rollback")
+		}
+	}
+	rollbackLabBook()
+
 	if !attachmentTableExists(t, db, "sqlite", "journal_entries") {
 		t.Fatal("journal_entries missing")
 	}
@@ -194,7 +207,7 @@ func TestRunMigrationsDown(t *testing.T) {
 			t.Fatalf("docs.%s remains after rollback", col)
 		}
 	}
-	// 000050_doc_section_ownership is the latest migration.
+	// 000050_doc_section_ownership remains after human_docs is rolled back.
 	for _, col := range []string{"origin", "template_id", "last_synced_at", "gen_keys"} {
 		if !hasColumn(t, db, "sqlite", "docs", col) {
 			t.Fatalf("docs.%s missing after migrations", col)
@@ -443,6 +456,8 @@ func TestRunMigrationsDown(t *testing.T) {
 	if err := db.QueryRow("SELECT name FROM sqlite_master WHERE type='table' AND name='user_mfa_factors'").Scan(&mfaFactorsTable); err != nil {
 		t.Fatalf("user_mfa_factors table missing after reapply: %v", err)
 	}
+	rollbackLabBook()
+
 	if !attachmentTableExists(t, db, "sqlite", "journal_entries") {
 		t.Fatal("journal_entries missing")
 	}
@@ -755,6 +770,15 @@ func TestRunMigrationsDownPostgres(t *testing.T) {
 
 	if err := RunMigrations(db, "postgres", logger); err != nil {
 		t.Fatalf("RunMigrations() error: %v", err)
+	}
+	if !hasColumn(t, db, "postgres", "report_definitions", "attach_lab_book") {
+		t.Fatal("report_definitions.attach_lab_book missing")
+	}
+	if err := RunMigrationsDown(db, "postgres", logger); err != nil {
+		t.Fatalf("rollback report_lab_book: %v", err)
+	}
+	if hasColumn(t, db, "postgres", "report_definitions", "attach_lab_book") {
+		t.Fatal("report_definitions.attach_lab_book remains after rollback")
 	}
 	if !attachmentTableExists(t, db, "postgres", "journal_entries") {
 		t.Fatal("journal_entries missing")

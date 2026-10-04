@@ -2,3 +2,6 @@ web/dist
 web/node_modules
 web/src/api/generated/*
 web/src/api/model/*
+
+# Vendored browser bundle; labbook embeds it but its generated internals are not project code.
+backend/internal/labbook/assets/mermaid.min.js

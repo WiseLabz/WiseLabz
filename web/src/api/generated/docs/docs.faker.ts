@@ -214,6 +214,9 @@ export const getGetDocsTrashResponseMock = (): Doc[] =>
     ]),
   }));
 
+export const getGetDocsExportResponseMock = (): unknown | Blob =>
+  faker.helpers.arrayElement([undefined, {}]);
+
 export const getPostDocsImportResponseMock = (
   overrideResponse: Partial<Extract<DocImportPreview, object>> = {}
 ): DocImportPreview => ({
