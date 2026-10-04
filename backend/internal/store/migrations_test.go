@@ -798,6 +798,15 @@ func TestRunMigrationsDownPostgres(t *testing.T) {
 	if err := RunMigrations(db, "postgres", logger); err != nil {
 		t.Fatalf("RunMigrations() error: %v", err)
 	}
+	if !hasColumn(t, db, "postgres", "compliance_rules", "related") {
+		t.Fatal("compliance_rules.related missing")
+	}
+	if err := RunMigrationsDown(db, "postgres", logger); err != nil {
+		t.Fatalf("rollback compliance_rule_related: %v", err)
+	}
+	if hasColumn(t, db, "postgres", "compliance_rules", "related") {
+		t.Fatal("compliance_rules.related remains after rollback")
+	}
 	if !attachmentTableExists(t, db, "postgres", "entity_index") {
 		t.Fatal("entity_index missing")
 	}
