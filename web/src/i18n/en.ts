@@ -491,6 +491,23 @@ export const en = {
       viaSso: 'via SSO',
       viaSsoHint:
         "Synced from this user's identity provider group at login; edit their IdP group membership instead.",
+      viaConfig: 'via config',
+      viaConfigHint:
+        'Declared for this connector in config.yaml; change it there and restart the server.',
+    },
+    managed: {
+      tag: 'config',
+      hint: 'Managed by config.yaml. Change its settings there and restart the server.',
+      orphanedTag: 'orphaned',
+      orphanedHint:
+        'This connector was removed from config.yaml, so it was disabled. Release it to manage it here, or remove it.',
+      release: 'Release to UI',
+      releaseError: "Couldn't release the connector.",
+      editTitle: 'Managed by config',
+      editDesc:
+        'This connector is declared in config.yaml. Change its settings there and restart the server.',
+      orphanedEditDesc:
+        'This connector was removed from config.yaml. Release it from its page before editing it.',
     },
   },
   changes: {

@@ -5,7 +5,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import '../../i18n';
 import { ServiceDetailPage } from './ServiceDetailPage';
 
-const { restart, start, stop, health, configPush, configFields, syncRows, snapshotRows } = vi.hoisted(() => ({
+const { restart, start, stop, health, release, managedBy, configPush, configFields, syncRows, snapshotRows } = vi.hoisted(() => ({
+  release: vi.fn(),
+  // Overrides the mocked connector's managedBy for the config-managed tests (#500).
+  managedBy: { value: undefined as string | undefined },
   restart: vi.fn(),
   start: vi.fn(),
   stop: vi.fn(),
@@ -28,6 +31,7 @@ vi.mock('../../api/generated/connectors/connectors', () => ({
       scheduleSeconds: null,
       nextRunAt: '',
       lastSyncAt: '',
+      managedBy: managedBy.value,
     },
     isLoading: false,
     isError: false,
@@ -48,6 +52,7 @@ vi.mock('../../api/generated/connectors/connectors', () => ({
   postConnectorsConnectorIdStop: stop,
   postConnectorsConnectorIdConfigPush: configPush,
   postConnectorsConnectorIdHealth: health,
+  postConnectorsConnectorIdRelease: release,
   putConnectorsConnectorIdEnabled: vi.fn(),
   putConnectorsConnectorId: vi.fn(),
   getGetConnectorsQueryKey: () => [],
@@ -127,6 +132,7 @@ function renderPage() {
 }
 
 beforeEach(() => {
+  managedBy.value = undefined;
   syncRows.mockReturnValue({ data: [] });
   snapshotRows.mockReturnValue({ data: [] });
 });
@@ -308,5 +314,41 @@ describe('ServiceDetailPage config push', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'confirm-elevation' }));
 
     await waitFor(() => expect(toastWarning).toHaveBeenCalled());
+  });
+});
+
+describe('ServiceDetailPage config-managed connectors (#500)', () => {
+  it('offers every control for a UI-managed connector', () => {
+    renderPage();
+    for (const name of ['Edit', 'Remove', 'Disable', 'Sync']) {
+      expect(screen.getByRole('button', { name })).toBeInTheDocument();
+    }
+    expect(screen.queryByText('config')).not.toBeInTheDocument();
+  });
+
+  it('locks settings but keeps operational actions for a config-managed connector', () => {
+    managedBy.value = 'config';
+    renderPage();
+    expect(screen.getByText('config')).toBeInTheDocument();
+    expect(screen.getByText(/Managed by config\.yaml/)).toBeInTheDocument();
+    for (const name of ['Edit', 'Remove', 'Disable']) {
+      expect(screen.queryByRole('button', { name })).not.toBeInTheDocument();
+    }
+    expect(screen.getByRole('button', { name: 'Sync' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /health/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Release to UI' })).not.toBeInTheDocument();
+  });
+
+  it('offers only release and remove for an orphaned connector', async () => {
+    managedBy.value = 'config-orphaned';
+    release.mockResolvedValue({});
+    renderPage();
+    expect(screen.getByText('orphaned')).toBeInTheDocument();
+    for (const name of ['Edit', 'Disable', 'Enable', 'Sync']) {
+      expect(screen.queryByRole('button', { name })).not.toBeInTheDocument();
+    }
+    expect(screen.getByRole('button', { name: 'Remove' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Release to UI' }));
+    await waitFor(() => expect(release).toHaveBeenCalledWith('svc-pve1'));
   });
 });

@@ -49,10 +49,24 @@ type ConnectorRecord struct {
 	UserExpiresAt string `json:"userExpiresAt"`
 	// RotationMaxAgeDays overrides the global rotation.max_age_days config
 	// for this connector. nil means "use the global default".
-	RotationMaxAgeDays *int   `json:"rotationMaxAgeDays"`
-	CreatedAt          string `json:"createdAt"`
-	UpdatedAt          string `json:"updatedAt"`
+	RotationMaxAgeDays *int `json:"rotationMaxAgeDays"`
+	// ManagedBy says who owns the connector's settings (#500): ManagedByUI,
+	// ManagedByConfig (declared in config.yaml, locked in the UI) or
+	// ManagedByConfigOrphaned (its config entry was removed).
+	ManagedBy string `json:"managedBy"`
+	// ConfigHash fingerprints the config.yaml entry last applied to a
+	// config-managed connector; "" for every other connector.
+	ConfigHash string `json:"-"`
+	CreatedAt  string `json:"createdAt"`
+	UpdatedAt  string `json:"updatedAt"`
 }
+
+// Values of ConnectorRecord.ManagedBy.
+const (
+	ManagedByUI             = "ui"
+	ManagedByConfig         = "config"
+	ManagedByConfigOrphaned = "config-orphaned"
+)
 
 // IsCredentialExpired reports whether the connector's credentials have a
 // known expiry that has passed as of now.
@@ -70,7 +84,7 @@ func (c *ConnectorRecord) IsCredentialExpired(now time.Time) bool {
 // connectorColumns is the shared column list for every connector SELECT.
 const connectorColumns = `id, name, category, type, url, owner, verify_tls, config_data, enabled, status, status_message,
 	last_sync_at, schedule_seconds, next_run_at, last_sync_duration_ms, last_sync_error, retry_count, credential_expires_at,
-	secret_rotated_at, user_expires_at, rotation_max_age_days, created_at, updated_at`
+	secret_rotated_at, user_expires_at, rotation_max_age_days, managed_by, config_hash, created_at, updated_at`
 
 // CreateConnector inserts a new connector.
 func (s *Store) CreateConnector(ctx context.Context, c *ConnectorRecord) error {
@@ -93,18 +107,21 @@ func (s *Store) CreateConnector(ctx context.Context, c *ConnectorRecord) error {
 	if c.SecretRotatedAt == "" {
 		c.SecretRotatedAt = c.CreatedAt
 	}
+	if c.ManagedBy == "" {
+		c.ManagedBy = ManagedByUI
+	}
 
 	_, err := s.db.ExecContext(ctx, `
 		INSERT INTO connectors (id, name, category, type, url, owner, verify_tls, config_data, enabled, status, status_message, last_sync_at,
 			schedule_seconds, next_run_at, last_sync_duration_ms, last_sync_error, retry_count, credential_expires_at,
-			secret_rotated_at, user_expires_at, rotation_max_age_days, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			secret_rotated_at, user_expires_at, rotation_max_age_days, managed_by, config_hash, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`, c.ID, c.Name, c.Category, c.Type, c.URL, nilToStr(c.Owner), boolToInt(c.VerifyTLS), c.ConfigData,
 		boolToInt(c.Enabled), c.Status, c.StatusMessage, nilToStr(c.LastSyncAt),
 		// database/sql converts a nil *int argument to SQL NULL automatically.
 		c.ScheduleSeconds, nilToStr(c.NextRunAt), c.LastSyncDurationMs, c.LastSyncError, c.RetryCount,
 		nilToStr(c.CredentialExpiresAt), c.SecretRotatedAt, nilToStr(c.UserExpiresAt), c.RotationMaxAgeDays,
-		c.CreatedAt, c.UpdatedAt)
+		c.ManagedBy, c.ConfigHash, c.CreatedAt, c.UpdatedAt)
 	if err != nil {
 		if isUniqueViolation(err) {
 			return ErrConflict
@@ -123,37 +140,25 @@ func (s *Store) ExistingConnectorIDs(ctx context.Context, ids []string) (map[str
 
 // GetConnector retrieves a connector by ID.
 func (s *Store) GetConnector(ctx context.Context, id string) (*ConnectorRecord, error) {
-	c := &ConnectorRecord{}
-	var verifyTLS, enabled int
-	var owner, lastSyncAt, nextRunAt, lastSyncError, credentialExpiresAt sql.NullString
-	var scheduleSeconds, lastSyncDurationMs sql.NullInt64
-	var secretRotatedAt, userExpiresAt sql.NullString
-	var rotationMaxAgeDays sql.NullInt64
-	err := s.db.QueryRowContext(ctx, `SELECT `+connectorColumns+` FROM connectors WHERE id = ?
-	`, id).Scan(&c.ID, &c.Name, &c.Category, &c.Type, &c.URL, &owner, &verifyTLS, &c.ConfigData,
-		&enabled, &c.Status, &c.StatusMessage, &lastSyncAt,
-		&scheduleSeconds, &nextRunAt, &lastSyncDurationMs, &lastSyncError, &c.RetryCount, &credentialExpiresAt,
-		&secretRotatedAt, &userExpiresAt, &rotationMaxAgeDays,
-		&c.CreatedAt, &c.UpdatedAt)
+	c, err := scanConnector(s.db.QueryRowContext(ctx, `SELECT `+connectorColumns+` FROM connectors WHERE id = ?`, id))
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
 	if err != nil {
 		return nil, fmt.Errorf("get connector: %w", err)
 	}
-	c.VerifyTLS = verifyTLS != 0
-	c.Owner = nullStrToStr(owner)
-	c.Enabled = enabled != 0
-	c.LastSyncAt = nullStrToStr(lastSyncAt)
-	c.NextRunAt = nullStrToStr(nextRunAt)
-	c.LastSyncError = nullStrToStr(lastSyncError)
-	c.ScheduleSeconds = nullInt64ToIntPtr(scheduleSeconds)
-	c.LastSyncDurationMs = nullInt64ToIntPtr(lastSyncDurationMs)
-	c.CredentialExpiresAt = nullStrToStr(credentialExpiresAt)
-	c.SecretRotatedAt = nullStrToStr(secretRotatedAt)
-	c.UserExpiresAt = nullStrToStr(userExpiresAt)
-	c.RotationMaxAgeDays = nullInt64ToIntPtr(rotationMaxAgeDays)
-	return c, nil
+	return &c, nil
+}
+
+// ListConnectorsByName returns every connector with exactly this name. Names
+// are not unique, so config reconciliation (#500) has to see all candidates.
+func (s *Store) ListConnectorsByName(ctx context.Context, name string) ([]ConnectorRecord, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT `+connectorColumns+` FROM connectors WHERE name = ? ORDER BY created_at, id`, name)
+	if err != nil {
+		return nil, fmt.Errorf("list connectors by name: %w", err)
+	}
+	defer rows.Close() //nolint:errcheck
+	return scanConnectorRows(rows)
 }
 
 // UpdateConnector updates fields on an existing connector.
@@ -224,6 +229,12 @@ func (s *Store) UpdateConnector(ctx context.Context, id string, updates map[stri
 		case "rotation_max_age_days":
 			parts = append(parts, "rotation_max_age_days = ?")
 			args = append(args, v)
+		case "managed_by":
+			parts = append(parts, "managed_by = ?")
+			args = append(args, v)
+		case "config_hash":
+			parts = append(parts, "config_hash = ?")
+			args = append(args, v)
 		}
 	}
 
@@ -285,4 +296,23 @@ func nilToStr(s string) any {
 		return nil
 	}
 	return s
+}
+
+// configReconcileLockKey is the Postgres advisory lock that serialises
+// config.yaml connector reconciliation across replicas.
+const configReconcileLockKey int64 = 0x574c5a0500
+
+// LockConfigReconcile makes the surrounding transaction wait for any other
+// replica reconciling connectors from config.yaml (#500), so two replicas
+// starting together cannot both create the same declared connector. The lock
+// is released when the transaction ends. It is a no-op outside a Postgres
+// transaction: SQLite has a single writer.
+func (s *Store) LockConfigReconcile(ctx context.Context) error {
+	if _, ok := s.db.(pgTransactionDB); !ok {
+		return nil
+	}
+	if _, err := s.db.ExecContext(ctx, `SELECT pg_advisory_xact_lock(?)`, configReconcileLockKey); err != nil {
+		return fmt.Errorf("lock config reconcile: %w", err)
+	}
+	return nil
 }

@@ -74,9 +74,10 @@ func TestSnapshotUTCDataMigration(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-
-	c := ConnectorRecord{Name: "legacy", Category: "virtualization", Type: "proxmox", URL: "https://example.test"}
-	if err := s.CreateConnector(ctx, &c); err != nil {
+	// Inserted by hand: CreateConnector writes columns this older schema lacks.
+	c := ConnectorRecord{ID: "legacy-connector"}
+	if _, err := s.db.ExecContext(ctx, `INSERT INTO connectors (id, name, category, type, url, created_at, updated_at)
+		VALUES (?, 'legacy', 'virtualization', 'proxmox', 'https://example.test', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')`, c.ID); err != nil {
 		t.Fatal(err)
 	}
 	cases := []struct{ input, want string }{

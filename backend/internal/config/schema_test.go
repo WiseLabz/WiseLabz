@@ -41,6 +41,10 @@ func TestSchemaMatchesConfig(t *testing.T) {
 				t.Fatalf("%s: invalid collection schema: %v", path, node)
 			}
 			check(typ.Elem(), child, path, false)
+		case reflect.Interface:
+			if _, typed := node["type"]; typed {
+				t.Fatalf("%s: free-form value must not declare a type: %v", path, node)
+			}
 		default:
 			want := map[reflect.Kind]string{reflect.String: "string", reflect.Int: "integer", reflect.Int64: "integer", reflect.Bool: "boolean"}[typ.Kind()]
 			if typ.String() == "time.Duration" {

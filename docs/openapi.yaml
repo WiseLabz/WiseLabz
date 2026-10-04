@@ -906,6 +906,7 @@ paths:
         '400': { $ref: '#/components/responses/BadRequest' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: 'The connector is managed by config.yaml (`connector_managed`) or orphaned (`connector_orphaned`)' }
     delete:
       tags: [connectors]
       summary: Remove a connector (operator, destructive)
@@ -924,6 +925,25 @@ paths:
       responses:
         '204': { description: No Content }
         '403': { $ref: '#/components/responses/ElevationRequired' }
+        '409': { description: 'The connector is managed by config.yaml (`connector_managed`); remove its entry there instead' }
+  /connectors/{connectorId}/release:
+    post:
+      tags: [connectors]
+      summary: Release an orphaned connector to UI management (operator)
+      description: >
+        A connector whose config.yaml entry was removed is disabled and marked
+        `config-orphaned`. Releasing it sets `managedBy` back to `ui` so it can
+        be edited normally; it stays disabled.
+      parameters: [{ $ref: '#/components/parameters/ConnectorId' }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Connector' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: 'The connector is not orphaned (`connector_managed`)' }
   /connectors/{connectorId}/removal-impact:
     get:
       tags: [connectors]
@@ -1547,6 +1567,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Connector' }
+        '409': { description: 'The connector is managed by config.yaml (`connector_managed`) or orphaned (`connector_orphaned`)' }
 
   /connectors/{connectorId}/maintenance-window:
     get:
@@ -3652,6 +3673,8 @@ paths:
         an OIDC group->connector-role sync can appear twice, once per `source`
         (#279 part 3). `source: "oidc"` rows are read-only: they're revoked by
         the user's IdP group membership at their next login, not by this API.
+        `source: "config"` rows are read-only too: they come from the
+        connector's `grants` in config.yaml and are reconciled at startup.
       parameters: [{ $ref: '#/components/parameters/ConnectorId' }]
       responses:
         '200':
@@ -3664,7 +3687,7 @@ paths:
                   type: object
                   additionalProperties: true
                   properties:
-                    source: { type: string, enum: [manual, oidc], description: How the grant was created; see the endpoint description. }
+                    source: { type: string, enum: [manual, oidc, config], description: How the grant was created; see the endpoint description. }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
   /connectors/{connectorId}/permissions/{userId}:
@@ -3695,7 +3718,7 @@ paths:
                 type: object
                 additionalProperties: true
                 properties:
-                  source: { type: string, enum: [manual, oidc] }
+                  source: { type: string, enum: [manual, oidc, config] }
         '400': { $ref: '#/components/responses/BadRequest' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
@@ -4233,6 +4256,15 @@ components:
             string when unset.
         rotationMaxAgeDays:
           { type: integer, nullable: true, description: 'Overrides the global rotation.max_age_days for this connector; null uses the global default' }
+        managedBy:
+          type: string
+          enum: [ui, config, config-orphaned]
+          readOnly: true
+          description: >-
+            Who owns the connector's settings. `config`: declared in config.yaml
+            and reconciled at startup, so edits, enable/disable and delete are
+            rejected with 409. `config-orphaned`: its config entry was removed;
+            it is disabled and can only be deleted or released.
     ConnectorCreate:
       type: object
       required: [name, category, type, url, config]

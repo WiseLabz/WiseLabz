@@ -305,15 +305,20 @@ func TestConnector_Validate(t *testing.T) {
 
 ### 7. Document config fields
 
-Add a commented block to `config.example.yaml` so users know what to set:
+Users can declare connectors in `config.yaml` (see `docs/CONNECTORS_IN_CONFIG.md`), where
+the keys under `config:` are exactly your schema's field keys. A declared connector is
+checked strictly against the schema: a missing `Required` field or a key the schema does
+not define makes the entry invalid, so keep `Required` accurate. `url` and `verify_tls`
+are set on the entry itself, not under `config:`.
 
 ```yaml
-# Example: MyNewService connector
-#   - name: my-newservice
-#     type: mynewservice
-#     url: https://192.168.1.50:8443
-#     tls_verify: false
-#     # WISELABZ_SERVICES_N_APIKEY must be set in the environment
+connectors:
+  - name: my-newservice
+    type: mynewservice
+    url: https://192.168.1.50:8443
+    verify_tls: false
+    config:
+      api_key: ${MYNEWSERVICE_API_KEY}
 ```
 
 ## Sync flow

@@ -135,18 +135,8 @@ func TestRunMigrationsDown(t *testing.T) {
 		if !hasColumn(t, db, "sqlite", "report_definitions", "attach_lab_book") {
 			t.Fatal("report_definitions.attach_lab_book missing")
 		}
-		status, err := GetMigrationStatus(db, "sqlite")
-		if err != nil {
+		if err := RunMigrationsDown(db, "sqlite", logger); err != nil {
 			t.Fatal(err)
-		}
-		for status.Current > 52 {
-			if err := RunMigrationsDown(db, "sqlite", logger); err != nil {
-				t.Fatal(err)
-			}
-			status, err = GetMigrationStatus(db, "sqlite")
-			if err != nil {
-				t.Fatal(err)
-			}
 		}
 		if hasColumn(t, db, "sqlite", "report_definitions", "attach_lab_book") {
 			t.Fatal("report_definitions.attach_lab_book remains after rollback")
@@ -154,6 +144,38 @@ func TestRunMigrationsDown(t *testing.T) {
 	}
 	rollbackLabBook()
 
+	if !hasColumn(t, db, "sqlite", "connectors", "managed_by") {
+		t.Fatal("connectors.managed_by missing")
+	}
+	// The rollback must drop config-sourced grants and keep the others.
+	for _, q := range []string{
+		`INSERT INTO users (id, username, created_at) VALUES ('u1', 'u1', '2026-01-01T00:00:00Z')`,
+		`INSERT INTO connectors (id, name, category, type, url, managed_by, created_at, updated_at)
+			VALUES ('c1', 'pve', 'virtualization', 'proxmox', 'https://x', 'config', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')`,
+		`INSERT INTO user_connector_roles (id, user_id, connector_id, role, source, created_at, updated_at)
+			VALUES ('g1', 'u1', 'c1', 'viewer', 'manual', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')`,
+		`INSERT INTO user_connector_roles (id, user_id, connector_id, role, source, created_at, updated_at)
+			VALUES ('g2', 'u1', 'c1', 'operator', 'config', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')`,
+	} {
+		if _, err := db.Exec(q); err != nil {
+			t.Fatalf("seed %q: %v", q, err)
+		}
+	}
+	if err := RunMigrationsDown(db, "sqlite", logger); err != nil {
+		t.Fatalf("rollback connector_managed_by: %v", err)
+	}
+	if hasColumn(t, db, "sqlite", "connectors", "managed_by") {
+		t.Fatal("connectors.managed_by remains after rollback")
+	}
+	var grants int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM user_connector_roles WHERE connector_id = 'c1'`).Scan(&grants); err != nil || grants != 1 {
+		t.Fatalf("grants after rollback = %d, %v; want only the manual grant", grants, err)
+	}
+	for _, q := range []string{`DELETE FROM connectors WHERE id = 'c1'`, `DELETE FROM users WHERE id = 'u1'`} {
+		if _, err := db.Exec(q); err != nil {
+			t.Fatalf("cleanup %q: %v", q, err)
+		}
+	}
 	if !attachmentTableExists(t, db, "sqlite", "doc_attachments") {
 		t.Fatal("doc_attachments missing")
 	}
@@ -427,6 +449,15 @@ func TestRunMigrationsDown(t *testing.T) {
 	}
 	rollbackLabBook()
 
+	if !hasColumn(t, db, "sqlite", "connectors", "managed_by") {
+		t.Fatal("connectors.managed_by missing")
+	}
+	if err := RunMigrationsDown(db, "sqlite", logger); err != nil {
+		t.Fatalf("rollback connector_managed_by: %v", err)
+	}
+	if hasColumn(t, db, "sqlite", "connectors", "managed_by") {
+		t.Fatal("connectors.managed_by remains after rollback")
+	}
 	if !attachmentTableExists(t, db, "sqlite", "doc_attachments") {
 		t.Fatal("doc_attachments missing")
 	}
@@ -730,6 +761,15 @@ func TestRunMigrationsDownPostgres(t *testing.T) {
 	}
 	if hasColumn(t, db, "postgres", "report_definitions", "attach_lab_book") {
 		t.Fatal("report_definitions.attach_lab_book remains after rollback")
+	}
+	if !hasColumn(t, db, "postgres", "connectors", "managed_by") {
+		t.Fatal("connectors.managed_by missing")
+	}
+	if err := RunMigrationsDown(db, "postgres", logger); err != nil {
+		t.Fatalf("rollback connector_managed_by: %v", err)
+	}
+	if hasColumn(t, db, "postgres", "connectors", "managed_by") {
+		t.Fatal("connectors.managed_by remains after rollback")
 	}
 	if !attachmentTableExists(t, db, "postgres", "doc_attachments") {
 		t.Fatal("doc_attachments missing")

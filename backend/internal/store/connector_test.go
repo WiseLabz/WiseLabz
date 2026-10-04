@@ -334,3 +334,48 @@ func TestClaimDueConnector(t *testing.T) {
 		})
 	}
 }
+
+func TestConnectorManagedByAndListByName(t *testing.T) {
+	s := newDocTestStore(t)
+	ctx := context.Background()
+
+	ui := &ConnectorRecord{Name: "pve", Category: "virtualization", Type: "proxmox", URL: "https://a", Enabled: true}
+	managed := &ConnectorRecord{Name: "pve", Category: "virtualization", Type: "proxmox", URL: "https://b", Enabled: true, ManagedBy: ManagedByConfig}
+	other := &ConnectorRecord{Name: "other", Category: "virtualization", Type: "proxmox", URL: "https://c", Enabled: true}
+	for _, c := range []*ConnectorRecord{ui, managed, other} {
+		if err := s.CreateConnector(ctx, c); err != nil {
+			t.Fatalf("CreateConnector() error: %v", err)
+		}
+	}
+
+	got, err := s.GetConnector(ctx, ui.ID)
+	if err != nil || got.ManagedBy != ManagedByUI {
+		t.Fatalf("GetConnector(ui) = %+v, %v, want managed_by ui by default", got, err)
+	}
+
+	byName, err := s.ListConnectorsByName(ctx, "pve")
+	if err != nil {
+		t.Fatalf("ListConnectorsByName() error: %v", err)
+	}
+	if len(byName) != 2 {
+		t.Fatalf("ListConnectorsByName(pve) = %d rows, want 2", len(byName))
+	}
+	if none, err := s.ListConnectorsByName(ctx, "absent"); err != nil || len(none) != 0 {
+		t.Fatalf("ListConnectorsByName(absent) = %v, %v, want empty", none, err)
+	}
+
+	if err := s.UpdateConnector(ctx, managed.ID, map[string]any{"managed_by": ManagedByConfigOrphaned, "enabled": false}); err != nil {
+		t.Fatalf("UpdateConnector() error: %v", err)
+	}
+	byID, err := s.ListConnectorsByID(ctx, []string{managed.ID})
+	if err != nil {
+		t.Fatalf("ListConnectorsByID() error: %v", err)
+	}
+	if c := byID[managed.ID]; c.ManagedBy != ManagedByConfigOrphaned || c.Enabled {
+		t.Errorf("after orphaning = %+v", c)
+	}
+
+	if _, err := s.db.ExecContext(ctx, `UPDATE connectors SET managed_by = 'bogus' WHERE id = ?`, ui.ID); err == nil {
+		t.Error("managed_by accepted a value outside its CHECK constraint")
+	}
+}

@@ -53,13 +53,16 @@ auth:
   #     group_role_mapping:
   #       homelab-admins: admin
   #     # Maps an IdP group to per-connector viewer/operator roles, synced
-  #     # on every login (#279 part 3). Key is a connector UUID or "*" for
-  #     # every connector. Group names match case-insensitively.
+  #     # on every login (#279 part 3). Key is a connector UUID, a connector
+  #     # name or "*" for every connector. A name matching no connector or
+  #     # more than one is skipped with a warning at login. Group and
+  #     # connector names match case-insensitively.
   #     group_connector_roles:
   #       homelab-ops:
   #         "*": operator
   #       family:
   #         3f1c1e2a-1111-4c22-8b33-aaaaaaaaaaaa: viewer
+  #         Plex: viewer
 
 # AI module (opt-in)
 ai:
@@ -129,8 +132,32 @@ retention:
   # health_checks (connector health-check time series) older than this
   # (days) are purged
   health_check_days: 90
-  # how often the cleanup job runs, in hours
-  interval_hours: 24
+  # cron expression for the cleanup job (default: daily at midnight)
+  cron_expr: "0 0 * * *"
+
+# Connectors declared in this file (optional). They are applied to the database
+# at every start and are read-only in the UI; see docs/CONNECTORS_IN_CONFIG.md.
+# Inside this list only, ${VAR} is read from the environment and <field>_file
+# reads a field from a file. Check the list with `server config validate`.
+# connectors:
+#   - name: pve
+#     type: proxmox
+#     url: https://pve.lan:8006/api2/json
+#     verify_tls: true
+#     enabled: true
+#     # Auto-sync interval in seconds; omit for manual sync only.
+#     schedule_seconds: 900
+#     owner: alice
+#     # RFC3339 credential expiry and a per-connector rotation reminder (days).
+#     user_expires_at: "2027-01-01T00:00:00Z"
+#     rotation_max_age_days: 90
+#     config:
+#       token_id: root@pam!wiselabz
+#       token_secret: ${PVE_TOKEN_SECRET}
+#       # or: token_secret_file: /run/secrets/pve_token
+#     grants:
+#       - user: alice
+#         role: viewer
 
 # Logging
 log:

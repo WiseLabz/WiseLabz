@@ -95,6 +95,7 @@ export * from './connectorCapabilities';
 export * from './connectorCategory';
 export * from './connectorCreate';
 export * from './connectorCreateConfig';
+export * from './connectorManagedBy';
 export * from './connectorTypeSchema';
 export * from './connectorTypeSchemaLifecycleVerbsItem';
 export * from './connectorUpdate';

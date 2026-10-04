@@ -211,6 +211,30 @@ func (d *Dispatcher) NotifySystemEvent(ctx context.Context, eventType, severity,
 	}()
 }
 
+// NotifyAdmins dispatches a system-level event like NotifySystemEvent, but only
+// to instance admins: for problems only an admin can fix and whose details
+// other users have no grant to see (e.g. connectors declared in config.yaml).
+func (d *Dispatcher) NotifyAdmins(ctx context.Context, eventType, severity, title, message string) {
+	users, _, err := d.store.ListUsers(ctx, 0, maxNotifyUsers)
+	if err != nil {
+		slog.Error("failed to list users for admin notification", "error", err, "eventType", eventType)
+		return
+	}
+	admins := users[:0]
+	for _, u := range users {
+		if u.InstanceAdminRole == "admin" {
+			admins = append(admins, u)
+		}
+	}
+	channels := d.loadChannels(ctx)
+	routes := d.loadRouting(ctx)
+	d.inflight.Add(1)
+	go func() {
+		defer d.inflight.Done()
+		d.fanOut(admins, channels, routes, "", eventType, severity, "", title, message)
+	}()
+}
+
 // NotifyReport delivers a generated report to every active user's in-app
 // inbox and directly to the enabled channel types selected by its definition.
 // Report delivery intentionally bypasses notification routing rules.

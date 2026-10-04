@@ -58,6 +58,12 @@ object, action-specific), and `createdAt`.
 | `connector.bulk_sync` | `POST /api/connectors/bulk-sync` | connector / id — one record per resolved item |
 | `connector.bulk_reauth` | `POST /api/connectors/bulk-reauth` | connector / id — one record per resolved item |
 | `connector.bulk_restart` | `POST /api/connectors/bulk-restart` | connector / id — one record per resolved item |
+| `connector.release` | `POST /api/connectors/{id}/release` (an orphaned connector returned to UI management) | connector / id |
+| `connector.config_create` | Startup: a connector declared in `config.yaml` was created. `actorRole` is `system`, with no actor user | connector / new ID |
+| `connector.config_adopt` | Startup: a UI-created or orphaned connector was taken under config management. `detail.fields` names what changed; a changed secret appears only as `config.secret` | connector / id |
+| `connector.config_update` | Startup: a config-managed connector's entry changed. Same `detail` as adopt | connector / id |
+| `connector.config_orphan` | Startup: a config-managed connector's entry was removed; it was disabled | connector / id |
+| `connector.config_grants` | Startup: grants declared for the connector changed. `detail` holds the added and removed counts | connector / id |
 | `auth.elevate` | `POST /api/auth/elevate` | action / the elevated action name |
 | `auth.elevation_requested` | Any step-up-gated endpoint receiving `X-Elevation-Token` | action / the required action name |
 | `auth.elevation_denied` | Failed elevation-token validation on a step-up-gated endpoint | action / the required action name |

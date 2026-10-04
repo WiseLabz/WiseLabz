@@ -13,4 +13,5 @@ export type PutConnectorsConnectorIdPermissionsUserId200Source =
 export const PutConnectorsConnectorIdPermissionsUserId200Source = {
   manual: 'manual',
   oidc: 'oidc',
+  config: 'config',
 } as const;
