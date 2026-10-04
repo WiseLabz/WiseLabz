@@ -23,8 +23,8 @@ type EntityLink struct {
 // matchEntities reads the (cached) latest snapshot of every other connector and
 // matches its entities against entities, in precedence order (first hit
 // wins per pair): matching ExternalID+Kind, then matching IP, then matching
-// Hostname (case-insensitive). Matches across different connectors are all
-// kept; only exact (ConnectorID, ExternalID) duplicates are dropped.
+// Hostname or alias (case-insensitive). Matches across different connectors
+// are all kept; only exact (ConnectorID, ExternalID) duplicates are dropped.
 func matchEntities(ctx context.Context, s *store.Store, cache *snapshotCache, connectorID string, entities []connector.SnapshotEntity) ([]EntityLink, error) {
 	if len(entities) == 0 {
 		return nil, nil
@@ -80,10 +80,26 @@ func matchReason(a, b connector.SnapshotEntity) string {
 	if a.IP != "" && b.IP != "" && a.IP == b.IP {
 		return "IP address"
 	}
-	if a.Hostname != "" && b.Hostname != "" && strings.EqualFold(a.Hostname, b.Hostname) {
+	if hostnameMatches(a, b) {
 		return "hostname"
 	}
 	return ""
+}
+
+func hostnameMatches(a, b connector.SnapshotEntity) bool {
+	aNames := append([]string{a.Hostname}, a.Aliases...)
+	bNames := append([]string{b.Hostname}, b.Aliases...)
+	for _, aName := range aNames {
+		if aName == "" {
+			continue
+		}
+		for _, bName := range bNames {
+			if bName != "" && strings.EqualFold(aName, bName) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func dedupKey(connectorID string, e connector.SnapshotEntity) string {

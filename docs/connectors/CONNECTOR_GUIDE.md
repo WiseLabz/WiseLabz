@@ -445,6 +445,25 @@ authenticate with a cookie rather than a header. The UniFi connector
   bad credentials. Translate both into the shared connector error types so the
   sync engine can tell "retry later" from "fix your credentials".
 
+## Nginx Proxy Manager
+
+The Nginx Proxy Manager connector (`backend/internal/connector/npm/`) uses the
+NPM API to document proxy configuration. Its schema requires `url`, `email`,
+and `password`, with `verify_tls` as a toggle that defaults to `true`. It
+authenticates with the configured email and password through `POST /api/tokens`,
+then reads the six resource kinds: `proxy_host`, `redirection_host`, `stream`,
+`dead_host`, `certificate`, and `access_list`. Fetch is read-only and does not
+create, update, or delete NPM resources.
+
+For proxy hosts, the first configured domain is the primary domain and the
+remaining domains are aliases. Forward targets become operational
+dependencies: a literal IP address is recorded as `SnapshotEntity.IP`, while a
+hostname or service name becomes an `upstream_service` dependency. Certificate
+snapshots use the stable `expires_on` value to record expiry without including
+request or renewal timestamps that would create noise on every sync. The
+connector's `verify_tls` setting defaults to enabled and can be disabled for
+instances using a locally issued certificate.
+
 ## Keeping snapshots stable
 
 A snapshot is diffed against the previous one, so anything that changes on
