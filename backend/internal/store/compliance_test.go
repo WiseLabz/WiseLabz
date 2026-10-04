@@ -41,6 +41,116 @@ func TestComplianceRuleCRUD(t *testing.T) {
 	}
 }
 
+func TestComplianceRuleRelatedRoundTrip(t *testing.T) {
+	ctx := context.Background()
+	s := newDocTestStore(t)
+	relatedJSON := `[{"mode":"requires","connectorType":"pbs","entityKind":"vm","join":{"sourceField":"external_id","relatedField":"external_id"},"conditions":[{"attribute":"last_backup_age_days","op":"lt","value":7}]}]`
+	rule := &ComplianceRuleRecord{
+		Name:          "Related clause rule",
+		ConnectorType: "docker",
+		EntityKind:    "container",
+		Conditions:    `[{"attribute":"privileged","op":"eq","value":true}]`,
+		Severity:      "critical",
+		Title:         "Related test",
+		Enabled:       true,
+		Related:       relatedJSON,
+	}
+	if err := s.CreateComplianceRule(ctx, rule); err != nil {
+		t.Fatalf("CreateComplianceRule() error: %v", err)
+	}
+	got, err := s.GetComplianceRule(ctx, rule.ID)
+	if err != nil {
+		t.Fatalf("GetComplianceRule() error: %v", err)
+	}
+	if got.Related != relatedJSON {
+		t.Fatalf("Related mismatch: got %q, want %q", got.Related, relatedJSON)
+	}
+	rules, err := s.ListComplianceRules(ctx)
+	if err != nil {
+		t.Fatalf("ListComplianceRules() error: %v", err)
+	}
+	var found *ComplianceRuleRecord
+	for _, r := range rules {
+		if r.ID == rule.ID {
+			found = &r
+			break
+		}
+	}
+	if found == nil {
+		t.Fatalf("rule not found in list")
+	}
+	if found.Related != relatedJSON {
+		t.Fatalf("Related in list mismatch: got %q, want %q", found.Related, relatedJSON)
+	}
+}
+
+func TestComplianceRuleRelatedUpdateChanges(t *testing.T) {
+	ctx := context.Background()
+	s := newDocTestStore(t)
+	rule := &ComplianceRuleRecord{
+		Name:          "Update related test",
+		ConnectorType: "docker",
+		EntityKind:    "container",
+		Conditions:    `[{"attribute":"privileged","op":"eq","value":true}]`,
+		Severity:      "critical",
+		Title:         "Update related",
+		Enabled:       true,
+		Related:       `[{"mode":"requires","connectorType":"pbs","entityKind":"vm","join":{"sourceField":"external_id","relatedField":"external_id"},"conditions":[{"attribute":"last_backup_age_days","op":"lt","value":7}]}]`,
+	}
+	if err := s.CreateComplianceRule(ctx, rule); err != nil {
+		t.Fatalf("CreateComplianceRule() error: %v", err)
+	}
+	newRelated := `[{"mode":"forbids","connectorType":"proxmox","entityKind":"vm","join":{"sourceField":"external_id","relatedField":"external_id"},"conditions":[{"attribute":"last_backup_age_days","op":"lt","value":7}]}]`
+	rule.Related = newRelated
+	if err := s.UpdateComplianceRule(ctx, rule); err != nil {
+		t.Fatalf("UpdateComplianceRule() error: %v", err)
+	}
+	got, err := s.GetComplianceRule(ctx, rule.ID)
+	if err != nil {
+		t.Fatalf("GetComplianceRule() error: %v", err)
+	}
+	if got.Related != newRelated {
+		t.Fatalf("Related after update: got %q, want %q", got.Related, newRelated)
+	}
+}
+
+func TestComplianceRuleRelatedEmptyNormalizesToArray(t *testing.T) {
+	ctx := context.Background()
+	s := newDocTestStore(t)
+	rule := &ComplianceRuleRecord{
+		Name:          "Empty related test",
+		ConnectorType: "docker",
+		EntityKind:    "container",
+		Conditions:    `[{"attribute":"privileged","op":"eq","value":true}]`,
+		Severity:      "critical",
+		Title:         "Empty related",
+		Enabled:       true,
+		Related:       "",
+	}
+	if err := s.CreateComplianceRule(ctx, rule); err != nil {
+		t.Fatalf("CreateComplianceRule() error: %v", err)
+	}
+	got, err := s.GetComplianceRule(ctx, rule.ID)
+	if err != nil {
+		t.Fatalf("GetComplianceRule() error: %v", err)
+	}
+	if got.Related != "[]" {
+		t.Fatalf("Related should normalize empty to '[]': got %q", got.Related)
+	}
+}
+
+func TestComplianceRuleRelatedSeededRuleHasDefault(t *testing.T) {
+	ctx := context.Background()
+	s := newDocTestStore(t)
+	got, err := s.GetComplianceRule(ctx, "seed-pfsense-any-any")
+	if err != nil {
+		t.Fatalf("GetComplianceRule() error: %v", err)
+	}
+	if got.Related != "[]" {
+		t.Fatalf("Seeded rule Related should default to '[]': got %q", got.Related)
+	}
+}
+
 func TestComplianceFindingRuleDedupAndResolve(t *testing.T) {
 	ctx := context.Background()
 	s := newDocTestStore(t)

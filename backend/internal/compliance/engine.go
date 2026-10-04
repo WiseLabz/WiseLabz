@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"reflect"
 	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -132,6 +133,51 @@ func invalidField(field, msg, format string, args ...any) *ValidationError {
 	}
 }
 
+// validateConditions checks a list of conditions against a catalog's attributes.
+// pathPrefix is used to build the indexed path (e.g., "conditions" or "related[0].conditions").
+func validateConditions(pathPrefix string, attributes []AttributeSpec, conditions []Condition) error {
+	if len(conditions) > maxConditions {
+		return invalidField(pathPrefix, fmt.Sprintf("must contain at most %d conditions", maxConditions),
+			"at most %d conditions are allowed", maxConditions)
+	}
+
+	for i, condition := range conditions {
+		spec, ok := findAttribute(attributes, condition.Attribute)
+		if !ok {
+			path := fmt.Sprintf("%s[%d].attribute", pathPrefix, i)
+			return invalidField(path, "is not a known attribute for this entity kind",
+				"unknown attribute %q", condition.Attribute)
+		}
+		if !validOp(spec.Type, condition.Op) {
+			path := fmt.Sprintf("%s[%d].op", pathPrefix, i)
+			return invalidField(path, fmt.Sprintf("is not a valid operator for %s attributes", spec.Type),
+				"operator %q is not valid for %s attribute %q", condition.Op, spec.Type, condition.Attribute)
+		}
+		if condition.Op != "regex" {
+			continue
+		}
+		pattern, ok := condition.Value.(string)
+		if !ok {
+			path := fmt.Sprintf("%s[%d].value", pathPrefix, i)
+			return invalidField(path, "must be a string when op is regex",
+				"regex value for %q must be a string", condition.Attribute)
+		}
+		if len(pattern) > maxRegexLength {
+			path := fmt.Sprintf("%s[%d].value", pathPrefix, i)
+			return invalidField(path, fmt.Sprintf("must be at most %d characters", maxRegexLength),
+				"regex for %q exceeds %d characters", condition.Attribute, maxRegexLength)
+		}
+		if _, err := regexp.Compile(pattern); err != nil {
+			path := fmt.Sprintf("%s[%d].value", pathPrefix, i)
+			invalid := invalidField(path, "is not a valid regular expression",
+				"invalid regex for %q: %v", condition.Attribute, err)
+			invalid.Err = err
+			return invalid
+		}
+	}
+	return nil
+}
+
 // Validate checks that a rule can be evaluated with catalog. Empty conditions
 // are rejected: matching every entity is not a useful compliance rule.
 //
@@ -144,7 +190,7 @@ func Validate(rule Rule, catalog Catalog) error {
 		return invalidField("connectorType", "is not a known connector type",
 			"unknown connector type %q", rule.ConnectorType)
 	}
-	attributes, ok := kinds[rule.EntityKind]
+	sourceAttributes, ok := kinds[rule.EntityKind]
 	if !ok {
 		return invalidField("entityKind", "is not a known entity kind for this connector type",
 			"unknown entity kind %q for connector type %q", rule.EntityKind, rule.ConnectorType)
@@ -153,45 +199,69 @@ func Validate(rule Rule, catalog Catalog) error {
 		return invalidField("conditions", "must contain at least one condition",
 			"at least one condition is required")
 	}
-	if len(rule.Conditions) > maxConditions {
-		return invalidField("conditions", fmt.Sprintf("must contain at most %d conditions", maxConditions),
-			"at most %d conditions are allowed", maxConditions)
+
+	// Validate rule's own conditions
+	if err := validateConditions("conditions", sourceAttributes, rule.Conditions); err != nil {
+		return err
 	}
 
-	for i, condition := range rule.Conditions {
-		spec, ok := findAttribute(attributes, condition.Attribute)
+	// Validate related clauses
+	if len(rule.Related) > maxRelatedClauses {
+		return invalidField("related", fmt.Sprintf("must contain at most %d clauses", maxRelatedClauses),
+			"at most %d related clauses are allowed", maxRelatedClauses)
+	}
+
+	for i, clause := range rule.Related {
+		// Validate mode
+		if clause.Mode != ModeRequires && clause.Mode != ModeForbids {
+			path := fmt.Sprintf("related[%d].mode", i)
+			return invalidField(path, "must be 'requires' or 'forbids'",
+				"related[%d].mode must be 'requires' or 'forbids', got %q", i, clause.Mode)
+		}
+
+		// Validate connector type
+		relatedKinds, ok := catalog[clause.ConnectorType]
 		if !ok {
-			return invalidField(fmt.Sprintf("conditions[%d].attribute", i), "is not a known attribute for this entity kind",
-				"unknown attribute %q", condition.Attribute)
+			path := fmt.Sprintf("related[%d].connectorType", i)
+			return invalidField(path, "is not a known connector type",
+				"unknown connector type %q in related[%d]", clause.ConnectorType, i)
 		}
-		if !validOp(spec.Type, condition.Op) {
-			return invalidField(fmt.Sprintf("conditions[%d].op", i), fmt.Sprintf("is not a valid operator for %s attributes", spec.Type),
-				"operator %q is not valid for %s attribute %q", condition.Op, spec.Type, condition.Attribute)
-		}
-		if condition.Op != "regex" {
-			continue
-		}
-		pattern, ok := condition.Value.(string)
+
+		// Validate entity kind
+		relatedAttributes, ok := relatedKinds[clause.EntityKind]
 		if !ok {
-			return invalidField(fmt.Sprintf("conditions[%d].value", i), "must be a string when op is regex",
-				"regex value for %q must be a string", condition.Attribute)
+			path := fmt.Sprintf("related[%d].entityKind", i)
+			return invalidField(path, "is not a known entity kind for this connector type",
+				"unknown entity kind %q for connector type %q in related[%d]", clause.EntityKind, clause.ConnectorType, i)
 		}
-		if len(pattern) > maxRegexLength {
-			return invalidField(fmt.Sprintf("conditions[%d].value", i), fmt.Sprintf("must be at most %d characters", maxRegexLength),
-				"regex for %q exceeds %d characters", condition.Attribute, maxRegexLength)
+
+		// Validate clause conditions against related kind's attributes
+		if len(clause.Conditions) > 0 {
+			if err := validateConditions(fmt.Sprintf("related[%d].conditions", i), relatedAttributes, clause.Conditions); err != nil {
+				return err
+			}
 		}
-		if _, err := regexp.Compile(pattern); err != nil {
-			invalid := invalidField(fmt.Sprintf("conditions[%d].value", i), "is not a valid regular expression",
-				"invalid regex for %q: %v", condition.Attribute, err)
-			invalid.Err = err
-			return invalid
+
+		// Validate join source field against source kind's attributes
+		if !validJoinField(clause.Join.SourceField, sourceAttributes) {
+			path := fmt.Sprintf("related[%d].join.sourceField", i)
+			return invalidField(path, "is not a valid field for the source entity kind",
+				"invalid source field %q in related[%d].join", clause.Join.SourceField, i)
+		}
+
+		// Validate join related field against related kind's attributes
+		if !validJoinField(clause.Join.RelatedField, relatedAttributes) {
+			path := fmt.Sprintf("related[%d].join.relatedField", i)
+			return invalidField(path, "is not a valid field for the related entity kind",
+				"invalid related field %q in related[%d].join", clause.Join.RelatedField, i)
 		}
 	}
+
 	return nil
 }
 
 // Evaluate returns matching entities in snapshot order. A missing attribute is
-// false for every operator except neq and exists. exists uses a boolean value:
+// false for every operator except neq, not_contains and exists. exists uses a boolean value:
 // true requires presence and false requires absence.
 func Evaluate(rule Rule, snapshot Snapshot) []Entity {
 	matches := make([]Entity, 0)
@@ -204,13 +274,155 @@ func Evaluate(rule Rule, snapshot Snapshot) []Entity {
 	return matches
 }
 
+// fieldValue extracts a typed or attribute field from an entity and returns its
+// string value. Typed names (external_id, name, ip, hostname, mac) map directly to
+// Entity fields. AttributeFieldPrefix+"name" maps to Attributes[name], converted to
+// string as follows: string as is; numbers as strconv (whole numbers as int, else float);
+// bool as "true"/"false"; anything else (nil, arrays, maps) is not usable.
+// Returns ("", false) if the field is not usable or is empty after trimming.
+func fieldValue(e Entity, field string) (string, bool) {
+	var value any
+
+	switch field {
+	case "external_id":
+		value = e.ExternalID
+	case "name":
+		value = e.Name
+	case "ip":
+		value = e.IP
+	case "hostname":
+		value = e.Hostname
+	case "mac":
+		value = e.MAC
+	default:
+		if strings.HasPrefix(field, AttributeFieldPrefix) {
+			attrName := field[len(AttributeFieldPrefix):]
+			var ok bool
+			value, ok = e.Attributes[attrName]
+			if !ok {
+				return "", false
+			}
+		} else {
+			return "", false
+		}
+	}
+
+	// Convert value to string
+	var s string
+	switch v := value.(type) {
+	case string:
+		s = v
+	case bool:
+		s = fmt.Sprintf("%v", v)
+	default:
+		n, ok := number(v)
+		if !ok {
+			return "", false
+		}
+		// Whole numbers as int, else float
+		if n == float64(int64(n)) {
+			s = strconv.FormatInt(int64(n), 10)
+		} else {
+			s = strconv.FormatFloat(n, 'f', -1, 64)
+		}
+	}
+
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return "", false
+	}
+	return s, true
+}
+
+// validJoinField checks whether a field (either a typed field from JoinFields or
+// AttributeFieldPrefix+attributeName) is valid for the given entity's attribute catalog.
+func validJoinField(field string, attributes []AttributeSpec) bool {
+	// Check if it's a typed field
+	for _, typedField := range JoinFields {
+		if field == typedField {
+			return true
+		}
+	}
+
+	// Check if it's an attribute field
+	if strings.HasPrefix(field, AttributeFieldPrefix) {
+		attrName := field[len(AttributeFieldPrefix):]
+		_, found := findAttribute(attributes, attrName)
+		return found
+	}
+
+	return false
+}
+
 // EvaluateWithRelated is Evaluate for rules with Related clauses. The rule's own
 // conditions select source entities; a selected entity is returned when any
 // requires clause finds no related entity or any forbids clause finds one.
 // skipped is true, and matches nil, when a clause's connector type is absent
 // from related. A rule without clauses returns exactly Evaluate's result.
-func EvaluateWithRelated(_ Rule, _ Snapshot, _ RelatedEntities) (matches []Entity, skipped bool) {
-	panic("not implemented")
+func EvaluateWithRelated(rule Rule, snapshot Snapshot, related RelatedEntities) (matches []Entity, skipped bool) {
+	if len(rule.Related) == 0 {
+		return Evaluate(rule, snapshot), false
+	}
+
+	// Check if any clause refers to a missing connector type; if so, skip the rule.
+	for _, clause := range rule.Related {
+		if _, ok := related[clause.ConnectorType]; !ok {
+			return nil, true
+		}
+	}
+
+	// Get source entities by filtering on own conditions and kind.
+	sources := Evaluate(rule, snapshot)
+
+	// For each clause, build a map of (lowercased trimmed) join values that satisfy
+	// kind + conditions. We build the map once per clause to avoid O(source*related).
+	clauseMaps := make([]map[string]bool, len(rule.Related))
+	for i, clause := range rule.Related {
+		candidateMap := make(map[string]bool)
+		for _, relEntity := range related[clause.ConnectorType] {
+			if relEntity.Kind != clause.EntityKind || !matchesAll(relEntity, clause.Conditions) {
+				continue
+			}
+			joinVal, ok := fieldValue(relEntity, clause.Join.RelatedField)
+			if !ok {
+				continue
+			}
+			candidateMap[strings.ToLower(joinVal)] = true
+		}
+		clauseMaps[i] = candidateMap
+	}
+
+	// Filter sources: keep only those where ANY clause is violated.
+	result := make([]Entity, 0)
+	for _, source := range sources {
+		// Check each clause
+		clauseViolated := false
+		for i, clause := range rule.Related {
+			sourceFieldVal, _ := fieldValue(source, clause.Join.SourceField)
+			sourceFieldLower := strings.ToLower(sourceFieldVal)
+
+			// If source join field is empty, it can never match: requires is violated, forbids is satisfied.
+			if sourceFieldVal == "" {
+				if clause.Mode == ModeRequires {
+					clauseViolated = true
+					break
+				}
+				continue
+			}
+
+			found := clauseMaps[i][sourceFieldLower]
+			if (clause.Mode == ModeRequires && !found) || (clause.Mode == ModeForbids && found) {
+				clauseViolated = true
+				break
+			}
+		}
+
+		if clauseViolated {
+			result = append(result, source)
+		}
+	}
+
+	return result, false
 }
 
 func findAttribute(attributes []AttributeSpec, name string) (AttributeSpec, bool) {
@@ -225,9 +437,9 @@ func findAttribute(attributes []AttributeSpec, name string) (AttributeSpec, bool
 func validOp(attributeType, op string) bool {
 	switch attributeType {
 	case "string":
-		return op == "eq" || op == "neq" || op == "contains" || op == "regex" || op == "exists"
+		return op == "eq" || op == "neq" || op == "contains" || op == "not_contains" || op == "regex" || op == "exists"
 	case "string_array":
-		return op == "eq" || op == "neq" || op == "contains" || op == "exists"
+		return op == "eq" || op == "neq" || op == "contains" || op == "not_contains" || op == "exists"
 	case "number":
 		return op == "eq" || op == "neq" || op == "gt" || op == "lt" || op == "exists"
 	case "boolean":
@@ -251,6 +463,12 @@ func matches(value any, present bool, condition Condition) bool {
 	if condition.Op == "exists" {
 		want, ok := condition.Value.(bool)
 		return ok && present == want
+	}
+	if condition.Op == "not_contains" {
+		// Like neq, absence satisfies it; a needle that is not a string never
+		// matches, mirroring contains.
+		needle, ok := condition.Value.(string)
+		return ok && (!present || value == nil || !contains(value, needle))
 	}
 	if !present {
 		return condition.Op == "neq"
