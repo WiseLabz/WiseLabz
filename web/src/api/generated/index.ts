@@ -8,6 +8,7 @@ export * from './connectors/connectors';
 export * from './dashboard/dashboard';
 export * from './docs/docs';
 export * from './findings/findings';
+export * from './journal/journal';
 export * from './me/me';
 export * from './notifications/notifications';
 export * from './reports/reports';

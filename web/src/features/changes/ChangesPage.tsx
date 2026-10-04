@@ -43,7 +43,11 @@ export function ChangesPage() {
   const pageSize = 20;
   const page = Math.max(1, Number(searchParams.get('page')) || 1);
   const filter = (searchParams.get('severity') as Severity | 'all' | null) ?? 'all';
-  const { data, isLoading, isError, refetch } = useGetChanges({ page, pageSize });
+  const { data, isLoading, isError, refetch } = useGetChanges({
+    page,
+    pageSize,
+    severity: filter === 'all' ? undefined : filter,
+  });
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
   const setFilter = (next: Severity | 'all') =>
@@ -63,7 +67,7 @@ export function ChangesPage() {
       return params;
     });
 
-  const items = (data?.items ?? []).filter((c) => filter === 'all' || c.severity === filter);
+  const items = data?.items ?? [];
   const pageCount = data ? Math.max(1, Math.ceil(data.total / data.pageSize)) : 1;
 
   const toggleSelected = (id: string) =>
@@ -114,7 +118,9 @@ export function ChangesPage() {
                 aria-selected={filter === f.value}
                 onClick={() => setFilter(f.value)}
                 className="relative rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors"
-                style={{ color: filter === f.value ? 'var(--color-ink)' : 'var(--color-ink-muted)' }}
+                style={{
+                  color: filter === f.value ? 'var(--color-ink)' : 'var(--color-ink-muted)',
+                }}
               >
                 {filter === f.value && (
                   <motion.span
@@ -218,7 +224,12 @@ export function ChangesPage() {
         )}
       </Panel>
       {data && pageCount > 1 && (
-        <Pagination page={page} pageCount={pageCount} onPage={setPage} className="mt-4 justify-center" />
+        <Pagination
+          page={page}
+          pageCount={pageCount}
+          onPage={setPage}
+          className="mt-4 justify-center"
+        />
       )}
     </div>
   );

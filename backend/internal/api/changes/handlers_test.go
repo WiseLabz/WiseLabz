@@ -379,3 +379,39 @@ func TestExplain(t *testing.T) {
 		}
 	})
 }
+
+func TestListServiceNameAndServerSeverity(t *testing.T) {
+	h := newTestHandler(t)
+	ctx := context.Background()
+	c := store.ConnectorRecord{Name: "Router cluster", Category: "virtualization", Type: "proxmox", URL: "https://example.com"}
+	if err := h.Store.CreateConnector(ctx, &c); err != nil {
+		t.Fatal(err)
+	}
+	user := apitest.NewUser(t, h.Store, "viewer")
+	apitest.GrantConnectorRole(t, h.Store, user, c.ID, "viewer")
+	for _, severity := range []string{"info", "warning", "critical"} {
+		change := store.ChangeRecord{ServiceID: c.ID, ChangeType: "config", Severity: severity, Summary: severity}
+		if err := h.Store.CreateChange(ctx, &change); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, mode := range []string{"", "&cursor="} {
+		req := httptest.NewRequest(http.MethodGet, "/api/changes?severity=critical&pageSize=1"+mode, nil)
+		req = req.WithContext(auth.ContextWithUser(ctx, user, false))
+		rec := httptest.NewRecorder()
+		h.List(rec, req)
+		var page struct {
+			Items []struct {
+				ServiceName string `json:"serviceName"`
+				Severity    string `json:"severity"`
+			} `json:"items"`
+			Total int `json:"total"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &page); err != nil {
+			t.Fatal(err)
+		}
+		if rec.Code != 200 || page.Total != 1 || len(page.Items) != 1 || page.Items[0].ServiceName != c.Name || page.Items[0].Severity != "critical" {
+			t.Fatalf("list %s", rec.Body.String())
+		}
+	}
+}

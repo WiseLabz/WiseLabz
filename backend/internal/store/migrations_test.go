@@ -144,6 +144,15 @@ func TestRunMigrationsDown(t *testing.T) {
 	}
 	rollbackLabBook()
 
+	if !attachmentTableExists(t, db, "sqlite", "journal_entries") {
+		t.Fatal("journal_entries missing")
+	}
+	if err := RunMigrationsDown(db, "sqlite", logger); err != nil {
+		t.Fatalf("rollback journal_entries: %v", err)
+	}
+	if attachmentTableExists(t, db, "sqlite", "journal_entries") {
+		t.Fatal("journal_entries remains after rollback")
+	}
 	if !hasColumn(t, db, "sqlite", "connectors", "managed_by") {
 		t.Fatal("connectors.managed_by missing")
 	}
@@ -449,6 +458,15 @@ func TestRunMigrationsDown(t *testing.T) {
 	}
 	rollbackLabBook()
 
+	if !attachmentTableExists(t, db, "sqlite", "journal_entries") {
+		t.Fatal("journal_entries missing")
+	}
+	if err := RunMigrationsDown(db, "sqlite", logger); err != nil {
+		t.Fatalf("rollback journal_entries: %v", err)
+	}
+	if attachmentTableExists(t, db, "sqlite", "journal_entries") {
+		t.Fatal("journal_entries remains after rollback")
+	}
 	if !hasColumn(t, db, "sqlite", "connectors", "managed_by") {
 		t.Fatal("connectors.managed_by missing")
 	}
@@ -761,6 +779,15 @@ func TestRunMigrationsDownPostgres(t *testing.T) {
 	}
 	if hasColumn(t, db, "postgres", "report_definitions", "attach_lab_book") {
 		t.Fatal("report_definitions.attach_lab_book remains after rollback")
+	}
+	if !attachmentTableExists(t, db, "postgres", "journal_entries") {
+		t.Fatal("journal_entries missing")
+	}
+	if err := RunMigrationsDown(db, "postgres", logger); err != nil {
+		t.Fatalf("rollback journal_entries: %v", err)
+	}
+	if attachmentTableExists(t, db, "postgres", "journal_entries") {
+		t.Fatal("journal_entries remains after rollback")
 	}
 	if !hasColumn(t, db, "postgres", "connectors", "managed_by") {
 		t.Fatal("connectors.managed_by missing")

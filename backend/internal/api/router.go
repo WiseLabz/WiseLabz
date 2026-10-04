@@ -29,6 +29,7 @@ import (
 	settinghandler "github.com/WiseLabz/wiselabz/internal/api/settings"
 	syshandler "github.com/WiseLabz/wiselabz/internal/api/system"
 	tmplhandler "github.com/WiseLabz/wiselabz/internal/api/templates"
+	timelinehandler "github.com/WiseLabz/wiselabz/internal/api/timeline"
 	"github.com/WiseLabz/wiselabz/internal/auth"
 	"github.com/WiseLabz/wiselabz/internal/config"
 	"github.com/WiseLabz/wiselabz/internal/doc"
@@ -158,6 +159,7 @@ func newRouterDeps(cfg Config) routerDeps {
 		connH:       connH,
 		tmplH:       tmplhandler.NewHandler(cfg.Store, cfg.DocEngine),
 		changeH:     changeH,
+		timelineH:   &timelinehandler.Handler{Store: cfg.Store},
 		alertH:      alerthandler.NewHandler(cfg.Store),
 		attentionH:  attentionhandler.NewHandler(cfg.Store),
 		findingH:    findinghandler.NewHandler(cfg.Store),

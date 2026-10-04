@@ -69,6 +69,9 @@ object, action-specific), and `createdAt`.
 | `auth.elevation_denied` | Failed elevation-token validation on a step-up-gated endpoint | action / the required action name |
 | `auth.config.update` | `PUT /api/auth/config` | auth_config / (none) |
 | `auth.provider.enabled` | `PUT /api/auth/providers/{id}/enabled` | oidc_provider / provider id |
+| `journal.create` | `POST /api/journal` | journal / new ID |
+| `journal.update` | `PUT /api/journal/{id}` | journal / id |
+| `journal.delete` | `DELETE /api/journal/{id}` | journal / id |
 | `doc.restore` | `POST /api/docs/{id}/versions/{rev}/restore` | doc / doc id |
 | `doc.edit_proposed` | MCP `propose_doc_edit` (full-scope key; `detail` has `proposalId`, `baseVersion`) | doc / doc id |
 | `doc.edit_approved` | `POST /api/docs/edit-proposals/{id}/approve` | doc / doc id |

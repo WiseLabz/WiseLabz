@@ -34,6 +34,7 @@ type Manifest struct {
 func BundleCounts(b *Bundle) map[string]int {
 	return map[string]int{
 		"attachments":      len(b.Attachments),
+		"journalEntries":   len(b.JournalEntries),
 		"connectors":       len(b.Connectors),
 		"docs":             len(b.Docs),
 		"docVersions":      len(b.DocVersions),

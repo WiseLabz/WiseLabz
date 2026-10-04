@@ -134,6 +134,7 @@ func VerifyBundleFile(ctx context.Context, bundlePath string) VerificationResult
 	}
 	res.ActualCounts = map[string]int{
 		"attachments":      importResult.Attachments.Imported,
+		"journalEntries":   importResult.JournalEntries.Imported,
 		"connectors":       importResult.Connectors.Imported,
 		"docs":             importResult.Docs.Imported,
 		"docVersions":      importResult.DocVersions.Imported,

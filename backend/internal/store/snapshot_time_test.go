@@ -60,12 +60,15 @@ func TestSnapshotUTCDataMigration(t *testing.T) {
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	// Roll back to the version before snapshot_utc, regardless of later migrations.
-	status, err := GetMigrationStatus(s.rawDB, s.driver)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for status.Current >= 46 {
+	// Roll back to before snapshot_utc, regardless of later migrations.
+	for {
+		status, err := GetMigrationStatus(s.rawDB, s.driver)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if status.Current < 46 {
+			break
+		}
 		if err := RunMigrationsDown(s.rawDB, s.driver, logger); err != nil {
 			t.Fatal(err)
 		}

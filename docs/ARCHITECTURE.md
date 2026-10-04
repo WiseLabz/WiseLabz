@@ -725,3 +725,22 @@ This file records the _outcome_ of each decision; the ADRs record the _reasoning
 ---
 
 _Last updated: 2026-06-27_
+
+## Lab journal
+
+`GET /api/timeline` merges changes, significant sync runs, alerts, live document
+versions, manual notes and instance-admin lab audit actions through a store SQL
+union. Connector grants and API-key restrictions apply before counting/paging;
+EXISTS avoids duplicate events when manual and OIDC grants overlap. UTC timestamps
+are padded to fixed nanosecond precision inside the query, then a purpose-built
+keyset cursor orders `(timestamp, kind, id)` descending. Security audit events stay
+on Audit, and the lab action branch uses an explicit action allowlist.
+
+`journal_entries` stores human Markdown with a settable occurrence time, author
+text and optional connector/doc/entity context. Connector operators create scoped
+notes, instance admins create lab-wide notes, and authors/admins edit or delete
+notes they can view. Moving scope requires destination write access. Document
+links must share scope and be visible. Connector/document deletion clears links
+with SET NULL; the body, author and entity text survive. Backup bundles export and
+restore notes additively, including original timestamps; operational retention
+never prunes manual entries. Journal mutations record `journal.*` audit actions.
