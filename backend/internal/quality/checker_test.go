@@ -586,3 +586,264 @@ func TestDeletedDocsExcludedFromQualityChecks(t *testing.T) {
 		}
 	}
 }
+
+// relatedEnv is a proxmox source connector plus one connector of another type,
+// with a rule helper, for the cross-connector clause tests.
+type relatedEnv struct {
+	t       *testing.T
+	s       *store.Store
+	checker *Checker
+	source  *store.ConnectorRecord
+	other   *store.ConnectorRecord
+	clock   int
+}
+
+func newRelatedEnv(t *testing.T, otherType string) *relatedEnv {
+	t.Helper()
+	s := newTestStore(t)
+	env := &relatedEnv{t: t, s: s, checker: NewChecker(s, nil, nil, RotationConfig{MaxAgeDays: 90, WarnDays: 14})}
+	env.source = createConnector(t, s, "owner")
+	if otherType != "" {
+		env.other = createConnector(t, s, "owner")
+		if err := s.UpdateConnector(context.Background(), env.other.ID, map[string]any{"type": otherType}); err != nil {
+			t.Fatalf("UpdateConnector(type) error: %v", err)
+		}
+	}
+	return env
+}
+
+// snapshot stores a new latest snapshot for the connector.
+func (e *relatedEnv) snapshot(connectorID string, entities ...connector.SnapshotEntity) {
+	e.t.Helper()
+	data, err := json.Marshal(connector.ServiceSnapshot{Entities: entities})
+	if err != nil {
+		e.t.Fatalf("marshal snapshot: %v", err)
+	}
+	e.clock++
+	fetchedAt := time.Date(2020, 1, 1, 0, 0, e.clock, 0, time.UTC).Format(time.RFC3339)
+	if err := e.s.CreateSnapshot(context.Background(), &store.SnapshotRecord{ConnectorID: connectorID, Data: string(data), FetchedAt: fetchedAt}); err != nil {
+		e.t.Fatalf("CreateSnapshot() error: %v", err)
+	}
+}
+
+// rule creates an enabled rule over non-template proxmox vms with the given
+// related-clause JSON.
+func (e *relatedEnv) rule(related string) *store.ComplianceRuleRecord {
+	e.t.Helper()
+	rule := &store.ComplianceRuleRecord{
+		Name: "Related rule " + related, ConnectorType: "proxmox", EntityKind: "vm",
+		Conditions: `[{"attribute":"template","op":"eq","value":false}]`,
+		Severity:   "critical", Title: "Related rule", Enabled: true, Related: related,
+	}
+	if err := e.s.CreateComplianceRule(context.Background(), rule); err != nil {
+		e.t.Fatalf("CreateComplianceRule() error: %v", err)
+	}
+	return rule
+}
+
+func (e *relatedEnv) open(connectorID string) []store.QualityFindingRecord {
+	e.t.Helper()
+	return findings(e.t, e.s, connectorID, "compliance", "open")
+}
+
+func (e *relatedEnv) wantOpenDescription(connectorID, want string) {
+	e.t.Helper()
+	got := e.open(connectorID)
+	if len(got) != 1 || got[0].Description != want {
+		e.t.Fatalf("open findings on %s = %#v, want one with description %q", connectorID, got, want)
+	}
+}
+
+func (e *relatedEnv) wantNoOpen(connectorID string) {
+	e.t.Helper()
+	if got := e.open(connectorID); len(got) != 0 {
+		e.t.Fatalf("open findings on %s = %#v, want none", connectorID, got)
+	}
+}
+
+func clause(mode, connectorType, kind, conditions string) string {
+	return `{"mode":"` + mode + `","connectorType":"` + connectorType + `","entityKind":"` + kind + `",` +
+		`"join":{"sourceField":"external_id","relatedField":"external_id"},"conditions":` + conditions + `}`
+}
+
+func vm(name, externalID string) connector.SnapshotEntity {
+	return connector.SnapshotEntity{Kind: "vm", Name: name, ExternalID: externalID, Attributes: map[string]any{"template": false}}
+}
+
+func backup(name, externalID string, ageDays int) connector.SnapshotEntity {
+	return connector.SnapshotEntity{Kind: "backup", Name: name, ExternalID: externalID, Attributes: map[string]any{"last_backup_age_days": ageDays}}
+}
+
+func TestRelatedClauseRequiresFlagsOnlyUnmatchedSourceEntities(t *testing.T) {
+	env := newRelatedEnv(t, "pbs")
+	env.snapshot(env.source.ID, vm("vm-101", "101"), vm("vm-102", "102"))
+	env.snapshot(env.other.ID, backup("backup-101", "101", 1))
+	rule := env.rule("[" + clause("requires", "pbs", "backup", "[]") + "]")
+
+	if err := env.checker.EvaluateRule(context.Background(), rule.ID); err != nil {
+		t.Fatalf("EvaluateRule() error: %v", err)
+	}
+	// The finding lives on the source connector and names only source entities.
+	env.wantOpenDescription(env.source.ID, "Violating entities: vm-102.")
+	env.wantNoOpen(env.other.ID)
+}
+
+func TestRelatedClauseConditionsDecideWhichRelatedEntitiesCount(t *testing.T) {
+	env := newRelatedEnv(t, "pbs")
+	env.snapshot(env.source.ID, vm("vm-101", "101"), vm("vm-102", "102"))
+	env.snapshot(env.other.ID, backup("old", "101", 30), backup("fresh", "102", 2))
+	rule := env.rule("[" + clause("requires", "pbs", "backup", `[{"attribute":"last_backup_age_days","op":"lt","value":7}]`) + "]")
+
+	if err := env.checker.EvaluateRule(context.Background(), rule.ID); err != nil {
+		t.Fatalf("EvaluateRule() error: %v", err)
+	}
+	env.wantOpenDescription(env.source.ID, "Violating entities: vm-101.")
+}
+
+func TestRelatedClauseForbidsFlagsSourceEntitiesWithAMatch(t *testing.T) {
+	env := newRelatedEnv(t, "docker")
+	env.snapshot(env.source.ID, vm("vm-101", "101"), vm("vm-102", "102"))
+	env.snapshot(env.other.ID, connector.SnapshotEntity{Kind: "container", Name: "c-101", ExternalID: "101"})
+	rule := env.rule("[" + clause("forbids", "docker", "container", "[]") + "]")
+
+	if err := env.checker.EvaluateRule(context.Background(), rule.ID); err != nil {
+		t.Fatalf("EvaluateRule() error: %v", err)
+	}
+	env.wantOpenDescription(env.source.ID, "Violating entities: vm-101.")
+}
+
+func TestRelatedClausesAreANDedAcrossModes(t *testing.T) {
+	env := newRelatedEnv(t, "pbs")
+	env.snapshot(env.source.ID, vm("vm-101", "101"), vm("vm-102", "102"), vm("vm-103", "103"))
+	// 101: backed up and not forbidden; 102: no backup; 103: backed up but also forbidden by the second clause.
+	env.snapshot(env.other.ID, backup("b-101", "101", 1), backup("b-103", "103", 1), backup("stale-103", "103", 90))
+	rule := env.rule("[" + clause("requires", "pbs", "backup", "[]") + "," +
+		clause("forbids", "pbs", "backup", `[{"attribute":"last_backup_age_days","op":"gt","value":60}]`) + "]")
+
+	if err := env.checker.EvaluateRule(context.Background(), rule.ID); err != nil {
+		t.Fatalf("EvaluateRule() error: %v", err)
+	}
+	env.wantOpenDescription(env.source.ID, "Violating entities: vm-102, vm-103.")
+}
+
+// A related snapshot that exists but holds no matching entity is real data:
+// every source entity then lacks its backup. Only a missing snapshot skips.
+func TestRelatedClauseEmptyRelatedSnapshotIsNotSkipped(t *testing.T) {
+	env := newRelatedEnv(t, "pbs")
+	env.snapshot(env.source.ID, vm("vm-101", "101"))
+	env.snapshot(env.other.ID)
+	rule := env.rule("[" + clause("requires", "pbs", "backup", "[]") + "]")
+
+	if err := env.checker.EvaluateRule(context.Background(), rule.ID); err != nil {
+		t.Fatalf("EvaluateRule() error: %v", err)
+	}
+	env.wantOpenDescription(env.source.ID, "Violating entities: vm-101.")
+}
+
+func TestRelatedClauseRelatedSyncReEvaluatesSourceFindings(t *testing.T) {
+	env := newRelatedEnv(t, "pbs")
+	ctx := context.Background()
+	env.snapshot(env.source.ID, vm("vm-102", "102"))
+	env.snapshot(env.other.ID, backup("b-101", "101", 1))
+	env.rule("[" + clause("requires", "pbs", "backup", "[]") + "]")
+
+	if err := env.checker.RunForConnector(ctx, env.source.ID); err != nil {
+		t.Fatalf("RunForConnector(source) error: %v", err)
+	}
+	env.wantOpenDescription(env.source.ID, "Violating entities: vm-102.")
+
+	// The backup connector syncs a backup of vm 102: running the checker for
+	// the BACKUP connector must clear the finding on the proxmox connector.
+	env.snapshot(env.other.ID, backup("b-101", "101", 1), backup("b-102", "102", 1))
+	if err := env.checker.RunForConnector(ctx, env.other.ID); err != nil {
+		t.Fatalf("RunForConnector(other) error: %v", err)
+	}
+	env.wantNoOpen(env.source.ID)
+
+	// And a later sync that loses the backup reopens it.
+	env.snapshot(env.other.ID, backup("b-101", "101", 1))
+	if err := env.checker.RunForConnector(ctx, env.other.ID); err != nil {
+		t.Fatalf("RunForConnector(other) error: %v", err)
+	}
+	env.wantOpenDescription(env.source.ID, "Violating entities: vm-102.")
+}
+
+func TestRelatedClauseSkippedWithoutRelatedSnapshotsAndClearsStaleFinding(t *testing.T) {
+	env := newRelatedEnv(t, "pbs")
+	ctx := context.Background()
+	env.snapshot(env.source.ID, vm("vm-101", "101"))
+	env.snapshot(env.other.ID, backup("b-102", "102", 1))
+	rule := env.rule("[" + clause("requires", "pbs", "backup", "[]") + "]")
+	if err := env.checker.EvaluateRule(ctx, rule.ID); err != nil {
+		t.Fatalf("EvaluateRule() error: %v", err)
+	}
+	env.wantOpenDescription(env.source.ID, "Violating entities: vm-101.")
+
+	// The only connector of the related type goes away: the rule no longer
+	// applies, and its finding must not be left behind.
+	if err := env.s.DeleteConnector(ctx, env.other.ID); err != nil {
+		t.Fatalf("DeleteConnector() error: %v", err)
+	}
+	if err := env.checker.RunForConnector(ctx, env.source.ID); err != nil {
+		t.Fatalf("RunForConnector() error: %v", err)
+	}
+	env.wantNoOpen(env.source.ID)
+}
+
+func TestRelatedClauseSkippedWhenRelatedConnectorHasNoSnapshotYet(t *testing.T) {
+	env := newRelatedEnv(t, "pbs")
+	env.snapshot(env.source.ID, vm("vm-101", "101"))
+	rule := env.rule("[" + clause("requires", "pbs", "backup", "[]") + "]")
+
+	if err := env.checker.EvaluateRule(context.Background(), rule.ID); err != nil {
+		t.Fatalf("EvaluateRule() error: %v", err)
+	}
+	env.wantNoOpen(env.source.ID)
+}
+
+func TestRuleWithoutClausesIgnoresOtherConnectors(t *testing.T) {
+	for _, related := range []string{"", "[]"} {
+		env := newRelatedEnv(t, "")
+		env.snapshot(env.source.ID, vm("vm-101", "101"))
+		rule := env.rule(related)
+
+		if err := env.checker.EvaluateRule(context.Background(), rule.ID); err != nil {
+			t.Fatalf("EvaluateRule() error: %v", err)
+		}
+		env.wantOpenDescription(env.source.ID, "Violating entities: vm-101.")
+	}
+}
+
+func TestRelatedClauseFindingNeverCarriesRelatedEntityNames(t *testing.T) {
+	env := newRelatedEnv(t, "docker")
+	env.snapshot(env.source.ID, vm("vm-101", "101"))
+	env.snapshot(env.other.ID, connector.SnapshotEntity{Kind: "container", Name: "ungranted-secret-container", ExternalID: "101"})
+	rule := env.rule("[" + clause("forbids", "docker", "container", "[]") + "]")
+
+	if err := env.checker.EvaluateRule(context.Background(), rule.ID); err != nil {
+		t.Fatalf("EvaluateRule() error: %v", err)
+	}
+	open := env.open(env.source.ID)
+	if len(open) != 1 || strings.Contains(open[0].Description+open[0].Title, "ungranted-secret-container") {
+		t.Fatalf("finding = %#v, must name only the source entity", open)
+	}
+	if got := env.open(env.other.ID); len(got) != 0 {
+		t.Fatalf("finding leaked onto the related connector: %#v", got)
+	}
+}
+
+func TestMalformedRelatedJSONFailsOnlyThatRule(t *testing.T) {
+	env := newRelatedEnv(t, "")
+	env.snapshot(env.source.ID, vm("vm-101", "101"))
+	env.rule("{invalid json")
+	good := env.rule("[]")
+
+	err := env.checker.RunForConnector(context.Background(), env.source.ID)
+	if err == nil || !strings.Contains(err.Error(), "decode related") {
+		t.Fatalf("RunForConnector() error = %v, want one mentioning decode related", err)
+	}
+	open := env.open(env.source.ID)
+	if len(open) != 1 || open[0].RuleID != good.ID {
+		t.Fatalf("open findings = %#v, want only the well-formed rule's", open)
+	}
+}

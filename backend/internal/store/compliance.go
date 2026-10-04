@@ -12,7 +12,8 @@ import (
 
 // ComplianceRuleRecord is a persisted user-defined snapshot compliance rule.
 // Conditions is the JSON condition array; rule evaluation deliberately lives
-// outside the store package.
+// outside the store package. Related is a JSON array of related clauses
+// (cross-connector require/forbid checks).
 type ComplianceRuleRecord struct {
 	ID              string `json:"id"`
 	Name            string `json:"name"`
@@ -23,11 +24,12 @@ type ComplianceRuleRecord struct {
 	Title           string `json:"title"`
 	RemediationLink string `json:"remediationLink"`
 	Enabled         bool   `json:"enabled"`
+	Related         string `json:"related"`
 	CreatedAt       string `json:"createdAt"`
 	UpdatedAt       string `json:"updatedAt"`
 }
 
-const complianceRuleColumns = `id, name, connector_type, entity_kind, conditions, severity, title, remediation_link, enabled, created_at, updated_at`
+const complianceRuleColumns = `id, name, connector_type, entity_kind, conditions, severity, title, remediation_link, enabled, related, created_at, updated_at`
 
 // CreateComplianceRule persists a new compliance rule.
 func (s *Store) CreateComplianceRule(ctx context.Context, r *ComplianceRuleRecord) error {
@@ -41,10 +43,13 @@ func (s *Store) CreateComplianceRule(ctx context.Context, r *ComplianceRuleRecor
 	if r.UpdatedAt == "" {
 		r.UpdatedAt = now
 	}
+	if r.Related == "" {
+		r.Related = "[]"
+	}
 	_, err := s.db.ExecContext(ctx, `
-		INSERT INTO compliance_rules (id, name, connector_type, entity_kind, conditions, severity, title, remediation_link, enabled, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, r.ID, r.Name, r.ConnectorType, r.EntityKind, r.Conditions, r.Severity, r.Title, r.RemediationLink, r.Enabled, r.CreatedAt, r.UpdatedAt)
+		INSERT INTO compliance_rules (id, name, connector_type, entity_kind, conditions, severity, title, remediation_link, enabled, related, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, r.ID, r.Name, r.ConnectorType, r.EntityKind, r.Conditions, r.Severity, r.Title, r.RemediationLink, r.Enabled, r.Related, r.CreatedAt, r.UpdatedAt)
 	if err != nil {
 		return fmt.Errorf("create compliance rule: %w", err)
 	}
@@ -85,11 +90,14 @@ func (s *Store) ListComplianceRules(ctx context.Context) ([]ComplianceRuleRecord
 // UpdateComplianceRule replaces the mutable fields of a rule.
 func (s *Store) UpdateComplianceRule(ctx context.Context, r *ComplianceRuleRecord) error {
 	r.UpdatedAt = time.Now().UTC().Format(time.RFC3339Nano)
+	if r.Related == "" {
+		r.Related = "[]"
+	}
 	result, err := s.db.ExecContext(ctx, `
 		UPDATE compliance_rules
-		SET name = ?, connector_type = ?, entity_kind = ?, conditions = ?, severity = ?, title = ?, remediation_link = ?, enabled = ?, updated_at = ?
+		SET name = ?, connector_type = ?, entity_kind = ?, conditions = ?, severity = ?, title = ?, remediation_link = ?, enabled = ?, related = ?, updated_at = ?
 		WHERE id = ?
-	`, r.Name, r.ConnectorType, r.EntityKind, r.Conditions, r.Severity, r.Title, r.RemediationLink, r.Enabled, r.UpdatedAt, r.ID)
+	`, r.Name, r.ConnectorType, r.EntityKind, r.Conditions, r.Severity, r.Title, r.RemediationLink, r.Enabled, r.Related, r.UpdatedAt, r.ID)
 	if err != nil {
 		return fmt.Errorf("update compliance rule: %w", err)
 	}
@@ -121,7 +129,7 @@ func (s *Store) DeleteComplianceRule(ctx context.Context, id string) error {
 
 func scanComplianceRule(row rowScanner) (*ComplianceRuleRecord, error) {
 	var r ComplianceRuleRecord
-	if err := row.Scan(&r.ID, &r.Name, &r.ConnectorType, &r.EntityKind, &r.Conditions, &r.Severity, &r.Title, &r.RemediationLink, &r.Enabled, &r.CreatedAt, &r.UpdatedAt); err != nil {
+	if err := row.Scan(&r.ID, &r.Name, &r.ConnectorType, &r.EntityKind, &r.Conditions, &r.Severity, &r.Title, &r.RemediationLink, &r.Enabled, &r.Related, &r.CreatedAt, &r.UpdatedAt); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNotFound
 		}

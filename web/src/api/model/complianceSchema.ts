@@ -6,8 +6,11 @@
  *
  * OpenAPI spec version: 0.1.0
  */
-import type { ComplianceAttributeSpec } from './complianceAttributeSpec';
+import type { ComplianceSchemaAttributes } from './complianceSchemaAttributes';
 
-export type GetComplianceSchema200 = {
-  [key: string]: { [key: string]: ComplianceAttributeSpec[] };
-};
+export interface ComplianceSchema {
+  /** Attribute specs by connector type, then entity kind */
+  attributes: ComplianceSchemaAttributes;
+  /** Typed entity fields a related clause can join on; a catalog attribute is joined as "attributes.<name>" */
+  joinFields: string[];
+}

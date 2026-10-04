@@ -34,18 +34,22 @@ func NewHandler(s *store.Store, evaluator RuleEvaluator) *Handler {
 
 // Schema handles GET /api/compliance/schema.
 func (h *Handler) Schema(w http.ResponseWriter, _ *http.Request) {
-	httputil.JSON(w, http.StatusOK, connector.AttributeCatalog())
+	httputil.JSON(w, http.StatusOK, map[string]any{
+		"attributes": connector.AttributeCatalog(),
+		"joinFields": compliance.JoinFields,
+	})
 }
 
 type ruleRequest struct {
-	Name            string                 `json:"name"`
-	ConnectorType   string                 `json:"connectorType"`
-	EntityKind      string                 `json:"entityKind"`
-	Conditions      []compliance.Condition `json:"conditions"`
-	Severity        string                 `json:"severity"`
-	Title           string                 `json:"title"`
-	RemediationLink string                 `json:"remediationLink"`
-	Enabled         bool                   `json:"enabled"`
+	Name            string                     `json:"name"`
+	ConnectorType   string                     `json:"connectorType"`
+	EntityKind      string                     `json:"entityKind"`
+	Conditions      []compliance.Condition     `json:"conditions"`
+	Related         []compliance.RelatedClause `json:"related"`
+	Severity        string                     `json:"severity"`
+	Title           string                     `json:"title"`
+	RemediationLink string                     `json:"remediationLink"`
+	Enabled         bool                       `json:"enabled"`
 }
 
 func catalog() compliance.Catalog {
@@ -68,7 +72,16 @@ func (req ruleRequest) record(id string) (store.ComplianceRuleRecord, error) {
 	if err != nil {
 		return store.ComplianceRuleRecord{}, err
 	}
-	return store.ComplianceRuleRecord{ID: id, Name: req.Name, ConnectorType: req.ConnectorType, EntityKind: req.EntityKind, Conditions: string(conditions), Severity: req.Severity, Title: req.Title, RemediationLink: req.RemediationLink, Enabled: req.Enabled}, nil
+	// Marshal related clauses; nil slice becomes "[]" not "null"
+	relatedBytes, err := json.Marshal(req.Related)
+	if err != nil {
+		return store.ComplianceRuleRecord{}, err
+	}
+	related := string(relatedBytes)
+	if related == "null" {
+		related = "[]"
+	}
+	return store.ComplianceRuleRecord{ID: id, Name: req.Name, ConnectorType: req.ConnectorType, EntityKind: req.EntityKind, Conditions: string(conditions), Related: related, Severity: req.Severity, Title: req.Title, RemediationLink: req.RemediationLink, Enabled: req.Enabled}, nil
 }
 
 func toRule(record store.ComplianceRuleRecord) (compliance.Rule, error) {
@@ -76,7 +89,13 @@ func toRule(record store.ComplianceRuleRecord) (compliance.Rule, error) {
 	if err := json.Unmarshal([]byte(record.Conditions), &conditions); err != nil {
 		return compliance.Rule{}, err
 	}
-	return compliance.Rule{ID: record.ID, Name: record.Name, ConnectorType: record.ConnectorType, EntityKind: record.EntityKind, Conditions: conditions, Severity: record.Severity, Title: record.Title, RemediationLink: record.RemediationLink, Enabled: record.Enabled}, nil
+	var related []compliance.RelatedClause
+	if record.Related != "" && record.Related != "[]" {
+		if err := json.Unmarshal([]byte(record.Related), &related); err != nil {
+			return compliance.Rule{}, err
+		}
+	}
+	return compliance.Rule{ID: record.ID, Name: record.Name, ConnectorType: record.ConnectorType, EntityKind: record.EntityKind, Conditions: conditions, Related: related, Severity: record.Severity, Title: record.Title, RemediationLink: record.RemediationLink, Enabled: record.Enabled}, nil
 }
 
 func validRecord(record store.ComplianceRuleRecord) error {
@@ -124,11 +143,15 @@ func response(record store.ComplianceRuleRecord) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
+	related := rule.Related
+	if related == nil {
+		related = []compliance.RelatedClause{}
+	}
 	return map[string]any{
 		"id": rule.ID, "name": rule.Name, "connectorType": rule.ConnectorType,
-		"entityKind": rule.EntityKind, "conditions": rule.Conditions, "severity": rule.Severity,
-		"title": rule.Title, "remediationLink": rule.RemediationLink, "enabled": rule.Enabled,
-		"createdAt": record.CreatedAt, "updatedAt": record.UpdatedAt,
+		"entityKind": rule.EntityKind, "conditions": rule.Conditions, "related": related,
+		"severity": rule.Severity, "title": rule.Title, "remediationLink": rule.RemediationLink,
+		"enabled": rule.Enabled, "createdAt": record.CreatedAt, "updatedAt": record.UpdatedAt,
 	}, nil
 }
 
@@ -194,7 +217,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	h.audit(r, "compliance_rule.create", rule.ID, []string{"name", "connectorType", "entityKind", "conditions", "severity", "title", "remediationLink", "enabled"})
+	h.audit(r, "compliance_rule.create", rule.ID, []string{"name", "connectorType", "entityKind", "conditions", "related", "severity", "title", "remediationLink", "enabled"})
 	response, err := response(rule)
 	if err != nil {
 		httputil.Errorf(w, err)
@@ -276,14 +299,24 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, response)
 }
 
+func normalizeJSON(s string) string {
+	if s == "" {
+		return "[]"
+	}
+	return s
+}
+
 func changedFields(old, current store.ComplianceRuleRecord) []string {
-	fields := make([]string, 0, 8)
+	fields := make([]string, 0, 9)
 	for _, field := range []struct{ name, old, current string }{
 		{"name", old.Name, current.Name}, {"connectorType", old.ConnectorType, current.ConnectorType}, {"entityKind", old.EntityKind, current.EntityKind}, {"conditions", old.Conditions, current.Conditions}, {"severity", old.Severity, current.Severity}, {"title", old.Title, current.Title}, {"remediationLink", old.RemediationLink, current.RemediationLink},
 	} {
 		if field.old != field.current {
 			fields = append(fields, field.name)
 		}
+	}
+	if normalizeJSON(old.Related) != normalizeJSON(current.Related) {
+		fields = append(fields, "related")
 	}
 	if old.Enabled != current.Enabled {
 		fields = append(fields, "enabled")
@@ -311,6 +344,25 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	httputil.NoContent(w)
 }
 
+// latestSnapshot loads the latest snapshot for a connector, converting it to the
+// compliance engine's view. Returns (nil, nil) if no snapshot exists; other errors
+// are errors.
+func (h *Handler) latestSnapshot(ctx context.Context, connectorID string) (*compliance.Snapshot, error) {
+	snapshot, err := h.Store.GetLatestSnapshot(ctx, connectorID)
+	if errors.Is(err, store.ErrNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var source connector.ServiceSnapshot
+	if err := json.Unmarshal([]byte(snapshot.Data), &source); err != nil {
+		return nil, err
+	}
+	snap := compliance.SnapshotFromConnector(source)
+	return &snap, nil
+}
+
 // Test evaluates the supplied (unsaved) rule against current snapshots only.
 func (h *Handler) Test(w http.ResponseWriter, r *http.Request) {
 	req, ok := httputil.DecodeJSON[ruleRequest](w, r)
@@ -326,6 +378,38 @@ func (h *Handler) Test(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rule, _ := toRule(record)
+
+	// Load related data once if the rule has related clauses
+	var related compliance.RelatedEntities
+	if len(rule.Related) > 0 {
+		related = make(compliance.RelatedEntities)
+		connectors, err := h.Store.ListAllConnectors(r.Context())
+		if err != nil {
+			httputil.Errorf(w, err)
+			return
+		}
+		// For each distinct related connector type, load snapshots from all connectors of that type
+		relatedTypes := make(map[string]bool)
+		for _, clause := range rule.Related {
+			relatedTypes[clause.ConnectorType] = true
+		}
+		for relType := range relatedTypes {
+			for _, c := range connectors {
+				if c.Type != relType {
+					continue
+				}
+				snap, err := h.latestSnapshot(r.Context(), c.ID)
+				if err != nil {
+					httputil.Errorf(w, err)
+					return
+				}
+				if snap != nil {
+					related[relType] = append(related[relType], snap.Entities...)
+				}
+			}
+		}
+	}
+
 	connectors, err := h.Store.ListAllConnectors(r.Context())
 	if err != nil {
 		httputil.Errorf(w, err)
@@ -336,24 +420,24 @@ func (h *Handler) Test(w http.ResponseWriter, r *http.Request) {
 		if c.Type != rule.ConnectorType {
 			continue
 		}
-		snapshot, err := h.Store.GetLatestSnapshot(r.Context(), c.ID)
-		if errors.Is(err, store.ErrNotFound) {
-			continue
-		}
+		snap, err := h.latestSnapshot(r.Context(), c.ID)
 		if err != nil {
 			httputil.Errorf(w, err)
 			return
 		}
-		var source connector.ServiceSnapshot
-		if err := json.Unmarshal([]byte(snapshot.Data), &source); err != nil {
-			httputil.Errorf(w, err)
-			return
+		if snap == nil {
+			continue
 		}
-		entities := make([]compliance.Entity, len(source.Entities))
-		for i, entity := range source.Entities {
-			entities[i] = compliance.Entity{Kind: entity.Kind, Name: entity.Name, Attributes: entity.Attributes}
+		var matches []compliance.Entity
+		var skipped bool
+		if len(rule.Related) > 0 {
+			matches, skipped = compliance.EvaluateWithRelated(rule, *snap, related)
+		} else {
+			matches = compliance.Evaluate(rule, *snap)
 		}
-		matches := compliance.Evaluate(rule, compliance.Snapshot{Entities: entities})
+		if skipped {
+			continue
+		}
 		if len(matches) > 0 {
 			items = append(items, map[string]any{"connectorId": c.ID, "connectorName": c.Name, "entities": matches})
 		}
@@ -398,7 +482,7 @@ func (h *Handler) InstallPack(w http.ResponseWriter, r *http.Request) {
 		}
 		req := ruleRequest{
 			Name: rule.Name, ConnectorType: rule.ConnectorType, EntityKind: rule.EntityKind,
-			Conditions: rule.Conditions, Severity: rule.Severity, Title: rule.Title,
+			Conditions: rule.Conditions, Related: rule.Related, Severity: rule.Severity, Title: rule.Title,
 			RemediationLink: rule.RemediationLink, Enabled: true,
 		}
 		record, err := req.record("")
@@ -419,7 +503,7 @@ func (h *Handler) InstallPack(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
-		h.audit(r, "compliance_rule.create", record.ID, []string{"name", "connectorType", "entityKind", "conditions", "severity", "title", "remediationLink", "enabled"})
+		h.audit(r, "compliance_rule.create", record.ID, []string{"name", "connectorType", "entityKind", "conditions", "related", "severity", "title", "remediationLink", "enabled"})
 		installed++
 	}
 	httputil.JSON(w, http.StatusOK, map[string]any{"installed": installed, "skipped": skipped})

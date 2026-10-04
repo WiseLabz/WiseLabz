@@ -169,6 +169,21 @@ export const ptBR: Catalog = {
     loginFailed: 'Falha ao entrar. Verifique seu usuário e senha.',
     signOut: 'Sair',
   },
+  compliance: {
+    relatedTitle: 'Entidades relacionadas',
+    relatedHint: 'Opcionalmente exija ou proíba entidades relacionadas em outros serviços. Todas as cláusulas devem ser satisfeitas.',
+    addClause: 'Adicionar verificação de entidade relacionada',
+    removeClause: 'Remover cláusula',
+    clauseMode: 'Modo',
+    clauseModeRequires: 'Exigir',
+    clauseModeForbids: 'Proibir',
+    clauseConnectorType: 'Tipo de serviço relacionado',
+    clauseEntityKind: 'Tipo de entidade relacionada',
+    clauseJoinSourceField: 'Campo de origem',
+    clauseJoinRelatedField: 'Campo relacionado',
+    clauseSelectField: 'Selecionar campo',
+    clauseMaxReached: 'Máximo de 5 cláusulas de entidade relacionada permitido',
+  },
   settings: {
     language: {
       heading: 'Idioma',

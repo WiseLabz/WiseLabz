@@ -6,17 +6,14 @@
  *
  * OpenAPI spec version: 0.1.0
  */
+import type { ComplianceCondition } from './complianceCondition';
+import type { ComplianceJoin } from './complianceJoin';
+import type { ComplianceRelatedClauseMode } from './complianceRelatedClauseMode';
 
-export type ComplianceConditionOp =
-  (typeof ComplianceConditionOp)[keyof typeof ComplianceConditionOp];
-
-export const ComplianceConditionOp = {
-  eq: 'eq',
-  neq: 'neq',
-  contains: 'contains',
-  not_contains: 'not_contains',
-  regex: 'regex',
-  exists: 'exists',
-  gt: 'gt',
-  lt: 'lt',
-} as const;
+export interface ComplianceRelatedClause {
+  mode: ComplianceRelatedClauseMode;
+  connectorType: string;
+  entityKind: string;
+  join: ComplianceJoin;
+  conditions?: ComplianceCondition[];
+}

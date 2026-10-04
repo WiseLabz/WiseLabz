@@ -131,6 +131,15 @@ func TestRunMigrationsDown(t *testing.T) {
 		t.Fatalf("RunMigrations() error: %v", err)
 	}
 
+	if !hasColumn(t, db, "sqlite", "compliance_rules", "related") {
+		t.Fatal("compliance_rules.related missing")
+	}
+	if err := RunMigrationsDown(db, "sqlite", logger); err != nil {
+		t.Fatal(err)
+	}
+	if hasColumn(t, db, "sqlite", "compliance_rules", "related") {
+		t.Fatal("compliance_rules.related remains after rollback")
+	}
 	if !attachmentTableExists(t, db, "sqlite", "entity_index") {
 		t.Fatal("entity_index missing")
 	}
@@ -458,6 +467,12 @@ func TestRunMigrationsDown(t *testing.T) {
 	}
 	if !hasColumn(t, db, "sqlite", "users", "digest_cadence") {
 		t.Fatal("users.digest_cadence missing after reapply")
+	}
+	if !hasColumn(t, db, "sqlite", "compliance_rules", "related") {
+		t.Fatal("compliance_rules.related missing after reapply")
+	}
+	if err := RunMigrationsDown(db, "sqlite", logger); err != nil {
+		t.Fatal(err)
 	}
 	if err := db.QueryRow("SELECT name FROM sqlite_master WHERE type='table' AND name='job_health'").Scan(&jobHealthTable); err != nil {
 		t.Fatalf("job_health table missing after reapply: %v", err)

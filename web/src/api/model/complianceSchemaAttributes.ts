@@ -6,17 +6,11 @@
  *
  * OpenAPI spec version: 0.1.0
  */
+import type { ComplianceAttributeSpec } from './complianceAttributeSpec';
 
-export type ComplianceConditionOp =
-  (typeof ComplianceConditionOp)[keyof typeof ComplianceConditionOp];
-
-export const ComplianceConditionOp = {
-  eq: 'eq',
-  neq: 'neq',
-  contains: 'contains',
-  not_contains: 'not_contains',
-  regex: 'regex',
-  exists: 'exists',
-  gt: 'gt',
-  lt: 'lt',
-} as const;
+/**
+ * Attribute specs by connector type, then entity kind
+ */
+export type ComplianceSchemaAttributes = {
+  [key: string]: { [key: string]: ComplianceAttributeSpec[] };
+};

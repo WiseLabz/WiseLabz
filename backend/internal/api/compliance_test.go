@@ -3,6 +3,7 @@ package api_test
 import (
 	"encoding/json"
 	"net/http"
+	"reflect"
 	"testing"
 )
 
@@ -27,15 +28,23 @@ func TestComplianceSchemaReturnsConnectorAttributeCatalog(t *testing.T) {
 		t.Fatalf("status = %d, want 200; body = %s", rec.Code, rec.Body)
 	}
 
-	var schema map[string]map[string][]struct {
-		Name        string `json:"name"`
-		Type        string `json:"type"`
-		Description string `json:"description"`
+	var resp struct {
+		Attributes map[string]map[string][]struct {
+			Name        string `json:"name"`
+			Type        string `json:"type"`
+			Description string `json:"description"`
+		} `json:"attributes"`
+		JoinFields []string `json:"joinFields"`
 	}
-	if err := json.Unmarshal(rec.Body.Bytes(), &schema); err != nil {
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 
+	if want := []string{"external_id", "name", "ip", "hostname", "mac"}; !reflect.DeepEqual(resp.JoinFields, want) {
+		t.Fatalf("joinFields = %v, want %v", resp.JoinFields, want)
+	}
+
+	schema := resp.Attributes
 	pfsense, ok := schema["pfsense"]
 	if !ok {
 		t.Fatalf("schema missing pfsense connector type: %+v", schema)

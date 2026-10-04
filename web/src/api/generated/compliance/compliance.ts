@@ -29,8 +29,8 @@ import type {
   ComplianceRulePackInstallResult,
   ComplianceRulePage,
   ComplianceRuleTestResult,
+  ComplianceSchema,
   ForbiddenResponse,
-  GetComplianceSchema200,
   NotFoundResponse,
 } from '../../model';
 
@@ -61,7 +61,7 @@ export const getComplianceSchema = (
   options?: SecondParameter<typeof customInstance>,
   signal?: AbortSignal
 ) => {
-  return customInstance<GetComplianceSchema200>(
+  return customInstance<ComplianceSchema>(
     { url: `/compliance/schema`, method: 'GET', signal },
     options
   );

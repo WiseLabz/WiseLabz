@@ -14,20 +14,28 @@ import type {
   ComplianceRulePackInstallResult,
   ComplianceRulePage,
   ComplianceRuleTestResult,
-  GetComplianceSchema200,
+  ComplianceSchema,
 } from '../../model';
 
-export const getGetComplianceSchemaResponseMock = (): GetComplianceSchema200 => ({
-  [faker.string.alphanumeric(5)]: {
-    [faker.string.alphanumeric(5)]: Array.from(
-      { length: faker.number.int({ min: 1, max: 4 }) },
-      (_, i) => i + 1
-    ).map(() => ({
-      name: faker.string.alpha({ length: { min: 10, max: 20 } }),
-      type: faker.helpers.arrayElement(['string', 'number', 'boolean', 'string_array'] as const),
-      description: faker.string.alpha({ length: { min: 10, max: 20 } }),
-    })),
+export const getGetComplianceSchemaResponseMock = (
+  overrideResponse: Partial<Extract<ComplianceSchema, object>> = {}
+): ComplianceSchema => ({
+  attributes: {
+    [faker.string.alphanumeric(5)]: {
+      [faker.string.alphanumeric(5)]: Array.from(
+        { length: faker.number.int({ min: 1, max: 4 }) },
+        (_, i) => i + 1
+      ).map(() => ({
+        name: faker.string.alpha({ length: { min: 10, max: 20 } }),
+        type: faker.helpers.arrayElement(['string', 'number', 'boolean', 'string_array'] as const),
+        description: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      })),
+    },
   },
+  joinFields: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(
+    () => faker.string.alpha({ length: { min: 10, max: 20 } })
+  ),
+  ...overrideResponse,
 });
 
 export const getGetComplianceRulesResponseMock = (
@@ -45,6 +53,7 @@ export const getGetComplianceRulesResponseMock = (
             'eq',
             'neq',
             'contains',
+            'not_contains',
             'regex',
             'exists',
             'gt',
@@ -53,6 +62,37 @@ export const getGetComplianceRulesResponseMock = (
           value: {},
         })
       ),
+      related: faker.helpers.arrayElement([
+        Array.from({ length: faker.number.int({ min: 1, max: 5 }) }, (_, i) => i + 1).map(() => ({
+          mode: faker.helpers.arrayElement(['requires', 'forbids'] as const),
+          connectorType: faker.string.alpha({ length: { min: 10, max: 20 } }),
+          entityKind: faker.string.alpha({ length: { min: 10, max: 20 } }),
+          join: {
+            sourceField: faker.string.alpha({ length: { min: 10, max: 20 } }),
+            relatedField: faker.string.alpha({ length: { min: 10, max: 20 } }),
+          },
+          conditions: faker.helpers.arrayElement([
+            Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(
+              () => ({
+                attribute: faker.string.alpha({ length: { min: 10, max: 20 } }),
+                op: faker.helpers.arrayElement([
+                  'eq',
+                  'neq',
+                  'contains',
+                  'not_contains',
+                  'regex',
+                  'exists',
+                  'gt',
+                  'lt',
+                ] as const),
+                value: {},
+              })
+            ),
+            undefined,
+          ]),
+        })),
+        undefined,
+      ]),
       severity: faker.helpers.arrayElement(Object.values(Severity)),
       title: faker.string.alpha({ length: { min: 10, max: 20 } }),
       remediationLink: faker.helpers.arrayElement([
@@ -82,6 +122,7 @@ export const getPostComplianceRulesResponseMock = (): ComplianceRule => ({
           'eq',
           'neq',
           'contains',
+          'not_contains',
           'regex',
           'exists',
           'gt',
@@ -90,6 +131,35 @@ export const getPostComplianceRulesResponseMock = (): ComplianceRule => ({
         value: {},
       })
     ),
+    related: faker.helpers.arrayElement([
+      Array.from({ length: faker.number.int({ min: 1, max: 5 }) }, (_, i) => i + 1).map(() => ({
+        mode: faker.helpers.arrayElement(['requires', 'forbids'] as const),
+        connectorType: faker.string.alpha({ length: { min: 10, max: 20 } }),
+        entityKind: faker.string.alpha({ length: { min: 10, max: 20 } }),
+        join: {
+          sourceField: faker.string.alpha({ length: { min: 10, max: 20 } }),
+          relatedField: faker.string.alpha({ length: { min: 10, max: 20 } }),
+        },
+        conditions: faker.helpers.arrayElement([
+          Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() => ({
+            attribute: faker.string.alpha({ length: { min: 10, max: 20 } }),
+            op: faker.helpers.arrayElement([
+              'eq',
+              'neq',
+              'contains',
+              'not_contains',
+              'regex',
+              'exists',
+              'gt',
+              'lt',
+            ] as const),
+            value: {},
+          })),
+          undefined,
+        ]),
+      })),
+      undefined,
+    ]),
     severity: faker.helpers.arrayElement(Object.values(Severity)),
     title: faker.string.alpha({ length: { min: 10, max: 20 } }),
     remediationLink: faker.helpers.arrayElement([
@@ -117,6 +187,7 @@ export const getGetComplianceRulesIdResponseMock = (): ComplianceRule => ({
           'eq',
           'neq',
           'contains',
+          'not_contains',
           'regex',
           'exists',
           'gt',
@@ -125,6 +196,35 @@ export const getGetComplianceRulesIdResponseMock = (): ComplianceRule => ({
         value: {},
       })
     ),
+    related: faker.helpers.arrayElement([
+      Array.from({ length: faker.number.int({ min: 1, max: 5 }) }, (_, i) => i + 1).map(() => ({
+        mode: faker.helpers.arrayElement(['requires', 'forbids'] as const),
+        connectorType: faker.string.alpha({ length: { min: 10, max: 20 } }),
+        entityKind: faker.string.alpha({ length: { min: 10, max: 20 } }),
+        join: {
+          sourceField: faker.string.alpha({ length: { min: 10, max: 20 } }),
+          relatedField: faker.string.alpha({ length: { min: 10, max: 20 } }),
+        },
+        conditions: faker.helpers.arrayElement([
+          Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() => ({
+            attribute: faker.string.alpha({ length: { min: 10, max: 20 } }),
+            op: faker.helpers.arrayElement([
+              'eq',
+              'neq',
+              'contains',
+              'not_contains',
+              'regex',
+              'exists',
+              'gt',
+              'lt',
+            ] as const),
+            value: {},
+          })),
+          undefined,
+        ]),
+      })),
+      undefined,
+    ]),
     severity: faker.helpers.arrayElement(Object.values(Severity)),
     title: faker.string.alpha({ length: { min: 10, max: 20 } }),
     remediationLink: faker.helpers.arrayElement([
@@ -152,6 +252,7 @@ export const getPutComplianceRulesIdResponseMock = (): ComplianceRule => ({
           'eq',
           'neq',
           'contains',
+          'not_contains',
           'regex',
           'exists',
           'gt',
@@ -160,6 +261,35 @@ export const getPutComplianceRulesIdResponseMock = (): ComplianceRule => ({
         value: {},
       })
     ),
+    related: faker.helpers.arrayElement([
+      Array.from({ length: faker.number.int({ min: 1, max: 5 }) }, (_, i) => i + 1).map(() => ({
+        mode: faker.helpers.arrayElement(['requires', 'forbids'] as const),
+        connectorType: faker.string.alpha({ length: { min: 10, max: 20 } }),
+        entityKind: faker.string.alpha({ length: { min: 10, max: 20 } }),
+        join: {
+          sourceField: faker.string.alpha({ length: { min: 10, max: 20 } }),
+          relatedField: faker.string.alpha({ length: { min: 10, max: 20 } }),
+        },
+        conditions: faker.helpers.arrayElement([
+          Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() => ({
+            attribute: faker.string.alpha({ length: { min: 10, max: 20 } }),
+            op: faker.helpers.arrayElement([
+              'eq',
+              'neq',
+              'contains',
+              'not_contains',
+              'regex',
+              'exists',
+              'gt',
+              'lt',
+            ] as const),
+            value: {},
+          })),
+          undefined,
+        ]),
+      })),
+      undefined,
+    ]),
     severity: faker.helpers.arrayElement(Object.values(Severity)),
     title: faker.string.alpha({ length: { min: 10, max: 20 } }),
     remediationLink: faker.helpers.arrayElement([

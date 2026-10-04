@@ -7,6 +7,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { ComplianceCondition } from './complianceCondition';
+import type { ComplianceRelatedClause } from './complianceRelatedClause';
 import type { Severity } from './severity';
 
 export interface ComplianceRuleInput {
@@ -15,6 +16,11 @@ export interface ComplianceRuleInput {
   entityKind: string;
   /** @minItems 1 */
   conditions: ComplianceCondition[];
+  /**
+   * Clauses ANDed against entities of other connectors. A source entity violates when a requires clause finds no related entity or a forbids clause finds one.
+   * @maxItems 5
+   */
+  related?: ComplianceRelatedClause[];
   severity: Severity;
   title: string;
   remediationLink?: string;

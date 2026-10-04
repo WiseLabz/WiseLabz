@@ -841,13 +841,7 @@ paths:
           description: OK
           content:
             application/json:
-              schema:
-                type: object
-                additionalProperties:
-                  type: object
-                  additionalProperties:
-                    type: array
-                    items: { $ref: '#/components/schemas/ComplianceAttributeSpec' }
+              schema: { $ref: '#/components/schemas/ComplianceSchema' }
         '403': { $ref: '#/components/responses/Forbidden' }
   /compliance/rules:
     get:
@@ -4563,13 +4557,44 @@ components:
         name: { type: string, description: 'Attribute name (e.g., enabled, ipAddress)' }
         type: { type: string, enum: [string, number, boolean, string_array], description: 'Attribute value type' }
         description: { type: string, description: 'Human-readable description of the attribute' }
+    ComplianceSchema:
+      type: object
+      required: [attributes, joinFields]
+      properties:
+        attributes:
+          type: object
+          description: 'Attribute specs by connector type, then entity kind'
+          additionalProperties:
+            type: object
+            additionalProperties:
+              type: array
+              items: { $ref: '#/components/schemas/ComplianceAttributeSpec' }
+        joinFields:
+          type: array
+          description: 'Typed entity fields a related clause can join on; a catalog attribute is joined as "attributes.<name>"'
+          items: { type: string }
     ComplianceCondition:
       type: object
       required: [attribute, op, value]
       properties:
         attribute: { type: string }
-        op: { type: string, enum: [eq, neq, contains, regex, exists, gt, lt] }
+        op: { type: string, enum: [eq, neq, contains, not_contains, regex, exists, gt, lt] }
         value: {}
+    ComplianceJoin:
+      type: object
+      required: [sourceField, relatedField]
+      properties:
+        sourceField: { type: string, description: 'Typed field of the source entity, or "attributes.<name>"' }
+        relatedField: { type: string, description: 'Typed field of the related entity, or "attributes.<name>"' }
+    ComplianceRelatedClause:
+      type: object
+      required: [mode, connectorType, entityKind, join]
+      properties:
+        mode: { type: string, enum: [requires, forbids] }
+        connectorType: { type: string }
+        entityKind: { type: string }
+        join: { $ref: '#/components/schemas/ComplianceJoin' }
+        conditions: { type: array, items: { $ref: '#/components/schemas/ComplianceCondition' } }
     ComplianceRuleInput:
       type: object
       required: [name, connectorType, entityKind, conditions, severity, title]
@@ -4578,6 +4603,11 @@ components:
         connectorType: { type: string }
         entityKind: { type: string }
         conditions: { type: array, minItems: 1, items: { $ref: '#/components/schemas/ComplianceCondition' } }
+        related:
+          type: array
+          maxItems: 5
+          description: 'Clauses ANDed against entities of other connectors. A source entity violates when a requires clause finds no related entity or a forbids clause finds one.'
+          items: { $ref: '#/components/schemas/ComplianceRelatedClause' }
         severity: { $ref: '#/components/schemas/Severity' }
         title: { type: string }
         remediationLink: { type: string }
