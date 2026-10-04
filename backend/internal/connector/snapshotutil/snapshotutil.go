@@ -3,6 +3,7 @@
 package snapshotutil
 
 import (
+	"net"
 	"strings"
 
 	"github.com/WiseLabz/wiselabz/internal/connector"
@@ -52,4 +53,13 @@ func PutStrings(attrs map[string]any, key string, values []string) {
 	if len(values) > 0 {
 		attrs[key] = values
 	}
+}
+
+// NormalizeMAC returns a lowercase, colon-separated MAC, or empty for invalid input.
+func NormalizeMAC(value string) string {
+	mac, err := net.ParseMAC(strings.TrimSpace(value))
+	if err != nil {
+		return ""
+	}
+	return mac.String()
 }

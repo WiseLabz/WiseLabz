@@ -12,6 +12,7 @@ import { getAlerts, getGetAlertsQueryKey } from '../api/generated/alerts/alerts'
 import { getGetConnectorsQueryKey } from '../api/generated/connectors/connectors';
 import { getGetFindingsQueryKey } from '../api/generated/findings/findings';
 import { getGetNotificationsQueryKey } from '../api/generated/notifications/notifications';
+import { getGetSearchQueryKey } from '../api/generated/search/search';
 import { getGetDocsTreeQueryKey } from '../api/generated/docs/docs';
 import { useLive } from '../store/live';
 import { toast } from '../lib/toast';
@@ -101,6 +102,7 @@ function normalize(raw: WsEvent): WsEvent {
 function resync(qc: ReturnType<typeof useQueryClient>) {
   useLive.getState().resetJobs();
   qc.invalidateQueries({ queryKey: getGetAlertsQueryKey() });
+  qc.invalidateQueries({ queryKey: getGetSearchQueryKey() });
   qc.invalidateQueries({ queryKey: getGetChangesQueryKey() });
   qc.invalidateQueries({ queryKey: getGetConnectorsQueryKey() });
   qc.invalidateQueries({ queryKey: getGetDashboardOverviewQueryKey() });
@@ -228,6 +230,7 @@ function handle(frame: WsEvent, qc: ReturnType<typeof useQueryClient>) {
         tone: p.alertsRaised > 0 ? 'warn' : 'ok',
       });
       qc.invalidateQueries({ queryKey: getGetDashboardOverviewQueryKey() });
+      qc.invalidateQueries({ queryKey: getGetSearchQueryKey() });
       qc.invalidateQueries({ queryKey: getGetChangesQueryKey() });
       {
         const msg = i18n.t('notify.syncComplete', {
@@ -323,6 +326,7 @@ function handle(frame: WsEvent, qc: ReturnType<typeof useQueryClient>) {
         tone: 'signal',
       });
       qc.invalidateQueries({ queryKey: getGetDocsTreeQueryKey() });
+      qc.invalidateQueries({ queryKey: getGetSearchQueryKey() });
       break;
     }
     case 'doc.lock.acquired': {

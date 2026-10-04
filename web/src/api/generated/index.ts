@@ -14,6 +14,7 @@ export * from './notifications/notifications';
 export * from './reports/reports';
 export * from './runbooks/runbooks';
 export * from './saved-views/saved-views';
+export * from './search/search';
 export * from './settings/settings';
 export * from './system/system';
 export * from './templates/templates';

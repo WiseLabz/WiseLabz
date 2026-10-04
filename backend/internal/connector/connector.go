@@ -224,11 +224,13 @@ type ServiceSnapshot struct {
 // linking matches entities against each other by ExternalID, IP, or
 // Hostname — see doc.matchEntities.
 type SnapshotEntity struct {
-	Kind       string `json:"kind"` // "vm", "container", "rule", "dns_record"
-	Name       string `json:"name"`
-	IP         string `json:"ip,omitempty"`
-	Hostname   string `json:"hostname,omitempty"`
-	ExternalID string `json:"externalId,omitempty"` // Proxmox VMID, container ID, etc.
+	Kind       string   `json:"kind"` // "vm", "container", "rule", "dns_record"
+	Name       string   `json:"name"`
+	IP         string   `json:"ip,omitempty"`
+	Hostname   string   `json:"hostname,omitempty"`
+	MAC        string   `json:"mac,omitempty"`
+	Aliases    []string `json:"aliases,omitempty"`
+	ExternalID string   `json:"externalId,omitempty"` // Proxmox VMID, container ID, etc.
 	// Attributes carries stable, security-relevant, connector-specific
 	// values (enabled, privileged, protocol, ...) for compliance rules to
 	// evaluate (see AttributeSpec/RegisterAttributeCatalog). Values must be

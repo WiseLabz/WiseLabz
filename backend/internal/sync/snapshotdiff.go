@@ -127,6 +127,8 @@ func CompareEntities(prev, curr []connector.SnapshotEntity) []EntityChange {
 		addField("name", old.Name, newer.Name, true, true)
 		addField("ip", old.IP, newer.IP, true, true)
 		addField("hostname", old.Hostname, newer.Hostname, true, true)
+		addField("mac", old.MAC, newer.MAC, true, true)
+		addField("aliases", old.Aliases, newer.Aliases, true, true)
 		attributeKeys := make([]string, 0, len(old.Attributes)+len(newer.Attributes))
 		attributeSeen := make(map[string]bool)
 		for attr := range old.Attributes {

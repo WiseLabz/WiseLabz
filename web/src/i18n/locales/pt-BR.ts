@@ -15,13 +15,33 @@ export const ptBR: Catalog = {
   reports: {
     attachLabBook: 'Anexar livro do laboratório offline (email e Discord)',
   },
+  search: {
+    title: 'Pesquisar no laboratório',
+    query: 'Pesquisa',
+    placeholder: 'Nome, IP, hostname, MAC ou documentação…',
+    type: 'Tipo',
+    connector: 'Conector',
+    kind: 'Tipo de entidade',
+    allTypes: 'Todos os tipos',
+    allConnectors: 'Todos os conectores',
+    allKinds: 'Todos os tipos de entidade',
+    docs: 'Documentos',
+    runbooks: 'Runbooks',
+    entities: 'Entidades',
+    seeAll: 'Ver todos os resultados',
+    empty: 'Nenhum resultado encontrado',
+    prompt: 'Digite pelo menos dois caracteres para pesquisar',
+    loadError: 'Não foi possível pesquisar no laboratório',
+    limited:
+      'Exibindo até {{count}} resultados por grupo. Refine a pesquisa para obter resultados mais específicos.',
+  },
   app: {
     tagline: 'Documentação sábia para o seu homelab',
   },
   a11y: {
     skipToContent: 'Pular para o conteúdo',
   },
-  command: { nav: { journal: 'Diário' } },
+  command: { nav: { journal: 'Diário' }, group: { runbooks: 'Runbooks', entities: 'Entidades' } },
   journal: {
     title: 'Diário',
     description: 'Atividade do laboratório e as notas que dão contexto.',

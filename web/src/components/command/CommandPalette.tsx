@@ -24,6 +24,7 @@ import {
   putConnectorsConnectorIdEnabled,
   getGetConnectorsQueryKey,
 } from '../../api/generated/connectors/connectors';
+import { useGetSearch } from '../../api/generated/search/search';
 import { useGetDocsTree } from '../../api/generated/docs/docs';
 import type { Connector, DocNode } from '../../api/model';
 import { categoryIcon } from '../categoryIcon';
@@ -39,7 +40,14 @@ import {
 import { toast } from '../../lib/toast';
 import { registeredCommands, type Command, type CommandCtx, type CommandGroup } from './registry';
 
-const GROUP_ORDER: CommandGroup[] = ['navigate', 'actions', 'services', 'docs'];
+const GROUP_ORDER: CommandGroup[] = [
+  'navigate',
+  'actions',
+  'services',
+  'docs',
+  'runbooks',
+  'entities',
+];
 
 /** Advance the theme palette to the next preset — a quick keyboard-only re-skin. */
 function cycleTheme() {
@@ -236,6 +244,17 @@ function PaletteBody() {
     [ctx, connectorsQuery.data, docsTreeQuery.data]
   );
   const [query, setQuery] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedQuery(query.trim()), 300);
+    return () => clearTimeout(timer);
+  }, [query]);
+  const searchQuery = useGetSearch(
+    { q: debouncedQuery, limit: 5 },
+    {
+      query: { enabled: debouncedQuery.length >= 2 },
+    }
+  );
   const [active, setActive] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -265,8 +284,60 @@ function PaletteBody() {
   const filtered = useMemo(() => {
     const q = query.trim();
     if (!q) return commands;
-    return matchSorter(commands, q, { keys: ['label', 'hint'] });
-  }, [commands, query]);
+    let items = matchSorter(commands, q, { keys: ['label', 'hint'] });
+    if (q.length >= 2) {
+      // Only show hits for the current query while the debounce catches up.
+      const results = q === debouncedQuery ? searchQuery.data : undefined;
+      const serverDocs: Command[] = (results?.docs ?? []).map((hit) => ({
+        id: `d-${hit.id}`,
+        label: hit.title,
+        hint: hit.snippet,
+        group: 'docs',
+        Icon: FileTextIcon,
+        run: (c) => c.navigate(`/docs/${encodeURIComponent(hit.id)}`),
+      }));
+      const docIds = new Set(serverDocs.map((c) => c.id));
+      items = items.filter((c) => !docIds.has(c.id));
+      items.push(...serverDocs);
+      items.push(
+        ...(results?.runbooks ?? []).map((hit): Command => ({
+          id: `r-${hit.id}`,
+          label: hit.title,
+          hint: hit.snippet,
+          group: 'runbooks',
+          Icon: FileTextIcon,
+          run: (c) =>
+            c.navigate(`/search?${new URLSearchParams({ q, type: 'runbook', runbook: hit.id })}`),
+        }))
+      );
+      items.push(
+        ...(results?.entities ?? []).map((hit, index): Command => ({
+          id: `e-${hit.connectorId}-${index}`,
+          label: hit.name,
+          hint: [hit.connectorName, hit.kind, hit.ip || hit.hostname || hit.mac || hit.externalId]
+            .filter(Boolean)
+            .join(' · '),
+          group: 'entities',
+          Icon: LayersIcon,
+          run: (c) =>
+            c.navigate(
+              hit.docId
+                ? `/docs/${encodeURIComponent(hit.docId)}`
+                : `/services/${encodeURIComponent(hit.connectorId)}`
+            ),
+        }))
+      );
+      items.push({
+        id: 'search-all',
+        label: t('search.seeAll'),
+        group: 'entities',
+        Icon: FileTextIcon,
+        run: (c) => c.navigate(`/search?${new URLSearchParams({ q })}`),
+      });
+    }
+    // Keep keyboard traversal in the same order as the displayed groups.
+    return GROUP_ORDER.flatMap((group) => items.filter((c) => c.group === group));
+  }, [commands, query, debouncedQuery, searchQuery.data, t]);
 
   // Clamp the cursor at render time instead of in an effect.
   const cursor = filtered.length ? Math.min(active, filtered.length - 1) : 0;

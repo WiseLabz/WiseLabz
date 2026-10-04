@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '../../i18n';
 import { postSync, postConnectorsConnectorIdSync } from '../../api/generated/connectors/connectors';
@@ -30,12 +30,24 @@ vi.mock('../../api/generated/docs/docs', async (importOriginal) => ({
   useGetDocsTree: () => ({ data: { children: [] } }),
 }));
 
+const { searchHook } = vi.hoisted(() => ({ searchHook: vi.fn() }));
+vi.mock('../../api/generated/search/search', () => ({ useGetSearch: searchHook }));
+function Location() {
+  return (
+    <output data-testid="location">
+      {useLocation().pathname}
+      {useLocation().search}
+    </output>
+  );
+}
+
 vi.mock('../../hooks/useRole', () => ({ useCanMutate: () => true }));
 vi.mock('../../lib/toast', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
 describe('CommandPalette', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    searchHook.mockReturnValue({ data: { docs: [], runbooks: [], entities: [] } });
     HTMLElement.prototype.scrollIntoView = vi.fn();
     useUi.setState({ paletteOpen: true });
   });
@@ -50,7 +62,7 @@ describe('CommandPalette', () => {
       </QueryClientProvider>
     );
 
-    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'no matching command' } });
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: '☃' } });
     const dialog = screen.getByRole('dialog');
 
     expect(() => {
@@ -58,7 +70,7 @@ describe('CommandPalette', () => {
       fireEvent.keyDown(dialog, { key: 'ArrowUp' });
       fireEvent.keyDown(dialog, { key: 'Enter' });
     }).not.toThrow();
-    expect(screen.getByText('No matches for “no matching command”')).toBeInTheDocument();
+    expect(screen.getByText('No matches for “☃”')).toBeInTheDocument();
     expect(useUi.getState().paletteOpen).toBe(true);
   });
 
@@ -113,5 +125,60 @@ describe('CommandPalette', () => {
     fireEvent.click(screen.getByRole('option', { name: /^Sync all/ }));
     await waitFor(() => expect(toast.error).toHaveBeenCalled());
     expect(toast.success).not.toHaveBeenCalled();
+  });
+  it('debounces server groups, keeps full-text hits, and opens their destinations', async () => {
+    searchHook.mockReturnValue({
+      data: {
+        docs: [{ id: 'd', title: 'Recovery notes', snippet: 'IP 10.0.0.1' }],
+        runbooks: [{ id: 'r', title: 'Restart safely', snippet: 'Procedure' }],
+        entities: [
+          {
+            connectorId: 'c',
+            connectorName: 'Gateway',
+            docId: 'd',
+            kind: 'device',
+            name: 'edge',
+            ip: '10.0.0.1',
+          },
+        ],
+      },
+    });
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <MemoryRouter>
+          <CommandPalette />
+          <Location />
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: '10.0.0.1' } });
+    expect(searchHook.mock.lastCall?.[1]).toEqual({ query: { enabled: false } });
+    await waitFor(() =>
+      expect(screen.getByRole('option', { name: /Recovery notes/ })).toBeInTheDocument()
+    );
+    expect(screen.getByRole('group', { name: 'Runbooks' })).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: 'Entities' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: /Restart safely/ })).toBeInTheDocument();
+    expect(searchHook).toHaveBeenLastCalledWith(
+      { q: '10.0.0.1', limit: 5 },
+      { query: { enabled: true } }
+    );
+    fireEvent.click(screen.getByRole('option', { name: /edge/ }));
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/docs/d'));
+  });
+  it('offers See all results even without top hits', async () => {
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <MemoryRouter>
+          <CommandPalette />
+          <Location />
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'host & ip' } });
+    fireEvent.click(screen.getByRole('option', { name: 'See all results' }));
+    await waitFor(() =>
+      expect(screen.getByTestId('location')).toHaveTextContent('/search?q=host+%26+ip')
+    );
   });
 });

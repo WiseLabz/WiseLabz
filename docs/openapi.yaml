@@ -23,6 +23,7 @@ tags:
   - name: connectors
   - name: compliance
   - name: docs
+  - name: search
   - name: chat
   - name: templates
   - name: changes
@@ -41,6 +42,38 @@ security:
   - bearerAuth: []
 
 paths:
+  /search:
+    get:
+      tags: [search]
+      summary: Search docs, runbooks, and connector entities
+      description: Results are grouped and independently limited. Connector grants and API-key restrictions apply to docs and entities, including for admins. Runbooks are global and excluded by connector or kind filters; kind selects only entities.
+      parameters:
+        - in: query
+          name: q
+          schema: { type: string, maxLength: 500 }
+        - in: query
+          name: type
+          schema: { type: string, enum: [doc, runbook, entity] }
+        - in: query
+          name: connector
+          schema: { type: string, maxLength: 128 }
+        - in: query
+          name: kind
+          schema: { type: string, maxLength: 100 }
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        '200':
+          description: Grouped search results
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SearchResults' }
+        '400':
+          description: Invalid search filters
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
   # ───────────────────────── auth ─────────────────────────
   /auth/providers:
     get:
@@ -3992,6 +4025,45 @@ components:
           schema: { $ref: '#/components/schemas/Error' }
 
   schemas:
+    SearchResults:
+      type: object
+      required: [docs, runbooks, entities]
+      properties:
+        docs:
+          type: array
+          items: { $ref: '#/components/schemas/SearchHit' }
+        runbooks:
+          type: array
+          items: { $ref: '#/components/schemas/SearchHit' }
+        entities:
+          type: array
+          items: { $ref: '#/components/schemas/EntityHit' }
+    SearchHit:
+      type: object
+      required: [type, id, title, snippet, score]
+      properties:
+        type: { type: string, enum: [doc, runbook] }
+        id: { type: string }
+        title: { type: string }
+        serviceId: { type: string }
+        snippet: { type: string }
+        score: { type: number }
+    EntityHit:
+      type: object
+      required: [connectorId, connectorName, docId, kind, name, externalId, ip, hostname, mac, aliases]
+      properties:
+        connectorId: { type: string }
+        connectorName: { type: string }
+        docId: { type: string }
+        kind: { type: string }
+        name: { type: string }
+        externalId: { type: string }
+        ip: { type: string }
+        hostname: { type: string }
+        mac: { type: string }
+        aliases:
+          type: array
+          items: { type: string }
     # ── shared enums ──
     Role:
       type: string

@@ -26,6 +26,7 @@ import (
 	reporthandler "github.com/WiseLabz/wiselabz/internal/api/reports"
 	runbookhandler "github.com/WiseLabz/wiselabz/internal/api/runbooks"
 	savedviewhandler "github.com/WiseLabz/wiselabz/internal/api/savedviews"
+	searchhandler "github.com/WiseLabz/wiselabz/internal/api/search"
 	settinghandler "github.com/WiseLabz/wiselabz/internal/api/settings"
 	syshandler "github.com/WiseLabz/wiselabz/internal/api/system"
 	tmplhandler "github.com/WiseLabz/wiselabz/internal/api/templates"
@@ -160,6 +161,7 @@ func newRouterDeps(cfg Config) routerDeps {
 		tmplH:       tmplhandler.NewHandler(cfg.Store, cfg.DocEngine),
 		changeH:     changeH,
 		timelineH:   &timelinehandler.Handler{Store: cfg.Store},
+		searchH:     &searchhandler.Handler{Store: cfg.Store},
 		alertH:      alerthandler.NewHandler(cfg.Store),
 		attentionH:  attentionhandler.NewHandler(cfg.Store),
 		findingH:    findinghandler.NewHandler(cfg.Store),
