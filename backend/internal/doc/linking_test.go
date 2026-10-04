@@ -115,6 +115,31 @@ func TestMatchReasonHostnameAndAliases(t *testing.T) {
 	}
 }
 
+func TestHostnameMatchesDoesNotAllocate(t *testing.T) {
+	left := connector.SnapshotEntity{Aliases: []string{"api.example.test"}}
+	right := connector.SnapshotEntity{Aliases: []string{"API.EXAMPLE.TEST"}}
+	matched := false
+	if allocations := testing.AllocsPerRun(100, func() {
+		matched = hostnameMatches(left, right)
+	}); allocations != 0 {
+		t.Errorf("hostnameMatches() alias match allocated %v times per run, want 0", allocations)
+	}
+	if !matched {
+		t.Error("hostnameMatches() = false, want alias match")
+	}
+
+	empty := connector.SnapshotEntity{}
+	matched = true
+	if allocations := testing.AllocsPerRun(100, func() {
+		matched = hostnameMatches(empty, right)
+	}); allocations != 0 {
+		t.Errorf("hostnameMatches() empty entity allocated %v times per run, want 0", allocations)
+	}
+	if matched {
+		t.Error("hostnameMatches() = true, want no match for an empty entity")
+	}
+}
+
 func TestMatchEntitiesNPMProxyHostDomains(t *testing.T) {
 	ctx := context.Background()
 	s := newEngineTestStore(t)

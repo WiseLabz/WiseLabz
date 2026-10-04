@@ -1,6 +1,7 @@
 package npm
 
 import (
+	"bytes"
 	"encoding/json"
 	"reflect"
 	"strings"
@@ -28,7 +29,7 @@ func TestBuildersOnEmptyAndMalformedInput(t *testing.T) {
 		for _, raw := range []string{"not json", `{"id":1}`, `null`, `[`} {
 			t.Run(noun+" malformed", func(t *testing.T) {
 				content, entities, deps, err := build([]byte(raw))
-				if err == nil || len(entities) != 0 || len(deps) != 0 || !strings.Contains(content, "malformed response") {
+				if err == nil || len(entities) != 0 || len(deps) != 0 || content != "" {
 					t.Fatalf("malformed build = (%q, %d entities, %d dependencies, %v)", content, len(entities), len(deps), err)
 				}
 				if strings.Contains(err.Error(), "secret") {
@@ -83,6 +84,9 @@ func TestOtherBuildersMapUpstreamFields(t *testing.T) {
 	_, streams, deps, err := buildStreamTable([]byte(streamFixture))
 	if err != nil || len(streams) != 2 {
 		t.Fatalf("stream build: %v %+v", err, streams)
+	}
+	if streams[0].Name != "stream :53" || streams[0].Attributes["protocol"] != "udp" || streams[1].Attributes["protocol"] != "tcp" {
+		t.Errorf("stream identity/protocol mapping: %+v", streams)
 	}
 	if streams[0].IP != "192.0.2.2" || streams[1].IP != "" {
 		t.Errorf("stream IP mapping: %+v", streams)
@@ -260,3 +264,90 @@ const streamFixture = `[{"id":2,"incoming_port":3306,"forwarding_host":"stream.b
 const deadHostsFixture = `[{"id":10,"domain_names":["extra.example"],"certificate_id":0,"ssl_forced":false,"enabled":false},{"id":7,"domain_names":["gone.example"],"certificate_id":3,"ssl_forced":false,"enabled":true}]`
 const certificatesFixture = `[{"id":9,"provider":"other","nice_name":"Other cert","domain_names":["other.example"],"expires_on":"2027-01-01T00:00:00Z"},{"id":4,"provider":"letsencrypt","nice_name":"Wildcard cert","domain_names":["z.example","a.example"],"expires_on":"2026-11-15T04:17:54.000Z","meta":{"certificate_key":"secret"}}]`
 const accessListsFixture = `[{"id":10,"name":"Guests","satisfy_any":false,"pass_auth":true,"proxy_host_count":0},{"id":6,"name":"Staff","satisfy_any":true,"pass_auth":false,"proxy_host_count":3,"items":[{"username":"u","password":"secret"}]}]`
+
+func TestLegacyBooleanPayloadsMatchModernPayloads(t *testing.T) {
+	fixtures := []struct {
+		name  string
+		build tableBuilder
+		raw   string
+		bools bool
+	}{
+		{"proxy hosts", buildProxyHostTable, proxyHostsFixture, true},
+		{"redirection hosts", buildRedirectionHostTable, redirectFixture, true},
+		{"streams", buildStreamTable, streamFixture, true},
+		{"404 hosts", buildDeadHostTable, deadHostsFixture, true},
+		{"certificates", buildCertificateTable, certificatesFixture, false},
+		{"access lists", buildAccessListTable, accessListsFixture, true},
+	}
+	for _, fixture := range fixtures {
+		t.Run(fixture.name, func(t *testing.T) {
+			modern := []byte(fixture.raw)
+			legacy := bytes.ReplaceAll(bytes.ReplaceAll(modern, []byte("true"), []byte("1")), []byte("false"), []byte("0"))
+			if fixture.bools && bytes.Equal(modern, legacy) {
+				t.Fatal("boolean-bearing fixture did not produce a legacy payload")
+			}
+			modernContent, modernEntities, modernDeps, err := fixture.build(modern)
+			if err != nil {
+				t.Fatal(err)
+			}
+			legacyContent, legacyEntities, legacyDeps, err := fixture.build(legacy)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if modernContent != legacyContent || !reflect.DeepEqual(modernEntities, legacyEntities) || !reflect.DeepEqual(modernDeps, legacyDeps) {
+				t.Fatalf("legacy payload differs from modern payload\nmodern: %s\nlegacy: %s", modernContent, legacyContent)
+			}
+		})
+	}
+}
+
+func TestForwardIPExcludesLocalAddressesAndParsesBracketedIPv6(t *testing.T) {
+	for _, host := range []string{"127.0.0.1", "::1", "0.0.0.0", "::"} {
+		t.Run(host, func(t *testing.T) {
+			proxyJSON, _ := json.Marshal([]map[string]any{{"id": 1, "domain_names": []string{"proxy.example"}, "forward_host": host}})
+			_, proxies, proxyDeps, err := buildProxyHostTable(proxyJSON)
+			if err != nil {
+				t.Fatal(err)
+			}
+			streamJSON, _ := json.Marshal([]map[string]any{{"id": 1, "incoming_port": 80, "forwarding_host": host}})
+			_, streams, streamDeps, err := buildStreamTable(streamJSON)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if proxies[0].IP != "" || streams[0].IP != "" || len(proxyDeps) != 0 || len(streamDeps) != 0 {
+				t.Errorf("local literal became linkable: proxy=%+v deps=%v stream=%+v deps=%v", proxies[0], proxyDeps, streams[0], streamDeps)
+			}
+			if proxies[0].Attributes["forward_host"] != host || streams[0].Attributes["forwarding_host"] != host {
+				t.Errorf("forward host attribute was not preserved")
+			}
+		})
+	}
+	_, entities, deps, err := buildProxyHostTable([]byte(`[{"id":1,"domain_names":["proxy.example"],"forward_host":"[fd00::1]"}]`))
+	if err != nil || entities[0].IP != "fd00::1" || len(deps) != 0 {
+		t.Fatalf("bracketed IPv6 proxy forward host: entities=%+v deps=%v err=%v", entities, deps, err)
+	}
+	_, streams, deps, err := buildStreamTable([]byte(`[{"id":1,"incoming_port":80,"forwarding_host":"[fd00::1]"}]`))
+	if err != nil || streams[0].IP != "fd00::1" || len(deps) != 0 {
+		t.Fatalf("bracketed IPv6 stream forward host: entities=%+v deps=%v err=%v", streams, deps, err)
+	}
+}
+
+func TestStreamProtocolAndAutomaticRedirectTarget(t *testing.T) {
+	for _, tc := range []struct {
+		tcp, udp bool
+		want     string
+	}{
+		{true, false, "tcp"},
+		{false, true, "udp"},
+		{true, true, "tcp+udp"},
+		{false, false, ""},
+	} {
+		if got := streamProtocol(tc.tcp, tc.udp); got != tc.want {
+			t.Errorf("streamProtocol(%v, %v) = %q, want %q", tc.tcp, tc.udp, got, tc.want)
+		}
+	}
+	content, _, _, err := buildRedirectionHostTable([]byte(`[{"id":1,"domain_names":["redirect.example"],"forward_scheme":"auto","forward_domain_name":"target.example"}]`))
+	if err != nil || !strings.Contains(content, "| target.example |") || strings.Contains(content, "auto://") {
+		t.Fatalf("automatic redirect target = %q, err=%v", content, err)
+	}
+}

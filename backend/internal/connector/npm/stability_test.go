@@ -49,6 +49,11 @@ func TestFetchStableAcrossReorderingAndSnapshotJSON(t *testing.T) {
 	gets := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/tokens" {
+			if r.Method != http.MethodPost {
+				t.Errorf("token endpoint method = %s, want POST", r.Method)
+				http.Error(w, "token requests must use POST", http.StatusMethodNotAllowed)
+				return
+			}
 			tokens++
 			var credentials map[string]string
 			if err := json.NewDecoder(r.Body).Decode(&credentials); err != nil || credentials["identity"] != "npm@example.test" || credentials["secret"] != "npm-secret" {
@@ -56,6 +61,11 @@ func TestFetchStableAcrossReorderingAndSnapshotJSON(t *testing.T) {
 				return
 			}
 			_, _ = fmt.Fprintf(w, `{"token":"fresh-token-%d"}`, tokens)
+			return
+		}
+		if strings.HasPrefix(r.URL.Path, "/api/nginx/") && r.Method != http.MethodGet {
+			t.Errorf("resource %s method = %s, want GET", r.URL.Path, r.Method)
+			http.Error(w, "resource requests must use GET", http.StatusMethodNotAllowed)
 			return
 		}
 		gets++

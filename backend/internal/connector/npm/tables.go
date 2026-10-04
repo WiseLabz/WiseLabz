@@ -38,6 +38,7 @@ var attributeCatalog = map[string][]connector.AttributeSpec{
 		{Name: "incoming_port", Type: "number", Description: "Port exposed by the stream"},
 		{Name: "forwarding_host", Type: "string", Description: "Configured upstream host for the stream"},
 		{Name: "forwarding_port", Type: "number", Description: "Configured upstream port for the stream"},
+		{Name: "protocol", Type: "string", Description: "Forwarding protocol enabled for the stream"},
 		{Name: "tcp_forwarding", Type: "boolean", Description: "Whether TCP forwarding is enabled"},
 		{Name: "udp_forwarding", Type: "boolean", Description: "Whether UDP forwarding is enabled"},
 		{Name: "certificate_id", Type: "number", Description: "Numeric certificate ID attached to the stream"},
@@ -61,18 +62,18 @@ var attributeCatalog = map[string][]connector.AttributeSpec{
 	},
 }
 
-func decodeResources(raw []byte, dst any, title string) (string, error) {
+func decodeResources(raw []byte, dst any) error {
 	trimmed := bytes.TrimSpace(raw)
 	if len(trimmed) == 0 || trimmed[0] != '[' {
-		err := connector.NewMalformedResponseError(errors.New("expected a JSON array"))
-		return "_" + title + " unavailable: " + err.Error() + "_", err
+		return connector.NewMalformedResponseError(errors.New("expected a JSON array"))
 	}
 	if err := json.Unmarshal(trimmed, dst); err != nil {
-		err = connector.NewMalformedResponseError(errors.New("invalid JSON resource array"))
-		return "_" + title + " unavailable: " + err.Error() + "_", err
+		return connector.NewMalformedResponseError(errors.New("invalid JSON resource array"))
 	}
-	return "", nil
+	return nil
 }
+
+func forwardIP(host string) net.IP { return net.ParseIP(strings.Trim(strings.TrimSpace(host), "[]")) }
 
 func resourceTable(noun string, headers []string, rows [][]string) string {
 	if len(rows) == 0 {
@@ -128,11 +129,8 @@ func numericID(id int) string { return strconv.Itoa(id) }
 
 func buildProxyHostTable(raw []byte) (string, []connector.SnapshotEntity, []connector.ServiceDependency, error) {
 	var items []proxyHost
-	if c, err := decodeResources(raw, &items, "Proxy Hosts"); err != nil {
-		return c, nil, nil, err
-	}
-	if items == nil {
-		return snapshotutil.Empty("proxy hosts"), nil, nil, nil
+	if err := decodeResources(raw, &items); err != nil {
+		return "", nil, nil, err
 	}
 	sort.Slice(items, func(i, j int) bool { return items[i].ID < items[j].ID })
 	rows := make([][]string, 0, len(items))
@@ -143,8 +141,8 @@ func buildProxyHostTable(raw []byte) (string, []connector.SnapshotEntity, []conn
 		if name == "" {
 			name = numericID(p.ID)
 		}
-		rows = append(rows, []string{displayDomains(name, aliases), p.ForwardHost, strconv.Itoa(p.ForwardPort), snapshotutil.YesNo(p.Enabled)})
-		attrs := map[string]any{"forward_port": p.ForwardPort, "access_list_id": p.AccessListID, "certificate_id": p.CertificateID, "ssl_forced": p.SSLForced, "enabled": p.Enabled}
+		rows = append(rows, []string{displayDomains(name, aliases), p.ForwardHost, strconv.Itoa(p.ForwardPort), snapshotutil.YesNo(bool(p.Enabled))})
+		attrs := map[string]any{"forward_port": p.ForwardPort, "access_list_id": p.AccessListID, "certificate_id": p.CertificateID, "ssl_forced": bool(p.SSLForced), "enabled": bool(p.Enabled)}
 		snapshotutil.PutString(attrs, "forward_host", p.ForwardHost)
 		snapshotutil.PutString(attrs, "forward_scheme", p.ForwardScheme)
 		snapshotutil.PutStrings(attrs, "domain_names", sortedUnique(p.DomainNames))
@@ -153,8 +151,10 @@ func buildProxyHostTable(raw []byte) (string, []connector.SnapshotEntity, []conn
 			hostname = ""
 		}
 		entity := connector.SnapshotEntity{Kind: "proxy_host", Name: name, Hostname: hostname, Aliases: aliases, ExternalID: numericID(p.ID), Attributes: attrs}
-		if ip := net.ParseIP(p.ForwardHost); ip != nil {
-			entity.IP = ip.String()
+		if ip := forwardIP(p.ForwardHost); ip != nil {
+			if !ip.IsLoopback() && !ip.IsUnspecified() {
+				entity.IP = ip.String()
+			}
 		} else if p.ForwardHost != "" {
 			deps = append(deps, connector.ServiceDependency{Kind: "upstream_service", Name: p.ForwardHost})
 		}
@@ -165,11 +165,8 @@ func buildProxyHostTable(raw []byte) (string, []connector.SnapshotEntity, []conn
 
 func buildRedirectionHostTable(raw []byte) (string, []connector.SnapshotEntity, []connector.ServiceDependency, error) {
 	var items []redirectionHost
-	if c, err := decodeResources(raw, &items, "Redirection Hosts"); err != nil {
-		return c, nil, nil, err
-	}
-	if items == nil {
-		return snapshotutil.Empty("redirection hosts"), nil, nil, nil
+	if err := decodeResources(raw, &items); err != nil {
+		return "", nil, nil, err
 	}
 	sort.Slice(items, func(i, j int) bool { return items[i].ID < items[j].ID })
 	rows := make([][]string, 0, len(items))
@@ -179,8 +176,12 @@ func buildRedirectionHostTable(raw []byte) (string, []connector.SnapshotEntity, 
 		if name == "" {
 			name = numericID(h.ID)
 		}
-		rows = append(rows, []string{displayDomains(name, aliases), h.ForwardScheme + "://" + h.ForwardDomainName, strconv.Itoa(h.ForwardHTTPCode), snapshotutil.YesNo(h.Enabled)})
-		attrs := map[string]any{"forward_http_code": h.ForwardHTTPCode, "preserve_path": h.PreservePath, "certificate_id": h.CertificateID, "ssl_forced": h.SSLForced, "enabled": h.Enabled}
+		target := h.ForwardDomainName
+		if h.ForwardScheme != "auto" {
+			target = h.ForwardScheme + "://" + target
+		}
+		rows = append(rows, []string{displayDomains(name, aliases), target, strconv.Itoa(h.ForwardHTTPCode), snapshotutil.YesNo(bool(h.Enabled))})
+		attrs := map[string]any{"forward_http_code": h.ForwardHTTPCode, "preserve_path": bool(h.PreservePath), "certificate_id": h.CertificateID, "ssl_forced": bool(h.SSLForced), "enabled": bool(h.Enabled)}
 		snapshotutil.PutString(attrs, "forward_scheme", h.ForwardScheme)
 		snapshotutil.PutString(attrs, "forward_domain_name", h.ForwardDomainName)
 		snapshotutil.PutStrings(attrs, "domain_names", sortedUnique(h.DomainNames))
@@ -195,39 +196,36 @@ func buildRedirectionHostTable(raw []byte) (string, []connector.SnapshotEntity, 
 
 func buildStreamTable(raw []byte) (string, []connector.SnapshotEntity, []connector.ServiceDependency, error) {
 	var items []stream
-	if c, err := decodeResources(raw, &items, "Streams"); err != nil {
-		return c, nil, nil, err
-	}
-	if items == nil {
-		return snapshotutil.Empty("streams"), nil, nil, nil
+	if err := decodeResources(raw, &items); err != nil {
+		return "", nil, nil, err
 	}
 	sort.Slice(items, func(i, j int) bool { return items[i].ID < items[j].ID })
 	rows := make([][]string, 0, len(items))
 	entities := make([]connector.SnapshotEntity, 0, len(items))
 	deps := []connector.ServiceDependency{}
 	for _, s := range items {
-		name := net.JoinHostPort("0.0.0.0", strconv.Itoa(s.IncomingPort))
-		rows = append(rows, []string{strconv.Itoa(s.IncomingPort), s.ForwardingHost, strconv.Itoa(s.ForwardingPort), snapshotutil.YesNo(s.Enabled)})
-		attrs := map[string]any{"incoming_port": s.IncomingPort, "forwarding_port": s.ForwardingPort, "tcp_forwarding": s.TCPForwarding, "udp_forwarding": s.UDPForwarding, "certificate_id": s.CertificateID, "enabled": s.Enabled}
+		name := "stream :" + strconv.Itoa(s.IncomingPort)
+		protocol := streamProtocol(bool(s.TCPForwarding), bool(s.UDPForwarding))
+		rows = append(rows, []string{strconv.Itoa(s.IncomingPort), protocol, s.ForwardingHost, strconv.Itoa(s.ForwardingPort), snapshotutil.YesNo(bool(s.Enabled))})
+		attrs := map[string]any{"incoming_port": s.IncomingPort, "forwarding_port": s.ForwardingPort, "tcp_forwarding": bool(s.TCPForwarding), "udp_forwarding": bool(s.UDPForwarding), "certificate_id": s.CertificateID, "enabled": bool(s.Enabled), "protocol": protocol}
 		snapshotutil.PutString(attrs, "forwarding_host", s.ForwardingHost)
 		entity := connector.SnapshotEntity{Kind: "stream", Name: name, ExternalID: numericID(s.ID), Attributes: attrs}
-		if ip := net.ParseIP(s.ForwardingHost); ip != nil {
-			entity.IP = ip.String()
+		if ip := forwardIP(s.ForwardingHost); ip != nil {
+			if !ip.IsLoopback() && !ip.IsUnspecified() {
+				entity.IP = ip.String()
+			}
 		} else if s.ForwardingHost != "" {
 			deps = append(deps, connector.ServiceDependency{Kind: "upstream_service", Name: s.ForwardingHost})
 		}
 		entities = append(entities, entity)
 	}
-	return resourceTable("streams", []string{"Incoming port", "Forward host", "Forward port", "Enabled"}, rows), entities, uniqueDependencies(deps), nil
+	return resourceTable("streams", []string{"Incoming port", "Protocol", "Forward host", "Forward port", "Enabled"}, rows), entities, uniqueDependencies(deps), nil
 }
 
 func buildDeadHostTable(raw []byte) (string, []connector.SnapshotEntity, []connector.ServiceDependency, error) {
 	var items []deadHost
-	if c, err := decodeResources(raw, &items, "404 Hosts"); err != nil {
-		return c, nil, nil, err
-	}
-	if items == nil {
-		return snapshotutil.Empty("404 hosts"), nil, nil, nil
+	if err := decodeResources(raw, &items); err != nil {
+		return "", nil, nil, err
 	}
 	sort.Slice(items, func(i, j int) bool { return items[i].ID < items[j].ID })
 	rows := make([][]string, 0, len(items))
@@ -237,8 +235,8 @@ func buildDeadHostTable(raw []byte) (string, []connector.SnapshotEntity, []conne
 		if name == "" {
 			name = numericID(h.ID)
 		}
-		rows = append(rows, []string{displayDomains(name, aliases), snapshotutil.YesNo(h.Enabled), snapshotutil.YesNo(h.SSLForced)})
-		attrs := map[string]any{"certificate_id": h.CertificateID, "ssl_forced": h.SSLForced, "enabled": h.Enabled}
+		rows = append(rows, []string{displayDomains(name, aliases), snapshotutil.YesNo(bool(h.Enabled)), snapshotutil.YesNo(bool(h.SSLForced))})
+		attrs := map[string]any{"certificate_id": h.CertificateID, "ssl_forced": bool(h.SSLForced), "enabled": bool(h.Enabled)}
 		snapshotutil.PutStrings(attrs, "domain_names", sortedUnique(h.DomainNames))
 		hostname := name
 		if len(h.DomainNames) == 0 {
@@ -251,11 +249,8 @@ func buildDeadHostTable(raw []byte) (string, []connector.SnapshotEntity, []conne
 
 func buildCertificateTable(raw []byte) (string, []connector.SnapshotEntity, []connector.ServiceDependency, error) {
 	var items []certificate
-	if c, err := decodeResources(raw, &items, "Certificates"); err != nil {
-		return c, nil, nil, err
-	}
-	if items == nil {
-		return snapshotutil.Empty("certificates"), nil, nil, nil
+	if err := decodeResources(raw, &items); err != nil {
+		return "", nil, nil, err
 	}
 	sort.Slice(items, func(i, j int) bool { return items[i].ID < items[j].ID })
 	rows := make([][]string, 0, len(items))
@@ -283,11 +278,8 @@ func buildCertificateTable(raw []byte) (string, []connector.SnapshotEntity, []co
 
 func buildAccessListTable(raw []byte) (string, []connector.SnapshotEntity, []connector.ServiceDependency, error) {
 	var items []accessList
-	if c, err := decodeResources(raw, &items, "Access Lists"); err != nil {
-		return c, nil, nil, err
-	}
-	if items == nil {
-		return snapshotutil.Empty("access lists"), nil, nil, nil
+	if err := decodeResources(raw, &items); err != nil {
+		return "", nil, nil, err
 	}
 	sort.Slice(items, func(i, j int) bool { return items[i].ID < items[j].ID })
 	rows := make([][]string, 0, len(items))
@@ -297,11 +289,24 @@ func buildAccessListTable(raw []byte) (string, []connector.SnapshotEntity, []con
 		if name == "" {
 			name = numericID(a.ID)
 		}
-		rows = append(rows, []string{name, snapshotutil.YesNo(a.SatisfyAny), snapshotutil.YesNo(a.PassAuth), strconv.Itoa(a.ProxyHostCount)})
-		attrs := map[string]any{"satisfy_any": a.SatisfyAny, "pass_auth": a.PassAuth, "proxy_host_count": a.ProxyHostCount}
+		rows = append(rows, []string{name, snapshotutil.YesNo(bool(a.SatisfyAny)), snapshotutil.YesNo(bool(a.PassAuth)), strconv.Itoa(a.ProxyHostCount)})
+		attrs := map[string]any{"satisfy_any": bool(a.SatisfyAny), "pass_auth": bool(a.PassAuth), "proxy_host_count": a.ProxyHostCount}
 		entities = append(entities, connector.SnapshotEntity{Kind: "access_list", Name: name, ExternalID: numericID(a.ID), Attributes: attrs})
 	}
 	return resourceTable("access lists", []string{"Access list", "Satisfy any", "Pass auth", "Proxy hosts"}, rows), entities, nil, nil
+}
+
+func streamProtocol(tcp, udp bool) string {
+	switch {
+	case tcp && udp:
+		return "tcp+udp"
+	case tcp:
+		return "tcp"
+	case udp:
+		return "udp"
+	default:
+		return ""
+	}
 }
 
 func uniqueDependencies(deps []connector.ServiceDependency) []connector.ServiceDependency {

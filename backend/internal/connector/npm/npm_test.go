@@ -60,6 +60,7 @@ func authServer(t *testing.T, handler func(http.ResponseWriter, *http.Request)) 
 	return testServer(t, func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/tokens" {
 			if r.Method != http.MethodPost {
+				t.Errorf("token endpoint method = %s, want POST", r.Method)
 				http.Error(w, "wrong method", http.StatusMethodNotAllowed)
 				return
 			}
@@ -69,6 +70,11 @@ func authServer(t *testing.T, handler func(http.ResponseWriter, *http.Request)) 
 				return
 			}
 			_, _ = fmt.Fprintf(w, `{"token":%q,"expires":"2030-01-01T00:00:00Z"}`, testToken)
+			return
+		}
+		if strings.HasPrefix(r.URL.Path, "/api/nginx/") && r.Method != http.MethodGet {
+			t.Errorf("resource %s method = %s, want GET", r.URL.Path, r.Method)
+			http.Error(w, "resource requests must use GET", http.StatusMethodNotAllowed)
 			return
 		}
 		if r.Header.Get("Authorization") != "Bearer "+testToken {
@@ -105,6 +111,11 @@ func TestRegistrationAndIdentity(t *testing.T) {
 	}
 	if fields["password"].Type != "password" || fields["verify_tls"].Default != "true" {
 		t.Errorf("password/verify_tls schema = %+v / %+v", fields["password"], fields["verify_tls"])
+	}
+	for _, phrase := range []string{"proxy hosts", "redirection hosts", "streams", "404 hosts", "certificates", "access lists", "admin", "Two-factor authentication must be disabled"} {
+		if !strings.Contains(fields["email"].Description, phrase) {
+			t.Errorf("email description %q does not mention %q", fields["email"].Description, phrase)
+		}
 	}
 	if _, ok := connector.AttributeCatalog()[typeName]; !ok {
 		t.Errorf("attribute catalog missing for %s", typeName)
@@ -262,18 +273,113 @@ func TestResourceAuthErrorsAreSafe(t *testing.T) {
 	}
 }
 
-func TestAuthenticationMissingTokenIsAuthError(t *testing.T) {
+func TestAuthenticationTwoFactorIsAuthError(t *testing.T) {
+	challengeToken := "jwt-challenge-secret"
+	resourceRequests := 0
 	server := testServer(t, func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/tokens" {
-			_, _ = w.Write([]byte(`{"error":"two factor required","message":"` + testPassword + `"}`))
+			if r.Method != http.MethodPost {
+				t.Errorf("token endpoint method = %s, want POST", r.Method)
+				http.Error(w, "wrong method", http.StatusMethodNotAllowed)
+				return
+			}
+			_, _ = fmt.Fprintf(w, `{"requires_2fa":true,"challenge_token":%q}`, challengeToken)
 			return
+		}
+		if strings.HasPrefix(r.URL.Path, "/api/nginx/") {
+			resourceRequests++
 		}
 		http.Error(w, "should not fetch without token", http.StatusInternalServerError)
 	})
+	snapshot, err := testConnector(t, validConfig(server.URL)).Fetch(context.Background(), nil)
+	var authErr *connector.AuthError
+	if snapshot != nil || err == nil || !errors.As(err, &authErr) || !strings.Contains(err.Error(), "account has two-factor authentication enabled; use an account without 2FA") || strings.Contains(err.Error(), challengeToken) || strings.Contains(err.Error(), testPassword) || strings.Contains(fmt.Sprint(snapshot), challengeToken) {
+		t.Errorf("2FA result = (%v, %v)", snapshot, err)
+	}
+	if resourceRequests != 0 {
+		t.Errorf("2FA response was followed by %d resource requests", resourceRequests)
+	}
+}
+
+func TestAuthenticationMissingTokenRemainsAuthError(t *testing.T) {
+	server := testServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Errorf("token endpoint method = %s, want POST", r.Method)
+			http.Error(w, "wrong method", http.StatusMethodNotAllowed)
+			return
+		}
+		_, _ = w.Write([]byte(`{"message":"` + testPassword + `"}`))
+	})
 	err := testConnector(t, validConfig(server.URL)).Validate(context.Background(), nil)
 	var authErr *connector.AuthError
-	if err == nil || !errors.As(err, &authErr) || strings.Contains(err.Error(), testPassword) {
+	if err == nil || !errors.As(err, &authErr) || !strings.Contains(err.Error(), "npm authentication did not return a token") || strings.Contains(err.Error(), testPassword) {
 		t.Errorf("missing-token error = %v", err)
+	}
+}
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+func TestTransportErrorsPreserveCauseAndRedactURL(t *testing.T) {
+	conn := testConnector(t, validConfig("https://url-user:url-secret@example.test?token=query-secret"))
+	wantCause := errors.New("x509: certificate signed by unknown authority")
+	conn.client = &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+		return nil, fmt.Errorf("TLS handshake: %w", wantCause)
+	})}
+	err := conn.Validate(context.Background(), nil)
+	if !errors.Is(err, wantCause) {
+		t.Errorf("transport error %v does not preserve TLS cause", err)
+	}
+	for _, secret := range []string{"url-user", "url-secret", "query-secret", testPassword, testToken} {
+		if strings.Contains(fmt.Sprint(err), secret) {
+			t.Errorf("transport error exposed %q: %v", secret, err)
+		}
+	}
+	if !strings.Contains(fmt.Sprint(err), "x509: certificate signed by unknown authority") {
+		t.Errorf("transport error %v omits useful TLS cause", err)
+	}
+}
+
+func TestRequestStatusErrorsAreTypedAndSafe(t *testing.T) {
+	for _, tc := range []struct {
+		status int
+		check  func(error) bool
+	}{
+		{http.StatusUnauthorized, func(err error) bool { var target *connector.AuthError; return errors.As(err, &target) }},
+		{http.StatusForbidden, func(err error) bool { var target *connector.AuthError; return errors.As(err, &target) }},
+		{http.StatusBadGateway, func(err error) bool { var target *connector.ServiceUnavailableError; return errors.As(err, &target) }},
+		{http.StatusServiceUnavailable, func(err error) bool { var target *connector.ServiceUnavailableError; return errors.As(err, &target) }},
+		{http.StatusGatewayTimeout, func(err error) bool { var target *connector.ServiceUnavailableError; return errors.As(err, &target) }},
+		{599, func(err error) bool { return err != nil }},
+	} {
+		t.Run(fmt.Sprint(tc.status), func(t *testing.T) {
+			server := testServer(t, func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(tc.status)
+				_, _ = fmt.Fprintf(w, "%s %s", testPassword, testToken)
+			})
+			_, err := testConnector(t, validConfig(server.URL)).request(context.Background(), http.MethodGet, "/api/nginx/proxy-hosts", testToken, nil)
+			if !tc.check(err) || !strings.Contains(fmt.Sprint(err), fmt.Sprintf("API returned %d", tc.status)) {
+				t.Errorf("status %d error = %v", tc.status, err)
+			}
+			if err == nil || strings.Contains(err.Error(), testPassword) || strings.Contains(err.Error(), testToken) || strings.HasSuffix(err.Error(), ": ") {
+				t.Errorf("status %d error is unsafe or incomplete: %v", tc.status, err)
+			}
+		})
+	}
+}
+
+func TestOversizedResponseUsesBoundedReaderError(t *testing.T) {
+	server := testServer(t, func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(testPassword + strings.Repeat("x", connector.MaxResponseBytes)))
+	})
+	_, err := testConnector(t, validConfig(server.URL)).request(context.Background(), http.MethodGet, "/api/nginx/proxy-hosts", testToken, nil)
+	if err == nil || !strings.Contains(err.Error(), fmt.Sprintf("upstream response exceeds %d bytes", connector.MaxResponseBytes)) || strings.Contains(err.Error(), testPassword) {
+		t.Errorf("oversized response error = %v", err)
+	}
+	var malformed *connector.MalformedResponseError
+	if errors.As(err, &malformed) {
+		t.Errorf("oversized response was classified as malformed: %v", err)
 	}
 }
 
@@ -382,5 +488,14 @@ func TestFetchRequiresAuthentication(t *testing.T) {
 func TestSafeURL(t *testing.T) {
 	if got := safeURL("https://user:secret@example.test/path?token=query-secret"); got != "https://example.test/path" {
 		t.Errorf("safeURL = %q", got)
+	}
+}
+
+func TestBaseURLAcceptsOptionalAPIPath(t *testing.T) {
+	server := authServer(t, func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte(`[]`)) })
+	for _, baseURL := range []string{server.URL, server.URL + "/api", server.URL + "/api/"} {
+		if err := testConnector(t, validConfig(baseURL)).Validate(context.Background(), nil); err != nil {
+			t.Errorf("Validate with base URL %q: %v", baseURL, err)
+		}
 	}
 }

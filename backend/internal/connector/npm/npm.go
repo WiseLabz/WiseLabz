@@ -34,7 +34,7 @@ func init() {
 		Type: typeName, Category: "networking", Name: "Nginx Proxy Manager",
 		Fields: []connector.SchemaField{
 			{Key: "url", Label: "Nginx Proxy Manager URL", Type: "text", Required: true, Placeholder: "https://npm.example.com", Description: "Base URL of the Nginx Proxy Manager instance."},
-			{Key: "email", Label: "Email", Type: "text", Required: true, Description: "Nginx Proxy Manager account email."},
+			{Key: "email", Label: "Email", Type: "text", Required: true, Description: "Account email with view permission on proxy hosts, redirection hosts, streams, 404 hosts, certificates, and access lists. An admin account is simplest. Two-factor authentication must be disabled."},
 			{Key: "password", Label: "Password", Type: "password", Required: true, Description: "Nginx Proxy Manager account password."},
 			{Key: "verify_tls", Label: "Verify TLS", Type: "toggle", Required: false, Default: "true"},
 		},
@@ -49,7 +49,7 @@ type Connector struct {
 }
 
 func newConnector(config map[string]any) (connector.Connector, error) {
-	url, _ := config["url"].(string)
+	rawURL, _ := config["url"].(string)
 	email, _ := config["email"].(string)
 	password, _ := config["password"].(string)
 	verifyTLS := true
@@ -57,7 +57,7 @@ func newConnector(config map[string]any) (connector.Connector, error) {
 		verifyTLS = value
 	}
 	return &Connector{
-		url: strings.TrimRight(url, "/"), email: email, password: password,
+		url: strings.TrimSuffix(strings.TrimRight(rawURL, "/"), "/api"), email: email, password: password,
 		client: connector.NewHTTPClient(connector.HTTPClientOptions{SkipTLSVerify: !verifyTLS}),
 	}, nil
 }
@@ -145,10 +145,14 @@ func (c *Connector) authenticate(ctx context.Context) (string, error) {
 		return "", err
 	}
 	var response struct {
-		Token string `json:"token"`
+		Token       string   `json:"token"`
+		Requires2FA flexBool `json:"requires_2fa"`
 	}
 	if err := json.Unmarshal(data, &response); err != nil {
 		return "", connector.NewMalformedResponseError(errors.New("invalid authentication response"))
+	}
+	if bool(response.Requires2FA) {
+		return "", connector.NewAuthError(errors.New("account has two-factor authentication enabled; use an account without 2FA"))
 	}
 	if response.Token == "" {
 		return "", connector.NewAuthError(errors.New("npm authentication did not return a token"))
@@ -174,21 +178,23 @@ func (c *Connector) request(ctx context.Context, method, path, token string, bod
 	}
 	resp, err := c.client.Do(req)
 	if err != nil {
-		if connector.IsTimeout(err) {
-			return nil, connector.NewTimeoutError(errors.New("npm request timed out"))
-		}
-		return nil, errors.New("npm request failed")
+		return nil, connector.MapTransportError(err)
 	}
 	defer resp.Body.Close() //nolint:errcheck
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		if statusErr := connector.CheckStatus(resp.StatusCode, nil); statusErr != nil {
+		statusErr := fmt.Errorf("API returned %d", resp.StatusCode)
+		switch resp.StatusCode {
+		case http.StatusUnauthorized, http.StatusForbidden:
+			return nil, connector.NewAuthError(statusErr)
+		case http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusGatewayTimeout:
+			return nil, connector.NewServiceUnavailableError(statusErr)
+		default:
 			return nil, statusErr
 		}
-		return nil, fmt.Errorf("npm API returned HTTP %d", resp.StatusCode)
 	}
 	data, err := connector.ReadBody(resp.Body)
 	if err != nil {
-		return nil, connector.NewMalformedResponseError(errors.New("response body could not be read"))
+		return nil, fmt.Errorf("read npm response: %w", err)
 	}
 	return data, nil
 }

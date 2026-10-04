@@ -453,16 +453,26 @@ and `password`, with `verify_tls` as a toggle that defaults to `true`. It
 authenticates with the configured email and password through `POST /api/tokens`,
 then reads the six resource kinds: `proxy_host`, `redirection_host`, `stream`,
 `dead_host`, `certificate`, and `access_list`. Fetch is read-only and does not
-create, update, or delete NPM resources.
+create, update, or delete NPM resources. The configured account needs view
+permission on all six resource types; an admin account is the simplest choice.
+Two-factor authentication must be disabled for this account.
 
 For proxy hosts, the first configured domain is the primary domain and the
-remaining domains are aliases. Forward targets become operational
-dependencies: a literal IP address is recorded as `SnapshotEntity.IP`, while a
-hostname or service name becomes an `upstream_service` dependency. Certificate
-snapshots use the stable `expires_on` value to record expiry without including
-request or renewal timestamps that would create noise on every sync. The
-connector's `verify_tls` setting defaults to enabled and can be disabled for
-instances using a locally issued certificate.
+remaining domains are aliases. Redirection and 404 hosts also expose their
+remaining domains as aliases. A proxy host's literal forward IP is recorded
+on the entity as `SnapshotEntity.IP`; it is not a dependency. A hostname or
+service name becomes an `upstream_service` dependency. Bracketed IPv6 literals
+are supported. Loopback and unspecified forward addresses remain visible in
+the forward fields but are not recorded as linkable IPs or dependencies.
+
+Streams are named `stream :<port>` and include their `tcp`, `udp`, or
+`tcp+udp` protocol. Their forward target is recorded as a literal IP or, for a
+hostname, as an `upstream_service` dependency. Loopback and unspecified forward
+addresses remain visible in the forward fields but do not create linkable IPs
+or dependencies. Certificate snapshots use the stable `expires_on` value to
+record expiry without including request or renewal timestamps that would
+create noise on every sync. The connector's `verify_tls` setting defaults to
+enabled and can be disabled for instances using a locally issued certificate.
 
 ## Keeping snapshots stable
 

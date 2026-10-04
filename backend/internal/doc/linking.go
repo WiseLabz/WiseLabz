@@ -87,16 +87,29 @@ func matchReason(a, b connector.SnapshotEntity) string {
 }
 
 func hostnameMatches(a, b connector.SnapshotEntity) bool {
-	aNames := append([]string{a.Hostname}, a.Aliases...)
-	bNames := append([]string{b.Hostname}, b.Aliases...)
-	for _, aName := range aNames {
-		if aName == "" {
-			continue
+	aHasNames := a.Hostname != "" || len(a.Aliases) > 0
+	bHasNames := b.Hostname != "" || len(b.Aliases) > 0
+	if !aHasNames || !bHasNames {
+		return false
+	}
+	if a.Hostname != "" && matchesHostnameOrAlias(a.Hostname, b) {
+		return true
+	}
+	for _, alias := range a.Aliases {
+		if alias != "" && matchesHostnameOrAlias(alias, b) {
+			return true
 		}
-		for _, bName := range bNames {
-			if bName != "" && strings.EqualFold(aName, bName) {
-				return true
-			}
+	}
+	return false
+}
+
+func matchesHostnameOrAlias(name string, e connector.SnapshotEntity) bool {
+	if e.Hostname != "" && strings.EqualFold(name, e.Hostname) {
+		return true
+	}
+	for _, alias := range e.Aliases {
+		if alias != "" && strings.EqualFold(name, alias) {
+			return true
 		}
 	}
 	return false
