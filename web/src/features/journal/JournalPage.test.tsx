@@ -220,4 +220,52 @@ describe('Journal', () => {
     await waitFor(() => expect(error).toHaveBeenCalledWith('Could not save the entry'));
     expect(screen.getByRole('dialog')).toBeInTheDocument();
   });
+
+  it('writes date range and all-sync-runs filters to the URL and the request', async () => {
+    mount();
+    await screen.findByText('Replaced', { exact: false });
+    fireEvent.change(screen.getByLabelText('From (UTC)'), { target: { value: '2020-01-02' } });
+    fireEvent.change(screen.getByLabelText('Through (UTC)'), { target: { value: '2020-01-03' } });
+    fireEvent.click(screen.getByLabelText('Show all sync runs'));
+    await waitFor(() =>
+      expect(get).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          after: '2020-01-02T00:00:00Z',
+          before: '2020-01-03T23:59:59.999999999Z',
+          allSyncRuns: true,
+        }),
+        undefined,
+        expect.any(AbortSignal)
+      )
+    );
+    expect(screen.getByTestId('location')).toHaveTextContent('allSyncRuns=true');
+    fireEvent.click(screen.getByLabelText('Show all sync runs'));
+    await waitFor(() =>
+      expect(screen.getByTestId('location')).not.toHaveTextContent('allSyncRuns')
+    );
+  });
+
+  it('offers lab actions, lab-wide notes and edits on others notes to instance admins', async () => {
+    role.admin = true;
+    role.userId = 'someone-else';
+    mount();
+    await screen.findByText('Replaced', { exact: false });
+    expect(screen.getByRole('option', { name: 'Lab action' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Delete' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'New entry' }));
+    const scope = within(screen.getByRole('dialog')).getByLabelText('Scope');
+    expect(scope).toHaveValue('');
+    expect(within(scope).getByRole('option', { name: 'Lab-wide' })).toBeInTheDocument();
+  });
+
+  it('limits a non-admin operator to connector-scoped notes', async () => {
+    mount();
+    await screen.findByText('Replaced', { exact: false });
+    expect(screen.queryByRole('option', { name: 'Lab action' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'New entry' }));
+    const scope = within(screen.getByRole('dialog')).getByLabelText('Scope');
+    expect(scope).toHaveValue('c');
+    expect(within(scope).queryByRole('option', { name: 'Lab-wide' })).not.toBeInTheDocument();
+  });
 });
