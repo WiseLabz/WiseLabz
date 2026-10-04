@@ -41,12 +41,25 @@ func TestSchemaReturnsCatalog(t *testing.T) {
 		t.Fatalf("status %d, want 200: %s", rr.Code, rr.Body.String())
 	}
 
-	var schema map[string]any
-	if err := json.Unmarshal(rr.Body.Bytes(), &schema); err != nil {
+	var resp struct {
+		Attributes map[string]any `json:"attributes"`
+		JoinFields []string       `json:"joinFields"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if schema == nil {
-		t.Fatal("expected non-nil catalog")
+	if resp.Attributes == nil {
+		t.Fatal("expected non-nil attributes")
+	}
+	if len(resp.JoinFields) == 0 {
+		t.Fatal("expected non-empty joinFields")
+	}
+	// Verify joinFields contains the expected fields
+	expectedFields := []string{"external_id", "name", "ip", "hostname", "mac"}
+	for i, expected := range expectedFields {
+		if i >= len(resp.JoinFields) || resp.JoinFields[i] != expected {
+			t.Errorf("joinFields[%d] = %q, want %q", i, resp.JoinFields[i], expected)
+		}
 	}
 }
 
@@ -383,6 +396,80 @@ func TestTestRuleValidation(t *testing.T) {
 	}
 }
 
+func TestUpdateRuleChangesFieldsWithRelated(t *testing.T) {
+	s := apitest.NewStore(t)
+	h := compliance.NewHandler(s, nil)
+
+	ctx := context.Background()
+	rule := &store.ComplianceRuleRecord{
+		Name:          "test-rule",
+		Title:         "Test Rule",
+		ConnectorType: "docker",
+		EntityKind:    "container",
+		Conditions:    `[{"attribute":"image","op":"contains","value":"nginx"}]`,
+		Related:       `[]`,
+		Severity:      "info",
+		Enabled:       false,
+	}
+	if err := s.CreateComplianceRule(ctx, rule); err != nil {
+		t.Fatal(err)
+	}
+
+	// Update only the related field
+	body := map[string]any{
+		"name": "test-rule", "connectorType": "docker", "entityKind": "container",
+		"conditions": []map[string]any{{"attribute": "image", "op": "contains", "value": "nginx"}},
+		"related": []map[string]any{
+			{
+				"mode": "requires", "connectorType": "proxmox", "entityKind": "vm",
+				"join": map[string]any{"sourceField": "name", "relatedField": "name"},
+			},
+		},
+		"severity": "info", "title": "Test Rule", "remediationLink": "", "enabled": false,
+	}
+
+	bodyBytes, _ := json.Marshal(body)
+	r := httptest.NewRequest(http.MethodPut, "/api/compliance/rules/"+rule.ID, strings.NewReader(string(bodyBytes)))
+	r.Header.Set("Content-Type", "application/json")
+	r.SetPathValue("id", rule.ID)
+	rr := httptest.NewRecorder()
+	h.Update(rr, r)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status %d, want 200: %s", rr.Code, rr.Body.String())
+	}
+
+	// Verify audit included "related"
+	audits, _, err := s.ListAuditRecords(ctx, "", "compliance_rule", "", "", 0, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(audits) == 0 {
+		t.Fatal("expected audit records")
+	}
+
+	var detail map[string]any
+	if err := json.Unmarshal([]byte(audits[0].Detail), &detail); err != nil {
+		t.Fatal(err)
+	}
+
+	changedFields, ok := detail["changedFields"].([]any)
+	if !ok {
+		t.Fatalf("changedFields not a list: %v", detail["changedFields"])
+	}
+
+	found := false
+	for _, field := range changedFields {
+		if field == "related" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected 'related' in changedFields, got: %v", changedFields)
+	}
+}
+
 func TestInstallPack(t *testing.T) {
 	s := apitest.NewStore(t)
 	ev := &mockEvaluator{}
@@ -414,5 +501,173 @@ func TestInstallPack(t *testing.T) {
 
 	if rr, _ := install("nope"); rr.Code != http.StatusNotFound {
 		t.Fatalf("unknown pack status %d, want 404", rr.Code)
+	}
+}
+
+func TestUpdateRuleRelated(t *testing.T) {
+	s := apitest.NewStore(t)
+	h := compliance.NewHandler(s, nil)
+
+	ctx := context.Background()
+	rule := &store.ComplianceRuleRecord{
+		Name:          "test-rule",
+		Title:         "Test Rule",
+		ConnectorType: "docker",
+		EntityKind:    "container",
+		Conditions:    `[{"attribute":"image","op":"contains","value":"nginx"}]`,
+		Related:       `[]`,
+		Severity:      "info",
+		Enabled:       false,
+	}
+	if err := s.CreateComplianceRule(ctx, rule); err != nil {
+		t.Fatal(err)
+	}
+
+	// Update with a related clause
+	body := map[string]any{
+		"name": "test-rule", "connectorType": "docker", "entityKind": "container",
+		"conditions": []map[string]any{{"attribute": "image", "op": "contains", "value": "nginx"}},
+		"related": []map[string]any{
+			{
+				"mode": "requires", "connectorType": "proxmox", "entityKind": "vm",
+				"join":       map[string]any{"sourceField": "name", "relatedField": "name"},
+				"conditions": []map[string]any{{"attribute": "status", "op": "eq", "value": "running"}},
+			},
+		},
+		"severity": "info", "title": "Test Rule", "remediationLink": "", "enabled": false,
+	}
+
+	bodyBytes, _ := json.Marshal(body)
+	r := httptest.NewRequest(http.MethodPut, "/api/compliance/rules/"+rule.ID, strings.NewReader(string(bodyBytes)))
+	r.Header.Set("Content-Type", "application/json")
+	r.SetPathValue("id", rule.ID)
+	rr := httptest.NewRecorder()
+	h.Update(rr, r)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status %d, want 200: %s", rr.Code, rr.Body.String())
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+
+	related, ok := resp["related"].([]any)
+	if !ok {
+		t.Fatalf("related not a list: %v", resp["related"])
+	}
+	if len(related) != 1 {
+		t.Fatalf("expected 1 related clause after update, got %d", len(related))
+	}
+
+	// Update with no related key should clear it
+	body["related"] = nil
+	bodyBytes, _ = json.Marshal(body)
+	r = httptest.NewRequest(http.MethodPut, "/api/compliance/rules/"+rule.ID, strings.NewReader(string(bodyBytes)))
+	r.Header.Set("Content-Type", "application/json")
+	r.SetPathValue("id", rule.ID)
+	rr = httptest.NewRecorder()
+	h.Update(rr, r)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status %d, want 200: %s", rr.Code, rr.Body.String())
+	}
+
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+
+	related, ok = resp["related"].([]any)
+	if !ok {
+		t.Fatalf("related not a list after clearing: %v", resp["related"])
+	}
+	if len(related) != 0 {
+		t.Fatalf("expected empty related after clearing, got %d clauses", len(related))
+	}
+}
+
+func TestComplianceRelatedClauseValidation(t *testing.T) {
+	s := apitest.NewStore(t)
+	h := compliance.NewHandler(s, nil)
+
+	testCases := []struct {
+		name        string
+		related     any
+		errorField  string
+		errorSubstr string
+	}{
+		{
+			name: "bad mode",
+			related: []map[string]any{
+				{"mode": "invalid", "connectorType": "proxmox", "entityKind": "vm",
+					"join": map[string]any{"sourceField": "name", "relatedField": "name"}},
+			},
+			errorField:  "related[0].mode",
+			errorSubstr: "must be 'requires' or 'forbids'",
+		},
+		{
+			name: "invalid connector type",
+			related: []map[string]any{
+				{"mode": "requires", "connectorType": "invalid", "entityKind": "vm",
+					"join": map[string]any{"sourceField": "name", "relatedField": "name"}},
+			},
+			errorField:  "related[0].connectorType",
+			errorSubstr: "not a known connector type",
+		},
+		{
+			name: "bad join source field",
+			related: []map[string]any{
+				{"mode": "requires", "connectorType": "proxmox", "entityKind": "vm",
+					"join": map[string]any{"sourceField": "invalid_field", "relatedField": "name"}},
+			},
+			errorField:  "related[0].join.sourceField",
+			errorSubstr: "not a valid field",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			body := map[string]any{
+				"name": "test-rule", "connectorType": "docker", "entityKind": "container",
+				"conditions":      []map[string]any{{"attribute": "image", "op": "contains", "value": "nginx"}},
+				"related":         tc.related,
+				"severity":        "info",
+				"title":           "Test Rule",
+				"remediationLink": "",
+				"enabled":         false,
+			}
+
+			bodyBytes, _ := json.Marshal(body)
+			r := httptest.NewRequest(http.MethodPost, "/api/compliance/rules", strings.NewReader(string(bodyBytes)))
+			r.Header.Set("Content-Type", "application/json")
+			rr := httptest.NewRecorder()
+			h.Create(rr, r)
+
+			if rr.Code != http.StatusBadRequest {
+				t.Fatalf("status %d, want 400", rr.Code)
+			}
+
+			var errResp struct {
+				Details []struct {
+					Field string `json:"field"`
+					Msg   string `json:"msg"`
+				} `json:"details"`
+			}
+			if err := json.Unmarshal(rr.Body.Bytes(), &errResp); err != nil {
+				t.Fatalf("decode error response: %v", err)
+			}
+
+			found := false
+			for _, detail := range errResp.Details {
+				if detail.Field == tc.errorField && strings.Contains(detail.Msg, tc.errorSubstr) {
+					found = true
+					break
+				}
+			}
+			if !found {
+				t.Errorf("expected error field %q with substring %q, got details: %v", tc.errorField, tc.errorSubstr, errResp.Details)
+			}
+		})
 	}
 }

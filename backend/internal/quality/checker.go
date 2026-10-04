@@ -107,6 +107,9 @@ func (c *Checker) RunForConnector(ctx context.Context, connectorID string) error
 			c.broadcastCreated(connectorID, finding)
 		}
 	}
+	if err := c.checkRelatedCompliance(ctx, connectorID); err != nil {
+		errs = append(errs, fmt.Errorf("related compliance check: %w", err))
+	}
 	c.broadcastChanged(connectorID)
 	return errors.Join(errs...)
 }
@@ -125,6 +128,14 @@ func (c *Checker) EvaluateRule(ctx context.Context, ruleID string) error {
 	if err != nil {
 		return err
 	}
+	sources, err := c.newRelatedSource(ctx)
+	if err != nil {
+		return err
+	}
+	related, err := sources.forRule(ctx, rule)
+	if err != nil {
+		return err
+	}
 	connectors, err := c.store.ListAllConnectors(ctx)
 	if err != nil {
 		return err
@@ -139,7 +150,7 @@ func (c *Checker) EvaluateRule(ctx context.Context, ruleID string) error {
 			errs = append(errs, fmt.Errorf("connector %s: %w", conn.ID, err))
 			continue
 		}
-		finding, err := c.evaluateComplianceRule(ctx, conn.ID, rule, snapshot)
+		finding, err := c.evaluateComplianceRule(ctx, conn.ID, rule, snapshot, related)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("connector %s: %w", conn.ID, err))
 			continue
@@ -171,6 +182,10 @@ func (c *Checker) checkCompliance(ctx context.Context, connectorID string) ([]*s
 	var snapshot *compliance.Snapshot
 	var snapshotErr error
 	snapshotLoaded := false
+	sources, err := c.newRelatedSource(ctx)
+	if err != nil {
+		return nil, err
+	}
 	for i := range records {
 		if !records[i].Enabled || records[i].ConnectorType != conn.Type {
 			continue
@@ -188,7 +203,12 @@ func (c *Checker) checkCompliance(ctx context.Context, connectorID string) ([]*s
 			errs = append(errs, fmt.Errorf("rule %s: %w", records[i].ID, snapshotErr))
 			continue
 		}
-		finding, err := c.evaluateComplianceRule(ctx, connectorID, rule, snapshot)
+		related, err := sources.forRule(ctx, rule)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("rule %s: %w", records[i].ID, err))
+			continue
+		}
+		finding, err := c.evaluateComplianceRule(ctx, connectorID, rule, snapshot, related)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("rule %s: %w", records[i].ID, err))
 			continue
@@ -205,10 +225,18 @@ func complianceRule(record *store.ComplianceRuleRecord) (compliance.Rule, error)
 	if err := json.Unmarshal([]byte(record.Conditions), &conditions); err != nil {
 		return compliance.Rule{}, fmt.Errorf("decode conditions: %w", err)
 	}
+	var related []compliance.RelatedClause
+	relatedJSON := strings.TrimSpace(record.Related)
+	if relatedJSON != "" && relatedJSON != "[]" {
+		if err := json.Unmarshal([]byte(relatedJSON), &related); err != nil {
+			return compliance.Rule{}, fmt.Errorf("decode related: %w", err)
+		}
+	}
 	return compliance.Rule{
 		ID: record.ID, Name: record.Name, ConnectorType: record.ConnectorType,
-		EntityKind: record.EntityKind, Conditions: conditions, Severity: record.Severity,
-		Title: record.Title, RemediationLink: record.RemediationLink, Enabled: record.Enabled,
+		EntityKind: record.EntityKind, Conditions: conditions, Related: related,
+		Severity: record.Severity, Title: record.Title, RemediationLink: record.RemediationLink,
+		Enabled: record.Enabled,
 	}, nil
 }
 
@@ -225,20 +253,19 @@ func (c *Checker) loadComplianceSnapshot(ctx context.Context, connectorID string
 		slog.Warn("skipping malformed snapshot for compliance rule", "error", err)
 		return nil, nil
 	}
-	entities := make([]compliance.Entity, len(snapshot.Entities))
-	for i, entity := range snapshot.Entities {
-		entities[i] = compliance.Entity{Kind: entity.Kind, Name: entity.Name, Attributes: entity.Attributes}
-	}
-	return &compliance.Snapshot{Entities: entities}, nil
+	result := compliance.SnapshotFromConnector(snapshot)
+	return &result, nil
 }
 
-func (c *Checker) evaluateComplianceRule(ctx context.Context, connectorID string, rule compliance.Rule, snapshot *compliance.Snapshot) (*store.QualityFindingRecord, error) {
+func (c *Checker) evaluateComplianceRule(ctx context.Context, connectorID string, rule compliance.Rule, snapshot *compliance.Snapshot, related compliance.RelatedEntities) (*store.QualityFindingRecord, error) {
 	// Missing or malformed snapshots must not resolve existing findings.
 	if snapshot == nil {
 		return nil, nil
 	}
-	matches := compliance.Evaluate(rule, *snapshot)
-	if len(matches) == 0 {
+	matches, skipped := compliance.EvaluateWithRelated(rule, *snapshot, related)
+	// A skipped rule (no connector of a related type has a snapshot) does not
+	// apply right now, so it clears its finding like a clean evaluation does.
+	if skipped || len(matches) == 0 {
 		return nil, c.store.ResolveQualityFindingForRule(ctx, connectorID, rule.ID)
 	}
 	finding := &store.QualityFindingRecord{
@@ -247,6 +274,149 @@ func (c *Checker) evaluateComplianceRule(ctx context.Context, connectorID string
 		RemediationLink: rule.RemediationLink,
 	}
 	return c.upsert(ctx, finding)
+}
+
+// relatedSource loads the entities related clauses join against. Connectors
+// are listed once and each connector type's snapshots are read once, however
+// many rules reference the type.
+type relatedSource struct {
+	checker    *Checker
+	connectors []store.ConnectorRecord
+	byType     map[string]typeEntities
+}
+
+// typeEntities is the combined entities of every connector of one type that
+// has a snapshot; loaded is false when none has one.
+type typeEntities struct {
+	entities []compliance.Entity
+	loaded   bool
+}
+
+func (c *Checker) newRelatedSource(ctx context.Context) (*relatedSource, error) {
+	connectors, err := c.store.ListAllConnectors(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &relatedSource{checker: c, connectors: connectors, byType: make(map[string]typeEntities)}, nil
+}
+
+// forRule returns the related entities for a rule's clauses, nil when it has
+// none. A connector type with no snapshot is left out of the map, which is
+// what makes the engine skip the rule; a type whose snapshots hold no
+// entities is present with an empty slice.
+func (r *relatedSource) forRule(ctx context.Context, rule compliance.Rule) (compliance.RelatedEntities, error) {
+	if len(rule.Related) == 0 {
+		return nil, nil
+	}
+	related := make(compliance.RelatedEntities)
+	for _, clause := range rule.Related {
+		if _, done := related[clause.ConnectorType]; done {
+			continue
+		}
+		loaded, err := r.entitiesOfType(ctx, clause.ConnectorType)
+		if err != nil {
+			return nil, err
+		}
+		if loaded.loaded {
+			related[clause.ConnectorType] = loaded.entities
+		}
+	}
+	return related, nil
+}
+
+func (r *relatedSource) entitiesOfType(ctx context.Context, connectorType string) (typeEntities, error) {
+	if cached, ok := r.byType[connectorType]; ok {
+		return cached, nil
+	}
+	result := typeEntities{entities: []compliance.Entity{}}
+	var errs []error
+	for _, conn := range r.connectors {
+		if conn.Type != connectorType {
+			continue
+		}
+		snapshot, err := r.checker.loadComplianceSnapshot(ctx, conn.ID)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("connector %s: %w", conn.ID, err))
+			continue
+		}
+		if snapshot == nil {
+			continue
+		}
+		result.loaded = true
+		result.entities = append(result.entities, snapshot.Entities...)
+	}
+	if err := errors.Join(errs...); err != nil {
+		// A failed read must not look like "no data": that would skip the rule
+		// and resolve its findings. Do not cache it either.
+		return typeEntities{}, err
+	}
+	r.byType[connectorType] = result
+	return result, nil
+}
+
+func (c *Checker) checkRelatedCompliance(ctx context.Context, connectorID string) error {
+	conn, err := c.store.GetConnector(ctx, connectorID)
+	if err != nil {
+		return err
+	}
+	records, err := c.store.ListComplianceRules(ctx)
+	if err != nil {
+		return err
+	}
+	sources, err := c.newRelatedSource(ctx)
+	if err != nil {
+		return err
+	}
+	var errs []error
+	affectedConnectorIDs := make(map[string]bool)
+	for i := range records {
+		if !records[i].Enabled {
+			continue
+		}
+		rule, err := complianceRule(&records[i])
+		if err != nil {
+			errs = append(errs, fmt.Errorf("rule %s: %w", records[i].ID, err))
+			continue
+		}
+		hasClauseFor := false
+		for _, clause := range rule.Related {
+			if clause.ConnectorType == conn.Type {
+				hasClauseFor = true
+				break
+			}
+		}
+		if !hasClauseFor {
+			continue
+		}
+		related, err := sources.forRule(ctx, rule)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("rule %s: %w", records[i].ID, err))
+			continue
+		}
+		for _, sourceConn := range sources.connectors {
+			if sourceConn.Type != rule.ConnectorType || sourceConn.ID == connectorID {
+				continue
+			}
+			snapshot, err := c.loadComplianceSnapshot(ctx, sourceConn.ID)
+			if err != nil {
+				errs = append(errs, fmt.Errorf("rule %s connector %s: %w", records[i].ID, sourceConn.ID, err))
+				continue
+			}
+			finding, err := c.evaluateComplianceRule(ctx, sourceConn.ID, rule, snapshot, related)
+			if err != nil {
+				errs = append(errs, fmt.Errorf("rule %s connector %s: %w", records[i].ID, sourceConn.ID, err))
+				continue
+			}
+			if finding != nil && c.hub != nil {
+				c.broadcastCreated(sourceConn.ID, finding)
+			}
+			affectedConnectorIDs[sourceConn.ID] = true
+		}
+	}
+	for connID := range affectedConnectorIDs {
+		c.broadcastChanged(connID)
+	}
+	return errors.Join(errs...)
 }
 
 func complianceDescription(matches []compliance.Entity) string {

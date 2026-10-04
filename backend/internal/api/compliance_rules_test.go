@@ -219,6 +219,61 @@ func TestComplianceRuleValidation(t *testing.T) {
 			message: badRegexMessage(t, "("),
 			details: []httputil.FieldError{{Field: "conditions[0].value", Msg: "is not a valid regular expression"}},
 		},
+		{
+			name: "related clause bad mode",
+			mutate: func(r map[string]any) {
+				r["related"] = []map[string]any{
+					{
+						"mode": "invalid", "connectorType": "proxmox", "entityKind": "vm",
+						"join": map[string]any{"sourceField": "name", "relatedField": "name"},
+					},
+				}
+			},
+			message: "related[0].mode must be 'requires' or 'forbids', got \"invalid\"",
+			details: []httputil.FieldError{{Field: "related[0].mode", Msg: "must be 'requires' or 'forbids'"}},
+		},
+		{
+			name: "related clause bad connector type",
+			mutate: func(r map[string]any) {
+				r["related"] = []map[string]any{
+					{
+						"mode": "requires", "connectorType": "unknown", "entityKind": "vm",
+						"join": map[string]any{"sourceField": "name", "relatedField": "name"},
+					},
+				}
+			},
+			message: "unknown connector type \"unknown\" in related[0]",
+			details: []httputil.FieldError{{Field: "related[0].connectorType", Msg: "is not a known connector type"}},
+		},
+		{
+			name: "related clause bad source join field",
+			mutate: func(r map[string]any) {
+				r["related"] = []map[string]any{
+					{
+						"mode": "requires", "connectorType": "proxmox", "entityKind": "vm",
+						"join": map[string]any{"sourceField": "nonexistent", "relatedField": "name"},
+					},
+				}
+			},
+			message: "invalid source field \"nonexistent\" in related[0].join",
+			details: []httputil.FieldError{{Field: "related[0].join.sourceField", Msg: "is not a valid field for the source entity kind"}},
+		},
+		{
+			name: "related clause condition on unknown attribute",
+			mutate: func(r map[string]any) {
+				r["related"] = []map[string]any{
+					{
+						"mode": "requires", "connectorType": "proxmox", "entityKind": "vm",
+						"join": map[string]any{"sourceField": "name", "relatedField": "name"},
+						"conditions": []map[string]any{
+							complianceCondition("nonexistent_attr", "eq", "value"),
+						},
+					},
+				}
+			},
+			message: "unknown attribute \"nonexistent_attr\"",
+			details: []httputil.FieldError{{Field: "related[0].conditions[0].attribute", Msg: "is not a known attribute for this entity kind"}},
+		},
 	}
 
 	routes := []struct{ method, path string }{
