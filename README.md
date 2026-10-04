@@ -97,6 +97,7 @@ connectors against their type's fields) and `server config print
 | Service            | Status               |
 |--------------------|----------------------|
 | Proxmox VE         | Built-in             |
+| Proxmox Backup Server | Built-in         |
 | Docker             | Built-in             |
 | pfSense / OPNsense | Built-in             |
 | Netbird            | Built-in             |
