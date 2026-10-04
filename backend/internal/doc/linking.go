@@ -23,8 +23,8 @@ type EntityLink struct {
 // matchEntities reads the (cached) latest snapshot of every other connector and
 // matches its entities against entities, in precedence order (first hit
 // wins per pair): matching ExternalID+Kind, then matching IP, then matching
-// Hostname (case-insensitive). Matches across different connectors are all
-// kept; only exact (ConnectorID, ExternalID) duplicates are dropped.
+// Hostname or alias (case-insensitive). Matches across different connectors
+// are all kept; only exact (ConnectorID, ExternalID) duplicates are dropped.
 func matchEntities(ctx context.Context, s *store.Store, cache *snapshotCache, connectorID string, entities []connector.SnapshotEntity) ([]EntityLink, error) {
 	if len(entities) == 0 {
 		return nil, nil
@@ -80,10 +80,39 @@ func matchReason(a, b connector.SnapshotEntity) string {
 	if a.IP != "" && b.IP != "" && a.IP == b.IP {
 		return "IP address"
 	}
-	if a.Hostname != "" && b.Hostname != "" && strings.EqualFold(a.Hostname, b.Hostname) {
+	if hostnameMatches(a, b) {
 		return "hostname"
 	}
 	return ""
+}
+
+func hostnameMatches(a, b connector.SnapshotEntity) bool {
+	aHasNames := a.Hostname != "" || len(a.Aliases) > 0
+	bHasNames := b.Hostname != "" || len(b.Aliases) > 0
+	if !aHasNames || !bHasNames {
+		return false
+	}
+	if a.Hostname != "" && matchesHostnameOrAlias(a.Hostname, b) {
+		return true
+	}
+	for _, alias := range a.Aliases {
+		if alias != "" && matchesHostnameOrAlias(alias, b) {
+			return true
+		}
+	}
+	return false
+}
+
+func matchesHostnameOrAlias(name string, e connector.SnapshotEntity) bool {
+	if e.Hostname != "" && strings.EqualFold(name, e.Hostname) {
+		return true
+	}
+	for _, alias := range e.Aliases {
+		if alias != "" && strings.EqualFold(name, alias) {
+			return true
+		}
+	}
+	return false
 }
 
 func dedupKey(connectorID string, e connector.SnapshotEntity) string {

@@ -90,6 +90,92 @@ func TestMatchEntitiesHostnamePrecedenceCaseInsensitive(t *testing.T) {
 	}
 }
 
+func TestMatchReasonHostnameAndAliases(t *testing.T) {
+	tests := []struct {
+		name string
+		a, b connector.SnapshotEntity
+		want string
+	}{
+		{name: "hostname", a: connector.SnapshotEntity{Hostname: "app.example.test"}, b: connector.SnapshotEntity{Hostname: "app.example.test"}, want: "hostname"},
+		{name: "alias on right", a: connector.SnapshotEntity{Hostname: "app.example.test"}, b: connector.SnapshotEntity{Aliases: []string{"app.example.test"}}, want: "hostname"},
+		{name: "alias on left", a: connector.SnapshotEntity{Aliases: []string{"app.example.test"}}, b: connector.SnapshotEntity{Hostname: "app.example.test"}, want: "hostname"},
+		{name: "alias to alias", a: connector.SnapshotEntity{Aliases: []string{"app.example.test"}}, b: connector.SnapshotEntity{Aliases: []string{"APP.EXAMPLE.TEST"}}, want: "hostname"},
+		{name: "matching aliases with different hostnames", a: connector.SnapshotEntity{Hostname: "app.example.test", Aliases: []string{"shared.example.test"}}, b: connector.SnapshotEntity{Hostname: "other.example.test", Aliases: []string{"SHARED.EXAMPLE.TEST"}}, want: "hostname"},
+		{name: "empty hostnames", a: connector.SnapshotEntity{}, b: connector.SnapshotEntity{Aliases: []string{""}}},
+		{name: "no hostname match", a: connector.SnapshotEntity{Hostname: "app.example.test"}, b: connector.SnapshotEntity{Aliases: []string{"other.example.test"}}},
+		{name: "external ID precedence", a: connector.SnapshotEntity{Kind: "vm", ExternalID: "7", IP: "10.0.0.1", Hostname: "app.example.test"}, b: connector.SnapshotEntity{Kind: "vm", ExternalID: "7", IP: "10.0.0.1", Aliases: []string{"app.example.test"}}, want: "external ID"},
+		{name: "IP precedence", a: connector.SnapshotEntity{IP: "10.0.0.1", Hostname: "app.example.test"}, b: connector.SnapshotEntity{IP: "10.0.0.1", Aliases: []string{"app.example.test"}}, want: "IP address"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := matchReason(tt.a, tt.b); got != tt.want {
+				t.Errorf("matchReason() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestHostnameMatchesDoesNotAllocate(t *testing.T) {
+	left := connector.SnapshotEntity{Aliases: []string{"api.example.test"}}
+	right := connector.SnapshotEntity{Aliases: []string{"API.EXAMPLE.TEST"}}
+	matched := false
+	if allocations := testing.AllocsPerRun(100, func() {
+		matched = hostnameMatches(left, right)
+	}); allocations != 0 {
+		t.Errorf("hostnameMatches() alias match allocated %v times per run, want 0", allocations)
+	}
+	if !matched {
+		t.Error("hostnameMatches() = false, want alias match")
+	}
+
+	empty := connector.SnapshotEntity{}
+	matched = true
+	if allocations := testing.AllocsPerRun(100, func() {
+		matched = hostnameMatches(empty, right)
+	}); allocations != 0 {
+		t.Errorf("hostnameMatches() empty entity allocated %v times per run, want 0", allocations)
+	}
+	if matched {
+		t.Error("hostnameMatches() = true, want no match for an empty entity")
+	}
+}
+
+func TestMatchEntitiesNPMProxyHostDomains(t *testing.T) {
+	ctx := context.Background()
+	s := newEngineTestStore(t)
+	seedEngineConnectorWithEntities(t, s, "Proxmox", "virtualization", "proxmox", []connector.SnapshotEntity{
+		{Kind: "vm", Name: "app-vm", IP: "10.0.0.25"},
+	})
+	seedEngineConnectorWithEntities(t, s, "Pi-hole", "dns", "pihole", []connector.SnapshotEntity{
+		{Kind: "dns_record", Name: "app.example.test", Hostname: "app.example.test"},
+		{Kind: "dns_record", Name: "www.example.test", Hostname: "www.example.test"},
+	})
+	npmID := seedEngineConnectorWithEntities(t, s, "NPM", "networking", "npm", nil)
+
+	links, err := matchEntities(ctx, s, newSnapshotCache(s), npmID, []connector.SnapshotEntity{
+		{Kind: "proxy_host", Name: "app.example.test", Hostname: "app.example.test", IP: "10.0.0.25", Aliases: []string{"www.example.test"}},
+	})
+	if err != nil {
+		t.Fatalf("matchEntities() error: %v", err)
+	}
+	if len(links) != 3 {
+		t.Fatalf("matchEntities() returned %d links, want VM IP and both DNS domain links: %+v", len(links), links)
+	}
+	got := map[string]string{}
+	for _, link := range links {
+		got[link.Entity.Name] = link.Reason
+	}
+	for name, reason := range map[string]string{
+		"app-vm":           "IP address",
+		"app.example.test": "hostname",
+		"www.example.test": "hostname",
+	} {
+		if got[name] != reason {
+			t.Errorf("link for %q reason = %q, want %q (all links: %+v)", name, got[name], reason, links)
+		}
+	}
+}
+
 func TestMatchEntitiesFansOutAcrossConnectors(t *testing.T) {
 	ctx := context.Background()
 	s := newEngineTestStore(t)
