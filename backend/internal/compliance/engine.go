@@ -10,22 +10,64 @@ import (
 )
 
 const (
-	maxConditions  = 20
-	maxRegexLength = 256
+	maxConditions     = 20
+	maxRegexLength    = 256
+	maxRelatedClauses = 5
 )
+
+// Related clause modes.
+const (
+	ModeRequires = "requires"
+	ModeForbids  = "forbids"
+)
+
+// AttributeFieldPrefix marks a join field that names a catalog attribute
+// (attributes.mac) rather than a typed entity field (mac). The prefix keeps the
+// two namespaces apart: some connectors emit an attribute called "mac" next to
+// the typed MAC field.
+const AttributeFieldPrefix = "attributes."
+
+// JoinFields lists the typed entity fields a related clause may join on.
+var JoinFields = []string{"external_id", "name", "ip", "hostname", "mac"}
 
 // Rule is a compliance rule stored by the application.
 type Rule struct {
-	ID              string      `json:"id" yaml:"id"`
-	Name            string      `json:"name" yaml:"name"`
-	ConnectorType   string      `json:"connectorType" yaml:"connectorType"`
-	EntityKind      string      `json:"entityKind" yaml:"entityKind"`
-	Conditions      []Condition `json:"conditions" yaml:"conditions"`
-	Severity        string      `json:"severity" yaml:"severity"`
-	Title           string      `json:"title" yaml:"title"`
-	RemediationLink string      `json:"remediationLink" yaml:"remediationLink"`
-	Enabled         bool        `json:"enabled" yaml:"enabled"`
+	ID            string      `json:"id" yaml:"id"`
+	Name          string      `json:"name" yaml:"name"`
+	ConnectorType string      `json:"connectorType" yaml:"connectorType"`
+	EntityKind    string      `json:"entityKind" yaml:"entityKind"`
+	Conditions    []Condition `json:"conditions" yaml:"conditions"`
+	// Related clauses are ANDed. They are evaluated against entities of other
+	// connectors; see EvaluateWithRelated.
+	Related         []RelatedClause `json:"related,omitempty" yaml:"related,omitempty"`
+	Severity        string          `json:"severity" yaml:"severity"`
+	Title           string          `json:"title" yaml:"title"`
+	RemediationLink string          `json:"remediationLink" yaml:"remediationLink"`
+	Enabled         bool            `json:"enabled" yaml:"enabled"`
 }
+
+// RelatedClause requires (or forbids) an entity of another connector type that
+// is joined to the rule's source entity.
+type RelatedClause struct {
+	Mode          string      `json:"mode" yaml:"mode"` // ModeRequires or ModeForbids
+	ConnectorType string      `json:"connectorType" yaml:"connectorType"`
+	EntityKind    string      `json:"entityKind" yaml:"entityKind"`
+	Join          Join        `json:"join" yaml:"join"`
+	Conditions    []Condition `json:"conditions,omitempty" yaml:"conditions,omitempty"`
+}
+
+// Join pairs a source-entity field with a related-entity field. Each is a
+// typed field from JoinFields or AttributeFieldPrefix + a catalog attribute.
+type Join struct {
+	SourceField  string `json:"sourceField" yaml:"sourceField"`
+	RelatedField string `json:"relatedField" yaml:"relatedField"`
+}
+
+// RelatedEntities holds the candidate related entities per connector type: the
+// entities of the latest snapshot of every connector of that type, combined. A
+// type with no connector snapshot is absent from the map (rules needing it are
+// skipped); a type whose snapshots hold no entities maps to an empty slice.
+type RelatedEntities map[string][]Entity
 
 // Condition compares one entity attribute with a value.
 type Condition struct {
@@ -52,6 +94,10 @@ type Snapshot struct {
 type Entity struct {
 	Kind       string         `json:"kind"`
 	Name       string         `json:"name"`
+	ExternalID string         `json:"externalId,omitempty"`
+	IP         string         `json:"ip,omitempty"`
+	Hostname   string         `json:"hostname,omitempty"`
+	MAC        string         `json:"mac,omitempty"`
 	Attributes map[string]any `json:"attributes"`
 }
 
@@ -156,6 +202,15 @@ func Evaluate(rule Rule, snapshot Snapshot) []Entity {
 		matches = append(matches, entity)
 	}
 	return matches
+}
+
+// EvaluateWithRelated is Evaluate for rules with Related clauses. The rule's own
+// conditions select source entities; a selected entity is returned when any
+// requires clause finds no related entity or any forbids clause finds one.
+// skipped is true, and matches nil, when a clause's connector type is absent
+// from related. A rule without clauses returns exactly Evaluate's result.
+func EvaluateWithRelated(_ Rule, _ Snapshot, _ RelatedEntities) (matches []Entity, skipped bool) {
+	panic("not implemented")
 }
 
 func findAttribute(attributes []AttributeSpec, name string) (AttributeSpec, bool) {

@@ -7,16 +7,10 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export type ComplianceConditionOp =
-  (typeof ComplianceConditionOp)[keyof typeof ComplianceConditionOp];
+export type ComplianceRelatedClauseMode =
+  (typeof ComplianceRelatedClauseMode)[keyof typeof ComplianceRelatedClauseMode];
 
-export const ComplianceConditionOp = {
-  eq: 'eq',
-  neq: 'neq',
-  contains: 'contains',
-  not_contains: 'not_contains',
-  regex: 'regex',
-  exists: 'exists',
-  gt: 'gt',
-  lt: 'lt',
+export const ComplianceRelatedClauseMode = {
+  requires: 'requires',
+  forbids: 'forbids',
 } as const;

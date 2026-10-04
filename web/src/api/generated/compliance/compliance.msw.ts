@@ -14,7 +14,7 @@ import type {
   ComplianceRulePackInstallResult,
   ComplianceRulePage,
   ComplianceRuleTestResult,
-  GetComplianceSchema200,
+  ComplianceSchema,
 } from '../../model';
 
 import {
@@ -39,10 +39,10 @@ export {
 
 export const getGetComplianceSchemaMockHandler = (
   overrideResponse?:
-    | GetComplianceSchema200
+    | ComplianceSchema
     | ((
         info: Parameters<Parameters<typeof http.get>[1]>[0]
-      ) => Promise<GetComplianceSchema200> | GetComplianceSchema200),
+      ) => Promise<ComplianceSchema> | ComplianceSchema),
   options?: RequestHandlerOptions
 ) => {
   return http.get(

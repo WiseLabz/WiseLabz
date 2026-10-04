@@ -7,16 +7,9 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export type ComplianceConditionOp =
-  (typeof ComplianceConditionOp)[keyof typeof ComplianceConditionOp];
-
-export const ComplianceConditionOp = {
-  eq: 'eq',
-  neq: 'neq',
-  contains: 'contains',
-  not_contains: 'not_contains',
-  regex: 'regex',
-  exists: 'exists',
-  gt: 'gt',
-  lt: 'lt',
-} as const;
+export interface ComplianceJoin {
+  /** Typed field of the source entity, or "attributes.<name>" */
+  sourceField: string;
+  /** Typed field of the related entity, or "attributes.<name>" */
+  relatedField: string;
+}
