@@ -783,6 +783,15 @@ func TestRunMigrationsDownPostgres(t *testing.T) {
 	if err := RunMigrations(db, "postgres", logger); err != nil {
 		t.Fatalf("RunMigrations() error: %v", err)
 	}
+	if !attachmentTableExists(t, db, "postgres", "entity_index") {
+		t.Fatal("entity_index missing")
+	}
+	if err := RunMigrationsDown(db, "postgres", logger); err != nil {
+		t.Fatalf("rollback entity_index: %v", err)
+	}
+	if attachmentTableExists(t, db, "postgres", "entity_index") {
+		t.Fatal("entity_index remains after rollback")
+	}
 	if !hasColumn(t, db, "postgres", "report_definitions", "attach_lab_book") {
 		t.Fatal("report_definitions.attach_lab_book missing")
 	}
