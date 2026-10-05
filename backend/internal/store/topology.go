@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -61,6 +62,13 @@ type TopologyEdge struct {
 const topologyEdgeColumns = `id, connector_id, src_connector_id, src_kind, src_name, src_ref,
 	dst_connector_id, dst_kind, dst_name, dst_ref, kind, source, detail, created_at`
 
+// topologyRebuildMu and the advisory lock below serialize edge replacement so
+// two connectors' rebuilds cannot both delete and re-insert the same shared
+// resolves_to rows and leave duplicates (key distinct from the identity lock).
+var topologyRebuildMu sync.Mutex
+
+const topologyRebuildAdvisoryLock = 731058503
+
 // topologyEdgesAffectedBy selects the edges a rebuild of one connector
 // replaces (argument: the connector ID, four times): everything it owns, any
 // same_as edge touching it (re-derived symmetrically from its latest
@@ -69,7 +77,7 @@ const topologyEdgeColumns = `id, connector_id, src_connector_id, src_kind, src_n
 // outlive the entity it points at.
 const topologyEdgesAffectedBy = `connector_id = ?
 	OR (kind = '` + TopologyEdgeSameAs + `' AND (src_connector_id = ? OR dst_connector_id = ?))
-	OR (kind = '` + TopologyEdgeResolvesTo + `' AND dst_connector_id = ?)`
+	OR (kind = '` + TopologyEdgeResolvesTo + `' AND dst_connector_id = ?`
 
 // ReplaceTopologyEdgesForConnector atomically rebuilds the edges affected by
 // connectorID's rebuild (see topologyEdgesAffectedBy), so entities that
@@ -77,9 +85,32 @@ const topologyEdgesAffectedBy = `connector_id = ?
 // an empty ConnectorID is owned by connectorID; a non-empty one keeps its
 // owner (a resolves_to edge owned by the DNS connector).
 func (s *Store) ReplaceTopologyEdgesForConnector(ctx context.Context, connectorID string, edges []TopologyEdge) error {
+	return s.ReplaceTopologyEdgesPreserving(ctx, connectorID, edges, nil)
+}
+
+// ReplaceTopologyEdgesPreserving is ReplaceTopologyEdgesForConnector for a
+// rebuild that could not read the snapshots of preserveOwners. Their
+// resolves_to edges pointing at connectorID would have been re-derived from
+// those snapshots, so the existing ones are kept rather than deleted.
+func (s *Store) ReplaceTopologyEdgesPreserving(ctx context.Context, connectorID string, edges []TopologyEdge, preserveOwners []string) error {
+	topologyRebuildMu.Lock()
+	defer topologyRebuildMu.Unlock()
 	return s.WithinTransaction(ctx, func(tx *Store) error {
-		if _, err := tx.db.ExecContext(ctx, `DELETE FROM topology_edges WHERE `+topologyEdgesAffectedBy,
-			connectorID, connectorID, connectorID, connectorID); err != nil {
+		if s.driver == "postgres" {
+			if _, err := tx.db.ExecContext(ctx, `SELECT pg_advisory_xact_lock(`+fmt.Sprint(topologyRebuildAdvisoryLock)+`)`); err != nil {
+				return fmt.Errorf("lock topology rebuild: %w", err)
+			}
+		}
+		where := topologyEdgesAffectedBy
+		args := []any{connectorID, connectorID, connectorID, connectorID}
+		if len(preserveOwners) > 0 {
+			where += ` AND connector_id NOT IN (` + placeholders(len(preserveOwners)) + `)`
+			for _, id := range preserveOwners {
+				args = append(args, id)
+			}
+		}
+		where += `)`
+		if _, err := tx.db.ExecContext(ctx, `DELETE FROM topology_edges WHERE `+where, args...); err != nil {
 			return fmt.Errorf("delete topology edges: %w", err)
 		}
 		now := time.Now().UTC().Format(time.RFC3339)

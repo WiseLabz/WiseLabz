@@ -412,3 +412,46 @@ func TestTopologyDocRegenerationFailureDoesNotFailRebuildAndRetries(t *testing.T
 		t.Fatalf("doc versions = %d, want %d after the retry", n, base+1)
 	}
 }
+
+func TestTopologyDocWithoutMarkerGetsNoVersionWhenContentUnchanged(t *testing.T) {
+	ctx := context.Background()
+	s, e, dns, vm := dnsFixture(t)
+	rebuild(t, e, dns, vm)
+	res, err := e.GenerateLabTopology(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A doc generated before fingerprints existed: same body, no marker line.
+	if err := s.UpdateDoc(ctx, res.DocID, StripMarkers(res.Content), nil); err != nil {
+		t.Fatal(err)
+	}
+	base, _ := labDocVersions(t, s)
+	rebuild(t, e, dns, vm, dns, vm)
+	if n, _ := labDocVersions(t, s); n != base {
+		t.Fatalf("doc versions = %d, want %d: unchanged legacy doc got a new version", n, base)
+	}
+	// A real edge change still regenerates it.
+	addTopologySnapshot(t, s, dns, connector.ServiceSnapshot{ServiceName: "Pihole"})
+	rebuild(t, e, dns)
+	if n, _ := labDocVersions(t, s); n != base+1 {
+		t.Fatalf("doc versions = %d, want %d after an edge change", n, base+1)
+	}
+}
+
+func TestResolvesToKeptWhenOtherConnectorSnapshotUnreadable(t *testing.T) {
+	ctx := context.Background()
+	s, e, dns, vm := dnsFixture(t)
+	rebuild(t, e, dns, vm)
+	if edges := edgesOfKind(t, s, store.TopologyEdgeResolvesTo, dns, vm); len(edges) != 1 {
+		t.Fatalf("setup: resolves_to = %+v", edges)
+	}
+	// The DNS connector's latest snapshot cannot be read during the target's rebuild.
+	if err := s.CreateSnapshot(ctx, &store.SnapshotRecord{ConnectorID: dns, Data: "{not json"}); err != nil {
+		t.Fatal(err)
+	}
+	rebuild(t, e, vm)
+	edges := edgesOfKind(t, s, store.TopologyEdgeResolvesTo, dns, vm)
+	if len(edges) != 1 || edges[0].ConnectorID != dns {
+		t.Fatalf("resolves_to after unreadable DNS snapshot = %+v, want the existing edge kept", edges)
+	}
+}

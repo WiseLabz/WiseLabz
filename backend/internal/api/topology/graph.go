@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/WiseLabz/wiselabz/internal/httputil"
+	"github.com/WiseLabz/wiselabz/internal/store"
 )
 
 type graphNode struct {
@@ -80,6 +81,7 @@ func (h *Handler) Graph(w http.ResponseWriter, r *http.Request) {
 		httputil.Errorf(w, err)
 		return
 	}
+	sortEdgesForCap(edges)
 	members, err := h.activeMembers(r, allowed)
 	if err != nil {
 		httputil.Errorf(w, err)
@@ -122,6 +124,10 @@ func (h *Handler) Graph(w http.ResponseWriter, r *http.Request) {
 		}
 		a := endpoint(e.SrcConnectorID, e.SrcKind, e.SrcName, e.SrcRef)
 		b := endpoint(e.DstConnectorID, e.DstKind, e.DstName, e.DstRef)
+		if a.ID == b.ID {
+			// Both ends collapsed into one identity node: not a relation.
+			continue
+		}
 		// Edges owned by different connectors can describe the same relation
 		// (and several members of one identity collapse onto one node).
 		edgeKey := strings.Join([]string{a.ID, b.ID, e.Kind, e.Source, e.Detail}, "\x00")
@@ -132,7 +138,7 @@ func (h *Handler) Graph(w http.ResponseWriter, r *http.Request) {
 		if _, ok := nodes[a.ID]; !ok {
 			newNodes++
 		}
-		if _, ok := nodes[b.ID]; !ok && b.ID != a.ID {
+		if _, ok := nodes[b.ID]; !ok {
 			newNodes++
 		}
 		if len(outEdges) >= maxGraphEdges || len(nodes)+newNodes > maxGraphNodes {
@@ -180,8 +186,48 @@ func (h *Handler) Graph(w http.ResponseWriter, r *http.Request) {
 		}
 		return strings.Compare(a.ID, b.ID)
 	})
-	slices.SortFunc(outEdges, func(a, b graphEdge) int { return strings.Compare(a.ID, b.ID) })
+	slices.SortFunc(outEdges, func(a, b graphEdge) int {
+		return strings.Compare(edgeOutputKey(a), edgeOutputKey(b))
+	})
 	httputil.JSON(w, http.StatusOK, graphResponse{Nodes: out, Edges: outEdges, Truncated: truncated})
+}
+
+// edgeKindPriority orders edge kinds for the edge cap: the typed relations
+// come first so a large lab cannot push them out behind contains and
+// dependency edges.
+var edgeKindPriority = map[string]int{
+	store.TopologyEdgeProxiesTo: 0, store.TopologyEdgeResolvesTo: 1, store.TopologyEdgeRunsOn: 2,
+	store.TopologyEdgeSameAs: 3, store.TopologyEdgeDependency: 4, store.TopologyEdgeContains: 5,
+}
+
+func edgeKindRank(kind string) int {
+	if r, ok := edgeKindPriority[kind]; ok {
+		return r
+	}
+	return len(edgeKindPriority)
+}
+
+// sortEdgesForCap sorts by kind priority and then by endpoint and detail
+// values only, never the row ID, so which edges survive the cap does not
+// change when the edges are rebuilt.
+func sortEdgesForCap(edges []store.TopologyEdge) {
+	key := func(e store.TopologyEdge) string {
+		return strings.Join([]string{e.SrcConnectorID, e.SrcKind, e.SrcName, e.SrcRef,
+			e.DstConnectorID, e.DstKind, e.DstName, e.DstRef, e.Source, e.Detail}, "\x00")
+	}
+	slices.SortStableFunc(edges, func(a, b store.TopologyEdge) int {
+		if c := edgeKindRank(a.Kind) - edgeKindRank(b.Kind); c != 0 {
+			return c
+		}
+		if c := strings.Compare(a.Kind, b.Kind); c != 0 {
+			return c
+		}
+		return strings.Compare(key(a), key(b))
+	})
+}
+
+func edgeOutputKey(e graphEdge) string {
+	return strings.Join([]string{e.Source, e.Target, e.Kind, e.SourceLabel, e.Detail}, "\x00")
 }
 
 func memberKey(connectorID, kind, ref, name string) string {

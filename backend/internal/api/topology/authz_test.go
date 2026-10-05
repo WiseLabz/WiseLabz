@@ -500,3 +500,71 @@ func TestGraphIsCapped(t *testing.T) {
 		t.Fatalf("small graph marked truncated: %s", body)
 	}
 }
+
+func TestGraphNeverEmitsSelfLoopEdges(t *testing.T) {
+	f := newFixture(t)
+	// vm-a (pve) and node-1 (net) are one identity, so the fixture's runs_on
+	// edge between them and a same_as edge both collapse onto one node.
+	f.identity(t, "id-one", "one", "",
+		[5]string{f.pve, "vm", "vm-a", "vm-a", ""},
+		[5]string{f.net, "node", "node-1", "node-1", ""})
+	f.replace(t, f.pve, []edgeSpec{
+		{f.pve, f.net, "vm", "vm-a", "node", "node-1", store.TopologyEdgeRunsOn},
+		{f.pve, f.net, "vm", "vm-a", "node", "node-1", store.TopologyEdgeSameAs},
+	})
+	_, body := f.graph(t, call{userID: f.viewer}, nil)
+	g := decodeGraph(t, body)
+	for _, e := range g.Edges {
+		if e.Source == e.Target {
+			t.Fatalf("self-loop edge %+v in %s", e, body)
+		}
+	}
+	// The unrelated net-internal edge must survive.
+	if len(g.Edges) != 1 || g.Edges[0].Kind != store.TopologyEdgeDependency {
+		t.Fatalf("edges = %s, want only the dependency edge", body)
+	}
+}
+
+func TestGraphCapKeepsTypedEdgesFirstAndIsStableAcrossRebuilds(t *testing.T) {
+	f := newFixture(t)
+	build := func() []store.TopologyEdge {
+		edges := make([]store.TopologyEdge, 0, maxGraphEdges+51)
+		// Alphabetically earlier kind that would otherwise eat the cap.
+		for i := 0; i < maxGraphEdges+50; i++ {
+			edges = append(edges, store.TopologyEdge{
+				SrcConnectorID: f.net, SrcKind: "x", SrcName: "a", SrcRef: "a", DstConnectorID: f.net, DstKind: "x", DstName: "b", DstRef: "b",
+				Kind: store.TopologyEdgeContains, Detail: fmt.Sprintf("c%05d", i),
+			})
+		}
+		return append(edges, store.TopologyEdge{
+			SrcConnectorID: f.net, SrcKind: "x", SrcName: "a", SrcRef: "a", DstConnectorID: f.net, DstKind: "x", DstName: "b", DstRef: "b",
+			Kind: store.TopologyEdgeProxiesTo, Detail: "443",
+		})
+	}
+	snapshot := func() string {
+		if err := f.s.ReplaceTopologyEdgesForConnector(context.Background(), f.net, build()); err != nil {
+			t.Fatal(err)
+		}
+		_, body := f.graph(t, call{userID: f.viewer}, nil)
+		g := decodeGraph(t, body)
+		if !g.Truncated || len(g.Edges) != maxGraphEdges {
+			t.Fatalf("edges = %d truncated=%v", len(g.Edges), g.Truncated)
+		}
+		var keys []string
+		hasTyped := false
+		for _, e := range g.Edges {
+			if e.Kind == store.TopologyEdgeProxiesTo {
+				hasTyped = true
+			}
+			keys = append(keys, e.Source+"|"+e.Target+"|"+e.Kind+"|"+e.Detail)
+		}
+		if !hasTyped {
+			t.Fatal("typed proxies_to edge was cut before contains edges")
+		}
+		return strings.Join(keys, "\n")
+	}
+	first := snapshot()
+	if second := snapshot(); first != second {
+		t.Fatal("capped edge set or order changed after a rebuild")
+	}
+}

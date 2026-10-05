@@ -895,6 +895,17 @@ func TestRunMigrationsDownPostgres(t *testing.T) {
 		t.Fatal("entities.merged_at missing")
 	}
 	if err := RunMigrationsDown(db, "postgres", logger); err != nil {
+		t.Fatalf("rollback topology edge detail migration: %v", err)
+	}
+	if hasColumn(t, db, "postgres", "topology_edges", "detail") {
+		t.Fatal("topology edge detail column remains after 000059 rollback")
+	}
+	entitiesPresent := attachmentTableExists(t, db, "postgres", "entities")
+	entityKindPresent := hasColumn(t, db, "postgres", "quality_findings", "entity_kind")
+	if !entitiesPresent || !entityKindPresent {
+		t.Fatalf("entity identity schema was rolled back with 000059 (entities=%v entity_kind=%v)", entitiesPresent, entityKindPresent)
+	}
+	if err := RunMigrationsDown(db, "postgres", logger); err != nil {
 		t.Fatalf("rollback entity_identities: %v", err)
 	}
 	if attachmentTableExists(t, db, "postgres", "entities") || hasColumn(t, db, "postgres", "quality_findings", "entity_kind") {

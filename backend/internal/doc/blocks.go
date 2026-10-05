@@ -160,9 +160,15 @@ func slugKeys(prefix string, titles []string) []string {
 	return keys
 }
 
-// StripMarkers returns content with the wl:gen marker lines removed, i.e.
-// what a reader sees. For a fresh render it equals the plain preview.
+// topologyMarkerLine matches the topology edge fingerprint comment together
+// with the blank line that separates it from the generated body.
+var topologyMarkerLine = regexp.MustCompile(`\n?` + regexp.QuoteMeta(topologyDocMarker) + `[^\n]*-->[ \t]*\n?`)
+
+// StripMarkers returns content with the wl:gen marker lines and the topology
+// edge fingerprint comment removed, i.e. what a reader sees. For a fresh
+// render it equals the plain preview.
 func StripMarkers(content string) string {
+	content = topologyMarkerLine.ReplaceAllString(content, "")
 	var b strings.Builder
 	for _, s := range ParseBlocks(content) {
 		if s.Block != nil {

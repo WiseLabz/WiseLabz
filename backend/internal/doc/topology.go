@@ -88,7 +88,7 @@ func (e *Engine) RebuildTopologyForConnector(ctx context.Context, connectorID st
 	if err != nil {
 		return fmt.Errorf("list connectors: %w", err)
 	}
-	others := e.loadOtherSnapshots(ctx, connectorID, all)
+	others, unreadable := e.loadOtherSnapshots(ctx, connectorID, all)
 
 	addResolvesToEdges(b, connectorID, snap, others)
 	for _, dep := range snap.Dependencies {
@@ -99,7 +99,7 @@ func (e *Engine) RebuildTopologyForConnector(ctx context.Context, connectorID st
 	}
 	addRuntimeEdges(b, connectorID, snap, others)
 
-	if err := e.store.ReplaceTopologyEdgesForConnector(ctx, connectorID, b.edges); err != nil {
+	if err := e.store.ReplaceTopologyEdgesPreserving(ctx, connectorID, b.edges, unreadable); err != nil {
 		return err
 	}
 	e.refreshTopologyDoc(ctx)
@@ -114,22 +114,26 @@ type otherSnapshot struct {
 }
 
 // loadOtherSnapshots returns the latest snapshot of every connector except
-// connectorID, ordered by connector ID. Connectors without a usable snapshot
-// are skipped.
-func (e *Engine) loadOtherSnapshots(ctx context.Context, connectorID string, all []store.ConnectorRecord) []otherSnapshot {
-	out := make([]otherSnapshot, 0, len(all))
+// connectorID, ordered by connector ID. Connectors without any snapshot are
+// skipped; connectors whose snapshot exists but could not be read are
+// returned in unreadable, so the caller keeps the edges derived from them.
+func (e *Engine) loadOtherSnapshots(ctx context.Context, connectorID string, all []store.ConnectorRecord) (out []otherSnapshot, unreadable []string) {
+	out = make([]otherSnapshot, 0, len(all))
 	for _, c := range all {
 		if c.ID == connectorID {
 			continue
 		}
 		snap, err := e.snapshots.latest(ctx, c.ID)
 		if err != nil {
+			if !errors.Is(err, store.ErrNotFound) {
+				unreadable = append(unreadable, c.ID)
+			}
 			continue
 		}
 		out = append(out, otherSnapshot{ID: c.ID, Name: c.Name, Snap: snap})
 	}
 	slices.SortFunc(out, func(a, b otherSnapshot) int { return strings.Compare(a.ID, b.ID) })
-	return out
+	return out, unreadable
 }
 
 func isDNSEntity(kind string) bool { return kind == "dns_record" || kind == "dns_rewrite" }
@@ -170,7 +174,7 @@ func (e *Engine) regenerateTopologyDocIfStale(ctx context.Context) error {
 		if strings.Contains(full.Content, topologyDocMarker+fingerprint+" -->") {
 			return nil
 		}
-		if _, err := e.GenerateLabTopology(ctx); err != nil {
+		if _, err := e.generateLabTopology(ctx, true); err != nil {
 			return fmt.Errorf("regenerate topology doc: %w", err)
 		}
 		return nil

@@ -312,3 +312,20 @@ func TestExportOmitsSoftDeletedDocs(t *testing.T) {
 		t.Fatalf("export: %+v %v", result, err)
 	}
 }
+
+func TestExportAllStripsTopologyFingerprint(t *testing.T) {
+	ctx := context.Background()
+	s := newTestStore(t)
+	content := "# Lab Topology\n\n```mermaid\ngraph LR\n```\n\n<!-- wl:topology-edges:" + "0123abcd" + " -->\n"
+	if err := s.CreateDoc(ctx, &store.DocRecord{ID: id1, Title: "Lab Topology", Kind: "lab", Content: content}); err != nil {
+		t.Fatalf("create doc: %v", err)
+	}
+	dir := t.TempDir()
+	if _, err := docexport.NewExporter(s).ExportAll(ctx, dir); err != nil {
+		t.Fatalf("ExportAll: %v", err)
+	}
+	got := readFile(t, filepath.Join(dir, "lab-topology-0000000a.md"))
+	if want := "# Lab Topology\n\n```mermaid\ngraph LR\n```\n"; got != want {
+		t.Fatalf("export = %q, want %q", got, want)
+	}
+}

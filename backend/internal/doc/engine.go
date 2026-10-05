@@ -312,6 +312,14 @@ const labTopologyTitle = "Lab Topology"
 // into one lab-wide Mermaid diagram and persists it as the single Kind:
 // "lab" doc titled "Lab Topology" (created on first call, updated after).
 func (e *Engine) GenerateLabTopology(ctx context.Context) (*GenerateResult, error) {
+	return e.generateLabTopology(ctx, false)
+}
+
+// generateLabTopology renders and persists the Lab Topology doc. With
+// skipIfUnchanged, an existing doc whose content already equals the render
+// (ignoring the fingerprint comment) is left alone, so a doc that only lacks
+// the comment does not get a new version.
+func (e *Engine) generateLabTopology(ctx context.Context, skipIfUnchanged bool) (*GenerateResult, error) {
 	connectors, err := e.store.ListAllConnectors(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("list connectors: %w", err)
@@ -377,6 +385,15 @@ func (e *Engine) GenerateLabTopology(ctx context.Context) (*GenerateResult, erro
 	var docID string
 	if existing != nil {
 		docID = existing.ID
+		if skipIfUnchanged {
+			current, err := e.store.GetDoc(ctx, docID)
+			if err != nil {
+				return nil, fmt.Errorf("get topology doc: %w", err)
+			}
+			if StripMarkers(current.Content) == StripMarkers(content) {
+				return &GenerateResult{DocID: docID, Title: labTopologyTitle, Content: current.Content}, nil
+			}
+		}
 		if err := e.store.UpdateDoc(ctx, docID, content, nil); err != nil {
 			return nil, fmt.Errorf("update doc: %w", err)
 		}
