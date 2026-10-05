@@ -71,8 +71,11 @@ func (c *Connector) Validate(ctx context.Context, _ map[string]any) error {
 	if (c.basicUsername == "") != (c.basicPassword == "") {
 		return errors.New("caddy basic auth username and password must be provided together")
 	}
+	if c.bearerToken != "" && (c.basicUsername != "" || c.basicPassword != "") {
+		return errors.New("caddy bearer token and basic auth cannot be used together")
+	}
 	if c.configJSON != "" {
-		_, err := parseConfig([]byte(c.configJSON))
+		_, err := parsePastedConfig([]byte(c.configJSON))
 		return err
 	}
 	parsed, err := url.Parse(c.url)
@@ -83,7 +86,7 @@ func (c *Connector) Validate(ctx context.Context, _ map[string]any) error {
 	if err != nil {
 		return err
 	}
-	_, err = parseConfig(raw)
+	_, err = parseAdminConfig(raw)
 	return err
 }
 
@@ -94,7 +97,11 @@ func (c *Connector) Fetch(ctx context.Context, _ map[string]any) (snapshot *conn
 	if (c.url == "") == (c.configJSON == "") {
 		return nil, errors.New("exactly one of caddy url or config_json is required")
 	}
-	raw := []byte(c.configJSON)
+	var raw []byte
+	pasted := c.url == ""
+	if pasted {
+		raw = []byte(c.configJSON)
+	}
 	if c.url != "" {
 		var err error
 		raw, err = c.fetchConfig(ctx)
@@ -102,7 +109,13 @@ func (c *Connector) Fetch(ctx context.Context, _ map[string]any) (snapshot *conn
 			return nil, err
 		}
 	}
-	parsed, err := parseConfig(raw)
+	var parsed *parsedConfig
+	var err error
+	if pasted {
+		parsed, err = parsePastedConfig(raw)
+	} else {
+		parsed, err = parseAdminConfig(raw)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -133,19 +146,33 @@ func (c *Connector) fetchConfig(ctx context.Context) ([]byte, error) {
 	return data, nil
 }
 
-func parseConfig(raw []byte) (*parsedConfig, error) {
-	if len(strings.TrimSpace(string(raw))) == 0 {
-		return nil, connector.NewMalformedResponseError(errors.New("empty config JSON"))
-	}
+func parsePastedConfig(raw []byte) (*parsedConfig, error) {
 	if len(raw) > maxConfigBytes {
 		return nil, connector.NewMalformedResponseError(fmt.Errorf("config exceeds %d bytes", maxConfigBytes))
 	}
+	return parseConfig(raw)
+}
+
+func parseAdminConfig(raw []byte) (*parsedConfig, error) {
+	if strings.TrimSpace(string(raw)) == "null" {
+		return parseConfig([]byte(`{}`))
+	}
+	return parseConfig(raw)
+}
+
+func parseConfig(raw []byte) (*parsedConfig, error) {
+	trimmed := strings.TrimSpace(string(raw))
+	if trimmed == "" {
+		return nil, connector.NewMalformedResponseError(errors.New("empty config JSON"))
+	}
+	var object map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &object); err != nil || object == nil {
+		return nil, connector.NewMalformedResponseError(errors.New("config must be a Caddy JSON object"))
+	}
 	var cfg caddyConfig
 	if err := json.Unmarshal(raw, &cfg); err != nil {
-		return nil, connector.NewMalformedResponseError(errors.New("invalid Caddy JSON config"))
-	}
-	if cfg.Apps.HTTP.Servers == nil && cfg.Apps.TLS.Automation.Policies == nil {
-		return nil, connector.NewMalformedResponseError(errors.New("config has no Caddy apps.http.servers or apps.tls.automation.policies"))
+		// Accept valid JSON objects without recognized Caddy apps as empty inventory.
+		return &parsedConfig{}, nil
 	}
 	return buildTables(cfg), nil
 }

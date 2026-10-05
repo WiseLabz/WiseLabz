@@ -23,17 +23,20 @@ type httpServer struct {
 }
 
 type httpRoute struct {
-	Match  []routeMatch `json:"match"`
-	Handle []handler    `json:"handle"`
+	Match    []routeMatch `json:"match"`
+	Handle   []handler    `json:"handle"`
+	Terminal bool         `json:"terminal"`
 }
 
 type routeMatch struct {
 	Host []string `json:"host"`
+	Path []string `json:"path"`
 }
 
 type handler struct {
-	Handler   string     `json:"handler"`
-	Upstreams []upstream `json:"upstreams"`
+	Handler   string      `json:"handler"`
+	Upstreams []upstream  `json:"upstreams"`
+	Routes    []httpRoute `json:"routes"`
 }
 
 type upstream struct {
@@ -54,9 +57,13 @@ type serverRecord struct {
 }
 
 type routeRecord struct {
-	server   string
-	name     string
-	hosts    []string
-	upstream string
-	port     string
+	server     string
+	name       string
+	hosts      []string
+	paths      []string
+	upstreams  []string
+	ports      []string
+	entityIP   string
+	externalID string
+	index      int
 }

@@ -8,3 +8,10 @@ func TestRouteHostsUsesFirstHostMatcher(t *testing.T) {
 		t.Fatalf("routeHosts = %v", got)
 	}
 }
+
+func TestRoutePathsIncludesNestedSubrouteMatchers(t *testing.T) {
+	paths := routePaths([]routeMatch{{Path: []string{"/root"}}}, []handler{{Handler: "subroute", Routes: []httpRoute{{Match: []routeMatch{{Path: []string{"/nested"}}}}}}}, 0)
+	if len(paths) != 2 || paths[0] != "/nested" || paths[1] != "/root" {
+		t.Fatalf("routePaths = %v", paths)
+	}
+}
