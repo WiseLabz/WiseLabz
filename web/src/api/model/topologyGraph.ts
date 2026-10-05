@@ -10,6 +10,8 @@ import type { TopologyEdge } from './topologyEdge';
 import type { TopologyNode } from './topologyNode';
 
 export interface TopologyGraph {
+  /** True when the 2000-node or 5000-edge cap omitted part of the graph. */
+  truncated: boolean;
   nodes: TopologyNode[];
   edges: TopologyEdge[];
 }

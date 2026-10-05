@@ -49,7 +49,7 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
 };
 
 /**
- * Edges are limited to connectors the caller can view and any API-key connector scope. With to, returns the shortest path; without to, follows directed edges from from.
+ * Edges are limited to connectors the caller can view and any API-key connector scope. With to, returns the shortest path over undirected edges and reports hops. Without to, follows directed edges from from (breadth-first, each node once; hops is omitted) and returns at most 1000 steps, setting truncated when more were reachable.
  * @summary Trace a path through visible topology edges
  */
 export const getTopologyPath = (
@@ -168,6 +168,7 @@ export function useGetTopologyPath<
 }
 
 /**
+ * Nodes are entity identities (merged identities excluded) plus connector service nodes and unresolved endpoints. Edges and members are limited to connectors the caller can view and any API-key connector scope; a connector filter naming a hidden connector returns the same empty graph as an unknown one. The response is capped at 2000 nodes and 5000 edges (no pagination) and sets truncated when the cap cut it short.
  * @summary Get the visible live topology graph
  */
 export const getTopologyGraph = (

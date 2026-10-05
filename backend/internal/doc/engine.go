@@ -353,6 +353,13 @@ func (e *Engine) GenerateLabTopology(ctx context.Context) (*GenerateResult, erro
 		"# %s\n\n_%d entities across %d connectors._\n\n```mermaid\n%s```\n",
 		labTopologyTitle, len(entities), len(connectors), renderLabMermaid(entities, links),
 	)
+	// Record which stored edge set this render reflects, so a later topology
+	// rebuild regenerates only when the edges moved on.
+	fingerprint, err := e.store.TopologyEdgesFingerprint(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("fingerprint topology edges: %w", err)
+	}
+	content += "\n" + topologyDocMarker + fingerprint + " -->\n"
 
 	docs, _, err := e.store.ListAllDocs(ctx, labTopologyTitle, 0, 50)
 	if err != nil {

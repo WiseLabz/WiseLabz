@@ -41,32 +41,48 @@ type Step struct {
 type hop struct{ prev, edgeKind, source, detail string }
 type adjacent struct{ to, kind, source, detail string }
 
-// ShortestPath runs breadth-first search from any matching node. When directed
-// is false, every edge can be traversed both ways (the MCP contract).
-func ShortestPath(edges []store.TopologyEdge, from, to string, directed bool) []Step {
-	nodes := map[string]Node{}
-	adj := map[string][]adjacent{}
-	order := []string{}
+// graph is the adjacency structure both traversals share. order lists node
+// keys in first-seen edge order, which keeps results deterministic.
+type graph struct {
+	nodes map[string]Node
+	adj   map[string][]adjacent
+	order []string
+}
+
+func buildGraph(edges []store.TopologyEdge, directed bool) *graph {
+	g := &graph{nodes: map[string]Node{}, adj: map[string][]adjacent{}}
 	touch := func(n Node) string {
 		k := n.key()
-		if _, ok := nodes[k]; !ok {
-			nodes[k] = n
-			order = append(order, k)
+		if _, ok := g.nodes[k]; !ok {
+			g.nodes[k] = n
+			g.order = append(g.order, k)
 		}
 		return k
 	}
 	for _, e := range edges {
 		a := touch(Node{ConnectorID: e.SrcConnectorID, Kind: e.SrcKind, Name: e.SrcName, Ref: e.SrcRef})
 		b := touch(Node{ConnectorID: e.DstConnectorID, Kind: e.DstKind, Name: e.DstName, Ref: e.DstRef})
-		adj[a] = append(adj[a], adjacent{b, e.Kind, e.Source, e.Detail})
+		g.adj[a] = append(g.adj[a], adjacent{b, e.Kind, e.Source, e.Detail})
 		if !directed {
-			adj[b] = append(adj[b], adjacent{a, e.Kind, e.Source, e.Detail})
+			g.adj[b] = append(g.adj[b], adjacent{a, e.Kind, e.Source, e.Detail})
 		}
 	}
+	return g
+}
+
+func (g *graph) step(k string, h hop) Step {
+	n := g.nodes[k]
+	return Step{ConnectorID: n.ConnectorID, Kind: n.Kind, Name: n.Name, EdgeKind: h.edgeKind, EdgeSource: h.source, Detail: h.detail}
+}
+
+// ShortestPath runs breadth-first search from any matching node. When directed
+// is false, every edge can be traversed both ways (the MCP contract).
+func ShortestPath(edges []store.TopologyEdge, from, to string, directed bool) []Step {
+	g := buildGraph(edges, directed)
 	visited := map[string]hop{}
 	var queue []string
-	for _, k := range order {
-		if nodes[k].matches(from) {
+	for _, k := range g.order {
+		if g.nodes[k].matches(from) {
 			visited[k] = hop{}
 			queue = append(queue, k)
 		}
@@ -74,7 +90,7 @@ func ShortestPath(edges []store.TopologyEdge, from, to string, directed bool) []
 	for len(queue) > 0 {
 		cur := queue[0]
 		queue = queue[1:]
-		if nodes[cur].matches(to) {
+		if g.nodes[cur].matches(to) {
 			var rev []string
 			for k := cur; ; {
 				rev = append(rev, k)
@@ -86,13 +102,11 @@ func ShortestPath(edges []store.TopologyEdge, from, to string, directed bool) []
 			}
 			steps := make([]Step, 0, len(rev))
 			for i := len(rev) - 1; i >= 0; i-- {
-				n := nodes[rev[i]]
-				h := visited[rev[i]]
-				steps = append(steps, Step{ConnectorID: n.ConnectorID, Kind: n.Kind, Name: n.Name, EdgeKind: h.edgeKind, EdgeSource: h.source, Detail: h.detail})
+				steps = append(steps, g.step(rev[i], visited[rev[i]]))
 			}
 			return steps
 		}
-		for _, nb := range adj[cur] {
+		for _, nb := range g.adj[cur] {
 			if _, ok := visited[nb.to]; ok {
 				continue
 			}
@@ -104,54 +118,32 @@ func ShortestPath(edges []store.TopologyEdge, from, to string, directed bool) []
 }
 
 // FollowDirected returns a breadth-first spanning walk of all nodes reachable
-// from matching start nodes, following edge direction and visiting each node once.
-func FollowDirected(edges []store.TopologyEdge, from string) []Step {
-	return directedReachable(edges, from)
-}
-
-func directedReachable(edges []store.TopologyEdge, from string) []Step {
-	// Use a synthetic destination that cannot match a real node to collect the
-	// traversal; the normal search's path reconstruction is not suitable here.
-	nodes := map[string]Node{}
-	adj := map[string][]adjacent{}
-	order := []string{}
-	touch := func(n Node) string {
-		k := n.key()
-		if _, ok := nodes[k]; !ok {
-			nodes[k] = n
-			order = append(order, k)
-		}
-		return k
-	}
-	for _, e := range edges {
-		a := touch(Node{ConnectorID: e.SrcConnectorID, Kind: e.SrcKind, Name: e.SrcName, Ref: e.SrcRef})
-		b := touch(Node{ConnectorID: e.DstConnectorID, Kind: e.DstKind, Name: e.DstName, Ref: e.DstRef})
-		adj[a] = append(adj[a], adjacent{b, e.Kind, e.Source, e.Detail})
-	}
-	seen := map[string]bool{}
-	type item struct {
-		k   string
-		via adjacent
-	}
-	var queue []item
-	for _, k := range order {
-		if nodes[k].matches(from) {
-			seen[k] = true
-			queue = append(queue, item{k, adjacent{}})
+// from matching start nodes, following edge direction and visiting each node
+// once. At most limit steps are returned (limit <= 0 means no cap); truncated
+// reports whether reachable nodes were left out.
+func FollowDirected(edges []store.TopologyEdge, from string, limit int) (steps []Step, truncated bool) {
+	g := buildGraph(edges, true)
+	visited := map[string]hop{}
+	var queue []string
+	for _, k := range g.order {
+		if g.nodes[k].matches(from) {
+			visited[k] = hop{}
+			queue = append(queue, k)
 		}
 	}
-	var out []Step
 	for len(queue) > 0 {
-		it := queue[0]
+		cur := queue[0]
 		queue = queue[1:]
-		n := nodes[it.k]
-		out = append(out, Step{ConnectorID: n.ConnectorID, Kind: n.Kind, Name: n.Name, EdgeKind: it.via.kind, EdgeSource: it.via.source, Detail: it.via.detail})
-		for _, nb := range adj[it.k] {
-			if !seen[nb.to] {
-				seen[nb.to] = true
-				queue = append(queue, item{nb.to, nb})
+		if limit > 0 && len(steps) >= limit {
+			return steps, true
+		}
+		steps = append(steps, g.step(cur, visited[cur]))
+		for _, nb := range g.adj[cur] {
+			if _, ok := visited[nb.to]; !ok {
+				visited[nb.to] = hop{cur, nb.kind, nb.source, nb.detail}
+				queue = append(queue, nb.to)
 			}
 		}
 	}
-	return out
+	return steps, false
 }

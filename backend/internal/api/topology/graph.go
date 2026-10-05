@@ -8,7 +8,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/WiseLabz/wiselabz/internal/auth"
 	"github.com/WiseLabz/wiselabz/internal/httputil"
 )
 
@@ -28,9 +27,20 @@ type graphEdge struct {
 	SourceLabel string `json:"sourceLabel,omitempty"`
 	Detail      string `json:"detail,omitempty"`
 }
+
+// graphResponse is the body of GET /api/topology/graph. Truncated is true when
+// maxGraphNodes or maxGraphEdges cut the result short.
+type graphResponse struct {
+	Nodes     []graphNode `json:"nodes"`
+	Edges     []graphEdge `json:"edges"`
+	Truncated bool        `json:"truncated"`
+}
 type activeMember struct{ EntityID, ConnectorID, Kind, Ref, Name string }
 
-// Graph returns a graph whose edges and active members are scoped to visible connectors.
+// Graph returns a graph whose edges and active members are scoped to visible
+// connectors. Members of merged identities (entities.merged_into set) are
+// ignored; their live members belong to the surviving identity. The result is
+// capped at maxGraphNodes nodes and maxGraphEdges edges.
 func (h *Handler) Graph(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	connectorFilter := q.Get("connector")
@@ -44,38 +54,26 @@ func (h *Handler) Graph(w http.ResponseWriter, r *http.Request) {
 		}
 		includeUnlinked = v
 	}
-	all, err := h.Store.ListConnectorIDs(r.Context())
+	allowed, names, err := h.visibleConnectors(r)
 	if err != nil {
 		httputil.Errorf(w, err)
 		return
-	}
-	allowed, err := h.Store.FilterConnectorIDsByGrant(r.Context(), auth.UserIDFromContext(r.Context()), all, "viewer")
-	if err != nil {
-		httputil.Errorf(w, err)
-		return
-	}
-	restriction := auth.APIKeyRestrictionFromContext(r.Context())
-	if len(restriction.ConnectorIDs) > 0 {
-		allowed = slices.DeleteFunc(allowed, func(id string) bool { return !slices.Contains(restriction.ConnectorIDs, id) })
 	}
 	if connectorFilter != "" {
-		matches := false
+		// Match by ID or name among the visible connectors only, so a hidden
+		// connector is indistinguishable from a nonexistent one.
+		matched := ""
 		for _, id := range allowed {
-			if id == connectorFilter {
-				matches = true
-				break
-			}
-			if c, e := h.Store.GetConnector(r.Context(), id); e == nil && c.Name == connectorFilter {
-				connectorFilter = id
-				matches = true
+			if id == connectorFilter || names[id] == connectorFilter {
+				matched = id
 				break
 			}
 		}
-		if !matches {
-			httputil.JSON(w, 200, map[string]any{"nodes": []graphNode{}, "edges": []graphEdge{}})
+		if matched == "" {
+			httputil.JSON(w, 200, graphResponse{Nodes: []graphNode{}, Edges: []graphEdge{}})
 			return
 		}
-		allowed = []string{connectorFilter}
+		allowed = []string{matched}
 	}
 	edges, err := h.Store.ListTopologyEdges(r.Context(), allowed)
 	if err != nil {
@@ -116,12 +114,32 @@ func (h *Handler) Graph(w http.ResponseWriter, r *http.Request) {
 		}
 		return graphNode{ID: id, Type: "node", ConnectorID: cid, Kind: kind, Name: name, Ref: ref}
 	}
+	truncated := false
+	seenEdges := map[string]bool{}
 	for _, e := range edges {
 		if kindFilter != "" && e.SrcKind != kindFilter && e.DstKind != kindFilter {
 			continue
 		}
 		a := endpoint(e.SrcConnectorID, e.SrcKind, e.SrcName, e.SrcRef)
 		b := endpoint(e.DstConnectorID, e.DstKind, e.DstName, e.DstRef)
+		// Edges owned by different connectors can describe the same relation
+		// (and several members of one identity collapse onto one node).
+		edgeKey := strings.Join([]string{a.ID, b.ID, e.Kind, e.Source, e.Detail}, "\x00")
+		if seenEdges[edgeKey] {
+			continue
+		}
+		newNodes := 0
+		if _, ok := nodes[a.ID]; !ok {
+			newNodes++
+		}
+		if _, ok := nodes[b.ID]; !ok && b.ID != a.ID {
+			newNodes++
+		}
+		if len(outEdges) >= maxGraphEdges || len(nodes)+newNodes > maxGraphNodes {
+			truncated = true
+			continue
+		}
+		seenEdges[edgeKey] = true
 		nodes[a.ID] = a
 		nodes[b.ID] = b
 		linked[a.ID] = true
@@ -129,10 +147,24 @@ func (h *Handler) Graph(w http.ResponseWriter, r *http.Request) {
 		outEdges = append(outEdges, graphEdge{ID: e.ID, Source: a.ID, Target: b.ID, Kind: e.Kind, SourceLabel: e.Source, Detail: e.Detail})
 	}
 	if includeUnlinked {
+		unlinked := make([]graphNode, 0, len(identityNames))
 		for id, n := range identityNames {
 			if !linked[id] {
-				nodes[id] = n
+				unlinked = append(unlinked, n)
 			}
+		}
+		slices.SortFunc(unlinked, func(a, b graphNode) int {
+			if c := strings.Compare(a.Name, b.Name); c != 0 {
+				return c
+			}
+			return strings.Compare(a.ID, b.ID)
+		})
+		for _, n := range unlinked {
+			if len(nodes) >= maxGraphNodes {
+				truncated = true
+				break
+			}
+			nodes[n.ID] = n
 		}
 	}
 	out := make([]graphNode, 0, len(nodes))
@@ -149,7 +181,7 @@ func (h *Handler) Graph(w http.ResponseWriter, r *http.Request) {
 		return strings.Compare(a.ID, b.ID)
 	})
 	slices.SortFunc(outEdges, func(a, b graphEdge) int { return strings.Compare(a.ID, b.ID) })
-	httputil.JSON(w, http.StatusOK, map[string]any{"nodes": out, "edges": outEdges})
+	httputil.JSON(w, http.StatusOK, graphResponse{Nodes: out, Edges: outEdges, Truncated: truncated})
 }
 
 func memberKey(connectorID, kind, ref, name string) string {
@@ -168,7 +200,10 @@ func (h *Handler) activeMembers(r *http.Request, ids []string) (map[string]activ
 	for i, id := range ids {
 		args[i] = id
 	}
-	rows, err := h.Store.DB().QueryContext(r.Context(), fmt.Sprintf(`SELECT entity_id,connector_id,kind,ref,name FROM entity_members WHERE gone_at IS NULL AND connector_id IN (%s) ORDER BY connector_id,kind,ref`, marks), args...)
+	rows, err := h.Store.DB().QueryContext(r.Context(), fmt.Sprintf(`SELECT m.entity_id, m.connector_id, m.kind, m.ref, m.name
+		FROM entity_members m JOIN entities e ON e.id = m.entity_id
+		WHERE m.gone_at IS NULL AND e.merged_into IS NULL AND m.connector_id IN (%s)
+		ORDER BY m.connector_id, m.kind, m.ref`, marks), args...)
 	if err != nil {
 		return nil, fmt.Errorf("list active topology members: %w", err)
 	}

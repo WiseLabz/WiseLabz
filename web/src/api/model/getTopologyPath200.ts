@@ -10,7 +10,12 @@ import type { TopologyPathStep } from './topologyPathStep';
 
 export type GetTopologyPath200 = {
   found: boolean;
-  /** @minimum 0 */
+  /**
+   * Edge count of the shortest path; present only when to is given.
+   * @minimum 0
+   */
   hops?: number;
+  /** True when a directed walk (no to) hit the 1000-step cap. */
+  truncated: boolean;
   path: TopologyPathStep[];
 };

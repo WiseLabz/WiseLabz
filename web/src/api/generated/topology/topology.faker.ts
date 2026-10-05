@@ -15,6 +15,7 @@ export const getGetTopologyPathResponseMock = (
 ): GetTopologyPath200 => ({
   found: faker.datatype.boolean(),
   hops: faker.helpers.arrayElement([faker.number.int({ min: 0 }), undefined]),
+  truncated: faker.datatype.boolean(),
   path: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() => ({
     connectorId: faker.string.alpha({ length: { min: 10, max: 20 } }),
     connectorName: faker.string.alpha({ length: { min: 10, max: 20 } }),
@@ -39,6 +40,7 @@ export const getGetTopologyPathResponseMock = (
 export const getGetTopologyGraphResponseMock = (
   overrideResponse: Partial<Extract<TopologyGraph, object>> = {}
 ): TopologyGraph => ({
+  truncated: faker.datatype.boolean(),
   nodes: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() => ({
     id: faker.string.alpha({ length: { min: 10, max: 20 } }),
     type: faker.helpers.arrayElement(['identity', 'node'] as const),
