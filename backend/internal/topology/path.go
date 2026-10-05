@@ -33,13 +33,26 @@ type Step struct {
 	ConnectorName string `json:"connectorName"`
 	Kind          string `json:"kind"`
 	Name          string `json:"name"`
-	EdgeKind      string `json:"edgeKind,omitempty"`
-	EdgeSource    string `json:"edgeSource,omitempty"`
-	Detail        string `json:"detail,omitempty"`
+	NodeID        string `json:"nodeId,omitempty"`
+	GraphNodeKey  string `json:"-"`
+	// FromKey is the graph key of the node this step was reached from (empty
+	// for start nodes); EdgeReversed reports that the edge into this step was
+	// traversed against its direction. Neither is part of the MCP output.
+	FromKey      string `json:"-"`
+	EdgeReversed bool   `json:"-"`
+	EdgeKind     string `json:"edgeKind,omitempty"`
+	EdgeSource   string `json:"edgeSource,omitempty"`
+	Detail       string `json:"detail,omitempty"`
 }
 
-type hop struct{ prev, edgeKind, source, detail string }
-type adjacent struct{ to, kind, source, detail string }
+type hop struct {
+	prev, edgeKind, source, detail string
+	reversed                       bool
+}
+type adjacent struct {
+	to, kind, source, detail string
+	reversed                 bool
+}
 
 // graph is the adjacency structure both traversals share. order lists node
 // keys in first-seen edge order, which keeps results deterministic.
@@ -62,9 +75,9 @@ func buildGraph(edges []store.TopologyEdge, directed bool) *graph {
 	for _, e := range edges {
 		a := touch(Node{ConnectorID: e.SrcConnectorID, Kind: e.SrcKind, Name: e.SrcName, Ref: e.SrcRef})
 		b := touch(Node{ConnectorID: e.DstConnectorID, Kind: e.DstKind, Name: e.DstName, Ref: e.DstRef})
-		g.adj[a] = append(g.adj[a], adjacent{b, e.Kind, e.Source, e.Detail})
+		g.adj[a] = append(g.adj[a], adjacent{b, e.Kind, e.Source, e.Detail, false})
 		if !directed {
-			g.adj[b] = append(g.adj[b], adjacent{a, e.Kind, e.Source, e.Detail})
+			g.adj[b] = append(g.adj[b], adjacent{a, e.Kind, e.Source, e.Detail, true})
 		}
 	}
 	return g
@@ -72,7 +85,17 @@ func buildGraph(edges []store.TopologyEdge, directed bool) *graph {
 
 func (g *graph) step(k string, h hop) Step {
 	n := g.nodes[k]
-	return Step{ConnectorID: n.ConnectorID, Kind: n.Kind, Name: n.Name, EdgeKind: h.edgeKind, EdgeSource: h.source, Detail: h.detail}
+	return Step{
+		ConnectorID:  n.ConnectorID,
+		Kind:         n.Kind,
+		Name:         n.Name,
+		GraphNodeKey: k,
+		FromKey:      h.prev,
+		EdgeReversed: h.reversed,
+		EdgeKind:     h.edgeKind,
+		EdgeSource:   h.source,
+		Detail:       h.detail,
+	}
 }
 
 // ShortestPath runs breadth-first search from any matching node. When directed
@@ -110,7 +133,7 @@ func ShortestPath(edges []store.TopologyEdge, from, to string, directed bool) []
 			if _, ok := visited[nb.to]; ok {
 				continue
 			}
-			visited[nb.to] = hop{cur, nb.kind, nb.source, nb.detail}
+			visited[nb.to] = hop{cur, nb.kind, nb.source, nb.detail, nb.reversed}
 			queue = append(queue, nb.to)
 		}
 	}
@@ -140,7 +163,7 @@ func FollowDirected(edges []store.TopologyEdge, from string, limit int) (steps [
 		steps = append(steps, g.step(cur, visited[cur]))
 		for _, nb := range g.adj[cur] {
 			if _, ok := visited[nb.to]; !ok {
-				visited[nb.to] = hop{cur, nb.kind, nb.source, nb.detail}
+				visited[nb.to] = hop{cur, nb.kind, nb.source, nb.detail, nb.reversed}
 				queue = append(queue, nb.to)
 			}
 		}

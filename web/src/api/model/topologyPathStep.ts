@@ -12,6 +12,12 @@ export interface TopologyPathStep {
   connectorName: string;
   kind: string;
   name: string;
+  /** Matching graph node ID, including the resolved identity when available. */
+  nodeId?: string;
+  /** Graph node ID of the step this one was reached from (resolved like nodeId, from active members on viewable connectors only); absent on start nodes. With edgeKind it identifies the traversed edge. */
+  fromNodeId?: string;
+  /** True when the edge into this step was traversed against its direction (only possible for the undirected path to a target). */
+  edgeReversed?: boolean;
   edgeKind?: string;
   edgeSource?: string;
   detail?: string;
