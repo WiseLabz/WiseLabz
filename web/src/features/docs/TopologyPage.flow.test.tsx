@@ -57,6 +57,18 @@ class TestDOMMatrix {
   }
 }
 
+const protoDescriptors = {
+  offsetHeight: Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetHeight'),
+  offsetWidth: Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetWidth'),
+  getBBox: Object.getOwnPropertyDescriptor(SVGElement.prototype, 'getBBox'),
+};
+
+function restore(target: object, key: keyof typeof protoDescriptors) {
+  const original = protoDescriptors[key];
+  if (original) Object.defineProperty(target, key, original);
+  else delete (target as Record<string, unknown>)[key];
+}
+
 beforeEach(() => {
   graphHook.mockReturnValue({ data: graph, isLoading: false, isError: false, refetch: vi.fn() });
   pathHook.mockReturnValue({ data: undefined, isError: false, isLoading: false });
@@ -74,8 +86,9 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllGlobals();
-  delete (HTMLElement.prototype as { offsetHeight?: number }).offsetHeight;
-  delete (HTMLElement.prototype as { offsetWidth?: number }).offsetWidth;
+  restore(HTMLElement.prototype, 'offsetHeight');
+  restore(HTMLElement.prototype, 'offsetWidth');
+  restore(SVGElement.prototype, 'getBBox');
 });
 
 describe('TopologyPage with the real React Flow', () => {

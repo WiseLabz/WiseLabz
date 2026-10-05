@@ -29,6 +29,7 @@ export const ptBR: Catalog = {
       traceError: 'Não foi possível rastrear esse caminho.',
       noPath: 'Nenhum caminho encontrado entre esses pontos.',
       noPathFrom: 'Nada encontrado para seguir a partir desse ponto.',
+      tracing: 'Rastreando caminho…',
       pathTruncated: 'O caminho foi interrompido no número máximo de etapas.',
       traceHops: 'Etapas do caminho',
       truncated: 'Este grafo está limitado aos primeiros 2.000 nós e 5.000 relações.',

@@ -8,7 +8,8 @@ import type { TopologyGraph } from '../../api/model';
 import '../../i18n';
 import { TopologyPage } from './TopologyPage';
 
-const { graphHook, pathHook, connectorsHook, docsHook, postTopology, role } = vi.hoisted(() => ({
+const { graphHook, pathHook, connectorsHook, docsHook, postTopology, role, fitView } = vi.hoisted(() => ({
+  fitView: vi.fn(),
   graphHook: vi.fn(),
   pathHook: vi.fn(),
   connectorsHook: vi.fn(),
@@ -34,13 +35,16 @@ vi.mock('@xyflow/react', async () => {
       nodes,
       edges,
       nodeTypes,
+      children,
     }: {
+      children?: ReactNode;
       nodes: Array<{ id: string; data: unknown }>;
       edges: Array<{ id: string; data?: { highlighted?: boolean }; label?: string }>;
       nodeTypes: Record<string, ComponentType<never>>;
     }) => {
       const NodeView = nodeTypes.topology;
       return React.createElement('div', { 'data-testid': 'flow-canvas' }, [
+        children,
         ...nodes.map((node) =>
           React.createElement(NodeView, { key: node.id, id: node.id, data: node.data } as never)
         ),
@@ -58,6 +62,7 @@ vi.mock('@xyflow/react', async () => {
         ),
       ]);
     },
+    useReactFlow: () => ({ fitView }),
     Background: () => null,
     Handle: () => null,
     Controls: () => null,
@@ -198,6 +203,7 @@ const hostToVM = {
       kind: 'vm',
       name: 'VM Beta',
       nodeId: 'identity-b',
+      fromNodeId: 'identity-a',
       edgeKind: 'runs_on',
     },
   ],
@@ -229,7 +235,7 @@ describe('TopologyPage', () => {
       within(screen.getByTestId('flow-canvas')).queryByRole('link', { name: 'Lonely' })
     ).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('checkbox', { name: 'Show unlinked identities' }));
-    expect(graphHook).toHaveBeenLastCalledWith({ includeUnlinked: true }, expect.anything());
+    expect(graphHook).toHaveBeenCalledWith({ includeUnlinked: true }, expect.anything());
     screen.getByText('Browse nodes (4)').closest('details')!.open = true;
     expect(
       within(screen.getByTestId('flow-canvas')).getByRole('link', { name: 'Lonely' })
@@ -244,7 +250,7 @@ describe('TopologyPage', () => {
     fireEvent.change(screen.getByRole('combobox', { name: 'Entity kind' }), {
       target: { value: 'host' },
     });
-    expect(graphHook).toHaveBeenLastCalledWith(
+    expect(graphHook).toHaveBeenCalledWith(
       { connector: 'connector-a', kind: 'host' },
       expect.anything()
     );
@@ -285,6 +291,7 @@ describe('TopologyPage', () => {
             kind: 'vm',
             name: 'VM Beta',
             nodeId: 'identity-b',
+            fromNodeId: 'identity-a',
             edgeKind: 'runs_on',
           },
         ],
@@ -417,7 +424,7 @@ describe('TopologyPage', () => {
   it('restores filters and trace from an initial URL', () => {
     pathHook.mockReturnValue({ data: hostToVM, isError: false, isLoading: false });
     renderTopology('/topology?connector=connector-a&kind=host&includeUnlinked=true&from=Host+Alpha&to=VM+Beta');
-    expect(graphHook).toHaveBeenLastCalledWith(
+    expect(graphHook).toHaveBeenCalledWith(
       { connector: 'connector-a', kind: 'host', includeUnlinked: true },
       expect.anything()
     );
@@ -543,5 +550,206 @@ describe('TopologyPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Trace path' }));
     await waitFor(() => expect(highlightedEdgeIds()).toEqual(['edge-1']));
     expect(layout.mock.calls.length).toBe(initial);
+  });
+
+  describe('trace highlight exactness', () => {
+    const node = (id: string, name: string) => ({ id, type: 'identity' as const, name, kind: 'vm' });
+    const branching: TopologyGraph = {
+      truncated: false,
+      nodes: [node('a', 'A'), node('b', 'B'), node('c', 'C'), node('d', 'D')],
+      edges: [
+        { id: 'ab', source: 'a', target: 'b', kind: 'runs_on' },
+        { id: 'ac', source: 'a', target: 'c', kind: 'runs_on' },
+        { id: 'bd', source: 'b', target: 'd', kind: 'runs_on' },
+        // Decoys: edges between steps that are merely adjacent in BFS order.
+        { id: 'bc', source: 'b', target: 'c', kind: 'runs_on' },
+        { id: 'cd', source: 'c', target: 'd', kind: 'runs_on' },
+      ],
+    };
+    const step = (name: string, extra: Record<string, unknown> = {}) => ({
+      connectorId: 'c1',
+      kind: 'vm',
+      name,
+      nodeId: name.toLowerCase(),
+      ...extra,
+    });
+
+    it('highlights exactly the edges a from-only walk followed', async () => {
+      graphHook.mockReturnValue({ data: branching, isLoading: false, isError: false });
+      pathHook.mockReturnValue({
+        data: {
+          found: true,
+          truncated: false,
+          path: [
+            step('A'),
+            step('B', { fromNodeId: 'a', edgeKind: 'runs_on' }),
+            step('C', { fromNodeId: 'a', edgeKind: 'runs_on' }),
+            step('D', { fromNodeId: 'b', edgeKind: 'runs_on' }),
+          ],
+        },
+        isError: false,
+        isLoading: false,
+      });
+      renderTopology('/topology?from=A');
+      await waitFor(() => expect(highlightedEdgeIds().sort()).toEqual(['ab', 'ac', 'bd']));
+    });
+
+    it('decides by edge direction when both directions exist', async () => {
+      graphHook.mockReturnValue({
+        data: {
+          ...branching,
+          nodes: branching.nodes.slice(0, 2),
+          edges: [
+            { id: 'ab', source: 'a', target: 'b', kind: 'runs_on' },
+            { id: 'ba', source: 'b', target: 'a', kind: 'runs_on' },
+          ],
+        },
+        isLoading: false,
+        isError: false,
+      });
+      const path = (reversed: boolean) => ({
+        data: {
+          found: true,
+          hops: 1,
+          truncated: false,
+          path: [
+            step('A'),
+            step('B', {
+              fromNodeId: 'a',
+              edgeKind: 'runs_on',
+              ...(reversed ? { edgeReversed: true } : {}),
+            }),
+          ],
+        },
+        isError: false,
+        isLoading: false,
+      });
+      pathHook.mockReturnValue(path(false));
+      const view = renderTopology('/topology?from=A&to=B');
+      await waitFor(() => expect(highlightedEdgeIds()).toEqual(['ab']));
+      view.unmount();
+      pathHook.mockReturnValue(path(true));
+      renderTopology('/topology?from=A&to=B');
+      await waitFor(() => expect(highlightedEdgeIds()).toEqual(['ba']));
+    });
+
+    it('highlights a merged edge only when a part on it is the traversed kind', async () => {
+      graphHook.mockReturnValue({
+        data: {
+          ...branching,
+          nodes: branching.nodes.slice(0, 2),
+          edges: [
+            { id: 'ab1', source: 'a', target: 'b', kind: 'runs_on' },
+            { id: 'ab2', source: 'a', target: 'b', kind: 'resolves_to' },
+          ],
+        },
+        isLoading: false,
+        isError: false,
+      });
+      pathHook.mockReturnValue({
+        data: {
+          found: true,
+          hops: 1,
+          truncated: false,
+          path: [step('A'), step('B', { fromNodeId: 'a', edgeKind: 'proxies_to' })],
+        },
+        isError: false,
+        isLoading: false,
+      });
+      renderTopology('/topology?from=A&to=B');
+      expect(highlightedEdgeIds()).toEqual([]);
+    });
+  });
+
+  it('collapses duplicate edge parts into one label line', () => {
+    graphHook.mockReturnValue({
+      data: {
+        ...graph,
+        edges: [
+          { id: 'x1', source: 'identity-a', target: 'identity-b', kind: 'runs_on', sourceLabel: 'p1' },
+          { id: 'x2', source: 'identity-a', target: 'identity-b', kind: 'runs_on', sourceLabel: 'p2' },
+        ],
+      },
+      isLoading: false,
+      isError: false,
+    });
+    renderTopology();
+    expect(screen.getByTestId('flow-edge')).toHaveTextContent(/^runs_on$/);
+  });
+
+  describe('viewport refit', () => {
+    const withNodes = (ids: string[]): TopologyGraph => ({
+      truncated: false,
+      nodes: graph.nodes.filter((n) => ids.includes(n.id)),
+      edges: graph.edges,
+    });
+
+    it('refits when the node set changes but not on trace or styling changes', async () => {
+      graphHook.mockImplementation((params: { includeUnlinked?: boolean; connector?: string }) => ({
+        // `connector` swaps in a fresh response with the same nodes.
+        data: params.includeUnlinked
+          ? withNodes(['identity-a', 'identity-b', 'connector-a'])
+          : withNodes(['identity-a', 'identity-b']),
+        isLoading: false,
+        isError: false,
+        refetch: vi.fn(),
+      }));
+      pathHook.mockReturnValue({ data: hostToVM, isError: false, isLoading: false });
+      renderTopology();
+      await waitFor(() => expect(screen.getByTestId('flow-canvas')).toBeInTheDocument());
+      fitView.mockClear();
+
+      fireEvent.change(screen.getByRole('combobox', { name: 'Connector' }), {
+        target: { value: 'connector-a' },
+      });
+      fireEvent.change(screen.getByRole('textbox', { name: 'From' }), {
+        target: { value: 'Host Alpha' },
+      });
+      fireEvent.submit(screen.getByRole('form', { name: 'Trace a path' }));
+      await waitFor(() => expect(highlightedEdgeIds()).toEqual(['edge-1']));
+      expect(fitView).not.toHaveBeenCalled();
+
+      fireEvent.click(screen.getByRole('checkbox', { name: 'Show unlinked identities' }));
+      await waitFor(() => expect(fitView).toHaveBeenCalledTimes(1));
+    });
+  });
+
+  it('names the legend as a group and shows progress while a trace is in flight', () => {
+    pathHook.mockReturnValue({ data: undefined, isError: false, isLoading: true, isFetching: true });
+    renderTopology('/topology?from=Host+Alpha');
+    expect(screen.getByRole('group', { name: 'Edge kind legend' })).toBeInTheDocument();
+    expect(screen.getByText('Tracing path…')).toHaveAttribute('role', 'status');
+  });
+
+  describe('kind options', () => {
+    const unfiltered = (params: { kind?: string; connector?: string }) => ({
+      data: params.kind
+        ? { ...graph, nodes: graph.nodes.filter((n) => n.kind === params.kind), edges: [] }
+        : params.connector
+          ? { ...graph, nodes: graph.nodes.filter((n) => n.kind === 'vm'), edges: [] }
+          : graph,
+      isLoading: false,
+      isError: false,
+      refetch: vi.fn(),
+    });
+    const options = () =>
+      within(screen.getByRole('combobox', { name: 'Entity kind' }))
+        .getAllByRole('option')
+        .map((o) => o.textContent);
+
+    it('lists every kind when the page loads with a kind in the URL', () => {
+      graphHook.mockImplementation(unfiltered);
+      renderTopology('/topology?kind=host');
+      expect(options()).toEqual(['All kinds', 'host', 'service', 'vm']);
+    });
+
+    it('follows the connector filter while a kind is set', () => {
+      graphHook.mockImplementation(unfiltered);
+      renderTopology('/topology?kind=vm');
+      fireEvent.change(screen.getByRole('combobox', { name: 'Connector' }), {
+        target: { value: 'connector-a' },
+      });
+      expect(options()).toEqual(['All kinds', 'vm']);
+    });
   });
 });

@@ -1,5 +1,5 @@
 import type { CSSProperties, FormEvent } from 'react';
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { isAxiosError } from 'axios';
 import dagre from '@dagrejs/dagre';
@@ -12,6 +12,7 @@ import {
   Position,
   ReactFlow,
   getBezierPath,
+  useReactFlow,
 } from '@xyflow/react';
 import type { Edge, EdgeProps, Node, NodeProps } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
@@ -84,7 +85,7 @@ function GraphNode({ data }: NodeProps<FlowNode>) {
   );
   if (!data.href) {
     return (
-      <div className={className} aria-label={data.item.name}>
+      <div className={className}>
         {handles}
         {content}
       </div>
@@ -155,6 +156,22 @@ const reactFlowTheme = {
   '--xy-edge-label-color': 'var(--color-ink-muted)',
 } as CSSProperties;
 
+// fitView on <ReactFlow> only fits at mount, so a cached response swapping the
+// node set in would keep the old viewport. Refit whenever the set changes, not
+// on highlight or styling changes.
+function FitOnNodeSet({ nodeKey }: { nodeKey: string }) {
+  const { fitView } = useReactFlow();
+  const first = useRef(true);
+  useEffect(() => {
+    if (first.current) {
+      first.current = false;
+      return;
+    }
+    void fitView({ padding: 0.2 });
+  }, [nodeKey, fitView]);
+  return null;
+}
+
 const nodeTypes = { topology: GraphNode };
 const edgeTypes = { topology: GraphEdge };
 
@@ -191,16 +208,18 @@ function flowNodes(
 
 // Several edge kinds between the same ordered pair would draw on top of one
 // another, so they collapse into one edge whose label lists every kind.
-function flowEdges(relations: TopologyEdge[], traceKeys: Set<string>): FlowEdge[] {
+function flowEdges(relations: TopologyEdge[], traced: Set<string>): FlowEdge[] {
   const pairs = new Map<string, TopologyEdge[]>();
   for (const edge of relations) {
     const key = `${edge.source}\0${edge.target}`;
     pairs.set(key, [...(pairs.get(key) ?? []), edge]);
   }
-  return Array.from(pairs.entries()).map(([key, group]) => {
+  return Array.from(pairs.values()).map((group) => {
     const first = group[0];
-    const highlighted = traceKeys.has(key) || traceKeys.has(`${first.target}\0${first.source}`);
-    const parts = group.map((edge) => `${edge.kind}${edge.detail ? ` · ${edge.detail}` : ''}`);
+    const highlighted = group.some((edge) => traced.has(edge.id));
+    const parts = Array.from(
+      new Set(group.map((edge) => `${edge.kind}${edge.detail ? ` · ${edge.detail}` : ''}`))
+    );
     const label = parts.join(', ');
     return {
       id: first.id,
@@ -230,23 +249,40 @@ function findConnectorDoc(node: DocNode | undefined, connectorId: string): strin
   return undefined;
 }
 
-function traceKeys(
-  path: Array<{ connectorId: string; kind: string; name: string; nodeId?: string }>,
-  nodes: TopologyNode[]
-) {
-  const ids = path.map((step) => {
-    if (step.nodeId) return step.nodeId;
-    const candidates = nodes.filter(
-      (node) => node.name === step.name && (!step.kind || node.kind === step.kind)
-    );
-    return (
-      candidates.find((node) => node.type === 'node' && node.connectorId === step.connectorId)
-        ?.id ?? candidates[0]?.id
-    );
-  });
+type PathStep = {
+  connectorId: string;
+  kind: string;
+  name: string;
+  nodeId?: string;
+  fromNodeId?: string;
+  edgeReversed?: boolean;
+  edgeKind?: string;
+  edgeSource?: string;
+  detail?: string;
+};
+
+// Every step after the first names the node it was reached from and the
+// kind/source/detail of the edge it followed, so the traversed edge is looked
+// up exactly instead of being guessed from step order. A hop through a node
+// the page does not draw has no edge to highlight.
+function tracedEdgeIds(path: PathStep[], relations: TopologyEdge[]) {
   const result = new Set<string>();
-  for (let i = 1; i < ids.length; i++) {
-    if (ids[i - 1] && ids[i]) result.add(`${ids[i - 1]}\0${ids[i]}`);
+  for (const step of path) {
+    if (!step.nodeId || !step.fromNodeId || !step.edgeKind) continue;
+    const [source, target] = step.edgeReversed
+      ? [step.nodeId, step.fromNodeId]
+      : [step.fromNodeId, step.nodeId];
+    for (const edge of relations) {
+      if (
+        edge.source === source &&
+        edge.target === target &&
+        edge.kind === step.edgeKind &&
+        (edge.sourceLabel ?? '') === (step.edgeSource ?? '') &&
+        (edge.detail ?? '') === (step.detail ?? '')
+      ) {
+        result.add(edge.id);
+      }
+    }
   }
   return result;
 }
@@ -296,8 +332,9 @@ export function TopologyPage() {
     );
   }, [graphQuery.data, items]);
   const highlights = useMemo(
-    () => (pathQuery.data?.found ? traceKeys(pathQuery.data.path, items) : new Set<string>()),
-    [items, pathQuery.data]
+    () =>
+      pathQuery.data?.found ? tracedEdgeIds(pathQuery.data.path, relations) : new Set<string>(),
+    [relations, pathQuery.data]
   );
   const getNodeHref = useCallback(
     (item: TopologyNode) => {
@@ -314,6 +351,7 @@ export function TopologyPage() {
     },
     [docsTree.data]
   );
+  const nodeKey = useMemo(() => items.map((item) => item.id).sort().join('\0'), [items]);
   const positions = useMemo(() => layoutPositions(items, relations), [items, relations]);
   const nodes = useMemo(
     () => flowNodes(items, positions, getNodeHref),
@@ -321,19 +359,28 @@ export function TopologyPage() {
   );
   const edges = useMemo(() => flowEdges(relations, highlights), [relations, highlights]);
   const connectorList = (connectorsQuery.data ?? []) as Array<{ id: string; name: string }>;
-  // The kind list comes from the last response that had no kind filter, so
-  // picking a kind does not collapse the select to that one option.
-  const [knownKinds, setKnownKinds] = useState<string[]>([]);
-  const itemKinds = useMemo(
+  // The kind list comes from the response without the kind filter, so picking
+  // a kind (or loading one from the URL) does not collapse the select.
+  const kindsQuery = useGetTopologyGraph(
+    {
+      ...(connector ? { connector } : {}),
+      ...(includeUnlinked ? { includeUnlinked: true } : {}),
+    },
+    { query: { retry: false, enabled: Boolean(kind) } }
+  );
+  const kindSource = kind ? kindsQuery.data : graphQuery.data;
+  const knownKinds = useMemo(
     () =>
       Array.from(
-        new Set(items.map((item) => item.kind).filter((value): value is string => Boolean(value)))
+        new Set(
+          (kindSource?.nodes ?? emptyNodes)
+            .filter((item) => item.type === 'identity' || isConnectorNode(item))
+            .map((item) => item.kind)
+            .filter((value): value is string => Boolean(value))
+        )
       ).sort(),
-    [items]
+    [kindSource]
   );
-  if (!kind && graphQuery.data && knownKinds.join('\0') !== itemKinds.join('\0')) {
-    setKnownKinds(itemKinds);
-  }
   const kindOptions = kind && !knownKinds.includes(kind) ? [...knownKinds, kind].sort() : knownKinds;
   const updateFilter = (key: string, value: string) => {
     const next = new URLSearchParams(searchParams);
@@ -479,6 +526,11 @@ export function TopologyPage() {
             {t('docs.topology.traceValidation')}
           </p>
         )}
+        {Boolean(fromParam) && pathQuery.isFetching && (
+          <p role="status" className="px-4 pt-3 text-sm text-ink-muted">
+            {t('docs.topology.tracing')}
+          </p>
+        )}
         {pathQuery.isError && (
           <p role="alert" className="px-4 pt-3 text-sm text-err">
             {isAxiosError(pathQuery.error) && pathQuery.error.response?.status === 400
@@ -515,6 +567,7 @@ export function TopologyPage() {
         )}
         <div
           className="flex flex-wrap gap-x-4 gap-y-1 px-4 py-3 text-xs text-ink-muted"
+          role="group"
           aria-label={t('docs.topology.legend')}
         >
           {Object.entries(edgeColors).map(([edgeKind, color]) => (
@@ -581,6 +634,7 @@ export function TopologyPage() {
               >
                 <Background color="var(--color-line-soft)" />
                 <Controls showInteractive={false} />
+                <FitOnNodeSet nodeKey={nodeKey} />
               </ReactFlow>
             </div>
             <details className="border-t border-line-soft p-4">

@@ -141,6 +141,8 @@ type pathBody struct {
 		Name          string `json:"name"`
 		NodeID        string `json:"nodeId"`
 		EdgeKind      string `json:"edgeKind"`
+		FromNodeID    string `json:"fromNodeId"`
+		EdgeReversed  bool   `json:"edgeReversed"`
 	} `json:"path"`
 }
 
@@ -585,5 +587,39 @@ func TestGraphCapKeepsTypedEdgesFirstAndIsStableAcrossRebuilds(t *testing.T) {
 	first := snapshot()
 	if second := snapshot(); first != second {
 		t.Fatal("capped edge set or order changed after a rebuild")
+	}
+}
+
+func TestPathReportsFromNodeIDsResolvedLikeNodeIDs(t *testing.T) {
+	f := newFixture(t)
+	f.identity(t, "identity-vm", "canonical vm name", "", [5]string{f.pve, "vm", "vm-a", "vm-a", ""})
+	f.identity(t, "identity-node", "canonical node name", "", [5]string{f.net, "node", "node-1", "node-1", ""})
+
+	for _, params := range []url.Values{q("from", "vm-a", "to", "node-1"), q("from", "vm-a")} {
+		status, body := f.path(t, call{userID: f.viewer}, params)
+		if status != 200 {
+			t.Fatalf("path status=%d body=%s", status, body)
+		}
+		path := decodePath(t, body).Path
+		if len(path) < 2 || path[0].FromNodeID != "" || path[1].FromNodeID != "identity-vm" {
+			t.Fatalf("%v: fromNodeId chain = %s", params, body)
+		}
+		if path[1].EdgeReversed {
+			t.Fatalf("%v: forward edge reported reversed: %s", params, body)
+		}
+	}
+}
+
+func TestPathFromNodeIDNeverNamesHiddenEntity(t *testing.T) {
+	f := newFixture(t)
+	// An identity whose only member lives on the hidden connector must not
+	// leak its entity ID through fromNodeId; the plain graph key is used.
+	f.identity(t, "identity-hidden", "hidden entity", "", [5]string{f.secret, "vm", "vm-a", "vm-a", ""}, [5]string{f.pve, "vm", "vm-a", "vm-a", "2026-02-01"})
+	status, body := f.path(t, call{userID: f.viewer}, q("from", "vm-a"))
+	if status != 200 {
+		t.Fatalf("status=%d body=%s", status, body)
+	}
+	if strings.Contains(body, "identity-hidden") {
+		t.Fatalf("response leaks hidden entity: %s", body)
 	}
 }

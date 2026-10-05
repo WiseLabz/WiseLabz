@@ -49,6 +49,21 @@ func (h *Handler) visibleConnectors(r *http.Request) (allowed []string, names ma
 	return allowed, names, nil
 }
 
+// pathStep is a topology.Step plus the HTTP-only fields that let the UI tell
+// exactly which edge a step followed. The MCP output omits them.
+type pathStep struct {
+	topology.Step
+	FromNodeID   string `json:"fromNodeId,omitempty"`
+	EdgeReversed bool   `json:"edgeReversed,omitempty"`
+}
+
+// isConnectorServiceKey reports whether a graph key is a connector's own
+// service node, which never resolves to an entity identity.
+func isConnectorServiceKey(key string) bool {
+	parts := strings.Split(key, "\x00")
+	return len(parts) == 3 && parts[1] == "service" && parts[0] == parts[2]
+}
+
 // Path handles GET /api/topology/path.
 func (h *Handler) Path(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
@@ -77,29 +92,35 @@ func (h *Handler) Path(w http.ResponseWriter, r *http.Request) {
 	if path == nil {
 		path = []topology.Step{}
 	}
+	steps := make([]pathStep, len(path))
 	if len(path) > 0 {
 		members, err := h.activeMembers(r, allowed)
 		if err != nil {
 			httputil.Errorf(w, err)
 			return
 		}
+		// resolve maps a graph key to the ID the graph endpoint uses: the
+		// identity of an ACTIVE visible member, else the plain node key.
+		resolve := func(key string) string {
+			if member, ok := members[key]; ok && !isConnectorServiceKey(key) {
+				return member.EntityID
+			}
+			return key
+		}
 		for i := range path {
 			path[i].ConnectorName = names[path[i].ConnectorID]
-			path[i].NodeID = path[i].GraphNodeKey
-			connectorServiceKey := path[i].ConnectorID + "\x00service\x00" + path[i].ConnectorID
-			isConnectorService := path[i].Kind == "service" && path[i].GraphNodeKey == connectorServiceKey
-			if !isConnectorService {
-				if member, ok := members[path[i].GraphNodeKey]; ok {
-					path[i].NodeID = member.EntityID
-				}
+			path[i].NodeID = resolve(path[i].GraphNodeKey)
+			steps[i] = pathStep{Step: path[i], EdgeReversed: path[i].EdgeReversed}
+			if path[i].FromKey != "" {
+				steps[i].FromNodeID = resolve(path[i].FromKey)
 			}
 		}
 	}
 	if to == "" {
-		httputil.JSON(w, http.StatusOK, map[string]any{"found": len(path) > 0, "truncated": truncated, "path": path})
+		httputil.JSON(w, http.StatusOK, map[string]any{"found": len(path) > 0, "truncated": truncated, "path": steps})
 		return
 	}
-	httputil.JSON(w, http.StatusOK, map[string]any{"found": len(path) > 0, "hops": max(0, len(path)-1), "truncated": false, "path": path})
+	httputil.JSON(w, http.StatusOK, map[string]any{"found": len(path) > 0, "hops": max(0, len(path)-1), "truncated": false, "path": steps})
 }
 
 func httpErr(w http.ResponseWriter, status int, message string) {

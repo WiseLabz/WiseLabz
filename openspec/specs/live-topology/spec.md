@@ -38,9 +38,15 @@ The topology builder SHALL persist `resolves_to`, `proxies_to`, and `runs_on` ed
 
 Each step of a `GET /api/topology/path` response SHALL carry a `nodeId` equal to the ID the same node has in `GET /api/topology/graph`, so a client can highlight a path on the graph without matching by name. A step that is an active member of an entity identity on a connector the caller may view SHALL report that identity's ID; any other step, such as a connector service node, SHALL report its plain graph node key. The identity lookup SHALL consider only connectors the caller may view.
 
+Each step after a start node SHALL also carry `fromNodeId`, the graph node ID of the step it was reached from, resolved exactly like `nodeId` (active members on connectors the caller may view only, else the plain graph node key), and `edgeReversed` when its edge was traversed against its direction (only possible for the undirected path to a target). With `edgeKind`, `edgeSource` and `detail` these identify the edge each step followed. MCP `topology_path` output SHALL NOT include `fromNodeId` or `edgeReversed`.
+
 #### Scenario: Path step maps to a graph identity
 - **WHEN** a path step is an entity that resolves to an identity visible in the graph
 - **THEN** the step's `nodeId` equals that identity's graph node ID
+
+#### Scenario: From node never names a hidden entity
+- **WHEN** a step was reached from a node whose only identity member is on a connector the caller cannot view
+- **THEN** its `fromNodeId` is the plain graph node key, never that entity's ID
 
 #### Scenario: Connector service step
 - **WHEN** a path step is a connector's own service node
@@ -122,15 +128,15 @@ The page SHALL offer a connector filter, a kind filter chosen from the kinds pre
 
 ### Requirement: Trace highlighting
 
-The page SHALL provide a trace form with a required `from` endpoint and an optional `to` endpoint, submitted with the Enter key or the trace button, that calls `GET /api/topology/path`. With both endpoints the page SHALL highlight the shortest path between them; with only `from` it SHALL highlight the directed walk that follows outgoing edges from it. The returned hops SHALL be listed in order. Endpoints SHALL be validated (`from` required, at most 256 characters each) before a request is sent, and a no-path result, a validation error from the server, a request failure, or a truncated walk SHALL each be reported without hiding the graph. Highlighting SHALL NOT recompute the graph layout.
+The page SHALL provide a trace form with a required `from` endpoint and an optional `to` endpoint, submitted with the Enter key or the trace button, that calls `GET /api/topology/path`. With both endpoints the page SHALL highlight the shortest path between them; with only `from` it SHALL highlight the directed walk that follows outgoing edges from it. In both cases the page SHALL highlight exactly the edges the steps followed, identified by the step's `fromNodeId`, `nodeId`, `edgeReversed`, `edgeKind`, `edgeSource` and `detail`, never an edge merely between two consecutive steps; where both directions or several kinds exist between a pair only the traversed one counts, and a hop through a node the page does not draw highlights nothing. The returned hops SHALL be listed in order. Endpoints SHALL be validated (`from` required, at most 256 characters each) before a request is sent, and a no-path result, a validation error from the server, a request failure, or a truncated walk SHALL each be reported without hiding the graph. Highlighting SHALL NOT recompute the graph layout or refit the viewport, but the viewport SHALL refit whenever the set of displayed nodes changes (filters, show-unlinked, or cached data swapping in). The kind filter's options SHALL come from the graph without the kind filter, including when a kind is already set in the URL.
 
 #### Scenario: Path between two endpoints
 - **WHEN** a user submits both endpoints and a path is found
-- **THEN** the edges between consecutive hops are highlighted, no other edge is, and the hops are listed
+- **THEN** exactly the edges the path followed are highlighted, no other edge is, and the hops are listed
 
 #### Scenario: Walk from one endpoint
 - **WHEN** a user submits only `from`
-- **THEN** the request omits `to` and the returned directed walk is highlighted and listed
+- **THEN** the request omits `to` and the edges the walk followed (for a branching walk, each node's edge from its parent) are highlighted and the walk is listed
 
 #### Scenario: Missing start
 - **WHEN** a user submits the form with no `from`

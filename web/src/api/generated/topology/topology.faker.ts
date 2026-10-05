@@ -25,6 +25,11 @@ export const getGetTopologyPathResponseMock = (
       faker.string.alpha({ length: { min: 10, max: 20 } }),
       undefined,
     ]),
+    fromNodeId: faker.helpers.arrayElement([
+      faker.string.alpha({ length: { min: 10, max: 20 } }),
+      undefined,
+    ]),
+    edgeReversed: faker.helpers.arrayElement([faker.datatype.boolean(), undefined]),
     edgeKind: faker.helpers.arrayElement([
       faker.string.alpha({ length: { min: 10, max: 20 } }),
       undefined,

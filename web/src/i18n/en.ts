@@ -908,6 +908,7 @@ export const en = {
       traceError: "Couldn't trace that path.",
       noPath: 'No path found between those endpoints.',
       noPathFrom: 'Nothing found to follow from that endpoint.',
+      tracing: 'Tracing path…',
       pathTruncated: 'The path was cut short at the maximum number of steps.',
       traceHops: 'Path hops',
       truncated: 'This graph is limited to the first 2,000 nodes and 5,000 edges.',

@@ -74,3 +74,31 @@ func TestShortestPathMatchesRefAndIgnoresCase(t *testing.T) {
 		t.Fatalf("path = %v, want match by name/ref case-insensitively", names(p))
 	}
 }
+
+func TestFollowDirectedStepsNameTheNodeTheyWereReachedFrom(t *testing.T) {
+	// A→B, A→C, B→D: BFS order is A,B,C,D, so D's parent is B, not C.
+	edges := []store.TopologyEdge{edge("a", "b", "k"), edge("a", "c", "k"), edge("b", "d", "k")}
+	path, _ := FollowDirected(edges, "a", 0)
+	from := map[string]string{}
+	for _, s := range path {
+		from[s.Name] = s.FromKey
+	}
+	keyOf := func(name string) string { return Node{ConnectorID: "c", Kind: "x", Name: name}.key() }
+	want := map[string]string{"a": "", "b": keyOf("a"), "c": keyOf("a"), "d": keyOf("b")}
+	for name, w := range want {
+		if from[name] != w {
+			t.Errorf("FromKey(%s) = %q, want %q", name, from[name], w)
+		}
+	}
+}
+
+func TestShortestPathMarksEdgesTraversedAgainstTheirDirection(t *testing.T) {
+	edges := []store.TopologyEdge{edge("a", "b", "k"), edge("c", "b", "k")}
+	path := ShortestPath(edges, "a", "c", false)
+	if len(path) != 3 || path[1].EdgeReversed || !path[2].EdgeReversed {
+		t.Fatalf("path = %+v, want a→b forward then b←c reversed", path)
+	}
+	if path[0].FromKey != "" || path[2].FromKey != path[1].GraphNodeKey {
+		t.Fatalf("FromKey chain wrong: %+v", path)
+	}
+}
