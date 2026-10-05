@@ -20,6 +20,7 @@ import (
 	connhandler "github.com/WiseLabz/wiselabz/internal/api/connectors"
 	dashhandler "github.com/WiseLabz/wiselabz/internal/api/dashboard"
 	dochandler "github.com/WiseLabz/wiselabz/internal/api/docs"
+	entityhandler "github.com/WiseLabz/wiselabz/internal/api/entities"
 	findinghandler "github.com/WiseLabz/wiselabz/internal/api/findings"
 	"github.com/WiseLabz/wiselabz/internal/api/middleware"
 	notifhandler "github.com/WiseLabz/wiselabz/internal/api/notifications"
@@ -166,6 +167,7 @@ func newRouterDeps(cfg Config) routerDeps {
 		alertH:      alerthandler.NewHandler(cfg.Store),
 		attentionH:  attentionhandler.NewHandler(cfg.Store),
 		findingH:    findinghandler.NewHandler(cfg.Store),
+		entityH:     entityhandler.NewHandler(cfg.Store),
 		notifH:      notifhandler.NewHandler(cfg.Store),
 		runbookH:    runbookhandler.NewHandler(cfg.Store, connH),
 		dashH:       dashhandler.NewHandler(cfg.Store),

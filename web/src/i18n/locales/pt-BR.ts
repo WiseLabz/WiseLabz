@@ -35,6 +35,22 @@ export const ptBR: Catalog = {
     limited:
       'Exibindo até {{count}} resultados por grupo. Refine a pesquisa para obter resultados mais específicos.',
   },
+  entities: {
+    notFound: 'Entidade não encontrada',
+    loadError: 'Não foi possível carregar esta entidade',
+    gone: 'Esta entidade não é mais observada.',
+    members: 'Também vista como',
+    relatedByIp: 'Relacionada por IP',
+    neighbors: 'Vizinhos na topologia',
+    history: 'Histórico de atributos',
+    findings: 'Problemas encontrados',
+    connectorFindings: 'Nos conectores que reportaram',
+    runbooks: 'Runbooks',
+    empty: 'Nenhum registro relacionado',
+    goneSince: 'Não é mais observada desde {{date}}',
+    connectorDoc: 'Documento do conector',
+    findingStatus: { open: 'aberto', resolved: 'resolvido' },
+  },
   app: {
     tagline: 'Documentação sábia para o seu homelab',
   },

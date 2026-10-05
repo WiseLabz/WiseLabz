@@ -8,3 +8,4 @@
 - [x] Verify store, doc, sync, quality, retention, server lifecycle, and migration tests; run required backend tests and lint.
 - [x] Update graphify output and open a ready-for-review PR referencing #502 as “Part of #502”.
 - [x] Round 4: notify once per rule per connector across new, flapping and escalating entities; deterministic ID assignment by oldest identity; `merged_at` column and merged-row purge keyed on it (#632).
+- [x] Add the grant-filtered entity detail endpoint and page, with snapshot-derived history, related topology, findings, runbooks, redirect handling, and gone state (#502).

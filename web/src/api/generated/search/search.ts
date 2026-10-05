@@ -19,7 +19,7 @@ import type {
   UseQueryResult,
 } from '@tanstack/react-query';
 
-import type { Error, GetSearchParams, SearchResults } from '../../model';
+import type { EntityDetail, Error, GetSearchParams, SearchResults } from '../../model';
 
 import { customInstance } from '../../axios-instance';
 import type { ErrorType } from '../../axios-instance';
@@ -149,6 +149,129 @@ export function useGetSearch<
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
   const queryOptions = getGetSearchQueryOptions(params, options);
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+/**
+ * Returns 404 unless the caller can view at least one member connector; a malformed id, an unknown id, a redirect loop and a missing grant all return the identical 404. Instance admins get no implicit access. All connector-derived fields are filtered by viewer grants and API-key restrictions.
+ *
+ * `kind` and `name` come from the first active visible member (a gone member only when none is active). `members` lists every visible member, active first, with `goneAt` on departed ones. `neighbors`, `relatedByIp`, `findings`, `onReportingConnectors` and `runbooks` only consider active visible members and are capped (200 edges, 50 findings, 100 runbook steps). `findings` and `onReportingConnectors` contain open findings only.
+ *
+ * `history` is derived from snapshot diffs: for each visible member connector the 30 most recent snapshots are compared pairwise, and at most 100 changes are returned, newest first. `at` is the fetch time of the newer snapshot of the pair, `old` the value in the older snapshot and `new` the value in the newer one.
+ * @summary Get a visible entity identity and its related topology
+ */
+export const getEntitiesId = (
+  id: string,
+  options?: SecondParameter<typeof customInstance>,
+  signal?: AbortSignal
+) => {
+  return customInstance<EntityDetail>({ url: `/entities/${id}`, method: 'GET', signal }, options);
+};
+
+export const getGetEntitiesIdQueryKey = (id: string) => {
+  return [`/entities/${id}`] as const;
+};
+
+export const getGetEntitiesIdQueryOptions = <
+  TData = Awaited<ReturnType<typeof getEntitiesId>>,
+  TError = ErrorType<Error>,
+>(
+  id: string,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getEntitiesId>>, TError, TData>>;
+    request?: SecondParameter<typeof customInstance>;
+  }
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetEntitiesIdQueryKey(id);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getEntitiesId>>> = ({ signal }) =>
+    getEntitiesId(id, requestOptions, signal);
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: id !== null && id !== undefined,
+    ...queryOptions,
+  } as UseQueryOptions<Awaited<ReturnType<typeof getEntitiesId>>, TError, TData> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+};
+
+export type GetEntitiesIdQueryResult = NonNullable<Awaited<ReturnType<typeof getEntitiesId>>>;
+export type GetEntitiesIdQueryError = ErrorType<Error>;
+
+export function useGetEntitiesId<
+  TData = Awaited<ReturnType<typeof getEntitiesId>>,
+  TError = ErrorType<Error>,
+>(
+  id: string,
+  options: {
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof getEntitiesId>>, TError, TData>> &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getEntitiesId>>,
+          TError,
+          Awaited<ReturnType<typeof getEntitiesId>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useGetEntitiesId<
+  TData = Awaited<ReturnType<typeof getEntitiesId>>,
+  TError = ErrorType<Error>,
+>(
+  id: string,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getEntitiesId>>, TError, TData>> &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getEntitiesId>>,
+          TError,
+          Awaited<ReturnType<typeof getEntitiesId>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useGetEntitiesId<
+  TData = Awaited<ReturnType<typeof getEntitiesId>>,
+  TError = ErrorType<Error>,
+>(
+  id: string,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getEntitiesId>>, TError, TData>>;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * @summary Get a visible entity identity and its related topology
+ */
+
+export function useGetEntitiesId<
+  TData = Awaited<ReturnType<typeof getEntitiesId>>,
+  TError = ErrorType<Error>,
+>(
+  id: string,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getEntitiesId>>, TError, TData>>;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getGetEntitiesIdQueryOptions(id, options);
 
   const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
     queryKey: DataTag<QueryKey, TData, TError>;

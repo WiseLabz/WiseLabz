@@ -9,11 +9,11 @@
 import { HttpResponse, http } from 'msw';
 import type { RequestHandlerOptions } from 'msw';
 
-import type { SearchResults } from '../../model';
+import type { EntityDetail, SearchResults } from '../../model';
 
-import { getGetSearchResponseMock } from './search.faker';
+import { getGetEntitiesIdResponseMock, getGetSearchResponseMock } from './search.faker';
 
-export { getGetSearchResponseMock } from './search.faker';
+export { getGetSearchResponseMock, getGetEntitiesIdResponseMock } from './search.faker';
 
 export const getGetSearchMockHandler = (
   overrideResponse?:
@@ -38,4 +38,28 @@ export const getGetSearchMockHandler = (
     options
   );
 };
-export const getSearchMock = () => [getGetSearchMockHandler()];
+
+export const getGetEntitiesIdMockHandler = (
+  overrideResponse?:
+    | EntityDetail
+    | ((
+        info: Parameters<Parameters<typeof http.get>[1]>[0]
+      ) => Promise<EntityDetail> | EntityDetail),
+  options?: RequestHandlerOptions
+) => {
+  return http.get(
+    '*/entities/:id',
+    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+      return HttpResponse.json(
+        overrideResponse !== undefined
+          ? typeof overrideResponse === 'function'
+            ? await overrideResponse(info)
+            : overrideResponse
+          : getGetEntitiesIdResponseMock(),
+        { status: 200 }
+      );
+    },
+    options
+  );
+};
+export const getSearchMock = () => [getGetSearchMockHandler(), getGetEntitiesIdMockHandler()];

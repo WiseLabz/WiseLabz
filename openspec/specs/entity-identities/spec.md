@@ -51,3 +51,25 @@ Entity-specific compliance findings SHALL persist the entity kind and connector-
 
 ### Requirement: One notification per rule per connector
 Entity-specific compliance findings SHALL notify at most once per rule and connector at a given severity. A new or returning entity on a rule that already notified at that severity or higher SHALL NOT notify; a severity escalation SHALL notify exactly once; and a rule whose open findings on a connector have all resolved SHALL notify once when it fires again.
+
+### Requirement: Grant-filtered entity detail
+The system SHALL expose `GET /api/entities/{id}` and a web detail page for visible persisted identities. The endpoint SHALL follow flattened merge redirects and return the same 404 response for missing or invisible identities unless the redirect target is itself visible. A caller SHALL be able to view at least one member connector; API-key connector restrictions SHALL be applied. Members, topology links, history, findings, and runbooks SHALL include only data from granted connectors. The displayed kind, name, and gone state SHALL be derived from visible members.
+
+#### Scenario: Viewer has access to one member connector
+- **WHEN** an identity has members on two connectors and the caller can view one
+- **THEN** the endpoint SHALL return only that member and data derived from granted connectors.
+
+#### Scenario: No visible member or hidden redirect target
+- **WHEN** the caller cannot view any member of the identity or its redirect target
+- **THEN** the endpoint SHALL return 404 without revealing the identity or redirect target.
+
+#### Scenario: Gone identity
+- **WHEN** every visible member is marked gone
+- **THEN** the detail page SHALL show that the entity is no longer observed.
+
+### Requirement: Entity attribute history
+The system SHALL derive entity attribute history from existing snapshot diffs and SHALL NOT add a separate history table.
+
+#### Scenario: Changed attributes
+- **WHEN** successive retained snapshots contain a field change for a visible member
+- **THEN** the entity detail response SHALL include the corresponding `EntityChange` with its snapshot time.

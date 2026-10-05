@@ -135,6 +135,7 @@ describe('CommandPalette', () => {
         runbooks: [{ id: 'r', title: 'Restart safely', snippet: 'Procedure' }],
         entities: [
           {
+            entityId: 'entity-1',
             connectorId: 'c',
             connectorName: 'Gateway',
             docId: 'd',
@@ -166,7 +167,31 @@ describe('CommandPalette', () => {
       { query: { enabled: true } }
     );
     fireEvent.click(screen.getByRole('option', { name: /edge/ }));
-    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/docs/d'));
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/entities/entity-1'));
+  });
+  it.each([
+    ['doc', 'd', '/docs/d'],
+    ['service', '', '/services/c'],
+  ])('falls back to the %s when an entity hit has no identity', async (_label, docId, path) => {
+    searchHook.mockReturnValue({
+      data: {
+        docs: [],
+        runbooks: [],
+        entities: [{ entityId: '', connectorId: 'c', connectorName: 'Gateway', docId, kind: 'device', name: 'edge', ip: '10.0.0.1' }],
+      },
+    });
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <MemoryRouter>
+          <CommandPalette />
+          <Location />
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: '10.0.0.1' } });
+    await waitFor(() => expect(screen.getByRole('option', { name: /edge/ })).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('option', { name: /edge/ }));
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent(path));
   });
   it('offers See all results even without top hits', async () => {
     render(

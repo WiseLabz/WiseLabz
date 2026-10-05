@@ -20,4 +20,4 @@ Connector snapshots currently identify objects only within each reporting connec
 ## Impact
 
 - Backend store migration 000058 for SQLite and PostgreSQL, identity reconciliation, retention cleanup, sync wiring, leadership backfill, findings, and search.
-- No entity detail endpoint or web page is included; those are the follow-up PR for #502.
+- Expose grant-filtered entity details, topology relationships, snapshot-derived attribute history, findings, and targeted runbooks through an API and web page.

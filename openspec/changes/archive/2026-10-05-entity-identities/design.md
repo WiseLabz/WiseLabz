@@ -17,6 +17,10 @@
 
 The next PR in #502 will expose entity detail pages, redirects, grant-filtered members and related links, changes, findings, and runbooks. Manual identity merge/split is not included here; the schema leaves room for a future manual override by keeping identity metadata separate from connector-local membership references, but this change adds no override fields or behavior.
 
+## Entity details
+
+The entity detail endpoint follows flattened `merged_into` redirects, then authorizes only when the caller can view at least one member connector. It applies API-key connector restrictions through the same grant filter as connector-scoped endpoints and constructs every response section from the resulting visible connector set. Display name, kind, and gone state come from visible members so hidden memberships cannot affect the response. Attribute history is derived on demand from retained snapshots using `sync.BuildSnapshotDiff` and its `EntityChange` records; no history table is added. Topology edges are read by stored kind and endpoints so future edge types appear without endpoint changes. Manual merge/split remains deferred to the linked follow-up issue.
+
 ## Risks
 
 - Strong heuristic hostname matches can merge distinct systems; preserving merge redirects and keeping IP links weak limits accidental identity collapse.
