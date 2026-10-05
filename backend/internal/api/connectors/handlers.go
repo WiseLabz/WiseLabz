@@ -106,11 +106,13 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		{"name", req.Name},
 		{"category", req.Category},
 		{"type", req.Type},
-		{"url", req.URL},
 	} {
 		if f.value == "" {
 			fieldErrs = append(fieldErrs, httputil.FieldError{Field: f.name, Msg: "is required"})
 		}
+	}
+	if req.URL == "" && connector.URLRequired(req.Type) {
+		fieldErrs = append(fieldErrs, httputil.FieldError{Field: "url", Msg: "is required"})
 	}
 	fieldErrs = append(fieldErrs, validateRotationFields(req.UserExpiresAt, req.RotationMaxAgeDays)...)
 	if len(fieldErrs) > 0 {
@@ -380,7 +382,7 @@ func applyConnectorScalarUpdates(updates map[string]any, req *updateConnectorReq
 // without a config body is a no-op. It writes the error response and reports
 // false when the update must not proceed.
 func (h *Handler) applyConnectorConfigUpdate(w http.ResponseWriter, r *http.Request, id string, req *updateConnectorRequest, updates map[string]any) bool {
-	if req.Config == nil {
+	if req.Config == nil && req.URL == nil && req.Type == nil {
 		return true
 	}
 	rec, err := h.Store.GetConnector(r.Context(), id)
@@ -403,6 +405,14 @@ func (h *Handler) applyConnectorConfigUpdate(w http.ResponseWriter, r *http.Requ
 	verifyTLS := rec.VerifyTLS
 	if req.VerifyTLS != nil {
 		verifyTLS = *req.VerifyTLS
+	}
+	if url == "" && connector.URLRequired(typ) {
+		httputil.ErrorWithDetails(w, http.StatusBadRequest, "invalid_request", "Request validation failed",
+			[]httputil.FieldError{{Field: "url", Msg: "is required"}})
+		return false
+	}
+	if req.Config == nil {
+		return true
 	}
 	if err := validateConnectorConfig(typ, url, verifyTLS, req.Config); err != nil {
 		writeConfigRejection(w, err)
@@ -488,8 +498,7 @@ func (h *Handler) Test(w http.ResponseWriter, r *http.Request) {
 		httputil.Errorf(w, err)
 		return
 	}
-	cfg["url"] = rec.URL
-	cfg["verify_tls"] = rec.VerifyTLS
+	connector.ApplyRecordConfig(cfg, rec.URL, rec.VerifyTLS)
 
 	c, err := connector.Get(rec.Type, cfg)
 	if err != nil {
@@ -729,8 +738,7 @@ func (h *Handler) ConfigFields(w http.ResponseWriter, r *http.Request) {
 		httputil.Errorf(w, fmt.Errorf("parse config: %w", err))
 		return
 	}
-	cfg["url"] = rec.URL
-	cfg["verify_tls"] = rec.VerifyTLS
+	connector.ApplyRecordConfig(cfg, rec.URL, rec.VerifyTLS)
 
 	conn, err := connector.Get(rec.Type, cfg)
 	if err != nil {

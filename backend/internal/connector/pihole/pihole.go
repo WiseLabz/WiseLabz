@@ -546,6 +546,8 @@ func buildHostsTable(raw []byte) (content string, entities []connector.SnapshotE
 		}
 		entities = append(entities, connector.SnapshotEntity{
 			Kind:       "dns_record",
+			Name:       hostname,
+			ExternalID: hostname + "=" + ip,
 			Hostname:   hostname,
 			IP:         ip,
 			Attributes: attrs,

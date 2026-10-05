@@ -304,7 +304,7 @@ func (e *Engine) syncConfig(rec *store.ConnectorRecord, fields []string) (map[st
 	if err != nil {
 		return nil, err
 	}
-	cfg["url"], cfg["verify_tls"] = rec.URL, rec.VerifyTLS
+	connector.ApplyRecordConfig(cfg, rec.URL, rec.VerifyTLS)
 	if len(fields) > 0 {
 		cfg["fields"] = fields
 	}

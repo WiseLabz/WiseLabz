@@ -30,6 +30,7 @@ func init() {
 			{Key: "basic_password", Label: "Basic auth password", Type: "password"},
 			{Key: "verify_tls", Label: "Verify TLS", Type: "toggle", Default: "true"},
 		},
+		ConfigCheck: checkInputMode,
 	}, newConnector)
 	connector.RegisterAttributeCatalog(typeName, attributeCatalog)
 }
@@ -52,6 +53,20 @@ func newConnector(config map[string]any) (connector.Connector, error) {
 		bearerToken: get("bearer_token"), basicUsername: get("basic_username"), basicPassword: get("basic_password"),
 		client: connector.NewHTTPClient(connector.HTTPClientOptions{SkipTLSVerify: !verifyTLS}),
 	}, nil
+}
+
+// checkInputMode enforces, at create/update time, that exactly one of url or
+// config_json is set.
+func checkInputMode(config map[string]any) error {
+	url, _ := config["url"].(string)
+	pasted, _ := config["config_json"].(string)
+	switch hasURL, hasJSON := strings.TrimSpace(url) != "", pasted != ""; {
+	case hasURL && hasJSON:
+		return &connector.ConfigValidationError{Field: "config_json", Message: "only one of url or config_json may be set"}
+	case !hasURL && !hasJSON:
+		return &connector.ConfigValidationError{Field: "url", Message: "set either url or config_json"}
+	}
+	return nil
 }
 
 // Name returns the connector display name.

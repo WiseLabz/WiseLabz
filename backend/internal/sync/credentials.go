@@ -22,8 +22,7 @@ func (e *Engine) RefreshCredentials(ctx context.Context, connectorID string) err
 	if err != nil {
 		return fmt.Errorf("parse config: %w", err)
 	}
-	cfg["url"] = rec.URL
-	cfg["verify_tls"] = rec.VerifyTLS
+	connector.ApplyRecordConfig(cfg, rec.URL, rec.VerifyTLS)
 
 	conn, err := connector.Get(rec.Type, cfg)
 	if err != nil {

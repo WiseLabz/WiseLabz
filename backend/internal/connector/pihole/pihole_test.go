@@ -71,8 +71,8 @@ func TestBuildHostsTableValidRecords(t *testing.T) {
 	}
 
 	want := []connector.SnapshotEntity{
-		{Kind: "dns_record", Hostname: "nas.internal.example.com", IP: "10.0.0.5", Attributes: map[string]any{"source": "local_dns", "is_ipv6": false}},
-		{Kind: "dns_record", Hostname: "printer.internal.example.com", IP: "10.0.0.6", Attributes: map[string]any{"source": "local_dns", "is_ipv6": false}},
+		{Kind: "dns_record", Name: "nas.internal.example.com", ExternalID: "nas.internal.example.com=10.0.0.5", Hostname: "nas.internal.example.com", IP: "10.0.0.5", Attributes: map[string]any{"source": "local_dns", "is_ipv6": false}},
+		{Kind: "dns_record", Name: "printer.internal.example.com", ExternalID: "printer.internal.example.com=10.0.0.6", Hostname: "printer.internal.example.com", IP: "10.0.0.6", Attributes: map[string]any{"source": "local_dns", "is_ipv6": false}},
 	}
 	for i, w := range want {
 		if !reflect.DeepEqual(entities[i], w) {

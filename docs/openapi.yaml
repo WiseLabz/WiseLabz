@@ -4659,13 +4659,15 @@ components:
             it is disabled and can only be deleted or released.
     ConnectorCreate:
       type: object
-      required: [name, category, type, url, config]
+      required: [name, category, type, config]
       properties:
         name: { type: string }
         owner: { type: string, nullable: true }
         category: { $ref: '#/components/schemas/ConnectorCategory' }
         type: { type: string }
-        url: { type: string }
+        url:
+          type: string
+          description: Required unless the connector type's schema marks its `url` field optional (for example Caddy in pasted config_json mode); an empty value is rejected with 400 for types that require it.
         verifyTls: { type: boolean, default: true }
         config:
           type: object

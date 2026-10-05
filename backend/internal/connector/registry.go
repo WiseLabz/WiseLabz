@@ -35,6 +35,9 @@ type TypeSchema struct {
 	// the lifecycle verbs (restart/start/stop) this type's Connector
 	// implementation supports (see SupportsLifecycleVerb).
 	LifecycleVerbs []string `json:"lifecycleVerbs"`
+	// ConfigCheck is an optional cross-field rule (e.g. "exactly one of url
+	// or config_json") applied by ValidateConfig after the per-field checks.
+	ConfigCheck func(config map[string]any) error `json:"-"`
 	// Capabilities is computed from the connector's optional interfaces.
 	Capabilities CapabilityDescriptor `json:"capabilities"`
 }
@@ -121,7 +124,38 @@ func ValidateConfig(schema TypeSchema, config map[string]any) error {
 			}
 		}
 	}
+	if schema.ConfigCheck != nil {
+		return schema.ConfigCheck(config)
+	}
 	return nil
+}
+
+// URLRequired reports whether the connector type's schema requires the
+// top-level url. Unknown types and types without a url field keep the
+// historical behaviour (required).
+func URLRequired(typ string) bool {
+	schema, err := GetTypeSchema(typ)
+	if err != nil {
+		return true
+	}
+	for _, f := range schema.Fields {
+		if f.Key == "url" {
+			return f.Required
+		}
+	}
+	return true
+}
+
+// ApplyRecordConfig folds a connector record's top-level url and verify_tls
+// into its config map. An empty url is left out so optional-url types (Caddy
+// pasted mode) do not see a spurious empty value.
+func ApplyRecordConfig(cfg map[string]any, url string, verifyTLS bool) {
+	if url != "" {
+		cfg["url"] = url
+	} else {
+		delete(cfg, "url")
+	}
+	cfg["verify_tls"] = verifyTLS
 }
 
 // AttributeSpec describes one structured attribute an entity kind may carry

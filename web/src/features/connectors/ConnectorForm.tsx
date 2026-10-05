@@ -51,7 +51,8 @@ export function ConnectorForm({
   const create = useMutation({
     mutationFn: () => {
       if (!schema) throw new Error('no type selected');
-      const url = String(values.url ?? '');
+      // Optional-url types (Caddy pasted-JSON mode) must not send an empty url.
+      const url = String(values.url ?? '') || undefined;
       const tlsField = schema.fields.find(isVerifyTlsField);
       // Verify TLS is on unless the user switched it off.
       const verifyTls = tlsField ? Boolean(values[tlsField.name] ?? fieldDefault(tlsField)) : true;
@@ -60,7 +61,7 @@ export function ConnectorForm({
         if (isTopLevelField(f)) continue;
         config[f.name] = values[f.name] ?? fieldDefault(f);
       }
-      return postConnectors({ name, owner: owner || undefined, category: schema.category, type: schema.type, url, verifyTls, config });
+      return postConnectors({ name, owner: owner || undefined, category: schema.category, type: schema.type, ...(url ? { url } : {}), verifyTls, config });
     },
     onSuccess: (created) => {
       queryClient.invalidateQueries({ queryKey: getGetConnectorsQueryKey() });

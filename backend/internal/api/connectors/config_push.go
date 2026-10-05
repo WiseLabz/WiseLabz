@@ -118,8 +118,7 @@ func (h *Handler) resolveConfigPusher(w http.ResponseWriter, r *http.Request, id
 		httputil.Errorf(w, fmt.Errorf("parse config: %w", err))
 		return nil, nil, nil, nil, false
 	}
-	cfg["url"] = rec.URL
-	cfg["verify_tls"] = rec.VerifyTLS
+	connector.ApplyRecordConfig(cfg, rec.URL, rec.VerifyTLS)
 
 	conn, err := connector.Get(rec.Type, cfg)
 	if err != nil {

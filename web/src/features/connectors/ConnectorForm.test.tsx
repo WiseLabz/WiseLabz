@@ -19,6 +19,16 @@ const schemas = [
       { name: 'verify_tls', label: 'Verify TLS', kind: 'toggle', required: false, default: 'true' },
     ],
   },
+  {
+    type: 'caddy',
+    category: 'networking',
+    displayName: 'Caddy',
+    isCredentialRefresher: false,
+    fields: [
+      { name: 'url', label: 'Caddy Admin API URL', kind: 'text', required: false },
+      { name: 'config_json', label: 'Caddy JSON config', kind: 'secret', required: false },
+    ],
+  },
 ];
 
 vi.mock('../../api/generated/connectors/connectors', () => ({
@@ -40,7 +50,7 @@ async function fillAndSubmit(toggleTls: boolean) {
   const tls = screen.getByRole('switch', { name: /verify tls/i });
   expect(tls).toHaveAttribute('aria-checked', 'true');
   if (toggleTls) fireEvent.click(tls);
-  fireEvent.click(screen.getByRole('button', { name: /connect|create|add/i }));
+  fireEvent.click(screen.getByRole('button', { name: /test & add/i }));
   await waitFor(() => expect(postConnectors).toHaveBeenCalled());
   return postConnectors.mock.calls[postConnectors.mock.calls.length - 1][0] as Record<string, unknown>;
 }
@@ -57,5 +67,23 @@ describe('ConnectorForm verify_tls (#613)', () => {
     const body = await fillAndSubmit(true);
     expect(body.verifyTls).toBe(false);
     expect(body.config).toEqual({ token_secret: 's3cret' });
+  });
+});
+
+describe('ConnectorForm optional url (pasted-JSON mode)', () => {
+  it('omits url from the request when the type does not require it and it is empty', async () => {
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <ConnectorForm onCreated={vi.fn()} />
+      </QueryClientProvider>,
+    );
+    fireEvent.click(screen.getByText('Caddy'));
+    fireEvent.change(screen.getByLabelText(/display name/i), { target: { value: 'caddy1' } });
+    fireEvent.change(screen.getByLabelText(/caddy json config/i), { target: { value: '{"apps":{}}' } });
+    fireEvent.click(screen.getByRole('button', { name: /test & add/i }));
+    await waitFor(() => expect(postConnectors).toHaveBeenCalled());
+    const body = postConnectors.mock.calls[postConnectors.mock.calls.length - 1][0] as Record<string, unknown>;
+    expect(body).not.toHaveProperty('url');
+    expect(body.config).toEqual({ config_json: '{"apps":{}}' });
   });
 });

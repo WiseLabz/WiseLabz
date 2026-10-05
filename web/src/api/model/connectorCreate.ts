@@ -15,7 +15,8 @@ export interface ConnectorCreate {
   owner?: string | null;
   category: ConnectorCategory;
   type: string;
-  url: string;
+  /** Required unless the connector type's schema marks its `url` field optional (for example Caddy in pasted config_json mode); an empty value is rejected with 400 for types that require it. */
+  url?: string;
   verifyTls?: boolean;
   /** Schema-driven fields incl. secrets; stored encrypted, never in plaintext config (ARCHITECTURE.md) */
   config: ConnectorCreateConfig;

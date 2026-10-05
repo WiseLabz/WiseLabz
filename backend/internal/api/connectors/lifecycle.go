@@ -179,8 +179,7 @@ func (h *Handler) lifecycleOpMutate(w http.ResponseWriter, r *http.Request, conn
 		httputil.Errorf(w, fmt.Errorf("parse config: %w", err))
 		return
 	}
-	cfg["url"] = rec.URL
-	cfg["verify_tls"] = rec.VerifyTLS
+	connector.ApplyRecordConfig(cfg, rec.URL, rec.VerifyTLS)
 
 	conn, err := connector.Get(rec.Type, cfg)
 	if err != nil {
@@ -295,8 +294,7 @@ func (h *Handler) restartConnector(ctx context.Context, rec *store.ConnectorReco
 	if err != nil {
 		return fmt.Errorf("parse config: %w", err)
 	}
-	cfg["url"] = rec.URL
-	cfg["verify_tls"] = rec.VerifyTLS
+	connector.ApplyRecordConfig(cfg, rec.URL, rec.VerifyTLS)
 
 	conn, err := connector.Get(rec.Type, cfg)
 	if err != nil {
