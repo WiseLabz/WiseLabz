@@ -106,6 +106,7 @@ connectors against their type's fields) and `server config print
 | Cloudflare         | Built-in             |
 | Home Assistant     | Built-in             |
 | Nginx Proxy Manager | Built-in            |
+| Caddy              | Built-in             |
 | Traefik            | Built-in             |
 | Portainer          | Built-in             |
 | AdGuard Home       | Built-in             |

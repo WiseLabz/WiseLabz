@@ -7,6 +7,7 @@ package all
 // Register all connectors via side-effect imports.
 import (
 	_ "github.com/WiseLabz/wiselabz/internal/connector/adguardhome"    // register AdGuard Home connector
+	_ "github.com/WiseLabz/wiselabz/internal/connector/caddy"          // register Caddy connector
 	_ "github.com/WiseLabz/wiselabz/internal/connector/cloudflare"     // register Cloudflare connector
 	_ "github.com/WiseLabz/wiselabz/internal/connector/custom"         // register custom connector
 	_ "github.com/WiseLabz/wiselabz/internal/connector/dnsresolver"    // register DNS Resolver connector

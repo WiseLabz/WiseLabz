@@ -16,6 +16,7 @@ func TestAllConnectorImplementationsRegister(t *testing.T) {
 	}{
 		{typ: "adguardhome", category: "dns"},
 		{typ: "custom", category: "virtualization"},
+		{typ: "caddy", category: "networking"},
 		{typ: "docker", category: "containers_paas"},
 		{typ: "home_assistant", category: "virtualization"},
 		{typ: "npm", category: "networking"},
@@ -57,6 +58,7 @@ func TestConnectorFailureContract(t *testing.T) {
 	}{
 		{"adguardhome", map[string]any{"auth_mode": "none"}, false},
 		{"custom", nil, true},
+		{"caddy", nil, false},
 		{"dnsresolver", map[string]any{"api_key": "bad"}, false},
 		{"home_assistant", map[string]any{"access_token": "bad"}, false},
 		{"netbird", map[string]any{"api_token": "bad"}, false},
