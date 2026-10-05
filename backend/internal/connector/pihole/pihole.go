@@ -536,22 +536,25 @@ func buildHostsTable(raw []byte) (content string, entities []connector.SnapshotE
 		if len(fields) < 2 {
 			continue
 		}
-		ip, hostname := fields[0], fields[1]
-		if _, err := fmt.Fprintf(&b, "| %s | %s |\n", hostname, ip); err != nil {
-			return "", nil
+		ip := fields[0]
+		// A hosts line may map several names to one IP ("10.0.0.1 a b").
+		for _, hostname := range fields[1:] {
+			if _, err := fmt.Fprintf(&b, "| %s | %s |\n", hostname, ip); err != nil {
+				return "", nil
+			}
+			attrs := map[string]any{
+				"source":  "local_dns",
+				"is_ipv6": net.ParseIP(ip).To4() == nil,
+			}
+			entities = append(entities, connector.SnapshotEntity{
+				Kind:       "dns_record",
+				Name:       hostname,
+				ExternalID: hostname + "=" + ip,
+				Hostname:   hostname,
+				IP:         ip,
+				Attributes: attrs,
+			})
 		}
-		attrs := map[string]any{
-			"source":  "local_dns",
-			"is_ipv6": net.ParseIP(ip).To4() == nil,
-		}
-		entities = append(entities, connector.SnapshotEntity{
-			Kind:       "dns_record",
-			Name:       hostname,
-			ExternalID: hostname + "=" + ip,
-			Hostname:   hostname,
-			IP:         ip,
-			Attributes: attrs,
-		})
 	}
 	if len(entities) == 0 {
 		return "_No local DNS records returned_", nil

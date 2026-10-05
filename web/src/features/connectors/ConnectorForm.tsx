@@ -51,7 +51,8 @@ export function ConnectorForm({
   const create = useMutation({
     mutationFn: () => {
       if (!schema) throw new Error('no type selected');
-      // Optional-url types (Caddy pasted-JSON mode) must not send an empty url.
+      // An empty url is omitted for every type; the API rejects it with a field
+      // error where the type requires one, and Caddy pasted-JSON mode needs it absent.
       const url = String(values.url ?? '') || undefined;
       const tlsField = schema.fields.find(isVerifyTlsField);
       // Verify TLS is on unless the user switched it off.

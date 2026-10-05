@@ -87,3 +87,23 @@ func TestIsCredentialRefresherType(t *testing.T) {
 		}
 	}
 }
+
+func TestApplyRecordConfig(t *testing.T) {
+	t.Run("empty url leaves the key absent", func(t *testing.T) {
+		cfg := map[string]any{"url": "stale", "token": "t"}
+		ApplyRecordConfig(cfg, "", false)
+		if _, ok := cfg["url"]; ok {
+			t.Fatalf("url key present: %v", cfg)
+		}
+		if cfg["verify_tls"] != false || cfg["token"] != "t" {
+			t.Fatalf("cfg = %v", cfg)
+		}
+	})
+	t.Run("non-empty url is kept", func(t *testing.T) {
+		cfg := map[string]any{}
+		ApplyRecordConfig(cfg, "https://a.example", true)
+		if cfg["url"] != "https://a.example" || cfg["verify_tls"] != true {
+			t.Fatalf("cfg = %v", cfg)
+		}
+	})
+}

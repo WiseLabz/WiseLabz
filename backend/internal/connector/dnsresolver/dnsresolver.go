@@ -246,6 +246,8 @@ func buildHostOverrideTable(raw []byte) (content string, entities []connector.Sn
 		}
 		entities = append(entities, connector.SnapshotEntity{
 			Kind:       "dns_record",
+			Name:       hostname,
+			ExternalID: hostname + "=" + o.IP,
 			Hostname:   hostname,
 			IP:         o.IP,
 			Attributes: attrs,

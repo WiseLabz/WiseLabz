@@ -87,3 +87,23 @@ describe('ConnectorForm optional url (pasted-JSON mode)', () => {
     expect(body.config).toEqual({ config_json: '{"apps":{}}' });
   });
 });
+
+describe('ConnectorForm Caddy mode switch', () => {
+  it('sends no url after the url is typed and cleared for pasted mode', async () => {
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <ConnectorForm onCreated={vi.fn()} />
+      </QueryClientProvider>,
+    );
+    fireEvent.click(screen.getByText('Caddy'));
+    fireEvent.change(screen.getByLabelText(/display name/i), { target: { value: 'caddy2' } });
+    fireEvent.change(screen.getByLabelText(/caddy admin api url/i), { target: { value: 'http://caddy:2019' } });
+    fireEvent.change(screen.getByLabelText(/caddy admin api url/i), { target: { value: '' } });
+    fireEvent.change(screen.getByLabelText(/caddy json config/i), { target: { value: '{"apps":{}}' } });
+    fireEvent.click(screen.getByRole('button', { name: /test & add/i }));
+    await waitFor(() => expect(postConnectors).toHaveBeenCalled());
+    const body = postConnectors.mock.calls[postConnectors.mock.calls.length - 1][0] as Record<string, unknown>;
+    expect(body).not.toHaveProperty('url');
+    expect(body.config).toEqual({ config_json: '{"apps":{}}' });
+  });
+});

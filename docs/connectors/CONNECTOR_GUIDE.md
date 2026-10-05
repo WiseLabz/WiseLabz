@@ -146,6 +146,11 @@ func init() {
 }
 ```
 
+On update, `ConfigCheck` runs against the merged state (stored record plus the
+request); a secret field the request omits keeps its stored value, and an explicit
+empty string clears it. Connectors declared in `config.yaml` still require a `url`
+for every type, so a pasted-JSON Caddy can only be created through the API or UI.
+
 Supported field types: `"text"`, `"password"`, `"number"`, `"select"`, `"toggle"`.
 
 Secret fields should use `"password"` — the UI renders a password input and the

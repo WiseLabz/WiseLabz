@@ -6,6 +6,7 @@
  * are operator actions, enforced server-side.
  */
 import { useMemo, useState } from 'react';
+import { isAxiosError } from 'axios';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -76,6 +77,16 @@ export function ConnectorEditPage() {
         // Only send secret/config fields the user actually re-entered.
         if (values[f.name] !== undefined && String(values[f.name]).length > 0) config[f.name] = values[f.name];
       }
+      // Moving an optional-url type (Caddy) from pasted-JSON mode to url mode:
+      // the stored pasted blob is write-only and omitted fields are kept
+      // server-side, so clear it explicitly or both inputs would be set.
+      const urlField = schema?.fields.find((f) => f.name === 'url');
+      const newUrl = values.url !== undefined ? String(values.url) : (connector.data?.url ?? '');
+      if (urlField && !urlField.required && !connector.data?.url && newUrl) {
+        for (const f of schema?.fields ?? []) {
+          if (f.kind === 'secret' && config[f.name] === undefined) config[f.name] = '';
+        }
+      }
       return putConnectorsConnectorId(id, {
         name: nameValue,
         owner: ownerValue,
@@ -95,7 +106,13 @@ export function ConnectorEditPage() {
       toast.success(t('connectors.edit.saved'));
       navigate(`/services/${id}`);
     },
-    onError: () => toast.error(t('connectors.edit.saveError')),
+    onError: (error) => {
+      const details = isAxiosError(error)
+        ? (error.response?.data as { details?: { field: string; msg: string }[] } | undefined)?.details
+        : undefined;
+      const fieldMsg = details?.map((d) => `${d.field}: ${d.msg}`).join('; ');
+      toast.error(fieldMsg ? `${t('connectors.edit.saveError')} ${fieldMsg}` : t('connectors.edit.saveError'));
+    },
   });
 
   if (connector.isLoading) {

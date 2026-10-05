@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/WiseLabz/wiselabz/internal/auth"
+	"github.com/WiseLabz/wiselabz/internal/store"
 )
 
 const caddyPastedJSON = `{"apps":{"http":{"servers":{"srv0":{"listen":[":443"],"routes":[{"match":[{"host":["app.lab.test"]}],"handle":[{"handler":"reverse_proxy","upstreams":[{"dial":"10.0.0.5:8080"}]}]}]}}}}}`
@@ -120,4 +121,126 @@ func TestTestConnectionPastedCaddy(t *testing.T) {
 	if rr.Code != http.StatusOK || !strings.Contains(rr.Body.String(), `"ok":true`) {
 		t.Fatalf("status = %d body=%s", rr.Code, rr.Body.String())
 	}
+}
+
+// TestUpdateCaddyInputModeOnEveryWritePath pins that the exactly-one-of
+// url/config_json rule is evaluated against the effective merged state
+// (stored record overlaid with the request) on every PUT shape, and that a
+// config body that leaves the pasted JSON out keeps the stored value.
+func TestUpdateCaddyInputModeOnEveryWritePath(t *testing.T) {
+	t.Parallel()
+	h := newTestHandler(t)
+	const caddyURL = "http://caddy.example.com:2019"
+
+	put := func(id, body string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodPut, "/api/connectors/"+id, strings.NewReader(body))
+		req.SetPathValue("id", id)
+		req = req.WithContext(auth.ContextWithUser(req.Context(), "admin", true))
+		rr := httptest.NewRecorder()
+		h.Update(rr, req)
+		return rr
+	}
+	create := func(url string, cfg map[string]any) string {
+		var m map[string]any
+		rr := postConnector(h, caddyBody(t, url, cfg))
+		if rr.Code != http.StatusCreated {
+			t.Fatalf("create: status = %d body=%s", rr.Code, rr.Body.String())
+		}
+		_ = json.Unmarshal(rr.Body.Bytes(), &m)
+		id, _ := m["id"].(string)
+		return id
+	}
+	stored := func(id string) (string, map[string]any) {
+		rec, err := h.Store.GetConnector(context.Background(), id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		cfg, err := store.ParseConnectorConfig(rec.Type, rec.ConfigData, h.Config.Encryption.Key)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return rec.URL, cfg
+	}
+	wantReject := func(t *testing.T, rr *httptest.ResponseRecorder, field, msg string) {
+		t.Helper()
+		if rr.Code != http.StatusBadRequest || !strings.Contains(rr.Body.String(), field) || !strings.Contains(rr.Body.String(), msg) {
+			t.Fatalf("status = %d, want 400 naming %q / %q; body=%s", rr.Code, field, msg, rr.Body.String())
+		}
+	}
+
+	pasted := func() string {
+		return create("", map[string]any{"config_json": caddyPastedJSON})
+	}
+	urlMode := func() string { return create(caddyURL, map[string]any{}) }
+
+	t.Run("pasted: url only is rejected", func(t *testing.T) {
+		id := pasted()
+		wantReject(t, put(id, `{"url":"`+caddyURL+`"}`), "config_json", "only one")
+		if u, cfg := stored(id); u != "" || cfg["config_json"] != caddyPastedJSON {
+			t.Fatalf("rejected update changed state: url=%q cfg=%v", u, cfg)
+		}
+	})
+	t.Run("pasted: clearing url keeps it valid", func(t *testing.T) {
+		id := pasted()
+		if rr := put(id, `{"url":""}`); rr.Code != http.StatusOK {
+			t.Fatalf("status = %d body=%s", rr.Code, rr.Body.String())
+		}
+	})
+	t.Run("pasted: rename with empty config keeps the stored json", func(t *testing.T) {
+		id := pasted()
+		if rr := put(id, `{"name":"r","url":"","config":{}}`); rr.Code != http.StatusOK {
+			t.Fatalf("status = %d body=%s", rr.Code, rr.Body.String())
+		}
+		if _, cfg := stored(id); cfg["config_json"] != caddyPastedJSON {
+			t.Fatalf("config_json lost: %v", cfg)
+		}
+	})
+	t.Run("pasted: config without config_json keeps it and applies other keys", func(t *testing.T) {
+		id := pasted()
+		if rr := put(id, `{"config":{"bearer_token":"tok"}}`); rr.Code != http.StatusOK {
+			t.Fatalf("status = %d body=%s", rr.Code, rr.Body.String())
+		}
+		if _, cfg := stored(id); cfg["config_json"] != caddyPastedJSON || cfg["bearer_token"] != "tok" {
+			t.Fatalf("cfg = %v", cfg)
+		}
+	})
+	t.Run("pasted: replacing config_json with url but not clearing it is rejected", func(t *testing.T) {
+		id := pasted()
+		wantReject(t, put(id, `{"url":"`+caddyURL+`","config":{}}`), "config_json", "only one")
+	})
+	t.Run("pasted to url mode: url plus explicit empty config_json", func(t *testing.T) {
+		id := pasted()
+		if rr := put(id, `{"url":"`+caddyURL+`","config":{"config_json":""}}`); rr.Code != http.StatusOK {
+			t.Fatalf("status = %d body=%s", rr.Code, rr.Body.String())
+		}
+		if u, cfg := stored(id); u != caddyURL || cfg["config_json"] != nil && cfg["config_json"] != "" {
+			t.Fatalf("url=%q cfg=%v", u, cfg)
+		}
+	})
+	t.Run("url mode: clearing url is rejected", func(t *testing.T) {
+		id := urlMode()
+		wantReject(t, put(id, `{"url":""}`), "url", "either")
+	})
+	t.Run("url mode: config_json alone is rejected", func(t *testing.T) {
+		id := urlMode()
+		wantReject(t, put(id, `{"config":{"config_json":`+mustJSON(caddyPastedJSON)+`}}`), "config_json", "only one")
+	})
+	t.Run("url mode to pasted: empty url plus config_json", func(t *testing.T) {
+		id := urlMode()
+		if rr := put(id, `{"url":"","config":{"config_json":`+mustJSON(caddyPastedJSON)+`}}`); rr.Code != http.StatusOK {
+			t.Fatalf("status = %d body=%s", rr.Code, rr.Body.String())
+		}
+		if u, cfg := stored(id); u != "" || cfg["config_json"] != caddyPastedJSON {
+			t.Fatalf("url=%q cfg=%v", u, cfg)
+		}
+	})
+	t.Run("url mode: unrelated config and verifyTls updates pass", func(t *testing.T) {
+		id := urlMode()
+		if rr := put(id, `{"config":{"bearer_token":"tok"}}`); rr.Code != http.StatusOK {
+			t.Fatalf("status = %d body=%s", rr.Code, rr.Body.String())
+		}
+		if rr := put(id, `{"verifyTls":false}`); rr.Code != http.StatusOK {
+			t.Fatalf("status = %d body=%s", rr.Code, rr.Body.String())
+		}
+	})
 }

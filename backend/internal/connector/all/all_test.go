@@ -128,3 +128,17 @@ func countLifecycle(c connector.CapabilityDescriptor) int {
 	}
 	return n
 }
+
+// TestURLRequiredPerType pins that caddy is the only registered type whose
+// top-level url is optional; every other type keeps the url required.
+func TestURLRequiredPerType(t *testing.T) {
+	for _, s := range connector.ListSchemas() {
+		want := s.Type != "caddy"
+		if got := connector.URLRequired(s.Type); got != want {
+			t.Errorf("URLRequired(%q) = %v, want %v", s.Type, got, want)
+		}
+	}
+	if !connector.URLRequired("no-such-type") {
+		t.Error("unknown type must keep url required")
+	}
+}
