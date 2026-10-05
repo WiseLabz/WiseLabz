@@ -192,3 +192,195 @@ func TestTestEndpointEvaluatesRelatedClauses(t *testing.T) {
 		t.Fatalf("forbids items = %v, want only web", items)
 	}
 }
+
+// toNumeric converts a value (float64, int, json.Number) to int for comparison.
+func toNumeric(v any) int {
+	switch val := v.(type) {
+	case float64:
+		return int(val)
+	case int:
+		return val
+	case json.Number:
+		i, _ := val.Int64()
+		return int(i)
+	default:
+		return 0
+	}
+}
+
+func TestInstallPackStoresRelatedClauses(t *testing.T) {
+	s := apitest.NewStore(t)
+	ev := &mockEvaluator{}
+	h := compliance.NewHandler(s, ev)
+
+	// Install the recommended pack.
+	r := httptest.NewRequest(http.MethodPost, "/api/compliance/packs/recommended/install", nil)
+	r.SetPathValue("id", "recommended")
+	rr := httptest.NewRecorder()
+	h.InstallPack(rr, r)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("install status %d, want 200: %s", rr.Code, rr.Body.String())
+	}
+
+	var installResp map[string]int
+	if err := json.Unmarshal(rr.Body.Bytes(), &installResp); err != nil {
+		t.Fatalf("decode install response: %v", err)
+	}
+	installed := installResp["installed"]
+	if installed == 0 {
+		t.Fatal("install returned 0 rules")
+	}
+
+	// Verify evaluator was called for each installed rule.
+	if ev.evaluateCalls != installed {
+		t.Fatalf("evaluateCalls = %d, want %d", ev.evaluateCalls, installed)
+	}
+
+	// Read rules from store.
+	rules, err := s.ListComplianceRules(context.Background())
+	if err != nil {
+		t.Fatalf("ListComplianceRules: %v", err)
+	}
+
+	// Find the two backup rules and a rule without related clauses.
+	vmBackupRule := findRuleByName(rules, "Proxmox VM has no recent backup")
+	containerBackupRule := findRuleByName(rules, "Proxmox container has no recent backup")
+	dockerPrivilegedRule := findRuleByName(rules, "Docker privileged container")
+
+	if vmBackupRule == nil {
+		t.Fatal("VM backup rule not found")
+	}
+	if containerBackupRule == nil {
+		t.Fatal("Container backup rule not found")
+	}
+	if dockerPrivilegedRule == nil {
+		t.Fatal("Docker privileged rule not found")
+	}
+
+	// Check that the two backup rules have exactly one related clause with expected structure.
+	for _, tc := range []struct {
+		name       string
+		rule       *store.ComplianceRuleRecord
+		entityKind string
+	}{
+		{"Proxmox VM has no recent backup", vmBackupRule, "vm"},
+		{"Proxmox container has no recent backup", containerBackupRule, "container"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			// Parse related clauses.
+			var related []map[string]any
+			if err := json.Unmarshal([]byte(tc.rule.Related), &related); err != nil {
+				t.Fatalf("unmarshal related: %v", err)
+			}
+
+			if len(related) != 1 {
+				t.Fatalf("related clauses = %d, want 1", len(related))
+			}
+
+			clause := related[0]
+
+			// Check mode, connectorType, entityKind.
+			if clause["mode"] != "requires" {
+				t.Errorf("mode = %v, want requires", clause["mode"])
+			}
+			if clause["connectorType"] != "pbs" {
+				t.Errorf("connectorType = %v, want pbs", clause["connectorType"])
+			}
+			if clause["entityKind"] != tc.entityKind {
+				t.Errorf("entityKind = %v, want %s", clause["entityKind"], tc.entityKind)
+			}
+
+			// Check join.
+			joinRaw, ok := clause["join"].(map[string]any)
+			if !ok {
+				t.Fatalf("join is not a map: %v", clause["join"])
+			}
+			if joinRaw["sourceField"] != "external_id" {
+				t.Errorf("join.sourceField = %v, want external_id", joinRaw["sourceField"])
+			}
+			if joinRaw["relatedField"] != "external_id" {
+				t.Errorf("join.relatedField = %v, want external_id", joinRaw["relatedField"])
+			}
+
+			// Check conditions.
+			condRaw, ok := clause["conditions"].([]any)
+			if !ok {
+				t.Fatalf("conditions is not a list: %v", clause["conditions"])
+			}
+			if len(condRaw) != 1 {
+				t.Fatalf("clause conditions = %d, want 1", len(condRaw))
+			}
+
+			cond, ok := condRaw[0].(map[string]any)
+			if !ok {
+				t.Fatalf("condition is not a map: %v", condRaw[0])
+			}
+			if cond["attribute"] != "last_backup_age_days" {
+				t.Errorf("condition.attribute = %v, want last_backup_age_days", cond["attribute"])
+			}
+			if cond["op"] != "lt" {
+				t.Errorf("condition.op = %v, want lt", cond["op"])
+			}
+			if toNumeric(cond["value"]) != 7 {
+				t.Errorf("condition.value = %v, want 7", cond["value"])
+			}
+		})
+	}
+
+	// Check that the backup rules have the expected own conditions.
+	for _, tc := range []struct {
+		name string
+		rule *store.ComplianceRuleRecord
+	}{
+		{"Proxmox VM has no recent backup", vmBackupRule},
+		{"Proxmox container has no recent backup", containerBackupRule},
+	} {
+		t.Run(tc.name+" conditions", func(t *testing.T) {
+			var conds []map[string]any
+			if err := json.Unmarshal([]byte(tc.rule.Conditions), &conds); err != nil {
+				t.Fatalf("unmarshal conditions: %v", err)
+			}
+
+			// Expect: template eq false, tags not_contains no-backup.
+			hasTemplate := false
+			hasTags := false
+
+			for _, c := range conds {
+				if c["attribute"] == "template" && c["op"] == "eq" && c["value"] == false {
+					hasTemplate = true
+				}
+				if c["attribute"] == "tags" && c["op"] == "not_contains" && c["value"] == "no-backup" {
+					hasTags = true
+				}
+			}
+
+			if !hasTemplate {
+				t.Errorf("missing condition: template eq false")
+			}
+			if !hasTags {
+				t.Errorf("missing condition: tags not_contains no-backup")
+			}
+		})
+	}
+
+	// Check that Docker privileged rule has no related clauses (empty array).
+	t.Run("Docker privileged container has no related", func(t *testing.T) {
+		var related []any
+		if err := json.Unmarshal([]byte(dockerPrivilegedRule.Related), &related); err != nil {
+			t.Fatalf("unmarshal related: %v", err)
+		}
+		if len(related) != 0 {
+			t.Errorf("related clauses = %d, want 0", len(related))
+		}
+	})
+}
+
+func findRuleByName(rules []store.ComplianceRuleRecord, name string) *store.ComplianceRuleRecord {
+	for i := range rules {
+		if rules[i].Name == name {
+			return &rules[i]
+		}
+	}
+	return nil
+}

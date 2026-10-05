@@ -55,6 +55,7 @@ var attributeCatalog = map[string][]connector.AttributeSpec{
 		{Name: "protection", Type: "boolean", Description: "Whether removal/disk-wipe protection is enabled"},
 		{Name: "template", Type: "boolean", Description: "Whether the guest is a template"},
 		{Name: "os_type", Type: "string", Description: "Configured guest OS type"},
+		{Name: "tags", Type: "string_array", Description: "Tags assigned to the guest in Proxmox VE, sorted"},
 	},
 	"container": {
 		{Name: "status", Type: "string", Description: "Guest power state (running, stopped, ...)"},
@@ -65,6 +66,7 @@ var attributeCatalog = map[string][]connector.AttributeSpec{
 		{Name: "template", Type: "boolean", Description: "Whether the guest is a template"},
 		{Name: "os_type", Type: "string", Description: "Configured guest OS type"},
 		{Name: "unprivileged", Type: "boolean", Description: "Whether the container runs unprivileged"},
+		{Name: "tags", Type: "string_array", Description: "Tags assigned to the guest in Proxmox VE, sorted"},
 	},
 }
 

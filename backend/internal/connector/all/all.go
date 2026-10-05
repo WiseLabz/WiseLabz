@@ -15,6 +15,7 @@ import (
 	_ "github.com/WiseLabz/wiselabz/internal/connector/netbird"        // register Netbird connector
 	_ "github.com/WiseLabz/wiselabz/internal/connector/npm"            // register Nginx Proxy Manager connector
 	_ "github.com/WiseLabz/wiselabz/internal/connector/opnsense"       // register OPNsense connector
+	_ "github.com/WiseLabz/wiselabz/internal/connector/pbs"            // register Proxmox Backup Server connector
 	_ "github.com/WiseLabz/wiselabz/internal/connector/pfsense"        // register pfSense connector
 	_ "github.com/WiseLabz/wiselabz/internal/connector/pihole"         // register Pi-hole connector
 	_ "github.com/WiseLabz/wiselabz/internal/connector/portainer"      // register Portainer connector

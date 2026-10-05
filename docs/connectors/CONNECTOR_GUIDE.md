@@ -474,6 +474,68 @@ record expiry without including request or renewal timestamps that would
 create noise on every sync. The connector's `verify_tls` setting defaults to
 enabled and can be disabled for instances using a locally issued certificate.
 
+## Proxmox Backup Server
+
+The Proxmox Backup Server connector (`backend/internal/connector/pbs/`) reads
+datastore configuration, backup inventory and verification state from PBS. Its
+schema requires `url` (the base URL such as `https://pbs.example.com:8007`; a
+trailing `/api2/json` is accepted and stripped), `token_id` (an API token ID
+like `root@pam!monitoring`), `token_secret` (the API token secret, encrypted
+at rest), and `verify_tls` (a toggle defaulting to `true`). The connector
+authenticates using API token authentication only, sending
+`Authorization: PBSAPIToken=<token_id>:<token_secret>` on each request.
+
+Fetch is read-only and issues only GET requests to `/admin/datastore`,
+`/admin/datastore/{store}/namespace`, `/admin/datastore/{store}/groups`,
+`/admin/datastore/{store}/snapshots`, `/config/verify` and `/config/prune`.
+Error messages never include upstream response bodies or the token.
+
+Create a dedicated user in PBS and assign it an API token. Grant the
+`DatastoreAudit` role (privilege `Datastore.Audit`) on path `/datastore` with
+propagate enabled, or on individual datastores, to both the user and the token.
+Token permissions come from ACL entries for the token's own ID and are
+intersected with the user's permissions, so the token needs its own ACL entry
+and can never exceed its user. `Datastore.Audit` covers listing datastores,
+namespaces, groups and snapshots and reading verify and prune job
+configuration. When a request returns 403 (denied), the sync ends in error, the
+previous inventory stays frozen, and the sync error names the failing section.
+A token that can see only some datastores or namespaces will hide guests whose
+backups live elsewhere; the backup compliance rule would then flag them as
+missing backups.
+
+The connector emits entities of kind `datastore`, `verify_job`, `prune_job`,
+and backup groups reusing kinds `vm` (backup type vm), `container` (backup type
+ct) and `host` (backup type host). Guest entities have `ExternalID` set to the
+VMID so they link to Proxmox VE guests of the same kind and ID; the hostname is
+also stored on host entities. A guest can have groups in several datastores and
+namespaces; the connector emits one entity per guest, taken from the group with
+the newest backup, with `backup_count` summed over all that guest's groups. The
+entity's `datastore` and `namespace` attributes are from the newest group, and
+`verify_state` is the newest snapshot's verification result (`ok`, `failed`, or
+`none`). `last_backup_age_days` is a whole number of days (rounded down, never
+negative) computed at sync time, so it stays stable all day and changes at most
+once daily instead of on every sync. Because it is computed at sync time, it is
+as old as the last successful sync. A guest whose group has no backup time
+carries no `last_backup_age_days` attribute.
+
+Section content lists configuration only (datastores, groups, verify and prune
+jobs). Backup counts, ages and verify results are entity attributes, so a
+routine backup does not register as drift. PBS entities carry no IP address.
+
+The recommended compliance pack ships two rules, "Proxmox VM has no recent
+backup" and "Proxmox container has no recent backup". For Proxmox guests that
+are not templates and whose `tags` do not contain `no-backup`, they require a
+PBS entity of the same kind whose `external_id` equals the guest's and whose
+`last_backup_age_days` is below 7. Tag a guest `no-backup` to opt out. The rule
+is skipped (and any finding cleared) while no Proxmox Backup Server connector
+has a snapshot. Findings belong to the Proxmox connector. Note that the join is
+by VMID only; two Proxmox clusters reusing a VMID and backing up to the same
+PBS instance cannot be distinguished.
+
+The Proxmox VE connector supplies the `tags` attribute these rules use: a
+sorted string array, empty when the guest has no tags, on `vm` and `container`
+entities, read from the guest list response.
+
 ## Keeping snapshots stable
 
 A snapshot is diffed against the previous one, so anything that changes on
