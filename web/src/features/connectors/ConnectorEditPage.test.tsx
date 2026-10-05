@@ -5,7 +5,8 @@ import { describe, expect, it, vi } from 'vitest';
 import '../../i18n';
 import { ConnectorEditPage } from './ConnectorEditPage';
 
-const { putConnectorsConnectorId, testMock } = vi.hoisted(() => ({
+const { putConnectorsConnectorId, testMock, toastError } = vi.hoisted(() => ({
+  toastError: vi.fn(),
   putConnectorsConnectorId: vi.fn().mockResolvedValue({}),
   testMock: vi.fn(),
 }));
@@ -34,6 +35,8 @@ vi.mock('../../api/generated/connectors/connectors', () => ({
   postConnectorsConnectorIdTest: (...args: unknown[]) => testMock(...args),
   getGetConnectorsQueryKey: () => [],
 }));
+
+vi.mock('../../lib/toast', () => ({ toast: { success: vi.fn(), error: (...args: unknown[]) => toastError(...args) } }));
 
 vi.mock('../../hooks/useRole', () => ({ useConnectorRole: () => 'operator' }));
 
@@ -132,6 +135,93 @@ describe('ConnectorEditPage verify_tls (#613)', () => {
       expect(body.config).not.toHaveProperty('verify_tls');
     } finally {
       schemas = original;
+    }
+  });
+});
+
+describe('ConnectorEditPage Caddy input mode (pasted JSON vs url)', () => {
+  const caddySchema = {
+    type: 'caddy',
+    category: 'networking',
+    displayName: 'Caddy',
+    isCredentialRefresher: false,
+    fields: [
+      { name: 'url', label: 'Caddy Admin API URL', kind: 'text', required: false },
+      { name: 'config_json', label: 'Caddy JSON config', kind: 'secret', required: false },
+      { name: 'bearer_token', label: 'Bearer token', kind: 'password', required: false },
+      { name: 'verify_tls', label: 'Verify TLS', kind: 'toggle', required: false },
+    ],
+  };
+
+  async function run(stored: { url: string }, edit: () => void) {
+    const originalSchemas = schemas;
+    const originalConnector = connectorData;
+    schemas = [caddySchema];
+    connectorData = { ...connectorData, type: 'caddy', name: 'caddy1', url: stored.url };
+    try {
+      putConnectorsConnectorId.mockClear();
+      renderPage();
+      edit();
+      fireEvent.click(screen.getByRole('button', { name: /save/i }));
+      await waitFor(() => expect(putConnectorsConnectorId).toHaveBeenCalled());
+      return putConnectorsConnectorId.mock.calls[0][1] as { url?: string; config: Record<string, unknown> };
+    } finally {
+      schemas = originalSchemas;
+      connectorData = originalConnector;
+    }
+  }
+
+  it('renaming a pasted-mode connector sends no config_json so the stored value is kept', async () => {
+    const body = await run({ url: '' }, () =>
+      fireEvent.change(screen.getByLabelText(/display name/i), { target: { value: 'renamed' } }),
+    );
+    expect(body.url).toBe('');
+    expect(body.config).not.toHaveProperty('config_json');
+  });
+
+  it('switching from url mode to pasted mode sends the json and an empty url', async () => {
+    const body = await run({ url: 'http://caddy.example.com:2019' }, () => {
+      fireEvent.change(screen.getByLabelText(/caddy admin api url/i), { target: { value: '' } });
+      fireEvent.change(screen.getByLabelText(/caddy json config/i), { target: { value: '{"apps":{}}' } });
+    });
+    expect(body.url).toBe('');
+    expect(body.config.config_json).toBe('{"apps":{}}');
+  });
+
+  it('switching from pasted mode back to url mode clears the stored json', async () => {
+    const body = await run({ url: '' }, () =>
+      fireEvent.change(screen.getByLabelText(/caddy admin api url/i), {
+        target: { value: 'http://caddy.example.com:2019' },
+      }),
+    );
+    expect(body.url).toBe('http://caddy.example.com:2019');
+    expect(body.config.config_json).toBe('');
+  });
+
+  it('does not clear the stored json when editing a url-mode connector', async () => {
+    const body = await run({ url: 'http://caddy.example.com:2019' }, () =>
+      fireEvent.change(screen.getByLabelText(/caddy admin api url/i), {
+        target: { value: 'http://caddy2.example.com:2019' },
+      }),
+    );
+    expect(body.config).not.toHaveProperty('config_json');
+  });
+
+  it('shows the server field message when the save is rejected', async () => {
+    const originalSchemas = schemas;
+    schemas = [caddySchema];
+    putConnectorsConnectorId.mockRejectedValueOnce(
+      Object.assign(new Error('bad'), {
+        isAxiosError: true,
+        response: { status: 400, data: { details: [{ field: 'url', msg: 'set either url or config_json' }] } },
+      }),
+    );
+    try {
+      renderPage();
+      fireEvent.click(screen.getByRole('button', { name: /save/i }));
+      await waitFor(() => expect(toastError).toHaveBeenCalledWith(expect.stringContaining('set either url or config_json')));
+    } finally {
+      schemas = originalSchemas;
     }
   });
 });

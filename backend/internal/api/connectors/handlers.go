@@ -106,11 +106,13 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		{"name", req.Name},
 		{"category", req.Category},
 		{"type", req.Type},
-		{"url", req.URL},
 	} {
 		if f.value == "" {
 			fieldErrs = append(fieldErrs, httputil.FieldError{Field: f.name, Msg: "is required"})
 		}
+	}
+	if req.URL == "" && connector.URLRequired(req.Type) {
+		fieldErrs = append(fieldErrs, httputil.FieldError{Field: "url", Msg: "is required"})
 	}
 	fieldErrs = append(fieldErrs, validateRotationFields(req.UserExpiresAt, req.RotationMaxAgeDays)...)
 	if len(fieldErrs) > 0 {
@@ -380,7 +382,7 @@ func applyConnectorScalarUpdates(updates map[string]any, req *updateConnectorReq
 // without a config body is a no-op. It writes the error response and reports
 // false when the update must not proceed.
 func (h *Handler) applyConnectorConfigUpdate(w http.ResponseWriter, r *http.Request, id string, req *updateConnectorRequest, updates map[string]any) bool {
-	if req.Config == nil {
+	if req.Config == nil && req.URL == nil && req.Type == nil && req.VerifyTLS == nil {
 		return true
 	}
 	rec, err := h.Store.GetConnector(r.Context(), id)
@@ -404,10 +406,24 @@ func (h *Handler) applyConnectorConfigUpdate(w http.ResponseWriter, r *http.Requ
 	if req.VerifyTLS != nil {
 		verifyTLS = *req.VerifyTLS
 	}
-	if err := validateConnectorConfig(typ, url, verifyTLS, req.Config); err != nil {
+	if url == "" && connector.URLRequired(typ) {
+		httputil.ErrorWithDetails(w, http.StatusBadRequest, "invalid_request", "Request validation failed",
+			[]httputil.FieldError{{Field: "url", Msg: "is required"}})
+		return false
+	}
+	effective, err := h.effectiveConnectorConfig(rec, typ, req.Config)
+	if err != nil {
+		httputil.Errorf(w, err)
+		return false
+	}
+	if err := validateConnectorConfig(typ, url, verifyTLS, effective); err != nil {
 		writeConfigRejection(w, err)
 		return false
 	}
+	if req.Config == nil {
+		return true
+	}
+	req.Config = effective
 	changed, err := store.SecretFieldsChanged(typ, rec.ConfigData, req.Config, h.Config.Encryption.Key)
 	if err != nil {
 		httputil.Errorf(w, err)
@@ -423,6 +439,43 @@ func (h *Handler) applyConnectorConfigUpdate(w http.ResponseWriter, r *http.Requ
 		updates["secret_rotated_at"] = time.Now().UTC().Format(time.RFC3339)
 	}
 	return true
+}
+
+// effectiveConnectorConfig is the config an update would leave behind: the
+// request's config, plus the stored value of every secret field the request
+// leaves out. Credentials are write-only over the API, so a client that does
+// not re-enter one means "keep it"; an explicit empty string clears it. A
+// request without a config body keeps the whole stored config. Validation
+// runs against this merged state so cross-field rules (Caddy's exactly-one-of
+// url/config_json) hold for every PUT shape.
+func (h *Handler) effectiveConnectorConfig(rec *store.ConnectorRecord, typ string, requested map[string]any) (map[string]any, error) {
+	stored, err := store.ParseConnectorConfig(rec.Type, rec.ConfigData, h.Config.Encryption.Key)
+	if err != nil {
+		return nil, err
+	}
+	if requested == nil {
+		return stored, nil
+	}
+	merged := make(map[string]any, len(requested))
+	for k, v := range requested {
+		merged[k] = v
+	}
+	schema, err := connector.GetTypeSchema(typ)
+	if err != nil || typ != rec.Type {
+		return merged, nil //nolint:nilerr // unknown or changed type: nothing to carry over
+	}
+	for _, f := range schema.Fields {
+		if !store.IsSecretFieldType(f.Type) {
+			continue
+		}
+		if _, sent := merged[f.Key]; sent {
+			continue
+		}
+		if v, ok := stored[f.Key].(string); ok && v != "" {
+			merged[f.Key] = v
+		}
+	}
+	return merged, nil
 }
 
 // recordConnectorUpdateAudit records only which fields changed, not their
@@ -488,8 +541,7 @@ func (h *Handler) Test(w http.ResponseWriter, r *http.Request) {
 		httputil.Errorf(w, err)
 		return
 	}
-	cfg["url"] = rec.URL
-	cfg["verify_tls"] = rec.VerifyTLS
+	connector.ApplyRecordConfig(cfg, rec.URL, rec.VerifyTLS)
 
 	c, err := connector.Get(rec.Type, cfg)
 	if err != nil {
@@ -729,8 +781,7 @@ func (h *Handler) ConfigFields(w http.ResponseWriter, r *http.Request) {
 		httputil.Errorf(w, fmt.Errorf("parse config: %w", err))
 		return
 	}
-	cfg["url"] = rec.URL
-	cfg["verify_tls"] = rec.VerifyTLS
+	connector.ApplyRecordConfig(cfg, rec.URL, rec.VerifyTLS)
 
 	conn, err := connector.Get(rec.Type, cfg)
 	if err != nil {

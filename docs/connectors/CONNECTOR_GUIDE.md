@@ -136,11 +136,20 @@ func init() {
         },
     }, func(config map[string]any) (connector.Connector, error) {
         // The config map contains all field values keyed by their Key above,
-        // plus "url" and "verify_tls" injected automatically from the connector record.
+        // plus "url" (omitted when empty) and "verify_tls" injected automatically from the
+        // connector record. The API requires a url on create/update only when the "url"
+        // field is declared `Required: true`; declare it optional for types with an
+        // alternative input such as Caddy's config_json, and add a `ConfigCheck` for any
+        // cross-field rule.
         return New(config)
     })
 }
 ```
+
+On update, `ConfigCheck` runs against the merged state (stored record plus the
+request); a secret field the request omits keeps its stored value, and an explicit
+empty string clears it. Connectors declared in `config.yaml` still require a `url`
+for every type, so a pasted-JSON Caddy can only be created through the API or UI.
 
 Supported field types: `"text"`, `"password"`, `"number"`, `"select"`, `"toggle"`.
 
@@ -478,7 +487,9 @@ enabled and can be disabled for instances using a locally issued certificate.
 
 The Caddy connector (`backend/internal/connector/caddy/`) reads JSON config in
 one of two ways: set `url` to the admin API base URL, or paste a JSON config
-into `config_json`. Exactly one is required. URL mode makes only
+into `config_json`. Exactly one is required: create and update reject both
+or neither with a 400, and pasted mode needs no top-level `url` (leave it out
+or empty). URL mode makes only
 `GET {url}/config/`; optional bearer token or basic auth supports admin APIs
 behind an authenticating proxy. TLS verification defaults to enabled.
 Bearer and basic authentication cannot be configured together. Pasted JSON

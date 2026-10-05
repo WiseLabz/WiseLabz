@@ -35,8 +35,7 @@ func RunHealthCheck(ctx context.Context, s *store.Store, rec *store.ConnectorRec
 	if err != nil {
 		return Result{}, err
 	}
-	cfg["url"] = rec.URL
-	cfg["verify_tls"] = rec.VerifyTLS
+	connector.ApplyRecordConfig(cfg, rec.URL, rec.VerifyTLS)
 
 	start := time.Now()
 	c, connErr := connector.Get(rec.Type, cfg)

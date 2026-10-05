@@ -71,12 +71,25 @@ func TestBuildHostsTableValidRecords(t *testing.T) {
 	}
 
 	want := []connector.SnapshotEntity{
-		{Kind: "dns_record", Hostname: "nas.internal.example.com", IP: "10.0.0.5", Attributes: map[string]any{"source": "local_dns", "is_ipv6": false}},
-		{Kind: "dns_record", Hostname: "printer.internal.example.com", IP: "10.0.0.6", Attributes: map[string]any{"source": "local_dns", "is_ipv6": false}},
+		{Kind: "dns_record", Name: "nas.internal.example.com", ExternalID: "nas.internal.example.com=10.0.0.5", Hostname: "nas.internal.example.com", IP: "10.0.0.5", Attributes: map[string]any{"source": "local_dns", "is_ipv6": false}},
+		{Kind: "dns_record", Name: "printer.internal.example.com", ExternalID: "printer.internal.example.com=10.0.0.6", Hostname: "printer.internal.example.com", IP: "10.0.0.6", Attributes: map[string]any{"source": "local_dns", "is_ipv6": false}},
 	}
 	for i, w := range want {
 		if !reflect.DeepEqual(entities[i], w) {
 			t.Errorf("entities[%d] = %+v, want %+v", i, entities[i], w)
+		}
+	}
+}
+
+func TestBuildHostsTableMultipleNamesPerLine(t *testing.T) {
+	data := []byte(`{"config":{"dns":{"hosts":["10.0.0.1 a.lab b.lab"]}}}`)
+	_, entities := buildHostsTable(data)
+	if len(entities) != 2 {
+		t.Fatalf("entities len = %d, want 2: %+v", len(entities), entities)
+	}
+	for i, host := range []string{"a.lab", "b.lab"} {
+		if entities[i].Name != host || entities[i].ExternalID != host+"=10.0.0.1" || entities[i].Hostname != host {
+			t.Errorf("entities[%d] = %+v, want host %s", i, entities[i], host)
 		}
 	}
 }
