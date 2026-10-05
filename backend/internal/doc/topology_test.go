@@ -33,9 +33,12 @@ func TestRebuildTopologyForConnector(t *testing.T) {
 	})
 	dock := seedEngineConnectorWithEntities(t, s, "Docker", "containers_paas", "docker", nil)
 	addTopologySnapshot(t, s, dock, connector.ServiceSnapshot{
-		ServiceName:  "Docker",
-		Entities:     []connector.SnapshotEntity{{Kind: "container", Name: "nginx", IP: "10.0.0.5"}},
-		Dependencies: []connector.ServiceDependency{{Kind: "host", Name: "pve1"}, {Kind: "network", Name: "lan"}},
+		ServiceName: "Docker",
+		Entities: []connector.SnapshotEntity{
+			{Kind: "container", Name: "nginx", IP: "10.0.0.5", Attributes: map[string]any{"node": "pve1"}},
+			{Kind: "proxy_host", Name: "web-proxy", Attributes: map[string]any{"forward_host": "web-01", "forward_port": 8443}},
+		},
+		Dependencies: []connector.ServiceDependency{{Kind: "host", Name: "pve1"}, {Kind: "network", Name: "lan"}, {Kind: "upstream_service", Name: "web-01"}},
 	})
 
 	if err := e.RebuildTopologyForConnector(ctx, dock); err != nil {
@@ -61,6 +64,18 @@ func TestRebuildTopologyForConnector(t *testing.T) {
 	}
 	if !has(store.TopologyEdgeDependency, "Docker", "lan") {
 		t.Errorf("missing placeholder dependency Docker->lan in %+v", edges)
+	}
+	if !has(store.TopologyEdgeRunsOn, "nginx", "pve1") {
+		t.Errorf("missing directed runs_on edge nginx->pve1 in %+v", edges)
+	}
+	proxyFound := false
+	for _, ed := range edges {
+		if ed.Kind == store.TopologyEdgeProxiesTo && ed.SrcName == "web-proxy" && ed.DstName == "web-01" && ed.Detail == "8443" {
+			proxyFound = true
+		}
+	}
+	if !proxyFound {
+		t.Errorf("missing directed proxy edge with upstream port in %+v", edges)
 	}
 
 	// Re-sync with the container gone and no dependencies: edges are replaced.

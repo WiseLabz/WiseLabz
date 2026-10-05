@@ -18,4 +18,5 @@ export * from './search/search';
 export * from './settings/settings';
 export * from './system/system';
 export * from './templates/templates';
+export * from './topology/topology';
 export * from './users/users';

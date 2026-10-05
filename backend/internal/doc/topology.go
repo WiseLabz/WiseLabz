@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"strings"
 
 	"github.com/WiseLabz/wiselabz/internal/connector"
@@ -46,7 +47,14 @@ func (e *Engine) RebuildTopologyForConnector(ctx context.Context, connectorID st
 	snap, err := e.snapshots.latest(ctx, connectorID)
 	if errors.Is(err, store.ErrNotFound) {
 		// No snapshot at all: drop whatever edges exist.
-		return e.store.ReplaceTopologyEdgesForConnector(ctx, connectorID, nil)
+		changed, err := e.store.ReplaceTopologyEdgesForConnectorChanged(ctx, connectorID, nil)
+		if err != nil {
+			return err
+		}
+		if changed {
+			return e.regenerateTopologyDocIfPresent(ctx)
+		}
+		return nil
 	}
 	if err != nil {
 		// A transient DB error or an unparseable snapshot says nothing about
@@ -68,10 +76,16 @@ func (e *Engine) RebuildTopologyForConnector(ctx context.Context, connectorID st
 		}, l.ConnectorID, l.Entity.Kind, l.Entity.Name, entityRef(l.Entity), store.TopologyEdgeSameAs, l.Reason)
 		other := store.TopologyEdge{SrcConnectorID: l.ConnectorID, SrcKind: topologyServiceKind, SrcName: l.ConnectorName, SrcRef: l.ConnectorID}
 		b.add(other, l.ConnectorID, l.Entity.Kind, l.Entity.Name, entityRef(l.Entity), store.TopologyEdgeContains, "")
+		if isDNSEntity(l.Local.Kind) {
+			b.add(l.edgeSource(connectorID), l.ConnectorID, l.Entity.Kind, l.Entity.Name, entityRef(l.Entity), store.TopologyEdgeResolvesTo, l.Reason)
+		} else if isDNSEntity(l.Entity.Kind) {
+			b.add(store.TopologyEdge{SrcConnectorID: l.ConnectorID, SrcKind: l.Entity.Kind, SrcName: l.Entity.Name, SrcRef: entityRef(l.Entity)},
+				connectorID, l.Local.Kind, l.Local.Name, entityRef(l.Local), store.TopologyEdgeResolvesTo, l.Reason)
+		}
 	}
-
+	var all []store.ConnectorRecord
 	if len(snap.Dependencies) > 0 {
-		others, err := e.store.ListAllConnectors(ctx)
+		all, err = e.store.ListAllConnectors(ctx)
 		if err != nil {
 			return fmt.Errorf("list connectors: %w", err)
 		}
@@ -79,11 +93,147 @@ func (e *Engine) RebuildTopologyForConnector(ctx context.Context, connectorID st
 			if strings.TrimSpace(dep.Name) == "" {
 				continue
 			}
-			e.addDependencyEdge(ctx, b, self, connectorID, snap, others, dep)
+			e.addDependencyEdge(ctx, b, self, connectorID, snap, all, dep)
 		}
 	}
+	addRuntimeEdges(ctx, e, b, connectorID, snap, all)
 
-	return e.store.ReplaceTopologyEdgesForConnector(ctx, connectorID, b.edges)
+	changed, err := e.store.ReplaceTopologyEdgesForConnectorChanged(ctx, connectorID, b.edges)
+	if err != nil || !changed {
+		return err
+	}
+	return e.regenerateTopologyDocIfPresent(ctx)
+}
+
+func isDNSEntity(kind string) bool { return kind == "dns_record" || kind == "dns_rewrite" }
+
+func (e *Engine) regenerateTopologyDocIfPresent(ctx context.Context) error {
+	docs, _, err := e.store.ListAllDocs(ctx, labTopologyTitle, 0, 50)
+	if err != nil {
+		return fmt.Errorf("list topology docs: %w", err)
+	}
+	for _, d := range docs {
+		if d.Kind == "lab" && d.Title == labTopologyTitle && d.Origin != store.DocOriginHuman {
+			if _, err := e.GenerateLabTopology(ctx); err != nil {
+				return fmt.Errorf("regenerate topology doc: %w", err)
+			}
+			break
+		}
+	}
+	return nil
+}
+
+func (l EntityLink) edgeSource(connectorID string) store.TopologyEdge {
+	return store.TopologyEdge{SrcConnectorID: connectorID, SrcKind: l.Local.Kind, SrcName: l.Local.Name, SrcRef: entityRef(l.Local)}
+}
+
+func addRuntimeEdges(ctx context.Context, e *Engine, b *edgeBuilder, connectorID string, snap *connector.ServiceSnapshot, all []store.ConnectorRecord) {
+	for _, ent := range snap.Entities {
+		if ent.Kind == "container" {
+			if raw, ok := ent.Attributes["environment"].(string); ok && raw != "" {
+				dstConnector, dstKind, dstName, dstRef := connectorID, "environment", raw, raw
+				if target, cid, ok := runtimeTarget(ctx, e, connectorID, snap, all, raw); ok {
+					dstConnector, dstKind, dstName, dstRef = cid, target.Kind, target.Name, entityRef(target)
+				}
+				b.add(store.TopologyEdge{SrcConnectorID: connectorID, SrcKind: ent.Kind, SrcName: ent.Name, SrcRef: entityRef(ent)}, dstConnector, dstKind, dstName, dstRef, store.TopologyEdgeRunsOn, "Portainer environment")
+			}
+		}
+	}
+	for _, dep := range snap.Dependencies {
+		if dep.Kind != "upstream_service" && dep.Kind != "host" {
+			continue
+		}
+		for _, ent := range snap.Entities {
+			if dep.Kind == "upstream_service" && (ent.Kind == "proxy_host" || ent.Kind == "stream" || ent.Kind == "router" || ent.Kind == "http_route" || ent.Kind == "service") {
+				target := ""
+				for _, key := range []string{"forward_host", "forwarding_host", "service", "upstream"} {
+					if v, ok := ent.Attributes[key].(string); ok {
+						target = v
+						break
+					}
+				}
+				if target != "" && !strings.EqualFold(target, dep.Name) && !strings.Contains(target, dep.Name) && !strings.Contains(dep.Name, target) {
+					continue
+				}
+				detail := ""
+				for _, key := range []string{"forward_port", "forwarding_port"} {
+					if v, ok := ent.Attributes[key]; ok {
+						detail = fmt.Sprint(v)
+						break
+					}
+				}
+				if detail == "" {
+					_, detail = runtimeTargetParts(dep.Name)
+				}
+				dstConnector, dstKind, dstName, dstRef := connectorID, "upstream_service", dep.Name, ""
+				if target, cid, ok := runtimeTarget(ctx, e, connectorID, snap, all, dep.Name); ok {
+					dstConnector, dstKind, dstName, dstRef = cid, target.Kind, target.Name, entityRef(target)
+				}
+				b.addDetailed(store.TopologyEdge{SrcConnectorID: connectorID, SrcKind: ent.Kind, SrcName: ent.Name, SrcRef: entityRef(ent)}, dstConnector, dstKind, dstName, dstRef, store.TopologyEdgeProxiesTo, "configured upstream", detail)
+			}
+			if dep.Kind == "host" && (ent.Kind == "container" || ent.Kind == "vm") {
+				if _, hasEnvironment := ent.Attributes["environment"]; hasEnvironment {
+					continue
+				}
+				if host, ok := ent.Attributes["node"].(string); ok && host != dep.Name {
+					continue
+				}
+				dstConnector, dstKind, dstName, dstRef := connectorID, "host", dep.Name, ""
+				if target, cid, ok := runtimeTarget(ctx, e, connectorID, snap, all, dep.Name); ok {
+					dstConnector, dstKind, dstName, dstRef = cid, target.Kind, target.Name, entityRef(target)
+				}
+				b.add(store.TopologyEdge{SrcConnectorID: connectorID, SrcKind: ent.Kind, SrcName: ent.Name, SrcRef: entityRef(ent)}, dstConnector, dstKind, dstName, dstRef, store.TopologyEdgeRunsOn, "connector host")
+			}
+		}
+	}
+}
+
+func runtimeTarget(ctx context.Context, e *Engine, connectorID string, snap *connector.ServiceSnapshot, all []store.ConnectorRecord, name string) (connector.SnapshotEntity, string, bool) {
+	target, _ := runtimeTargetParts(name)
+	find := func(entities []connector.SnapshotEntity) (connector.SnapshotEntity, bool) {
+		for _, ent := range entities {
+			if strings.EqualFold(ent.Name, target) || strings.EqualFold(ent.Hostname, target) || strings.EqualFold(ent.IP, target) {
+				return ent, true
+			}
+			for _, alias := range ent.Aliases {
+				if strings.EqualFold(alias, target) {
+					return ent, true
+				}
+			}
+		}
+		return connector.SnapshotEntity{}, false
+	}
+	if ent, ok := find(snap.Entities); ok {
+		return ent, connectorID, true
+	}
+	for _, c := range all {
+		if c.ID == connectorID {
+			continue
+		}
+		other, err := e.snapshots.latest(ctx, c.ID)
+		if err != nil {
+			continue
+		}
+		if ent, ok := find(other.Entities); ok {
+			return ent, c.ID, true
+		}
+	}
+	return connector.SnapshotEntity{}, "", false
+}
+
+func runtimeTargetParts(name string) (host, port string) {
+	raw := strings.TrimSpace(name)
+	parsed, err := url.Parse(raw)
+	if err == nil && parsed.Hostname() != "" {
+		return parsed.Hostname(), parsed.Port()
+	}
+	if !strings.Contains(raw, "@") {
+		parsed, err = url.Parse("//" + raw)
+		if err == nil && parsed.Hostname() != "" {
+			return parsed.Hostname(), parsed.Port()
+		}
+	}
+	return raw, ""
 }
 
 // addDependencyEdge resolves a declared dependency to the best known node:
@@ -134,12 +284,17 @@ type edgeBuilder struct {
 
 // add appends an edge from src's endpoint fields to the given destination.
 func (b *edgeBuilder) add(src store.TopologyEdge, dstConnectorID, dstKind, dstName, dstRef, kind, source string) {
+	b.addDetailed(src, dstConnectorID, dstKind, dstName, dstRef, kind, source, "")
+}
+
+func (b *edgeBuilder) addDetailed(src store.TopologyEdge, dstConnectorID, dstKind, dstName, dstRef, kind, source, detail string) {
 	e := src
 	e.DstConnectorID, e.DstKind, e.DstName, e.DstRef = dstConnectorID, dstKind, dstName, dstRef
 	e.Kind, e.Source = kind, source
+	e.Detail = detail
 	key := strings.Join([]string{
 		e.SrcConnectorID, e.SrcKind, e.SrcName, e.SrcRef,
-		e.DstConnectorID, e.DstKind, e.DstName, e.DstRef, e.Kind, e.Source,
+		e.DstConnectorID, e.DstKind, e.DstName, e.DstRef, e.Kind, e.Source, e.Detail,
 	}, "\x00")
 	if b.seen[key] {
 		return

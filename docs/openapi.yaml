@@ -24,6 +24,7 @@ tags:
   - name: compliance
   - name: docs
   - name: search
+  - name: topology
   - name: chat
   - name: templates
   - name: changes
@@ -42,6 +43,50 @@ security:
   - bearerAuth: []
 
 paths:
+  /topology/path:
+    get:
+      tags: [topology]
+      summary: Trace a path through visible topology edges
+      description: Edges are limited to connectors the caller can view and any API-key connector scope. With to, returns the shortest path; without to, follows directed edges from from.
+      parameters:
+        - in: query
+          name: from
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 256 }
+        - in: query
+          name: to
+          schema: { type: string, maxLength: 256 }
+      responses:
+        '200':
+          description: Visible path result
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [found, path]
+                properties:
+                  found: { type: boolean }
+                  hops: { type: integer, minimum: 0 }
+                  path:
+                    type: array
+                    items: { $ref: '#/components/schemas/TopologyPathStep' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /topology/graph:
+    get:
+      tags: [topology]
+      summary: Get the visible live topology graph
+      parameters:
+        - { in: query, name: connector, schema: { type: string } }
+        - { in: query, name: kind, schema: { type: string } }
+        - { in: query, name: includeUnlinked, schema: { type: boolean, default: false } }
+      responses:
+        '200':
+          description: Visible topology graph
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TopologyGraph' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
   /search:
     get:
       tags: [search]
@@ -4019,6 +4064,47 @@ components:
           schema: { $ref: '#/components/schemas/Error' }
 
   schemas:
+    TopologyPathStep:
+      type: object
+      required: [connectorId, connectorName, kind, name]
+      properties:
+        connectorId: { type: string }
+        connectorName: { type: string }
+        kind: { type: string }
+        name: { type: string }
+        edgeKind: { type: string }
+        edgeSource: { type: string }
+        detail: { type: string }
+    TopologyGraph:
+      type: object
+      required: [nodes, edges]
+      properties:
+        nodes:
+          type: array
+          items: { $ref: '#/components/schemas/TopologyNode' }
+        edges:
+          type: array
+          items: { $ref: '#/components/schemas/TopologyEdge' }
+    TopologyNode:
+      type: object
+      required: [id, type, name]
+      properties:
+        id: { type: string }
+        type: { type: string, enum: [identity, node] }
+        name: { type: string }
+        kind: { type: string }
+        connectorId: { type: string }
+        ref: { type: string }
+    TopologyEdge:
+      type: object
+      required: [id, source, target, kind]
+      properties:
+        id: { type: string }
+        source: { type: string }
+        target: { type: string }
+        kind: { type: string, enum: [dependency, same_as, contains, resolves_to, proxies_to, runs_on] }
+        sourceLabel: { type: string }
+        detail: { type: string }
     SearchResults:
       type: object
       required: [docs, runbooks, entities]

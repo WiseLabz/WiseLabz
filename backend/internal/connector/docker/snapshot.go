@@ -44,6 +44,9 @@ func (d *Connector) Fetch(ctx context.Context, config map[string]any) (snapshot 
 		info.Name, info.ServerVersion, info.Containers, info.ContainersRunning, info.Images, info.NCPU, info.MemTotal)
 	sections = append(sections, connector.SnapshotSection{Title: "System", Content: content})
 	metadata["engine_version"] = info.ServerVersion
+	if connector.WantsField(fields, "containers") {
+		entities = append(entities, connector.SnapshotEntity{Kind: "host", Name: d.host, ExternalID: d.host})
+	}
 
 	if connector.WantsField(fields, "containers") {
 		if raw, err := d.doRequest(ctx, "/containers/json?all=true"); err != nil {

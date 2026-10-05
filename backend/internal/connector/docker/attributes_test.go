@@ -128,8 +128,17 @@ func TestFetchEnrichesContainersFromInspectEndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Fetch() error = %v", err)
 	}
-	if len(snap.Entities) != 1 {
-		t.Fatalf("Entities = %+v, want 1", snap.Entities)
+	if len(snap.Entities) != 2 {
+		t.Fatalf("Entities = %+v, want host and container", snap.Entities)
+	}
+	var containerEntity *connector.SnapshotEntity
+	for i := range snap.Entities {
+		if snap.Entities[i].Kind == "container" {
+			containerEntity = &snap.Entities[i]
+		}
+	}
+	if containerEntity == nil {
+		t.Fatalf("container entity missing: %+v", snap.Entities)
 	}
 	want := map[string]any{
 		"image":            "nginx",
@@ -140,8 +149,8 @@ func TestFetchEnrichesContainersFromInspectEndToEnd(t *testing.T) {
 		"restart_policy":   "unless-stopped",
 		"user":             "appuser",
 	}
-	if !reflect.DeepEqual(snap.Entities[0].Attributes, want) {
-		t.Errorf("Entities[0].Attributes = %+v, want %+v", snap.Entities[0].Attributes, want)
+	if !reflect.DeepEqual(containerEntity.Attributes, want) {
+		t.Errorf("container attributes = %+v, want %+v", containerEntity.Attributes, want)
 	}
 }
 

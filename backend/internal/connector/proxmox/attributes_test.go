@@ -83,6 +83,7 @@ func TestFetchEntityAttributes(t *testing.T) {
 
 	wantWeb1 := map[string]any{
 		"status":           "running",
+		"node":             "pve1",
 		"onboot":           true,
 		"protection":       false,
 		"agent_enabled":    true,
@@ -97,6 +98,7 @@ func TestFetchEntityAttributes(t *testing.T) {
 
 	wantTmpl1 := map[string]any{
 		"status":           "stopped",
+		"node":             "pve1",
 		"onboot":           false,
 		"protection":       true,
 		"agent_enabled":    false,
@@ -111,6 +113,7 @@ func TestFetchEntityAttributes(t *testing.T) {
 
 	wantVM102 := map[string]any{
 		"status":           "running",
+		"node":             "pve1",
 		"onboot":           true,
 		"protection":       false,
 		"agent_enabled":    true,
@@ -125,6 +128,7 @@ func TestFetchEntityAttributes(t *testing.T) {
 
 	wantCt1 := map[string]any{
 		"status":           "running",
+		"node":             "pve1",
 		"onboot":           true,
 		"protection":       false,
 		"template":         false,
@@ -140,6 +144,7 @@ func TestFetchEntityAttributes(t *testing.T) {
 
 	wantCt2 := map[string]any{
 		"status":           "stopped",
+		"node":             "pve1",
 		"onboot":           false,
 		"protection":       false,
 		"template":         false,
@@ -155,6 +160,7 @@ func TestFetchEntityAttributes(t *testing.T) {
 
 	wantCt3 := map[string]any{
 		"status":           "running",
+		"node":             "pve1",
 		"onboot":           true,
 		"protection":       false,
 		"template":         false,
@@ -232,11 +238,20 @@ func TestFetchEntityAttributesDegradesOnConfigError(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Fetch() error = %v", err)
 	}
-	if len(snap.Entities) != 1 {
-		t.Fatalf("Entities = %+v, want 1", snap.Entities)
+	if len(snap.Entities) != 2 {
+		t.Fatalf("Entities = %+v, want node and VM", snap.Entities)
 	}
-	want := map[string]any{"status": "stopped", "tags": []string{}}
-	if got := snap.Entities[0].Attributes; !reflect.DeepEqual(got, want) {
+	want := map[string]any{"status": "stopped", "tags": []string{}, "node": "pve1"}
+	var vm *connector.SnapshotEntity
+	for i := range snap.Entities {
+		if snap.Entities[i].Kind == "vm" {
+			vm = &snap.Entities[i]
+		}
+	}
+	if vm == nil {
+		t.Fatalf("VM missing from entities: %+v", snap.Entities)
+	}
+	if got := vm.Attributes; !reflect.DeepEqual(got, want) {
 		t.Errorf("Attributes = %+v, want %+v (config/firewall errors should be omitted, not fail Fetch)", got, want)
 	}
 }
@@ -272,10 +287,19 @@ func TestFetchEntityTagsPresentEvenWhenConfigFails(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Fetch() error = %v", err)
 	}
-	if len(snap.Entities) != 1 {
-		t.Fatalf("Entities = %+v, want 1", snap.Entities)
+	if len(snap.Entities) != 2 {
+		t.Fatalf("Entities = %+v, want node and VM", snap.Entities)
 	}
-	attrs := snap.Entities[0].Attributes
+	var vm *connector.SnapshotEntity
+	for i := range snap.Entities {
+		if snap.Entities[i].Kind == "vm" {
+			vm = &snap.Entities[i]
+		}
+	}
+	if vm == nil {
+		t.Fatalf("VM missing from entities: %+v", snap.Entities)
+	}
+	attrs := vm.Attributes
 	tagsVal, ok := attrs["tags"]
 	if !ok {
 		t.Fatalf("Attributes missing 'tags', have %+v", attrs)
