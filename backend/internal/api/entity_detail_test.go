@@ -557,3 +557,26 @@ func TestEntityDetailAllNamesEmptyFallsBackToRef(t *testing.T) {
 		t.Fatalf("name = %v kind = %v, want ref fallback a.lab.test", body["name"], body["kind"])
 	}
 }
+
+func TestEntityDetailCollapsesEdgesAcrossMembersOfOneEntity(t *testing.T) {
+	t.Parallel()
+	app := newTestApp(t)
+	userID, token := app.user(t, "viewer")
+	c1, c2 := entityTestConnector(t, app, "alpha"), entityTestConnector(t, app, "beta")
+	app.connectorGrant(t, userID, c1.ID, "viewer")
+	app.connectorGrant(t, userID, c2.ID, "viewer")
+	id, route := newID(), newID()
+	seedEntity(t, app, id, "s", "vm", c1.ID, "vm-ref", "web01", "")
+	seedEntity(t, app, route, "r", "http_route", c1.ID, "route-ref", "wiki", "")
+	seedEntityMember(t, app, route, c2.ID, "http_route", "route-ref", "wiki", "")
+	for _, c := range []*store.ConnectorRecord{c1, c2} {
+		if err := app.Store.ReplaceTopologyEdgesForConnector(context.Background(), c.ID, []store.TopologyEdge{
+			{SrcConnectorID: c.ID, SrcKind: "http_route", SrcName: "wiki", SrcRef: "route-ref", DstConnectorID: c1.ID, DstKind: "vm", DstName: "web01", DstRef: "vm-ref", Kind: "proxies_to", Source: "caddy", Detail: "8080"},
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if n := decodeEntity(t, getEntity(t, app, id, token))["neighbors"].([]any); len(n) != 1 {
+		t.Fatalf("same relation from two members of one entity should list once: %v", n)
+	}
+}

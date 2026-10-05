@@ -232,10 +232,17 @@ func (h *Handler) edges(ctx context.Context, id string, active []store.EntityMem
 	for _, e := range edges {
 		src, dst := toEndpoint(e.Src, id), toEndpoint(e.Dst, id)
 		isIP := e.Kind == store.TopologyEdgeSameAs && e.Source == "IP address"
-		if isIP && e.Src.EntityID == id && e.Dst.EntityID == id {
-			continue // both ends are members of this identity
+		if e.Src.EntityID == id && e.Dst.EntityID == id {
+			continue // both ends are members of this identity: not a relation to another entity
 		}
-		key := strings.Join([]string{e.Kind, e.Source, e.Detail, src.ConnectorID, src.Kind, src.Ref, dst.ConnectorID, dst.Kind, dst.Ref}, "\x00")
+		// An endpoint that belongs to an entity is identified by it, so the same
+		// relation reported by several members or connectors collapses; same_as
+		// is symmetric.
+		a, b := endpointKey(e.Src), endpointKey(e.Dst)
+		if e.Kind == store.TopologyEdgeSameAs && b < a {
+			a, b = b, a
+		}
+		key := strings.Join([]string{e.Kind, e.Source, e.Detail, a, b}, "\x00")
 		if seen[key] {
 			continue
 		}
@@ -247,6 +254,13 @@ func (h *Handler) edges(ctx context.Context, id string, active []store.EntityMem
 		}
 	}
 	return nil
+}
+
+func endpointKey(e store.EntityEdgeEndpoint) string {
+	if e.EntityID != "" {
+		return "entity:" + e.EntityID
+	}
+	return strings.Join([]string{e.ConnectorID, e.Kind, e.Ref}, "\x00")
 }
 
 func toEndpoint(e store.EntityEdgeEndpoint, self string) endpoint {
