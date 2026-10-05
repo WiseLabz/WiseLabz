@@ -150,13 +150,15 @@ func (c *Checker) EvaluateRule(ctx context.Context, ruleID string) error {
 			errs = append(errs, fmt.Errorf("connector %s: %w", conn.ID, err))
 			continue
 		}
-		finding, err := c.evaluateComplianceRule(ctx, conn.ID, rule, snapshot, related)
+		findings, err := c.evaluateComplianceRule(ctx, conn.ID, rule, snapshot, related)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("connector %s: %w", conn.ID, err))
 			continue
 		}
-		if finding != nil && c.hub != nil {
-			c.broadcastCreated(conn.ID, finding)
+		if c.hub != nil {
+			for _, finding := range findings {
+				c.broadcastCreated(conn.ID, finding)
+			}
 		}
 		c.broadcastChanged(conn.ID)
 	}
@@ -208,14 +210,12 @@ func (c *Checker) checkCompliance(ctx context.Context, connectorID string) ([]*s
 			errs = append(errs, fmt.Errorf("rule %s: %w", records[i].ID, err))
 			continue
 		}
-		finding, err := c.evaluateComplianceRule(ctx, connectorID, rule, snapshot, related)
+		ruleFindings, err := c.evaluateComplianceRule(ctx, connectorID, rule, snapshot, related)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("rule %s: %w", records[i].ID, err))
 			continue
 		}
-		if finding != nil {
-			findings = append(findings, finding)
-		}
+		findings = append(findings, ruleFindings...)
 	}
 	return findings, errors.Join(errs...)
 }
@@ -257,23 +257,105 @@ func (c *Checker) loadComplianceSnapshot(ctx context.Context, connectorID string
 	return &result, nil
 }
 
-func (c *Checker) evaluateComplianceRule(ctx context.Context, connectorID string, rule compliance.Rule, snapshot *compliance.Snapshot, related compliance.RelatedEntities) (*store.QualityFindingRecord, error) {
+func (c *Checker) evaluateComplianceRule(ctx context.Context, connectorID string, rule compliance.Rule, snapshot *compliance.Snapshot, related compliance.RelatedEntities) ([]*store.QualityFindingRecord, error) {
 	// Missing or malformed snapshots must not resolve existing findings.
 	if snapshot == nil {
 		return nil, nil
 	}
 	matches, skipped := compliance.EvaluateWithRelated(rule, *snapshot, related)
-	// A skipped rule (no connector of a related type has a snapshot) does not
-	// apply right now, so it clears its finding like a clean evaluation does.
 	if skipped || len(matches) == 0 {
 		return nil, c.store.ResolveQualityFindingForRule(ctx, connectorID, rule.ID)
 	}
-	finding := &store.QualityFindingRecord{
-		ConnectorID: connectorID, RuleID: rule.ID, CheckType: "compliance",
-		Severity: rule.Severity, Title: rule.Title, Description: complianceDescription(matches),
-		RemediationLink: rule.RemediationLink,
+	findings := make([]*store.QualityFindingRecord, 0, len(matches))
+	upserted := make([]*store.QualityFindingRecord, 0, len(matches))
+	refs := make([]store.EntityIdentityRef, 0, len(matches))
+	for _, entity := range matches {
+		refs = append(refs, store.EntityIdentityRef{Kind: entity.Kind, Ref: complianceEntityRef(entity)})
 	}
-	return c.upsert(ctx, finding)
+	// Resolve vanished entities first so the notified level below only reflects
+	// findings that stay open. When every previous finding resolves, the rule
+	// firing again is a new incident and notifies once more.
+	if err := c.store.ResolveQualityFindingsForRuleExceptEntities(ctx, connectorID, rule.ID, refs); err != nil {
+		return nil, err
+	}
+	notified, err := c.ruleNotifiedRank(ctx, connectorID, rule.ID)
+	if err != nil {
+		return nil, err
+	}
+	for _, entity := range matches {
+		finding := &store.QualityFindingRecord{
+			ConnectorID: connectorID, RuleID: rule.ID, CheckType: "compliance",
+			EntityKind: entity.Kind, EntityRef: complianceEntityRef(entity),
+			Severity: rule.Severity, Title: rule.Title, Description: complianceDescription([]compliance.Entity{entity}),
+			RemediationLink: rule.RemediationLink,
+		}
+		created, err := c.upsertWithoutNotify(ctx, finding)
+		if err != nil {
+			return nil, err
+		}
+		upserted = append(upserted, finding)
+		if created != nil {
+			findings = append(findings, created)
+		}
+	}
+	// Persist each matching entity separately, but notify once per rule and
+	// connector: only a severity above everything already announced for the
+	// rule's open findings notifies, whichever entity carries it. Every other
+	// finding is marked as covered so later runs and new or returning entities
+	// stay quiet.
+	if c.notifier != nil {
+		var candidate *store.QualityFindingRecord
+		for _, f := range upserted {
+			if findingRank(f.Severity) > max(notified, findingRank(f.NotifiedSeverity)) {
+				candidate = f
+				break
+			}
+		}
+		if candidate != nil {
+			c.maybeNotify(ctx, candidate)
+		}
+		for _, f := range upserted {
+			if f == candidate || findingRank(f.Severity) <= findingRank(f.NotifiedSeverity) {
+				continue
+			}
+			if err := c.store.SetQualityFindingNotifiedSeverity(ctx, f.ID, f.Severity); err != nil {
+				slog.Error("failed to record finding notification", "finding", f.ID, "error", err)
+			}
+		}
+	}
+	if len(findings) > 1 {
+		findings = findings[:1]
+	}
+	return findings, nil
+}
+
+func complianceEntityRef(entity compliance.Entity) string {
+	if entity.ExternalID != "" {
+		return entity.ExternalID
+	}
+	return entity.Name
+}
+
+// findingRank is severityRank with "never notified" below every severity.
+func findingRank(severity string) int {
+	if rank, ok := severityRank[severity]; ok {
+		return rank
+	}
+	return -1
+}
+
+// ruleNotifiedRank is the highest severity already notified across the open
+// findings of one rule on one connector, or -1 when none has notified.
+func (c *Checker) ruleNotifiedRank(ctx context.Context, connectorID, ruleID string) (int, error) {
+	severities, err := c.store.OpenNotifiedSeveritiesForRule(ctx, connectorID, ruleID)
+	if err != nil {
+		return 0, err
+	}
+	highest := -1
+	for _, sev := range severities {
+		highest = max(highest, findingRank(sev))
+	}
+	return highest, nil
 }
 
 // relatedSource loads the entities related clauses join against. Connectors
@@ -402,13 +484,15 @@ func (c *Checker) checkRelatedCompliance(ctx context.Context, connectorID string
 				errs = append(errs, fmt.Errorf("rule %s connector %s: %w", records[i].ID, sourceConn.ID, err))
 				continue
 			}
-			finding, err := c.evaluateComplianceRule(ctx, sourceConn.ID, rule, snapshot, related)
+			findings, err := c.evaluateComplianceRule(ctx, sourceConn.ID, rule, snapshot, related)
 			if err != nil {
 				errs = append(errs, fmt.Errorf("rule %s connector %s: %w", records[i].ID, sourceConn.ID, err))
 				continue
 			}
-			if finding != nil && c.hub != nil {
-				c.broadcastCreated(sourceConn.ID, finding)
+			if c.hub != nil {
+				for _, finding := range findings {
+					c.broadcastCreated(sourceConn.ID, finding)
+				}
 			}
 			affectedConnectorIDs[sourceConn.ID] = true
 		}
@@ -559,13 +643,20 @@ func (c *Checker) checkOwnership(ctx context.Context, connectorID string) (*stor
 }
 
 func (c *Checker) upsert(ctx context.Context, finding *store.QualityFindingRecord) (*store.QualityFindingRecord, error) {
+	created, err := c.upsertWithoutNotify(ctx, finding)
+	if err == nil {
+		c.maybeNotify(ctx, finding)
+	}
+	return created, err
+}
+
+func (c *Checker) upsertWithoutNotify(ctx context.Context, finding *store.QualityFindingRecord) (*store.QualityFindingRecord, error) {
 	candidateID := uuid.New().String()
 	finding.ID = candidateID
 	if err := c.store.UpsertQualityFinding(ctx, finding); err != nil {
 		return nil, err
 	}
 	isNew := finding.ID == candidateID
-	c.maybeNotify(ctx, finding)
 	if !isNew {
 		return nil, nil
 	}

@@ -4044,8 +4044,9 @@ components:
         score: { type: number }
     EntityHit:
       type: object
-      required: [connectorId, connectorName, docId, kind, name, externalId, ip, hostname, mac, aliases]
+      required: [entityId, connectorId, connectorName, docId, kind, name, externalId, ip, hostname, mac, aliases]
       properties:
+        entityId: { type: string }
         connectorId: { type: string }
         connectorName: { type: string }
         docId: { type: string }
@@ -5762,6 +5763,8 @@ components:
         connectorId: { type: string }
         connectorName: { type: string }
         docId: { type: string, nullable: true }
+        entityKind: { type: string }
+        entityRef: { type: string }
         ruleId: { type: string, nullable: true }
         checkType: { $ref: '#/components/schemas/QualityCheckType' }
         severity: { $ref: '#/components/schemas/Severity' }

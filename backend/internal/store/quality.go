@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -15,6 +16,8 @@ type QualityFindingRecord struct {
 	ID              string `json:"id"`
 	ConnectorID     string `json:"connectorId"`
 	DocID           string `json:"docId,omitempty"`
+	EntityKind      string `json:"entityKind,omitempty"`
+	EntityRef       string `json:"entityRef,omitempty"`
 	RuleID          string `json:"ruleId,omitempty"`
 	CheckType       string `json:"checkType"`
 	Severity        string `json:"severity"`
@@ -35,7 +38,7 @@ type QualityFindingRecord struct {
 }
 
 const qualityFindingColumns = `id, connector_id, doc_id, rule_id, check_type, severity, title, description,
-	remediation_link, status, detected_count, first_detected_at, last_seen_at, resolved_at, notified_severity`
+	remediation_link, status, detected_count, first_detected_at, last_seen_at, resolved_at, notified_severity, entity_kind, entity_ref`
 
 // UpsertQualityFinding atomically inserts a new open finding or records another
 // detection of the existing open finding for the same connector and check.
@@ -54,9 +57,9 @@ func (s *Store) UpsertQualityFinding(ctx context.Context, f *QualityFindingRecor
 	var notifiedSeverity sql.NullString
 	err := s.db.QueryRowContext(ctx, `
 		INSERT INTO quality_findings (id, connector_id, doc_id, rule_id, check_type, severity, title, description,
-			remediation_link, status, detected_count, first_detected_at, last_seen_at, resolved_at, notified_severity)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', 1, ?, ?, NULL, NULL)
-		ON CONFLICT(connector_id, check_type, COALESCE(rule_id, '')) WHERE status = 'open'
+			remediation_link, status, detected_count, first_detected_at, last_seen_at, resolved_at, notified_severity, entity_kind, entity_ref)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', 1, ?, ?, NULL, NULL, ?, ?)
+		ON CONFLICT(connector_id, check_type, COALESCE(rule_id, ''), COALESCE(entity_kind, ''), COALESCE(entity_ref, '')) WHERE status = 'open'
 		DO UPDATE SET last_seen_at = excluded.last_seen_at,
 			detected_count = quality_findings.detected_count + 1,
 			doc_id = excluded.doc_id,
@@ -64,7 +67,7 @@ func (s *Store) UpsertQualityFinding(ctx context.Context, f *QualityFindingRecor
 			description = excluded.description, remediation_link = excluded.remediation_link
 		RETURNING id, notified_severity
 	`, f.ID, f.ConnectorID, nilToStr(f.DocID), nilToStr(f.RuleID), f.CheckType, f.Severity, f.Title,
-		f.Description, f.RemediationLink, f.FirstDetectedAt, f.LastSeenAt).Scan(&f.ID, &notifiedSeverity)
+		f.Description, f.RemediationLink, f.FirstDetectedAt, f.LastSeenAt, nilToStr(f.EntityKind), nilToStr(f.EntityRef)).Scan(&f.ID, &notifiedSeverity)
 	if err != nil {
 		return fmt.Errorf("upsert quality finding: %w", err)
 	}
@@ -84,6 +87,30 @@ func (s *Store) SetQualityFindingNotifiedSeverity(ctx context.Context, id, sever
 	return nil
 }
 
+// OpenNotifiedSeveritiesForRule returns the distinct notified_severity values of
+// the open findings of one rule on one connector. A rule notifies once per
+// connector, so this is the level already announced to the user.
+func (s *Store) OpenNotifiedSeveritiesForRule(ctx context.Context, connectorID, ruleID string) ([]string, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT DISTINCT notified_severity FROM quality_findings
+		WHERE connector_id = ? AND rule_id = ? AND status = 'open' AND notified_severity IS NOT NULL`, connectorID, ruleID)
+	if err != nil {
+		return nil, fmt.Errorf("list notified severities for rule: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var out []string
+	for rows.Next() {
+		var sev string
+		if err := rows.Scan(&sev); err != nil {
+			return nil, fmt.Errorf("scan notified severity: %w", err)
+		}
+		out = append(out, sev)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate notified severities: %w", err)
+	}
+	return out, nil
+}
+
 // ResolveQualityFinding resolves the currently open finding, if any, and
 // clears notified_severity so a later re-open is treated as a new finding
 // for notification purposes.
@@ -97,6 +124,66 @@ func (s *Store) ResolveQualityFinding(ctx context.Context, connectorID, checkTyp
 		return fmt.Errorf("resolve quality finding: %w", err)
 	}
 	return nil
+}
+
+// EntityIdentityRef identifies the member key a finding describes.
+type EntityIdentityRef struct{ Kind, Ref string }
+
+// ResolveQualityFindingsForRuleExceptEntities resolves entity-specific findings
+// for matches that disappeared from the latest evaluation.
+func (s *Store) ResolveQualityFindingsForRuleExceptEntities(ctx context.Context, connectorID, ruleID string, keep []EntityIdentityRef) error {
+	keepSet := make(map[string]bool, len(keep))
+	for _, ref := range keep {
+		keepSet[ref.Kind+"\x00"+ref.Ref] = true
+	}
+	stale, err := staleQualityFindingIDs(ctx, s, connectorID, ruleID, keepSet)
+	if err != nil {
+		return err
+	}
+	if len(stale) == 0 {
+		return nil
+	}
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	const batch = 500
+	for start := 0; start < len(stale); start += batch {
+		end := start + batch
+		if end > len(stale) {
+			end = len(stale)
+		}
+		placeholders := make([]string, end-start)
+		args := []any{now}
+		for i, id := range stale[start:end] {
+			placeholders[i] = "?"
+			args = append(args, id)
+		}
+		if _, err := s.db.ExecContext(ctx, `UPDATE quality_findings SET status='resolved', resolved_at=?, notified_severity=NULL WHERE id IN (`+strings.Join(placeholders, ",")+`)`, args...); err != nil {
+			return fmt.Errorf("resolve stale entity findings for rule: %w", err)
+		}
+	}
+	return nil
+}
+
+func staleQualityFindingIDs(ctx context.Context, s *Store, connectorID, ruleID string, keep map[string]bool) ([]string, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT id, entity_kind, entity_ref FROM quality_findings WHERE connector_id = ? AND rule_id = ? AND status = 'open'`, connectorID, ruleID)
+	if err != nil {
+		return nil, fmt.Errorf("list entity findings for resolution: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	stale := make([]string, 0)
+	for rows.Next() {
+		var id string
+		var kind, ref sql.NullString
+		if err := rows.Scan(&id, &kind, &ref); err != nil {
+			return nil, fmt.Errorf("scan entity finding for resolution: %w", err)
+		}
+		if !kind.Valid || !ref.Valid || !keep[kind.String+"\x00"+ref.String] {
+			stale = append(stale, id)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate entity findings for resolution: %w", err)
+	}
+	return stale, nil
 }
 
 // ResolveQualityFindingForRule resolves an open compliance finding for one
@@ -196,10 +283,10 @@ func (s *Store) CountQualityFindingsOpen(ctx context.Context) (int, error) {
 
 func scanQualityFinding(row rowScanner) (QualityFindingRecord, error) {
 	var f QualityFindingRecord
-	var docID, ruleID, resolvedAt, notifiedSeverity sql.NullString
+	var docID, ruleID, resolvedAt, notifiedSeverity, entityKind, entityRef sql.NullString
 	err := row.Scan(&f.ID, &f.ConnectorID, &docID, &ruleID, &f.CheckType, &f.Severity, &f.Title,
 		&f.Description, &f.RemediationLink, &f.Status, &f.DetectedCount,
-		&f.FirstDetectedAt, &f.LastSeenAt, &resolvedAt, &notifiedSeverity)
+		&f.FirstDetectedAt, &f.LastSeenAt, &resolvedAt, &notifiedSeverity, &entityKind, &entityRef)
 	if errors.Is(err, sql.ErrNoRows) {
 		return QualityFindingRecord{}, ErrNotFound
 	}
@@ -210,5 +297,7 @@ func scanQualityFinding(row rowScanner) (QualityFindingRecord, error) {
 	f.RuleID = ruleID.String
 	f.ResolvedAt = resolvedAt.String
 	f.NotifiedSeverity = notifiedSeverity.String
+	f.EntityKind = entityKind.String
+	f.EntityRef = entityRef.String
 	return f, nil
 }

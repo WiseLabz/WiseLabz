@@ -8,6 +8,7 @@
  */
 
 export interface EntityHit {
+  entityId: string;
   connectorId: string;
   connectorName: string;
   docId: string;

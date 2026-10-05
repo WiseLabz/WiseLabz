@@ -74,16 +74,44 @@ func matchEntities(ctx context.Context, s *store.Store, cache *snapshotCache, co
 // matchReason returns the precedence-ordered reason two entities match, or
 // "" if they don't match on any tier.
 func matchReason(a, b connector.SnapshotEntity) string {
-	if a.ExternalID != "" && b.ExternalID != "" && a.Kind == b.Kind && a.ExternalID == b.ExternalID {
-		return "external ID"
+	if reason := strongMatchReason(a, b); reason == "external ID" {
+		return reason
 	}
 	if a.IP != "" && b.IP != "" && a.IP == b.IP {
 		return "IP address"
+	}
+	return strongMatchReason(a, b)
+}
+
+// strongMatchReason returns only identity-grade match reasons. In particular,
+// a shared hostname remains strong even when the same pair also shares an IP;
+// topology's matchReason keeps its IP-first explanation for that weak link.
+func strongMatchReason(a, b connector.SnapshotEntity) string {
+	if a.ExternalID != "" && b.ExternalID != "" && a.Kind == b.Kind && a.ExternalID == b.ExternalID {
+		return "external ID"
 	}
 	if hostnameMatches(a, b) {
 		return "hostname"
 	}
 	return ""
+}
+
+// strongIdentityFeatures is shared by live linking and persisted clustering so
+// their strong-match dimensions cannot drift.
+func strongIdentityFeatures(e connector.SnapshotEntity) []string {
+	features := make([]string, 0, 1+len(e.Aliases)+1)
+	if e.ExternalID != "" {
+		features = append(features, "id\x00"+e.Kind+"\x00"+e.ExternalID)
+	}
+	if e.Hostname != "" {
+		features = append(features, "host\x00"+strings.ToLower(e.Hostname))
+	}
+	for _, alias := range e.Aliases {
+		if alias != "" {
+			features = append(features, "host\x00"+strings.ToLower(alias))
+		}
+	}
+	return features
 }
 
 func hostnameMatches(a, b connector.SnapshotEntity) bool {

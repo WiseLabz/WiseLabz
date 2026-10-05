@@ -285,6 +285,11 @@ func (e *Engine) finishSync(ctx context.Context, connectorID, jobID string, rec 
 			slog.Error("topology rebuild failed", "connector", logsafe.Sanitize(connectorID), "error", logsafe.Sanitize(err.Error()))
 		}
 	}
+	if status == "success" && result.SnapshotID != "" && e.identities != nil {
+		if err := e.identities.RebuildEntityIdentitiesForConnector(ctx, connectorID); err != nil {
+			slog.Error("entity identity rebuild failed", "connector", logsafe.Sanitize(connectorID), "error", logsafe.Sanitize(err.Error()))
+		}
+	}
 }
 
 func snapshotIDOrNil(id string) *string {

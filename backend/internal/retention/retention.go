@@ -44,6 +44,14 @@ func RunCleanupOnce(ctx context.Context, s *store.Store, cfg store.RetentionSett
 		} else if n > 0 {
 			logger.Info("Purged old snapshots", "count", n)
 		}
+
+		n, err = s.DeleteExpiredEntityIdentities(ctx, cutoff(cfg.SnapshotDays))
+		if err != nil {
+			logger.Error("delete expired entity identities", "error", err)
+			errs = append(errs, fmt.Errorf("delete expired entity identities: %w", err))
+		} else if n > 0 {
+			logger.Info("Purged old entity identities", "count", n)
+		}
 	}
 
 	if cfg.DocVersionDays > 0 {

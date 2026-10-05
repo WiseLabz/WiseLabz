@@ -47,6 +47,11 @@ type TopologyBuilder interface {
 	RebuildTopologyForConnector(ctx context.Context, connectorID string) error
 }
 
+// IdentityBuilder reconciles persisted identity memberships after a successful sync.
+type IdentityBuilder interface {
+	RebuildEntityIdentitiesForConnector(ctx context.Context, connectorID string) error
+}
+
 // Engine runs sync jobs against connectors.
 type Engine struct {
 	workerMu       sync.Mutex
@@ -61,6 +66,7 @@ type Engine struct {
 	qualityChecker QualityChecker
 	docRegenerator DocRegenerator
 	topology       TopologyBuilder
+	identities     IdentityBuilder
 	// encKey is the base64-encoded AES-256 key (config.Encryption.Key) used
 	// to decrypt/re-encrypt secret-bearing connector config fields via
 	// store.ParseConnectorConfig/MarshalConnectorConfig.
@@ -97,6 +103,11 @@ func (e *Engine) SetDocRegenerator(dr DocRegenerator) {
 // construction; nil (the default) skips topology edge rebuilds.
 func (e *Engine) SetTopologyBuilder(tb TopologyBuilder) {
 	e.topology = tb
+}
+
+// SetIdentityBuilder wires persisted identity reconciliation after sync.
+func (e *Engine) SetIdentityBuilder(builder IdentityBuilder) {
+	e.identities = builder
 }
 
 // SetBaseContext sets the context that detached syncs derive from. main wires

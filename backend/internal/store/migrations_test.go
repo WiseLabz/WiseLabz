@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"log/slog"
@@ -49,6 +50,11 @@ func TestRunMigrations(t *testing.T) {
 			t.Errorf("table %s does not exist or is not queryable: %v", table, err)
 		}
 	}
+	if !attachmentTableExists(t, db, "sqlite", "entities") || !attachmentTableExists(t, db, "sqlite", "entity_members") ||
+		!hasColumn(t, db, "sqlite", "entities", "merged_at") ||
+		!hasColumn(t, db, "sqlite", "quality_findings", "entity_kind") || !hasColumn(t, db, "sqlite", "quality_findings", "entity_ref") {
+		t.Fatal("entity identity migration schema is incomplete")
+	}
 	var disabledRules int
 	if err := db.QueryRow("SELECT COUNT(*) FROM compliance_rules WHERE enabled = 0").Scan(&disabledRules); err != nil || disabledRules != 5 {
 		t.Errorf("disabled seeded compliance rules = %d, %v; want 5, nil", disabledRules, err)
@@ -62,6 +68,46 @@ func TestRunMigrations(t *testing.T) {
 	var name string
 	if err := db.QueryRow("SELECT name FROM sqlite_master WHERE type='table' AND name='maintenance_windows'").Scan(&name); err != nil {
 		t.Errorf("maintenance_windows table missing after migrations: %v", err)
+	}
+
+	identityStore := New(db, "sqlite")
+	connector := &ConnectorRecord{Name: "migration-index", Type: "test", Category: "virtualization", URL: "https://migration.test"}
+	if err := identityStore.CreateConnector(context.Background(), connector); err != nil {
+		t.Fatal(err)
+	}
+	for _, ref := range []string{"vm-a", "vm-b"} {
+		finding := &QualityFindingRecord{ConnectorID: connector.ID, RuleID: "same-rule", CheckType: "compliance", EntityKind: "vm", EntityRef: ref, Severity: "warning", Title: ref}
+		if err := identityStore.UpsertQualityFinding(context.Background(), finding); err != nil {
+			t.Fatalf("entity finding %s: %v", ref, err)
+		}
+	}
+	for _, id := range []string{"old-identity", "current-identity", "duplicate-identity"} {
+		if _, err := db.Exec(`INSERT INTO entities(id,kind,display_name,first_seen_at,last_seen_at) VALUES(?,?,?,?,?)`, id, "vm", id, "2026-01-01", "2026-01-01"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := db.Exec(`INSERT INTO entity_members(entity_id,connector_id,kind,ref,name,gone_at) VALUES(?,?,?,?,?,?)`, "old-identity", connector.ID, "vm", "returning", "old", "2026-01-02"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO entity_members(entity_id,connector_id,kind,ref,name,gone_at) VALUES(?,?,?,?,?,NULL)`, "current-identity", connector.ID, "vm", "returning", "current"); err != nil {
+		t.Fatalf("gone key should allow active member: %v", err)
+	}
+	if _, err := db.Exec(`INSERT INTO entity_members(entity_id,connector_id,kind,ref,name,gone_at) VALUES(?,?,?,?,?,NULL)`, "duplicate-identity", connector.ID, "vm", "returning", "duplicate"); err == nil {
+		t.Fatal("active member key accepted a duplicate")
+	}
+	var open int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM quality_findings WHERE connector_id=? AND rule_id='same-rule' AND status='open'`, connector.ID).Scan(&open); err != nil || open != 2 {
+		t.Fatalf("open entity findings before downgrade = %d, %v; want 2", open, err)
+	}
+	if err := RunMigrationsDown(db, "sqlite", logger); err != nil {
+		t.Fatalf("downgrade entity identity migration: %v", err)
+	}
+	var resolved int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM quality_findings WHERE connector_id=? AND rule_id='same-rule' AND status='resolved'`, connector.ID).Scan(&resolved); err != nil || resolved != 1 {
+		t.Fatalf("resolved entity findings after downgrade = %d, %v; want 1", resolved, err)
+	}
+	if err := RunMigrations(db, "sqlite", logger); err != nil {
+		t.Fatalf("reapply entity identity migration: %v", err)
 	}
 }
 
@@ -133,6 +179,15 @@ func TestRunMigrationsDown(t *testing.T) {
 
 	if !hasColumn(t, db, "sqlite", "compliance_rules", "related") {
 		t.Fatal("compliance_rules.related missing")
+	}
+	if err := RunMigrationsDown(db, "sqlite", logger); err != nil {
+		t.Fatal(err)
+	}
+	if attachmentTableExists(t, db, "sqlite", "entities") || hasColumn(t, db, "sqlite", "quality_findings", "entity_kind") {
+		t.Fatal("entity identity migration remains after rollback")
+	}
+	if !hasColumn(t, db, "sqlite", "compliance_rules", "related") {
+		t.Fatal("000057 compliance_rules.related missing after rolling back 000058")
 	}
 	if err := RunMigrationsDown(db, "sqlite", logger); err != nil {
 		t.Fatal(err)
@@ -464,6 +519,12 @@ func TestRunMigrationsDown(t *testing.T) {
 	}
 	if err := db.QueryRow("SELECT name FROM sqlite_master WHERE type='table' AND name='compliance_rules'").Scan(&name); err != nil {
 		t.Fatalf("compliance_rules missing after reapply: %v", err)
+	}
+	if !attachmentTableExists(t, db, "sqlite", "entities") || !attachmentTableExists(t, db, "sqlite", "entity_members") {
+		t.Fatal("entity identity tables missing after migration reapply")
+	}
+	if err := RunMigrationsDown(db, "sqlite", logger); err != nil {
+		t.Fatalf("rollback entity identities before legacy migration checks: %v", err)
 	}
 	if !hasColumn(t, db, "sqlite", "users", "digest_cadence") {
 		t.Fatal("users.digest_cadence missing after reapply")
@@ -800,6 +861,15 @@ func TestRunMigrationsDownPostgres(t *testing.T) {
 	}
 	if !hasColumn(t, db, "postgres", "compliance_rules", "related") {
 		t.Fatal("compliance_rules.related missing")
+	}
+	if !hasColumn(t, db, "postgres", "entities", "merged_at") {
+		t.Fatal("entities.merged_at missing")
+	}
+	if err := RunMigrationsDown(db, "postgres", logger); err != nil {
+		t.Fatalf("rollback entity_identities: %v", err)
+	}
+	if attachmentTableExists(t, db, "postgres", "entities") || hasColumn(t, db, "postgres", "quality_findings", "entity_kind") {
+		t.Fatal("entity identities remain after rollback")
 	}
 	if err := RunMigrationsDown(db, "postgres", logger); err != nil {
 		t.Fatalf("rollback compliance_rule_related: %v", err)
