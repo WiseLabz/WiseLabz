@@ -6,12 +6,13 @@
  *
  * OpenAPI spec version: 0.1.0
  */
-import type { UserRole } from './userRole';
 
-export interface UserUpdate {
-  role?: UserRole;
-  disabled?: boolean;
-  displayName?: string;
-  /** Only valid when role is admin; grants permission to edit the admin-default dashboard layout */
-  canManageDashboardDefaults?: boolean;
-}
+/**
+ * Instance-level role of a user account, as accepted by POST /users and PATCH /users/{userId} and returned on User. `admin` manages users and lab-wide settings; `user` gets access only through connector grants (`viewer` / `operator`, see Role).
+ */
+export type UserRole = (typeof UserRole)[keyof typeof UserRole];
+
+export const UserRole = {
+  user: 'user',
+  admin: 'admin',
+} as const;

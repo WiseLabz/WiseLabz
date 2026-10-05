@@ -623,3 +623,21 @@ func TestPathFromNodeIDNeverNamesHiddenEntity(t *testing.T) {
 		t.Fatalf("response leaks hidden entity: %s", body)
 	}
 }
+
+func TestGraphIdentityNamedFromNonEmptyMember(t *testing.T) {
+	f := newFixture(t)
+	// The nameless dns_record sorts first by name but must not blank the node.
+	f.identity(t, "id-dns", "ignored", "",
+		[5]string{f.pve, "dns_record", "web.lab.test", "", ""},
+		[5]string{f.net, "vm", "web-vm", "web", ""})
+	_, body := f.graph(t, call{userID: f.viewer}, q("includeUnlinked", "true"))
+	for _, n := range decodeGraph(t, body).Nodes {
+		if n.ID == "id-dns" {
+			if n.Name != "web" || n.Kind != "vm" {
+				t.Fatalf("node = %+v, want name web kind vm", n)
+			}
+			return
+		}
+	}
+	t.Fatalf("identity missing: %s", body)
+}

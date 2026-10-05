@@ -444,3 +444,116 @@ func seedEntityMember(t *testing.T, app *testApp, id, connectorID, kind, ref, na
 		t.Fatal(err)
 	}
 }
+
+const farMarker = "FAR-MARKER-91c2"
+
+// seedFarEdgeFixture builds identity `near` (member on `member`) with a
+// proxies_to neighbour and an IP relation to identity `far`, whose only member
+// lives on connector `other`, which is not a member connector of `near`.
+func seedFarEdgeFixture(t *testing.T, app *testApp) (near string, member, other *store.ConnectorRecord) {
+	t.Helper()
+	member, other = entityTestConnector(t, app, "member"), entityTestConnector(t, app, "other "+farMarker)
+	near, far := newID(), newID()
+	seedEntity(t, app, near, "n", "vm", member.ID, "near-ref", "Near", "")
+	seedEntity(t, app, far, "f", "service", other.ID, "far-ref", "Far "+farMarker, "")
+	if err := app.Store.ReplaceTopologyEdgesForConnector(context.Background(), other.ID, []store.TopologyEdge{
+		{SrcConnectorID: other.ID, SrcKind: "service", SrcName: "Far " + farMarker, SrcRef: "far-ref", DstConnectorID: member.ID, DstKind: "vm", DstName: "Near", DstRef: "near-ref", Kind: "proxies_to", Source: "far-proxy", Detail: "upstream-" + farMarker},
+		{SrcConnectorID: member.ID, SrcKind: "vm", SrcName: "Near", SrcRef: "near-ref", DstConnectorID: other.ID, DstKind: "service", DstName: "Far " + farMarker, DstRef: "far-ref", Kind: "same_as", Source: "IP address"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	return near, member, other
+}
+
+func TestEntityDetailEdgesToNonMemberConnectorVisibleWithGrant(t *testing.T) {
+	t.Parallel()
+	app := newTestApp(t)
+	adminID, adminToken := app.user(t, "operator")
+	near, member, other := seedFarEdgeFixture(t, app)
+	app.connectorGrant(t, adminID, member.ID, "viewer")
+	app.connectorGrant(t, adminID, other.ID, "viewer")
+
+	body := decodeEntity(t, getEntity(t, app, near, adminToken))
+	neighbors, links := body["neighbors"].([]any), body["relatedByIp"].([]any)
+	if len(neighbors) != 1 || neighbors[0].(map[string]any)["kind"] != "proxies_to" {
+		t.Fatalf("proxies_to neighbour on a viewable non-member connector missing: %v", neighbors)
+	}
+	if len(links) != 1 {
+		t.Fatalf("IP relation to a viewable non-member connector missing: %v", links)
+	}
+}
+
+func TestEntityDetailEdgesToUnviewableConnectorLeaveNoTrace(t *testing.T) {
+	t.Parallel()
+	app := newTestApp(t)
+	userID, token := app.user(t, "viewer")
+	near, member, other := seedFarEdgeFixture(t, app)
+	app.connectorGrant(t, userID, member.ID, "viewer")
+	keyOwner, _ := app.user(t, "viewer")
+	app.connectorGrant(t, keyOwner, member.ID, "viewer")
+	app.connectorGrant(t, keyOwner, other.ID, "viewer")
+	key := mintAPIKey(t, app, keyOwner, "full", []string{member.ID})
+
+	for name, tok := range map[string]string{"viewer on member only": token, "key restricted to member": key} {
+		rec := getEntity(t, app, near, tok)
+		body := decodeEntity(t, rec)
+		if s := rec.Body.String(); strings.Contains(s, farMarker) || strings.Contains(s, other.ID) || strings.Contains(s, "far-ref") {
+			t.Fatalf("%s: far endpoint leaked: %s", name, s)
+		}
+		if len(body["neighbors"].([]any)) != 0 || len(body["relatedByIp"].([]any)) != 0 {
+			t.Fatalf("%s: edges to an unviewable connector listed: %s", name, rec.Body.String())
+		}
+	}
+}
+
+func TestEntityDetailDeduplicatesEdgesAndNamesFromVisibleMembers(t *testing.T) {
+	t.Parallel()
+	app := newTestApp(t)
+	userID, token := app.user(t, "viewer")
+	c1, c2 := entityTestConnector(t, app, "alpha"), entityTestConnector(t, app, "beta")
+	app.connectorGrant(t, userID, c1.ID, "viewer")
+	app.connectorGrant(t, userID, c2.ID, "viewer")
+	id, other := newID(), newID()
+	// A nameless dns_record sorts first by name but must not blank the title.
+	seedEntity(t, app, id, "stored", "dns_record", c1.ID, "web01.lab.test", "", "")
+	seedEntityMember(t, app, id, c2.ID, "vm", "vm-ref", "web01", "")
+	seedEntity(t, app, other, "o", "service", c2.ID, "other-ref", "Other", "")
+	edge := func(kind, source string) store.TopologyEdge {
+		return store.TopologyEdge{SrcConnectorID: c2.ID, SrcKind: "vm", SrcName: "web01", SrcRef: "vm-ref", DstConnectorID: c2.ID, DstKind: "service", DstName: "Other", DstRef: "other-ref", Kind: kind, Source: source, Detail: "d"}
+	}
+	for _, owner := range []string{c1.ID, c2.ID} {
+		if err := app.Store.ReplaceTopologyEdgesForConnector(context.Background(), owner, []store.TopologyEdge{
+			edge("dependency", "x"), edge("same_as", "IP address"),
+			// both ends are members of this identity: not a relation to another entity
+			{SrcConnectorID: c1.ID, SrcKind: "dns_record", SrcName: "", SrcRef: "web01.lab.test", DstConnectorID: c2.ID, DstKind: "vm", DstName: "web01", DstRef: "vm-ref", Kind: "same_as", Source: "IP address"},
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	rec := getEntity(t, app, id, token)
+	body := decodeEntity(t, rec)
+	if body["name"] != "web01" || body["kind"] != "vm" {
+		t.Fatalf("identity should be named from the non-empty member: %s", rec.Body.String())
+	}
+	if n := body["neighbors"].([]any); len(n) != 1 {
+		t.Fatalf("duplicate neighbours not collapsed: %v", n)
+	}
+	if l := body["relatedByIp"].([]any); len(l) != 1 {
+		t.Fatalf("want one IP relation (deduped, no self relation): %v", l)
+	}
+}
+
+func TestEntityDetailAllNamesEmptyFallsBackToRef(t *testing.T) {
+	t.Parallel()
+	app := newTestApp(t)
+	userID, token := app.user(t, "viewer")
+	c := entityTestConnector(t, app, "alpha")
+	app.connectorGrant(t, userID, c.ID, "viewer")
+	id := newID()
+	seedEntity(t, app, id, "stored", "dns_record", c.ID, "b.lab.test", "", "")
+	seedEntityMember(t, app, id, c.ID, "dns_record", "a.lab.test", "", "")
+	body := decodeEntity(t, getEntity(t, app, id, token))
+	if body["name"] != "a.lab.test" || body["kind"] != "dns_record" {
+		t.Fatalf("name = %v kind = %v, want ref fallback a.lab.test", body["name"], body["kind"])
+	}
+}

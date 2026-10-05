@@ -47,7 +47,7 @@ const mockSession: AuthSession = {
     id: 'user123',
     username: 'testuser',
     email: 'test@example.com',
-    role: 'operator',
+    role: 'admin',
     authSource: 'local',
     createdAt: '2026-10-01T00:00:00Z',
   } as User,

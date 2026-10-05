@@ -8,7 +8,7 @@
  */
 import { faker } from '@faker-js/faker';
 
-import { Role } from '../../model';
+import { UserRole } from '../../model';
 import type {
   MfaStatus,
   PostMeMfaRecoveryCodes200,
@@ -29,7 +29,7 @@ export const getGetMeResponseMock = (
     undefined,
   ]),
   email: faker.helpers.arrayElement([faker.internet.email(), undefined]),
-  role: faker.helpers.arrayElement(Object.values(Role)),
+  role: faker.helpers.arrayElement(Object.values(UserRole)),
   authSource: faker.helpers.arrayElement(['local', 'oidc'] as const),
   disabled: faker.helpers.arrayElement([faker.datatype.boolean(), undefined]),
   canManageDashboardDefaults: faker.helpers.arrayElement([faker.datatype.boolean(), undefined]),
@@ -56,7 +56,7 @@ export const getPatchMeResponseMock = (
     undefined,
   ]),
   email: faker.helpers.arrayElement([faker.internet.email(), undefined]),
-  role: faker.helpers.arrayElement(Object.values(Role)),
+  role: faker.helpers.arrayElement(Object.values(UserRole)),
   authSource: faker.helpers.arrayElement(['local', 'oidc'] as const),
   disabled: faker.helpers.arrayElement([faker.datatype.boolean(), undefined]),
   canManageDashboardDefaults: faker.helpers.arrayElement([faker.datatype.boolean(), undefined]),

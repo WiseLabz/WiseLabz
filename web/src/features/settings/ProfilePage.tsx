@@ -69,7 +69,7 @@ export function ProfilePage() {
           </Field>
           <Field label={t('settings.profile.role')}>
             <div className="flex h-9.5 items-center">
-              <ToneTag tone={me?.role === 'operator' ? 'signal' : 'idle'} label={me?.role ?? '—'} />
+              <ToneTag tone={me?.role === 'admin' ? 'signal' : 'idle'} label={me?.role ?? '—'} />
             </div>
           </Field>
           <Field label={t('settings.profile.displayName')} htmlFor="profile-name">
