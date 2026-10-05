@@ -268,6 +268,7 @@ func (c *Checker) evaluateComplianceRule(ctx context.Context, connectorID string
 	}
 	findings := make([]*store.QualityFindingRecord, 0, len(matches))
 	var notificationCandidate *store.QualityFindingRecord
+	upserted := make([]*store.QualityFindingRecord, 0, len(matches))
 	refs := make([]store.EntityIdentityRef, 0, len(matches))
 	for _, entity := range matches {
 		ref := entity.ExternalID
@@ -285,6 +286,7 @@ func (c *Checker) evaluateComplianceRule(ctx context.Context, connectorID string
 		if err != nil {
 			return nil, err
 		}
+		upserted = append(upserted, finding)
 		if created != nil {
 			findings = append(findings, created)
 			if notificationCandidate == nil {
@@ -299,8 +301,18 @@ func (c *Checker) evaluateComplianceRule(ctx context.Context, connectorID string
 	}
 	// Persist each matching entity separately, but preserve the connector-level
 	// notification and broadcast cadence: one representative per rule/check.
-	if notificationCandidate != nil {
+	if notificationCandidate != nil && c.notifier != nil {
 		c.maybeNotify(ctx, notificationCandidate)
+		// Mark siblings as covered by that notification so later runs do not
+		// re-notify them one entity at a time.
+		for _, f := range upserted {
+			if f == notificationCandidate || (f.NotifiedSeverity != "" && severityRank[f.Severity] <= severityRank[f.NotifiedSeverity]) {
+				continue
+			}
+			if err := c.store.SetQualityFindingNotifiedSeverity(ctx, f.ID, f.Severity); err != nil {
+				slog.Error("failed to record finding notification", "finding", f.ID, "error", err)
+			}
+		}
 	}
 	if len(findings) > 1 {
 		findings = findings[:1]

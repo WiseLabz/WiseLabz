@@ -377,6 +377,14 @@ func TestComplianceFindingsStayPerEntityButNotifyOncePerRuleRun(t *testing.T) {
 	if notifier.calls != 1 {
 		t.Fatalf("notification calls=%d, want one per rule run", notifier.calls)
 	}
+	for i := 0; i < 3; i++ {
+		if err := checker.EvaluateRule(ctx, rule.ID); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if notifier.calls != 1 {
+		t.Fatalf("notification calls=%d after repeated runs, want 1", notifier.calls)
+	}
 }
 
 func TestQualityThresholdBoundaries(t *testing.T) {

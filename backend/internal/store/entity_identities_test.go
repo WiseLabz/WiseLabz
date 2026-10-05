@@ -201,3 +201,38 @@ func TestReconcileEntityIdentitiesConcurrent(t *testing.T) {
 		t.Fatalf("active members=%d identities=%d, want %d and 1", count, distinct, len(cluster))
 	}
 }
+
+func TestReconcileEntityIdentitiesSplitMemberDoesNotJoinMergeLoser(t *testing.T) {
+	ctx := context.Background()
+	for i := 0; i < 5; i++ {
+		s := newDocTestStore(t)
+		var ids []string
+		for _, n := range []string{"c1", "c2", "c3"} {
+			c := ConnectorRecord{Name: n, Type: "test", Category: "virtualization", URL: "https://" + n + ".test"}
+			if err := s.CreateConnector(ctx, &c); err != nil {
+				t.Fatal(err)
+			}
+			ids = append(ids, c.ID)
+		}
+		mk := func(c, ref string) EntityMemberRecord {
+			return EntityMemberRecord{ConnectorID: c, Kind: "vm", Ref: ref, Name: ref}
+		}
+		a, m1, m2 := mk(ids[0], "a"), mk(ids[1], "m1"), mk(ids[2], "m2")
+		if err := s.ReconcileEntityIdentities(ctx, [][]EntityMemberRecord{{a}, {m1, m2}}); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.ReconcileEntityIdentities(ctx, [][]EntityMemberRecord{{a, m1}, {m2}}); err != nil {
+			t.Fatal(err)
+		}
+		idOf := func(ref string) string {
+			var id string
+			if err := s.db.QueryRowContext(ctx, `SELECT entity_id FROM entity_members WHERE ref = ? AND gone_at IS NULL`, ref).Scan(&id); err != nil {
+				t.Fatal(err)
+			}
+			return id
+		}
+		if idOf("a") != idOf("m1") || idOf("m2") == idOf("a") {
+			t.Fatalf("run %d: split member landed in the wrong identity: a=%s m1=%s m2=%s", i, idOf("a"), idOf("m1"), idOf("m2"))
+		}
+	}
+}

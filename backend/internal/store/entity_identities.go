@@ -165,7 +165,21 @@ func resolveExistingIdentity(id string, entities map[string]entityIdentity) stri
 
 func chooseIdentityIDs(clusters [][]EntityMemberRecord, members map[string]storedIdentityMember, entities map[string]entityIdentity) (map[string]string, map[string]string) {
 	chosen, mergedInto, used := make(map[string]string, len(clusters)), map[string]string{}, map[string]bool{}
-	for _, cluster := range clusters {
+	// Clusters holding currently observed members claim existing IDs before
+	// clusters made only of returning (gone) members.
+	order := make([]int, 0, len(clusters))
+	for i, cluster := range clusters {
+		if clusterHasActiveMember(cluster, members) {
+			order = append(order, i)
+		}
+	}
+	for i, cluster := range clusters {
+		if !clusterHasActiveMember(cluster, members) {
+			order = append(order, i)
+		}
+	}
+	for _, ci := range order {
+		cluster := clusters[ci]
 		candidates := map[string]bool{}
 		for _, member := range cluster {
 			if old, ok := members[identityMemberKey(member.ConnectorID, member.Kind, member.Ref)]; ok {
@@ -174,7 +188,7 @@ func chooseIdentityIDs(clusters [][]EntityMemberRecord, members map[string]store
 		}
 		ids := make([]string, 0, len(candidates))
 		for id := range candidates {
-			if id != "" && !used[id] {
+			if id != "" && !used[id] && mergedInto[id] == "" {
 				ids = append(ids, id)
 			}
 		}
@@ -195,6 +209,15 @@ func chooseIdentityIDs(clusters [][]EntityMemberRecord, members map[string]store
 		chosen[clusterKey(cluster)] = id
 	}
 	return chosen, mergedInto
+}
+
+func clusterHasActiveMember(cluster []EntityMemberRecord, members map[string]storedIdentityMember) bool {
+	for _, m := range cluster {
+		if old, ok := members[identityMemberKey(m.ConnectorID, m.Kind, m.Ref)]; ok && !old.goneAt.Valid {
+			return true
+		}
+	}
+	return false
 }
 
 func buildIdentityDiff(clusters [][]EntityMemberRecord, chosen map[string]string, oldMembers map[string]storedIdentityMember, entities map[string]entityIdentity, preserve map[string]bool, now string) (map[string]entityIdentity, map[string]bool, map[string]storedIdentityMember, []storedIdentityMember) {
@@ -431,7 +454,14 @@ func clusterKey(cluster []EntityMemberRecord) string {
 // member history is removed by the entity_members foreign-key cascade.
 func (s *Store) DeleteExpiredEntityIdentities(ctx context.Context, cutoff string) (int64, error) {
 	var removed int64
+	entityIdentityReconcileMu.Lock()
+	defer entityIdentityReconcileMu.Unlock()
 	err := s.WithinTransaction(ctx, func(tx *Store) error {
+		if s.driver == "postgres" {
+			if _, err := tx.db.ExecContext(ctx, `SELECT pg_advisory_xact_lock(731058502)`); err != nil {
+				return fmt.Errorf("lock entity identity purge: %w", err)
+			}
+		}
 		predicate := `(gone_at IS NOT NULL AND gone_at < ?) OR (merged_into IS NOT NULL AND last_seen_at < ?)`
 		if _, err := tx.db.ExecContext(ctx, `DELETE FROM entity_members WHERE entity_id IN (SELECT id FROM entities WHERE `+predicate+`)`, cutoff, cutoff); err != nil {
 			return fmt.Errorf("delete expired entity members: %w", err)

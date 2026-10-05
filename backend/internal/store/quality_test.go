@@ -110,10 +110,14 @@ func TestResolveQualityFindingsForRuleExceptEntitiesBatchesAndResolvesLegacy(t *
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	c := seedQualityConnector(t, s, "entity-resolution")
+	rule := &ComplianceRuleRecord{Name: "r", ConnectorType: "test", EntityKind: "vm", Conditions: `[]`, Severity: "warning", Title: "r", Enabled: true}
+	if err := s.CreateComplianceRule(ctx, rule); err != nil {
+		t.Fatal(err)
+	}
 	for _, finding := range []*QualityFindingRecord{
-		{ConnectorID: c.ID, RuleID: "rule", CheckType: "compliance", EntityKind: "vm", EntityRef: "keep", Severity: "warning", Title: "keep"},
-		{ConnectorID: c.ID, RuleID: "rule", CheckType: "compliance", EntityKind: "vm", EntityRef: "gone", Severity: "warning", Title: "gone"},
-		{ConnectorID: c.ID, RuleID: "rule", CheckType: "compliance", Severity: "warning", Title: "legacy"},
+		{ConnectorID: c.ID, RuleID: rule.ID, CheckType: "compliance", EntityKind: "vm", EntityRef: "keep", Severity: "warning", Title: "keep"},
+		{ConnectorID: c.ID, RuleID: rule.ID, CheckType: "compliance", EntityKind: "vm", EntityRef: "gone", Severity: "warning", Title: "gone"},
+		{ConnectorID: c.ID, RuleID: rule.ID, CheckType: "compliance", Severity: "warning", Title: "legacy"},
 	} {
 		if err := s.UpsertQualityFinding(ctx, finding); err != nil {
 			t.Fatal(err)
@@ -124,14 +128,14 @@ func TestResolveQualityFindingsForRuleExceptEntitiesBatchesAndResolvesLegacy(t *
 	for i := 1; i < len(keep); i++ {
 		keep[i] = EntityIdentityRef{Kind: "vm", Ref: fmt.Sprintf("unused-%d", i)}
 	}
-	if err := s.ResolveQualityFindingsForRuleExceptEntities(ctx, c.ID, "rule", keep); err != nil {
+	if err := s.ResolveQualityFindingsForRuleExceptEntities(ctx, c.ID, rule.ID, keep); err != nil {
 		t.Fatal(err)
 	}
 	var open, resolved int
-	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM quality_findings WHERE connector_id=? AND rule_id='rule' AND status='open'`, c.ID).Scan(&open); err != nil {
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM quality_findings WHERE connector_id=? AND rule_id=? AND status='open'`, c.ID, rule.ID).Scan(&open); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM quality_findings WHERE connector_id=? AND rule_id='rule' AND status='resolved'`, c.ID).Scan(&resolved); err != nil {
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM quality_findings WHERE connector_id=? AND rule_id=? AND status='resolved'`, c.ID, rule.ID).Scan(&resolved); err != nil {
 		t.Fatal(err)
 	}
 	if open != 1 || resolved != 2 {
