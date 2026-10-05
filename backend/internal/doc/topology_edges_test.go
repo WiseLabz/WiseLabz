@@ -1,7 +1,11 @@
 package doc
 
 import (
+	"bytes"
 	"context"
+	"fmt"
+	"log/slog"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -514,8 +518,11 @@ func TestLabTopologyDrawsTypedEdgesAndVersionsOnChangeOnly(t *testing.T) {
 	}
 	docs, _, _ := s.ListAllDocs(ctx, labTopologyTitle, 0, 10)
 	cur, _ := s.GetDoc(ctx, docs[0].ID)
-	if !strings.Contains(cur.Content, topologyDocMarker+fp+" -->") {
-		t.Fatal("stored marker is stale after the typed-edge change")
+	if cur.TopologyFingerprint != fp {
+		t.Fatal("stored fingerprint is stale after the typed-edge change")
+	}
+	if strings.Contains(cur.Content, "wl:topology-edges") {
+		t.Fatalf("generated content carries a fingerprint comment:\n%s", cur.Content)
 	}
 	rebuild(t, e, host, proxy)
 	if n, _ := labDocVersions(t, s); n != base+1 {
@@ -584,5 +591,258 @@ func TestSameAsEdgesIndependentOfSyncOrder(t *testing.T) {
 		if got := sameAsPairs(t, s, ids...); !slices.Equal(got, want) {
 			t.Errorf("sync order %v: same_as = %v, want %v", perm, got, want)
 		}
+	}
+}
+
+func labDoc(t *testing.T, s *store.Store) *store.DocRecord {
+	t.Helper()
+	docs, _, err := s.ListAllDocs(context.Background(), labTopologyTitle, 0, 10)
+	if err != nil || len(docs) == 0 {
+		t.Fatalf("lab doc: %v (%d)", err, len(docs))
+	}
+	d, err := s.GetDoc(context.Background(), docs[0].ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return d
+}
+
+func TestLabTopologyFingerprintSurvivesUISaveWithoutRerender(t *testing.T) {
+	ctx := context.Background()
+	s, e, proxy, host := proxyDocFixture(t, "web-01")
+	if _, err := e.GenerateLabTopology(ctx); err != nil {
+		t.Fatal(err)
+	}
+	d := labDoc(t, s)
+	fp, _ := e.labTopologyFingerprint(ctx)
+	if d.TopologyFingerprint != fp {
+		t.Fatalf("fingerprint = %q, want %q", d.TopologyFingerprint, fp)
+	}
+	// A UI Save PUTs the served content back verbatim.
+	if err := s.UpdateDoc(ctx, d.ID, d.Content, nil); err != nil {
+		t.Fatal(err)
+	}
+	saved := labDoc(t, s)
+	base, _ := labDocVersions(t, s)
+
+	rebuild(t, e, host, proxy, host)
+	after := labDoc(t, s)
+	if n, _ := labDocVersions(t, s); n != base || after.CurrentVersion != saved.CurrentVersion {
+		t.Fatalf("a rebuild after a UI save re-rendered: versions %d->%d, rev %d->%d", base, n, saved.CurrentVersion, after.CurrentVersion)
+	}
+	if after.TopologyFingerprint != fp {
+		t.Fatalf("fingerprint lost by the save: %q", after.TopologyFingerprint)
+	}
+}
+
+func TestLabTopologyFingerprintOnlyUpdateAddsNoVersion(t *testing.T) {
+	ctx := context.Background()
+	s, e, proxy, host := proxyDocFixture(t, "web-01")
+	if _, err := e.GenerateLabTopology(ctx); err != nil {
+		t.Fatal(err)
+	}
+	d := labDoc(t, s)
+	base, _ := labDocVersions(t, s)
+	fp, _ := e.labTopologyFingerprint(ctx)
+	// Edges the diagram does not draw changed meanwhile: same drawing, new hash.
+	if err := s.SetDocTopologyFingerprint(ctx, d.ID, "stale", nil, 0); err != nil {
+		t.Fatal(err)
+	}
+	rebuild(t, e, proxy, host)
+	after := labDoc(t, s)
+	if n, _ := labDocVersions(t, s); n != base || after.CurrentVersion != d.CurrentVersion || after.Content != d.Content {
+		t.Fatalf("fingerprint-only update changed content/versions: %d->%d rev %d->%d", base, n, d.CurrentVersion, after.CurrentVersion)
+	}
+	if after.TopologyFingerprint != fp {
+		t.Fatalf("fingerprint = %q, want %q", after.TopologyFingerprint, fp)
+	}
+}
+
+func TestLabTopologyDropsLegacyMarkerWithoutNewVersion(t *testing.T) {
+	ctx := context.Background()
+	s, e, proxy, host := proxyDocFixture(t, "web-01")
+	if _, err := e.GenerateLabTopology(ctx); err != nil {
+		t.Fatal(err)
+	}
+	d := labDoc(t, s)
+	// Content as the earlier code stored it: marker line appended, no column.
+	legacy := d.Content + "\n" + topologyDocMarker + "0123abcd -->\n"
+	if err := s.UpdateDoc(ctx, d.ID, legacy, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetDocTopologyFingerprint(ctx, d.ID, "", nil, 0); err != nil {
+		t.Fatal(err)
+	}
+	before := labDoc(t, s)
+	base, _ := labDocVersions(t, s)
+
+	rebuild(t, e, proxy, host)
+	after := labDoc(t, s)
+	if strings.Contains(after.Content, "wl:topology-edges") {
+		t.Fatalf("legacy marker survived regeneration:\n%s", after.Content)
+	}
+	if n, _ := labDocVersions(t, s); n != base || after.CurrentVersion != before.CurrentVersion {
+		t.Fatalf("legacy cleanup created a version: %d->%d rev %d->%d", base, n, before.CurrentVersion, after.CurrentVersion)
+	}
+	if after.TopologyFingerprint == "" {
+		t.Fatal("fingerprint not recorded")
+	}
+}
+
+var hostileLabels = []string{
+	`a"] ... ["`,
+	"a\"]\n click zz call alert()\n q[\" (proxy_host)",
+	`proxies_to :80"] click n1 href "javascript:alert(1)" ["|` + "\nx",
+	`x"] --> evil["y`,
+	"a\r\nb c\u0085d",
+	"```\n<!-- wl:gen key=\"x\" h=\"y\" -->",
+	"%% directive\n%%{init: {}}%%",
+	"<img src=x onerror=alert(1)> | [a] #quot; #35;",
+}
+
+func TestMermaidLabelNeutralisesHostileInput(t *testing.T) {
+	for _, in := range hostileLabels {
+		got := mermaidLabel(in)
+		if len(got) < 2 || got[0] != '"' || got[len(got)-1] != '"' {
+			t.Fatalf("mermaidLabel(%q) = %q, want a quoted string", in, got)
+		}
+		inner := got[1 : len(got)-1]
+		if strings.ContainsAny(inner, "\"<>[]|`%\r\n\t \u0085") {
+			t.Errorf("mermaidLabel(%q) = %q keeps a structural character", in, got)
+		}
+		if strings.Contains(inner, "#") && !regexp.MustCompile(`^(?:[^#]|#(?:quot|lt|gt|\d+);)*$`).MatchString(inner) {
+			t.Errorf("mermaidLabel(%q) = %q has a bare #", in, got)
+		}
+	}
+	if got := mermaidLabel(`say "hi"`); got != `"say #quot;hi#quot;"` {
+		t.Errorf("quotes: %q", got)
+	}
+}
+
+func TestRenderLabMermaidHostileNamesKeepExpectedNodesAndEdges(t *testing.T) {
+	var entities []labEntity
+	for i, h := range hostileLabels {
+		entities = append(entities, labEntity{ConnectorID: "c1", Entity: connector.SnapshotEntity{Kind: "vm", Name: h, ExternalID: fmt.Sprint(i)}})
+	}
+	typed := []store.TopologyEdge{{
+		SrcConnectorID: "c1", SrcKind: "proxy_host", SrcName: hostileLabels[0], SrcRef: "p",
+		DstConnectorID: "c1", DstKind: "vm", DstName: hostileLabels[3], DstRef: "3",
+		Kind: store.TopologyEdgeProxiesTo, Detail: hostileLabels[2],
+	}}
+	links := []labLink{{A: entities[0], B: entities[1], Reason: "IP address"}}
+	out := renderLabMermaid(entities, links, typed)
+
+	nodeRe := regexp.MustCompile(`^    n[0-9a-f]+\["[^"]*"\]$`)
+	edgeRe := regexp.MustCompile(`^    n[0-9a-f]+ -->\|(?:"[^"]*"|[A-Za-z ]+)\| n[0-9a-f]+$`)
+	var nodes, edges int
+	for i, line := range strings.Split(strings.TrimRight(out, "\n"), "\n") {
+		switch {
+		case i == 0 && line == "graph LR":
+		case nodeRe.MatchString(line):
+			nodes++
+		case edgeRe.MatchString(line):
+			edges++
+		default:
+			t.Fatalf("line %d is not a plain node or edge: %q\n%s", i, line, out)
+		}
+	}
+	// One node per entity plus the proxy_host placeholder; one same-reason
+	// link plus the typed edge.
+	if nodes != len(entities)+1 || edges != 2 {
+		t.Fatalf("nodes=%d edges=%d, want %d and 2\n%s", nodes, edges, len(entities)+1, out)
+	}
+	if strings.Contains(out, "```") {
+		t.Fatalf("diagram can leave its fence:\n%s", out)
+	}
+}
+
+// ipGroupSnaps builds two connectors whose entities all share one IP: na
+// entities on A and nb on B, plus one strong (external-ID) pair that also
+// shares the IP and sorts last, to prove strong matches are never capped.
+func ipGroupSnaps(na, nb int) []connector.ServiceSnapshot {
+	mk := func(prefix string, n int) []connector.SnapshotEntity {
+		out := make([]connector.SnapshotEntity, n)
+		for i := range out {
+			id := fmt.Sprintf("%s%03d", prefix, i)
+			out[i] = connector.SnapshotEntity{Kind: "vm", Name: id, ExternalID: id, IP: "10.9.9.9"}
+		}
+		return out
+	}
+	a, b := mk("a", na), mk("b", nb)
+	a = append(a, connector.SnapshotEntity{Kind: "db", Name: "zz-strong", ExternalID: "zz-strong", IP: "10.9.9.9"})
+	b = append(b, connector.SnapshotEntity{Kind: "db", Name: "zz-strong", ExternalID: "zz-strong", IP: "10.9.9.9"})
+	return []connector.ServiceSnapshot{{ServiceName: "A", Entities: a}, {ServiceName: "B", Entities: b}}
+}
+
+func rebuildIPGroup(t *testing.T, snaps []connector.ServiceSnapshot, order []int) (*store.Store, []string, []string) {
+	t.Helper()
+	s := newEngineTestStore(t)
+	e := NewEngine(s)
+	ids := make([]string, len(snaps))
+	for i, snap := range snaps {
+		ids[i] = seedEngineConnectorWithEntities(t, s, snap.ServiceName, "networking", "t"+snap.ServiceName, nil)
+	}
+	for _, i := range order {
+		addTopologySnapshot(t, s, ids[i], snaps[i])
+		rebuild(t, e, ids[i])
+	}
+	return s, ids, sameAsPairs(t, s, ids...)
+}
+
+func TestSameAsIPOnlyFanOutIsCappedDeterministically(t *testing.T) {
+	// 26+26 entities (25 IP-only + 1 strong each side) share the IP: over the cap.
+	over := ipGroupSnaps(25, 25)
+	s, ids, first := rebuildIPGroup(t, over, []int{0, 1})
+	e := NewEngine(s)
+	// Re-syncing either side, in either order, must keep the very same subset.
+	for _, order := range [][]int{{1}, {0}, {1, 0}, {0, 1}} {
+		for _, i := range order {
+			rebuild(t, e, ids[i])
+		}
+		if got := sameAsPairs(t, s, ids...); !slices.Equal(got, first) {
+			t.Fatalf("capped same_as set changed after re-syncing %v: %d pairs, was %d", order, len(got), len(first))
+		}
+	}
+	full := 26 * 26 // every cross pair, the strong one included
+	if len(first) >= full {
+		t.Fatalf("over the cap: %d pairs, want fewer than the complete %d", len(first), full)
+	}
+	if !slices.Contains(first, "zz-strong|zz-strong") {
+		t.Fatal("strong match dropped by the IP cap")
+	}
+	if len(first) < 2 {
+		t.Fatalf("capped set should keep a subset, got %d pairs", len(first))
+	}
+}
+
+func TestSameAsIPOnlyCompleteUpToCap(t *testing.T) {
+	// 25+25 entities (24 IP-only + 1 strong each side) share the IP: exactly at the cap.
+	at := ipGroupSnaps(24, 24)
+	for _, order := range [][]int{{0, 1}, {1, 0}} {
+		_, _, got := rebuildIPGroup(t, at, order)
+		if want := 25 * 25; len(got) != want {
+			t.Fatalf("order %v: %d same_as pairs at the cap, want the complete %d", order, len(got), want)
+		}
+	}
+}
+
+func TestSameAsIPOnlyCapLogsOncePerRebuild(t *testing.T) {
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn})))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+
+	snaps := ipGroupSnaps(30, 30)
+	s := newEngineTestStore(t)
+	e := NewEngine(s)
+	ids := make([]string, len(snaps))
+	for i, snap := range snaps {
+		ids[i] = seedEngineConnectorWithEntities(t, s, snap.ServiceName, "networking", "t"+snap.ServiceName, nil)
+		addTopologySnapshot(t, s, ids[i], snap)
+	}
+	buf.Reset()
+	rebuild(t, e, ids[0])
+	if n := strings.Count(buf.String(), "same_as IP-only matches capped"); n != 1 {
+		t.Fatalf("warn logged %d times for one rebuild, want 1:\n%s", n, buf.String())
 	}
 }

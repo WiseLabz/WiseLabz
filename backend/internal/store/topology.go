@@ -79,6 +79,10 @@ const topologyEdgesAffectedBy = `connector_id = ?
 	OR (kind = '` + TopologyEdgeSameAs + `' AND (src_connector_id = ? OR dst_connector_id = ?))
 	OR (kind = '` + TopologyEdgeResolvesTo + `' AND dst_connector_id = ?`
 
+// topologyInsertBatch is the rows per INSERT: 14 columns each keeps a
+// statement far below both databases' bind-parameter limits.
+const topologyInsertBatch = 200
+
 // ReplaceTopologyEdgesForConnector atomically rebuilds the edges affected by
 // connectorID's rebuild (see topologyEdgesAffectedBy), so entities that
 // disappeared from either side don't leave stale edges behind. An edge with
@@ -114,23 +118,28 @@ func (s *Store) ReplaceTopologyEdgesPreserving(ctx context.Context, connectorID 
 			return fmt.Errorf("delete topology edges: %w", err)
 		}
 		now := time.Now().UTC().Format(time.RFC3339)
-		for i := range edges {
-			e := edges[i]
-			if e.ID == "" {
-				e.ID = uuid.New().String()
+		// Multi-row inserts: a shared IP can mean thousands of rows per rebuild.
+		for start := 0; start < len(edges); start += topologyInsertBatch {
+			end := min(start+topologyInsertBatch, len(edges))
+			rows := make([]string, 0, end-start)
+			args := make([]any, 0, (end-start)*14)
+			for i := start; i < end; i++ {
+				e := edges[i]
+				if e.ID == "" {
+					e.ID = uuid.New().String()
+				}
+				if e.CreatedAt == "" {
+					e.CreatedAt = now
+				}
+				if e.ConnectorID == "" {
+					e.ConnectorID = connectorID
+				}
+				rows = append(rows, "("+placeholders(14)+")")
+				args = append(args, e.ID, e.ConnectorID, e.SrcConnectorID, e.SrcKind, e.SrcName, e.SrcRef,
+					e.DstConnectorID, e.DstKind, e.DstName, e.DstRef, e.Kind, e.Source, e.Detail, e.CreatedAt)
 			}
-			if e.CreatedAt == "" {
-				e.CreatedAt = now
-			}
-			if e.ConnectorID == "" {
-				e.ConnectorID = connectorID
-			}
-			if _, err := tx.db.ExecContext(ctx, `
-				INSERT INTO topology_edges (`+topologyEdgeColumns+`)
-				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-			`, e.ID, e.ConnectorID, e.SrcConnectorID, e.SrcKind, e.SrcName, e.SrcRef,
-				e.DstConnectorID, e.DstKind, e.DstName, e.DstRef, e.Kind, e.Source, e.Detail, e.CreatedAt); err != nil {
-				return fmt.Errorf("insert topology edge: %w", err)
+			if _, err := tx.db.ExecContext(ctx, `INSERT INTO topology_edges (`+topologyEdgeColumns+`) VALUES `+strings.Join(rows, ", "), args...); err != nil {
+				return fmt.Errorf("insert topology edges: %w", err)
 			}
 		}
 		return nil

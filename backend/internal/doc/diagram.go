@@ -16,12 +16,12 @@ func renderMermaid(centerEntity string, links []EntityLink) string {
 	b.WriteString("graph LR\n")
 
 	centerID := "n" + shortHash("center|"+centerEntity)
-	fmt.Fprintf(&b, "    %s[%q]\n", centerID, centerEntity)
+	fmt.Fprintf(&b, "    %s[%s]\n", centerID, mermaidLabel(centerEntity))
 
 	for _, l := range links {
 		nodeID := entityNodeID(l.ConnectorID, l.Entity)
 		label := fmt.Sprintf("%s (%s)", l.Entity.Name, l.Entity.Kind)
-		fmt.Fprintf(&b, "    %s[%q]\n", nodeID, label)
+		fmt.Fprintf(&b, "    %s[%s]\n", nodeID, mermaidLabel(label))
 		fmt.Fprintf(&b, "    %s -->|%s| %s\n", centerID, l.Reason, nodeID)
 	}
 
@@ -72,7 +72,7 @@ func renderLabMermaid(entities []labEntity, links []labLink, typed []store.Topol
 		if !seen[id] {
 			seen[id] = true
 			label := fmt.Sprintf("%s (%s)", le.Entity.Name, le.Entity.Kind)
-			fmt.Fprintf(&b, "    %s[%q]\n", id, label)
+			fmt.Fprintf(&b, "    %s[%s]\n", id, mermaidLabel(label))
 		}
 		return id
 	}
@@ -94,7 +94,7 @@ func renderLabMermaid(entities []labEntity, links []labLink, typed []store.Topol
 		id := "n" + shortHash(connectorID+"|"+kind+"|"+ref)
 		if !seen[id] {
 			seen[id] = true
-			fmt.Fprintf(&b, "    %s[%q]\n", id, fmt.Sprintf("%s (%s)", name, kind))
+			fmt.Fprintf(&b, "    %s[%s]\n", id, mermaidLabel(fmt.Sprintf("%s (%s)", name, kind)))
 		}
 		return id
 	}
@@ -109,7 +109,7 @@ func renderLabMermaid(entities []labEntity, links []labLink, typed []store.Topol
 		if e.Detail != "" {
 			label += " :" + e.Detail
 		}
-		line := fmt.Sprintf("    %s -->|%q| %s\n", src, label, dst)
+		line := fmt.Sprintf("    %s -->|%s| %s\n", src, mermaidLabel(label), dst)
 		if !drawn[line] {
 			drawn[line] = true
 			b.WriteString(line)
@@ -127,4 +127,41 @@ var drawnEdgeKinds = map[string]bool{
 	store.TopologyEdgeResolvesTo: true,
 	store.TopologyEdgeProxiesTo:  true,
 	store.TopologyEdgeRunsOn:     true,
+}
+
+// mermaidReplacer neutralises everything that could end a quoted Mermaid
+// label, start another statement, or leave the surrounding code fence. Go's %q
+// is not enough: Mermaid has no backslash escape, so a label ends at the
+// first raw quote. Mermaid entity codes (#quot;, #35;) render as the original
+// character, so the text still reads the same. '#' is escaped first-class so
+// input cannot forge an entity code, and '%' so "%%" can never start a
+// Mermaid comment/directive.
+var mermaidReplacer = strings.NewReplacer(
+	"#", "#35;",
+	`"`, "#quot;",
+	"<", "#lt;",
+	">", "#gt;",
+	"[", "#91;",
+	"]", "#93;",
+	"|", "#124;",
+	"`", "#96;",
+	"%", "#37;",
+	"\r", " ",
+	"\n", " ",
+	"\t", " ",
+)
+
+// mermaidLabel returns s as a quoted Mermaid label that cannot break out of
+// its string, forge nodes or edges, or add click/href directives, whatever a
+// connector put in a name, kind or detail. Output is always a single line.
+func mermaidLabel(s string) string {
+	s = strings.Map(func(r rune) rune {
+		// Other line breaks (VT, FF, NEL, U+2028/9) and C0/C1 controls act as
+		// line ends for some parsers; flatten them like \n.
+		if r < 0x20 || (r >= 0x7f && r < 0xa0) || r == 0x2028 || r == 0x2029 {
+			return ' '
+		}
+		return r
+	}, s)
+	return `"` + mermaidReplacer.Replace(s) + `"`
 }

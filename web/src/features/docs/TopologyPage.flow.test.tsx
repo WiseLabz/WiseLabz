@@ -3,7 +3,8 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import type { TopologyGraph } from '../../api/model';
-import '../../i18n';
+import i18n from '../../i18n';
+import { LANGUAGES } from '../../i18n/languages';
 import { TopologyPage } from './TopologyPage';
 
 // Unlike TopologyPage.test.tsx this suite renders the real React Flow, so the
@@ -146,5 +147,53 @@ describe('TopologyPage with the real React Flow', () => {
     expect(
       region.querySelector('.react-flow__edge[aria-label="Host Alpha runs_on · vmid 7 VM Beta"]')
     ).not.toBeNull();
+  });
+
+  it('gives each node a single tab stop, and Enter/click on it navigates', async () => {
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <MemoryRouter initialEntries={['/topology']}>
+          <Routes>
+            <Route path="/topology" element={<TopologyPage />} />
+            <Route path="/entities/:id" element={<p>Entity page</p>} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+    const region = screen.getByRole('region', { name: 'Topology graph' });
+    await screen.findByText('runs_on · vmid 7');
+    // The wrapper must not be focusable: only the inner link is a tab stop.
+    region
+      .querySelectorAll<HTMLElement>('.react-flow__node')
+      .forEach((node) => expect(node.getAttribute('tabindex')).toBeNull());
+    expect(region.querySelectorAll('.react-flow__node a[href]').length).toBe(2);
+    const link = region.querySelector<HTMLAnchorElement>('a[aria-label="Host Alpha"]')!;
+    expect(link.getAttribute('href')).toBe('/entities/identity-a');
+    // Keyboard activation of a link is a click; the link is what navigates.
+    fireEvent.click(link);
+    expect(await screen.findByText('Entity page')).toBeInTheDocument();
+  });
+
+  it('builds the edge label from the translated template', async () => {
+    i18n.addResourceBundle('pt-BR', 'translation', await LANGUAGES['pt-BR']!.load!());
+    await i18n.changeLanguage('pt-BR');
+    try {
+      render(
+        <QueryClientProvider client={new QueryClient()}>
+          <MemoryRouter initialEntries={['/topology']}>
+            <Routes>
+              <Route path="/topology" element={<TopologyPage />} />
+            </Routes>
+          </MemoryRouter>
+        </QueryClientProvider>
+      );
+      const region = screen.getByRole('region', { name: 'Grafo da topologia' });
+      await screen.findByText('runs_on · vmid 7');
+      expect(
+        region.querySelector('.react-flow__edge[aria-label="Host Alpha → VM Beta: runs_on · vmid 7"]')
+      ).not.toBeNull();
+    } finally {
+      await i18n.changeLanguage('en');
+    }
   });
 });

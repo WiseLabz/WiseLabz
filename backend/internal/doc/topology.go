@@ -148,15 +148,16 @@ func (e *Engine) loadOtherSnapshots(ctx context.Context, connectorID string, all
 
 func isDNSEntity(kind string) bool { return kind == "dns_record" || kind == "dns_rewrite" }
 
-// topologyDocMarker prefixes the edge fingerprint embedded in the generated
-// Lab Topology doc, so a later rebuild can tell whether the doc reflects the
-// stored edges.
+// topologyDocMarker prefixes the edge fingerprint comment that earlier
+// versions embedded in the generated Lab Topology doc. The fingerprint now
+// lives in docs.topology_fingerprint; the marker is only recognised so legacy
+// content can be cleaned (see StripTopologyMarker).
 const topologyDocMarker = "<!-- wl:topology-edges:"
 
 // refreshTopologyDoc regenerates the generated Lab Topology doc when it
 // exists and its recorded edge fingerprint differs from the stored edges. It
 // never fails the caller: errors are logged, and the next rebuild retries
-// because the doc still carries the old fingerprint.
+// because the doc still records the old fingerprint.
 func (e *Engine) refreshTopologyDoc(ctx context.Context) {
 	if err := e.regenerateTopologyDocIfStale(ctx); err != nil {
 		slog.Error("topology doc regeneration failed", "error", logsafe.Sanitize(err.Error()))
@@ -191,7 +192,7 @@ func (e *Engine) regenerateTopologyDocIfStale(ctx context.Context) error {
 		if err != nil {
 			return fmt.Errorf("get topology doc: %w", err)
 		}
-		if strings.Contains(full.Content, topologyDocMarker+fingerprint+" -->") {
+		if full.TopologyFingerprint == fingerprint {
 			return nil
 		}
 		if _, err := e.generateLabTopology(ctx, true); err != nil {

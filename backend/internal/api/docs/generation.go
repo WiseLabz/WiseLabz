@@ -3,7 +3,6 @@ package docs
 import (
 	"net/http"
 
-	"github.com/WiseLabz/wiselabz/internal/doc"
 	"github.com/WiseLabz/wiselabz/internal/httputil"
 )
 
@@ -44,7 +43,6 @@ func (h *Handler) GenerateTopology(w http.ResponseWriter, r *http.Request) {
 		httputil.Errorf(w, err)
 		return
 	}
-	result.Content = doc.StripTopologyMarker(result.Content)
 	h.SyncEmbeddings(r.Context(), result.DocID, result.Content)
 	httputil.JSON(w, http.StatusOK, result)
 }

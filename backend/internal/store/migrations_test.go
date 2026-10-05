@@ -58,6 +58,9 @@ func TestRunMigrations(t *testing.T) {
 	if !hasColumn(t, db, "sqlite", "topology_edges", "detail") {
 		t.Fatal("topology edge detail migration schema is incomplete")
 	}
+	if !hasColumn(t, db, "sqlite", "docs", "topology_fingerprint") {
+		t.Fatal("docs.topology_fingerprint missing")
+	}
 	var disabledRules int
 	if err := db.QueryRow("SELECT COUNT(*) FROM compliance_rules WHERE enabled = 0").Scan(&disabledRules); err != nil || disabledRules != 5 {
 		t.Errorf("disabled seeded compliance rules = %d, %v; want 5, nil", disabledRules, err)
@@ -101,6 +104,12 @@ func TestRunMigrations(t *testing.T) {
 	var open int
 	if err := db.QueryRow(`SELECT COUNT(*) FROM quality_findings WHERE connector_id=? AND rule_id='same-rule' AND status='open'`, connector.ID).Scan(&open); err != nil || open != 2 {
 		t.Fatalf("open entity findings before downgrade = %d, %v; want 2", open, err)
+	}
+	if err := RunMigrationsDown(db, "sqlite", logger); err != nil {
+		t.Fatalf("downgrade doc topology fingerprint migration: %v", err)
+	}
+	if hasColumn(t, db, "sqlite", "docs", "topology_fingerprint") || !hasColumn(t, db, "sqlite", "topology_edges", "detail") {
+		t.Fatal("000060 rollback must drop only docs.topology_fingerprint")
 	}
 	if err := RunMigrationsDown(db, "sqlite", logger); err != nil {
 		t.Fatalf("downgrade topology edge detail migration: %v", err)
@@ -160,6 +169,9 @@ func TestRunMigrationsPostgres(t *testing.T) {
 	if !hasColumn(t, db, "postgres", "topology_edges", "detail") {
 		t.Fatal("postgres topology edge detail migration schema is incomplete")
 	}
+	if !hasColumn(t, db, "postgres", "docs", "topology_fingerprint") {
+		t.Fatal("postgres docs.topology_fingerprint missing")
+	}
 
 	// Verify idempotent — running again should be no-op
 	if err := RunMigrations(db, "postgres", logger); err != nil {
@@ -191,6 +203,12 @@ func TestRunMigrationsDown(t *testing.T) {
 
 	if !hasColumn(t, db, "sqlite", "compliance_rules", "related") {
 		t.Fatal("compliance_rules.related missing")
+	}
+	if err := RunMigrationsDown(db, "sqlite", logger); err != nil {
+		t.Fatalf("rollback doc topology fingerprint migration: %v", err)
+	}
+	if hasColumn(t, db, "sqlite", "docs", "topology_fingerprint") || !hasColumn(t, db, "sqlite", "topology_edges", "detail") {
+		t.Fatal("000060 rollback must drop only docs.topology_fingerprint")
 	}
 	if err := RunMigrationsDown(db, "sqlite", logger); err != nil {
 		t.Fatalf("rollback topology edge detail migration: %v", err)
@@ -547,6 +565,12 @@ func TestRunMigrationsDown(t *testing.T) {
 		t.Fatal("entity identity tables missing after migration reapply")
 	}
 	if err := RunMigrationsDown(db, "sqlite", logger); err != nil {
+		t.Fatalf("rollback doc topology fingerprint before edge detail: %v", err)
+	}
+	if hasColumn(t, db, "sqlite", "docs", "topology_fingerprint") {
+		t.Fatal("docs.topology_fingerprint remains after 000060 rollback")
+	}
+	if err := RunMigrationsDown(db, "sqlite", logger); err != nil {
 		t.Fatalf("rollback topology edge detail before identity migration: %v", err)
 	}
 	if hasColumn(t, db, "sqlite", "topology_edges", "detail") || !attachmentTableExists(t, db, "sqlite", "entities") {
@@ -893,6 +917,12 @@ func TestRunMigrationsDownPostgres(t *testing.T) {
 	}
 	if !hasColumn(t, db, "postgres", "entities", "merged_at") {
 		t.Fatal("entities.merged_at missing")
+	}
+	if err := RunMigrationsDown(db, "postgres", logger); err != nil {
+		t.Fatalf("rollback doc topology fingerprint migration: %v", err)
+	}
+	if hasColumn(t, db, "postgres", "docs", "topology_fingerprint") || !hasColumn(t, db, "postgres", "topology_edges", "detail") {
+		t.Fatal("000060 rollback must drop only docs.topology_fingerprint")
 	}
 	if err := RunMigrationsDown(db, "postgres", logger); err != nil {
 		t.Fatalf("rollback topology edge detail migration: %v", err)

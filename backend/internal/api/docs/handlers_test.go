@@ -1,6 +1,7 @@
 package docs
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -591,7 +592,7 @@ func TestListHidesLabWideDocsAndTotalsFromNonAdmins(t *testing.T) {
 	}
 }
 
-func TestServedDocHidesTopologyMarker(t *testing.T) {
+func TestServedDocHidesLegacyTopologyMarker(t *testing.T) {
 	h := newTestHandler(t)
 	ctx := context.Background()
 	marker := "<!-- wl:topology-edges:0123abcd -->"
@@ -627,5 +628,57 @@ func TestServedDocHidesTopologyMarker(t *testing.T) {
 	stored, err := h.Store.GetDoc(ctx, d.ID)
 	if err != nil || !strings.Contains(stored.Content, marker) {
 		t.Fatalf("stored content lost the marker: %v %q", err, stored.Content)
+	}
+}
+
+// A generated Lab Topology doc keeps its edge fingerprint outside the content:
+// no endpoint serves a marker, and a UI Save (which PUTs the served content
+// back) cannot lose the fingerprint.
+func TestGeneratedTopologyDocHasNoMarkerAndSaveKeepsFingerprint(t *testing.T) {
+	h := newTestHandler(t)
+	ctx := context.Background()
+	res, err := h.DocEngine.GenerateLabTopology(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stored, err := h.Store.GetDoc(ctx, res.DocID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fp := stored.TopologyFingerprint
+	if fp == "" || strings.Contains(stored.Content, "wl:topology-edges") {
+		t.Fatalf("fingerprint %q must be stored beside marker-free content:\n%s", fp, stored.Content)
+	}
+
+	save := func(base int) *httptest.ResponseRecorder {
+		body, _ := json.Marshal(map[string]any{"content": stored.Content + "\nedited\n", "baseVersion": base})
+		req := httptest.NewRequest(http.MethodPut, "/api/docs/"+res.DocID, bytes.NewReader(body))
+		req.SetPathValue("id", res.DocID)
+		req = req.WithContext(auth.ContextWithUser(req.Context(), "admin", true))
+		rr := httptest.NewRecorder()
+		h.Save(rr, req)
+		return rr
+	}
+	if rr := save(stored.CurrentVersion); rr.Code != http.StatusOK {
+		t.Fatalf("save: %d %s", rr.Code, rr.Body.String())
+	}
+	// A stale base version yields the 409 body (the current doc).
+	conflict := save(stored.CurrentVersion)
+	if conflict.Code != http.StatusConflict || strings.Contains(conflict.Body.String(), "wl:topology-edges") {
+		t.Fatalf("409: status %d, body %s", conflict.Code, conflict.Body.String())
+	}
+
+	vreq := httptest.NewRequest(http.MethodGet, "/api/docs/"+res.DocID+"/versions", nil)
+	vreq.SetPathValue("id", res.DocID)
+	vreq = vreq.WithContext(auth.ContextWithUser(vreq.Context(), "admin", true))
+	vrr := httptest.NewRecorder()
+	h.Versions(vrr, vreq)
+	if vrr.Code != http.StatusOK || strings.Contains(vrr.Body.String(), "wl:topology-edges") {
+		t.Fatalf("versions list: status %d, body %s", vrr.Code, vrr.Body.String())
+	}
+
+	after, err := h.Store.GetDoc(ctx, res.DocID)
+	if err != nil || after.TopologyFingerprint != fp {
+		t.Fatalf("fingerprint after save = %q (%v), want %q", after.TopologyFingerprint, err, fp)
 	}
 }

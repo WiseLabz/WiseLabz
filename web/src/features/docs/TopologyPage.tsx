@@ -80,12 +80,7 @@ function GraphNode({ data }: NodeProps<FlowNode>) {
   const handles = (
     <>
       <Handle type="target" position={Position.Left} isConnectable={false} className="!opacity-0" />
-      <Handle
-        type="source"
-        position={Position.Right}
-        isConnectable={false}
-        className="!opacity-0"
-      />
+      <Handle type="source" position={Position.Right} isConnectable={false} className="!opacity-0" />
     </>
   );
   if (!data.href) {
@@ -216,7 +211,8 @@ function flowNodes(
 function flowEdges(
   relations: TopologyEdge[],
   traced: Set<string>,
-  names: Map<string, string>
+  names: Map<string, string>,
+  describe: (source: string, label: string, target: string) => string
 ): FlowEdge[] {
   const pairs = new Map<string, TopologyEdge[]>();
   for (const edge of relations) {
@@ -239,10 +235,16 @@ function flowEdges(
       target: first.target,
       type: 'topology',
       label,
-      ariaLabel: `${names.get(first.source) ?? first.source} ${label} ${names.get(first.target) ?? first.target}`,
+      ariaLabel: describe(
+        names.get(first.source) ?? first.source,
+        label,
+        names.get(first.target) ?? first.target
+      ),
       data: { label, parts, highlighted, showLabel },
       style: {
-        stroke: highlighted ? 'var(--color-ink)' : edgeColors[first.kind] || edgeColors.dependency,
+        stroke: highlighted
+          ? 'var(--color-ink)'
+          : edgeColors[first.kind] || edgeColors.dependency,
         strokeWidth: highlighted ? 3.5 : 1.5,
         strokeDasharray: first.kind === 'same_as' ? '5 4' : undefined,
       },
@@ -362,22 +364,21 @@ export function TopologyPage() {
     },
     [docsTree.data]
   );
-  const nodeKey = useMemo(
-    () =>
-      items
-        .map((item) => item.id)
-        .sort()
-        .join('\0'),
-    [items]
-  );
+  const nodeKey = useMemo(() => items.map((item) => item.id).sort().join('\0'), [items]);
   const positions = useMemo(() => layoutPositions(items, relations), [items, relations]);
   const nodes = useMemo(
     () => flowNodes(items, positions, getNodeHref),
     [items, positions, getNodeHref]
   );
   const edges = useMemo(
-    () => flowEdges(relations, highlights, new Map(items.map((item) => [item.id, item.name]))),
-    [relations, highlights, items]
+    () =>
+      flowEdges(
+        relations,
+        highlights,
+        new Map(items.map((item) => [item.id, item.name])),
+        (source, label, target) => t('docs.topology.edgeLabel', { source, label, target })
+      ),
+    [relations, highlights, items, t]
   );
   const connectorList = (connectorsQuery.data ?? []) as Array<{ id: string; name: string }>;
   // The kind list comes from the response without the kind filter, so picking
@@ -402,8 +403,7 @@ export function TopologyPage() {
       ).sort(),
     [kindSource]
   );
-  const kindOptions =
-    kind && !knownKinds.includes(kind) ? [...knownKinds, kind].sort() : knownKinds;
+  const kindOptions = kind && !knownKinds.includes(kind) ? [...knownKinds, kind].sort() : knownKinds;
   const updateFilter = (key: string, value: string) => {
     const next = new URLSearchParams(searchParams);
     if (value) next.set(key, value);
@@ -651,6 +651,7 @@ export function TopologyPage() {
                 fitViewOptions={{ padding: 0.2 }}
                 nodesDraggable={false}
                 nodesConnectable={false}
+                nodesFocusable={false}
                 elementsSelectable
                 proOptions={{ hideAttribution: true }}
               >
