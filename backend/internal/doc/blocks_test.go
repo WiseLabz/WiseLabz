@@ -91,3 +91,11 @@ func TestStripMarkersMatchesPlainRender(t *testing.T) {
 		t.Fatalf("StripMarkers(fresh) = %q, want %q", got, r.plain())
 	}
 }
+
+func TestStripMarkersRemovesTopologyFingerprint(t *testing.T) {
+	body := "# Lab Topology\n\n```mermaid\ngraph LR\n```\n"
+	got := StripMarkers(body + "\n" + topologyDocMarker + "0123abcd -->\n")
+	if got != body {
+		t.Fatalf("StripMarkers = %q, want %q", got, body)
+	}
+}

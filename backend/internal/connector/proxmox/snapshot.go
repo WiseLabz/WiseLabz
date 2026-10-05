@@ -57,6 +57,9 @@ func (p *Connector) Fetch(ctx context.Context, config map[string]any) (*connecto
 	totalStorage := 0
 
 	for _, node := range nodesResponse.Data {
+		if wantEntities {
+			entities = append(entities, connector.SnapshotEntity{Kind: "node", Name: node.Node, ExternalID: node.Node})
+		}
 		nr := &nodeResult{section: fmt.Sprintf("## Node: %s\n\n- **Status**: %s\n- **Memory**: %d MB\n\n",
 			node.Node, node.Status, node.MaxMem/bytesPerMB)}
 		dependencies = append(dependencies, connector.ServiceDependency{Kind: "host", Name: node.Node})
@@ -161,6 +164,7 @@ func (p *Connector) fetchVMs(ctx context.Context, node string, wantEntities bool
 		}
 		attrs := map[string]any{"status": vm.Status}
 		if wantEntities {
+			attrs["node"] = node
 			attrs["tags"] = parseTags(vm.Tags)
 			if vm.Status == "running" {
 				ent.IP = p.fetchQemuIP(ctx, node, vm.VMID)
@@ -207,6 +211,7 @@ func (p *Connector) fetchContainers(ctx context.Context, node string, wantEntiti
 		}
 		attrs := map[string]any{"status": ct.Status}
 		if wantEntities {
+			attrs["node"] = node
 			attrs["tags"] = parseTags(ct.Tags)
 			if ct.Status == "running" {
 				ent.IP = p.fetchLxcIP(ctx, node, ct.VMID)

@@ -31,6 +31,7 @@ import (
 	syshandler "github.com/WiseLabz/wiselabz/internal/api/system"
 	tmplhandler "github.com/WiseLabz/wiselabz/internal/api/templates"
 	timelinehandler "github.com/WiseLabz/wiselabz/internal/api/timeline"
+	topologyhandler "github.com/WiseLabz/wiselabz/internal/api/topology"
 	"github.com/WiseLabz/wiselabz/internal/auth"
 	"github.com/WiseLabz/wiselabz/internal/config"
 	"github.com/WiseLabz/wiselabz/internal/doc"
@@ -173,6 +174,7 @@ func newRouterDeps(cfg Config) routerDeps {
 		chatH:       chathandler.NewHandler(cfg.Store, settingH.AIConfig, cfg.AIRegistry, cfg.EmbedRegistry),
 		complianceH: compliancehandler.NewHandler(cfg.Store, ruleEvaluator),
 		reportH:     reporthandler.NewHandler(cfg.Store, cfg.ReportManager),
+		topologyH:   &topologyhandler.Handler{Store: cfg.Store},
 		mcpH: internalmcp.NewHTTPHandler(internalmcp.Deps{
 			Store: cfg.Store, AIConfig: settingH.AIConfig, Embed: cfg.EmbedRegistry,
 		}),

@@ -25,6 +25,7 @@ import (
 	syshandler "github.com/WiseLabz/wiselabz/internal/api/system"
 	tmplhandler "github.com/WiseLabz/wiselabz/internal/api/templates"
 	timelinehandler "github.com/WiseLabz/wiselabz/internal/api/timeline"
+	topologyhandler "github.com/WiseLabz/wiselabz/internal/api/topology"
 	"github.com/WiseLabz/wiselabz/internal/auth"
 )
 
@@ -53,6 +54,7 @@ type routerDeps struct {
 	savedViewH  *savedviewhandler.Handler
 	chatH       *chathandler.Handler
 	complianceH *compliancehandler.Handler
+	topologyH   *topologyhandler.Handler
 	reportH     *reporthandler.Handler
 	mcpH        http.Handler
 }
@@ -90,6 +92,10 @@ func mountAPIRoutes(r chi.Router, d routerDeps) {
 		r.Delete("/journal/{id}", d.timelineH.Delete)
 		mountDashboardRoutes(r, d)
 		mountReportRoutes(r, d)
+		r.Route("/topology", func(r chi.Router) {
+			r.Get("/graph", d.topologyH.Graph)
+			r.Get("/path", d.topologyH.Path)
+		})
 
 		// --- Instance-admin-only routes ---
 		r.Group(func(r chi.Router) {

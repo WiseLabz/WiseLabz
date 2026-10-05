@@ -55,6 +55,9 @@ func TestRunMigrations(t *testing.T) {
 		!hasColumn(t, db, "sqlite", "quality_findings", "entity_kind") || !hasColumn(t, db, "sqlite", "quality_findings", "entity_ref") {
 		t.Fatal("entity identity migration schema is incomplete")
 	}
+	if !hasColumn(t, db, "sqlite", "topology_edges", "detail") {
+		t.Fatal("topology edge detail migration schema is incomplete")
+	}
 	var disabledRules int
 	if err := db.QueryRow("SELECT COUNT(*) FROM compliance_rules WHERE enabled = 0").Scan(&disabledRules); err != nil || disabledRules != 5 {
 		t.Errorf("disabled seeded compliance rules = %d, %v; want 5, nil", disabledRules, err)
@@ -98,6 +101,12 @@ func TestRunMigrations(t *testing.T) {
 	var open int
 	if err := db.QueryRow(`SELECT COUNT(*) FROM quality_findings WHERE connector_id=? AND rule_id='same-rule' AND status='open'`, connector.ID).Scan(&open); err != nil || open != 2 {
 		t.Fatalf("open entity findings before downgrade = %d, %v; want 2", open, err)
+	}
+	if err := RunMigrationsDown(db, "sqlite", logger); err != nil {
+		t.Fatalf("downgrade topology edge detail migration: %v", err)
+	}
+	if hasColumn(t, db, "sqlite", "topology_edges", "detail") {
+		t.Fatal("topology edge detail migration remains after downgrade")
 	}
 	if err := RunMigrationsDown(db, "sqlite", logger); err != nil {
 		t.Fatalf("downgrade entity identity migration: %v", err)
@@ -148,6 +157,9 @@ func TestRunMigrationsPostgres(t *testing.T) {
 			t.Errorf("table %s does not exist or is not queryable: %v", table, err)
 		}
 	}
+	if !hasColumn(t, db, "postgres", "topology_edges", "detail") {
+		t.Fatal("postgres topology edge detail migration schema is incomplete")
+	}
 
 	// Verify idempotent — running again should be no-op
 	if err := RunMigrations(db, "postgres", logger); err != nil {
@@ -181,10 +193,21 @@ func TestRunMigrationsDown(t *testing.T) {
 		t.Fatal("compliance_rules.related missing")
 	}
 	if err := RunMigrationsDown(db, "sqlite", logger); err != nil {
+		t.Fatalf("rollback topology edge detail migration: %v", err)
+	}
+	if hasColumn(t, db, "sqlite", "topology_edges", "detail") {
+		t.Fatal("topology edge detail column remains after 000059 rollback")
+	}
+	entitiesPresent := attachmentTableExists(t, db, "sqlite", "entities")
+	entityKindPresent := hasColumn(t, db, "sqlite", "quality_findings", "entity_kind")
+	if !entitiesPresent || !entityKindPresent {
+		t.Fatalf("entity identity schema was rolled back with 000059 (entities=%v entity_kind=%v)", entitiesPresent, entityKindPresent)
+	}
+	if err := RunMigrationsDown(db, "sqlite", logger); err != nil {
 		t.Fatal(err)
 	}
 	if attachmentTableExists(t, db, "sqlite", "entities") || hasColumn(t, db, "sqlite", "quality_findings", "entity_kind") {
-		t.Fatal("entity identity migration remains after rollback")
+		t.Fatal("entity identity migration remains after 000058 rollback")
 	}
 	if !hasColumn(t, db, "sqlite", "compliance_rules", "related") {
 		t.Fatal("000057 compliance_rules.related missing after rolling back 000058")
@@ -522,6 +545,12 @@ func TestRunMigrationsDown(t *testing.T) {
 	}
 	if !attachmentTableExists(t, db, "sqlite", "entities") || !attachmentTableExists(t, db, "sqlite", "entity_members") {
 		t.Fatal("entity identity tables missing after migration reapply")
+	}
+	if err := RunMigrationsDown(db, "sqlite", logger); err != nil {
+		t.Fatalf("rollback topology edge detail before identity migration: %v", err)
+	}
+	if hasColumn(t, db, "sqlite", "topology_edges", "detail") || !attachmentTableExists(t, db, "sqlite", "entities") {
+		t.Fatal("000059 rollback must drop edge detail while preserving identities")
 	}
 	if err := RunMigrationsDown(db, "sqlite", logger); err != nil {
 		t.Fatalf("rollback entity identities before legacy migration checks: %v", err)
@@ -864,6 +893,17 @@ func TestRunMigrationsDownPostgres(t *testing.T) {
 	}
 	if !hasColumn(t, db, "postgres", "entities", "merged_at") {
 		t.Fatal("entities.merged_at missing")
+	}
+	if err := RunMigrationsDown(db, "postgres", logger); err != nil {
+		t.Fatalf("rollback topology edge detail migration: %v", err)
+	}
+	if hasColumn(t, db, "postgres", "topology_edges", "detail") {
+		t.Fatal("topology edge detail column remains after 000059 rollback")
+	}
+	entitiesPresent := attachmentTableExists(t, db, "postgres", "entities")
+	entityKindPresent := hasColumn(t, db, "postgres", "quality_findings", "entity_kind")
+	if !entitiesPresent || !entityKindPresent {
+		t.Fatalf("entity identity schema was rolled back with 000059 (entities=%v entity_kind=%v)", entitiesPresent, entityKindPresent)
 	}
 	if err := RunMigrationsDown(db, "postgres", logger); err != nil {
 		t.Fatalf("rollback entity_identities: %v", err)

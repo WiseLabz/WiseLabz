@@ -71,6 +71,22 @@ func TestTopologyPathTool(t *testing.T) {
 			t.Fatalf("out = %+v, want no path for key limited to one connector", out)
 		}
 	})
+
+	t.Run("key covering every needed connector still finds the path", func(t *testing.T) {
+		var out pathOut
+		h.callTool(restrictedCtx(full, []string{a, b, c}), t, "topology_path", args, &out)
+		if !out.Found || out.Hops != 2 {
+			t.Fatalf("out = %+v, want the 3-step path", out)
+		}
+	})
+
+	t.Run("key naming a connector the user cannot view does not widen access", func(t *testing.T) {
+		var out pathOut
+		h.callTool(restrictedCtx(partial, []string{a, b, c}), t, "topology_path", args, &out)
+		if out.Found || len(out.Path) != 0 {
+			t.Fatalf("out = %+v, want no path: the key restriction only narrows the user's grants", out)
+		}
+	})
 }
 
 func TestShortestTopologyPathPrefersFewestHops(t *testing.T) {
