@@ -580,3 +580,39 @@ func TestEntityDetailCollapsesEdgesAcrossMembersOfOneEntity(t *testing.T) {
 		t.Fatalf("same relation from two members of one entity should list once: %v", n)
 	}
 }
+
+func TestEntityDetailKeepsDistinctRefLessFarEndsSeparate(t *testing.T) {
+	t.Parallel()
+	app := newTestApp(t)
+	userID, token := app.user(t, "viewer")
+	c := entityTestConnector(t, app, "alpha")
+	app.connectorGrant(t, userID, c.ID, "viewer")
+	id := newID()
+	seedEntity(t, app, id, "s", "vm", c.ID, "vm-ref", "web01", "")
+	edge := func(name string) store.TopologyEdge {
+		return store.TopologyEdge{SrcConnectorID: c.ID, SrcKind: "vm", SrcName: "web01", SrcRef: "vm-ref", DstConnectorID: c.ID, DstKind: "dns_record", DstName: name, DstRef: "", Kind: "dependency", Source: "x", Detail: "d"}
+	}
+	if err := app.Store.ReplaceTopologyEdgesForConnector(context.Background(), c.ID, []store.TopologyEdge{edge("a.lab.test"), edge("b.lab.test"), edge("a.lab.test")}); err != nil {
+		t.Fatal(err)
+	}
+	if n := decodeEntity(t, getEntity(t, app, id, token))["neighbors"].([]any); len(n) != 2 {
+		t.Fatalf("two distinct ref-less far ends must stay separate (and a repeat collapse): %v", n)
+	}
+}
+
+func TestEntityDetailIgnoresServicePlaceholderMemberWhenNaming(t *testing.T) {
+	t.Parallel()
+	app := newTestApp(t)
+	userID, token := app.user(t, "viewer")
+	c := entityTestConnector(t, app, "alpha")
+	app.connectorGrant(t, userID, c.ID, "viewer")
+	id := newID()
+	// The connector placeholder sorts first by name but is not a real member,
+	// exactly as the topology graph treats it.
+	seedEntity(t, app, id, "stored", "service", c.ID, c.ID, "A placeholder", "")
+	seedEntityMember(t, app, id, c.ID, "vm", "vm-ref", "zeta", "")
+	body := decodeEntity(t, getEntity(t, app, id, token))
+	if body["name"] != "zeta" || body["kind"] != "vm" {
+		t.Fatalf("name = %v kind = %v, want zeta/vm", body["name"], body["kind"])
+	}
+}

@@ -75,6 +75,13 @@ func (l EntityLabel) Text() string {
 	return l.Ref
 }
 
+// IsServicePlaceholder reports whether the member is a connector's own service
+// placeholder (kind service, ref = connector ID), which never names an entity
+// that has a real member.
+func (l EntityLabel) IsServicePlaceholder() bool {
+	return l.Kind == "service" && l.Ref == l.ConnectorID
+}
+
 // Better reports whether l should name the entity instead of o. Priority:
 // a member with a non-empty name, then the lowest display text, connector ID,
 // kind and ref. Callers pass only active, visible members, so the choice never

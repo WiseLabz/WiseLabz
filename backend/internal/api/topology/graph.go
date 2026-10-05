@@ -92,13 +92,13 @@ func (h *Handler) Graph(w http.ResponseWriter, r *http.Request) {
 	identityNames := map[string]graphNode{}
 	bestLabel := map[string]store.EntityLabel{}
 	for _, m := range members {
-		if m.Kind == "service" && m.Ref == m.ConnectorID {
+		label := store.EntityLabel{ConnectorID: m.ConnectorID, Kind: m.Kind, Ref: m.Ref, Name: m.Name}
+		if label.IsServicePlaceholder() {
 			continue
 		}
 		if kindFilter != "" && m.Kind != kindFilter {
 			continue
 		}
-		label := store.EntityLabel{ConnectorID: m.ConnectorID, Kind: m.Kind, Ref: m.Ref, Name: m.Name}
 		if current, ok := bestLabel[m.EntityID]; !ok || label.Better(current) {
 			bestLabel[m.EntityID] = label
 			identityNames[m.EntityID] = graphNode{ID: m.EntityID, Type: "identity", Name: label.Text(), Kind: m.Kind}

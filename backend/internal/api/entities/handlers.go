@@ -187,20 +187,23 @@ func (h *Handler) detail(ctx context.Context, id string, allowed, viewable []str
 		}
 	}
 	// Name and kind come from the best active visible member (see
-	// store.EntityLabel.Better); only when none is active do gone members name it.
-	pool := visible
-	if len(active) > 0 {
-		pool = nil
+	// store.EntityLabel.Better), skipping connector service placeholders like
+	// the topology graph does; only when none qualifies do the rest name it.
+	// (The graph's kind filter narrows its pool further; the page has none.)
+	var best store.EntityLabel
+	found := false
+	for _, pass := range []func(store.EntityMemberDetail) bool{
+		func(m store.EntityMemberDetail) bool { return m.GoneAt == "" && !entityLabel(m).IsServicePlaceholder() },
+		func(m store.EntityMemberDetail) bool { return m.GoneAt == "" },
+		func(store.EntityMemberDetail) bool { return true },
+	} {
 		for _, m := range visible {
-			if m.GoneAt == "" {
-				pool = append(pool, m)
+			if l := entityLabel(m); pass(m) && (!found || l.Better(best)) {
+				best, found = l, true
 			}
 		}
-	}
-	best := entityLabel(pool[0])
-	for _, m := range pool[1:] {
-		if l := entityLabel(m); l.Better(best) {
-			best = l
+		if found {
+			break
 		}
 	}
 	out.Kind, out.Name, out.Gone = best.Kind, best.Text(), len(active) == 0
@@ -222,7 +225,8 @@ func entityLabel(m store.EntityMemberDetail) store.EntityLabel {
 
 // edges lists typed neighbours and IP relations. Edges are stored once per
 // owning connector, so identical logical edges are collapsed; the store orders
-// rows deterministically and the first of each duplicate wins.
+// rows deterministically and the first of each duplicate wins. Duplicates are
+// removed after the store's row cap, so they can use up part of it.
 func (h *Handler) edges(ctx context.Context, id string, active []store.EntityMemberKey, viewable []string, out *detail) error {
 	edges, err := h.Store.ListEntityEdges(ctx, active, viewable, maxEdges)
 	if err != nil {
@@ -260,7 +264,11 @@ func endpointKey(e store.EntityEdgeEndpoint) string {
 	if e.EntityID != "" {
 		return "entity:" + e.EntityID
 	}
-	return strings.Join([]string{e.ConnectorID, e.Kind, e.Ref}, "\x00")
+	ref := e.Ref
+	if ref == "" {
+		ref = "name:" + e.Name // ref-less endpoints are identified by name, as in the graph
+	}
+	return strings.Join([]string{e.ConnectorID, e.Kind, ref}, "\x00")
 }
 
 func toEndpoint(e store.EntityEdgeEndpoint, self string) endpoint {
