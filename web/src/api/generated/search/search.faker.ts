@@ -67,6 +67,11 @@ export const getGetEntitiesIdResponseMock = (
   members: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(
     () => ({
       connectorId: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      connectorName: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      docId: faker.helpers.arrayElement([
+        faker.string.alpha({ length: { min: 10, max: 20 } }),
+        undefined,
+      ]),
       kind: faker.string.alpha({ length: { min: 10, max: 20 } }),
       ref: faker.string.alpha({ length: { min: 10, max: 20 } }),
       name: faker.string.alpha({ length: { min: 10, max: 20 } }),
@@ -83,12 +88,14 @@ export const getGetEntitiesIdResponseMock = (
         kind: faker.string.alpha({ length: { min: 10, max: 20 } }),
         name: faker.string.alpha({ length: { min: 10, max: 20 } }),
         ref: faker.string.alpha({ length: { min: 10, max: 20 } }),
+        entityId: faker.helpers.arrayElement([faker.string.uuid(), undefined]),
       },
       to: {
         connectorId: faker.string.alpha({ length: { min: 10, max: 20 } }),
         kind: faker.string.alpha({ length: { min: 10, max: 20 } }),
         name: faker.string.alpha({ length: { min: 10, max: 20 } }),
         ref: faker.string.alpha({ length: { min: 10, max: 20 } }),
+        entityId: faker.helpers.arrayElement([faker.string.uuid(), undefined]),
       },
       reason: faker.string.alpha({ length: { min: 10, max: 20 } }),
     })
@@ -101,12 +108,14 @@ export const getGetEntitiesIdResponseMock = (
         kind: faker.string.alpha({ length: { min: 10, max: 20 } }),
         name: faker.string.alpha({ length: { min: 10, max: 20 } }),
         ref: faker.string.alpha({ length: { min: 10, max: 20 } }),
+        entityId: faker.helpers.arrayElement([faker.string.uuid(), undefined]),
       },
       to: {
         connectorId: faker.string.alpha({ length: { min: 10, max: 20 } }),
         kind: faker.string.alpha({ length: { min: 10, max: 20 } }),
         name: faker.string.alpha({ length: { min: 10, max: 20 } }),
         ref: faker.string.alpha({ length: { min: 10, max: 20 } }),
+        entityId: faker.helpers.arrayElement([faker.string.uuid(), undefined]),
       },
     })
   ),

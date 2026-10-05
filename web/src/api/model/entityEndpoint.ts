@@ -12,4 +12,6 @@ export interface EntityEndpoint {
   kind: string;
   name: string;
   ref: string;
+  /** Another entity the caller can open that this endpoint belongs to. Omitted for this entity and for endpoints without an active identity. */
+  entityId?: string;
 }

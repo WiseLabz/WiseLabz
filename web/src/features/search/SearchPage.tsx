@@ -162,7 +162,13 @@ export function SearchPage() {
                     >
                       <Link
                         className="text-sm text-accent-secondary-bright"
-                        to={`/entities/${encodeURIComponent(hit.entityId)}`}
+                        to={
+                          hit.entityId
+                            ? `/entities/${encodeURIComponent(hit.entityId)}`
+                            : hit.docId
+                              ? `/docs/${encodeURIComponent(hit.docId)}`
+                              : `/services/${encodeURIComponent(hit.connectorId)}`
+                        }
                       >
                         {hit.name}
                       </Link>

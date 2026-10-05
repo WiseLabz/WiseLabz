@@ -47,6 +47,9 @@ export const ptBR: Catalog = {
     connectorFindings: 'Nos conectores que reportaram',
     runbooks: 'Runbooks',
     empty: 'Nenhum registro relacionado',
+    goneSince: 'Não é mais observada desde {{date}}',
+    connectorDoc: 'Documento do conector',
+    findingStatus: { open: 'aberto', resolved: 'resolvido' },
   },
   app: {
     tagline: 'Documentação sábia para o seu homelab',

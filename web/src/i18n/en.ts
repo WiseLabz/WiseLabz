@@ -36,6 +36,9 @@ export const en = {
     connectorFindings: 'On reporting connectors',
     runbooks: 'Runbooks',
     empty: 'No related records',
+    goneSince: 'No longer observed since {{date}}',
+    connectorDoc: 'Connector doc',
+    findingStatus: { open: 'open', resolved: 'resolved' },
   },
   app: {
     name: 'WiseLabz',

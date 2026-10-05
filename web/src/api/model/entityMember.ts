@@ -9,6 +9,9 @@
 
 export interface EntityMember {
   connectorId: string;
+  connectorName: string;
+  /** The connector's generated service doc, when one exists. */
+  docId?: string;
   kind: string;
   ref: string;
   name: string;

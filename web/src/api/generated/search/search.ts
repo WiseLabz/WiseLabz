@@ -158,7 +158,11 @@ export function useGetSearch<
 }
 
 /**
- * Returns 404 unless the caller can view at least one member connector. All connector-derived fields are filtered by viewer grants and API-key restrictions.
+ * Returns 404 unless the caller can view at least one member connector; a malformed id, an unknown id, a redirect loop and a missing grant all return the identical 404. Instance admins get no implicit access. All connector-derived fields are filtered by viewer grants and API-key restrictions.
+ *
+ * `kind` and `name` come from the first active visible member (a gone member only when none is active). `members` lists every visible member, active first, with `goneAt` on departed ones. `neighbors`, `relatedByIp`, `findings`, `onReportingConnectors` and `runbooks` only consider active visible members and are capped (200 edges, 50 findings, 100 runbook steps). `findings` and `onReportingConnectors` contain open findings only.
+ *
+ * `history` is derived from snapshot diffs: for each visible member connector the 30 most recent snapshots are compared pairwise, and at most 100 changes are returned, newest first. `at` is the fetch time of the newer snapshot of the pair, `old` the value in the older snapshot and `new` the value in the newer one.
  * @summary Get a visible entity identity and its related topology
  */
 export const getEntitiesId = (
