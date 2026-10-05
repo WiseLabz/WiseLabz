@@ -8,7 +8,7 @@
  */
 import { faker } from '@faker-js/faker';
 
-import type { SearchResults } from '../../model';
+import type { EntityDetail, SearchResults } from '../../model';
 
 export const getGetSearchResponseMock = (
   overrideResponse: Partial<Extract<SearchResults, object>> = {}
@@ -52,6 +52,160 @@ export const getGetSearchResponseMock = (
       aliases: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(
         () => faker.string.alpha({ length: { min: 10, max: 20 } })
       ),
+    })
+  ),
+  ...overrideResponse,
+});
+
+export const getGetEntitiesIdResponseMock = (
+  overrideResponse: Partial<Extract<EntityDetail, object>> = {}
+): EntityDetail => ({
+  id: faker.string.uuid(),
+  kind: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  name: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  gone: faker.datatype.boolean(),
+  members: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(
+    () => ({
+      connectorId: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      kind: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      ref: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      name: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      goneAt: faker.helpers.arrayElement([
+        faker.date.past().toISOString().slice(0, 19) + 'Z',
+        undefined,
+      ]),
+    })
+  ),
+  relatedByIp: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(
+    () => ({
+      from: {
+        connectorId: faker.string.alpha({ length: { min: 10, max: 20 } }),
+        kind: faker.string.alpha({ length: { min: 10, max: 20 } }),
+        name: faker.string.alpha({ length: { min: 10, max: 20 } }),
+        ref: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      },
+      to: {
+        connectorId: faker.string.alpha({ length: { min: 10, max: 20 } }),
+        kind: faker.string.alpha({ length: { min: 10, max: 20 } }),
+        name: faker.string.alpha({ length: { min: 10, max: 20 } }),
+        ref: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      },
+      reason: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    })
+  ),
+  neighbors: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(
+    () => ({
+      kind: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      from: {
+        connectorId: faker.string.alpha({ length: { min: 10, max: 20 } }),
+        kind: faker.string.alpha({ length: { min: 10, max: 20 } }),
+        name: faker.string.alpha({ length: { min: 10, max: 20 } }),
+        ref: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      },
+      to: {
+        connectorId: faker.string.alpha({ length: { min: 10, max: 20 } }),
+        kind: faker.string.alpha({ length: { min: 10, max: 20 } }),
+        name: faker.string.alpha({ length: { min: 10, max: 20 } }),
+        ref: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      },
+    })
+  ),
+  history: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(
+    () => ({
+      ...{
+        kind: faker.string.alpha({ length: { min: 10, max: 20 } }),
+        key: faker.string.alpha({ length: { min: 10, max: 20 } }),
+        name: faker.string.alpha({ length: { min: 10, max: 20 } }),
+        field: faker.string.alpha({ length: { min: 10, max: 20 } }),
+        change: faker.helpers.arrayElement(['added', 'removed', 'modified'] as const),
+        old: faker.helpers.arrayElement([{}, undefined]),
+        new: faker.helpers.arrayElement([{}, undefined]),
+      },
+      ...{
+        connectorId: faker.string.alpha({ length: { min: 10, max: 20 } }),
+        at: faker.date.past().toISOString().slice(0, 19) + 'Z',
+      },
+    })
+  ),
+  findings: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(
+    () => ({
+      id: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      connectorId: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      entityKind: faker.helpers.arrayElement([
+        faker.string.alpha({ length: { min: 10, max: 20 } }),
+        undefined,
+      ]),
+      entityRef: faker.helpers.arrayElement([
+        faker.string.alpha({ length: { min: 10, max: 20 } }),
+        undefined,
+      ]),
+      ruleId: faker.helpers.arrayElement([
+        faker.string.alpha({ length: { min: 10, max: 20 } }),
+        undefined,
+      ]),
+      checkType: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      severity: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      title: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      description: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      remediationLink: faker.helpers.arrayElement([
+        faker.string.alpha({ length: { min: 10, max: 20 } }),
+        undefined,
+      ]),
+      status: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      detectedCount: faker.number.int(),
+      firstDetectedAt: faker.date.past().toISOString().slice(0, 19) + 'Z',
+      lastSeenAt: faker.date.past().toISOString().slice(0, 19) + 'Z',
+      resolvedAt: faker.helpers.arrayElement([
+        faker.date.past().toISOString().slice(0, 19) + 'Z',
+        undefined,
+      ]),
+    })
+  ),
+  onReportingConnectors: Array.from(
+    { length: faker.number.int({ min: 1, max: 4 }) },
+    (_, i) => i + 1
+  ).map(() => ({
+    id: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    connectorId: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    entityKind: faker.helpers.arrayElement([
+      faker.string.alpha({ length: { min: 10, max: 20 } }),
+      undefined,
+    ]),
+    entityRef: faker.helpers.arrayElement([
+      faker.string.alpha({ length: { min: 10, max: 20 } }),
+      undefined,
+    ]),
+    ruleId: faker.helpers.arrayElement([
+      faker.string.alpha({ length: { min: 10, max: 20 } }),
+      undefined,
+    ]),
+    checkType: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    severity: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    title: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    description: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    remediationLink: faker.helpers.arrayElement([
+      faker.string.alpha({ length: { min: 10, max: 20 } }),
+      undefined,
+    ]),
+    status: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    detectedCount: faker.number.int(),
+    firstDetectedAt: faker.date.past().toISOString().slice(0, 19) + 'Z',
+    lastSeenAt: faker.date.past().toISOString().slice(0, 19) + 'Z',
+    resolvedAt: faker.helpers.arrayElement([
+      faker.date.past().toISOString().slice(0, 19) + 'Z',
+      undefined,
+    ]),
+  })),
+  runbooks: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(
+    () => ({
+      id: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      title: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      body: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      step: {
+        id: faker.string.alpha({ length: { min: 10, max: 20 } }),
+        title: faker.string.alpha({ length: { min: 10, max: 20 } }),
+        verb: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      },
     })
   ),
   ...overrideResponse,

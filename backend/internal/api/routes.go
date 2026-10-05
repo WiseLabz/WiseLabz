@@ -15,6 +15,7 @@ import (
 	connhandler "github.com/WiseLabz/wiselabz/internal/api/connectors"
 	dashhandler "github.com/WiseLabz/wiselabz/internal/api/dashboard"
 	dochandler "github.com/WiseLabz/wiselabz/internal/api/docs"
+	entityhandler "github.com/WiseLabz/wiselabz/internal/api/entities"
 	findinghandler "github.com/WiseLabz/wiselabz/internal/api/findings"
 	notifhandler "github.com/WiseLabz/wiselabz/internal/api/notifications"
 	reporthandler "github.com/WiseLabz/wiselabz/internal/api/reports"
@@ -47,6 +48,7 @@ type routerDeps struct {
 	alertH      *alerthandler.Handler
 	attentionH  *attentionhandler.Handler
 	findingH    *findinghandler.Handler
+	entityH     *entityhandler.Handler
 	notifH      *notifhandler.Handler
 	runbookH    *runbookhandler.Handler
 	dashH       *dashhandler.Handler

@@ -320,11 +320,7 @@ function PaletteBody() {
           group: 'entities',
           Icon: LayersIcon,
           run: (c) =>
-            c.navigate(
-              hit.docId
-                ? `/docs/${encodeURIComponent(hit.docId)}`
-                : `/services/${encodeURIComponent(hit.connectorId)}`
-            ),
+            c.navigate(`/entities/${encodeURIComponent(hit.entityId)}`),
         }))
       );
       items.push({

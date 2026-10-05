@@ -10,6 +10,8 @@ import (
 // changes, alerts, attention, runbooks, findings, notifications and saved
 // views. It must be called on an already-authenticated group.
 func mountWorkflowRoutes(r chi.Router, d routerDeps) {
+	r.Get("/entities/{id}", d.entityH.Get)
+
 	// changes/alerts/findings ARE connector-scoped (each row carries a
 	// NOT NULL connector FK), unlike templates/runbooks. Their
 	// mutations resolve the record's connector in-handler and check

@@ -135,6 +135,7 @@ describe('CommandPalette', () => {
         runbooks: [{ id: 'r', title: 'Restart safely', snippet: 'Procedure' }],
         entities: [
           {
+            entityId: 'entity-1',
             connectorId: 'c',
             connectorName: 'Gateway',
             docId: 'd',
@@ -166,7 +167,7 @@ describe('CommandPalette', () => {
       { query: { enabled: true } }
     );
     fireEvent.click(screen.getByRole('option', { name: /edge/ }));
-    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/docs/d'));
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/entities/entity-1'));
   });
   it('offers See all results even without top hits', async () => {
     render(

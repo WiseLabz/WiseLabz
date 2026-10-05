@@ -84,6 +84,9 @@ const ChatPage = lazy(() =>
 const SearchPage = lazy(() =>
   import('./features/search/SearchPage').then(({ SearchPage }) => ({ default: SearchPage }))
 );
+const EntityDetailPage = lazy(() =>
+  import('./features/entities/EntityDetailPage').then(({ EntityDetailPage }) => ({ default: EntityDetailPage }))
+);
 const JournalPage = lazy(() =>
   import('./features/journal/JournalPage').then(({ JournalPage }) => ({ default: JournalPage }))
 );
@@ -244,6 +247,7 @@ const router = createBrowserRouter([
       { path: 'changes', element: <ChangesPage /> },
       { path: 'journal', element: <JournalPage /> },
       { path: 'search', element: <SearchPage /> },
+      { path: 'entities/:id', element: <EntityDetailPage /> },
       { path: 'changes/:changeId', element: <ChangeDetailPage /> },
       { path: 'attention', element: <AttentionPage /> },
       { path: 'alerts', element: <AlertsPage /> },

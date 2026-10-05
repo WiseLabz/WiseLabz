@@ -58,12 +58,12 @@ describe('SearchPage', () => {
     HTMLElement.prototype.scrollIntoView = vi.fn();
     view.mockReturnValue({ data: results, isLoading: false, isError: false, refetch: vi.fn() });
   });
-  it('renders all groups and links entities to the generated doc', () => {
+  it('renders all groups and links entity hits to their identity page', () => {
     mount();
     expect(screen.getByRole('region', { name: 'Docs' })).toBeInTheDocument();
     expect(screen.getByRole('region', { name: 'Runbooks' })).toBeInTheDocument();
     expect(screen.getByRole('region', { name: 'Entities' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'router' })).toHaveAttribute('href', '/docs/d');
+    expect(screen.getByRole('link', { name: 'router' })).toHaveAttribute('href', '/entities/entity-1');
     expect(screen.getByText(/aa:bb:cc:dd:ee:ff/)).toHaveTextContent('dns.lab');
     fireEvent.click(screen.getByRole('link', { name: 'Recovery' }));
     const panel = screen.getByText('Runbook viewer r').parentElement!;

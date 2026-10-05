@@ -121,6 +121,27 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
+  /entities/{id}:
+    get:
+      tags: [search]
+      summary: Get a visible entity identity and its related topology
+      description: Returns 404 unless the caller can view at least one member connector. All connector-derived fields are filtered by viewer grants and API-key restrictions.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Visible entity details
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EntityDetail' }
+        '404':
+          description: Entity not found or not visible
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
   # ───────────────────────── auth ─────────────────────────
   /auth/providers:
     get:
@@ -4108,6 +4129,107 @@ components:
         kind: { type: string, enum: [dependency, same_as, contains, resolves_to, proxies_to, runs_on] }
         sourceLabel: { type: string }
         detail: { type: string }
+    EntityDetail:
+      type: object
+      required: [id, kind, name, gone, members, relatedByIp, neighbors, history, findings, onReportingConnectors, runbooks]
+      properties:
+        id: { type: string, format: uuid }
+        kind: { type: string }
+        name: { type: string }
+        gone: { type: boolean }
+        members:
+          type: array
+          items: { $ref: '#/components/schemas/EntityMember' }
+        relatedByIp:
+          type: array
+          items: { $ref: '#/components/schemas/EntityLink' }
+        neighbors:
+          type: array
+          items: { $ref: '#/components/schemas/EntityNeighbor' }
+        history:
+          type: array
+          items: { $ref: '#/components/schemas/EntityHistoryChange' }
+        findings:
+          type: array
+          items: { $ref: '#/components/schemas/EntityFinding' }
+        onReportingConnectors:
+          type: array
+          items: { $ref: '#/components/schemas/EntityFinding' }
+        runbooks:
+          type: array
+          items: { $ref: '#/components/schemas/EntityRunbook' }
+    EntityMember:
+      type: object
+      required: [connectorId, kind, ref, name]
+      properties:
+        connectorId: { type: string }
+        kind: { type: string }
+        ref: { type: string }
+        name: { type: string }
+        goneAt: { type: string, format: date-time }
+    EntityLink:
+      type: object
+      required: [from, to, reason]
+      properties:
+        from: { $ref: '#/components/schemas/EntityEndpoint' }
+        to: { $ref: '#/components/schemas/EntityEndpoint' }
+        reason: { type: string }
+    EntityNeighbor:
+      type: object
+      required: [kind, from, to]
+      properties:
+        kind: { type: string }
+        from: { $ref: '#/components/schemas/EntityEndpoint' }
+        to: { $ref: '#/components/schemas/EntityEndpoint' }
+    EntityEndpoint:
+      type: object
+      required: [connectorId, kind, name, ref]
+      properties:
+        connectorId: { type: string }
+        kind: { type: string }
+        name: { type: string }
+        ref: { type: string }
+    EntityHistoryChange:
+      allOf:
+        - $ref: '#/components/schemas/EntityChange'
+        - type: object
+          required: [connectorId, at]
+          properties:
+            connectorId: { type: string }
+            at: { type: string, format: date-time }
+    EntityFinding:
+      type: object
+      required: [id, connectorId, checkType, severity, title, description, status, detectedCount, firstDetectedAt, lastSeenAt]
+      properties:
+        id: { type: string }
+        connectorId: { type: string }
+        entityKind: { type: string }
+        entityRef: { type: string }
+        ruleId: { type: string }
+        checkType: { type: string }
+        severity: { type: string }
+        title: { type: string }
+        description: { type: string }
+        remediationLink: { type: string }
+        status: { type: string }
+        detectedCount: { type: integer }
+        firstDetectedAt: { type: string, format: date-time }
+        lastSeenAt: { type: string, format: date-time }
+        resolvedAt: { type: string, format: date-time }
+    EntityRunbook:
+      type: object
+      required: [id, title, body, step]
+      properties:
+        id: { type: string }
+        title: { type: string }
+        body: { type: string }
+        step:
+          type: object
+          required: [id, title, verb]
+          properties:
+            id: { type: string }
+            title: { type: string }
+            verb: { type: string }
     SearchResults:
       type: object
       required: [docs, runbooks, entities]

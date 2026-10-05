@@ -24,6 +24,19 @@ export const en = {
     limited:
       'Showing up to {{count}} results per group. Refine your search for more specific results.',
   },
+  entities: {
+    notFound: 'Entity not found',
+    loadError: 'Could not load this entity',
+    gone: 'This entity is no longer observed.',
+    members: 'Also seen as',
+    relatedByIp: 'Related by IP',
+    neighbors: 'Topology neighbors',
+    history: 'Attribute history',
+    findings: 'Findings',
+    connectorFindings: 'On reporting connectors',
+    runbooks: 'Runbooks',
+    empty: 'No related records',
+  },
   app: {
     name: 'WiseLabz',
     tagline: 'Wise homelab documentation',
