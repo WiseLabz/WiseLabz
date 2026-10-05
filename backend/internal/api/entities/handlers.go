@@ -64,6 +64,8 @@ type neighbor struct {
 	Kind string   `json:"kind"`
 	From endpoint `json:"from"`
 	To   endpoint `json:"to"`
+	// Detail is the edge's context (e.g. the proxy upstream), omitted when empty.
+	Detail string `json:"detail,omitempty"`
 }
 
 type change struct {
@@ -188,7 +190,7 @@ func (h *Handler) edges(ctx context.Context, id string, active []store.EntityMem
 		if e.Kind == store.TopologyEdgeSameAs && e.Source == "IP address" {
 			out.RelatedByIP = append(out.RelatedByIP, link{From: src, To: dst, Reason: e.Source})
 		} else {
-			out.Neighbors = append(out.Neighbors, neighbor{Kind: e.Kind, From: src, To: dst})
+			out.Neighbors = append(out.Neighbors, neighbor{Kind: e.Kind, From: src, To: dst, Detail: e.Detail})
 		}
 	}
 	return nil

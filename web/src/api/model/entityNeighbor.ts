@@ -12,4 +12,5 @@ export interface EntityNeighbor {
   kind: string;
   from: EntityEndpoint;
   to: EntityEndpoint;
+  detail?: string;
 }

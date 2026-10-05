@@ -4190,6 +4190,7 @@ components:
         kind: { type: string }
         from: { $ref: '#/components/schemas/EntityEndpoint' }
         to: { $ref: '#/components/schemas/EntityEndpoint' }
+        detail: { type: string }
     EntityEndpoint:
       type: object
       required: [connectorId, kind, name, ref]

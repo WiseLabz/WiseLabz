@@ -48,6 +48,7 @@ type EntityEdge struct {
 	Dst    EntityEdgeEndpoint
 	Kind   string
 	Source string
+	Detail string
 }
 
 // EntityRunbookStep is a runbook step that targets an entity member.
@@ -143,10 +144,12 @@ func (s *Store) ListEntityEdges(ctx context.Context, members []EntityMemberKey, 
 	srcPred, srcArgs := memberPredicate("e.src_connector_id", "e.src_kind", "e.src_ref", members)
 	dstPred, dstArgs := memberPredicate("e.dst_connector_id", "e.dst_kind", "e.dst_ref", members)
 	query := `SELECT e.src_connector_id, e.src_kind, e.src_name, e.src_ref, COALESCE(sm.entity_id, ''),
-			e.dst_connector_id, e.dst_kind, e.dst_name, e.dst_ref, COALESCE(dm.entity_id, ''), e.kind, e.source
+			e.dst_connector_id, e.dst_kind, e.dst_name, e.dst_ref, COALESCE(dm.entity_id, ''), e.kind, e.source, e.detail
 		FROM topology_edges e
 		LEFT JOIN entity_members sm ON sm.connector_id = e.src_connector_id AND sm.kind = e.src_kind AND sm.ref = e.src_ref AND sm.gone_at IS NULL
+			AND sm.entity_id IN (SELECT id FROM entities WHERE merged_into IS NULL)
 		LEFT JOIN entity_members dm ON dm.connector_id = e.dst_connector_id AND dm.kind = e.dst_kind AND dm.ref = e.dst_ref AND dm.gone_at IS NULL
+			AND dm.entity_id IN (SELECT id FROM entities WHERE merged_into IS NULL)
 		WHERE e.src_connector_id IN (` + inPlaceholders(len(allowed)) + `) AND e.dst_connector_id IN (` + inPlaceholders(len(allowed)) + `)
 		AND (` + srcPred + ` OR ` + dstPred + `)
 		ORDER BY e.kind, e.src_name, e.dst_name, e.id LIMIT ?`
@@ -163,7 +166,7 @@ func (s *Store) ListEntityEdges(ctx context.Context, members []EntityMemberKey, 
 	for rows.Next() {
 		var e EntityEdge
 		if err := rows.Scan(&e.Src.ConnectorID, &e.Src.Kind, &e.Src.Name, &e.Src.Ref, &e.Src.EntityID,
-			&e.Dst.ConnectorID, &e.Dst.Kind, &e.Dst.Name, &e.Dst.Ref, &e.Dst.EntityID, &e.Kind, &e.Source); err != nil {
+			&e.Dst.ConnectorID, &e.Dst.Kind, &e.Dst.Name, &e.Dst.Ref, &e.Dst.EntityID, &e.Kind, &e.Source, &e.Detail); err != nil {
 			return nil, fmt.Errorf("scan entity topology edge: %w", err)
 		}
 		edges = append(edges, e)

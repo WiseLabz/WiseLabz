@@ -113,22 +113,30 @@ func TestEntityDetailEdgesPredicateAndEndpointEntities(t *testing.T) {
 		{SrcConnectorID: f.c1.ID, SrcKind: "vm", SrcName: "A", SrcRef: "a", DstConnectorID: f.c2.ID, DstKind: "vm", DstName: "B", DstRef: "b", Kind: "dependency", Source: "x"},
 		{SrcConnectorID: f.c1.ID, SrcKind: "vm", SrcName: "Other", SrcRef: "other", DstConnectorID: f.c2.ID, DstKind: "vm", DstName: "B", DstRef: "b", Kind: "dependency", Source: "unrelated"},
 		{SrcConnectorID: f.c2.ID, SrcKind: "vm", SrcName: "B", SrcRef: "b", DstConnectorID: f.c1.ID, DstKind: "vm", DstName: "A", DstRef: "a", Kind: TopologyEdgeSameAs, Source: "IP address"},
+		{SrcConnectorID: f.c1.ID, SrcKind: "vm", SrcName: "A", SrcRef: "a", DstConnectorID: f.c2.ID, DstKind: "vm", DstName: "B", DstRef: "b", Kind: "proxies_to", Source: "caddy", Detail: "/api -> :8080"},
 	}
 	if err := f.s.ReplaceTopologyEdgesForConnector(ctx, f.c1.ID, edges); err != nil {
 		t.Fatal(err)
 	}
 	member := []EntityMemberKey{{ConnectorID: f.c1.ID, Kind: "vm", Ref: "a"}}
 	got, err := f.s.ListEntityEdges(ctx, member, []string{f.c1.ID, f.c2.ID}, 10)
-	if err != nil || len(got) != 2 {
-		t.Fatalf("edges = %+v, %v; want the two edges touching a", got, err)
+	if err != nil || len(got) != 3 {
+		t.Fatalf("edges = %+v, %v; want the three edges touching a", got, err)
 	}
+	var sawDetail bool
 	for _, e := range got {
+		if e.Kind == "proxies_to" {
+			sawDetail = e.Detail == "/api -> :8080"
+		}
 		if e.Source == "unrelated" {
 			t.Fatalf("edge not touching the member returned: %+v", e)
 		}
 		if (e.Src.Ref == "b" && e.Src.EntityID != "e2") || (e.Dst.Ref == "b" && e.Dst.EntityID != "e2") || (e.Src.Ref == "a" && e.Src.EntityID != "e1") {
 			t.Fatalf("endpoint entity ids wrong: %+v", e)
 		}
+	}
+	if !sawDetail {
+		t.Fatalf("proxies_to edge detail not returned: %+v", got)
 	}
 	// A hidden connector on either end drops the edge.
 	if hidden, err := f.s.ListEntityEdges(ctx, member, []string{f.c1.ID}, 10); err != nil || len(hidden) != 0 {

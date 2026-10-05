@@ -71,12 +71,12 @@ export function EntityDetailPage() {
           <p key={`${edge.from.connectorId}:${edge.to.connectorId}:${i}`} className="text-sm text-ink"><Endpoint endpoint={edge.from} /> ↔ <Endpoint endpoint={edge.to} /> <span className="text-xs text-ink-muted">· {edge.reason}</span></p>
         )) : <EmptyState title={t('entities.empty')} />)}
         {section(t('entities.neighbors'), data.neighbors.length ? data.neighbors.map((edge, i) => (
-          <p key={`${edge.kind}:${edge.from.connectorId}:${edge.to.connectorId}:${i}`} className="text-sm text-ink"><Endpoint endpoint={edge.from} /> → <Endpoint endpoint={edge.to} /> <span className="font-mono text-xs text-ink-muted">· {edge.kind}</span></p>
+          <p key={`${edge.kind}:${edge.from.connectorId}:${edge.to.connectorId}:${i}`} className="text-sm text-ink"><Endpoint endpoint={edge.from} /> → <Endpoint endpoint={edge.to} /> <span className="font-mono text-xs text-ink-muted">· {edge.kind}</span>{edge.detail && <span className="text-xs text-ink-muted"> · {edge.detail}</span>}</p>
         )) : <EmptyState title={t('entities.empty')} />)}
         {section(t('entities.history'), data.history.length ? data.history.map((item, i) => (
           <div key={`${item.at}:${item.key}:${item.field}:${i}`} className="border-b border-line-soft pb-2 text-sm last:border-0">
             <p className="text-ink"><span className="font-mono">{item.field}</span> · {item.change}</p>
-            <p className="mt-1 text-xs text-ink-muted">{item.at} · {valueText(item.old)} → {valueText(item.new)}</p>
+            <p className="mt-1 text-xs text-ink-muted">{fullDate(item.at)} · {valueText(item.old)} → {valueText(item.new)}</p>
           </div>
         )) : <EmptyState title={t('entities.empty')} />)}
         {section(t('entities.findings'), data.findings.length ? data.findings.map((finding) => (

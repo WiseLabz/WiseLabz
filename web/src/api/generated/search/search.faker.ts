@@ -117,6 +117,10 @@ export const getGetEntitiesIdResponseMock = (
         ref: faker.string.alpha({ length: { min: 10, max: 20 } }),
         entityId: faker.helpers.arrayElement([faker.string.uuid(), undefined]),
       },
+      detail: faker.helpers.arrayElement([
+        faker.string.alpha({ length: { min: 10, max: 20 } }),
+        undefined,
+      ]),
     })
   ),
   history: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(
