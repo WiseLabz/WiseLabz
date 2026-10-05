@@ -6,19 +6,19 @@
  *
  * OpenAPI spec version: 0.1.0
  */
-import type { Role } from './role';
 import type { UserAuthSource } from './userAuthSource';
 import type { UserDigestCadence } from './userDigestCadence';
+import type { UserRole } from './userRole';
 
 export interface User {
   id: string;
   username: string;
   displayName?: string;
   email?: string;
-  role: Role;
+  role: UserRole;
   authSource: UserAuthSource;
   disabled?: boolean;
-  /** When role is operator, grants permission to edit the admin-default dashboard layout */
+  /** When role is admin, grants permission to edit the admin-default dashboard layout */
   canManageDashboardDefaults?: boolean;
   createdAt: string;
   digestCadence?: UserDigestCadence;

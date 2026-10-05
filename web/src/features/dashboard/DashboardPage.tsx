@@ -146,7 +146,7 @@ export function DashboardPage() {
             >
               {t('dashboard.resetLayout')}
             </Button>
-            {me?.role === 'operator' && me.canManageDashboardDefaults && (
+            {me?.role === 'admin' && me.canManageDashboardDefaults && (
               <Button variant="ghost" size="sm" onClick={() => setAdminDefaultOpen(true)}>
                 {t('dashboard.editDefaultLayout')}
               </Button>

@@ -36,7 +36,7 @@ const me = {
   username: 'alice',
   displayName: 'Alice',
   email: 'alice@example.com',
-  role: 'operator' as const,
+  role: 'admin' as const,
   authSource: 'local' as const,
   digestCadence: 'off' as const,
   digestTimezone: 'UTC',

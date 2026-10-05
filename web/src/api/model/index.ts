@@ -421,6 +421,7 @@ export * from './user';
 export * from './userAuthSource';
 export * from './userCreate';
 export * from './userDigestCadence';
+export * from './userRole';
 export * from './userUpdate';
 export * from './webAuthnOptions';
 export * from './webAuthnResponse';

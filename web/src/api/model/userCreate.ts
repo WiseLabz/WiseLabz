@@ -6,14 +6,14 @@
  *
  * OpenAPI spec version: 0.1.0
  */
-import type { Role } from './role';
+import type { UserRole } from './userRole';
 
 export interface UserCreate {
   username: string;
   email?: string;
-  role: Role;
+  role: UserRole;
   /** Local accounts only */
   password?: string;
-  /** Only valid when role is operator; grants permission to edit the admin-default dashboard layout */
+  /** Only valid when role is admin; grants permission to edit the admin-default dashboard layout */
   canManageDashboardDefaults?: boolean;
 }

@@ -128,7 +128,7 @@ paths:
       description: |
         Returns 404 unless the caller can view at least one member connector; a malformed id, an unknown id, a redirect loop and a missing grant all return the identical 404. Instance admins get no implicit access. All connector-derived fields are filtered by viewer grants and API-key restrictions.
 
-        `kind` and `name` come from the first active visible member (a gone member only when none is active). `members` lists every visible member, active first, with `goneAt` on departed ones. `neighbors`, `relatedByIp`, `findings`, `onReportingConnectors` and `runbooks` only consider active visible members and are capped (200 edges, 50 findings, 100 runbook steps). `findings` and `onReportingConnectors` contain open findings only.
+        `kind` and `name` come from one active visible member (a gone member only when none is active), preferring a non-empty name, then the lowest name (or ref when nameless), connector ID, kind and ref; the topology graph names identity nodes the same way. `neighbors` and `relatedByIp` list edges whose near end is an active visible member and whose far end is on any connector the caller can view (not only member connectors), de-duplicated; an identity is never related by IP to itself. `members` lists every visible member, active first, with `goneAt` on departed ones. `neighbors`, `relatedByIp`, `findings`, `onReportingConnectors` and `runbooks` only consider active visible members and are capped (200 edges, 50 findings, 100 runbook steps). `findings` and `onReportingConnectors` contain open findings only.
 
         `history` is derived from snapshot diffs: for each visible member connector the 30 most recent snapshots are compared pairwise, and at most 100 changes are returned, newest first. `at` is the fetch time of the newer snapshot of the pair, `old` the value in the older snapshot and `new` the value in the newer one.
       parameters:
@@ -4296,6 +4296,14 @@ components:
         v1 single-admin homelab — user management). Enforced server-side on every
         mutating endpoint; UI hiding a control is convenience, never the boundary.
       enum: [viewer, operator]
+    UserRole:
+      type: string
+      description: >
+        Instance-level role of a user account, as accepted by POST /users and
+        PATCH /users/{userId} and returned on User. `admin` manages users and
+        lab-wide settings; `user` gets access only through connector grants
+        (`viewer` / `operator`, see Role).
+      enum: [user, admin]
     ServiceStatus:
       type: string
       enum: [online, degraded, offline, unknown]
@@ -4461,10 +4469,10 @@ components:
         username: { type: string }
         displayName: { type: string }
         email: { type: string, format: email }
-        role: { $ref: '#/components/schemas/Role' }
+        role: { $ref: '#/components/schemas/UserRole' }
         authSource: { type: string, enum: [local, oidc] }
         disabled: { type: boolean }
-        canManageDashboardDefaults: { type: boolean, description: 'When role is operator, grants permission to edit the admin-default dashboard layout' }
+        canManageDashboardDefaults: { type: boolean, description: 'When role is admin, grants permission to edit the admin-default dashboard layout' }
         createdAt: { type: string, format: date-time }
         digestCadence: { type: string, enum: [off, daily, weekly] }
         digestTimezone: { type: string, description: 'IANA timezone, e.g. America/New_York' }
@@ -4477,16 +4485,16 @@ components:
       properties:
         username: { type: string }
         email: { type: string, format: email }
-        role: { $ref: '#/components/schemas/Role' }
+        role: { $ref: '#/components/schemas/UserRole' }
         password: { type: string, format: password, description: Local accounts only }
-        canManageDashboardDefaults: { type: boolean, description: 'Only valid when role is operator; grants permission to edit the admin-default dashboard layout' }
+        canManageDashboardDefaults: { type: boolean, description: 'Only valid when role is admin; grants permission to edit the admin-default dashboard layout' }
     UserUpdate:
       type: object
       properties:
-        role: { $ref: '#/components/schemas/Role' }
+        role: { $ref: '#/components/schemas/UserRole' }
         disabled: { type: boolean }
         displayName: { type: string }
-        canManageDashboardDefaults: { type: boolean, description: 'Only valid when role is operator; grants permission to edit the admin-default dashboard layout' }
+        canManageDashboardDefaults: { type: boolean, description: 'Only valid when role is admin; grants permission to edit the admin-default dashboard layout' }
     ProfileUpdate:
       type: object
       properties:

@@ -61,6 +61,47 @@ type EntityRunbookStep struct {
 	StepVerb     string
 }
 
+// EntityLabel is a member's claim to name its entity: the fields that decide
+// which member supplies an identity's name and kind.
+type EntityLabel struct {
+	ConnectorID, Kind, Ref, Name string
+}
+
+// Text is the member's display name, or its ref when it has no name.
+func (l EntityLabel) Text() string {
+	if l.Name != "" {
+		return l.Name
+	}
+	return l.Ref
+}
+
+// IsServicePlaceholder reports whether the member is a connector's own service
+// placeholder (kind service, ref = connector ID), which never names an entity
+// that has a real member.
+func (l EntityLabel) IsServicePlaceholder() bool {
+	return l.Kind == "service" && l.Ref == l.ConnectorID
+}
+
+// Better reports whether l should name the entity instead of o. Priority:
+// a member with a non-empty name, then the lowest display text, connector ID,
+// kind and ref. Callers pass only active, visible members, so the choice never
+// depends on row order or on a member the caller may not see.
+func (l EntityLabel) Better(o EntityLabel) bool {
+	if (l.Name == "") != (o.Name == "") {
+		return l.Name != ""
+	}
+	if a, b := l.Text(), o.Text(); a != b {
+		return a < b
+	}
+	if l.ConnectorID != o.ConnectorID {
+		return l.ConnectorID < o.ConnectorID
+	}
+	if l.Kind != o.Kind {
+		return l.Kind < o.Kind
+	}
+	return l.Ref < o.Ref
+}
+
 // ResolveEntityIdentity follows the merged_into chain from id to the surviving
 // identity. A missing id, a dangling redirect and a redirect loop all return
 // ErrNotFound.
@@ -136,8 +177,11 @@ func (s *Store) ListEntityMembers(ctx context.Context, entityID string, connecto
 }
 
 // ListEntityEdges returns up to limit topology edges that touch one of members
-// and whose both endpoints lie on allowed connectors.
-func (s *Store) ListEntityEdges(ctx context.Context, members []EntityMemberKey, allowed []string, limit int) ([]EntityEdge, error) {
+// and whose both endpoints lie on viewable connectors. members are the near
+// ends (active, on connectors the caller may view); the far end may be on any
+// viewable connector, not only a member connector of the entity.
+func (s *Store) ListEntityEdges(ctx context.Context, members []EntityMemberKey, viewable []string, limit int) ([]EntityEdge, error) {
+	allowed := viewable
 	if len(members) == 0 || len(allowed) == 0 {
 		return []EntityEdge{}, nil
 	}
@@ -152,7 +196,7 @@ func (s *Store) ListEntityEdges(ctx context.Context, members []EntityMemberKey, 
 			AND dm.entity_id IN (SELECT id FROM entities WHERE merged_into IS NULL)
 		WHERE e.src_connector_id IN (` + inPlaceholders(len(allowed)) + `) AND e.dst_connector_id IN (` + inPlaceholders(len(allowed)) + `)
 		AND (` + srcPred + ` OR ` + dstPred + `)
-		ORDER BY e.kind, e.src_name, e.dst_name, e.id LIMIT ?`
+		ORDER BY e.kind, e.src_name, e.dst_name, e.src_connector_id, e.src_kind, e.src_ref, e.dst_connector_id, e.dst_kind, e.dst_ref, e.source, e.detail, e.id LIMIT ?`
 	args := append(stringArgs(allowed), stringArgs(allowed)...)
 	args = append(args, srcArgs...)
 	args = append(args, dstArgs...)

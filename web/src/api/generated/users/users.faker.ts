@@ -8,7 +8,7 @@
  */
 import { faker } from '@faker-js/faker';
 
-import { Role } from '../../model';
+import { UserRole } from '../../model';
 import type { User } from '../../model';
 
 export const getGetUsersResponseMock = (): User[] =>
@@ -20,7 +20,7 @@ export const getGetUsersResponseMock = (): User[] =>
       undefined,
     ]),
     email: faker.helpers.arrayElement([faker.internet.email(), undefined]),
-    role: faker.helpers.arrayElement(Object.values(Role)),
+    role: faker.helpers.arrayElement(Object.values(UserRole)),
     authSource: faker.helpers.arrayElement(['local', 'oidc'] as const),
     disabled: faker.helpers.arrayElement([faker.datatype.boolean(), undefined]),
     canManageDashboardDefaults: faker.helpers.arrayElement([faker.datatype.boolean(), undefined]),
@@ -46,7 +46,7 @@ export const getPostUsersResponseMock = (
     undefined,
   ]),
   email: faker.helpers.arrayElement([faker.internet.email(), undefined]),
-  role: faker.helpers.arrayElement(Object.values(Role)),
+  role: faker.helpers.arrayElement(Object.values(UserRole)),
   authSource: faker.helpers.arrayElement(['local', 'oidc'] as const),
   disabled: faker.helpers.arrayElement([faker.datatype.boolean(), undefined]),
   canManageDashboardDefaults: faker.helpers.arrayElement([faker.datatype.boolean(), undefined]),
@@ -73,7 +73,7 @@ export const getPatchUsersUserIdResponseMock = (
     undefined,
   ]),
   email: faker.helpers.arrayElement([faker.internet.email(), undefined]),
-  role: faker.helpers.arrayElement(Object.values(Role)),
+  role: faker.helpers.arrayElement(Object.values(UserRole)),
   authSource: faker.helpers.arrayElement(['local', 'oidc'] as const),
   disabled: faker.helpers.arrayElement([faker.datatype.boolean(), undefined]),
   canManageDashboardDefaults: faker.helpers.arrayElement([faker.datatype.boolean(), undefined]),

@@ -8,7 +8,7 @@
  */
 import { faker } from '@faker-js/faker';
 
-import { ApiKeyScope, Role } from '../../model';
+import { ApiKeyScope, Role, UserRole } from '../../model';
 import type {
   ApiKey,
   ApiKeyCreated,
@@ -47,7 +47,7 @@ export const getPostAuthLoginResponseAuthSessionMock = (
         undefined,
       ]),
       email: faker.helpers.arrayElement([faker.internet.email(), undefined]),
-      role: faker.helpers.arrayElement(Object.values(Role)),
+      role: faker.helpers.arrayElement(Object.values(UserRole)),
       authSource: faker.helpers.arrayElement(['local', 'oidc'] as const),
       disabled: faker.helpers.arrayElement([faker.datatype.boolean(), undefined]),
       canManageDashboardDefaults: faker.helpers.arrayElement([faker.datatype.boolean(), undefined]),
@@ -97,7 +97,7 @@ export const getPostAuthLoginMfaResponseMock = (
       undefined,
     ]),
     email: faker.helpers.arrayElement([faker.internet.email(), undefined]),
-    role: faker.helpers.arrayElement(Object.values(Role)),
+    role: faker.helpers.arrayElement(Object.values(UserRole)),
     authSource: faker.helpers.arrayElement(['local', 'oidc'] as const),
     disabled: faker.helpers.arrayElement([faker.datatype.boolean(), undefined]),
     canManageDashboardDefaults: faker.helpers.arrayElement([faker.datatype.boolean(), undefined]),
@@ -131,7 +131,7 @@ export const getPostAuthOidcCallbackResponseMock = (
       undefined,
     ]),
     email: faker.helpers.arrayElement([faker.internet.email(), undefined]),
-    role: faker.helpers.arrayElement(Object.values(Role)),
+    role: faker.helpers.arrayElement(Object.values(UserRole)),
     authSource: faker.helpers.arrayElement(['local', 'oidc'] as const),
     disabled: faker.helpers.arrayElement([faker.datatype.boolean(), undefined]),
     canManageDashboardDefaults: faker.helpers.arrayElement([faker.datatype.boolean(), undefined]),
@@ -163,7 +163,7 @@ export const getPostAuthRefreshResponseMock = (
       undefined,
     ]),
     email: faker.helpers.arrayElement([faker.internet.email(), undefined]),
-    role: faker.helpers.arrayElement(Object.values(Role)),
+    role: faker.helpers.arrayElement(Object.values(UserRole)),
     authSource: faker.helpers.arrayElement(['local', 'oidc'] as const),
     disabled: faker.helpers.arrayElement([faker.datatype.boolean(), undefined]),
     canManageDashboardDefaults: faker.helpers.arrayElement([faker.datatype.boolean(), undefined]),

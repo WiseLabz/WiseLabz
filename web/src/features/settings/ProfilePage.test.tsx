@@ -24,7 +24,7 @@ let me = {
   username: 'testuser',
   displayName: 'Test User',
   email: 'test@example.com',
-  role: 'operator' as const,
+  role: 'admin' as const,
   authSource: 'local' as const,
   digestCadence: 'off' as 'off' | 'daily' | 'weekly',
   digestTimezone: '',

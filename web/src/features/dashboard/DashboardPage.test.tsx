@@ -47,28 +47,28 @@ function renderDashboard(me: Partial<User>) {
 
 describe('DashboardPage', () => {
   it('hides the default-layout editor from a viewer', async () => {
-    renderDashboard({ role: 'viewer', canManageDashboardDefaults: false });
+    renderDashboard({ role: 'user', canManageDashboardDefaults: false });
 
     expect(await screen.findByRole('button', { name: 'Reset to default' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Edit default layout' })).not.toBeInTheDocument();
   });
 
   it('hides the default-layout editor from an operator without the permission', async () => {
-    renderDashboard({ role: 'operator', canManageDashboardDefaults: false });
+    renderDashboard({ role: 'admin', canManageDashboardDefaults: false });
 
     await screen.findByRole('button', { name: 'Reset to default' });
     expect(screen.queryByRole('button', { name: 'Edit default layout' })).not.toBeInTheDocument();
   });
 
   it('shows the default-layout editor to a permitted operator', async () => {
-    renderDashboard({ role: 'operator', canManageDashboardDefaults: true });
+    renderDashboard({ role: 'admin', canManageDashboardDefaults: true });
 
     expect(await screen.findByRole('button', { name: 'Edit default layout' })).toBeInTheDocument();
   });
 
   it('resets the layout via the reset button', async () => {
     let resetCalled = false;
-    renderDashboard({ role: 'viewer', canManageDashboardDefaults: false });
+    renderDashboard({ role: 'user', canManageDashboardDefaults: false });
     server.use(
       http.post('/api/dashboard/layout/reset', () => {
         resetCalled = true;

@@ -55,9 +55,21 @@ Entity-specific compliance findings SHALL notify at most once per rule and conne
 ### Requirement: Grant-filtered entity detail
 The system SHALL expose `GET /api/entities/{id}` and a web detail page for visible persisted identities. The endpoint SHALL follow flattened merge redirects and return the same 404 response for missing or invisible identities unless the redirect target is itself visible. A caller SHALL be able to view at least one member connector; API-key connector restrictions SHALL be applied. Members, topology links, history, findings, and runbooks SHALL include only data from granted connectors. The displayed kind, name, and gone state SHALL be derived from visible members.
 
+Topology neighbours and IP relations SHALL be listed when the near endpoint is an active member of the identity on a member connector the caller may view and the far endpoint lies on any connector the caller may view (viewer grant narrowed by API-key restrictions, as in `GET /api/topology/graph`); the far connector need not be a member connector of the identity. A far endpoint on a connector the caller may not view SHALL be omitted entirely, with no name, kind, count, ID, or placeholder. Edges stored once per owning connector SHALL be de-duplicated by (kind, near member, far endpoint, detail) in a deterministic order, and an IP relation whose two ends are members of the same identity SHALL be dropped.
+
+The identity's name and kind SHALL come from one active visible member (a gone member only when none is active), chosen by priority: a member with a non-empty name, then the lowest display text (name, or ref when the member has no name), connector ID, kind, and ref. `GET /api/topology/graph` SHALL name identity nodes by the same rule. A hidden member's name SHALL never be used.
+
 #### Scenario: Viewer has access to one member connector
 - **WHEN** an identity has members on two connectors and the caller can view one
 - **THEN** the endpoint SHALL return only that member and data derived from granted connectors.
+
+#### Scenario: Neighbour on a non-member connector
+- **WHEN** an identity's member has a `proxies_to` edge to an entity on a connector that is not a member connector but the caller may view
+- **THEN** the neighbour SHALL be listed; for a caller without a grant on that connector it SHALL leave no trace in the response.
+
+#### Scenario: Nameless member
+- **WHEN** an identity has a member with an empty name and another with a name
+- **THEN** the named member SHALL provide the identity's name and kind.
 
 #### Scenario: No visible member or hidden redirect target
 - **WHEN** the caller cannot view any member of the identity or its redirect target

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"sort"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -130,7 +131,12 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 		notFound(w)
 		return
 	}
-	out, err := h.detail(ctx, entity.ID, allowed)
+	viewable, err := h.viewableConnectorIDs(ctx)
+	if err != nil {
+		httpError(w, err)
+		return
+	}
+	out, err := h.detail(ctx, entity.ID, allowed, viewable)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			notFound(w)
@@ -147,7 +153,22 @@ func validID(id string) bool {
 	return err == nil && len(id) == canonicalUUIDLength
 }
 
-func (h *Handler) detail(ctx context.Context, id string, allowed []string) (*detail, error) {
+// viewableConnectorIDs returns every connector the caller may view (viewer
+// grant, narrowed by any API-key restriction), the same set the topology graph
+// uses. Far ends of edges are shown only on these connectors.
+func (h *Handler) viewableConnectorIDs(ctx context.Context) ([]string, error) {
+	list, err := h.Store.ListConnectorNames(ctx)
+	if err != nil {
+		return nil, err
+	}
+	ids := make([]string, len(list))
+	for i, c := range list {
+		ids[i] = c.ID
+	}
+	return h.Store.FilterConnectorIDsByGrant(ctx, auth.UserIDFromContext(ctx), ids, "viewer")
+}
+
+func (h *Handler) detail(ctx context.Context, id string, allowed, viewable []string) (*detail, error) {
 	visible, err := h.Store.ListEntityMembers(ctx, id, allowed)
 	if err != nil {
 		return nil, err
@@ -156,9 +177,6 @@ func (h *Handler) detail(ctx context.Context, id string, allowed []string) (*det
 		return nil, store.ErrNotFound
 	}
 	out := &detail{ID: id, Members: []member{}, RelatedByIP: []link{}, Neighbors: []neighbor{}, History: []change{}, Findings: []store.QualityFindingRecord{}, ConnectorFindings: []store.QualityFindingRecord{}, Runbooks: []runbook{}}
-	// Members arrive active first, so the first row names the entity unless
-	// every visible member is gone.
-	out.Kind, out.Name, out.Gone = visible[0].Kind, visible[0].Name, visible[0].GoneAt != ""
 	var active []store.EntityMemberKey
 	activeConnectors := map[string]bool{}
 	for _, m := range visible {
@@ -168,7 +186,28 @@ func (h *Handler) detail(ctx context.Context, id string, allowed []string) (*det
 			activeConnectors[m.ConnectorID] = true
 		}
 	}
-	if err := h.edges(ctx, id, active, allowed, out); err != nil {
+	// Name and kind come from the best active visible member (see
+	// store.EntityLabel.Better), skipping connector service placeholders like
+	// the topology graph does; only when none qualifies do the rest name it.
+	// (The graph's kind filter narrows its pool further; the page has none.)
+	var best store.EntityLabel
+	found := false
+	for _, pass := range []func(store.EntityMemberDetail) bool{
+		func(m store.EntityMemberDetail) bool { return m.GoneAt == "" && !entityLabel(m).IsServicePlaceholder() },
+		func(m store.EntityMemberDetail) bool { return m.GoneAt == "" },
+		func(store.EntityMemberDetail) bool { return true },
+	} {
+		for _, m := range visible {
+			if l := entityLabel(m); pass(m) && (!found || l.Better(best)) {
+				best, found = l, true
+			}
+		}
+		if found {
+			break
+		}
+	}
+	out.Kind, out.Name, out.Gone = best.Kind, best.Text(), len(active) == 0
+	if err := h.edges(ctx, id, active, viewable, out); err != nil {
 		return nil, err
 	}
 	if err := h.history(ctx, visible, out); err != nil {
@@ -180,14 +219,39 @@ func (h *Handler) detail(ctx context.Context, id string, allowed []string) (*det
 	return out, h.runbooks(ctx, active, out)
 }
 
-func (h *Handler) edges(ctx context.Context, id string, active []store.EntityMemberKey, allowed []string, out *detail) error {
-	edges, err := h.Store.ListEntityEdges(ctx, active, allowed, maxEdges)
+func entityLabel(m store.EntityMemberDetail) store.EntityLabel {
+	return store.EntityLabel{ConnectorID: m.ConnectorID, Kind: m.Kind, Ref: m.Ref, Name: m.Name}
+}
+
+// edges lists typed neighbours and IP relations. Edges are stored once per
+// owning connector, so identical logical edges are collapsed; the store orders
+// rows deterministically and the first of each duplicate wins. Duplicates are
+// removed after the store's row cap, so they can use up part of it.
+func (h *Handler) edges(ctx context.Context, id string, active []store.EntityMemberKey, viewable []string, out *detail) error {
+	edges, err := h.Store.ListEntityEdges(ctx, active, viewable, maxEdges)
 	if err != nil {
 		return err
 	}
+	seen := map[string]bool{}
 	for _, e := range edges {
 		src, dst := toEndpoint(e.Src, id), toEndpoint(e.Dst, id)
-		if e.Kind == store.TopologyEdgeSameAs && e.Source == "IP address" {
+		isIP := e.Kind == store.TopologyEdgeSameAs && e.Source == "IP address"
+		if e.Src.EntityID == id && e.Dst.EntityID == id {
+			continue // both ends are members of this identity: not a relation to another entity
+		}
+		// An endpoint that belongs to an entity is identified by it, so the same
+		// relation reported by several members or connectors collapses; same_as
+		// is symmetric.
+		a, b := endpointKey(e.Src), endpointKey(e.Dst)
+		if e.Kind == store.TopologyEdgeSameAs && b < a {
+			a, b = b, a
+		}
+		key := strings.Join([]string{e.Kind, e.Source, e.Detail, a, b}, "\x00")
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		if isIP {
 			out.RelatedByIP = append(out.RelatedByIP, link{From: src, To: dst, Reason: e.Source})
 		} else {
 			out.Neighbors = append(out.Neighbors, neighbor{Kind: e.Kind, From: src, To: dst, Detail: e.Detail})
@@ -196,8 +260,22 @@ func (h *Handler) edges(ctx context.Context, id string, active []store.EntityMem
 	return nil
 }
 
+func endpointKey(e store.EntityEdgeEndpoint) string {
+	if e.EntityID != "" {
+		return "entity:" + e.EntityID
+	}
+	ref := e.Ref
+	if ref == "" {
+		ref = "name:" + e.Name // ref-less endpoints are identified by name, as in the graph
+	}
+	return strings.Join([]string{e.ConnectorID, e.Kind, ref}, "\x00")
+}
+
 func toEndpoint(e store.EntityEdgeEndpoint, self string) endpoint {
 	out := endpoint{ConnectorID: e.ConnectorID, Kind: e.Kind, Name: e.Name, Ref: e.Ref}
+	if out.Name == "" {
+		out.Name = e.Ref
+	}
 	if e.EntityID != self {
 		out.EntityID = e.EntityID
 	}
