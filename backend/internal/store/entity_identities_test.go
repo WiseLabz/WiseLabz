@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"sync"
 	"testing"
@@ -153,6 +154,17 @@ func TestReconcileEntityIdentitiesFlattensMergeRedirects(t *testing.T) {
 	if firstRedirect == winner {
 		t.Fatal("expected the older connector 0 identity to remain separate")
 	}
+	mergedAt := func(id string) (v sql.NullString) {
+		t.Helper()
+		if err := s.db.QueryRowContext(ctx, `SELECT merged_at FROM entities WHERE id=?`, id).Scan(&v); err != nil {
+			t.Fatal(err)
+		}
+		return v
+	}
+	firstMergedAt := mergedAt(firstRedirect)
+	if !firstMergedAt.Valid || mergedAt(winner).Valid {
+		t.Fatalf("merged_at: loser=%v winner=%v, want loser set and winner NULL", firstMergedAt, mergedAt(winner))
+	}
 	if err := s.ReconcileEntityIdentities(ctx, [][]EntityMemberRecord{{members[0], members[1], members[2]}}); err != nil {
 		t.Fatal(err)
 	}
@@ -165,6 +177,12 @@ func TestReconcileEntityIdentitiesFlattensMergeRedirects(t *testing.T) {
 	}
 	if idFor(1) != winner || idFor(2) != winner {
 		t.Fatal("all merged member rows should point to final winner")
+	}
+	if got := mergedAt(firstRedirect); got != firstMergedAt {
+		t.Fatalf("re-pointing a redirect changed merged_at from %v to %v", firstMergedAt, got)
+	}
+	if mergedAt(winner).Valid {
+		t.Fatal("final winner must not carry merged_at")
 	}
 }
 
@@ -233,6 +251,48 @@ func TestReconcileEntityIdentitiesSplitMemberDoesNotJoinMergeLoser(t *testing.T)
 		}
 		if idOf("a") != idOf("m1") || idOf("m2") == idOf("a") {
 			t.Fatalf("run %d: split member landed in the wrong identity: a=%s m1=%s m2=%s", i, idOf("a"), idOf("m1"), idOf("m2"))
+		}
+	}
+}
+
+// With L older than A, the cluster {a, m1} must always claim L whatever the
+// connector UUID order, so m2 is the member that gets a fresh ID.
+func TestReconcileEntityIdentitiesOlderIdentityWinsRegardlessOfConnectorOrder(t *testing.T) {
+	ctx := context.Background()
+	for i := 0; i < 30; i++ {
+		s := newDocTestStore(t)
+		var ids []string
+		for _, n := range []string{"c1", "c2", "c3"} {
+			c := ConnectorRecord{Name: n, Type: "test", Category: "virtualization", URL: "https://" + n + ".test"}
+			if err := s.CreateConnector(ctx, &c); err != nil {
+				t.Fatal(err)
+			}
+			ids = append(ids, c.ID)
+		}
+		mk := func(c, ref, observed string) EntityMemberRecord {
+			return EntityMemberRecord{ConnectorID: c, Kind: "vm", Ref: ref, Name: ref, ObservedAt: observed}
+		}
+		a, m1, m2 := mk(ids[0], "a", "2021-01-01T00:00:00Z"), mk(ids[1], "m1", "2020-01-01T00:00:00Z"), mk(ids[2], "m2", "2020-01-01T00:00:00Z")
+		idOf := func(ref string) string {
+			var id string
+			if err := s.db.QueryRowContext(ctx, `SELECT entity_id FROM entity_members WHERE ref = ? AND gone_at IS NULL`, ref).Scan(&id); err != nil {
+				t.Fatal(err)
+			}
+			return id
+		}
+		if err := s.ReconcileEntityIdentities(ctx, [][]EntityMemberRecord{{m1, m2}}); err != nil {
+			t.Fatal(err)
+		}
+		older := idOf("m1")
+		if err := s.ReconcileEntityIdentities(ctx, [][]EntityMemberRecord{{m1, m2}, {a}}); err != nil {
+			t.Fatal(err)
+		}
+		newer := idOf("a")
+		if err := s.ReconcileEntityIdentities(ctx, [][]EntityMemberRecord{{a, m1}, {m2}}); err != nil {
+			t.Fatal(err)
+		}
+		if idOf("a") != older || idOf("m1") != older || idOf("m2") == older || idOf("m2") == newer {
+			t.Fatalf("run %d: older=%s newer=%s got a=%s m1=%s m2=%s", i, older, newer, idOf("a"), idOf("m1"), idOf("m2"))
 		}
 	}
 }

@@ -28,7 +28,7 @@ type EntityMemberRecord struct {
 
 type entityIdentity struct {
 	id, kind, name, firstSeen, lastSeen string
-	goneAt, mergedInto                  sql.NullString
+	goneAt, mergedInto, mergedAt        sql.NullString
 }
 
 type storedIdentityMember struct {
@@ -78,7 +78,7 @@ func (s *Store) reconcileEntityIdentities(ctx context.Context, clusters [][]Enti
 	chosen, mergedInto := chooseIdentityIDs(clusters, oldMembers, entities)
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	updates, active, desired, gone := buildIdentityDiff(clusters, chosen, oldMembers, entities, preserve, now)
-	flattenIdentityRedirects(entities, mergedInto, updates)
+	flattenIdentityRedirects(entities, mergedInto, updates, now)
 	markUnobservedIdentitiesGone(entities, active, mergedInto, updates, now)
 
 	if err := upsertIdentityRows(ctx, s, updates); err != nil {
@@ -106,7 +106,7 @@ func loadIdentityState(ctx context.Context, s *Store) (map[string]entityIdentity
 }
 
 func loadEntityRows(ctx context.Context, s *Store) (map[string]entityIdentity, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id, kind, display_name, first_seen_at, last_seen_at, gone_at, merged_into FROM entities`)
+	rows, err := s.db.QueryContext(ctx, `SELECT id, kind, display_name, first_seen_at, last_seen_at, gone_at, merged_into, merged_at FROM entities`)
 	if err != nil {
 		return nil, fmt.Errorf("load existing entity identities: %w", err)
 	}
@@ -114,7 +114,7 @@ func loadEntityRows(ctx context.Context, s *Store) (map[string]entityIdentity, e
 	entities := make(map[string]entityIdentity)
 	for rows.Next() {
 		var e entityIdentity
-		if err := rows.Scan(&e.id, &e.kind, &e.name, &e.firstSeen, &e.lastSeen, &e.goneAt, &e.mergedInto); err != nil {
+		if err := rows.Scan(&e.id, &e.kind, &e.name, &e.firstSeen, &e.lastSeen, &e.goneAt, &e.mergedInto, &e.mergedAt); err != nil {
 			return nil, fmt.Errorf("scan existing entity identity: %w", err)
 		}
 		entities[e.id] = e
@@ -166,17 +166,58 @@ func resolveExistingIdentity(id string, entities map[string]entityIdentity) stri
 func chooseIdentityIDs(clusters [][]EntityMemberRecord, members map[string]storedIdentityMember, entities map[string]entityIdentity) (map[string]string, map[string]string) {
 	chosen, mergedInto, used := make(map[string]string, len(clusters)), map[string]string{}, map[string]bool{}
 	// Clusters holding currently observed members claim existing IDs before
-	// clusters made only of returning (gone) members.
-	order := make([]int, 0, len(clusters))
-	for i, cluster := range clusters {
-		if clusterHasActiveMember(cluster, members) {
-			order = append(order, i)
-		}
+	// clusters made only of returning (gone) members; within each group the
+	// cluster holding the oldest candidate identity goes first, so the outcome
+	// never depends on connector UUID or map order. clusterKey only breaks ties.
+	type claimOrder struct {
+		index  int
+		active bool
+		oldest string // "" when the cluster has no existing identity
+		spread int    // distinct existing identities the cluster would merge
 	}
-	for i, cluster := range clusters {
-		if !clusterHasActiveMember(cluster, members) {
-			order = append(order, i)
+	older := func(a, b string) bool {
+		fa, fb := entities[a].firstSeen, entities[b].firstSeen
+		if fa != fb {
+			return fa < fb
 		}
+		return a < b
+	}
+	claims := make([]claimOrder, len(clusters))
+	for i, cluster := range clusters {
+		claims[i] = claimOrder{index: i, active: clusterHasActiveMember(cluster, members)}
+		seen := map[string]bool{}
+		for _, member := range cluster {
+			if old, ok := members[identityMemberKey(member.ConnectorID, member.Kind, member.Ref)]; ok {
+				id := resolveExistingIdentity(old.entityID, entities)
+				if id == "" {
+					continue
+				}
+				seen[id] = true
+				if claims[i].oldest == "" || older(id, claims[i].oldest) {
+					claims[i].oldest = id
+				}
+			}
+		}
+		claims[i].spread = len(seen)
+	}
+	sort.SliceStable(claims, func(i, j int) bool {
+		x, y := claims[i], claims[j]
+		switch {
+		case x.active != y.active:
+			return x.active
+		case x.oldest != y.oldest:
+			if x.oldest == "" || y.oldest == "" {
+				return y.oldest == ""
+			}
+			return older(x.oldest, y.oldest)
+		case x.spread != y.spread:
+			return x.spread > y.spread
+		}
+		return clusterKey(clusters[x.index]) < clusterKey(clusters[y.index])
+	})
+	order := make([]int, len(claims))
+	for i, c := range claims {
+		order[i] = c.index
 	}
 	for _, ci := range order {
 		cluster := clusters[ci]
@@ -282,10 +323,13 @@ func resolveFinalIdentity(id string, entities map[string]entityIdentity, mergedI
 	return id
 }
 
-func flattenIdentityRedirects(entities map[string]entityIdentity, mergedInto map[string]string, updates map[string]entityIdentity) {
+// flattenIdentityRedirects records new merges (stamping merged_at) and re-points
+// older redirects at their final winner, keeping their original merged_at.
+func flattenIdentityRedirects(entities map[string]entityIdentity, mergedInto map[string]string, updates map[string]entityIdentity, now string) {
 	for id, target := range mergedInto {
 		old := entities[id]
 		old.id, old.mergedInto, old.goneAt = id, sql.NullString{String: target, Valid: true}, sql.NullString{}
+		old.mergedAt = sql.NullString{String: now, Valid: true}
 		updates[id] = old
 	}
 	for id, old := range entities {
@@ -333,21 +377,24 @@ func upsertIdentityRows(ctx context.Context, s *Store, rows map[string]entityIde
 		if end > len(ids) {
 			end = len(ids)
 		}
-		values, args := make([]string, 0, end-start), make([]any, 0, (end-start)*7)
+		values, args := make([]string, 0, end-start), make([]any, 0, (end-start)*8)
 		for _, id := range ids[start:end] {
 			e := rows[id]
-			gone, merged := any(nil), any(nil)
+			gone, merged, mergedAt := any(nil), any(nil), any(nil)
 			if e.goneAt.Valid {
 				gone = e.goneAt.String
 			}
 			if e.mergedInto.Valid {
 				merged = e.mergedInto.String
 			}
-			values = append(values, "(?, ?, ?, ?, ?, ?, ?)")
-			args = append(args, e.id, e.kind, e.name, e.firstSeen, e.lastSeen, gone, merged)
+			if e.mergedAt.Valid {
+				mergedAt = e.mergedAt.String
+			}
+			values = append(values, "(?, ?, ?, ?, ?, ?, ?, ?)")
+			args = append(args, e.id, e.kind, e.name, e.firstSeen, e.lastSeen, gone, merged, mergedAt)
 		}
-		query := `INSERT INTO entities (id, kind, display_name, first_seen_at, last_seen_at, gone_at, merged_into) VALUES ` + strings.Join(values, ",") +
-			` ON CONFLICT(id) DO UPDATE SET kind=excluded.kind, display_name=excluded.display_name, first_seen_at=excluded.first_seen_at, last_seen_at=excluded.last_seen_at, gone_at=excluded.gone_at, merged_into=excluded.merged_into`
+		query := `INSERT INTO entities (id, kind, display_name, first_seen_at, last_seen_at, gone_at, merged_into, merged_at) VALUES ` + strings.Join(values, ",") +
+			` ON CONFLICT(id) DO UPDATE SET kind=excluded.kind, display_name=excluded.display_name, first_seen_at=excluded.first_seen_at, last_seen_at=excluded.last_seen_at, gone_at=excluded.gone_at, merged_into=excluded.merged_into, merged_at=excluded.merged_at`
 		if _, err := s.db.ExecContext(ctx, query, args...); err != nil {
 			return fmt.Errorf("upsert entity identities: %w", err)
 		}
@@ -450,7 +497,8 @@ func clusterKey(cluster []EntityMemberRecord) string {
 	return identityMemberKey(cluster[0].ConnectorID, cluster[0].Kind, cluster[0].Ref)
 }
 
-// DeleteExpiredEntityIdentities removes gone and merged rows older than cutoff;
+// DeleteExpiredEntityIdentities removes rows gone, or merged, before cutoff
+// (merged age is measured from merged_at, not last observation);
 // member history is removed by the entity_members foreign-key cascade.
 func (s *Store) DeleteExpiredEntityIdentities(ctx context.Context, cutoff string) (int64, error) {
 	var removed int64
@@ -462,7 +510,7 @@ func (s *Store) DeleteExpiredEntityIdentities(ctx context.Context, cutoff string
 				return fmt.Errorf("lock entity identity purge: %w", err)
 			}
 		}
-		predicate := `(gone_at IS NOT NULL AND gone_at < ?) OR (merged_into IS NOT NULL AND last_seen_at < ?)`
+		predicate := `(gone_at IS NOT NULL AND gone_at < ?) OR (merged_into IS NOT NULL AND merged_at < ?)`
 		if _, err := tx.db.ExecContext(ctx, `DELETE FROM entity_members WHERE entity_id IN (SELECT id FROM entities WHERE `+predicate+`)`, cutoff, cutoff); err != nil {
 			return fmt.Errorf("delete expired entity members: %w", err)
 		}

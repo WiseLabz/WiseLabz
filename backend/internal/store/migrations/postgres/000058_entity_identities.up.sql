@@ -5,10 +5,12 @@ CREATE TABLE entities (
     first_seen_at TEXT NOT NULL,
     last_seen_at TEXT NOT NULL,
     gone_at TEXT,
-    merged_into TEXT REFERENCES entities(id) ON DELETE SET NULL
+    merged_into TEXT REFERENCES entities(id) ON DELETE SET NULL,
+    merged_at TEXT
 );
 CREATE INDEX idx_entities_gone_at ON entities(gone_at);
 CREATE INDEX idx_entities_merged_into ON entities(merged_into);
+CREATE INDEX idx_entities_merged_at ON entities(merged_at);
 
 CREATE TABLE entity_members (
     entity_id TEXT NOT NULL REFERENCES entities(id) ON DELETE CASCADE,

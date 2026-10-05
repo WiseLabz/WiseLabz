@@ -87,6 +87,30 @@ func (s *Store) SetQualityFindingNotifiedSeverity(ctx context.Context, id, sever
 	return nil
 }
 
+// OpenNotifiedSeveritiesForRule returns the distinct notified_severity values of
+// the open findings of one rule on one connector. A rule notifies once per
+// connector, so this is the level already announced to the user.
+func (s *Store) OpenNotifiedSeveritiesForRule(ctx context.Context, connectorID, ruleID string) ([]string, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT DISTINCT notified_severity FROM quality_findings
+		WHERE connector_id = ? AND rule_id = ? AND status = 'open' AND notified_severity IS NOT NULL`, connectorID, ruleID)
+	if err != nil {
+		return nil, fmt.Errorf("list notified severities for rule: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var out []string
+	for rows.Next() {
+		var sev string
+		if err := rows.Scan(&sev); err != nil {
+			return nil, fmt.Errorf("scan notified severity: %w", err)
+		}
+		out = append(out, sev)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate notified severities: %w", err)
+	}
+	return out, nil
+}
+
 // ResolveQualityFinding resolves the currently open finding, if any, and
 // clears notified_severity so a later re-open is treated as a new finding
 // for notification purposes.

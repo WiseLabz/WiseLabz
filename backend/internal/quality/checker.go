@@ -267,18 +267,25 @@ func (c *Checker) evaluateComplianceRule(ctx context.Context, connectorID string
 		return nil, c.store.ResolveQualityFindingForRule(ctx, connectorID, rule.ID)
 	}
 	findings := make([]*store.QualityFindingRecord, 0, len(matches))
-	var notificationCandidate *store.QualityFindingRecord
 	upserted := make([]*store.QualityFindingRecord, 0, len(matches))
 	refs := make([]store.EntityIdentityRef, 0, len(matches))
 	for _, entity := range matches {
-		ref := entity.ExternalID
-		if ref == "" {
-			ref = entity.Name
-		}
-		refs = append(refs, store.EntityIdentityRef{Kind: entity.Kind, Ref: ref})
+		refs = append(refs, store.EntityIdentityRef{Kind: entity.Kind, Ref: complianceEntityRef(entity)})
+	}
+	// Resolve vanished entities first so the notified level below only reflects
+	// findings that stay open. When every previous finding resolves, the rule
+	// firing again is a new incident and notifies once more.
+	if err := c.store.ResolveQualityFindingsForRuleExceptEntities(ctx, connectorID, rule.ID, refs); err != nil {
+		return nil, err
+	}
+	notified, err := c.ruleNotifiedRank(ctx, connectorID, rule.ID)
+	if err != nil {
+		return nil, err
+	}
+	for _, entity := range matches {
 		finding := &store.QualityFindingRecord{
 			ConnectorID: connectorID, RuleID: rule.ID, CheckType: "compliance",
-			EntityKind: entity.Kind, EntityRef: ref,
+			EntityKind: entity.Kind, EntityRef: complianceEntityRef(entity),
 			Severity: rule.Severity, Title: rule.Title, Description: complianceDescription([]compliance.Entity{entity}),
 			RemediationLink: rule.RemediationLink,
 		}
@@ -289,24 +296,26 @@ func (c *Checker) evaluateComplianceRule(ctx context.Context, connectorID string
 		upserted = append(upserted, finding)
 		if created != nil {
 			findings = append(findings, created)
-			if notificationCandidate == nil {
-				notificationCandidate = created
-			}
-		} else if notificationCandidate == nil && severityRank[finding.Severity] > severityRank[finding.NotifiedSeverity] {
-			notificationCandidate = finding
 		}
 	}
-	if err := c.store.ResolveQualityFindingsForRuleExceptEntities(ctx, connectorID, rule.ID, refs); err != nil {
-		return nil, err
-	}
-	// Persist each matching entity separately, but preserve the connector-level
-	// notification and broadcast cadence: one representative per rule/check.
-	if notificationCandidate != nil && c.notifier != nil {
-		c.maybeNotify(ctx, notificationCandidate)
-		// Mark siblings as covered by that notification so later runs do not
-		// re-notify them one entity at a time.
+	// Persist each matching entity separately, but notify once per rule and
+	// connector: only a severity above everything already announced for the
+	// rule's open findings notifies, whichever entity carries it. Every other
+	// finding is marked as covered so later runs and new or returning entities
+	// stay quiet.
+	if c.notifier != nil {
+		var candidate *store.QualityFindingRecord
 		for _, f := range upserted {
-			if f == notificationCandidate || (f.NotifiedSeverity != "" && severityRank[f.Severity] <= severityRank[f.NotifiedSeverity]) {
+			if findingRank(f.Severity) > max(notified, findingRank(f.NotifiedSeverity)) {
+				candidate = f
+				break
+			}
+		}
+		if candidate != nil {
+			c.maybeNotify(ctx, candidate)
+		}
+		for _, f := range upserted {
+			if f == candidate || findingRank(f.Severity) <= findingRank(f.NotifiedSeverity) {
 				continue
 			}
 			if err := c.store.SetQualityFindingNotifiedSeverity(ctx, f.ID, f.Severity); err != nil {
@@ -318,6 +327,35 @@ func (c *Checker) evaluateComplianceRule(ctx context.Context, connectorID string
 		findings = findings[:1]
 	}
 	return findings, nil
+}
+
+func complianceEntityRef(entity compliance.Entity) string {
+	if entity.ExternalID != "" {
+		return entity.ExternalID
+	}
+	return entity.Name
+}
+
+// findingRank is severityRank with "never notified" below every severity.
+func findingRank(severity string) int {
+	if rank, ok := severityRank[severity]; ok {
+		return rank
+	}
+	return -1
+}
+
+// ruleNotifiedRank is the highest severity already notified across the open
+// findings of one rule on one connector, or -1 when none has notified.
+func (c *Checker) ruleNotifiedRank(ctx context.Context, connectorID, ruleID string) (int, error) {
+	severities, err := c.store.OpenNotifiedSeveritiesForRule(ctx, connectorID, ruleID)
+	if err != nil {
+		return 0, err
+	}
+	highest := -1
+	for _, sev := range severities {
+		highest = max(highest, findingRank(sev))
+	}
+	return highest, nil
 }
 
 // relatedSource loads the entities related clauses join against. Connectors

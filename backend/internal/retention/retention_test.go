@@ -138,24 +138,27 @@ func TestRunCleanupPurgesOnlyExpiredGoneAndMergedIdentities(t *testing.T) {
 	if err := s.CreateConnector(ctx, c); err != nil {
 		t.Fatal(err)
 	}
-	activeID, goneID, recentID, mergedID := uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString()
+	activeID, goneID, recentID, mergedID, mergedRecentID := uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString()
 	old := time.Now().UTC().AddDate(0, 0, -90).Format(time.RFC3339Nano)
 	recent := time.Now().UTC().AddDate(0, 0, -2).Format(time.RFC3339Nano)
-	for _, entity := range []struct{ id, gone, merged string }{
-		{activeID, "", ""}, {goneID, old, ""}, {recentID, recent, ""}, {mergedID, "", activeID},
+	// mergedRecentID was last observed long ago but merged recently: its
+	// redirect must survive. mergedID was merged longer ago than the cutoff.
+	for _, entity := range []struct{ id, gone, merged, mergedAt string }{
+		{activeID, "", "", ""}, {goneID, old, "", ""}, {recentID, recent, "", ""},
+		{mergedID, "", activeID, old}, {mergedRecentID, "", activeID, recent},
 	} {
-		var goneAt, mergedInto any
+		var goneAt, mergedInto, mergedAt any
 		if entity.gone != "" {
 			goneAt = entity.gone
 		}
 		if entity.merged != "" {
-			mergedInto = entity.merged
+			mergedInto, mergedAt = entity.merged, entity.mergedAt
 		}
-		if _, err := s.DB().ExecContext(ctx, `INSERT INTO entities(id,kind,display_name,first_seen_at,last_seen_at,gone_at,merged_into) VALUES(?,?,?,?,?,?,?)`, entity.id, "vm", entity.id, old, old, goneAt, mergedInto); err != nil {
+		if _, err := s.DB().ExecContext(ctx, `INSERT INTO entities(id,kind,display_name,first_seen_at,last_seen_at,gone_at,merged_into,merged_at) VALUES(?,?,?,?,?,?,?,?)`, entity.id, "vm", entity.id, old, old, goneAt, mergedInto, mergedAt); err != nil {
 			t.Fatal(err)
 		}
 	}
-	for _, member := range []struct{ id, ref, gone string }{{activeID, "active", ""}, {goneID, "gone", old}, {recentID, "recent", recent}, {mergedID, "merged", old}} {
+	for _, member := range []struct{ id, ref, gone string }{{activeID, "active", ""}, {goneID, "gone", old}, {recentID, "recent", recent}, {mergedID, "merged", old}, {mergedRecentID, "merged-recent", old}} {
 		var goneAt any
 		if member.gone != "" {
 			goneAt = member.gone
@@ -175,8 +178,8 @@ func TestRunCleanupPurgesOnlyExpiredGoneAndMergedIdentities(t *testing.T) {
 	if err := s.DB().QueryRowContext(ctx, `SELECT COUNT(*) FROM entity_members`).Scan(&members); err != nil {
 		t.Fatal(err)
 	}
-	if entities != 2 || members != 2 {
-		t.Fatalf("after purge entities=%d members=%d, want recent-gone plus active", entities, members)
+	if entities != 3 || members != 3 {
+		t.Fatalf("after purge entities=%d members=%d, want active, recent-gone and recently merged", entities, members)
 	}
 }
 

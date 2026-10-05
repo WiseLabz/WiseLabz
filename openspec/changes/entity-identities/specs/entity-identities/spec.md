@@ -25,7 +25,7 @@ The system SHALL merge memberships transitively only for same-kind external-ID m
 - **THEN** they SHALL retain separate identities.
 
 ### Requirement: Stable identity lifecycle
-The system SHALL retain the oldest existing identity ID when memberships merge and SHALL set each losing identity's `merged_into` to the winner. When an observation leaves a cluster, it SHALL receive a new identity. When an identity loses its last member, it SHALL receive `gone_at` and remain stored until snapshot retention expires.
+The system SHALL retain the oldest existing identity ID when memberships merge and SHALL set each losing identity's `merged_into` to the winner and its `merged_at` to the merge time (kept when the redirect is later re-pointed, cleared with `merged_into`). When an observation leaves a cluster, it SHALL receive a new identity. When an identity loses its last member, it SHALL receive `gone_at` and remain stored until snapshot retention expires.
 
 #### Scenario: Merge retains oldest ID
 - **WHEN** two existing identities become one strong-match component
@@ -36,11 +36,18 @@ The system SHALL retain the oldest existing identity ID when memberships merge a
 - **THEN** the identity SHALL be marked gone without immediate deletion.
 
 #### Scenario: Retention purges identities
-- **WHEN** a gone identity or merged redirect is older than `retention_settings.snapshot_days`
+- **WHEN** a gone identity (by `gone_at`) or a merged redirect (by `merged_at`, not `last_seen_at`) is older than `retention_settings.snapshot_days`
 - **THEN** the retention job SHALL purge it.
+
+#### Scenario: Recently merged identity survives
+- **WHEN** an identity unobserved for longer than `snapshot_days` is merged into another identity inside the retention window
+- **THEN** its redirect SHALL survive until `merged_at` passes the cutoff.
 
 ### Requirement: Sync-time and startup reconciliation
 The system SHALL rebuild identities after a successful connector sync and SHALL backfill identities for existing snapshots when a server instance acquires leadership. An unreadable snapshot SHALL NOT erase the last known-good memberships.
 
 ### Requirement: Entity-bound findings and search
 Entity-specific compliance findings SHALL persist the entity kind and connector-local ref they describe. Entity search hits SHALL include the persisted identity UUID for their member.
+
+### Requirement: One notification per rule per connector
+Entity-specific compliance findings SHALL notify at most once per rule and connector at a given severity. A new or returning entity on a rule that already notified at that severity or higher SHALL NOT notify; a severity escalation SHALL notify exactly once; and a rule whose open findings on a connector have all resolved SHALL notify once when it fires again.

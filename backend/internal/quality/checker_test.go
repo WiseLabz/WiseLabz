@@ -896,3 +896,118 @@ func TestMalformedRelatedJSONFailsOnlyThatRule(t *testing.T) {
 		t.Fatalf("open findings = %#v, want only the well-formed rule's", open)
 	}
 }
+
+// setVMSnapshot stores a snapshot whose listed VMs all violate the firewall rule.
+func setVMSnapshot(t *testing.T, s *store.Store, connectorID, fetchedAt string, ids ...string) {
+	t.Helper()
+	entities := make([]connector.SnapshotEntity, 0, len(ids))
+	for _, id := range ids {
+		entities = append(entities, connector.SnapshotEntity{Kind: "vm", Name: "vm-" + id, ExternalID: id, Attributes: map[string]any{"firewall_enabled": false}})
+	}
+	data, err := json.Marshal(connector.ServiceSnapshot{Entities: entities})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.CreateSnapshot(context.Background(), &store.SnapshotRecord{ConnectorID: connectorID, Data: string(data), FetchedAt: fetchedAt}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func evalRuleN(t *testing.T, c *Checker, ruleID string, n int) {
+	t.Helper()
+	for i := 0; i < n; i++ {
+		if err := c.EvaluateRule(context.Background(), ruleID); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func TestComplianceNewEntityOnNotifiedRuleDoesNotNotifyAgain(t *testing.T) {
+	s := newTestStore(t)
+	conn := createConnector(t, s, "owner")
+	rule := createComplianceRule(t, s, "proxmox", "Firewall disabled")
+	notifier := &fakeNotifier{}
+	checker := NewChecker(s, nil, notifier, RotationConfig{MaxAgeDays: 90, WarnDays: 14})
+	setVMSnapshot(t, s, conn.ID, "2026-01-01T00:00:00Z", "a", "b")
+	evalRuleN(t, checker, rule.ID, 3)
+	if notifier.calls != 1 {
+		t.Fatalf("calls=%d, want 1", notifier.calls)
+	}
+	setVMSnapshot(t, s, conn.ID, "2026-01-02T00:00:00Z", "a", "b", "c", "d")
+	evalRuleN(t, checker, rule.ID, 3)
+	if got := len(findings(t, s, conn.ID, "compliance", "open")); got != 4 {
+		t.Fatalf("open findings=%d, want 4", got)
+	}
+	if notifier.calls != 1 {
+		t.Fatalf("calls=%d after new entities on notified rule, want 1", notifier.calls)
+	}
+}
+
+func TestComplianceEscalationNotifiesExactlyOnce(t *testing.T) {
+	ctx := context.Background()
+	s := newTestStore(t)
+	conn := createConnector(t, s, "owner")
+	rule := createComplianceRule(t, s, "proxmox", "Firewall disabled")
+	rule.Severity = "warning"
+	if err := s.UpdateComplianceRule(ctx, rule); err != nil {
+		t.Fatal(err)
+	}
+	notifier := &fakeNotifier{}
+	checker := NewChecker(s, nil, notifier, RotationConfig{MaxAgeDays: 90, WarnDays: 14})
+	setVMSnapshot(t, s, conn.ID, "2026-01-01T00:00:00Z", "a", "b", "c")
+	evalRuleN(t, checker, rule.ID, 2)
+	if notifier.calls != 1 {
+		t.Fatalf("calls=%d, want 1", notifier.calls)
+	}
+	rule.Severity = "critical"
+	if err := s.UpdateComplianceRule(ctx, rule); err != nil {
+		t.Fatal(err)
+	}
+	evalRuleN(t, checker, rule.ID, 3)
+	if notifier.calls != 2 {
+		t.Fatalf("calls=%d after escalation, want exactly 2", notifier.calls)
+	}
+}
+
+func TestComplianceEntityFlapDoesNotNotifyAgain(t *testing.T) {
+	s := newTestStore(t)
+	conn := createConnector(t, s, "owner")
+	rule := createComplianceRule(t, s, "proxmox", "Firewall disabled")
+	notifier := &fakeNotifier{}
+	checker := NewChecker(s, nil, notifier, RotationConfig{MaxAgeDays: 90, WarnDays: 14})
+	setVMSnapshot(t, s, conn.ID, "2026-01-01T00:00:00Z", "a", "b")
+	evalRuleN(t, checker, rule.ID, 1)
+	for i, ids := range [][]string{{"a"}, {"a", "b"}, {"a"}, {"a", "b"}} {
+		setVMSnapshot(t, s, conn.ID, "2026-01-0"+string(rune('2'+i))+"T00:00:00Z", ids...)
+		evalRuleN(t, checker, rule.ID, 1)
+	}
+	if notifier.calls != 1 {
+		t.Fatalf("calls=%d after flapping, want 1", notifier.calls)
+	}
+}
+
+func TestComplianceAllResolvedThenRefiresNotifiesAgain(t *testing.T) {
+	s := newTestStore(t)
+	conn := createConnector(t, s, "owner")
+	rule := createComplianceRule(t, s, "proxmox", "Firewall disabled")
+	notifier := &fakeNotifier{}
+	checker := NewChecker(s, nil, notifier, RotationConfig{MaxAgeDays: 90, WarnDays: 14})
+	setVMSnapshot(t, s, conn.ID, "2026-01-01T00:00:00Z", "a", "b")
+	evalRuleN(t, checker, rule.ID, 1)
+	setVMSnapshot(t, s, conn.ID, "2026-01-02T00:00:00Z")
+	evalRuleN(t, checker, rule.ID, 1)
+	if got := len(findings(t, s, conn.ID, "compliance", "open")); got != 0 {
+		t.Fatalf("open=%d, want 0", got)
+	}
+	setVMSnapshot(t, s, conn.ID, "2026-01-03T00:00:00Z", "a", "c")
+	evalRuleN(t, checker, rule.ID, 2)
+	if notifier.calls != 2 {
+		t.Fatalf("calls=%d after refire, want 2", notifier.calls)
+	}
+	// Entities fully replaced in one run is also a fresh incident.
+	setVMSnapshot(t, s, conn.ID, "2026-01-04T00:00:00Z", "x")
+	evalRuleN(t, checker, rule.ID, 1)
+	if notifier.calls != 3 {
+		t.Fatalf("calls=%d after full replacement, want 3", notifier.calls)
+	}
+}

@@ -51,6 +51,7 @@ func TestRunMigrations(t *testing.T) {
 		}
 	}
 	if !attachmentTableExists(t, db, "sqlite", "entities") || !attachmentTableExists(t, db, "sqlite", "entity_members") ||
+		!hasColumn(t, db, "sqlite", "entities", "merged_at") ||
 		!hasColumn(t, db, "sqlite", "quality_findings", "entity_kind") || !hasColumn(t, db, "sqlite", "quality_findings", "entity_ref") {
 		t.Fatal("entity identity migration schema is incomplete")
 	}
@@ -860,6 +861,9 @@ func TestRunMigrationsDownPostgres(t *testing.T) {
 	}
 	if !hasColumn(t, db, "postgres", "compliance_rules", "related") {
 		t.Fatal("compliance_rules.related missing")
+	}
+	if !hasColumn(t, db, "postgres", "entities", "merged_at") {
+		t.Fatal("entities.merged_at missing")
 	}
 	if err := RunMigrationsDown(db, "postgres", logger); err != nil {
 		t.Fatalf("rollback entity_identities: %v", err)
