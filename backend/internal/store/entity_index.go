@@ -20,6 +20,7 @@ type SearchFilter struct {
 
 // EntityHit identifies an entity and the reporting connector's generated doc.
 type EntityHit struct {
+	EntityID      string   `json:"entityId"`
 	ConnectorID   string   `json:"connectorId"`
 	ConnectorName string   `json:"connectorName"`
 	DocID         string   `json:"docId"`
@@ -119,11 +120,13 @@ func (s *Store) SearchEntities(ctx context.Context, userID, query string, filter
 	exactArgs = append(exactArgs, query)
 	args = append(args, exactArgs...)
 	args = append(args, limit)
-	rows, err := s.db.QueryContext(ctx, `SELECT e.connector_id, c.name,
+	rows, err := s.db.QueryContext(ctx, `SELECT COALESCE(em.entity_id, ''), e.connector_id, c.name,
  COALESCE((SELECT d.id FROM docs d WHERE d.service_id = e.connector_id AND d.deleted_at IS NULL
  AND d.kind = 'service' ORDER BY d.id LIMIT 1), ''),
  e.kind, e.name, e.external_id, e.ip, e.hostname, e.mac, e.aliases
  FROM entity_index e JOIN connectors c ON c.id = e.connector_id
+ LEFT JOIN entity_members em ON em.connector_id = e.connector_id AND em.kind = e.kind
+ AND em.ref = CASE WHEN e.external_id <> '' THEN e.external_id ELSE e.name END
  WHERE `+where+` AND (`+strings.Join(matches, " OR ")+`)
  ORDER BY CASE WHEN (`+strings.Join(exact, " OR ")+`) THEN 0 ELSE 1 END,
  e.name_folded, e.connector_id, e.kind, e.external_id, e.ip, e.hostname, e.mac, e.aliases LIMIT ?`, args...)
@@ -134,7 +137,7 @@ func (s *Store) SearchEntities(ctx context.Context, userID, query string, filter
 	for rows.Next() {
 		var hit EntityHit
 		var aliases string
-		if err := rows.Scan(&hit.ConnectorID, &hit.ConnectorName, &hit.DocID, &hit.Kind, &hit.Name,
+		if err := rows.Scan(&hit.EntityID, &hit.ConnectorID, &hit.ConnectorName, &hit.DocID, &hit.Kind, &hit.Name,
 			&hit.ExternalID, &hit.IP, &hit.Hostname, &hit.MAC, &aliases); err != nil {
 			return nil, fmt.Errorf("scan entity hit: %w", err)
 		}

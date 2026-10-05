@@ -25,6 +25,7 @@ const results: SearchResults = {
   runbooks: [{ type: 'runbook', id: 'r', title: 'Recovery', snippet: 'Restart safely', score: 1 }],
   entities: [
     {
+      entityId: 'entity-1',
       connectorId: 'c',
       connectorName: 'Gateway',
       docId: 'd',

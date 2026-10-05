@@ -49,6 +49,10 @@ func TestRunMigrations(t *testing.T) {
 			t.Errorf("table %s does not exist or is not queryable: %v", table, err)
 		}
 	}
+	if !attachmentTableExists(t, db, "sqlite", "entities") || !attachmentTableExists(t, db, "sqlite", "entity_members") ||
+		!hasColumn(t, db, "sqlite", "quality_findings", "entity_kind") || !hasColumn(t, db, "sqlite", "quality_findings", "entity_ref") {
+		t.Fatal("entity identity migration schema is incomplete")
+	}
 	var disabledRules int
 	if err := db.QueryRow("SELECT COUNT(*) FROM compliance_rules WHERE enabled = 0").Scan(&disabledRules); err != nil || disabledRules != 5 {
 		t.Errorf("disabled seeded compliance rules = %d, %v; want 5, nil", disabledRules, err)
@@ -133,6 +137,15 @@ func TestRunMigrationsDown(t *testing.T) {
 
 	if !hasColumn(t, db, "sqlite", "compliance_rules", "related") {
 		t.Fatal("compliance_rules.related missing")
+	}
+	if err := RunMigrationsDown(db, "sqlite", logger); err != nil {
+		t.Fatal(err)
+	}
+	if attachmentTableExists(t, db, "sqlite", "entities") || hasColumn(t, db, "sqlite", "quality_findings", "entity_kind") {
+		t.Fatal("entity identity migration remains after rollback")
+	}
+	if !hasColumn(t, db, "sqlite", "compliance_rules", "related") {
+		t.Fatal("000057 compliance_rules.related missing after rolling back 000058")
 	}
 	if err := RunMigrationsDown(db, "sqlite", logger); err != nil {
 		t.Fatal(err)
@@ -464,6 +477,12 @@ func TestRunMigrationsDown(t *testing.T) {
 	}
 	if err := db.QueryRow("SELECT name FROM sqlite_master WHERE type='table' AND name='compliance_rules'").Scan(&name); err != nil {
 		t.Fatalf("compliance_rules missing after reapply: %v", err)
+	}
+	if !attachmentTableExists(t, db, "sqlite", "entities") || !attachmentTableExists(t, db, "sqlite", "entity_members") {
+		t.Fatal("entity identity tables missing after migration reapply")
+	}
+	if err := RunMigrationsDown(db, "sqlite", logger); err != nil {
+		t.Fatalf("rollback entity identities before legacy migration checks: %v", err)
 	}
 	if !hasColumn(t, db, "sqlite", "users", "digest_cadence") {
 		t.Fatal("users.digest_cadence missing after reapply")

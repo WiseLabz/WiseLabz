@@ -39,6 +39,7 @@ export const getGetSearchResponseMock = (
   ),
   entities: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(
     () => ({
+      entityId: faker.string.alpha({ length: { min: 10, max: 20 } }),
       connectorId: faker.string.alpha({ length: { min: 10, max: 20 } }),
       connectorName: faker.string.alpha({ length: { min: 10, max: 20 } }),
       docId: faker.string.alpha({ length: { min: 10, max: 20 } }),

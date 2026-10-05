@@ -50,6 +50,9 @@ func TestEntityIndexSearch(t *testing.T) {
 	}
 	replace(a.ID, entities)
 	replace(b.ID, []connector.SnapshotEntity{{Kind: "device", Name: "hidden-router"}})
+	if err := s.ReconcileEntityIdentities(ctx, [][]EntityMemberRecord{{{ConnectorID: a.ID, Kind: "device", Ref: "100", Name: "ROUTER"}}}); err != nil {
+		t.Fatalf("reconcile entity identity: %v", err)
+	}
 	userCtx := auth.ContextWithUser(ctx, "search-user", false)
 	search := func(ctx context.Context, q string, f SearchFilter, limit int) []EntityHit {
 		t.Helper()
@@ -60,7 +63,7 @@ func TestEntityIndexSearch(t *testing.T) {
 		return hits
 	}
 	hits := search(userCtx, "router", SearchFilter{}, 10)
-	if len(hits) != 3 || hits[0].Name != "ROUTER" || hits[0].DocID != "service-doc" || hits[0].ConnectorName != "Router" {
+	if len(hits) != 3 || hits[0].Name != "ROUTER" || hits[0].DocID != "service-doc" || hits[0].ConnectorName != "Router" || hits[0].EntityID == "" {
 		t.Fatalf("hits: %+v", hits)
 	}
 	for _, q := range []string{"10.0.0.1", "gateway", "AA:BB:CC:DD:EE:FF", "100", "dns.lab"} {

@@ -150,13 +150,15 @@ func (c *Checker) EvaluateRule(ctx context.Context, ruleID string) error {
 			errs = append(errs, fmt.Errorf("connector %s: %w", conn.ID, err))
 			continue
 		}
-		finding, err := c.evaluateComplianceRule(ctx, conn.ID, rule, snapshot, related)
+		findings, err := c.evaluateComplianceRule(ctx, conn.ID, rule, snapshot, related)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("connector %s: %w", conn.ID, err))
 			continue
 		}
-		if finding != nil && c.hub != nil {
-			c.broadcastCreated(conn.ID, finding)
+		if c.hub != nil {
+			for _, finding := range findings {
+				c.broadcastCreated(conn.ID, finding)
+			}
 		}
 		c.broadcastChanged(conn.ID)
 	}
@@ -208,14 +210,12 @@ func (c *Checker) checkCompliance(ctx context.Context, connectorID string) ([]*s
 			errs = append(errs, fmt.Errorf("rule %s: %w", records[i].ID, err))
 			continue
 		}
-		finding, err := c.evaluateComplianceRule(ctx, connectorID, rule, snapshot, related)
+		ruleFindings, err := c.evaluateComplianceRule(ctx, connectorID, rule, snapshot, related)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("rule %s: %w", records[i].ID, err))
 			continue
 		}
-		if finding != nil {
-			findings = append(findings, finding)
-		}
+		findings = append(findings, ruleFindings...)
 	}
 	return findings, errors.Join(errs...)
 }
@@ -257,23 +257,41 @@ func (c *Checker) loadComplianceSnapshot(ctx context.Context, connectorID string
 	return &result, nil
 }
 
-func (c *Checker) evaluateComplianceRule(ctx context.Context, connectorID string, rule compliance.Rule, snapshot *compliance.Snapshot, related compliance.RelatedEntities) (*store.QualityFindingRecord, error) {
+func (c *Checker) evaluateComplianceRule(ctx context.Context, connectorID string, rule compliance.Rule, snapshot *compliance.Snapshot, related compliance.RelatedEntities) ([]*store.QualityFindingRecord, error) {
 	// Missing or malformed snapshots must not resolve existing findings.
 	if snapshot == nil {
 		return nil, nil
 	}
 	matches, skipped := compliance.EvaluateWithRelated(rule, *snapshot, related)
-	// A skipped rule (no connector of a related type has a snapshot) does not
-	// apply right now, so it clears its finding like a clean evaluation does.
 	if skipped || len(matches) == 0 {
 		return nil, c.store.ResolveQualityFindingForRule(ctx, connectorID, rule.ID)
 	}
-	finding := &store.QualityFindingRecord{
-		ConnectorID: connectorID, RuleID: rule.ID, CheckType: "compliance",
-		Severity: rule.Severity, Title: rule.Title, Description: complianceDescription(matches),
-		RemediationLink: rule.RemediationLink,
+	findings := make([]*store.QualityFindingRecord, 0, len(matches))
+	refs := make([]store.EntityIdentityRef, 0, len(matches))
+	for _, entity := range matches {
+		ref := entity.ExternalID
+		if ref == "" {
+			ref = entity.Name
+		}
+		refs = append(refs, store.EntityIdentityRef{Kind: entity.Kind, Ref: ref})
+		finding := &store.QualityFindingRecord{
+			ConnectorID: connectorID, RuleID: rule.ID, CheckType: "compliance",
+			EntityKind: entity.Kind, EntityRef: ref,
+			Severity: rule.Severity, Title: rule.Title, Description: complianceDescription([]compliance.Entity{entity}),
+			RemediationLink: rule.RemediationLink,
+		}
+		created, err := c.upsert(ctx, finding)
+		if err != nil {
+			return nil, err
+		}
+		if created != nil {
+			findings = append(findings, created)
+		}
 	}
-	return c.upsert(ctx, finding)
+	if err := c.store.ResolveQualityFindingsForRuleExceptEntities(ctx, connectorID, rule.ID, refs); err != nil {
+		return nil, err
+	}
+	return findings, nil
 }
 
 // relatedSource loads the entities related clauses join against. Connectors
@@ -402,13 +420,15 @@ func (c *Checker) checkRelatedCompliance(ctx context.Context, connectorID string
 				errs = append(errs, fmt.Errorf("rule %s connector %s: %w", records[i].ID, sourceConn.ID, err))
 				continue
 			}
-			finding, err := c.evaluateComplianceRule(ctx, sourceConn.ID, rule, snapshot, related)
+			findings, err := c.evaluateComplianceRule(ctx, sourceConn.ID, rule, snapshot, related)
 			if err != nil {
 				errs = append(errs, fmt.Errorf("rule %s connector %s: %w", records[i].ID, sourceConn.ID, err))
 				continue
 			}
-			if finding != nil && c.hub != nil {
-				c.broadcastCreated(sourceConn.ID, finding)
+			if c.hub != nil {
+				for _, finding := range findings {
+					c.broadcastCreated(sourceConn.ID, finding)
+				}
 			}
 			affectedConnectorIDs[sourceConn.ID] = true
 		}

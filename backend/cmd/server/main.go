@@ -200,7 +200,7 @@ func main() {
 		Ready:               readyState,
 		Elector:             elector,
 		LeaderElection:      cfg.HA.LeaderElection,
-		TopologyBackfill:    docEngine.BackfillTopology,
+		TopologyBackfill:    docEngine.BackfillTopologyAndIdentities,
 		EntityIndexBackfill: s.BackfillEntityIndex,
 		ShutdownTimeout:     cfg.Server.ShutdownTimeoutDuration(),
 	})

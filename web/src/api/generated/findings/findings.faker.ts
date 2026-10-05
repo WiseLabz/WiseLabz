@@ -19,6 +19,14 @@ export const getGetFindingsResponseMock = (
     connectorId: faker.string.alpha({ length: { min: 10, max: 20 } }),
     connectorName: faker.string.alpha({ length: { min: 10, max: 20 } }),
     docId: faker.helpers.arrayElement([faker.string.alpha({ length: { min: 10, max: 20 } }), null]),
+    entityKind: faker.helpers.arrayElement([
+      faker.string.alpha({ length: { min: 10, max: 20 } }),
+      undefined,
+    ]),
+    entityRef: faker.helpers.arrayElement([
+      faker.string.alpha({ length: { min: 10, max: 20 } }),
+      undefined,
+    ]),
     ruleId: faker.helpers.arrayElement([
       faker.string.alpha({ length: { min: 10, max: 20 } }),
       null,
@@ -50,6 +58,14 @@ export const getGetFindingsFindingIdResponseMock = (
   connectorId: faker.string.alpha({ length: { min: 10, max: 20 } }),
   connectorName: faker.string.alpha({ length: { min: 10, max: 20 } }),
   docId: faker.helpers.arrayElement([faker.string.alpha({ length: { min: 10, max: 20 } }), null]),
+  entityKind: faker.helpers.arrayElement([
+    faker.string.alpha({ length: { min: 10, max: 20 } }),
+    undefined,
+  ]),
+  entityRef: faker.helpers.arrayElement([
+    faker.string.alpha({ length: { min: 10, max: 20 } }),
+    undefined,
+  ]),
   ruleId: faker.helpers.arrayElement([faker.string.alpha({ length: { min: 10, max: 20 } }), null]),
   checkType: faker.helpers.arrayElement(Object.values(QualityCheckType)),
   severity: faker.helpers.arrayElement(Object.values(Severity)),
@@ -74,6 +90,14 @@ export const getPostFindingsFindingIdResolveResponseMock = (
   connectorId: faker.string.alpha({ length: { min: 10, max: 20 } }),
   connectorName: faker.string.alpha({ length: { min: 10, max: 20 } }),
   docId: faker.helpers.arrayElement([faker.string.alpha({ length: { min: 10, max: 20 } }), null]),
+  entityKind: faker.helpers.arrayElement([
+    faker.string.alpha({ length: { min: 10, max: 20 } }),
+    undefined,
+  ]),
+  entityRef: faker.helpers.arrayElement([
+    faker.string.alpha({ length: { min: 10, max: 20 } }),
+    undefined,
+  ]),
   ruleId: faker.helpers.arrayElement([faker.string.alpha({ length: { min: 10, max: 20 } }), null]),
   checkType: faker.helpers.arrayElement(Object.values(QualityCheckType)),
   severity: faker.helpers.arrayElement(Object.values(Severity)),

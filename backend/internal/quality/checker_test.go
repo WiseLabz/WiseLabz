@@ -723,7 +723,17 @@ func TestRelatedClausesAreANDedAcrossModes(t *testing.T) {
 	if err := env.checker.EvaluateRule(context.Background(), rule.ID); err != nil {
 		t.Fatalf("EvaluateRule() error: %v", err)
 	}
-	env.wantOpenDescription(env.source.ID, "Violating entities: vm-102, vm-103.")
+	got := env.open(env.source.ID)
+	if len(got) != 2 {
+		t.Fatalf("open findings = %#v, want one per matching entity", got)
+	}
+	refs := map[string]bool{}
+	for _, finding := range got {
+		refs[finding.EntityRef] = finding.EntityKind == "vm"
+	}
+	if !refs["102"] || !refs["103"] {
+		t.Fatalf("entity references = %#v, want vm refs 102 and 103", got)
+	}
 }
 
 // A related snapshot that exists but holds no matching entity is real data:
