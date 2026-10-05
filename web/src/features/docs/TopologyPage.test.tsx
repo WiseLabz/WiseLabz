@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useLocation, useNavigationType } from 'react-router-dom';
+import dagre from '@dagrejs/dagre';
 import type { ComponentType, ReactNode } from 'react';
 import type { TopologyGraph } from '../../api/model';
 import '../../i18n';
@@ -49,6 +50,7 @@ vi.mock('@xyflow/react', async () => {
             {
               key: edge.id,
               'data-testid': 'flow-edge',
+              'data-edge-id': edge.id,
               'data-highlighted': String(edge.data?.highlighted),
             },
             edge.label
@@ -57,6 +59,7 @@ vi.mock('@xyflow/react', async () => {
       ]);
     },
     Background: () => null,
+    Handle: () => null,
     Controls: () => null,
     BaseEdge: () => null,
     EdgeLabelRenderer: ({ children }: { children: ReactNode }) => children,
@@ -147,6 +150,17 @@ beforeEach(() => {
 
 afterEach(() => vi.restoreAllMocks());
 
+function LocationProbe() {
+  const location = useLocation();
+  const type = useNavigationType();
+  return (
+    <>
+      <output data-testid="search">{location.search}</output>
+      <output data-testid="nav-type">{type}</output>
+    </>
+  );
+}
+
 function renderTopology(url = '/topology') {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
@@ -154,6 +168,7 @@ function renderTopology(url = '/topology') {
   return render(
     <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={[url]}>
+        <LocationProbe />
         <Routes>
           <Route path="/topology" element={<TopologyPage />} />
           <Route path="/entities/:id" element={<p>Entity page</p>} />
@@ -164,6 +179,29 @@ function renderTopology(url = '/topology') {
     </QueryClientProvider>
   );
 }
+
+function highlightedEdgeIds() {
+  return screen
+    .getAllByTestId('flow-edge')
+    .filter((edge) => edge.getAttribute('data-highlighted') === 'true')
+    .map((edge) => edge.getAttribute('data-edge-id'));
+}
+
+const hostToVM = {
+  found: true,
+  hops: 1,
+  truncated: false,
+  path: [
+    { connectorId: 'connector-a', kind: 'host', name: 'Host Alpha', nodeId: 'identity-a' },
+    {
+      connectorId: 'connector-a',
+      kind: 'vm',
+      name: 'VM Beta',
+      nodeId: 'identity-b',
+      edgeKind: 'runs_on',
+    },
+  ],
+};
 
 describe('TopologyPage', () => {
   it('starts with linked graph nodes and sends includeUnlinked when toggled', () => {
@@ -265,13 +303,8 @@ describe('TopologyPage', () => {
       { from: 'Host Alpha', to: 'VM Beta' },
       expect.objectContaining({ query: expect.objectContaining({ enabled: true }) })
     );
-    await waitFor(() =>
-      expect(
-        screen
-          .getAllByTestId('flow-edge')
-          .some((edge) => edge.getAttribute('data-highlighted') === 'true')
-      ).toBe(true)
-    );
+    await waitFor(() => expect(highlightedEdgeIds()).toEqual(['edge-1']));
+    expect(screen.getByTestId('search')).toHaveTextContent('?from=Host+Alpha&to=VM+Beta');
   });
 
   it('shows no path and trace request errors without hiding the graph', () => {
@@ -300,7 +333,7 @@ describe('TopologyPage', () => {
         </MemoryRouter>
       </QueryClientProvider>
     );
-    expect(screen.getByRole('alert')).toHaveTextContent('Enter both endpoints');
+    expect(screen.getByRole('alert')).toHaveTextContent('Enter a starting point');
   });
 
   it('navigates identity clicks to the entity and connector clicks to its doc', async () => {
@@ -359,10 +392,156 @@ describe('TopologyPage', () => {
   it('shows endpoint validation before submitting an invalid trace', () => {
     renderTopology();
     fireEvent.click(screen.getByRole('button', { name: 'Trace path' }));
-    expect(screen.getByRole('alert')).toHaveTextContent('Enter both endpoints');
+    expect(screen.getByRole('alert')).toHaveTextContent('Enter a starting point');
     expect(pathHook).toHaveBeenLastCalledWith(
       { from: '_', to: undefined },
       expect.objectContaining({ query: expect.objectContaining({ enabled: false }) })
     );
+  });
+
+  it('writes filters to the URL by replacing history and restores them from the URL', () => {
+    renderTopology();
+    fireEvent.change(screen.getByRole('combobox', { name: 'Connector' }), {
+      target: { value: 'connector-a' },
+    });
+    fireEvent.change(screen.getByRole('combobox', { name: 'Entity kind' }), {
+      target: { value: 'host' },
+    });
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Show unlinked identities' }));
+    expect(screen.getByTestId('search')).toHaveTextContent(
+      '?connector=connector-a&kind=host&includeUnlinked=true'
+    );
+    expect(screen.getByTestId('nav-type')).toHaveTextContent('REPLACE');
+  });
+
+  it('restores filters and trace from an initial URL', () => {
+    pathHook.mockReturnValue({ data: hostToVM, isError: false, isLoading: false });
+    renderTopology('/topology?connector=connector-a&kind=host&includeUnlinked=true&from=Host+Alpha&to=VM+Beta');
+    expect(graphHook).toHaveBeenLastCalledWith(
+      { connector: 'connector-a', kind: 'host', includeUnlinked: true },
+      expect.anything()
+    );
+    expect(screen.getByRole('combobox', { name: 'Connector' })).toHaveValue('connector-a');
+    expect(screen.getByRole('combobox', { name: 'Entity kind' })).toHaveValue('host');
+    expect(screen.getByRole('checkbox', { name: 'Show unlinked identities' })).toBeChecked();
+    expect(screen.getByRole('textbox', { name: 'From' })).toHaveValue('Host Alpha');
+    expect(screen.getByRole('textbox', { name: 'To' })).toHaveValue('VM Beta');
+    expect(pathHook).toHaveBeenLastCalledWith(
+      { from: 'Host Alpha', to: 'VM Beta' },
+      expect.objectContaining({ query: expect.objectContaining({ enabled: true }) })
+    );
+    expect(highlightedEdgeIds()).toEqual(['edge-1']);
+  });
+
+  it('keeps every kind selectable after a kind filter narrows the response', () => {
+    graphHook.mockImplementation((params: { kind?: string }) => ({
+      data: params.kind
+        ? { ...graph, nodes: graph.nodes.filter((n) => n.kind === params.kind), edges: [] }
+        : graph,
+      isLoading: false,
+      isError: false,
+      refetch: vi.fn(),
+    }));
+    renderTopology();
+    const select = screen.getByRole('combobox', { name: 'Entity kind' });
+    expect(within(select).getAllByRole('option').map((o) => o.textContent)).toEqual([
+      'All kinds',
+      'host',
+      'service',
+      'vm',
+    ]);
+    fireEvent.change(select, { target: { value: 'host' } });
+    expect(within(select).getAllByRole('option').map((o) => o.textContent)).toEqual([
+      'All kinds',
+      'host',
+      'service',
+      'vm',
+    ]);
+    expect(select).toHaveValue('host');
+  });
+
+  it('submits the trace with Enter and allows a from-only trace', async () => {
+    pathHook.mockReturnValue({ data: hostToVM, isError: false, isLoading: false });
+    renderTopology();
+    fireEvent.change(screen.getByRole('textbox', { name: 'From' }), {
+      target: { value: 'Host Alpha' },
+    });
+    fireEvent.submit(screen.getByRole('form', { name: 'Trace a path' }));
+    expect(screen.getByTestId('search')).toHaveTextContent('?from=Host+Alpha');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(pathHook).toHaveBeenLastCalledWith(
+      { from: 'Host Alpha', to: undefined },
+      expect.objectContaining({ query: expect.objectContaining({ enabled: true }) })
+    );
+    await waitFor(() => expect(highlightedEdgeIds()).toEqual(['edge-1']));
+    expect(screen.getByRole('button', { name: 'Trace path' })).toHaveAttribute('type', 'submit');
+  });
+
+  it('says the path walk was limited when the endpoint truncates', () => {
+    pathHook.mockReturnValue({
+      data: { ...hostToVM, truncated: true },
+      isError: false,
+      isLoading: false,
+    });
+    renderTopology('/topology?from=Host+Alpha');
+    expect(screen.getByText(/path was cut short/i)).toBeInTheDocument();
+  });
+
+  it('reports a failed Mermaid export', async () => {
+    role.admin = true;
+    postTopology.mockRejectedValue(new Error('forbidden'));
+    renderTopology();
+    fireEvent.click(screen.getByRole('button', { name: 'Open Mermaid document' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent("Couldn't export the Mermaid");
+    expect(screen.queryByText('Document page')).not.toBeInTheDocument();
+  });
+
+  it('shows a filter-specific empty state that clears the filters', () => {
+    graphHook.mockImplementation((params: { kind?: string }) => ({
+      data: params.kind ? emptyGraph : graph,
+      isLoading: false,
+      isError: false,
+      refetch: vi.fn(),
+    }));
+    renderTopology('/topology?kind=rack&from=Host+Alpha');
+    expect(screen.getByText('No topology matches these filters')).toBeInTheDocument();
+    expect(screen.queryByText('No topology yet')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }));
+    expect(screen.getByTestId('search')).toHaveTextContent('?from=Host+Alpha');
+    expect(screen.getByRole('link', { name: 'Host Alpha', hidden: true })).toBeInTheDocument();
+  });
+
+  it('merges parallel edges between the same pair into one labelled edge', () => {
+    graphHook.mockReturnValue({
+      data: {
+        ...graph,
+        edges: [
+          ...graph.edges,
+          { id: 'edge-1b', source: 'identity-a', target: 'identity-b', kind: 'resolves_to' },
+        ],
+      },
+      isLoading: false,
+      isError: false,
+      refetch: vi.fn(),
+    });
+    renderTopology();
+    const edges = screen.getAllByTestId('flow-edge');
+    expect(edges).toHaveLength(2);
+    expect(edges.map((e) => e.textContent)).toContain('runs_on, resolves_to');
+  });
+
+  it('does not re-run the dagre layout for a trace or a filter keystroke', async () => {
+    const layout = vi.spyOn(dagre, 'layout');
+    pathHook.mockReturnValue({ data: hostToVM, isError: false, isLoading: false });
+    renderTopology();
+    const initial = layout.mock.calls.length;
+    expect(initial).toBeGreaterThan(0);
+    fireEvent.change(screen.getByRole('textbox', { name: 'From' }), {
+      target: { value: 'Host Alpha' },
+    });
+    fireEvent.change(screen.getByRole('textbox', { name: 'To' }), { target: { value: 'VM Beta' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Trace path' }));
+    await waitFor(() => expect(highlightedEdgeIds()).toEqual(['edge-1']));
+    expect(layout.mock.calls.length).toBe(initial);
   });
 });
