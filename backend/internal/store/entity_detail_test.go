@@ -146,9 +146,9 @@ func TestEntityDetailFindingsOpenOnlyAndConnectorLevel(t *testing.T) {
 	ctx := context.Background()
 	f := newEntityDetailFixture(t)
 	for _, fi := range []QualityFindingRecord{
-		{ConnectorID: f.c1.ID, CheckType: "compliance", RuleID: "r-open", Severity: "warning", Title: "open", EntityKind: "vm", EntityRef: "a"},
-		{ConnectorID: f.c1.ID, CheckType: "compliance", RuleID: "r-resolved", Severity: "warning", Title: "resolved", EntityKind: "vm", EntityRef: "a"},
-		{ConnectorID: f.c1.ID, CheckType: "compliance", RuleID: "r-other", Severity: "warning", Title: "other entity", EntityKind: "vm", EntityRef: "z"},
+		{ConnectorID: f.c1.ID, CheckType: "compliance", Severity: "warning", Title: "open", EntityKind: "vm", EntityRef: "a"},
+		{ConnectorID: f.c1.ID, CheckType: "config_drift", Severity: "warning", Title: "resolved", EntityKind: "vm", EntityRef: "a"},
+		{ConnectorID: f.c1.ID, CheckType: "compliance", Severity: "warning", Title: "other entity", EntityKind: "vm", EntityRef: "z"},
 		{ConnectorID: f.c1.ID, CheckType: "stale", Severity: "info", Title: "connector level"},
 		{ConnectorID: f.c2.ID, CheckType: "stale", Severity: "info", Title: "other connector level"},
 	} {
@@ -156,7 +156,7 @@ func TestEntityDetailFindingsOpenOnlyAndConnectorLevel(t *testing.T) {
 		if err := f.s.UpsertQualityFinding(ctx, &fi); err != nil {
 			t.Fatal(err)
 		}
-		if fi.RuleID == "r-resolved" {
+		if fi.CheckType == "config_drift" {
 			if _, err := f.s.db.ExecContext(ctx, `UPDATE quality_findings SET status = 'resolved', resolved_at = '2026-09-01T00:00:00Z' WHERE id = ?`, fi.ID); err != nil {
 				t.Fatal(err)
 			}
