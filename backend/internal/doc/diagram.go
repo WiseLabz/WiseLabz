@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/WiseLabz/wiselabz/internal/connector"
+	"github.com/WiseLabz/wiselabz/internal/store"
 )
 
 // renderMermaid emits a Mermaid flowchart (graph LR) with centerEntity as
@@ -15,12 +16,12 @@ func renderMermaid(centerEntity string, links []EntityLink) string {
 	b.WriteString("graph LR\n")
 
 	centerID := "n" + shortHash("center|"+centerEntity)
-	fmt.Fprintf(&b, "    %s[%q]\n", centerID, centerEntity)
+	fmt.Fprintf(&b, "    %s[%s]\n", centerID, mermaidLabel(centerEntity))
 
 	for _, l := range links {
 		nodeID := entityNodeID(l.ConnectorID, l.Entity)
 		label := fmt.Sprintf("%s (%s)", l.Entity.Name, l.Entity.Kind)
-		fmt.Fprintf(&b, "    %s[%q]\n", nodeID, label)
+		fmt.Fprintf(&b, "    %s[%s]\n", nodeID, mermaidLabel(label))
 		fmt.Fprintf(&b, "    %s -->|%s| %s\n", centerID, l.Reason, nodeID)
 	}
 
@@ -58,8 +59,10 @@ type labLink struct {
 
 // renderLabMermaid emits a Mermaid flowchart with one node per entity
 // (including entities with no matches, so isolated services still show up)
-// and one edge per matched pair.
-func renderLabMermaid(entities []labEntity, links []labLink) string {
+// and one edge per matched pair, followed by one directional arrow per typed
+// topology edge (proxies_to, resolves_to, runs_on) labelled with its kind and
+// detail, e.g. "proxies_to :8080".
+func renderLabMermaid(entities []labEntity, links []labLink, typed []store.TopologyEdge) string {
 	var b strings.Builder
 	b.WriteString("graph LR\n")
 
@@ -69,7 +72,7 @@ func renderLabMermaid(entities []labEntity, links []labLink) string {
 		if !seen[id] {
 			seen[id] = true
 			label := fmt.Sprintf("%s (%s)", le.Entity.Name, le.Entity.Kind)
-			fmt.Fprintf(&b, "    %s[%q]\n", id, label)
+			fmt.Fprintf(&b, "    %s[%s]\n", id, mermaidLabel(label))
 		}
 		return id
 	}
@@ -82,5 +85,83 @@ func renderLabMermaid(entities []labEntity, links []labLink) string {
 		fmt.Fprintf(&b, "    %s -->|%s| %s\n", aID, l.Reason, bID)
 	}
 
+	// Edge endpoints are keyed like entityNodeID (connector, kind, external ID
+	// or name); a placeholder endpoint with no entity gets a node of its own.
+	endpoint := func(connectorID, kind, name, ref string) string {
+		if ref == "" {
+			ref = name
+		}
+		id := "n" + shortHash(connectorID+"|"+kind+"|"+ref)
+		if !seen[id] {
+			seen[id] = true
+			fmt.Fprintf(&b, "    %s[%s]\n", id, mermaidLabel(fmt.Sprintf("%s (%s)", name, kind)))
+		}
+		return id
+	}
+	drawn := map[string]bool{}
+	for _, e := range typed {
+		if e.Kind == store.TopologyEdgeSameAs || !drawnEdgeKinds[e.Kind] {
+			continue
+		}
+		src := endpoint(e.SrcConnectorID, e.SrcKind, e.SrcName, e.SrcRef)
+		dst := endpoint(e.DstConnectorID, e.DstKind, e.DstName, e.DstRef)
+		label := e.Kind
+		if e.Detail != "" {
+			label += " :" + e.Detail
+		}
+		line := fmt.Sprintf("    %s -->|%s| %s\n", src, mermaidLabel(label), dst)
+		if !drawn[line] {
+			drawn[line] = true
+			b.WriteString(line)
+		}
+	}
+
 	return b.String()
+}
+
+// drawnEdgeKinds are the stored edge kinds the Lab Topology diagram draws, and
+// therefore the kinds its fingerprint covers (same_as is drawn from live
+// entity matches, the rest from stored edges).
+var drawnEdgeKinds = map[string]bool{
+	store.TopologyEdgeSameAs:     true,
+	store.TopologyEdgeResolvesTo: true,
+	store.TopologyEdgeProxiesTo:  true,
+	store.TopologyEdgeRunsOn:     true,
+}
+
+// mermaidReplacer neutralises everything that could end a quoted Mermaid
+// label, start another statement, or leave the surrounding code fence. Go's %q
+// is not enough: Mermaid has no backslash escape, so a label ends at the
+// first raw quote. Mermaid entity codes (#quot;, #35;) render as the original
+// character, so the text still reads the same. '#' is escaped first-class so
+// input cannot forge an entity code, and '%' so "%%" can never start a
+// Mermaid comment/directive.
+var mermaidReplacer = strings.NewReplacer(
+	"#", "#35;",
+	`"`, "#quot;",
+	"<", "#lt;",
+	">", "#gt;",
+	"[", "#91;",
+	"]", "#93;",
+	"|", "#124;",
+	"`", "#96;",
+	"%", "#37;",
+	"\r", " ",
+	"\n", " ",
+	"\t", " ",
+)
+
+// mermaidLabel returns s as a quoted Mermaid label that cannot break out of
+// its string, forge nodes or edges, or add click/href directives, whatever a
+// connector put in a name, kind or detail. Output is always a single line.
+func mermaidLabel(s string) string {
+	s = strings.Map(func(r rune) rune {
+		// Other line breaks (VT, FF, NEL, U+2028/9) and C0/C1 controls act as
+		// line ends for some parsers; flatten them like \n.
+		if r < 0x20 || (r >= 0x7f && r < 0xa0) || r == 0x2028 || r == 0x2029 {
+			return ' '
+		}
+		return r
+	}, s)
+	return `"` + mermaidReplacer.Replace(s) + `"`
 }

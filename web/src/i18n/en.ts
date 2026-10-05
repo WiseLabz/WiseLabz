@@ -914,6 +914,7 @@ export const en = {
       truncated: 'This graph is limited to the first 2,000 nodes and 5,000 edges.',
       legend: 'Edge kind legend',
       graph: 'Topology graph',
+      edgeLabel: '{{source}} {{label}} {{target}}',
       nodeList: 'Browse nodes ({{count}})',
     },
   },

@@ -35,6 +35,7 @@ export const ptBR: Catalog = {
       truncated: 'Este grafo está limitado aos primeiros 2.000 nós e 5.000 relações.',
       legend: 'Legenda dos tipos de relação',
       graph: 'Grafo da topologia',
+      edgeLabel: '{{source}} → {{target}}: {{label}}',
       nodeList: 'Explorar nós ({{count}})',
     },
     export: {

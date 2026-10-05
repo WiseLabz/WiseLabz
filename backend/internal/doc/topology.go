@@ -68,15 +68,21 @@ func (e *Engine) RebuildTopologyForConnector(ctx context.Context, connectorID st
 	b := &edgeBuilder{seen: map[string]bool{}}
 	self := store.TopologyEdge{SrcConnectorID: connectorID, SrcKind: topologyServiceKind, SrcName: conn.Name, SrcRef: connectorID}
 
-	links, err := matchEntities(ctx, e.store, e.snapshots, connectorID, snap.Entities)
+	links, err := matchEntityPairs(ctx, e.store, e.snapshots, connectorID, snap.Entities)
 	if err != nil {
 		return err
 	}
 	for _, l := range links {
 		b.add(self, connectorID, l.Local.Kind, l.Local.Name, entityRef(l.Local), store.TopologyEdgeContains, "")
-		b.add(store.TopologyEdge{
-			SrcConnectorID: connectorID, SrcKind: l.Local.Kind, SrcName: l.Local.Name, SrcRef: entityRef(l.Local),
-		}, l.ConnectorID, l.Entity.Kind, l.Entity.Name, entityRef(l.Entity), store.TopologyEdgeSameAs, l.Reason)
+		// same_as is symmetric: store it in one canonical direction so the edge
+		// is identical whichever side's rebuild derives it.
+		src := store.TopologyEdge{SrcConnectorID: connectorID, SrcKind: l.Local.Kind, SrcName: l.Local.Name, SrcRef: entityRef(l.Local)}
+		dst := store.TopologyEdge{DstConnectorID: l.ConnectorID, DstKind: l.Entity.Kind, DstName: l.Entity.Name, DstRef: entityRef(l.Entity)}
+		if sameAsKey(dst.DstConnectorID, dst.DstKind, dst.DstRef) < sameAsKey(src.SrcConnectorID, src.SrcKind, src.SrcRef) {
+			src = store.TopologyEdge{SrcConnectorID: dst.DstConnectorID, SrcKind: dst.DstKind, SrcName: dst.DstName, SrcRef: dst.DstRef}
+			dst = store.TopologyEdge{DstConnectorID: connectorID, DstKind: l.Local.Kind, DstName: l.Local.Name, DstRef: entityRef(l.Local)}
+		}
+		b.add(src, dst.DstConnectorID, dst.DstKind, dst.DstName, dst.DstRef, store.TopologyEdgeSameAs, l.Reason)
 		other := store.TopologyEdge{SrcConnectorID: l.ConnectorID, SrcKind: topologyServiceKind, SrcName: l.ConnectorName, SrcRef: l.ConnectorID}
 		b.add(other, l.ConnectorID, l.Entity.Kind, l.Entity.Name, entityRef(l.Entity), store.TopologyEdgeContains, "")
 	}
@@ -104,6 +110,10 @@ func (e *Engine) RebuildTopologyForConnector(ctx context.Context, connectorID st
 	}
 	e.refreshTopologyDoc(ctx)
 	return nil
+}
+
+func sameAsKey(connectorID, kind, ref string) string {
+	return connectorID + "\x00" + kind + "\x00" + ref
 }
 
 // otherSnapshot is another connector's latest parsed snapshot.
@@ -138,19 +148,30 @@ func (e *Engine) loadOtherSnapshots(ctx context.Context, connectorID string, all
 
 func isDNSEntity(kind string) bool { return kind == "dns_record" || kind == "dns_rewrite" }
 
-// topologyDocMarker prefixes the edge fingerprint embedded in the generated
-// Lab Topology doc, so a later rebuild can tell whether the doc reflects the
-// stored edges.
+// topologyDocMarker prefixes the edge fingerprint comment that earlier
+// versions embedded in the generated Lab Topology doc. The fingerprint now
+// lives in docs.topology_fingerprint; the marker is only recognised so legacy
+// content can be cleaned (see StripTopologyMarker).
 const topologyDocMarker = "<!-- wl:topology-edges:"
 
 // refreshTopologyDoc regenerates the generated Lab Topology doc when it
 // exists and its recorded edge fingerprint differs from the stored edges. It
 // never fails the caller: errors are logged, and the next rebuild retries
-// because the doc still carries the old fingerprint.
+// because the doc still records the old fingerprint.
 func (e *Engine) refreshTopologyDoc(ctx context.Context) {
 	if err := e.regenerateTopologyDocIfStale(ctx); err != nil {
 		slog.Error("topology doc regeneration failed", "error", logsafe.Sanitize(err.Error()))
 	}
+}
+
+// labTopologyFingerprint hashes the stored edges the Lab Topology diagram
+// draws, so edges it ignores (contains, dependency) never make it look stale.
+func (e *Engine) labTopologyFingerprint(ctx context.Context) (string, error) {
+	kinds := make([]string, 0, len(drawnEdgeKinds))
+	for k := range drawnEdgeKinds {
+		kinds = append(kinds, k)
+	}
+	return e.store.TopologyEdgesFingerprint(ctx, kinds...)
 }
 
 func (e *Engine) regenerateTopologyDocIfStale(ctx context.Context) error {
@@ -162,7 +183,7 @@ func (e *Engine) regenerateTopologyDocIfStale(ctx context.Context) error {
 		if d.Kind != "lab" || d.Title != labTopologyTitle || d.Origin == store.DocOriginHuman {
 			continue
 		}
-		fingerprint, err := e.store.TopologyEdgesFingerprint(ctx)
+		fingerprint, err := e.labTopologyFingerprint(ctx)
 		if err != nil {
 			return err
 		}
@@ -171,7 +192,7 @@ func (e *Engine) regenerateTopologyDocIfStale(ctx context.Context) error {
 		if err != nil {
 			return fmt.Errorf("get topology doc: %w", err)
 		}
-		if strings.Contains(full.Content, topologyDocMarker+fingerprint+" -->") {
+		if full.TopologyFingerprint == fingerprint {
 			return nil
 		}
 		if _, err := e.generateLabTopology(ctx, true); err != nil {

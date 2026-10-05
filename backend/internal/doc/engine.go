@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"text/template"
@@ -317,8 +318,8 @@ func (e *Engine) GenerateLabTopology(ctx context.Context) (*GenerateResult, erro
 
 // generateLabTopology renders and persists the Lab Topology doc. With
 // skipIfUnchanged, an existing doc whose content already equals the render
-// (ignoring the fingerprint comment) is left alone, so a doc that only lacks
-// the comment does not get a new version.
+// is left alone: a changed fingerprint alone updates just the stored
+// fingerprint, never a new version.
 func (e *Engine) generateLabTopology(ctx context.Context, skipIfUnchanged bool) (*GenerateResult, error) {
 	connectors, err := e.store.ListAllConnectors(ctx)
 	if err != nil {
@@ -357,17 +358,26 @@ func (e *Engine) generateLabTopology(ctx context.Context, skipIfUnchanged bool) 
 		}
 	}
 
+	ids := make([]string, len(connectors))
+	for i, c := range connectors {
+		ids[i] = c.ID
+	}
+	edges, err := e.store.ListTopologyEdges(ctx, ids)
+	if err != nil {
+		return nil, fmt.Errorf("list topology edges: %w", err)
+	}
+
 	content := fmt.Sprintf(
 		"# %s\n\n_%d entities across %d connectors._\n\n```mermaid\n%s```\n",
-		labTopologyTitle, len(entities), len(connectors), renderLabMermaid(entities, links),
+		labTopologyTitle, len(entities), len(connectors), renderLabMermaid(entities, links, edges),
 	)
-	// Record which stored edge set this render reflects, so a later topology
-	// rebuild regenerates only when the edges moved on.
-	fingerprint, err := e.store.TopologyEdgesFingerprint(ctx)
+	// Which stored edge set this render reflects is kept beside the doc (not in
+	// its content), so a later topology rebuild regenerates only when the
+	// edges moved on and no edit of the content can lose it.
+	fingerprint, err := e.labTopologyFingerprint(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("fingerprint topology edges: %w", err)
 	}
-	content += "\n" + topologyDocMarker + fingerprint + " -->\n"
 
 	docs, _, err := e.store.ListAllDocs(ctx, labTopologyTitle, 0, 50)
 	if err != nil {
@@ -391,7 +401,20 @@ func (e *Engine) generateLabTopology(ctx context.Context, skipIfUnchanged bool) 
 				return nil, fmt.Errorf("get topology doc: %w", err)
 			}
 			if StripMarkers(current.Content) == StripMarkers(content) {
-				return &GenerateResult{DocID: docID, Title: labTopologyTitle, Content: current.Content}, nil
+				// Same drawing: no new version. Only the bookkeeping moves, and
+				// a legacy in-content fingerprint comment is dropped in place.
+				clean := StripTopologyMarker(current.Content)
+				var cleaned *string
+				if clean != current.Content {
+					cleaned = &clean
+				}
+				if cleaned != nil || current.TopologyFingerprint != fingerprint {
+					err := e.store.SetDocTopologyFingerprint(ctx, docID, fingerprint, cleaned, current.CurrentVersion)
+					if err != nil && !errors.Is(err, store.ErrVersionConflict) {
+						return nil, fmt.Errorf("record topology fingerprint: %w", err)
+					}
+				}
+				return &GenerateResult{DocID: docID, Title: labTopologyTitle, Content: clean}, nil
 			}
 		}
 		if err := e.store.UpdateDoc(ctx, docID, content, nil); err != nil {
@@ -404,8 +427,11 @@ func (e *Engine) generateLabTopology(ctx context.Context, skipIfUnchanged bool) 
 		_ = e.store.CreateDocVersion(ctx, &store.DocVersionRecord{
 			DocID: docID, Rev: updated.CurrentVersion, Content: content, Trigger: "manual",
 		})
+		if err := e.store.SetDocTopologyFingerprint(ctx, docID, fingerprint, nil, 0); err != nil {
+			return nil, fmt.Errorf("record topology fingerprint: %w", err)
+		}
 	} else {
-		doc := &store.DocRecord{Title: labTopologyTitle, Kind: "lab", Content: content}
+		doc := &store.DocRecord{Title: labTopologyTitle, Kind: "lab", Content: content, TopologyFingerprint: fingerprint}
 		if err := e.store.CreateDoc(ctx, doc); err != nil {
 			return nil, fmt.Errorf("create doc: %w", err)
 		}

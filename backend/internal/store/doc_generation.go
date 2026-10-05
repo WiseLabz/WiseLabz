@@ -132,3 +132,33 @@ func (s *Store) GetLatestChangeByPattern(ctx context.Context, patternID string) 
 	}
 	return &c, nil
 }
+
+// SetDocTopologyFingerprint records the edge-set hash the doc was rendered
+// from. With content, it also replaces the stored content in place, without
+// a new version, only while the doc is still at expectedVersion (so a
+// concurrent edit is never overwritten); a lost race returns ErrVersionConflict.
+func (s *Store) SetDocTopologyFingerprint(ctx context.Context, id, fingerprint string, content *string, expectedVersion int) error {
+	query := `UPDATE docs SET topology_fingerprint = ?`
+	args := []any{fingerprint}
+	if content != nil {
+		query += `, content = ?`
+		args = append(args, *content)
+	}
+	query += ` WHERE id = ? AND deleted_at IS NULL`
+	args = append(args, id)
+	if content != nil {
+		query += ` AND current_version = ?`
+		args = append(args, expectedVersion)
+	}
+	res, err := s.db.ExecContext(ctx, query, args...)
+	if err != nil {
+		return fmt.Errorf("set doc topology fingerprint: %w", err)
+	}
+	if n, err := res.RowsAffected(); err == nil && n == 0 {
+		if _, getErr := s.GetDoc(ctx, id); getErr == nil {
+			return ErrVersionConflict
+		}
+		return ErrNotFound
+	}
+	return nil
+}

@@ -36,6 +36,10 @@ type DocRecord struct {
 	// GenKeys is the raw JSON array of block keys in the last applied
 	// render; nil means the doc predates wl:gen markers.
 	GenKeys *string `json:"-"`
+	// TopologyFingerprint is the edge-set hash the generated Lab Topology doc
+	// was last rendered from. It lives beside the content, not in it, so no
+	// edit, restore or export of the content can lose or leak it.
+	TopologyFingerprint string `json:"-"`
 }
 
 // --- Doc CRUD ---
@@ -64,10 +68,10 @@ func (s *Store) CreateDoc(ctx context.Context, d *DocRecord) error {
 
 	_, err := s.db.ExecContext(ctx, `
 		INSERT INTO docs (id, title, kind, service_id, content, current_version, created_at, updated_at,
-			origin, template_id, last_synced_at, gen_keys, parent_id, deleted_at, created_by)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			origin, template_id, last_synced_at, gen_keys, parent_id, deleted_at, created_by, topology_fingerprint)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`, d.ID, d.Title, d.Kind, nilToStr(d.ServiceID), d.Content, d.CurrentVersion, d.CreatedAt, d.UpdatedAt,
-		d.Origin, nilToStr(d.TemplateID), nilToStr(d.LastSyncedAt), d.GenKeys, nilToStr(d.ParentID), nilToStr(d.DeletedAt), nilToStr(d.CreatedBy))
+		d.Origin, nilToStr(d.TemplateID), nilToStr(d.LastSyncedAt), d.GenKeys, nilToStr(d.ParentID), nilToStr(d.DeletedAt), nilToStr(d.CreatedBy), nilToStr(d.TopologyFingerprint))
 	if err != nil {
 		return fmt.Errorf("create doc: %w", err)
 	}
@@ -185,7 +189,7 @@ func (s *Store) ListDocsByService(ctx context.Context, serviceID string) ([]DocR
 func (s *Store) listDocsByService(ctx context.Context, serviceID, contentExpr string) ([]DocRecord, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, title, kind, service_id, `+contentExpr+`, current_version, created_at, updated_at,
-			origin, template_id, last_synced_at, gen_keys, parent_id, deleted_at, created_by
+			origin, template_id, last_synced_at, gen_keys, parent_id, deleted_at, created_by, topology_fingerprint
 		FROM docs WHERE service_id = ? AND deleted_at IS NULL ORDER BY updated_at DESC
 	`, serviceID)
 	if err != nil {
@@ -238,7 +242,7 @@ func (s *Store) ListDocsGroupedByService(ctx context.Context) (map[string][]DocR
 }
 
 // docColumns is the full column list, including the (potentially large) content.
-const docColumns = `id, title, kind, service_id, content, current_version, created_at, updated_at, origin, template_id, last_synced_at, gen_keys, parent_id, deleted_at, created_by`
+const docColumns = `id, title, kind, service_id, content, current_version, created_at, updated_at, origin, template_id, last_synced_at, gen_keys, parent_id, deleted_at, created_by, topology_fingerprint`
 
 // docSummaryColumns omits content for list/tree views that never render it.
 const docSummaryColumns = `id, title, kind, service_id, current_version, created_at, updated_at, origin, template_id, last_synced_at, parent_id, deleted_at, created_by`
@@ -257,14 +261,15 @@ func scanDocSummary(row rowScanner) (DocRecord, error) {
 
 func scanDoc(row rowScanner) (DocRecord, error) {
 	var d DocRecord
-	var svcID, tmplID, synced, genKeys, parent, deleted, creator sql.NullString
+	var svcID, tmplID, synced, genKeys, parent, deleted, creator, fingerprint sql.NullString
 	err := row.Scan(&d.ID, &d.Title, &d.Kind, &svcID, &d.Content, &d.CurrentVersion, &d.CreatedAt, &d.UpdatedAt,
-		&d.Origin, &tmplID, &synced, &genKeys, &parent, &deleted, &creator)
+		&d.Origin, &tmplID, &synced, &genKeys, &parent, &deleted, &creator, &fingerprint)
 	if err != nil {
 		return DocRecord{}, err
 	}
 	d.ServiceID, d.TemplateID, d.LastSyncedAt = svcID.String, tmplID.String, synced.String
 	d.ParentID, d.DeletedAt, d.CreatedBy = parent.String, deleted.String, creator.String
+	d.TopologyFingerprint = fingerprint.String
 	if genKeys.Valid {
 		d.GenKeys = &genKeys.String
 	}

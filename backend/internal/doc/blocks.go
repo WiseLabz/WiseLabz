@@ -160,12 +160,21 @@ func slugKeys(prefix string, titles []string) []string {
 	return keys
 }
 
-// topologyMarkerLine matches the topology edge fingerprint comment together
-// with the blank line that separates it from the generated body.
+// topologyMarkerLine matches the legacy topology edge fingerprint comment
+// (no longer written) together with the blank line that separates it from the
+// generated body.
 var topologyMarkerLine = regexp.MustCompile(`\n?` + regexp.QuoteMeta(topologyDocMarker) + `[^\n]*-->[ \t]*\n?`)
 
-// StripMarkers returns content with the wl:gen marker lines and the topology
-// edge fingerprint comment removed, i.e. what a reader sees. For a fresh
+// StripTopologyMarker removes only the legacy topology edge fingerprint
+// comment, leaving wl:gen block markers intact. Content written before the
+// fingerprint moved out of the doc still carries it until the next Lab
+// Topology regeneration cleans it, so the doc and version endpoints strip it.
+func StripTopologyMarker(content string) string {
+	return topologyMarkerLine.ReplaceAllString(content, "")
+}
+
+// StripMarkers returns content with the wl:gen marker lines and any legacy
+// topology edge fingerprint comment removed, i.e. what a reader sees. For a fresh
 // render it equals the plain preview.
 func StripMarkers(content string) string {
 	content = topologyMarkerLine.ReplaceAllString(content, "")

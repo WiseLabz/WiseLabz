@@ -3,6 +3,8 @@ package doc
 import (
 	"context"
 	"fmt"
+	"log/slog"
+	"slices"
 	"strings"
 
 	"github.com/WiseLabz/wiselabz/internal/connector"
@@ -26,6 +28,18 @@ type EntityLink struct {
 // Hostname or alias (case-insensitive). Matches across different connectors
 // are all kept; only exact (ConnectorID, ExternalID) duplicates are dropped.
 func matchEntities(ctx context.Context, s *store.Store, cache *snapshotCache, connectorID string, entities []connector.SnapshotEntity) ([]EntityLink, error) {
+	return collectLinks(ctx, s, cache, connectorID, entities, false)
+}
+
+// matchEntityPairs is matchEntities without the one-link-per-other-entity cut:
+// every (local, other) pair that matches is returned. Persisted topology edges
+// use it so the edge set does not depend on which entity happened to match
+// first, and so it is the same whichever side of a pair is rebuilt.
+func matchEntityPairs(ctx context.Context, s *store.Store, cache *snapshotCache, connectorID string, entities []connector.SnapshotEntity) ([]EntityLink, error) {
+	return collectLinks(ctx, s, cache, connectorID, entities, true)
+}
+
+func collectLinks(ctx context.Context, s *store.Store, cache *snapshotCache, connectorID string, entities []connector.SnapshotEntity, allPairs bool) ([]EntityLink, error) {
 	if len(entities) == 0 {
 		return nil, nil
 	}
@@ -37,6 +51,14 @@ func matchEntities(ctx context.Context, s *store.Store, cache *snapshotCache, co
 
 	var links []EntityLink
 	seen := map[string]bool{}
+	ipGroups := map[string][]string{} // IP -> sorted entity keys, for the IP-only cap
+	if allPairs {
+		for _, mine := range entities {
+			if mine.IP != "" {
+				ipGroups[mine.IP] = append(ipGroups[mine.IP], sameAsKey(connectorID, mine.Kind, entityRef(mine)))
+			}
+		}
+	}
 	for _, c := range connectors {
 		if c.ID == connectorID {
 			continue
@@ -46,13 +68,22 @@ func matchEntities(ctx context.Context, s *store.Store, cache *snapshotCache, co
 			continue // no snapshot yet or unparseable; soft-skip
 		}
 		for _, other := range snap.Entities {
+			if allPairs && other.IP != "" {
+				ipGroups[other.IP] = append(ipGroups[other.IP], sameAsKey(c.ID, other.Kind, entityRef(other)))
+			}
 			for _, mine := range entities {
 				reason := matchReason(mine, other)
 				if reason == "" {
 					continue
 				}
 				key := dedupKey(c.ID, other)
+				if allPairs {
+					key += ">" + dedupKey(connectorID, mine)
+				}
 				if seen[key] {
+					if allPairs {
+						continue
+					}
 					break
 				}
 				seen[key] = true
@@ -63,12 +94,65 @@ func matchEntities(ctx context.Context, s *store.Store, cache *snapshotCache, co
 					ConnectorName: c.Name,
 					Reason:        reason,
 				})
-				break
+				if !allPairs {
+					break
+				}
 			}
 		}
 	}
 
+	if allPairs {
+		links = capIPOnlyLinks(links, connectorID, ipGroups)
+	}
 	return links, nil
+}
+
+// maxIPOnlyGroup bounds the same_as fan-out of one shared IP: persisted pairs
+// are complete (every sync order yields the same edges) but N entities on one
+// IP across connectors is N-squared rows per rebuild, so an IP shared by more
+// entities than this keeps only its first maxIPOnlyGroup entities. Strong
+// (external ID / hostname) matches are never capped.
+const maxIPOnlyGroup = 50
+
+// capIPOnlyLinks drops IP-only links that involve an entity beyond the first
+// maxIPOnlyGroup of its IP's group, ordered by stable entity key. The rule
+// looks only at the group, never at which side is being rebuilt, so it picks
+// the same subset from either end of a pair.
+func capIPOnlyLinks(links []EntityLink, connectorID string, groups map[string][]string) []EntityLink {
+	allowed := map[string]map[string]bool{}
+	var capped []string
+	for ip, keys := range groups {
+		if len(keys) <= maxIPOnlyGroup {
+			continue
+		}
+		slices.Sort(keys)
+		set := make(map[string]bool, maxIPOnlyGroup)
+		for _, k := range keys[:maxIPOnlyGroup] {
+			set[k] = true
+		}
+		allowed[ip] = set
+		capped = append(capped, ip)
+	}
+	if len(capped) == 0 {
+		return links
+	}
+	slices.Sort(capped)
+	slog.Warn("topology: same_as IP-only matches capped; entities beyond the cap get no IP-based same_as edges (strong matches are unaffected)",
+		"connector", connectorID, "cap", maxIPOnlyGroup, "ips", len(capped), "firstIP", capped[0])
+
+	out := links[:0:0]
+	for _, l := range links {
+		if l.Reason == "IP address" && strongMatchReason(l.Local, l.Entity) == "" {
+			set, over := allowed[l.Local.IP]
+			localIn := set[sameAsKey(connectorID, l.Local.Kind, entityRef(l.Local))]
+			otherIn := set[sameAsKey(l.ConnectorID, l.Entity.Kind, entityRef(l.Entity))]
+			if over && (!localIn || !otherIn) {
+				continue
+			}
+		}
+		out = append(out, l)
+	}
+	return out
 }
 
 // matchReason returns the precedence-ordered reason two entities match, or
