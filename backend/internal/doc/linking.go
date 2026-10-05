@@ -26,6 +26,18 @@ type EntityLink struct {
 // Hostname or alias (case-insensitive). Matches across different connectors
 // are all kept; only exact (ConnectorID, ExternalID) duplicates are dropped.
 func matchEntities(ctx context.Context, s *store.Store, cache *snapshotCache, connectorID string, entities []connector.SnapshotEntity) ([]EntityLink, error) {
+	return collectLinks(ctx, s, cache, connectorID, entities, false)
+}
+
+// matchEntityPairs is matchEntities without the one-link-per-other-entity cut:
+// every (local, other) pair that matches is returned. Persisted topology edges
+// use it so the edge set does not depend on which entity happened to match
+// first, and so it is the same whichever side of a pair is rebuilt.
+func matchEntityPairs(ctx context.Context, s *store.Store, cache *snapshotCache, connectorID string, entities []connector.SnapshotEntity) ([]EntityLink, error) {
+	return collectLinks(ctx, s, cache, connectorID, entities, true)
+}
+
+func collectLinks(ctx context.Context, s *store.Store, cache *snapshotCache, connectorID string, entities []connector.SnapshotEntity, allPairs bool) ([]EntityLink, error) {
 	if len(entities) == 0 {
 		return nil, nil
 	}
@@ -52,7 +64,13 @@ func matchEntities(ctx context.Context, s *store.Store, cache *snapshotCache, co
 					continue
 				}
 				key := dedupKey(c.ID, other)
+				if allPairs {
+					key += ">" + dedupKey(connectorID, mine)
+				}
 				if seen[key] {
+					if allPairs {
+						continue
+					}
 					break
 				}
 				seen[key] = true
@@ -63,7 +81,9 @@ func matchEntities(ctx context.Context, s *store.Store, cache *snapshotCache, co
 					ConnectorName: c.Name,
 					Reason:        reason,
 				})
-				break
+				if !allPairs {
+					break
+				}
 			}
 		}
 	}

@@ -42,7 +42,7 @@ const edgeColors: Record<string, string> = {
 
 type NodeData = { item: TopologyNode; href?: string };
 type FlowNode = Node<NodeData>;
-type FlowEdge = Edge<{ label: string; parts: string[]; highlighted: boolean }>;
+type FlowEdge = Edge<{ label: string; parts: string[]; highlighted: boolean; showLabel: boolean }>;
 type Positions = Map<string, { x: number; y: number }>;
 
 function isConnectorNode(item: TopologyNode) {
@@ -80,7 +80,12 @@ function GraphNode({ data }: NodeProps<FlowNode>) {
   const handles = (
     <>
       <Handle type="target" position={Position.Left} isConnectable={false} className="!opacity-0" />
-      <Handle type="source" position={Position.Right} isConnectable={false} className="!opacity-0" />
+      <Handle
+        type="source"
+        position={Position.Right}
+        isConnectable={false}
+        className="!opacity-0"
+      />
     </>
   );
   if (!data.href) {
@@ -127,7 +132,7 @@ function GraphEdge({
   return (
     <>
       <BaseEdge id={id} path={path} style={style} markerEnd={markerEnd} />
-      {data?.label && (
+      {data?.label && data.showLabel && (
         <EdgeLabelRenderer>
           <span
             className="pointer-events-none absolute flex flex-col items-center rounded bg-surface px-1.5 py-0.5 font-mono text-[10px] text-ink-muted"
@@ -208,7 +213,11 @@ function flowNodes(
 
 // Several edge kinds between the same ordered pair would draw on top of one
 // another, so they collapse into one edge whose label lists every kind.
-function flowEdges(relations: TopologyEdge[], traced: Set<string>): FlowEdge[] {
+function flowEdges(
+  relations: TopologyEdge[],
+  traced: Set<string>,
+  names: Map<string, string>
+): FlowEdge[] {
   const pairs = new Map<string, TopologyEdge[]>();
   for (const edge of relations) {
     const key = `${edge.source}\0${edge.target}`;
@@ -221,17 +230,19 @@ function flowEdges(relations: TopologyEdge[], traced: Set<string>): FlowEdge[] {
       new Set(group.map((edge) => `${edge.kind}${edge.detail ? ` · ${edge.detail}` : ''}`))
     );
     const label = parts.join(', ');
+    // `contains` fans out from every connector and its labels pile up, so they
+    // are only drawn while traced; the kind stays in the legend and aria-label.
+    const showLabel = highlighted || group.some((edge) => edge.kind !== 'contains');
     return {
       id: first.id,
       source: first.source,
       target: first.target,
       type: 'topology',
       label,
-      data: { label, parts, highlighted },
+      ariaLabel: `${names.get(first.source) ?? first.source} ${label} ${names.get(first.target) ?? first.target}`,
+      data: { label, parts, highlighted, showLabel },
       style: {
-        stroke: highlighted
-          ? 'var(--color-ink)'
-          : edgeColors[first.kind] || edgeColors.dependency,
+        stroke: highlighted ? 'var(--color-ink)' : edgeColors[first.kind] || edgeColors.dependency,
         strokeWidth: highlighted ? 3.5 : 1.5,
         strokeDasharray: first.kind === 'same_as' ? '5 4' : undefined,
       },
@@ -351,13 +362,23 @@ export function TopologyPage() {
     },
     [docsTree.data]
   );
-  const nodeKey = useMemo(() => items.map((item) => item.id).sort().join('\0'), [items]);
+  const nodeKey = useMemo(
+    () =>
+      items
+        .map((item) => item.id)
+        .sort()
+        .join('\0'),
+    [items]
+  );
   const positions = useMemo(() => layoutPositions(items, relations), [items, relations]);
   const nodes = useMemo(
     () => flowNodes(items, positions, getNodeHref),
     [items, positions, getNodeHref]
   );
-  const edges = useMemo(() => flowEdges(relations, highlights), [relations, highlights]);
+  const edges = useMemo(
+    () => flowEdges(relations, highlights, new Map(items.map((item) => [item.id, item.name]))),
+    [relations, highlights, items]
+  );
   const connectorList = (connectorsQuery.data ?? []) as Array<{ id: string; name: string }>;
   // The kind list comes from the response without the kind filter, so picking
   // a kind (or loading one from the URL) does not collapse the select.
@@ -381,7 +402,8 @@ export function TopologyPage() {
       ).sort(),
     [kindSource]
   );
-  const kindOptions = kind && !knownKinds.includes(kind) ? [...knownKinds, kind].sort() : knownKinds;
+  const kindOptions =
+    kind && !knownKinds.includes(kind) ? [...knownKinds, kind].sort() : knownKinds;
   const updateFilter = (key: string, value: string) => {
     const next = new URLSearchParams(searchParams);
     if (value) next.set(key, value);
@@ -629,7 +651,7 @@ export function TopologyPage() {
                 fitViewOptions={{ padding: 0.2 }}
                 nodesDraggable={false}
                 nodesConnectable={false}
-                elementsSelectable={false}
+                elementsSelectable
                 proOptions={{ hideAttribution: true }}
               >
                 <Background color="var(--color-line-soft)" />

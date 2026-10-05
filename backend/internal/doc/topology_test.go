@@ -56,8 +56,9 @@ func TestRebuildTopologyForConnector(t *testing.T) {
 		}
 		return false
 	}
-	if !has(store.TopologyEdgeSameAs, "nginx", "web-01") {
-		t.Errorf("missing same_as nginx->web-01 in %+v", edges)
+	// same_as is symmetric and stored in one canonical direction.
+	if !has(store.TopologyEdgeSameAs, "nginx", "web-01") && !has(store.TopologyEdgeSameAs, "web-01", "nginx") {
+		t.Errorf("missing same_as nginx<->web-01 in %+v", edges)
 	}
 	if !has(store.TopologyEdgeDependency, "Docker", "pve1") {
 		t.Errorf("missing dependency Docker->pve1 (resolved to proxmox entity) in %+v", edges)

@@ -76,7 +76,9 @@ func buildGraph(edges []store.TopologyEdge, directed bool) *graph {
 		a := touch(Node{ConnectorID: e.SrcConnectorID, Kind: e.SrcKind, Name: e.SrcName, Ref: e.SrcRef})
 		b := touch(Node{ConnectorID: e.DstConnectorID, Kind: e.DstKind, Name: e.DstName, Ref: e.DstRef})
 		g.adj[a] = append(g.adj[a], adjacent{b, e.Kind, e.Source, e.Detail, false})
-		if !directed {
+		// same_as is stored in one canonical direction but is symmetric, so a
+		// directed walk must still cross it either way.
+		if !directed || e.Kind == store.TopologyEdgeSameAs {
 			g.adj[b] = append(g.adj[b], adjacent{a, e.Kind, e.Source, e.Detail, true})
 		}
 	}

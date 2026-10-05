@@ -111,4 +111,40 @@ describe('TopologyPage with the real React Flow', () => {
     fireEvent.click(link!);
     expect(await screen.findByText('Entity page')).toBeInTheDocument();
   });
+
+  it('keeps nodes clickable: React Flow must not mark them pointer-events: none', async () => {
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <MemoryRouter initialEntries={['/topology']}>
+          <Routes>
+            <Route path="/topology" element={<TopologyPage />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+    const region = screen.getByRole('region', { name: 'Topology graph' });
+    await screen.findByText('runs_on · vmid 7');
+    const nodes = region.querySelectorAll<HTMLElement>('.react-flow__node');
+    expect(nodes.length).toBe(2);
+    // jsdom has no layout, but React Flow sets this inline, so a real mouse
+    // would be swallowed by the pane exactly when this is 'none'.
+    nodes.forEach((node) => expect(getComputedStyle(node).pointerEvents).not.toBe('none'));
+  });
+
+  it('labels edges for assistive tech with names, not raw IDs', async () => {
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <MemoryRouter initialEntries={['/topology']}>
+          <Routes>
+            <Route path="/topology" element={<TopologyPage />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+    const region = screen.getByRole('region', { name: 'Topology graph' });
+    await screen.findByText('runs_on · vmid 7');
+    expect(
+      region.querySelector('.react-flow__edge[aria-label="Host Alpha runs_on · vmid 7 VM Beta"]')
+    ).not.toBeNull();
+  });
 });

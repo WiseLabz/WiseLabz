@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/WiseLabz/wiselabz/internal/connector"
+	"github.com/WiseLabz/wiselabz/internal/store"
 )
 
 // renderMermaid emits a Mermaid flowchart (graph LR) with centerEntity as
@@ -58,8 +59,10 @@ type labLink struct {
 
 // renderLabMermaid emits a Mermaid flowchart with one node per entity
 // (including entities with no matches, so isolated services still show up)
-// and one edge per matched pair.
-func renderLabMermaid(entities []labEntity, links []labLink) string {
+// and one edge per matched pair, followed by one directional arrow per typed
+// topology edge (proxies_to, resolves_to, runs_on) labelled with its kind and
+// detail, e.g. "proxies_to :8080".
+func renderLabMermaid(entities []labEntity, links []labLink, typed []store.TopologyEdge) string {
 	var b strings.Builder
 	b.WriteString("graph LR\n")
 
@@ -82,5 +85,46 @@ func renderLabMermaid(entities []labEntity, links []labLink) string {
 		fmt.Fprintf(&b, "    %s -->|%s| %s\n", aID, l.Reason, bID)
 	}
 
+	// Edge endpoints are keyed like entityNodeID (connector, kind, external ID
+	// or name); a placeholder endpoint with no entity gets a node of its own.
+	endpoint := func(connectorID, kind, name, ref string) string {
+		if ref == "" {
+			ref = name
+		}
+		id := "n" + shortHash(connectorID+"|"+kind+"|"+ref)
+		if !seen[id] {
+			seen[id] = true
+			fmt.Fprintf(&b, "    %s[%q]\n", id, fmt.Sprintf("%s (%s)", name, kind))
+		}
+		return id
+	}
+	drawn := map[string]bool{}
+	for _, e := range typed {
+		if e.Kind == store.TopologyEdgeSameAs || !drawnEdgeKinds[e.Kind] {
+			continue
+		}
+		src := endpoint(e.SrcConnectorID, e.SrcKind, e.SrcName, e.SrcRef)
+		dst := endpoint(e.DstConnectorID, e.DstKind, e.DstName, e.DstRef)
+		label := e.Kind
+		if e.Detail != "" {
+			label += " :" + e.Detail
+		}
+		line := fmt.Sprintf("    %s -->|%q| %s\n", src, label, dst)
+		if !drawn[line] {
+			drawn[line] = true
+			b.WriteString(line)
+		}
+	}
+
 	return b.String()
+}
+
+// drawnEdgeKinds are the stored edge kinds the Lab Topology diagram draws, and
+// therefore the kinds its fingerprint covers (same_as is drawn from live
+// entity matches, the rest from stored edges).
+var drawnEdgeKinds = map[string]bool{
+	store.TopologyEdgeSameAs:     true,
+	store.TopologyEdgeResolvesTo: true,
+	store.TopologyEdgeProxiesTo:  true,
+	store.TopologyEdgeRunsOn:     true,
 }

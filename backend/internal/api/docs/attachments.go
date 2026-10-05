@@ -10,6 +10,7 @@ import (
 
 	"github.com/WiseLabz/wiselabz/internal/auth"
 	"github.com/WiseLabz/wiselabz/internal/blobstore"
+	"github.com/WiseLabz/wiselabz/internal/doc"
 	"github.com/WiseLabz/wiselabz/internal/httputil"
 	"github.com/WiseLabz/wiselabz/internal/store"
 )
@@ -41,10 +42,12 @@ func (h *Handler) writeDoc(w http.ResponseWriter, r *http.Request, d *store.DocR
 		httputil.Errorf(w, err)
 		return
 	}
+	shown := *d
+	shown.Content = doc.StripTopologyMarker(d.Content)
 	httputil.JSON(w, http.StatusOK, struct {
 		*store.DocRecord
 		Attachments []store.DocAttachment `json:"attachments"`
-	}{DocRecord: d, Attachments: attachments})
+	}{DocRecord: &shown, Attachments: attachments})
 }
 
 // ListAttachments returns doc-owned signed metadata after viewer authorization.

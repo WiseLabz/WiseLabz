@@ -102,3 +102,15 @@ func TestShortestPathMarksEdgesTraversedAgainstTheirDirection(t *testing.T) {
 		t.Fatalf("FromKey chain wrong: %+v", path)
 	}
 }
+
+func TestFollowDirectedCrossesSameAsEitherWay(t *testing.T) {
+	// same_as is stored in one canonical direction; walking from either end
+	// must still reach the other.
+	edges := []store.TopologyEdge{edge("a", "b", store.TopologyEdgeSameAs)}
+	for _, from := range []string{"a", "b"} {
+		path, _ := FollowDirected(edges, from, 0)
+		if len(path) != 2 {
+			t.Fatalf("FollowDirected from %s = %v, want both ends", from, names(path))
+		}
+	}
+}

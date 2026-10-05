@@ -164,6 +164,13 @@ func slugKeys(prefix string, titles []string) []string {
 // with the blank line that separates it from the generated body.
 var topologyMarkerLine = regexp.MustCompile(`\n?` + regexp.QuoteMeta(topologyDocMarker) + `[^\n]*-->[ \t]*\n?`)
 
+// StripTopologyMarker removes only the topology edge fingerprint comment,
+// leaving wl:gen block markers intact. Served doc content goes through it so
+// the comment, which exists for regeneration bookkeeping, is never shown.
+func StripTopologyMarker(content string) string {
+	return topologyMarkerLine.ReplaceAllString(content, "")
+}
+
 // StripMarkers returns content with the wl:gen marker lines and the topology
 // edge fingerprint comment removed, i.e. what a reader sees. For a fresh
 // render it equals the plain preview.

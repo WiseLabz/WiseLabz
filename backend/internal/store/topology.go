@@ -152,8 +152,10 @@ func fingerprintKey(e TopologyEdge) string {
 
 // TopologyEdgesFingerprint hashes the set of stored edges, independent of row
 // IDs, timestamps and which connector's rebuild produced a row. Two calls
-// return the same value exactly when the edge set is unchanged.
-func (s *Store) TopologyEdgesFingerprint(ctx context.Context) (string, error) {
+// return the same value exactly when the edge set is unchanged. With kinds,
+// only edges of those kinds are hashed, so a fingerprint can cover exactly
+// what a consumer renders.
+func (s *Store) TopologyEdgesFingerprint(ctx context.Context, kinds ...string) (string, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT `+topologyEdgeColumns+` FROM topology_edges`)
 	if err != nil {
 		return "", fmt.Errorf("list topology edges: %w", err)
@@ -165,6 +167,9 @@ func (s *Store) TopologyEdgesFingerprint(ctx context.Context) (string, error) {
 		if err := rows.Scan(&e.ID, &e.ConnectorID, &e.SrcConnectorID, &e.SrcKind, &e.SrcName, &e.SrcRef,
 			&e.DstConnectorID, &e.DstKind, &e.DstName, &e.DstRef, &e.Kind, &e.Source, &e.Detail, &e.CreatedAt); err != nil {
 			return "", fmt.Errorf("scan topology edge: %w", err)
+		}
+		if len(kinds) > 0 && !slices.Contains(kinds, e.Kind) {
+			continue
 		}
 		seen[fingerprintKey(e)] = struct{}{}
 	}

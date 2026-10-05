@@ -7,6 +7,7 @@ import (
 	"strconv"
 
 	"github.com/WiseLabz/wiselabz/internal/auth"
+	"github.com/WiseLabz/wiselabz/internal/doc"
 	"github.com/WiseLabz/wiselabz/internal/httputil"
 	"github.com/WiseLabz/wiselabz/internal/store"
 )
@@ -45,6 +46,7 @@ func (h *Handler) Version(w http.ResponseWriter, r *http.Request) {
 
 	for _, v := range versions {
 		if v.Rev == rev {
+			v.Content = doc.StripTopologyMarker(v.Content)
 			httputil.JSON(w, http.StatusOK, v)
 			return
 		}

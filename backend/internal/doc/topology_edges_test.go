@@ -2,6 +2,7 @@ package doc
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"testing"
 
@@ -453,5 +454,135 @@ func TestResolvesToKeptWhenOtherConnectorSnapshotUnreadable(t *testing.T) {
 	edges := edgesOfKind(t, s, store.TopologyEdgeResolvesTo, dns, vm)
 	if len(edges) != 1 || edges[0].ConnectorID != dns {
 		t.Fatalf("resolves_to after unreadable DNS snapshot = %+v, want the existing edge kept", edges)
+	}
+}
+
+// proxyDocFixture seeds a proxy connector routing app.lan to upstream, plus a
+// target host, and generates the Lab Topology doc.
+func proxyDocFixture(t *testing.T, upstream string) (s *store.Store, e *Engine, proxy, host string) {
+	t.Helper()
+	s = newEngineTestStore(t)
+	e = NewEngine(s)
+	host = seedEngineConnectorWithEntities(t, s, "Hosts", "virtualization", "proxmox", []connector.SnapshotEntity{
+		{Kind: "vm", Name: "web-01", ExternalID: "100"},
+		{Kind: "vm", Name: "db-01", ExternalID: "101"},
+	})
+	proxy = seedEngineConnectorWithEntities(t, s, "Proxy", "networking", "npm", nil)
+	setProxyUpstream(t, s, proxy, upstream)
+	rebuild(t, e, host, proxy)
+	return s, e, proxy, host
+}
+
+func setProxyUpstream(t *testing.T, s *store.Store, proxy, upstream string) {
+	t.Helper()
+	addTopologySnapshot(t, s, proxy, connector.ServiceSnapshot{
+		ServiceName: "Proxy",
+		Entities: []connector.SnapshotEntity{
+			{Kind: "proxy_host", Name: "app.lan", ExternalID: "1", Attributes: map[string]any{"forward_host": upstream, "forward_port": 8080}},
+		},
+		Dependencies: []connector.ServiceDependency{{Kind: "upstream_service", Name: upstream}},
+	})
+}
+
+func TestLabTopologyDrawsTypedEdgesAndVersionsOnChangeOnly(t *testing.T) {
+	ctx := context.Background()
+	s, e, proxy, host := proxyDocFixture(t, "web-01")
+	res, err := e.GenerateLabTopology(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(res.Content, `-->|"proxies_to :8080"|`) {
+		t.Fatalf("diagram lacks the typed proxies_to edge:\n%s", res.Content)
+	}
+	base, _ := labDocVersions(t, s)
+
+	// No change: no new version, and the marker keeps matching the edges.
+	rebuild(t, e, host, proxy, host, proxy)
+	if n, _ := labDocVersions(t, s); n != base {
+		t.Fatalf("versions = %d, want %d with no change", n, base)
+	}
+
+	// Only the typed edge moves (web-01 -> db-01): exactly one new version.
+	setProxyUpstream(t, s, proxy, "db-01")
+	rebuild(t, e, proxy)
+	if n, _ := labDocVersions(t, s); n != base+1 {
+		t.Fatalf("versions = %d, want %d after a typed-edge-only change", n, base+1)
+	}
+	fp, err := e.labTopologyFingerprint(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	docs, _, _ := s.ListAllDocs(ctx, labTopologyTitle, 0, 10)
+	cur, _ := s.GetDoc(ctx, docs[0].ID)
+	if !strings.Contains(cur.Content, topologyDocMarker+fp+" -->") {
+		t.Fatal("stored marker is stale after the typed-edge change")
+	}
+	rebuild(t, e, host, proxy)
+	if n, _ := labDocVersions(t, s); n != base+1 {
+		t.Fatalf("versions = %d, want %d after a no-op rebuild", n, base+1)
+	}
+}
+
+func TestLabTopologyIgnoresUndrawnEdgeChanges(t *testing.T) {
+	ctx := context.Background()
+	s, e, proxy, host := proxyDocFixture(t, "web-01")
+	if _, err := e.GenerateLabTopology(ctx); err != nil {
+		t.Fatal(err)
+	}
+	base, _ := labDocVersions(t, s)
+	// A dependency (not drawn) appears: the edge set moves but the doc must not.
+	addTopologySnapshot(t, s, proxy, connector.ServiceSnapshot{
+		ServiceName: "Proxy",
+		Entities: []connector.SnapshotEntity{
+			{Kind: "proxy_host", Name: "app.lan", ExternalID: "1", Attributes: map[string]any{"forward_host": "web-01", "forward_port": 8080}},
+		},
+		Dependencies: []connector.ServiceDependency{{Kind: "upstream_service", Name: "web-01"}, {Kind: "database", Name: "pg"}},
+	})
+	rebuild(t, e, proxy, host)
+	if n, _ := labDocVersions(t, s); n != base {
+		t.Fatalf("versions = %d, want %d for an undrawn change", n, base)
+	}
+}
+
+// sameAsPairs lists the stored same_as edges as sorted undirected "a|b" keys.
+func sameAsPairs(t *testing.T, s *store.Store, ids ...string) []string {
+	t.Helper()
+	var out []string
+	for _, e := range edgesOfKind(t, s, store.TopologyEdgeSameAs, ids...) {
+		a, b := e.SrcName, e.DstName
+		if b < a {
+			a, b = b, a
+		}
+		out = append(out, a+"|"+b)
+	}
+	slices.Sort(out)
+	return out
+}
+
+func TestSameAsEdgesIndependentOfSyncOrder(t *testing.T) {
+	perms := [][]int{{0, 1, 2}, {0, 2, 1}, {1, 0, 2}, {1, 2, 0}, {2, 0, 1}, {2, 1, 0}}
+	snaps := []connector.ServiceSnapshot{
+		{ServiceName: "A", Entities: []connector.SnapshotEntity{
+			{Kind: "vm", Name: "a1", ExternalID: "a1", IP: "10.0.0.5"},
+			{Kind: "host", Name: "a2", ExternalID: "a2", IP: "10.0.0.5"},
+		}},
+		{ServiceName: "B", Entities: []connector.SnapshotEntity{{Kind: "share", Name: "b1", ExternalID: "b1", IP: "10.0.0.5"}}},
+		{ServiceName: "C", Entities: []connector.SnapshotEntity{{Kind: "container", Name: "c1", ExternalID: "c1", IP: "10.0.0.5"}}},
+	}
+	want := []string{"a1|b1", "a1|c1", "a2|b1", "a2|c1", "b1|c1"}
+	for _, perm := range perms {
+		s := newEngineTestStore(t)
+		e := NewEngine(s)
+		ids := make([]string, len(snaps))
+		for i, snap := range snaps {
+			ids[i] = seedEngineConnectorWithEntities(t, s, snap.ServiceName, "networking", "t"+snap.ServiceName, nil)
+		}
+		for _, i := range perm {
+			addTopologySnapshot(t, s, ids[i], snaps[i])
+			rebuild(t, e, ids[i])
+		}
+		if got := sameAsPairs(t, s, ids...); !slices.Equal(got, want) {
+			t.Errorf("sync order %v: same_as = %v, want %v", perm, got, want)
+		}
 	}
 }

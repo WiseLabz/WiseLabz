@@ -590,3 +590,42 @@ func TestListHidesLabWideDocsAndTotalsFromNonAdmins(t *testing.T) {
 		t.Errorf("non-admin GET lab doc status = %d, want 404", rr.Code)
 	}
 }
+
+func TestServedDocHidesTopologyMarker(t *testing.T) {
+	h := newTestHandler(t)
+	ctx := context.Background()
+	marker := "<!-- wl:topology-edges:0123abcd -->"
+	content := "# Lab Topology\n\n```mermaid\ngraph LR\n```\n\n" + marker + "\n"
+	d := &store.DocRecord{Title: "Lab Topology", Kind: "lab", Content: content}
+	if err := h.Store.CreateDoc(ctx, d); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.Store.CreateDocVersion(ctx, &store.DocVersionRecord{DocID: d.ID, Rev: 1, Content: content, Trigger: "manual"}); err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/docs/"+d.ID, nil)
+	req.SetPathValue("id", d.ID)
+	req = req.WithContext(auth.ContextWithUser(req.Context(), "admin", true))
+	rr := httptest.NewRecorder()
+	h.Get(rr, req)
+	if rr.Code != http.StatusOK || strings.Contains(rr.Body.String(), "wl:topology-edges") {
+		t.Fatalf("GET doc: status %d, marker visible in %s", rr.Code, rr.Body.String())
+	}
+
+	vreq := httptest.NewRequest(http.MethodGet, "/api/docs/"+d.ID+"/versions/1", nil)
+	vreq.SetPathValue("id", d.ID)
+	vreq.SetPathValue("rev", "1")
+	vreq = vreq.WithContext(auth.ContextWithUser(vreq.Context(), "admin", true))
+	vrr := httptest.NewRecorder()
+	h.Version(vrr, vreq)
+	if vrr.Code != http.StatusOK || strings.Contains(vrr.Body.String(), "wl:topology-edges") {
+		t.Fatalf("GET version: status %d, marker visible in %s", vrr.Code, vrr.Body.String())
+	}
+
+	// The stored copy keeps the marker: regeneration bookkeeping depends on it.
+	stored, err := h.Store.GetDoc(ctx, d.ID)
+	if err != nil || !strings.Contains(stored.Content, marker) {
+		t.Fatalf("stored content lost the marker: %v %q", err, stored.Content)
+	}
+}

@@ -17,11 +17,29 @@ function cssVar(name: string, fallback: string): string {
 // Color resolution cache to avoid DOM probes on every render.
 const colorCache = new Map<string, string>();
 
+// Converts any CSS color string to rgb()/rgba() by painting one pixel.
+// Modern browsers keep oklch() as-is in computed styles, and khroma (mermaid's
+// color parser) throws "Unsupported color format" on it, so the computed value
+// alone is not enough. Returns undefined where canvas is unavailable.
+function toRgb(color: string): string | undefined {
+  try {
+    const ctx = document.createElement('canvas').getContext('2d');
+    if (!ctx) return undefined;
+    ctx.clearRect(0, 0, 1, 1);
+    ctx.fillStyle = color;
+    ctx.fillRect(0, 0, 1, 1);
+    const [r, g, b, a] = ctx.getImageData(0, 0, 1, 1).data;
+    return a === 255 ? `rgb(${r}, ${g}, ${b})` : `rgba(${r}, ${g}, ${b}, ${(a / 255).toFixed(3)})`;
+  } catch {
+    return undefined;
+  }
+}
+
 // Resolves a CSS custom property to a color format mermaid's own color
 // parser (khroma) understands. The app's palette tokens are oklch(...),
-// which khroma can't parse, so raw getPropertyValue text isn't usable
-// directly — instead let the browser's own CSS engine resolve it (any
-// valid CSS color resolves through `color` to an rgb()/rgba() string).
+// which khroma can't parse, so the browser resolves the variable and the
+// result is converted to rgb() when it is not already in a format khroma
+// reads.
 function resolveColor(varName: string, fallback: string): string {
   if (typeof document === 'undefined') return fallback;
 
@@ -34,7 +52,8 @@ function resolveColor(varName: string, fallback: string): string {
   const resolved = getComputedStyle(probe).color;
   document.body.removeChild(probe);
 
-  const result = resolved && !resolved.includes('var(') ? resolved : fallback;
+  let result = resolved && !resolved.includes('var(') ? resolved : fallback;
+  if (!/^(rgba?\(|#)/i.test(result)) result = toRgb(result) ?? fallback;
   colorCache.set(varName, result);
   return result;
 }
