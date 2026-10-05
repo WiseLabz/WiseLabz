@@ -474,6 +474,31 @@ record expiry without including request or renewal timestamps that would
 create noise on every sync. The connector's `verify_tls` setting defaults to
 enabled and can be disabled for instances using a locally issued certificate.
 
+## Caddy
+
+The Caddy connector (`backend/internal/connector/caddy/`) reads JSON config in
+one of two ways: set `url` to the admin API base URL, or paste a JSON config
+into `config_json`. Exactly one is required. URL mode makes only
+`GET {url}/config/`; optional bearer token or basic auth supports admin APIs
+behind an authenticating proxy. TLS verification defaults to enabled.
+Bearer and basic authentication cannot be configured together. Pasted JSON
+is limited to 1 MiB; URL mode uses the shared HTTP response limit. Both input
+modes use the same parser and health check. JSON objects without recognized
+HTTP or TLS apps produce empty tables; `caddy adapt` and `/config/` output are
+the intended config sources. The connector does not parse Caddyfiles or use
+Caddy Go dependencies.
+
+Snapshots list HTTP servers, their routes, and TLS automation policy
+subjects. For a route, the first hostname matcher is the entity hostname and
+subsequent hostnames are aliases. A route's entity ID is a stable key derived
+from its server, sorted host matchers and path matchers when hosts exist, so
+reordering routes does not change those IDs; hostless routes use their server
+and config index. Literal upstream IPs are linked on the route entity unless
+they are loopback or unspecified addresses. Hostname upstreams from all nested
+`reverse_proxy` handlers become `upstream_service` dependencies. All upstream
+dials appear in the route table and attributes, with the first linkable
+literal IP recorded on the entity. Certificate expiry is not included.
+
 ## Proxmox Backup Server
 
 The Proxmox Backup Server connector (`backend/internal/connector/pbs/`) reads
