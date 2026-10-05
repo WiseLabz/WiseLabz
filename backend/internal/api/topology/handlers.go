@@ -77,8 +77,23 @@ func (h *Handler) Path(w http.ResponseWriter, r *http.Request) {
 	if path == nil {
 		path = []topology.Step{}
 	}
-	for i := range path {
-		path[i].ConnectorName = names[path[i].ConnectorID]
+	if len(path) > 0 {
+		members, err := h.activeMembers(r, allowed)
+		if err != nil {
+			httputil.Errorf(w, err)
+			return
+		}
+		for i := range path {
+			path[i].ConnectorName = names[path[i].ConnectorID]
+			path[i].NodeID = path[i].GraphNodeKey
+			connectorServiceKey := path[i].ConnectorID + "\x00service\x00" + path[i].ConnectorID
+			isConnectorService := path[i].Kind == "service" && path[i].GraphNodeKey == connectorServiceKey
+			if !isConnectorService {
+				if member, ok := members[path[i].GraphNodeKey]; ok {
+					path[i].NodeID = member.EntityID
+				}
+			}
+		}
 	}
 	if to == "" {
 		httputil.JSON(w, http.StatusOK, map[string]any{"found": len(path) > 0, "truncated": truncated, "path": path})

@@ -4100,6 +4100,7 @@ components:
         connectorName: { type: string }
         kind: { type: string }
         name: { type: string }
+        nodeId: { type: string, description: "Matching graph node ID, including the resolved identity when available." }
         edgeKind: { type: string }
         edgeSource: { type: string }
         detail: { type: string }

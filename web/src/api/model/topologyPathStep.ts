@@ -12,6 +12,8 @@ export interface TopologyPathStep {
   connectorName: string;
   kind: string;
   name: string;
+  /** Matching graph node ID, including the resolved identity when available. */
+  nodeId?: string;
   edgeKind?: string;
   edgeSource?: string;
   detail?: string;

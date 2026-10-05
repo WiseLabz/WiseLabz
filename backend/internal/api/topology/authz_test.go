@@ -139,6 +139,7 @@ type pathBody struct {
 		ConnectorID   string `json:"connectorId"`
 		ConnectorName string `json:"connectorName"`
 		Name          string `json:"name"`
+		NodeID        string `json:"nodeId"`
 		EdgeKind      string `json:"edgeKind"`
 	} `json:"path"`
 }
@@ -195,6 +196,24 @@ func TestPathValidation(t *testing.T) {
 	}
 	if code, body := f.path(t, viewer, q("from", strings.Repeat("a", 256))); code != 200 {
 		t.Errorf("256-char from: status %d body %s, want 200", code, body)
+	}
+}
+
+func TestPathReportsMatchingGraphNodeIDs(t *testing.T) {
+	f := newFixture(t)
+	f.identity(t, "identity-vm", "canonical vm name", "", [5]string{f.pve, "vm", "vm-a", "vm-a", ""})
+	f.identity(t, "identity-node", "canonical node name", "", [5]string{f.net, "node", "node-1", "node-1", ""})
+
+	status, body := f.path(t, call{userID: f.viewer}, q("from", "vm-a", "to", "node-1"))
+	if status != 200 {
+		t.Fatalf("path status=%d body=%s", status, body)
+	}
+	path := decodePath(t, body).Path
+	if len(path) != 2 {
+		t.Fatalf("path has %d steps, want 2: %+v", len(path), path)
+	}
+	if path[0].NodeID != "identity-vm" || path[1].NodeID != "identity-node" {
+		t.Fatalf("path graph node IDs = %q, %q", path[0].NodeID, path[1].NodeID)
 	}
 }
 

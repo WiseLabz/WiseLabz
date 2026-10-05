@@ -3,6 +3,32 @@ import type { Catalog } from '../languages';
 /** Brazilian Portuguese. Partial: untranslated keys fall back to English. */
 export const ptBR: Catalog = {
   docs: {
+    topology: {
+      title: 'Topologia ao vivo',
+      loadError: 'Não foi possível carregar a topologia do laboratório.',
+      emptyTitle: 'Ainda não há topologia',
+      emptyDesc: 'Conectores e identidades vinculadas aparecerão aqui após a sincronização.',
+      generating: 'Gerando…',
+      export: 'Abrir documento Mermaid',
+      connectorFilter: 'Conector',
+      allConnectors: 'Todos os conectores',
+      kindFilter: 'Tipo de entidade',
+      allKinds: 'Todos os tipos',
+      showUnlinked: 'Mostrar identidades sem vínculo',
+      traceFrom: 'De',
+      traceTo: 'Para',
+      tracePlaceholder: 'Nome ou ID da entidade…',
+      trace: 'Rastrear caminho',
+      clearTrace: 'Limpar caminho',
+      traceValidation: 'Informe os dois pontos, com até 256 caracteres cada.',
+      traceError: 'Não foi possível rastrear esse caminho.',
+      noPath: 'Nenhum caminho encontrado entre esses pontos.',
+      traceHops: 'Etapas do caminho',
+      truncated: 'Este grafo está limitado aos primeiros 2.000 nós e 5.000 relações.',
+      legend: 'Legenda dos tipos de relação',
+      graph: 'Grafo da topologia',
+      nodeList: 'Explorar nós ({{count}})',
+    },
     export: {
       action: 'Exportar livro do laboratório',
       pending: 'Exportando…',
@@ -187,7 +213,8 @@ export const ptBR: Catalog = {
   },
   compliance: {
     relatedTitle: 'Entidades relacionadas',
-    relatedHint: 'Opcionalmente exija ou proíba entidades relacionadas em outros serviços. Todas as cláusulas devem ser satisfeitas.',
+    relatedHint:
+      'Opcionalmente exija ou proíba entidades relacionadas em outros serviços. Todas as cláusulas devem ser satisfeitas.',
     addClause: 'Adicionar verificação de entidade relacionada',
     removeClause: 'Remover cláusula',
     clauseMode: 'Modo',

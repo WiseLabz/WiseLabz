@@ -33,6 +33,8 @@ type Step struct {
 	ConnectorName string `json:"connectorName"`
 	Kind          string `json:"kind"`
 	Name          string `json:"name"`
+	NodeID        string `json:"nodeId,omitempty"`
+	GraphNodeKey  string `json:"-"`
 	EdgeKind      string `json:"edgeKind,omitempty"`
 	EdgeSource    string `json:"edgeSource,omitempty"`
 	Detail        string `json:"detail,omitempty"`
@@ -72,7 +74,15 @@ func buildGraph(edges []store.TopologyEdge, directed bool) *graph {
 
 func (g *graph) step(k string, h hop) Step {
 	n := g.nodes[k]
-	return Step{ConnectorID: n.ConnectorID, Kind: n.Kind, Name: n.Name, EdgeKind: h.edgeKind, EdgeSource: h.source, Detail: h.detail}
+	return Step{
+		ConnectorID:  n.ConnectorID,
+		Kind:         n.Kind,
+		Name:         n.Name,
+		GraphNodeKey: k,
+		EdgeKind:     h.edgeKind,
+		EdgeSource:   h.source,
+		Detail:       h.detail,
+	}
 }
 
 // ShortestPath runs breadth-first search from any matching node. When directed
