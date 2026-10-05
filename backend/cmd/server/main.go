@@ -114,8 +114,7 @@ func main() {
 	syncEngine := sync.NewEngine(s, wsHub, notifDispatcher, qualityChecker, cfg.Encryption.Key)
 	syncEngine.SetLimits(cfg.Sync.MaxConcurrency, cfg.Sync.DueBatchSize, cfg.Sync.Timeout)
 	docEngine := doc.NewEngine(s)
-	syncEngine.SetDocRegenerator(docEngine)
-	syncEngine.SetTopologyBuilder(docEngine)
+	wireDocumentServices(syncEngine, docEngine)
 
 	aiRegistry, embedRegistry := newAIRegistries()
 
@@ -224,6 +223,12 @@ func main() {
 	if exitCode != 0 {
 		os.Exit(exitCode)
 	}
+}
+
+func wireDocumentServices(engine *sync.Engine, docEngine *doc.Engine) {
+	engine.SetDocRegenerator(docEngine)
+	engine.SetTopologyBuilder(docEngine)
+	engine.SetIdentityBuilder(docEngine)
 }
 
 // newAIRegistries registers the built-in chat and embedding providers.

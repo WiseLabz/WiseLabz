@@ -16,9 +16,11 @@ CREATE TABLE entity_members (
     kind TEXT NOT NULL,
     ref TEXT NOT NULL,
     name TEXT NOT NULL,
-    PRIMARY KEY (connector_id, kind, ref)
+    gone_at TEXT,
+    PRIMARY KEY (entity_id, connector_id, kind, ref)
 );
 CREATE INDEX idx_entity_members_entity ON entity_members(entity_id);
+CREATE UNIQUE INDEX idx_entity_members_active_key ON entity_members(connector_id, kind, ref) WHERE gone_at IS NULL;
 
 ALTER TABLE quality_findings ADD COLUMN entity_kind TEXT;
 ALTER TABLE quality_findings ADD COLUMN entity_ref TEXT;

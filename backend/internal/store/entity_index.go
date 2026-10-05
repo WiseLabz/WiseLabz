@@ -125,7 +125,7 @@ func (s *Store) SearchEntities(ctx context.Context, userID, query string, filter
  AND d.kind = 'service' ORDER BY d.id LIMIT 1), ''),
  e.kind, e.name, e.external_id, e.ip, e.hostname, e.mac, e.aliases
  FROM entity_index e JOIN connectors c ON c.id = e.connector_id
- LEFT JOIN entity_members em ON em.connector_id = e.connector_id AND em.kind = e.kind
+ LEFT JOIN entity_members em ON em.connector_id = e.connector_id AND em.kind = e.kind AND em.gone_at IS NULL
  AND em.ref = CASE WHEN e.external_id <> '' THEN e.external_id ELSE e.name END
  WHERE `+where+` AND (`+strings.Join(matches, " OR ")+`)
  ORDER BY CASE WHEN (`+strings.Join(exact, " OR ")+`) THEN 0 ELSE 1 END,

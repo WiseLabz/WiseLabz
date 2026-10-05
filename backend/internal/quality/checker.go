@@ -267,6 +267,7 @@ func (c *Checker) evaluateComplianceRule(ctx context.Context, connectorID string
 		return nil, c.store.ResolveQualityFindingForRule(ctx, connectorID, rule.ID)
 	}
 	findings := make([]*store.QualityFindingRecord, 0, len(matches))
+	var notificationCandidate *store.QualityFindingRecord
 	refs := make([]store.EntityIdentityRef, 0, len(matches))
 	for _, entity := range matches {
 		ref := entity.ExternalID
@@ -280,16 +281,29 @@ func (c *Checker) evaluateComplianceRule(ctx context.Context, connectorID string
 			Severity: rule.Severity, Title: rule.Title, Description: complianceDescription([]compliance.Entity{entity}),
 			RemediationLink: rule.RemediationLink,
 		}
-		created, err := c.upsert(ctx, finding)
+		created, err := c.upsertWithoutNotify(ctx, finding)
 		if err != nil {
 			return nil, err
 		}
 		if created != nil {
 			findings = append(findings, created)
+			if notificationCandidate == nil {
+				notificationCandidate = created
+			}
+		} else if notificationCandidate == nil && severityRank[finding.Severity] > severityRank[finding.NotifiedSeverity] {
+			notificationCandidate = finding
 		}
 	}
 	if err := c.store.ResolveQualityFindingsForRuleExceptEntities(ctx, connectorID, rule.ID, refs); err != nil {
 		return nil, err
+	}
+	// Persist each matching entity separately, but preserve the connector-level
+	// notification and broadcast cadence: one representative per rule/check.
+	if notificationCandidate != nil {
+		c.maybeNotify(ctx, notificationCandidate)
+	}
+	if len(findings) > 1 {
+		findings = findings[:1]
 	}
 	return findings, nil
 }
@@ -579,13 +593,20 @@ func (c *Checker) checkOwnership(ctx context.Context, connectorID string) (*stor
 }
 
 func (c *Checker) upsert(ctx context.Context, finding *store.QualityFindingRecord) (*store.QualityFindingRecord, error) {
+	created, err := c.upsertWithoutNotify(ctx, finding)
+	if err == nil {
+		c.maybeNotify(ctx, finding)
+	}
+	return created, err
+}
+
+func (c *Checker) upsertWithoutNotify(ctx context.Context, finding *store.QualityFindingRecord) (*store.QualityFindingRecord, error) {
 	candidateID := uuid.New().String()
 	finding.ID = candidateID
 	if err := c.store.UpsertQualityFinding(ctx, finding); err != nil {
 		return nil, err
 	}
 	isNew := finding.ID == candidateID
-	c.maybeNotify(ctx, finding)
 	if !isNew {
 		return nil, nil
 	}

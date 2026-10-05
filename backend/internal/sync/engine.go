@@ -103,7 +103,11 @@ func (e *Engine) SetDocRegenerator(dr DocRegenerator) {
 // construction; nil (the default) skips topology edge rebuilds.
 func (e *Engine) SetTopologyBuilder(tb TopologyBuilder) {
 	e.topology = tb
-	e.identities, _ = tb.(IdentityBuilder)
+}
+
+// SetIdentityBuilder wires persisted identity reconciliation after sync.
+func (e *Engine) SetIdentityBuilder(builder IdentityBuilder) {
+	e.identities = builder
 }
 
 // SetBaseContext sets the context that detached syncs derive from. main wires

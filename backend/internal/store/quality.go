@@ -108,21 +108,58 @@ type EntityIdentityRef struct{ Kind, Ref string }
 // ResolveQualityFindingsForRuleExceptEntities resolves entity-specific findings
 // for matches that disappeared from the latest evaluation.
 func (s *Store) ResolveQualityFindingsForRuleExceptEntities(ctx context.Context, connectorID, ruleID string, keep []EntityIdentityRef) error {
-	if len(keep) == 0 {
-		return s.ResolveQualityFindingForRule(ctx, connectorID, ruleID)
-	}
-	clauses := make([]string, 0, len(keep))
-	args := []any{time.Now().UTC().Format(time.RFC3339Nano), connectorID, ruleID}
+	keepSet := make(map[string]bool, len(keep))
 	for _, ref := range keep {
-		clauses = append(clauses, `(entity_kind = ? AND entity_ref = ?)`)
-		args = append(args, ref.Kind, ref.Ref)
+		keepSet[ref.Kind+"\x00"+ref.Ref] = true
 	}
-	_, err := s.db.ExecContext(ctx, `UPDATE quality_findings SET status = 'resolved', resolved_at = ?, notified_severity = NULL
-		WHERE connector_id = ? AND rule_id = ? AND status = 'open' AND (entity_kind IS NULL OR NOT (`+strings.Join(clauses, ` OR `)+`))`, args...)
+	stale, err := staleQualityFindingIDs(ctx, s, connectorID, ruleID, keepSet)
 	if err != nil {
-		return fmt.Errorf("resolve stale entity findings for rule: %w", err)
+		return err
+	}
+	if len(stale) == 0 {
+		return nil
+	}
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	const batch = 500
+	for start := 0; start < len(stale); start += batch {
+		end := start + batch
+		if end > len(stale) {
+			end = len(stale)
+		}
+		placeholders := make([]string, end-start)
+		args := []any{now}
+		for i, id := range stale[start:end] {
+			placeholders[i] = "?"
+			args = append(args, id)
+		}
+		if _, err := s.db.ExecContext(ctx, `UPDATE quality_findings SET status='resolved', resolved_at=?, notified_severity=NULL WHERE id IN (`+strings.Join(placeholders, ",")+`)`, args...); err != nil {
+			return fmt.Errorf("resolve stale entity findings for rule: %w", err)
+		}
 	}
 	return nil
+}
+
+func staleQualityFindingIDs(ctx context.Context, s *Store, connectorID, ruleID string, keep map[string]bool) ([]string, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT id, entity_kind, entity_ref FROM quality_findings WHERE connector_id = ? AND rule_id = ? AND status = 'open'`, connectorID, ruleID)
+	if err != nil {
+		return nil, fmt.Errorf("list entity findings for resolution: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	stale := make([]string, 0)
+	for rows.Next() {
+		var id string
+		var kind, ref sql.NullString
+		if err := rows.Scan(&id, &kind, &ref); err != nil {
+			return nil, fmt.Errorf("scan entity finding for resolution: %w", err)
+		}
+		if !kind.Valid || !ref.Valid || !keep[kind.String+"\x00"+ref.String] {
+			stale = append(stale, id)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate entity findings for resolution: %w", err)
+	}
+	return stale, nil
 }
 
 // ResolveQualityFindingForRule resolves an open compliance finding for one

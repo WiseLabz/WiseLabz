@@ -119,6 +119,18 @@ func TestEntityIndexSearch(t *testing.T) {
 	if hits := search(userCtx, "dns.lab", SearchFilter{}, 10); len(hits) != 2 || hits[0].Name != "ROUTER" {
 		t.Fatalf("alias ranking: %+v", hits)
 	}
+	if err := s.ReconcileEntityIdentities(ctx, nil); err != nil {
+		t.Fatal(err)
+	}
+	if hits := search(userCtx, "router", SearchFilter{ConnectorID: a.ID}, 10); len(hits) == 0 {
+		t.Fatalf("expected search hits for connector: %+v", hits)
+	} else {
+		for _, hit := range hits {
+			if hit.EntityID != "" {
+				t.Fatalf("gone member still exposed an active entity id: %+v", hit)
+			}
+		}
+	}
 	// A failed snapshot transaction must leave the previous index untouched.
 	rollback := errors.New("rollback")
 	if err := s.WithinTransaction(ctx, func(tx *Store) error {

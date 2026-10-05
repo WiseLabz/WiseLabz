@@ -2,12 +2,14 @@ package doc
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"sort"
-	"strings"
-	"time"
 
+	"github.com/WiseLabz/wiselabz/internal/connector"
+	"github.com/WiseLabz/wiselabz/internal/logsafe"
 	"github.com/WiseLabz/wiselabz/internal/store"
 )
 
@@ -21,37 +23,48 @@ func (e *Engine) RebuildEntityIdentitiesForConnector(ctx context.Context, _ stri
 // BackfillEntityIdentities initializes or reconciles identities across every
 // connector with a readable latest snapshot.
 func (e *Engine) BackfillEntityIdentities(ctx context.Context) (int, error) {
-	connectors, err := e.store.ListAllConnectors(ctx)
-	if err != nil {
-		return 0, fmt.Errorf("list connectors for identity backfill: %w", err)
-	}
-	members := make([]store.EntityMemberRecord, 0)
 	count := 0
-	for _, c := range connectors {
-		if err := ctx.Err(); err != nil {
-			return count, err
-		}
-		snap, err := e.snapshots.latest(ctx, c.ID)
+	err := e.store.ReconcileEntityIdentitiesWith(ctx, func(ctx context.Context, tx *store.Store) ([][]store.EntityMemberRecord, []string, error) {
+		connectors, err := tx.ListAllConnectors(ctx)
 		if err != nil {
+			return nil, nil, fmt.Errorf("list connectors for identity backfill: %w", err)
+		}
+		members := make([]store.EntityMemberRecord, 0)
+		preserve := make([]string, 0)
+		for _, c := range connectors {
+			if err := ctx.Err(); err != nil {
+				return nil, nil, err
+			}
+			record, err := tx.GetLatestSnapshot(ctx, c.ID)
 			if errors.Is(err, store.ErrNotFound) {
 				continue
 			}
-			return count, fmt.Errorf("load identity snapshot for %s: %w", c.ID, err)
-		}
-		count++
-		seen := map[string]bool{}
-		for _, entity := range snap.Entities {
-			ref := entityRef(entity)
-			key := identityKey(c.ID, entity.Kind, ref)
-			if seen[key] {
+			if err != nil {
+				slog.Warn("identity reconciliation retained unreadable connector snapshot", "connector", logsafe.Sanitize(c.ID), "error", logsafe.Sanitize(err.Error()))
+				preserve = append(preserve, c.ID)
 				continue
 			}
-			seen[key] = true
-			members = append(members, store.EntityMemberRecord{ConnectorID: c.ID, Kind: entity.Kind, Ref: ref, Name: entity.Name, ObservedAt: snap.FetchedAt.UTC().Format(time.RFC3339Nano), ExternalID: entity.ExternalID, Hostname: entity.Hostname, Aliases: entity.Aliases})
+			var snap connector.ServiceSnapshot
+			if err := json.Unmarshal([]byte(record.Data), &snap); err != nil {
+				slog.Warn("identity reconciliation retained malformed connector snapshot", "connector", logsafe.Sanitize(c.ID), "error", logsafe.Sanitize(err.Error()))
+				preserve = append(preserve, c.ID)
+				continue
+			}
+			count++
+			seen := map[string]bool{}
+			for _, entity := range snap.Entities {
+				ref := entityRef(entity)
+				key := identityKey(c.ID, entity.Kind, ref)
+				if seen[key] {
+					continue
+				}
+				seen[key] = true
+				members = append(members, store.EntityMemberRecord{ConnectorID: c.ID, Kind: entity.Kind, Ref: ref, Name: entity.Name, ObservedAt: record.FetchedAt, ExternalID: entity.ExternalID, Hostname: entity.Hostname, Aliases: entity.Aliases})
+			}
 		}
-	}
-	clusters := identityClusters(members)
-	if err := e.store.ReconcileEntityIdentities(ctx, clusters); err != nil {
+		return identityClusters(members), preserve, nil
+	})
+	if err != nil {
 		return count, fmt.Errorf("reconcile entity identities: %w", err)
 	}
 	return count, nil
@@ -81,23 +94,31 @@ func identityClusters(members []store.EntityMemberRecord) [][]store.EntityMember
 	}
 	features := make(map[string][]int)
 	for i, m := range members {
-		if m.ExternalID != "" {
-			key := "id\x00" + m.Kind + "\x00" + m.ExternalID
+		for _, key := range strongIdentityFeatures(connector.SnapshotEntity{Kind: m.Kind, ExternalID: m.ExternalID, Hostname: m.Hostname, Aliases: m.Aliases}) {
 			features[key] = append(features[key], i)
-		}
-		for _, hostname := range append([]string{m.Hostname}, m.Aliases...) {
-			if hostname != "" {
-				key := "host\x00" + strings.ToLower(hostname)
-				features[key] = append(features[key], i)
-			}
 		}
 	}
 	for _, indices := range features {
-		for a := 0; a < len(indices); a++ {
-			for b := a + 1; b < len(indices); b++ {
-				if members[indices[a]].ConnectorID != members[indices[b]].ConnectorID {
-					join(indices[a], indices[b])
-				}
+		byConnector := make(map[string][]int)
+		connectorOrder := make([]string, 0)
+		for _, index := range indices {
+			id := members[index].ConnectorID
+			if _, ok := byConnector[id]; !ok {
+				connectorOrder = append(connectorOrder, id)
+			}
+			byConnector[id] = append(byConnector[id], index)
+		}
+		if len(connectorOrder) < 2 {
+			continue
+		}
+		primary := byConnector[connectorOrder[0]]
+		other := byConnector[connectorOrder[1]][0]
+		for _, index := range primary {
+			join(index, other)
+		}
+		for _, id := range connectorOrder[1:] {
+			for _, index := range byConnector[id] {
+				join(index, primary[0])
 			}
 		}
 	}

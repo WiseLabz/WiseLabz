@@ -348,6 +348,37 @@ func TestComplianceRulesDetectResolveAndEvaluateOnSave(t *testing.T) {
 	}
 }
 
+func TestComplianceFindingsStayPerEntityButNotifyOncePerRuleRun(t *testing.T) {
+	ctx := context.Background()
+	s := newTestStore(t)
+	conn := createConnector(t, s, "owner")
+	entities := []connector.SnapshotEntity{
+		{Kind: "vm", Name: "vm-a", ExternalID: "a", Attributes: map[string]any{"firewall_enabled": false}},
+		{Kind: "vm", Name: "vm-b", ExternalID: "b", Attributes: map[string]any{"firewall_enabled": false}},
+		{Kind: "vm", Name: "vm-c", ExternalID: "c", Attributes: map[string]any{"firewall_enabled": false}},
+	}
+	data, err := json.Marshal(connector.ServiceSnapshot{Entities: entities})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.CreateSnapshot(ctx, &store.SnapshotRecord{ConnectorID: conn.ID, Data: string(data), FetchedAt: "2026-01-01T00:00:00Z"}); err != nil {
+		t.Fatal(err)
+	}
+	rule := createComplianceRule(t, s, "proxmox", "Firewall disabled")
+	notifier := &fakeNotifier{}
+	checker := NewChecker(s, nil, notifier, RotationConfig{MaxAgeDays: 90, WarnDays: 14})
+	if err := checker.EvaluateRule(ctx, rule.ID); err != nil {
+		t.Fatal(err)
+	}
+	open := findings(t, s, conn.ID, "compliance", "open")
+	if len(open) != 3 {
+		t.Fatalf("open entity findings=%d, want 3: %+v", len(open), open)
+	}
+	if notifier.calls != 1 {
+		t.Fatalf("notification calls=%d, want one per rule run", notifier.calls)
+	}
+}
+
 func TestQualityThresholdBoundaries(t *testing.T) {
 	ctx := context.Background()
 	s := newTestStore(t)

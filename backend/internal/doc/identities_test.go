@@ -27,6 +27,24 @@ func TestIdentityClustersUseTransitiveStrongMatchesOnly(t *testing.T) {
 	}
 }
 
+func TestIdentityClusterTreatsHostnameAsStrongWhenIPAlsoMatches(t *testing.T) {
+	a := connector.SnapshotEntity{Kind: "device", Name: "a", IP: "192.0.2.1", Hostname: "node.example"}
+	b := connector.SnapshotEntity{Kind: "device", Name: "b", IP: "192.0.2.1", Hostname: "NODE.EXAMPLE"}
+	if got := strongMatchReason(a, b); got != "hostname" {
+		t.Fatalf("strongMatchReason() = %q, want hostname", got)
+	}
+	if got := matchReason(a, b); got != "IP address" {
+		t.Fatalf("matchReason() = %q, want existing IP-first topology reason", got)
+	}
+	clusters := identityClusters([]store.EntityMemberRecord{
+		{ConnectorID: "a", Kind: a.Kind, Ref: "a", Name: a.Name, Hostname: a.Hostname},
+		{ConnectorID: "b", Kind: b.Kind, Ref: "b", Name: b.Name, Hostname: b.Hostname},
+	})
+	if len(clusters) != 1 || len(clusters[0]) != 2 {
+		t.Fatalf("hostname match with shared IP produced clusters: %+v", clusters)
+	}
+}
+
 func TestBackfillEntityIdentities(t *testing.T) {
 	ctx := context.Background()
 	s := newEngineTestStore(t)
@@ -77,5 +95,33 @@ func TestBackfillEntityIdentities(t *testing.T) {
 	}
 	if idAfterBackfill != firstID {
 		t.Fatalf("identity changed on idempotent backfill: %q != %q", idAfterBackfill, firstID)
+	}
+}
+
+func TestBackfillRetainsMembershipWhenSnapshotIsUnreadable(t *testing.T) {
+	ctx := context.Background()
+	s := newEngineTestStore(t)
+	connectorID := seedEngineConnectorWithEntities(t, s, "unreadable", "virtualization", "proxmox", []connector.SnapshotEntity{{Kind: "vm", Name: "vm-a", ExternalID: "100"}})
+	e := NewEngine(s)
+	if _, err := e.BackfillEntityIdentities(ctx); err != nil {
+		t.Fatal(err)
+	}
+	var before string
+	if err := s.DB().QueryRowContext(ctx, `SELECT entity_id FROM entity_members WHERE connector_id = ?`, connectorID).Scan(&before); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.DB().ExecContext(ctx, `UPDATE service_snapshots SET data = '{' WHERE connector_id = ?`, connectorID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.BackfillEntityIdentities(ctx); err != nil {
+		t.Fatal(err)
+	}
+	var got string
+	var memberGone, entityGone bool
+	if err := s.DB().QueryRowContext(ctx, `SELECT m.entity_id, m.gone_at IS NOT NULL, e.gone_at IS NOT NULL FROM entity_members m JOIN entities e ON e.id=m.entity_id WHERE m.connector_id=?`, connectorID).Scan(&got, &memberGone, &entityGone); err != nil {
+		t.Fatal(err)
+	}
+	if got != before || memberGone || entityGone {
+		t.Fatalf("unreadable snapshot changed membership: id=%q memberGone=%v entityGone=%v", got, memberGone, entityGone)
 	}
 }
