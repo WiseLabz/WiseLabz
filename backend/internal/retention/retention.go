@@ -30,6 +30,14 @@ type Publisher interface {
 	Broadcast(eventType string, payload any)
 }
 
+// runExpiredEvent mirrors the run-level fields of runbookrun.Event, which this
+// package cannot import without pulling in the HTTP handlers.
+type runExpiredEvent struct {
+	RunID     string `json:"runId"`
+	RunbookID string `json:"runbookId,omitempty"`
+	State     string `json:"state"`
+}
+
 // RunCleanupOnce performs one cleanup pass: for every category whose *Days
 // config value is > 0, deletes rows older than the cutoff. A category with
 // Days <= 0 is skipped (retention disabled). Open runbook runs without recent
@@ -142,12 +150,22 @@ func RunCleanupOnce(ctx context.Context, s *store.Store, cfg store.RetentionSett
 		errs = append(errs, fmt.Errorf("expire open runbook runs: %w", err))
 	} else if len(expiredRuns) > 0 {
 		logger.Info("Expired open runbook runs", "count", len(expiredRuns))
+		payloads := make([]runExpiredEvent, 0, len(expiredRuns))
+		for _, id := range expiredRuns {
+			payload := runExpiredEvent{RunID: id, State: "expired"}
+			if run, _, err := s.GetRunbookRun(ctx, id); err != nil {
+				logger.Warn("load expired runbook run for event", "runId", id, "error", err)
+			} else if run.RunbookID != nil {
+				payload.RunbookID = *run.RunbookID
+			}
+			payloads = append(payloads, payload)
+		}
 		for _, publisher := range events {
 			if publisher == nil {
 				continue
 			}
-			for _, id := range expiredRuns {
-				publisher.Broadcast(ws.EventRunbookRunUpdated, map[string]string{"runId": id, "state": "expired"})
+			for _, payload := range payloads {
+				publisher.Broadcast(ws.EventRunbookRunUpdated, payload)
 			}
 		}
 	}

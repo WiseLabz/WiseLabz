@@ -683,13 +683,13 @@ func TestRunCleanupRunbookHistoryPeriodZeroKeepsEverything(t *testing.T) {
 }
 
 type runExpiryPublisher struct {
-	events []map[string]string
+	events []runExpiredEvent
 	types  []string
 }
 
 func (p *runExpiryPublisher) Broadcast(eventType string, payload any) {
 	p.types = append(p.types, eventType)
-	p.events = append(p.events, payload.(map[string]string))
+	p.events = append(p.events, payload.(runExpiredEvent))
 }
 
 func TestRunExpiryPublishesUpdates(t *testing.T) {
@@ -704,7 +704,7 @@ func TestRunExpiryPublishesUpdates(t *testing.T) {
 	if err := RunCleanupOnce(context.Background(), s, cfg, testLogger(), p); err != nil {
 		t.Fatal(err)
 	}
-	if len(p.events) != 1 || p.types[0] != "runbook.run.updated" || p.events[0]["runId"] != run.ID || p.events[0]["state"] != "expired" {
+	if len(p.events) != 1 || p.types[0] != "runbook.run.updated" || p.events[0].RunID != run.ID || p.events[0].State != "expired" || p.events[0].RunbookID != rb.ID {
 		t.Fatalf("types=%+v events=%+v", p.types, p.events)
 	}
 	if err := RunCleanupOnce(context.Background(), s, cfg, testLogger(), p); err != nil {
