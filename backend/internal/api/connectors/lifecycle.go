@@ -128,7 +128,8 @@ func (h *Handler) lifecycleOpPreview(w http.ResponseWriter, r *http.Request, con
 }
 
 // PreviewLifecycleOp previews a connector or entity without mutating it.
-// Callers are responsible for authorization; no elevation is required.
+// Callers must verify the connector operator grant first. HTTP preview routes
+// remain elevation-free.
 func (h *Handler) PreviewLifecycleOp(
 	ctx context.Context,
 	connectorID, verb, entityRef string,
@@ -234,9 +235,11 @@ func (h *Handler) lifecycleOpMutate(w http.ResponseWriter, r *http.Request, conn
 	httputil.JSON(w, http.StatusOK, map[string]any{"status": verb + "ed"})
 }
 
-// MutateLifecycleOp performs an already-authorized lifecycle operation, including
-// failure alerts and success audit. Callers must authorize and elevate before
-// calling it; the core does not inspect elevation tokens or request actors.
+// MutateLifecycleOp performs an already-authorized lifecycle operation.
+// Callers must verify the connector operator grant first; HTTP mutation
+// handlers must also validate elevation. Per ADR 0001/0002, a failed operation
+// is not rolled back, creates a critical alert, and is not audited; success is
+// audited. The core does not inspect elevation tokens or request actors.
 func (h *Handler) MutateLifecycleOp(
 	ctx context.Context,
 	connectorID, verb, entityRef string,
@@ -313,7 +316,7 @@ func (h *Handler) mutateLifecycleOp(
 			Title:       fmt.Sprintf("%s failed for %s", capitalize(verb), rec.Name),
 			Description: err.Error(),
 		}
-		if createErr := h.Store.CreateAlert(ctx, alert); createErr != nil {
+		if createErr := h.Store.CreateAlert(context.WithoutCancel(ctx), alert); createErr != nil {
 			slog.Error("failed to create "+verb+" failure alert", "error", createErr)
 		} else if h.WSHub != nil {
 			h.WSHub.BroadcastConnector(connectorID, ws.EventAlertCreated, map[string]any{
@@ -331,12 +334,13 @@ func (h *Handler) mutateLifecycleOp(
 		}
 	}
 
-	detail := map[string]any{"entityRef": entityRef}
+	detail := make(map[string]any, len(extraAudit)+1)
 	for k, v := range extraAudit {
 		detail[k] = v
 	}
+	detail["entityRef"] = entityRef
 	auditAction := "connector." + verb
-	if err := h.recordLifecycleAudit(ctx, actor, auditAction, connectorID, detail); err != nil {
+	if err := h.recordLifecycleAudit(context.WithoutCancel(ctx), actor, auditAction, connectorID, detail); err != nil {
 		slog.Error("failed to record audit", "action", auditAction, "error", err)
 	}
 
@@ -349,25 +353,7 @@ func (h *Handler) recordLifecycleAudit(
 	action, connectorID string,
 	detail map[string]any,
 ) error {
-	data, err := json.Marshal(detail)
-	if err != nil {
-		return fmt.Errorf("marshal audit detail: %w", err)
-	}
-	role := ""
-	if actor.UserID != "" {
-		role = "user"
-		if actor.InstanceAdmin {
-			role = "admin"
-		}
-	}
-	return h.Store.CreateAuditRecord(ctx, &store.AuditRecord{
-		ActorUserID: actor.UserID,
-		ActorRole:   role,
-		Action:      action,
-		TargetType:  "connector",
-		TargetID:    connectorID,
-		Detail:      string(data),
-	})
+	return h.Store.RecordAuditAs(ctx, actor.UserID, actor.InstanceAdmin, action, "connector", connectorID, detail)
 }
 
 // capitalize upper-cases a word's first byte (ASCII verbs only: "restart",

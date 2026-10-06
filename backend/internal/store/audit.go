@@ -84,8 +84,9 @@ func (s *Store) insertAuditRecords(ctx context.Context, records []AuditRecord) e
 // authenticated actor in ctx.
 func (s *Store) RecordAuditBatchFromContext(ctx context.Context, action, targetType string, records []AuditRecord) error {
 	for i := range records {
-		records[i].ActorUserID = auth.UserIDFromContext(ctx)
-		records[i].ActorRole = actorRoleLabel(ctx)
+		actorUserID := auth.UserIDFromContext(ctx)
+		records[i].ActorUserID = actorUserID
+		records[i].ActorRole = actorRoleLabel(actorUserID, auth.InstanceAdminFromContext(ctx))
 		records[i].Action = action
 		records[i].TargetType = targetType
 	}
@@ -101,6 +102,30 @@ func (s *Store) RecordAuditBatchFromContext(ctx context.Context, action, targetT
 // exception. Call sites treat a returned error as non-fatal (slog.Error and
 // continue); see docs/AUDIT.md.
 func (s *Store) RecordAuditFromContext(ctx context.Context, action, targetType, targetID string, detail any) error {
+	return s.RecordAuditAs(
+		ctx,
+		auth.UserIDFromContext(ctx),
+		auth.InstanceAdminFromContext(ctx),
+		action,
+		targetType,
+		targetID,
+		detail,
+	)
+}
+
+// RecordAuditAs records one audit entry using the explicitly resolved actor.
+// Actor attribution and role do not depend on auth values or restrictions in
+// ctx, allowing callers that resolve an actor before entering a core operation
+// to preserve that identity in the audit trail.
+func (s *Store) RecordAuditAs(
+	ctx context.Context,
+	actorUserID string,
+	instanceAdmin bool,
+	action string,
+	targetType string,
+	targetID string,
+	detail any,
+) error {
 	detailJSON := ""
 	if detail != nil {
 		data, err := json.Marshal(detail)
@@ -111,8 +136,8 @@ func (s *Store) RecordAuditFromContext(ctx context.Context, action, targetType, 
 	}
 
 	return s.CreateAuditRecord(ctx, &AuditRecord{
-		ActorUserID: auth.UserIDFromContext(ctx),
-		ActorRole:   actorRoleLabel(ctx),
+		ActorUserID: actorUserID,
+		ActorRole:   actorRoleLabel(actorUserID, instanceAdmin),
 		Action:      action,
 		TargetType:  targetType,
 		TargetID:    targetID,
@@ -124,12 +149,12 @@ func (s *Store) RecordAuditFromContext(ctx context.Context, action, targetType, 
 // trail ("admin"/"user"). Per-connector grant changes are self-describing
 // via the audit action/target/detail, so this stays the coarse instance-wide
 // label rather than trying to cram a connector-scoped role into one column.
-// Empty when there's no authenticated actor in ctx (mirrors ActorUserID).
-func actorRoleLabel(ctx context.Context) string {
-	if auth.UserIDFromContext(ctx) == "" {
+// Empty when there's no actor (mirrors ActorUserID), even if instanceAdmin is true.
+func actorRoleLabel(userID string, instanceAdmin bool) string {
+	if userID == "" {
 		return ""
 	}
-	if auth.InstanceAdminFromContext(ctx) {
+	if instanceAdmin {
 		return "admin"
 	}
 	return "user"
