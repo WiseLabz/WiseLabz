@@ -31,7 +31,12 @@ const run: RunbookRun = {
   steps: [],
 };
 
-beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
+beforeAll(async () => {
+  server.listen({ onUnhandledRequest: 'error' });
+  // Load the route chunk before rendering so coverage instrumentation does not
+  // consume the UI assertion's wait deadline.
+  await import('./RunPage');
+});
 afterEach(() => {
   server.resetHandlers();
   queryClient.clear();

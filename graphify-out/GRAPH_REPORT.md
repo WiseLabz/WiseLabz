@@ -1,17 +1,17 @@
 # Graph Report - runbook-runs-web  (2026-10-06)
 
 ## Corpus Check
-- 1366 files · ~1,006,936 words
+- 1366 files · ~1,006,960 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 27 file(s) not represented in the graph (top: (none) 15, .tmpl 3, .toml 2)
 
 ## Summary
-- 11097 nodes · 34190 edges · 456 communities (412 shown, 44 thin omitted)
+- 11097 nodes · 34191 edges · 452 communities (408 shown, 44 thin omitted)
 - Extraction: 92% EXTRACTED · 8% INFERRED · 0% AMBIGUOUS · INFERRED: 2825 edges (avg confidence: 0.85)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `662e5507`
+- Built from commit: `81f38afd`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -23,11 +23,11 @@
 - react
 - context.Context
 - go_pkg_testing
-- go_pkg_github_com_wiselabz_wiselabz_internal_store
+- go_pkg_net_http
 - go_pkg_context
 - vitest
-- net/http.Request
-- go_pkg_io
+- Errorf
+- go_pkg_strings
 - WebSocketProvider.tsx
 - ServiceSnapshot
 - newTestHandler
@@ -45,31 +45,31 @@
 - dispatcher_test.go
 - Button.tsx
 - @tanstack/react-query
-- InstanceAdminFromContext
-- GetTypeSchema
+- net/http.Request
+- ValidateConfig
 - net/http.ResponseWriter
 - entity_identities.go
 - newTestHandler
 - package.json
-- SnapshotEntity
+- NewMalformedResponseError
 - DocRecord
 - api/entity_detail_test.go
 - ValidateRefSegment
-- npm_test.go
+- runbook_run.go
 - Store
 - TopologyPage.tsx
 - placeholders
-- caddy/tables.go
+- npm_test.go
 - newTestHandler
 - DecodeKey
 - Dispatcher
 - checker_test.go
 - fixtures.ts
 - ErrorWithDetails
-- router.go
+- go_pkg_log_slog
 - NewUser
 - buildGroupsTable
-- NewStore
+- NewHandler
 - blocks.go
 - Handler
 - channels.go
@@ -79,7 +79,7 @@
 - docexport/export_test.go
 - compliance/engine_test.go
 - NewEngine
-- store/backup_test.go
+- templates_test.go
 - ADDED Requirements
 - ADDED Requirements
 - Error Creation
@@ -88,11 +88,11 @@
 - docker_test.go
 - topology_edges_test.go
 - Decisions
-- fetch_test.go
-- Do
-- newMCPServer
+- truenas_test.go
+- entity_overrides_test.go
+- TopologyEdge
 - New
-- Executor
+- api/runbooks_test.go
 - ConnectorEditPage.tsx
 - ADDED Requirements
 - Service
@@ -102,8 +102,8 @@
 - Checker
 - ThemeControls.tsx
 - Compare
-- traefik/tables_test.go
-- sync.Mutex
+- Connector
+- .ConfigPush
 - compliance/engine.go
 - portainer/tables.go
 - .runPerRevision
@@ -112,13 +112,13 @@
 - backup/backup.go
 - EntityDetailPage.tsx
 - Common Go Bugs
-- runbook_run_test.go
+- snapshotdiff.go
 - Store
 - buildEntities
 - Hub
 - ADDED Requirements
 - adguardhome/tables.go
-- AuthMiddleware
+- NewService
 - rewritePlaceholders
 - NewEngine
 - settings.mock.ts
@@ -127,19 +127,19 @@
 - retention/retention_test.go
 - ADDED Requirements
 - Requirements
-- runbooks/handlers_test.go
+- connector_permission_test.go
 - runs_test.go
 - unifi_test.go
-- EmbedRegistry
-- dashboard_test.go
-- api/auth/webauthn_test.go
-- net/http.Client
-- NewRegistry
-- OIDCProvider
-- lifecycleManager
-- Handler
-- config_test.go
 - Registry
+- dashboard_test.go
+- net/http/httptest.ResponseRecorder
+- NewClient
+- NewRegistry
+- Handler
+- lifecycleManager
+- traefik_test.go
+- config_test.go
+- SuggestWithFallback
 - Get
 - httpx/retry_test.go
 - Manager
@@ -149,7 +149,7 @@
 - .call
 - response.go
 - Connector
-- reports/handlers_test.go
+- NewStore
 - handlers_caddy_url_test.go
 - HandleStoreError
 - mountAPIRoutes
@@ -159,23 +159,23 @@
 - Requirements
 - devDependencies
 - Codebase Design
-- Handler
+- runbooks/handlers.go
 - portainer_test.go
 - newTestHarness
-- render_test.go
+- data.go
 - time.Time
 - JournalEntry
 - Plan
 - docs/handlers_test.go
 - lifecycle_review_test.go
-- registry.go
+- GetTypeSchema
 - rewriter
 - Requirements
 - server/lifecycle_test.go
 - Register
 - logging.go
 - reconcile_test.go
-- truenas_test.go
+- newRouterDeps
 - ownership_test.go
 - keyset_test.go
 - newTestAppWithOptions
@@ -183,22 +183,22 @@
 - backup/main_test.go
 - changes/handlers_test.go
 - gitFixture
-- NewService
+- Config
 - config/connectors.go
 - adguardhome_test.go
 - connector/connector.go
 - sshStdioConn
-- newRelatedEnv
-- concurrency_test.go
+- store/topology_test.go
+- handlers_related_test.go
 - .searchDocs
 - Engine
 - HTML Report Format
-- Connector
+- SnapshotEntity
 - connectors_health_test.go
 - Handler
 - Engine
 - docimport_test.go
-- Runner
+- Envelope
 - Decision
 - ADDED Requirements
 - ADDED Requirements
@@ -210,25 +210,25 @@
 - Book
 - all.go
 - doc/topology.go
-- net/http/httptest.ResponseRecorder
+- EntityMemberKey
 - Backend test performance
 - ADDED Requirements
 - docdiffmodel.ts
 - SuggestRequest
-- Connector
-- newRouterDeps
-- login_test.go
+- net/http.Client
+- AuthedUser
+- api/changes_test.go
 - MigratedSQLite
-- DeliveryRecord
+- SnapshotDiff
 - RunbookStepRecord
 - WiseLabz — Design Contract
 - Requirement: Propose a doc edit via MCP
 - ADDED Requirements
 - compilerOptions
-- config_cmd.go
+- config_cmd_test.go
 - RateLimit
 - system/backup_test.go
-- engine_hardening_test.go
+- IsSecureRequest
 - store/entity_detail_test.go
 - planner
 - Configuration & Documentation Backup (Export/Import)
@@ -243,7 +243,7 @@
 - AssertMatchesSpec
 - diagram.go
 - Handler
-- data.go
+- Entity
 - Contributing to WiseLabz
 - WiseLabz Connector Guide
 - Requirement: Valid connector categories
@@ -253,7 +253,7 @@
 - doc_lifecycle_test.go
 - pagination_contract_test.go
 - leader_test.go
-- encoding/json.RawMessage
+- provider_test.go
 - TestComplianceRuleValidation
 - Decisions
 - Requirement: Scheduled health checks
@@ -263,7 +263,7 @@
 - General Debugging Methodology
 - Production Debugging
 - The Golden Rules
-- io.Reader
+- EntityLabel
 - serveSSHDockerConn
 - connectors_managed_test.go
 - unifi/tables.go
@@ -274,8 +274,8 @@
 - scripts
 - done
 - .agents/skills/openspec-explore/SKILL.md
-- newTestHandler
-- .Fetch
+- client_test.go
+- OpenArchive
 - templatefuncs.go
 - Store
 - transform_test.go
@@ -285,17 +285,17 @@
 - ADDED Requirements
 - Requirements
 - Archive
-- TestResumeAndConfirmPublishAfterThePreviousGoroutineStopped
+- DocAttachment
 - explore.md
 - WiseLabz
 - Decision
 - Requirement: Draft runbook from alert
-- Connector
-- chat/chat.go
+- Evaluate
+- oidc_elevate_test.go
 - newImportHandler
-- .call
+- scanMaintenanceWindow
 - npm/types.go
-- Connector
+- computeNextRun
 - Decision
 - Offline Lab Book and Scheduled Doc Export
 - Tasks
@@ -320,14 +320,14 @@
 - Database Performance
 - Transactions, Isolation Levels, and Locking
 - Testing Database Code
-- ComputeWindow
+- ReadyState
 - Store
 - ComplianceRuleRecord
 - RunDocLockSweep
 - Cache
 - Audit Trail
 - Step by step
-- compliance/handlers.go
+- noopValidatedConnector
 - Proposal
 - Proposal
 - Proposal
@@ -345,11 +345,11 @@
 - Proposal
 - Proposal
 - Requirement: Stable MCP traversal and topology document refresh
-- fakeConnector
+- DocVersionRecord
 - compress.go
 - Handler
-- newBlockedSync
-- password.go
+- Rule
+- golden_snapshot_test.go
 - ref_components_runbook_runhistory
 - CONTRIBUTING.md
 - Bulk Review Actions
@@ -370,11 +370,9 @@
 - areas.sh script
 - Struct Scanning and NULLable Columns
 - Test-Driven Debugging
-- Signer
-- docker/snapshot.go
-- digestDue
-- Recover
-- Store
+- fields_test.go
+- lifecycleError
+- dockerSSHAddr
 - engine_maintenance_test.go
 - Authentication design
 - Backup Recovery: What Comes Back, and What Doesn't
@@ -399,9 +397,7 @@
 - Web Interface Guidelines
 - RequireConnectorRole
 - web_src_api_model_index_runbookrunpreview
-- CORS
 - routerOperations
-- graph.go
 - authz_scope_test.go
 - Development workflow
 - Runbook runs
@@ -432,7 +428,6 @@
 - Error Handling
 - Parameterized Queries
 - JSON Pitfalls
-- mcp/topology_test.go
 - Prometheus metrics
 - WiseLabz — v2 Backlog
 - Spec Delta
@@ -490,7 +485,7 @@
 ## Import Cycles
 - None detected.
 
-## Communities (456 total, 44 thin omitted)
+## Communities (452 total, 44 thin omitted)
 
 ### Community 0 - "newDocTestStore"
 Cohesion: 0.02
@@ -498,11 +493,11 @@ Nodes (212): TestAPIKeyLifecycle(), TestAPIKeyNotFound(), TestLookupAPIKeyReflec
 
 ### Community 1 - "newTestApp"
 Cohesion: 0.02
-Nodes (221): runbookResp, runbookStepResp, templateBody, TestAlertsDraftRunbook(), testApp, seedAlert(), TestAlertsBulkSnoozePartialFailure(), TestAlertsBulkSnoozeRejectsTooManyIDs() (+213 more)
+Nodes (181): TestAlertsDraftRunbook(), testApp, seedAlert(), TestAlertsBulkSnoozePartialFailure(), TestAlertsBulkSnoozeRejectsTooManyIDs(), TestAlertsBulkSnoozeRoleBoundary(), TestAlertsBulkSnoozeValidation(), TestAlertsListDaysWindow() (+173 more)
 
 ### Community 2 - "testing.T"
 Cohesion: 0.02
-Nodes (200): cursorPage, TestRunHealthcheck(), TestClaudeSuggest(), TestClaudeSuggestDefaultMaxTokens(), TestClaudeSuggestErrors(), TestClaudeSuggestMultipleContentBlocks(), TestOpenAICompatibleSuggest(), TestOpenAICompatibleSuggestErrors() (+192 more)
+Nodes (176): cursorPage, TestRunHealthcheck(), TestClaudeSuggest(), TestClaudeSuggestDefaultMaxTokens(), TestClaudeSuggestErrors(), TestClaudeSuggestMultipleContentBlocks(), TestOpenAICompatibleSuggest(), TestOpenAICompatibleSuggestErrors() (+168 more)
 
 ### Community 3 - "icons.tsx"
 Cohesion: 0.04
@@ -514,31 +509,31 @@ Nodes (152): react, react-i18next, web_src_api_generated_auth_auth_deleteauthapi
 
 ### Community 5 - "context.Context"
 Cohesion: 0.02
-Nodes (55): fakeStatusChecker, sanitizeSessions(), abandonedByCaller(), Connector, Connector, SendTest(), Store, existingIDs() (+47 more)
+Nodes (54): fakeStatusChecker, sanitizeSessions(), abandonedByCaller(), Connector, Connector, Connector, SendTest(), Store (+46 more)
 
 ### Community 6 - "go_pkg_testing"
 Cohesion: 0.04
-Nodes (25): TestBuildHostOverrideTableAttributes(), buildHostOverrideTable(), isIPv6(), TestBuildHostOverrideTableMalformedCases(), TestBuildHostOverrideTableValidOverrides(), TestBuildPeerTableAttributes(), TestBuildPolicyTableAttributes(), buildPeerTable() (+17 more)
+Nodes (21): TestLoggablePathMasksShareTokenUnderV1(), TestSchemaMatchesConfig(), TestBuildHostOverrideTableAttributes(), buildHostOverrideTable(), isIPv6(), TestBuildHostOverrideTableMalformedCases(), TestBuildHostOverrideTableValidOverrides(), IsTimeout() (+13 more)
 
-### Community 7 - "go_pkg_github_com_wiselabz_wiselabz_internal_store"
-Cohesion: 0.04
-Nodes (58): bulkSnoozeItemResult, bulkSnoozeRequest, changePromptData(), stripPromptTags(), truncateUTF8(), nestedDocNodes(), TestNestedDocNodesKeepsOrderAndNesting(), versionSections() (+50 more)
+### Community 7 - "go_pkg_net_http"
+Cohesion: 0.05
+Nodes (38): bulkSnoozeItemResult, bulkSnoozeRequest, changedFields(), normalizeJSON(), nestedDocNodes(), TestNestedDocNodesKeepsOrderAndNesting(), versionSections(), TemplateVersionSection (+30 more)
 
 ### Community 8 - "go_pkg_context"
-Cohesion: 0.06
-Nodes (22): StatusError, ClassifyHealth(), TestClassifyHealth(), TestClassifyHealthPerTypeThreshold(), IsTimeout(), TestIsTimeout(), contains(), searchString() (+14 more)
+Cohesion: 0.05
+Nodes (22): StatusError, ClassifyHealth(), TestClassifyHealth(), TestClassifyHealthPerTypeThreshold(), go_pkg_context, go_pkg_database_sql, go_pkg_errors, go_pkg_fmt (+14 more)
 
 ### Community 9 - "vitest"
 Cohesion: 0.02
 Nodes (112): @testing-library/react, vitest, web_src_api_generated_connectors_connectors_deleteconnectorsconnectoridgoldensnapshot, web_src_api_generated_connectors_connectors_getgetconnectorsconnectoridgoldensnapshotquerykey, web_src_api_generated_connectors_connectors_postconnectorsconnectoridgoldensnapshot, web_src_api_generated_connectors_connectors_usegetconnectorsconnectorid, web_src_api_generated_connectors_connectors_usegetconnectorsconnectoridgoldensnapshot, web_src_api_generated_connectors_connectors_usegetconnectorsconnectoridsnapshotsdiff (+104 more)
 
-### Community 10 - "net/http.Request"
+### Community 10 - "Errorf"
 Cohesion: 0.04
-Nodes (53): routerDeps, Handler, Handler, Handler, newToken(), sanitize(), Handler, Handler (+45 more)
+Nodes (35): routerDeps, Handler, Handler, newToken(), sanitize(), Handler, Handler, Handler (+27 more)
 
-### Community 11 - "go_pkg_io"
+### Community 11 - "go_pkg_strings"
 Cohesion: 0.03
-Nodes (66): splitOrigins(), slicesEqual(), TestSplitOrigins(), keys(), writeExportState(), fenceMarker(), firstH1(), doHTTPRequestMethod() (+58 more)
+Nodes (73): edgeOutputKey(), TestSignedURLExpiryTamperAndKeySeparation(), NewSigner(), keys(), writeExportState(), fenceMarker(), firstH1(), ReadBody() (+65 more)
 
 ### Community 12 - "WebSocketProvider.tsx"
 Cohesion: 0.04
@@ -546,11 +541,11 @@ Nodes (62): Client dispatch model, Delivery, Envelope, Mock emitter (frontend-fi
 
 ### Community 13 - "ServiceSnapshot"
 Cohesion: 0.04
-Nodes (29): noopValidatedConnector, ServiceSnapshot, Connector, buildRouteTable(), buildGatewayTable(), primaryGatewayName(), wanInterfaceName(), buildGatewayTable() (+21 more)
+Nodes (31): ServiceSnapshot, WantsField(), Connector, Connector, buildRouteTable(), buildGatewayTable(), primaryGatewayName(), wanInterfaceName() (+23 more)
 
 ### Community 14 - "newTestHandler"
-Cohesion: 0.13
-Nodes (31): testHandler, TestElevateFailuresCountTowardLockout(), TestLocalLoginDisabledIsEnforced(), TestLoginMFARejectsLockedAccountEvenWithCorrectCode(), TestTokenTTLsAndStepUpComeFromSettings(), doJSON(), TestElevateMethodsReflectsMFA(), TestElevatePasswordRejectedWhenMFAEnabled() (+23 more)
+Cohesion: 0.09
+Nodes (46): testHandler, TestElevateFailuresCountTowardLockout(), TestLocalLoginDisabledIsEnforced(), TestLoginMFARejectsLockedAccountEvenWithCorrectCode(), TestTokenTTLsAndStepUpComeFromSettings(), doJSON(), testHandler, req() (+38 more)
 
 ### Community 15 - "Markdown.tsx"
 Cohesion: 0.10
@@ -574,15 +569,15 @@ Nodes (48): 10. Component conventions, Button (`Button.tsx`), Panel (`Panel.tsx`
 
 ### Community 20 - "ConnectorRecord"
 Cohesion: 0.04
-Nodes (44): formatDigest(), Dispatcher, actorRoleLabel(), auditFilterClause(), AuditRecord, Store, scanAuditRecord(), BackupRun (+36 more)
+Nodes (48): Dispatcher, Dispatcher, RunDeliveryRetries(), actorRoleLabel(), auditFilterClause(), AuditRecord, Store, scanAuditRecord() (+40 more)
 
 ### Community 21 - "AllowLoopbackForTest"
-Cohesion: 0.05
-Nodes (58): createKey(), testApp, newConnector(), TestAPIKeyCreateValidation(), TestAPIKeyDefaultsToFullScope(), TestConnectorRestrictedAPIKey(), TestReadOnlyAPIKey(), TestReadOnlyAPIKeyCapsConnectorRoleAtViewer() (+50 more)
+Cohesion: 0.07
+Nodes (46): createKey(), testApp, newConnector(), TestAPIKeyCreateValidation(), TestAPIKeyDefaultsToFullScope(), TestConnectorRestrictedAPIKey(), TestReadOnlyAPIKey(), TestReadOnlyAPIKeyCapsConnectorRoleAtViewer() (+38 more)
 
 ### Community 22 - "MDCell"
-Cohesion: 0.10
-Nodes (49): buildFiltering(), resourceTable(), Empty(), MalformedSection(), MDCell(), NormalizeMAC(), PutString(), PutStrings() (+41 more)
+Cohesion: 0.06
+Nodes (72): resourceTable(), Empty(), MalformedSection(), MDCell(), NormalizeMAC(), PutString(), PutStrings(), TestMDCell() (+64 more)
 
 ### Community 23 - "backup/backup_test.go"
 Cohesion: 0.08
@@ -590,7 +585,7 @@ Nodes (71): archiveOptions(), checksumFile(), ArchiveOptions, Bundle, ImportStre
 
 ### Community 24 - "MapTransportError"
 Cohesion: 0.04
-Nodes (32): NewAuthError(), NewServiceUnavailableError(), setHeaders(), TestValidateCustomURL(), tryParseEntities(), validateCustomURL(), Connector, TestTypedErrorsAreDistinguishableByType() (+24 more)
+Nodes (33): Connector, NewAuthError(), NewServiceUnavailableError(), setHeaders(), TestValidateCustomURL(), tryParseEntities(), validateCustomURL(), Connector (+25 more)
 
 ### Community 25 - "New"
 Cohesion: 0.07
@@ -608,21 +603,21 @@ Nodes (152): web_src_api_generated_alerts_alerts_postalertsalertiddismiss, web_s
 Cohesion: 0.03
 Nodes (112): PR 2: #494 Human-written docs, 7. `quality.finding.created` and `quality.findings.changed`, @codemirror/state, @codemirror/view, ref_node_buffer, react-router-dom, @tanstack/react-query, ref_undici (+104 more)
 
-### Community 29 - "InstanceAdminFromContext"
-Cohesion: 0.17
-Nodes (11): APIKeyRestriction, Handler, chi.Router, mountWSRoutes(), normalizedTime(), readInput(), APIKeyRestrictionFromContext(), RejectRestrictedAPIKey() (+3 more)
-
-### Community 30 - "GetTypeSchema"
+### Community 29 - "net/http.Request"
 Cohesion: 0.08
-Nodes (45): TestRegisteredSchema(), TestSchemaConfigValidation(), TestConfigSizeSchemaLimit(), TestVerifyTLSConfigFieldDefaultsTrue(), TestRegisteredSchema(), TestRegistrationAndIdentity(), TestRegistrationAndIdentity(), TestAttributeCatalogCoversEmittedKeys() (+37 more)
+Nodes (24): APIKeyRestriction, Handler, Handler, Handler, Handler, chi.Router, mountWSRoutes(), Handler (+16 more)
+
+### Community 30 - "ValidateConfig"
+Cohesion: 0.12
+Nodes (20): declaredConnectorErrors(), TestSchemaConfigValidation(), TestConfigSizeSchemaLimit(), TestValidateDeclared(), ValidateDeclared(), TestAttributeCatalogCoversEmittedKeys(), TestAttributeCatalogCoversNewEntityKinds(), TestBuildHostsTableAttributes() (+12 more)
 
 ### Community 31 - "net/http.ResponseWriter"
-Cohesion: 0.08
-Nodes (15): updateUserRequest, Handler, writeUserWriteError(), Handler, writeLifecycleError(), Handler, writeManagedConflict(), Handler (+7 more)
+Cohesion: 0.07
+Nodes (23): clearFlowCookie(), clearOIDCFlowCookie(), clearOIDCElevateFlowCookie(), oidcFlowCookieName(), readOIDCFlowCookie(), setFlowCookie(), setOIDCFlowCookie(), Handler (+15 more)
 
 ### Community 32 - "entity_identities.go"
-Cohesion: 0.08
-Nodes (54): identityClusters(), clusterRefs(), override(), overrideMembers(), TestIdentityClustersDetachLeavesHostnameCluster(), TestIdentityClustersDetachPlusMergeMovesMember(), TestIdentityClustersMergeJoinsUnmatchedMembers(), TestIdentityClustersOverridesWithoutEffectLeaveOutputUnchanged() (+46 more)
+Cohesion: 0.07
+Nodes (56): Engine, identityClusters(), identityKey(), clusterRefs(), override(), overrideMembers(), TestIdentityClustersDetachLeavesHostnameCluster(), TestIdentityClustersDetachPlusMergeMovesMember() (+48 more)
 
 ### Community 33 - "newTestHandler"
 Cohesion: 0.07
@@ -632,25 +627,25 @@ Nodes (58): actionRequest(), actionResponse(), TestActionBulkGrantBoundaries(), 
 Cohesion: 0.04
 Nodes (46): clsx, codemirror, @codemirror/commands, @codemirror/lang-markdown, eslint, eslint-plugin-react-hooks, eslint-plugin-react-refresh, @faker-js/faker (+38 more)
 
-### Community 35 - "SnapshotEntity"
-Cohesion: 0.06
-Nodes (51): SnapshotEntity, SnapshotSection, NewMalformedResponseError(), WantsField(), buildAdlistTable(), buildClientTable(), buildDomainTable(), buildGroupTable() (+43 more)
+### Community 35 - "NewMalformedResponseError"
+Cohesion: 0.08
+Nodes (45): SnapshotSection, NewMalformedResponseError(), buildAdlistTable(), buildClientTable(), buildDomainTable(), buildGroupTable(), cell(), clientIP() (+37 more)
 
 ### Community 36 - "DocRecord"
 Cohesion: 0.11
-Nodes (10): ReportDocs(), Viewable(), canOperateDoc(), docSearchWhere(), DocRecord, Store, Store, scanDoc() (+2 more)
+Nodes (11): ReportDocs(), Viewable(), canOperateDoc(), docSearchWhere(), escapeLike(), DocRecord, Store, Store (+3 more)
 
 ### Community 37 - "api/entity_detail_test.go"
-Cohesion: 0.08
-Nodes (74): failingReconciler, overrideBody, overrideFixture, snap, assertSameResponse(), atIs(), decodeEntity(), entityTestConnector() (+66 more)
+Cohesion: 0.29
+Nodes (29): snap, assertSameResponse(), atIs(), decodeEntity(), entityTestConnector(), getEntity(), testApp, newID() (+21 more)
 
 ### Community 38 - "ValidateRefSegment"
-Cohesion: 0.05
-Nodes (13): init(), ConfigField, Connector, isFallbackExternalID(), Connector, Connector, PathSegment(), ValidateRefSegment() (+5 more)
+Cohesion: 0.06
+Nodes (12): init(), ConfigField, Connector, isFallbackExternalID(), Connector, PathSegment(), ValidateRefSegment(), Connector (+4 more)
 
-### Community 39 - "npm_test.go"
-Cohesion: 0.24
-Nodes (25): safeURL(), authServer(), Connector, TestAuthenticationAndResourceErrorsAreSafe(), TestAuthenticationMissingTokenRemainsAuthError(), TestAuthenticationTwoFactorIsAuthError(), TestBaseURLAcceptsOptionalAPIPath(), testConnector() (+17 more)
+### Community 39 - "runbook_run.go"
+Cohesion: 0.07
+Nodes (28): enableFakeEmbedding(), nilToStr(), Store, activeRunbookRunID(), canonicalRunbookTimeValue(), closeUnfinishedRunbookRunSteps(), Store, isActiveRunbookRunViolation() (+20 more)
 
 ### Community 40 - "Store"
 Cohesion: 0.23
@@ -662,11 +657,11 @@ Nodes (34): @dagrejs/dagre, @xyflow/react, web_src_api_generated_docs_docs_postd
 
 ### Community 42 - "placeholders"
 Cohesion: 0.05
-Nodes (25): seedAlert(), changeServiceIDs(), seedChange(), Store, placeholders(), AlertRecord, ChangeRecord, Store (+17 more)
+Nodes (29): SnapshotError(), seedAlert(), changeServiceIDs(), seedChange(), Store, placeholders(), changeFilterClause(), AlertRecord (+21 more)
 
-### Community 43 - "caddy/tables.go"
-Cohesion: 0.08
-Nodes (40): parseAdminConfig(), parseConfig(), parsePastedConfig(), TestConfigSizeLimit(), TestEmptyConfigAndLiveNullAreHealthy(), tablesAsString(), TestConfigParsingIsStable(), TestFetchDataStableAcrossMapAndRouteOrdering() (+32 more)
+### Community 43 - "npm_test.go"
+Cohesion: 0.06
+Nodes (65): parseAdminConfig(), parseConfig(), parsePastedConfig(), TestConfigSizeLimit(), TestEmptyConfigAndLiveNullAreHealthy(), tablesAsString(), TestConfigParsingIsStable(), TestFetchDataStableAcrossMapAndRouteOrdering() (+57 more)
 
 ### Community 44 - "newTestHandler"
 Cohesion: 0.17
@@ -674,79 +669,79 @@ Nodes (43): TestAttachmentACLAndServing(), TestAttachmentDeleteOwnershipAndPurge
 
 ### Community 45 - "DecodeKey"
 Cohesion: 0.08
-Nodes (34): Values, oidcElevateFlow, ProviderConfig, Loader, New(), primaryProviderConfig(), Handler, randomOIDCToken() (+26 more)
+Nodes (32): Values, oidcElevateFlow, ProviderConfig, Loader, New(), primaryProviderConfig(), Handler, randomOIDCToken() (+24 more)
 
 ### Community 46 - "Dispatcher"
 Cohesion: 0.10
-Nodes (21): sendAppriseChannel(), sendGenericWebhookChannel(), sendGotifyChannel(), sendPushoverChannel(), sendSlackChannel(), sendTelegramChannel(), slackPayload(), TestSendAppriseChannel() (+13 more)
+Nodes (22): sendAppriseChannel(), sendGenericWebhookChannel(), sendGotifyChannel(), sendPushoverChannel(), sendSlackChannel(), sendTelegramChannel(), slackPayload(), TestSendAppriseChannel() (+14 more)
 
 ### Community 47 - "checker_test.go"
-Cohesion: 0.16
-Nodes (43): NewChecker(), createComplianceRule(), createComplianceSnapshot(), createConnector(), evalRuleN(), findings(), newTestStore(), setVMSnapshot() (+35 more)
+Cohesion: 0.11
+Nodes (60): NewChecker(), backup(), clause(), createComplianceRule(), createComplianceSnapshot(), createConnector(), evalRuleN(), findings() (+52 more)
 
 ### Community 48 - "fixtures.ts"
 Cohesion: 0.06
 Nodes (40): web_src_api_model_index_alert, web_src_api_model_index_alertpage, web_src_api_model_index_changedetail, web_src_api_model_index_changepage, web_src_api_model_index_changesummary, web_src_api_model_index_connectortypeschema, web_src_api_model_index_dashboardoverview, web_src_api_model_index_doc (+32 more)
 
 ### Community 49 - "ErrorWithDetails"
-Cohesion: 0.07
-Nodes (28): sanitizeUser(), setRefreshCookie(), errLocalLoginDisabled(), Handler, userLocked(), factorJSON(), Handler, mfaDecrypt() (+20 more)
+Cohesion: 0.08
+Nodes (25): sanitizeUser(), setRefreshCookie(), errLocalLoginDisabled(), Handler, userLocked(), factorJSON(), Handler, mfaDecrypt() (+17 more)
 
-### Community 50 - "router.go"
-Cohesion: 0.10
-Nodes (27): go_pkg_github_com_go_chi_chi_v5, go_pkg_github_com_wiselabz_wiselabz_internal_api_alerts, go_pkg_github_com_wiselabz_wiselabz_internal_api_apikeys, go_pkg_github_com_wiselabz_wiselabz_internal_api_attention, go_pkg_github_com_wiselabz_wiselabz_internal_api_auth, go_pkg_github_com_wiselabz_wiselabz_internal_api_changes, go_pkg_github_com_wiselabz_wiselabz_internal_api_chat, go_pkg_github_com_wiselabz_wiselabz_internal_api_compliance (+19 more)
+### Community 50 - "go_pkg_log_slog"
+Cohesion: 0.04
+Nodes (55): splitOrigins(), slicesEqual(), TestSplitOrigins(), changePromptData(), stripPromptTags(), truncateUTF8(), bulkResolveItemResult, bulkResolveRequest (+47 more)
 
 ### Community 51 - "NewUser"
-Cohesion: 0.13
-Nodes (33): TestRecoverRunbookRunsMarksRunningRunsInterrupted(), TestListServiceNameAndServerSeverity(), GrantConnectorRole(), instanceAdminRole(), NewUser(), TestListCacheSeparatesRestrictedKeys(), TestListServiceNameAndServerSeverity(), TestConnectorStoreErrorPaths() (+25 more)
+Cohesion: 0.08
+Nodes (67): TestRecoverRunbookRunsMarksRunningRunsInterrupted(), TestListServiceNameAndServerSeverity(), GrantConnectorRole(), instanceAdminRole(), NewUser(), TestListCacheSeparatesRestrictedKeys(), TestListServiceNameAndServerSeverity(), Handler (+59 more)
 
 ### Community 52 - "buildGroupsTable"
 Cohesion: 0.10
-Nodes (40): flexInt, ptrFlexInt(), TestAttributeCatalogCoversEmittedKeys(), Connector, TestBuildGroupsTableListsEveryGroupAndStaysStableWhenNewestMoves(), safeURL(), buildDatastoresTable(), buildGroupsTable() (+32 more)
+Nodes (39): flexInt, ptrFlexInt(), TestAttributeCatalogCoversEmittedKeys(), Connector, TestBuildGroupsTableListsEveryGroupAndStaysStableWhenNewestMoves(), buildDatastoresTable(), buildGroupsTable(), buildPruneJobsTable() (+31 more)
 
-### Community 53 - "NewStore"
-Cohesion: 0.11
-Nodes (42): NewHandler(), TestBulkSnooze(), TestDismissNotFound(), TestGetNotFound(), TestListEmpty(), TestResolveNotFound(), TestSnooze(), NewStore() (+34 more)
+### Community 53 - "NewHandler"
+Cohesion: 0.20
+Nodes (18): NewHandler(), TestComplianceRelatedClauseValidation(), TestCreateAndDeleteRuleAudit(), TestCreateAndGetRuleAudit(), TestCreateRuleCallsEvaluatorWhenEnabled(), TestCreateRuleValidation(), TestDeleteRuleNotFound(), TestDeleteRuleSuccess() (+10 more)
 
 ### Community 54 - "blocks.go"
 Cohesion: 0.12
-Nodes (34): diffToSpec(), blockKeys(), HashBody(), lineEnd(), NewBlock(), ParseBlocks(), renderFresh(), RenderSegments() (+26 more)
+Nodes (32): diffToSpec(), blockKeys(), HashBody(), lineEnd(), NewBlock(), ParseBlocks(), renderFresh(), RenderSegments() (+24 more)
 
 ### Community 55 - "Handler"
-Cohesion: 0.07
-Nodes (28): endpointKey(), entityLabel(), entityLabelText(), entityRef(), Handler, memberSnapshotKey(), NewHandler(), snapshotEntityKey() (+20 more)
+Cohesion: 0.18
+Nodes (13): endpointKey(), Handler, NewHandler(), toEndpoint(), EntityEdgeEndpoint, detail, endpoint, link (+5 more)
 
 ### Community 56 - "channels.go"
 Cohesion: 0.07
-Nodes (33): IPKey(), TestIPKey(), isSafeMethod(), unitSystemSummary(), IsSafeMethod(), idempotent(), TestDiscordMultipartAttachment(), TestDiscordOversizeTextDelivery() (+25 more)
+Nodes (34): IPKey(), TestIPKey(), isSafeMethod(), unitSystemSummary(), IsSafeMethod(), idempotent(), TestDiscordMultipartAttachment(), TestDiscordOversizeTextDelivery() (+26 more)
 
 ### Community 57 - "RunbookRunRecord"
 Cohesion: 0.05
-Nodes (53): Engine, identityKey(), Sanitize(), enableFakeEmbedding(), failureSummary(), Notifier, Publisher, Executor (+45 more)
+Nodes (38): Sanitize(), failureSummary(), Notifier, Publisher, Executor, notifyFailed(), publishRun(), publishStep() (+30 more)
 
 ### Community 58 - "newEnv"
-Cohesion: 0.17
-Nodes (34): TestLifecycleStepIgnoresAStoredTimeout(), TestStoreGrantsOperatorForADeletedUser(), describeFrames(), readRunFrames(), TestHubDeliversStepEventsOnlyToConnectorReaders(), TestRunNotificationsThroughDispatcher(), describe(), eventually() (+26 more)
+Cohesion: 0.05
+Nodes (80): activeRuns(), assertNoFailureNotes(), assertNoOpenSteps(), env, race(), repeat(), startQueued(), TestAwaitStopped() (+72 more)
 
 ### Community 59 - "dependencies"
 Cohesion: 0.05
 Nodes (43): dependencies, axios, clsx, codemirror, @codemirror/commands, @codemirror/lang-markdown, @codemirror/state, @codemirror/view (+35 more)
 
 ### Community 60 - "docexport/export_test.go"
-Cohesion: 0.09
-Nodes (34): TestExpireAlertsOnceNoExpiredAlertsIsNoop(), TestExpireAlertsOnceNotifiesViaDispatcher(), testLogger(), expireAlertsOnce(), main(), newLogger(), registerJobs(), runHealthcheck() (+26 more)
+Cohesion: 0.07
+Nodes (42): TestExpireAlertsOnceNoExpiredAlertsIsNoop(), TestExpireAlertsOnceNotifiesViaDispatcher(), testLogger(), expireAlertsOnce(), main(), newLogger(), registerJobs(), runHealthcheck() (+34 more)
 
 ### Community 61 - "compliance/engine_test.go"
-Cohesion: 0.09
-Nodes (40): Evaluate(), EvaluateWithRelated(), testCatalog(), TestContainsStringArray(), TestEvaluateAndKindAndOrder(), TestEvaluateEdgeCases(), TestEvaluateLargeSnapshot(), TestEvaluateOperators() (+32 more)
+Cohesion: 0.11
+Nodes (33): EvaluateWithRelated(), testCatalog(), TestEvaluateWithRelatedBasic(), TestEvaluateWithRelatedClausesAreANDed(), TestEvaluateWithRelatedConditionFilters(), TestEvaluateWithRelatedEmptyJoinValue(), TestEvaluateWithRelatedEmptySlice(), TestEvaluateWithRelatedForbids() (+25 more)
 
 ### Community 62 - "NewEngine"
-Cohesion: 0.17
-Nodes (39): NewEngine(), newEngineTestStore(), seedEngineConnector(), seedEngineTemplate(), TestGenerateFromSnapshotIncludesDependencies(), TestGenerateFromTemplateReturnsVersionPersistenceError(), TestGenerateFromTemplateStillPersists(), TestMatchingConnectorsEmptyAppliesToIsWildcard() (+31 more)
+Cohesion: 0.16
+Nodes (41): NewEngine(), newEngineTestStore(), seedEngineConnector(), seedEngineTemplate(), TestGenerateFromSnapshotIncludesDependencies(), TestGenerateFromTemplateReturnsVersionPersistenceError(), TestGenerateFromTemplateStillPersists(), TestMatchingConnectorsEmptyAppliesToIsWildcard() (+33 more)
 
-### Community 63 - "store/backup_test.go"
-Cohesion: 0.32
-Nodes (11): newBackupTestStore(), TestCreateBackupRun(), TestGetBackupScheduleWhenNotExists(), TestListBackupRunsPaginated(), TestPruneBackupRunsByAge(), TestPruneBackupRunsByCount(), TestPruneBackupRunsCombinedLimits(), TestPruneBackupRunsNegativeMaxBackups() (+3 more)
+### Community 63 - "templates_test.go"
+Cohesion: 0.11
+Nodes (29): templateBody, TestTemplateMutationRoleMatrix(), callMCP(), testApp, newMCPClient(), TestMCPKnowledgeToolsAdvertised(), TestMCPProposeDocEdit(), TestMCPProposeDocEditScopeAndLimits() (+21 more)
 
 ### Community 64 - "ADDED Requirements"
 Cohesion: 0.05
@@ -769,36 +764,36 @@ Cohesion: 0.19
 Nodes (32): decodeGraph(), decodePath(), Handler, newFixture(), q(), TestGraphAPIKeyConnectorRestriction(), TestGraphCapKeepsTypedEdgesFirstAndIsStableAcrossRebuilds(), TestGraphCollapsesDuplicateEdges() (+24 more)
 
 ### Community 69 - "docker_test.go"
-Cohesion: 0.08
-Nodes (34): generateSelfSignedCert(), generateSSHHostKey(), startSSHDockerServer(), TestConfigPush(), TestDockerWritableFields(), TestDoRequestContextTimeout(), TestDoRequestErrorCases(), TestFetchBuildsSectionsFromEndpoints() (+26 more)
+Cohesion: 0.07
+Nodes (40): buildDockerTLSConfig(), newDockerClient(), newTCPDockerClient(), generateSelfSignedCert(), generateSSHHostKey(), startSSHDockerServer(), TestConfigPush(), TestDockerWritableFields() (+32 more)
 
 ### Community 70 - "topology_edges_test.go"
-Cohesion: 0.17
-Nodes (38): dnsFixture(), edgesOfKind(), Engine, ipGroupSnaps(), labDoc(), labDocVersions(), proxyDocFixture(), proxyEdges() (+30 more)
+Cohesion: 0.18
+Nodes (36): dnsFixture(), edgesOfKind(), Engine, ipGroupSnaps(), labDoc(), labDocVersions(), proxyDocFixture(), proxyEdges() (+28 more)
 
 ### Community 71 - "Decisions"
 Cohesion: 0.05
 Nodes (36): Context, D10. Postgres job gated on the Go dependency closure, D11. `govulncheck` gating and nightly workflow, D12. "CodeQL – Code Quality" (GitHub's built-in Code Quality scan): check before acting, D1. Keep `dorny/paths-filter` to list files; classify in `scripts/ci/changes.sh`, D2. Rules are an ordered Bash `case` table; first match wins, D3. `web/package.json` version-only rule, pull requests only, D4. Fixture table and `check` mode (+28 more)
 
-### Community 72 - "fetch_test.go"
+### Community 72 - "truenas_test.go"
 Cohesion: 0.08
-Nodes (31): testApp, wsDial(), extractGroups(), newMockOIDCServer(), TestAuthURLAfterInitialization(), TestAuthURLBeforeInitialization(), TestExtractGroups(), TestInitializeFailure() (+23 more)
+Nodes (41): testApp, wsDial(), equalNames(), pbsServer(), pveServer(), realCatalog(), TestRecommendedBackupRulesAgainstRealConnectors(), entityKinds() (+33 more)
 
-### Community 73 - "Do"
-Cohesion: 0.07
-Nodes (10): Connector, Connector, Do(), DoJSON(), Connector, buildDeviceTable(), buildPolicySummary(), Connector (+2 more)
+### Community 73 - "entity_overrides_test.go"
+Cohesion: 0.22
+Nodes (21): failingReconciler, overrideBody, overrideFixture, decodeOverride(), testApp, memberIdentity(), memberIdentityFromList(), newOverrideFixture() (+13 more)
 
-### Community 74 - "newMCPServer"
-Cohesion: 0.14
-Nodes (32): Deps, registerListAttentionItems(), Deps, registerListChanges(), Deps, jsonResult(), registerListConnectors(), Deps (+24 more)
+### Community 74 - "TopologyEdge"
+Cohesion: 0.06
+Nodes (65): edgeKindRank(), sortEdgesForCap(), Deps, registerListAttentionItems(), Deps, registerListChanges(), Deps, jsonResult() (+57 more)
 
 ### Community 75 - "New"
-Cohesion: 0.13
-Nodes (25): TestManagerScheduleReplacement(), newFakeHealthStore(), TestJobHealthOkToFailingNotifiesOnce(), TestJobHealthPanicCountsAsFailure(), TestJobHealthPersistsAcrossRestart(), TestJobHealthWithoutStoreDoesNothing(), New(), TestAddJobInvalidExpression() (+17 more)
+Cohesion: 0.07
+Nodes (32): TestManagerScheduleReplacement(), newFakeHealthStore(), TestJobHealthOkToFailingNotifiesOnce(), TestJobHealthPanicCountsAsFailure(), TestJobHealthPersistsAcrossRestart(), TestJobHealthWithoutStoreDoesNothing(), cron.EntryID, Runner (+24 more)
 
-### Community 76 - "Executor"
-Cohesion: 0.09
-Nodes (11): Executor, activeRun, Deps, Grants, HealthChecker, Lifecycle, Notifier, Publisher (+3 more)
+### Community 76 - "api/runbooks_test.go"
+Cohesion: 0.16
+Nodes (24): runbookResp, runbookStepResp, createRunbookWithStep(), testApp, seedProxmoxConnector(), seedRunbook(), TestRunbookExecuteStepDryRunWithoutTokenWorks(), TestRunbookExecuteStepFailureCreatesAlert() (+16 more)
 
 ### Community 77 - "ConnectorEditPage.tsx"
 Cohesion: 0.08
@@ -818,51 +813,47 @@ Nodes (27): exists(), Handler, seedBackupRuns(), TestCreateBackupRunTriggersManu
 
 ### Community 81 - "ws/ws_test.go"
 Cohesion: 0.14
-Nodes (30): TestBroadcastDocEventScoping(), NewHub(), normalizeOrigin(), assertEnvelope(), assertNoFrame(), connectorHub(), decodeEnvelope(), mustMarshalEnvelope() (+22 more)
+Nodes (29): TestBroadcastDocEventScoping(), NewHub(), normalizeOrigin(), assertEnvelope(), assertNoFrame(), connectorHub(), decodeEnvelope(), mustMarshalEnvelope() (+21 more)
 
 ### Community 82 - "connector_permission.go"
 Cohesion: 0.14
 Nodes (12): auditConnectorGrantDiffJSON(), ClampConnectorRole(), TestClampConnectorRole(), getConnectorGrant(), ConnectorGrantDiff, ConnectorRef, Store, highestConnectorRole() (+4 more)
 
 ### Community 83 - "Checker"
-Cohesion: 0.11
-Nodes (21): fetchSnapshot(), names(), Entity, RelatedEntities, Snapshot, SnapshotFromConnector(), TestSnapshotFromConnectorCarriesTypedFields(), findingConnectorIDs() (+13 more)
+Cohesion: 0.14
+Nodes (12): RelatedEntities, seedFinding(), complianceRule(), findingRank(), Checker, RunStaleSweepOnce(), QualityFindingRecord, scanQualityFinding() (+4 more)
 
 ### Community 84 - "ThemeControls.tsx"
 Cohesion: 0.07
 Nodes (43): @fontsource/space-mono, @fontsource-variable/space-grotesk, mermaid, react-dom, App(), colorCache, cssVar(), Mermaid() (+35 more)
 
 ### Community 85 - "Compare"
-Cohesion: 0.06
-Nodes (51): configPushLanded(), assertNoSnapshotChanges(), TestFetchStableAcrossReorderingAndSnapshotJSON(), assertNoChanges(), pbsFixture(), TestBackupDoesNotChangeSections(), TestFetchStableAcrossReorderingAndLooseEncodings(), SafeCell() (+43 more)
+Cohesion: 0.14
+Nodes (19): configPushLanded(), TestBackupDoesNotChangeSections(), driftDescription(), Checker, highestDriftSeverity(), TestCompareIgnoresEntityAttributes(), TestCompareMapKeyOrderingDoesNotAffectResult(), TestCompareStillDetectsRuleContentChanges() (+11 more)
 
-### Community 86 - "traefik/tables_test.go"
-Cohesion: 0.11
-Nodes (25): TestAttributeCatalogCoversEmittedKeys(), buildEntryPointTable(), buildMiddlewareTable(), buildOverview(), buildRouterTable(), buildServiceTable(), healthSummary(), hostFromRule() (+17 more)
-
-### Community 87 - "sync.Mutex"
-Cohesion: 0.09
-Nodes (16): lastRunEvent(), env, healthStep(), newTestSpawner(), Executor, go_pkg_github_com_wiselabz_wiselabz_internal_api_connectors, sync.Mutex, eventRecorder (+8 more)
+### Community 87 - ".ConfigPush"
+Cohesion: 0.14
+Nodes (11): Handler, isWritableField(), validateConfigPushRequest(), capitalize(), LifecycleActor, ConfigPusher, ValidateCompositeRef(), Err() (+3 more)
 
 ### Community 88 - "compliance/engine.go"
-Cohesion: 0.14
-Nodes (27): catalog(), backupRules(), contains(), equal(), fieldValue(), findAttribute(), Catalog, Condition (+19 more)
+Cohesion: 0.17
+Nodes (22): catalog(), contains(), equal(), fieldValue(), findAttribute(), Catalog, Condition, RelatedClause (+14 more)
 
 ### Community 89 - "portainer/tables.go"
-Cohesion: 0.12
-Nodes (29): TestAttributeCatalogCoversEmittedKeys(), environmentDependencies(), buildEnvironmentTable(), buildStackTable(), containerRows(), environmentNames(), environmentTypeName(), hostFromURL() (+21 more)
+Cohesion: 0.09
+Nodes (32): TestAttributeCatalogCoversEmittedKeys(), environmentDependencies(), Connector, putMetadata(), buildEnvironmentTable(), buildStackTable(), containerRows(), environmentNames() (+24 more)
 
 ### Community 90 - ".runPerRevision"
-Cohesion: 0.10
-Nodes (24): TestPruneAttachmentFilesKeepsOperatorFiles(), fetchAllDocs(), fileName(), IsGeneratedName(), pruneAttachmentFiles(), pruneStale(), slugify(), TestIsGeneratedName() (+16 more)
+Cohesion: 0.13
+Nodes (17): fileName(), slugify(), commitMessage(), gitAuth(), Exporter, installHTTPS(), TestCommitMessage(), TestGitAuthHTTPSNoToken() (+9 more)
 
 ### Community 91 - "handlers.ts"
 Cohesion: 0.06
 Nodes (30): web_src_api_generated_alerts_alerts_msw, web_src_api_generated_alerts_alerts_msw_getalertsmock, web_src_api_generated_auth_auth_msw, web_src_api_generated_auth_auth_msw_getauthmock, web_src_api_generated_changes_changes_msw, web_src_api_generated_changes_changes_msw_getchangesmock, web_src_api_generated_connectors_connectors_msw, web_src_api_generated_connectors_connectors_msw_getconnectorsmock (+22 more)
 
 ### Community 92 - "npm/tables.go"
-Cohesion: 0.18
-Nodes (29): connectedDevices(), LifecyclePreview, ServiceDependency, buildAccessListTable(), buildCertificateTable(), buildDeadHostTable(), buildProxyHostTable(), buildRedirectionHostTable() (+21 more)
+Cohesion: 0.21
+Nodes (27): ServiceDependency, buildAccessListTable(), buildCertificateTable(), buildDeadHostTable(), buildProxyHostTable(), buildRedirectionHostTable(), buildStreamTable(), decodeResources() (+19 more)
 
 ### Community 93 - "backup/backup.go"
 Cohesion: 0.13
@@ -876,9 +867,9 @@ Nodes (33): axios, web_src_api_generated_connectors_connectors_deleteconnectorsc
 Cohesion: 0.06
 Nodes (31): `break` in `select`/`switch` Inside `for` Loop, Closed Channel in `select` Causes Busy Loop, Common Go Bugs, Concurrent Map Read/Write (Fatal), Context Misuse, Copying sync Types, Defer Gotchas, Enum Zero Value with `iota` (+23 more)
 
-### Community 96 - "runbook_run_test.go"
-Cohesion: 0.21
-Nodes (23): runbookRunTimestamp(), createOpenManualRunbookRun(), createRunbookRunFixture(), enableRunbookRunForeignKeys(), Store, hasNineFractionalDigits(), runbookRunStep(), runbookRunStepCount() (+15 more)
+### Community 96 - "snapshotdiff.go"
+Cohesion: 0.15
+Nodes (19): assertNoSnapshotChanges(), TestFetchStableAcrossReorderingAndSnapshotJSON(), assertNoChanges(), pbsFixture(), TestFetchStableAcrossReorderingAndLooseEncodings(), BuildSnapshotDiff(), CompareDependencies(), CompareEntities() (+11 more)
 
 ### Community 97 - "Store"
 Cohesion: 0.14
@@ -889,40 +880,40 @@ Cohesion: 0.07
 Nodes (34): TestAttributeCatalogCoversEmittedKeys(), JSONType(), TestAttributeCatalogCoversEmittedKeys(), attrIP(), attrNumber(), attrString(), buildEntities(), buildIntegrations() (+26 more)
 
 ### Community 99 - "Hub"
-Cohesion: 0.11
-Nodes (19): wsRead(), dialHub(), eventsUntilMarker(), payloadOf(), TestRunSyncFieldsWhenFreeWaitsForInFlightSyncSilently(), watchConnectorEvents(), Envelope, Hub (+11 more)
+Cohesion: 0.16
+Nodes (12): dialHub(), Hub, Identity, setupWSConnection(), github.com/gorilla/websocket.Conn, github.com/gorilla/websocket.Upgrader, Audience, broadcastMsg (+4 more)
 
 ### Community 100 - "ADDED Requirements"
 Cohesion: 0.06
 Nodes (30): ADDED Requirements, MODIFIED Requirements, Requirement: Manual identity overrides, Requirement: Override admin workflow, Requirement: Override administration API, Requirement: Override effect on identity lifecycle, Requirement: Override lifecycle, Requirement: Strong-match clustering (+22 more)
 
 ### Community 101 - "adguardhome/tables.go"
-Cohesion: 0.14
-Nodes (24): statusInfo, upstreamDependencies(), TestAttributeCatalogCoversEmittedKeys(), buildClientTable(), buildDHCP(), buildDNSInfo(), buildRewriteTable(), buildStatus() (+16 more)
+Cohesion: 0.15
+Nodes (25): statusInfo, upstreamDependencies(), TestAttributeCatalogCoversEmittedKeys(), buildClientTable(), buildDHCP(), buildDNSInfo(), buildFiltering(), buildRewriteTable() (+17 more)
 
-### Community 102 - "AuthMiddleware"
-Cohesion: 0.11
-Nodes (22): APIKeyChecker, fakeConnectorRoleChecker, testAuditCall, testAuditRecorder, treatAsSafeFromContext(), AuthMiddleware(), RequireInstanceAdmin(), assertElevationAuditCalls() (+14 more)
+### Community 102 - "NewService"
+Cohesion: 0.08
+Nodes (41): APIKeyChecker, fakeConnectorRoleChecker, testAuditCall, testAuditRecorder, TestAuthMiddlewareAcceptsNonAdminAPIKey(), TestAuthMiddlewareAPIKeyLifecycle(), TestAuthMiddlewareRejectsExpiredAndRevokedAPIKeys(), TestAuthMiddlewareThrottlesAPIKeyLastUsed() (+33 more)
 
 ### Community 103 - "rewritePlaceholders"
 Cohesion: 0.10
 Nodes (14): TestAPIKeyLastUsedThrottle(), doRewritePlaceholders(), rewritePlaceholders(), TestRewritePlaceholders(), TestRewritePlaceholdersCached(), database/sql.Result, database/sql.Row, database/sql.Rows (+6 more)
 
 ### Community 104 - "NewEngine"
-Cohesion: 0.12
-Nodes (29): RequestedFields(), TestBaseContext(), TestRunDueSyncsRespectsLimits(), TestSyncCancellationRecordsFailureAndReleasesGuard(), TestSyncDeadlinePersistsDegradedStatus(), TestSyncExcludesConcurrentRuns(), TestRunSyncFieldsPassesHintToConnector(), TestRunSyncFieldsSurvivesCredentialRefresh() (+21 more)
+Cohesion: 0.09
+Nodes (38): RequestedFields(), TestBaseContext(), TestRunDueSyncsRespectsLimits(), TestSyncCancellationRecordsFailureAndReleasesGuard(), TestSyncDeadlinePersistsDegradedStatus(), TestSyncExcludesConcurrentRuns(), fakeConnector, TestRefreshCredentialsDirect() (+30 more)
 
 ### Community 105 - "settings.mock.ts"
 Cohesion: 0.08
 Nodes (26): web_src_api_model_index_aiconfig, web_src_api_model_index_aifallbackprovider, web_src_api_model_index_health, web_src_api_model_index_notificationchannel, web_src_api_model_index_notificationroute, web_src_api_model_index_profileupdate, web_src_api_model_index_session, web_src_api_model_index_systeminfo (+18 more)
 
 ### Community 106 - "time.Duration"
-Cohesion: 0.08
-Nodes (30): NewHandler(), NewWebAuthnService(), TestWebAuthnRPConfig(), WebAuthnRPConfig(), Config, LogSettings, IsSSHRemote(), AISettings (+22 more)
+Cohesion: 0.07
+Nodes (31): healthFakeConnector, NewHandler(), NewWebAuthnService(), TestWebAuthnRPConfig(), WebAuthnRPConfig(), Config, LogSettings, IsSSHRemote() (+23 more)
 
 ### Community 107 - "api/auth/oidc.go"
-Cohesion: 0.08
-Nodes (22): TestEmailDomainAllowed(), TestOIDCConnectorRolesForGroups(), TestOIDCRoleForGroups(), TestResolveConnectorNames(), connectorRoleLess(), emailDomainAllowed(), oidcConnectorRolesForGroups(), oidcRoleForGroups() (+14 more)
+Cohesion: 0.22
+Nodes (10): TestEmailDomainAllowed(), TestOIDCConnectorRolesForGroups(), TestOIDCRoleForGroups(), TestResolveConnectorNames(), connectorRoleLess(), emailDomainAllowed(), oidcConnectorRolesForGroups(), oidcRoleForGroups() (+2 more)
 
 ### Community 108 - "retention/retention_test.go"
 Cohesion: 0.20
@@ -936,9 +927,9 @@ Nodes (28): ADDED Requirements, Purpose, Requirement: Conflicting edits raise a 
 Cohesion: 0.07
 Nodes (28): doc-section-ownership Specification, Purpose, Requirement: Conflicting edits raise a reviewable Change, Requirement: Doc Changes can be resolved by accept or keep, Requirement: Docs expose provenance fields, Requirement: Existing docs are upgraded by provenance, Requirement: Generated content excludes volatile fetch timestamps, Requirement: Generated content is delimited by ownership markers (+20 more)
 
-### Community 111 - "runbooks/handlers_test.go"
-Cohesion: 0.22
-Nodes (27): NewHandler(), createWithSteps(), decodeRunbook(), fieldErrorFields(), Handler, newTestHandler(), operatorOn(), seedProxmoxConnector() (+19 more)
+### Community 111 - "connector_permission_test.go"
+Cohesion: 0.26
+Nodes (18): Store, newTestConnector(), newTestUser(), TestConnectorReaderIDs(), TestDeleteConnectorGrant(), TestFilterConnectorIDsByGrant(), TestGetUserConnectorRoleHighestAcrossSources(), TestListConnectorGrants() (+10 more)
 
 ### Community 112 - "runs_test.go"
 Cohesion: 0.28
@@ -948,49 +939,49 @@ Nodes (26): assertDeletedStepRedacted(), assertNoRunAudit(), assertRunAudit(), a
 Cohesion: 0.17
 Nodes (27): TestRestart(), TestRestartRejectsBadRef(), authorized(), decodeJSONBody(), Connector, newTestConnector(), passwordConfig(), TestAPIKeyIsNotSentInPasswordMode() (+19 more)
 
-### Community 114 - "EmbedRegistry"
-Cohesion: 0.27
-Nodes (7): newAIRegistries(), RegisterOllamaEmbedder(), RegisterOpenAIEmbedder(), Embedder, EmbedRegistry, NewEmbedRegistry(), sync.RWMutex
+### Community 114 - "Registry"
+Cohesion: 0.13
+Nodes (13): Provider, newAIRegistries(), RegisterClaude(), TestRegisterClaudeDefaults(), RegisterOllamaEmbedder(), RegisterOpenAIEmbedder(), Embedder, EmbedRegistry (+5 more)
 
 ### Community 115 - "dashboard_test.go"
-Cohesion: 0.08
-Nodes (33): dashboardLayout, scopedOverview, mustHashDummyPassword(), instanceAdminRoleFor(), assertOnlyConnector(), dashboardConnector(), getOverview(), testApp (+25 more)
-
-### Community 116 - "api/auth/webauthn_test.go"
-Cohesion: 0.23
-Nodes (19): virtualAuthenticator, beginWebAuthnLogin(), credentialResponse(), finishWebAuthnLogin(), testHandler, newVirtualAuthenticator(), registerVirtualAuthenticator(), TestWebAuthnCeremonyCannotBeReplayedOrUsedByAnotherUser() (+11 more)
-
-### Community 117 - "net/http.Client"
 Cohesion: 0.13
-Nodes (24): GuardedDialer(), buildDockerTLSConfig(), newClient(), newDockerClient(), newTCPDockerClient(), TestNewTCPDockerClientNoTLSWhenNoCert(), newTransport(), sharedTransport() (+16 more)
+Nodes (20): dashboardLayout, scopedOverview, mustHashDummyPassword(), instanceAdminRoleFor(), assertOnlyConnector(), dashboardConnector(), getOverview(), testApp (+12 more)
+
+### Community 116 - "net/http/httptest.ResponseRecorder"
+Cohesion: 0.14
+Nodes (30): secondFactorInput, virtualAuthenticator, flowCookieFrom(), testHandler, Handler, beginWebAuthnLogin(), credentialResponse(), finishWebAuthnLogin() (+22 more)
+
+### Community 117 - "NewClient"
+Cohesion: 0.13
+Nodes (19): GuardedDialer(), IsDangerousIP(), newClient(), newTransport(), sharedTransport(), clientTimeout(), Options, NewClient() (+11 more)
 
 ### Community 118 - "NewRegistry"
 Cohesion: 0.43
 Nodes (14): NewRegistry(), NewHandler(), TestAIConfigRoundTrip(), testConfig(), TestGetAIConfigNeverReturnsPlaintextKey(), TestGetAuthConfig(), TestGetDecryptedAPIKeyNoKeyStored(), TestNotificationsConfigRoundTrip() (+6 more)
 
-### Community 119 - "OIDCProvider"
-Cohesion: 0.08
-Nodes (26): clearFlowCookie(), clearOIDCFlowCookie(), clearOIDCElevateFlowCookie(), Handler, newOIDCUser(), oidcFlowCookieName(), readOIDCFlowCookie(), setFlowCookie() (+18 more)
+### Community 119 - "Handler"
+Cohesion: 0.09
+Nodes (15): updateUserRequest, Handler, writeUserWriteError(), Handler, newOIDCUser(), validHostPort(), Handler, oidcProviderJSON() (+7 more)
 
 ### Community 120 - "lifecycleManager"
-Cohesion: 0.09
-Nodes (10): newLifecycleManager(), Election, golang.org/x/sync/errgroup.Group, net/http.Server, sync/atomic.Bool, gatedStopScheduler, lifecycleDeps, lifecycleManager (+2 more)
+Cohesion: 0.13
+Nodes (8): newLifecycleManager(), Election, golang.org/x/sync/errgroup.Group, net/http.Server, gatedStopScheduler, lifecycleDeps, lifecycleManager, lifecycleScheduler
 
-### Community 121 - "Handler"
-Cohesion: 0.32
-Nodes (3): Handler, writeRunError(), WriteElevationError()
+### Community 121 - "traefik_test.go"
+Cohesion: 0.25
+Nodes (16): Connector, newTestConnector(), TestBasicAuthHeaderIsSent(), TestErrorMapping(), TestExpiredDeadlineMapsToTimeout(), TestFetchDegradesPerSection(), TestFetchHappyPath(), TestFetchSelectiveFields() (+8 more)
 
 ### Community 122 - "config_test.go"
 Cohesion: 0.07
 Nodes (40): Load(), TestAccessTokenTTLDuration(), TestAttachmentSettingsDefaultsAndEnvironment(), TestDocExportGitCommitModeValidation(), TestDocExportGitValidate(), TestLoadAcceptsConnectorNameInGroupConnectorRoles(), TestLoadDefaults(), TestLoadEnvOverride() (+32 more)
 
-### Community 123 - "Registry"
-Cohesion: 0.14
-Nodes (13): Provider, StubProvider, SuggestResult, registerFailThenSucceed(), TestIsRetryable(), TestSuggestWithFallbackAdvancesOnRetryableError(), TestSuggestWithFallbackAllFail(), TestSuggestWithFallbackFirstProviderSucceeds() (+5 more)
+### Community 123 - "SuggestWithFallback"
+Cohesion: 0.23
+Nodes (11): StubProvider, SuggestResult, registerFailThenSucceed(), TestIsRetryable(), TestSuggestWithFallbackAdvancesOnRetryableError(), TestSuggestWithFallbackAllFail(), TestSuggestWithFallbackFirstProviderSucceeds(), TestSuggestWithFallbackNoProviders() (+3 more)
 
 ### Community 124 - "Get"
 Cohesion: 0.06
-Nodes (37): Handler, isWritableField(), validateConfigPushRequest(), capitalize(), LifecycleActor, ConfigPusher, LifecycleOp(), TestNPMPasswordIsEncryptedAtRest() (+29 more)
+Nodes (39): applyConnectorScalarUpdates(), configRequestField(), Handler, parseScheduleUpdates(), validateConnectorConfig(), validateRotationFields(), viewOf(), writeConfigRejection() (+31 more)
 
 ### Community 125 - "httpx/retry_test.go"
 Cohesion: 0.19
@@ -1018,23 +1009,23 @@ Nodes (7): fixture, Handler, newFixture(), TestBulkSnoozeAuthzPerItem(), TestGet
 
 ### Community 131 - "response.go"
 Cohesion: 0.08
-Nodes (26): Handler, decodeStoredSnapshot(), Handler, snapshotStoreError(), Handler, Cursor(), DecodeCursor(), EncodeCursor() (+18 more)
+Nodes (28): Handler, decodeStoredSnapshot(), Handler, snapshotStoreError(), Handler, Cursor(), DecodeCursor(), EncodeCursor() (+20 more)
 
-### Community 133 - "reports/handlers_test.go"
-Cohesion: 0.18
-Nodes (24): newReportManager(), TestReportLabBookDispatch(), NewHandler(), TestCreateDefinitionDuplicateSlug(), TestCreateDefinitionSuccess(), TestCreateDefinitionValidation(), TestDeleteDefinition(), TestDeleteDefinitionNotFound() (+16 more)
+### Community 133 - "NewStore"
+Cohesion: 0.14
+Nodes (36): newReportManager(), TestReportLabBookDispatch(), NewHandler(), TestBulkSnooze(), TestDismissNotFound(), TestGetNotFound(), TestListEmpty(), TestResolveNotFound() (+28 more)
 
 ### Community 134 - "handlers_caddy_url_test.go"
-Cohesion: 0.18
-Nodes (14): caddyBody(), Handler, mustJSON(), postConnector(), TestCreateURLRequirementFollowsTypeSchema(), TestTestConnectionPastedCaddy(), TestUpdateCaddyInputModeOnEveryWritePath(), TestUpdateURLRequirementParity() (+6 more)
+Cohesion: 0.13
+Nodes (19): caddyBody(), Handler, mustJSON(), postConnector(), TestCreateURLRequirementFollowsTypeSchema(), TestTestConnectionPastedCaddy(), TestUpdateCaddyInputModeOnEveryWritePath(), TestUpdateURLRequirementParity() (+11 more)
 
 ### Community 135 - "HandleStoreError"
-Cohesion: 0.11
-Nodes (11): Handler, Handler, shareLinkFromContext(), httpError(), notFound(), validID(), Handler, toOverrideResponse() (+3 more)
+Cohesion: 0.13
+Nodes (10): Handler, shareLinkFromContext(), httpError(), notFound(), validID(), Handler, toOverrideResponse(), validateCreateOverride() (+2 more)
 
 ### Community 136 - "mountAPIRoutes"
-Cohesion: 0.12
-Nodes (20): PermissionChecker, chi.Router, mountChatRoutes(), mountDocRoutes(), mountShareRoutes(), mountTemplateRoutes(), chi.Router, chi.Router (+12 more)
+Cohesion: 0.14
+Nodes (18): chi.Router, mountChatRoutes(), mountDocRoutes(), mountShareRoutes(), mountTemplateRoutes(), chi.Router, chi.Router, mountMCPRoutes() (+10 more)
 
 ### Community 137 - "NewHTTPClient"
 Cohesion: 0.11
@@ -1060,9 +1051,9 @@ Nodes (25): devDependencies, eslint, eslint-plugin-react-hooks, eslint-plugin-re
 Cohesion: 0.09
 Nodes (21): 1. In-process, 2. Local-substitutable, 3. Remote but owned (Ports & Adapters), 4. True external (Mock), Deepening, Dependency categories, Seam discipline, Testing strategy: replace, don't layer (+13 more)
 
-### Community 143 - "Handler"
-Cohesion: 0.09
-Nodes (24): applyConnectorScalarUpdates(), configRequestField(), Handler, parseScheduleUpdates(), validateConnectorConfig(), validateRotationFields(), viewOf(), writeConfigRejection() (+16 more)
+### Community 143 - "runbooks/handlers.go"
+Cohesion: 0.21
+Nodes (12): effectiveKind(), Handler, hasTimeout(), reportedTimeout(), stepAuditDetail(), validKind(), validTargetType(), validVerb() (+4 more)
 
 ### Community 144 - "portainer_test.go"
 Cohesion: 0.17
@@ -1072,33 +1063,33 @@ Nodes (23): TestStackActionRejectsBadRef(), TestStackActions(), dockerPath(), Co
 Cohesion: 0.28
 Nodes (22): TestListAttentionItems(), TestListChanges(), TestListConnectors(), TestSearchDocs(), TestListFindings(), adminCtx(), createConnector(), createUser() (+14 more)
 
-### Community 146 - "render_test.go"
-Cohesion: 0.20
-Nodes (17): connectorFilter(), RenderHTML(), RenderMarkdown(), sampleData(), TestRenderHTML_EscapesDocTitles(), TestRenderHTML_SectionUnavailable(), TestRenderHTML_Truncated(), TestRenderMarkdown_Golden() (+9 more)
+### Community 146 - "data.go"
+Cohesion: 0.09
+Nodes (37): connectorFilter(), RenderHTML(), RenderMarkdown(), sampleData(), TestRenderHTML_EscapesDocTitles(), TestRenderHTML_SectionUnavailable(), TestRenderHTML_Truncated(), TestRenderMarkdown_Golden() (+29 more)
 
 ### Community 147 - "time.Time"
-Cohesion: 0.18
-Nodes (15): computeUptime(), Store, maxExtension(), outsideMaintenance(), Store, statusSeverity(), golang.org/x/time/rate.Limiter, time.Time (+7 more)
+Cohesion: 0.05
+Nodes (25): Signer, buildDeviceTable(), buildPolicySummary(), calendarDaysBetween(), digestDue(), formatDigest(), Dispatcher, TestDigestDue() (+17 more)
 
 ### Community 148 - "JournalEntry"
 Cohesion: 0.31
 Nodes (4): JournalEntry, Store, scanJournalEntry(), rowsAffected()
 
 ### Community 149 - "Plan"
-Cohesion: 0.11
-Nodes (16): Attachment, Handler, TestStageClaimAndSweep(), Issue, Mapping, Plan, Stage, NewStage() (+8 more)
+Cohesion: 0.12
+Nodes (14): Attachment, TestStageClaimAndSweep(), Issue, Mapping, Plan, Stage, NewStage(), SavePlan() (+6 more)
 
 ### Community 150 - "docs/handlers_test.go"
 Cohesion: 0.15
 Nodes (20): NewHandler(), TestAISuggestInvalidJSON(), TestByServiceNoDocsYet(), TestGenerate(), TestGeneratedTopologyDocHasNoMarkerAndSaveKeepsFingerprint(), TestGetLockOfUnknownDoc(), TestGetRootIsSynthetic(), TestGetUnknownIDFallsBackToServicePlaceholder() (+12 more)
 
 ### Community 151 - "lifecycle_review_test.go"
-Cohesion: 0.19
-Nodes (17): assertNoReviewFailureSideEffects(), assertNoReviewMutationSideEffects(), assertReviewLifecycleError(), Handler, lifecycleReviewAlerts(), lifecycleReviewAudit(), newLifecycleReviewConnector(), TestMutateLifecycleOpCallerContextEndSkipsFailureAlert() (+9 more)
+Cohesion: 0.16
+Nodes (19): assertNoReviewFailureSideEffects(), assertNoReviewMutationSideEffects(), assertReviewLifecycleError(), Handler, lifecycleReviewAlerts(), lifecycleReviewAudit(), newLifecycleReviewConnector(), TestMutateLifecycleOpCallerContextEndSkipsFailureAlert() (+11 more)
 
-### Community 152 - "registry.go"
-Cohesion: 0.15
-Nodes (14): countLifecycle(), TestAllConnectorImplementationsRegister(), TestConnectorCapabilitiesMatchOptionalInterfaces(), TestConnectorFailureContract(), TestURLRequiredPerType(), IsCredentialRefresherType(), ListSchemas(), TestIsCredentialRefresherType() (+6 more)
+### Community 152 - "GetTypeSchema"
+Cohesion: 0.11
+Nodes (28): TestRegisteredSchema(), countLifecycle(), TestAllConnectorImplementationsRegister(), TestConnectorCapabilitiesMatchOptionalInterfaces(), TestConnectorFailureContract(), TestURLRequiredPerType(), TestVerifyTLSConfigFieldDefaultsTrue(), Capabilities() (+20 more)
 
 ### Community 153 - "rewriter"
 Cohesion: 0.15
@@ -1117,32 +1108,32 @@ Cohesion: 0.16
 Nodes (22): init(), init(), init(), init(), init(), init(), init(), init() (+14 more)
 
 ### Community 157 - "logging.go"
-Cohesion: 0.13
-Nodes (19): loggablePath(), loggableQuery(), Logger(), captureLog(), TestLoggerCorrelatesErrorfWithRequestID(), TestLoggerRedactsShareToken(), TestLoggerRedactsWSTicket(), TestLoggablePathMasksShareTokenUnderV1() (+11 more)
+Cohesion: 0.16
+Nodes (17): loggablePath(), loggableQuery(), Logger(), captureLog(), TestLoggerCorrelatesErrorfWithRequestID(), TestLoggerRedactsShareToken(), TestLoggerRedactsWSTicket(), TestGetRequestIDMissing() (+9 more)
 
 ### Community 158 - "reconcile_test.go"
 Cohesion: 0.30
 Nodes (20): adminID(), auditActions(), entry(), init(), newStore(), only(), run(), storedConfig() (+12 more)
 
-### Community 159 - "truenas_test.go"
-Cohesion: 0.21
-Nodes (19): TestAppActionRejectsBadRef(), TestAppActions(), Connector, newTestConnector(), TestBearerHeaderIsSent(), TestErrorMapping(), TestExpiredDeadlineMapsToTimeout(), TestFetchDegradesPerSection() (+11 more)
+### Community 159 - "newRouterDeps"
+Cohesion: 0.18
+Nodes (14): NewHandler(), TestList(), TestListWithDaysFilter(), NewHandler(), NewHandler(), Handler, newTestHandler(), TestGetAdminDefault() (+6 more)
 
 ### Community 160 - "ownership_test.go"
-Cohesion: 0.41
-Nodes (19): docChanges(), Engine, humanSave(), mustGetDoc(), ownershipFixture(), pushSnapshot(), runSync(), TestDismissedConflictIsNotReraisedForSameUpstream() (+11 more)
+Cohesion: 0.37
+Nodes (21): blockIndex(), docChanges(), Engine, humanSave(), mustGetDoc(), ownershipFixture(), pushSnapshot(), runSync() (+13 more)
 
 ### Community 161 - "keyset_test.go"
 Cohesion: 0.19
 Nodes (16): Store, seedConnectorForChanges(), TestChangeRelatedServiceIDsAndPatternIDRoundTrip(), TestChangeRelatedServiceIDsDefaultsToEmptyArray(), TestCountRecentChangePatterns(), TestCountRecentChangesByPattern(), assertSameSet(), Store (+8 more)
 
 ### Community 162 - "newTestAppWithOptions"
-Cohesion: 0.13
-Nodes (22): RegisterClaude(), TestRegisterClaudeDefaults(), RegisterOpenAICompatible(), TestRegisterOpenAICompatibleDefaults(), TestBackupImportRejectsOversizedBody(), TestMetricsExposesState(), TestMetricsRequiresToken(), testApp (+14 more)
+Cohesion: 0.16
+Nodes (18): TestBackupImportRejectsOversizedBody(), TestMetricsExposesState(), TestMetricsRequiresToken(), testApp, newConnectorForAuthzTest(), newTestAppWithBackupDir(), newTestAppWithOptions(), TestBackupCreateManualRun() (+10 more)
 
 ### Community 163 - "middleware.go"
 Cohesion: 0.10
-Nodes (31): AuditRecorder, contextKey, elevationError, MFAChecker, UserStatusChecker, CacheHeaders(), SecurityHeaders(), TestSecurityHeaders() (+23 more)
+Nodes (31): AuditRecorder, contextKey, elevationError, MFAChecker, PermissionChecker, UserStatusChecker, CacheHeaders(), chi.Router (+23 more)
 
 ### Community 164 - "backup/main_test.go"
 Cohesion: 0.17
@@ -1156,9 +1147,9 @@ Nodes (20): NewHandler(), Handler, newTestHandler(), TestAcknowledgeNotFound(), 
 Cohesion: 0.31
 Nodes (11): SetBeforePushForTest(), newGitFixture(), TestGitExportLifecycle(), TestGitExportPushRejectionReturnsError(), TestGitExportRefusesForeignDirectory(), TestGitPerRevisionBootstrapReplayAndCap(), TestGitPerRevisionBotCatchUpAndRejectedPush(), TestGitPerRevisionMissingIntermediateAndEngineAuthor() (+3 more)
 
-### Community 167 - "NewService"
-Cohesion: 0.13
-Nodes (22): testAPIKeyChecker, TestAuthMiddlewareAcceptsNonAdminAPIKey(), TestAuthMiddlewareAPIKeyLifecycle(), TestAuthMiddlewareRejectsExpiredAndRevokedAPIKeys(), TestAuthMiddlewareThrottlesAPIKeyLastUsed(), APIKeyClaims, NewService(), TestConcurrentIssuePairUniqueTokenIDs() (+14 more)
+### Community 167 - "Config"
+Cohesion: 0.11
+Nodes (16): Config, testAPIKeyChecker, CORS(), TestCORSMatchedOrigin(), TestCORSPreflightDisallowedOriginForbidden(), TestCORSUnlistedOriginGetsNoHeaders(), SecurityHeaders(), TestSecurityHeaders() (+8 more)
 
 ### Community 168 - "config/connectors.go"
 Cohesion: 0.17
@@ -1169,40 +1160,40 @@ Cohesion: 0.20
 Nodes (20): adguardAPI(), Connector, newTestConnector(), TestBasicAuthHeaderIsSent(), TestErrorMapping(), TestExpiredDeadlineMapsToTimeout(), TestFetchDegradesPerSection(), TestFetchDegradesWhenStatusFails() (+12 more)
 
 ### Community 170 - "connector/connector.go"
-Cohesion: 0.09
-Nodes (14): Capabilities(), CapabilityDescriptor, TimeoutError, IsDangerousIP(), NewTimeoutError(), supportedLifecycleVerbs(), AuthError, CredentialRefresher (+6 more)
+Cohesion: 0.10
+Nodes (10): TimeoutError, NewTimeoutError(), supportedLifecycleVerbs(), AuthError, CredentialRefresher, MalformedResponseError, Restarter, Starter (+2 more)
 
 ### Community 171 - "sshStdioConn"
 Cohesion: 0.12
 Nodes (10): TestDialSSHStdioHonorsContextCancel(), closeQuietly(), dialSSHStdio(), sshStdioConn, golang.org/x/crypto/ssh.Client, golang.org/x/crypto/ssh.ClientConfig, golang.org/x/crypto/ssh.Session, io.Closer (+2 more)
 
-### Community 172 - "newRelatedEnv"
-Cohesion: 0.33
-Nodes (17): backup(), clause(), newRelatedEnv(), TestMalformedRelatedJSONFailsOnlyThatRule(), TestRelatedClauseConditionsDecideWhichRelatedEntitiesCount(), TestRelatedClauseEmptyRelatedSnapshotIsNotSkipped(), TestRelatedClauseFindingNeverCarriesRelatedEntityNames(), TestRelatedClauseForbidsFlagsSourceEntitiesWithAMatch() (+9 more)
+### Community 172 - "store/topology_test.go"
+Cohesion: 0.27
+Nodes (14): createTopologyTestConnectors(), Store, insertLegacyTopologyTestEdge(), TestTopologyEdgesFingerprint(), TestTopologyEdgesReplaceAndFilter(), TestTopologyEdgesResolvesToOwnershipAndDetail(), TestTopologyPreservedOwnersDoNotDuplicateRefreshedSharedEdges(), TestTopologyReplacementConcurrentRebuildsDoNotDuplicateSharedEdges() (+6 more)
 
-### Community 173 - "concurrency_test.go"
-Cohesion: 0.26
-Nodes (19): activeRuns(), assertNoFailureNotes(), assertNoOpenSteps(), env, race(), repeat(), startQueued(), TestAwaitStopped() (+11 more)
+### Community 173 - "handlers_related_test.go"
+Cohesion: 0.32
+Nodes (13): decodeMap(), findRuleByName(), relatedRuleBody(), seedConnector(), serve(), TestCreateRuleRejectsClauseConditionOnSourceOnlyAttribute(), TestCreateRuleRejectsMoreThanFiveClauses(), TestCreateRuleStoresRelatedClausesAndGetReturnsThem() (+5 more)
 
 ### Community 174 - ".searchDocs"
-Cohesion: 0.17
-Nodes (14): escapeLike(), Store, ftsMatchExpr(), Store, interleaveHits(), normalizeScores(), pgTSQuery(), searchTokens() (+6 more)
+Cohesion: 0.18
+Nodes (13): Store, ftsMatchExpr(), Store, interleaveHits(), normalizeScores(), pgTSQuery(), searchTokens(), snippetFor() (+5 more)
 
 ### Community 175 - "Engine"
-Cohesion: 0.10
-Nodes (9): Store, Engine, context.CancelFunc, sync.Map, sync.WaitGroup, testSpawner, DocRegenerator, IdentityBuilder (+1 more)
+Cohesion: 0.05
+Nodes (15): Store, Engine, actionConnector, bulkFakeConnector, failingPushConnector, sync.Map, sync.Mutex, sync.WaitGroup (+7 more)
 
 ### Community 176 - "HTML Report Format"
 Cohesion: 0.10
 Nodes (18): Call-graph collapse, Candidate card, Cross-section (good for layered shallowness), Diagram patterns, Hand-built boxes-and-arrows (when Mermaid's layout fights you), Header, HTML Report Format, Mass diagram (good for "interface as wide as implementation") (+10 more)
 
-### Community 177 - "Connector"
-Cohesion: 0.21
-Nodes (5): TestBuildDNSRecordTableAttributes(), TestBuildTunnelTableAttributes(), buildDNSRecordTable(), buildTunnelTable(), Connector
+### Community 177 - "SnapshotEntity"
+Cohesion: 0.08
+Nodes (30): connectedDevices(), LifecyclePreview, TestBuildDNSRecordTableAttributes(), TestBuildTunnelTableAttributes(), buildDNSRecordTable(), buildTunnelTable(), SnapshotEntity, TestBuildContainerTableAttributes() (+22 more)
 
 ### Community 178 - "connectors_health_test.go"
-Cohesion: 0.14
-Nodes (19): healthFakeConnector, testApp, registerHealthFakeType(), seedHealthTestConnector(), TestConnectorsHealthDegraded(), TestConnectorsHealthDoesNotCreateSnapshot(), TestConnectorsHealthOffline(), TestConnectorsHealthOnline() (+11 more)
+Cohesion: 0.20
+Nodes (18): testApp, registerHealthFakeType(), seedHealthTestConnector(), TestConnectorsHealthDegraded(), TestConnectorsHealthDoesNotCreateSnapshot(), TestConnectorsHealthOffline(), TestConnectorsHealthOnline(), TestConnectorsHealthRecordsTimeSeriesRow() (+10 more)
 
 ### Community 179 - "Handler"
 Cohesion: 0.20
@@ -1213,12 +1204,12 @@ Cohesion: 0.20
 Nodes (6): slugKeys(), Engine, TemplateFuncs(), GenerateResult, renderResult, text/template.FuncMap
 
 ### Community 181 - "docimport_test.go"
-Cohesion: 0.30
-Nodes (19): cleanName(), DefaultLimits(), Limits, OpenArchive(), analyze(), buildZip(), byPath(), hasIssue() (+11 more)
+Cohesion: 0.40
+Nodes (15): DefaultLimits(), analyze(), buildZip(), byPath(), hasIssue(), md(), TestAnalyzeObsidianVault(), TestArchiveGuards() (+7 more)
 
-### Community 182 - "Runner"
-Cohesion: 0.16
-Nodes (7): cron.EntryID, Runner, cron.Cron, HealthStore, jobEntry, JobInfo, Notifier
+### Community 182 - "Envelope"
+Cohesion: 0.21
+Nodes (8): wsRead(), eventsUntilMarker(), payloadOf(), TestRunSyncFieldsWhenFreeWaitsForInFlightSyncSilently(), watchConnectorEvents(), Envelope, newEnvelope(), newHeartbeat()
 
 ### Community 183 - "Decision"
 Cohesion: 0.11
@@ -1249,24 +1240,24 @@ Cohesion: 0.09
 Nodes (21): web_src_api_model_index_runbookrunupdatedevent, AlertCreatedPayload, AlertResolvedPayload, ChangeDetectedPayload, DocAiSuggestionPayload, DocGeneratedPayload, DocLockAcquiredPayload, DocLockExpiredPayload (+13 more)
 
 ### Community 190 - "Handler"
-Cohesion: 0.24
+Cohesion: 0.25
 Nodes (6): response(), toRule(), validRecord(), writeRuleRejection(), Handler, RuleEvaluator
 
 ### Community 191 - "Book"
-Cohesion: 0.15
-Nodes (15): Extension(), anchor(), component(), Load(), nodeText(), relative(), testBook(), TestHierarchySiblingOrderAndUnicodeAnchors() (+7 more)
+Cohesion: 0.16
+Nodes (15): anchor(), component(), Load(), nodeText(), relative(), testBook(), TestHierarchySiblingOrderAndUnicodeAnchors(), TestHTMLPortableHierarchy() (+7 more)
 
 ### Community 192 - "all.go"
 Cohesion: 0.11
 Nodes (18): go_pkg_github_com_wiselabz_wiselabz_internal_connector_adguardhome, go_pkg_github_com_wiselabz_wiselabz_internal_connector_caddy, go_pkg_github_com_wiselabz_wiselabz_internal_connector_cloudflare, go_pkg_github_com_wiselabz_wiselabz_internal_connector_custom, go_pkg_github_com_wiselabz_wiselabz_internal_connector_dnsresolver, go_pkg_github_com_wiselabz_wiselabz_internal_connector_docker, go_pkg_github_com_wiselabz_wiselabz_internal_connector_home_assistant, go_pkg_github_com_wiselabz_wiselabz_internal_connector_netbird (+10 more)
 
 ### Community 193 - "doc/topology.go"
-Cohesion: 0.09
-Nodes (38): capIPOnlyLinks(), collectLinks(), dedupKey(), hostnameMatches(), matchEntityPairs(), matchesHostnameOrAlias(), matchReason(), strongIdentityFeatures() (+30 more)
+Cohesion: 0.23
+Nodes (16): addDependencyEdge(), addProxyEdges(), addResolvesToEdges(), addRuntimeEdges(), entityRef(), entitySource(), Engine, isDNSEntity() (+8 more)
 
-### Community 194 - "net/http/httptest.ResponseRecorder"
-Cohesion: 0.24
-Nodes (8): testHandler, TestConfirmingEnrollmentUpgradesSession(), TestDeleteFactorBlockedByPolicyWhenLast(), TestEnrollmentOnlySessionBlockedOutsideAllowlist(), TestPolicyAdminsOnlyAffectsAdmins(), testHandler, Handler, net/http/httptest.ResponseRecorder
+### Community 194 - "EntityMemberKey"
+Cohesion: 0.23
+Nodes (7): EntityIdentity, EntityMemberKey, Store, inPlaceholders(), memberPredicate(), stringArgs(), EntityRunbookStep
 
 ### Community 195 - "Backend test performance"
 Cohesion: 0.11
@@ -1281,27 +1272,31 @@ Cohesion: 0.20
 Nodes (14): diff, buildDocDiff(), DiffRowUnit, DocDiffModel, DocRow, fold(), toUnits(), DiffLine (+6 more)
 
 ### Community 198 - "SuggestRequest"
-Cohesion: 0.13
-Nodes (11): claudeProvider, openAICompatibleProvider, testProvider, SuggestChunk, SuggestRequest, TestRegistryGet(), TestRegistryList(), TestStubProviderName() (+3 more)
+Cohesion: 0.16
+Nodes (10): claudeProvider, openAICompatibleProvider, SuggestChunk, SuggestRequest, LimitedBody(), ErrorBody(), LimitedBody(), TestErrorBodyTrimsAndCaps() (+2 more)
 
-### Community 200 - "newRouterDeps"
+### Community 199 - "net/http.Client"
 Cohesion: 0.10
-Nodes (30): Config, TestEmbeddedSPAWithoutFrontendBuild(), NewHandler(), TestCreate(), TestList(), TestRevoke(), JWTService(), Token() (+22 more)
+Nodes (6): ollamaEmbedder, openAIEmbedder, Connector, Connector, Connector, net/http.Client
 
-### Community 201 - "login_test.go"
-Cohesion: 0.22
-Nodes (10): testHandler, req(), TestChangePassword(), TestChangePasswordRevokesAPIKeys(), TestCreateUser(), TestDeleteUser(), TestLogin(), TestResetPassword() (+2 more)
+### Community 200 - "AuthedUser"
+Cohesion: 0.30
+Nodes (12): TestEmbeddedSPAWithoutFrontendBuild(), NewHandler(), TestCreate(), TestList(), TestRevoke(), AuthedUser(), JWTService(), Token() (+4 more)
+
+### Community 201 - "api/changes_test.go"
+Cohesion: 0.26
+Nodes (12): testApp, seedChange(), seedChangeWithSeverity(), TestChangesAcknowledgeRoleBoundary(), TestChangesAcknowledgeSuccess(), TestChangesBulkResolveEmptyIDs(), TestChangesBulkResolveInvalidStatus(), TestChangesBulkResolvePartialFailure() (+4 more)
 
 ### Community 202 - "MigratedSQLite"
 Cohesion: 0.14
 Nodes (23): Handler, SyncDocEmbeddings(), TestSyncDocEmbeddingsKeepsOldRowsWhenEmbedFails(), TestRetrieveUsesCacheAndSyncInvalidates(), CheckHealth(), Collect(), collectVersions(), newTestStore() (+15 more)
 
-### Community 203 - "DeliveryRecord"
-Cohesion: 0.21
-Nodes (7): Dispatcher, Dispatcher, RunDeliveryRetries(), DeliveryRecord, DeliveryStatus, Store, scanDelivery()
+### Community 203 - "SnapshotDiff"
+Cohesion: 0.22
+Nodes (13): SafeCell(), TestSnapshotDiffCSVNeutralizesFormulaCellsOnly(), TestSnapshotDiffExports(), UnifiedHunks(), RenderSnapshotDiff(), renderSnapshotMarkdown(), reportValue(), snapshotReportRows() (+5 more)
 
 ### Community 204 - "RunbookStepRecord"
-Cohesion: 0.23
+Cohesion: 0.27
 Nodes (6): runbookStepConnectorIDs(), RunbookRecord, RunbookStepRecord, Store, scanRunbook(), scanRunbookStep()
 
 ### Community 205 - "WiseLabz — Design Contract"
@@ -1320,21 +1315,21 @@ Nodes (17): ADDED Requirements, Purpose, Requirement: Bounded gap extrapolation,
 Cohesion: 0.11
 Nodes (17): compilerOptions, allowImportingTsExtensions, isolatedModules, jsx, lib, module, moduleDetection, moduleResolution (+9 more)
 
-### Community 209 - "config_cmd.go"
-Cohesion: 0.18
-Nodes (14): declaredConnectorErrors(), runConfigCommand(), setValidEnv(), TestConfigPrintRedacted(), TestConfigSchema(), TestConfigUnknown(), TestConfigValidate(), TestConfigValidateDeclaredConnectors() (+6 more)
+### Community 209 - "config_cmd_test.go"
+Cohesion: 0.29
+Nodes (10): runConfigCommand(), setValidEnv(), TestConfigPrintRedacted(), TestConfigSchema(), TestConfigUnknown(), TestConfigValidate(), TestConfigValidateDeclaredConnectors(), Schema() (+2 more)
 
 ### Community 210 - "RateLimit"
-Cohesion: 0.43
-Nodes (4): TestRateLimit(), RateLimit(), golang.org/x/time/rate.Limit, limiterStore
+Cohesion: 0.31
+Nodes (6): TestRateLimit(), RateLimit(), golang.org/x/time/rate.Limit, golang.org/x/time/rate.Limiter, limiterStore, visitor
 
 ### Community 211 - "system/backup_test.go"
 Cohesion: 0.28
 Nodes (12): TestExportBackupRedactsConnectorSecrets(), TestExportImportRoundTrip(), TestImportBackupCorruptJSON(), TestImportBackupIdempotence(), TestImportBackupInvalidCategory(), TestImportBackupOrphanDocVersion(), TestImportBackupOrphanTemplateSection(), TestImportBackupPartialFailureRollback() (+4 more)
 
-### Community 212 - "engine_hardening_test.go"
-Cohesion: 0.24
-Nodes (7): fakeConnector, TestRefreshCredentialsDirect(), TestRefreshCredentialsUnsupportedConnector(), TestRunSyncFlagsRepeatDriftAndBumpsSeverity(), TestRunSyncRefreshesExpiredCredentials(), TestRunSyncRefusesExpiredCredentialsWithoutRefresher(), refreshableConnector
+### Community 212 - "IsSecureRequest"
+Cohesion: 0.30
+Nodes (10): ClientIP(), hostOnly(), IsSecureRequest(), isTrustedProxy(), TestClientIPRejectsNonIPForwardedFor(), TestClientIPTrustedPeerUsesForwardedFor(), TestClientIPUntrustedPeerIgnoresHeaders(), TestIsSecureRequestTLS() (+2 more)
 
 ### Community 213 - "store/entity_detail_test.go"
 Cohesion: 0.38
@@ -1353,16 +1348,16 @@ Cohesion: 0.12
 Nodes (16): 1. Marker format and hashing, 2. Block keys, 3. Schema (migration `000050_doc_section_ownership`, sqlite + postgres), 4. Merge algorithm (`doc/merge.go`, pure function), 5. `RegenerateForConnector`, 6. Conflict and adopt Changes, 7. Legacy upgrade, 8. `POST /api/changes/{id}/resolve-doc` (+8 more)
 
 ### Community 217 - "TestElevateOIDC"
-Cohesion: 0.24
-Nodes (10): mockElevateOIDCServer, beginElevate(), containsCode(), defaultClaims(), elevateOIDCTestSetup(), flowCookieFrom(), testHandler, newMockElevateOIDCServer() (+2 more)
+Cohesion: 0.27
+Nodes (9): mockElevateOIDCServer, beginElevate(), containsCode(), defaultClaims(), elevateOIDCTestSetup(), testHandler, newMockElevateOIDCServer(), TestElevateOIDC() (+1 more)
 
 ### Community 218 - "pfsense.go"
-Cohesion: 0.27
+Cohesion: 0.26
 Nodes (8): buildInterfaceTable(), interfaceExternalIDs(), interfaceFallbackID(), TestBuildInterfaceAnonymousFallbackGetsOccurrenceIDs(), TestBuildInterfaceFallbackIdentityUsesIdentifierAndMAC(), firewallRule, pfsenseInterface, ruleInterfaces
 
 ### Community 219 - "Handler"
-Cohesion: 0.24
-Nodes (7): definition(), record(), reportJSON(), valid(), TestValidateBundleRejectsInvalidRunbookStepShape(), Handler, input
+Cohesion: 0.20
+Nodes (8): definition(), record(), reportJSON(), valid(), TestValidateBundleRejectsInvalidRunbookStepShape(), JobName(), Handler, input
 
 ### Community 220 - "ADDED Requirements"
 Cohesion: 0.12
@@ -1377,8 +1372,8 @@ Cohesion: 0.12
 Nodes (15): compilerOptions, allowImportingTsExtensions, isolatedModules, lib, module, moduleDetection, moduleResolution, noEmit (+7 more)
 
 ### Community 223 - "notifications/handlers_test.go"
-Cohesion: 0.31
-Nodes (14): AuthedUser(), NewHandler(), decodePaginated(), jsonHasEmptyArrayItems(), newTestStore(), seedDelivery(), TestListDeliveriesEmpty(), TestListDeliveriesNoFilter() (+6 more)
+Cohesion: 0.32
+Nodes (13): NewHandler(), decodePaginated(), jsonHasEmptyArrayItems(), newTestStore(), seedDelivery(), TestListDeliveriesEmpty(), TestListDeliveriesNoFilter(), TestListDeliveriesStatusFilter() (+5 more)
 
 ### Community 224 - "AssertMatchesSpec"
 Cohesion: 0.28
@@ -1388,9 +1383,9 @@ Nodes (14): AssertMatchesSpec(), loadSpec(), specPath(), createForSpec(), decode
 Cohesion: 0.26
 Nodes (13): entityNodeID(), mermaidLabel(), renderLabMermaid(), renderMermaid(), shortHash(), TestRenderMermaid(), TestRenderMermaidNoLinks(), relatedEntities() (+5 more)
 
-### Community 227 - "data.go"
-Cohesion: 0.27
-Nodes (14): ChangeEntry, ComplianceSection, ConnectorDrift, DocChangeEntry, DocsSection, DriftSection, FindingSummary, JobHealthEntry (+6 more)
+### Community 227 - "Entity"
+Cohesion: 0.20
+Nodes (9): fetchSnapshot(), names(), Entity, Snapshot, SnapshotFromConnector(), TestSnapshotFromConnectorCarriesTypedFields(), complianceDescription(), complianceEntityRef() (+1 more)
 
 ### Community 228 - "Contributing to WiseLabz"
 Cohesion: 0.13
@@ -1428,9 +1423,9 @@ Nodes (13): hasAllStringKeys(), httputilCalls(), receiverName(), TestBareArrayAl
 Cohesion: 0.25
 Nodes (9): New(), postgresDB(), TestCampaignContextCancel(), TestElectorCloseWithoutCampaign(), TestSecondElectorWaitsThenTakesOver(), TestWatchOnNonCampaignedElector(), TestWatchReportsTerminatedSession(), database/sql.Conn (+1 more)
 
-### Community 237 - "encoding/json.RawMessage"
-Cohesion: 0.48
-Nodes (7): secondFactorInput, apiIdentifier(), firewallRuleIdentities(), firewallRuleIdentityBase(), isJSONInteger(), resolveFirewallRuleID(), encoding/json.RawMessage
+### Community 237 - "provider_test.go"
+Cohesion: 0.29
+Nodes (6): testProvider, TestRegistryGet(), TestRegistryList(), TestStubProviderName(), TestStubProviderSuggest(), TestStubProviderSuggestStream()
 
 ### Community 238 - "TestComplianceRuleValidation"
 Cohesion: 0.29
@@ -1468,9 +1463,9 @@ Nodes (12): HTTP Client Issues, Logging & Observability, Network & HTTP Debuggin
 Cohesion: 0.15
 Nodes (13): 1. Read the Error Message First, 2. Reproduce Before You Fix, 3. If You Don't Measure It, You're Guessing, 4. One Hypothesis at a Time, 5. Find the Root Cause — No Workarounds, 6. Research the Codebase, Not Just the Diff, 7. Start Simple, Cross-References (+5 more)
 
-### Community 247 - "io.Reader"
-Cohesion: 0.21
-Nodes (9): ollamaEmbedder, openAIEmbedder, LimitedBody(), ErrorBody(), LimitedBody(), ReadBody(), TestErrorBodyTrimsAndCaps(), TestReadBodyRejectsOversize() (+1 more)
+### Community 247 - "EntityLabel"
+Cohesion: 0.22
+Nodes (7): entityLabel(), entityLabelText(), entityRef(), memberSnapshotKey(), snapshotEntityKey(), EntityLabel, EntityMemberDetail
 
 ### Community 248 - "serveSSHDockerConn"
 Cohesion: 0.29
@@ -1512,21 +1507,21 @@ Nodes (3): Sync flow, close(), done()
 Cohesion: 0.17
 Nodes (11): Check for context, Ending Discovery, Guardrails, Handling Different Entry Points, OpenSpec Awareness, Planning a Change, The Stance, What You Don't Have To Do (+3 more)
 
-### Community 258 - "newTestHandler"
-Cohesion: 0.26
-Nodes (11): templateRequest(), TestListPagination(), TestTemplateErrorPaths(), TestVersionLifecycle(), Handler, newTestHandler(), TestCreate(), TestDeleteNotFound() (+3 more)
+### Community 258 - "client_test.go"
+Cohesion: 0.08
+Nodes (36): Handler, newFixture(), TestGetAuthz(), TestListFiltersByGrantAndPaginates(), TestResolveAuthz(), spaHandler(), templateRequest(), TestListPagination() (+28 more)
 
-### Community 259 - ".Fetch"
-Cohesion: 0.35
-Nodes (6): agentEnabled(), Connector, parseTags(), TestParseTags(), guestList, nodeResult
+### Community 259 - "OpenArchive"
+Cohesion: 0.43
+Nodes (5): Handler, cleanName(), Limits, OpenArchive(), UploadPath()
 
 ### Community 260 - "templatefuncs.go"
-Cohesion: 0.24
-Nodes (9): dateFormat(), filterByTitle(), TestDateFormat(), TestFilterByTitle(), TestToJSON(), TestTruncate(), toJSON(), truncate() (+1 more)
+Cohesion: 0.27
+Nodes (8): dateFormat(), filterByTitle(), TestDateFormat(), TestFilterByTitle(), TestToJSON(), TestTruncate(), toJSON(), truncate()
 
 ### Community 261 - "Store"
-Cohesion: 0.16
-Nodes (7): decodeConnectorIDs(), APIKey, Store, scanAPIKey(), Store, scanMaintenanceWindow(), MaintenanceWindowRecord
+Cohesion: 0.27
+Nodes (4): decodeConnectorIDs(), APIKey, Store, scanAPIKey()
 
 ### Community 262 - "transform_test.go"
 Cohesion: 0.21
@@ -1556,9 +1551,9 @@ Nodes (12): Requirement: Authorized topology path API, Requirement: Directed tra
 Cohesion: 0.28
 Nodes (3): Archive, countingReader, archive/zip.File
 
-### Community 269 - "TestResumeAndConfirmPublishAfterThePreviousGoroutineStopped"
-Cohesion: 0.40
-Nodes (4): newBlockingNotifier(), TestResumeAndConfirmPublishAfterThePreviousGoroutineStopped(), sync.Once, blockingNotifier
+### Community 269 - "DocAttachment"
+Cohesion: 0.39
+Nodes (3): DocAttachment, Store, scanAttachment()
 
 ### Community 270 - "explore.md"
 Cohesion: 0.18
@@ -1576,21 +1571,29 @@ Nodes (11): 0002 — Start/stop lab-mutating operations, Audit, Authorization, C
 Cohesion: 0.18
 Nodes (10): ADDED Requirements, Purpose, Requirement: Draft runbook from alert, Requirement: Safe diff quoting, Scenario: Diff contains a code fence, Scenario: Draft returned, Scenario: Unknown alert, Scenario: Viewer denied (+2 more)
 
-### Community 275 - "chat/chat.go"
-Cohesion: 0.18
-Nodes (14): buildPrompt(), TestBuildPrompt(), cosineSimilarity(), Match, packVector(), Retrieve(), SplitSections(), TestCosineSimilarityRanksClosestVectorHighest() (+6 more)
+### Community 274 - "Evaluate"
+Cohesion: 0.29
+Nodes (7): Evaluate(), TestContainsStringArray(), TestEvaluateAndKindAndOrder(), TestEvaluateEdgeCases(), TestEvaluateLargeSnapshot(), TestEvaluateOperators(), TestNotContains()
+
+### Community 275 - "oidc_elevate_test.go"
+Cohesion: 0.09
+Nodes (24): buildPrompt(), TestBuildPrompt(), GenerateRecoveryCodes(), randomRecoveryChars(), TestGenerateRecoveryCodesAreUniqueAndFormatted(), cosineSimilarity(), Match, packVector() (+16 more)
 
 ### Community 276 - "newImportHandler"
 Cohesion: 0.42
 Nodes (10): commitRequest(), Handler, importRequest(), newImportHandler(), stage(), TestImportAdminOnly(), TestImportExpiry(), TestImportPreviewAndCommit() (+2 more)
 
-### Community 277 - ".call"
-Cohesion: 0.26
-Nodes (10): Handler, newFixture(), TestGetAuthz(), TestListFiltersByGrantAndPaginates(), TestResolveAuthz(), NewHandler(), TestGetNotFound(), TestListEmpty() (+2 more)
+### Community 277 - "scanMaintenanceWindow"
+Cohesion: 0.48
+Nodes (3): Store, scanMaintenanceWindow(), MaintenanceWindowRecord
 
 ### Community 278 - "npm/types.go"
 Cohesion: 0.31
 Nodes (8): accessList, certificate, deadHost, flexBool, proxyHost, redirectionHost, stream, tableBuilder
+
+### Community 279 - "computeNextRun"
+Cohesion: 0.43
+Nodes (5): TestComputeNextRun_BackoffNeverExceedsScheduleCadence(), TestComputeNextRun_FailureUsesBackoffSchedule(), TestComputeNextRun_ManualOnlyNeverSchedules(), TestComputeNextRun_SuccessSchedulesAtCadenceAndResetsRetries(), computeNextRun()
 
 ### Community 280 - "Decision"
 Cohesion: 0.20
@@ -1684,10 +1687,6 @@ Nodes (5): Basic transaction pattern, Custom isolation level, Locking variants, 
 Cohesion: 0.25
 Nodes (8): Integration Tests, Mock for service-layer tests, sqlmock for Query-Level Testing, Table of Contents, Test database with testcontainers-go, Testing Database Code, Unit Tests with Mocks, What to Test
 
-### Community 304 - "ComputeWindow"
-Cohesion: 0.39
-Nodes (6): ComputeWindow(), TestComputeWindow_CappedAt31Days(), TestComputeWindow_ExactlyAtCap(), TestComputeWindow_FirstRun(), TestComputeWindow_ManualRunUsesLastScheduledWatermarkUnchanged(), TestComputeWindow_Watermark()
-
 ### Community 305 - "Store"
 Cohesion: 0.29
 Nodes (4): Store, AIConfigRecord, AIConfigUpdate, AIFallbackProviderRecord
@@ -1711,10 +1710,6 @@ Nodes (7): Audit Trail, Endpoint, Filtering and export, Keyset (cursor) paginati
 ### Community 310 - "Step by step"
 Cohesion: 0.25
 Nodes (8): 1. Create the package, 2. Define your config schema, 3. Implement the interface, 4. Register the connector, 5. Add the barrel import, 6. Write tests, 7. Document config fields, Step by step
-
-### Community 311 - "compliance/handlers.go"
-Cohesion: 0.67
-Nodes (3): changedFields(), normalizeJSON(), go_pkg_github_com_wiselabz_wiselabz_internal_compliance
 
 ### Community 312 - "Proposal"
 Cohesion: 0.25
@@ -1792,9 +1787,13 @@ Nodes (3): Compress(), isWebSocketUpgrade(), go_pkg_github_com_go_chi_chi_v5_mid
 Cohesion: 0.18
 Nodes (6): webAuthnFlow, webAuthnUser, Handler, github.com/go-webauthn/webauthn/webauthn.Credential, github.com/go-webauthn/webauthn/webauthn.SessionData, github.com/google/uuid.UUID
 
-### Community 332 - "newBlockedSync"
-Cohesion: 0.67
-Nodes (3): Engine, newBlockedSync(), TestRunSyncFieldsWhenFreeStopsWaitingWithContext()
+### Community 332 - "Rule"
+Cohesion: 0.60
+Nodes (5): backupRules(), Rule, FindPack(), LoadPacks(), Pack
+
+### Community 333 - "golden_snapshot_test.go"
+Cohesion: 0.60
+Nodes (4): Store, mustCreateGoldenSnapshotConnector(), TestGetSnapshotByID(), TestPinGoldenSnapshotRoundTrip()
 
 ### Community 335 - "CONTRIBUTING.md"
 Cohesion: 0.29
@@ -1867,18 +1866,6 @@ Nodes (5): JSON Marshaling, NULLable Columns, Struct Scanning and NULLable Colum
 ### Community 353 - "Test-Driven Debugging"
 Cohesion: 0.33
 Nodes (5): Debugging Flaky Tests, Expand Edge Cases with Table Tests, Reproduce the Bug in a Test, Test-Driven Debugging, Useful Test Flags
-
-### Community 354 - "Signer"
-Cohesion: 0.47
-Nodes (3): TestSignedURLExpiryTamperAndKeySeparation(), Signer, NewSigner()
-
-### Community 356 - "digestDue"
-Cohesion: 0.40
-Nodes (5): calendarDaysBetween(), digestDue(), TestDigestDue(), TestDigestDueWeeklyAcrossSpringDST(), time.Location
-
-### Community 357 - "Recover"
-Cohesion: 0.18
-Nodes (10): FreezeSteps(), hasTimeout(), StepTimeout(), TestStepHelpers(), env, Notifier, Publisher, Recover() (+2 more)
 
 ### Community 359 - "engine_maintenance_test.go"
 Cohesion: 0.60
@@ -1972,17 +1959,9 @@ Nodes (4): Guidelines Source, How It Works, Usage, Web Interface Guidelines
 Cohesion: 0.33
 Nodes (6): ConnectorRoleChecker, chi.Router, mountConnectorRoutes(), RequireConnectorRole(), TestRequireConnectorRole(), TestRequireConnectorRoleCheckerError()
 
-### Community 383 - "CORS"
-Cohesion: 0.60
-Nodes (4): CORS(), TestCORSMatchedOrigin(), TestCORSPreflightDisallowedOriginForbidden(), TestCORSUnlistedOriginGetsNoHeaders()
-
 ### Community 384 - "routerOperations"
 Cohesion: 0.50
 Nodes (5): normalizeParams(), routerOperations(), specOperations(), TestOpenAPIMatchesRouter(), chi.Routes
-
-### Community 385 - "graph.go"
-Cohesion: 0.48
-Nodes (6): edgeKindRank(), edgeOutputKey(), sortEdgesForCap(), graphEdge, graphNode, graphResponse
 
 ### Community 386 - "authz_scope_test.go"
 Cohesion: 0.60
@@ -2148,17 +2127,17 @@ Nodes (3): Requirement: Run preview, Scenario: Preview before elevation, Scenari
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `UserIDFromContext()` connect `net/http.Request` to `newDocTestStore`, `response.go`, `context.Context`, `HandleStoreError`, `mountAPIRoutes`, `Handler`, `ConnectorRecord`, `Plan`, `docs/handlers_test.go`, `InstanceAdminFromContext`, `net/http.ResponseWriter`, `middleware.go`, `DecodeKey`, `ErrorWithDetails`, `newMCPServer`, `Handler`, `Handler`, `Handler`, `AuthMiddleware`, `runs_test.go`, `OIDCProvider`, `Handler`, `RequireConnectorRole`?**
+- **Why does `UserIDFromContext()` connect `Errorf` to `newDocTestStore`, `response.go`, `OpenArchive`, `context.Context`, `HandleStoreError`, `runbooks/handlers.go`, `ConnectorRecord`, `docs/handlers_test.go`, `net/http.Request`, `net/http.ResponseWriter`, `middleware.go`, `DecodeKey`, `ErrorWithDetails`, `TopologyEdge`, `Handler`, `Handler`, `Handler`, `NewService`, `runs_test.go`, `Get`, `RequireConnectorRole`?**
   _High betweenness centrality (0.014) - this node is a cross-community bridge._
-- **Why does `Store` connect `Store` to `.call`, `response.go`, `testing.T`, `reports/handlers_test.go`, `go_pkg_context`, `net/http.Request`, `health/health_test.go`, `ServiceSnapshot`, `Handler`, `newTestHarness`, `render_test.go`, `chat/chat.go`, `time.Time`, `.call`, `docs/handlers_test.go`, `backup/backup_test.go`, `New`, `dispatcher_test.go`, `InstanceAdminFromContext`, `reconcile_test.go`, `net/http.ResponseWriter`, `ownership_test.go`, `newTestAppWithOptions`, `backup/main_test.go`, `changes/handlers_test.go`, `DocRecord`, `gitFixture`, `placeholders`, `newTestHandler`, `DecodeKey`, `Dispatcher`, `checker_test.go`, `Engine`, `newRelatedEnv`, `NewUser`, `Engine`, `NewStore`, `Handler`, `RunbookRunRecord`, `docexport/export_test.go`, `NewEngine`, `Book`, `store/backup_test.go`, `doc/topology.go`, `net/http/httptest.ResponseRecorder`, `Handler`, `authz_test.go`, `topology_edges_test.go`, `newRouterDeps`, `MigratedSQLite`, `newMCPServer`, `Service`, `system/backup_test.go`, `Checker`, `sync.Mutex`, `.runPerRevision`, `Handler`, `backup/backup.go`, `notifications/handlers_test.go`, `Handler`, `rewritePlaceholders`, `engine_maintenance_test.go`, `NewEngine`, `time.Duration`, `retention/retention_test.go`, `runbooks/handlers_test.go`, `NewRegistry`, `lifecycleManager`, `Manager`?**
+- **Why does `Store` connect `Store` to `.call`, `response.go`, `testing.T`, `NewStore`, `client_test.go`, `go_pkg_context`, `Errorf`, `health/health_test.go`, `runbooks/handlers.go`, `newTestHarness`, `data.go`, `oidc_elevate_test.go`, `time.Time`, `docs/handlers_test.go`, `backup/backup_test.go`, `New`, `dispatcher_test.go`, `net/http.Request`, `reconcile_test.go`, `newRouterDeps`, `net/http.ResponseWriter`, `ownership_test.go`, `newTestAppWithOptions`, `backup/main_test.go`, `changes/handlers_test.go`, `DocRecord`, `Config`, `runbook_run.go`, `gitFixture`, `placeholders`, `newTestHandler`, `DecodeKey`, `handlers_related_test.go`, `Dispatcher`, `checker_test.go`, `SnapshotEntity`, `Engine`, `NewUser`, `Engine`, `NewHandler`, `Handler`, `RunbookRunRecord`, `newEnv`, `docexport/export_test.go`, `NewEngine`, `Book`, `Handler`, `authz_test.go`, `topology_edges_test.go`, `AuthedUser`, `MigratedSQLite`, `TopologyEdge`, `Service`, `system/backup_test.go`, `Checker`, `Handler`, `backup/backup.go`, `notifications/handlers_test.go`, `Handler`, `rewritePlaceholders`, `engine_maintenance_test.go`, `NewEngine`, `time.Duration`, `retention/retention_test.go`, `net/http/httptest.ResponseRecorder`, `NewRegistry`, `Handler`, `lifecycleManager`, `Get`, `Manager`?**
   _High betweenness centrality (0.010) - this node is a cross-community bridge._
 - **What connects `github.com/WiseLabz/wiselabz`, `Handler`, `bulkSnoozeRequest` to the rest of the system?**
   _1757 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `newDocTestStore` be split into smaller, more focused modules?**
-  _Cohesion score 0.017539931333034782 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.0173536608319217 - nodes in this community are weakly interconnected._
 - **Should `newTestApp` be split into smaller, more focused modules?**
-  _Cohesion score 0.01737403822288409 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.019832548403976975 - nodes in this community are weakly interconnected._
 - **Should `testing.T` be split into smaller, more focused modules?**
-  _Cohesion score 0.015541870889363664 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.0177666388192704 - nodes in this community are weakly interconnected._
 - **Should `icons.tsx` be split into smaller, more focused modules?**
   _Cohesion score 0.03718263718263718 - nodes in this community are weakly interconnected._
