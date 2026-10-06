@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/url"
 	"os"
@@ -479,23 +480,49 @@ func TestRunCleanupExpiresForgottenManualRun(t *testing.T) {
 	}
 }
 
-// TestRunCleanupRecentActivityNotExpired verifies runs with recent activity
-// (less than RunbookOpenRunHours ago) are not expired by cleanup.
+// backdateRunbookRun sets a run's updated_at to age ago, simulating a run
+// whose last activity was that long in the past.
+func backdateRunbookRun(t *testing.T, s *store.Store, runID string, age time.Duration) {
+	t.Helper()
+	updatedAt := time.Now().UTC().Add(-age).Format(time.RFC3339Nano)
+	if _, err := s.DB().ExecContext(context.Background(), `UPDATE runbook_runs SET updated_at = ? WHERE id = ?`, updatedAt, runID); err != nil {
+		t.Fatalf("set updated_at error: %v", err)
+	}
+}
+
+// TestRunCleanupRecentActivityNotExpired verifies that in one pass runs idle
+// for longer than RunbookOpenRunHours expire (skipping unfinished steps) while
+// runs with recent activity keep their state, including a stale run that saw
+// real activity before cleanup.
 func TestRunCleanupRecentActivityNotExpired(t *testing.T) {
 	ctx := context.Background()
 	s := newTestStore(t)
-	runbook1, _ := createRetentionRunbookFixture(t, s)
-	runbook2, _ := createRetentionRunbookFixture(t, s)
 
-	waitingRun, _ := createManualWaitRun(t, s, runbook1.ID)
-	failedRun := createFailedRun(t, s, runbook2.ID)
+	staleWaitingRunbook, _ := createRetentionRunbookFixture(t, s)
+	staleFailedRunbook, _ := createRetentionRunbookFixture(t, s)
+	recentWaitingRunbook, _ := createRetentionRunbookFixture(t, s)
+	recentFailedRunbook, _ := createRetentionRunbookFixture(t, s)
+	activeRunbook, _ := createRetentionRunbookFixture(t, s)
 
-	recentUpdatedAt := time.Now().UTC().Add(-1 * time.Hour).Format(time.RFC3339Nano)
-	if _, err := s.DB().ExecContext(ctx, `UPDATE runbook_runs SET updated_at = ? WHERE id = ?`, recentUpdatedAt, waitingRun.ID); err != nil {
-		t.Fatalf("set updated_at error: %v", err)
+	staleWaiting, staleWaitingStep := createManualWaitRun(t, s, staleWaitingRunbook.ID)
+	staleFailed := createFailedRun(t, s, staleFailedRunbook.ID)
+	recentWaiting, _ := createManualWaitRun(t, s, recentWaitingRunbook.ID)
+	recentFailed := createFailedRun(t, s, recentFailedRunbook.ID)
+	activeFailed := createFailedRun(t, s, activeRunbook.ID)
+
+	backdateRunbookRun(t, s, staleWaiting.ID, 25*time.Hour)
+	backdateRunbookRun(t, s, staleFailed.ID, 25*time.Hour)
+	backdateRunbookRun(t, s, recentWaiting.ID, time.Hour)
+	backdateRunbookRun(t, s, recentFailed.ID, time.Hour)
+
+	// A stale failed run that is resumed and fails again has had real activity
+	// (UpdateRunbookRun touches updated_at), so it must not expire.
+	backdateRunbookRun(t, s, activeFailed.ID, 25*time.Hour)
+	if _, err := s.UpdateRunbookRun(ctx, activeFailed.ID, "failed", map[string]any{"state": "running", "resumed_by": "operator"}); err != nil {
+		t.Fatalf("resume stale run error: %v", err)
 	}
-	if _, err := s.DB().ExecContext(ctx, `UPDATE runbook_runs SET updated_at = ? WHERE id = ?`, recentUpdatedAt, failedRun.ID); err != nil {
-		t.Fatalf("set updated_at error: %v", err)
+	if _, err := s.UpdateRunbookRun(ctx, activeFailed.ID, "running", map[string]any{"state": "failed", "reason": "step failed again"}); err != nil {
+		t.Fatalf("fail resumed run error: %v", err)
 	}
 
 	cfg := store.RetentionSettings{RunbookOpenRunHours: 24}
@@ -503,23 +530,82 @@ func TestRunCleanupRecentActivityNotExpired(t *testing.T) {
 		t.Fatalf("RunCleanupOnce() error: %v", err)
 	}
 
-	gotWaiting, gotWaitingSteps, err := s.GetRunbookRun(ctx, waitingRun.ID)
-	if err != nil {
-		t.Fatalf("GetRunbookRun(waiting) error: %v", err)
-	}
-	if gotWaiting.State != "waiting_manual" {
-		t.Fatalf("waiting run state = %q, want %q", gotWaiting.State, "waiting_manual")
-	}
-	if len(gotWaitingSteps) != 1 || gotWaitingSteps[0].State != "waiting" {
-		t.Fatalf("waiting step state = %q, want %q", gotWaitingSteps[0].State, "waiting")
+	for name, id := range map[string]string{"stale waiting": staleWaiting.ID, "stale failed": staleFailed.ID} {
+		got, steps, err := s.GetRunbookRun(ctx, id)
+		if err != nil {
+			t.Fatalf("GetRunbookRun(%s) error: %v", name, err)
+		}
+		if got.State != "expired" {
+			t.Fatalf("%s run state = %q, want %q", name, got.State, "expired")
+		}
+		if len(steps) != 1 {
+			t.Fatalf("%s run steps = %+v, want 1 step", name, steps)
+		}
+		// The stale failed run's only step already failed; only unfinished steps are skipped.
+		if id == staleWaiting.ID && (steps[0].ID != staleWaitingStep.ID || steps[0].State != "skipped") {
+			t.Fatalf("%s run steps = %+v, want step %s skipped", name, steps, staleWaitingStep.ID)
+		}
 	}
 
-	gotFailed, _, err := s.GetRunbookRun(ctx, failedRun.ID)
-	if err != nil {
-		t.Fatalf("GetRunbookRun(failed) error: %v", err)
+	survivors := []struct {
+		name      string
+		id        string
+		wantState string
+	}{
+		{"recent waiting", recentWaiting.ID, "waiting_manual"},
+		{"recent failed", recentFailed.ID, "failed"},
+		{"stale then active", activeFailed.ID, "failed"},
 	}
-	if gotFailed.State != "failed" {
-		t.Fatalf("failed run state = %q, want %q", gotFailed.State, "failed")
+	for _, tc := range survivors {
+		got, steps, err := s.GetRunbookRun(ctx, tc.id)
+		if err != nil {
+			t.Fatalf("GetRunbookRun(%s) error: %v", tc.name, err)
+		}
+		if got.State != tc.wantState {
+			t.Fatalf("%s run state = %q, want %q", tc.name, got.State, tc.wantState)
+		}
+		if tc.id == recentWaiting.ID && (len(steps) != 1 || steps[0].State != "waiting") {
+			t.Fatalf("%s run steps = %+v, want step waiting", tc.name, steps)
+		}
+	}
+}
+
+// TestRunCleanupOpenRunHoursNonPositiveFallsBackToDefault verifies a
+// non-positive RunbookOpenRunHours uses the default window instead of expiring
+// everything or disabling expiry.
+func TestRunCleanupOpenRunHoursNonPositiveFallsBackToDefault(t *testing.T) {
+	for _, hours := range []int{0, -5} {
+		t.Run(fmt.Sprintf("hours=%d", hours), func(t *testing.T) {
+			ctx := context.Background()
+			s := newTestStore(t)
+			recentRunbook, _ := createRetentionRunbookFixture(t, s)
+			staleRunbook, _ := createRetentionRunbookFixture(t, s)
+
+			recent, _ := createManualWaitRun(t, s, recentRunbook.ID)
+			stale, _ := createManualWaitRun(t, s, staleRunbook.ID)
+			backdateRunbookRun(t, s, recent.ID, time.Hour)
+			backdateRunbookRun(t, s, stale.ID, time.Duration(store.DefaultRunbookOpenRunHours+1)*time.Hour)
+
+			cfg := store.RetentionSettings{RunbookOpenRunHours: hours}
+			if err := RunCleanupOnce(ctx, s, cfg, testLogger()); err != nil {
+				t.Fatalf("RunCleanupOnce() error: %v", err)
+			}
+
+			gotRecent, _, err := s.GetRunbookRun(ctx, recent.ID)
+			if err != nil {
+				t.Fatalf("GetRunbookRun(recent) error: %v", err)
+			}
+			if gotRecent.State != "waiting_manual" {
+				t.Fatalf("recent run state = %q, want %q", gotRecent.State, "waiting_manual")
+			}
+			gotStale, _, err := s.GetRunbookRun(ctx, stale.ID)
+			if err != nil {
+				t.Fatalf("GetRunbookRun(stale) error: %v", err)
+			}
+			if gotStale.State != "expired" {
+				t.Fatalf("stale run state = %q, want %q", gotStale.State, "expired")
+			}
+		})
 	}
 }
 

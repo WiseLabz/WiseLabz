@@ -1,6 +1,6 @@
 # 0006 — Runbook runs elevation and execution boundaries
 
-Status: accepted
+Status: accepted (implementation in progress, #510)
 
 ## Context
 
@@ -19,8 +19,8 @@ sync-and-wait, wait-until-healthy, and manual steps, continuing even if the
 browser tab is closed.
 
 Requiring interactive per-step elevation during a whole-runbook run is
-incompatible with server-side execution: elevation tokens have a 60-second TTL
-(`backend/internal/auth/jwt.go:52`), while a multi-step run involving reboots,
+incompatible with server-side execution: elevation tokens have a hardcoded 60-second TTL
+(`elevationTTL` in `backend/internal/auth/jwt.go`), while a multi-step run involving reboots,
 syncs, and health verification may span several minutes. However, executing
 mutations on lab infrastructure without upfront elevated confirmation would
 violate ADR 0001's security boundary: a run must never mutate the lab without an
@@ -36,10 +36,10 @@ whole-runbook runs, extending ADR 0001 and ADR 0002.
 Starting or resuming a whole-runbook run requires exactly one elevation token
 for the new action `runbook.run`, scoped to the target runbook ID:
 
-- Validated via `auth.ValidateElevationHeaderFor(r, "runbook.run", runbookID)`
-  at run start and again on resume.
-- The elevation covers an aggregated dry-run preview of all steps in the
-  runbook.
+- Validated with `auth.ValidateElevationHeaderFor`, passing the action
+  `runbook.run` and the runbook ID as the target, at run start and again on
+  resume.
+- The elevation covers exactly the steps shown in the dry-run preview.
 - The standard 60-second elevation token TTL bounds only the interval between
   preview confirmation and starting (or resuming) the run; it does not limit the
   run's execution duration.
@@ -93,31 +93,27 @@ When the backend starts up:
   guaranteed after a crash and no human is present, a human operator must inspect
   the lab and explicitly resume the run with a fresh `runbook.run` elevation
   token.
+- An `unknown` step is repeated on resume. It is shown with a warning in the
+  resume dialog; restart, start, and stop are safe to repeat.
 
 ### Audit
 
-Audit records are logged for run lifecycle transitions:
-
-| Action | Trigger | targetType / targetId |
-|---|---|---|
-| `runbook.run` | `POST /api/runbooks/{id}/run` | runbook / id |
-| `runbook.resume` | `POST /api/runbook-runs/{runId}/resume` | runbook / id |
-| `runbook.confirm` | `POST /api/runbook-runs/{runId}/steps/{stepId}/confirm` | runbook / id |
-| `runbook.cancel` | `POST /api/runbook-runs/{runId}/cancel` | runbook / id |
-
-In addition, individual lifecycle steps emit standard `connector.<verb>` audit
-events with the run and step identifiers in `detail`.
+An audit entry with the acting user is recorded for each of: run started,
+manual step confirmed, run resumed, and run cancelled. Each entry carries the
+runbook and run identifiers. Lifecycle steps executed by a run keep their
+existing `connector.<verb>` audit action, with the run and step identifiers
+added in `detail`.
 
 ### Dry-run preview
 
-`POST /api/runbooks/{id}/run?dryRun=true` produces an aggregated dry-run
-preview:
+`POST /api/runbooks/{id}/run?dryRun=true` produces a preview that changes
+nothing: no run is created and no connector is mutated.
 
-- Lists all frozen steps in sequence.
-- Includes affected-entity previews for each lifecycle step matching direct
-  lifecycle dry-runs.
-- Evaluates per-step execution permissions and identifies any missing grants.
-- A dry-run preview is mandatory before a run can be initiated from the UI.
+- Lists the runbook's steps in order with kind, title, and target.
+- Includes, for each lifecycle step, the same affected-entity preview a direct
+  lifecycle dry-run returns.
+- States for each step whether the caller may execute it and, if not, why.
+- Redacts steps on connectors the caller cannot view.
 
 ### Rollback expectations
 
@@ -132,7 +128,8 @@ and resume from the failed step.
   weakening security boundaries.
 - Operators confirm the full scope of mutations once at start, rather than
   scrambling to re-elevate across 60-second windows during automated sequences.
-- Permissions remain strictly enforced throughout execution via pre-step grant
-  re-checks.
+- Permissions are re-checked immediately before each step. A grant revoked
+  after the run started can still allow the step already in flight, because the
+  re-check happens only before a step begins.
 - Crashes and restarts fail safely to `interrupted` / `unknown`, requiring human
   supervision and re-elevation to continue.
