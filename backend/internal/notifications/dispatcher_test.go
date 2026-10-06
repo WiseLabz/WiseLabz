@@ -1502,3 +1502,64 @@ func TestNotifyAdmins_SkipsNonAdmins(t *testing.T) {
 		t.Errorf("non-admin received %d notifications, want none", len(got))
 	}
 }
+
+// TestNotifyRunbookRun_ScopedToStepConnectorAndRouted verifies a run failure
+// reaches only the users who can view the failed step's connector, is recorded
+// under its own event type and honours per-event routing.
+func TestNotifyRunbookRun_ScopedToStepConnectorAndRouted(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	var hits int
+	var mu sync.Mutex
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		mu.Lock()
+		hits++
+		mu.Unlock()
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+	routing := `[{"eventType":"runbook.run_failed","channel":"webhook","enabled":true,"minSeverity":"warning"}]`
+	setChannelAndRoutingConfig(t, s, "webhook", srv.URL, routing)
+
+	reader := &store.User{Username: "run-reader", Email: "reader@example.com"}
+	stranger := &store.User{Username: "run-stranger", Email: "stranger@example.com"}
+	for _, u := range []*store.User{reader, stranger} {
+		if err := s.CreateUser(ctx, u); err != nil {
+			t.Fatal(err)
+		}
+	}
+	grantReader(t, s, reader.ID, "run-connector")
+
+	d := NewDispatcher(s, nil)
+	d.NotifyRunbookRun(ctx, EventRunbookRunFailed, "warning", "run-connector", "Runbook run failed: Restart proxy", `Step 2 "Restart": boom`)
+	waitForDispatch(t, d)
+	// No route exists for the waiting event, so it stays in-app only.
+	d.NotifyRunbookRun(ctx, EventRunbookRunWaiting, "info", "", "Runbook run waiting for confirmation: Restart proxy", `Step 3 "Check" is waiting for a manual confirmation.`)
+	waitForDispatch(t, d)
+
+	got, _, err := s.ListNotifications(ctx, reader.ID, false, 0, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	types := map[string]string{}
+	for _, n := range got {
+		types[n.EventType] = n.Title
+	}
+	if len(got) != 2 || types[EventRunbookRunFailed] != "Runbook run failed: Restart proxy" || types[EventRunbookRunWaiting] == "" {
+		t.Fatalf("reader notifications = %+v, want one failed and one waiting", got)
+	}
+	// The stranger cannot view the failed step's connector; a manual step has
+	// no connector, so the waiting event reaches everyone.
+	got, _, err = s.ListNotifications(ctx, stranger.ID, false, 0, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].EventType != EventRunbookRunWaiting {
+		t.Fatalf("stranger notifications = %+v, want only the waiting event", got)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if hits != 1 {
+		t.Errorf("webhook hits = %d, want 1 (failed routed, waiting has no route)", hits)
+	}
+}

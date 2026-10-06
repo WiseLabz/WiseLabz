@@ -37,6 +37,10 @@ const (
 	EventDocLockExpired         = "doc.lock.expired"
 	EventSystemHealth           = "system.health"
 	EventSystemNotice           = "system.notice"
+	// EventRunbookRunUpdated is sent whenever a runbook run or one of its steps
+	// changes state. A step event carries the step and goes only to readers of
+	// the step's connector; a run-level event carries no step and is global.
+	EventRunbookRunUpdated = "runbook.run.updated"
 	// EventSystemResync tells clients to refetch volatile state. The relay emits
 	// it after its listener reconnects following a gap (ADR 0005).
 	EventSystemResync = "system.resync"

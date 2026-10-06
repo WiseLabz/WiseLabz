@@ -211,6 +211,38 @@ func (d *Dispatcher) NotifySystemEvent(ctx context.Context, eventType, severity,
 	}()
 }
 
+// Runbook run events (see internal/runbookrun). A run that succeeds or is
+// cancelled sends nothing.
+const (
+	// EventRunbookRunFailed is sent when a runbook run becomes failed: a step
+	// failed or timed out, a grant was revoked, or a restart interrupted it.
+	EventRunbookRunFailed = "runbook.run_failed"
+	// EventRunbookRunWaiting is sent when a runbook run pauses on a manual
+	// step and waits for a user to confirm it.
+	EventRunbookRunWaiting = "runbook.run_waiting"
+)
+
+// NotifyRunbookRun dispatches a runbook run event, honouring per-event routing
+// like NotifySystemEvent. connectorID is the connector of the step the event
+// is about: when set, only users holding a grant on it are notified, because
+// the message names that step. An empty connectorID (a manual step) reaches
+// every active user.
+func (d *Dispatcher) NotifyRunbookRun(ctx context.Context, eventType, severity, connectorID, title, message string) {
+	users, _, err := d.store.ListUsers(ctx, 0, maxNotifyUsers)
+	if err != nil {
+		slog.Error("failed to list users for runbook run notification", "error", err, "eventType", eventType)
+		return
+	}
+	channels := d.loadChannels(ctx)
+	routes := d.loadRouting(ctx)
+	users = d.connectorAudience(ctx, users, connectorID)
+	d.inflight.Add(1)
+	go func() {
+		defer d.inflight.Done()
+		d.fanOut(users, channels, routes, "", eventType, severity, connectorID, title, message)
+	}()
+}
+
 // NotifyAdmins dispatches a system-level event like NotifySystemEvent, but only
 // to instance admins: for problems only an admin can fix and whose details
 // other users have no grant to see (e.g. connectors declared in config.yaml).

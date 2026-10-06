@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 const runbookRunTimestampLayout = "2006-01-02T15:04:05.000000000Z"
@@ -63,6 +64,29 @@ func (e *RunbookRunConflictError) Error() string {
 
 func (e *RunbookRunConflictError) Unwrap() error { return ErrConflict }
 
+// ErrRunbookRunStepCount reports a run created without steps, with a nil step
+// or with more steps than a runbook may hold.
+var ErrRunbookRunStepCount = errors.New("a runbook run needs between 1 and 20 steps")
+
+// runbookRunActiveIndex is the partial unique index allowing one active run
+// per runbook (migration 000062).
+const runbookRunActiveIndex = "idx_runbook_runs_one_active"
+
+// isActiveRunbookRunViolation reports whether err is a violation of
+// runbookRunActiveIndex specifically. PostgreSQL names the index; SQLite names
+// the indexed column, which no other unique constraint covers.
+func isActiveRunbookRunViolation(err error) bool {
+	if err == nil {
+		return false
+	}
+	if pgErr, ok := errors.AsType[*pgconn.PgError](err); ok {
+		return pgErr.Code == "23505" && pgErr.ConstraintName == runbookRunActiveIndex
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "UNIQUE constraint failed: runbook_runs.runbook_id") ||
+		strings.Contains(msg, "UNIQUE constraint failed: index '"+runbookRunActiveIndex+"'")
+}
+
 const runbookRunColumns = `id, runbook_id, runbook_title, state, reason, started_by, resumed_by, cancelled_by, started_at, updated_at, finished_at`
 
 const runbookRunStepColumns = `id, run_id, position, kind, title, connector_id, verb, entity_ref, timeout_seconds, state, started_at, finished_at, error, confirmed_by`
@@ -70,9 +94,11 @@ const runbookRunStepColumns = `id, run_id, position, kind, title, connector_id, 
 // CreateRunbookRun atomically stores a new active run and its frozen steps.
 // The runbook title is read inside the transaction, and the supplied steps
 // are copied in order without retaining a reference to authored step rows.
+// A step count outside 1 to 20 is ErrRunbookRunStepCount; a second active run
+// for the runbook is a *RunbookRunConflictError naming the existing run.
 func (s *Store) CreateRunbookRun(ctx context.Context, runbookID, startedBy string, steps []*RunbookRunStepRecord) (*RunbookRunRecord, []*RunbookRunStepRecord, error) {
 	if len(steps) == 0 || len(steps) > 20 {
-		return nil, nil, fmt.Errorf("create runbook run: expected 1 to 20 frozen steps")
+		return nil, nil, fmt.Errorf("create runbook run: %w", ErrRunbookRunStepCount)
 	}
 
 	run := &RunbookRunRecord{
@@ -83,7 +109,7 @@ func (s *Store) CreateRunbookRun(ctx context.Context, runbookID, startedBy strin
 	savedSteps := make([]*RunbookRunStepRecord, 0, len(steps))
 	for position, step := range steps {
 		if step == nil {
-			return nil, nil, fmt.Errorf("create runbook run: frozen step %d is nil", position)
+			return nil, nil, fmt.Errorf("create runbook run: frozen step %d is nil: %w", position, ErrRunbookRunStepCount)
 		}
 		savedSteps = append(savedSteps, &RunbookRunStepRecord{
 			ID:             uuid.New().String(),
@@ -130,11 +156,14 @@ func (s *Store) CreateRunbookRun(ctx context.Context, runbookID, startedBy strin
 		return run, savedSteps, nil
 	}
 
-	if isUniqueViolation(err) {
-		if existingID, lookupErr := s.activeRunbookRunID(ctx, runbookID); lookupErr == nil {
-			return nil, nil, &RunbookRunConflictError{RunID: existingID}
+	if isActiveRunbookRunViolation(err) {
+		// The winner can finish before this lookup; the conflict stays typed
+		// and RunID is then empty.
+		existingID, lookupErr := s.activeRunbookRunID(ctx, runbookID)
+		if lookupErr != nil && !errors.Is(lookupErr, sql.ErrNoRows) {
+			return nil, nil, fmt.Errorf("create runbook run: find active run: %w", lookupErr)
 		}
-		return nil, nil, ErrConflict
+		return nil, nil, &RunbookRunConflictError{RunID: existingID}
 	}
 	return nil, nil, fmt.Errorf("create runbook run: %w", err)
 }
@@ -298,7 +327,95 @@ func (s *Store) ConfirmRunbookRunStep(ctx context.Context, runID, stepID, confir
 	})
 }
 
-// CancelRunbookRun cancels an open run and atomically skips unfinished work.
+// PauseRunbookRunOnManualStep atomically moves a pending manual step to
+// waiting and its running parent to waiting_manual, so a crash cannot leave a
+// waiting step inside a running run.
+func (s *Store) PauseRunbookRunOnManualStep(ctx context.Context, runID, stepID string) (*RunbookRunRecord, *RunbookRunStepRecord, error) {
+	return s.transitionRunbookRunWithStep(ctx, "pause runbook run on manual step", runID, stepID, "pending",
+		map[string]any{"state": "waiting_manual"}, map[string]any{"state": "waiting"})
+}
+
+// FailRunbookRunStep atomically ends a running step and fails its running
+// parent with reason. stepState is failed when the step is known to have
+// failed, or unknown when its outcome could not be established.
+func (s *Store) FailRunbookRunStep(ctx context.Context, runID, stepID, stepState, stepError, reason string) (*RunbookRunRecord, *RunbookRunStepRecord, error) {
+	if stepState != "failed" && stepState != "unknown" {
+		return nil, nil, fmt.Errorf("fail runbook run step: unsupported step state %q", stepState)
+	}
+	return s.transitionRunbookRunWithStep(ctx, "fail runbook run step", runID, stepID, "running",
+		map[string]any{"state": "failed", "reason": reason}, map[string]any{"state": stepState, "error": stepError})
+}
+
+// FinishRunbookRun atomically completes the last running step and its running
+// parent. It is ErrConflict while any other step has not succeeded.
+func (s *Store) FinishRunbookRun(ctx context.Context, runID, stepID string) (*RunbookRunRecord, *RunbookRunStepRecord, error) {
+	return s.transitionRunbookRunWithStep(ctx, "finish runbook run", runID, stepID, "running",
+		map[string]any{"state": "succeeded"}, map[string]any{"state": "succeeded"})
+}
+
+// transitionRunbookRunWithStep applies one step update and one run update in a
+// single transaction. The run must be running and the step in
+// expectedStepState, otherwise it is ErrConflict and nothing changes. A run
+// may only succeed once every step has.
+func (s *Store) transitionRunbookRunWithStep(
+	ctx context.Context,
+	op, runID, stepID, expectedStepState string,
+	runUpdates, stepUpdates map[string]any,
+) (*RunbookRunRecord, *RunbookRunStepRecord, error) {
+	var run *RunbookRunRecord
+	var step *RunbookRunStepRecord
+	err := s.WithinTransaction(ctx, func(tx *Store) error {
+		parent, err := lockRunbookRun(ctx, tx.db, s.driver == "postgres", runID)
+		if err != nil {
+			return err
+		}
+		if parent.State != "running" {
+			return ErrConflict
+		}
+		now := nextRunbookRunTimestamp(parent.UpdatedAt)
+		stepSet, err := normalizedRunbookRunStepUpdates(stepUpdates, expectedStepState, now)
+		if err != nil {
+			return err
+		}
+		if err := updateRunbookRunStep(ctx, tx.db, runID, stepID, expectedStepState, stepSet); err != nil {
+			return err
+		}
+		if runUpdates["state"] == "succeeded" {
+			var unfinished int
+			if err := tx.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM runbook_run_steps WHERE run_id = ? AND state <> 'succeeded'`, runID).Scan(&unfinished); err != nil {
+				return fmt.Errorf("count unfinished runbook steps: %w", err)
+			}
+			if unfinished != 0 {
+				return ErrConflict
+			}
+		}
+		runSet, err := normalizedRunbookRunUpdates(runUpdates, now)
+		if err != nil {
+			return err
+		}
+		if err := updateRunbookRun(ctx, tx.db, runID, "running", runSet, now); err != nil {
+			return err
+		}
+		run, err = scanRunbookRun(tx.db.QueryRowContext(ctx, `SELECT `+runbookRunColumns+` FROM runbook_runs WHERE id = ?`, runID))
+		if err != nil {
+			return fmt.Errorf("read updated runbook run: %w", err)
+		}
+		step, err = scanRunbookRunStep(tx.db.QueryRowContext(ctx, `SELECT `+runbookRunStepColumns+` FROM runbook_run_steps WHERE run_id = ? AND id = ?`, runID, stepID))
+		if err != nil {
+			return fmt.Errorf("read updated runbook run step: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, nil, fmt.Errorf("%s: %w", op, err)
+	}
+	return run, step, nil
+}
+
+// CancelRunbookRun cancels an open run and atomically closes unfinished work
+// without rewriting what happened: pending and waiting steps become skipped, a
+// running step becomes unknown because its real outcome is not known, and an
+// unknown step stays unknown.
 func (s *Store) CancelRunbookRun(ctx context.Context, id, cancelledBy string) error {
 	return s.WithinTransaction(ctx, func(tx *Store) error {
 		run, err := lockRunbookRun(ctx, tx.db, s.driver == "postgres", id)
@@ -309,8 +426,8 @@ func (s *Store) CancelRunbookRun(ctx context.Context, id, cancelledBy string) er
 			return ErrConflict
 		}
 		now := nextRunbookRunTimestamp(run.UpdatedAt)
-		if _, err := tx.db.ExecContext(ctx, `UPDATE runbook_run_steps SET state = 'skipped', finished_at = ? WHERE run_id = ? AND state IN ('pending','running','waiting','unknown')`, now, id); err != nil {
-			return fmt.Errorf("skip unfinished runbook steps: %w", err)
+		if err := closeUnfinishedRunbookRunSteps(ctx, tx.db, id, now); err != nil {
+			return err
 		}
 		result, err := tx.db.ExecContext(ctx, `UPDATE runbook_runs SET state = 'cancelled', cancelled_by = ?, updated_at = ?, finished_at = ? WHERE id = ? AND state IN ('running','waiting_manual','failed')`, cancelledBy, now, now, id)
 		if err != nil {
@@ -326,8 +443,10 @@ func (s *Store) CancelRunbookRun(ctx context.Context, id, cancelledBy string) er
 }
 
 // InterruptRunningRunbookRuns fails in-flight runs at startup without
-// continuing them and marks their in-flight steps unknown. Manual waits are
-// intentionally unchanged. It returns the IDs of the runs it transitioned, in
+// continuing them and marks their in-flight steps unknown. A waiting step left
+// inside a running run (a pause that did not complete) goes back to pending so
+// resuming pauses on it again. Runs in waiting_manual are intentionally
+// unchanged. It returns the IDs of the runs it transitioned, in
 // processing order, so callers can publish an update per run.
 func (s *Store) InterruptRunningRunbookRuns(ctx context.Context) ([]string, error) {
 	interrupted := make([]string, 0)
@@ -351,6 +470,9 @@ func (s *Store) InterruptRunningRunbookRuns(ctx context.Context) ([]string, erro
 			if _, err := tx.db.ExecContext(ctx, `UPDATE runbook_run_steps SET state = 'unknown', finished_at = ? WHERE run_id = ? AND state = 'running'`, now, id); err != nil {
 				return fmt.Errorf("mark interrupted runbook steps unknown: %w", err)
 			}
+			if _, err := tx.db.ExecContext(ctx, `UPDATE runbook_run_steps SET state = 'pending', started_at = NULL WHERE run_id = ? AND state = 'waiting'`, id); err != nil {
+				return fmt.Errorf("reset orphaned waiting runbook steps: %w", err)
+			}
 			result, err := tx.db.ExecContext(ctx, `UPDATE runbook_runs SET state = 'failed', reason = 'interrupted', updated_at = ? WHERE id = ? AND state = 'running'`, now, id)
 			if err != nil {
 				return fmt.Errorf("mark runbook run interrupted: %w", err)
@@ -371,8 +493,8 @@ func (s *Store) InterruptRunningRunbookRuns(ctx context.Context) ([]string, erro
 	return interrupted, nil
 }
 
-// ExpireOpenRunbookRuns expires stale manual waits and failed runs, skipping
-// unfinished steps. It returns the IDs of the runs it transitioned, in
+// ExpireOpenRunbookRuns expires stale manual waits and failed runs, closing
+// unfinished steps the way CancelRunbookRun does. It returns the IDs of the runs it transitioned, in
 // processing order, so callers can publish an update per run. An empty cutoff
 // is a no-op that returns an empty slice.
 func (s *Store) ExpireOpenRunbookRuns(ctx context.Context, before string) ([]string, error) {
@@ -401,8 +523,8 @@ func (s *Store) ExpireOpenRunbookRuns(ctx context.Context, before string) ([]str
 				continue
 			}
 			now := nextRunbookRunTimestamp(run.UpdatedAt)
-			if _, err := tx.db.ExecContext(ctx, `UPDATE runbook_run_steps SET state = 'skipped', finished_at = ? WHERE run_id = ? AND state IN ('pending','running','waiting','unknown')`, now, id); err != nil {
-				return fmt.Errorf("skip expired runbook steps: %w", err)
+			if err := closeUnfinishedRunbookRunSteps(ctx, tx.db, id, now); err != nil {
+				return err
 			}
 			result, err := tx.db.ExecContext(ctx, `UPDATE runbook_runs SET state = 'expired', updated_at = ?, finished_at = ? WHERE id = ? AND state IN ('waiting_manual','failed') AND updated_at < ?`, now, now, id, cutoff)
 			if err != nil {
@@ -470,6 +592,19 @@ func (s *Store) PruneRunbookRuns(ctx context.Context, before string) (int64, err
 		return 0, fmt.Errorf("prune finished runbook runs: %w", err)
 	}
 	return affected, nil
+}
+
+// closeUnfinishedRunbookRunSteps ends the steps of a run that is being
+// cancelled or expired. A running step becomes unknown rather than skipped:
+// its operation may have reached the connector. Unknown steps are left alone.
+func closeUnfinishedRunbookRunSteps(ctx context.Context, db DBTX, runID, now string) error {
+	if _, err := db.ExecContext(ctx, `UPDATE runbook_run_steps SET state = 'unknown', finished_at = ? WHERE run_id = ? AND state = 'running'`, now, runID); err != nil {
+		return fmt.Errorf("mark in-flight runbook steps unknown: %w", err)
+	}
+	if _, err := db.ExecContext(ctx, `UPDATE runbook_run_steps SET state = 'skipped', finished_at = ? WHERE run_id = ? AND state IN ('pending','waiting')`, now, runID); err != nil {
+		return fmt.Errorf("skip unfinished runbook steps: %w", err)
+	}
+	return nil
 }
 
 func activeRunbookRunID(ctx context.Context, db DBTX, runbookID string) (string, error) {

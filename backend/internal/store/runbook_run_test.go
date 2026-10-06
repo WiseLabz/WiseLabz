@@ -668,3 +668,226 @@ func hasNineFractionalDigits(value string) bool {
 	parsed, err := time.Parse(runbookRunTimestampLayout, value)
 	return err == nil && parsed.UTC().Format(runbookRunTimestampLayout) == value
 }
+
+func TestRunbookRunCreateTypedErrors(t *testing.T) {
+	ctx := context.Background()
+	s := newDocTestStore(t)
+	runbook, connectorID := createRunbookRunFixture(t, s)
+	tooMany := make([]*RunbookRunStepRecord, 21)
+	for i := range tooMany {
+		tooMany[i] = runbookRunStep("manual", fmt.Sprintf("Step %d", i), "", "")
+	}
+	for name, steps := range map[string][]*RunbookRunStepRecord{
+		"none":     nil,
+		"too many": tooMany,
+		"nil step": {nil},
+	} {
+		if _, _, err := s.CreateRunbookRun(ctx, runbook.ID, "starter", steps); !errors.Is(err, ErrRunbookRunStepCount) {
+			t.Fatalf("CreateRunbookRun(%s) = %v, want ErrRunbookRunStepCount", name, err)
+		}
+	}
+
+	first, _, err := s.CreateRunbookRun(ctx, runbook.ID, "starter", []*RunbookRunStepRecord{runbookRunStep("lifecycle", "Restart", connectorID, "restart")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _, err = s.CreateRunbookRun(ctx, runbook.ID, "starter", []*RunbookRunStepRecord{runbookRunStep("manual", "Check", "", "")})
+	var conflict *RunbookRunConflictError
+	if !errors.As(err, &conflict) || conflict.RunID != first.ID || !errors.Is(err, ErrConflict) {
+		t.Fatalf("second active run error = %v, want a conflict naming %s", err, first.ID)
+	}
+
+	// Only the one-active-run index is a conflict: another unique violation in
+	// the same insert must surface as a plain database error.
+	if !isActiveRunbookRunViolation(errors.New("UNIQUE constraint failed: runbook_runs.runbook_id")) {
+		t.Fatal("active run index violation was not recognised")
+	}
+	for _, msg := range []string{
+		"UNIQUE constraint failed: runbook_runs.id",
+		"UNIQUE constraint failed: runbook_run_steps.run_id, runbook_run_steps.position",
+	} {
+		if isActiveRunbookRunViolation(errors.New(msg)) {
+			t.Fatalf("%q was treated as an active run conflict", msg)
+		}
+	}
+}
+
+func TestRunbookRunCombinedTransitions(t *testing.T) {
+	ctx := context.Background()
+	s := newDocTestStore(t)
+	runbook, connectorID := createRunbookRunFixture(t, s)
+	run, steps, err := s.CreateRunbookRun(ctx, runbook.ID, "starter", []*RunbookRunStepRecord{
+		runbookRunStep("manual", "Check", "", ""),
+		runbookRunStep("lifecycle", "Restart", connectorID, "restart"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Pause: step and run change in one transaction.
+	pausedRun, pausedStep, err := s.PauseRunbookRunOnManualStep(ctx, run.ID, steps[0].ID)
+	if err != nil {
+		t.Fatalf("PauseRunbookRunOnManualStep() error: %v", err)
+	}
+	if pausedRun.State != "waiting_manual" || pausedStep.State != "waiting" || pausedStep.StartedAt == "" || pausedRun.UpdatedAt <= run.UpdatedAt {
+		t.Fatalf("paused run/step = %+v / %+v", pausedRun, pausedStep)
+	}
+	if _, _, err := s.PauseRunbookRunOnManualStep(ctx, run.ID, steps[0].ID); !errors.Is(err, ErrConflict) {
+		t.Fatalf("second pause = %v, want ErrConflict", err)
+	}
+	if err := s.ConfirmRunbookRunStep(ctx, run.ID, steps[0].ID, "operator"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Fail: a step that is not running is rejected and nothing changes.
+	if _, _, err := s.FailRunbookRunStep(ctx, run.ID, steps[1].ID, "failed", "boom", "step_failed"); !errors.Is(err, ErrConflict) {
+		t.Fatalf("fail a pending step = %v, want ErrConflict", err)
+	}
+	if got, _, err := s.GetRunbookRun(ctx, run.ID); err != nil || got.State != "running" {
+		t.Fatalf("run after rejected fail = %+v, %v; want running", got, err)
+	}
+	if _, err := s.UpdateRunbookRunStep(ctx, run.ID, steps[1].ID, "pending", map[string]any{"state": "running"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := s.FailRunbookRunStep(ctx, run.ID, steps[1].ID, "skipped", "boom", "step_failed"); err == nil {
+		t.Fatal("FailRunbookRunStep() accepted step state skipped")
+	}
+	failedRun, failedStep, err := s.FailRunbookRunStep(ctx, run.ID, steps[1].ID, "failed", "boom", "step_failed")
+	if err != nil {
+		t.Fatalf("FailRunbookRunStep() error: %v", err)
+	}
+	if failedRun.State != "failed" || failedRun.Reason != "step_failed" || failedRun.FinishedAt != "" ||
+		failedStep.State != "failed" || failedStep.Error != "boom" || failedStep.FinishedAt == "" {
+		t.Fatalf("failed run/step = %+v / %+v", failedRun, failedStep)
+	}
+
+	// Resume, then finish: the last step and the run succeed together.
+	if _, err := s.UpdateRunbookRun(ctx, run.ID, "failed", map[string]any{"state": "running", "resumed_by": "resumer"}); err != nil {
+		t.Fatal(err)
+	}
+	retried, err := s.UpdateRunbookRunStep(ctx, run.ID, steps[1].ID, "failed", map[string]any{"state": "running"})
+	if err != nil || retried.Error != "" || retried.FinishedAt != "" {
+		t.Fatalf("retried step = %+v, %v; want error and finished_at cleared", retried, err)
+	}
+	finishedRun, finishedStep, err := s.FinishRunbookRun(ctx, run.ID, steps[1].ID)
+	if err != nil {
+		t.Fatalf("FinishRunbookRun() error: %v", err)
+	}
+	if finishedRun.State != "succeeded" || finishedRun.FinishedAt == "" || finishedStep.State != "succeeded" || finishedStep.FinishedAt == "" {
+		t.Fatalf("finished run/step = %+v / %+v", finishedRun, finishedStep)
+	}
+	if _, _, err := s.FinishRunbookRun(ctx, run.ID, steps[1].ID); !errors.Is(err, ErrConflict) {
+		t.Fatalf("finish a terminal run = %v, want ErrConflict", err)
+	}
+
+	// Unknown outcome: the step is recorded as unknown, not failed.
+	unknownRun, unknownSteps := createOpenManualRunbookRun(t, s, "Only")
+	if _, err := s.UpdateRunbookRunStep(ctx, unknownRun.ID, unknownSteps[0].ID, "pending", map[string]any{"state": "running"}); err != nil {
+		t.Fatal(err)
+	}
+	if gotRun, gotStep, err := s.FailRunbookRunStep(ctx, unknownRun.ID, unknownSteps[0].ID, "unknown", "lost", "internal_error"); err != nil ||
+		gotRun.State != "failed" || gotStep.State != "unknown" || gotStep.Error != "lost" {
+		t.Fatalf("unknown outcome = %+v / %+v, %v", gotRun, gotStep, err)
+	}
+}
+
+func TestRunbookRunFinishRequiresEveryStepSucceeded(t *testing.T) {
+	ctx := context.Background()
+	s := newDocTestStore(t)
+	run, steps := createOpenManualRunbookRun(t, s, "First", "Second")
+	if _, err := s.UpdateRunbookRunStep(ctx, run.ID, steps[0].ID, "pending", map[string]any{"state": "running"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := s.FinishRunbookRun(ctx, run.ID, steps[0].ID); !errors.Is(err, ErrConflict) {
+		t.Fatalf("finish with a pending step = %v, want ErrConflict", err)
+	}
+	got, gotSteps, err := s.GetRunbookRun(ctx, run.ID)
+	if err != nil || got.State != "running" || gotSteps[0].State != "running" || gotSteps[1].State != "pending" {
+		t.Fatalf("run after rejected finish = %+v, steps %+v, err %v; want nothing changed", got, gotSteps, err)
+	}
+}
+
+func TestRunbookRunCancelAndExpireKeepUnknownOutcomes(t *testing.T) {
+	ctx := context.Background()
+	s := newDocTestStore(t)
+
+	// Cancel mid-step: the running step's outcome is not known.
+	run, steps := createOpenManualRunbookRun(t, s, "Done", "Running", "Later")
+	if _, err := s.UpdateRunbookRunStep(ctx, run.ID, steps[0].ID, "pending", map[string]any{"state": "running"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.UpdateRunbookRunStep(ctx, run.ID, steps[0].ID, "running", map[string]any{"state": "succeeded"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.UpdateRunbookRunStep(ctx, run.ID, steps[1].ID, "pending", map[string]any{"state": "running"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.CancelRunbookRun(ctx, run.ID, "canceller"); err != nil {
+		t.Fatal(err)
+	}
+	got, gotSteps, err := s.GetRunbookRun(ctx, run.ID)
+	if err != nil || got.State != "cancelled" || gotSteps[0].State != "succeeded" || gotSteps[1].State != "unknown" || gotSteps[1].FinishedAt == "" || gotSteps[2].State != "skipped" {
+		t.Fatalf("cancelled mid-step = %+v, steps %+v, err %v; want succeeded/unknown/skipped", got, gotSteps, err)
+	}
+
+	// Cancel and expire after an interruption: an unknown step stays unknown.
+	for name, end := range map[string]func(id string) error{
+		"cancel": func(id string) error { return s.CancelRunbookRun(ctx, id, "canceller") },
+		"expire": func(id string) error {
+			if _, err := s.db.ExecContext(ctx, `UPDATE runbook_runs SET updated_at = ? WHERE id = ?`, runbookRunTimestamp(time.Now().Add(-48*time.Hour)), id); err != nil {
+				return err
+			}
+			ids, err := s.ExpireOpenRunbookRuns(ctx, time.Now().UTC().Add(-24*time.Hour).Format(time.RFC3339))
+			if err == nil && !slices.Contains(ids, id) {
+				return fmt.Errorf("run %s was not expired (got %v)", id, ids)
+			}
+			return err
+		},
+	} {
+		run, steps := createOpenManualRunbookRun(t, s, "Interrupted", "Later")
+		if _, err := s.UpdateRunbookRunStep(ctx, run.ID, steps[0].ID, "pending", map[string]any{"state": "running"}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := s.InterruptRunningRunbookRuns(ctx); err != nil {
+			t.Fatal(err)
+		}
+		interruptedAt := ""
+		if _, interruptedSteps, err := s.GetRunbookRun(ctx, run.ID); err != nil || interruptedSteps[0].State != "unknown" {
+			t.Fatalf("%s: interrupted steps = %+v, %v", name, interruptedSteps, err)
+		} else {
+			interruptedAt = interruptedSteps[0].FinishedAt
+		}
+		if err := end(run.ID); err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		_, gotSteps, err := s.GetRunbookRun(ctx, run.ID)
+		if err != nil || gotSteps[0].State != "unknown" || gotSteps[0].FinishedAt != interruptedAt || gotSteps[1].State != "skipped" {
+			t.Fatalf("%s: steps = %+v, err %v; want unknown kept untouched and pending skipped", name, gotSteps, err)
+		}
+	}
+}
+
+func TestRunbookRunInterruptResetsOrphanedWaitingStep(t *testing.T) {
+	ctx := context.Background()
+	s := newDocTestStore(t)
+	// A pause written as two separate updates could stop after the first one,
+	// leaving a waiting step inside a running run.
+	run, steps := createOpenManualRunbookRun(t, s, "Check", "Later")
+	if _, err := s.UpdateRunbookRunStep(ctx, run.ID, steps[0].ID, "pending", map[string]any{"state": "waiting"}); err != nil {
+		t.Fatal(err)
+	}
+	ids, err := s.InterruptRunningRunbookRuns(ctx)
+	if err != nil || !slices.Contains(ids, run.ID) {
+		t.Fatalf("InterruptRunningRunbookRuns() = %v, %v; want %s", ids, err, run.ID)
+	}
+	got, gotSteps, err := s.GetRunbookRun(ctx, run.ID)
+	if err != nil || got.State != "failed" || got.Reason != "interrupted" {
+		t.Fatalf("recovered run = %+v, %v", got, err)
+	}
+	if gotSteps[0].State != "pending" || gotSteps[0].StartedAt != "" || gotSteps[1].State != "pending" {
+		t.Fatalf("recovered steps = %+v; want the orphaned waiting step back to pending", gotSteps)
+	}
+	if err := s.ConfirmRunbookRunStep(ctx, run.ID, steps[0].ID, "operator"); !errors.Is(err, ErrConflict) {
+		t.Fatalf("confirm inside a failed run = %v, want ErrConflict", err)
+	}
+}
