@@ -3554,6 +3554,9 @@ paths:
       summary: >-
         Update the data-retention cleanup configuration — operator. Each
         `*Days` field must be >= 0 (0 disables cleanup for that category,
+        rejected otherwise with code `invalid_days`); `runbookOpenRunHours`
+        must be between 1 and 8760 (code `invalid_hours` otherwise);
+        `runbookRunDays` must be between 0 and 3650 (0 disables cleanup,
         rejected otherwise with code `invalid_days`); `cronExpr` must be a
         valid 5-field or 6-field cron expression (code `invalid_cron`
         otherwise). Re-registers the retention cron job with the new
@@ -3572,7 +3575,8 @@ paths:
         '400':
           description: >-
             Invalid JSON body, `cronExpr` empty/invalid (code `invalid_cron`),
-            or a negative `*Days` value (code `invalid_days`)
+            `runbookOpenRunHours` out of range (code `invalid_hours`),
+            or a `*Days` value out of range (code `invalid_days`)
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
@@ -6701,6 +6705,8 @@ components:
         auditDays: { type: integer, description: Delete audit log records older than this many days; 0 disables cleanup for this category }
         healthCheckDays: { type: integer, description: Delete health-check time-series rows older than this many days; 0 disables cleanup for this category }
         deletedDocsDays: { type: integer, minimum: 0, default: 30, description: Permanently purge trash older than this many days; 0 disables cleanup }
+        runbookOpenRunHours: { type: integer, minimum: 1, maximum: 8760, default: 24, description: Expire open runbook runs after this many hours of inactivity; must be between 1 and 8760 }
+        runbookRunDays: { type: integer, minimum: 0, maximum: 3650, default: 90, description: Delete finished runbook runs older than this many days; 0 keeps run history forever; must be between 0 and 3650 }
         reportDays: { type: integer, description: Delete generated reports older than this many days; 0 disables cleanup for this category }
         cronExpr: { type: string, description: 5-field or 6-field (with leading seconds) cron expression, example: '0 0 * * *' }
         updatedAt: { type: string, format: date-time }

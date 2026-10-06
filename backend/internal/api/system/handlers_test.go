@@ -2,6 +2,8 @@ package system
 
 import (
 	"database/sql"
+	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -152,6 +154,16 @@ func TestGetRetentionSettingsDefault(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d; body=%s", rr.Code, http.StatusOK, rr.Body.String())
 	}
+	var resp map[string]any
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+	if resp["runbookOpenRunHours"] != float64(store.DefaultRunbookOpenRunHours) {
+		t.Errorf("runbookOpenRunHours = %v, want %d", resp["runbookOpenRunHours"], store.DefaultRunbookOpenRunHours)
+	}
+	if resp["runbookRunDays"] != float64(store.DefaultRunbookRunDays) {
+		t.Errorf("runbookRunDays = %v, want %d", resp["runbookRunDays"], store.DefaultRunbookRunDays)
+	}
 }
 
 func TestUpdateRetentionSettings(t *testing.T) {
@@ -193,12 +205,66 @@ func TestUpdateRetentionSettings(t *testing.T) {
 		}
 	})
 
+	t.Run("runbook open run hours bounds", func(t *testing.T) {
+		for _, hours := range []int{0, -5, 8761} {
+			body := fmt.Sprintf(`{"cronExpr":"0 0 * * *","runbookOpenRunHours":%d}`, hours)
+			req := httptest.NewRequest(http.MethodPut, "/api/system/settings/retention", strings.NewReader(body))
+			rr := httptest.NewRecorder()
+			h.UpdateRetentionSettings(rr, req)
+			if rr.Code != http.StatusBadRequest {
+				t.Fatalf("hours=%d: status = %d, want 400; body=%s", hours, rr.Code, rr.Body.String())
+			}
+		}
+	})
+
+	t.Run("runbook run days bounds", func(t *testing.T) {
+		for _, days := range []int{-1, 3651} {
+			body := fmt.Sprintf(`{"cronExpr":"0 0 * * *","runbookRunDays":%d}`, days)
+			req := httptest.NewRequest(http.MethodPut, "/api/system/settings/retention", strings.NewReader(body))
+			rr := httptest.NewRecorder()
+			h.UpdateRetentionSettings(rr, req)
+			if rr.Code != http.StatusBadRequest {
+				t.Fatalf("days=%d: status = %d, want 400; body=%s", days, rr.Code, rr.Body.String())
+			}
+		}
+	})
+
+	t.Run("runbook run days zero keeps forever", func(t *testing.T) {
+		body := `{"cronExpr":"0 0 * * *","runbookRunDays":0,"runbookOpenRunHours":12}`
+		req := httptest.NewRequest(http.MethodPut, "/api/system/settings/retention", strings.NewReader(body))
+		rr := httptest.NewRecorder()
+		h.UpdateRetentionSettings(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200; body=%s", rr.Code, rr.Body.String())
+		}
+		var resp map[string]any
+		if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+		if resp["runbookRunDays"] != float64(0) {
+			t.Errorf("runbookRunDays = %v, want 0", resp["runbookRunDays"])
+		}
+		if resp["runbookOpenRunHours"] != float64(12) {
+			t.Errorf("runbookOpenRunHours = %v, want 12", resp["runbookOpenRunHours"])
+		}
+	})
+
 	t.Run("happy path", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodPut, "/api/system/settings/retention", strings.NewReader(`{"cronExpr":"0 0 * * *","snapshotDays":30,"docVersionDays":60,"alertDays":90,"syncRunDays":30,"auditDays":90}`))
+		req := httptest.NewRequest(http.MethodPut, "/api/system/settings/retention", strings.NewReader(`{"cronExpr":"0 0 * * *","snapshotDays":30,"docVersionDays":60,"alertDays":90,"syncRunDays":30,"auditDays":90,"runbookOpenRunHours":48,"runbookRunDays":180}`))
 		rr := httptest.NewRecorder()
 		h.UpdateRetentionSettings(rr, req)
 		if rr.Code != http.StatusOK {
 			t.Fatalf("status = %d, want %d; body=%s", rr.Code, http.StatusOK, rr.Body.String())
+		}
+		var resp map[string]any
+		if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+		if resp["runbookOpenRunHours"] != float64(48) {
+			t.Errorf("runbookOpenRunHours = %v, want 48", resp["runbookOpenRunHours"])
+		}
+		if resp["runbookRunDays"] != float64(180) {
+			t.Errorf("runbookRunDays = %v, want 180", resp["runbookRunDays"])
 		}
 	})
 

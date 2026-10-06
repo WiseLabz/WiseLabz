@@ -17,7 +17,13 @@ import {
   deleteRunbooksRunbookId,
 } from '../../api/generated/runbooks/runbooks';
 import { useGetConnectors, useGetConnectorsSchema } from '../../api/generated/connectors/connectors';
-import type { Runbook, RunbookStepInput, RunbookStepVerb, RunbookTargetType } from '../../api/model';
+import type {
+  Runbook,
+  RunbookStepInput,
+  RunbookStepKind,
+  RunbookStepVerb,
+  RunbookTargetType,
+} from '../../api/model';
 import { Severity } from '../../api/model/severity';
 import { Button, IconButton } from '../../components/ui/Button';
 import { Panel } from '../../components/ui/Panel';
@@ -38,16 +44,28 @@ const MAX_STEPS = 20;
 interface StepDraft {
   key: string;
   id?: string;
+  kind?: RunbookStepKind;
   title: string;
   connectorId: string;
   /** Empty for a loaded step that is not a lifecycle step. */
   verb: RunbookStepVerb | '';
   entityRef: string;
+  timeoutSeconds?: number | '';
+  redacted?: boolean;
 }
 
 let stepKeySeq = 0;
 function newStepDraft(): StepDraft {
-  return { key: `new-${++stepKeySeq}`, title: '', connectorId: '', verb: 'restart', entityRef: '' };
+  return {
+    key: `new-${++stepKeySeq}`,
+    kind: 'lifecycle',
+    title: '',
+    connectorId: '',
+    verb: 'restart',
+    entityRef: '',
+    timeoutSeconds: '',
+    redacted: false,
+  };
 }
 
 interface Draft {
@@ -104,10 +122,13 @@ export function RunbooksPage() {
       steps: rb.steps.map((s) => ({
         key: s.id,
         id: s.id,
+        kind: s.kind,
         title: s.title,
         connectorId: s.connectorId,
-        verb: s.verb,
+        verb: s.verb as RunbookStepVerb | '',
         entityRef: s.entityRef,
+        timeoutSeconds: s.timeoutSeconds > 0 ? s.timeoutSeconds : '',
+        redacted: !s.kind,
       })),
     });
     setFormError(null);
@@ -128,15 +149,51 @@ export function RunbooksPage() {
     targetValue: draft.targetValue.trim(),
     docId: draft.docId.trim() || null,
     snapshotId: draft.snapshotId.trim() || null,
-    steps: draft.steps.map(
-      (s): RunbookStepInput => ({
+    steps: draft.steps.map((s): RunbookStepInput => {
+      if (s.redacted) {
+        return {
+          id: s.id,
+          title: s.title,
+          ...(s.connectorId ? { connectorId: s.connectorId } : {}),
+          ...(s.verb ? { verb: s.verb as RunbookStepVerb } : {}),
+          ...(s.entityRef ? { entityRef: s.entityRef } : {}),
+          ...(typeof s.timeoutSeconds === 'number' && s.timeoutSeconds > 0
+            ? { timeoutSeconds: s.timeoutSeconds }
+            : {}),
+        };
+      }
+
+      const kind = s.kind || 'lifecycle';
+      const base: RunbookStepInput = {
         ...(s.id ? { id: s.id } : {}),
+        kind,
         title: s.title.trim(),
-        connectorId: s.connectorId,
-        verb: s.verb || undefined,
-        ...(s.entityRef ? { entityRef: s.entityRef } : {}),
-      })
-    ),
+      };
+
+      if (kind === 'lifecycle') {
+        return {
+          ...base,
+          connectorId: s.connectorId,
+          verb: (s.verb || undefined) as RunbookStepVerb | undefined,
+          ...(s.entityRef ? { entityRef: s.entityRef } : {}),
+        };
+      }
+
+      if (kind === 'sync_and_wait' || kind === 'wait_until_healthy') {
+        const timeout =
+          s.timeoutSeconds !== '' && s.timeoutSeconds !== undefined
+            ? Number(s.timeoutSeconds)
+            : undefined;
+        return {
+          ...base,
+          connectorId: s.connectorId,
+          ...(timeout !== undefined && !isNaN(timeout) ? { timeoutSeconds: timeout } : {}),
+        };
+      }
+
+      // kind === 'manual'
+      return base;
+    }),
   });
 
   const conflictMessage = t('settings.runbooks.conflict');
@@ -427,113 +484,223 @@ export function RunbooksPage() {
               <p className="text-xs text-ink-muted">{t('settings.runbooks.steps.empty')}</p>
             ) : (
               <ul className="space-y-3">
-                {draft.steps.map((step, index) => (
-                  <li
-                    key={step.key}
-                    className="space-y-2 rounded-md border border-line-soft bg-canvas-sunken p-3"
-                  >
-                    <div className="flex items-center gap-2">
-                      <TextInput
-                        aria-label={t('settings.runbooks.steps.titleLabel')}
-                        value={step.title}
-                        placeholder={t('settings.runbooks.steps.titlePlaceholder')}
-                        onChange={(e) => updateStep(step.key, { title: e.target.value })}
-                        className="flex-1"
-                      />
-                      <IconButton
-                        label={t('settings.runbooks.steps.moveUp')}
-                        onClick={() => moveStep(step.key, -1)}
-                        disabled={index === 0}
-                      >
-                        <ChevronDownIcon size={14} className="rotate-180" />
-                      </IconButton>
-                      <IconButton
-                        label={t('settings.runbooks.steps.moveDown')}
-                        onClick={() => moveStep(step.key, 1)}
-                        disabled={index === draft.steps.length - 1}
-                      >
-                        <ChevronDownIcon size={14} />
-                      </IconButton>
-                      <IconButton
-                        label={t('settings.runbooks.steps.remove')}
-                        onClick={() => removeStep(step.key)}
-                        className="hover:text-err"
-                      >
-                        <XIcon size={14} />
-                      </IconButton>
-                    </div>
-
-                    <div className="grid gap-2 sm:grid-cols-3">
-                      <label className="block">
-                        <span className="mb-1 block text-2xs text-ink-faint">
-                          {t('settings.runbooks.steps.connectorLabel')}
-                        </span>
-                        <Select
-                          aria-label={t('settings.runbooks.steps.connectorLabel')}
-                          value={step.connectorId}
-                          onChange={(e) => {
-                            const connectorId = e.target.value;
-                            const type = connectors.data?.find((c) => c.id === connectorId)?.type;
-                            const verbs = schemas.data?.find((s) => s.type === type)?.lifecycleVerbs ?? [];
-                            updateStep(step.key, {
-                              connectorId,
-                              entityRef: '',
-                              verb: (verbs[0] ?? step.verb) as RunbookStepVerb,
-                            });
-                          }}
-                        >
-                          <option value="" disabled>
-                            {t('settings.runbooks.steps.connectorPlaceholder')}
-                          </option>
-                          {(connectors.data ?? []).map((c) => (
-                            <option key={c.id} value={c.id}>
-                              {c.name}
-                            </option>
-                          ))}
-                        </Select>
-                      </label>
-
-                      <label className="block">
-                        <span className="mb-1 block text-2xs text-ink-faint">
-                          {t('settings.runbooks.steps.verbLabel')}
-                        </span>
-                        <Select
-                          aria-label={t('settings.runbooks.steps.verbLabel')}
-                          value={step.verb}
-                          onChange={(e) =>
-                            updateStep(step.key, { verb: e.target.value as RunbookStepVerb })
-                          }
-                        >
-                          {(() => {
-                            const type = connectors.data?.find((c) => c.id === step.connectorId)?.type;
-                            const verbs =
-                              schemas.data?.find((s) => s.type === type)?.lifecycleVerbs ??
-                              (['restart', 'start', 'stop'] as RunbookStepVerb[]);
-                            return verbs.map((v) => (
-                              <option key={v} value={v}>
-                                {v}
-                              </option>
-                            ));
-                          })()}
-                        </Select>
-                      </label>
-
-                      {step.connectorId && (
-                        <EntityPicker
-                          connectorId={step.connectorId}
-                          value={step.entityRef}
-                          onChange={(entityRef) => updateStep(step.key, { entityRef })}
+                {draft.steps.map((step, index) => {
+                  const isRedacted = !!step.redacted;
+                  const kind = step.kind || 'lifecycle';
+                  return (
+                    <li
+                      key={step.key}
+                      className="space-y-2 rounded-md border border-line-soft bg-canvas-sunken p-3"
+                    >
+                      <div className="flex items-center gap-2">
+                        <TextInput
+                          aria-label={t('settings.runbooks.steps.titleLabel')}
+                          value={step.title}
+                          placeholder={t('settings.runbooks.steps.titlePlaceholder')}
+                          disabled={isRedacted}
+                          readOnly={isRedacted}
+                          onChange={(e) => updateStep(step.key, { title: e.target.value })}
+                          className="flex-1"
                         />
-                      )}
-                    </div>
+                        {isRedacted ? (
+                          <span className="font-mono text-2xs italic text-ink-faint">
+                            {t('settings.runbooks.steps.restricted')}
+                          </span>
+                        ) : (
+                          <>
+                            <IconButton
+                              label={t('settings.runbooks.steps.moveUp')}
+                              onClick={() => moveStep(step.key, -1)}
+                              disabled={index === 0}
+                            >
+                              <ChevronDownIcon size={14} className="rotate-180" />
+                            </IconButton>
+                            <IconButton
+                              label={t('settings.runbooks.steps.moveDown')}
+                              onClick={() => moveStep(step.key, 1)}
+                              disabled={index === draft.steps.length - 1}
+                            >
+                              <ChevronDownIcon size={14} />
+                            </IconButton>
+                            <IconButton
+                              label={t('settings.runbooks.steps.remove')}
+                              onClick={() => removeStep(step.key)}
+                              className="hover:text-err"
+                            >
+                              <XIcon size={14} />
+                            </IconButton>
+                          </>
+                        )}
+                      </div>
 
-                    {stepErrors[index] && (
-                      <p role="alert" className="text-2xs text-err">
-                        {stepErrors[index]}
-                      </p>
-                    )}
-                  </li>
-                ))}
+                      {isRedacted ? (
+                        <p className="text-2xs italic text-ink-faint">
+                          {t('settings.runbooks.steps.redactedHint')}
+                        </p>
+                      ) : (
+                        <div className="grid gap-2 sm:grid-cols-3">
+                          <label className="block">
+                            <span className="mb-1 block text-2xs text-ink-faint">
+                              {t('settings.runbooks.steps.kindLabel')}
+                            </span>
+                            <Select
+                              aria-label={t('settings.runbooks.steps.kindLabel')}
+                              value={kind}
+                              onChange={(e) => {
+                                const nextKind = e.target.value as RunbookStepKind;
+                                if (nextKind === 'manual') {
+                                  updateStep(step.key, {
+                                    kind: nextKind,
+                                    connectorId: '',
+                                    verb: '',
+                                    entityRef: '',
+                                    timeoutSeconds: '',
+                                  });
+                                } else if (
+                                  nextKind === 'sync_and_wait' ||
+                                  nextKind === 'wait_until_healthy'
+                                ) {
+                                  updateStep(step.key, {
+                                    kind: nextKind,
+                                    verb: '',
+                                    entityRef: '',
+                                    timeoutSeconds: step.timeoutSeconds || '',
+                                  });
+                                } else {
+                                  // lifecycle
+                                  const type = connectors.data?.find(
+                                    (c) => c.id === step.connectorId
+                                  )?.type;
+                                  const verbs =
+                                    schemas.data?.find((s) => s.type === type)?.lifecycleVerbs ?? [];
+                                  updateStep(step.key, {
+                                    kind: nextKind,
+                                    verb: (verbs[0] ?? 'restart') as RunbookStepVerb,
+                                    timeoutSeconds: '',
+                                  });
+                                }
+                              }}
+                            >
+                              <option value="lifecycle">{t('settings.runbooks.steps.kinds.lifecycle')}</option>
+                              <option value="sync_and_wait">{t('settings.runbooks.steps.kinds.sync_and_wait')}</option>
+                              <option value="wait_until_healthy">{t('settings.runbooks.steps.kinds.wait_until_healthy')}</option>
+                              <option value="manual">{t('settings.runbooks.steps.kinds.manual')}</option>
+                            </Select>
+                          </label>
+
+                          {kind !== 'manual' && (
+                            <label className="block">
+                              <span className="mb-1 block text-2xs text-ink-faint">
+                                {t('settings.runbooks.steps.connectorLabel')}
+                              </span>
+                              <Select
+                                aria-label={t('settings.runbooks.steps.connectorLabel')}
+                                value={step.connectorId}
+                                onChange={(e) => {
+                                  const connectorId = e.target.value;
+                                  if (kind === 'sync_and_wait' || kind === 'wait_until_healthy') {
+                                    updateStep(step.key, { connectorId });
+                                  } else {
+                                    const type = connectors.data?.find((c) => c.id === connectorId)?.type;
+                                    const verbs =
+                                      schemas.data?.find((s) => s.type === type)?.lifecycleVerbs ?? [];
+                                    updateStep(step.key, {
+                                      connectorId,
+                                      entityRef: '',
+                                      verb: (verbs[0] ?? step.verb ?? 'restart') as RunbookStepVerb,
+                                    });
+                                  }
+                                }}
+                              >
+                                <option value="" disabled>
+                                  {t('settings.runbooks.steps.connectorPlaceholder')}
+                                </option>
+                                {(connectors.data ?? []).map((c) => (
+                                  <option key={c.id} value={c.id}>
+                                    {c.name}
+                                  </option>
+                                ))}
+                              </Select>
+                            </label>
+                          )}
+
+                          {kind === 'lifecycle' && (
+                            <label className="block">
+                              <span className="mb-1 block text-2xs text-ink-faint">
+                                {t('settings.runbooks.steps.verbLabel')}
+                              </span>
+                              <Select
+                                aria-label={t('settings.runbooks.steps.verbLabel')}
+                                value={step.verb}
+                                onChange={(e) =>
+                                  updateStep(step.key, { verb: e.target.value as RunbookStepVerb })
+                                }
+                              >
+                                {(() => {
+                                  const type = connectors.data?.find(
+                                    (c) => c.id === step.connectorId
+                                  )?.type;
+                                  const verbs =
+                                    schemas.data?.find((s) => s.type === type)?.lifecycleVerbs ??
+                                    (['restart', 'start', 'stop'] as RunbookStepVerb[]);
+                                  return verbs.map((v) => (
+                                    <option key={v} value={v}>
+                                      {v}
+                                    </option>
+                                  ));
+                                })()}
+                              </Select>
+                            </label>
+                          )}
+
+                          {(kind === 'sync_and_wait' || kind === 'wait_until_healthy') && (
+                            <label className="block">
+                              <span className="mb-1 block text-2xs text-ink-faint">
+                                {t('settings.runbooks.steps.timeoutLabel')}
+                              </span>
+                              <TextInput
+                                aria-label={t('settings.runbooks.steps.timeoutLabel')}
+                                type="number"
+                                min={10}
+                                max={1800}
+                                placeholder="300"
+                                value={step.timeoutSeconds ?? ''}
+                                onChange={(e) =>
+                                  updateStep(step.key, {
+                                    timeoutSeconds:
+                                      e.target.value === '' ? '' : Number(e.target.value),
+                                  })
+                                }
+                              />
+                            </label>
+                          )}
+
+                          {kind === 'lifecycle' && step.connectorId && (
+                            <EntityPicker
+                              connectorId={step.connectorId}
+                              value={step.entityRef}
+                              onChange={(entityRef) => updateStep(step.key, { entityRef })}
+                            />
+                          )}
+
+                          {kind === 'manual' && (
+                            <div className="flex items-center sm:col-span-2">
+                              <p className="text-2xs text-ink-faint">
+                                {t('settings.runbooks.steps.manualHint')}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {stepErrors[index] && (
+                        <p role="alert" className="text-2xs text-err">
+                          {stepErrors[index]}
+                        </p>
+                      )}
+                    </li>
+                  );
+                })}
               </ul>
             )}
           </div>

@@ -36,13 +36,15 @@ func TestRetentionSettingsGetPutRoundTrip(t *testing.T) {
 	}
 
 	putBody := map[string]any{
-		"snapshotDays":    30,
-		"docVersionDays":  60,
-		"alertDays":       90,
-		"syncRunDays":     14,
-		"auditDays":       120,
-		"healthCheckDays": 45,
-		"cronExpr":        "0 1 * * *",
+		"snapshotDays":        30,
+		"docVersionDays":      60,
+		"alertDays":           90,
+		"syncRunDays":         14,
+		"auditDays":           120,
+		"healthCheckDays":     45,
+		"runbookOpenRunHours": 48,
+		"runbookRunDays":      30,
+		"cronExpr":            "0 1 * * *",
 	}
 	putRec := app.req(t, http.MethodPut, "/api/system/settings/retention", putBody, opToken)
 	if putRec.Code != http.StatusOK {
@@ -54,6 +56,12 @@ func TestRetentionSettingsGetPutRoundTrip(t *testing.T) {
 	}
 	if putResp["auditDays"].(float64) != 120 {
 		t.Errorf("PUT response auditDays = %v, want 120", putResp["auditDays"])
+	}
+	if putResp["runbookOpenRunHours"].(float64) != 48 {
+		t.Errorf("PUT response runbookOpenRunHours = %v, want 48", putResp["runbookOpenRunHours"])
+	}
+	if putResp["runbookRunDays"].(float64) != 30 {
+		t.Errorf("PUT response runbookRunDays = %v, want 30", putResp["runbookRunDays"])
 	}
 
 	getRec2 := app.req(t, http.MethodGet, "/api/system/settings/retention", nil, opToken)
@@ -73,6 +81,12 @@ func TestRetentionSettingsGetPutRoundTrip(t *testing.T) {
 	if getResp["healthCheckDays"].(float64) != 45 {
 		t.Errorf("GET healthCheckDays = %v, want 45", getResp["healthCheckDays"])
 	}
+	if getResp["runbookOpenRunHours"].(float64) != 48 {
+		t.Errorf("GET runbookOpenRunHours = %v, want 48", getResp["runbookOpenRunHours"])
+	}
+	if getResp["runbookRunDays"].(float64) != 30 {
+		t.Errorf("GET runbookRunDays = %v, want 30", getResp["runbookRunDays"])
+	}
 }
 
 func TestRetentionSettingsValidation(t *testing.T) {
@@ -85,6 +99,24 @@ func TestRetentionSettingsValidation(t *testing.T) {
 	}, opToken)
 	if negRec.Code != http.StatusBadRequest {
 		t.Fatalf("negative days status = %d, want 400; body = %s", negRec.Code, negRec.Body)
+	}
+
+	for _, hours := range []int{0, -1, 8761} {
+		hoursRec := app.req(t, http.MethodPut, "/api/system/settings/retention", map[string]any{
+			"runbookOpenRunHours": hours, "cronExpr": "0 0 * * *",
+		}, opToken)
+		if hoursRec.Code != http.StatusBadRequest {
+			t.Fatalf("hours %d status = %d, want 400; body = %s", hours, hoursRec.Code, hoursRec.Body)
+		}
+	}
+
+	for _, days := range []int{-1, 3651} {
+		daysRec := app.req(t, http.MethodPut, "/api/system/settings/retention", map[string]any{
+			"runbookRunDays": days, "cronExpr": "0 0 * * *",
+		}, opToken)
+		if daysRec.Code != http.StatusBadRequest {
+			t.Fatalf("days %d status = %d, want 400; body = %s", days, daysRec.Code, daysRec.Body)
+		}
 	}
 
 	badCronRec := app.req(t, http.MethodPut, "/api/system/settings/retention", map[string]any{
