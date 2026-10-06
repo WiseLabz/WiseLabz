@@ -33,13 +33,14 @@ type Manifest struct {
 // verifying a bundle that predates the manifest sidecar.
 func BundleCounts(b *Bundle) map[string]int {
 	return map[string]int{
-		"attachments":      len(b.Attachments),
-		"journalEntries":   len(b.JournalEntries),
-		"connectors":       len(b.Connectors),
-		"docs":             len(b.Docs),
-		"docVersions":      len(b.DocVersions),
-		"templates":        len(b.Templates),
-		"templateSections": len(b.TemplateSections),
+		"attachments":             len(b.Attachments),
+		"journalEntries":          len(b.JournalEntries),
+		"connectors":              len(b.Connectors),
+		"docs":                    len(b.Docs),
+		"docVersions":             len(b.DocVersions),
+		"templates":               len(b.Templates),
+		"templateSections":        len(b.TemplateSections),
+		"entityIdentityOverrides": len(b.EntityIdentityOverrides),
 	}
 }
 

@@ -585,3 +585,71 @@ func TestJournalBackupRoundTrip(t *testing.T) {
 		t.Fatalf("idempotence %+v: %v", res, err)
 	}
 }
+
+func TestEntityIdentityOverridesBackupRoundTrip(t *testing.T) {
+	ctx := context.Background()
+	src := newTestStore(t)
+	dst := newTestStore(t)
+	var members []store.EntityMemberRecord
+	for _, name := range []string{"one", "two"} {
+		c := store.ConnectorRecord{Name: name, Category: "virtualization", Type: "proxmox", URL: "https://" + name + ".example.com"}
+		if err := src.CreateConnector(ctx, &c); err != nil {
+			t.Fatal(err)
+		}
+		members = append(members, store.EntityMemberRecord{ConnectorID: c.ID, Kind: "vm", Ref: name, Name: name})
+	}
+	clusters := [][]store.EntityMemberRecord{{members[0]}, {members[1]}}
+	if err := src.ReconcileEntityIdentities(ctx, clusters); err != nil {
+		t.Fatal(err)
+	}
+	merge := store.EntityIdentityOverride{Action: store.EntityOverrideMerge, ConnectorID: members[1].ConnectorID, Kind: "vm", Ref: "two", OtherConnectorID: members[0].ConnectorID, OtherKind: "vm", OtherRef: "one", Note: "same box", CreatedBy: "admin"}
+	detach := store.EntityIdentityOverride{Action: store.EntityOverrideDetach, ConnectorID: members[0].ConnectorID, Kind: "vm", Ref: "one", CreatedBy: "admin"}
+	for _, o := range []*store.EntityIdentityOverride{&merge, &detach} {
+		if err := src.CreateEntityIdentityOverride(ctx, o); err != nil {
+			t.Fatal(err)
+		}
+	}
+	want, err := src.LoadEntityIdentityOverrides(ctx)
+	if err != nil || len(want) != 2 {
+		t.Fatalf("source overrides = %v, %v", want, err)
+	}
+
+	run, err := backup.ExportToFile(ctx, src, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if verified := backup.VerifyBundleFile(ctx, run.FilePath); verified.Status != "pass" || verified.ActualCounts["entityIdentityOverrides"] != 2 || verified.ExpectedCounts["entityIdentityOverrides"] != 2 {
+		t.Fatalf("override archive verification: %+v", verified)
+	}
+	res, err := backup.ImportFromFile(ctx, dst, run.FilePath, backup.ArchiveOptions{BlobDir: t.TempDir()})
+	if err != nil || res.EntityIdentityOverrides.Imported != 2 {
+		t.Fatalf("restore result %+v: %v", res, err)
+	}
+	got, err := dst.LoadEntityIdentityOverrides(ctx)
+	if err != nil || len(got) != 2 {
+		t.Fatalf("restored overrides = %v, %v", got, err)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("restored override %d = %+v, want %+v", i, got[i], want[i])
+		}
+	}
+	// Members are rebuilt from snapshots, so restored overrides start dormant.
+	views, err := dst.ListEntityIdentityOverrides(ctx)
+	if err != nil || len(views) != 2 || views[0].State != store.EntityOverrideDormant || views[1].State != store.EntityOverrideDormant {
+		t.Fatalf("restored override states = %+v, %v; want dormant", views, err)
+	}
+	res, err = backup.ImportFromFile(ctx, dst, run.FilePath, backup.ArchiveOptions{BlobDir: t.TempDir()})
+	if err != nil || res.EntityIdentityOverrides.Skipped != 2 || res.EntityIdentityOverrides.Imported != 0 {
+		t.Fatalf("idempotent restore %+v: %v", res, err)
+	}
+}
+
+func TestValidateBundleRejectsOverrideOfUnknownConnector(t *testing.T) {
+	b := &backup.Bundle{Version: backup.BundleVersion, EntityIdentityOverrides: []store.EntityIdentityOverride{
+		{ID: "o1", Action: store.EntityOverrideDetach, ConnectorID: "missing", Kind: "vm", Ref: "x", CreatedBy: "admin", CreatedAt: "2026-01-01T00:00:00Z"},
+	}}
+	if err := backup.ValidateBundle(b); err == nil {
+		t.Fatal("ValidateBundle accepted an override of a connector missing from the bundle")
+	}
+}
