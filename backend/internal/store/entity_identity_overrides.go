@@ -280,12 +280,19 @@ func (s *Store) entityOverrideView(ctx context.Context, o EntityIdentityOverride
 	if err != nil {
 		return view, err
 	}
+	view.State = EntityOverrideState(members)
+	return view, nil
+}
+
+// EntityOverrideState derives an override's state from its members: active
+// when every member is currently observed, otherwise dormant.
+func EntityOverrideState(members []EntityOverrideMember) string {
 	for _, member := range members {
 		if member.EntityID == "" || member.Gone {
-			view.State = EntityOverrideDormant
+			return EntityOverrideDormant
 		}
 	}
-	return view, nil
+	return EntityOverrideActive
 }
 
 // EntityOverrideMembers resolves the one (detach) or two (merge) members an

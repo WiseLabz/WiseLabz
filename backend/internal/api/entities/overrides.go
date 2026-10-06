@@ -5,9 +5,8 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"strings"
 	"unicode/utf8"
-
-	"github.com/go-chi/chi/v5"
 
 	"github.com/WiseLabz/wiselabz/internal/auth"
 	"github.com/WiseLabz/wiselabz/internal/httputil"
@@ -62,15 +61,6 @@ func toOverrideResponse(o store.EntityIdentityOverride, state string, members []
 	return out
 }
 
-func stateOf(members []store.EntityOverrideMember) string {
-	for _, m := range members {
-		if m.EntityID == "" || m.Gone {
-			return store.EntityOverrideDormant
-		}
-	}
-	return store.EntityOverrideActive
-}
-
 // ListOverrides handles GET /api/entity-overrides. It returns every override
 // unfiltered, so the route must sit behind auth.RequireInstanceAdmin.
 func (h *Handler) ListOverrides(w http.ResponseWriter, r *http.Request) {
@@ -94,8 +84,12 @@ func (h *Handler) CreateOverride(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if utf8.RuneCountInString(req.Note) > maxOverrideNoteRunes {
-		httputil.Error(w, http.StatusBadRequest, "invalid_request", "Note is too long")
+	if msg := validateCreateOverride(req); msg != "" {
+		httputil.Error(w, http.StatusBadRequest, "invalid_request", msg)
+		return
+	}
+	if h.Reconciler == nil {
+		httpError(w, errors.New("entity override reconciler is not configured"))
 		return
 	}
 	o := store.EntityIdentityOverride{
@@ -117,7 +111,27 @@ func (h *Handler) CreateOverride(w http.ResponseWriter, r *http.Request) {
 		httpError(w, err)
 		return
 	}
-	httputil.JSON(w, http.StatusCreated, toOverrideResponse(o, stateOf(members), members))
+	httputil.JSON(w, http.StatusCreated, toOverrideResponse(o, store.EntityOverrideState(members), members))
+}
+
+// validateCreateOverride rejects input the database would refuse (a NUL byte
+// fails on PostgreSQL) or that cannot name a connector, before anything is
+// stored.
+func validateCreateOverride(req createOverrideRequest) string {
+	for _, v := range []string{req.Action, req.ConnectorID, req.Kind, req.Ref, req.OtherConnectorID, req.OtherKind, req.OtherRef, req.Note} {
+		if strings.ContainsRune(v, 0) {
+			return "Fields must not contain NUL characters"
+		}
+	}
+	for _, id := range []string{req.ConnectorID, req.OtherConnectorID} {
+		if id != "" && !validID(id) {
+			return "Connector IDs must be UUIDs"
+		}
+	}
+	if utf8.RuneCountInString(req.Note) > maxOverrideNoteRunes {
+		return "Note is too long"
+	}
+	return ""
 }
 
 // DeleteOverride handles DELETE /api/entity-overrides/{id}: it removes the
@@ -125,7 +139,15 @@ func (h *Handler) CreateOverride(w http.ResponseWriter, r *http.Request) {
 // override with each member's resulting identity ID. Route behind
 // auth.RequireInstanceAdmin.
 func (h *Handler) DeleteOverride(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
+	id := r.PathValue("id")
+	if !validID(id) {
+		httputil.HandleStoreError(w, store.ErrNotFound)
+		return
+	}
+	if h.Reconciler == nil {
+		httpError(w, errors.New("entity override reconciler is not configured"))
+		return
+	}
 	view, err := h.Store.GetEntityIdentityOverride(r.Context(), id)
 	if err != nil {
 		httputil.HandleStoreError(w, err)
@@ -141,7 +163,7 @@ func (h *Handler) DeleteOverride(w http.ResponseWriter, r *http.Request) {
 		httpError(w, err)
 		return
 	}
-	httputil.JSON(w, http.StatusOK, toOverrideResponse(view.EntityIdentityOverride, stateOf(members), members))
+	httputil.JSON(w, http.StatusOK, toOverrideResponse(view.EntityIdentityOverride, store.EntityOverrideState(members), members))
 }
 
 // reconcileMembers rebuilds identities, then reads where each of the
