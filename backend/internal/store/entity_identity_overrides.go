@@ -67,6 +67,16 @@ type EntityIdentityOverrideView struct {
 	Members []EntityOverrideMember
 }
 
+// sortMergePair orders a merge's two members by member key so A/B and B/A are
+// one row. Create and import both use it.
+func (o *EntityIdentityOverride) sortMergePair() {
+	if identityMemberKey(o.ConnectorID, o.Kind, o.Ref) > identityMemberKey(o.OtherConnectorID, o.OtherKind, o.OtherRef) {
+		o.ConnectorID, o.OtherConnectorID = o.OtherConnectorID, o.ConnectorID
+		o.Kind, o.OtherKind = o.OtherKind, o.Kind
+		o.Ref, o.OtherRef = o.OtherRef, o.Ref
+	}
+}
+
 const entityOverrideColumns = `id, action, connector_id, kind, ref, other_connector_id, other_kind, other_ref, note, created_by, created_at`
 
 func scanEntityOverride(row rowScanner) (EntityIdentityOverride, error) {
@@ -109,10 +119,8 @@ func (s *Store) CreateEntityIdentityOverride(ctx context.Context, o *EntityIdent
 			return fmt.Errorf("%w: a merge needs two different members", ErrInvalidEntityOverride)
 		case o.Kind != o.OtherKind:
 			return fmt.Errorf("%w: cannot merge members of different kinds", ErrInvalidEntityOverride)
-		case first > second:
-			o.ConnectorID, o.OtherConnectorID = o.OtherConnectorID, o.ConnectorID
-			o.Ref, o.OtherRef = o.OtherRef, o.Ref
 		}
+		o.sortMergePair()
 	}
 	if o.ID == "" {
 		o.ID = uuid.NewString()
@@ -159,8 +167,12 @@ func (s *Store) insertEntityOverride(ctx context.Context, o EntityIdentityOverri
 // ImportEntityIdentityOverride restores a backed-up override without requiring
 // its members to exist: members are rebuilt from snapshots, so the override
 // stays dormant until the first sync observes them. It reports false when an
-// override with the same ID or an equivalent member tuple is already stored.
+// override with the same ID or an equivalent member tuple is already stored; a
+// merge pair is put in sorted order first, so a reversed pair counts as equivalent.
 func (s *Store) ImportEntityIdentityOverride(ctx context.Context, o EntityIdentityOverride) (bool, error) {
+	if o.Action == EntityOverrideMerge {
+		o.sortMergePair()
+	}
 	var one int
 	err := s.db.QueryRowContext(ctx, `SELECT 1 FROM entity_identity_overrides WHERE id = ? OR (action = ? AND connector_id = ? AND kind = ? AND ref = ?
 		AND COALESCE(other_connector_id, '') = ? AND COALESCE(other_kind, '') = ? AND COALESCE(other_ref, '') = ?) LIMIT 1`,

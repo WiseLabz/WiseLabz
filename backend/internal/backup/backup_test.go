@@ -12,6 +12,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	_ "github.com/jackc/pgx/v5/stdlib"
@@ -651,5 +652,118 @@ func TestValidateBundleRejectsOverrideOfUnknownConnector(t *testing.T) {
 	}}
 	if err := backup.ValidateBundle(b); err == nil {
 		t.Fatal("ValidateBundle accepted an override of a connector missing from the bundle")
+	}
+}
+
+// overrideSource returns a store holding two connectors and one merge override
+// between members that were never recorded (as after a restore).
+func overrideBundle(t *testing.T) *backup.Bundle {
+	t.Helper()
+	ctx := context.Background()
+	src := newTestStore(t)
+	var members []store.EntityMemberRecord
+	for _, name := range []string{"one", "two"} {
+		c := store.ConnectorRecord{Name: name, Category: "virtualization", Type: "proxmox", URL: "https://" + name + ".example.com"}
+		if err := src.CreateConnector(ctx, &c); err != nil {
+			t.Fatal(err)
+		}
+		members = append(members, store.EntityMemberRecord{ConnectorID: c.ID, Kind: "vm", Ref: name, Name: name})
+	}
+	if err := src.ReconcileEntityIdentities(ctx, [][]store.EntityMemberRecord{{members[0]}, {members[1]}}); err != nil {
+		t.Fatal(err)
+	}
+	merge := store.EntityIdentityOverride{Action: store.EntityOverrideMerge, ConnectorID: members[0].ConnectorID, Kind: "vm", Ref: "one",
+		OtherConnectorID: members[1].ConnectorID, OtherKind: "vm", OtherRef: "two", CreatedBy: "admin"}
+	if err := src.CreateEntityIdentityOverride(ctx, &merge); err != nil {
+		t.Fatal(err)
+	}
+	b, err := backup.Export(ctx, src)
+	if err != nil || len(b.EntityIdentityOverrides) != 1 {
+		t.Fatalf("export = %v, %v", b, err)
+	}
+	return b
+}
+
+func TestRestoredEntityIdentityOverridesSurviveRetention(t *testing.T) {
+	ctx := context.Background()
+	b := overrideBundle(t)
+	dst := newTestStore(t)
+	if res, err := backup.Import(ctx, dst, b); err != nil || res.EntityIdentityOverrides.Imported != 1 {
+		t.Fatalf("import = %+v, %v", res, err)
+	}
+	cutoff := time.Now().UTC().AddDate(0, 0, -90).Format(time.RFC3339)
+	if _, err := dst.DeleteExpiredEntityIdentities(ctx, cutoff); err != nil {
+		t.Fatal(err)
+	}
+	left, err := dst.LoadEntityIdentityOverrides(ctx)
+	if err != nil || len(left) != 1 {
+		t.Fatalf("restored overrides after one retention pass = %d, %v; want 1", len(left), err)
+	}
+}
+
+func TestImportEntityIdentityOverrideEquivalentTuples(t *testing.T) {
+	ctx := context.Background()
+	b := overrideBundle(t)
+	dst := newTestStore(t)
+	if _, err := backup.Import(ctx, dst, b); err != nil {
+		t.Fatal(err)
+	}
+	o := b.EntityIdentityOverrides[0]
+
+	same := o
+	same.ID = "different-id"
+	reversed := same
+	reversed.ID = "reversed-id"
+	reversed.ConnectorID, reversed.OtherConnectorID = o.OtherConnectorID, o.ConnectorID
+	reversed.Ref, reversed.OtherRef = o.OtherRef, o.Ref
+	// A bundle carrying the stored pair under new IDs, in either order, adds nothing.
+	b.EntityIdentityOverrides = []store.EntityIdentityOverride{same, reversed}
+	res, err := backup.Import(ctx, dst, b)
+	if err != nil || res.EntityIdentityOverrides.Imported != 0 || res.EntityIdentityOverrides.Skipped != 2 {
+		t.Fatalf("equivalent tuples: %+v, %v; want both skipped", res, err)
+	}
+
+	// A fresh target given the pair in both orders stores it once.
+	fresh := newTestStore(t)
+	b.EntityIdentityOverrides = []store.EntityIdentityOverride{reversed, same}
+	conns, err := dst.ListAllConnectors(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b.Connectors = conns
+	res, err = backup.Import(ctx, fresh, b)
+	if err != nil || res.EntityIdentityOverrides.Imported != 1 || res.EntityIdentityOverrides.Skipped != 1 {
+		t.Fatalf("reversed pair import: %+v, %v; want 1 imported, 1 skipped", res, err)
+	}
+	stored, err := fresh.LoadEntityIdentityOverrides(ctx)
+	if err != nil || len(stored) != 1 || stored[0].Ref != o.Ref {
+		t.Fatalf("stored overrides = %+v, %v; want one row in sorted order", stored, err)
+	}
+}
+
+func TestValidateBundleRejectsMalformedOverrides(t *testing.T) {
+	good := store.EntityIdentityOverride{ID: "o1", Action: store.EntityOverrideMerge, ConnectorID: "c1", Kind: "vm", Ref: "a",
+		OtherConnectorID: "c2", OtherKind: "vm", OtherRef: "b", CreatedBy: "admin", CreatedAt: "2026-01-01T00:00:00Z"}
+	bundle := func(o ...store.EntityIdentityOverride) *backup.Bundle {
+		return &backup.Bundle{Version: backup.BundleVersion, EntityIdentityOverrides: o,
+			Connectors: []store.ConnectorRecord{{ID: "c1", Category: "virtualization"}, {ID: "c2", Category: "virtualization"}}}
+	}
+	if err := backup.ValidateBundle(bundle(good)); err != nil {
+		t.Fatalf("valid override rejected: %v", err)
+	}
+	mutate := func(f func(*store.EntityIdentityOverride)) store.EntityIdentityOverride { o := good; f(&o); return o }
+	cases := map[string]*backup.Bundle{
+		"duplicate id":       bundle(good, mutate(func(o *store.EntityIdentityOverride) { o.Ref = "c" })),
+		"cross-kind merge":   bundle(mutate(func(o *store.EntityIdentityOverride) { o.OtherKind = "host" })),
+		"same member twice":  bundle(mutate(func(o *store.EntityIdentityOverride) { o.OtherConnectorID, o.OtherRef = "c1", "a" })),
+		"detach with second": bundle(mutate(func(o *store.EntityIdentityOverride) { o.Action = store.EntityOverrideDetach })),
+		"unknown action":     bundle(mutate(func(o *store.EntityIdentityOverride) { o.Action = "split" })),
+		"unknown other":      bundle(mutate(func(o *store.EntityIdentityOverride) { o.OtherConnectorID = "missing" })),
+		"missing creator":    bundle(mutate(func(o *store.EntityIdentityOverride) { o.CreatedBy = "" })),
+	}
+	for name, b := range cases {
+		if err := backup.ValidateBundle(b); err == nil {
+			t.Errorf("%s: ValidateBundle accepted it", name)
+		}
 	}
 }

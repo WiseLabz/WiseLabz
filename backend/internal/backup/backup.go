@@ -326,8 +326,8 @@ func ValidateBundle(b *Bundle) error {
 }
 
 // validateOverride checks one backed-up override's shape and that every member
-// connector is part of the bundle (a merge also needs its pair in sorted order,
-// the form the store writes).
+// connector is part of the bundle. An unsorted merge pair is valid: the store
+// puts it in sorted order on import.
 func validateOverride(o store.EntityIdentityOverride, connectorIDs map[string]bool) error {
 	if o.ID == "" || o.Kind == "" || o.Ref == "" || !connectorIDs[o.ConnectorID] || o.CreatedBy == "" || o.CreatedAt == "" {
 		return errors.New("missing field or unknown connector")
