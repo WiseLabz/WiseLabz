@@ -84,6 +84,11 @@ const ChatPage = lazy(() =>
 const SearchPage = lazy(() =>
   import('./features/search/SearchPage').then(({ SearchPage }) => ({ default: SearchPage }))
 );
+const EntityOverridesPage = lazy(() =>
+  import('./features/entities/EntityOverridesPage').then(({ EntityOverridesPage }) => ({
+    default: EntityOverridesPage,
+  }))
+);
 const EntityDetailPage = lazy(() =>
   import('./features/entities/EntityDetailPage').then(({ EntityDetailPage }) => ({ default: EntityDetailPage }))
 );
@@ -247,6 +252,14 @@ const router = createBrowserRouter([
       { path: 'changes', element: <ChangesPage /> },
       { path: 'journal', element: <JournalPage /> },
       { path: 'search', element: <SearchPage /> },
+      {
+        path: 'entities/overrides',
+        element: (
+          <RequireInstanceAdmin>
+            <EntityOverridesPage />
+          </RequireInstanceAdmin>
+        ),
+      },
       { path: 'entities/:id', element: <EntityDetailPage /> },
       { path: 'changes/:changeId', element: <ChangeDetailPage /> },
       { path: 'attention', element: <AttentionPage /> },

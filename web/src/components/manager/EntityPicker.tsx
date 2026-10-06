@@ -20,6 +20,9 @@ export function EntityPicker({
   onEntityChange,
   id,
   label,
+  kind,
+  placeholder,
+  hideWholeService,
 }: {
   connectorId: string;
   value: string;
@@ -27,6 +30,9 @@ export function EntityPicker({
   onEntityChange?: (entity: SnapshotEntity | undefined) => void;
   id?: string;
   label?: string;
+  kind?: string;
+  placeholder?: string;
+  hideWholeService?: boolean;
 }) {
   const { t } = useTranslation();
   const latest = useGetConnectorsConnectorIdSnapshots(
@@ -38,7 +44,9 @@ export function EntityPicker({
   const full = useGetConnectorsConnectorIdSnapshotsSnapshotId(connectorId, latestId, {
     query: { enabled: !!connectorId && !!latestId },
   });
-  const entities = (full.data?.entities ?? []).filter((e) => !!e.externalId);
+  const entities = (full.data?.entities ?? []).filter(
+    (e) => !!e.externalId && (!kind || e.kind === kind)
+  );
 
   const pickerLabel = label ?? t('entityPicker.label');
 
@@ -56,7 +64,10 @@ export function EntityPicker({
           }}
           className="h-8 w-full appearance-none rounded-sm border border-line bg-surface pl-2.5 pr-7 text-xs text-ink outline-none focus-visible:border-accent-primary-soft"
         >
-          <option value="">{t('entityPicker.wholeService')}</option>
+          <option value="">
+            {placeholder ??
+              (hideWholeService ? t('entityPicker.label') : t('entityPicker.wholeService'))}
+          </option>
           {entities.map((entity) => (
             <option key={entity.externalId} value={entity.externalId}>
               {entity.name} ({entity.externalId})
