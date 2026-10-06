@@ -223,6 +223,36 @@ func TestUpdateRetentionSettings(t *testing.T) {
 	})
 }
 
+func TestUpdateRetentionSettingsKeepsRunbookRunSettings(t *testing.T) {
+	h := newTestHandler(t)
+	ctx := t.Context()
+	if err := h.Store.UpsertRetentionSettings(ctx, store.RetentionSettings{
+		SnapshotDays: 90, DocVersionDays: 365, AlertDays: 180, SyncRunDays: 90, AuditDays: 180,
+		HealthCheckDays: 90, ReportDays: 90, DeletedDocsDays: 30, CronExpr: "0 0 * * *",
+		RunbookOpenRunHours: 48, RunbookRunDays: 30,
+	}); err != nil {
+		t.Fatalf("UpsertRetentionSettings() error: %v", err)
+	}
+
+	body := `{"cronExpr":"0 1 * * *","snapshotDays":30,"docVersionDays":60,"alertDays":90,"syncRunDays":30,"auditDays":90,"healthCheckDays":30,"reportDays":30,"deletedDocsDays":7}`
+	rr := httptest.NewRecorder()
+	h.UpdateRetentionSettings(rr, httptest.NewRequest(http.MethodPut, "/api/system/settings/retention", strings.NewReader(body)))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body=%s", rr.Code, http.StatusOK, rr.Body.String())
+	}
+
+	rs, err := h.Store.GetRetentionSettings(ctx)
+	if err != nil {
+		t.Fatalf("GetRetentionSettings() error: %v", err)
+	}
+	if rs.SnapshotDays != 30 || rs.CronExpr != "0 1 * * *" {
+		t.Fatalf("settings not updated: %+v", rs)
+	}
+	if rs.RunbookOpenRunHours != 48 || rs.RunbookRunDays != 30 {
+		t.Fatalf("runbook run settings = %d hours / %d days, want 48 / 30", rs.RunbookOpenRunHours, rs.RunbookRunDays)
+	}
+}
+
 func TestGetBackupScheduleDefault(t *testing.T) {
 	h := newTestHandler(t)
 	req := httptest.NewRequest(http.MethodGet, "/api/system/backup/schedule", nil)

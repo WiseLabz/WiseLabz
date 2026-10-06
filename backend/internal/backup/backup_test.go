@@ -6,6 +6,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -891,6 +892,43 @@ func TestRunbookBackupJSONAndZIPRoundTrip(t *testing.T) {
 	assertNoRunbookHistory(t, zipDst)
 	if got := backupRowCount(t, zipDst, "service_snapshots"); got != 0 {
 		t.Fatalf("ZIP restored snapshots = %d, want 0", got)
+	}
+}
+
+func TestRunbookImportSkipsExistingTargetWithDifferentID(t *testing.T) {
+	ctx, src, runbook, _ := runbookBackupFixture(t)
+	bundle, err := backup.Export(ctx, src)
+	if err != nil {
+		t.Fatalf("Export(): %v", err)
+	}
+
+	dst := newTestStore(t)
+	local, _, err := dst.CreateRunbookWithSteps(ctx,
+		&store.RunbookRecord{ID: "local-runbook", Title: "Local remediation", TargetType: runbook.TargetType, TargetValue: runbook.TargetValue},
+		[]*store.RunbookStepRecord{{Kind: "manual", Title: "local step"}})
+	if err != nil {
+		t.Fatalf("create local runbook: %v", err)
+	}
+
+	res, err := backup.Import(ctx, dst, bundle)
+	if err != nil {
+		t.Fatalf("Import() with a runbook target already in use: %v", err)
+	}
+	if res.Runbooks.Imported != 0 || res.Runbooks.Skipped != 1 {
+		t.Fatalf("runbook import counts = %+v, want 0 imported / 1 skipped", res.Runbooks)
+	}
+	if res.RunbookSteps.Imported != 0 || res.RunbookSteps.Skipped != len(bundle.RunbookSteps) {
+		t.Fatalf("runbook step import counts = %+v, want 0 imported / %d skipped", res.RunbookSteps, len(bundle.RunbookSteps))
+	}
+	got, err := dst.GetRunbook(ctx, local.ID)
+	if err != nil || got.Title != "Local remediation" {
+		t.Fatalf("local runbook = %+v, %v; want it unchanged", got, err)
+	}
+	if _, err := dst.GetRunbook(ctx, runbook.ID); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("GetRunbook(bundled id) error = %v, want ErrNotFound", err)
+	}
+	if got := backupRowCount(t, dst, "runbook_steps"); got != 1 {
+		t.Fatalf("runbook step rows = %d, want only the local step", got)
 	}
 }
 

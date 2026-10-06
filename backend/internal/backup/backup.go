@@ -642,15 +642,18 @@ func importRunbooks(ctx context.Context, s *store.Store, runbooks []store.Runboo
 		return fmt.Errorf("check existing runbooks: %w", err)
 	}
 	existingIDs := make(map[string]bool, len(existingRunbooks))
+	existingTargets := make(map[string]bool, len(existingRunbooks))
 	for _, runbook := range existingRunbooks {
 		existingIDs[runbook.ID] = true
+		existingTargets[runbook.TargetType+"\x00"+runbook.TargetValue] = true
 	}
 	stepsByRunbook := make(map[string][]store.RunbookStepRecord, len(runbooks))
 	for _, step := range steps {
 		stepsByRunbook[step.RunbookID] = append(stepsByRunbook[step.RunbookID], step)
 	}
 	for _, runbook := range runbooks {
-		if existingIDs[runbook.ID] {
+		// runbooks has a unique index on (target_type, target_value), so a target match must skip too.
+		if existingIDs[runbook.ID] || existingTargets[runbook.TargetType+"\x00"+runbook.TargetValue] {
 			res.Runbooks.Skipped++
 			res.RunbookSteps.Skipped += len(stepsByRunbook[runbook.ID])
 			continue

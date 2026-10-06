@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -152,10 +153,14 @@ func (s *Store) GetRunbookRun(ctx context.Context, id string) (*RunbookRunRecord
 }
 
 // ListRunbookRuns returns one runbook's history newest first and its total
-// count. A limit outside the supported range uses the default page size.
+// count. A limit of zero or less uses the default page size of 20; a larger
+// limit is clamped to 100.
 func (s *Store) ListRunbookRuns(ctx context.Context, runbookID string, limit, offset int) ([]*RunbookRunRecord, int, error) {
-	if limit <= 0 || limit > 100 {
+	if limit <= 0 {
 		limit = 20
+	}
+	if limit > 100 {
+		limit = 100
 	}
 	if offset < 0 {
 		offset = 0
@@ -165,9 +170,20 @@ func (s *Store) ListRunbookRuns(ctx context.Context, runbookID string, limit, of
 
 // UpdateRunbookRun applies an allowlisted state or actor update only if the
 // run remains in expectedState. Every successful update refreshes activity.
+// A key outside the allowlist (state, reason, resumed_by, cancelled_by,
+// finished_at) is an error rather than being ignored. Moving a run to
+// cancelled or expired is rejected: CancelRunbookRun and ExpireOpenRunbookRuns
+// own those transitions because they also skip unfinished steps. A succeeded
+// update with an absent or empty finished_at defaults it to now.
 func (s *Store) UpdateRunbookRun(ctx context.Context, id, expectedState string, updates map[string]any) (*RunbookRunRecord, error) {
 	if len(updates) == 0 {
 		return nil, fmt.Errorf("update runbook run: no fields to update")
+	}
+	switch updates["state"] {
+	case "cancelled":
+		return nil, fmt.Errorf("update runbook run: state cancelled must be set with CancelRunbookRun")
+	case "expired":
+		return nil, fmt.Errorf("update runbook run: state expired must be set with ExpireOpenRunbookRuns")
 	}
 	var updated *RunbookRunRecord
 	err := s.WithinTransaction(ctx, func(tx *Store) error {
@@ -204,7 +220,8 @@ func (s *Store) UpdateRunbookRun(ctx context.Context, id, expectedState string, 
 // UpdateRunbookRunStep transitions one frozen step only when it is still in
 // expectedState and its parent run remains active. The parent row is locked
 // and touched in the same transaction, so cancellation and expiry serialize
-// with step progress.
+// with step progress. A key outside the allowlist (state, started_at,
+// finished_at, error, confirmed_by) is an error rather than being ignored.
 func (s *Store) UpdateRunbookRunStep(ctx context.Context, runID, stepID, expectedState string, updates map[string]any) (*RunbookRunStepRecord, error) {
 	if len(updates) == 0 {
 		return nil, fmt.Errorf("update runbook run step: no fields to update")
@@ -310,9 +327,10 @@ func (s *Store) CancelRunbookRun(ctx context.Context, id, cancelledBy string) er
 
 // InterruptRunningRunbookRuns fails in-flight runs at startup without
 // continuing them and marks their in-flight steps unknown. Manual waits are
-// intentionally unchanged.
-func (s *Store) InterruptRunningRunbookRuns(ctx context.Context) (int64, error) {
-	var affected int64
+// intentionally unchanged. It returns the IDs of the runs it transitioned, in
+// processing order, so callers can publish an update per run.
+func (s *Store) InterruptRunningRunbookRuns(ctx context.Context) ([]string, error) {
+	interrupted := make([]string, 0)
 	err := s.WithinTransaction(ctx, func(tx *Store) error {
 		ids, err := runbookRunIDs(ctx, tx.db, s.driver == "postgres", `state = 'running'`)
 		if err != nil {
@@ -341,27 +359,31 @@ func (s *Store) InterruptRunningRunbookRuns(ctx context.Context) (int64, error) 
 			if err != nil {
 				return fmt.Errorf("count interrupted runbook runs: %w", err)
 			}
-			affected += n
+			if n == 1 {
+				interrupted = append(interrupted, id)
+			}
 		}
 		return nil
 	})
 	if err != nil {
-		return 0, fmt.Errorf("interrupt running runbook runs: %w", err)
+		return nil, fmt.Errorf("interrupt running runbook runs: %w", err)
 	}
-	return affected, nil
+	return interrupted, nil
 }
 
 // ExpireOpenRunbookRuns expires stale manual waits and failed runs, skipping
-// unfinished steps. An empty cutoff is a no-op.
-func (s *Store) ExpireOpenRunbookRuns(ctx context.Context, before string) (int64, error) {
+// unfinished steps. It returns the IDs of the runs it transitioned, in
+// processing order, so callers can publish an update per run. An empty cutoff
+// is a no-op that returns an empty slice.
+func (s *Store) ExpireOpenRunbookRuns(ctx context.Context, before string) ([]string, error) {
+	expired := make([]string, 0)
 	if before == "" {
-		return 0, nil
+		return expired, nil
 	}
 	cutoff, err := normalizeRunbookRunCutoff(before)
 	if err != nil {
-		return 0, fmt.Errorf("expire open runbook runs: %w", err)
+		return nil, fmt.Errorf("expire open runbook runs: %w", err)
 	}
-	var affected int64
 	err = s.WithinTransaction(ctx, func(tx *Store) error {
 		ids, err := runbookRunIDs(ctx, tx.db, s.driver == "postgres", `state IN ('waiting_manual','failed') AND updated_at < ?`, cutoff)
 		if err != nil {
@@ -390,14 +412,16 @@ func (s *Store) ExpireOpenRunbookRuns(ctx context.Context, before string) (int64
 			if err != nil {
 				return fmt.Errorf("count expired runbook runs: %w", err)
 			}
-			affected += n
+			if n == 1 {
+				expired = append(expired, id)
+			}
 		}
 		return nil
 	})
 	if err != nil {
-		return 0, fmt.Errorf("expire open runbook runs: %w", err)
+		return nil, fmt.Errorf("expire open runbook runs: %w", err)
 	}
-	return affected, nil
+	return expired, nil
 }
 
 // PruneRunbookRuns removes terminal history older than before. An empty
@@ -526,9 +550,13 @@ func scanRunbookRunStep(row rowScanner) (*RunbookRunStepRecord, error) {
 }
 
 func updateRunbookRun(ctx context.Context, db DBTX, id, expectedState string, updates map[string]any, now string) error {
+	allowed := []string{"state", "reason", "resumed_by", "cancelled_by", "finished_at"}
+	if key, ok := unsupportedRunbookRunField(updates, allowed); ok {
+		return fmt.Errorf("unsupported runbook run field %q", key)
+	}
 	sets := make([]string, 0, len(updates)+1)
 	args := make([]any, 0, len(updates)+3)
-	for _, key := range []string{"state", "reason", "resumed_by", "cancelled_by", "finished_at"} {
+	for _, key := range allowed {
 		value, ok := updates[key]
 		if !ok {
 			continue
@@ -561,9 +589,13 @@ func updateRunbookRun(ctx context.Context, db DBTX, id, expectedState string, up
 }
 
 func updateRunbookRunStep(ctx context.Context, db DBTX, runID, stepID, expectedState string, updates map[string]any) error {
+	allowed := []string{"state", "started_at", "finished_at", "error", "confirmed_by"}
+	if key, ok := unsupportedRunbookRunField(updates, allowed); ok {
+		return fmt.Errorf("unsupported runbook run step field %q", key)
+	}
 	sets := make([]string, 0, len(updates))
 	args := make([]any, 0, len(updates)+3)
-	for _, key := range []string{"state", "started_at", "finished_at", "error", "confirmed_by"} {
+	for _, key := range allowed {
 		value, ok := updates[key]
 		if !ok {
 			continue
@@ -592,6 +624,16 @@ func updateRunbookRunStep(ctx context.Context, db DBTX, runID, stepID, expectedS
 		return ErrConflict
 	}
 	return nil
+}
+
+// unsupportedRunbookRunField returns a key of updates that is not in allowed.
+func unsupportedRunbookRunField(updates map[string]any, allowed []string) (string, bool) {
+	for key := range updates {
+		if !slices.Contains(allowed, key) {
+			return key, true
+		}
+	}
+	return "", false
 }
 
 func lockRunbookRun(ctx context.Context, db DBTX, postgres bool, id string) (*RunbookRunRecord, error) {
@@ -682,8 +724,9 @@ func normalizedRunbookRunUpdates(updates map[string]any, now string) (map[string
 			if _, ok := normalized["finished_at"]; !ok {
 				normalized["finished_at"] = ""
 			}
-		case "succeeded", "cancelled", "expired":
-			if _, ok := normalized["finished_at"]; !ok {
+		case "succeeded":
+			// An empty finished_at would store NULL and make the terminal run unprunable.
+			if value, ok := normalized["finished_at"]; !ok || value == nil || value == "" {
 				normalized["finished_at"] = now
 			}
 		}

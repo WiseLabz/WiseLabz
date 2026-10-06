@@ -267,7 +267,7 @@ func (s *Store) ListEntityRunbookSteps(ctx context.Context, members []EntityMemb
 		preds = append(preds, `(s.connector_id = ? AND s.entity_ref = ?)`)
 		args = append(args, m.ConnectorID, m.Ref)
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT r.id, r.title, r.body, s.id, s.title, s.verb
+	rows, err := s.db.QueryContext(ctx, `SELECT r.id, r.title, r.body, s.id, s.title, COALESCE(s.verb, '')
 		FROM runbooks r JOIN runbook_steps s ON s.runbook_id = r.id
 		WHERE `+strings.Join(preds, ` OR `)+`
 		ORDER BY r.title, r.id, s.position, s.id LIMIT ?`, append(args, limit)...)

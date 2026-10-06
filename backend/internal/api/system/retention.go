@@ -28,15 +28,17 @@ func (h *Handler) GetRetentionSettings(w http.ResponseWriter, r *http.Request) {
 		// keep in sync with config.go retention defaults
 		slog.Warn("retention settings not found, returning default", "error", err)
 		rs = store.RetentionSettings{
-			SnapshotDays:    90,
-			DocVersionDays:  365,
-			AlertDays:       180,
-			SyncRunDays:     90,
-			AuditDays:       180,
-			HealthCheckDays: 90,
-			ReportDays:      90,
-			DeletedDocsDays: 30,
-			CronExpr:        "0 0 * * *",
+			SnapshotDays:        90,
+			DocVersionDays:      365,
+			AlertDays:           180,
+			SyncRunDays:         90,
+			AuditDays:           180,
+			HealthCheckDays:     90,
+			ReportDays:          90,
+			DeletedDocsDays:     30,
+			CronExpr:            "0 0 * * *",
+			RunbookOpenRunHours: store.DefaultRunbookOpenRunHours,
+			RunbookRunDays:      store.DefaultRunbookRunDays,
 		}
 	}
 
@@ -89,10 +91,18 @@ func (h *Handler) UpdateRetentionSettings(w http.ResponseWriter, r *http.Request
 	}
 
 	// Omitting deletedDocsDays keeps the stored value so older clients don't reset it.
+	// The runbook run settings are not part of the request yet, so they always carry through.
 	deletedDays := 30
+	runbookOpenRunHours := store.DefaultRunbookOpenRunHours
+	runbookRunDays := store.DefaultRunbookRunDays
+	current, currentErr := h.Store.GetRetentionSettings(r.Context())
+	if currentErr == nil {
+		runbookOpenRunHours = current.RunbookOpenRunHours
+		runbookRunDays = current.RunbookRunDays
+	}
 	if req.DeletedDocsDays != nil {
 		deletedDays = *req.DeletedDocsDays
-	} else if current, err := h.Store.GetRetentionSettings(r.Context()); err == nil {
+	} else if currentErr == nil {
 		deletedDays = current.DeletedDocsDays
 	}
 	var dayErrs []httputil.FieldError
@@ -119,15 +129,17 @@ func (h *Handler) UpdateRetentionSettings(w http.ResponseWriter, r *http.Request
 	}
 
 	newSettings := store.RetentionSettings{
-		SnapshotDays:    req.SnapshotDays,
-		DocVersionDays:  req.DocVersionDays,
-		AlertDays:       req.AlertDays,
-		SyncRunDays:     req.SyncRunDays,
-		AuditDays:       req.AuditDays,
-		HealthCheckDays: req.HealthCheckDays,
-		ReportDays:      req.ReportDays,
-		DeletedDocsDays: deletedDays,
-		CronExpr:        req.CronExpr,
+		SnapshotDays:        req.SnapshotDays,
+		DocVersionDays:      req.DocVersionDays,
+		AlertDays:           req.AlertDays,
+		SyncRunDays:         req.SyncRunDays,
+		AuditDays:           req.AuditDays,
+		HealthCheckDays:     req.HealthCheckDays,
+		ReportDays:          req.ReportDays,
+		DeletedDocsDays:     deletedDays,
+		CronExpr:            req.CronExpr,
+		RunbookOpenRunHours: runbookOpenRunHours,
+		RunbookRunDays:      runbookRunDays,
 	}
 	if err := h.Store.UpsertRetentionSettings(r.Context(), newSettings); err != nil {
 		httputil.Errorf(w, err)
@@ -168,15 +180,17 @@ func (h *Handler) InitRetentionJob(ctx context.Context) {
 		}
 		slog.Info("initializing retention settings with defaults")
 		rs = store.RetentionSettings{
-			SnapshotDays:    h.Config.Retention.SnapshotDays,
-			DocVersionDays:  h.Config.Retention.DocVersionDays,
-			AlertDays:       h.Config.Retention.AlertDays,
-			SyncRunDays:     h.Config.Retention.SyncRunDays,
-			AuditDays:       h.Config.Retention.AuditDays,
-			HealthCheckDays: h.Config.Retention.HealthCheckDays,
-			ReportDays:      h.Config.Retention.ReportDays,
-			DeletedDocsDays: h.Config.Retention.DeletedDocsDays,
-			CronExpr:        h.Config.Retention.CronExpr,
+			SnapshotDays:        h.Config.Retention.SnapshotDays,
+			DocVersionDays:      h.Config.Retention.DocVersionDays,
+			AlertDays:           h.Config.Retention.AlertDays,
+			SyncRunDays:         h.Config.Retention.SyncRunDays,
+			AuditDays:           h.Config.Retention.AuditDays,
+			HealthCheckDays:     h.Config.Retention.HealthCheckDays,
+			ReportDays:          h.Config.Retention.ReportDays,
+			DeletedDocsDays:     h.Config.Retention.DeletedDocsDays,
+			CronExpr:            h.Config.Retention.CronExpr,
+			RunbookOpenRunHours: store.DefaultRunbookOpenRunHours,
+			RunbookRunDays:      store.DefaultRunbookRunDays,
 		}
 		if err := h.Store.UpsertRetentionSettings(ctx, rs); err != nil {
 			slog.Error("failed to initialize retention settings", "error", err)

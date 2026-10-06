@@ -219,6 +219,10 @@ func TestInitRetentionJobCreatesDefaultSettingsIfMissing(t *testing.T) {
 	if settings.UpdatedAt == "" {
 		t.Error("UpdatedAt should be set after init")
 	}
+	if settings.RunbookOpenRunHours != store.DefaultRunbookOpenRunHours || settings.RunbookRunDays != store.DefaultRunbookRunDays {
+		t.Errorf("runbook run settings = %d hours / %d days, want %d / %d",
+			settings.RunbookOpenRunHours, settings.RunbookRunDays, store.DefaultRunbookOpenRunHours, store.DefaultRunbookRunDays)
+	}
 }
 
 func TestInitBackupJobCreatesDefaultScheduleIfMissing(t *testing.T) {

@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -343,8 +345,11 @@ func TestRunbookRunInterruptExpireAndPrune(t *testing.T) {
 	if _, err := s.UpdateRunbookRun(ctx, waitingRun.ID, "running", map[string]any{"state": "waiting_manual"}); err != nil {
 		t.Fatal(err)
 	}
-	if n, err := s.InterruptRunningRunbookRuns(ctx); err != nil || n != 1 {
-		t.Fatalf("InterruptRunningRunbookRuns() = %d, %v; want one interrupted run", n, err)
+	if ids, err := s.InterruptRunningRunbookRuns(ctx); err != nil || len(ids) != 1 || ids[0] != activeRun.ID {
+		t.Fatalf("InterruptRunningRunbookRuns() = %v, %v; want only the running run %s", ids, err, activeRun.ID)
+	}
+	if ids, err := s.InterruptRunningRunbookRuns(ctx); err != nil || ids == nil || len(ids) != 0 {
+		t.Fatalf("second InterruptRunningRunbookRuns() = %v, %v; want a non-nil empty slice", ids, err)
 	}
 	interrupted, interruptedSteps, err := s.GetRunbookRun(ctx, activeRun.ID)
 	if err != nil || interrupted.State != "failed" || interrupted.Reason != "interrupted" || interruptedSteps[0].State != "unknown" || interruptedSteps[0].FinishedAt == "" {
@@ -391,8 +396,12 @@ func TestRunbookRunInterruptExpireAndPrune(t *testing.T) {
 	_, oldWaiting, _ := setOpenRun("waiting_manual", old)
 	_, boundaryFailed, _ := setOpenRun("failed", cutoffFixed)
 	_, recentFailed, _ := setOpenRun("failed", after)
-	if n, err := s.ExpireOpenRunbookRuns(ctx, cutoff); err != nil || n != 2 {
-		t.Fatalf("ExpireOpenRunbookRuns() = %d, %v; want stale failed and manual runs", n, err)
+	if ids, err := s.ExpireOpenRunbookRuns(ctx, ""); err != nil || ids == nil || len(ids) != 0 {
+		t.Fatalf("ExpireOpenRunbookRuns(empty) = %v, %v; want a non-nil empty slice", ids, err)
+	}
+	expiredIDs, err := s.ExpireOpenRunbookRuns(ctx, cutoff)
+	if err != nil || len(expiredIDs) != 2 || !slices.Contains(expiredIDs, oldFailed.ID) || !slices.Contains(expiredIDs, oldWaiting.ID) {
+		t.Fatalf("ExpireOpenRunbookRuns() = %v, %v; want stale failed run %s and manual run %s", expiredIDs, err, oldFailed.ID, oldWaiting.ID)
 	}
 	gotOld, gotOldSteps, err := s.GetRunbookRun(ctx, oldFailed.ID)
 	if err != nil || gotOld.State != "expired" || gotOldSteps[0].State != "skipped" || gotOldSteps[0].FinishedAt == "" {
@@ -458,6 +467,196 @@ func TestRunbookRunInterruptExpireAndPrune(t *testing.T) {
 	for _, id := range []string{boundarySuccess.ID, newerSuccess.ID} {
 		if _, _, err := s.GetRunbookRun(ctx, id); err != nil {
 			t.Fatalf("run %s at/after prune cutoff was removed: %v", id, err)
+		}
+	}
+}
+
+// createOpenManualRunbookRun starts a run on a fresh runbook with one pending
+// manual step per title.
+func createOpenManualRunbookRun(t *testing.T, s *Store, titles ...string) (*RunbookRunRecord, []*RunbookRunStepRecord) {
+	t.Helper()
+	book, _ := createRunbookRunFixture(t, s)
+	frozen := make([]*RunbookRunStepRecord, 0, len(titles))
+	for _, title := range titles {
+		frozen = append(frozen, runbookRunStep("manual", title, "", ""))
+	}
+	run, steps, err := s.CreateRunbookRun(context.Background(), book.ID, "starter", frozen)
+	if err != nil {
+		t.Fatalf("CreateRunbookRun() error: %v", err)
+	}
+	return run, steps
+}
+
+func runbookRunStepCount(t *testing.T, s *Store, runID string) int {
+	t.Helper()
+	var n int
+	if err := s.db.QueryRowContext(context.Background(), `SELECT COUNT(*) FROM runbook_run_steps WHERE run_id = ?`, runID).Scan(&n); err != nil {
+		t.Fatalf("count steps of run %s: %v", runID, err)
+	}
+	return n
+}
+
+func TestRunbookRunUpdateRejectsUnsupportedInput(t *testing.T) {
+	ctx := context.Background()
+	s := newDocTestStore(t)
+	run, steps := createOpenManualRunbookRun(t, s, "Check")
+
+	if _, err := s.UpdateRunbookRun(ctx, run.ID, "running", map[string]any{"state": "failed", "resumedBy": "typo"}); err == nil || !strings.Contains(err.Error(), "resumedBy") {
+		t.Fatalf("UpdateRunbookRun(unknown key) error = %v, want one naming resumedBy", err)
+	}
+	if _, err := s.UpdateRunbookRunStep(ctx, run.ID, steps[0].ID, "pending", map[string]any{"state": "running", "startedAt": "typo"}); err == nil || !strings.Contains(err.Error(), "startedAt") {
+		t.Fatalf("UpdateRunbookRunStep(unknown key) error = %v, want one naming startedAt", err)
+	}
+	got, gotSteps, err := s.GetRunbookRun(ctx, run.ID)
+	if err != nil || got.State != "running" || got.UpdatedAt != run.UpdatedAt || gotSteps[0].State != "pending" || gotSteps[0].StartedAt != "" {
+		t.Fatalf("run after rejected updates = %+v, steps %+v, err %v; want nothing changed", got, gotSteps, err)
+	}
+
+	for state, fn := range map[string]string{"cancelled": "CancelRunbookRun", "expired": "ExpireOpenRunbookRuns"} {
+		if _, err := s.UpdateRunbookRun(ctx, run.ID, "running", map[string]any{"state": state}); err == nil || !strings.Contains(err.Error(), fn) {
+			t.Fatalf("UpdateRunbookRun(state %s) error = %v, want one naming %s", state, err, fn)
+		}
+	}
+	got, gotSteps, err = s.GetRunbookRun(ctx, run.ID)
+	if err != nil || got.State != "running" || got.FinishedAt != "" || gotSteps[0].State != "pending" {
+		t.Fatalf("run after rejected terminal states = %+v, steps %+v, err %v; want it still open", got, gotSteps, err)
+	}
+
+	done, err := s.UpdateRunbookRun(ctx, run.ID, "running", map[string]any{"state": "succeeded", "finished_at": ""})
+	if err != nil || done.State != "succeeded" || !hasNineFractionalDigits(done.FinishedAt) {
+		t.Fatalf("succeeded run with empty finished_at = %+v, %v; want finished_at defaulted to now", done, err)
+	}
+}
+
+func TestRunbookRunCancelWhileWaitingAndFailed(t *testing.T) {
+	ctx := context.Background()
+	s := newDocTestStore(t)
+	run, steps := createOpenManualRunbookRun(t, s, "Check", "Later")
+	if _, err := s.UpdateRunbookRunStep(ctx, run.ID, steps[0].ID, "pending", map[string]any{"state": "waiting"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.UpdateRunbookRun(ctx, run.ID, "running", map[string]any{"state": "waiting_manual"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.CancelRunbookRun(ctx, run.ID, "canceller"); err != nil {
+		t.Fatalf("CancelRunbookRun(waiting_manual) error: %v", err)
+	}
+	got, gotSteps, err := s.GetRunbookRun(ctx, run.ID)
+	if err != nil || got.State != "cancelled" || got.CancelledBy == nil || *got.CancelledBy != "canceller" || len(gotSteps) != 2 || gotSteps[0].State != "skipped" || gotSteps[1].State != "skipped" {
+		t.Fatalf("cancelled waiting run = %+v, steps %+v, err %v; want both steps skipped", got, gotSteps, err)
+	}
+	if err := s.CancelRunbookRun(ctx, run.ID, "canceller"); !errors.Is(err, ErrConflict) {
+		t.Fatalf("second CancelRunbookRun() = %v, want ErrConflict", err)
+	}
+
+	failed, _ := createOpenManualRunbookRun(t, s, "Check")
+	if _, err := s.UpdateRunbookRun(ctx, failed.ID, "running", map[string]any{"state": "failed", "reason": "boom"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.CancelRunbookRun(ctx, failed.ID, "canceller"); err != nil {
+		t.Fatalf("CancelRunbookRun(failed) error: %v", err)
+	}
+	if got, _, err := s.GetRunbookRun(ctx, failed.ID); err != nil || got.State != "cancelled" {
+		t.Fatalf("cancelled failed run = %+v, %v", got, err)
+	}
+}
+
+func TestRunbookRunResumeGuardAndExpireSkipsRunning(t *testing.T) {
+	ctx := context.Background()
+	s := newDocTestStore(t)
+	waiting, waitingSteps := createOpenManualRunbookRun(t, s, "Check")
+	if _, err := s.UpdateRunbookRunStep(ctx, waiting.ID, waitingSteps[0].ID, "pending", map[string]any{"state": "waiting"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.UpdateRunbookRun(ctx, waiting.ID, "running", map[string]any{"state": "waiting_manual"}); err != nil {
+		t.Fatal(err)
+	}
+	// Resume is only valid from failed; a manual wait must be confirmed instead.
+	if _, err := s.UpdateRunbookRun(ctx, waiting.ID, "failed", map[string]any{"state": "running", "resumed_by": "resumer"}); !errors.Is(err, ErrConflict) {
+		t.Fatalf("resume a waiting_manual run = %v, want ErrConflict", err)
+	}
+	if got, _, err := s.GetRunbookRun(ctx, waiting.ID); err != nil || got.State != "waiting_manual" {
+		t.Fatalf("run after rejected resume = %+v, %v; want waiting_manual", got, err)
+	}
+
+	running, _ := createOpenManualRunbookRun(t, s, "Check")
+	old := runbookRunTimestamp(time.Now().Add(-48 * time.Hour))
+	if _, err := s.db.ExecContext(ctx, `UPDATE runbook_runs SET updated_at = ? WHERE id = ?`, old, running.ID); err != nil {
+		t.Fatal(err)
+	}
+	cutoff := time.Now().UTC().Add(-24 * time.Hour).Format(time.RFC3339)
+	if ids, err := s.ExpireOpenRunbookRuns(ctx, cutoff); err != nil || len(ids) != 0 {
+		t.Fatalf("ExpireOpenRunbookRuns() = %v, %v; want the stale running run left alone", ids, err)
+	}
+	if got, _, err := s.GetRunbookRun(ctx, running.ID); err != nil || got.State != "running" {
+		t.Fatalf("stale running run = %+v, %v; want running", got, err)
+	}
+}
+
+func TestRunbookRunPruneKeepsOpenAndDeletesTerminalHistory(t *testing.T) {
+	ctx := context.Background()
+	s := newDocTestStore(t)
+	old := runbookRunTimestamp(time.Now().Add(-48 * time.Hour))
+	cutoff := time.Now().UTC().Add(-24 * time.Hour).Format(time.RFC3339)
+	failRun := func(id string) {
+		t.Helper()
+		if _, err := s.UpdateRunbookRun(ctx, id, "running", map[string]any{"state": "failed", "reason": "boom"}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := s.db.ExecContext(ctx, `UPDATE runbook_runs SET updated_at = ? WHERE id = ?`, old, id); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	cancelled, _ := createOpenManualRunbookRun(t, s, "Check")
+	if err := s.CancelRunbookRun(ctx, cancelled.ID, "canceller"); err != nil {
+		t.Fatal(err)
+	}
+	expired, _ := createOpenManualRunbookRun(t, s, "Check")
+	failRun(expired.ID)
+	if ids, err := s.ExpireOpenRunbookRuns(ctx, cutoff); err != nil || len(ids) != 1 || ids[0] != expired.ID {
+		t.Fatalf("ExpireOpenRunbookRuns() = %v, %v; want the stale failed run %s", ids, err, expired.ID)
+	}
+	for _, id := range []string{cancelled.ID, expired.ID} {
+		if _, err := s.db.ExecContext(ctx, `UPDATE runbook_runs SET finished_at = ? WHERE id = ?`, old, id); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// An old failed run is still open (no finished_at), so pruning must keep it.
+	openRun, _ := createOpenManualRunbookRun(t, s, "Check")
+	failRun(openRun.ID)
+
+	if n, err := s.PruneRunbookRuns(ctx, cutoff); err != nil || n != 2 {
+		t.Fatalf("PruneRunbookRuns() = %d, %v; want the cancelled and expired runs", n, err)
+	}
+	if got, _, err := s.GetRunbookRun(ctx, openRun.ID); err != nil || got.State != "failed" || runbookRunStepCount(t, s, openRun.ID) != 1 {
+		t.Fatalf("old open run = %+v, %v; want it kept with its steps", got, err)
+	}
+	for _, id := range []string{cancelled.ID, expired.ID} {
+		if _, _, err := s.GetRunbookRun(ctx, id); !errors.Is(err, ErrNotFound) {
+			t.Fatalf("pruned run %s lookup error = %v, want ErrNotFound", id, err)
+		}
+		if n := runbookRunStepCount(t, s, id); n != 0 {
+			t.Fatalf("pruned run %s kept %d step rows, want 0", id, n)
+		}
+	}
+}
+
+func TestRunbookRunOrphanedActiveRunsCoexist(t *testing.T) {
+	ctx := context.Background()
+	s := newDocTestStore(t)
+	enableRunbookRunForeignKeys(t, s)
+	first, _ := createOpenManualRunbookRun(t, s, "Check")
+	second, _ := createOpenManualRunbookRun(t, s, "Check")
+	for _, run := range []*RunbookRunRecord{first, second} {
+		if err := s.DeleteRunbook(ctx, *run.RunbookID); err != nil {
+			t.Fatalf("DeleteRunbook() error: %v", err)
+		}
+	}
+	for _, id := range []string{first.ID, second.ID} {
+		got, _, err := s.GetRunbookRun(ctx, id)
+		if err != nil || got.RunbookID != nil || got.State != "running" {
+			t.Fatalf("orphaned run %s = %+v, %v; want a running run with a nil runbook ID", id, got, err)
 		}
 	}
 }

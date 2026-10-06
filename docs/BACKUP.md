@@ -36,6 +36,12 @@ text and connector/doc/entity links. Import restores them additively by ID.
   connector snapshots at the next sync, and overrides refer to members by that
   connector-local key, so a restored override stays *dormant* until its member
   is observed again and then applies without further action.
+- **Runbooks** (`runbooks`, `runbookSteps`) — authored runbooks and their
+  steps, including each step's kind and timeout. A runbook's snapshot link is
+  not exported (snapshots are operational data), while its doc link is kept.
+  Import is additive: a runbook whose ID or target (type and value) already
+  exists is skipped together with its steps, so local edits are never mixed
+  with the backup's steps.
 - **AI config summary** (`aiConfig`) — `enabled`, `provider`, `model`,
   `baseUrl`, `mode`. Informational only (see Exclusions).
 
@@ -51,6 +57,9 @@ text and connector/doc/entity links. Import restores them additively by ID.
   visibility; **it is never applied on import** — a working AI config in the
   target instance would otherwise be silently broken by importing a summary
   with no usable key.
+- **Runbook run history** (`runbook_runs`, `runbook_run_steps`) — operational
+  history of executed runbooks, not authored content, so it is not exported.
+  A restored runbook starts with no runs.
 - **Notification channel config** (`notification_config.config_json`) — not
   exported at all. It's an arbitrary JSON blob (SMTP credentials, webhook
   URLs/secrets) with no schema WiseLabz can use to redact just the secret

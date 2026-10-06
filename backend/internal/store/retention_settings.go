@@ -6,6 +6,13 @@ import (
 	"time"
 )
 
+// Defaults for the runbook run retention columns. They mirror the column
+// defaults of migration 000063; 0 run days means keep run history forever.
+const (
+	DefaultRunbookOpenRunHours = 24
+	DefaultRunbookRunDays      = 90
+)
+
 // RetentionSettings represents the data-retention cleanup configuration
 // (single-row table with id='default'). Mirrors BackupSchedule's pattern.
 type RetentionSettings struct {
