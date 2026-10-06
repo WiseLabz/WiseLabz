@@ -5,10 +5,8 @@ import { useQueryClient } from '@tanstack/react-query';
 import { isAxiosError } from 'axios';
 import { toast } from '../../lib/toast';
 import {
-  getEntitiesId,
   useGetEntityOverrides,
   useDeleteEntityOverridesId,
-  getGetEntityOverridesQueryKey,
 } from '../../api/generated/search/search';
 import { useGetUsers } from '../../api/generated/users/users';
 import type { EntityOverride, EntityOverrideMember } from '../../api/model';
@@ -18,6 +16,7 @@ import { ToneTag } from '../../components/ui/ToneTag';
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
 import { EmptyState, ErrorState, SkeletonRows } from '../../components/ui/states';
 import { fullDate } from '../../lib/time';
+import { invalidateEntityCaches, isEntityVisible } from './overrideCache';
 
 function MemberItem({ member }: { member: EntityOverrideMember }) {
   return (
@@ -55,53 +54,53 @@ export function EntityOverridesPage() {
     return map;
   }, [usersQuery.data]);
 
+  // Never show the raw user id: placeholder while the list loads, readable fallback otherwise.
+  const creatorName = (userId: string) =>
+    usersById.get(userId) ||
+    (usersQuery.isLoading ? '…' : t('entities.overrides.unknownUser'));
+
   const overrides = useGetEntityOverrides();
+  const announceRemoved = async (res: EntityOverride | undefined) => {
+    const entityIds = Array.from(
+      new Set(
+        (res?.members ?? []).map((m) => m.entityId).filter((id): id is string => Boolean(id))
+      )
+    );
+
+    if (entityIds.length !== 1) {
+      toast.success(t('entities.overrides.removeSuccess'));
+      return;
+    }
+
+    const targetEntityId = entityIds[0];
+    if (await isEntityVisible(queryClient, targetEntityId)) {
+      toast.success(t('entities.overrides.removeSuccess'), {
+        action: {
+          label: t('entities.overrides.viewIdentity'),
+          onClick: () => navigate(`/entities/${encodeURIComponent(targetEntityId)}`),
+        },
+      });
+    } else {
+      toast.success(t('entities.overrides.removeSuccessNotVisible'));
+    }
+  };
+
   const deleteMutation = useDeleteEntityOverridesId({
     mutation: {
-      onSuccess: async (res) => {
-        void queryClient.invalidateQueries({ queryKey: getGetEntityOverridesQueryKey() });
-        void queryClient.invalidateQueries({
-          predicate: (q) =>
-            typeof q.queryKey[0] === 'string' && q.queryKey[0].startsWith('/entities/'),
-        });
+      onSuccess: (res) => {
+        invalidateEntityCaches(queryClient);
         setToRemove(null);
-
-        const entityIds = Array.from(
-          new Set(
-            (res?.members ?? [])
-              .map((m) => m.entityId)
-              .filter((id): id is string => Boolean(id))
-          )
-        );
-
-        if (entityIds.length === 0 || entityIds.length > 1) {
-          toast.success(t('entities.overrides.removeSuccess'));
-          return;
-        }
-
-        const targetEntityId = entityIds[0];
-        try {
-          await getEntitiesId(targetEntityId);
-          toast.success(t('entities.overrides.removeSuccess'), {
-            action: {
-              label: t('entities.overrides.viewIdentity'),
-              onClick: () => navigate(`/entities/${encodeURIComponent(targetEntityId)}`),
-            },
-          });
-        } catch (err) {
-          if (isAxiosError(err) && err.response?.status === 404) {
-            toast.success(t('entities.overrides.removeSuccessNotVisible'));
-          } else {
-            toast.success(t('entities.overrides.removeSuccess'), {
-              action: {
-                label: t('entities.overrides.viewIdentity'),
-                onClick: () => navigate(`/entities/${encodeURIComponent(targetEntityId)}`),
-              },
-            });
-          }
-        }
+        // Not awaited: the visibility probe must not keep the mutation pending.
+        void announceRemoved(res);
       },
-      onError: () => {
+      onError: (err) => {
+        // The override may already be gone (reconcile failed after the delete, or
+        // another admin removed it): resync the list and close the stale dialog.
+        const status = isAxiosError(err) ? err.response?.status : undefined;
+        if (status === 404 || (status !== undefined && status >= 500)) {
+          invalidateEntityCaches(queryClient);
+          setToRemove(null);
+        }
         toast.error(t('entities.overrides.removeError'));
       },
     },
@@ -200,7 +199,7 @@ export function EntityOverridesPage() {
                   <div className="flex flex-wrap items-center gap-3 text-2xs text-ink-faint">
                     <span>
                       {t('entities.overrides.createdBy', {
-                        user: usersById.get(override.createdBy) || override.createdBy,
+                        user: creatorName(override.createdBy),
                       })}
                     </span>
                     <span>·</span>

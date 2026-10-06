@@ -84,4 +84,40 @@ describe('EntityPicker', () => {
 
     expect(screen.getByText('No entities of this kind found on this connector.')).toBeInTheDocument();
   });
+
+  it('collapses same-ref entities of a kind into one option', () => {
+    const onEntityChange = vi.fn();
+    snapshotDetailHook.mockReturnValue({
+      data: {
+        entities: [
+          { kind: 'vm', name: 'dup' },
+          { kind: 'vm', name: 'dup' },
+          { externalId: 'dup', kind: 'vm', name: 'other' },
+        ],
+      },
+    });
+
+    render(
+      <EntityPicker connectorId="c1" value="" kind="vm" onChange={vi.fn()} onEntityChange={onEntityChange} />
+    );
+
+    expect(screen.getAllByRole('option', { name: /dup|other/ })).toHaveLength(1);
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'dup' } });
+    expect(onEntityChange).toHaveBeenCalledWith(expect.objectContaining({ name: 'dup' }));
+  });
+
+  it('shows loading, no-snapshot and error states', () => {
+    snapshotListHook.mockReturnValue({ data: undefined, isLoading: true });
+    snapshotDetailHook.mockReturnValue({ data: undefined });
+    const { rerender } = render(<EntityPicker connectorId="c1" value="" onChange={vi.fn()} />);
+    expect(screen.getByText('Loading entities…')).toBeInTheDocument();
+
+    snapshotListHook.mockReturnValue({ data: [] });
+    rerender(<EntityPicker connectorId="c1" value="" onChange={vi.fn()} />);
+    expect(screen.getByText(/No snapshot yet/)).toBeInTheDocument();
+
+    snapshotListHook.mockReturnValue({ data: undefined, isError: true });
+    rerender(<EntityPicker connectorId="c1" value="" onChange={vi.fn()} />);
+    expect(screen.getByText('Could not load entities for this connector.')).toBeInTheDocument();
+  });
 });

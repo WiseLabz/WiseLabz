@@ -30,6 +30,10 @@ vi.mock('../../api/generated/search/search', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../api/generated/search/search')>()),
   useGetEntitiesId: (id: string) => entityHook(id),
   getEntitiesId: (id: string) => getEntitiesIdMock(id),
+  getGetEntitiesIdQueryOptions: (id: string) => ({
+    queryKey: [`/entities/${id}`],
+    queryFn: () => getEntitiesIdMock(id),
+  }),
   usePostEntityOverrides: (options?: {
     mutation?: { onError?: (err: unknown) => void };
   }) => ({
@@ -320,7 +324,7 @@ describe('EntityDetailPage', () => {
       );
       expect(getEntitiesIdMock).toHaveBeenCalledWith('entity-new');
       expect(entityHook).toHaveBeenCalledWith('entity-new');
-      expect(qc.getQueryState(['/entities/entity-new'])?.isInvalidated).toBe(true);
+      expect(qc.getQueryState(['/entities/entity-new'])?.isInvalidated).toBe(false); // invalidated, then refetched by the visibility probe
       expect(qc.getQueryState(['/entity-overrides'])?.isInvalidated).toBe(true);
     });
     expect(toastMock.success).toHaveBeenCalledWith('Member detached.');
@@ -389,7 +393,7 @@ describe('EntityDetailPage', () => {
       );
       expect(getEntitiesIdMock).toHaveBeenCalledWith('entity-merged');
       expect(entityHook).toHaveBeenCalledWith('entity-merged');
-      expect(qc.getQueryState(['/entities/entity-merged'])?.isInvalidated).toBe(true);
+      expect(qc.getQueryState(['/entities/entity-merged'])?.isInvalidated).toBe(false); // invalidated, then refetched by the visibility probe
       expect(qc.getQueryState(['/entity-overrides'])?.isInvalidated).toBe(true);
     });
     expect(toastMock.success).toHaveBeenCalledWith('Members merged.');
@@ -717,7 +721,10 @@ describe('EntityDetailPage', () => {
       expect(toastMock.error).toHaveBeenCalledWith('Could not merge members.');
       expect(qc.getQueryState(['/entities/entity-1'])?.isInvalidated).toBe(true);
       expect(qc.getQueryState(['/entity-overrides'])?.isInvalidated).toBe(true);
-      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
+    const panel = screen.getByRole('dialog', { hidden: true }).querySelector('[class*="transition-"]');
+    await waitFor(() => {
+      expect(panel).toHaveClass('opacity-0');
     });
   });
 
@@ -740,6 +747,94 @@ describe('EntityDetailPage', () => {
 
     fireEvent.change(pickerSelect, { target: { value: 'bare-metal' } });
     expect(within(dialog).getByRole('button', { name: 'Merge' })).toBeEnabled();
+  });
+
+  it('keeps the merge dialog and form when the request gets no response', async () => {
+    postOverrideMutate.mockImplementation(() => {
+      throw new AxiosError('Network Error', 'ERR_NETWORK');
+    });
+    mount();
+
+    fireEvent.click(screen.getByRole('button', { name: /merge router/i }));
+    const dialog = await screen.findByRole('dialog');
+    fireEvent.change(within(dialog).getByLabelText('Target entity'), { target: { value: '43' } });
+    fireEvent.change(within(dialog).getByLabelText('Note (optional)'), { target: { value: 'keep me' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Merge' }));
+
+    await waitFor(() => {
+      expect(toastMock.error).toHaveBeenCalledWith('Could not merge members.');
+    });
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(within(dialog).getByLabelText('Target entity')).toHaveValue('43');
+    expect(within(dialog).getByLabelText('Note (optional)')).toHaveValue('keep me');
+  });
+
+  it('falls back to the first connector when the member connector is not in the list', async () => {
+    connectorsHook.mockReturnValue({ data: [{ id: 'c2', name: 'OPNsense' }], isLoading: false });
+    getEntitiesIdMock.mockResolvedValue({ id: 'entity-merged', name: 'merged', members: [] });
+    mount();
+
+    fireEvent.click(screen.getByRole('button', { name: /merge router/i }));
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByLabelText('Target connector')).toHaveValue('c2');
+    fireEvent.change(within(dialog).getByLabelText('Target entity'), { target: { value: '43' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Merge' }));
+
+    await waitFor(() => {
+      expect(postOverrideMutate).toHaveBeenCalledWith(
+        expect.objectContaining({ otherConnectorId: 'c2', otherRef: '43' })
+      );
+    });
+  });
+
+  it('blocks merging with a member already in this identity', async () => {
+    entityHook.mockReturnValue({
+      data: {
+        ...base,
+        members: [...base.members, { ...base.members[0], ref: '43', name: 'switch-target' }],
+      },
+      isLoading: false,
+      isError: false,
+      refetch: vi.fn(),
+    });
+    mount();
+
+    fireEvent.click(screen.getByRole('button', { name: /merge router/i }));
+    const dialog = await screen.findByRole('dialog');
+    fireEvent.change(within(dialog).getByLabelText('Target entity'), { target: { value: '43' } });
+
+    expect(within(dialog).getByRole('alert')).toHaveTextContent(
+      'This member is already part of this identity.'
+    );
+    expect(within(dialog).getByRole('button', { name: 'Merge' })).toBeDisabled();
+  });
+
+  it('keeps the merge dialog mounted and fades it out after cancel', async () => {
+    mount();
+
+    fireEvent.click(screen.getByRole('button', { name: /merge router/i }));
+    const dialog = await screen.findByRole('dialog');
+    const panel = dialog.querySelector('[class*="transition-"]');
+    await waitFor(() => {
+      expect(panel).toHaveClass('opacity-100');
+    });
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+
+    await waitFor(() => {
+      expect(panel).toHaveClass('opacity-0');
+    });
+    expect(within(dialog).getByText(/Choose another member of the same kind/)).toBeInTheDocument();
+  });
+
+  it('shows a no-snapshot hint when the connector has never synced', async () => {
+    snapshotsHook.mockReturnValue({ data: [] });
+    snapshotDetailHook.mockReturnValue({ data: undefined });
+    mount();
+
+    fireEvent.click(screen.getByRole('button', { name: /merge router/i }));
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByText(/No snapshot yet/)).toBeInTheDocument();
   });
 
   it('retains detach description text while fading out after cancel', async () => {

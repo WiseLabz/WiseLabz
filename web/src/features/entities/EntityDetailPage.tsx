@@ -5,12 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { useQueryClient } from '@tanstack/react-query';
 import { isAxiosError } from 'axios';
 import { toast } from '../../lib/toast';
-import {
-  getEntitiesId,
-  getGetEntityOverridesQueryKey,
-  useGetEntitiesId,
-  usePostEntityOverrides,
-} from '../../api/generated/search/search';
+import { useGetEntitiesId, usePostEntityOverrides } from '../../api/generated/search/search';
 import { useGetConnectors } from '../../api/generated/connectors/connectors';
 import type { EntityEndpoint, EntityFinding, EntityMember, EntityOverride } from '../../api/model';
 import { Markdown } from '../../components/docs/Markdown';
@@ -22,6 +17,7 @@ import { EmptyState, ErrorState, SkeletonRows } from '../../components/ui/states
 import { EntityPicker } from '../../components/manager/EntityPicker';
 import { useIsInstanceAdmin } from '../../hooks/useRole';
 import { fullDate } from '../../lib/time';
+import { invalidateEntityCaches, isEntityVisible } from './overrideCache';
 
 const valueText = (value: unknown) =>
   value === undefined ? '—' : typeof value === 'string' ? value : JSON.stringify(value);
@@ -53,6 +49,7 @@ export function EntityDetailPage() {
   const [detachMember, setDetachMember] = useState<EntityMember | null>(null);
   const [isDetachOpen, setIsDetachOpen] = useState(false);
   const [mergeMember, setMergeMember] = useState<EntityMember | null>(null);
+  const [isMergeOpen, setIsMergeOpen] = useState(false);
   const [targetConnectorId, setTargetConnectorId] = useState('');
   const [targetRef, setTargetRef] = useState('');
   const [note, setNote] = useState('');
@@ -64,40 +61,17 @@ export function EntityDetailPage() {
     successMsg: string,
     notVisibleMsg: string
   ) => {
-    if (!targetEntityId) {
+    if (!targetEntityId || !(await isEntityVisible(queryClient, targetEntityId))) {
       toast.success(notVisibleMsg);
       void entity.refetch();
       return;
     }
-    try {
-      await getEntitiesId(targetEntityId);
-      toast.success(successMsg);
-      if (targetEntityId === id) {
-        void entity.refetch();
-      } else {
-        navigate(`/entities/${encodeURIComponent(targetEntityId)}`);
-      }
-    } catch (err) {
-      if (isAxiosError(err) && err.response?.status === 404) {
-        toast.success(notVisibleMsg);
-        void entity.refetch();
-      } else {
-        toast.success(successMsg);
-        if (targetEntityId === id) {
-          void entity.refetch();
-        } else {
-          navigate(`/entities/${encodeURIComponent(targetEntityId)}`);
-        }
-      }
+    toast.success(successMsg);
+    if (targetEntityId === id) {
+      void entity.refetch();
+    } else {
+      navigate(`/entities/${encodeURIComponent(targetEntityId)}`);
     }
-  };
-
-  const invalidateEntityCaches = () => {
-    void queryClient.invalidateQueries({ queryKey: getGetEntityOverridesQueryKey() });
-    void queryClient.invalidateQueries({
-      predicate: (q) =>
-        typeof q.queryKey[0] === 'string' && q.queryKey[0].startsWith('/entities/'),
-    });
   };
 
   const handleOverrideSuccess = async (
@@ -106,7 +80,7 @@ export function EntityDetailPage() {
     messages: { success: string; notVisible: string },
     resetForm: () => void
   ) => {
-    invalidateEntityCaches();
+    invalidateEntityCaches(queryClient);
     resetForm();
     const targetMember =
       res.members.find(
@@ -132,12 +106,14 @@ export function EntityDetailPage() {
     errorMessage: string,
     resetForm: () => void
   ) => {
-    if (isAxiosError(err) && err.response?.status === 409) {
+    const status = isAxiosError(err) ? err.response?.status : undefined;
+    if (status === 409) {
       toast.error(t('entities.overrides.conflictError'));
-    } else if (isAxiosError(err) && err.response?.status && err.response.status < 500) {
+    } else if (status === undefined || status < 500) {
+      // No response (network/timeout) or a client error: nothing changed, keep the form to retry.
       toast.error(errorMessage);
     } else {
-      invalidateEntityCaches();
+      invalidateEntityCaches(queryClient);
       void entity.refetch();
       resetForm();
       toast.error(errorMessage);
@@ -158,7 +134,7 @@ export function EntityDetailPage() {
       },
       {
         onSuccess: (res) =>
-          handleOverrideSuccess(
+          void handleOverrideSuccess(
             m,
             res,
             {
@@ -182,21 +158,47 @@ export function EntityDetailPage() {
 
   const openMerge = (m: EntityMember) => {
     setMergeMember(m);
-    setTargetConnectorId(m.connectorId || connectors.data?.[0]?.id || '');
+    setTargetConnectorId(m.connectorId);
+    setTargetRef('');
+    setNote('');
+    setIsMergeOpen(true);
+  };
+
+  // Keeps mergeMember so the dialog content survives the exit transition.
+  const closeMerge = () => {
+    setIsMergeOpen(false);
+    setTargetConnectorId('');
     setTargetRef('');
     setNote('');
   };
 
+  // The select only offers loaded connectors, so state that is not among them
+  // (list still loading, or connector missing) falls back to the first option.
+  const connectorOptions = connectors.data ?? [];
+  const effectiveConnectorId = connectorOptions.some((c) => c.id === targetConnectorId)
+    ? targetConnectorId
+    : (connectorOptions[0]?.id ?? '');
+
   const isSameMember = Boolean(
     mergeMember &&
-      targetConnectorId === mergeMember.connectorId &&
+      effectiveConnectorId === mergeMember.connectorId &&
       targetRef === mergeMember.ref
+  );
+  const isAlreadyInIdentity = Boolean(
+    mergeMember &&
+      !isSameMember &&
+      entity.data?.members.some(
+        (m) =>
+          m.connectorId === effectiveConnectorId &&
+          m.kind === mergeMember.kind &&
+          m.ref === targetRef
+      )
   );
 
   const handleMergeSubmit = (e: FormEvent) => {
     e.preventDefault();
     const m = mergeMember;
-    if (!m || !targetConnectorId || !targetRef || isSameMember) return;
+    if (!m || !effectiveConnectorId || !targetRef || isSameMember || isAlreadyInIdentity) return;
     postOverride.mutate(
       {
         data: {
@@ -204,7 +206,7 @@ export function EntityDetailPage() {
           connectorId: m.connectorId,
           kind: m.kind,
           ref: m.ref,
-          otherConnectorId: targetConnectorId,
+          otherConnectorId: effectiveConnectorId,
           otherKind: m.kind,
           otherRef: targetRef,
           note: note.trim() || undefined,
@@ -212,25 +214,17 @@ export function EntityDetailPage() {
       },
       {
         onSuccess: (res) =>
-          handleOverrideSuccess(
+          void handleOverrideSuccess(
             m,
             res,
             {
               success: t('entities.overrides.mergeSuccess'),
               notVisible: t('entities.overrides.mergeSuccessNotVisible'),
             },
-            () => {
-              setMergeMember(null);
-              setTargetRef('');
-              setNote('');
-            }
+            closeMerge
           ),
         onError: (err) =>
-          handleOverrideError(err, t('entities.overrides.mergeError'), () => {
-            setMergeMember(null);
-            setTargetRef('');
-            setNote('');
-          }),
+          handleOverrideError(err, t('entities.overrides.mergeError'), closeMerge),
       }
     );
   };
@@ -485,17 +479,12 @@ export function EntityDetailPage() {
         confirmDisabled={postOverride.isPending}
       />
 
-      {mergeMember && (
-        <Dialog
-          open={Boolean(mergeMember)}
-          onClose={() => {
-            setMergeMember(null);
-            setTargetRef('');
-            setTargetConnectorId('');
-            setNote('');
-          }}
-          title={t('entities.overrides.mergeTitle')}
-        >
+      <Dialog
+        open={isMergeOpen}
+        onClose={closeMerge}
+        title={t('entities.overrides.mergeTitle')}
+      >
+        {mergeMember && (
           <form onSubmit={handleMergeSubmit} className="space-y-4">
             <p className="text-sm text-ink-muted">
               {t('entities.overrides.mergeSubtitle', {
@@ -509,14 +498,14 @@ export function EntityDetailPage() {
               </span>
               <select
                 aria-label={t('entities.overrides.targetConnector')}
-                value={targetConnectorId}
+                value={effectiveConnectorId}
                 onChange={(e) => {
                   setTargetConnectorId(e.target.value);
                   setTargetRef('');
                 }}
                 className="h-8 w-full appearance-none rounded-sm border border-line bg-surface pl-2.5 pr-7 text-xs text-ink outline-none focus-visible:border-accent-primary-soft"
               >
-                {connectors.data?.map((c) => (
+                {connectorOptions.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name}
                   </option>
@@ -524,9 +513,9 @@ export function EntityDetailPage() {
               </select>
             </div>
 
-            {targetConnectorId && (
+            {effectiveConnectorId && (
               <EntityPicker
-                connectorId={targetConnectorId}
+                connectorId={effectiveConnectorId}
                 value={targetRef}
                 onChange={setTargetRef}
                 kind={mergeMember.kind}
@@ -557,17 +546,18 @@ export function EntityDetailPage() {
               />
             </div>
 
+            {isAlreadyInIdentity && (
+              <p role="alert" className="text-2xs text-err">
+                {t('entities.overrides.alreadyMemberError')}
+              </p>
+            )}
+
             <div className="flex items-center justify-end gap-2 pt-2">
               <Button
                 type="button"
                 variant="ghost"
                 size="sm"
-                onClick={() => {
-                  setMergeMember(null);
-                  setTargetRef('');
-                  setTargetConnectorId('');
-                  setNote('');
-                }}
+                onClick={closeMerge}
               >
                 {t('common.cancel', { defaultValue: 'Cancel' })}
               </Button>
@@ -575,14 +565,14 @@ export function EntityDetailPage() {
                 type="submit"
                 variant="primary"
                 size="sm"
-                disabled={!targetRef || isSameMember || postOverride.isPending}
+                disabled={!targetRef || isSameMember || isAlreadyInIdentity || postOverride.isPending}
               >
                 {t('entities.overrides.mergeAction')}
               </Button>
             </div>
           </form>
-        </Dialog>
-      )}
+        )}
+      </Dialog>
     </div>
   );
 }

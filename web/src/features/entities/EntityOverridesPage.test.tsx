@@ -26,6 +26,10 @@ vi.mock('../../api/generated/search/search', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../api/generated/search/search')>()),
   useGetEntityOverrides: () => overridesHook(),
   getEntitiesId: (id: string) => getEntitiesIdMock(id),
+  getGetEntitiesIdQueryOptions: (id: string) => ({
+    queryKey: [`/entities/${id}`],
+    queryFn: () => getEntitiesIdMock(id),
+  }),
   useDeleteEntityOverridesId: (options?: {
     mutation?: { onSuccess?: (data: unknown) => void; onError?: (err: unknown) => void };
   }) => ({
@@ -182,7 +186,7 @@ describe('EntityOverridesPage', () => {
           }),
         })
       );
-      expect(qc.getQueryState(['/entities/entity-1'])?.isInvalidated).toBe(true);
+      expect(qc.getQueryState(['/entities/entity-1'])?.isInvalidated).toBe(false); // invalidated, then refetched by the visibility probe
       expect(qc.getQueryState(['/entity-overrides'])?.isInvalidated).toBe(true);
       expect(panel).toHaveClass('opacity-0');
     });
@@ -298,6 +302,63 @@ describe('EntityOverridesPage', () => {
     await vi.waitFor(() => {
       expect(toastMock.error).toHaveBeenCalledWith('Could not remove override.');
     });
+  });
+
+  it.each([500, 404])('resyncs and closes the dialog when delete fails with %i', async (status) => {
+    deleteHook.mockImplementation(() => {
+      throw statusError(status);
+    });
+    const qc = new QueryClient();
+    qc.setQueryData(['/entities/entity-1'], { id: 'entity-1' });
+    qc.setQueryData(['/entity-overrides'], []);
+    mount(qc);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Remove override for router' }));
+    const dialog = await screen.findByRole('dialog');
+    const panel = dialog.querySelector('[class*="transition-"]');
+    await vi.waitFor(() => {
+      expect(panel).toHaveClass('opacity-100');
+    });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Remove' }));
+
+    await vi.waitFor(() => {
+      expect(toastMock.error).toHaveBeenCalledWith('Could not remove override.');
+      expect(qc.getQueryState(['/entity-overrides'])?.isInvalidated).toBe(true);
+      expect(qc.getQueryState(['/entities/entity-1'])?.isInvalidated).toBe(true);
+      expect(panel).toHaveClass('opacity-0');
+    });
+  });
+
+  it('keeps the dialog open when delete gets no response', async () => {
+    deleteHook.mockImplementation(() => {
+      throw new Error('Network Error');
+    });
+    mount();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Remove override for router' }));
+    const dialog = await screen.findByRole('dialog');
+    const panel = dialog.querySelector('[class*="transition-"]');
+    await vi.waitFor(() => {
+      expect(panel).toHaveClass('opacity-100');
+    });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Remove' }));
+
+    await vi.waitFor(() => {
+      expect(toastMock.error).toHaveBeenCalledWith('Could not remove override.');
+    });
+    expect(panel).toHaveClass('opacity-100');
+  });
+
+  it('never shows the raw creator id for unknown users or while users load', () => {
+    usersHook.mockReturnValue({ data: [], isLoading: false });
+    const { unmount } = mount();
+    expect(screen.getAllByText('Created by Unknown user')).toHaveLength(2);
+    expect(screen.queryByText(/admin-user-id/)).not.toBeInTheDocument();
+    unmount();
+
+    usersHook.mockReturnValue({ data: undefined, isLoading: true });
+    mount();
+    expect(screen.getAllByText('Created by …')).toHaveLength(2);
   });
 
   it('shows empty state when no overrides exist', () => {

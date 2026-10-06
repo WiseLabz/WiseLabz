@@ -46,12 +46,27 @@ export function EntityPicker({
   });
   // When kind is specified (e.g. merge picker), allow fallback to entity.name if externalId
   // is absent, matching backend topology entityRef() resolution. Other callers require externalId.
-  const entities = (full.data?.entities ?? []).filter(
-    (e) => (kind ? !!(e.externalId || e.name) : !!e.externalId) && (!kind || e.kind === kind)
-  );
-
   const getEntityRef = (e: SnapshotEntity) => (kind ? e.externalId || e.name : e.externalId);
-  const showEmptyKindHint = Boolean(kind && full.data && entities.length === 0);
+  // In kind mode entities are one member per (connector, kind, ref) to the backend, so
+  // same-ref entities collapse to the first, keeping option values/keys unique.
+  const seen = new Set<string>();
+  const entities = (full.data?.entities ?? []).filter((e) => {
+    const ref = getEntityRef(e);
+    if (!ref || (kind && e.kind !== kind)) return false;
+    if (!kind) return true;
+    if (seen.has(ref)) return false;
+    seen.add(ref);
+    return true;
+  });
+
+  const status = (() => {
+    if (!connectorId) return null;
+    if (latest.isError || full.isError) return t('entityPicker.loadError');
+    if (latest.isLoading || full.isLoading) return t('entityPicker.loading');
+    if (latest.data && latest.data.length === 0) return t('entityPicker.noSnapshot');
+    if (kind && full.data && entities.length === 0) return t('entityPicker.noEntitiesOfKind');
+    return null;
+  })();
 
   const pickerLabel = label ?? t('entityPicker.label');
 
@@ -76,7 +91,7 @@ export function EntityPicker({
           {entities.map((entity) => {
             const ref = getEntityRef(entity) ?? '';
             return (
-              <option key={`${entity.kind}:${ref}`} value={ref}>
+              <option key={ref} value={ref}>
                 {entity.name}{entity.externalId ? ` (${entity.externalId})` : ''}
               </option>
             );
@@ -87,11 +102,7 @@ export function EntityPicker({
           className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-ink-faint"
         />
       </div>
-      {showEmptyKindHint && (
-        <p className="mt-1 text-2xs text-ink-muted">
-          {t('entityPicker.noEntitiesOfKind')}
-        </p>
-      )}
+      {status && <p className="mt-1 text-2xs text-ink-muted">{status}</p>}
     </label>
   );
 }
