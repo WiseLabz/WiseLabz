@@ -25,7 +25,7 @@ cancel that run before starting another.
 ## Follow and control a run
 
 The run detail updates as steps change. The run can be **Running**, **Waiting for
-confirmation**, **Failed**, **Succeeded**, **Cancelled**, or **Expired**. Steps can
+manual confirmation**, **Failed**, **Succeeded**, **Cancelled**, or **Expired**. Steps can
 be **Pending**, **Running**, **Waiting**, **Succeeded**, **Failed**, **Skipped**,
 or **Unknown**. Detail shows available timestamps, reasons, errors, and the users
 who started, resumed, confirmed, or cancelled the run.
@@ -38,7 +38,10 @@ who started, resumed, confirmed, or cancelled the run.
   backend restarted during execution. Inspect the connector before approving:
   resuming repeats that operation and may repeat a change that already happened.
 - **Cancel run** asks for confirmation and prevents further steps. It does not
-  undo completed operations. Unfinished steps become skipped.
+  undo completed operations. Unfinished steps become skipped. Any user with
+  operator access to every connector in the run that still exists can cancel it;
+  connectors deleted since the run started do not count. Cancelling needs no
+  additional authentication approval.
 
 A backend restart never automatically continues an interrupted run. A running
 run becomes failed and its active step becomes unknown; a waiting manual step
