@@ -1376,10 +1376,11 @@ export const en = {
         connectorPlaceholder: 'Select a connector',
         verbLabel: 'Action',
         timeoutLabel: 'Timeout (seconds)',
-        timeoutPlaceholder: '300',
         manualHint: 'A manual instruction for an operator to confirm during the run.',
         restricted: 'Restricted step',
         redactedHint: 'This step targets a connector you do not have permission to view.',
+        lockedHint:
+          'This runbook has steps on connectors you cannot view, so its steps cannot be edited here. Your other changes are saved and the steps stay as they are.',
         moveUp: 'Move step up',
         moveDown: 'Move step down',
         remove: 'Remove step',

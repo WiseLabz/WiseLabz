@@ -287,6 +287,23 @@ export const ptBR: Catalog = {
     clauseMaxReached: 'Máximo de 5 cláusulas de entidade relacionada permitido',
   },
   settings: {
+    runbooks: {
+      steps: {
+        kindLabel: 'Tipo',
+        kinds: {
+          lifecycle: 'Ciclo de vida',
+          sync_and_wait: 'Sincronizar e aguardar',
+          wait_until_healthy: 'Aguardar ficar saudável',
+          manual: 'Manual',
+        },
+        timeoutLabel: 'Tempo limite (segundos)',
+        manualHint: 'Uma instrução manual para o operador confirmar durante a execução.',
+        restricted: 'Etapa restrita',
+        redactedHint: 'Esta etapa usa um conector que você não tem permissão para visualizar.',
+        lockedHint:
+          'Este runbook tem etapas em conectores que você não pode visualizar, então as etapas não podem ser editadas aqui. Suas outras alterações são salvas e as etapas permanecem como estão.',
+      },
+    },
     language: {
       heading: 'Idioma',
       desc: 'Idioma da interface. O texto sem tradução aparece em inglês.',
