@@ -78,7 +78,7 @@ func TestStartRunAuthorization(t *testing.T) {
 		mode string
 		want int
 	}{
-		{"missing elevation", "", 400}, {"wrong runbook token", "wrong", 401},
+		{"missing elevation", "", 400}, {"wrong runbook token", "wrong", 401}, {"other action token", "action", 401},
 		{"missing grant precedes elevation", "grant", 403}, {"restricted key", "restricted", 403},
 		{"read-only key", "read", 403}, {"valid elevation", "valid", 202},
 	} {
@@ -88,6 +88,12 @@ func TestStartRunAuthorization(t *testing.T) {
 			switch tc.mode {
 			case "wrong":
 				elevateRun(t, h, r, "another-runbook")
+			case "action":
+				tok, err := h.ConnH.JWT.IssueElevationBound(user, "connector.restart", auth.ElevationBinding{Target: id})
+				if err != nil {
+					t.Fatal(err)
+				}
+				r.Header.Set("X-Elevation-Token", tok.Token)
 			case "grant":
 				if _, err := h.Store.UpsertConnectorGrant(r.Context(), user, b, "viewer"); err != nil {
 					t.Fatal(err)
@@ -110,6 +116,7 @@ func TestStartRunAuthorization(t *testing.T) {
 				if total != 0 {
 					t.Fatal("rejected request created run")
 				}
+				assertNoRunAudit(t, h, "runbook.run.start")
 				return
 			}
 			if total != 1 || runs[0].StartedBy != user {
@@ -153,6 +160,28 @@ func seededRun(t *testing.T, h *Handler, id, user string, waiting bool) (*store.
 		}
 	}
 	return run, steps
+}
+
+func assertNoRunAudit(t *testing.T, h *Handler, action string) {
+	t.Helper()
+	records, total, err := h.Store.ListAuditRecords(context.Background(), action, "runbook_run", "", "", 0, 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if total != 0 {
+		t.Fatalf("rejected request wrote audit: %+v", records)
+	}
+}
+
+// manualRun seeds a manual-only runbook with one run paused on its first step.
+func manualRun(t *testing.T, h *Handler, user, value string) (string, *store.RunbookRunRecord, []*store.RunbookRunStepRecord) {
+	t.Helper()
+	rb, _, err := h.Store.CreateRunbookWithSteps(context.Background(), &store.RunbookRecord{Title: "Manual " + value, TargetType: "change_type", TargetValue: value}, []*store.RunbookStepRecord{{Kind: "manual", Title: "Check " + value}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	run, steps := seededRun(t, h, rb.ID, user, true)
+	return rb.ID, run, steps
 }
 
 func assertRunAudit(t *testing.T, h *Handler, action, runID, rbID, user string) {
@@ -227,8 +256,27 @@ func TestRunActionsAuthorizationAndAudit(t *testing.T) {
 					h.CancelRun(rr, r)
 				}
 				assertRunStatus(t, rr, want)
-				if mode == "valid" || mode == "shutdown" {
+				switch mode {
+				case "valid", "shutdown":
 					assertRunAudit(t, h, "runbook.run."+action, run.ID, id, user)
+				case "missing_grant", "restricted", "wrong_state", "unknown":
+					assertNoRunAudit(t, h, "runbook.run."+action)
+				}
+				if mode == "missing_grant" {
+					for _, leaked := range []string{b, "Secret restore", "sync_and_wait"} {
+						if strings.Contains(rr.Body.String(), leaked) {
+							t.Fatalf("403 body leaked %q: %s", leaked, rr.Body.String())
+						}
+					}
+				}
+				if action == "resume" && mode == "valid" {
+					var resumed store.RunbookRunRecord
+					if err := json.Unmarshal(rr.Body.Bytes(), &resumed); err != nil {
+						t.Fatal(err)
+					}
+					if resumed.State != "running" || resumed.ResumedBy == nil || *resumed.ResumedBy != user {
+						t.Fatalf("resumed=%+v", resumed)
+					}
 				}
 			})
 		}
@@ -320,6 +368,15 @@ func TestRunVisibilityAndPreview(t *testing.T) {
 				if endpoint == "preview" && root["canStart"] != false {
 					t.Fatal("blocked preview can start")
 				}
+				if endpoint == "preview" && mode == "mixed_grants" {
+					lifecycle := root["steps"].([]any)[1].(map[string]any)
+					if lifecycle["redacted"] != false || lifecycle["canExecute"] != false || lifecycle["executeBlockedReason"] != "no_operator_grant" {
+						t.Fatalf("viewer lifecycle step=%+v", lifecycle)
+					}
+					if _, ok := lifecycle["preview"]; ok {
+						t.Fatalf("viewer got lifecycle preview: %+v", lifecycle)
+					}
+				}
 			})
 		}
 	}
@@ -373,6 +430,14 @@ func TestDeletedRunbookRunActions(t *testing.T) {
 				h.CancelRun(rr, r)
 			}
 			assertRunStatus(t, rr, want)
+			if action == "resume" {
+				var body struct {
+					Code string `json:"code"`
+				}
+				if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil || body.Code != "runbook_deleted" {
+					t.Fatalf("resume body=%s err=%v", rr.Body.String(), err)
+				}
+			}
 		})
 	}
 }
@@ -430,4 +495,64 @@ func TestRunHistoryPaginationAndResumeTarget(t *testing.T) {
 	if err != nil || current.State != "failed" {
 		t.Fatalf("run=%+v err=%v", current, err)
 	}
+}
+
+func TestRunPreviewUnavailableHidesCause(t *testing.T) {
+	h, id, user, a, _ := runFixture(t)
+	if _, err := h.Store.DB().ExecContext(context.Background(), "DELETE FROM service_snapshots WHERE connector_id = ?", a); err != nil {
+		t.Fatal(err)
+	}
+	r := runRequest(user, id, "", "")
+	r.URL.RawQuery = "dryRun=true"
+	rr := httptest.NewRecorder()
+	h.StartRun(rr, r)
+	assertRunStatus(t, rr, 200)
+	var preview runPreviewResponse
+	if err := json.Unmarshal(rr.Body.Bytes(), &preview); err != nil {
+		t.Fatal(err)
+	}
+	step := preview.Steps[1]
+	if preview.CanStart || step.CanExecute || step.ExecuteBlockedReason != "preview_unavailable" || step.Preview != nil {
+		t.Fatalf("preview=%+v", preview)
+	}
+	if strings.Contains(rr.Body.String(), "snapshot") {
+		t.Fatalf("preview leaked internal error: %s", rr.Body.String())
+	}
+}
+
+func TestReadOnlyKeyCannotMutateManualRun(t *testing.T) {
+	for _, action := range []string{"confirm", "cancel"} {
+		t.Run(action, func(t *testing.T) {
+			h, _, user, _, _ := runFixture(t)
+			rbID, run, steps := manualRun(t, h, user, "manual.readonly")
+			r := runRequest(user, rbID, run.ID, steps[0].ID)
+			r = r.WithContext(auth.ContextWithAPIKeyRestriction(r.Context(), auth.APIKeyRestriction{ReadOnly: true}))
+			rr := httptest.NewRecorder()
+			if action == "confirm" {
+				h.ConfirmRunStep(rr, r)
+			} else {
+				h.CancelRun(rr, r)
+			}
+			assertRunStatus(t, rr, 403)
+			current, _, err := h.Store.GetRunbookRun(context.Background(), run.ID)
+			if err != nil || current.State != "waiting_manual" {
+				t.Fatalf("run=%+v err=%v", current, err)
+			}
+			assertNoRunAudit(t, h, "runbook.run."+action)
+		})
+	}
+}
+
+func TestConfirmRejectsStepOfAnotherRun(t *testing.T) {
+	h, _, user, _, _ := runFixture(t)
+	idA, runA, _ := manualRun(t, h, user, "manual.idor.a")
+	_, runB, stepsB := manualRun(t, h, user, "manual.idor.b")
+	rr := httptest.NewRecorder()
+	h.ConfirmRunStep(rr, runRequest(user, idA, runA.ID, stepsB[0].ID))
+	assertRunStatus(t, rr, 409)
+	_, saved, err := h.Store.GetRunbookRun(context.Background(), runB.ID)
+	if err != nil || saved[0].State != "waiting" {
+		t.Fatalf("other run step=%+v err=%v", saved[0], err)
+	}
+	assertNoRunAudit(t, h, "runbook.run.confirm")
 }
