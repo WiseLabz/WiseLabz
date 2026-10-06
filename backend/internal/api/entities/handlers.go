@@ -180,7 +180,16 @@ func (h *Handler) detail(ctx context.Context, id string, allowed, viewable []str
 	var active []store.EntityMemberKey
 	activeConnectors := map[string]bool{}
 	for _, m := range visible {
-		out.Members = append(out.Members, member{ConnectorID: m.ConnectorID, ConnectorName: m.ConnectorName, DocID: m.DocID, Kind: m.Kind, Ref: m.Ref, Name: m.Name, GoneAt: m.GoneAt})
+		label := entityLabel(m)
+		out.Members = append(out.Members, member{
+			ConnectorID:   m.ConnectorID,
+			ConnectorName: m.ConnectorName,
+			DocID:         m.DocID,
+			Kind:          m.Kind,
+			Ref:           m.Ref,
+			Name:          entityLabelText(label),
+			GoneAt:        m.GoneAt,
+		})
 		if m.GoneAt == "" {
 			active = append(active, m.EntityMemberKey)
 			activeConnectors[m.ConnectorID] = true
@@ -206,7 +215,7 @@ func (h *Handler) detail(ctx context.Context, id string, allowed, viewable []str
 			break
 		}
 	}
-	out.Kind, out.Name, out.Gone = best.Kind, best.Text(), len(active) == 0
+	out.Kind, out.Name, out.Gone = best.Kind, entityLabelText(best), len(active) == 0
 	if err := h.edges(ctx, id, active, viewable, out); err != nil {
 		return nil, err
 	}
@@ -221,6 +230,13 @@ func (h *Handler) detail(ctx context.Context, id string, allowed, viewable []str
 
 func entityLabel(m store.EntityMemberDetail) store.EntityLabel {
 	return store.EntityLabel{ConnectorID: m.ConnectorID, Kind: m.Kind, Ref: m.Ref, Name: m.Name}
+}
+
+func entityLabelText(label store.EntityLabel) string {
+	if text := label.Text(); text != "" {
+		return text
+	}
+	return label.Kind
 }
 
 // edges lists typed neighbours and IP relations. Edges are stored once per

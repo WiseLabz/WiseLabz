@@ -64,7 +64,7 @@ const topologyEdgeColumns = `id, connector_id, src_connector_id, src_kind, src_n
 
 // topologyRebuildMu and the advisory lock below serialize edge replacement so
 // two connectors' rebuilds cannot both delete and re-insert the same shared
-// resolves_to rows and leave duplicates (key distinct from the identity lock).
+// logical rows and leave duplicates (key distinct from the identity lock).
 var topologyRebuildMu sync.Mutex
 
 const topologyRebuildAdvisoryLock = 731058503
@@ -83,11 +83,17 @@ const topologyEdgesAffectedBy = `connector_id = ?
 // statement far below both databases' bind-parameter limits.
 const topologyInsertBatch = 200
 
+// topologyLogicalEdgeColumns identify an edge without its storage owner, row
+// ID, or creation time. same_as ownership is canonicalized from its endpoint
+// order below, while other shared edges retain the owner that re-derived them.
+const topologyLogicalEdgeColumns = `src_connector_id, src_kind, COALESCE(NULLIF(src_ref, ''), src_name),
+	dst_connector_id, dst_kind, COALESCE(NULLIF(dst_ref, ''), dst_name), kind, source, detail`
+
 // ReplaceTopologyEdgesForConnector atomically rebuilds the edges affected by
 // connectorID's rebuild (see topologyEdgesAffectedBy), so entities that
-// disappeared from either side don't leave stale edges behind. An edge with
-// an empty ConnectorID is owned by connectorID; a non-empty one keeps its
-// owner (a resolves_to edge owned by the DNS connector).
+// disappeared from either side don't leave stale edges behind. An empty
+// ConnectorID defaults to connectorID; resolves_to keeps its DNS connector
+// owner, while same_as uses the connector at its canonical source endpoint.
 func (s *Store) ReplaceTopologyEdgesForConnector(ctx context.Context, connectorID string, edges []TopologyEdge) error {
 	return s.ReplaceTopologyEdgesPreserving(ctx, connectorID, edges, nil)
 }
@@ -97,6 +103,21 @@ func (s *Store) ReplaceTopologyEdgesForConnector(ctx context.Context, connectorI
 // resolves_to edges pointing at connectorID would have been re-derived from
 // those snapshots, so the existing ones are kept rather than deleted.
 func (s *Store) ReplaceTopologyEdgesPreserving(ctx context.Context, connectorID string, edges []TopologyEdge, preserveOwners []string) error {
+	// Normalize and collapse this rebuild's input before taking the global lock.
+	// The lock still protects replacement against another rebuild inserting the
+	// same shared edge between the logical-row cleanup and its insert.
+	prepared := make([]TopologyEdge, 0, len(edges))
+	seen := make(map[string]struct{}, len(edges))
+	for _, edge := range edges {
+		edge = canonicalTopologyEdge(edge, connectorID)
+		key := topologyLogicalEdgeKey(edge)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		prepared = append(prepared, edge)
+	}
+
 	topologyRebuildMu.Lock()
 	defer topologyRebuildMu.Unlock()
 	return s.WithinTransaction(ctx, func(tx *Store) error {
@@ -117,14 +138,25 @@ func (s *Store) ReplaceTopologyEdgesPreserving(ctx context.Context, connectorID 
 		if _, err := tx.db.ExecContext(ctx, `DELETE FROM topology_edges WHERE `+where, args...); err != nil {
 			return fmt.Errorf("delete topology edges: %w", err)
 		}
+		// Rebuilds can derive a shared edge already stored by another connector,
+		// or under several legacy owners. Replace every row with the same
+		// endpoint identity before inserting one row for this rebuild. The
+		// global in-process and PostgreSQL locks make this delete/insert safe
+		// without a schema migration.
+		for start := 0; start < len(prepared); start += topologyInsertBatch {
+			end := min(start+topologyInsertBatch, len(prepared))
+			if err := deleteTopologyLogicalEdges(ctx, tx, prepared[start:end]); err != nil {
+				return err
+			}
+		}
 		now := time.Now().UTC().Format(time.RFC3339)
 		// Multi-row inserts: a shared IP can mean thousands of rows per rebuild.
-		for start := 0; start < len(edges); start += topologyInsertBatch {
-			end := min(start+topologyInsertBatch, len(edges))
+		for start := 0; start < len(prepared); start += topologyInsertBatch {
+			end := min(start+topologyInsertBatch, len(prepared))
 			rows := make([]string, 0, end-start)
 			args := make([]any, 0, (end-start)*14)
 			for i := start; i < end; i++ {
-				e := edges[i]
+				e := prepared[i]
 				if e.ID == "" {
 					e.ID = uuid.New().String()
 				}
@@ -144,6 +176,72 @@ func (s *Store) ReplaceTopologyEdgesPreserving(ctx context.Context, connectorID 
 		}
 		return nil
 	})
+}
+
+func canonicalTopologyEdge(edge TopologyEdge, defaultOwner string) TopologyEdge {
+	srcKey := topologyEndpointKey(edge.SrcConnectorID, edge.SrcKind, edge.SrcRef)
+	dstKey := topologyEndpointKey(edge.DstConnectorID, edge.DstKind, edge.DstRef)
+	if edge.Kind == TopologyEdgeSameAs && dstKey < srcKey {
+		edge.SrcConnectorID, edge.DstConnectorID = edge.DstConnectorID, edge.SrcConnectorID
+		edge.SrcKind, edge.DstKind = edge.DstKind, edge.SrcKind
+		edge.SrcName, edge.DstName = edge.DstName, edge.SrcName
+		edge.SrcRef, edge.DstRef = edge.DstRef, edge.SrcRef
+	}
+	if edge.ConnectorID == "" {
+		edge.ConnectorID = defaultOwner
+	}
+	if edge.Kind == TopologyEdgeSameAs {
+		edge.ConnectorID = edge.SrcConnectorID
+	}
+	return edge
+}
+
+func topologyEndpointKey(connectorID, kind, ref string) string {
+	return strings.Join([]string{connectorID, kind, ref}, "\x00")
+}
+
+func topologyLogicalEdgeKey(edge TopologyEdge) string {
+	srcRef := edge.SrcRef
+	if srcRef == "" {
+		srcRef = edge.SrcName
+	}
+	dstRef := edge.DstRef
+	if dstRef == "" {
+		dstRef = edge.DstName
+	}
+	return strings.Join([]string{
+		edge.SrcConnectorID, edge.SrcKind, srcRef,
+		edge.DstConnectorID, edge.DstKind, dstRef,
+		edge.Kind, edge.Source, edge.Detail,
+	}, "\x00")
+}
+
+func deleteTopologyLogicalEdges(ctx context.Context, tx *Store, edges []TopologyEdge) error {
+	if len(edges) == 0 {
+		return nil
+	}
+	columns := "(" + topologyLogicalEdgeColumns + ")"
+	rows := make([]string, 0, len(edges))
+	args := make([]any, 0, len(edges)*9)
+	for _, edge := range edges {
+		rows = append(rows, "("+placeholders(9)+")")
+		srcRef := edge.SrcRef
+		if srcRef == "" {
+			srcRef = edge.SrcName
+		}
+		dstRef := edge.DstRef
+		if dstRef == "" {
+			dstRef = edge.DstName
+		}
+		args = append(args, edge.SrcConnectorID, edge.SrcKind, srcRef,
+			edge.DstConnectorID, edge.DstKind, dstRef,
+			edge.Kind, edge.Source, edge.Detail)
+	}
+	query := `DELETE FROM topology_edges WHERE ` + columns + ` IN (VALUES ` + strings.Join(rows, ", ") + `)`
+	if _, err := tx.db.ExecContext(ctx, query, args...); err != nil {
+		return fmt.Errorf("deduplicate topology edges: %w", err)
+	}
+	return nil
 }
 
 // fingerprintKey identifies an edge by what it says about the lab, ignoring

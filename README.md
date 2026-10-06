@@ -34,6 +34,9 @@ services alongside the generated docs.
   updated documentation section for you, keeping manual effort near zero.
 - **Web dashboard** — Browse your generated documentation and monitor live service data
   side by side in one place.
+- **Live topology** — Explore the lab graph and export a generated Mermaid diagram. The
+  Lab Topology document draws `same_as`, `resolves_to`, `proxies_to`, and `runs_on` edges;
+  it omits `contains` and `dependency` edges.
 - **Community connectors** — The connector interface is open. Anyone can write and
   contribute a connector for a service they rely on.
 - **Single binary, single compose file** — Deploy with `docker compose up`. SQLite for
