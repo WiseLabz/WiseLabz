@@ -5,10 +5,12 @@ import (
 	"database/sql"
 	"errors"
 	"log/slog"
+	"net/url"
 	"os"
 	"strings"
 	"testing"
 
+	"github.com/google/uuid"
 	_ "modernc.org/sqlite"
 )
 
@@ -105,6 +107,7 @@ func TestRunMigrations(t *testing.T) {
 	if err := db.QueryRow(`SELECT COUNT(*) FROM quality_findings WHERE connector_id=? AND rule_id='same-rule' AND status='open'`, connector.ID).Scan(&open); err != nil || open != 2 {
 		t.Fatalf("open entity findings before downgrade = %d, %v; want 2", open, err)
 	}
+	rollbackEntityIdentityOverrides(t, db, "sqlite", logger)
 	if err := RunMigrationsDown(db, "sqlite", logger); err != nil {
 		t.Fatalf("downgrade doc topology fingerprint migration: %v", err)
 	}
@@ -204,6 +207,7 @@ func TestRunMigrationsDown(t *testing.T) {
 	if !hasColumn(t, db, "sqlite", "compliance_rules", "related") {
 		t.Fatal("compliance_rules.related missing")
 	}
+	rollbackEntityIdentityOverrides(t, db, "sqlite", logger)
 	if err := RunMigrationsDown(db, "sqlite", logger); err != nil {
 		t.Fatalf("rollback doc topology fingerprint migration: %v", err)
 	}
@@ -564,6 +568,7 @@ func TestRunMigrationsDown(t *testing.T) {
 	if !attachmentTableExists(t, db, "sqlite", "entities") || !attachmentTableExists(t, db, "sqlite", "entity_members") {
 		t.Fatal("entity identity tables missing after migration reapply")
 	}
+	rollbackEntityIdentityOverrides(t, db, "sqlite", logger)
 	if err := RunMigrationsDown(db, "sqlite", logger); err != nil {
 		t.Fatalf("rollback doc topology fingerprint before edge detail: %v", err)
 	}
@@ -918,6 +923,7 @@ func TestRunMigrationsDownPostgres(t *testing.T) {
 	if !hasColumn(t, db, "postgres", "entities", "merged_at") {
 		t.Fatal("entities.merged_at missing")
 	}
+	rollbackEntityIdentityOverrides(t, db, "postgres", logger)
 	if err := RunMigrationsDown(db, "postgres", logger); err != nil {
 		t.Fatalf("rollback doc topology fingerprint migration: %v", err)
 	}
@@ -1623,4 +1629,72 @@ func attachmentTableExists(t *testing.T, db *sql.DB, driver, table string) bool 
 		t.Fatal(err)
 	}
 	return n > 0
+}
+
+// rollbackEntityIdentityOverrides runs migration 000061 down and checks it
+// removed only the override table.
+func rollbackEntityIdentityOverrides(t *testing.T, db *sql.DB, driver string, logger *slog.Logger) {
+	t.Helper()
+	if !attachmentTableExists(t, db, driver, "entity_identity_overrides") {
+		t.Fatal("entity_identity_overrides missing before 000061 rollback")
+	}
+	if err := RunMigrationsDown(db, driver, logger); err != nil {
+		t.Fatalf("rollback entity identity overrides migration: %v", err)
+	}
+	if attachmentTableExists(t, db, driver, "entity_identity_overrides") || !attachmentTableExists(t, db, driver, "entity_members") {
+		t.Fatal("000061 rollback must drop only entity_identity_overrides")
+	}
+}
+
+func TestEntityIdentityOverridesMigrationUpDownUp(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
+	run := func(t *testing.T, db *sql.DB, driver string) {
+		if err := RunMigrations(db, driver, logger); err != nil {
+			t.Fatal(err)
+		}
+		rollbackEntityIdentityOverrides(t, db, driver, logger)
+		if err := RunMigrations(db, driver, logger); err != nil {
+			t.Fatalf("re-apply migrations: %v", err)
+		}
+		if !attachmentTableExists(t, db, driver, "entity_identity_overrides") {
+			t.Fatal("entity_identity_overrides missing after re-apply")
+		}
+	}
+	t.Run("sqlite", func(t *testing.T) {
+		db, err := sql.Open("sqlite", "file:"+t.TempDir()+"/overrides.db?cache=shared")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer db.Close() //nolint:errcheck
+		run(t, db, "sqlite")
+	})
+	t.Run("postgres", func(t *testing.T) {
+		dsn := os.Getenv("WISELABZ_TEST_POSTGRES_DSN")
+		if dsn == "" {
+			t.Skip("WISELABZ_TEST_POSTGRES_DSN not set; skipping postgres migration test")
+		}
+		admin, err := sql.Open("pgx", dsn)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer admin.Close() //nolint:errcheck
+		schema := "t_" + strings.ReplaceAll(uuid.NewString(), "-", "")
+		if _, err := admin.Exec("CREATE SCHEMA " + schema); err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _, _ = admin.Exec("DROP SCHEMA " + schema + " CASCADE") }()
+		u, err := url.Parse(dsn)
+		if err != nil {
+			t.Fatal(err)
+		}
+		q := u.Query()
+		q.Set("search_path", schema)
+		u.RawQuery = q.Encode()
+		db, err := sql.Open("pgx", u.String())
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer db.Close() //nolint:errcheck
+		run(t, db, "postgres")
+	})
 }
