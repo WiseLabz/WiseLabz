@@ -17,10 +17,10 @@
 
 ## 3. Web workflow and translations (PR 3)
 
-- [ ] 3.1 Regenerate the web API client from `docs/openapi.yaml`; verify the frontend type check passes with the new hooks
-- [ ] 3.2 Add admin-only detach and merge actions to `web/src/features/entities/EntityDetailPage.tsx`, with confirmation, the entity picker restricted to the same kind, and navigation to the returned identity; verify Vitest covers both flows and that non-admins see no action
-- [ ] 3.3 Add the admin overrides list with state and remove action, linked from the entity detail page; verify Vitest covers listing, the dormant state and removal
-- [ ] 3.4 Add all new strings to `web/src/i18n/en.ts` and `web/src/i18n/locales/pt-BR.ts`; verify the i18n catalog tests and `bun run lint` pass
+- [x] 3.1 Regenerate the web API client from `docs/openapi.yaml`; verify the frontend type check passes with the new hooks
+- [x] 3.2 Add admin-only detach and merge actions to `web/src/features/entities/EntityDetailPage.tsx`, with confirmation, the entity picker restricted to the same kind, and navigation to the returned identity; verify Vitest covers both flows and that non-admins see no action
+- [x] 3.3 Add the admin overrides list with state and remove action, linked from the entity detail page; verify Vitest covers listing, the dormant state and removal
+- [x] 3.4 Add all new strings to `web/src/i18n/en.ts` and `web/src/i18n/locales/pt-BR.ts`; verify the i18n catalog tests and `bun run lint` pass
 
 ## 4. Integration check
 
