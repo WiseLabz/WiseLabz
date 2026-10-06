@@ -6,18 +6,10 @@
  *
  * OpenAPI spec version: 0.1.0
  */
+import type { RunbookRunStepState } from './runbookRunStepState';
 
-export interface Notification {
+export type RunbookRunUpdatedEventStep = {
   id: string;
-  /**
-   * Deep-link target when set — the affected alert.
-   * @nullable
-   */
-  alertId?: string | null;
-  /** e.g. alert.created, finding.created, system.job_failed, runbook.run_failed, runbook.run_waiting, digest.summary */
-  eventType: string;
-  title: string;
-  message: string;
-  read: boolean;
-  createdAt: string;
-}
+  position: number;
+  state: RunbookRunStepState;
+};

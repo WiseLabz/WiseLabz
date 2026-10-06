@@ -152,19 +152,20 @@ func main() {
 		elector = leader.New(s.RawDB(), cfg.HA.LockPollInterval)
 	}
 	routerCfg := api.Config{
-		Store:          s,
-		JWT:            jwtSvc,
-		Config:         cfg,
-		SyncEngine:     syncEngine,
-		DocEngine:      docEngine,
-		WSHub:          wsHub,
-		Scheduler:      jobRunner,
-		BackupDir:      backupDir,
-		AIRegistry:     aiRegistry,
-		EmbedRegistry:  embedRegistry,
-		QualityChecker: qualityChecker,
-		ReportManager:  reportManager,
-		Ready:          readyState,
+		Store:                  s,
+		JWT:                    jwtSvc,
+		Config:                 cfg,
+		SyncEngine:             syncEngine,
+		DocEngine:              docEngine,
+		WSHub:                  wsHub,
+		NotificationDispatcher: notifDispatcher,
+		Scheduler:              jobRunner,
+		BackupDir:              backupDir,
+		AIRegistry:             aiRegistry,
+		EmbedRegistry:          embedRegistry,
+		QualityChecker:         qualityChecker,
+		ReportManager:          reportManager,
+		Ready:                  readyState,
 	}
 	if cfg.Server.Embed {
 		spaFiles, err := fs.Sub(web.DistFS, "dist")
@@ -175,7 +176,6 @@ func main() {
 		routerCfg.SPAFiles = spaFiles
 	}
 	router := api.NewRouter(routerCfg)
-
 	// Start HTTP server
 	srv := &http.Server{
 		Addr:              cfg.Server.Addr(),

@@ -12,6 +12,7 @@ import (
 	"github.com/WiseLabz/wiselabz/internal/config"
 	"github.com/WiseLabz/wiselabz/internal/diagnostics"
 	"github.com/WiseLabz/wiselabz/internal/httputil"
+	"github.com/WiseLabz/wiselabz/internal/retention"
 	"github.com/WiseLabz/wiselabz/internal/scheduler"
 	"github.com/WiseLabz/wiselabz/internal/store"
 )
@@ -45,6 +46,7 @@ func (r *ReadyState) NotReady() bool { return r.notReady.Load() }
 // Handler holds dependencies for system endpoints.
 type Handler struct {
 	DB               store.DBTX
+	RetentionEvents  retention.Publisher
 	Config           *config.Config
 	Store            *store.Store
 	Scheduler        *scheduler.Runner // for re-registering backup/retention jobs

@@ -300,7 +300,7 @@ func TestElevateRejectsUnknownAction(t *testing.T) {
 }
 
 func TestElevationActionValidation(t *testing.T) {
-	for _, action := range []string{"connector.delete", "connector.restart", "connector.start", "connector.stop", "connector.bulkRestart", "connector.configPush", "template.delete", "user.delete", "user.resetPassword", "user.resetMfa", "mfa.manage"} {
+	for _, action := range []string{"connector.delete", "connector.restart", "connector.start", "connector.stop", "connector.bulkRestart", "connector.configPush", "template.delete", "user.delete", "user.resetPassword", "user.resetMfa", "mfa.manage", "runbook.run"} {
 		if !validElevationAction(action) {
 			t.Errorf("known action %q rejected", action)
 		}

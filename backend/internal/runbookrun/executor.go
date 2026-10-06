@@ -87,6 +87,15 @@ var ErrNoActor = errors.New("runbook run: an acting user is required")
 // can be resumed later.
 var ErrShuttingDown = errors.New("runbook run: the server is shutting down")
 
+// ShutdownError identifies work whose durable transition preceded a refused
+// spawn. HTTP callers can still audit that transition while returning 503.
+type ShutdownError struct {
+	RunID string
+}
+
+func (e *ShutdownError) Error() string { return ErrShuttingDown.Error() }
+func (e *ShutdownError) Unwrap() error { return ErrShuttingDown }
+
 // Store is the run persistence the executor needs. *store.Store satisfies it.
 type Store interface {
 	CreateRunbookRun(ctx context.Context, runbookID, startedBy string, steps []*store.RunbookRunStepRecord) (*store.RunbookRunRecord, []*store.RunbookRunStepRecord, error)
@@ -426,7 +435,7 @@ func (e *Executor) failShutdown(ctx context.Context, runID string) error {
 	case !stateChanged(err):
 		slog.Error("runbook run: record shutdown failed", "run", logsafe.Sanitize(runID), "error", err)
 	}
-	return ErrShuttingDown
+	return &ShutdownError{RunID: runID}
 }
 
 // cancelActive cancels the context of the goroutine holding runID's slot, if

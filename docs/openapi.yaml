@@ -3090,6 +3090,158 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
 
+  /runbooks/{runbookId}/run:
+    parameters:
+      - { $ref: '#/components/parameters/RunbookId' }
+    post:
+      tags: [runbooks]
+      operationId: startRunbookRun
+      summary: Preview or start a whole-runbook run
+      description: >
+        dryRun=true returns the ordered, redacted preview without elevation or mutation.
+        Starting requires operator on every referenced connector (including API-key restrictions)
+        before any other rejection, and one fresh runbook.run elevation targeted at runbookId.
+        Steps are frozen at start. An empty runbook cannot start. Existing single-step execution is unchanged.
+      parameters:
+        - { name: dryRun, in: query, schema: { type: boolean } }
+        - name: X-Elevation-Token
+          in: header
+          schema: { type: string }
+          description: Fresh single-use runbook.run elevation targeted at runbookId; unnecessary for dryRun=true.
+      responses:
+        '200':
+          description: Ordered dry-run preview
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RunbookRunPreview' }
+        '202':
+          description: Run accepted and executing asynchronously
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RunbookRun' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/ElevationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: An active run exists; runId identifies it
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RunbookRunConflict' }
+        '503':
+          description: Work refused during shutdown; the run is failed with reason interrupted
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+  /runbooks/{runbookId}/runs:
+    parameters:
+      - { $ref: '#/components/parameters/RunbookId' }
+    get:
+      tags: [runbooks]
+      operationId: listRunbookRuns
+      summary: Run history, newest first with frozen redacted steps
+      parameters:
+        - { $ref: '#/components/parameters/Page' }
+        - { $ref: '#/components/parameters/PageSize' }
+      responses:
+        '200':
+          description: Paginated run history; viewers can read, API-key restrictions redact steps
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RunbookRunPage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /runbook-runs/{runId}:
+    parameters:
+      - { $ref: '#/components/parameters/RunbookRunId' }
+    get:
+      tags: [runbooks]
+      operationId: getRunbookRun
+      summary: Read a run, including after its runbook was deleted
+      responses:
+        '200':
+          description: Frozen steps and outcomes; hidden steps omit all authored metadata and error text
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RunbookRun' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /runbook-runs/{runId}/steps/{stepId}/confirm:
+    parameters:
+      - { $ref: '#/components/parameters/RunbookRunId' }
+      - { $ref: '#/components/parameters/RunbookStepId' }
+    post:
+      tags: [runbooks]
+      operationId: confirmRunbookRunStep
+      summary: Confirm a waiting manual step and continue
+      description: >
+        Requires operator on every connector of the frozen run (API-key restrictions apply),
+        checked before state or step validation. No elevation. Available after runbook deletion.
+      responses:
+        '204': { description: 'Step confirmed, confirming user recorded, execution continues' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Run or manual step is not waiting
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+        '503':
+          description: Continuation refused during shutdown; confirmed step stays succeeded and run is interrupted
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+  /runbook-runs/{runId}/resume:
+    parameters:
+      - { $ref: '#/components/parameters/RunbookRunId' }
+    post:
+      tags: [runbooks]
+      operationId: resumeRunbookRun
+      summary: Resume a failed run with fresh elevation
+      description: >
+        Requires operator on every frozen connector before state or elevation validation,
+        and a fresh single-use runbook.run elevation targeted at the runbook id.
+        Continues from the first non-succeeded step, including unknown outcomes.
+        A deleted runbook cannot be resumed because its elevation target no longer exists:
+        returns 409 runbook_deleted; history, cancellation and manual confirmation remain available.
+      parameters:
+        - name: X-Elevation-Token
+          in: header
+          required: false
+          schema: { type: string }
+          description: Fresh runbook.run elevation targeted at the runbook id (when step-up is on).
+      responses:
+        '202':
+          description: Execution accepted; resuming user recorded
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RunbookRunRecord' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/ElevationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: 'Run is not failed, or runbook was deleted (code runbook_deleted)'
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+        '503':
+          description: Work refused during shutdown; run remains failed with reason interrupted
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+  /runbook-runs/{runId}/cancel:
+    parameters:
+      - { $ref: '#/components/parameters/RunbookRunId' }
+    post:
+      tags: [runbooks]
+      operationId: cancelRunbookRun
+      summary: Cancel a running, waiting or failed run
+      description: >
+        Requires operator on every frozen connector (API-key restrictions apply), checked before state.
+        No elevation. Stops execution before its next step and records the cancelling user.
+        Available after runbook deletion. Connectors deleted since the run started do not count toward the
+        grant requirement for cancellation (confirm and resume still require every frozen connector).
+      responses:
+        '204': { description: Run cancelled }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Run is already terminal
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+
   # ───────────────────────── quality findings ─────────────────────────
   /findings:
     get:
@@ -4078,7 +4230,8 @@ paths:
       description: Redeem it as `?ticket=` on GET /ws (see docs/WS_CONTRACT.md).
         Read-only and connector-restricted API keys may mint one; the socket then
         receives only the connector events the key's owner can read, narrowed to
-        the key's connectors.
+        the key's connectors. Run transitions use runbook.run.updated; its
+        payload is RunbookRunUpdatedEvent and contains identifiers and states only.
       responses:
         '200':
           description: OK
@@ -4108,6 +4261,7 @@ components:
     TemplateId: { name: templateId, in: path, required: true, schema: { type: string } }
     ChangeId: { name: changeId, in: path, required: true, schema: { type: string } }
     AlertId: { name: alertId, in: path, required: true, schema: { type: string } }
+    RunbookRunId: { name: runId, in: path, required: true, schema: { type: string } }
     RunbookId: { name: runbookId, in: path, required: true, schema: { type: string } }
     RunbookStepId: { name: stepId, in: path, required: true, schema: { type: string } }
     ProposalId: { name: proposalId, in: path, required: true, schema: { type: string } }
@@ -5989,6 +6143,111 @@ components:
         page: { type: integer }
         pageSize: { type: integer }
 
+    RunbookRunState:
+      type: string
+      enum: [running, waiting_manual, failed, succeeded, cancelled, expired]
+    RunbookRunStepState:
+      type: string
+      enum: [pending, running, waiting, succeeded, failed, skipped, unknown]
+    RunbookRunRecord:
+      type: object
+      required: [id, runbookTitle, state, startedBy, startedAt, updatedAt]
+      properties:
+        id: { type: string }
+        runbookId: { type: string, description: Omitted after runbook deletion }
+        runbookTitle: { type: string, description: Title frozen at start }
+        state: { $ref: '#/components/schemas/RunbookRunState' }
+        reason: { type: string }
+        startedBy: { type: string }
+        resumedBy: { type: string }
+        cancelledBy: { type: string }
+        startedAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        finishedAt: { type: string, format: date-time }
+    RunbookRunStep:
+      type: object
+      description: >
+        Frozen step and its current outcome. A redacted step carries no kind, title, connector,
+        entity, verb, timeout, error or preview; only identifiers, position, state, times,
+        confirming user and permission flags remain. Manual steps have no connector and are visible.
+      required: [id, position, redacted, canExecute]
+      properties:
+        id: { type: string }
+        position: { type: integer }
+        kind: { type: string, enum: [lifecycle, sync_and_wait, wait_until_healthy, manual] }
+        title: { type: string }
+        connectorId: { type: string }
+        connectorName: { type: string }
+        verb: { type: string, enum: [restart, start, stop] }
+        entityRef: { type: string }
+        timeoutSeconds: { type: integer }
+        state: { $ref: '#/components/schemas/RunbookRunStepState' }
+        startedAt: { type: string, format: date-time }
+        finishedAt: { type: string, format: date-time }
+        error: { type: string }
+        confirmedBy: { type: string }
+        redacted: { type: boolean }
+        canExecute: { type: boolean }
+        executeBlockedReason:
+          type: string
+          description: Machine code for why canExecute is false; one of no_viewer_grant, no_operator_grant, preview_unavailable.
+        preview: { $ref: '#/components/schemas/RestartPreview' }
+    RunbookRun:
+      allOf:
+        - { $ref: '#/components/schemas/RunbookRunRecord' }
+        - type: object
+          required: [steps]
+          properties:
+            steps:
+              type: array
+              items: { $ref: '#/components/schemas/RunbookRunStep' }
+    RunbookRunPage:
+      type: object
+      required: [items, total, page, pageSize]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/RunbookRun' }
+        total: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
+    RunbookRunPreview:
+      type: object
+      required: [id, canStart, steps]
+      properties:
+        id: { type: string, description: Runbook ID }
+        canStart: { type: boolean, description: False when empty or any step is blocked }
+        steps:
+          type: array
+          items: { $ref: '#/components/schemas/RunbookRunStep' }
+    RunbookRunConflict:
+      type: object
+      required: [code, message, runId]
+      properties:
+        code: { type: string }
+        message: { type: string }
+        runId: { type: string, description: Existing active run }
+    RunbookRunUpdatedEvent:
+      type: object
+      description: >
+        Payload of WebSocket event runbook.run.updated, emitted on every run or step transition,
+        including retention expiry. Connector step events reach only clients permitted to view that
+        connector. Run-level and manual-step events contain no sensitive connector metadata;
+        fetch the run detail to apply redaction.
+      required: [runId, state]
+      properties:
+        runId: { type: string }
+        runbookId: { type: string }
+        state: { $ref: '#/components/schemas/RunbookRunState' }
+        reason: { type: string }
+        step:
+          type: object
+          required: [id, position, state]
+          properties:
+            id: { type: string }
+            position: { type: integer }
+            state: { $ref: '#/components/schemas/RunbookRunStepState' }
+
     # ── runbooks ──
     RunbookTargetType:
       type: string
@@ -6190,7 +6449,7 @@ components:
       properties:
         id: { type: string }
         alertId: { type: string, nullable: true, description: 'Deep-link target when set — the affected alert.' }
-        eventType: { type: string, description: 'e.g. alert.created, finding.created, system.job_failed, digest.summary' }
+        eventType: { type: string, description: 'e.g. alert.created, finding.created, system.job_failed, runbook.run_failed, runbook.run_waiting, digest.summary' }
         title: { type: string }
         message: { type: string }
         read: { type: boolean }
@@ -6306,7 +6565,8 @@ components:
           description: >-
             ID of the resource the token is bound to, for actions on one (the user
             for `user.delete`, `user.resetPassword`, `user.resetMfa`, `user.update`;
-            the provider for `authProvider.toggle`). The token is also bound to the
+            the provider for `authProvider.toggle`, the runbook for `runbook.run`).
+            The token is also bound to the
             caller's session and is single-use.
         password: { type: string, format: password }
         totp: { type: string, description: 6-digit TOTP code when 2FA is configured }
@@ -6455,7 +6715,7 @@ components:
       type: object
       required: [eventType, channel, enabled]
       properties:
-        eventType: { type: string, description: 'Event type the route applies to. Emitted today: alert.created, finding.created, system.job_failed (scheduled job failing/recovered).' }
+        eventType: { type: string, description: 'Event type the route applies to. Emitted today: alert.created, finding.created, system.job_failed (scheduled job failing/recovered), runbook.run_failed (failed run), runbook.run_waiting (manual confirmation).' }
         channel: { $ref: '#/components/schemas/NotificationChannelType' }
         enabled: { type: boolean }
         minSeverity: { $ref: '#/components/schemas/Severity' }

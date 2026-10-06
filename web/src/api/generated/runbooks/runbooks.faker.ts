@@ -8,8 +8,22 @@
  */
 import { faker } from '@faker-js/faker';
 
-import { RunbookStepKind, RunbookStepStoredVerb, RunbookTargetType } from '../../model';
-import type { RestartPreview, Runbook, RunbookPage } from '../../model';
+import {
+  RunbookRunState,
+  RunbookRunStepState,
+  RunbookStepKind,
+  RunbookStepStoredVerb,
+  RunbookTargetType,
+} from '../../model';
+import type {
+  RestartPreview,
+  Runbook,
+  RunbookPage,
+  RunbookRun,
+  RunbookRunPage,
+  RunbookRunPreview,
+  RunbookRunRecord,
+} from '../../model';
 
 export const getGetRunbooksResponseMock = (
   overrideResponse: Partial<Extract<RunbookPage, object>> = {}
@@ -196,5 +210,498 @@ export const getExecuteRunbookStepResponseMock = (
       undefined,
     ]),
   })),
+  ...overrideResponse,
+});
+
+export const getStartRunbookRunResponseMock = (
+  overrideResponse: Partial<Extract<RunbookRunPreview | RunbookRun, object>> = {}
+): RunbookRunPreview | RunbookRun =>
+  faker.helpers.arrayElement([
+    {
+      id: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      canStart: faker.datatype.boolean(),
+      steps: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(
+        () => ({
+          id: faker.string.alpha({ length: { min: 10, max: 20 } }),
+          position: faker.number.int(),
+          kind: faker.helpers.arrayElement([
+            faker.helpers.arrayElement([
+              'lifecycle',
+              'sync_and_wait',
+              'wait_until_healthy',
+              'manual',
+            ] as const),
+            undefined,
+          ]),
+          title: faker.helpers.arrayElement([
+            faker.string.alpha({ length: { min: 10, max: 20 } }),
+            undefined,
+          ]),
+          connectorId: faker.helpers.arrayElement([
+            faker.string.alpha({ length: { min: 10, max: 20 } }),
+            undefined,
+          ]),
+          connectorName: faker.helpers.arrayElement([
+            faker.string.alpha({ length: { min: 10, max: 20 } }),
+            undefined,
+          ]),
+          verb: faker.helpers.arrayElement([
+            faker.helpers.arrayElement(['restart', 'start', 'stop'] as const),
+            undefined,
+          ]),
+          entityRef: faker.helpers.arrayElement([
+            faker.string.alpha({ length: { min: 10, max: 20 } }),
+            undefined,
+          ]),
+          timeoutSeconds: faker.helpers.arrayElement([faker.number.int(), undefined]),
+          state: faker.helpers.arrayElement([
+            faker.helpers.arrayElement(Object.values(RunbookRunStepState)),
+            undefined,
+          ]),
+          startedAt: faker.helpers.arrayElement([
+            faker.date.past().toISOString().slice(0, 19) + 'Z',
+            undefined,
+          ]),
+          finishedAt: faker.helpers.arrayElement([
+            faker.date.past().toISOString().slice(0, 19) + 'Z',
+            undefined,
+          ]),
+          error: faker.helpers.arrayElement([
+            faker.string.alpha({ length: { min: 10, max: 20 } }),
+            undefined,
+          ]),
+          confirmedBy: faker.helpers.arrayElement([
+            faker.string.alpha({ length: { min: 10, max: 20 } }),
+            undefined,
+          ]),
+          redacted: faker.datatype.boolean(),
+          canExecute: faker.datatype.boolean(),
+          executeBlockedReason: faker.helpers.arrayElement([
+            faker.string.alpha({ length: { min: 10, max: 20 } }),
+            undefined,
+          ]),
+          preview: faker.helpers.arrayElement([
+            {
+              targetService: faker.string.alpha({ length: { min: 10, max: 20 } }),
+              estimatedDowntimeSeconds: faker.number.int({ min: 0 }),
+              affectedEntities: faker.helpers.arrayElement([
+                Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(
+                  () => faker.string.alpha({ length: { min: 10, max: 20 } })
+                ),
+                undefined,
+              ]),
+              dependentServices: Array.from(
+                { length: faker.number.int({ min: 1, max: 4 }) },
+                (_, i) => i + 1
+              ).map(() => ({
+                kind: faker.string.alpha({ length: { min: 10, max: 20 } }),
+                name: faker.string.alpha({ length: { min: 10, max: 20 } }),
+                ref: faker.helpers.arrayElement([
+                  faker.string.alpha({ length: { min: 10, max: 20 } }),
+                  undefined,
+                ]),
+              })),
+            },
+            undefined,
+          ]),
+        })
+      ),
+      ...overrideResponse,
+    },
+    {
+      ...{
+        id: faker.string.alpha({ length: { min: 10, max: 20 } }),
+        runbookId: faker.helpers.arrayElement([
+          faker.string.alpha({ length: { min: 10, max: 20 } }),
+          undefined,
+        ]),
+        runbookTitle: faker.string.alpha({ length: { min: 10, max: 20 } }),
+        state: faker.helpers.arrayElement(Object.values(RunbookRunState)),
+        reason: faker.helpers.arrayElement([
+          faker.string.alpha({ length: { min: 10, max: 20 } }),
+          undefined,
+        ]),
+        startedBy: faker.string.alpha({ length: { min: 10, max: 20 } }),
+        resumedBy: faker.helpers.arrayElement([
+          faker.string.alpha({ length: { min: 10, max: 20 } }),
+          undefined,
+        ]),
+        cancelledBy: faker.helpers.arrayElement([
+          faker.string.alpha({ length: { min: 10, max: 20 } }),
+          undefined,
+        ]),
+        startedAt: faker.date.past().toISOString().slice(0, 19) + 'Z',
+        updatedAt: faker.date.past().toISOString().slice(0, 19) + 'Z',
+        finishedAt: faker.helpers.arrayElement([
+          faker.date.past().toISOString().slice(0, 19) + 'Z',
+          undefined,
+        ]),
+      },
+      ...{
+        steps: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(
+          () => ({
+            id: faker.string.alpha({ length: { min: 10, max: 20 } }),
+            position: faker.number.int(),
+            kind: faker.helpers.arrayElement([
+              faker.helpers.arrayElement([
+                'lifecycle',
+                'sync_and_wait',
+                'wait_until_healthy',
+                'manual',
+              ] as const),
+              undefined,
+            ]),
+            title: faker.helpers.arrayElement([
+              faker.string.alpha({ length: { min: 10, max: 20 } }),
+              undefined,
+            ]),
+            connectorId: faker.helpers.arrayElement([
+              faker.string.alpha({ length: { min: 10, max: 20 } }),
+              undefined,
+            ]),
+            connectorName: faker.helpers.arrayElement([
+              faker.string.alpha({ length: { min: 10, max: 20 } }),
+              undefined,
+            ]),
+            verb: faker.helpers.arrayElement([
+              faker.helpers.arrayElement(['restart', 'start', 'stop'] as const),
+              undefined,
+            ]),
+            entityRef: faker.helpers.arrayElement([
+              faker.string.alpha({ length: { min: 10, max: 20 } }),
+              undefined,
+            ]),
+            timeoutSeconds: faker.helpers.arrayElement([faker.number.int(), undefined]),
+            state: faker.helpers.arrayElement([
+              faker.helpers.arrayElement(Object.values(RunbookRunStepState)),
+              undefined,
+            ]),
+            startedAt: faker.helpers.arrayElement([
+              faker.date.past().toISOString().slice(0, 19) + 'Z',
+              undefined,
+            ]),
+            finishedAt: faker.helpers.arrayElement([
+              faker.date.past().toISOString().slice(0, 19) + 'Z',
+              undefined,
+            ]),
+            error: faker.helpers.arrayElement([
+              faker.string.alpha({ length: { min: 10, max: 20 } }),
+              undefined,
+            ]),
+            confirmedBy: faker.helpers.arrayElement([
+              faker.string.alpha({ length: { min: 10, max: 20 } }),
+              undefined,
+            ]),
+            redacted: faker.datatype.boolean(),
+            canExecute: faker.datatype.boolean(),
+            executeBlockedReason: faker.helpers.arrayElement([
+              faker.string.alpha({ length: { min: 10, max: 20 } }),
+              undefined,
+            ]),
+            preview: faker.helpers.arrayElement([
+              {
+                targetService: faker.string.alpha({ length: { min: 10, max: 20 } }),
+                estimatedDowntimeSeconds: faker.number.int({ min: 0 }),
+                affectedEntities: faker.helpers.arrayElement([
+                  Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(
+                    () => faker.string.alpha({ length: { min: 10, max: 20 } })
+                  ),
+                  undefined,
+                ]),
+                dependentServices: Array.from(
+                  { length: faker.number.int({ min: 1, max: 4 }) },
+                  (_, i) => i + 1
+                ).map(() => ({
+                  kind: faker.string.alpha({ length: { min: 10, max: 20 } }),
+                  name: faker.string.alpha({ length: { min: 10, max: 20 } }),
+                  ref: faker.helpers.arrayElement([
+                    faker.string.alpha({ length: { min: 10, max: 20 } }),
+                    undefined,
+                  ]),
+                })),
+              },
+              undefined,
+            ]),
+          })
+        ),
+      },
+    },
+  ]);
+
+export const getListRunbookRunsResponseMock = (
+  overrideResponse: Partial<Extract<RunbookRunPage, object>> = {}
+): RunbookRunPage => ({
+  items: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() => ({
+    ...{
+      id: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      runbookId: faker.helpers.arrayElement([
+        faker.string.alpha({ length: { min: 10, max: 20 } }),
+        undefined,
+      ]),
+      runbookTitle: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      state: faker.helpers.arrayElement(Object.values(RunbookRunState)),
+      reason: faker.helpers.arrayElement([
+        faker.string.alpha({ length: { min: 10, max: 20 } }),
+        undefined,
+      ]),
+      startedBy: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      resumedBy: faker.helpers.arrayElement([
+        faker.string.alpha({ length: { min: 10, max: 20 } }),
+        undefined,
+      ]),
+      cancelledBy: faker.helpers.arrayElement([
+        faker.string.alpha({ length: { min: 10, max: 20 } }),
+        undefined,
+      ]),
+      startedAt: faker.date.past().toISOString().slice(0, 19) + 'Z',
+      updatedAt: faker.date.past().toISOString().slice(0, 19) + 'Z',
+      finishedAt: faker.helpers.arrayElement([
+        faker.date.past().toISOString().slice(0, 19) + 'Z',
+        undefined,
+      ]),
+    },
+    ...{
+      steps: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(
+        () => ({
+          id: faker.string.alpha({ length: { min: 10, max: 20 } }),
+          position: faker.number.int(),
+          kind: faker.helpers.arrayElement([
+            faker.helpers.arrayElement([
+              'lifecycle',
+              'sync_and_wait',
+              'wait_until_healthy',
+              'manual',
+            ] as const),
+            undefined,
+          ]),
+          title: faker.helpers.arrayElement([
+            faker.string.alpha({ length: { min: 10, max: 20 } }),
+            undefined,
+          ]),
+          connectorId: faker.helpers.arrayElement([
+            faker.string.alpha({ length: { min: 10, max: 20 } }),
+            undefined,
+          ]),
+          connectorName: faker.helpers.arrayElement([
+            faker.string.alpha({ length: { min: 10, max: 20 } }),
+            undefined,
+          ]),
+          verb: faker.helpers.arrayElement([
+            faker.helpers.arrayElement(['restart', 'start', 'stop'] as const),
+            undefined,
+          ]),
+          entityRef: faker.helpers.arrayElement([
+            faker.string.alpha({ length: { min: 10, max: 20 } }),
+            undefined,
+          ]),
+          timeoutSeconds: faker.helpers.arrayElement([faker.number.int(), undefined]),
+          state: faker.helpers.arrayElement([
+            faker.helpers.arrayElement(Object.values(RunbookRunStepState)),
+            undefined,
+          ]),
+          startedAt: faker.helpers.arrayElement([
+            faker.date.past().toISOString().slice(0, 19) + 'Z',
+            undefined,
+          ]),
+          finishedAt: faker.helpers.arrayElement([
+            faker.date.past().toISOString().slice(0, 19) + 'Z',
+            undefined,
+          ]),
+          error: faker.helpers.arrayElement([
+            faker.string.alpha({ length: { min: 10, max: 20 } }),
+            undefined,
+          ]),
+          confirmedBy: faker.helpers.arrayElement([
+            faker.string.alpha({ length: { min: 10, max: 20 } }),
+            undefined,
+          ]),
+          redacted: faker.datatype.boolean(),
+          canExecute: faker.datatype.boolean(),
+          executeBlockedReason: faker.helpers.arrayElement([
+            faker.string.alpha({ length: { min: 10, max: 20 } }),
+            undefined,
+          ]),
+          preview: faker.helpers.arrayElement([
+            {
+              targetService: faker.string.alpha({ length: { min: 10, max: 20 } }),
+              estimatedDowntimeSeconds: faker.number.int({ min: 0 }),
+              affectedEntities: faker.helpers.arrayElement([
+                Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(
+                  () => faker.string.alpha({ length: { min: 10, max: 20 } })
+                ),
+                undefined,
+              ]),
+              dependentServices: Array.from(
+                { length: faker.number.int({ min: 1, max: 4 }) },
+                (_, i) => i + 1
+              ).map(() => ({
+                kind: faker.string.alpha({ length: { min: 10, max: 20 } }),
+                name: faker.string.alpha({ length: { min: 10, max: 20 } }),
+                ref: faker.helpers.arrayElement([
+                  faker.string.alpha({ length: { min: 10, max: 20 } }),
+                  undefined,
+                ]),
+              })),
+            },
+            undefined,
+          ]),
+        })
+      ),
+    },
+  })),
+  total: faker.number.int(),
+  page: faker.number.int(),
+  pageSize: faker.number.int(),
+  ...overrideResponse,
+});
+
+export const getGetRunbookRunResponseMock = (): RunbookRun => ({
+  ...{
+    id: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    runbookId: faker.helpers.arrayElement([
+      faker.string.alpha({ length: { min: 10, max: 20 } }),
+      undefined,
+    ]),
+    runbookTitle: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    state: faker.helpers.arrayElement(Object.values(RunbookRunState)),
+    reason: faker.helpers.arrayElement([
+      faker.string.alpha({ length: { min: 10, max: 20 } }),
+      undefined,
+    ]),
+    startedBy: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    resumedBy: faker.helpers.arrayElement([
+      faker.string.alpha({ length: { min: 10, max: 20 } }),
+      undefined,
+    ]),
+    cancelledBy: faker.helpers.arrayElement([
+      faker.string.alpha({ length: { min: 10, max: 20 } }),
+      undefined,
+    ]),
+    startedAt: faker.date.past().toISOString().slice(0, 19) + 'Z',
+    updatedAt: faker.date.past().toISOString().slice(0, 19) + 'Z',
+    finishedAt: faker.helpers.arrayElement([
+      faker.date.past().toISOString().slice(0, 19) + 'Z',
+      undefined,
+    ]),
+  },
+  ...{
+    steps: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(
+      () => ({
+        id: faker.string.alpha({ length: { min: 10, max: 20 } }),
+        position: faker.number.int(),
+        kind: faker.helpers.arrayElement([
+          faker.helpers.arrayElement([
+            'lifecycle',
+            'sync_and_wait',
+            'wait_until_healthy',
+            'manual',
+          ] as const),
+          undefined,
+        ]),
+        title: faker.helpers.arrayElement([
+          faker.string.alpha({ length: { min: 10, max: 20 } }),
+          undefined,
+        ]),
+        connectorId: faker.helpers.arrayElement([
+          faker.string.alpha({ length: { min: 10, max: 20 } }),
+          undefined,
+        ]),
+        connectorName: faker.helpers.arrayElement([
+          faker.string.alpha({ length: { min: 10, max: 20 } }),
+          undefined,
+        ]),
+        verb: faker.helpers.arrayElement([
+          faker.helpers.arrayElement(['restart', 'start', 'stop'] as const),
+          undefined,
+        ]),
+        entityRef: faker.helpers.arrayElement([
+          faker.string.alpha({ length: { min: 10, max: 20 } }),
+          undefined,
+        ]),
+        timeoutSeconds: faker.helpers.arrayElement([faker.number.int(), undefined]),
+        state: faker.helpers.arrayElement([
+          faker.helpers.arrayElement(Object.values(RunbookRunStepState)),
+          undefined,
+        ]),
+        startedAt: faker.helpers.arrayElement([
+          faker.date.past().toISOString().slice(0, 19) + 'Z',
+          undefined,
+        ]),
+        finishedAt: faker.helpers.arrayElement([
+          faker.date.past().toISOString().slice(0, 19) + 'Z',
+          undefined,
+        ]),
+        error: faker.helpers.arrayElement([
+          faker.string.alpha({ length: { min: 10, max: 20 } }),
+          undefined,
+        ]),
+        confirmedBy: faker.helpers.arrayElement([
+          faker.string.alpha({ length: { min: 10, max: 20 } }),
+          undefined,
+        ]),
+        redacted: faker.datatype.boolean(),
+        canExecute: faker.datatype.boolean(),
+        executeBlockedReason: faker.helpers.arrayElement([
+          faker.string.alpha({ length: { min: 10, max: 20 } }),
+          undefined,
+        ]),
+        preview: faker.helpers.arrayElement([
+          {
+            targetService: faker.string.alpha({ length: { min: 10, max: 20 } }),
+            estimatedDowntimeSeconds: faker.number.int({ min: 0 }),
+            affectedEntities: faker.helpers.arrayElement([
+              Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(
+                () => faker.string.alpha({ length: { min: 10, max: 20 } })
+              ),
+              undefined,
+            ]),
+            dependentServices: Array.from(
+              { length: faker.number.int({ min: 1, max: 4 }) },
+              (_, i) => i + 1
+            ).map(() => ({
+              kind: faker.string.alpha({ length: { min: 10, max: 20 } }),
+              name: faker.string.alpha({ length: { min: 10, max: 20 } }),
+              ref: faker.helpers.arrayElement([
+                faker.string.alpha({ length: { min: 10, max: 20 } }),
+                undefined,
+              ]),
+            })),
+          },
+          undefined,
+        ]),
+      })
+    ),
+  },
+});
+
+export const getResumeRunbookRunResponseMock = (
+  overrideResponse: Partial<Extract<RunbookRunRecord, object>> = {}
+): RunbookRunRecord => ({
+  id: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  runbookId: faker.helpers.arrayElement([
+    faker.string.alpha({ length: { min: 10, max: 20 } }),
+    undefined,
+  ]),
+  runbookTitle: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  state: faker.helpers.arrayElement(Object.values(RunbookRunState)),
+  reason: faker.helpers.arrayElement([
+    faker.string.alpha({ length: { min: 10, max: 20 } }),
+    undefined,
+  ]),
+  startedBy: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  resumedBy: faker.helpers.arrayElement([
+    faker.string.alpha({ length: { min: 10, max: 20 } }),
+    undefined,
+  ]),
+  cancelledBy: faker.helpers.arrayElement([
+    faker.string.alpha({ length: { min: 10, max: 20 } }),
+    undefined,
+  ]),
+  startedAt: faker.date.past().toISOString().slice(0, 19) + 'Z',
+  updatedAt: faker.date.past().toISOString().slice(0, 19) + 'Z',
+  finishedAt: faker.helpers.arrayElement([
+    faker.date.past().toISOString().slice(0, 19) + 'Z',
+    undefined,
+  ]),
   ...overrideResponse,
 });

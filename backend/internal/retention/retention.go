@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/WiseLabz/wiselabz/internal/store"
+	"github.com/WiseLabz/wiselabz/internal/ws"
 )
 
 // Fixed retention windows (days) for tables that have no configurable
@@ -24,6 +25,19 @@ const (
 	chatDays         = 90
 )
 
+// Publisher sends run-level updates without coupling cleanup to HTTP handlers.
+type Publisher interface {
+	Broadcast(eventType string, payload any)
+}
+
+// runExpiredEvent mirrors the run-level fields of runbookrun.Event, which this
+// package cannot import without pulling in the HTTP handlers.
+type runExpiredEvent struct {
+	RunID     string `json:"runId"`
+	RunbookID string `json:"runbookId,omitempty"`
+	State     string `json:"state"`
+}
+
 // RunCleanupOnce performs one cleanup pass: for every category whose *Days
 // config value is > 0, deletes rows older than the cutoff. A category with
 // Days <= 0 is skipped (retention disabled). Open runbook runs without recent
@@ -32,7 +46,7 @@ const (
 // (0 keeps history indefinitely). Errors in one category are logged and do not
 // stop the others from running, but are joined into the returned error so the
 // scheduler's job health (#384) reflects a partial cleanup pass.
-func RunCleanupOnce(ctx context.Context, s *store.Store, cfg store.RetentionSettings, logger *slog.Logger) error {
+func RunCleanupOnce(ctx context.Context, s *store.Store, cfg store.RetentionSettings, logger *slog.Logger, events ...Publisher) error {
 	cutoff := func(days int) string {
 		return time.Now().UTC().AddDate(0, 0, -days).Format(time.RFC3339)
 	}
@@ -136,6 +150,7 @@ func RunCleanupOnce(ctx context.Context, s *store.Store, cfg store.RetentionSett
 		errs = append(errs, fmt.Errorf("expire open runbook runs: %w", err))
 	} else if len(expiredRuns) > 0 {
 		logger.Info("Expired open runbook runs", "count", len(expiredRuns))
+		publishExpiredRuns(ctx, s, logger, expiredRuns, events)
 	}
 
 	if cfg.RunbookRunDays > 0 {
@@ -172,4 +187,26 @@ func RunCleanupOnce(ctx context.Context, s *store.Store, cfg store.RetentionSett
 	}
 
 	return errors.Join(errs...)
+}
+
+// publishExpiredRuns announces each expired run as a run-level update.
+func publishExpiredRuns(ctx context.Context, s *store.Store, logger *slog.Logger, ids []string, events []Publisher) {
+	payloads := make([]runExpiredEvent, 0, len(ids))
+	for _, id := range ids {
+		payload := runExpiredEvent{RunID: id, State: "expired"}
+		if run, _, err := s.GetRunbookRun(ctx, id); err != nil {
+			logger.Warn("load expired runbook run for event", "runId", id, "error", err)
+		} else if run.RunbookID != nil {
+			payload.RunbookID = *run.RunbookID
+		}
+		payloads = append(payloads, payload)
+	}
+	for _, publisher := range events {
+		if publisher == nil {
+			continue
+		}
+		for _, payload := range payloads {
+			publisher.Broadcast(ws.EventRunbookRunUpdated, payload)
+		}
+	}
 }

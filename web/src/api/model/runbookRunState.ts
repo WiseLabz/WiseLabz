@@ -7,17 +7,13 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface Notification {
-  id: string;
-  /**
-   * Deep-link target when set — the affected alert.
-   * @nullable
-   */
-  alertId?: string | null;
-  /** e.g. alert.created, finding.created, system.job_failed, runbook.run_failed, runbook.run_waiting, digest.summary */
-  eventType: string;
-  title: string;
-  message: string;
-  read: boolean;
-  createdAt: string;
-}
+export type RunbookRunState = (typeof RunbookRunState)[keyof typeof RunbookRunState];
+
+export const RunbookRunState = {
+  running: 'running',
+  waiting_manual: 'waiting_manual',
+  failed: 'failed',
+  succeeded: 'succeeded',
+  cancelled: 'cancelled',
+  expired: 'expired',
+} as const;

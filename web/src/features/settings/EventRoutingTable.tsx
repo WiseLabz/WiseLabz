@@ -36,7 +36,13 @@ const CHANNEL_LABELS: Record<NotificationChannelType, string> = {
  * before any route exists for them, so a new event (e.g. system.job_failed) can
  * be routed without hand-editing the saved config.
  */
-const KNOWN_EVENT_TYPES = ['alert.created', 'finding.created', 'system.job_failed'] as const;
+const KNOWN_EVENT_TYPES = [
+  'alert.created',
+  'finding.created',
+  'system.job_failed',
+  'runbook.run_failed',
+  'runbook.run_waiting',
+] as const;
 
 function eventLabel(eventType: string): string {
   return eventType.replace(/[._]/g, ' ');

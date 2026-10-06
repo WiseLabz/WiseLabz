@@ -29,12 +29,19 @@ import type {
   ExecuteRunbookStepParams,
   ForbiddenResponse,
   GetRunbooksParams,
+  ListRunbookRunsParams,
   NotFoundResponse,
   RestartPreview,
   Runbook,
   RunbookCreate,
   RunbookPage,
+  RunbookRun,
+  RunbookRunConflict,
+  RunbookRunPage,
+  RunbookRunPreview,
+  RunbookRunRecord,
   RunbookUpdate,
+  StartRunbookRunParams,
   UnauthorizedResponse,
 } from '../../model';
 
@@ -669,4 +676,628 @@ export const useExecuteRunbookStep = <
   TContext
 > => {
   return useMutation(getExecuteRunbookStepMutationOptions(options), queryClient);
+};
+/**
+ * dryRun=true returns the ordered, redacted preview without elevation or mutation. Starting requires operator on every referenced connector (including API-key restrictions) before any other rejection, and one fresh runbook.run elevation targeted at runbookId. Steps are frozen at start. An empty runbook cannot start. Existing single-step execution is unchanged.
+ * @summary Preview or start a whole-runbook run
+ */
+export const startRunbookRun = (
+  runbookId: string,
+  params?: StartRunbookRunParams,
+  options?: SecondParameter<typeof customInstance>,
+  signal?: AbortSignal
+) => {
+  return customInstance<RunbookRunPreview | RunbookRun>(
+    { url: `/runbooks/${runbookId}/run`, method: 'POST', params, signal },
+    options
+  );
+};
+
+export const getStartRunbookRunMutationKey = () => ['startRunbookRun'] as const;
+
+export const getStartRunbookRunMutationOptions = <
+  TError = ErrorType<
+    | BadRequestResponse
+    | ElevationRequiredResponse
+    | ForbiddenResponse
+    | NotFoundResponse
+    | RunbookRunConflict
+    | Error
+  >,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof startRunbookRun>>,
+    TError,
+    StartRunbookRunMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof startRunbookRun>>,
+  TError,
+  StartRunbookRunMutationVariables,
+  TContext
+> => {
+  const mutationKey = getStartRunbookRunMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof startRunbookRun>>,
+    StartRunbookRunMutationVariables
+  > = (props) => {
+    const { runbookId, params } = props ?? {};
+
+    return startRunbookRun(runbookId, params, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type StartRunbookRunMutationResult = NonNullable<
+  Awaited<ReturnType<typeof startRunbookRun>>
+>;
+
+export type StartRunbookRunMutationError = ErrorType<
+  | BadRequestResponse
+  | ElevationRequiredResponse
+  | ForbiddenResponse
+  | NotFoundResponse
+  | RunbookRunConflict
+  | Error
+>;
+export type StartRunbookRunMutationVariables = {
+  runbookId: string;
+  params?: StartRunbookRunParams;
+};
+
+/**
+ * @summary Preview or start a whole-runbook run
+ */
+export const useStartRunbookRun = <
+  TError = ErrorType<
+    | BadRequestResponse
+    | ElevationRequiredResponse
+    | ForbiddenResponse
+    | NotFoundResponse
+    | RunbookRunConflict
+    | Error
+  >,
+  TContext = unknown,
+>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof startRunbookRun>>,
+      TError,
+      StartRunbookRunMutationVariables,
+      TContext
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseMutationResult<
+  Awaited<ReturnType<typeof startRunbookRun>>,
+  TError,
+  StartRunbookRunMutationVariables,
+  TContext
+> => {
+  return useMutation(getStartRunbookRunMutationOptions(options), queryClient);
+};
+/**
+ * @summary Run history, newest first with frozen redacted steps
+ */
+export const listRunbookRuns = (
+  runbookId: string,
+  params?: ListRunbookRunsParams,
+  options?: SecondParameter<typeof customInstance>,
+  signal?: AbortSignal
+) => {
+  return customInstance<RunbookRunPage>(
+    { url: `/runbooks/${runbookId}/runs`, method: 'GET', params, signal },
+    options
+  );
+};
+
+export const getListRunbookRunsQueryKey = (runbookId: string, params?: ListRunbookRunsParams) => {
+  return [`/runbooks/${runbookId}/runs`, ...(params ? [params] : [])] as const;
+};
+
+export const getListRunbookRunsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listRunbookRuns>>,
+  TError = ErrorType<UnauthorizedResponse | NotFoundResponse>,
+>(
+  runbookId: string,
+  params?: ListRunbookRunsParams,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof listRunbookRuns>>, TError, TData>>;
+    request?: SecondParameter<typeof customInstance>;
+  }
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListRunbookRunsQueryKey(runbookId, params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listRunbookRuns>>> = ({ signal }) =>
+    listRunbookRuns(runbookId, params, requestOptions, signal);
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: runbookId !== null && runbookId !== undefined,
+    ...queryOptions,
+  } as UseQueryOptions<Awaited<ReturnType<typeof listRunbookRuns>>, TError, TData> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+};
+
+export type ListRunbookRunsQueryResult = NonNullable<Awaited<ReturnType<typeof listRunbookRuns>>>;
+export type ListRunbookRunsQueryError = ErrorType<UnauthorizedResponse | NotFoundResponse>;
+
+export function useListRunbookRuns<
+  TData = Awaited<ReturnType<typeof listRunbookRuns>>,
+  TError = ErrorType<UnauthorizedResponse | NotFoundResponse>,
+>(
+  runbookId: string,
+  params: undefined | ListRunbookRunsParams,
+  options: {
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof listRunbookRuns>>, TError, TData>> &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listRunbookRuns>>,
+          TError,
+          Awaited<ReturnType<typeof listRunbookRuns>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useListRunbookRuns<
+  TData = Awaited<ReturnType<typeof listRunbookRuns>>,
+  TError = ErrorType<UnauthorizedResponse | NotFoundResponse>,
+>(
+  runbookId: string,
+  params?: ListRunbookRunsParams,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof listRunbookRuns>>, TError, TData>> &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listRunbookRuns>>,
+          TError,
+          Awaited<ReturnType<typeof listRunbookRuns>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useListRunbookRuns<
+  TData = Awaited<ReturnType<typeof listRunbookRuns>>,
+  TError = ErrorType<UnauthorizedResponse | NotFoundResponse>,
+>(
+  runbookId: string,
+  params?: ListRunbookRunsParams,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof listRunbookRuns>>, TError, TData>>;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * @summary Run history, newest first with frozen redacted steps
+ */
+
+export function useListRunbookRuns<
+  TData = Awaited<ReturnType<typeof listRunbookRuns>>,
+  TError = ErrorType<UnauthorizedResponse | NotFoundResponse>,
+>(
+  runbookId: string,
+  params?: ListRunbookRunsParams,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof listRunbookRuns>>, TError, TData>>;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getListRunbookRunsQueryOptions(runbookId, params, options);
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+/**
+ * @summary Read a run, including after its runbook was deleted
+ */
+export const getRunbookRun = (
+  runId: string,
+  options?: SecondParameter<typeof customInstance>,
+  signal?: AbortSignal
+) => {
+  return customInstance<RunbookRun>(
+    { url: `/runbook-runs/${runId}`, method: 'GET', signal },
+    options
+  );
+};
+
+export const getGetRunbookRunQueryKey = (runId: string) => {
+  return [`/runbook-runs/${runId}`] as const;
+};
+
+export const getGetRunbookRunQueryOptions = <
+  TData = Awaited<ReturnType<typeof getRunbookRun>>,
+  TError = ErrorType<UnauthorizedResponse | NotFoundResponse>,
+>(
+  runId: string,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getRunbookRun>>, TError, TData>>;
+    request?: SecondParameter<typeof customInstance>;
+  }
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetRunbookRunQueryKey(runId);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getRunbookRun>>> = ({ signal }) =>
+    getRunbookRun(runId, requestOptions, signal);
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: runId !== null && runId !== undefined,
+    ...queryOptions,
+  } as UseQueryOptions<Awaited<ReturnType<typeof getRunbookRun>>, TError, TData> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+};
+
+export type GetRunbookRunQueryResult = NonNullable<Awaited<ReturnType<typeof getRunbookRun>>>;
+export type GetRunbookRunQueryError = ErrorType<UnauthorizedResponse | NotFoundResponse>;
+
+export function useGetRunbookRun<
+  TData = Awaited<ReturnType<typeof getRunbookRun>>,
+  TError = ErrorType<UnauthorizedResponse | NotFoundResponse>,
+>(
+  runId: string,
+  options: {
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof getRunbookRun>>, TError, TData>> &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getRunbookRun>>,
+          TError,
+          Awaited<ReturnType<typeof getRunbookRun>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useGetRunbookRun<
+  TData = Awaited<ReturnType<typeof getRunbookRun>>,
+  TError = ErrorType<UnauthorizedResponse | NotFoundResponse>,
+>(
+  runId: string,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getRunbookRun>>, TError, TData>> &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getRunbookRun>>,
+          TError,
+          Awaited<ReturnType<typeof getRunbookRun>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useGetRunbookRun<
+  TData = Awaited<ReturnType<typeof getRunbookRun>>,
+  TError = ErrorType<UnauthorizedResponse | NotFoundResponse>,
+>(
+  runId: string,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getRunbookRun>>, TError, TData>>;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * @summary Read a run, including after its runbook was deleted
+ */
+
+export function useGetRunbookRun<
+  TData = Awaited<ReturnType<typeof getRunbookRun>>,
+  TError = ErrorType<UnauthorizedResponse | NotFoundResponse>,
+>(
+  runId: string,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getRunbookRun>>, TError, TData>>;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getGetRunbookRunQueryOptions(runId, options);
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+/**
+ * Requires operator on every connector of the frozen run (API-key restrictions apply), checked before state or step validation. No elevation. Available after runbook deletion.
+ * @summary Confirm a waiting manual step and continue
+ */
+export const confirmRunbookRunStep = (
+  runId: string,
+  stepId: string,
+  options?: SecondParameter<typeof customInstance>,
+  signal?: AbortSignal
+) => {
+  return customInstance<void>(
+    { url: `/runbook-runs/${runId}/steps/${stepId}/confirm`, method: 'POST', signal },
+    options
+  );
+};
+
+export const getConfirmRunbookRunStepMutationKey = () => ['confirmRunbookRunStep'] as const;
+
+export const getConfirmRunbookRunStepMutationOptions = <
+  TError = ErrorType<UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | Error>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof confirmRunbookRunStep>>,
+    TError,
+    ConfirmRunbookRunStepMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof confirmRunbookRunStep>>,
+  TError,
+  ConfirmRunbookRunStepMutationVariables,
+  TContext
+> => {
+  const mutationKey = getConfirmRunbookRunStepMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof confirmRunbookRunStep>>,
+    ConfirmRunbookRunStepMutationVariables
+  > = (props) => {
+    const { runId, stepId } = props ?? {};
+
+    return confirmRunbookRunStep(runId, stepId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ConfirmRunbookRunStepMutationResult = NonNullable<
+  Awaited<ReturnType<typeof confirmRunbookRunStep>>
+>;
+
+export type ConfirmRunbookRunStepMutationError = ErrorType<
+  UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | Error
+>;
+export type ConfirmRunbookRunStepMutationVariables = { runId: string; stepId: string };
+
+/**
+ * @summary Confirm a waiting manual step and continue
+ */
+export const useConfirmRunbookRunStep = <
+  TError = ErrorType<UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | Error>,
+  TContext = unknown,
+>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof confirmRunbookRunStep>>,
+      TError,
+      ConfirmRunbookRunStepMutationVariables,
+      TContext
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseMutationResult<
+  Awaited<ReturnType<typeof confirmRunbookRunStep>>,
+  TError,
+  ConfirmRunbookRunStepMutationVariables,
+  TContext
+> => {
+  return useMutation(getConfirmRunbookRunStepMutationOptions(options), queryClient);
+};
+/**
+ * Requires operator on every frozen connector before state or elevation validation, and a fresh single-use runbook.run elevation targeted at the runbook id. Continues from the first non-succeeded step, including unknown outcomes. A deleted runbook cannot be resumed because its elevation target no longer exists: returns 409 runbook_deleted; history, cancellation and manual confirmation remain available.
+ * @summary Resume a failed run with fresh elevation
+ */
+export const resumeRunbookRun = (
+  runId: string,
+  options?: SecondParameter<typeof customInstance>,
+  signal?: AbortSignal
+) => {
+  return customInstance<RunbookRunRecord>(
+    { url: `/runbook-runs/${runId}/resume`, method: 'POST', signal },
+    options
+  );
+};
+
+export const getResumeRunbookRunMutationKey = () => ['resumeRunbookRun'] as const;
+
+export const getResumeRunbookRunMutationOptions = <
+  TError = ErrorType<
+    BadRequestResponse | ElevationRequiredResponse | ForbiddenResponse | NotFoundResponse | Error
+  >,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof resumeRunbookRun>>,
+    TError,
+    ResumeRunbookRunMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof resumeRunbookRun>>,
+  TError,
+  ResumeRunbookRunMutationVariables,
+  TContext
+> => {
+  const mutationKey = getResumeRunbookRunMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof resumeRunbookRun>>,
+    ResumeRunbookRunMutationVariables
+  > = (props) => {
+    const { runId } = props ?? {};
+
+    return resumeRunbookRun(runId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ResumeRunbookRunMutationResult = NonNullable<
+  Awaited<ReturnType<typeof resumeRunbookRun>>
+>;
+
+export type ResumeRunbookRunMutationError = ErrorType<
+  BadRequestResponse | ElevationRequiredResponse | ForbiddenResponse | NotFoundResponse | Error
+>;
+export type ResumeRunbookRunMutationVariables = { runId: string };
+
+/**
+ * @summary Resume a failed run with fresh elevation
+ */
+export const useResumeRunbookRun = <
+  TError = ErrorType<
+    BadRequestResponse | ElevationRequiredResponse | ForbiddenResponse | NotFoundResponse | Error
+  >,
+  TContext = unknown,
+>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof resumeRunbookRun>>,
+      TError,
+      ResumeRunbookRunMutationVariables,
+      TContext
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseMutationResult<
+  Awaited<ReturnType<typeof resumeRunbookRun>>,
+  TError,
+  ResumeRunbookRunMutationVariables,
+  TContext
+> => {
+  return useMutation(getResumeRunbookRunMutationOptions(options), queryClient);
+};
+/**
+ * Requires operator on every frozen connector (API-key restrictions apply), checked before state. No elevation. Stops execution before its next step and records the cancelling user. Available after runbook deletion. Connectors deleted since the run started do not count toward the grant requirement for cancellation (confirm and resume still require every frozen connector).
+ * @summary Cancel a running, waiting or failed run
+ */
+export const cancelRunbookRun = (
+  runId: string,
+  options?: SecondParameter<typeof customInstance>,
+  signal?: AbortSignal
+) => {
+  return customInstance<void>(
+    { url: `/runbook-runs/${runId}/cancel`, method: 'POST', signal },
+    options
+  );
+};
+
+export const getCancelRunbookRunMutationKey = () => ['cancelRunbookRun'] as const;
+
+export const getCancelRunbookRunMutationOptions = <
+  TError = ErrorType<UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | Error>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof cancelRunbookRun>>,
+    TError,
+    CancelRunbookRunMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof cancelRunbookRun>>,
+  TError,
+  CancelRunbookRunMutationVariables,
+  TContext
+> => {
+  const mutationKey = getCancelRunbookRunMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof cancelRunbookRun>>,
+    CancelRunbookRunMutationVariables
+  > = (props) => {
+    const { runId } = props ?? {};
+
+    return cancelRunbookRun(runId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CancelRunbookRunMutationResult = NonNullable<
+  Awaited<ReturnType<typeof cancelRunbookRun>>
+>;
+
+export type CancelRunbookRunMutationError = ErrorType<
+  UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | Error
+>;
+export type CancelRunbookRunMutationVariables = { runId: string };
+
+/**
+ * @summary Cancel a running, waiting or failed run
+ */
+export const useCancelRunbookRun = <
+  TError = ErrorType<UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | Error>,
+  TContext = unknown,
+>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof cancelRunbookRun>>,
+      TError,
+      CancelRunbookRunMutationVariables,
+      TContext
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseMutationResult<
+  Awaited<ReturnType<typeof cancelRunbookRun>>,
+  TError,
+  CancelRunbookRunMutationVariables,
+  TContext
+> => {
+  return useMutation(getCancelRunbookRunMutationOptions(options), queryClient);
 };

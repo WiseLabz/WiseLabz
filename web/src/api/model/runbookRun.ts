@@ -6,18 +6,9 @@
  *
  * OpenAPI spec version: 0.1.0
  */
+import type { RunbookRunRecord } from './runbookRunRecord';
+import type { RunbookRunStep } from './runbookRunStep';
 
-export interface Notification {
-  id: string;
-  /**
-   * Deep-link target when set — the affected alert.
-   * @nullable
-   */
-  alertId?: string | null;
-  /** e.g. alert.created, finding.created, system.job_failed, runbook.run_failed, runbook.run_waiting, digest.summary */
-  eventType: string;
-  title: string;
-  message: string;
-  read: boolean;
-  createdAt: string;
-}
+export type RunbookRun = RunbookRunRecord & {
+  steps: RunbookRunStep[];
+};

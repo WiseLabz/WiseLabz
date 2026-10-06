@@ -409,7 +409,8 @@ type SystemResyncPayload = {};
 
 ### 16. `runbook.run.updated`
 A runbook run, or one of its steps, changed state. Sent on every transition by
-the run executor (`internal/runbookrun`).
+the run executor (`internal/runbookrun`). The retention job also sends the
+run-level event (state `expired`) when it expires an open run.
 
 ```ts
 interface RunbookRunUpdatedPayload {
