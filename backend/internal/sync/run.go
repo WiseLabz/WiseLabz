@@ -38,8 +38,28 @@ func (e *Engine) RunSyncFields(ctx context.Context, connectorID string, jobID st
 	return e.runSyncFields(ctx, connectorID, jobID, fields, false)
 }
 
+// RunSyncFieldsWhenFree is RunSyncFields for a caller that needs its own
+// sync: while another sync of the connector is in flight it waits for that one
+// to end, or for ctx, instead of failing with ErrAlreadyRunning, and
+// broadcasts nothing meanwhile.
+func (e *Engine) RunSyncFieldsWhenFree(ctx context.Context, connectorID, jobID string, fields []string) (*RunResult, error) {
+	for {
+		done := make(chan struct{})
+		prev, loaded := e.inFlight.LoadOrStore(connectorID, done)
+		if !loaded {
+			return e.runClaimed(ctx, connectorID, jobID, fields, false, done)
+		}
+		select {
+		case <-prev.(chan struct{}):
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
+}
+
 func (e *Engine) runSyncFields(ctx context.Context, connectorID, jobID string, fields []string, scheduled bool) (*RunResult, error) {
-	if _, loaded := e.inFlight.LoadOrStore(connectorID, struct{}{}); loaded {
+	done := make(chan struct{})
+	if _, loaded := e.inFlight.LoadOrStore(connectorID, done); loaded {
 		if e.hub != nil {
 			e.hub.BroadcastConnector(connectorID, ws.EventSyncComplete, map[string]any{
 				"serviceId": connectorID, "jobId": jobID, "error": ErrAlreadyRunning.Error(),
@@ -47,7 +67,13 @@ func (e *Engine) runSyncFields(ctx context.Context, connectorID, jobID string, f
 		}
 		return nil, ErrAlreadyRunning
 	}
-	defer e.inFlight.Delete(connectorID)
+	return e.runClaimed(ctx, connectorID, jobID, fields, scheduled, done)
+}
+
+// runClaimed runs a sync whose inFlight slot the caller has just claimed with
+// done. It frees the slot, then wakes anyone waiting on it, on every exit.
+func (e *Engine) runClaimed(ctx context.Context, connectorID, jobID string, fields []string, scheduled bool, done chan struct{}) (*RunResult, error) {
+	defer func() { e.inFlight.Delete(connectorID); close(done) }()
 	select {
 	case e.sem <- struct{}{}:
 		defer func() { <-e.sem }()
