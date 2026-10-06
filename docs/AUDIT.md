@@ -110,7 +110,7 @@ mutation permission by itself (see `docs/adr/0001-lab-mutating-operation-boundar
 the caller still needs an operator grant on the step's connector and a
 valid elevation token for `connector.<verb>`. `runbook.create`/
 `runbook.update` record the runbook's `title` and its `steps` (each step's
-`id`, `connectorId`, `verb`, `entityRef`); `runbook.update` additionally
+`id`, `kind`, `connectorId`, `verb`, `entityRef`, `timeoutSeconds`); `runbook.update` additionally
 records `changedFields`, the list of top-level keys present in the request
 body. `runbook.delete` records the deleted runbook's `title`.
 

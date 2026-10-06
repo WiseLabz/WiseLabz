@@ -22,21 +22,29 @@ type runbookSummary struct {
 
 // runbookStepView is a runbook step as MCP returns it. Steps on connectors
 // the caller cannot view are redacted down to position and a generic title:
-// no connector, verb or entity reference leaks.
+// no connector, verb, entity reference, kind or timeout leaks. A step with no
+// connector (a manual step) has nothing to hide and is never redacted.
+// TimeoutSeconds is set only for sync_and_wait and wait_until_healthy steps.
 type runbookStepView struct {
-	Position      int    `json:"position"`
-	Title         string `json:"title"`
-	ConnectorID   string `json:"connectorId,omitempty"`
-	ConnectorName string `json:"connectorName,omitempty"`
-	Verb          string `json:"verb,omitempty"`
-	EntityRef     string `json:"entityRef,omitempty"`
-	Redacted      bool   `json:"redacted,omitempty"`
+	Position       int    `json:"position"`
+	Kind           string `json:"kind,omitempty"`
+	Title          string `json:"title"`
+	ConnectorID    string `json:"connectorId,omitempty"`
+	ConnectorName  string `json:"connectorName,omitempty"`
+	Verb           string `json:"verb,omitempty"`
+	EntityRef      string `json:"entityRef,omitempty"`
+	TimeoutSeconds int    `json:"timeoutSeconds,omitempty"`
+	Redacted       bool   `json:"redacted,omitempty"`
 }
 
+// runbookStepConnectorIDs returns the connector ids of the steps that have
+// one.
 func runbookStepConnectorIDs(steps []*store.RunbookStepRecord) []string {
 	ids := make([]string, 0, len(steps))
 	for _, st := range steps {
-		ids = append(ids, st.ConnectorID)
+		if st.ConnectorID != "" {
+			ids = append(ids, st.ConnectorID)
+		}
 	}
 	return ids
 }
@@ -121,6 +129,21 @@ func registerGetRunbook(s *mcpserver.MCPServer, d Deps) {
 
 		views := make([]runbookStepView, 0, len(steps))
 		for _, st := range steps {
+			kind := st.Kind
+			if kind == "" {
+				kind = "lifecycle"
+			}
+			timeout := 0
+			if kind == "sync_and_wait" || kind == "wait_until_healthy" {
+				timeout = st.TimeoutSeconds
+				if timeout == 0 {
+					timeout = 300
+				}
+			}
+			if st.ConnectorID == "" {
+				views = append(views, runbookStepView{Position: st.Position, Kind: kind, Title: st.Title})
+				continue
+			}
 			if !allowed[st.ConnectorID] {
 				views = append(views, runbookStepView{Position: st.Position, Title: "Restricted step", Redacted: true})
 				continue
@@ -130,8 +153,8 @@ func registerGetRunbook(s *mcpserver.MCPServer, d Deps) {
 				name = c.Name
 			}
 			views = append(views, runbookStepView{
-				Position: st.Position, Title: st.Title, ConnectorID: st.ConnectorID,
-				ConnectorName: name, Verb: st.Verb, EntityRef: st.EntityRef,
+				Position: st.Position, Kind: kind, Title: st.Title, ConnectorID: st.ConnectorID,
+				ConnectorName: name, Verb: st.Verb, EntityRef: st.EntityRef, TimeoutSeconds: timeout,
 			})
 		}
 

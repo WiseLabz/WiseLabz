@@ -108,3 +108,68 @@ func TestGetRunbookDocLinkVisibility(t *testing.T) {
 		t.Errorf("restricted key docId = %q, want hidden", got)
 	}
 }
+
+// get_runbook reports each visible step's kind and wait timeout, redacts a
+// connector step the caller cannot view down to nothing, and never redacts a
+// manual step (it has no connector).
+func TestGetRunbookStepKinds(t *testing.T) {
+	ctx := context.Background()
+	h := newTestHarness(t)
+	visible := createConnector(t, h.Store, "pve", "virtualization")
+	hidden := createConnector(t, h.Store, "nas", "networking")
+	userID := createUser(t, h.Store)
+	for _, cid := range []string{visible, hidden} {
+		if _, err := h.Store.UpsertConnectorGrant(ctx, userID, cid, "operator"); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	rb, _, err := h.Store.CreateRunbookWithSteps(ctx,
+		&store.RunbookRecord{Title: "Failover", Body: "b", TargetType: "alert_severity", TargetValue: "critical"},
+		[]*store.RunbookStepRecord{
+			{Title: "Restart VM", ConnectorID: visible, Verb: "restart", EntityRef: "vm:100"},
+			{Title: "Wait for NAS", Kind: "wait_until_healthy", TimeoutSeconds: 600, ConnectorID: hidden},
+			{Title: "Check the console", Kind: "manual"},
+		})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	type got struct {
+		Steps []runbookStepView `json:"steps"`
+	}
+
+	t.Run("restricted key redacts the wait step only", func(t *testing.T) {
+		var out got
+		h.callTool(restrictedCtx(userID, []string{visible}), t, "get_runbook", map[string]any{"id": rb.ID}, &out)
+		if len(out.Steps) != 3 {
+			t.Fatalf("steps = %+v", out.Steps)
+		}
+		if out.Steps[0].Redacted || out.Steps[0].Kind != "lifecycle" || out.Steps[0].TimeoutSeconds != 0 {
+			t.Errorf("lifecycle step = %+v, want visible lifecycle with no timeout", out.Steps[0])
+		}
+		wait := out.Steps[1]
+		if !wait.Redacted || wait.Title != "Restricted step" || wait.Kind != "" || wait.TimeoutSeconds != 0 || wait.ConnectorID != "" {
+			t.Errorf("wait step = %+v, want redacted with no kind or timeout", wait)
+		}
+		manual := out.Steps[2]
+		if manual.Redacted || manual.Title != "Check the console" || manual.Kind != "manual" {
+			t.Errorf("manual step = %+v, want visible title and kind manual", manual)
+		}
+	})
+
+	t.Run("full access reports kind and timeout", func(t *testing.T) {
+		var out got
+		h.callTool(userCtx(userID), t, "get_runbook", map[string]any{"id": rb.ID}, &out)
+		if len(out.Steps) != 3 {
+			t.Fatalf("steps = %+v", out.Steps)
+		}
+		wait := out.Steps[1]
+		if wait.Redacted || wait.Kind != "wait_until_healthy" || wait.TimeoutSeconds != 600 || wait.ConnectorName != "nas" {
+			t.Errorf("wait step = %+v, want wait_until_healthy/600 on nas", wait)
+		}
+		if out.Steps[2].Redacted || out.Steps[2].Kind != "manual" {
+			t.Errorf("manual step = %+v", out.Steps[2])
+		}
+	})
+}
