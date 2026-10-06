@@ -150,24 +150,7 @@ func RunCleanupOnce(ctx context.Context, s *store.Store, cfg store.RetentionSett
 		errs = append(errs, fmt.Errorf("expire open runbook runs: %w", err))
 	} else if len(expiredRuns) > 0 {
 		logger.Info("Expired open runbook runs", "count", len(expiredRuns))
-		payloads := make([]runExpiredEvent, 0, len(expiredRuns))
-		for _, id := range expiredRuns {
-			payload := runExpiredEvent{RunID: id, State: "expired"}
-			if run, _, err := s.GetRunbookRun(ctx, id); err != nil {
-				logger.Warn("load expired runbook run for event", "runId", id, "error", err)
-			} else if run.RunbookID != nil {
-				payload.RunbookID = *run.RunbookID
-			}
-			payloads = append(payloads, payload)
-		}
-		for _, publisher := range events {
-			if publisher == nil {
-				continue
-			}
-			for _, payload := range payloads {
-				publisher.Broadcast(ws.EventRunbookRunUpdated, payload)
-			}
-		}
+		publishExpiredRuns(ctx, s, logger, expiredRuns, events)
 	}
 
 	if cfg.RunbookRunDays > 0 {
@@ -204,4 +187,26 @@ func RunCleanupOnce(ctx context.Context, s *store.Store, cfg store.RetentionSett
 	}
 
 	return errors.Join(errs...)
+}
+
+// publishExpiredRuns announces each expired run as a run-level update.
+func publishExpiredRuns(ctx context.Context, s *store.Store, logger *slog.Logger, ids []string, events []Publisher) {
+	payloads := make([]runExpiredEvent, 0, len(ids))
+	for _, id := range ids {
+		payload := runExpiredEvent{RunID: id, State: "expired"}
+		if run, _, err := s.GetRunbookRun(ctx, id); err != nil {
+			logger.Warn("load expired runbook run for event", "runId", id, "error", err)
+		} else if run.RunbookID != nil {
+			payload.RunbookID = *run.RunbookID
+		}
+		payloads = append(payloads, payload)
+	}
+	for _, publisher := range events {
+		if publisher == nil {
+			continue
+		}
+		for _, payload := range payloads {
+			publisher.Broadcast(ws.EventRunbookRunUpdated, payload)
+		}
+	}
 }
