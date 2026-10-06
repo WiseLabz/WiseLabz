@@ -2,10 +2,12 @@ import { useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { useQueryClient } from '@tanstack/react-query';
 import { isAxiosError } from 'axios';
-import { toast } from 'sonner';
+import { toast } from '../../lib/toast';
 import {
   getEntitiesId,
+  getGetEntityOverridesQueryKey,
   useGetEntitiesId,
   usePostEntityOverrides,
 } from '../../api/generated/search/search';
@@ -42,6 +44,7 @@ export function EntityDetailPage() {
   const { t } = useTranslation();
   const { id = '' } = useParams();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const isAdmin = useIsInstanceAdmin();
 
   const entity = useGetEntitiesId(id);
@@ -53,21 +56,7 @@ export function EntityDetailPage() {
   const [targetRef, setTargetRef] = useState('');
   const [note, setNote] = useState('');
 
-  const postOverride = usePostEntityOverrides({
-    mutation: {
-      onError: (err) => {
-        if (isAxiosError(err) && err.response?.status === 409) {
-          toast.error(
-            t('entities.overrides.conflictError', {
-              defaultValue: 'An equivalent override already exists.',
-            })
-          );
-        } else {
-          toast.error(t('common.actionFailed'));
-        }
-      },
-    },
-  });
+  const postOverride = usePostEntityOverrides();
 
   const handleVisibilityAndNavigate = async (
     targetEntityId: string | undefined,
@@ -92,8 +81,12 @@ export function EntityDetailPage() {
         toast.success(notVisibleMsg);
         void entity.refetch();
       } else {
-        toast.success(notVisibleMsg);
-        void entity.refetch();
+        toast.success(successMsg);
+        if (targetEntityId === id) {
+          void entity.refetch();
+        } else {
+          navigate(`/entities/${encodeURIComponent(targetEntityId)}`);
+        }
       }
     }
   };
@@ -112,13 +105,39 @@ export function EntityDetailPage() {
       },
       {
         onSuccess: async (res) => {
+          void queryClient.invalidateQueries({ queryKey: getGetEntityOverridesQueryKey() });
+          void queryClient.invalidateQueries({ queryKey: ['/entities'] });
           setDetachMember(null);
-          const targetEntityId = res.members[0]?.entityId;
+          const targetMember =
+            res.members.find(
+              (item) =>
+                item.connectorId === m.connectorId &&
+                item.kind === m.kind &&
+                item.ref === m.ref
+            ) ?? res.members[0];
+          if (res.state === 'dormant') {
+            toast.info(t('entities.overrides.savedDormant'));
+            void entity.refetch();
+            return;
+          }
           await handleVisibilityAndNavigate(
-            targetEntityId,
+            targetMember?.entityId,
             t('entities.overrides.detachSuccess'),
             t('entities.overrides.detachSuccessNotVisible')
           );
+        },
+        onError: (err) => {
+          if (isAxiosError(err) && err.response?.status === 409) {
+            toast.error(t('entities.overrides.conflictError'));
+          } else if (isAxiosError(err) && err.response?.status && err.response.status < 500) {
+            toast.error(t('entities.overrides.detachError'));
+          } else {
+            void queryClient.invalidateQueries({ queryKey: getGetEntityOverridesQueryKey() });
+            void queryClient.invalidateQueries({ queryKey: ['/entities'] });
+            void entity.refetch();
+            setDetachMember(null);
+            toast.error(t('entities.overrides.detachError'));
+          }
         },
       }
     );
@@ -156,15 +175,43 @@ export function EntityDetailPage() {
       },
       {
         onSuccess: async (res) => {
+          void queryClient.invalidateQueries({ queryKey: getGetEntityOverridesQueryKey() });
+          void queryClient.invalidateQueries({ queryKey: ['/entities'] });
           setMergeMember(null);
           setTargetRef('');
           setNote('');
-          const targetEntityId = res.members[0]?.entityId || res.members[1]?.entityId;
+          const targetMember =
+            res.members.find(
+              (item) =>
+                item.connectorId === m.connectorId &&
+                item.kind === m.kind &&
+                item.ref === m.ref
+            ) ?? res.members[0];
+          if (res.state === 'dormant') {
+            toast.info(t('entities.overrides.savedDormant'));
+            void entity.refetch();
+            return;
+          }
           await handleVisibilityAndNavigate(
-            targetEntityId,
+            targetMember?.entityId,
             t('entities.overrides.mergeSuccess'),
             t('entities.overrides.mergeSuccessNotVisible')
           );
+        },
+        onError: (err) => {
+          if (isAxiosError(err) && err.response?.status === 409) {
+            toast.error(t('entities.overrides.conflictError'));
+          } else if (isAxiosError(err) && err.response?.status && err.response.status < 500) {
+            toast.error(t('entities.overrides.mergeError'));
+          } else {
+            void queryClient.invalidateQueries({ queryKey: getGetEntityOverridesQueryKey() });
+            void queryClient.invalidateQueries({ queryKey: ['/entities'] });
+            void entity.refetch();
+            setMergeMember(null);
+            setTargetRef('');
+            setNote('');
+            toast.error(t('entities.overrides.mergeError'));
+          }
         },
       }
     );
@@ -269,6 +316,9 @@ export function EntityDetailPage() {
                       <Button
                         size="sm"
                         variant="ghost"
+                        aria-label={t('entities.overrides.mergeActionAria', {
+                          name: m.name || m.ref,
+                        })}
                         onClick={() => openMerge(m)}
                       >
                         {t('entities.overrides.mergeAction')}
@@ -276,6 +326,9 @@ export function EntityDetailPage() {
                       <Button
                         size="sm"
                         variant="danger"
+                        aria-label={t('entities.overrides.detachActionAria', {
+                          name: m.name || m.ref,
+                        })}
                         onClick={() => setDetachMember(m)}
                       >
                         {t('entities.overrides.detachAction')}
@@ -394,21 +447,23 @@ export function EntityDetailPage() {
         )}
       </div>
 
-      <ConfirmDialog
-        open={Boolean(detachMember)}
-        onClose={() => setDetachMember(null)}
-        onConfirm={handleDetachConfirm}
-        title={t('entities.overrides.detachTitle')}
-        description={
-          detachMember
-            ? t('entities.overrides.detachConfirm', { name: detachMember.name })
-            : undefined
-        }
-        confirmLabel={t('entities.overrides.detachAction')}
-        cancelLabel={t('common.cancel', { defaultValue: 'Cancel' })}
-        tone="danger"
-        confirmDisabled={postOverride.isPending}
-      />
+      {detachMember && (
+        <ConfirmDialog
+          open={Boolean(detachMember)}
+          onClose={() => setDetachMember(null)}
+          onConfirm={handleDetachConfirm}
+          title={t('entities.overrides.detachTitle')}
+          description={
+            detachMember
+              ? t('entities.overrides.detachConfirm', { name: detachMember.name })
+              : undefined
+          }
+          confirmLabel={t('entities.overrides.detachAction')}
+          cancelLabel={t('common.cancel', { defaultValue: 'Cancel' })}
+          tone="danger"
+          confirmDisabled={postOverride.isPending}
+        />
+      )}
 
       {mergeMember && (
         <Dialog

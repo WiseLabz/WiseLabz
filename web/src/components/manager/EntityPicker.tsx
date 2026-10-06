@@ -44,9 +44,14 @@ export function EntityPicker({
   const full = useGetConnectorsConnectorIdSnapshotsSnapshotId(connectorId, latestId, {
     query: { enabled: !!connectorId && !!latestId },
   });
+  // When kind is specified (e.g. merge picker), allow fallback to entity.name if externalId
+  // is absent, matching backend topology entityRef() resolution. Other callers require externalId.
   const entities = (full.data?.entities ?? []).filter(
-    (e) => !!e.externalId && (!kind || e.kind === kind)
+    (e) => (kind ? !!(e.externalId || e.name) : !!e.externalId) && (!kind || e.kind === kind)
   );
+
+  const getEntityRef = (e: SnapshotEntity) => (kind ? e.externalId || e.name : e.externalId);
+  const showEmptyKindHint = Boolean(kind && full.data && entities.length === 0);
 
   const pickerLabel = label ?? t('entityPicker.label');
 
@@ -60,7 +65,7 @@ export function EntityPicker({
           value={value}
           onChange={(e) => {
             onChange(e.target.value);
-            onEntityChange?.(entities.find((entity) => entity.externalId === e.target.value));
+            onEntityChange?.(entities.find((entity) => getEntityRef(entity) === e.target.value));
           }}
           className="h-8 w-full appearance-none rounded-sm border border-line bg-surface pl-2.5 pr-7 text-xs text-ink outline-none focus-visible:border-accent-primary-soft"
         >
@@ -68,17 +73,25 @@ export function EntityPicker({
             {placeholder ??
               (hideWholeService ? t('entityPicker.label') : t('entityPicker.wholeService'))}
           </option>
-          {entities.map((entity) => (
-            <option key={entity.externalId} value={entity.externalId}>
-              {entity.name} ({entity.externalId})
-            </option>
-          ))}
+          {entities.map((entity) => {
+            const ref = getEntityRef(entity) ?? '';
+            return (
+              <option key={`${entity.kind}:${ref}`} value={ref}>
+                {entity.name}{entity.externalId ? ` (${entity.externalId})` : ''}
+              </option>
+            );
+          })}
         </select>
         <ChevronDownIcon
           size={12}
           className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-ink-faint"
         />
       </div>
+      {showEmptyKindHint && (
+        <p className="mt-1 text-2xs text-ink-muted">
+          {t('entityPicker.noEntitiesOfKind')}
+        </p>
+      )}
     </label>
   );
 }

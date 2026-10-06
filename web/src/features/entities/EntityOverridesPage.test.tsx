@@ -5,34 +5,54 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { setLanguagePreference } from '../../i18n';
 import { EntityOverridesPage } from './EntityOverridesPage';
 
-const { overridesHook, deleteHook, toastMock } = vi.hoisted(() => ({
+const { overridesHook, deleteHook, toastMock, getEntitiesIdMock, usersHook } = vi.hoisted(() => ({
   overridesHook: vi.fn(),
   deleteHook: vi.fn(),
   toastMock: { success: vi.fn(), error: vi.fn() },
+  getEntitiesIdMock: vi.fn(),
+  usersHook: vi.fn(),
 }));
+
+function statusError(status: number) {
+  const err = new Error(`Request failed with status ${status}`);
+  // @ts-expect-error test helper
+  err.isAxiosError = true;
+  // @ts-expect-error test helper
+  err.response = { status };
+  return err;
+}
 
 vi.mock('../../api/generated/search/search', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../api/generated/search/search')>()),
   useGetEntityOverrides: () => overridesHook(),
+  getEntitiesId: (id: string) => getEntitiesIdMock(id),
   useDeleteEntityOverridesId: (options?: {
-    mutation?: { onSuccess?: () => void; onError?: () => void };
+    mutation?: { onSuccess?: (data: unknown) => void; onError?: (err: unknown) => void };
   }) => ({
     mutate: (vars: { id: string }) => {
-      deleteHook(vars.id);
-      options?.mutation?.onSuccess?.();
+      try {
+        const res = deleteHook(vars.id);
+        options?.mutation?.onSuccess?.(res);
+      } catch (err) {
+        options?.mutation?.onError?.(err);
+      }
     },
     isPending: false,
   }),
   getGetEntityOverridesQueryKey: () => ['/entity-overrides'],
 }));
 
-vi.mock('sonner', () => ({
+vi.mock('../../api/generated/users/users', () => ({
+  useGetUsers: () => usersHook(),
+}));
+
+vi.mock('../../lib/toast', () => ({
   toast: toastMock,
 }));
 
-function mount() {
+function mount(queryClient = new QueryClient()) {
   return render(
-    <QueryClientProvider client={new QueryClient()}>
+    <QueryClientProvider client={queryClient}>
       <MemoryRouter initialEntries={['/entities/overrides']}>
         <Routes>
           <Route path="/entities/overrides" element={<EntityOverridesPage />} />
@@ -47,7 +67,7 @@ const mockOverrides = [
     id: 'ov-1',
     action: 'detach' as const,
     note: 'Separated for maintenance',
-    createdBy: 'admin-user',
+    createdBy: 'admin-user-id',
     createdAt: '2026-09-01T00:00:00Z',
     state: 'active' as const,
     members: [
@@ -65,7 +85,7 @@ const mockOverrides = [
     id: 'ov-2',
     action: 'merge' as const,
     note: 'Manual switch clustering',
-    createdBy: 'admin-user',
+    createdBy: 'admin-user-id',
     createdAt: '2026-09-02T00:00:00Z',
     state: 'dormant' as const,
     members: [
@@ -93,32 +113,50 @@ describe('EntityOverridesPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     void setLanguagePreference('en');
+    usersHook.mockReturnValue({
+      data: [{ id: 'admin-user-id', username: 'admin', displayName: 'Admin User' }],
+    });
     overridesHook.mockReturnValue({
       data: mockOverrides,
       isLoading: false,
       isError: false,
       refetch: vi.fn(),
     });
+    deleteHook.mockImplementation((id: string) => {
+      const found = mockOverrides.find((o) => o.id === id);
+      return found ?? { id, action: 'detach', members: [] };
+    });
+    getEntitiesIdMock.mockResolvedValue({ id: 'entity-1', name: 'router', members: [] });
   });
 
   afterEach(async () => {
     await setLanguagePreference('en');
   });
 
-  it('lists overrides with action, note, creator, and state', () => {
+  it('lists overrides with action, note, resolved creator name, and state', () => {
     mount();
     expect(screen.getByRole('heading', { level: 1, name: 'Identity overrides' })).toBeInTheDocument();
     expect(screen.getByText('Separated for maintenance')).toBeInTheDocument();
     expect(screen.getByText('Manual switch clustering')).toBeInTheDocument();
     expect(screen.getByText('Active')).toBeInTheDocument();
     expect(screen.getByText('Dormant')).toBeInTheDocument();
+    expect(screen.getAllByText('Created by Admin User')).toHaveLength(2);
     expect(screen.getByRole('link', { name: 'router' })).toHaveAttribute('href', '/entities/entity-1');
   });
 
-  it('removes an override after confirmation', async () => {
+  it('provides accessible aria-labels on remove buttons incorporating member names', () => {
     mount();
-    const removeButtons = screen.getAllByRole('button', { name: 'Remove' });
-    fireEvent.click(removeButtons[0]);
+    expect(screen.getByRole('button', { name: 'Remove override for router' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Remove override for switch-a, switch-b' })).toBeInTheDocument();
+  });
+
+  it('removes an override, probes visibility when visible, closes dialog, and invalidates caches', async () => {
+    const qc = new QueryClient();
+    const invalidateSpy = vi.spyOn(qc, 'invalidateQueries');
+    mount(qc);
+
+    const removeBtn = screen.getByRole('button', { name: 'Remove override for router' });
+    fireEvent.click(removeBtn);
 
     const dialog = await screen.findByRole('dialog');
     expect(dialog).toBeInTheDocument();
@@ -128,7 +166,59 @@ describe('EntityOverridesPage', () => {
     fireEvent.click(confirmButton);
 
     expect(deleteHook).toHaveBeenCalledWith('ov-1');
-    expect(toastMock.success).toHaveBeenCalledWith('Override removed.');
+    await vi.waitFor(() => {
+      expect(getEntitiesIdMock).toHaveBeenCalledWith('entity-1');
+      expect(toastMock.success).toHaveBeenCalledWith(
+        'Override removed.',
+        expect.objectContaining({
+          action: expect.objectContaining({
+            label: 'View',
+          }),
+        })
+      );
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['/entity-overrides'] });
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['/entities'] });
+    });
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('stays on page and shows not visible message when returned identity gives 404', async () => {
+    getEntitiesIdMock.mockRejectedValue(statusError(404));
+    mount();
+
+    const removeBtn = screen.getByRole('button', { name: 'Remove override for router' });
+    fireEvent.click(removeBtn);
+
+    const dialog = await screen.findByRole('dialog');
+    const confirmButton = within(dialog).getByRole('button', { name: 'Remove' });
+    fireEvent.click(confirmButton);
+
+    await vi.waitFor(() => {
+      expect(deleteHook).toHaveBeenCalledWith('ov-1');
+      expect(getEntitiesIdMock).toHaveBeenCalledWith('entity-1');
+      expect(toastMock.success).toHaveBeenCalledWith(
+        'Override removed. The resulting identity is not visible with your current permissions.'
+      );
+    });
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('handles delete failure with error toast', async () => {
+    deleteHook.mockImplementation(() => {
+      throw statusError(500);
+    });
+    mount();
+
+    const removeBtn = screen.getByRole('button', { name: 'Remove override for router' });
+    fireEvent.click(removeBtn);
+
+    const dialog = await screen.findByRole('dialog');
+    const confirmButton = within(dialog).getByRole('button', { name: 'Remove' });
+    fireEvent.click(confirmButton);
+
+    await vi.waitFor(() => {
+      expect(toastMock.error).toHaveBeenCalledWith('Could not remove override.');
+    });
   });
 
   it('shows empty state when no overrides exist', () => {

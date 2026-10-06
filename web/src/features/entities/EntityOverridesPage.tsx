@@ -1,13 +1,16 @@
-import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useMemo, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useQueryClient } from '@tanstack/react-query';
-import { toast } from 'sonner';
+import { isAxiosError } from 'axios';
+import { toast } from '../../lib/toast';
 import {
+  getEntitiesId,
   useGetEntityOverrides,
   useDeleteEntityOverridesId,
   getGetEntityOverridesQueryKey,
 } from '../../api/generated/search/search';
+import { useGetUsers } from '../../api/generated/users/users';
 import type { EntityOverride, EntityOverrideMember } from '../../api/model';
 import { Panel, PanelHeader } from '../../components/ui/Panel';
 import { Button } from '../../components/ui/Button';
@@ -39,16 +42,53 @@ function MemberItem({ member }: { member: EntityOverrideMember }) {
 
 export function EntityOverridesPage() {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [toRemove, setToRemove] = useState<EntityOverride | null>(null);
+
+  const usersQuery = useGetUsers();
+  const usersById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const u of usersQuery.data ?? []) {
+      map.set(u.id, u.displayName || u.username);
+    }
+    return map;
+  }, [usersQuery.data]);
 
   const overrides = useGetEntityOverrides();
   const deleteMutation = useDeleteEntityOverridesId({
     mutation: {
-      onSuccess: () => {
+      onSuccess: async (res) => {
         void queryClient.invalidateQueries({ queryKey: getGetEntityOverridesQueryKey() });
-        toast.success(t('entities.overrides.removeSuccess'));
+        void queryClient.invalidateQueries({ queryKey: ['/entities'] });
         setToRemove(null);
+
+        const targetEntityId = res?.members?.[0]?.entityId;
+        if (!targetEntityId) {
+          toast.success(t('entities.overrides.removeSuccessNotVisible'));
+          return;
+        }
+
+        try {
+          await getEntitiesId(targetEntityId);
+          toast.success(t('entities.overrides.removeSuccess'), {
+            action: {
+              label: t('notify.view'),
+              onClick: () => navigate(`/entities/${encodeURIComponent(targetEntityId)}`),
+            },
+          });
+        } catch (err) {
+          if (isAxiosError(err) && err.response?.status === 404) {
+            toast.success(t('entities.overrides.removeSuccessNotVisible'));
+          } else {
+            toast.success(t('entities.overrides.removeSuccess'), {
+              action: {
+                label: t('notify.view'),
+                onClick: () => navigate(`/entities/${encodeURIComponent(targetEntityId)}`),
+              },
+            });
+          }
+        }
       },
       onError: () => {
         toast.error(t('entities.overrides.removeError'));
@@ -147,7 +187,11 @@ export function EntityOverridesPage() {
                   )}
 
                   <div className="flex flex-wrap items-center gap-3 text-2xs text-ink-faint">
-                    <span>{t('entities.overrides.createdBy', { user: override.createdBy })}</span>
+                    <span>
+                      {t('entities.overrides.createdBy', {
+                        user: usersById.get(override.createdBy) || override.createdBy,
+                      })}
+                    </span>
                     <span>·</span>
                     <span>{t('entities.overrides.createdAt', { date: fullDate(override.createdAt) })}</span>
                   </div>
@@ -157,6 +201,9 @@ export function EntityOverridesPage() {
                   <Button
                     size="sm"
                     variant="danger"
+                    aria-label={t('entities.overrides.removeActionAria', {
+                      name: override.members.map((m) => m.name || m.ref).join(', '),
+                    })}
                     onClick={() => setToRemove(override)}
                   >
                     {t('entities.overrides.removeAction')}
@@ -168,19 +215,21 @@ export function EntityOverridesPage() {
         </Panel>
       )}
 
-      <ConfirmDialog
-        open={Boolean(toRemove)}
-        onClose={() => setToRemove(null)}
-        onConfirm={() => {
-          if (toRemove) deleteMutation.mutate({ id: toRemove.id });
-        }}
-        title={t('entities.overrides.removeTitle')}
-        description={t('entities.overrides.removeConfirm')}
-        confirmLabel={t('entities.overrides.removeAction')}
-        cancelLabel={t('common.cancel', { defaultValue: 'Cancel' })}
-        tone="danger"
-        confirmDisabled={deleteMutation.isPending}
-      />
+      {toRemove && (
+        <ConfirmDialog
+          open={Boolean(toRemove)}
+          onClose={() => setToRemove(null)}
+          onConfirm={() => {
+            if (toRemove) deleteMutation.mutate({ id: toRemove.id });
+          }}
+          title={t('entities.overrides.removeTitle')}
+          description={t('entities.overrides.removeConfirm')}
+          confirmLabel={t('entities.overrides.removeAction')}
+          cancelLabel={t('common.cancel', { defaultValue: 'Cancel' })}
+          tone="danger"
+          confirmDisabled={deleteMutation.isPending}
+        />
+      )}
     </div>
   );
 }
