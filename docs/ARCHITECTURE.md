@@ -721,6 +721,9 @@ This file records the _outcome_ of each decision; the ADRs record the _reasoning
   active/passive operation and readiness-based failover.
 - [`0005-cross-replica-websocket-relay.md`](adr/0005-cross-replica-websocket-relay.md) —
   PostgreSQL LISTEN/NOTIFY relay for WebSocket events under active/active (deferred).
+- [`0006-runbook-runs-elevation-and-execution.md`](adr/0006-runbook-runs-elevation-and-execution.md) —
+  whole-runbook run elevation model (`runbook.run`), step authorization re-checks,
+  manual step confirmation, and crash interruption recovery, extending ADR 0001/0002.
 
 ---
 

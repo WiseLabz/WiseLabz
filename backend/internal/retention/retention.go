@@ -1,6 +1,6 @@
 // Package retention runs the background job that bounds the growth of
 // historical WiseLabz data (service snapshots, doc revisions, alerts, health
-// checks, and sync run history) by deleting rows past a configurable
+// checks, sync run history, and runbook runs) by deleting rows past a configurable
 // per-category age.
 package retention
 
@@ -26,10 +26,12 @@ const (
 
 // RunCleanupOnce performs one cleanup pass: for every category whose *Days
 // config value is > 0, deletes rows older than the cutoff. A category with
-// Days <= 0 is skipped (retention disabled). Errors in one category are
-// logged and do not stop the others from running, but are joined into the
-// returned error so the scheduler's job health (#384) reflects a partial
-// cleanup pass.
+// Days <= 0 is skipped (retention disabled). Open runbook runs without recent
+// activity are expired after RunbookOpenRunHours (default 24), and finished
+// runs older than RunbookRunDays (default 90) are pruned when RunbookRunDays > 0
+// (0 keeps history indefinitely). Errors in one category are logged and do not
+// stop the others from running, but are joined into the returned error so the
+// scheduler's job health (#384) reflects a partial cleanup pass.
 func RunCleanupOnce(ctx context.Context, s *store.Store, cfg store.RetentionSettings, logger *slog.Logger) error {
 	cutoff := func(days int) string {
 		return time.Now().UTC().AddDate(0, 0, -days).Format(time.RFC3339)
@@ -117,6 +119,32 @@ func RunCleanupOnce(ctx context.Context, s *store.Store, cfg store.RetentionSett
 	if cfg.DeletedDocsDays > 0 {
 		if _, err := s.PurgeDeletedDocs(ctx, cutoff(cfg.DeletedDocsDays)); err != nil {
 			errs = append(errs, fmt.Errorf("purge deleted docs: %w", err))
+		}
+	}
+
+	cutoffHours := func(hours int) string {
+		return time.Now().UTC().Add(-time.Duration(hours) * time.Hour).Format(time.RFC3339)
+	}
+
+	openRunHours := cfg.RunbookOpenRunHours
+	if openRunHours <= 0 {
+		openRunHours = store.DefaultRunbookOpenRunHours
+	}
+	expiredRuns, err := s.ExpireOpenRunbookRuns(ctx, cutoffHours(openRunHours))
+	if err != nil {
+		logger.Error("expire open runbook runs", "error", err)
+		errs = append(errs, fmt.Errorf("expire open runbook runs: %w", err))
+	} else if len(expiredRuns) > 0 {
+		logger.Info("Expired open runbook runs", "count", len(expiredRuns))
+	}
+
+	if cfg.RunbookRunDays > 0 {
+		n, err := s.PruneRunbookRuns(ctx, cutoff(cfg.RunbookRunDays))
+		if err != nil {
+			logger.Error("prune finished runbook runs", "error", err)
+			errs = append(errs, fmt.Errorf("prune finished runbook runs: %w", err))
+		} else if n > 0 {
+			logger.Info("Purged finished runbook runs", "count", n)
 		}
 	}
 
