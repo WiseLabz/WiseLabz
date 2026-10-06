@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { MemoryRouter, Route, Routes, useLocation, useNavigationType } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useLocation, useNavigationType, useParams } from 'react-router-dom';
 import dagre from '@dagrejs/dagre';
 import type { ComponentType, ReactNode } from 'react';
 import type { TopologyGraph } from '../../api/model';
@@ -138,10 +138,19 @@ beforeEach(() => {
       docId: 'root',
       children: [
         {
-          docId: 'connector-doc',
+          docId: 'connector-a',
           serviceId: 'connector-a',
           kind: 'service',
+          branch: true,
           title: 'Router Connector',
+          children: [
+            {
+              docId: 'connector-doc',
+              serviceId: 'connector-a',
+              kind: 'service',
+              title: 'Router Connector service doc',
+            },
+          ],
         },
       ],
     },
@@ -166,6 +175,16 @@ function LocationProbe() {
   );
 }
 
+function DocumentRouteProbe() {
+  const { docId } = useParams();
+  return (
+    <>
+      <p>Document page</p>
+      <output data-testid="document-route">{docId}</output>
+    </>
+  );
+}
+
 function renderTopology(url = '/topology') {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
@@ -177,7 +196,7 @@ function renderTopology(url = '/topology') {
         <Routes>
           <Route path="/topology" element={<TopologyPage />} />
           <Route path="/entities/:id" element={<p>Entity page</p>} />
-          <Route path="/docs/:docId" element={<p>Document page</p>} />
+          <Route path="/docs/:docId" element={<DocumentRouteProbe />} />
           <Route path="/services/:id" element={<p>Connector page</p>} />
         </Routes>
       </MemoryRouter>
@@ -357,6 +376,34 @@ describe('TopologyPage', () => {
       within(screen.getByTestId('flow-canvas')).getByRole('link', { name: 'Router Connector' })
     );
     expect(await screen.findByText('Document page')).toBeInTheDocument();
+    expect(screen.getByTestId('document-route')).toHaveTextContent('connector-doc');
+  });
+
+  it('opens connector details when its docs-tree branch has no service document', async () => {
+    docsHook.mockReturnValue({
+      data: {
+        docId: 'root',
+        title: 'Lab Documentation',
+        kind: 'lab',
+        children: [
+          {
+            docId: 'connector-a',
+            serviceId: 'connector-a',
+            kind: 'service',
+            branch: true,
+            title: 'Router Connector',
+            children: [],
+          },
+        ],
+      },
+    });
+    renderTopology();
+    screen.getByText('Browse nodes (3)').closest('details')!.open = true;
+    fireEvent.click(
+      within(screen.getByTestId('flow-canvas')).getByRole('link', { name: 'Router Connector' })
+    );
+
+    expect(await screen.findByText('Connector page')).toBeInTheDocument();
   });
 
   it('hides Mermaid export for non-admins and opens the generated doc for admins', async () => {

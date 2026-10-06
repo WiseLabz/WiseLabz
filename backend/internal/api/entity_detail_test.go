@@ -553,8 +553,97 @@ func TestEntityDetailAllNamesEmptyFallsBackToRef(t *testing.T) {
 	seedEntity(t, app, id, "stored", "dns_record", c.ID, "b.lab.test", "", "")
 	seedEntityMember(t, app, id, c.ID, "dns_record", "a.lab.test", "", "")
 	body := decodeEntity(t, getEntity(t, app, id, token))
-	if body["name"] != "a.lab.test" || body["kind"] != "dns_record" {
-		t.Fatalf("name = %v kind = %v, want ref fallback a.lab.test", body["name"], body["kind"])
+	members := body["members"].([]any)
+	if body["name"] != "a.lab.test" || body["kind"] != "dns_record" || len(members) != 2 {
+		t.Fatalf(
+			"name = %v kind = %v members = %v, want active ref fallback and member names",
+			body["name"], body["kind"], members,
+		)
+	}
+	if members[0].(map[string]any)["name"] != "a.lab.test" || members[1].(map[string]any)["name"] != "b.lab.test" {
+		t.Fatalf("member names = %v, want ref fallbacks a.lab.test and b.lab.test", members)
+	}
+}
+
+func TestEntityDetailGoneMemberNameFallsBackToRefThenKind(t *testing.T) {
+	t.Parallel()
+	app := newTestApp(t)
+	userID, token := app.user(t, "viewer")
+	c := entityTestConnector(t, app, "alpha")
+	app.connectorGrant(t, userID, c.ID, "viewer")
+	refFallback, kindFallback := newID(), newID()
+	goneAt := "2026-09-01T00:00:00Z"
+	seedEntity(t, app, refFallback, "stored ref", "vm", c.ID, "gone-ref", "", goneAt)
+	seedEntity(t, app, kindFallback, "stored kind", "dns_record", c.ID, "", "", goneAt)
+
+	for _, tt := range []struct {
+		id, want string
+	}{
+		{id: refFallback, want: "gone-ref"},
+		{id: kindFallback, want: "dns_record"},
+	} {
+		body := decodeEntity(t, getEntity(t, app, tt.id, token))
+		members := body["members"].([]any)
+		if len(members) != 1 {
+			t.Fatalf("members = %v, want one gone member", members)
+		}
+		if body["name"] != tt.want || body["gone"] != true || members[0].(map[string]any)["name"] != tt.want {
+			t.Fatalf(
+				"name = %v gone = %v members = %v, want gone label %q in header and member",
+				body["name"], body["gone"], members, tt.want,
+			)
+		}
+	}
+}
+
+func TestEntityDetailNeighborsOmitMergedIdentityIDsAtBothEndpoints(t *testing.T) {
+	t.Parallel()
+	app := newTestApp(t)
+	userID, token := app.user(t, "viewer")
+	c1, c2 := entityTestConnector(t, app, "near"), entityTestConnector(t, app, "merged")
+	app.connectorGrant(t, userID, c1.ID, "viewer")
+	app.connectorGrant(t, userID, c2.ID, "viewer")
+	near, survivor, merged := newID(), newID(), newID()
+	seedEntity(t, app, near, "near", "vm", c1.ID, "near-ref", "Near", "")
+	seedIdentity(t, app, survivor, "vm", "")
+	seedIdentity(t, app, merged, "vm", survivor)
+	seedEntityMember(t, app, merged, c2.ID, "vm", "merged-ref", "Merged", "")
+
+	if err := app.Store.ReplaceTopologyEdgesForConnector(context.Background(), c2.ID, []store.TopologyEdge{
+		{
+			SrcConnectorID: c2.ID, SrcKind: "vm", SrcName: "Merged", SrcRef: "merged-ref",
+			DstConnectorID: c1.ID, DstKind: "vm", DstName: "Near", DstRef: "near-ref",
+			Kind: "dependency", Source: "merged-source",
+		},
+		{
+			SrcConnectorID: c1.ID, SrcKind: "vm", SrcName: "Near", SrcRef: "near-ref",
+			DstConnectorID: c2.ID, DstKind: "vm", DstName: "Merged", DstRef: "merged-ref",
+			Kind: "dependency", Source: "merged-target",
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	neighbors := decodeEntity(t, getEntity(t, app, near, token))["neighbors"].([]any)
+	if len(neighbors) != 2 {
+		t.Fatalf("neighbors = %v, want both edge directions", neighbors)
+	}
+	seen := map[string]bool{}
+	for _, raw := range neighbors {
+		edge := raw.(map[string]any)
+		seen[edge["from"].(map[string]any)["ref"].(string)+"->"+edge["to"].(map[string]any)["ref"].(string)] = true
+		for _, endpointKey := range []string{"from", "to"} {
+			endpoint := edge[endpointKey].(map[string]any)
+			if endpoint["entityId"] == merged {
+				t.Fatalf("redirected identity leaked from neighbor %s endpoint: %v", endpointKey, edge)
+			}
+			if endpoint["ref"] == "merged-ref" && endpoint["entityId"] != nil && endpoint["entityId"] != "" {
+				t.Fatalf("merged member should not expose an entity id at %s: %v", endpointKey, edge)
+			}
+		}
+	}
+	if !seen["merged-ref->near-ref"] || !seen["near-ref->merged-ref"] {
+		t.Fatalf("neighbors did not cover both endpoint directions: %v", seen)
 	}
 }
 

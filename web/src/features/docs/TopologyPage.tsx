@@ -254,7 +254,9 @@ function flowEdges(
 
 function findConnectorDoc(node: DocNode | undefined, connectorId: string): string | undefined {
   if (!node) return undefined;
-  if (node.serviceId === connectorId) return node.docId;
+  if (node.serviceId === connectorId && node.kind === 'service' && !node.branch && node.docId) {
+    return node.docId;
+  }
   for (const child of node.children ?? []) {
     const found = findConnectorDoc(child, connectorId);
     if (found) return found;

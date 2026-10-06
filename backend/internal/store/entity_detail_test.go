@@ -150,6 +150,59 @@ func TestEntityDetailEdgesPredicateAndEndpointEntities(t *testing.T) {
 	}
 }
 
+func TestEntityDetailEdgesOmitMergedIdentityIDsAtBothEndpoints(t *testing.T) {
+	ctx := context.Background()
+	f := newEntityDetailFixture(t)
+	f.entity(t, "near", "")
+	f.entity(t, "survivor", "")
+	f.entity(t, "merged", "survivor")
+	f.member(t, "near", f.c1.ID, "near-ref", "Near", "")
+	f.member(t, "merged", f.c2.ID, "merged-ref", "Merged", "")
+
+	edges := []TopologyEdge{
+		{
+			SrcConnectorID: f.c2.ID, SrcKind: "vm", SrcName: "Merged", SrcRef: "merged-ref",
+			DstConnectorID: f.c1.ID, DstKind: "vm", DstName: "Near", DstRef: "near-ref",
+			Kind: "dependency", Source: "merged-source",
+		},
+		{
+			SrcConnectorID: f.c1.ID, SrcKind: "vm", SrcName: "Near", SrcRef: "near-ref",
+			DstConnectorID: f.c2.ID, DstKind: "vm", DstName: "Merged", DstRef: "merged-ref",
+			Kind: "dependency", Source: "merged-target",
+		},
+	}
+	if err := f.s.ReplaceTopologyEdgesForConnector(ctx, f.c2.ID, edges); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := f.s.ListEntityEdges(
+		ctx,
+		[]EntityMemberKey{{ConnectorID: f.c1.ID, Kind: "vm", Ref: "near-ref"}},
+		[]string{f.c1.ID, f.c2.ID},
+		10,
+	)
+	if err != nil || len(got) != 2 {
+		t.Fatalf("edges = %+v, %v; want both edge directions", got, err)
+	}
+	for _, edge := range got {
+		if edge.Src.EntityID == "merged" || edge.Dst.EntityID == "merged" {
+			t.Fatalf("merged identity exposed at an edge endpoint: %+v", edge)
+		}
+		switch edge.Source {
+		case "merged-source":
+			if edge.Src.EntityID != "" || edge.Dst.EntityID != "near" {
+				t.Fatalf("source-side merged endpoint = %+v; want no redirected ID and near target", edge)
+			}
+		case "merged-target":
+			if edge.Src.EntityID != "near" || edge.Dst.EntityID != "" {
+				t.Fatalf("target-side merged endpoint = %+v; want near source and no redirected ID", edge)
+			}
+		default:
+			t.Fatalf("unexpected edge: %+v", edge)
+		}
+	}
+}
+
 func TestEntityDetailFindingsOpenOnlyAndConnectorLevel(t *testing.T) {
 	ctx := context.Background()
 	f := newEntityDetailFixture(t)
