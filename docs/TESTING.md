@@ -224,6 +224,16 @@ leave the required check pending forever on a docs-only PR. The `changes` job
 decides what else runs, using `scripts/ci/changes.sh`, and every other job is
 gated on its outputs.
 
+`CI Status` requires `Detect changes` to succeed and every selected job to
+finish successfully. A selected job that is skipped fails the gate; skips
+are allowed only for unselected areas or heavy jobs deferred on draft PRs.
+
+**Runner outages.** After runners recover, retry failed or cancelled jobs
+and their dependents with `gh run rerun <id> --failed`. Check that
+`Detect changes` and all selected jobs completed successfully before merging.
+If the failed-job retry leaves selected jobs skipped, re-run the entire
+workflow with `gh run rerun <id>`.
+
 **Areas.** Each changed path is matched against the ordered rule table at the
 top of `scripts/ci/changes.sh`. The first match wins.
 
