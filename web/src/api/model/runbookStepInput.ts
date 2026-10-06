@@ -23,8 +23,8 @@ export interface RunbookStepInput {
   verb?: RunbookStepVerb;
   entityRef?: string;
   /**
-   * Only for sync_and_wait and wait_until_healthy: between 10 seconds and 30 minutes, default 5 minutes. Ignored as 0 on lifecycle and manual steps, which reject any other value.
-   * @minimum 10
+   * For sync_and_wait and wait_until_healthy it must be between 10 and 1800 seconds and defaults to 300 when omitted. Lifecycle and manual steps accept only 0 or omission.
+   * @minimum 0
    * @maximum 1800
    */
   timeoutSeconds?: number;

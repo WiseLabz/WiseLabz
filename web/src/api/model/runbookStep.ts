@@ -8,21 +8,22 @@
  */
 import type { RunbookStepExecuteBlockedReason } from './runbookStepExecuteBlockedReason';
 import type { RunbookStepKind } from './runbookStepKind';
-import type { RunbookStepVerb } from './runbookStepVerb';
+import type { RunbookStepStoredVerb } from './runbookStepStoredVerb';
 
 export interface RunbookStep {
   id: string;
   /** Order within the runbook, 0-based; matches the steps array index. */
   position: number;
-  kind: RunbookStepKind;
+  /** Absent for a step redacted because the caller cannot view its connector. */
+  kind?: RunbookStepKind;
   title: string;
   /** Empty for a manual step, and for a step redacted because the caller cannot view its connector. */
   connectorId: string;
   /** The referenced connector's display name, for rendering without a second lookup. */
   connectorName: string;
-  verb: RunbookStepVerb;
+  verb: RunbookStepStoredVerb;
   /**
-   * Timeout of a sync_and_wait or wait_until_healthy step, in seconds. Always 0 for lifecycle and manual steps, whenever the step was created.
+   * Timeout of a sync_and_wait or wait_until_healthy step, in seconds. Always 0 for lifecycle and manual steps, whenever the step was created, and for a redacted step.
    * @minimum 0
    * @maximum 1800
    */

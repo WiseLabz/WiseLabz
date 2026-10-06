@@ -8,7 +8,7 @@
  */
 import { faker } from '@faker-js/faker';
 
-import { RunbookStepKind, RunbookStepVerb, RunbookTargetType } from '../../model';
+import { RunbookStepKind, RunbookStepStoredVerb, RunbookTargetType } from '../../model';
 import type { RestartPreview, Runbook, RunbookPage } from '../../model';
 
 export const getGetRunbooksResponseMock = (
@@ -29,11 +29,14 @@ export const getGetRunbooksResponseMock = (
       () => ({
         id: faker.string.alpha({ length: { min: 10, max: 20 } }),
         position: faker.number.int(),
-        kind: faker.helpers.arrayElement(Object.values(RunbookStepKind)),
+        kind: faker.helpers.arrayElement([
+          faker.helpers.arrayElement(Object.values(RunbookStepKind)),
+          undefined,
+        ]),
         title: faker.string.alpha({ length: { min: 10, max: 20 } }),
         connectorId: faker.string.alpha({ length: { min: 10, max: 20 } }),
         connectorName: faker.string.alpha({ length: { min: 10, max: 20 } }),
-        verb: faker.helpers.arrayElement(Object.values(RunbookStepVerb)),
+        verb: faker.helpers.arrayElement(Object.values(RunbookStepStoredVerb)),
         timeoutSeconds: faker.number.int({ min: 0, max: 1800 }),
         entityRef: faker.string.alpha({ length: { min: 10, max: 20 } }),
         canExecute: faker.datatype.boolean(),
@@ -70,11 +73,14 @@ export const getPostRunbooksResponseMock = (
   steps: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() => ({
     id: faker.string.alpha({ length: { min: 10, max: 20 } }),
     position: faker.number.int(),
-    kind: faker.helpers.arrayElement(Object.values(RunbookStepKind)),
+    kind: faker.helpers.arrayElement([
+      faker.helpers.arrayElement(Object.values(RunbookStepKind)),
+      undefined,
+    ]),
     title: faker.string.alpha({ length: { min: 10, max: 20 } }),
     connectorId: faker.string.alpha({ length: { min: 10, max: 20 } }),
     connectorName: faker.string.alpha({ length: { min: 10, max: 20 } }),
-    verb: faker.helpers.arrayElement(Object.values(RunbookStepVerb)),
+    verb: faker.helpers.arrayElement(Object.values(RunbookStepStoredVerb)),
     timeoutSeconds: faker.number.int({ min: 0, max: 1800 }),
     entityRef: faker.string.alpha({ length: { min: 10, max: 20 } }),
     canExecute: faker.datatype.boolean(),
@@ -106,11 +112,14 @@ export const getGetRunbooksRunbookIdResponseMock = (
   steps: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() => ({
     id: faker.string.alpha({ length: { min: 10, max: 20 } }),
     position: faker.number.int(),
-    kind: faker.helpers.arrayElement(Object.values(RunbookStepKind)),
+    kind: faker.helpers.arrayElement([
+      faker.helpers.arrayElement(Object.values(RunbookStepKind)),
+      undefined,
+    ]),
     title: faker.string.alpha({ length: { min: 10, max: 20 } }),
     connectorId: faker.string.alpha({ length: { min: 10, max: 20 } }),
     connectorName: faker.string.alpha({ length: { min: 10, max: 20 } }),
-    verb: faker.helpers.arrayElement(Object.values(RunbookStepVerb)),
+    verb: faker.helpers.arrayElement(Object.values(RunbookStepStoredVerb)),
     timeoutSeconds: faker.number.int({ min: 0, max: 1800 }),
     entityRef: faker.string.alpha({ length: { min: 10, max: 20 } }),
     canExecute: faker.datatype.boolean(),
@@ -142,11 +151,14 @@ export const getPutRunbooksRunbookIdResponseMock = (
   steps: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() => ({
     id: faker.string.alpha({ length: { min: 10, max: 20 } }),
     position: faker.number.int(),
-    kind: faker.helpers.arrayElement(Object.values(RunbookStepKind)),
+    kind: faker.helpers.arrayElement([
+      faker.helpers.arrayElement(Object.values(RunbookStepKind)),
+      undefined,
+    ]),
     title: faker.string.alpha({ length: { min: 10, max: 20 } }),
     connectorId: faker.string.alpha({ length: { min: 10, max: 20 } }),
     connectorName: faker.string.alpha({ length: { min: 10, max: 20 } }),
-    verb: faker.helpers.arrayElement(Object.values(RunbookStepVerb)),
+    verb: faker.helpers.arrayElement(Object.values(RunbookStepStoredVerb)),
     timeoutSeconds: faker.number.int({ min: 0, max: 1800 }),
     entityRef: faker.string.alpha({ length: { min: 10, max: 20 } }),
     canExecute: faker.datatype.boolean(),

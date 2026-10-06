@@ -8,12 +8,12 @@
  */
 
 /**
- * Empty for every kind except lifecycle.
+ * A lifecycle step's verb; empty for every other step kind and for a redacted step.
  */
-export type BackupRunbookStepVerb =
-  (typeof BackupRunbookStepVerb)[keyof typeof BackupRunbookStepVerb];
+export type RunbookStepStoredVerb =
+  (typeof RunbookStepStoredVerb)[keyof typeof RunbookStepStoredVerb];
 
-export const BackupRunbookStepVerb = {
+export const RunbookStepStoredVerb = {
   '': '',
   restart: 'restart',
   start: 'start',

@@ -40,7 +40,8 @@ interface StepDraft {
   id?: string;
   title: string;
   connectorId: string;
-  verb: RunbookStepVerb;
+  /** Empty for a loaded step that is not a lifecycle step. */
+  verb: RunbookStepVerb | '';
   entityRef: string;
 }
 
@@ -132,7 +133,7 @@ export function RunbooksPage() {
         ...(s.id ? { id: s.id } : {}),
         title: s.title.trim(),
         connectorId: s.connectorId,
-        verb: s.verb,
+        verb: s.verb || undefined,
         ...(s.entityRef ? { entityRef: s.entityRef } : {}),
       })
     ),

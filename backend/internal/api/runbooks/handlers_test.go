@@ -500,6 +500,8 @@ func TestCreateStepKindsValidation(t *testing.T) {
 		{"manual with connector", `{"kind":"manual","title":"t","connectorId":"` + connID + `"}`, "steps[0].connectorId"},
 		{"manual with verb", `{"kind":"manual","title":"t","verb":"restart"}`, "steps[0].verb"},
 		{"manual without title", `{"kind":"manual"}`, "steps[0].title"},
+		{"manual with entityRef", `{"kind":"manual","title":"t","entityRef":"100"}`, "steps[0].entityRef"},
+		{"sync with entityRef", `{"kind":"sync_and_wait","title":"t","connectorId":"` + connID + `","entityRef":"100"}`, "steps[0].entityRef"},
 	}
 	for i, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -688,5 +690,115 @@ func TestExecuteStepRejectsMalformedLifecycle(t *testing.T) {
 		if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "invalid_step") {
 			t.Errorf("step %q: status = %d body=%s, want 400 invalid_step", st.Title, rec.Code, rec.Body.String())
 		}
+	}
+}
+
+// TestExecuteStepNonLifecycleNeedsGrantFirst checks that a caller without an
+// operator grant on the step's connector gets the same 403 whatever the
+// step's kind, so the kind of a step they cannot view is not revealed. A
+// manual step has no connector and is rejected with a 400 directly.
+func TestExecuteStepNonLifecycleNeedsGrantFirst(t *testing.T) {
+	h := newTestHandler(t)
+	connID := seedProxmoxConnector(t, h)
+	rr := createWithSteps(t, h, "", "grantfirst", `
+		{"title":"Restart","connectorId":"`+connID+`","verb":"restart"},
+		{"kind":"sync_and_wait","title":"Sync","connectorId":"`+connID+`"},
+		{"kind":"wait_until_healthy","title":"Healthy","connectorId":"`+connID+`"},
+		{"kind":"manual","title":"Confirm"}`)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("create status = %d; body=%s", rr.Code, rr.Body.String())
+	}
+	created := decodeRunbook(t, rr)
+
+	execute := func(user, stepID, query string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodPost, "/api/runbooks/"+created.ID+"/steps/"+stepID+"/execute"+query, nil)
+		req.SetPathValue("id", created.ID)
+		req.SetPathValue("stepId", stepID)
+		req = req.WithContext(auth.ContextWithUser(req.Context(), user, false))
+		rec := httptest.NewRecorder()
+		h.ExecuteStep(rec, req)
+		return rec
+	}
+
+	stranger := apitest.NewUser(t, h.Store, "viewer")
+	viewer := apitest.NewUser(t, h.Store, "viewer")
+	apitest.GrantConnectorRole(t, h.Store, viewer, connID, "viewer")
+	for _, query := range []string{"", "?dryRun=true"} {
+		var bodies []string
+		for _, st := range created.Steps[:3] {
+			rec := execute(stranger, st.ID, query)
+			if rec.Code != http.StatusForbidden {
+				t.Errorf("no grant, %s, query=%q: status = %d body=%s, want 403", st.Kind, query, rec.Code, rec.Body.String())
+			}
+			bodies = append(bodies, rec.Body.String())
+
+			rec = execute(viewer, st.ID, query)
+			if rec.Code != http.StatusForbidden {
+				t.Errorf("viewer grant, %s, query=%q: status = %d body=%s, want 403", st.Kind, query, rec.Code, rec.Body.String())
+			}
+		}
+		if bodies[0] != bodies[1] || bodies[0] != bodies[2] {
+			t.Errorf("query=%q: 403 bodies differ across step kinds: %q", query, bodies)
+		}
+
+		rec := execute(stranger, created.Steps[3].ID, query)
+		if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "unsupported_step_kind") {
+			t.Errorf("manual, query=%q: status = %d body=%s, want 400 unsupported_step_kind", query, rec.Code, rec.Body.String())
+		}
+	}
+}
+
+// TestStepKindsRedactedWithoutViewerGrant checks that a caller who cannot view
+// a step's connector learns neither its kind nor its timeout, while a manual
+// step (no connector) stays visible.
+func TestStepKindsRedactedWithoutViewerGrant(t *testing.T) {
+	h := newTestHandler(t)
+	connID := seedProxmoxConnector(t, h)
+	rr := createWithSteps(t, h, "", "kindsredact", `
+		{"kind":"sync_and_wait","title":"Sync","connectorId":"`+connID+`","timeoutSeconds":600},
+		{"kind":"wait_until_healthy","title":"Healthy","connectorId":"`+connID+`"},
+		{"kind":"manual","title":"Confirm the failover"}`)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("create status = %d; body=%s", rr.Code, rr.Body.String())
+	}
+	created := decodeRunbook(t, rr)
+
+	stranger := apitest.NewUser(t, h.Store, "viewer")
+	req := httptest.NewRequest(http.MethodGet, "/api/runbooks/"+created.ID, nil)
+	req.SetPathValue("id", created.ID)
+	req = req.WithContext(auth.ContextWithUser(req.Context(), stranger, false))
+	getRR := httptest.NewRecorder()
+	h.Get(getRR, req)
+	if getRR.Code != http.StatusOK {
+		t.Fatalf("get status = %d; body=%s", getRR.Code, getRR.Body.String())
+	}
+	steps := decodeRunbook(t, getRR).Steps
+	if len(steps) != 3 {
+		t.Fatalf("len(steps) = %d, want 3", len(steps))
+	}
+
+	for _, st := range steps[:2] {
+		if st.Title != "Restricted step" || st.Kind != "" || st.ConnectorID != "" || st.ConnectorName != "" ||
+			st.Verb != "" || st.EntityRef != "" || st.TimeoutSeconds != 0 || st.CanExecute ||
+			st.ExecuteBlockedReason != "no_viewer_grant" {
+			t.Errorf("step not redacted: %+v", st)
+		}
+	}
+
+	var raw struct {
+		Steps []map[string]any `json:"steps"`
+	}
+	if err := json.Unmarshal(getRR.Body.Bytes(), &raw); err != nil {
+		t.Fatalf("unmarshal raw: %v", err)
+	}
+	for _, st := range raw.Steps[:2] {
+		if _, ok := st["kind"]; ok {
+			t.Errorf("redacted step has a kind key: %v", st)
+		}
+	}
+
+	manual := steps[2]
+	if manual.Title != "Confirm the failover" || manual.Kind != "manual" || manual.ExecuteBlockedReason != "not_lifecycle" {
+		t.Errorf("manual step = %+v, want visible title, kind manual and reason not_lifecycle", manual)
 	}
 }

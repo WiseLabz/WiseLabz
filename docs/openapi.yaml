@@ -3032,10 +3032,13 @@ paths:
       operationId: executeRunbookStep
       summary: Execute (or preview) one runbook step's lifecycle operation
       description: >
-        Only lifecycle steps can be executed on their own; any other step
-        kind, or a lifecycle step without a connector or verb, is rejected
-        with 400 `unsupported_step_kind` / `invalid_step` before anything
-        else happens. Resolves the target connector, verb, and entityRef from the stored
+        Only lifecycle steps can be executed on their own. The operator
+        grant on the step's connector is checked first (403), so the answer
+        does not depend on the step's kind; then a step that is not a
+        lifecycle step is rejected with 400 `unsupported_step_kind` and a
+        lifecycle step without a verb with 400 `invalid_step`. A step with
+        no connector (a manual step) is rejected with 400 directly.
+        Resolves the target connector, verb, and entityRef from the stored
         step — the request body is ignored — and runs the exact same
         dry-run-preview / elevation-gated-mutate path as the connector-level
         restart/start/stop endpoints (see ADR 0001/0002). Linking a step
@@ -3069,9 +3072,12 @@ paths:
         '400':
           description: >
             Missing elevation token, the connector type doesn't support the
-            step's verb (`unsupported_operation`), the step is not a
-            lifecycle step (`unsupported_step_kind`) or has no connector or
-            verb (`invalid_step`).
+            step's verb (`unsupported_operation`), or, once the operator
+            grant on the step's connector is confirmed, the step is not a
+            lifecycle step (`unsupported_step_kind`) or has no verb
+            (`invalid_step`). A step with no connector is rejected with
+            `unsupported_step_kind` (a manual step) or `invalid_step`
+            before any grant check.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
@@ -5986,6 +5992,10 @@ components:
     RunbookStepVerb:
       type: string
       enum: [restart, start, stop]
+    RunbookStepStoredVerb:
+      type: string
+      enum: ['', restart, start, stop]
+      description: A lifecycle step's verb; empty for every other step kind and for a redacted step.
     RunbookStepKind:
       type: string
       enum: [lifecycle, sync_and_wait, wait_until_healthy, manual]
@@ -5996,15 +6006,17 @@ components:
         reports online; manual waits for a human to confirm.
     RunbookStep:
       type: object
-      required: [id, position, kind, title, connectorId, connectorName, verb, entityRef, timeoutSeconds, canExecute, executeBlockedReason]
+      required: [id, position, title, connectorId, connectorName, verb, entityRef, timeoutSeconds, canExecute, executeBlockedReason]
       properties:
         id: { type: string }
         position: { type: integer, description: 'Order within the runbook, 0-based; matches the steps array index.' }
-        kind: { $ref: '#/components/schemas/RunbookStepKind' }
+        kind:
+          allOf: [{ $ref: '#/components/schemas/RunbookStepKind' }]
+          description: Absent for a step redacted because the caller cannot view its connector.
         title: { type: string }
         connectorId: { type: string, description: 'Empty for a manual step, and for a step redacted because the caller cannot view its connector.' }
         connectorName: { type: string, description: "The referenced connector's display name, for rendering without a second lookup." }
-        verb: { $ref: '#/components/schemas/RunbookStepVerb' }
+        verb: { $ref: '#/components/schemas/RunbookStepStoredVerb' }
         timeoutSeconds:
           type: integer
           minimum: 0
@@ -6012,7 +6024,7 @@ components:
           description: >
             Timeout of a sync_and_wait or wait_until_healthy step, in seconds.
             Always 0 for lifecycle and manual steps, whenever the step was
-            created.
+            created, and for a redacted step.
         entityRef:
           type: string
           description: >
@@ -6060,13 +6072,13 @@ components:
         entityRef: { type: string, default: '' }
         timeoutSeconds:
           type: integer
-          minimum: 10
+          minimum: 0
           maximum: 1800
           default: 300
           description: >
-            Only for sync_and_wait and wait_until_healthy: between 10 seconds
-            and 30 minutes, default 5 minutes. Ignored as 0 on lifecycle and
-            manual steps, which reject any other value.
+            For sync_and_wait and wait_until_healthy it must be between 10 and
+            1800 seconds and defaults to 300 when omitted. Lifecycle and
+            manual steps accept only 0 or omission.
     Runbook:
       type: object
       required: [id, title, body, targetType, targetValue, steps, createdAt, updatedAt]
@@ -6636,7 +6648,9 @@ components:
             manual steps.
         title: { type: string }
         connectorId: { type: string, description: 'Empty for a manual step.' }
-        verb: { type: string, description: 'Empty for every kind except lifecycle.', enum: ['', restart, start, stop] }
+        verb:
+          allOf: [{ $ref: '#/components/schemas/RunbookStepStoredVerb' }]
+          description: Empty for every kind except lifecycle.
         entityRef: { type: string }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }

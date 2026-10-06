@@ -6,8 +6,8 @@
  *
  * OpenAPI spec version: 0.1.0
  */
-import type { BackupRunbookStepVerb } from './backupRunbookStepVerb';
 import type { RunbookStepKind } from './runbookStepKind';
+import type { RunbookStepStoredVerb } from './runbookStepStoredVerb';
 
 /**
  * Stored runbook step as exported in a backup. A bundle written before step kinds existed has no kind or timeoutSeconds; such a step imports as lifecycle.
@@ -28,7 +28,7 @@ export interface BackupRunbookStep {
   /** Empty for a manual step. */
   connectorId: string;
   /** Empty for every kind except lifecycle. */
-  verb: BackupRunbookStepVerb;
+  verb: RunbookStepStoredVerb;
   entityRef: string;
   createdAt: string;
   updatedAt: string;

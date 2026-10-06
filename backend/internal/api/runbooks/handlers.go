@@ -117,7 +117,7 @@ type stepInput struct {
 type stepResponse struct {
 	ID                   string `json:"id"`
 	Position             int    `json:"position"`
-	Kind                 string `json:"kind"`
+	Kind                 string `json:"kind,omitempty"`
 	Title                string `json:"title"`
 	ConnectorID          string `json:"connectorId"`
 	ConnectorName        string `json:"connectorName"`
@@ -208,13 +208,11 @@ func (h *Handler) validateStepTarget(ctx context.Context, prefix, kind string, i
 			errs = append(errs, httputil.FieldError{Field: prefix + ".connectorId", Msg: "must be empty for a manual step"})
 		}
 	} else {
-		conn, err := h.Store.GetConnector(ctx, in.ConnectorID)
-		switch {
-		case in.ConnectorID == "":
+		if in.ConnectorID == "" {
 			errs = append(errs, httputil.FieldError{Field: prefix + ".connectorId", Msg: "is required"})
-		case err != nil:
+		} else if conn, err := h.Store.GetConnector(ctx, in.ConnectorID); err != nil {
 			errs = append(errs, httputil.FieldError{Field: prefix + ".connectorId", Msg: "connector not found"})
-		case kind == kindLifecycle && validVerb(in.Verb) && !connector.SupportsLifecycleVerb(conn.Type, in.Verb):
+		} else if kind == kindLifecycle && validVerb(in.Verb) && !connector.SupportsLifecycleVerb(conn.Type, in.Verb) {
 			errs = append(errs, httputil.FieldError{Field: prefix + ".verb", Msg: "connector does not support this verb"})
 		}
 	}
@@ -265,11 +263,10 @@ func (h *Handler) toStepResponses(ctx context.Context, userID string, steps []*s
 			return nil, err
 		}
 		if role == "" {
-			// Hide the connector, entity and verb from callers with no grant (#527).
+			// Hide the connector, entity, verb, kind and timeout from callers with no grant (#527).
 			out = append(out, stepResponse{
 				ID:                   st.ID,
 				Position:             st.Position,
-				Kind:                 kind,
 				Title:                "Restricted step",
 				ExecuteBlockedReason: "no_viewer_grant",
 			})
@@ -685,7 +682,10 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 // direct connector restart/start/stop, with runbookId/stepId merged into
 // the audit detail. Authoring a step grants nothing on its own: the caller
 // must additionally hold at least an operator grant on the step's
-// connector, checked here (not at authoring time).
+// connector, checked here (not at authoring time). That grant check comes
+// before the step-kind checks, so a caller without a grant on the step's
+// connector gets the same 403 whatever the step's kind; only a step with no
+// connector is rejected with a 400 ahead of it.
 func (h *Handler) ExecuteStep(w http.ResponseWriter, r *http.Request) {
 	runbookID := r.PathValue("id")
 	stepID := r.PathValue("stepId")
@@ -711,12 +711,16 @@ func (h *Handler) ExecuteStep(w http.ResponseWriter, r *http.Request) {
 
 	// Only a well-formed lifecycle step may run on its own. A backup import
 	// can carry any kind or a lifecycle step with no connector or verb, and
-	// none of those may reach the lifecycle path.
-	if effectiveKind(step.Kind) != kindLifecycle {
-		httputil.Error(w, http.StatusBadRequest, "unsupported_step_kind", "Only lifecycle steps can be executed on their own")
-		return
-	}
-	if step.ConnectorID == "" || step.Verb == "" {
+	// none of those may reach the lifecycle path. A step with no connector (a
+	// manual step, or a malformed row) is never redacted, so it is rejected
+	// before the grant check without revealing anything. For every other step
+	// the operator grant is checked first, so a caller without one gets the
+	// same 403 whatever the step's kind and cannot probe a hidden step's kind.
+	if step.ConnectorID == "" {
+		if effectiveKind(step.Kind) != kindLifecycle {
+			httputil.Error(w, http.StatusBadRequest, "unsupported_step_kind", "Only lifecycle steps can be executed on their own")
+			return
+		}
 		httputil.Error(w, http.StatusBadRequest, "invalid_step", "Step has no connector or verb")
 		return
 	}
@@ -728,6 +732,15 @@ func (h *Handler) ExecuteStep(w http.ResponseWriter, r *http.Request) {
 	}
 	if !ok {
 		httputil.Error(w, http.StatusForbidden, "forbidden", "insufficient permissions")
+		return
+	}
+
+	if effectiveKind(step.Kind) != kindLifecycle {
+		httputil.Error(w, http.StatusBadRequest, "unsupported_step_kind", "Only lifecycle steps can be executed on their own")
+		return
+	}
+	if step.Verb == "" {
+		httputil.Error(w, http.StatusBadRequest, "invalid_step", "Step has no connector or verb")
 		return
 	}
 
