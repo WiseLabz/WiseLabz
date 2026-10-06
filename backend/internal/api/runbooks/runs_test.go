@@ -556,3 +556,111 @@ func TestConfirmRejectsStepOfAnotherRun(t *testing.T) {
 	}
 	assertNoRunAudit(t, h, "runbook.run.confirm")
 }
+
+func deleteRunConnectors(t *testing.T, h *Handler, ids ...string) {
+	t.Helper()
+	for _, id := range ids {
+		if err := h.Store.DeleteConnector(context.Background(), id); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func assertRunState(t *testing.T, h *Handler, runID, want string) {
+	t.Helper()
+	run, _, err := h.Store.GetRunbookRun(context.Background(), runID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if run.State != want {
+		t.Fatalf("state=%s want=%s", run.State, want)
+	}
+}
+
+// assertDeletedStepRedacted checks history still hides a step whose connector is gone.
+func assertDeletedStepRedacted(t *testing.T, h *Handler, id, user, runID string) {
+	t.Helper()
+	rr := httptest.NewRecorder()
+	h.GetRun(rr, runRequest(user, id, runID, ""))
+	assertRunStatus(t, rr, 200)
+	var view struct {
+		Steps []struct {
+			Redacted bool `json:"redacted"`
+		} `json:"steps"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &view); err != nil {
+		t.Fatal(err)
+	}
+	if len(view.Steps) != 3 || !view.Steps[2].Redacted {
+		t.Fatalf("deleted connector step not redacted: %s", rr.Body.String())
+	}
+}
+
+func TestCancelRunAfterConnectorDeleted(t *testing.T) {
+	t.Run("surviving grant cancels", func(t *testing.T) {
+		h, id, user, _, b := runFixture(t)
+		run, _ := seededRun(t, h, id, user, false)
+		deleteRunConnectors(t, h, b)
+		rr := httptest.NewRecorder()
+		h.CancelRun(rr, runRequest(user, id, run.ID, ""))
+		assertRunStatus(t, rr, 204)
+		assertRunState(t, h, run.ID, "cancelled")
+		assertRunAudit(t, h, "runbook.run.cancel", run.ID, id, user)
+		assertDeletedStepRedacted(t, h, id, user, run.ID)
+	})
+	t.Run("missing grant on surviving connector", func(t *testing.T) {
+		h, id, user, a, b := runFixture(t)
+		run, _ := seededRun(t, h, id, user, false)
+		deleteRunConnectors(t, h, b)
+		if _, err := h.Store.UpsertConnectorGrant(context.Background(), user, a, "viewer"); err != nil {
+			t.Fatal(err)
+		}
+		rr := httptest.NewRecorder()
+		h.CancelRun(rr, runRequest(user, id, run.ID, ""))
+		assertRunStatus(t, rr, 403)
+		assertRunState(t, h, run.ID, "failed")
+		assertNoRunAudit(t, h, "runbook.run.cancel")
+	})
+	t.Run("all connectors deleted", func(t *testing.T) {
+		h, id, user, a, b := runFixture(t)
+		run, _ := seededRun(t, h, id, user, false)
+		deleteRunConnectors(t, h, a, b)
+		r := runRequest(user, id, run.ID, "")
+		readOnly := r.WithContext(auth.ContextWithAPIKeyRestriction(r.Context(), auth.APIKeyRestriction{ReadOnly: true}))
+		rr := httptest.NewRecorder()
+		h.CancelRun(rr, readOnly)
+		assertRunStatus(t, rr, 403)
+		assertRunState(t, h, run.ID, "failed")
+		assertNoRunAudit(t, h, "runbook.run.cancel")
+		rr = httptest.NewRecorder()
+		h.CancelRun(rr, r)
+		assertRunStatus(t, rr, 204)
+		assertRunState(t, h, run.ID, "cancelled")
+		assertRunAudit(t, h, "runbook.run.cancel", run.ID, id, user)
+	})
+}
+
+func TestConfirmResumeStillRequireDeletedConnectorGrant(t *testing.T) {
+	t.Run("confirm", func(t *testing.T) {
+		h, id, user, _, b := runFixture(t)
+		run, steps := seededRun(t, h, id, user, true)
+		deleteRunConnectors(t, h, b)
+		rr := httptest.NewRecorder()
+		h.ConfirmRunStep(rr, runRequest(user, id, run.ID, steps[0].ID))
+		assertRunStatus(t, rr, 403)
+		assertRunState(t, h, run.ID, "waiting_manual")
+		assertNoRunAudit(t, h, "runbook.run.confirm")
+	})
+	t.Run("resume", func(t *testing.T) {
+		h, id, user, _, b := runFixture(t)
+		run, _ := seededRun(t, h, id, user, false)
+		deleteRunConnectors(t, h, b)
+		r := runRequest(user, id, run.ID, "")
+		elevateRun(t, h, r, id)
+		rr := httptest.NewRecorder()
+		h.ResumeRun(rr, r)
+		assertRunStatus(t, rr, 403)
+		assertRunState(t, h, run.ID, "failed")
+		assertNoRunAudit(t, h, "runbook.run.resume")
+	})
+}

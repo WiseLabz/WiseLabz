@@ -1215,7 +1215,7 @@ export const useResumeRunbookRun = <
   return useMutation(getResumeRunbookRunMutationOptions(options), queryClient);
 };
 /**
- * Requires operator on every frozen connector (API-key restrictions apply), checked before state. No elevation. Stops execution before its next step and records the cancelling user. Available after runbook deletion.
+ * Requires operator on every frozen connector (API-key restrictions apply), checked before state. No elevation. Stops execution before its next step and records the cancelling user. Available after runbook deletion. Connectors deleted since the run started do not count toward the grant requirement for cancellation (confirm and resume still require every frozen connector).
  * @summary Cancel a running, waiting or failed run
  */
 export const cancelRunbookRun = (

@@ -3231,7 +3231,8 @@ paths:
       description: >
         Requires operator on every frozen connector (API-key restrictions apply), checked before state.
         No elevation. Stops execution before its next step and records the cancelling user.
-        Available after runbook deletion.
+        Available after runbook deletion. Connectors deleted since the run started do not count toward the
+        grant requirement for cancellation (confirm and resume still require every frozen connector).
       responses:
         '204': { description: Run cancelled }
         '401': { $ref: '#/components/responses/Unauthorized' }

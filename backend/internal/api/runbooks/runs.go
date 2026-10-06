@@ -50,6 +50,7 @@ type runPreviewResponse struct {
 
 // runAuthorized checks all distinct frozen connectors before inspecting state
 // or elevation. Store role checks apply API-key connector restrictions too.
+// CancelRun alone passes only the steps whose connector still exists.
 func (h *Handler) runAuthorized(w http.ResponseWriter, r *http.Request, steps []*store.RunbookRunStepRecord) bool {
 	checked := map[string]bool{}
 	for _, step := range steps {
@@ -330,10 +331,44 @@ func (h *Handler) ResumeRun(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusAccepted, resumed)
 }
 
-// CancelRun cancels an open run after checking every frozen connector grant.
+// existingConnectorSteps drops steps whose connector was deleted, since the
+// grants cascaded away with it and nobody could ever pass the check again.
+func (h *Handler) existingConnectorSteps(ctx context.Context, steps []*store.RunbookRunStepRecord) ([]*store.RunbookRunStepRecord, error) {
+	exists := map[string]bool{}
+	kept := make([]*store.RunbookRunStepRecord, 0, len(steps))
+	for _, step := range steps {
+		id := step.ConnectorID
+		if id != "" {
+			if _, seen := exists[id]; !seen {
+				_, err := h.Store.GetConnector(ctx, id)
+				if err != nil && !errors.Is(err, store.ErrNotFound) {
+					return nil, err
+				}
+				exists[id] = err == nil
+			}
+			if !exists[id] {
+				continue
+			}
+		}
+		kept = append(kept, step)
+	}
+	return kept, nil
+}
+
+// CancelRun cancels an open run after checking the grant on every frozen
+// connector that still exists; deleted connectors do not block cancellation.
 func (h *Handler) CancelRun(w http.ResponseWriter, r *http.Request) {
-	run, ok := h.authorizedRun(w, r)
-	if !ok {
+	run, steps, err := h.Store.GetRunbookRun(r.Context(), r.PathValue("runId"))
+	if err != nil {
+		writeRunError(w, err)
+		return
+	}
+	steps, err = h.existingConnectorSteps(r.Context(), steps)
+	if err != nil {
+		httputil.Errorf(w, err)
+		return
+	}
+	if !h.runAuthorized(w, r, steps) {
 		return
 	}
 	if err := h.Executor.Cancel(r.Context(), run.ID, auth.UserIDFromContext(r.Context())); err != nil {
