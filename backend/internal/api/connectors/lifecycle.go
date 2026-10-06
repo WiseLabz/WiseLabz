@@ -79,35 +79,89 @@ func (h *Handler) ServeLifecycleOp(w http.ResponseWriter, r *http.Request, conne
 	h.lifecycleOpMutate(w, r, connectorID, verb, entityRef, extraAudit)
 }
 
-// lifecycleOpPreview builds the dry-run preview response for connectorID's
-// latest snapshot. When entityRef matches a snapshot entity by ExternalID,
-// that entity's name is used as targetService instead of the top-level
-// service name, so a per-entity restart/start/stop previews the entity
-// actually being targeted.
-func (h *Handler) lifecycleOpPreview(w http.ResponseWriter, r *http.Request, connectorID, verb, entityRef string) {
-	if _, err := h.Store.GetConnector(r.Context(), connectorID); err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			httputil.Error(w, http.StatusNotFound, "not_found", "Connector not found")
-			return
-		}
-		httputil.Errorf(w, err)
+// LifecyclePreview describes the blast radius from the latest stored snapshot.
+type LifecyclePreview struct {
+	TargetService            string                        `json:"targetService"`
+	EstimatedDowntimeSeconds int                           `json:"estimatedDowntimeSeconds"`
+	DependentServices        []connector.ServiceDependency `json:"dependentServices"`
+	AffectedEntities         []string                      `json:"affectedEntities"`
+}
+
+// LifecycleActor identifies the acting user explicitly, including the audit role.
+type LifecycleActor struct {
+	UserID        string
+	InstanceAdmin bool
+}
+
+type lifecycleError struct {
+	status  int
+	code    string
+	message string
+	cause   error
+}
+
+func (e *lifecycleError) Error() string { return e.message }
+func (e *lifecycleError) Unwrap() error { return e.cause }
+
+type preparedLifecycleOp struct {
+	record *store.ConnectorRecord
+	config map[string]any
+	apply  func(context.Context, map[string]any, string) error
+}
+
+func writeLifecycleError(w http.ResponseWriter, err error) {
+	var lifecycleErr *lifecycleError
+	if errors.As(err, &lifecycleErr) {
+		httputil.Error(w, lifecycleErr.status, lifecycleErr.code, lifecycleErr.message)
 		return
+	}
+	httputil.Errorf(w, err)
+}
+
+func (h *Handler) lifecycleOpPreview(w http.ResponseWriter, r *http.Request, connectorID, verb, entityRef string) {
+	preview, err := h.PreviewLifecycleOp(r.Context(), connectorID, verb, entityRef)
+	if err != nil {
+		writeLifecycleError(w, err)
+		return
+	}
+	httputil.JSON(w, http.StatusOK, preview)
+}
+
+// PreviewLifecycleOp previews a connector or entity without mutating it.
+// Callers must verify the connector operator grant first. HTTP preview routes
+// remain elevation-free.
+func (h *Handler) PreviewLifecycleOp(
+	ctx context.Context,
+	connectorID, verb, entityRef string,
+) (*LifecyclePreview, error) {
+	if _, err := h.Store.GetConnector(ctx, connectorID); err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			return nil, &lifecycleError{
+				status:  http.StatusNotFound,
+				code:    "not_found",
+				message: "Connector not found",
+				cause:   err,
+			}
+		}
+		return nil, err
 	}
 
-	sn, err := h.Store.GetLatestSnapshot(r.Context(), connectorID)
+	sn, err := h.Store.GetLatestSnapshot(ctx, connectorID)
 	if errors.Is(err, store.ErrNotFound) {
-		httputil.Error(w, http.StatusNotFound, "not_found", "No snapshot available for connector")
-		return
+		return nil, &lifecycleError{
+			status:  http.StatusNotFound,
+			code:    "not_found",
+			message: "No snapshot available for connector",
+			cause:   err,
+		}
 	}
 	if err != nil {
-		httputil.Errorf(w, err)
-		return
+		return nil, err
 	}
 
 	var snap connector.ServiceSnapshot
 	if err := json.Unmarshal([]byte(sn.Data), &snap); err != nil {
-		httputil.Errorf(w, fmt.Errorf("decode service snapshot: %w", err))
-		return
+		return nil, fmt.Errorf("decode service snapshot: %w", err)
 	}
 
 	targetService := snap.ServiceName
@@ -132,12 +186,12 @@ func (h *Handler) lifecycleOpPreview(w http.ResponseWriter, r *http.Request, con
 		// bounded estimate — 0 rather than inventing a new field.
 		downtime = 0
 	}
-	httputil.JSON(w, http.StatusOK, map[string]any{
-		"targetService":            targetService,
-		"estimatedDowntimeSeconds": downtime,
-		"dependentServices":        dependencies,
-		"affectedEntities":         affected,
-	})
+	return &LifecyclePreview{
+		TargetService:            targetService,
+		EstimatedDowntimeSeconds: downtime,
+		DependentServices:        dependencies,
+		AffectedEntities:         affected,
+	}, nil
 }
 
 // connectedDevices returns the names an entity powers or carries (its
@@ -159,52 +213,102 @@ func connectedDevices(e connector.SnapshotEntity) []string {
 	return out
 }
 
-// lifecycleOpMutate handles the real, mutating side of restart/start/stop
-// (dryRun absent/false). Per ADR 0001/0002: gated by the verb's elevation
-// action, no rollback on failure (an AlertRecord is raised instead), and
-// only successes are audited.
+// lifecycleOpMutate preserves the direct operation's validation and elevation order.
 func (h *Handler) lifecycleOpMutate(w http.ResponseWriter, r *http.Request, connectorID, verb, entityRef string, extraAudit map[string]any) {
-	rec, err := h.Store.GetConnector(r.Context(), connectorID)
-	if errors.Is(err, store.ErrNotFound) {
-		httputil.Error(w, http.StatusNotFound, "not_found", "Connector not found")
+	prepared, err := h.prepareLifecycleOp(r.Context(), connectorID, verb)
+	if err != nil {
+		writeLifecycleError(w, err)
 		return
 	}
-	if err != nil {
-		httputil.Errorf(w, err)
+	if err := auth.ValidateElevationHeader(h.JWT, h.Store, "connector."+verb, r); err != nil {
+		auth.WriteElevationError(w, err)
 		return
+	}
+	actor := LifecycleActor{
+		UserID:        auth.UserIDFromContext(r.Context()),
+		InstanceAdmin: auth.InstanceAdminFromContext(r.Context()),
+	}
+	if err := h.mutateLifecycleOp(r.Context(), prepared, verb, entityRef, actor, extraAudit); err != nil {
+		writeLifecycleError(w, err)
+		return
+	}
+	httputil.JSON(w, http.StatusOK, map[string]any{"status": verb + "ed"})
+}
+
+// MutateLifecycleOp performs an already-authorized lifecycle operation.
+// Callers must verify the connector operator grant first; HTTP mutation
+// handlers must also validate elevation. Per ADR 0001/0002, a failed operation
+// is not rolled back, creates a critical alert, and is not audited; success is
+// audited. The core does not inspect elevation tokens or request actors.
+func (h *Handler) MutateLifecycleOp(
+	ctx context.Context,
+	connectorID, verb, entityRef string,
+	actor LifecycleActor,
+	extraAudit map[string]any,
+) error {
+	prepared, err := h.prepareLifecycleOp(ctx, connectorID, verb)
+	if err != nil {
+		return err
+	}
+	return h.mutateLifecycleOp(ctx, prepared, verb, entityRef, actor, extraAudit)
+}
+
+func (h *Handler) prepareLifecycleOp(ctx context.Context, connectorID, verb string) (*preparedLifecycleOp, error) {
+	rec, err := h.Store.GetConnector(ctx, connectorID)
+	if errors.Is(err, store.ErrNotFound) {
+		return nil, &lifecycleError{
+			status:  http.StatusNotFound,
+			code:    "not_found",
+			message: "Connector not found",
+			cause:   err,
+		}
+	}
+	if err != nil {
+		return nil, err
 	}
 
 	cfg, err := store.ParseConnectorConfig(rec.Type, rec.ConfigData, h.Config.Encryption.Key)
 	if err != nil {
-		httputil.Errorf(w, fmt.Errorf("parse config: %w", err))
-		return
+		return nil, fmt.Errorf("parse config: %w", err)
 	}
 	connector.ApplyRecordConfig(cfg, rec.URL, rec.VerifyTLS)
 
 	conn, err := connector.Get(rec.Type, cfg)
 	if err != nil {
-		httputil.Errorf(w, err)
-		return
+		return nil, err
 	}
 
 	fn, ok := connector.LifecycleOp(conn, verb)
 	if !ok {
-		httputil.Error(w, http.StatusBadRequest, "unsupported_operation", "connector does not support "+verb)
-		return
+		return nil, &lifecycleError{
+			status:  http.StatusBadRequest,
+			code:    "unsupported_operation",
+			message: "connector does not support " + verb,
+		}
 	}
 
-	elevateAction := "connector." + verb
-	if err := auth.ValidateElevationHeader(h.JWT, h.Store, elevateAction, r); err != nil {
-		auth.WriteElevationError(w, err)
-		return
-	}
+	return &preparedLifecycleOp{record: rec, config: cfg, apply: fn}, nil
+}
 
+func (h *Handler) mutateLifecycleOp(
+	ctx context.Context,
+	prepared *preparedLifecycleOp,
+	verb, entityRef string,
+	actor LifecycleActor,
+	extraAudit map[string]any,
+) error {
+	rec := prepared.record
+	connectorID := rec.ID
 	if err := connector.ValidateCompositeRef(entityRef); err != nil {
-		httputil.Error(w, http.StatusBadRequest, "invalid_request", "invalid entityRef")
-		return
+		return &lifecycleError{
+			status:  http.StatusBadRequest,
+			code:    "invalid_request",
+			message: "invalid entityRef",
+			cause:   err,
+		}
 	}
 
-	if err := fn(r.Context(), cfg, entityRef); err != nil {
+	if err := prepared.apply(ctx, prepared.config, entityRef); err != nil {
 		slog.Error("connector "+verb+" failed", "connector", connectorID, "error", err)
 		alert := &store.AlertRecord{
 			ServiceID:   connectorID,
@@ -212,7 +316,7 @@ func (h *Handler) lifecycleOpMutate(w http.ResponseWriter, r *http.Request, conn
 			Title:       fmt.Sprintf("%s failed for %s", capitalize(verb), rec.Name),
 			Description: err.Error(),
 		}
-		if createErr := h.Store.CreateAlert(r.Context(), alert); createErr != nil {
+		if createErr := h.Store.CreateAlert(context.WithoutCancel(ctx), alert); createErr != nil {
 			slog.Error("failed to create "+verb+" failure alert", "error", createErr)
 		} else if h.WSHub != nil {
 			h.WSHub.BroadcastConnector(connectorID, ws.EventAlertCreated, map[string]any{
@@ -222,20 +326,34 @@ func (h *Handler) lifecycleOpMutate(w http.ResponseWriter, r *http.Request, conn
 				"title":     alert.Title,
 			})
 		}
-		httputil.Error(w, http.StatusBadGateway, verb+"_failed", err.Error())
-		return
+		return &lifecycleError{
+			status:  http.StatusBadGateway,
+			code:    verb + "_failed",
+			message: err.Error(),
+			cause:   err,
+		}
 	}
 
-	detail := map[string]any{"entityRef": entityRef}
+	detail := make(map[string]any, len(extraAudit)+1)
 	for k, v := range extraAudit {
 		detail[k] = v
 	}
+	detail["entityRef"] = entityRef
 	auditAction := "connector." + verb
-	if err := h.Store.RecordAuditFromContext(r.Context(), auditAction, "connector", connectorID, detail); err != nil {
+	if err := h.recordLifecycleAudit(context.WithoutCancel(ctx), actor, auditAction, connectorID, detail); err != nil {
 		slog.Error("failed to record audit", "action", auditAction, "error", err)
 	}
 
-	httputil.JSON(w, http.StatusOK, map[string]any{"status": verb + "ed"})
+	return nil
+}
+
+func (h *Handler) recordLifecycleAudit(
+	ctx context.Context,
+	actor LifecycleActor,
+	action, connectorID string,
+	detail map[string]any,
+) error {
+	return h.Store.RecordAuditAs(ctx, actor.UserID, actor.InstanceAdmin, action, "connector", connectorID, detail)
 }
 
 // capitalize upper-cases a word's first byte (ASCII verbs only: "restart",
