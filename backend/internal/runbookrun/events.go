@@ -78,14 +78,16 @@ func (e *Executor) notifyWaiting(ctx context.Context, run *store.RunbookRunRecor
 	if e.notifier == nil {
 		return
 	}
-	e.notifier.NotifyRunbookRun(ctx, notifications.EventRunbookRunWaiting, "info", step.ConnectorID,
+	e.notifier.NotifyRunbookRun(ctx, notifications.EventRunbookRunWaiting, "info", step.ConnectorID, "",
 		"Runbook run waiting for confirmation: "+run.RunbookTitle,
 		fmt.Sprintf("Step %d %q is waiting for a manual confirmation.", step.Position+1, step.Title))
 }
 
 // notifyFailed dispatches runbook.run_failed naming the runbook, the step the
 // run stopped on (nil when it stopped between steps) and the reason. The
-// notification is scoped to that step's connector.
+// notification is scoped to that step's connector. When the run failed for
+// lack of a grant, the acting user is notified as well: they may no longer
+// hold a grant on the connector and would otherwise never hear of it.
 func notifyFailed(ctx context.Context, notifier Notifier, run *store.RunbookRunRecord, step *store.RunbookRunStepRecord) {
 	if notifier == nil {
 		return
@@ -103,7 +105,11 @@ func notifyFailed(ctx context.Context, notifier Notifier, run *store.RunbookRunR
 			message += " Its outcome is unknown."
 		}
 	}
-	notifier.NotifyRunbookRun(ctx, notifications.EventRunbookRunFailed, "warning", connectorID,
+	actorID := ""
+	if run.Reason == ReasonPermissionDenied {
+		actorID = ActingUser(run)
+	}
+	notifier.NotifyRunbookRun(ctx, notifications.EventRunbookRunFailed, "warning", connectorID, actorID,
 		"Runbook run failed: "+run.RunbookTitle, message)
 }
 

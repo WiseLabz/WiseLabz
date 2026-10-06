@@ -193,19 +193,24 @@ func TestSyncAndWaitStep(t *testing.T) {
 		}
 	})
 
-	t.Run("waits for a sync already running, then runs its own", func(t *testing.T) {
+	t.Run("calls the syncer once under the step's deadline", func(t *testing.T) {
 		e := newEnv(t)
 		a := e.connector()
-		e.sync.fn = func(_ context.Context, n int) (*syncengine.RunResult, error) {
-			if n < 3 {
-				return nil, syncengine.ErrAlreadyRunning
-			}
+		e.exec.stepTimeout = func(*store.RunbookRunStepRecord) time.Duration { return time.Hour }
+		var deadline time.Time
+		var hasDeadline bool
+		e.sync.fn = func(ctx context.Context, _ int) (*syncengine.RunResult, error) {
+			deadline, hasDeadline = ctx.Deadline()
 			return &syncengine.RunResult{Status: "success"}, nil
 		}
+		started := time.Now()
 		run, _ := e.start(syncStep(a))
 		e.settle()
-		if got, _ := e.get(run.ID); got.State != RunSucceeded || e.sync.count() != 3 {
-			t.Fatalf("run = %+v after %d sync attempts, want succeeded after 3", got, e.sync.count())
+		if got, _ := e.get(run.ID); got.State != RunSucceeded || e.sync.count() != 1 {
+			t.Fatalf("run = %+v after %d sync calls, want succeeded after 1", got, e.sync.count())
+		}
+		if !hasDeadline || deadline.Before(started.Add(time.Hour)) || deadline.After(time.Now().Add(time.Hour)) {
+			t.Fatalf("sync context deadline = %v (set %v), want the step's one hour timeout", deadline, hasDeadline)
 		}
 	})
 

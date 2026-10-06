@@ -32,9 +32,11 @@ type StoreGrants struct {
 }
 
 // Operator implements Grants. A user who was deleted or disabled after
-// starting the run no longer acts, whatever grants remain.
+// starting the run no longer acts, whatever grants remain. The user is read
+// from the writer, like the grant check below, so a just-disabled user does not
+// pass until a read replica catches up.
 func (g StoreGrants) Operator(ctx context.Context, userID, connectorID string) (connectors.LifecycleActor, bool, error) {
-	user, err := g.Store.GetUserByID(ctx, userID)
+	user, err := g.Store.GetUserByIDFromWriter(ctx, userID)
 	if errors.Is(err, store.ErrNotFound) {
 		return connectors.LifecycleActor{}, false, nil
 	}

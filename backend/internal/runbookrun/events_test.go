@@ -201,6 +201,29 @@ func TestRunNotificationsThroughDispatcher(t *testing.T) {
 	if got := count(e.starter); !reflect.DeepEqual(got, want) {
 		t.Fatalf("starter notifications after cancelling the waiting run = %v, want %v", got, want)
 	}
+
+	// Permission denied: the acting user lost the grant, so the connector-scoped
+	// notification would skip them; they are notified as the acting user.
+	revoked := apitest.NewUser(t, e.s, "viewer")
+	apitest.GrantConnectorRole(t, e.s, revoked, a, "operator")
+	if err := e.s.DeleteConnectorGrant(ctx, revoked, a); err != nil {
+		t.Fatal(err)
+	}
+	book, saved := e.runbook(lifecycleStep(a, "restart"))
+	denied, _, err := e.exec.Start(ctx, book.ID, revoked, saved)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.settle()
+	if got, _ := e.get(denied.ID); got.State != RunFailed || got.Reason != ReasonPermissionDenied {
+		t.Fatalf("run = %+v, want failed with permission_denied", got)
+	}
+	if got := count(revoked); !reflect.DeepEqual(got, map[string]int{notifications.EventRunbookRunFailed: 1}) {
+		t.Fatalf("notifications of the user whose grant was revoked = %v, want the failed run", got)
+	}
+	if got := count(stranger); !reflect.DeepEqual(got, map[string]int{notifications.EventRunbookRunWaiting: 1}) {
+		t.Fatalf("stranger notifications after a permission failure = %v, want only the waiting one", got)
+	}
 }
 
 // TestRunEventCarriesNoStepDetails pins the WebSocket payload to identifiers

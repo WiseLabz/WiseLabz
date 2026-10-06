@@ -12,7 +12,6 @@ import (
 	"github.com/WiseLabz/wiselabz/internal/api/connectors"
 	"github.com/WiseLabz/wiselabz/internal/logsafe"
 	"github.com/WiseLabz/wiselabz/internal/store"
-	syncengine "github.com/WiseLabz/wiselabz/internal/sync"
 )
 
 // stepFailure is why a step did not succeed: the reason recorded on the run
@@ -79,9 +78,21 @@ func (e *Executor) runStep(ctx context.Context, run *store.RunbookRunRecord, ste
 	switch step.State {
 	case StepPending, StepFailed, StepUnknown:
 	default:
-		// running, waiting or skipped: another goroutine owns the step or the
-		// run is not executable. Never run a step twice.
+		// running, waiting or skipped while the run is running. This goroutine
+		// holds the run's slot, so nobody else owns the step: it was left
+		// behind by an earlier failure. Never run a step twice, and never leave
+		// the run running with nothing driving it.
 		slog.Warn("runbook run: step is not startable", "run", logsafe.Sanitize(run.ID), "step", logsafe.Sanitize(step.ID), "state", step.State)
+		if step.State == StepRunning {
+			// Whether the connector call happened is not known. The run fails
+			// and the step becomes unknown, which a resume may start again.
+			e.recordFailure(ctx, run, step, StepUnknown, &stepFailure{
+				reason:  ReasonInternalError,
+				message: "The step was left running by an earlier failure.",
+			})
+			return false
+		}
+		e.failRun(ctx, run.ID, fmt.Errorf("step %s is %s in a running run", step.ID, step.State))
 		return false
 	}
 
@@ -111,7 +122,10 @@ func (e *Executor) runStep(ctx context.Context, run *store.RunbookRunRecord, ste
 	return false
 }
 
-// pause stops the run on a manual step until a user confirms it.
+// pause stops the run on a manual step until a user confirms it. When the run
+// cannot pause, a conflict means it was cancelled or expired meanwhile or the
+// step is not pending: failRun fails the run if it is still running and does
+// nothing otherwise.
 func (e *Executor) pause(ctx context.Context, run *store.RunbookRunRecord, step *store.RunbookRunStepRecord) {
 	dbCtx, cancel := detached(ctx)
 	defer cancel()
@@ -119,8 +133,8 @@ func (e *Executor) pause(ctx context.Context, run *store.RunbookRunRecord, step 
 	if err != nil {
 		if !stateChanged(err) {
 			slog.Error("runbook run: pause on manual step failed", "run", logsafe.Sanitize(run.ID), "step", logsafe.Sanitize(step.ID), "error", err)
-			e.failRun(ctx, run.ID, err)
 		}
+		e.failRun(ctx, run.ID, err)
 		return
 	}
 	e.publishStep(paused, waiting)
@@ -154,7 +168,8 @@ func (e *Executor) recordSuccess(ctx context.Context, run *store.RunbookRunRecor
 }
 
 // recordFailure stores the step outcome and the failed run in one transaction
-// and notifies.
+// and notifies. When that write fails, failRun fails the run at run level if it
+// is still running, so a failed write never leaves it running.
 func (e *Executor) recordFailure(ctx context.Context, run *store.RunbookRunRecord, step *store.RunbookRunStepRecord, stepState string, failure *stepFailure) {
 	dbCtx, cancel := detached(ctx)
 	defer cancel()
@@ -163,6 +178,7 @@ func (e *Executor) recordFailure(ctx context.Context, run *store.RunbookRunRecor
 		if !stateChanged(err) {
 			slog.Error("runbook run: record step failure failed", "run", logsafe.Sanitize(run.ID), "step", logsafe.Sanitize(step.ID), "error", err)
 		}
+		e.failRun(ctx, run.ID, err)
 		return
 	}
 	e.publishStep(failed, ended)
@@ -171,14 +187,13 @@ func (e *Executor) recordFailure(ctx context.Context, run *store.RunbookRunRecor
 }
 
 // outcomeNotRecorded handles a succeeded step whose result could not be
-// stored. A state conflict means the run was cancelled meanwhile and is
-// already consistent. Anything else leaves a step that ran but is not
-// recorded, so it is marked unknown and the run stops.
+// stored. The step ran but is not recorded, so it is marked unknown and the
+// run stops, also after a state conflict: the run may still be running. If it
+// was cancelled meanwhile it is already consistent and that write conflicts too.
 func (e *Executor) outcomeNotRecorded(ctx context.Context, run *store.RunbookRunRecord, step *store.RunbookRunStepRecord, err error) {
-	if stateChanged(err) {
-		return
+	if !stateChanged(err) {
+		slog.Error("runbook run: record step success failed", "run", logsafe.Sanitize(run.ID), "step", logsafe.Sanitize(step.ID), "error", err)
 	}
-	slog.Error("runbook run: record step success failed", "run", logsafe.Sanitize(run.ID), "step", logsafe.Sanitize(step.ID), "error", err)
 	e.recordFailure(ctx, run, step, StepUnknown, &stepFailure{
 		reason:  ReasonInternalError,
 		message: "The step ran but its result could not be recorded.",
@@ -199,9 +214,11 @@ func (e *Executor) finishWithoutStep(ctx context.Context, run *store.RunbookRunR
 	e.publishRun(finished)
 }
 
-// failRun stops a run the executor can no longer drive because reading or
-// writing its state failed between steps, when no step is in flight. Best
-// effort: if this write fails too, the run stays running until it is
+// failRun fails a run the executor can no longer drive, with reason
+// internal_error, when no step is in flight. The write is guarded on the run
+// still being running, so it does nothing for a run that was cancelled, expired
+// or already failed, and it is skipped when ctx is done or cause is a missing
+// run. Best effort: if this write fails too, the run stays running until it is
 // cancelled or the next startup recovery.
 func (e *Executor) failRun(ctx context.Context, runID string, cause error) {
 	if ctx.Err() != nil || errors.Is(cause, store.ErrNotFound) {
@@ -240,7 +257,6 @@ func (e *Executor) perform(ctx context.Context, run *store.RunbookRunRecord, ste
 	var waitingFor string
 	switch step.Kind {
 	case KindLifecycle:
-		waitingFor = step.Verb + " to finish"
 		err = e.lifecycle.MutateLifecycleOp(stepCtx, step.ConnectorID, step.Verb, step.EntityRef, actor, auditDetail(run, step))
 	case KindSyncAndWait:
 		waitingFor = "the sync to finish"
@@ -258,14 +274,10 @@ func (e *Executor) perform(ctx context.Context, run *store.RunbookRunRecord, ste
 	if err == nil {
 		return nil
 	}
-	if ctx.Err() == nil && (errors.Is(stepCtx.Err(), context.DeadlineExceeded) || errors.Is(err, context.DeadlineExceeded)) {
-		// A lifecycle step has no step timeout: the deadline was the
-		// connector call's own.
-		message := "Timed out waiting for " + waitingFor + "."
-		if timeout > 0 {
-			message = fmt.Sprintf("Timed out after %s waiting for %s.", timeout, waitingFor)
-		}
-		return &stepFailure{reason: ReasonStepTimeout, message: message}
+	if timeout > 0 && ctx.Err() == nil && errors.Is(stepCtx.Err(), context.DeadlineExceeded) {
+		// The step's own deadline expired. A deadline error from the operation
+		// itself, such as a connector's HTTP timeout, is an ordinary failure.
+		return &stepFailure{reason: ReasonStepTimeout, message: fmt.Sprintf("Timed out after %s waiting for %s.", timeout, waitingFor)}
 	}
 	return &stepFailure{reason: ReasonStepFailed, message: err.Error()}
 }
@@ -314,30 +326,26 @@ func auditDetail(run *store.RunbookRunRecord, step *store.RunbookRunStepRecord) 
 }
 
 // syncAndWait syncs the connector and returns once that sync has finished
-// successfully. While another sync holds the connector it waits and then runs
-// its own, so the step always observes the state left by the steps before it.
+// successfully. The engine waits for a sync already running on the connector
+// and then runs its own, so the step observes the state left by the steps
+// before it. ctx, which carries the step timeout and the run's cancellation,
+// bounds that wait too.
 func (e *Executor) syncAndWait(ctx context.Context, connectorID string) error {
-	for {
-		result, err := e.syncer.RunSyncFields(ctx, connectorID, uuid.NewString(), nil)
-		switch {
-		case errors.Is(err, syncengine.ErrAlreadyRunning):
-			if err := sleep(ctx, e.syncBusyRetry); err != nil {
-				return err
-			}
-		case err != nil:
-			return err
-		case result == nil:
-			return errors.New("the sync did not run")
-		case result.Status == "skipped":
-			return errors.New("the sync was skipped because the connector is disabled")
-		case result.Status != "success":
-			if result.Error != "" {
-				return errors.New(result.Error)
-			}
-			return fmt.Errorf("the sync ended with status %q", result.Status)
-		default:
-			return nil
+	result, err := e.syncer.RunSyncFieldsWhenFree(ctx, connectorID, uuid.NewString(), nil)
+	switch {
+	case err != nil:
+		return err
+	case result == nil:
+		return errors.New("the sync did not run")
+	case result.Status == "skipped":
+		return errors.New("the sync was skipped because the connector is disabled")
+	case result.Status != "success":
+		if result.Error != "" {
+			return errors.New(result.Error)
 		}
+		return fmt.Errorf("the sync ended with status %q", result.Status)
+	default:
+		return nil
 	}
 }
 

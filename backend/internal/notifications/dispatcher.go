@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"slices"
 	"sync"
 	"time"
 
@@ -226,16 +227,25 @@ const (
 // like NotifySystemEvent. connectorID is the connector of the step the event
 // is about: when set, only users holding a grant on it are notified, because
 // the message names that step. An empty connectorID (a manual step) reaches
-// every active user.
-func (d *Dispatcher) NotifyRunbookRun(ctx context.Context, eventType, severity, connectorID, title, message string) {
-	users, _, err := d.store.ListUsers(ctx, 0, maxNotifyUsers)
+// every active user. A non-empty actorID adds that user to the audience even
+// without a grant on connectorID, so a run's owner still hears about their own
+// run after a revoked grant; callers pass it only for events about that user's
+// run. The actor is resolved from the same user list (a deleted user is absent,
+// a disabled one is skipped by fanOut) and is never notified twice.
+func (d *Dispatcher) NotifyRunbookRun(ctx context.Context, eventType, severity, connectorID, actorID, title, message string) {
+	all, _, err := d.store.ListUsers(ctx, 0, maxNotifyUsers)
 	if err != nil {
 		slog.Error("failed to list users for runbook run notification", "error", err, "eventType", eventType)
 		return
 	}
 	channels := d.loadChannels(ctx)
 	routes := d.loadRouting(ctx)
-	users = d.connectorAudience(ctx, users, connectorID)
+	users := d.connectorAudience(ctx, all, connectorID)
+	if actorID != "" && !slices.ContainsFunc(users, func(u store.User) bool { return u.ID == actorID }) {
+		if i := slices.IndexFunc(all, func(u store.User) bool { return u.ID == actorID }); i >= 0 {
+			users = append(users, all[i])
+		}
+	}
 	d.inflight.Add(1)
 	go func() {
 		defer d.inflight.Done()

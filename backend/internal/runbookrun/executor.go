@@ -10,10 +10,12 @@ package runbookrun
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"sync"
 	"time"
 
 	"github.com/WiseLabz/wiselabz/internal/api/connectors"
+	"github.com/WiseLabz/wiselabz/internal/logsafe"
 	"github.com/WiseLabz/wiselabz/internal/store"
 	syncengine "github.com/WiseLabz/wiselabz/internal/sync"
 )
@@ -70,9 +72,6 @@ const (
 	// DefaultStepTimeout applies to a sync_and_wait or wait_until_healthy step
 	// without a timeout.
 	DefaultStepTimeout = 5 * time.Minute
-	// syncBusyRetryInterval paces sync_and_wait while another sync holds the
-	// connector.
-	syncBusyRetryInterval = 2 * time.Second
 	// storeTimeout bounds one state read or write. Writes are detached from
 	// the run's context so an outcome is still recorded while it is cancelled.
 	storeTimeout = 15 * time.Second
@@ -82,6 +81,11 @@ const (
 
 // ErrNoActor rejects a start, resume, confirm or cancel without a user.
 var ErrNoActor = errors.New("runbook run: an acting user is required")
+
+// ErrShuttingDown reports a start, resume or confirm that arrived after
+// shutdown began. The run was recorded as failed with reason interrupted and
+// can be resumed later.
+var ErrShuttingDown = errors.New("runbook run: the server is shutting down")
 
 // Store is the run persistence the executor needs. *store.Store satisfies it.
 type Store interface {
@@ -103,10 +107,11 @@ type Lifecycle interface {
 	MutateLifecycleOp(ctx context.Context, connectorID, verb, entityRef string, actor connectors.LifecycleActor, extraAudit map[string]any) error
 }
 
-// Syncer runs one connector sync and blocks until it ends. *sync.Engine
-// satisfies it.
+// Syncer runs one connector sync and blocks until it ends. While another sync
+// of the connector is in flight it waits for that one instead of failing, and
+// it broadcasts nothing while waiting. *sync.Engine satisfies it.
 type Syncer interface {
-	RunSyncFields(ctx context.Context, connectorID, jobID string, fields []string) (*syncengine.RunResult, error)
+	RunSyncFieldsWhenFree(ctx context.Context, connectorID, jobID string, fields []string) (*syncengine.RunResult, error)
 }
 
 // HealthChecker runs one connector health check and returns its status.
@@ -126,16 +131,18 @@ type Publisher interface {
 	BroadcastConnector(connectorID, eventType string, payload any)
 }
 
-// Notifier dispatches run notifications. *notifications.Dispatcher satisfies
-// it.
+// Notifier dispatches run notifications. A non-empty actorID is notified even
+// without a grant on connectorID. *notifications.Dispatcher satisfies it.
 type Notifier interface {
-	NotifyRunbookRun(ctx context.Context, eventType, severity, connectorID, title, message string)
+	NotifyRunbookRun(ctx context.Context, eventType, severity, connectorID, actorID, title, message string)
 }
 
 // Spawner starts tracked background work under a context that is cancelled on
 // shutdown. *sync.Engine satisfies it, so shutdown waits for running steps.
 type Spawner interface {
-	Go(work func(context.Context))
+	// TryGo runs work in the background. False means shutdown has begun and
+	// work was not run.
+	TryGo(work func(context.Context)) bool
 }
 
 // Deps are the executor's collaborators. Events and Notifier may be nil.
@@ -151,7 +158,11 @@ type Deps struct {
 }
 
 // Executor runs runbook runs, one goroutine per active run. It executes in
-// this process only: a run belongs to the replica that accepted it.
+// this process only: a run belongs to the replica that accepted it. At most one
+// goroutine of this process drives a run at a time: a goroutine takes the
+// run's slot in the registry before it executes and holds it until it stops. A
+// run that a slot holder reads as running is therefore driven by nobody else
+// here.
 type Executor struct {
 	store     Store
 	lifecycle Lifecycle
@@ -163,16 +174,17 @@ type Executor struct {
 	spawner   Spawner
 
 	healthPollInterval time.Duration
-	syncBusyRetry      time.Duration
 	stepTimeout        func(*store.RunbookRunStepRecord) time.Duration
 
 	mu     sync.Mutex
 	active map[string]*activeRun
 }
 
-// activeRun is the cancel handle of one run's goroutine.
+// activeRun is the registry entry of the goroutine that holds a run's slot:
+// its cancel handle, and a channel closed once that goroutine has stopped.
 type activeRun struct {
 	cancel context.CancelFunc
+	done   chan struct{}
 }
 
 // New builds an executor.
@@ -187,7 +199,6 @@ func New(deps Deps) *Executor {
 		notifier:           deps.Notifier,
 		spawner:            deps.Spawner,
 		healthPollInterval: HealthPollInterval,
-		syncBusyRetry:      syncBusyRetryInterval,
 		stepTimeout:        StepTimeout,
 		active:             make(map[string]*activeRun),
 	}
@@ -251,6 +262,8 @@ func StepTimeout(step *store.RunbookRunStepRecord) time.Duration {
 // caller has already validated the runbook.run elevation and the operator
 // grant on every connector of steps. A second active run for the runbook is a
 // *store.RunbookRunConflictError; no steps is store.ErrRunbookRunStepCount.
+// After shutdown began the run is recorded as failed (interrupted) and the
+// error is ErrShuttingDown.
 func (e *Executor) Start(ctx context.Context, runbookID, userID string, steps []*store.RunbookStepRecord) (*store.RunbookRunRecord, []*store.RunbookRunStepRecord, error) {
 	if userID == "" {
 		return nil, nil, ErrNoActor
@@ -260,12 +273,16 @@ func (e *Executor) Start(ctx context.Context, runbookID, userID string, steps []
 		return nil, nil, err
 	}
 	e.publishRun(run)
-	e.spawn(run.ID)
+	if !e.spawn(run.ID) {
+		return nil, nil, e.failShutdown(ctx, run.ID)
+	}
 	return run, frozen, nil
 }
 
 // Confirm completes the waiting manual step stepID as userID and continues the
-// run. It is store.ErrConflict when the step is not waiting.
+// run. It is store.ErrConflict when the step is not waiting. After shutdown
+// began the step stays confirmed, the run is recorded as failed (interrupted)
+// and the error is ErrShuttingDown; resuming continues after the step.
 func (e *Executor) Confirm(ctx context.Context, runID, stepID, userID string) error {
 	if userID == "" {
 		return ErrNoActor
@@ -273,6 +290,7 @@ func (e *Executor) Confirm(ctx context.Context, runID, stepID, userID string) er
 	if err := e.store.ConfirmRunbookRunStep(ctx, runID, stepID, userID); err != nil {
 		return err
 	}
+	e.awaitStopped(ctx, runID)
 	if run, steps, err := e.store.GetRunbookRun(ctx, runID); err == nil {
 		for _, step := range steps {
 			if step.ID == stepID {
@@ -281,13 +299,16 @@ func (e *Executor) Confirm(ctx context.Context, runID, stepID, userID string) er
 		}
 		e.publishRun(run)
 	}
-	e.spawn(runID)
+	if !e.spawn(runID) {
+		return e.failShutdown(ctx, runID)
+	}
 	return nil
 }
 
 // Resume restarts a failed run from its first step that has not succeeded and
 // records userID as the acting user for the steps that follow. It is
-// store.ErrConflict for a run in any other state.
+// store.ErrConflict for a run in any other state. After shutdown began the run
+// is recorded as failed (interrupted) again and the error is ErrShuttingDown.
 func (e *Executor) Resume(ctx context.Context, runID, userID string) (*store.RunbookRunRecord, error) {
 	if userID == "" {
 		return nil, ErrNoActor
@@ -296,8 +317,11 @@ func (e *Executor) Resume(ctx context.Context, runID, userID string) (*store.Run
 	if err != nil {
 		return nil, err
 	}
+	e.awaitStopped(ctx, run.ID)
 	e.publishRun(run)
-	e.spawn(run.ID)
+	if !e.spawn(run.ID) {
+		return nil, e.failShutdown(ctx, run.ID)
+	}
 	return run, nil
 }
 
@@ -325,28 +349,88 @@ func (e *Executor) Cancel(ctx context.Context, runID, userID string) error {
 }
 
 // spawn starts the goroutine that executes runID from its first step that has
-// not succeeded. Every transition is guarded by the stored state, so a second
-// goroutine for the same run stops at its first read or write.
-func (e *Executor) spawn(runID string) {
-	e.spawner.Go(func(base context.Context) {
+// not succeeded and reports whether the spawner accepted it; false means
+// shutdown has begun. The goroutine first takes the run's slot in the registry:
+// while another goroutine holds it, it waits for that one to stop, or returns
+// without executing when shutdown comes first. Only the slot holder is
+// registered, and it leaves the registry before its done channel closes. Every
+// transition is also guarded by the stored state.
+func (e *Executor) spawn(runID string) bool {
+	return e.spawner.TryGo(func(base context.Context) {
 		ctx, cancel := context.WithCancel(base)
 		defer cancel()
-		handle := &activeRun{cancel: cancel}
-		e.mu.Lock()
-		e.active[runID] = handle
-		e.mu.Unlock()
+		handle := &activeRun{cancel: cancel, done: make(chan struct{})}
+		if !e.claim(ctx, runID, handle) {
+			return
+		}
 		defer func() {
 			e.mu.Lock()
-			if e.active[runID] == handle {
-				delete(e.active, runID)
-			}
+			delete(e.active, runID)
 			e.mu.Unlock()
+			close(handle.done)
 		}()
 		e.execute(ctx, runID)
 	})
 }
 
-// cancelActive cancels the context of runID's goroutine, if it has one here.
+// claim registers handle as the holder of runID's slot, waiting for the
+// current holder to stop first. It reports false when ctx ends before the slot
+// is free.
+func (e *Executor) claim(ctx context.Context, runID string, handle *activeRun) bool {
+	for {
+		e.mu.Lock()
+		holder := e.active[runID]
+		if holder == nil {
+			e.active[runID] = handle
+			e.mu.Unlock()
+			return true
+		}
+		e.mu.Unlock()
+		select {
+		case <-holder.done:
+		case <-ctx.Done():
+			return false
+		}
+	}
+}
+
+// awaitStopped waits until the goroutine holding runID's slot has stopped, or
+// until ctx is done. A resume or confirm calls it before publishing, so the
+// previous goroutine's last events reach clients first. That goroutine has
+// already stored its final state and only has events and a notification left.
+func (e *Executor) awaitStopped(ctx context.Context, runID string) {
+	e.mu.Lock()
+	holder := e.active[runID]
+	e.mu.Unlock()
+	if holder == nil {
+		return
+	}
+	select {
+	case <-holder.done:
+	case <-ctx.Done():
+	}
+}
+
+// failShutdown records a run whose goroutine the spawner refused as failed with
+// reason interrupted and returns ErrShuttingDown. The write is detached from
+// ctx so a dropped request still records it. If it fails, startup recovery
+// marks the run left running as interrupted anyway. It sends no notification:
+// the caller gets the error and the dispatcher may already be draining.
+func (e *Executor) failShutdown(ctx context.Context, runID string) error {
+	dbCtx, cancel := detached(ctx)
+	defer cancel()
+	failed, err := e.store.UpdateRunbookRun(dbCtx, runID, RunRunning, map[string]any{"state": RunFailed, "reason": ReasonInterrupted})
+	switch {
+	case err == nil:
+		e.publishRun(failed)
+	case !stateChanged(err):
+		slog.Error("runbook run: record shutdown failed", "run", logsafe.Sanitize(runID), "error", err)
+	}
+	return ErrShuttingDown
+}
+
+// cancelActive cancels the context of the goroutine holding runID's slot, if
+// this process has one.
 func (e *Executor) cancelActive(runID string) {
 	e.mu.Lock()
 	handle := e.active[runID]

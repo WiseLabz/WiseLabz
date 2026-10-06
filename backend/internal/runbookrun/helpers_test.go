@@ -3,6 +3,7 @@ package runbookrun
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -63,7 +64,6 @@ func (e *env) newExecutor(st Store) *Executor {
 		Spawner:   e.spawner,
 	})
 	exec.healthPollInterval = time.Millisecond
-	exec.syncBusyRetry = time.Millisecond
 	return exec
 }
 
@@ -160,11 +160,13 @@ func manualStep(title string) *store.RunbookStepRecord {
 }
 
 // testSpawner runs work in tracked goroutines under a context the test can
-// cancel to simulate shutdown.
+// cancel to simulate shutdown, and can refuse work like an engine that is
+// shutting down.
 type testSpawner struct {
-	ctx    context.Context
-	cancel context.CancelFunc
-	wg     sync.WaitGroup
+	ctx     context.Context
+	cancel  context.CancelFunc
+	wg      sync.WaitGroup
+	refused atomic.Bool
 }
 
 func newTestSpawner(t *testing.T) *testSpawner {
@@ -177,12 +179,21 @@ func newTestSpawner(t *testing.T) *testSpawner {
 	return sp
 }
 
-func (sp *testSpawner) Go(work func(context.Context)) {
+// refuse makes TryGo drop work until accept is called.
+func (sp *testSpawner) refuse() { sp.refused.Store(true) }
+
+func (sp *testSpawner) accept() { sp.refused.Store(false) }
+
+func (sp *testSpawner) TryGo(work func(context.Context)) bool {
+	if sp.refused.Load() {
+		return false
+	}
 	sp.wg.Add(1)
 	go func() {
 		defer sp.wg.Done()
 		work(sp.ctx)
 	}()
+	return true
 }
 
 func (sp *testSpawner) wait(t *testing.T) {
@@ -271,7 +282,7 @@ type fakeSync struct {
 	fn func(ctx context.Context, n int) (*syncengine.RunResult, error)
 }
 
-func (f *fakeSync) RunSyncFields(ctx context.Context, connectorID, _ string, _ []string) (*syncengine.RunResult, error) {
+func (f *fakeSync) RunSyncFieldsWhenFree(ctx context.Context, connectorID, _ string, _ []string) (*syncengine.RunResult, error) {
 	f.mu.Lock()
 	f.calls = append(f.calls, connectorID)
 	n := len(f.calls)
@@ -346,6 +357,7 @@ type note struct {
 	EventType   string
 	Severity    string
 	ConnectorID string
+	ActorID     string
 	Title       string
 	Message     string
 }
@@ -355,10 +367,10 @@ type noteRecorder struct {
 	notes []note
 }
 
-func (r *noteRecorder) NotifyRunbookRun(_ context.Context, eventType, severity, connectorID, title, message string) {
+func (r *noteRecorder) NotifyRunbookRun(_ context.Context, eventType, severity, connectorID, actorID, title, message string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.notes = append(r.notes, note{EventType: eventType, Severity: severity, ConnectorID: connectorID, Title: title, Message: message})
+	r.notes = append(r.notes, note{EventType: eventType, Severity: severity, ConnectorID: connectorID, ActorID: actorID, Title: title, Message: message})
 }
 
 func (r *noteRecorder) snapshot() []note {

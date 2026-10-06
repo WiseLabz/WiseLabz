@@ -1531,10 +1531,10 @@ func TestNotifyRunbookRun_ScopedToStepConnectorAndRouted(t *testing.T) {
 	grantReader(t, s, reader.ID, "run-connector")
 
 	d := NewDispatcher(s, nil)
-	d.NotifyRunbookRun(ctx, EventRunbookRunFailed, "warning", "run-connector", "Runbook run failed: Restart proxy", `Step 2 "Restart": boom`)
+	d.NotifyRunbookRun(ctx, EventRunbookRunFailed, "warning", "run-connector", "", "Runbook run failed: Restart proxy", `Step 2 "Restart": boom`)
 	waitForDispatch(t, d)
 	// No route exists for the waiting event, so it stays in-app only.
-	d.NotifyRunbookRun(ctx, EventRunbookRunWaiting, "info", "", "Runbook run waiting for confirmation: Restart proxy", `Step 3 "Check" is waiting for a manual confirmation.`)
+	d.NotifyRunbookRun(ctx, EventRunbookRunWaiting, "info", "", "", "Runbook run waiting for confirmation: Restart proxy", `Step 3 "Check" is waiting for a manual confirmation.`)
 	waitForDispatch(t, d)
 
 	got, _, err := s.ListNotifications(ctx, reader.ID, false, 0, 10)
@@ -1561,5 +1561,152 @@ func TestNotifyRunbookRun_ScopedToStepConnectorAndRouted(t *testing.T) {
 	defer mu.Unlock()
 	if hits != 1 {
 		t.Errorf("webhook hits = %d, want 1 (failed routed, waiting has no route)", hits)
+	}
+}
+
+// runNotificationCount returns how many runbook.run_failed notifications a
+// user holds.
+func runNotificationCount(t *testing.T, s *store.Store, userID string) int {
+	t.Helper()
+	got, _, err := s.ListNotifications(context.Background(), userID, false, 0, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	n := 0
+	for _, g := range got {
+		if g.EventType == EventRunbookRunFailed {
+			n++
+		}
+	}
+	return n
+}
+
+func createRunUser(t *testing.T, s *store.Store, name string) *store.User {
+	t.Helper()
+	u := &store.User{Username: name, Email: name + "@example.com"}
+	if err := s.CreateUser(context.Background(), u); err != nil {
+		t.Fatal(err)
+	}
+	return u
+}
+
+// TestNotifyRunbookRun_ActorJoinsAudienceOnce verifies the acting user is told
+// about their own run without a grant on the step's connector, alongside the
+// grant holders, and that a user who is both actor and grant holder gets one
+// notification.
+func TestNotifyRunbookRun_ActorJoinsAudienceOnce(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	holder := createRunUser(t, s, "run-holder")
+	actor := createRunUser(t, s, "run-actor")
+	stranger := createRunUser(t, s, "run-bystander")
+	grantReader(t, s, holder.ID, "actor-connector")
+
+	d := NewDispatcher(s, nil)
+	d.NotifyRunbookRun(ctx, EventRunbookRunFailed, "warning", "actor-connector", actor.ID, "Runbook run failed", "permission_denied")
+	waitForDispatch(t, d)
+	for user, want := range map[*store.User]int{holder: 1, actor: 1, stranger: 0} {
+		if got := runNotificationCount(t, s, user.ID); got != want {
+			t.Errorf("%s notifications = %d, want %d", user.Username, got, want)
+		}
+	}
+
+	// The actor now also holds a grant: still exactly one more notification.
+	grantReader(t, s, actor.ID, "actor-connector")
+	d.NotifyRunbookRun(ctx, EventRunbookRunFailed, "warning", "actor-connector", actor.ID, "Runbook run failed", "again")
+	waitForDispatch(t, d)
+	if got := runNotificationCount(t, s, actor.ID); got != 2 {
+		t.Errorf("actor with grant notifications = %d, want 2 (one per event)", got)
+	}
+	if got := runNotificationCount(t, s, holder.ID); got != 2 {
+		t.Errorf("holder notifications = %d, want 2", got)
+	}
+}
+
+// TestNotifyRunbookRun_EmptyActorKeepsConnectorAudience verifies an empty
+// actorID leaves the audience as the connector's grant holders only.
+func TestNotifyRunbookRun_EmptyActorKeepsConnectorAudience(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	holder := createRunUser(t, s, "run-holder")
+	other := createRunUser(t, s, "run-other")
+	grantReader(t, s, holder.ID, "no-actor-connector")
+
+	d := NewDispatcher(s, nil)
+	d.NotifyRunbookRun(ctx, EventRunbookRunFailed, "warning", "no-actor-connector", "", "Runbook run failed", "boom")
+	waitForDispatch(t, d)
+	if got := runNotificationCount(t, s, holder.ID); got != 1 {
+		t.Errorf("holder notifications = %d, want 1", got)
+	}
+	if got := runNotificationCount(t, s, other.ID); got != 0 {
+		t.Errorf("other notifications = %d, want 0", got)
+	}
+}
+
+// TestNotifyRunbookRun_DisabledOrUnknownActorNotNotified verifies a disabled
+// actor is skipped and an actor ID that matches no user adds nobody.
+func TestNotifyRunbookRun_DisabledOrUnknownActorNotNotified(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	holder := createRunUser(t, s, "run-holder")
+	disabled := createRunUser(t, s, "run-disabled")
+	grantReader(t, s, holder.ID, "gone-connector")
+	if err := s.UpdateUser(ctx, disabled.ID, map[string]any{"disabled": true}); err != nil {
+		t.Fatal(err)
+	}
+
+	d := NewDispatcher(s, nil)
+	d.NotifyRunbookRun(ctx, EventRunbookRunFailed, "warning", "gone-connector", disabled.ID, "Runbook run failed", "boom")
+	d.NotifyRunbookRun(ctx, EventRunbookRunFailed, "warning", "gone-connector", "no-such-user", "Runbook run failed", "boom")
+	waitForDispatch(t, d)
+	if got := runNotificationCount(t, s, disabled.ID); got != 0 {
+		t.Errorf("disabled actor notifications = %d, want 0", got)
+	}
+	if got := runNotificationCount(t, s, holder.ID); got != 2 {
+		t.Errorf("holder notifications = %d, want 2 (one per call)", got)
+	}
+}
+
+// TestNotifyRunbookRun_ActorReachedWhenNoGrantHolders verifies the actor still
+// gets the in-app notification, and the routed external channel is attempted,
+// when nobody holds a grant on the step's connector.
+func TestNotifyRunbookRun_ActorReachedWhenNoGrantHolders(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	var hits int
+	var mu sync.Mutex
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		mu.Lock()
+		hits++
+		mu.Unlock()
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+	routing := `[{"eventType":"runbook.run_failed","channel":"webhook","enabled":true,"minSeverity":"warning"}]`
+	setChannelAndRoutingConfig(t, s, "webhook", srv.URL, routing)
+	actor := createRunUser(t, s, "run-actor")
+	bystander := createRunUser(t, s, "run-bystander")
+
+	d := NewDispatcher(s, nil)
+	d.NotifyRunbookRun(ctx, EventRunbookRunFailed, "warning", "ungranted-connector", "", "Runbook run failed", "boom")
+	waitForDispatch(t, d)
+	mu.Lock()
+	if hits != 0 {
+		t.Errorf("webhook hits without actor = %d, want 0 (no in-app delivery, so no external one)", hits)
+	}
+	mu.Unlock()
+
+	d.NotifyRunbookRun(ctx, EventRunbookRunFailed, "warning", "ungranted-connector", actor.ID, "Runbook run failed", "permission_denied")
+	waitForDispatch(t, d)
+	if got := runNotificationCount(t, s, actor.ID); got != 1 {
+		t.Errorf("actor notifications = %d, want 1", got)
+	}
+	if got := runNotificationCount(t, s, bystander.ID); got != 0 {
+		t.Errorf("bystander notifications = %d, want 0", got)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if hits != 1 {
+		t.Errorf("webhook hits = %d, want 1", hits)
 	}
 }

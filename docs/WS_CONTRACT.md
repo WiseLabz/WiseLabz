@@ -276,8 +276,11 @@ nothing. Both are routable per channel like `alert.created` and included in
 digests.
 
 The message names the step the run stopped on, so a notification about a step
-on a connector goes only to users holding a grant on that connector. A manual
-step has no connector and notifies every active user.
+on a connector goes only to users holding a grant on that connector, plus the
+acting user when the run failed with `permission_denied` (they no longer hold
+the grant). A manual step has no connector and notifies every active user.
+Only a restart recovery notifies for `interrupted`; a run refused at shutdown
+is marked `interrupted` without a notification.
 
 ```ts
 interface RunbookRunNotificationPayload {
