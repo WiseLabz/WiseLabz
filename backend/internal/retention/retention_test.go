@@ -3,6 +3,8 @@ package retention
 import (
 	"context"
 	"database/sql"
+	"errors"
+	"fmt"
 	"log/slog"
 	"net/url"
 	"os"
@@ -340,5 +342,342 @@ func TestCleanupPurgesOldTrash(t *testing.T) {
 	trash, err := s.ListDeletedDocs(ctx)
 	if err != nil || len(trash) != 1 || trash[0].ID != recent.ID {
 		t.Fatalf("trash: %+v %v", trash, err)
+	}
+}
+
+func createRetentionRunbookFixture(t *testing.T, s *store.Store) (*store.RunbookRecord, string) {
+	t.Helper()
+	ctx := context.Background()
+	suffix := uuid.NewString()
+	connector := &store.ConnectorRecord{
+		Name:     "runbook-conn-" + suffix,
+		Category: "virtualization",
+		Type:     "proxmox",
+		URL:      "https://example.com",
+	}
+	if err := s.CreateConnector(ctx, connector); err != nil {
+		t.Fatalf("CreateConnector() error: %v", err)
+	}
+	runbook, err := s.CreateRunbook(ctx, &store.RunbookRecord{
+		Title:       "Runbook " + suffix,
+		TargetType:  "change_type",
+		TargetValue: suffix,
+	})
+	if err != nil {
+		t.Fatalf("CreateRunbook() error: %v", err)
+	}
+	return runbook, connector.ID
+}
+
+func createManualWaitRun(t *testing.T, s *store.Store, runbookID string) (*store.RunbookRunRecord, *store.RunbookRunStepRecord) {
+	t.Helper()
+	ctx := context.Background()
+	step := &store.RunbookRunStepRecord{
+		Kind:  "manual",
+		Title: "Operator confirmation",
+	}
+	run, steps, err := s.CreateRunbookRun(ctx, runbookID, "operator", []*store.RunbookRunStepRecord{step})
+	if err != nil {
+		t.Fatalf("CreateRunbookRun() error: %v", err)
+	}
+	if _, err := s.UpdateRunbookRunStep(ctx, run.ID, steps[0].ID, "pending", map[string]any{"state": "waiting"}); err != nil {
+		t.Fatalf("UpdateRunbookRunStep() error: %v", err)
+	}
+	updatedRun, err := s.UpdateRunbookRun(ctx, run.ID, "running", map[string]any{"state": "waiting_manual"})
+	if err != nil {
+		t.Fatalf("UpdateRunbookRun() error: %v", err)
+	}
+	return updatedRun, steps[0]
+}
+
+func createFailedRun(t *testing.T, s *store.Store, runbookID string) *store.RunbookRunRecord {
+	t.Helper()
+	ctx := context.Background()
+	step := &store.RunbookRunStepRecord{
+		Kind:  "manual",
+		Title: "Operator step",
+	}
+	run, steps, err := s.CreateRunbookRun(ctx, runbookID, "operator", []*store.RunbookRunStepRecord{step})
+	if err != nil {
+		t.Fatalf("CreateRunbookRun() error: %v", err)
+	}
+	if _, err := s.UpdateRunbookRunStep(ctx, run.ID, steps[0].ID, "pending", map[string]any{"state": "failed", "error": "step error"}); err != nil {
+		t.Fatalf("UpdateRunbookRunStep() error: %v", err)
+	}
+	updatedRun, err := s.UpdateRunbookRun(ctx, run.ID, "running", map[string]any{"state": "failed", "reason": "step failed"})
+	if err != nil {
+		t.Fatalf("UpdateRunbookRun() error: %v", err)
+	}
+	return updatedRun
+}
+
+func createSucceededRun(t *testing.T, s *store.Store, runbookID, connectorID string) *store.RunbookRunRecord {
+	t.Helper()
+	ctx := context.Background()
+	step := &store.RunbookRunStepRecord{
+		Kind:        "lifecycle",
+		Title:       "Restart service",
+		ConnectorID: connectorID,
+		Verb:        "restart",
+		EntityRef:   "100",
+	}
+	run, steps, err := s.CreateRunbookRun(ctx, runbookID, "operator", []*store.RunbookRunStepRecord{step})
+	if err != nil {
+		t.Fatalf("CreateRunbookRun() error: %v", err)
+	}
+	if _, err := s.UpdateRunbookRunStep(ctx, run.ID, steps[0].ID, "pending", map[string]any{"state": "running"}); err != nil {
+		t.Fatalf("UpdateRunbookRunStep() running error: %v", err)
+	}
+	if _, err := s.UpdateRunbookRunStep(ctx, run.ID, steps[0].ID, "running", map[string]any{"state": "succeeded"}); err != nil {
+		t.Fatalf("UpdateRunbookRunStep() succeeded error: %v", err)
+	}
+	updated, err := s.UpdateRunbookRun(ctx, run.ID, "running", map[string]any{"state": "succeeded"})
+	if err != nil {
+		t.Fatalf("UpdateRunbookRun() succeeded error: %v", err)
+	}
+	return updated
+}
+
+// TestRunCleanupExpiresForgottenManualRun verifies a forgotten manual run
+// waiting for longer than RunbookOpenRunHours becomes expired and skips its
+// unfinished steps, allowing a new run of that runbook to be started.
+func TestRunCleanupExpiresForgottenManualRun(t *testing.T) {
+	ctx := context.Background()
+	s := newTestStore(t)
+	runbook, _ := createRetentionRunbookFixture(t, s)
+
+	run, step := createManualWaitRun(t, s, runbook.ID)
+	oldUpdatedAt := time.Now().UTC().Add(-25 * time.Hour).Format(time.RFC3339Nano)
+	if _, err := s.DB().ExecContext(ctx, `UPDATE runbook_runs SET updated_at = ? WHERE id = ?`, oldUpdatedAt, run.ID); err != nil {
+		t.Fatalf("set updated_at error: %v", err)
+	}
+
+	cfg := store.RetentionSettings{RunbookOpenRunHours: 24}
+	if err := RunCleanupOnce(ctx, s, cfg, testLogger()); err != nil {
+		t.Fatalf("RunCleanupOnce() error: %v", err)
+	}
+
+	gotRun, gotSteps, err := s.GetRunbookRun(ctx, run.ID)
+	if err != nil {
+		t.Fatalf("GetRunbookRun() error: %v", err)
+	}
+	if gotRun.State != "expired" {
+		t.Fatalf("run state = %q, want %q", gotRun.State, "expired")
+	}
+	if len(gotSteps) != 1 || gotSteps[0].ID != step.ID || gotSteps[0].State != "skipped" {
+		t.Fatalf("run steps = %+v, want step %s skipped", gotSteps, step.ID)
+	}
+
+	// An expired run frees the runbook: a new run can be started.
+	newRun, _, err := s.CreateRunbookRun(ctx, runbook.ID, "operator", []*store.RunbookRunStepRecord{
+		{Kind: "manual", Title: "Fresh run"},
+	})
+	if err != nil {
+		t.Fatalf("CreateRunbookRun after expiry error: %v", err)
+	}
+	if newRun.State != "running" {
+		t.Fatalf("new run state = %q, want %q", newRun.State, "running")
+	}
+}
+
+// backdateRunbookRun sets a run's updated_at to age ago, simulating a run
+// whose last activity was that long in the past.
+func backdateRunbookRun(t *testing.T, s *store.Store, runID string, age time.Duration) {
+	t.Helper()
+	updatedAt := time.Now().UTC().Add(-age).Format(time.RFC3339Nano)
+	if _, err := s.DB().ExecContext(context.Background(), `UPDATE runbook_runs SET updated_at = ? WHERE id = ?`, updatedAt, runID); err != nil {
+		t.Fatalf("set updated_at error: %v", err)
+	}
+}
+
+// TestRunCleanupRecentActivityNotExpired verifies that in one pass runs idle
+// for longer than RunbookOpenRunHours expire (skipping unfinished steps) while
+// runs with recent activity keep their state, including a stale run that saw
+// real activity before cleanup.
+func TestRunCleanupRecentActivityNotExpired(t *testing.T) {
+	ctx := context.Background()
+	s := newTestStore(t)
+
+	staleWaitingRunbook, _ := createRetentionRunbookFixture(t, s)
+	staleFailedRunbook, _ := createRetentionRunbookFixture(t, s)
+	recentWaitingRunbook, _ := createRetentionRunbookFixture(t, s)
+	recentFailedRunbook, _ := createRetentionRunbookFixture(t, s)
+	activeRunbook, _ := createRetentionRunbookFixture(t, s)
+
+	staleWaiting, staleWaitingStep := createManualWaitRun(t, s, staleWaitingRunbook.ID)
+	staleFailed := createFailedRun(t, s, staleFailedRunbook.ID)
+	recentWaiting, _ := createManualWaitRun(t, s, recentWaitingRunbook.ID)
+	recentFailed := createFailedRun(t, s, recentFailedRunbook.ID)
+	activeFailed := createFailedRun(t, s, activeRunbook.ID)
+
+	backdateRunbookRun(t, s, staleWaiting.ID, 25*time.Hour)
+	backdateRunbookRun(t, s, staleFailed.ID, 25*time.Hour)
+	backdateRunbookRun(t, s, recentWaiting.ID, time.Hour)
+	backdateRunbookRun(t, s, recentFailed.ID, time.Hour)
+
+	// A stale failed run that is resumed and fails again has had real activity
+	// (UpdateRunbookRun touches updated_at), so it must not expire.
+	backdateRunbookRun(t, s, activeFailed.ID, 25*time.Hour)
+	if _, err := s.UpdateRunbookRun(ctx, activeFailed.ID, "failed", map[string]any{"state": "running", "resumed_by": "operator"}); err != nil {
+		t.Fatalf("resume stale run error: %v", err)
+	}
+	if _, err := s.UpdateRunbookRun(ctx, activeFailed.ID, "running", map[string]any{"state": "failed", "reason": "step failed again"}); err != nil {
+		t.Fatalf("fail resumed run error: %v", err)
+	}
+
+	cfg := store.RetentionSettings{RunbookOpenRunHours: 24}
+	if err := RunCleanupOnce(ctx, s, cfg, testLogger()); err != nil {
+		t.Fatalf("RunCleanupOnce() error: %v", err)
+	}
+
+	for name, id := range map[string]string{"stale waiting": staleWaiting.ID, "stale failed": staleFailed.ID} {
+		got, steps, err := s.GetRunbookRun(ctx, id)
+		if err != nil {
+			t.Fatalf("GetRunbookRun(%s) error: %v", name, err)
+		}
+		if got.State != "expired" {
+			t.Fatalf("%s run state = %q, want %q", name, got.State, "expired")
+		}
+		if len(steps) != 1 {
+			t.Fatalf("%s run steps = %+v, want 1 step", name, steps)
+		}
+		// The stale failed run's only step already failed; only unfinished steps are skipped.
+		if id == staleWaiting.ID && (steps[0].ID != staleWaitingStep.ID || steps[0].State != "skipped") {
+			t.Fatalf("%s run steps = %+v, want step %s skipped", name, steps, staleWaitingStep.ID)
+		}
+	}
+
+	survivors := []struct {
+		name      string
+		id        string
+		wantState string
+	}{
+		{"recent waiting", recentWaiting.ID, "waiting_manual"},
+		{"recent failed", recentFailed.ID, "failed"},
+		{"stale then active", activeFailed.ID, "failed"},
+	}
+	for _, tc := range survivors {
+		got, steps, err := s.GetRunbookRun(ctx, tc.id)
+		if err != nil {
+			t.Fatalf("GetRunbookRun(%s) error: %v", tc.name, err)
+		}
+		if got.State != tc.wantState {
+			t.Fatalf("%s run state = %q, want %q", tc.name, got.State, tc.wantState)
+		}
+		if tc.id == recentWaiting.ID && (len(steps) != 1 || steps[0].State != "waiting") {
+			t.Fatalf("%s run steps = %+v, want step waiting", tc.name, steps)
+		}
+	}
+}
+
+// TestRunCleanupOpenRunHoursNonPositiveFallsBackToDefault verifies a
+// non-positive RunbookOpenRunHours uses the default window instead of expiring
+// everything or disabling expiry.
+func TestRunCleanupOpenRunHoursNonPositiveFallsBackToDefault(t *testing.T) {
+	for _, hours := range []int{0, -5} {
+		t.Run(fmt.Sprintf("hours=%d", hours), func(t *testing.T) {
+			ctx := context.Background()
+			s := newTestStore(t)
+			recentRunbook, _ := createRetentionRunbookFixture(t, s)
+			staleRunbook, _ := createRetentionRunbookFixture(t, s)
+
+			recent, _ := createManualWaitRun(t, s, recentRunbook.ID)
+			stale, _ := createManualWaitRun(t, s, staleRunbook.ID)
+			backdateRunbookRun(t, s, recent.ID, time.Hour)
+			backdateRunbookRun(t, s, stale.ID, time.Duration(store.DefaultRunbookOpenRunHours+1)*time.Hour)
+
+			cfg := store.RetentionSettings{RunbookOpenRunHours: hours}
+			if err := RunCleanupOnce(ctx, s, cfg, testLogger()); err != nil {
+				t.Fatalf("RunCleanupOnce() error: %v", err)
+			}
+
+			gotRecent, _, err := s.GetRunbookRun(ctx, recent.ID)
+			if err != nil {
+				t.Fatalf("GetRunbookRun(recent) error: %v", err)
+			}
+			if gotRecent.State != "waiting_manual" {
+				t.Fatalf("recent run state = %q, want %q", gotRecent.State, "waiting_manual")
+			}
+			gotStale, _, err := s.GetRunbookRun(ctx, stale.ID)
+			if err != nil {
+				t.Fatalf("GetRunbookRun(stale) error: %v", err)
+			}
+			if gotStale.State != "expired" {
+				t.Fatalf("stale run state = %q, want %q", gotStale.State, "expired")
+			}
+		})
+	}
+}
+
+// TestRunCleanupPrunesFinishedRunbookRuns verifies terminal runs older than
+// RunbookRunDays are pruned along with their steps, while recent terminal runs
+// survive.
+func TestRunCleanupPrunesFinishedRunbookRuns(t *testing.T) {
+	ctx := context.Background()
+	s := newTestStore(t)
+	runbook, connectorID := createRetentionRunbookFixture(t, s)
+
+	oldRun := createSucceededRun(t, s, runbook.ID, connectorID)
+	recentRun := createSucceededRun(t, s, runbook.ID, connectorID)
+
+	oldFinishedAt := time.Now().UTC().AddDate(0, 0, -95).Format(time.RFC3339Nano)
+	recentFinishedAt := time.Now().UTC().AddDate(0, 0, -5).Format(time.RFC3339Nano)
+	if _, err := s.DB().ExecContext(ctx, `UPDATE runbook_runs SET finished_at = ? WHERE id = ?`, oldFinishedAt, oldRun.ID); err != nil {
+		t.Fatalf("set finished_at error: %v", err)
+	}
+	if _, err := s.DB().ExecContext(ctx, `UPDATE runbook_runs SET finished_at = ? WHERE id = ?`, recentFinishedAt, recentRun.ID); err != nil {
+		t.Fatalf("set finished_at error: %v", err)
+	}
+
+	cfg := store.RetentionSettings{RunbookRunDays: 90}
+	if err := RunCleanupOnce(ctx, s, cfg, testLogger()); err != nil {
+		t.Fatalf("RunCleanupOnce() error: %v", err)
+	}
+
+	_, _, err := s.GetRunbookRun(ctx, oldRun.ID)
+	if !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("old run lookup error = %v, want ErrNotFound", err)
+	}
+	var stepCount int
+	if err := s.DB().QueryRowContext(ctx, `SELECT COUNT(*) FROM runbook_run_steps WHERE run_id = ?`, oldRun.ID).Scan(&stepCount); err != nil {
+		t.Fatalf("count old run steps error: %v", err)
+	}
+	if stepCount != 0 {
+		t.Fatalf("pruned run step count = %d, want 0", stepCount)
+	}
+
+	gotRecent, _, err := s.GetRunbookRun(ctx, recentRun.ID)
+	if err != nil {
+		t.Fatalf("recent run should survive, error: %v", err)
+	}
+	if gotRecent.ID != recentRun.ID {
+		t.Fatalf("recent run ID = %q, want %q", gotRecent.ID, recentRun.ID)
+	}
+}
+
+// TestRunCleanupRunbookHistoryPeriodZeroKeepsEverything verifies that a
+// history period of 0 days (RunbookRunDays: 0) keeps all finished runs indefinitely.
+func TestRunCleanupRunbookHistoryPeriodZeroKeepsEverything(t *testing.T) {
+	ctx := context.Background()
+	s := newTestStore(t)
+	runbook, connectorID := createRetentionRunbookFixture(t, s)
+
+	oldRun := createSucceededRun(t, s, runbook.ID, connectorID)
+	veryOldFinishedAt := time.Now().UTC().AddDate(0, 0, -365).Format(time.RFC3339Nano)
+	if _, err := s.DB().ExecContext(ctx, `UPDATE runbook_runs SET finished_at = ? WHERE id = ?`, veryOldFinishedAt, oldRun.ID); err != nil {
+		t.Fatalf("set finished_at error: %v", err)
+	}
+
+	cfg := store.RetentionSettings{RunbookRunDays: 0}
+	if err := RunCleanupOnce(ctx, s, cfg, testLogger()); err != nil {
+		t.Fatalf("RunCleanupOnce() error: %v", err)
+	}
+
+	gotOld, _, err := s.GetRunbookRun(ctx, oldRun.ID)
+	if err != nil {
+		t.Fatalf("run with RunbookRunDays=0 should survive, got error: %v", err)
+	}
+	if gotOld.ID != oldRun.ID {
+		t.Fatalf("surviving run ID = %q, want %q", gotOld.ID, oldRun.ID)
 	}
 }

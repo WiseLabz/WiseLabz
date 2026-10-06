@@ -33,11 +33,11 @@
 - [ ] 5.2 Apply step redaction to run list/detail and preview; verify tests with mixed grants and a hidden connector.
 - [ ] 5.3 Record audit entries for start, confirm, resume and cancel and add them and `runbook.run` to `docs/AUDIT.md`; verify audit assertions in the handler tests.
 - [ ] 5.4 Register routes, add OpenAPI paths and schemas, regenerate the web client; verify the router and OpenAPI contract tests.
-- [ ] 5.5 Write ADR `0006` extending ADR 0001/0002 with the `runbook.run` elevation model and interruption rule; verify it is linked from `docs/adr` index or `docs/ARCHITECTURE.md` as the other ADRs are.
+- [x] 5.5 Write ADR `0006` extending ADR 0001/0002 with the `runbook.run` elevation model and interruption rule; verify it is linked from `docs/adr` index or `docs/ARCHITECTURE.md` as the other ADRs are.
 
 ## 6. Retention
 
-- [ ] 6.1 Expire open runs and prune finished runs in `retention.RunCleanupOnce`; verify tests for a forgotten manual step, recent activity not expiring, pruning, and history period 0.
+- [x] 6.1 Expire open runs and prune finished runs in `retention.RunCleanupOnce`; verify tests for a forgotten manual step, recent activity not expiring, pruning, and history period 0.
 - [ ] 6.2 Expose the two settings in the retention settings API, OpenAPI and settings form with en and pt-BR labels; verify handler tests and the settings page vitest.
 
 ## 7. MCP
