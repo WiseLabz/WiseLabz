@@ -222,6 +222,38 @@ describe('WebSocketProvider', () => {
     unsubscribe();
   });
 
+  it('refetches only the run named by the update', async () => {
+    const queryClient = new QueryClient();
+    await renderProvider(queryClient);
+    const { QueryObserver } = await import('@tanstack/react-query');
+    const refetchRun1 = vi.fn().mockResolvedValue({ id: 'run-1' });
+    const refetchRun2 = vi.fn().mockResolvedValue({ id: 'run-2' });
+    const unsubscribe = [
+      new QueryObserver(queryClient, {
+        queryKey: getGetRunbookRunQueryKey('run-1'),
+        queryFn: refetchRun1,
+      }),
+      new QueryObserver(queryClient, {
+        queryKey: getGetRunbookRunQueryKey('run-2'),
+        queryFn: refetchRun2,
+      }),
+    ].map((observer) => observer.subscribe(() => {}));
+    await waitFor(() => {
+      expect(refetchRun1).toHaveBeenCalledTimes(1);
+      expect(refetchRun2).toHaveBeenCalledTimes(1);
+    });
+
+    send({
+      type: 'runbook.run.updated',
+      id: 'run-2-update',
+      payload: { runId: 'run-2', runbookId: 'rb-1', state: 'running' },
+    });
+
+    await waitFor(() => expect(refetchRun2).toHaveBeenCalledTimes(2));
+    expect(refetchRun1).toHaveBeenCalledTimes(1);
+    unsubscribe.forEach((stop) => stop());
+  });
+
   it.each(['runbook.run_failed', 'runbook.run_waiting'])(
     'refreshes the notification bell on %s',
     async (type) => {
