@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"testing"
@@ -491,5 +492,54 @@ func TestDisableUserRevokesShareLinksAtomically(t *testing.T) {
 	}
 	if stillRevoked.RevokedAt != after.RevokedAt {
 		t.Fatal("reenabling changed link revocation")
+	}
+}
+
+// TestGetUserByIDFromWriterIgnoresReadPool installs a read pool that still
+// holds the user enabled (a lagging replica) and checks the writer-only read
+// sees the committed disable and delete while GetUserByID reads the replica.
+func TestGetUserByIDFromWriterIgnoresReadPool(t *testing.T) {
+	s := newDocTestStore(t)
+	if s.driver == "postgres" {
+		t.Skip("read pools are SQLite-only (OpenReadDB returns nil for postgres)")
+	}
+	ctx := context.Background()
+
+	stale, err := sql.Open("sqlite", "file:"+migratedSQLite(t))
+	if err != nil {
+		t.Fatalf("open stale read db: %v", err)
+	}
+	staleStore := New(stale, "sqlite")
+	s.SetReadDB(stale)
+	t.Cleanup(func() { _ = stale.Close() })
+
+	u := &User{Username: "writer-read"}
+	if err := s.CreateUser(ctx, u); err != nil {
+		t.Fatalf("CreateUser() error: %v", err)
+	}
+	replicaCopy := *u
+	if err := staleStore.CreateUser(ctx, &replicaCopy); err != nil {
+		t.Fatalf("seed stale replica: %v", err)
+	}
+	if err := s.UpdateUser(ctx, u.ID, map[string]any{"disabled": true}); err != nil {
+		t.Fatalf("UpdateUser(disabled) error: %v", err)
+	}
+
+	got, err := s.GetUserByIDFromWriter(ctx, u.ID)
+	if err != nil || !got.Disabled {
+		t.Fatalf("GetUserByIDFromWriter() = %#v, %v; want disabled user", got, err)
+	}
+	if viaReplica, err := s.GetUserByID(ctx, u.ID); err != nil || viaReplica.Disabled {
+		t.Fatalf("GetUserByID() = %#v, %v; want the stale enabled replica row", viaReplica, err)
+	}
+
+	if err := s.DeleteUser(ctx, u.ID); err != nil {
+		t.Fatalf("DeleteUser() error: %v", err)
+	}
+	if got, err := s.GetUserByIDFromWriter(ctx, u.ID); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("GetUserByIDFromWriter() after delete = %#v, %v; want ErrNotFound", got, err)
+	}
+	if viaReplica, err := s.GetUserByID(ctx, u.ID); err != nil || viaReplica.ID != u.ID {
+		t.Fatalf("GetUserByID() after delete = %#v, %v; want the stale replica row", viaReplica, err)
 	}
 }
