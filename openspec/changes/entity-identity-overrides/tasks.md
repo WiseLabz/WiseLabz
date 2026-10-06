@@ -6,7 +6,7 @@
 - [x] 1.2 Add `backend/internal/store/entity_identity_overrides.go` with create (validation, sorted merge pair, conflict error), list (member names, connector names, state, current identity IDs) and delete; verify store tests cover unknown member, same member twice, cross-kind merge, reversed duplicate and connector-delete cascade
 - [x] 1.3 Make `identityClusters` in `backend/internal/doc/identities.go` take overrides and apply the detach, automatic, merge precedence; load overrides inside the reconcile callback of `BackfillEntityIdentities`; verify unit tests for detach leaving a hostname cluster, merge joining unmatched members, detach plus merge moving a member, and no-override output unchanged
 - [x] 1.4 Add reconciliation tests through the store: a manual merge leaves a `merged_into` redirect with `merged_at`, a detach gives one side a new identity and keeps the old ID on the other, removing an override restores the automatic result, a dormant override applies again when the member returns; verify they pass on both drivers
-- [x] 1.5 Purge overrides without any remaining member row in `DeleteExpiredEntityIdentities`; verify a retention test shows the override deleted in the same run as the member history
+- [x] 1.5 Purge an override in `DeleteExpiredEntityIdentities` when the run removes the last membership row of a member it references (a never-observed member keeps its override); verify a retention test shows the override deleted in the same run as the member history
 - [x] 1.6 Add the override table to backup export and import and describe it in `docs/BACKUP.md`; verify a backup round-trip test restores the overrides
 
 ## 2. Admin API, audit and OpenAPI (PR 2)

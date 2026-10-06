@@ -655,8 +655,8 @@ func TestValidateBundleRejectsOverrideOfUnknownConnector(t *testing.T) {
 	}
 }
 
-// overrideSource returns a store holding two connectors and one merge override
-// between members that were never recorded (as after a restore).
+// overrideBundle returns a bundle exported from a store with two connectors and
+// one merge override; the members are unobserved wherever it is imported.
 func overrideBundle(t *testing.T) *backup.Bundle {
 	t.Helper()
 	ctx := context.Background()
