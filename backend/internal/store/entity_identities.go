@@ -499,7 +499,9 @@ func clusterKey(cluster []EntityMemberRecord) string {
 
 // DeleteExpiredEntityIdentities removes rows gone, or merged, before cutoff
 // (merged age is measured from merged_at, not last observation);
-// member history is removed by the entity_members foreign-key cascade.
+// member history is removed by the entity_members foreign-key cascade. In the
+// same transaction it deletes manual overrides that reference a member with no
+// remaining entity_members row.
 func (s *Store) DeleteExpiredEntityIdentities(ctx context.Context, cutoff string) (int64, error) {
 	var removed int64
 	entityIdentityReconcileMu.Lock()
@@ -521,6 +523,13 @@ func (s *Store) DeleteExpiredEntityIdentities(ctx context.Context, cutoff string
 		removed, err = result.RowsAffected()
 		if err != nil {
 			return fmt.Errorf("count expired entity identities: %w", err)
+		}
+		const memberGone = `NOT EXISTS (SELECT 1 FROM entity_members m WHERE m.connector_id = %[1]s AND m.kind = %[2]s AND m.ref = %[3]s)`
+		if _, err := tx.db.ExecContext(ctx, `DELETE FROM entity_identity_overrides WHERE `+
+			fmt.Sprintf(memberGone, "entity_identity_overrides.connector_id", "entity_identity_overrides.kind", "entity_identity_overrides.ref")+
+			` OR (other_connector_id IS NOT NULL AND `+
+			fmt.Sprintf(memberGone, "entity_identity_overrides.other_connector_id", "entity_identity_overrides.other_kind", "entity_identity_overrides.other_ref")+`)`); err != nil {
+			return fmt.Errorf("delete orphaned entity identity overrides: %w", err)
 		}
 		return nil
 	})
