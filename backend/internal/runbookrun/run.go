@@ -259,6 +259,8 @@ func (e *Executor) perform(ctx context.Context, run *store.RunbookRunRecord, ste
 		return nil
 	}
 	if ctx.Err() == nil && (errors.Is(stepCtx.Err(), context.DeadlineExceeded) || errors.Is(err, context.DeadlineExceeded)) {
+		// A lifecycle step has no step timeout: the deadline was the
+		// connector call's own.
 		message := "Timed out waiting for " + waitingFor + "."
 		if timeout > 0 {
 			message = fmt.Sprintf("Timed out after %s waiting for %s.", timeout, waitingFor)

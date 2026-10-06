@@ -68,7 +68,7 @@ const (
 	// connector.
 	HealthPollInterval = 10 * time.Second
 	// DefaultStepTimeout applies to a sync_and_wait or wait_until_healthy step
-	// frozen without a timeout.
+	// without a timeout.
 	DefaultStepTimeout = 5 * time.Minute
 	// syncBusyRetryInterval paces sync_and_wait while another sync holds the
 	// connector.
@@ -194,7 +194,10 @@ func New(deps Deps) *Executor {
 }
 
 // FreezeSteps copies authored steps into the form a run stores, so later
-// edits to the runbook cannot change what the run executes.
+// edits to the runbook cannot change what the run executes. A step without a
+// kind is a lifecycle step. Only the wait kinds have a timeout: the value
+// stored on any other step (legacy rows hold the column default) is dropped,
+// and a wait step without one gets DefaultStepTimeout.
 func FreezeSteps(steps []*store.RunbookStepRecord) []*store.RunbookRunStepRecord {
 	frozen := make([]*store.RunbookRunStepRecord, 0, len(steps))
 	for _, step := range steps {
@@ -202,28 +205,45 @@ func FreezeSteps(steps []*store.RunbookStepRecord) []*store.RunbookRunStepRecord
 			frozen = append(frozen, nil)
 			continue
 		}
+		kind := step.Kind
+		if kind == "" {
+			kind = KindLifecycle
+		}
+		timeout := 0
+		if hasTimeout(kind) {
+			timeout = step.TimeoutSeconds
+			if timeout <= 0 {
+				timeout = int(DefaultStepTimeout / time.Second)
+			}
+		}
 		frozen = append(frozen, &store.RunbookRunStepRecord{
-			Kind:           step.Kind,
+			Kind:           kind,
 			Title:          step.Title,
 			ConnectorID:    step.ConnectorID,
 			Verb:           step.Verb,
 			EntityRef:      step.EntityRef,
-			TimeoutSeconds: step.TimeoutSeconds,
+			TimeoutSeconds: timeout,
 		})
 	}
 	return frozen
 }
 
-// StepTimeout returns how long a step may run. A lifecycle step without a
-// timeout is bounded only by the connector call itself (zero).
+// hasTimeout reports whether steps of kind wait and therefore time out.
+func hasTimeout(kind string) bool {
+	return kind == KindSyncAndWait || kind == KindWaitUntilHealthy
+}
+
+// StepTimeout returns how long a step may run. Only sync_and_wait and
+// wait_until_healthy steps have a timeout; a lifecycle step is bounded by the
+// connector call itself (zero), whatever its row holds.
 func StepTimeout(step *store.RunbookRunStepRecord) time.Duration {
+	if !hasTimeout(step.Kind) {
+		return 0
+	}
 	if step.TimeoutSeconds > 0 {
 		return time.Duration(step.TimeoutSeconds) * time.Second
 	}
-	if step.Kind == KindSyncAndWait || step.Kind == KindWaitUntilHealthy {
-		return DefaultStepTimeout
-	}
-	return 0
+	return DefaultStepTimeout
 }
 
 // Start creates a run of runbookID from the given authored steps, records

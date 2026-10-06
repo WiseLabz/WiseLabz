@@ -15,6 +15,7 @@ import (
 
 	"github.com/WiseLabz/wiselabz/internal/api/apitest"
 	"github.com/WiseLabz/wiselabz/internal/notifications"
+	"github.com/WiseLabz/wiselabz/internal/store"
 	"github.com/WiseLabz/wiselabz/internal/ws"
 )
 
@@ -199,5 +200,37 @@ func TestRunNotificationsThroughDispatcher(t *testing.T) {
 	}
 	if got := count(e.starter); !reflect.DeepEqual(got, want) {
 		t.Fatalf("starter notifications after cancelling the waiting run = %v, want %v", got, want)
+	}
+}
+
+// TestRunEventCarriesNoStepDetails pins the WebSocket payload to identifiers
+// and states. A step on a connector the viewer cannot see is redacted over
+// REST, down to its kind, so an event must never carry a step's kind, title,
+// connector, verb, entity or error.
+func TestRunEventCarriesNoStepDetails(t *testing.T) {
+	bookID := "book"
+	run := &store.RunbookRunRecord{ID: "run", RunbookID: &bookID, RunbookTitle: "Restart proxy", State: RunFailed, Reason: ReasonStepFailed, StartedBy: "starter"}
+	step := &store.RunbookRunStepRecord{
+		ID: "step", RunID: "run", Position: 1, Kind: KindLifecycle, Title: "Restart", ConnectorID: "connector",
+		Verb: "restart", EntityRef: "100", TimeoutSeconds: 30, State: StepFailed, Error: "connection refused", ConfirmedBy: "someone",
+	}
+	events := &eventRecorder{}
+	publishStep(events, run, step)
+	publishRun(events, run)
+
+	var got []string
+	for _, p := range events.snapshot() {
+		data, err := json.Marshal(p.Event)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got = append(got, p.ConnectorID+" "+string(data))
+	}
+	want := []string{
+		`connector {"runId":"run","runbookId":"book","state":"failed","reason":"step_failed","step":{"id":"step","position":1,"state":"failed"}}`,
+		` {"runId":"run","runbookId":"book","state":"failed","reason":"step_failed"}`,
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("events = %q, want %q", got, want)
 	}
 }

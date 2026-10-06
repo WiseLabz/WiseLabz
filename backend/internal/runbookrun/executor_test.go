@@ -1007,13 +1007,27 @@ func TestStoreFailureStopsRunWithoutLeavingItRunning(t *testing.T) {
 }
 
 func TestStepHelpers(t *testing.T) {
+	// Frozen steps drop the authored identity. A step without a kind is a
+	// lifecycle step; only the wait kinds keep a timeout, and legacy rows hold
+	// the column default of 300 on every kind.
 	frozen := FreezeSteps([]*store.RunbookStepRecord{
-		{ID: "authored", RunbookID: "book", Position: 7, Kind: KindLifecycle, Title: "Restart", ConnectorID: "c", Verb: "restart", EntityRef: "100", TimeoutSeconds: 30},
+		{ID: "authored", RunbookID: "book", Position: 7, Kind: KindLifecycle, Title: "Restart", ConnectorID: "c", Verb: "restart", EntityRef: "100", TimeoutSeconds: 300},
 		nil,
+		{Title: "Legacy", ConnectorID: "c", Verb: "stop", TimeoutSeconds: 300},
+		{Kind: KindManual, Title: "Check", TimeoutSeconds: 300},
+		{Kind: KindSyncAndWait, Title: "Sync", ConnectorID: "c", TimeoutSeconds: 60},
+		{Kind: KindWaitUntilHealthy, Title: "Wait", ConnectorID: "c"},
 	})
-	want := &store.RunbookRunStepRecord{Kind: KindLifecycle, Title: "Restart", ConnectorID: "c", Verb: "restart", EntityRef: "100", TimeoutSeconds: 30}
-	if len(frozen) != 2 || !reflect.DeepEqual(frozen[0], want) || frozen[1] != nil {
-		t.Fatalf("FreezeSteps() = %+v, want a copy without the authored identity", frozen)
+	want := []*store.RunbookRunStepRecord{
+		{Kind: KindLifecycle, Title: "Restart", ConnectorID: "c", Verb: "restart", EntityRef: "100"},
+		nil,
+		{Kind: KindLifecycle, Title: "Legacy", ConnectorID: "c", Verb: "stop"},
+		{Kind: KindManual, Title: "Check"},
+		{Kind: KindSyncAndWait, Title: "Sync", ConnectorID: "c", TimeoutSeconds: 60},
+		{Kind: KindWaitUntilHealthy, Title: "Wait", ConnectorID: "c", TimeoutSeconds: 300},
+	}
+	if !reflect.DeepEqual(frozen, want) {
+		t.Fatalf("FreezeSteps() = %+v, want %+v", frozen, want)
 	}
 
 	for _, tc := range []struct {
@@ -1025,7 +1039,8 @@ func TestStepHelpers(t *testing.T) {
 		{&store.RunbookRunStepRecord{Kind: KindSyncAndWait}, 5 * time.Minute},
 		{&store.RunbookRunStepRecord{Kind: KindWaitUntilHealthy}, 5 * time.Minute},
 		{&store.RunbookRunStepRecord{Kind: KindLifecycle}, 0},
-		{&store.RunbookRunStepRecord{Kind: KindLifecycle, TimeoutSeconds: 45}, 45 * time.Second},
+		{&store.RunbookRunStepRecord{Kind: KindLifecycle, TimeoutSeconds: 300}, 0},
+		{&store.RunbookRunStepRecord{Kind: KindManual, TimeoutSeconds: 300}, 0},
 	} {
 		if got := StepTimeout(tc.step); got != tc.want {
 			t.Errorf("StepTimeout(%s, %ds) = %s, want %s", tc.step.Kind, tc.step.TimeoutSeconds, got, tc.want)
