@@ -163,6 +163,11 @@ describe('EntityOverridesPage', () => {
     expect(dialog).toBeInTheDocument();
     expect(within(dialog).getByText('Remove override')).toBeInTheDocument();
 
+    const panel = dialog.querySelector('[class*="transition-"]');
+    await vi.waitFor(() => {
+      expect(panel).toHaveClass('opacity-100');
+    });
+
     const confirmButton = within(dialog).getByRole('button', { name: 'Remove' });
     fireEvent.click(confirmButton);
 
@@ -179,6 +184,7 @@ describe('EntityOverridesPage', () => {
       );
       expect(qc.getQueryState(['/entities/entity-1'])?.isInvalidated).toBe(true);
       expect(qc.getQueryState(['/entity-overrides'])?.isInvalidated).toBe(true);
+      expect(panel).toHaveClass('opacity-0');
     });
   });
 
@@ -190,6 +196,11 @@ describe('EntityOverridesPage', () => {
     fireEvent.click(removeBtn);
 
     const dialog = await screen.findByRole('dialog');
+    const panel = dialog.querySelector('[class*="transition-"]');
+    await vi.waitFor(() => {
+      expect(panel).toHaveClass('opacity-100');
+    });
+
     const confirmButton = within(dialog).getByRole('button', { name: 'Remove' });
     fireEvent.click(confirmButton);
 
@@ -199,6 +210,7 @@ describe('EntityOverridesPage', () => {
       expect(toastMock.success).toHaveBeenCalledWith(
         'Override removed. The resulting identity is not visible with your current permissions.'
       );
+      expect(panel).toHaveClass('opacity-0');
     });
   });
 

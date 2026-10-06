@@ -293,8 +293,11 @@ describe('EntityDetailPage', () => {
   });
 
   it('detaches a member and navigates to the new identity when visible', async () => {
+    const qc = new QueryClient();
+    qc.setQueryData(['/entities/entity-new'], { id: 'entity-new', name: 'new', members: [] });
+    qc.setQueryData(['/entity-overrides'], []);
     getEntitiesIdMock.mockResolvedValue({ id: 'entity-new', name: 'new', members: [] });
-    mount();
+    mount(qc);
 
     const detachBtn = screen.getByRole('button', { name: /detach router/i });
     fireEvent.click(detachBtn);
@@ -317,6 +320,8 @@ describe('EntityDetailPage', () => {
       );
       expect(getEntitiesIdMock).toHaveBeenCalledWith('entity-new');
       expect(entityHook).toHaveBeenCalledWith('entity-new');
+      expect(qc.getQueryState(['/entities/entity-new'])?.isInvalidated).toBe(true);
+      expect(qc.getQueryState(['/entity-overrides'])?.isInvalidated).toBe(true);
     });
     expect(toastMock.success).toHaveBeenCalledWith('Member detached.');
   });
@@ -343,8 +348,11 @@ describe('EntityDetailPage', () => {
   });
 
   it('merges a member, asserts same-kind restriction in picker, and navigates when visible', async () => {
+    const qc = new QueryClient();
+    qc.setQueryData(['/entities/entity-merged'], { id: 'entity-merged', name: 'merged', members: [] });
+    qc.setQueryData(['/entity-overrides'], []);
     getEntitiesIdMock.mockResolvedValue({ id: 'entity-merged', name: 'merged', members: [] });
-    mount();
+    mount(qc);
 
     const mergeBtn = screen.getByRole('button', { name: /merge router/i });
     fireEvent.click(mergeBtn);
@@ -381,6 +389,8 @@ describe('EntityDetailPage', () => {
       );
       expect(getEntitiesIdMock).toHaveBeenCalledWith('entity-merged');
       expect(entityHook).toHaveBeenCalledWith('entity-merged');
+      expect(qc.getQueryState(['/entities/entity-merged'])?.isInvalidated).toBe(true);
+      expect(qc.getQueryState(['/entity-overrides'])?.isInvalidated).toBe(true);
     });
     expect(toastMock.success).toHaveBeenCalledWith('Members merged.');
   });
@@ -457,6 +467,10 @@ describe('EntityDetailPage', () => {
     fireEvent.click(detachBtn);
 
     const dialog = await screen.findByRole('dialog');
+    const panel = dialog.querySelector('[class*="transition-"]');
+    await waitFor(() => {
+      expect(panel).toHaveClass('opacity-100');
+    });
     const confirmBtn = within(dialog).getByRole('button', { name: 'Detach' });
     fireEvent.click(confirmBtn);
 
@@ -464,6 +478,7 @@ describe('EntityDetailPage', () => {
       expect(toastMock.error).toHaveBeenCalledWith('Could not detach member.');
       expect(qc.getQueryState(['/entities/entity-1'])?.isInvalidated).toBe(true);
       expect(qc.getQueryState(['/entity-overrides'])?.isInvalidated).toBe(true);
+      expect(panel).toHaveClass('opacity-0');
     });
   });
 
@@ -702,6 +717,7 @@ describe('EntityDetailPage', () => {
       expect(toastMock.error).toHaveBeenCalledWith('Could not merge members.');
       expect(qc.getQueryState(['/entities/entity-1'])?.isInvalidated).toBe(true);
       expect(qc.getQueryState(['/entity-overrides'])?.isInvalidated).toBe(true);
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     });
   });
 
@@ -724,5 +740,51 @@ describe('EntityDetailPage', () => {
 
     fireEvent.change(pickerSelect, { target: { value: 'bare-metal' } });
     expect(within(dialog).getByRole('button', { name: 'Merge' })).toBeEnabled();
+  });
+
+  it('retains detach description text while fading out after cancel', async () => {
+    mount();
+
+    const detachBtn = screen.getByRole('button', { name: /detach router/i });
+    fireEvent.click(detachBtn);
+
+    const dialog = await screen.findByRole('dialog');
+    const panel = dialog.querySelector('[class*="transition-"]');
+    await waitFor(() => {
+      expect(panel).toHaveClass('opacity-100');
+    });
+
+    const cancelBtn = within(dialog).getByRole('button', { name: 'Cancel' });
+    fireEvent.click(cancelBtn);
+
+    await waitFor(() => {
+      expect(panel).toHaveClass('opacity-0');
+    });
+    expect(within(dialog).getByText(/Are you sure you want to detach router/)).toBeInTheDocument();
+  });
+
+  it('falls back to ref for nameless member in detach and merge dialogs', async () => {
+    entityHook.mockReturnValue({
+      data: {
+        ...base,
+        members: [{ ...base.members[0], name: '', ref: '42' }],
+      },
+      isLoading: false,
+      isError: false,
+    });
+    mount();
+
+    const detachBtn = screen.getByRole('button', { name: /detach 42/i });
+    fireEvent.click(detachBtn);
+    expect(await screen.findByText(/Are you sure you want to detach 42/)).toBeInTheDocument();
+
+    const cancelBtn = screen.getByRole('button', { name: 'Cancel' });
+    fireEvent.click(cancelBtn);
+
+    const mergeBtn = screen.getByRole('button', { name: /merge 42/i });
+    fireEvent.click(mergeBtn);
+    expect(
+      await screen.findByText(/Choose another member of the same kind to merge with 42/)
+    ).toBeInTheDocument();
   });
 });

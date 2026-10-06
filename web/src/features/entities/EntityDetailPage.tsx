@@ -51,6 +51,7 @@ export function EntityDetailPage() {
   const connectors = useGetConnectors({ query: { enabled: isAdmin } });
 
   const [detachMember, setDetachMember] = useState<EntityMember | null>(null);
+  const [isDetachOpen, setIsDetachOpen] = useState(false);
   const [mergeMember, setMergeMember] = useState<EntityMember | null>(null);
   const [targetConnectorId, setTargetConnectorId] = useState('');
   const [targetRef, setTargetRef] = useState('');
@@ -164,14 +165,19 @@ export function EntityDetailPage() {
               success: t('entities.overrides.detachSuccess'),
               notVisible: t('entities.overrides.detachSuccessNotVisible'),
             },
-            () => setDetachMember(null)
+            () => setIsDetachOpen(false)
           ),
         onError: (err) =>
           handleOverrideError(err, t('entities.overrides.detachError'), () =>
-            setDetachMember(null)
+            setIsDetachOpen(false)
           ),
       }
     );
+  };
+
+  const openDetach = (m: EntityMember) => {
+    setDetachMember(m);
+    setIsDetachOpen(true);
   };
 
   const openMerge = (m: EntityMember) => {
@@ -343,7 +349,7 @@ export function EntityDetailPage() {
                           name: m.name || m.ref,
                           connector: m.connectorName || m.connectorId,
                         })}
-                        onClick={() => setDetachMember(m)}
+                        onClick={() => openDetach(m)}
                       >
                         {t('entities.overrides.detachAction')}
                       </Button>
@@ -462,8 +468,8 @@ export function EntityDetailPage() {
       </div>
 
       <ConfirmDialog
-        open={Boolean(detachMember)}
-        onClose={() => setDetachMember(null)}
+        open={isDetachOpen}
+        onClose={() => setIsDetachOpen(false)}
         onConfirm={handleDetachConfirm}
         title={t('entities.overrides.detachTitle')}
         description={
@@ -492,7 +498,9 @@ export function EntityDetailPage() {
         >
           <form onSubmit={handleMergeSubmit} className="space-y-4">
             <p className="text-sm text-ink-muted">
-              {t('entities.overrides.mergeSubtitle', { name: mergeMember.name })}
+              {t('entities.overrides.mergeSubtitle', {
+                name: mergeMember.name || mergeMember.ref,
+              })}
             </p>
 
             <div>

@@ -1,7 +1,7 @@
 # Graph Report - entity-overrides-web  (2026-10-06)
 
 ## Corpus Check
-- 1313 files · ~927,537 words
+- 1313 files · ~927,775 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 27 file(s) not represented in the graph (top: (none) 15, .tmpl 3, .toml 2)
 
@@ -11,7 +11,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `90297166`
+- Built from commit: `c890c3c5`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
