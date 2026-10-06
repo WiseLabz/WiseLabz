@@ -63,6 +63,8 @@ The reconcile callback in `BackfillEntityIdentities` loads overrides from the tr
 
 Routes in `mountWorkflowRoutes`, grouped under `auth.RequireInstanceAdmin`. The handler needs the doc engine to reconcile; it calls `BackfillEntityIdentities` after the store mutation and then resolves the current identity ID of each affected member for the response. Reconciliation failure after a committed mutation returns 500 with the override in place; the next sync reconciles it. Audit uses `Store.RecordAuditFromContext`, non-fatal on failure as elsewhere.
 
+The returned identity ID is not a visibility grant: `GET /api/entities/{id}` keeps its connector grant rule and uniform 404, so an administrator without a viewer grant on the member's connector gets the ID but a 404 for it, and the web flow stays on the page with a confirmation in that case.
+
 Admin-only keeps the first version simple: an override changes what every user sees, including on connectors a per-connector operator cannot view.
 
 ### Web

@@ -82,8 +82,12 @@ The system SHALL expose `GET /api/entity-overrides`, `POST /api/entity-overrides
 - **THEN** the response SHALL be 403 and no override SHALL be read or changed.
 
 #### Scenario: Create returns the new identities
-- **WHEN** an administrator creates a detach override for a member of a two-member identity
+- **WHEN** an administrator who can view the member's connector creates a detach override for a member of a two-member identity
 - **THEN** the response SHALL contain the override and the member's new identity ID, and a following `GET /api/entities/{id}` for that ID SHALL return the member.
+
+#### Scenario: Administrator without a grant on the member's connector
+- **WHEN** an administrator with no viewer grant on the member's connector creates a detach override
+- **THEN** the response SHALL still contain the member's new identity ID, and `GET /api/entities/{id}` for that ID SHALL return 404, because instance administrators have no implicit entity access.
 
 #### Scenario: Duplicate
 - **WHEN** an administrator creates an override equivalent to an existing one
@@ -94,7 +98,7 @@ The system SHALL expose `GET /api/entity-overrides`, `POST /api/entity-overrides
 - **THEN** the audit log SHALL contain one `entity.override.create` and one `entity.override.delete` record for it.
 
 ### Requirement: Override admin workflow
-For instance administrators the entity detail page SHALL offer a detach action on each member and a merge action that selects another entity's member of the same kind, and the web UI SHALL provide a list of all overrides with their state and a remove action. After a create or remove the UI SHALL show the identity returned by the API for the affected member. Callers who are not instance administrators SHALL NOT see these actions or the list. All new strings SHALL be translatable and present in the English and pt-BR catalogs.
+For instance administrators the entity detail page SHALL offer a detach action on each member and a merge action that selects another entity's member of the same kind, and the web UI SHALL provide a list of all overrides with their state and a remove action. After a create or remove the UI SHALL show the identity returned by the API for the affected member; when that identity is not visible to the administrator, the UI SHALL stay on the current page and show a confirmation instead of navigating to a 404. Callers who are not instance administrators SHALL NOT see these actions or the list. All new strings SHALL be translatable and present in the English and pt-BR catalogs.
 
 #### Scenario: Admin detaches a member
 - **WHEN** an administrator uses the detach action on a member and confirms
