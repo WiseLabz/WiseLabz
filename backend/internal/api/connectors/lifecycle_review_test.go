@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -29,6 +30,9 @@ type lifecycleReviewConnectorState struct {
 	restarts int
 	failure  error
 	cancel   context.CancelFunc
+	// operation, when set, replaces the default outcome of Restart. It runs
+	// outside the state lock so it may block until the context ends.
+	operation func(context.Context) error
 }
 
 type lifecycleReviewConnector struct {
@@ -45,11 +49,14 @@ func (c *lifecycleReviewConnector) Validate(context.Context, map[string]any) err
 func (c *lifecycleReviewConnector) Fetch(context.Context, map[string]any) (*connector.ServiceSnapshot, error) {
 	return &connector.ServiceSnapshot{ServiceName: "lifecycle-review"}, nil
 }
-func (c *lifecycleReviewConnector) Restart(context.Context, map[string]any, string) error {
+func (c *lifecycleReviewConnector) Restart(ctx context.Context, _ map[string]any, _ string) error {
 	c.state.mu.Lock()
 	c.state.restarts++
-	cancel, failure := c.state.cancel, c.state.failure
+	cancel, failure, operation := c.state.cancel, c.state.failure, c.state.operation
 	c.state.mu.Unlock()
+	if operation != nil {
+		return operation(ctx)
+	}
 	if cancel != nil {
 		cancel()
 	}
@@ -391,6 +398,94 @@ func TestMutateLifecycleOpCancellationBeforeLookupStopsOperation(t *testing.T) {
 	}
 }
 
+func TestMutateLifecycleOpCallerContextEndSkipsFailureAlert(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name string
+		wrap func(error) error
+	}{
+		{name: "bare context error", wrap: func(err error) error { return err }},
+		{name: "wrapped context error", wrap: func(err error) error { return fmt.Errorf("proxmox: %w", err) }},
+	} {
+		t.Run("cancel "+tc.name, func(t *testing.T) {
+			t.Parallel()
+			h := newTestHandler(t)
+			connectorID, state := newLifecycleReviewConnector(t, h)
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			started := make(chan struct{})
+			state.mu.Lock()
+			state.operation = func(ctx context.Context) error {
+				close(started)
+				<-ctx.Done()
+				return tc.wrap(ctx.Err())
+			}
+			state.mu.Unlock()
+
+			done := make(chan error, 1)
+			go func() {
+				done <- h.MutateLifecycleOp(ctx, connectorID, "restart", "vm-100", LifecycleActor{}, nil)
+			}()
+			<-started
+			cancel()
+			err := <-done
+
+			assertReviewLifecycleError(t, err, http.StatusBadGateway, "restart_failed")
+			if !errors.Is(err, context.Canceled) {
+				t.Errorf("MutateLifecycleOp() error = %v, want it to wrap context.Canceled", err)
+			}
+			assertNoReviewFailureSideEffects(t, h, connectorID)
+		})
+	}
+
+	t.Run("deadline exceeded", func(t *testing.T) {
+		t.Parallel()
+		h := newTestHandler(t)
+		connectorID, state := newLifecycleReviewConnector(t, h)
+		ctx := &deadlineContext{Context: context.Background(), done: make(chan struct{})}
+		started := make(chan struct{})
+		state.mu.Lock()
+		state.operation = func(ctx context.Context) error {
+			close(started)
+			<-ctx.Done()
+			return fmt.Errorf("proxmox: %w", ctx.Err())
+		}
+		state.mu.Unlock()
+
+		done := make(chan error, 1)
+		go func() {
+			done <- h.MutateLifecycleOp(ctx, connectorID, "restart", "vm-100", LifecycleActor{}, nil)
+		}()
+		<-started
+		close(ctx.done)
+		err := <-done
+
+		assertReviewLifecycleError(t, err, http.StatusBadGateway, "restart_failed")
+		if !errors.Is(err, context.DeadlineExceeded) {
+			t.Errorf("MutateLifecycleOp() error = %v, want it to wrap context.DeadlineExceeded", err)
+		}
+		assertNoReviewFailureSideEffects(t, h, connectorID)
+	})
+}
+
+// deadlineContext is a context whose deadline "expires" when the test closes
+// done, so a test decides when the deadline is reached instead of a timer.
+type deadlineContext struct {
+	context.Context
+	done chan struct{}
+}
+
+func (c *deadlineContext) Done() <-chan struct{} { return c.done }
+
+func (c *deadlineContext) Err() error {
+	select {
+	case <-c.done:
+		return context.DeadlineExceeded
+	default:
+		return nil
+	}
+}
+
 func (s *lifecycleReviewConnectorState) restartCount() int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -402,6 +497,19 @@ func assertReviewLifecycleError(t *testing.T, err error, status int, code string
 	var lifecycleErr *lifecycleError
 	if !errors.As(err, &lifecycleErr) || lifecycleErr.status != status || lifecycleErr.code != code {
 		t.Fatalf("lifecycle error = %v, want status %d code %q", err, status, code)
+	}
+}
+
+// assertNoReviewFailureSideEffects checks that an abandoned operation left no
+// alert (and therefore no alert broadcast, which only follows a created alert)
+// and no audit record.
+func assertNoReviewFailureSideEffects(t *testing.T, h *Handler, connectorID string) {
+	t.Helper()
+	if alerts := lifecycleReviewAlerts(t, h, connectorID); len(alerts) != 0 {
+		t.Errorf("alerts = %+v, want none", alerts)
+	}
+	if records := lifecycleReviewAudit(t, h, connectorID); len(records) != 0 {
+		t.Errorf("audit records = %+v, want none", records)
 	}
 }
 

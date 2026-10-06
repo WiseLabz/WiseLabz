@@ -239,7 +239,9 @@ func (h *Handler) lifecycleOpMutate(w http.ResponseWriter, r *http.Request, conn
 // Callers must verify the connector operator grant first; HTTP mutation
 // handlers must also validate elevation. Per ADR 0001/0002, a failed operation
 // is not rolled back, creates a critical alert, and is not audited; success is
-// audited. The core does not inspect elevation tokens or request actors.
+// audited. An operation that ends only because the caller's context was done
+// still returns the failure but creates no alert. The core does not inspect
+// elevation tokens or request actors.
 func (h *Handler) MutateLifecycleOp(
 	ctx context.Context,
 	connectorID, verb, entityRef string,
@@ -309,6 +311,16 @@ func (h *Handler) mutateLifecycleOp(
 	}
 
 	if err := prepared.apply(ctx, prepared.config, entityRef); err != nil {
+		failure := &lifecycleError{
+			status:  http.StatusBadGateway,
+			code:    verb + "_failed",
+			message: err.Error(),
+			cause:   err,
+		}
+		if abandonedByCaller(ctx, err) {
+			slog.Info("connector "+verb+" abandoned by caller", "connector", connectorID, "error", err)
+			return failure
+		}
 		slog.Error("connector "+verb+" failed", "connector", connectorID, "error", err)
 		alert := &store.AlertRecord{
 			ServiceID:   connectorID,
@@ -326,12 +338,7 @@ func (h *Handler) mutateLifecycleOp(
 				"title":     alert.Title,
 			})
 		}
-		return &lifecycleError{
-			status:  http.StatusBadGateway,
-			code:    verb + "_failed",
-			message: err.Error(),
-			cause:   err,
-		}
+		return failure
 	}
 
 	detail := make(map[string]any, len(extraAudit)+1)
@@ -345,6 +352,15 @@ func (h *Handler) mutateLifecycleOp(
 	}
 
 	return nil
+}
+
+// abandonedByCaller reports whether err is the caller's own context error: a
+// user cancelling a run, a dropped request or a shutdown says nothing about the
+// connector, so it must not raise a failure alert. A different error is a real
+// failure even when the context happens to be done as well.
+func abandonedByCaller(ctx context.Context, err error) bool {
+	ctxErr := ctx.Err()
+	return ctxErr != nil && errors.Is(err, ctxErr)
 }
 
 func (h *Handler) recordLifecycleAudit(
