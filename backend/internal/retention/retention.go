@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/WiseLabz/wiselabz/internal/store"
+	"github.com/WiseLabz/wiselabz/internal/ws"
 )
 
 // Fixed retention windows (days) for tables that have no configurable
@@ -24,6 +25,11 @@ const (
 	chatDays         = 90
 )
 
+// Publisher sends run-level updates without coupling cleanup to HTTP handlers.
+type Publisher interface {
+	Broadcast(eventType string, payload any)
+}
+
 // RunCleanupOnce performs one cleanup pass: for every category whose *Days
 // config value is > 0, deletes rows older than the cutoff. A category with
 // Days <= 0 is skipped (retention disabled). Open runbook runs without recent
@@ -32,7 +38,7 @@ const (
 // (0 keeps history indefinitely). Errors in one category are logged and do not
 // stop the others from running, but are joined into the returned error so the
 // scheduler's job health (#384) reflects a partial cleanup pass.
-func RunCleanupOnce(ctx context.Context, s *store.Store, cfg store.RetentionSettings, logger *slog.Logger) error {
+func RunCleanupOnce(ctx context.Context, s *store.Store, cfg store.RetentionSettings, logger *slog.Logger, events ...Publisher) error {
 	cutoff := func(days int) string {
 		return time.Now().UTC().AddDate(0, 0, -days).Format(time.RFC3339)
 	}
@@ -136,6 +142,14 @@ func RunCleanupOnce(ctx context.Context, s *store.Store, cfg store.RetentionSett
 		errs = append(errs, fmt.Errorf("expire open runbook runs: %w", err))
 	} else if len(expiredRuns) > 0 {
 		logger.Info("Expired open runbook runs", "count", len(expiredRuns))
+		for _, publisher := range events {
+			if publisher == nil {
+				continue
+			}
+			for _, id := range expiredRuns {
+				publisher.Broadcast(ws.EventRunbookRunUpdated, map[string]string{"runId": id, "state": "expired"})
+			}
+		}
 	}
 
 	if cfg.RunbookRunDays > 0 {

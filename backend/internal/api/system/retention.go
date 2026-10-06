@@ -237,7 +237,7 @@ func (h *Handler) reregisterRetentionJob(rs store.RetentionSettings) {
 	id, err := h.Scheduler.AddJob("retention", rs.CronExpr, func(jobCtx context.Context) error {
 		blobstore.PublicationMu.Lock()
 		defer blobstore.PublicationMu.Unlock()
-		purgeErr := retention.RunCleanupOnce(jobCtx, h.Store, rs, slog.Default())
+		purgeErr := retention.RunCleanupOnce(jobCtx, h.Store, rs, slog.Default(), h.RetentionEvents)
 		blobs := blobstore.New(h.Config.Attachments.Dir, h.Config.Attachments.MaxBytes)
 		gcErr := blobs.Sweep(func(hash string) (bool, error) { return h.Store.BlobReferenced(jobCtx, hash) })
 		return errors.Join(purgeErr, gcErr)

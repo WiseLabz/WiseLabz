@@ -38,8 +38,10 @@ import (
 	"github.com/WiseLabz/wiselabz/internal/doc"
 	"github.com/WiseLabz/wiselabz/internal/httputil"
 	internalmcp "github.com/WiseLabz/wiselabz/internal/mcp"
+	"github.com/WiseLabz/wiselabz/internal/notifications"
 	"github.com/WiseLabz/wiselabz/internal/quality"
 	"github.com/WiseLabz/wiselabz/internal/report"
+	"github.com/WiseLabz/wiselabz/internal/runbookrun"
 	"github.com/WiseLabz/wiselabz/internal/scheduler"
 	"github.com/WiseLabz/wiselabz/internal/store"
 	"github.com/WiseLabz/wiselabz/internal/sync"
@@ -51,18 +53,19 @@ import (
 
 // Config holds all dependencies needed to construct the router.
 type Config struct {
-	Store          *store.Store
-	JWT            *auth.Service
-	Config         *config.Config
-	SyncEngine     *sync.Engine
-	DocEngine      *doc.Engine
-	WSHub          *ws.Hub
-	AIRegistry     *ai.Registry
-	EmbedRegistry  *ai.EmbedRegistry
-	Scheduler      *scheduler.Runner // for backup job scheduling
-	QualityChecker *quality.Checker
-	ReportManager  *report.Manager
-	BackupDir      string // directory where backups are written
+	Store                  *store.Store
+	JWT                    *auth.Service
+	Config                 *config.Config
+	SyncEngine             *sync.Engine
+	DocEngine              *doc.Engine
+	WSHub                  *ws.Hub
+	NotificationDispatcher *notifications.Dispatcher
+	AIRegistry             *ai.Registry
+	EmbedRegistry          *ai.EmbedRegistry
+	Scheduler              *scheduler.Runner // for backup job scheduling
+	QualityChecker         *quality.Checker
+	ReportManager          *report.Manager
+	BackupDir              string // directory where backups are written
 	// Ready is the shared readiness flag the lifecycle manager flips during
 	// ordered shutdown. Nil in tests that don't exercise /readyz.
 	Ready *syshandler.ReadyState
@@ -129,6 +132,9 @@ func NewRouter(cfg Config) chi.Router {
 // mounts share the same instances.
 func newRouterDeps(cfg Config) routerDeps {
 	sysH := syshandler.NewHandler(cfg.Store.DB(), cfg.Config, cfg.Store, cfg.Scheduler, cfg.BackupDir, cfg.Ready)
+	if cfg.WSHub != nil {
+		sysH.RetentionEvents = cfg.WSHub
+	}
 	// Register the backup cron job through the handler (not directly against
 	// cfg.Scheduler) so its entry ID is tracked and later PUT /schedule calls
 	// can remove/replace it instead of stacking duplicate jobs.
@@ -143,6 +149,20 @@ func newRouterDeps(cfg Config) routerDeps {
 	}
 
 	connH := connhandler.NewHandler(cfg.Store, cfg.SyncEngine, cfg.Config, cfg.JWT, cfg.WSHub)
+
+	runbookH := runbookhandler.NewHandler(cfg.Store, connH)
+	deps := runbookrun.Deps{
+		Store: cfg.Store, Lifecycle: connH, Sync: cfg.SyncEngine, Spawner: cfg.SyncEngine,
+		Health: runbookrun.StoreHealth{Store: cfg.Store, EncryptionKey: cfg.Config.Encryption.Key},
+		Grants: runbookrun.StoreGrants{Store: cfg.Store},
+	}
+	if cfg.WSHub != nil {
+		deps.Events = cfg.WSHub
+	}
+	if cfg.NotificationDispatcher != nil {
+		deps.Notifier = cfg.NotificationDispatcher
+	}
+	runbookH.Executor = runbookrun.New(deps)
 
 	docH := dochandler.NewHandler(cfg.Store, cfg.DocEngine, settingH, cfg.AIRegistry, cfg.EmbedRegistry, cfg.WSHub)
 	changeH := changehandler.NewHandler(cfg.Store, settingH, cfg.AIRegistry, cfg.WSHub)
@@ -175,7 +195,7 @@ func newRouterDeps(cfg Config) routerDeps {
 		findingH:    findinghandler.NewHandler(cfg.Store),
 		entityH:     entityhandler.NewHandler(cfg.Store, entityReconciler),
 		notifH:      notifhandler.NewHandler(cfg.Store),
-		runbookH:    runbookhandler.NewHandler(cfg.Store, connH),
+		runbookH:    runbookH,
 		dashH:       dashhandler.NewHandler(cfg.Store),
 		docH:        docH,
 		savedViewH:  savedviewhandler.NewHandler(cfg.Store),

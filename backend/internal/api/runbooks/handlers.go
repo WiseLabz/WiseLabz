@@ -15,6 +15,7 @@ import (
 	"github.com/WiseLabz/wiselabz/internal/auth"
 	"github.com/WiseLabz/wiselabz/internal/connector"
 	"github.com/WiseLabz/wiselabz/internal/httputil"
+	"github.com/WiseLabz/wiselabz/internal/runbookrun"
 	"github.com/WiseLabz/wiselabz/internal/store"
 )
 
@@ -23,8 +24,9 @@ import (
 // execution shares the exact same dry-run/elevation/audit/alert path as a
 // direct connector restart/start/stop.
 type Handler struct {
-	Store *store.Store
-	ConnH *connectors.Handler
+	Store    *store.Store
+	ConnH    *connectors.Handler
+	Executor *runbookrun.Executor
 }
 
 // NewHandler creates a new runbook handler.

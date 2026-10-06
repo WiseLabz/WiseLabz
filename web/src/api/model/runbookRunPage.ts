@@ -6,18 +6,11 @@
  *
  * OpenAPI spec version: 0.1.0
  */
+import type { RunbookRun } from './runbookRun';
 
-export interface Notification {
-  id: string;
-  /**
-   * Deep-link target when set — the affected alert.
-   * @nullable
-   */
-  alertId?: string | null;
-  /** e.g. alert.created, finding.created, system.job_failed, runbook.run_failed, runbook.run_waiting, digest.summary */
-  eventType: string;
-  title: string;
-  message: string;
-  read: boolean;
-  createdAt: string;
+export interface RunbookRunPage {
+  items: RunbookRun[];
+  total: number;
+  page: number;
+  pageSize: number;
 }

@@ -27,6 +27,8 @@ describe('EventRoutingTable', () => {
     expect(screen.getByText('alert created')).toBeInTheDocument();
     expect(screen.getByText('finding created')).toBeInTheDocument();
     expect(screen.getByText('system job failed')).toBeInTheDocument();
+    expect(screen.getByText('runbook run failed')).toBeInTheDocument();
+    expect(screen.getByText('runbook run waiting')).toBeInTheDocument();
 
     const cell = screen.getByRole('switch', { name: 'system job failed → Webhook' });
     expect(cell).not.toBeDisabled();

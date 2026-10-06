@@ -46,6 +46,8 @@ func newMCPServer(d Deps) *mcpserver.MCPServer {
 	registerTopologyPath(s, d)
 	registerListRunbooks(s, d)
 	registerGetRunbook(s, d)
+	registerListRunbookRuns(s, d)
+	registerGetRunbookRun(s, d)
 	registerProposeDocEdit(s, d)
 	registerListFindings(s, d)
 	registerListChanges(s, d)

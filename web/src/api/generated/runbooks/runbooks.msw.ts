@@ -9,14 +9,26 @@
 import { HttpResponse, http } from 'msw';
 import type { RequestHandlerOptions } from 'msw';
 
-import type { RestartPreview, Runbook, RunbookPage } from '../../model';
+import type {
+  RestartPreview,
+  Runbook,
+  RunbookPage,
+  RunbookRun,
+  RunbookRunPage,
+  RunbookRunPreview,
+  RunbookRunRecord,
+} from '../../model';
 
 import {
   getExecuteRunbookStepResponseMock,
+  getGetRunbookRunResponseMock,
   getGetRunbooksResponseMock,
   getGetRunbooksRunbookIdResponseMock,
+  getListRunbookRunsResponseMock,
   getPostRunbooksResponseMock,
   getPutRunbooksRunbookIdResponseMock,
+  getResumeRunbookRunResponseMock,
+  getStartRunbookRunResponseMock,
 } from './runbooks.faker';
 
 export {
@@ -25,6 +37,10 @@ export {
   getGetRunbooksRunbookIdResponseMock,
   getPutRunbooksRunbookIdResponseMock,
   getExecuteRunbookStepResponseMock,
+  getStartRunbookRunResponseMock,
+  getListRunbookRunsResponseMock,
+  getGetRunbookRunResponseMock,
+  getResumeRunbookRunResponseMock,
 } from './runbooks.faker';
 
 export const getGetRunbooksMockHandler = (
@@ -154,6 +170,137 @@ export const getExecuteRunbookStepMockHandler = (
     options
   );
 };
+
+export const getStartRunbookRunMockHandler = (
+  overrideResponse?:
+    | RunbookRunPreview
+    | RunbookRun
+    | ((
+        info: Parameters<Parameters<typeof http.post>[1]>[0]
+      ) => Promise<RunbookRunPreview | RunbookRun> | RunbookRunPreview | RunbookRun),
+  options?: RequestHandlerOptions
+) => {
+  return http.post(
+    '*/runbooks/:runbookId/run',
+    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+      return HttpResponse.json(
+        overrideResponse !== undefined
+          ? typeof overrideResponse === 'function'
+            ? await overrideResponse(info)
+            : overrideResponse
+          : getStartRunbookRunResponseMock(),
+        { status: 200 }
+      );
+    },
+    options
+  );
+};
+
+export const getListRunbookRunsMockHandler = (
+  overrideResponse?:
+    | RunbookRunPage
+    | ((
+        info: Parameters<Parameters<typeof http.get>[1]>[0]
+      ) => Promise<RunbookRunPage> | RunbookRunPage),
+  options?: RequestHandlerOptions
+) => {
+  return http.get(
+    '*/runbooks/:runbookId/runs',
+    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+      return HttpResponse.json(
+        overrideResponse !== undefined
+          ? typeof overrideResponse === 'function'
+            ? await overrideResponse(info)
+            : overrideResponse
+          : getListRunbookRunsResponseMock(),
+        { status: 200 }
+      );
+    },
+    options
+  );
+};
+
+export const getGetRunbookRunMockHandler = (
+  overrideResponse?:
+    | RunbookRun
+    | ((info: Parameters<Parameters<typeof http.get>[1]>[0]) => Promise<RunbookRun> | RunbookRun),
+  options?: RequestHandlerOptions
+) => {
+  return http.get(
+    '*/runbook-runs/:runId',
+    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+      return HttpResponse.json(
+        overrideResponse !== undefined
+          ? typeof overrideResponse === 'function'
+            ? await overrideResponse(info)
+            : overrideResponse
+          : getGetRunbookRunResponseMock(),
+        { status: 200 }
+      );
+    },
+    options
+  );
+};
+
+export const getConfirmRunbookRunStepMockHandler = (
+  overrideResponse?:
+    void | ((info: Parameters<Parameters<typeof http.post>[1]>[0]) => Promise<void> | void),
+  options?: RequestHandlerOptions
+) => {
+  return http.post(
+    '*/runbook-runs/:runId/steps/:stepId/confirm',
+    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+      if (typeof overrideResponse === 'function') {
+        await overrideResponse(info);
+      }
+
+      return new HttpResponse(null, { status: 204 });
+    },
+    options
+  );
+};
+
+export const getResumeRunbookRunMockHandler = (
+  overrideResponse?:
+    | RunbookRunRecord
+    | ((
+        info: Parameters<Parameters<typeof http.post>[1]>[0]
+      ) => Promise<RunbookRunRecord> | RunbookRunRecord),
+  options?: RequestHandlerOptions
+) => {
+  return http.post(
+    '*/runbook-runs/:runId/resume',
+    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+      return HttpResponse.json(
+        overrideResponse !== undefined
+          ? typeof overrideResponse === 'function'
+            ? await overrideResponse(info)
+            : overrideResponse
+          : getResumeRunbookRunResponseMock(),
+        { status: 202 }
+      );
+    },
+    options
+  );
+};
+
+export const getCancelRunbookRunMockHandler = (
+  overrideResponse?:
+    void | ((info: Parameters<Parameters<typeof http.post>[1]>[0]) => Promise<void> | void),
+  options?: RequestHandlerOptions
+) => {
+  return http.post(
+    '*/runbook-runs/:runId/cancel',
+    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+      if (typeof overrideResponse === 'function') {
+        await overrideResponse(info);
+      }
+
+      return new HttpResponse(null, { status: 204 });
+    },
+    options
+  );
+};
 export const getRunbooksMock = () => [
   getGetRunbooksMockHandler(),
   getPostRunbooksMockHandler(),
@@ -161,4 +308,10 @@ export const getRunbooksMock = () => [
   getPutRunbooksRunbookIdMockHandler(),
   getDeleteRunbooksRunbookIdMockHandler(),
   getExecuteRunbookStepMockHandler(),
+  getStartRunbookRunMockHandler(),
+  getListRunbookRunsMockHandler(),
+  getGetRunbookRunMockHandler(),
+  getConfirmRunbookRunStepMockHandler(),
+  getResumeRunbookRunMockHandler(),
+  getCancelRunbookRunMockHandler(),
 ];

@@ -29,10 +29,10 @@
 
 ## 5. API
 
-- [ ] 5.1 Add the shared run authorization helper (operator on every connector of the frozen steps, API-key restriction) and the run endpoints: start, dry-run preview, list, get, confirm, resume, cancel; verify a handler authorization matrix covering missing elevation, token for another runbook, missing grant, restricted key, 202 on start and 409 on a second start.
-- [ ] 5.2 Apply step redaction to run list/detail and preview; verify tests with mixed grants and a hidden connector.
-- [ ] 5.3 Record audit entries for start, confirm, resume and cancel and add them and `runbook.run` to `docs/AUDIT.md`; verify audit assertions in the handler tests.
-- [ ] 5.4 Register routes, add OpenAPI paths and schemas, regenerate the web client; verify the router and OpenAPI contract tests.
+- [x] 5.1 Add the shared run authorization helper (operator on every connector of the frozen steps, API-key restriction) and the run endpoints: start, dry-run preview, list, get, confirm, resume, cancel; verify a handler authorization matrix covering missing elevation, token for another runbook, missing grant, restricted key, 202 on start and 409 on a second start.
+- [x] 5.2 Apply step redaction to run list/detail and preview; verify tests with mixed grants and a hidden connector.
+- [x] 5.3 Record audit entries for start, confirm, resume and cancel and add them and `runbook.run` to `docs/AUDIT.md`; verify audit assertions in the handler tests.
+- [x] 5.4 Register routes, add OpenAPI paths and schemas, regenerate the web client; verify the router and OpenAPI contract tests.
 - [x] 5.5 Write ADR `0006` extending ADR 0001/0002 with the `runbook.run` elevation model and interruption rule; verify it is linked from `docs/adr` index or `docs/ARCHITECTURE.md` as the other ADRs are.
 
 ## 6. Retention
@@ -42,7 +42,7 @@
 
 ## 7. MCP
 
-- [ ] 7.1 Add read-only list-runs and get-run tools in `internal/mcp/runbooks.go` with the same redaction; verify MCP tests for visibility and that no mutating run tool is registered.
+- [x] 7.1 Add read-only list-runs and get-run tools in `internal/mcp/runbooks.go` with the same redaction; verify MCP tests for visibility and that no mutating run tool is registered.
 
 ## 8. Web
 

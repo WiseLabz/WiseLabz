@@ -86,6 +86,10 @@ object, action-specific), and `createdAt`.
 | `finding.resolve` | `POST /api/findings/{id}/resolve` | finding / id |
 | `runbook.create` | `POST /api/runbooks` | runbook / new ID |
 | `runbook.update` | `PUT /api/runbooks/{id}` | runbook / id |
+| `runbook.run.start` | `POST /api/runbooks/{id}/run` (non-preview) | runbook_run / run ID; detail includes runId and runbookId |
+| `runbook.run.confirm` | `POST /api/runbook-runs/{runId}/steps/{stepId}/confirm` | runbook_run / run ID; detail includes runId, runbookId and stepId |
+| `runbook.run.resume` | `POST /api/runbook-runs/{runId}/resume` | runbook_run / run ID; detail includes runId and runbookId |
+| `runbook.run.cancel` | `POST /api/runbook-runs/{runId}/cancel` | runbook_run / run ID; detail includes runId and runbookId |
 | `runbook.delete` | `DELETE /api/runbooks/{id}` | runbook / id |
 | `entity.override.create` | `POST /api/entity-overrides` | entity_override / new ID |
 | `entity.override.delete` | `DELETE /api/entity-overrides/{id}` | entity_override / id |
@@ -162,3 +166,8 @@ Both formats are served as an attachment named
 objects. CSV has a header row with the columns `id`, `actorUserId`,
 `actorRole`, `action`, `targetType`, `targetId`, `detail` (the raw JSON string),
 `createdAt`.
+
+Starting and resuming a whole run require the `runbook.run` elevation action,
+targeted at the runbook ID (ADR 0006). Elevation is validated once; lifecycle
+steps retain their `connector.<verb>` audit action with runId, runbookId and
+stepId in detail. Preview, confirmation and cancellation need no elevation.

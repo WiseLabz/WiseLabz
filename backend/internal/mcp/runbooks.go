@@ -7,6 +7,7 @@ import (
 	mcpsdk "github.com/mark3labs/mcp-go/mcp"
 	mcpserver "github.com/mark3labs/mcp-go/server"
 
+	"github.com/WiseLabz/wiselabz/internal/api/runbooks"
 	"github.com/WiseLabz/wiselabz/internal/auth"
 	"github.com/WiseLabz/wiselabz/internal/store"
 )
@@ -192,4 +193,67 @@ func docViewable(ctx context.Context, s *store.Store, userID, docID string) (boo
 		return doc.Origin == store.DocOriginHuman || auth.InstanceAdminFromContext(ctx), nil
 	}
 	return s.UserHasConnectorRole(ctx, userID, doc.ServiceID, "viewer")
+}
+
+// Run history uses the API projection so visibility cannot drift between transports.
+func registerListRunbookRuns(s *mcpserver.MCPServer, d Deps) {
+	tool := mcpsdk.NewTool("list_runbook_runs",
+		mcpsdk.WithDescription("List a runbook's runs, newest first. Hidden connector steps are redacted."),
+		mcpsdk.WithString("runbookId", mcpsdk.Required(), mcpsdk.Description("Runbook ID.")),
+		withPagination(),
+	)
+	s.AddTool(tool, func(ctx context.Context, req mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
+		id, err := req.RequireString("runbookId")
+		if err != nil {
+			return mcpsdk.NewToolResultError(err.Error()), nil
+		}
+		if _, err := d.Store.GetRunbook(ctx, id); err != nil {
+			return mcpsdk.NewToolResultErrorFromErr("get runbook", err), nil
+		}
+		offset := offsetArg(req)
+		runs, total, err := d.Store.ListRunbookRuns(ctx, id, defaultPageSize, offset)
+		if err != nil {
+			return mcpsdk.NewToolResultErrorFromErr("list runs", err), nil
+		}
+		views := make([]runbooks.RunResponse, 0, len(runs))
+		h := &runbooks.Handler{Store: d.Store}
+		for _, run := range runs {
+			_, steps, err := d.Store.GetRunbookRun(ctx, run.ID)
+			if err != nil {
+				return mcpsdk.NewToolResultErrorFromErr("get run steps", err), nil
+			}
+			view, err := h.RunView(ctx, run, steps)
+			if err != nil {
+				return mcpsdk.NewToolResultErrorFromErr("check run visibility", err), nil
+			}
+			views = append(views, view)
+		}
+		return jsonResult(struct {
+			Runs   []runbooks.RunResponse `json:"runs"`
+			Total  int                    `json:"total"`
+			Offset int                    `json:"offset"`
+		}{views, total, offset})
+	})
+}
+
+func registerGetRunbookRun(s *mcpserver.MCPServer, d Deps) {
+	tool := mcpsdk.NewTool("get_runbook_run",
+		mcpsdk.WithDescription("Read a run's frozen steps and outcomes, including after runbook deletion. Hidden connector steps are redacted."),
+		mcpsdk.WithString("id", mcpsdk.Required(), mcpsdk.Description("Run ID.")),
+	)
+	s.AddTool(tool, func(ctx context.Context, req mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
+		id, err := req.RequireString("id")
+		if err != nil {
+			return mcpsdk.NewToolResultError(err.Error()), nil
+		}
+		run, steps, err := d.Store.GetRunbookRun(ctx, id)
+		if err != nil {
+			return mcpsdk.NewToolResultErrorFromErr("get run", err), nil
+		}
+		view, err := (&runbooks.Handler{Store: d.Store}).RunView(ctx, run, steps)
+		if err != nil {
+			return mcpsdk.NewToolResultErrorFromErr("check run visibility", err), nil
+		}
+		return jsonResult(view)
+	})
 }

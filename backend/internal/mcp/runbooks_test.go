@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	mcpsdk "github.com/mark3labs/mcp-go/mcp"
@@ -172,4 +173,115 @@ func TestGetRunbookStepKinds(t *testing.T) {
 			t.Errorf("manual step = %+v", out.Steps[2])
 		}
 	})
+}
+
+func TestRunHistoryToolsVisibility(t *testing.T) {
+	ctx := context.Background()
+	h := newTestHarness(t)
+	if _, err := h.Store.DB().ExecContext(ctx, "PRAGMA foreign_keys = ON"); err != nil {
+		t.Fatal(err)
+	}
+	visible := createConnector(t, h.Store, "visible", "virtualization")
+	hidden := createConnector(t, h.Store, "hidden", "networking")
+	user := createUser(t, h.Store)
+	mixed := createUser(t, h.Store)
+	for _, id := range []string{visible, hidden} {
+		if _, err := h.Store.UpsertConnectorGrant(ctx, user, id, "viewer"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := h.Store.UpsertConnectorGrant(ctx, mixed, visible, "viewer"); err != nil {
+		t.Fatal(err)
+	}
+	rb, err := h.Store.CreateRunbook(ctx, &store.RunbookRecord{Title: "Run history", TargetType: "change_type", TargetValue: "run.history"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	run, _, err := h.Store.CreateRunbookRun(ctx, rb.ID, user, []*store.RunbookRunStepRecord{
+		{Kind: "manual", Title: "Confirm"},
+		{Kind: "lifecycle", Title: "Visible", ConnectorID: visible, Verb: "restart"},
+		{Kind: "wait_until_healthy", Title: "Secret title", ConnectorID: hidden, EntityRef: "secret-entity", TimeoutSeconds: 300},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.Store.DB().ExecContext(ctx, "UPDATE runbook_run_steps SET error = ? WHERE run_id = ? AND position = 2", "secret failure", run.ID); err != nil {
+		t.Fatal(err)
+	}
+	for _, mode := range []string{"mixed", "restricted", "viewer"} {
+		for _, tool := range []string{"get_runbook_run", "list_runbook_runs"} {
+			t.Run(mode+"/"+tool, func(t *testing.T) {
+				caller := userCtx(mixed)
+				if mode == "restricted" {
+					caller = restrictedCtx(user, []string{visible})
+				}
+				if mode == "viewer" {
+					caller = userCtx(user)
+				}
+				args := map[string]any{"id": run.ID}
+				if tool == "list_runbook_runs" {
+					args = map[string]any{"runbookId": rb.ID}
+				}
+				var out map[string]any
+				h.callTool(caller, t, tool, args, &out)
+				if tool == "list_runbook_runs" {
+					if out["total"] != float64(1) {
+						t.Fatalf("list=%+v", out)
+					}
+					out = out["runs"].([]any)[0].(map[string]any)
+				}
+				steps := out["steps"].([]any)
+				secret := steps[2].(map[string]any)
+				if mode == "viewer" {
+					if secret["title"] != "Secret title" || secret["error"] != "secret failure" {
+						t.Fatalf("viewer=%+v", secret)
+					}
+					return
+				}
+				if secret["redacted"] != true {
+					t.Fatalf("hidden=%+v", secret)
+				}
+				for _, key := range []string{"kind", "title", "connectorId", "connectorName", "entityRef", "verb", "timeoutSeconds", "error", "preview"} {
+					if _, ok := secret[key]; ok {
+						t.Fatalf("hidden field %s: %+v", key, secret)
+					}
+				}
+				if steps[0].(map[string]any)["kind"] != "manual" || steps[1].(map[string]any)["connectorId"] != visible {
+					t.Fatalf("visible steps=%+v", steps)
+				}
+			})
+		}
+	}
+	tools, err := h.client.ListTools(userCtx(user), mcpsdk.ListToolsRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	names := map[string]bool{}
+	for _, tool := range tools.Tools {
+		names[tool.Name] = true
+		if strings.Contains(tool.Name, "run") && (strings.Contains(tool.Name, "start") || strings.Contains(tool.Name, "resume") || strings.Contains(tool.Name, "confirm") || strings.Contains(tool.Name, "cancel") || strings.Contains(tool.Name, "execute")) {
+			t.Fatalf("mutating run tool registered: %s", tool.Name)
+		}
+	}
+	if !names["list_runbook_runs"] || !names["get_runbook_run"] {
+		t.Fatalf("tools=%+v", names)
+	}
+	if err := h.Store.DeleteRunbook(ctx, rb.ID); err != nil {
+		t.Fatal(err)
+	}
+	var deleted map[string]any
+	h.callTool(userCtx(user), t, "get_runbook_run", map[string]any{"id": run.ID}, &deleted)
+	if deleted["runbookTitle"] != "Run history" || len(deleted["steps"].([]any)) != 3 {
+		t.Fatalf("deleted run=%+v", deleted)
+	}
+	for _, tool := range []string{"get_runbook_run", "list_runbook_runs"} {
+		args := map[string]any{"id": "missing"}
+		if tool == "list_runbook_runs" {
+			args = map[string]any{"runbookId": "missing"}
+		}
+		res, err := h.client.CallTool(userCtx(user), mcpsdk.CallToolRequest{Params: mcpsdk.CallToolParams{Name: tool, Arguments: args}})
+		if err != nil || !res.IsError {
+			t.Fatalf("missing %s res=%+v err=%v", tool, res, err)
+		}
+	}
 }

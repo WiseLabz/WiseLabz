@@ -50,9 +50,17 @@ func mountWorkflowRoutes(r chi.Router, d routerDeps) {
 		r.Get("/", d.attentionH.List)
 	})
 
+	r.Route("/runbook-runs", func(r chi.Router) {
+		r.Get("/{runId}", d.runbookH.GetRun)
+		r.Post("/{runId}/steps/{stepId}/confirm", d.runbookH.ConfirmRunStep)
+		r.Post("/{runId}/resume", d.runbookH.ResumeRun)
+		r.Post("/{runId}/cancel", d.runbookH.CancelRun)
+	})
 	r.Route("/runbooks", func(r chi.Router) {
 		r.Get("/", d.runbookH.List)
 		r.Get("/{id}", d.runbookH.Get)
+		r.Post("/{id}/run", d.runbookH.StartRun)
+		r.Get("/{id}/runs", d.runbookH.ListRuns)
 		// Not admin-only: ExecuteStep checks store.UserHasConnectorRole
 		// itself (operator grant on the step's connector), same reasoning
 		// as changes/alerts/findings above — plus the elevation check

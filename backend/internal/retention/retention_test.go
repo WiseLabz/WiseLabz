@@ -681,3 +681,36 @@ func TestRunCleanupRunbookHistoryPeriodZeroKeepsEverything(t *testing.T) {
 		t.Fatalf("surviving run ID = %q, want %q", gotOld.ID, oldRun.ID)
 	}
 }
+
+type runExpiryPublisher struct {
+	events []map[string]string
+	types  []string
+}
+
+func (p *runExpiryPublisher) Broadcast(eventType string, payload any) {
+	p.types = append(p.types, eventType)
+	p.events = append(p.events, payload.(map[string]string))
+}
+
+func TestRunExpiryPublishesUpdates(t *testing.T) {
+	s := newTestStore(t)
+	rb, _ := createRetentionRunbookFixture(t, s)
+	run, _ := createManualWaitRun(t, s, rb.ID)
+	if _, err := s.DB().ExecContext(context.Background(), "UPDATE runbook_runs SET updated_at = ? WHERE id = ?", time.Now().UTC().Add(-48*time.Hour).Format(time.RFC3339), run.ID); err != nil {
+		t.Fatal(err)
+	}
+	p := &runExpiryPublisher{}
+	cfg := store.RetentionSettings{RunbookOpenRunHours: 24}
+	if err := RunCleanupOnce(context.Background(), s, cfg, testLogger(), p); err != nil {
+		t.Fatal(err)
+	}
+	if len(p.events) != 1 || p.types[0] != "runbook.run.updated" || p.events[0]["runId"] != run.ID || p.events[0]["state"] != "expired" {
+		t.Fatalf("types=%+v events=%+v", p.types, p.events)
+	}
+	if err := RunCleanupOnce(context.Background(), s, cfg, testLogger(), p); err != nil {
+		t.Fatal(err)
+	}
+	if len(p.events) != 1 {
+		t.Fatal("expiry update duplicated on next cleanup")
+	}
+}

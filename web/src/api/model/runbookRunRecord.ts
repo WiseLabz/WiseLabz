@@ -6,18 +6,20 @@
  *
  * OpenAPI spec version: 0.1.0
  */
+import type { RunbookRunState } from './runbookRunState';
 
-export interface Notification {
+export interface RunbookRunRecord {
   id: string;
-  /**
-   * Deep-link target when set — the affected alert.
-   * @nullable
-   */
-  alertId?: string | null;
-  /** e.g. alert.created, finding.created, system.job_failed, runbook.run_failed, runbook.run_waiting, digest.summary */
-  eventType: string;
-  title: string;
-  message: string;
-  read: boolean;
-  createdAt: string;
+  /** Omitted after runbook deletion */
+  runbookId?: string;
+  /** Title frozen at start */
+  runbookTitle: string;
+  state: RunbookRunState;
+  reason?: string;
+  startedBy: string;
+  resumedBy?: string;
+  cancelledBy?: string;
+  startedAt: string;
+  updatedAt: string;
+  finishedAt?: string;
 }
