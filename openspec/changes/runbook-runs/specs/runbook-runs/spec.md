@@ -7,11 +7,14 @@ Lets operators execute a whole runbook as one approved, recorded run with verifi
 ## ADDED Requirements
 
 ### Requirement: Step kinds
-A runbook step SHALL have one of four kinds: `lifecycle` (restart, start or stop on a connector, optionally on one entity), `sync_and_wait` (sync a connector and wait for the sync to finish), `wait_until_healthy` (wait until a connector's health check reports online) and `manual` (a human confirms the step). Existing steps SHALL be treated as `lifecycle`. A `lifecycle`, `sync_and_wait` or `wait_until_healthy` step SHALL reference an existing connector; a `manual` step SHALL NOT require one. A `sync_and_wait` or `wait_until_healthy` step SHALL have a timeout between 10 seconds and 30 minutes, defaulting to 5 minutes. A runbook SHALL hold at most 20 steps.
+A runbook step SHALL have one of four kinds: `lifecycle` (restart, start or stop on a connector, optionally on one entity), `sync_and_wait` (sync a connector and wait for the sync to finish), `wait_until_healthy` (wait until a connector's health check reports online) and `manual` (a human confirms the step). Existing steps SHALL be treated as `lifecycle`.
 
 #### Scenario: Existing runbook keeps working
 - **WHEN** a runbook created before this change is read
 - **THEN** each of its steps SHALL be reported with kind `lifecycle` and its verb, connector and entity unchanged.
+
+### Requirement: Step constraints
+A `lifecycle`, `sync_and_wait` or `wait_until_healthy` step SHALL reference an existing connector; a `manual` step SHALL NOT require one. A `sync_and_wait` or `wait_until_healthy` step SHALL have a timeout between 10 seconds and 30 minutes, defaulting to 5 minutes. A runbook SHALL hold at most 20 steps.
 
 #### Scenario: Timeout out of range
 - **WHEN** a runbook is saved with a `wait_until_healthy` step whose timeout is 45 minutes
