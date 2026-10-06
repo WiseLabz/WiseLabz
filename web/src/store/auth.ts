@@ -77,11 +77,7 @@ export const useAuth = create<AuthState>((set, get) => ({
   mfaMethods: [],
 
   async bootstrap() {
-    try {
-      set(apply(await postAuthRefresh()));
-    } catch {
-      set(clear());
-    }
+    if (!(await refreshSession())) set(clear());
   },
 
   async login(username, password) {
