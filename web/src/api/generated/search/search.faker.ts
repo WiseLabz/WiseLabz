@@ -8,7 +8,7 @@
  */
 import { faker } from '@faker-js/faker';
 
-import type { EntityDetail, SearchResults } from '../../model';
+import type { EntityDetail, EntityOverride, SearchResults } from '../../model';
 
 export const getGetSearchResponseMock = (
   overrideResponse: Partial<Extract<SearchResults, object>> = {}
@@ -219,6 +219,70 @@ export const getGetEntitiesIdResponseMock = (
         title: faker.string.alpha({ length: { min: 10, max: 20 } }),
         verb: faker.string.alpha({ length: { min: 10, max: 20 } }),
       },
+    })
+  ),
+  ...overrideResponse,
+});
+
+export const getGetEntityOverridesResponseMock = (): EntityOverride[] =>
+  Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() => ({
+    id: faker.string.uuid(),
+    action: faker.helpers.arrayElement(['detach', 'merge'] as const),
+    note: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    createdBy: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    createdAt: faker.date.past().toISOString().slice(0, 19) + 'Z',
+    state: faker.helpers.arrayElement(['active', 'dormant'] as const),
+    members: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(
+      () => ({
+        connectorId: faker.string.uuid(),
+        connectorName: faker.string.alpha({ length: { min: 10, max: 20 } }),
+        kind: faker.string.alpha({ length: { min: 10, max: 20 } }),
+        ref: faker.string.alpha({ length: { min: 10, max: 20 } }),
+        name: faker.string.alpha({ length: { min: 10, max: 20 } }),
+        entityId: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      })
+    ),
+  }));
+
+export const getPostEntityOverridesResponseMock = (
+  overrideResponse: Partial<Extract<EntityOverride, object>> = {}
+): EntityOverride => ({
+  id: faker.string.uuid(),
+  action: faker.helpers.arrayElement(['detach', 'merge'] as const),
+  note: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  createdBy: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  createdAt: faker.date.past().toISOString().slice(0, 19) + 'Z',
+  state: faker.helpers.arrayElement(['active', 'dormant'] as const),
+  members: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(
+    () => ({
+      connectorId: faker.string.uuid(),
+      connectorName: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      kind: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      ref: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      name: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      entityId: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    })
+  ),
+  ...overrideResponse,
+});
+
+export const getDeleteEntityOverridesIdResponseMock = (
+  overrideResponse: Partial<Extract<EntityOverride, object>> = {}
+): EntityOverride => ({
+  id: faker.string.uuid(),
+  action: faker.helpers.arrayElement(['detach', 'merge'] as const),
+  note: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  createdBy: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  createdAt: faker.date.past().toISOString().slice(0, 19) + 'Z',
+  state: faker.helpers.arrayElement(['active', 'dormant'] as const),
+  members: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(
+    () => ({
+      connectorId: faker.string.uuid(),
+      connectorName: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      kind: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      ref: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      name: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      entityId: faker.string.alpha({ length: { min: 10, max: 20 } }),
     })
   ),
   ...overrideResponse,

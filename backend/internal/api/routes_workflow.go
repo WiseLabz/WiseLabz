@@ -12,6 +12,15 @@ import (
 func mountWorkflowRoutes(r chi.Router, d routerDeps) {
 	r.Get("/entities/{id}", d.entityH.Get)
 
+	// Overrides are returned unfiltered by the store, so every route is
+	// instance-admin only.
+	r.Route("/entity-overrides", func(r chi.Router) {
+		r.Use(auth.RequireInstanceAdmin)
+		r.Get("/", d.entityH.ListOverrides)
+		r.Post("/", d.entityH.CreateOverride)
+		r.Delete("/{id}", d.entityH.DeleteOverride)
+	})
+
 	// changes/alerts/findings ARE connector-scoped (each row carries a
 	// NOT NULL connector FK), unlike templates/runbooks. Their
 	// mutations resolve the record's connector in-handler and check

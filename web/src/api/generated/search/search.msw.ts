@@ -9,11 +9,23 @@
 import { HttpResponse, http } from 'msw';
 import type { RequestHandlerOptions } from 'msw';
 
-import type { EntityDetail, SearchResults } from '../../model';
+import type { EntityDetail, EntityOverride, SearchResults } from '../../model';
 
-import { getGetEntitiesIdResponseMock, getGetSearchResponseMock } from './search.faker';
+import {
+  getDeleteEntityOverridesIdResponseMock,
+  getGetEntitiesIdResponseMock,
+  getGetEntityOverridesResponseMock,
+  getGetSearchResponseMock,
+  getPostEntityOverridesResponseMock,
+} from './search.faker';
 
-export { getGetSearchResponseMock, getGetEntitiesIdResponseMock } from './search.faker';
+export {
+  getGetSearchResponseMock,
+  getGetEntitiesIdResponseMock,
+  getGetEntityOverridesResponseMock,
+  getPostEntityOverridesResponseMock,
+  getDeleteEntityOverridesIdResponseMock,
+} from './search.faker';
 
 export const getGetSearchMockHandler = (
   overrideResponse?:
@@ -62,4 +74,82 @@ export const getGetEntitiesIdMockHandler = (
     options
   );
 };
-export const getSearchMock = () => [getGetSearchMockHandler(), getGetEntitiesIdMockHandler()];
+
+export const getGetEntityOverridesMockHandler = (
+  overrideResponse?:
+    | EntityOverride[]
+    | ((
+        info: Parameters<Parameters<typeof http.get>[1]>[0]
+      ) => Promise<EntityOverride[]> | EntityOverride[]),
+  options?: RequestHandlerOptions
+) => {
+  return http.get(
+    '*/entity-overrides',
+    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+      return HttpResponse.json(
+        overrideResponse !== undefined
+          ? typeof overrideResponse === 'function'
+            ? await overrideResponse(info)
+            : overrideResponse
+          : getGetEntityOverridesResponseMock(),
+        { status: 200 }
+      );
+    },
+    options
+  );
+};
+
+export const getPostEntityOverridesMockHandler = (
+  overrideResponse?:
+    | EntityOverride
+    | ((
+        info: Parameters<Parameters<typeof http.post>[1]>[0]
+      ) => Promise<EntityOverride> | EntityOverride),
+  options?: RequestHandlerOptions
+) => {
+  return http.post(
+    '*/entity-overrides',
+    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+      return HttpResponse.json(
+        overrideResponse !== undefined
+          ? typeof overrideResponse === 'function'
+            ? await overrideResponse(info)
+            : overrideResponse
+          : getPostEntityOverridesResponseMock(),
+        { status: 201 }
+      );
+    },
+    options
+  );
+};
+
+export const getDeleteEntityOverridesIdMockHandler = (
+  overrideResponse?:
+    | EntityOverride
+    | ((
+        info: Parameters<Parameters<typeof http.delete>[1]>[0]
+      ) => Promise<EntityOverride> | EntityOverride),
+  options?: RequestHandlerOptions
+) => {
+  return http.delete(
+    '*/entity-overrides/:id',
+    async (info: Parameters<Parameters<typeof http.delete>[1]>[0]) => {
+      return HttpResponse.json(
+        overrideResponse !== undefined
+          ? typeof overrideResponse === 'function'
+            ? await overrideResponse(info)
+            : overrideResponse
+          : getDeleteEntityOverridesIdResponseMock(),
+        { status: 200 }
+      );
+    },
+    options
+  );
+};
+export const getSearchMock = () => [
+  getGetSearchMockHandler(),
+  getGetEntitiesIdMockHandler(),
+  getGetEntityOverridesMockHandler(),
+  getPostEntityOverridesMockHandler(),
+  getDeleteEntityOverridesIdMockHandler(),
+];

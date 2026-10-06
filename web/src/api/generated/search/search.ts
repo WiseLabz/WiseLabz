@@ -6,23 +6,36 @@
  *
  * OpenAPI spec version: 0.1.0
  */
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import type {
   DataTag,
   DefinedInitialDataOptions,
   DefinedUseQueryResult,
+  MutationFunction,
   QueryClient,
   QueryFunction,
   QueryKey,
   UndefinedInitialDataOptions,
+  UseMutationOptions,
+  UseMutationResult,
   UseQueryOptions,
   UseQueryResult,
 } from '@tanstack/react-query';
 
-import type { EntityDetail, Error, GetSearchParams, SearchResults } from '../../model';
+import type {
+  BadRequestResponse,
+  EntityDetail,
+  EntityOverride,
+  EntityOverrideCreate,
+  Error,
+  ForbiddenResponse,
+  GetSearchParams,
+  NotFoundResponse,
+  SearchResults,
+} from '../../model';
 
 import { customInstance } from '../../axios-instance';
-import type { ErrorType } from '../../axios-instance';
+import type { ErrorType, BodyType } from '../../axios-instance';
 
 type SecondParameter<T extends (...args: never) => unknown> = Parameters<T>[1];
 
@@ -279,3 +292,297 @@ export function useGetEntitiesId<
 
   return withQueryKey(query, queryOptions.queryKey);
 }
+
+/**
+ * Returns every override, oldest first, unfiltered by connector grants. `state` is `active` when every referenced member is currently observed, otherwise `dormant`; a dormant override applies again when the member returns. Each member carries the identity ID it belongs to now (merge redirects resolved), empty when the member has no stored membership.
+ * @summary List manual entity identity overrides (instance admins only)
+ */
+export const getEntityOverrides = (
+  options?: SecondParameter<typeof customInstance>,
+  signal?: AbortSignal
+) => {
+  return customInstance<EntityOverride[]>(
+    { url: `/entity-overrides`, method: 'GET', signal },
+    options
+  );
+};
+
+export const getGetEntityOverridesQueryKey = () => {
+  return [`/entity-overrides`] as const;
+};
+
+export const getGetEntityOverridesQueryOptions = <
+  TData = Awaited<ReturnType<typeof getEntityOverrides>>,
+  TError = ErrorType<ForbiddenResponse>,
+>(options?: {
+  query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getEntityOverrides>>, TError, TData>>;
+  request?: SecondParameter<typeof customInstance>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetEntityOverridesQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getEntityOverrides>>> = ({ signal }) =>
+    getEntityOverrides(requestOptions, signal);
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getEntityOverrides>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type GetEntityOverridesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getEntityOverrides>>
+>;
+export type GetEntityOverridesQueryError = ErrorType<ForbiddenResponse>;
+
+export function useGetEntityOverrides<
+  TData = Awaited<ReturnType<typeof getEntityOverrides>>,
+  TError = ErrorType<ForbiddenResponse>,
+>(
+  options: {
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof getEntityOverrides>>, TError, TData>> &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getEntityOverrides>>,
+          TError,
+          Awaited<ReturnType<typeof getEntityOverrides>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useGetEntityOverrides<
+  TData = Awaited<ReturnType<typeof getEntityOverrides>>,
+  TError = ErrorType<ForbiddenResponse>,
+>(
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getEntityOverrides>>, TError, TData>
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getEntityOverrides>>,
+          TError,
+          Awaited<ReturnType<typeof getEntityOverrides>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useGetEntityOverrides<
+  TData = Awaited<ReturnType<typeof getEntityOverrides>>,
+  TError = ErrorType<ForbiddenResponse>,
+>(
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getEntityOverrides>>, TError, TData>>;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * @summary List manual entity identity overrides (instance admins only)
+ */
+
+export function useGetEntityOverrides<
+  TData = Awaited<ReturnType<typeof getEntityOverrides>>,
+  TError = ErrorType<ForbiddenResponse>,
+>(
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getEntityOverrides>>, TError, TData>>;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getGetEntityOverridesQueryOptions(options);
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+/**
+ * Stores the override and reconciles identities before responding. The response lists the identity ID each member now belongs to; after a detach, the old identity ID stays with whichever resulting cluster wins the usual tie-break, so clients must use the returned IDs. 400 when a member has never been recorded, a merge names the same member twice or members of different kinds, the action or a required field is invalid, or the note exceeds 1000 characters. 409 when an equivalent override exists (a merge of A with B equals a merge of B with A). Recorded in the audit log as `entity.override.create`.
+ * @summary Detach an entity member or merge two members (instance admins only)
+ */
+export const postEntityOverrides = (
+  entityOverrideCreate: BodyType<EntityOverrideCreate>,
+  options?: SecondParameter<typeof customInstance>,
+  signal?: AbortSignal
+) => {
+  return customInstance<EntityOverride>(
+    {
+      url: `/entity-overrides`,
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      data: entityOverrideCreate,
+      signal,
+    },
+    options
+  );
+};
+
+export const getPostEntityOverridesMutationKey = () => ['postEntityOverrides'] as const;
+
+export const getPostEntityOverridesMutationOptions = <
+  TError = ErrorType<BadRequestResponse | ForbiddenResponse | Error>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof postEntityOverrides>>,
+    TError,
+    PostEntityOverridesMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof postEntityOverrides>>,
+  TError,
+  PostEntityOverridesMutationVariables,
+  TContext
+> => {
+  const mutationKey = getPostEntityOverridesMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof postEntityOverrides>>,
+    PostEntityOverridesMutationVariables
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return postEntityOverrides(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type PostEntityOverridesMutationResult = NonNullable<
+  Awaited<ReturnType<typeof postEntityOverrides>>
+>;
+export type PostEntityOverridesMutationBody = BodyType<EntityOverrideCreate>;
+export type PostEntityOverridesMutationError = ErrorType<
+  BadRequestResponse | ForbiddenResponse | Error
+>;
+export type PostEntityOverridesMutationVariables = { data: BodyType<EntityOverrideCreate> };
+
+/**
+ * @summary Detach an entity member or merge two members (instance admins only)
+ */
+export const usePostEntityOverrides = <
+  TError = ErrorType<BadRequestResponse | ForbiddenResponse | Error>,
+  TContext = unknown,
+>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof postEntityOverrides>>,
+      TError,
+      PostEntityOverridesMutationVariables,
+      TContext
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseMutationResult<
+  Awaited<ReturnType<typeof postEntityOverrides>>,
+  TError,
+  PostEntityOverridesMutationVariables,
+  TContext
+> => {
+  return useMutation(getPostEntityOverridesMutationOptions(options), queryClient);
+};
+/**
+ * Removes the override and reconciles identities before responding, restoring the automatic result. Returns the removed override with the identity ID each member now belongs to. Recorded in the audit log as `entity.override.delete`.
+ * @summary Remove an entity identity override (instance admins only)
+ */
+export const deleteEntityOverridesId = (
+  id: string,
+  options?: SecondParameter<typeof customInstance>,
+  signal?: AbortSignal
+) => {
+  return customInstance<EntityOverride>(
+    { url: `/entity-overrides/${id}`, method: 'DELETE', signal },
+    options
+  );
+};
+
+export const getDeleteEntityOverridesIdMutationKey = () => ['deleteEntityOverridesId'] as const;
+
+export const getDeleteEntityOverridesIdMutationOptions = <
+  TError = ErrorType<ForbiddenResponse | NotFoundResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteEntityOverridesId>>,
+    TError,
+    DeleteEntityOverridesIdMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteEntityOverridesId>>,
+  TError,
+  DeleteEntityOverridesIdMutationVariables,
+  TContext
+> => {
+  const mutationKey = getDeleteEntityOverridesIdMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteEntityOverridesId>>,
+    DeleteEntityOverridesIdMutationVariables
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return deleteEntityOverridesId(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteEntityOverridesIdMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteEntityOverridesId>>
+>;
+
+export type DeleteEntityOverridesIdMutationError = ErrorType<ForbiddenResponse | NotFoundResponse>;
+export type DeleteEntityOverridesIdMutationVariables = { id: string };
+
+/**
+ * @summary Remove an entity identity override (instance admins only)
+ */
+export const useDeleteEntityOverridesId = <
+  TError = ErrorType<ForbiddenResponse | NotFoundResponse>,
+  TContext = unknown,
+>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof deleteEntityOverridesId>>,
+      TError,
+      DeleteEntityOverridesIdMutationVariables,
+      TContext
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseMutationResult<
+  Awaited<ReturnType<typeof deleteEntityOverridesId>>,
+  TError,
+  DeleteEntityOverridesIdMutationVariables,
+  TContext
+> => {
+  return useMutation(getDeleteEntityOverridesIdMutationOptions(options), queryClient);
+};

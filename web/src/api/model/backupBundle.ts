@@ -14,6 +14,7 @@ import type { Connector } from './connector';
 import type { Doc } from './doc';
 import type { DocAttachment } from './docAttachment';
 import type { DocVersion } from './docVersion';
+import type { EntityIdentityOverrideRecord } from './entityIdentityOverrideRecord';
 import type { JournalEntry } from './journalEntry';
 
 /**
@@ -30,6 +31,8 @@ export interface BackupBundle {
   docVersions: DocVersion[];
   templates: BackupBundleTemplatesItem[];
   templateSections: BackupBundleTemplateSectionsItem[];
+  /** Manual entity identity overrides; members are rebuilt from snapshots after restore, so a restored override stays dormant until its members are observed */
+  entityIdentityOverrides?: EntityIdentityOverrideRecord[];
   /** Informational only; never applied on import — the encrypted API key can't be restored from a backup */
   aiConfig?: BackupBundleAiConfig;
 }

@@ -153,6 +153,12 @@ func newRouterDeps(cfg Config) routerDeps {
 		changeH.DocEngine = cfg.DocEngine
 	}
 
+	// A nil *doc.Engine in the interface would not compare equal to nil.
+	var entityReconciler entityhandler.Reconciler
+	if cfg.DocEngine != nil {
+		entityReconciler = cfg.DocEngine
+	}
+
 	return routerDeps{
 		cfg:         cfg,
 		sysH:        sysH,
@@ -167,7 +173,7 @@ func newRouterDeps(cfg Config) routerDeps {
 		alertH:      alerthandler.NewHandler(cfg.Store),
 		attentionH:  attentionhandler.NewHandler(cfg.Store),
 		findingH:    findinghandler.NewHandler(cfg.Store),
-		entityH:     entityhandler.NewHandler(cfg.Store),
+		entityH:     entityhandler.NewHandler(cfg.Store, entityReconciler),
 		notifH:      notifhandler.NewHandler(cfg.Store),
 		runbookH:    runbookhandler.NewHandler(cfg.Store, connH),
 		dashH:       dashhandler.NewHandler(cfg.Store),

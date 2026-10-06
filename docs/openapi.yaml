@@ -147,6 +147,63 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
+  /entity-overrides:
+    get:
+      tags: [search]
+      summary: List manual entity identity overrides (instance admins only)
+      description: |
+        Returns every override, oldest first, unfiltered by connector grants. `state` is `active` when every referenced member is currently observed, otherwise `dormant`; a dormant override applies again when the member returns. Each member carries the identity ID it belongs to now (merge redirects resolved), empty when the member has no stored membership.
+      responses:
+        '200':
+          description: Overrides
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/EntityOverride' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [search]
+      summary: Detach an entity member or merge two members (instance admins only)
+      description: |
+        Stores the override and reconciles identities before responding. The response lists the identity ID each member now belongs to; after a detach, the old identity ID stays with whichever resulting cluster wins the usual tie-break, so clients must use the returned IDs. 400 when a member has never been recorded, a merge names the same member twice or members of different kinds, the action or a required field is invalid, or the note exceeds 1000 characters. 409 when an equivalent override exists (a merge of A with B equals a merge of B with A). Recorded in the audit log as `entity.override.create`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EntityOverrideCreate' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EntityOverride' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409':
+          description: An equivalent override already exists
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /entity-overrides/{id}:
+    delete:
+      tags: [search]
+      summary: Remove an entity identity override (instance admins only)
+      description: |
+        Removes the override and reconciles identities before responding, restoring the automatic result. Returns the removed override with the identity ID each member now belongs to. Recorded in the audit log as `entity.override.delete`.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Removed
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EntityOverride' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
   # ───────────────────────── auth ─────────────────────────
   /auth/providers:
     get:
@@ -4137,6 +4194,42 @@ components:
         kind: { type: string, enum: [dependency, same_as, contains, resolves_to, proxies_to, runs_on] }
         sourceLabel: { type: string }
         detail: { type: string }
+    EntityOverrideMember:
+      type: object
+      required: [connectorId, connectorName, kind, ref, name, entityId]
+      properties:
+        connectorId: { type: string, format: uuid }
+        connectorName: { type: string }
+        kind: { type: string }
+        ref: { type: string, description: Connector-local reference of the member }
+        name: { type: string }
+        entityId: { type: string, description: 'Identity the member belongs to now; empty when it has no stored membership' }
+    EntityOverride:
+      type: object
+      required: [id, action, note, createdBy, createdAt, state, members]
+      properties:
+        id: { type: string, format: uuid }
+        action: { type: string, enum: [detach, merge] }
+        note: { type: string }
+        createdBy: { type: string, description: ID of the administrator who created it }
+        createdAt: { type: string, format: date-time }
+        state: { type: string, enum: [active, dormant] }
+        members:
+          type: array
+          description: One member for a detach, two for a merge
+          items: { $ref: '#/components/schemas/EntityOverrideMember' }
+    EntityOverrideCreate:
+      type: object
+      required: [action, connectorId, kind, ref]
+      properties:
+        action: { type: string, enum: [detach, merge] }
+        connectorId: { type: string, format: uuid }
+        kind: { type: string }
+        ref: { type: string }
+        otherConnectorId: { type: string, format: uuid, description: 'Required for a merge, forbidden for a detach' }
+        otherKind: { type: string, description: 'Must equal kind' }
+        otherRef: { type: string }
+        note: { type: string, maxLength: 1000 }
     EntityDetail:
       type: object
       required: [id, kind, name, gone, members, relatedByIp, neighbors, history, findings, onReportingConnectors, runbooks]
@@ -6436,6 +6529,10 @@ components:
               title: { type: string }
               order: { type: integer }
               body: { type: string }
+        entityIdentityOverrides:
+          type: array
+          description: Manual entity identity overrides; members are rebuilt from snapshots after restore, so a restored override stays dormant until its members are observed
+          items: { $ref: '#/components/schemas/EntityIdentityOverrideRecord' }
         aiConfig:
           type: object
           description: Informational only; never applied on import — the encrypted API key can't be restored from a backup
@@ -6445,6 +6542,22 @@ components:
             model: { type: string }
             baseUrl: { type: string }
             mode: { type: string }
+    EntityIdentityOverrideRecord:
+      type: object
+      description: Stored override as exported in a backup; a merge pair is in sorted member-key order
+      required: [id, action, connectorId, kind, ref, note, createdBy, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        action: { type: string, enum: [detach, merge] }
+        connectorId: { type: string, format: uuid }
+        kind: { type: string }
+        ref: { type: string }
+        otherConnectorId: { type: string, format: uuid }
+        otherKind: { type: string }
+        otherRef: { type: string }
+        note: { type: string }
+        createdBy: { type: string }
+        createdAt: { type: string, format: date-time }
     BackupCounts:
       type: object
       required: [imported, skipped]
@@ -6462,6 +6575,7 @@ components:
         docVersions: { $ref: '#/components/schemas/BackupCounts' }
         templates: { $ref: '#/components/schemas/BackupCounts' }
         templateSections: { $ref: '#/components/schemas/BackupCounts' }
+        entityIdentityOverrides: { $ref: '#/components/schemas/BackupCounts' }
     RetentionSettings:
       type: object
       required: [snapshotDays, docVersionDays, alertDays, syncRunDays, auditDays, healthCheckDays, reportDays, cronExpr]

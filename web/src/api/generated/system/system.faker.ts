@@ -144,6 +144,10 @@ export const getPostSystemBackupImportResponseMock = (
   docVersions: { imported: faker.number.int(), skipped: faker.number.int() },
   templates: { imported: faker.number.int(), skipped: faker.number.int() },
   templateSections: { imported: faker.number.int(), skipped: faker.number.int() },
+  entityIdentityOverrides: faker.helpers.arrayElement([
+    { imported: faker.number.int(), skipped: faker.number.int() },
+    undefined,
+  ]),
   ...overrideResponse,
 });
 

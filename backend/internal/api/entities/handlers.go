@@ -20,10 +20,14 @@ import (
 )
 
 // Handler serves entity identity details.
-type Handler struct{ Store *store.Store }
+type Handler struct {
+	Store      *store.Store
+	Reconciler Reconciler
+}
 
-// NewHandler creates an entity detail handler.
-func NewHandler(s *store.Store) *Handler { return &Handler{Store: s} }
+// NewHandler creates an entity handler; rec reconciles identities after an
+// override mutation.
+func NewHandler(s *store.Store, rec Reconciler) *Handler { return &Handler{Store: s, Reconciler: rec} }
 
 // Bounds on what one detail request reads and returns.
 const (
