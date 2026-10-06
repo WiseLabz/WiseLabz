@@ -53,5 +53,5 @@
 
 ## 9. Integration
 
-- [ ] 9.1 Run `openspec validate runbook-runs --strict`, backend tests and lint with `GOFLAGS=-p=4 GOMAXPROCS=4`, then web tests, lint and typecheck at concurrency 4, sequentially; record the results.
-- [ ] 9.2 Run the app and exercise one run end to end against a test connector: preview, start, manual confirm, forced failure, resume, cancel and history; then run `graphify update .`.
+- [x] 9.1 Run `openspec validate runbook-runs --strict`, backend tests and lint with `GOFLAGS=-p=4 GOMAXPROCS=4`, then web tests, lint and typecheck at concurrency 4, sequentially; record the results.
+- [x] 9.2 Run the app and exercise one run end to end against a test connector: preview, start, manual confirm, forced failure, resume, cancel and history; then run `graphify update .`.

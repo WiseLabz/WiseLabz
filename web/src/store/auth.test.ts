@@ -68,6 +68,20 @@ afterEach(() => {
 
 describe('useAuth', () => {
   describe('bootstrap', () => {
+    it('shares refresh across concurrent bootstraps so cookie rotation cannot log out the user', async () => {
+      let calls = 0;
+      mockRefresh.mockImplementation(async () => {
+        if (calls++ > 0) throw { response: { status: 401 } };
+        return mockSession;
+      });
+
+      await Promise.all([useAuth.getState().bootstrap(), useAuth.getState().bootstrap()]);
+
+      expect(mockRefresh).toHaveBeenCalledTimes(1);
+      expect(useAuth.getState().status).toBe('authenticated');
+      expect(useAuth.getState().user).toEqual(mockSession.user);
+    });
+
     it('sets authenticated status on successful refresh', async () => {
       mockRefresh.mockResolvedValue(mockSession);
       await useAuth.getState().bootstrap();
