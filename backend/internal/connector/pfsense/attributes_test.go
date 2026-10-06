@@ -25,6 +25,9 @@ func TestBuildInterfaceTableAttributes(t *testing.T) {
 			t.Errorf("entities[%d].Attributes = %+v, want %+v", i, entities[i].Attributes, w)
 		}
 	}
+	if entities[0].ExternalID != "em0" || entities[1].ExternalID != "em1" {
+		t.Errorf("interface ExternalIDs = %q, %q; want device names em0, em1", entities[0].ExternalID, entities[1].ExternalID)
+	}
 }
 
 func TestBuildRuleTableAttributes(t *testing.T) {
@@ -53,6 +56,9 @@ func TestBuildRuleTableAttributes(t *testing.T) {
 	}
 	if _, ok := dnsAttrs["interface"]; ok {
 		t.Errorf("Block DNS attributes should omit interface when absent: %+v", dnsAttrs)
+	}
+	if entities[0].ExternalID == "" || entities[0].ExternalID == entities[1].ExternalID {
+		t.Errorf("rule ExternalIDs = %q, %q; want distinct stable identifiers", entities[0].ExternalID, entities[1].ExternalID)
 	}
 }
 

@@ -231,13 +231,16 @@ func TestBuildRuleTableMalformedCases(t *testing.T) {
 func TestBuildRuleTableValidRules(t *testing.T) {
 	data := []byte(`{
 		"data":[
-			{"descr":"Allow SSH","type":"pass","protocol":"tcp","source":"any","destination":"any","disabled":false},
+			{"descr":"Allow SSH","type":"pass","protocol":"tcp","source":"any","destination":"any","destination_port":"443","disabled":false},
 			{"descr":"Block DNS","type":"block","protocol":"udp","source":"10.0.0.0/8","destination":"any","disabled":true}
 		]
 	}`)
-	result, _ := buildRuleTable(data)
+	result, entities := buildRuleTable(data)
 	if !strings.Contains(result, "Allow SSH") || !strings.Contains(result, "Block DNS") {
 		t.Errorf("buildRuleTable() missing expected rules in: %q", result)
+	}
+	if len(entities) != 2 || entities[0].Attributes["destination_port"] != "443" {
+		t.Errorf("destination_port attribute = %+v, want 443", entities)
 	}
 }
 
@@ -342,16 +345,23 @@ func TestConfigPush(t *testing.T) {
 		entityRef string
 		fieldKey  string
 		value     any
+		scoped    bool
 		wantErr   bool
 	}{
-		{name: "success", entityRef: "1", fieldKey: "enabled", value: true},
+		{name: "success", entityRef: "tracker:1714079391", fieldKey: "enabled", value: true, scoped: true},
 		{name: "empty entityRef errors", entityRef: "", fieldKey: "enabled", value: true, wantErr: true},
 		{name: "unsupported field errors", entityRef: "1", fieldKey: "action", value: "block", wantErr: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var gotPath, gotMethod, gotBody string
+			patches := 0
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method == "GET" && r.URL.Path == "/api/v2/firewall/rules" {
+					_, _ = w.Write([]byte(`{"data":[{"id":1,"tracker":1714079391,"descr":"Allow SSH"}]}`))
+					return
+				}
+				patches++
 				gotPath, gotMethod = r.URL.Path, r.Method
 				b, _ := io.ReadAll(r.Body)
 				gotBody = string(b)
@@ -361,7 +371,11 @@ func TestConfigPush(t *testing.T) {
 			defer server.Close()
 
 			c := &Connector{url: server.URL, apiKey: "key", client: server.Client()}
-			err := c.ConfigPush(context.Background(), nil, tt.entityRef, tt.fieldKey, tt.value)
+			entityRef := tt.entityRef
+			if tt.scoped {
+				entityRef = connector.ScopedExternalID(typeName, server.URL, entityRef)
+			}
+			err := c.ConfigPush(context.Background(), nil, entityRef, tt.fieldKey, tt.value)
 			if tt.wantErr {
 				if err == nil {
 					t.Fatalf("ConfigPush() error = nil, want error")
@@ -374,8 +388,11 @@ func TestConfigPush(t *testing.T) {
 			if gotMethod != "PATCH" || gotPath != "/api/v2/firewall/rule" {
 				t.Errorf("request = %s %s, want PATCH /api/v2/firewall/rule", gotMethod, gotPath)
 			}
-			if !strings.Contains(gotBody, tt.entityRef) {
-				t.Errorf("body = %q, want it to reference id %q", gotBody, tt.entityRef)
+			if patches != 1 {
+				t.Errorf("PATCH count = %d, want 1", patches)
+			}
+			if !strings.Contains(gotBody, `"id":1`) || !strings.Contains(gotBody, `"disabled":false`) {
+				t.Errorf("body = %q, want current id 1 and disabled=false", gotBody)
 			}
 		})
 	}
