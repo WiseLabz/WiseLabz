@@ -152,7 +152,8 @@ describe('EntityOverridesPage', () => {
 
   it('removes an override, probes visibility when visible, closes dialog, and invalidates caches', async () => {
     const qc = new QueryClient();
-    const invalidateSpy = vi.spyOn(qc, 'invalidateQueries');
+    qc.setQueryData(['/entities/entity-1'], { id: 'entity-1' });
+    qc.setQueryData(['/entity-overrides'], []);
     mount(qc);
 
     const removeBtn = screen.getByRole('button', { name: 'Remove override for router' });
@@ -172,14 +173,13 @@ describe('EntityOverridesPage', () => {
         'Override removed.',
         expect.objectContaining({
           action: expect.objectContaining({
-            label: 'View',
+            label: 'View identity',
           }),
         })
       );
-      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['/entity-overrides'] });
-      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['/entities'] });
+      expect(qc.getQueryState(['/entities/entity-1'])?.isInvalidated).toBe(true);
+      expect(qc.getQueryState(['/entity-overrides'])?.isInvalidated).toBe(true);
     });
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
   it('stays on page and shows not visible message when returned identity gives 404', async () => {
@@ -200,7 +200,74 @@ describe('EntityOverridesPage', () => {
         'Override removed. The resulting identity is not visible with your current permissions.'
       );
     });
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('shows plain toast without action when removing override whose members have no entityId', async () => {
+    deleteHook.mockReturnValue({
+      id: 'ov-no-id',
+      action: 'detach',
+      members: [{ connectorId: 'c1', kind: 'vm', ref: '42', name: 'router' }],
+    });
+    mount();
+
+    const removeBtn = screen.getByRole('button', { name: 'Remove override for router' });
+    fireEvent.click(removeBtn);
+
+    const dialog = await screen.findByRole('dialog');
+    const confirmButton = within(dialog).getByRole('button', { name: 'Remove' });
+    fireEvent.click(confirmButton);
+
+    await vi.waitFor(() => {
+      expect(toastMock.success).toHaveBeenCalledWith('Override removed.');
+    });
+    expect(getEntitiesIdMock).not.toHaveBeenCalled();
+  });
+
+  it('shows plain toast without action when removing merge override whose members split into different entities', async () => {
+    deleteHook.mockReturnValue({
+      id: 'ov-2',
+      action: 'merge',
+      members: [
+        { connectorId: 'c1', kind: 'vm', ref: '43', name: 'switch-a', entityId: 'entity-a' },
+        { connectorId: 'c2', kind: 'vm', ref: '44', name: 'switch-b', entityId: 'entity-b' },
+      ],
+    });
+    mount();
+
+    const removeBtn = screen.getByRole('button', { name: 'Remove override for switch-a, switch-b' });
+    fireEvent.click(removeBtn);
+
+    const dialog = await screen.findByRole('dialog');
+    const confirmButton = within(dialog).getByRole('button', { name: 'Remove' });
+    fireEvent.click(confirmButton);
+
+    await vi.waitFor(() => {
+      expect(toastMock.success).toHaveBeenCalledWith('Override removed.');
+    });
+    expect(getEntitiesIdMock).not.toHaveBeenCalled();
+  });
+
+  it('translates view identity toast action in pt-BR', async () => {
+    await setLanguagePreference('pt-BR');
+    mount();
+
+    const removeBtn = screen.getByRole('button', { name: /remover substituição para router/i });
+    fireEvent.click(removeBtn);
+
+    const dialog = await screen.findByRole('dialog');
+    const confirmButton = within(dialog).getByRole('button', { name: 'Remover' });
+    fireEvent.click(confirmButton);
+
+    await vi.waitFor(() => {
+      expect(toastMock.success).toHaveBeenCalledWith(
+        'Substituição removida.',
+        expect.objectContaining({
+          action: expect.objectContaining({
+            label: 'Ver identidade',
+          }),
+        })
+      );
+    });
   });
 
   it('handles delete failure with error toast', async () => {

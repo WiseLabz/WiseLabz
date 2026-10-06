@@ -60,20 +60,31 @@ export function EntityOverridesPage() {
     mutation: {
       onSuccess: async (res) => {
         void queryClient.invalidateQueries({ queryKey: getGetEntityOverridesQueryKey() });
-        void queryClient.invalidateQueries({ queryKey: ['/entities'] });
+        void queryClient.invalidateQueries({
+          predicate: (q) =>
+            typeof q.queryKey[0] === 'string' && q.queryKey[0].startsWith('/entities/'),
+        });
         setToRemove(null);
 
-        const targetEntityId = res?.members?.[0]?.entityId;
-        if (!targetEntityId) {
-          toast.success(t('entities.overrides.removeSuccessNotVisible'));
+        const entityIds = Array.from(
+          new Set(
+            (res?.members ?? [])
+              .map((m) => m.entityId)
+              .filter((id): id is string => Boolean(id))
+          )
+        );
+
+        if (entityIds.length === 0 || entityIds.length > 1) {
+          toast.success(t('entities.overrides.removeSuccess'));
           return;
         }
 
+        const targetEntityId = entityIds[0];
         try {
           await getEntitiesId(targetEntityId);
           toast.success(t('entities.overrides.removeSuccess'), {
             action: {
-              label: t('notify.view'),
+              label: t('entities.overrides.viewIdentity'),
               onClick: () => navigate(`/entities/${encodeURIComponent(targetEntityId)}`),
             },
           });
@@ -83,7 +94,7 @@ export function EntityOverridesPage() {
           } else {
             toast.success(t('entities.overrides.removeSuccess'), {
               action: {
-                label: t('notify.view'),
+                label: t('entities.overrides.viewIdentity'),
                 onClick: () => navigate(`/entities/${encodeURIComponent(targetEntityId)}`),
               },
             });
@@ -215,21 +226,19 @@ export function EntityOverridesPage() {
         </Panel>
       )}
 
-      {toRemove && (
-        <ConfirmDialog
-          open={Boolean(toRemove)}
-          onClose={() => setToRemove(null)}
-          onConfirm={() => {
-            if (toRemove) deleteMutation.mutate({ id: toRemove.id });
-          }}
-          title={t('entities.overrides.removeTitle')}
-          description={t('entities.overrides.removeConfirm')}
-          confirmLabel={t('entities.overrides.removeAction')}
-          cancelLabel={t('common.cancel', { defaultValue: 'Cancel' })}
-          tone="danger"
-          confirmDisabled={deleteMutation.isPending}
-        />
-      )}
+      <ConfirmDialog
+        open={Boolean(toRemove)}
+        onClose={() => setToRemove(null)}
+        onConfirm={() => {
+          if (toRemove) deleteMutation.mutate({ id: toRemove.id });
+        }}
+        title={t('entities.overrides.removeTitle')}
+        description={t('entities.overrides.removeConfirm')}
+        confirmLabel={t('entities.overrides.removeAction')}
+        cancelLabel={t('common.cancel', { defaultValue: 'Cancel' })}
+        tone="danger"
+        confirmDisabled={deleteMutation.isPending}
+      />
     </div>
   );
 }

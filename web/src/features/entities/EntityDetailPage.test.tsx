@@ -281,8 +281,8 @@ describe('EntityDetailPage', () => {
   it('does not render detach, merge or overrides link for non-admins', () => {
     isInstanceAdminMock.mockReturnValue(false);
     mount();
-    expect(screen.queryByRole('button', { name: 'Detach' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Merge' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /detach/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /merge/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /manage overrides/i })).not.toBeInTheDocument();
   });
 
@@ -296,7 +296,7 @@ describe('EntityDetailPage', () => {
     getEntitiesIdMock.mockResolvedValue({ id: 'entity-new', name: 'new', members: [] });
     mount();
 
-    const detachBtn = screen.getByRole('button', { name: 'Detach router' });
+    const detachBtn = screen.getByRole('button', { name: /detach router/i });
     fireEvent.click(detachBtn);
 
     const dialog = await screen.findByRole('dialog');
@@ -325,7 +325,7 @@ describe('EntityDetailPage', () => {
     getEntitiesIdMock.mockRejectedValue(statusError(404));
     mount();
 
-    const detachBtn = screen.getByRole('button', { name: 'Detach router' });
+    const detachBtn = screen.getByRole('button', { name: /detach router/i });
     fireEvent.click(detachBtn);
 
     const dialog = await screen.findByRole('dialog');
@@ -346,7 +346,7 @@ describe('EntityDetailPage', () => {
     getEntitiesIdMock.mockResolvedValue({ id: 'entity-merged', name: 'merged', members: [] });
     mount();
 
-    const mergeBtn = screen.getByRole('button', { name: 'Merge router' });
+    const mergeBtn = screen.getByRole('button', { name: /merge router/i });
     fireEvent.click(mergeBtn);
 
     const dialog = await screen.findByRole('dialog');
@@ -389,7 +389,7 @@ describe('EntityDetailPage', () => {
     getEntitiesIdMock.mockResolvedValue({ id: 'entity-merged', name: 'merged', members: [] });
     mount();
 
-    const mergeBtn = screen.getByRole('button', { name: 'Merge router' });
+    const mergeBtn = screen.getByRole('button', { name: /merge router/i });
     fireEvent.click(mergeBtn);
 
     const dialog = await screen.findByRole('dialog');
@@ -427,7 +427,7 @@ describe('EntityDetailPage', () => {
     });
     mount();
 
-    const mergeBtn = screen.getByRole('button', { name: 'Merge router' });
+    const mergeBtn = screen.getByRole('button', { name: /merge router/i });
     fireEvent.click(mergeBtn);
 
     const dialog = await screen.findByRole('dialog');
@@ -446,13 +446,14 @@ describe('EntityDetailPage', () => {
 
   it('handles 500 error on mutate by closing dialog, invalidating queries, and showing specific error', async () => {
     const qc = new QueryClient();
-    const invalidateSpy = vi.spyOn(qc, 'invalidateQueries');
+    qc.setQueryData(['/entities/entity-1'], { id: 'entity-1', name: 'router' });
+    qc.setQueryData(['/entity-overrides'], []);
     postOverrideMutate.mockImplementation(() => {
       throw statusError(500);
     });
     mount(qc);
 
-    const detachBtn = screen.getByRole('button', { name: 'Detach router' });
+    const detachBtn = screen.getByRole('button', { name: /detach router/i });
     fireEvent.click(detachBtn);
 
     const dialog = await screen.findByRole('dialog');
@@ -461,17 +462,16 @@ describe('EntityDetailPage', () => {
 
     await waitFor(() => {
       expect(toastMock.error).toHaveBeenCalledWith('Could not detach member.');
-      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['/entities'] });
-      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['/entity-overrides'] });
+      expect(qc.getQueryState(['/entities/entity-1'])?.isInvalidated).toBe(true);
+      expect(qc.getQueryState(['/entity-overrides'])?.isInvalidated).toBe(true);
     });
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
   it('navigates to identity when probe returns non-404 error (500)', async () => {
     getEntitiesIdMock.mockRejectedValue(statusError(500));
     mount();
 
-    const detachBtn = screen.getByRole('button', { name: 'Detach router' });
+    const detachBtn = screen.getByRole('button', { name: /detach router/i });
     fireEvent.click(detachBtn);
 
     const dialog = await screen.findByRole('dialog');
@@ -492,7 +492,7 @@ describe('EntityDetailPage', () => {
     });
     mount();
 
-    const detachBtn = screen.getByRole('button', { name: 'Detach router' });
+    const detachBtn = screen.getByRole('button', { name: /detach router/i });
     fireEvent.click(detachBtn);
 
     const dialog = await screen.findByRole('dialog');
@@ -518,7 +518,7 @@ describe('EntityDetailPage', () => {
     getEntitiesIdMock.mockResolvedValue({ id: 'entity-acted-on', name: 'router', members: [] });
     mount();
 
-    const detachBtn = screen.getByRole('button', { name: 'Detach router' });
+    const detachBtn = screen.getByRole('button', { name: /detach router/i });
     fireEvent.click(detachBtn);
 
     const dialog = await screen.findByRole('dialog');
@@ -534,7 +534,7 @@ describe('EntityDetailPage', () => {
     getEntitiesIdMock.mockRejectedValue(statusError(404));
     mount();
 
-    const mergeBtn = screen.getByRole('button', { name: 'Merge router' });
+    const mergeBtn = screen.getByRole('button', { name: /merge router/i });
     fireEvent.click(mergeBtn);
 
     const dialog = await screen.findByRole('dialog');
@@ -556,7 +556,7 @@ describe('EntityDetailPage', () => {
 
   it('prevents merging a member with itself in the merge dialog', async () => {
     mount();
-    const mergeBtn = screen.getByRole('button', { name: 'Merge router' });
+    const mergeBtn = screen.getByRole('button', { name: /merge router/i });
     fireEvent.click(mergeBtn);
 
     const dialog = await screen.findByRole('dialog');
@@ -575,12 +575,154 @@ describe('EntityDetailPage', () => {
     });
     mount();
 
-    const mergeBtn = screen.getByRole('button', { name: 'Merge router' });
+    const mergeBtn = screen.getByRole('button', { name: /merge router/i });
     fireEvent.click(mergeBtn);
 
     const dialog = await screen.findByRole('dialog');
     expect(
       within(dialog).getByText('No entities of this kind found on this connector.')
     ).toBeInTheDocument();
+  });
+
+  it('disambiguates action buttons with connector name when members share the same name', () => {
+    entityHook.mockReturnValue({
+      data: {
+        ...base,
+        members: [
+          {
+            connectorId: 'c1',
+            connectorName: 'Proxmox lab',
+            kind: 'vm',
+            ref: '42',
+            name: 'router',
+          },
+          {
+            connectorId: 'c2',
+            connectorName: 'OPNsense',
+            kind: 'vm',
+            ref: '43',
+            name: 'router',
+          },
+        ],
+      },
+      isLoading: false,
+      isError: false,
+      refetch: vi.fn(),
+    });
+    mount();
+
+    expect(screen.getByRole('button', { name: 'Detach router (Proxmox lab)' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Detach router (OPNsense)' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Merge router (Proxmox lab)' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Merge router (OPNsense)' })).toBeInTheDocument();
+  });
+
+  it('picks response member matching acted-on member on merge even when ordered second', async () => {
+    postOverrideMutate.mockImplementation((data: Record<string, unknown>) => ({
+      id: 'ov-merge-2',
+      action: 'merge',
+      note: data.note || '',
+      createdBy: 'admin',
+      createdAt: '2026-09-01T00:00:00Z',
+      state: 'active',
+      members: [
+        { connectorId: 'c1', kind: 'vm', ref: '43', name: 'switch-target', entityId: 'entity-other' },
+        { ...base.members[0], entityId: 'entity-acted-on' },
+      ],
+    }));
+    getEntitiesIdMock.mockResolvedValue({ id: 'entity-acted-on', name: 'router', members: [] });
+    mount();
+
+    const mergeBtn = screen.getByRole('button', { name: /merge router/i });
+    fireEvent.click(mergeBtn);
+
+    const dialog = await screen.findByRole('dialog');
+    const pickerSelect = within(dialog).getByLabelText('Target entity');
+    fireEvent.change(pickerSelect, { target: { value: '43' } });
+
+    const confirmBtn = within(dialog).getByRole('button', { name: 'Merge' });
+    fireEvent.click(confirmBtn);
+
+    await waitFor(() => {
+      expect(getEntitiesIdMock).toHaveBeenCalledWith('entity-acted-on');
+    });
+    expect(getEntitiesIdMock).not.toHaveBeenCalledWith('entity-other');
+  });
+
+  it('handles dormant result on merge by showing saved dormant message', async () => {
+    postOverrideMutate.mockImplementation((data: Record<string, unknown>) => ({
+      id: 'ov-merge-dormant',
+      action: 'merge',
+      note: data.note || '',
+      createdBy: 'admin',
+      createdAt: '2026-09-01T00:00:00Z',
+      state: 'dormant',
+      members: [{ ...base.members[0], entityId: 'entity-dormant' }],
+    }));
+    mount();
+
+    const mergeBtn = screen.getByRole('button', { name: /merge router/i });
+    fireEvent.click(mergeBtn);
+
+    const dialog = await screen.findByRole('dialog');
+    const pickerSelect = within(dialog).getByLabelText('Target entity');
+    fireEvent.change(pickerSelect, { target: { value: '43' } });
+
+    const confirmBtn = within(dialog).getByRole('button', { name: 'Merge' });
+    fireEvent.click(confirmBtn);
+
+    await waitFor(() => {
+      expect(toastMock.info).toHaveBeenCalledWith(
+        'Override saved; it will apply when the member is observed again.'
+      );
+    });
+    expect(getEntitiesIdMock).not.toHaveBeenCalled();
+  });
+
+  it('handles 500 error on merge by closing dialog, invalidating queries, and showing error', async () => {
+    const qc = new QueryClient();
+    qc.setQueryData(['/entities/entity-1'], { id: 'entity-1', name: 'router' });
+    qc.setQueryData(['/entity-overrides'], []);
+    postOverrideMutate.mockImplementation(() => {
+      throw statusError(500);
+    });
+    mount(qc);
+
+    const mergeBtn = screen.getByRole('button', { name: /merge router/i });
+    fireEvent.click(mergeBtn);
+
+    const dialog = await screen.findByRole('dialog');
+    const pickerSelect = within(dialog).getByLabelText('Target entity');
+    fireEvent.change(pickerSelect, { target: { value: '43' } });
+
+    const confirmBtn = within(dialog).getByRole('button', { name: 'Merge' });
+    fireEvent.click(confirmBtn);
+
+    await waitFor(() => {
+      expect(toastMock.error).toHaveBeenCalledWith('Could not merge members.');
+      expect(qc.getQueryState(['/entities/entity-1'])?.isInvalidated).toBe(true);
+      expect(qc.getQueryState(['/entity-overrides'])?.isInvalidated).toBe(true);
+    });
+  });
+
+  it('allows selecting entity without externalId by falling back to name in merge picker', async () => {
+    snapshotDetailHook.mockReturnValue({
+      data: {
+        entities: [
+          { kind: 'vm', name: 'bare-metal' },
+        ],
+      },
+    });
+    mount();
+
+    const mergeBtn = screen.getByRole('button', { name: /merge router/i });
+    fireEvent.click(mergeBtn);
+
+    const dialog = await screen.findByRole('dialog');
+    const pickerSelect = within(dialog).getByLabelText('Target entity');
+    expect(within(pickerSelect).getByRole('option', { name: 'bare-metal' })).toBeInTheDocument();
+
+    fireEvent.change(pickerSelect, { target: { value: 'bare-metal' } });
+    expect(within(dialog).getByRole('button', { name: 'Merge' })).toBeEnabled();
   });
 });

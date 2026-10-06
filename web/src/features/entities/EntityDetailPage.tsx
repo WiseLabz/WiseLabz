@@ -12,7 +12,7 @@ import {
   usePostEntityOverrides,
 } from '../../api/generated/search/search';
 import { useGetConnectors } from '../../api/generated/connectors/connectors';
-import type { EntityEndpoint, EntityFinding, EntityMember } from '../../api/model';
+import type { EntityEndpoint, EntityFinding, EntityMember, EntityOverride } from '../../api/model';
 import { Markdown } from '../../components/docs/Markdown';
 import { Panel, PanelHeader } from '../../components/ui/Panel';
 import { Button } from '../../components/ui/Button';
@@ -91,6 +91,58 @@ export function EntityDetailPage() {
     }
   };
 
+  const invalidateEntityCaches = () => {
+    void queryClient.invalidateQueries({ queryKey: getGetEntityOverridesQueryKey() });
+    void queryClient.invalidateQueries({
+      predicate: (q) =>
+        typeof q.queryKey[0] === 'string' && q.queryKey[0].startsWith('/entities/'),
+    });
+  };
+
+  const handleOverrideSuccess = async (
+    member: EntityMember,
+    res: EntityOverride,
+    messages: { success: string; notVisible: string },
+    resetForm: () => void
+  ) => {
+    invalidateEntityCaches();
+    resetForm();
+    const targetMember =
+      res.members.find(
+        (item) =>
+          item.connectorId === member.connectorId &&
+          item.kind === member.kind &&
+          item.ref === member.ref
+      ) ?? res.members[0];
+    if (res.state === 'dormant') {
+      toast.info(t('entities.overrides.savedDormant'));
+      void entity.refetch();
+      return;
+    }
+    await handleVisibilityAndNavigate(
+      targetMember?.entityId,
+      messages.success,
+      messages.notVisible
+    );
+  };
+
+  const handleOverrideError = (
+    err: unknown,
+    errorMessage: string,
+    resetForm: () => void
+  ) => {
+    if (isAxiosError(err) && err.response?.status === 409) {
+      toast.error(t('entities.overrides.conflictError'));
+    } else if (isAxiosError(err) && err.response?.status && err.response.status < 500) {
+      toast.error(errorMessage);
+    } else {
+      invalidateEntityCaches();
+      void entity.refetch();
+      resetForm();
+      toast.error(errorMessage);
+    }
+  };
+
   const handleDetachConfirm = () => {
     const m = detachMember;
     if (!m) return;
@@ -104,41 +156,20 @@ export function EntityDetailPage() {
         },
       },
       {
-        onSuccess: async (res) => {
-          void queryClient.invalidateQueries({ queryKey: getGetEntityOverridesQueryKey() });
-          void queryClient.invalidateQueries({ queryKey: ['/entities'] });
-          setDetachMember(null);
-          const targetMember =
-            res.members.find(
-              (item) =>
-                item.connectorId === m.connectorId &&
-                item.kind === m.kind &&
-                item.ref === m.ref
-            ) ?? res.members[0];
-          if (res.state === 'dormant') {
-            toast.info(t('entities.overrides.savedDormant'));
-            void entity.refetch();
-            return;
-          }
-          await handleVisibilityAndNavigate(
-            targetMember?.entityId,
-            t('entities.overrides.detachSuccess'),
-            t('entities.overrides.detachSuccessNotVisible')
-          );
-        },
-        onError: (err) => {
-          if (isAxiosError(err) && err.response?.status === 409) {
-            toast.error(t('entities.overrides.conflictError'));
-          } else if (isAxiosError(err) && err.response?.status && err.response.status < 500) {
-            toast.error(t('entities.overrides.detachError'));
-          } else {
-            void queryClient.invalidateQueries({ queryKey: getGetEntityOverridesQueryKey() });
-            void queryClient.invalidateQueries({ queryKey: ['/entities'] });
-            void entity.refetch();
-            setDetachMember(null);
-            toast.error(t('entities.overrides.detachError'));
-          }
-        },
+        onSuccess: (res) =>
+          handleOverrideSuccess(
+            m,
+            res,
+            {
+              success: t('entities.overrides.detachSuccess'),
+              notVisible: t('entities.overrides.detachSuccessNotVisible'),
+            },
+            () => setDetachMember(null)
+          ),
+        onError: (err) =>
+          handleOverrideError(err, t('entities.overrides.detachError'), () =>
+            setDetachMember(null)
+          ),
       }
     );
   };
@@ -174,45 +205,26 @@ export function EntityDetailPage() {
         },
       },
       {
-        onSuccess: async (res) => {
-          void queryClient.invalidateQueries({ queryKey: getGetEntityOverridesQueryKey() });
-          void queryClient.invalidateQueries({ queryKey: ['/entities'] });
-          setMergeMember(null);
-          setTargetRef('');
-          setNote('');
-          const targetMember =
-            res.members.find(
-              (item) =>
-                item.connectorId === m.connectorId &&
-                item.kind === m.kind &&
-                item.ref === m.ref
-            ) ?? res.members[0];
-          if (res.state === 'dormant') {
-            toast.info(t('entities.overrides.savedDormant'));
-            void entity.refetch();
-            return;
-          }
-          await handleVisibilityAndNavigate(
-            targetMember?.entityId,
-            t('entities.overrides.mergeSuccess'),
-            t('entities.overrides.mergeSuccessNotVisible')
-          );
-        },
-        onError: (err) => {
-          if (isAxiosError(err) && err.response?.status === 409) {
-            toast.error(t('entities.overrides.conflictError'));
-          } else if (isAxiosError(err) && err.response?.status && err.response.status < 500) {
-            toast.error(t('entities.overrides.mergeError'));
-          } else {
-            void queryClient.invalidateQueries({ queryKey: getGetEntityOverridesQueryKey() });
-            void queryClient.invalidateQueries({ queryKey: ['/entities'] });
-            void entity.refetch();
+        onSuccess: (res) =>
+          handleOverrideSuccess(
+            m,
+            res,
+            {
+              success: t('entities.overrides.mergeSuccess'),
+              notVisible: t('entities.overrides.mergeSuccessNotVisible'),
+            },
+            () => {
+              setMergeMember(null);
+              setTargetRef('');
+              setNote('');
+            }
+          ),
+        onError: (err) =>
+          handleOverrideError(err, t('entities.overrides.mergeError'), () => {
             setMergeMember(null);
             setTargetRef('');
             setNote('');
-            toast.error(t('entities.overrides.mergeError'));
-          }
-        },
+          }),
       }
     );
   };
@@ -318,6 +330,7 @@ export function EntityDetailPage() {
                         variant="ghost"
                         aria-label={t('entities.overrides.mergeActionAria', {
                           name: m.name || m.ref,
+                          connector: m.connectorName || m.connectorId,
                         })}
                         onClick={() => openMerge(m)}
                       >
@@ -328,6 +341,7 @@ export function EntityDetailPage() {
                         variant="danger"
                         aria-label={t('entities.overrides.detachActionAria', {
                           name: m.name || m.ref,
+                          connector: m.connectorName || m.connectorId,
                         })}
                         onClick={() => setDetachMember(m)}
                       >
@@ -447,23 +461,23 @@ export function EntityDetailPage() {
         )}
       </div>
 
-      {detachMember && (
-        <ConfirmDialog
-          open={Boolean(detachMember)}
-          onClose={() => setDetachMember(null)}
-          onConfirm={handleDetachConfirm}
-          title={t('entities.overrides.detachTitle')}
-          description={
-            detachMember
-              ? t('entities.overrides.detachConfirm', { name: detachMember.name })
-              : undefined
-          }
-          confirmLabel={t('entities.overrides.detachAction')}
-          cancelLabel={t('common.cancel', { defaultValue: 'Cancel' })}
-          tone="danger"
-          confirmDisabled={postOverride.isPending}
-        />
-      )}
+      <ConfirmDialog
+        open={Boolean(detachMember)}
+        onClose={() => setDetachMember(null)}
+        onConfirm={handleDetachConfirm}
+        title={t('entities.overrides.detachTitle')}
+        description={
+          detachMember
+            ? t('entities.overrides.detachConfirm', {
+                name: detachMember.name || detachMember.ref,
+              })
+            : ''
+        }
+        confirmLabel={t('entities.overrides.detachAction')}
+        cancelLabel={t('common.cancel', { defaultValue: 'Cancel' })}
+        tone="danger"
+        confirmDisabled={postOverride.isPending}
+      />
 
       {mergeMember && (
         <Dialog
