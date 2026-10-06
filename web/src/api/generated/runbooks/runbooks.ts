@@ -578,7 +578,7 @@ export const useDeleteRunbooksRunbookId = <
   return useMutation(getDeleteRunbooksRunbookIdMutationOptions(options), queryClient);
 };
 /**
- * Resolves the target connector, verb, and entityRef from the stored step — the request body is ignored — and runs the exact same dry-run-preview / elevation-gated-mutate path as the connector-level restart/start/stop endpoints (see ADR 0001/0002). Linking a step grants nothing on its own: the caller must additionally hold at least an operator grant on the step's connector, and a real (non dry-run) execution still requires a valid X-Elevation-Token for action `connector.<verb>`. On success, records a `connector.<verb>` audit row whose detail includes this runbookId/stepId in addition to entityRef.
+ * Only lifecycle steps can be executed on their own; any other step kind, or a lifecycle step without a connector or verb, is rejected with 400 `unsupported_step_kind` / `invalid_step` before anything else happens. Resolves the target connector, verb, and entityRef from the stored step — the request body is ignored — and runs the exact same dry-run-preview / elevation-gated-mutate path as the connector-level restart/start/stop endpoints (see ADR 0001/0002). Linking a step grants nothing on its own: the caller must additionally hold at least an operator grant on the step's connector, and a real (non dry-run) execution still requires a valid X-Elevation-Token for action `connector.<verb>`. On success, records a `connector.<verb>` audit row whose detail includes this runbookId/stepId in addition to entityRef.
  * @summary Execute (or preview) one runbook step's lifecycle operation
  */
 export const executeRunbookStep = (

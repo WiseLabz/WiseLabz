@@ -354,3 +354,339 @@ func TestStepsRedactedWithoutViewerGrant(t *testing.T) {
 		t.Errorf("step not redacted: %+v", st)
 	}
 }
+
+// createWithSteps posts a runbook with the given raw steps JSON and returns
+// the recorder.
+// userID, when set, is the calling user (whose grants shape the response).
+func createWithSteps(t *testing.T, h *Handler, userID, targetValue, steps string) *httptest.ResponseRecorder {
+	t.Helper()
+	body := `{"title":"t","targetType":"change_type","targetValue":"` + targetValue + `","steps":[` + steps + `]}`
+	req := httptest.NewRequest(http.MethodPost, "/api/runbooks", strings.NewReader(body))
+	if userID != "" {
+		req = req.WithContext(auth.ContextWithUser(req.Context(), userID, false))
+	}
+	rr := httptest.NewRecorder()
+	h.Create(rr, req)
+	return rr
+}
+
+// operatorOn creates a user holding an operator grant on connID.
+func operatorOn(t *testing.T, h *Handler, connID string) string {
+	t.Helper()
+	user := apitest.NewUser(t, h.Store, "viewer")
+	apitest.GrantConnectorRole(t, h.Store, user, connID, "operator")
+	return user
+}
+
+func decodeRunbook(t *testing.T, rr *httptest.ResponseRecorder) runbookResponse {
+	t.Helper()
+	var resp runbookResponse
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal: %v; body=%s", err, rr.Body.String())
+	}
+	return resp
+}
+
+func fieldErrorFields(t *testing.T, rr *httptest.ResponseRecorder) []string {
+	t.Helper()
+	var resp struct {
+		Details []struct {
+			Field string `json:"field"`
+		} `json:"details"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal error body: %v; body=%s", err, rr.Body.String())
+	}
+	fields := make([]string, 0, len(resp.Details))
+	for _, d := range resp.Details {
+		fields = append(fields, d.Field)
+	}
+	return fields
+}
+
+func TestCreateStepKinds(t *testing.T) {
+	h := newTestHandler(t)
+	connID := seedProxmoxConnector(t, h)
+
+	rr := createWithSteps(t, h, operatorOn(t, h, connID), "kinds", `
+		{"title":"Restart","connectorId":"`+connID+`","verb":"restart"},
+		{"kind":"lifecycle","title":"Stop","connectorId":"`+connID+`","verb":"stop","entityRef":"100"},
+		{"kind":"sync_and_wait","title":"Sync","connectorId":"`+connID+`"},
+		{"kind":"wait_until_healthy","title":"Healthy","connectorId":"`+connID+`","timeoutSeconds":600},
+		{"kind":"manual","title":"Check the console"}`)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want 201; body=%s", rr.Code, rr.Body.String())
+	}
+	steps := decodeRunbook(t, rr).Steps
+	if len(steps) != 5 {
+		t.Fatalf("len(steps) = %d, want 5", len(steps))
+	}
+	want := []struct {
+		kind    string
+		timeout int
+	}{
+		{"lifecycle", 0},
+		{"lifecycle", 0},
+		{"sync_and_wait", 300},
+		{"wait_until_healthy", 600},
+		{"manual", 0},
+	}
+	for i, w := range want {
+		if steps[i].Kind != w.kind || steps[i].TimeoutSeconds != w.timeout {
+			t.Errorf("step %d kind/timeout = %q/%d, want %q/%d", i, steps[i].Kind, steps[i].TimeoutSeconds, w.kind, w.timeout)
+		}
+	}
+	manual := steps[4]
+	if manual.Title != "Check the console" || manual.ConnectorID != "" || manual.Verb != "" {
+		t.Errorf("manual step = %+v, want visible title and no connector or verb", manual)
+	}
+	if manual.CanExecute || manual.ExecuteBlockedReason != "not_lifecycle" {
+		t.Errorf("manual canExecute/reason = %v/%q, want false/not_lifecycle", manual.CanExecute, manual.ExecuteBlockedReason)
+	}
+	if steps[2].ConnectorName != "Proxmox" {
+		t.Errorf("sync step connectorName = %q, want Proxmox", steps[2].ConnectorName)
+	}
+}
+
+func TestStepKindsOperatorCanExecute(t *testing.T) {
+	h := newTestHandler(t)
+	connID := seedProxmoxConnector(t, h)
+	rr := createWithSteps(t, h, "", "canexec", `
+		{"title":"Restart","connectorId":"`+connID+`","verb":"restart"},
+		{"kind":"sync_and_wait","title":"Sync","connectorId":"`+connID+`"}`)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("status = %d; body=%s", rr.Code, rr.Body.String())
+	}
+	created := decodeRunbook(t, rr)
+
+	user := apitest.NewUser(t, h.Store, "viewer")
+	apitest.GrantConnectorRole(t, h.Store, user, connID, "operator")
+	req := httptest.NewRequest(http.MethodGet, "/api/runbooks/"+created.ID, nil)
+	req.SetPathValue("id", created.ID)
+	req = req.WithContext(auth.ContextWithUser(req.Context(), user, false))
+	getRR := httptest.NewRecorder()
+	h.Get(getRR, req)
+	steps := decodeRunbook(t, getRR).Steps
+	if !steps[0].CanExecute || steps[0].ExecuteBlockedReason != "" {
+		t.Errorf("lifecycle step canExecute/reason = %v/%q, want true/empty", steps[0].CanExecute, steps[0].ExecuteBlockedReason)
+	}
+	if steps[1].CanExecute || steps[1].ExecuteBlockedReason != "not_lifecycle" {
+		t.Errorf("sync step canExecute/reason = %v/%q, want false/not_lifecycle", steps[1].CanExecute, steps[1].ExecuteBlockedReason)
+	}
+}
+
+func TestCreateStepKindsValidation(t *testing.T) {
+	h := newTestHandler(t)
+	connID := seedProxmoxConnector(t, h)
+
+	cases := []struct {
+		name  string
+		step  string
+		field string
+	}{
+		{"unknown kind", `{"kind":"reboot","title":"t","connectorId":"` + connID + `","verb":"restart"}`, "steps[0].kind"},
+		{"lifecycle without connector", `{"title":"t","verb":"restart"}`, "steps[0].connectorId"},
+		{"lifecycle without verb", `{"kind":"lifecycle","title":"t","connectorId":"` + connID + `"}`, "steps[0].verb"},
+		{"sync without connector", `{"kind":"sync_and_wait","title":"t"}`, "steps[0].connectorId"},
+		{"sync with unknown connector", `{"kind":"sync_and_wait","title":"t","connectorId":"missing"}`, "steps[0].connectorId"},
+		{"sync with verb", `{"kind":"sync_and_wait","title":"t","connectorId":"` + connID + `","verb":"restart"}`, "steps[0].verb"},
+		{"health with verb", `{"kind":"wait_until_healthy","title":"t","connectorId":"` + connID + `","verb":"stop"}`, "steps[0].verb"},
+		{"health with entityRef", `{"kind":"wait_until_healthy","title":"t","connectorId":"` + connID + `","entityRef":"100"}`, "steps[0].entityRef"},
+		{"health timeout over 30 minutes", `{"kind":"wait_until_healthy","title":"t","connectorId":"` + connID + `","timeoutSeconds":2700}`, "steps[0].timeoutSeconds"},
+		{"sync timeout under 10 seconds", `{"kind":"sync_and_wait","title":"t","connectorId":"` + connID + `","timeoutSeconds":9}`, "steps[0].timeoutSeconds"},
+		{"sync timeout zero", `{"kind":"sync_and_wait","title":"t","connectorId":"` + connID + `","timeoutSeconds":0}`, "steps[0].timeoutSeconds"},
+		{"lifecycle with timeout", `{"title":"t","connectorId":"` + connID + `","verb":"restart","timeoutSeconds":60}`, "steps[0].timeoutSeconds"},
+		{"manual with timeout", `{"kind":"manual","title":"t","timeoutSeconds":60}`, "steps[0].timeoutSeconds"},
+		{"manual with connector", `{"kind":"manual","title":"t","connectorId":"` + connID + `"}`, "steps[0].connectorId"},
+		{"manual with verb", `{"kind":"manual","title":"t","verb":"restart"}`, "steps[0].verb"},
+		{"manual without title", `{"kind":"manual"}`, "steps[0].title"},
+	}
+	for i, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			rr := createWithSteps(t, h, "", "val"+string(rune('a'+i)), c.step)
+			if rr.Code != http.StatusBadRequest {
+				t.Fatalf("status = %d, want 400; body=%s", rr.Code, rr.Body.String())
+			}
+			found := false
+			for _, f := range fieldErrorFields(t, rr) {
+				if f == c.field {
+					found = true
+				}
+			}
+			if !found {
+				t.Errorf("field errors %v do not include %q; body=%s", fieldErrorFields(t, rr), c.field, rr.Body.String())
+			}
+		})
+	}
+
+	t.Run("error is located on the offending step", func(t *testing.T) {
+		rr := createWithSteps(t, h, "", "located", `{"title":"ok","connectorId":"`+connID+`","verb":"restart"},
+			{"kind":"manual","title":"ok"},
+			{"kind":"wait_until_healthy","title":"bad","connectorId":"`+connID+`","timeoutSeconds":2700}`)
+		if rr.Code != http.StatusBadRequest {
+			t.Fatalf("status = %d, want 400; body=%s", rr.Code, rr.Body.String())
+		}
+		fields := fieldErrorFields(t, rr)
+		if len(fields) != 1 || fields[0] != "steps[2].timeoutSeconds" {
+			t.Errorf("field errors = %v, want [steps[2].timeoutSeconds]", fields)
+		}
+	})
+
+	t.Run("boundary timeouts are accepted", func(t *testing.T) {
+		rr := createWithSteps(t, h, operatorOn(t, h, connID), "bounds", `
+			{"kind":"sync_and_wait","title":"min","connectorId":"`+connID+`","timeoutSeconds":10},
+			{"kind":"wait_until_healthy","title":"max","connectorId":"`+connID+`","timeoutSeconds":1800}`)
+		if rr.Code != http.StatusCreated {
+			t.Fatalf("status = %d, want 201; body=%s", rr.Code, rr.Body.String())
+		}
+		steps := decodeRunbook(t, rr).Steps
+		if steps[0].TimeoutSeconds != 10 || steps[1].TimeoutSeconds != 1800 {
+			t.Errorf("timeouts = %d/%d, want 10/1800", steps[0].TimeoutSeconds, steps[1].TimeoutSeconds)
+		}
+	})
+
+	t.Run("manual step without connector", func(t *testing.T) {
+		rr := createWithSteps(t, h, "", "manualonly", `{"kind":"manual","title":"Confirm the failover"}`)
+		if rr.Code != http.StatusCreated {
+			t.Fatalf("status = %d, want 201; body=%s", rr.Code, rr.Body.String())
+		}
+	})
+}
+
+func TestUpdateStepKinds(t *testing.T) {
+	h := newTestHandler(t)
+	connID := seedProxmoxConnector(t, h)
+	op := operatorOn(t, h, connID)
+	rr := createWithSteps(t, h, op, "upd", `{"title":"Restart","connectorId":"`+connID+`","verb":"restart"}`)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("create status = %d; body=%s", rr.Code, rr.Body.String())
+	}
+	created := decodeRunbook(t, rr)
+
+	put := func(steps string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodPut, "/api/runbooks/"+created.ID, strings.NewReader(`{"steps":[`+steps+`]}`))
+		req.SetPathValue("id", created.ID)
+		req = req.WithContext(auth.ContextWithUser(req.Context(), op, false))
+		rec := httptest.NewRecorder()
+		h.Update(rec, req)
+		return rec
+	}
+
+	bad := put(`{"kind":"sync_and_wait","title":"s","connectorId":"` + connID + `","timeoutSeconds":5}`)
+	if bad.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400; body=%s", bad.Code, bad.Body.String())
+	}
+
+	// A client that round-trips the response (timeoutSeconds 0 on lifecycle
+	// and manual steps) must be accepted.
+	ok := put(`{"id":"` + created.Steps[0].ID + `","kind":"lifecycle","title":"Restart","connectorId":"` + connID + `","verb":"restart","timeoutSeconds":0},
+		{"kind":"manual","title":"Confirm","timeoutSeconds":0},
+		{"kind":"wait_until_healthy","title":"Healthy","connectorId":"` + connID + `"}`)
+	if ok.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", ok.Code, ok.Body.String())
+	}
+	steps := decodeRunbook(t, ok).Steps
+	if steps[0].ID != created.Steps[0].ID {
+		t.Errorf("lifecycle step id changed across update")
+	}
+	if steps[2].Kind != "wait_until_healthy" || steps[2].TimeoutSeconds != 300 {
+		t.Errorf("health step = %q/%d, want wait_until_healthy/300 default", steps[2].Kind, steps[2].TimeoutSeconds)
+	}
+}
+
+// TestLegacyStepTimeoutNormalised covers rows written before step kinds
+// existed: the column default left 300 on lifecycle steps, new rows hold 0,
+// and the API must report the same value for both.
+func TestLegacyStepTimeoutNormalised(t *testing.T) {
+	h := newTestHandler(t)
+	connID := seedProxmoxConnector(t, h)
+	op := operatorOn(t, h, connID)
+	rr := createWithSteps(t, h, op, "legacy", `{"title":"Restart","connectorId":"`+connID+`","verb":"restart"}`)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("create status = %d; body=%s", rr.Code, rr.Body.String())
+	}
+	created := decodeRunbook(t, rr)
+	if created.Steps[0].TimeoutSeconds != 0 {
+		t.Fatalf("new lifecycle timeout = %d, want 0", created.Steps[0].TimeoutSeconds)
+	}
+
+	if _, err := h.Store.DB().ExecContext(context.Background(), `UPDATE runbook_steps SET timeout_seconds = 300, kind = 'lifecycle' WHERE runbook_id = ?`, created.ID); err != nil {
+		t.Fatalf("simulate legacy row: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/api/runbooks/"+created.ID, nil)
+	req.SetPathValue("id", created.ID)
+	req = req.WithContext(auth.ContextWithUser(req.Context(), op, false))
+	getRR := httptest.NewRecorder()
+	h.Get(getRR, req)
+	got := decodeRunbook(t, getRR).Steps[0]
+	if got.Kind != "lifecycle" || got.TimeoutSeconds != 0 {
+		t.Errorf("legacy step kind/timeout = %q/%d, want lifecycle/0", got.Kind, got.TimeoutSeconds)
+	}
+}
+
+func TestExecuteStepRejectsNonLifecycle(t *testing.T) {
+	h := newTestHandler(t)
+	connID := seedProxmoxConnector(t, h)
+	rr := createWithSteps(t, h, "", "execkinds", `
+		{"kind":"sync_and_wait","title":"Sync","connectorId":"`+connID+`"},
+		{"kind":"wait_until_healthy","title":"Healthy","connectorId":"`+connID+`"},
+		{"kind":"manual","title":"Confirm"}`)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("create status = %d; body=%s", rr.Code, rr.Body.String())
+	}
+	created := decodeRunbook(t, rr)
+
+	// An operator on the connector, so the rejection cannot be a grant failure.
+	user := apitest.NewUser(t, h.Store, "viewer")
+	apitest.GrantConnectorRole(t, h.Store, user, connID, "operator")
+	for _, dryRun := range []string{"", "?dryRun=true"} {
+		for _, st := range created.Steps {
+			req := httptest.NewRequest(http.MethodPost, "/api/runbooks/"+created.ID+"/steps/"+st.ID+"/execute"+dryRun, nil)
+			req.SetPathValue("id", created.ID)
+			req.SetPathValue("stepId", st.ID)
+			req = req.WithContext(auth.ContextWithUser(req.Context(), user, false))
+			rec := httptest.NewRecorder()
+			h.ExecuteStep(rec, req)
+			if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "unsupported_step_kind") {
+				t.Errorf("%s dryRun=%q: status = %d body=%s, want 400 unsupported_step_kind", st.Kind, dryRun, rec.Code, rec.Body.String())
+			}
+		}
+	}
+}
+
+// TestExecuteStepRejectsMalformedLifecycle covers a lifecycle step that
+// reached the database without a connector or verb (a backup import), which
+// must never run as a lifecycle operation.
+func TestExecuteStepRejectsMalformedLifecycle(t *testing.T) {
+	h := newTestHandler(t)
+	connID := seedProxmoxConnector(t, h)
+	rr := createWithSteps(t, h, "", "malformed", `
+		{"title":"No connector","connectorId":"`+connID+`","verb":"restart"},
+		{"title":"No verb","connectorId":"`+connID+`","verb":"restart"}`)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("create status = %d; body=%s", rr.Code, rr.Body.String())
+	}
+	created := decodeRunbook(t, rr)
+
+	db := h.Store.DB()
+	if _, err := db.ExecContext(context.Background(), `UPDATE runbook_steps SET connector_id = NULL WHERE id = ?`, created.Steps[0].ID); err != nil {
+		t.Fatalf("clear connector: %v", err)
+	}
+	if _, err := db.ExecContext(context.Background(), `UPDATE runbook_steps SET verb = NULL WHERE id = ?`, created.Steps[1].ID); err != nil {
+		t.Fatalf("clear verb: %v", err)
+	}
+
+	user := apitest.NewUser(t, h.Store, "viewer")
+	apitest.GrantConnectorRole(t, h.Store, user, connID, "operator")
+	for _, st := range created.Steps {
+		req := httptest.NewRequest(http.MethodPost, "/api/runbooks/"+created.ID+"/steps/"+st.ID+"/execute?dryRun=true", nil)
+		req.SetPathValue("id", created.ID)
+		req.SetPathValue("stepId", st.ID)
+		req = req.WithContext(auth.ContextWithUser(req.Context(), user, false))
+		rec := httptest.NewRecorder()
+		h.ExecuteStep(rec, req)
+		if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "invalid_step") {
+			t.Errorf("step %q: status = %d body=%s, want 400 invalid_step", st.Title, rec.Code, rec.Body.String())
+		}
+	}
+}

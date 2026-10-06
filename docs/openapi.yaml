@@ -3032,7 +3032,10 @@ paths:
       operationId: executeRunbookStep
       summary: Execute (or preview) one runbook step's lifecycle operation
       description: >
-        Resolves the target connector, verb, and entityRef from the stored
+        Only lifecycle steps can be executed on their own; any other step
+        kind, or a lifecycle step without a connector or verb, is rejected
+        with 400 `unsupported_step_kind` / `invalid_step` before anything
+        else happens. Resolves the target connector, verb, and entityRef from the stored
         step — the request body is ignored — and runs the exact same
         dry-run-preview / elevation-gated-mutate path as the connector-level
         restart/start/stop endpoints (see ADR 0001/0002). Linking a step
@@ -3065,8 +3068,10 @@ paths:
               schema: { $ref: '#/components/schemas/RestartPreview' }
         '400':
           description: >
-            Missing elevation token, or the connector type doesn't support
-            the step's verb (`unsupported_operation`).
+            Missing elevation token, the connector type doesn't support the
+            step's verb (`unsupported_operation`), the step is not a
+            lifecycle step (`unsupported_step_kind`) or has no connector or
+            verb (`invalid_step`).
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
@@ -5981,16 +5986,33 @@ components:
     RunbookStepVerb:
       type: string
       enum: [restart, start, stop]
+    RunbookStepKind:
+      type: string
+      enum: [lifecycle, sync_and_wait, wait_until_healthy, manual]
+      description: >
+        lifecycle restarts, starts or stops a connector (optionally one
+        entity); sync_and_wait syncs a connector and waits for the sync to
+        finish; wait_until_healthy waits until a connector's health check
+        reports online; manual waits for a human to confirm.
     RunbookStep:
       type: object
-      required: [id, position, title, connectorId, connectorName, verb, entityRef, canExecute, executeBlockedReason]
+      required: [id, position, kind, title, connectorId, connectorName, verb, entityRef, timeoutSeconds, canExecute, executeBlockedReason]
       properties:
         id: { type: string }
         position: { type: integer, description: 'Order within the runbook, 0-based; matches the steps array index.' }
+        kind: { $ref: '#/components/schemas/RunbookStepKind' }
         title: { type: string }
-        connectorId: { type: string }
+        connectorId: { type: string, description: 'Empty for a manual step, and for a step redacted because the caller cannot view its connector.' }
         connectorName: { type: string, description: "The referenced connector's display name, for rendering without a second lookup." }
         verb: { $ref: '#/components/schemas/RunbookStepVerb' }
+        timeoutSeconds:
+          type: integer
+          minimum: 0
+          maximum: 1800
+          description: >
+            Timeout of a sync_and_wait or wait_until_healthy step, in seconds.
+            Always 0 for lifecycle and manual steps, whenever the step was
+            created.
         entityRef:
           type: string
           description: >
@@ -5998,14 +6020,27 @@ components:
             connectors that manage a single implicit service.
         canExecute:
           type: boolean
-          description: Whether the calling user currently holds at least an operator grant on connectorId.
+          description: >
+            Whether the calling user can execute this step on its own: it is a
+            lifecycle step and they hold at least an operator grant on
+            connectorId.
         executeBlockedReason:
           type: string
-          enum: ['', no_operator_grant]
-          description: Empty when canExecute is true; "no_operator_grant" otherwise.
+          enum: ['', no_operator_grant, no_viewer_grant, not_lifecycle]
+          description: >
+            Empty when canExecute is true; "no_operator_grant" or
+            "no_viewer_grant" when the caller lacks the grant, and
+            "not_lifecycle" for a step whose kind only runs inside a run.
     RunbookStepInput:
       type: object
-      required: [title, connectorId, verb]
+      required: [title]
+      description: >
+        Which of connectorId, verb and timeoutSeconds apply depends on kind.
+        lifecycle (the default) requires connectorId and verb. sync_and_wait
+        and wait_until_healthy require connectorId, must not carry a verb or
+        entityRef, and accept a timeoutSeconds. manual carries no connectorId,
+        verb or timeout. Violations are reported as field errors on the step,
+        for example steps[2].timeoutSeconds.
       properties:
         id:
           type: string
@@ -6014,10 +6049,24 @@ components:
             history) across a replace-all update. Omit for a new step, or
             when creating a runbook; any ID that didn't already belong to
             this runbook is ignored and a fresh one is generated.
+        kind:
+          allOf: [{ $ref: '#/components/schemas/RunbookStepKind' }]
+          default: lifecycle
         title: { type: string }
-        connectorId: { type: string }
-        verb: { $ref: '#/components/schemas/RunbookStepVerb' }
+        connectorId: { type: string, description: 'Required unless kind is manual, where it must be empty.' }
+        verb:
+          allOf: [{ $ref: '#/components/schemas/RunbookStepVerb' }]
+          description: Required for lifecycle steps; must be omitted for the other kinds.
         entityRef: { type: string, default: '' }
+        timeoutSeconds:
+          type: integer
+          minimum: 10
+          maximum: 1800
+          default: 300
+          description: >
+            Only for sync_and_wait and wait_until_healthy: between 10 seconds
+            and 30 minutes, default 5 minutes. Ignored as 0 on lifecycle and
+            manual steps, which reject any other value.
     Runbook:
       type: object
       required: [id, title, body, targetType, targetValue, steps, createdAt, updatedAt]
@@ -6038,7 +6087,7 @@ components:
           type: array
           items: { $ref: '#/components/schemas/RunbookStep' }
           description: >
-            Connector lifecycle operations this runbook points at, in
+            Lifecycle, sync, health-wait and manual steps of this runbook, in
             position order. Linking a step grants no mutation permission by
             itself — see canExecute.
         createdAt: { type: string, format: date-time }
@@ -6529,6 +6578,14 @@ components:
               title: { type: string }
               order: { type: integer }
               body: { type: string }
+        runbooks:
+          type: array
+          description: Authored runbooks. Run history is operational and not exported.
+          items: { $ref: '#/components/schemas/BackupRunbook' }
+        runbookSteps:
+          type: array
+          description: Steps of the exported runbooks, flat and keyed by runbookId.
+          items: { $ref: '#/components/schemas/BackupRunbookStep' }
         entityIdentityOverrides:
           type: array
           description: Manual entity identity overrides; members are rebuilt from snapshots after restore, so a restored override stays dormant until its members are observed
@@ -6542,6 +6599,47 @@ components:
             model: { type: string }
             baseUrl: { type: string }
             mode: { type: string }
+    BackupRunbook:
+      type: object
+      required: [id, title, body, targetType, targetValue, createdAt, updatedAt]
+      properties:
+        id: { type: string }
+        title: { type: string }
+        body: { type: string }
+        targetType: { $ref: '#/components/schemas/RunbookTargetType' }
+        targetValue: { type: string }
+        snapshotId: { type: string, nullable: true }
+        docId: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    BackupRunbookStep:
+      type: object
+      description: >
+        Stored runbook step as exported in a backup. A bundle written before
+        step kinds existed has no kind or timeoutSeconds; such a step imports
+        as lifecycle.
+      required: [id, runbookId, position, title, connectorId, verb, entityRef, createdAt, updatedAt]
+      properties:
+        id: { type: string }
+        runbookId: { type: string }
+        position: { type: integer, minimum: 0 }
+        kind:
+          allOf: [{ $ref: '#/components/schemas/RunbookStepKind' }]
+          default: lifecycle
+        timeoutSeconds:
+          type: integer
+          minimum: 0
+          maximum: 1800
+          description: >
+            Timeout of a sync_and_wait or wait_until_healthy step; 0 or absent
+            means the 300 second default. Not meaningful for lifecycle and
+            manual steps.
+        title: { type: string }
+        connectorId: { type: string, description: 'Empty for a manual step.' }
+        verb: { type: string, description: 'Empty for every kind except lifecycle.', enum: ['', restart, start, stop] }
+        entityRef: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
     EntityIdentityOverrideRecord:
       type: object
       description: Stored override as exported in a backup; a merge pair is in sorted member-key order
@@ -6575,6 +6673,8 @@ components:
         docVersions: { $ref: '#/components/schemas/BackupCounts' }
         templates: { $ref: '#/components/schemas/BackupCounts' }
         templateSections: { $ref: '#/components/schemas/BackupCounts' }
+        runbooks: { $ref: '#/components/schemas/BackupCounts' }
+        runbookSteps: { $ref: '#/components/schemas/BackupCounts' }
         entityIdentityOverrides: { $ref: '#/components/schemas/BackupCounts' }
     RetentionSettings:
       type: object

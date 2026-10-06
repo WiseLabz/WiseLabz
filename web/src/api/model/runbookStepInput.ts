@@ -6,13 +6,26 @@
  *
  * OpenAPI spec version: 0.1.0
  */
+import type { RunbookStepKind } from './runbookStepKind';
 import type { RunbookStepVerb } from './runbookStepVerb';
 
+/**
+ * Which of connectorId, verb and timeoutSeconds apply depends on kind. lifecycle (the default) requires connectorId and verb. sync_and_wait and wait_until_healthy require connectorId, must not carry a verb or entityRef, and accept a timeoutSeconds. manual carries no connectorId, verb or timeout. Violations are reported as field errors on the step, for example steps[2].timeoutSeconds.
+ */
 export interface RunbookStepInput {
   /** An existing step's ID, to keep it (and its identity in audit history) across a replace-all update. Omit for a new step, or when creating a runbook; any ID that didn't already belong to this runbook is ignored and a fresh one is generated. */
   id?: string;
+  kind?: RunbookStepKind;
   title: string;
-  connectorId: string;
-  verb: RunbookStepVerb;
+  /** Required unless kind is manual, where it must be empty. */
+  connectorId?: string;
+  /** Required for lifecycle steps; must be omitted for the other kinds. */
+  verb?: RunbookStepVerb;
   entityRef?: string;
+  /**
+   * Only for sync_and_wait and wait_until_healthy: between 10 seconds and 30 minutes, default 5 minutes. Ignored as 0 on lifecycle and manual steps, which reject any other value.
+   * @minimum 10
+   * @maximum 1800
+   */
+  timeoutSeconds?: number;
 }

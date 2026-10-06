@@ -47,13 +47,68 @@ func validVerb(v string) bool {
 	return v == "restart" || v == "start" || v == "stop"
 }
 
+// Step kinds (runbook-runs spec, "Step kinds"). An empty kind means
+// lifecycle, so pre-existing clients and rows keep working.
+const (
+	kindLifecycle        = "lifecycle"
+	kindSyncAndWait      = "sync_and_wait"
+	kindWaitUntilHealthy = "wait_until_healthy"
+	kindManual           = "manual"
+)
+
+// Bounds and default for the timeout of the automated wait kinds.
+const (
+	minStepTimeoutSeconds     = 10
+	maxStepTimeoutSeconds     = 30 * 60
+	defaultStepTimeoutSeconds = 5 * 60
+)
+
+// blockedNotLifecycle is the executeBlockedReason of a step that cannot be
+// executed on its own because its kind only runs inside a whole-runbook run.
+const blockedNotLifecycle = "not_lifecycle"
+
+func validKind(k string) bool {
+	return k == kindLifecycle || k == kindSyncAndWait || k == kindWaitUntilHealthy || k == kindManual
+}
+
+// hasTimeout reports whether kind carries an authorable timeout.
+func hasTimeout(kind string) bool {
+	return kind == kindSyncAndWait || kind == kindWaitUntilHealthy
+}
+
+// effectiveKind maps the stored empty kind to lifecycle.
+func effectiveKind(kind string) string {
+	if kind == "" {
+		return kindLifecycle
+	}
+	return kind
+}
+
+// reportedTimeout is the one timeout value the API reports for a stored
+// step. Legacy rows hold 300 from the column default for every kind and new
+// lifecycle/manual rows hold 0, so only the wait kinds report a timeout;
+// every other kind reports 0 whenever the step was created.
+func reportedTimeout(kind string, stored int) int {
+	if !hasTimeout(kind) {
+		return 0
+	}
+	if stored == 0 {
+		return defaultStepTimeoutSeconds
+	}
+	return stored
+}
+
 // stepInput is one element of the "steps" array in RunbookCreate/RunbookUpdate.
+// TimeoutSeconds is a pointer so an omitted timeout (default) can be told
+// apart from an explicit one that is out of range.
 type stepInput struct {
-	ID          string `json:"id"`
-	Title       string `json:"title"`
-	ConnectorID string `json:"connectorId"`
-	Verb        string `json:"verb"`
-	EntityRef   string `json:"entityRef"`
+	ID             string `json:"id"`
+	Kind           string `json:"kind"`
+	Title          string `json:"title"`
+	ConnectorID    string `json:"connectorId"`
+	Verb           string `json:"verb"`
+	EntityRef      string `json:"entityRef"`
+	TimeoutSeconds *int   `json:"timeoutSeconds"`
 }
 
 // stepResponse is one element of the "steps" array in a runbook response.
@@ -62,11 +117,13 @@ type stepInput struct {
 type stepResponse struct {
 	ID                   string `json:"id"`
 	Position             int    `json:"position"`
+	Kind                 string `json:"kind"`
 	Title                string `json:"title"`
 	ConnectorID          string `json:"connectorId"`
 	ConnectorName        string `json:"connectorName"`
 	Verb                 string `json:"verb"`
 	EntityRef            string `json:"entityRef"`
+	TimeoutSeconds       int    `json:"timeoutSeconds"`
 	CanExecute           bool   `json:"canExecute"`
 	ExecuteBlockedReason string `json:"executeBlockedReason"`
 }
@@ -95,37 +152,86 @@ func (h *Handler) validateSteps(ctx context.Context, inputs []stepInput) ([]*sto
 	for i, in := range inputs {
 		prefix := fmt.Sprintf("steps[%d]", i)
 
+		kind := effectiveKind(in.Kind)
+		if !validKind(kind) {
+			fieldErrs = append(fieldErrs, httputil.FieldError{Field: prefix + ".kind", Msg: "must be lifecycle, sync_and_wait, wait_until_healthy, or manual"})
+			kind = ""
+		}
+
 		if strings.TrimSpace(in.Title) == "" {
 			fieldErrs = append(fieldErrs, httputil.FieldError{Field: prefix + ".title", Msg: "is required"})
 		}
-		if !validVerb(in.Verb) {
-			fieldErrs = append(fieldErrs, httputil.FieldError{Field: prefix + ".verb", Msg: "must be restart, start, or stop"})
+
+		// The connector and verb rules depend on the kind: lifecycle needs
+		// both, the wait kinds need a connector and no verb, manual neither.
+		if kind != "" {
+			fieldErrs = append(fieldErrs, h.validateStepTarget(ctx, prefix, kind, in)...)
 		}
 
-		conn, err := h.Store.GetConnector(ctx, in.ConnectorID)
+		timeout := 0
 		switch {
-		case err != nil:
-			fieldErrs = append(fieldErrs, httputil.FieldError{Field: prefix + ".connectorId", Msg: "connector not found"})
-		case validVerb(in.Verb) && !connector.SupportsLifecycleVerb(conn.Type, in.Verb):
-			fieldErrs = append(fieldErrs, httputil.FieldError{Field: prefix + ".verb", Msg: "connector does not support this verb"})
-		}
-
-		if err := connector.ValidateCompositeRef(in.EntityRef); err != nil {
-			fieldErrs = append(fieldErrs, httputil.FieldError{Field: prefix + ".entityRef", Msg: "invalid entityRef"})
+		case hasTimeout(kind):
+			timeout = defaultStepTimeoutSeconds
+			if in.TimeoutSeconds != nil {
+				timeout = *in.TimeoutSeconds
+				if timeout < minStepTimeoutSeconds || timeout > maxStepTimeoutSeconds {
+					fieldErrs = append(fieldErrs, httputil.FieldError{Field: prefix + ".timeoutSeconds", Msg: fmt.Sprintf("must be between %d and %d seconds", minStepTimeoutSeconds, maxStepTimeoutSeconds)})
+				}
+			}
+		case kind != "" && in.TimeoutSeconds != nil && *in.TimeoutSeconds != 0:
+			fieldErrs = append(fieldErrs, httputil.FieldError{Field: prefix + ".timeoutSeconds", Msg: "is only allowed for sync_and_wait and wait_until_healthy steps"})
 		}
 
 		steps = append(steps, &store.RunbookStepRecord{
-			ID:          in.ID,
-			Title:       in.Title,
-			ConnectorID: in.ConnectorID,
-			Verb:        in.Verb,
-			EntityRef:   in.EntityRef,
+			ID:             in.ID,
+			Kind:           kind,
+			TimeoutSeconds: timeout,
+			Title:          in.Title,
+			ConnectorID:    in.ConnectorID,
+			Verb:           in.Verb,
+			EntityRef:      in.EntityRef,
 		})
 	}
 	if len(fieldErrs) > 0 {
 		return nil, fieldErrs
 	}
 	return steps, nil
+}
+
+// validateStepTarget checks the connector, verb and entityRef of one step
+// against its (valid) kind and returns field errors keyed under prefix.
+func (h *Handler) validateStepTarget(ctx context.Context, prefix, kind string, in stepInput) []httputil.FieldError {
+	var errs []httputil.FieldError
+
+	if kind == kindManual {
+		if in.ConnectorID != "" {
+			errs = append(errs, httputil.FieldError{Field: prefix + ".connectorId", Msg: "must be empty for a manual step"})
+		}
+	} else {
+		conn, err := h.Store.GetConnector(ctx, in.ConnectorID)
+		switch {
+		case in.ConnectorID == "":
+			errs = append(errs, httputil.FieldError{Field: prefix + ".connectorId", Msg: "is required"})
+		case err != nil:
+			errs = append(errs, httputil.FieldError{Field: prefix + ".connectorId", Msg: "connector not found"})
+		case kind == kindLifecycle && validVerb(in.Verb) && !connector.SupportsLifecycleVerb(conn.Type, in.Verb):
+			errs = append(errs, httputil.FieldError{Field: prefix + ".verb", Msg: "connector does not support this verb"})
+		}
+	}
+
+	switch {
+	case kind == kindLifecycle && !validVerb(in.Verb):
+		errs = append(errs, httputil.FieldError{Field: prefix + ".verb", Msg: "must be restart, start, or stop"})
+	case kind != kindLifecycle && in.Verb != "":
+		errs = append(errs, httputil.FieldError{Field: prefix + ".verb", Msg: "must be empty for a " + kind + " step"})
+	}
+
+	if kind != kindLifecycle && in.EntityRef != "" {
+		errs = append(errs, httputil.FieldError{Field: prefix + ".entityRef", Msg: "must be empty for a " + kind + " step"})
+	} else if err := connector.ValidateCompositeRef(in.EntityRef); err != nil {
+		errs = append(errs, httputil.FieldError{Field: prefix + ".entityRef", Msg: "invalid entityRef"})
+	}
+	return errs
 }
 
 // toStepResponses builds the response steps for one runbook's steps,
@@ -136,6 +242,24 @@ func (h *Handler) validateSteps(ctx context.Context, inputs []stepInput) ([]*sto
 func (h *Handler) toStepResponses(ctx context.Context, userID string, steps []*store.RunbookStepRecord, connectorNames map[string]string, connectorRoles map[string]string) ([]stepResponse, error) {
 	out := make([]stepResponse, 0, len(steps))
 	for _, st := range steps {
+		kind := effectiveKind(st.Kind)
+		timeout := reportedTimeout(kind, st.TimeoutSeconds)
+
+		// A manual step has no connector, so there is nothing to redact and
+		// no grant to check; it is never executable on its own.
+		if st.ConnectorID == "" {
+			out = append(out, stepResponse{
+				ID:                   st.ID,
+				Position:             st.Position,
+				Kind:                 kind,
+				Title:                st.Title,
+				EntityRef:            st.EntityRef,
+				TimeoutSeconds:       timeout,
+				ExecuteBlockedReason: blockedNotLifecycle,
+			})
+			continue
+		}
+
 		role, err := h.connectorRole(ctx, userID, st.ConnectorID, connectorRoles)
 		if err != nil {
 			return nil, err
@@ -145,12 +269,12 @@ func (h *Handler) toStepResponses(ctx context.Context, userID string, steps []*s
 			out = append(out, stepResponse{
 				ID:                   st.ID,
 				Position:             st.Position,
+				Kind:                 kind,
 				Title:                "Restricted step",
 				ExecuteBlockedReason: "no_viewer_grant",
 			})
 			continue
 		}
-		can := role == "operator"
 
 		name, ok := connectorNames[st.ConnectorID]
 		if !ok {
@@ -163,19 +287,28 @@ func (h *Handler) toStepResponses(ctx context.Context, userID string, steps []*s
 			}
 			connectorNames[st.ConnectorID] = name
 		}
+
+		// Single-step execution is lifecycle only; the other kinds run as
+		// part of a whole-runbook run.
+		can := role == "operator" && kind == kindLifecycle
 		reason := ""
-		if !can {
+		switch {
+		case kind != kindLifecycle:
+			reason = blockedNotLifecycle
+		case !can:
 			reason = "no_operator_grant"
 		}
 
 		out = append(out, stepResponse{
 			ID:                   st.ID,
 			Position:             st.Position,
+			Kind:                 kind,
 			Title:                st.Title,
 			ConnectorID:          st.ConnectorID,
 			ConnectorName:        name,
 			Verb:                 st.Verb,
 			EntityRef:            st.EntityRef,
+			TimeoutSeconds:       timeout,
 			CanExecute:           can,
 			ExecuteBlockedReason: reason,
 		})
@@ -210,11 +343,14 @@ func (h *Handler) toRunbookResponse(ctx context.Context, rb *store.RunbookRecord
 func stepAuditDetail(steps []*store.RunbookStepRecord) []map[string]any {
 	out := make([]map[string]any, 0, len(steps))
 	for _, st := range steps {
+		kind := effectiveKind(st.Kind)
 		out = append(out, map[string]any{
-			"id":          st.ID,
-			"connectorId": st.ConnectorID,
-			"verb":        st.Verb,
-			"entityRef":   st.EntityRef,
+			"id":             st.ID,
+			"kind":           kind,
+			"connectorId":    st.ConnectorID,
+			"verb":           st.Verb,
+			"entityRef":      st.EntityRef,
+			"timeoutSeconds": reportedTimeout(kind, st.TimeoutSeconds),
 		})
 	}
 	return out
@@ -542,7 +678,8 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 
 // ExecuteStep handles POST /api/runbooks/{id}/steps/{stepId}/execute
 // [?dryRun=true]. The target connector/verb/entityRef always come from the
-// stored step, never from the request body, and execution is delegated to
+// stored step, never from the request body, only lifecycle steps are
+// executable, and execution is delegated to
 // the connectors handler's ServeLifecycleOp — the exact same dry-run
 // preview / elevation-gated mutate / failure-alert / audit path as a
 // direct connector restart/start/stop, with runbookId/stepId merged into
@@ -569,6 +706,18 @@ func (h *Handler) ExecuteStep(w http.ResponseWriter, r *http.Request) {
 	}
 	if err != nil {
 		httputil.Errorf(w, err)
+		return
+	}
+
+	// Only a well-formed lifecycle step may run on its own. A backup import
+	// can carry any kind or a lifecycle step with no connector or verb, and
+	// none of those may reach the lifecycle path.
+	if effectiveKind(step.Kind) != kindLifecycle {
+		httputil.Error(w, http.StatusBadRequest, "unsupported_step_kind", "Only lifecycle steps can be executed on their own")
+		return
+	}
+	if step.ConnectorID == "" || step.Verb == "" {
+		httputil.Error(w, http.StatusBadRequest, "invalid_step", "Step has no connector or verb")
 		return
 	}
 

@@ -6,17 +6,16 @@
  *
  * OpenAPI spec version: 0.1.0
  */
-import type { BackupCounts } from './backupCounts';
 
-export interface BackupImportResult {
-  journalEntries?: BackupCounts;
-  attachments?: BackupCounts;
-  connectors: BackupCounts;
-  docs: BackupCounts;
-  docVersions: BackupCounts;
-  templates: BackupCounts;
-  templateSections: BackupCounts;
-  runbooks?: BackupCounts;
-  runbookSteps?: BackupCounts;
-  entityIdentityOverrides?: BackupCounts;
-}
+/**
+ * Empty for every kind except lifecycle.
+ */
+export type BackupRunbookStepVerb =
+  (typeof BackupRunbookStepVerb)[keyof typeof BackupRunbookStepVerb];
+
+export const BackupRunbookStepVerb = {
+  '': '',
+  restart: 'restart',
+  start: 'start',
+  stop: 'stop',
+} as const;

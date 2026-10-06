@@ -8,7 +8,7 @@
  */
 
 /**
- * Empty when canExecute is true; "no_operator_grant" otherwise.
+ * Empty when canExecute is true; "no_operator_grant" or "no_viewer_grant" when the caller lacks the grant, and "not_lifecycle" for a step whose kind only runs inside a run.
  */
 export type RunbookStepExecuteBlockedReason =
   (typeof RunbookStepExecuteBlockedReason)[keyof typeof RunbookStepExecuteBlockedReason];
@@ -16,4 +16,6 @@ export type RunbookStepExecuteBlockedReason =
 export const RunbookStepExecuteBlockedReason = {
   '': '',
   no_operator_grant: 'no_operator_grant',
+  no_viewer_grant: 'no_viewer_grant',
+  not_lifecycle: 'not_lifecycle',
 } as const;

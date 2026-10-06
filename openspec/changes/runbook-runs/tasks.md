@@ -9,9 +9,9 @@
 
 ## 2. Step kinds in authoring
 
-- [ ] 2.1 Extend `validateSteps`, step input/response and `toStepResponses` for `sync_and_wait`, `wait_until_healthy` and `manual` with timeout bounds; verify handler tests for each kind, the timeout range error and a manual step without connector.
-- [ ] 2.2 Reject single-step execution of non-lifecycle steps in `ExecuteStep`; verify a handler test and that existing `ExecuteStep` tests pass unchanged.
-- [ ] 2.3 Update OpenAPI `RunbookStep`/`RunbookStepInput` and regenerate the web client; verify the OpenAPI contract test and web typecheck.
+- [x] 2.1 Extend `validateSteps`, step input/response and `toStepResponses` for `sync_and_wait`, `wait_until_healthy` and `manual` with timeout bounds; verify handler tests for each kind, the timeout range error and a manual step without connector.
+- [x] 2.2 Reject single-step execution of non-lifecycle steps in `ExecuteStep`; verify a handler test and that existing `ExecuteStep` tests pass unchanged.
+- [x] 2.3 Update OpenAPI `RunbookStep`/`RunbookStepInput` and regenerate the web client; verify the OpenAPI contract test and web typecheck.
 
 ## 3. Lifecycle cores
 
