@@ -56,7 +56,7 @@ The reconcile callback in `BackfillEntityIdentities` loads overrides from the tr
 
 - **Validation at creation** (store layer, inside a transaction): each member key must have an `entity_members` row (active or gone); merge needs two different keys of the same kind; a duplicate maps to a conflict error. A detach is allowed on a single-member identity: it is a valid "never auto-merge this" instruction.
 - **State** is derived, not stored: `active` when every referenced member row has `gone_at IS NULL`, otherwise `dormant`.
-- **Retention**: `DeleteExpiredEntityIdentities` already runs under the reconcile lock; in the same transaction it deletes overrides with a member key that no longer has any `entity_members` row.
+- **Retention**: `DeleteExpiredEntityIdentities` already runs under the reconcile lock; in the same transaction it deletes an override when this run removes the member history it references (the member key has `entity_members` rows and all of them expire). An override whose member has never been observed, for example after a restore before the connector's first sync, is kept and stays dormant until the member appears, its connector is deleted, or an admin removes it.
 - **Backup**: the override table is added to the export and import table list. `entities` and `entity_members` stay out, because they are rebuilt from snapshots; overrides refer to member keys, which a rebuild reproduces. Import order places the table after `connectors`.
 
 ### API

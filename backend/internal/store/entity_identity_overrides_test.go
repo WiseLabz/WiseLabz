@@ -385,3 +385,45 @@ func TestDeleteExpiredEntityIdentitiesPurgesOrphanedOverrides(t *testing.T) {
 		t.Fatalf("overrides after retention = %+v, want only the merge of members still present", left)
 	}
 }
+
+func TestDeleteExpiredEntityIdentitiesKeepsOverridesOfUnobservedMembers(t *testing.T) {
+	ctx := context.Background()
+	f := newOverrideFixture(t, 2, "")
+	// A restored override: its members have no entity_members rows yet.
+	restored := EntityIdentityOverride{ID: "restored", Action: EntityOverrideMerge, ConnectorID: f.conns[0], Kind: "vm", Ref: "never-synced-a",
+		OtherConnectorID: f.conns[1], OtherKind: "vm", OtherRef: "never-synced-b", CreatedBy: "admin", CreatedAt: "2026-01-01T00:00:00Z"}
+	if imported, err := f.s.ImportEntityIdentityOverride(ctx, restored); err != nil || !imported {
+		t.Fatalf("ImportEntityIdentityOverride() = %v, %v", imported, err)
+	}
+	if _, err := f.s.DeleteExpiredEntityIdentities(ctx, "2999-01-01T00:00:00Z"); err != nil {
+		t.Fatal(err)
+	}
+	left, err := f.s.LoadEntityIdentityOverrides(ctx)
+	if err != nil || len(left) != 1 || left[0].ID != "restored" {
+		t.Fatalf("overrides after retention = %+v, %v; want the never-observed override kept", left, err)
+	}
+}
+
+func TestEntityIdentityOverrideMergeDormantWhileOneMemberIsGone(t *testing.T) {
+	ctx := context.Background()
+	f := newOverrideFixture(t, 2, "")
+	merge, err := f.merge("m0", "m1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.reconcile()
+	if view, err := f.s.GetEntityIdentityOverride(ctx, merge.ID); err != nil || view.State != EntityOverrideActive {
+		t.Fatalf("state with both members present = %v, %v; want active", view, err)
+	}
+	returning := f.members["m1"]
+	delete(f.members, "m1")
+	f.reconcile()
+	if view, err := f.s.GetEntityIdentityOverride(ctx, merge.ID); err != nil || view.State != EntityOverrideDormant {
+		t.Fatalf("state with one member gone = %v, %v; want dormant", view, err)
+	}
+	f.members["m1"] = returning
+	f.reconcile()
+	if view, err := f.s.GetEntityIdentityOverride(ctx, merge.ID); err != nil || view.State != EntityOverrideActive || f.identity("m0") != f.identity("m1") {
+		t.Fatalf("after return = %v, %v; want active and merged", view, err)
+	}
+}
