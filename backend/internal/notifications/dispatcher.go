@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"slices"
 	"sync"
 	"time"
 
@@ -208,6 +209,47 @@ func (d *Dispatcher) NotifySystemEvent(ctx context.Context, eventType, severity,
 	go func() {
 		defer d.inflight.Done()
 		d.fanOut(users, channels, routes, "", eventType, severity, "", title, message)
+	}()
+}
+
+// Runbook run events (see internal/runbookrun). A run that succeeds or is
+// cancelled sends nothing.
+const (
+	// EventRunbookRunFailed is sent when a runbook run becomes failed: a step
+	// failed or timed out, a grant was revoked, or a restart interrupted it.
+	EventRunbookRunFailed = "runbook.run_failed"
+	// EventRunbookRunWaiting is sent when a runbook run pauses on a manual
+	// step and waits for a user to confirm it.
+	EventRunbookRunWaiting = "runbook.run_waiting"
+)
+
+// NotifyRunbookRun dispatches a runbook run event, honouring per-event routing
+// like NotifySystemEvent. connectorID is the connector of the step the event
+// is about: when set, only users holding a grant on it are notified, because
+// the message names that step. An empty connectorID (a manual step) reaches
+// every active user. A non-empty actorID adds that user to the audience even
+// without a grant on connectorID, so a run's owner still hears about their own
+// run after a revoked grant; callers pass it only for events about that user's
+// run. The actor is resolved from the same user list (a deleted user is absent,
+// a disabled one is skipped by fanOut) and is never notified twice.
+func (d *Dispatcher) NotifyRunbookRun(ctx context.Context, eventType, severity, connectorID, actorID, title, message string) {
+	all, _, err := d.store.ListUsers(ctx, 0, maxNotifyUsers)
+	if err != nil {
+		slog.Error("failed to list users for runbook run notification", "error", err, "eventType", eventType)
+		return
+	}
+	channels := d.loadChannels(ctx)
+	routes := d.loadRouting(ctx)
+	users := d.connectorAudience(ctx, all, connectorID)
+	if actorID != "" && !slices.ContainsFunc(users, func(u store.User) bool { return u.ID == actorID }) {
+		if i := slices.IndexFunc(all, func(u store.User) bool { return u.ID == actorID }); i >= 0 {
+			users = append(users, all[i])
+		}
+	}
+	d.inflight.Add(1)
+	go func() {
+		defer d.inflight.Done()
+		d.fanOut(users, channels, routes, "", eventType, severity, connectorID, title, message)
 	}()
 }
 

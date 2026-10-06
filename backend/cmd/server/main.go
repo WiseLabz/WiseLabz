@@ -142,6 +142,8 @@ func main() {
 		os.Exit(1)
 	}
 	registerJobs(jobRunner, cfg, s, wsHub, notifDispatcher, syncEngine, backupDir, logger)
+	// Before anything serves requests: runs left in flight are marked interrupted.
+	mustRecoverRunbookRuns(ctx, s, wsHub, notifDispatcher, logger)
 
 	// Build HTTP router
 	readyState := &syshandler.ReadyState{}

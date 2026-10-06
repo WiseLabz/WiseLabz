@@ -20,12 +20,12 @@
 
 ## 4. Run executor
 
-- [ ] 4.1 Create `internal/runbookrun` with the state machine over store, lifecycle, sync and health interfaces; verify unit tests for all-succeed, failure halts with later steps pending, and timestamps on every transition.
-- [ ] 4.2 Implement `sync_and_wait` and `wait_until_healthy` with step timeouts and 10 second health polling; verify tests with fake sync/health for success, timeout and cancellation mid-wait.
-- [ ] 4.3 Implement manual pause, confirm, resume from the first non-succeeded step and cancel; verify tests for each transition and the 409 cases.
-- [ ] 4.4 Implement the per-step grant re-check for the starting or last resuming user; verify a test where a revoked grant fails the step without calling the connector.
-- [ ] 4.5 Add startup recovery that marks running runs interrupted and wire it before the server listens; verify a test that a running run becomes failed/interrupted with its step unknown and a waiting run is untouched.
-- [ ] 4.6 Emit `runbook.run.updated` WebSocket events and the `runbook.run_failed` / `runbook.run_waiting` notification events; verify hub filtering by connector grant and dispatcher tests, including no notification on success or cancel.
+- [x] 4.1 Create `internal/runbookrun` with the state machine over store, lifecycle, sync and health interfaces; verify unit tests for all-succeed, failure halts with later steps pending, and timestamps on every transition.
+- [x] 4.2 Implement `sync_and_wait` and `wait_until_healthy` with step timeouts and 10 second health polling; verify tests with fake sync/health for success, timeout and cancellation mid-wait.
+- [x] 4.3 Implement manual pause, confirm, resume from the first non-succeeded step and cancel; verify tests for each transition and the 409 cases.
+- [x] 4.4 Implement the per-step grant re-check for the starting or last resuming user; verify a test where a revoked grant fails the step without calling the connector.
+- [x] 4.5 Add startup recovery that marks running runs interrupted and wire it before the server listens; verify a test that a running run becomes failed/interrupted with its step unknown and a waiting run is untouched.
+- [x] 4.6 Emit `runbook.run.updated` WebSocket events and the `runbook.run_failed` / `runbook.run_waiting` notification events; verify hub filtering by connector grant and dispatcher tests, including no notification on success or cancel.
 
 ## 5. API
 

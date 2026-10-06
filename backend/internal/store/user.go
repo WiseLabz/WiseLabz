@@ -84,9 +84,20 @@ func (s *Store) CreateUser(ctx context.Context, user *User) error {
 
 // GetUserByID retrieves a user by ID.
 func (s *Store) GetUserByID(ctx context.Context, id string) (*User, error) {
+	return getUserByID(ctx, s.reader(), id)
+}
+
+// GetUserByIDFromWriter retrieves a user by ID, always reading from the writer
+// rather than the read replica. Use it for authorization decisions that must
+// see a just-committed disable or delete, which a lagging replica would miss.
+func (s *Store) GetUserByIDFromWriter(ctx context.Context, id string) (*User, error) {
+	return getUserByID(ctx, s.db, id)
+}
+
+func getUserByID(ctx context.Context, db DBTX, id string) (*User, error) {
 	u := &User{}
 	var disabled, canManageDashboardDefaults int
-	err := s.reader().QueryRowContext(ctx, `
+	err := db.QueryRowContext(ctx, `
 		SELECT id, username, display_name, email, instance_admin_role, auth_source, password_hash, disabled, can_manage_dashboard_defaults, created_at, digest_cadence, digest_last_sent_at, digest_timezone, failed_login_attempts, locked_until
 		FROM users WHERE id = ?
 	`, id).Scan(&u.ID, &u.Username, &u.DisplayName, &u.Email, &u.InstanceAdminRole,

@@ -59,7 +59,7 @@ type Engine struct {
 	detached       atomic.Int64
 	workers        sync.WaitGroup
 	sem            chan struct{}
-	inFlight       sync.Map // connector ID -> active run; entries are removed on every exit
+	inFlight       sync.Map // connector ID -> chan closed when the active run exits; entries are removed on every exit
 	store          *store.Store
 	hub            *ws.Hub
 	notifier       AlertNotifier
@@ -194,11 +194,17 @@ func (e *Engine) RunSyncAll(ctx context.Context, jobID string) ([]RunResult, err
 }
 
 // Go registers detached work before launch so shutdown can drain queued runs.
-func (e *Engine) Go(work func(context.Context)) {
+// Work offered after shutdown has begun is dropped silently; use TryGo to learn
+// that.
+func (e *Engine) Go(work func(context.Context)) { e.TryGo(work) }
+
+// TryGo is Go for a caller that must know whether the work was accepted: it
+// reports false, without running work, once shutdown has begun.
+func (e *Engine) TryGo(work func(context.Context)) bool {
 	e.workerMu.Lock()
 	defer e.workerMu.Unlock()
 	if e.stopping {
-		return
+		return false
 	}
 	e.workers.Add(1)
 	e.detached.Add(1)
@@ -207,6 +213,7 @@ func (e *Engine) Go(work func(context.Context)) {
 		defer e.detached.Add(-1)
 		work(e.BaseContext())
 	}()
+	return true
 }
 
 // Wait stops accepting detached work and drains it within the shutdown deadline.
