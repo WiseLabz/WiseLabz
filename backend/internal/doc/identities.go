@@ -62,7 +62,11 @@ func (e *Engine) BackfillEntityIdentities(ctx context.Context) (int, error) {
 				members = append(members, store.EntityMemberRecord{ConnectorID: c.ID, Kind: entity.Kind, Ref: ref, Name: entity.Name, ObservedAt: record.FetchedAt, ExternalID: entity.ExternalID, Hostname: entity.Hostname, Aliases: entity.Aliases})
 			}
 		}
-		return identityClusters(members), preserve, nil
+		overrides, err := tx.LoadEntityIdentityOverrides(ctx)
+		if err != nil {
+			return nil, nil, fmt.Errorf("load entity identity overrides: %w", err)
+		}
+		return identityClusters(members, overrides), preserve, nil
 	})
 	if err != nil {
 		return count, fmt.Errorf("reconcile entity identities: %w", err)
@@ -74,7 +78,18 @@ func identityKey(connectorID, kind, ref string) string {
 	return connectorID + "\x00" + kind + "\x00" + ref
 }
 
-func identityClusters(members []store.EntityMemberRecord) [][]store.EntityMemberRecord {
+// identityClusters groups members into identities. Manual overrides apply in
+// this order: detached members contribute no automatic features, the remaining
+// features cluster as usual, then every merge override whose two members are
+// both present joins them (even when one is detached). With no overrides the
+// result is the automatic clustering alone.
+func identityClusters(members []store.EntityMemberRecord, overrides []store.EntityIdentityOverride) [][]store.EntityMemberRecord {
+	detached := make(map[string]bool)
+	for _, o := range overrides {
+		if o.Action == store.EntityOverrideDetach {
+			detached[identityKey(o.ConnectorID, o.Kind, o.Ref)] = true
+		}
+	}
 	parent := make([]int, len(members))
 	for i := range parent {
 		parent[i] = i
@@ -94,6 +109,9 @@ func identityClusters(members []store.EntityMemberRecord) [][]store.EntityMember
 	}
 	features := make(map[string][]int)
 	for i, m := range members {
+		if detached[identityKey(m.ConnectorID, m.Kind, m.Ref)] {
+			continue
+		}
 		for _, key := range strongIdentityFeatures(connector.SnapshotEntity{Kind: m.Kind, ExternalID: m.ExternalID, Hostname: m.Hostname, Aliases: m.Aliases}) {
 			features[key] = append(features[key], i)
 		}
@@ -119,6 +137,22 @@ func identityClusters(members []store.EntityMemberRecord) [][]store.EntityMember
 		for _, id := range connectorOrder[1:] {
 			for _, index := range byConnector[id] {
 				join(index, primary[0])
+			}
+		}
+	}
+	if len(overrides) > 0 {
+		index := make(map[string]int, len(members))
+		for i, m := range members {
+			index[identityKey(m.ConnectorID, m.Kind, m.Ref)] = i
+		}
+		for _, o := range overrides {
+			if o.Action != store.EntityOverrideMerge {
+				continue
+			}
+			a, okA := index[identityKey(o.ConnectorID, o.Kind, o.Ref)]
+			b, okB := index[identityKey(o.OtherConnectorID, o.OtherKind, o.OtherRef)]
+			if okA && okB {
+				join(a, b)
 			}
 		}
 	}
