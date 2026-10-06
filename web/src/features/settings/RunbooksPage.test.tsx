@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { MemoryRouter } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import '../../i18n';
 import { RunbooksPage } from './RunbooksPage';
@@ -13,7 +14,12 @@ const { postRunbooks, putRunbooksRunbookId, deleteRunbooksRunbookId } = vi.hoist
 let runbooks: unknown[] = [];
 
 vi.mock('../../api/generated/runbooks/runbooks', () => ({
-  useGetRunbooks: () => ({ data: { items: runbooks }, isLoading: false, isError: false, refetch: vi.fn() }),
+  useGetRunbooks: () => ({
+    data: { items: runbooks },
+    isLoading: false,
+    isError: false,
+    refetch: vi.fn(),
+  }),
   getGetRunbooksQueryKey: () => ['runbooks'],
   postRunbooks,
   putRunbooksRunbookId,
@@ -37,12 +43,33 @@ vi.mock('../../components/ui/Dialog', () => ({
     ) : null,
 }));
 
+vi.mock('../../components/runbook/RunHistory', () => ({
+  RunHistory: ({
+    runbookId,
+    onSelectRun,
+  }: {
+    runbookId: string;
+    onSelectRun: (id: string) => void;
+  }) => <button onClick={() => onSelectRun('saved-run')}>History for {runbookId}</button>,
+}));
+vi.mock('../../components/runbook/RunDetail', () => ({
+  RunDetail: ({ runId }: { runId: string }) => <p>Detail for {runId}</p>,
+}));
+
 vi.mock('../../api/generated/connectors/connectors', () => ({
   useGetConnectors: () => ({
     data: [{ id: 'conn-1', name: 'pve1', type: 'proxmox' }],
   }),
   useGetConnectorsSchema: () => ({
-    data: [{ type: 'proxmox', category: 'hypervisor', displayName: 'Proxmox', fields: [], lifecycleVerbs: ['restart', 'stop'] }],
+    data: [
+      {
+        type: 'proxmox',
+        category: 'hypervisor',
+        displayName: 'Proxmox',
+        fields: [],
+        lifecycleVerbs: ['restart', 'stop'],
+      },
+    ],
   }),
   useGetConnectorsConnectorIdSnapshots: () => ({ data: [{ id: 'snap-1' }] }),
   useGetConnectorsConnectorIdSnapshotsSnapshotId: () => ({
@@ -50,10 +77,14 @@ vi.mock('../../api/generated/connectors/connectors', () => ({
   }),
 }));
 
-function renderPage() {
+function renderPage(entry = '/settings/runbooks') {
   return render(
-    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
-      <RunbooksPage />
+    <QueryClientProvider
+      client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+    >
+      <MemoryRouter initialEntries={[entry]}>
+        <RunbooksPage />
+      </MemoryRouter>
     </QueryClientProvider>
   );
 }
@@ -62,6 +93,23 @@ describe('RunbooksPage steps editor', () => {
   afterEach(() => {
     runbooks = [];
     vi.clearAllMocks();
+  });
+
+  it('opens history from a runbook and then its run detail', () => {
+    runbooks = [
+      {
+        id: 'rb-history',
+        title: 'Recorded runbook',
+        body: '',
+        targetType: 'change_type',
+        targetValue: 'vm.created',
+        steps: [],
+      },
+    ];
+    renderPage();
+    fireEvent.click(screen.getByRole('button', { name: 'Run history for Recorded runbook' }));
+    fireEvent.click(screen.getByRole('button', { name: 'History for rb-history' }));
+    expect(screen.getByText('Detail for saved-run')).toBeInTheDocument();
   });
 
   it('creates a runbook with a step', async () => {
@@ -100,7 +148,14 @@ describe('RunbooksPage steps editor', () => {
   it('surfaces a field error for an invalid step', async () => {
     postRunbooks.mockRejectedValueOnce({
       isAxiosError: true,
-      response: { status: 400, data: { code: 'invalid_request', message: 'bad', details: [{ field: 'steps[0].verb', msg: 'unsupported verb' }] } },
+      response: {
+        status: 400,
+        data: {
+          code: 'invalid_request',
+          message: 'bad',
+          details: [{ field: 'steps[0].verb', msg: 'unsupported verb' }],
+        },
+      },
     });
 
     renderPage();
@@ -305,7 +360,9 @@ describe('RunbooksPage steps editor', () => {
         data: {
           code: 'invalid_request',
           message: 'bad',
-          details: [{ field: 'steps[0].timeoutSeconds', msg: 'must be between 10 and 1800 seconds' }],
+          details: [
+            { field: 'steps[0].timeoutSeconds', msg: 'must be between 10 and 1800 seconds' },
+          ],
         },
       },
     });

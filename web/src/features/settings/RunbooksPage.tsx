@@ -6,6 +6,7 @@
  * than a generic toast.
  */
 import { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { isAxiosError } from 'axios';
@@ -16,7 +17,10 @@ import {
   putRunbooksRunbookId,
   deleteRunbooksRunbookId,
 } from '../../api/generated/runbooks/runbooks';
-import { useGetConnectors, useGetConnectorsSchema } from '../../api/generated/connectors/connectors';
+import {
+  useGetConnectors,
+  useGetConnectorsSchema,
+} from '../../api/generated/connectors/connectors';
 import type {
   Runbook,
   RunbookStepInput,
@@ -34,6 +38,8 @@ import { EntityPicker } from '../../components/manager/EntityPicker';
 import { toast } from '../../lib/toast';
 import { SubHeader, Field, TextInput, Select } from './parts';
 import { FileTextIcon, PlusIcon, EditIcon, XIcon, ChevronDownIcon } from '../../components/icons';
+import { RunHistory } from '../../components/runbook/RunHistory';
+import { RunDetail } from '../../components/runbook/RunDetail';
 
 const TARGET_TYPES: RunbookTargetType[] = ['change_type', 'alert_severity', 'finding_check_type'];
 const MAX_STEPS = 20;
@@ -109,6 +115,23 @@ const emptyDraft: Draft = {
 
 export function RunbooksPage() {
   const { t } = useTranslation();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const runId = searchParams.get('runId');
+  const historyId = searchParams.get('runbookId');
+  const selectRun = (id: string | null) =>
+    setSearchParams((params) => {
+      const next = new URLSearchParams(params);
+      if (id) next.set('runId', id);
+      else next.delete('runId');
+      return next;
+    });
+  const selectHistory = (id: string | null) =>
+    setSearchParams((params) => {
+      const next = new URLSearchParams(params);
+      if (id) next.set('runbookId', id);
+      else next.delete('runbookId');
+      return next;
+    });
   const queryClient = useQueryClient();
   const { data, isLoading, isError, refetch } = useGetRunbooks({ pageSize: 100 });
 
@@ -356,6 +379,14 @@ export function RunbooksPage() {
                     · {rb.targetValue}
                   </p>
                 </div>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => selectHistory(rb.id)}
+                  aria-label={t('runbooks.runs.historyFor', { title: rb.title })}
+                >
+                  {t('runbooks.runs.history')}
+                </Button>
                 <IconButton label={t('settings.runbooks.editLabel')} onClick={() => openEdit(rb)}>
                   <EditIcon size={15} />
                 </IconButton>
@@ -371,6 +402,32 @@ export function RunbooksPage() {
           </ul>
         )}
       </Panel>
+
+      {historyId && !runId && (
+        <Dialog
+          open
+          onClose={() => selectHistory(null)}
+          title={t('runbooks.runs.history')}
+          size="lg"
+        >
+          <RunHistory runbookId={historyId} onSelectRun={selectRun} />
+          <div className="mt-4 flex justify-end">
+            <Button variant="ghost" size="sm" onClick={() => selectHistory(null)}>
+              {t('common.close')}
+            </Button>
+          </div>
+        </Dialog>
+      )}
+      {runId && (
+        <Dialog
+          open
+          onClose={() => selectRun(null)}
+          title={t('runbooks.runs.detailTitle')}
+          size="lg"
+        >
+          <RunDetail key={runId} runId={runId} onClose={() => selectRun(null)} showTitle={false} />
+        </Dialog>
+      )}
 
       <Dialog
         open={editing !== null}

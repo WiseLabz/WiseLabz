@@ -157,6 +157,9 @@ const ShareLinkPage = lazy(() =>
 const RunbooksPage = lazy(() =>
   import('./features/settings').then(({ RunbooksPage }) => ({ default: RunbooksPage }))
 );
+const RunPage = lazy(() =>
+  import('./components/runbook/RunPage').then(({ RunPage }) => ({ default: RunPage }))
+);
 const AuditPage = lazy(() =>
   import('./features/settings').then(({ AuditPage }) => ({ default: AuditPage }))
 );
@@ -262,6 +265,7 @@ const router = createBrowserRouter([
       },
       { path: 'entities/:id', element: <EntityDetailPage /> },
       { path: 'changes/:changeId', element: <ChangeDetailPage /> },
+      { path: 'runbook-runs/:runId', element: <RunPage /> },
       { path: 'attention', element: <AttentionPage /> },
       { path: 'alerts', element: <AlertsPage /> },
       { path: 'findings', element: <FindingsPage /> },
