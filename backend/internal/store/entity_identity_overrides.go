@@ -128,7 +128,18 @@ func (s *Store) CreateEntityIdentityOverride(ctx context.Context, o *EntityIdent
 	if o.CreatedAt == "" {
 		o.CreatedAt = time.Now().UTC().Format(time.RFC3339Nano)
 	}
+	// Serialise with reconciliation and the retention purge: the purge judges an
+	// override by its member rows, so a create racing it could leave an override
+	// whose member history was just removed. Nothing here is called while the
+	// lock is held (reconcile callbacks receive a tx Store and never create).
+	entityIdentityReconcileMu.Lock()
+	defer entityIdentityReconcileMu.Unlock()
 	return s.WithinTransaction(ctx, func(tx *Store) error {
+		if s.driver == "postgres" {
+			if _, err := tx.db.ExecContext(ctx, `SELECT pg_advisory_xact_lock(731058502)`); err != nil {
+				return fmt.Errorf("lock entity identity override create: %w", err)
+			}
+		}
 		for _, key := range [][3]string{{o.ConnectorID, o.Kind, o.Ref}, {o.OtherConnectorID, o.OtherKind, o.OtherRef}} {
 			if key[0] == "" {
 				continue

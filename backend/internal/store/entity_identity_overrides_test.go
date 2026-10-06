@@ -5,6 +5,7 @@ import (
 	"errors"
 	"sort"
 	"testing"
+	"time"
 )
 
 type overrideFixture struct {
@@ -425,5 +426,38 @@ func TestEntityIdentityOverrideMergeDormantWhileOneMemberIsGone(t *testing.T) {
 	f.reconcile()
 	if view, err := f.s.GetEntityIdentityOverride(ctx, merge.ID); err != nil || view.State != EntityOverrideActive || f.identity("m0") != f.identity("m1") {
 		t.Fatalf("after return = %v, %v; want active and merged", view, err)
+	}
+}
+
+func TestCreateEntityIdentityOverrideWaitsForReconcileLock(t *testing.T) {
+	ctx := context.Background()
+	f := newOverrideFixture(t, 1, "")
+	created := make(chan error, 1)
+	entityIdentityReconcileMu.Lock()
+	go func() {
+		o := f.ref("m0")
+		o.Action, o.CreatedBy = EntityOverrideDetach, "admin"
+		created <- f.s.CreateEntityIdentityOverride(ctx, &o)
+	}()
+	// While a retention run or reconcile holds the lock, the member check and
+	// insert must not run. Meanwhile the member history is removed, as the
+	// purge would, so the waiting create has to see it gone.
+	select {
+	case err := <-created:
+		entityIdentityReconcileMu.Unlock()
+		t.Fatalf("create finished while the reconcile lock was held: %v", err)
+	case <-time.After(200 * time.Millisecond):
+	}
+	m := f.members["m0"]
+	_, err := f.s.db.ExecContext(ctx, `DELETE FROM entity_members WHERE connector_id = ? AND kind = ? AND ref = ?`, m.ConnectorID, m.Kind, m.Ref)
+	entityIdentityReconcileMu.Unlock()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := <-created; !errors.Is(err, ErrInvalidEntityOverride) {
+		t.Fatalf("create after the member history was removed = %v, want ErrInvalidEntityOverride", err)
+	}
+	if left, _ := f.s.LoadEntityIdentityOverrides(ctx); len(left) != 0 {
+		t.Fatalf("an orphaned override was stored: %+v", left)
 	}
 }
