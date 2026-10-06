@@ -133,7 +133,7 @@ export function RunbookPanel(props: RunbookPanelProps) {
           title={t('runbooks.runs.detailTitle')}
           size="lg"
         >
-          <RunDetail key={runId} runId={runId} onClose={() => setRunId(null)} />
+          <RunDetail key={runId} runId={runId} onClose={() => setRunId(null)} showTitle={false} />
         </Dialog>
       )}
     </section>

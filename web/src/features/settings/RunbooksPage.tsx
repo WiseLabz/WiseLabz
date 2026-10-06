@@ -425,7 +425,7 @@ export function RunbooksPage() {
           title={t('runbooks.runs.detailTitle')}
           size="lg"
         >
-          <RunDetail key={runId} runId={runId} onClose={() => selectRun(null)} />
+          <RunDetail key={runId} runId={runId} onClose={() => selectRun(null)} showTitle={false} />
         </Dialog>
       )}
 

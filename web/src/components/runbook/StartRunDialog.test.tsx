@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { http, HttpResponse } from 'msw';
+import { delay, http, HttpResponse } from 'msw';
 import { setupServer } from 'msw/node';
 import '../../i18n';
 import type { Runbook, RunbookRunStep } from '../../api/model';
@@ -157,10 +157,12 @@ describe('StartRunDialog', () => {
 
   it('binds elevation to runbook.run and starts with the elevation token', async () => {
     let receivedToken: string | null = null;
+    let dryRunToken: string | null = 'unset';
     server.use(
       http.post('/api/runbooks/rb-1/run', ({ request }) => {
         const url = new URL(request.url);
         if (url.searchParams.get('dryRun') === 'true') {
+          dryRunToken = request.headers.get('X-Elevation-Token');
           return HttpResponse.json({ id: 'rb-1', canStart: true, steps: [step()] });
         }
         receivedToken = request.headers.get('X-Elevation-Token');
@@ -178,6 +180,7 @@ describe('StartRunDialog', () => {
       expect(receivedToken).toBe('elevation-token');
       expect(onStarted).toHaveBeenCalledWith('run-1');
     });
+    expect(dryRunToken).toBeNull();
   });
 
   it('shows the API conflict message and opens the existing run through its link', async () => {
@@ -228,5 +231,96 @@ describe('StartRunDialog', () => {
     expect(screen.getByText('You do not have permission to view this step.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Start run' })).toBeDisabled();
     expect(screen.queryByText('Lifecycle action')).not.toBeInTheDocument();
+  });
+
+  it('keeps start disabled while the preview is loading', async () => {
+    server.use(
+      http.post('/api/runbooks/rb-1/run', async () => {
+        await delay(100);
+        return HttpResponse.json({ id: 'rb-1', canStart: true, steps: [step()] });
+      })
+    );
+    renderDialog();
+
+    expect(screen.getByText('Loading preview…')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Start run' })).toBeDisabled();
+    expect(await screen.findByText('Restart the search worker')).toBeInTheDocument();
+    expect(screen.queryByText('Loading preview…')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Start run' })).toBeEnabled();
+  });
+
+  it('shows the preview error, keeps start disabled and recovers on retry', async () => {
+    let requests = 0;
+    server.use(
+      http.post('/api/runbooks/rb-1/run', () => {
+        requests += 1;
+        if (requests === 1) return new HttpResponse(null, { status: 500 });
+        return HttpResponse.json({ id: 'rb-1', canStart: true, steps: [step()] });
+      })
+    );
+    renderDialog();
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Could not load the run preview. Try again.'
+    );
+    expect(screen.getByRole('button', { name: 'Start run' })).toBeDisabled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Retry preview' }));
+    expect(await screen.findByText('Restart the search worker')).toBeInTheDocument();
+    expect(requests).toBe(2);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Start run' })).toBeEnabled();
+  });
+
+  it('explains an empty runbook and keeps start disabled', async () => {
+    server.use(
+      http.post('/api/runbooks/rb-1/run', () =>
+        HttpResponse.json({ id: 'rb-1', canStart: false, steps: [] })
+      )
+    );
+    renderDialog();
+
+    expect(
+      await screen.findByText('Add steps to this runbook before starting a run.')
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Start run' })).toBeDisabled();
+  });
+
+  it('renders a step missing its fields as restricted without printing undefined', async () => {
+    server.use(
+      http.post('/api/runbooks/rb-1/run', () =>
+        HttpResponse.json({
+          id: 'rb-1',
+          canStart: false,
+          steps: [{ id: 'bare-1', position: 0, redacted: false, canExecute: true }],
+        })
+      )
+    );
+    renderDialog();
+
+    expect(await screen.findByText('Restricted step')).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('undefined');
+  });
+
+  it('shows the unavailable message when the server is shutting down', async () => {
+    server.use(
+      http.post('/api/runbooks/rb-1/run', ({ request }) => {
+        if (new URL(request.url).searchParams.get('dryRun') === 'true') {
+          return HttpResponse.json({ id: 'rb-1', canStart: true, steps: [step()] });
+        }
+        return new HttpResponse(null, { status: 503 });
+      })
+    );
+    renderDialog();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Start run' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Confirm elevation' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'The server is shutting down. Try again shortly.'
+    );
+    expect(
+      screen.queryByText('Could not start this run. Review the preview and try again.')
+    ).not.toBeInTheDocument();
   });
 });

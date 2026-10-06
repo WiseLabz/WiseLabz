@@ -19,10 +19,20 @@ import { Skeleton } from '../ui/states';
 import { toast } from '../../lib/toast';
 import { ToneTag } from '../ui/ToneTag';
 import type { Tone } from '../ui/status';
+import { isConflict, runErrorMessage } from './runErrors';
 
 type RunT = ReturnType<typeof useTranslation>['t'];
 
-export function RunDetail({ runId, onClose }: { runId: string; onClose?: () => void }) {
+export function RunDetail({
+  runId,
+  onClose,
+  showTitle = true,
+}: {
+  runId: string;
+  onClose?: () => void;
+  /** Hide the heading when the surrounding page or dialog already provides it. */
+  showTitle?: boolean;
+}) {
   const { t, i18n } = useTranslation();
   const headingId = useId();
   const queryClient = useQueryClient();
@@ -46,7 +56,10 @@ export function RunDetail({ runId, onClose }: { runId: string; onClose?: () => v
       refresh();
       toast.success(t('runbooks.runs.confirmSuccess'));
     },
-    onError: () => toast.error(t('runbooks.runs.confirmError')),
+    onError: (error) => {
+      toast.error(runErrorMessage(error, t, 'runbooks.runs.confirmError'));
+      if (isConflict(error)) refresh();
+    },
   });
 
   const resume = useMutation({
@@ -66,8 +79,11 @@ export function RunDetail({ runId, onClose }: { runId: string; onClose?: () => v
       if (response?.code === 'runbook_deleted') {
         setRunbookDeleted(true);
         refresh();
+        setResumeError(t('runbooks.runs.resumeDeleted'));
+        return;
       }
-      setResumeError(response?.message || t('runbooks.runs.resumeError'));
+      if (isConflict(error)) refresh();
+      setResumeError(runErrorMessage(error, t, 'runbooks.runs.resumeError'));
     },
   });
 
@@ -78,17 +94,22 @@ export function RunDetail({ runId, onClose }: { runId: string; onClose?: () => v
       setConfirmCancelOpen(false);
       toast.success(t('runbooks.runs.cancelSuccess'));
     },
-    onError: () => toast.error(t('runbooks.runs.cancelError')),
+    onError: (error) => {
+      toast.error(runErrorMessage(error, t, 'runbooks.runs.cancelError'));
+      if (isConflict(error)) refresh();
+    },
   });
 
   const waitingStep = run?.steps.find((step) => step.state === 'waiting');
   const allStepsExecutable = !!run && run.steps.every((step) => step.canExecute);
-  const canConfirm =
-    run?.state === 'waiting_manual' && waitingStep?.kind === 'manual' && allStepsExecutable;
-  const canResume =
-    run?.state === 'failed' && !!run.runbookId && !runbookDeleted && allStepsExecutable;
-  const canCancel =
-    !!run && ['running', 'waiting_manual', 'failed'].includes(run.state) && allStepsExecutable;
+  const confirmShown = run?.state === 'waiting_manual' && waitingStep?.kind === 'manual';
+  const resumeShown = run?.state === 'failed' && !!run.runbookId && !runbookDeleted;
+  const canConfirm = confirmShown && allStepsExecutable;
+  const canResume = resumeShown && allStepsExecutable;
+  // Cancel does not depend on the steps being executable: a step whose connector
+  // was deleted is redacted for everyone, yet the run must stay cancellable. The
+  // server enforces grants and a refusal is surfaced by cancel.onError.
+  const canCancel = !!run && ['running', 'waiting_manual', 'failed'].includes(run.state);
   const firstUnfinishedStep = run?.steps
     .slice()
     .sort((a, b) => a.position - b.position)
@@ -102,12 +123,18 @@ export function RunDetail({ runId, onClose }: { runId: string; onClose?: () => v
 
   return (
     <>
-      <section aria-labelledby={headingId} className="space-y-5">
+      <section
+        aria-labelledby={showTitle ? headingId : undefined}
+        aria-label={showTitle ? undefined : t('runbooks.runs.detailTitle')}
+        className="space-y-5"
+      >
         <header className="flex min-w-0 items-start justify-between gap-3">
           <div className="min-w-0">
-            <h2 id={headingId} className="font-mono text-lg font-medium text-ink">
-              {t('runbooks.runs.detailTitle')}
-            </h2>
+            {showTitle && (
+              <h2 id={headingId} className="font-mono text-lg font-medium text-ink">
+                {t('runbooks.runs.detailTitle')}
+              </h2>
+            )}
             {run && <p className="mt-1 truncate text-sm text-ink-muted">{run.runbookTitle}</p>}
             {run && (
               <div aria-live="polite" aria-atomic="true" className="mt-2">
@@ -203,17 +230,14 @@ export function RunDetail({ runId, onClose }: { runId: string; onClose?: () => v
               </ol>
             </section>
 
-            {run.state !== 'succeeded' &&
-              run.state !== 'cancelled' &&
-              run.state !== 'expired' &&
-              !allStepsExecutable && (
-                <p role="note" className="text-xs text-ink-muted">
-                  {t('runbooks.runs.blockedAction')}
-                </p>
-              )}
+            {(confirmShown || resumeShown) && !allStepsExecutable && (
+              <p role="note" className="text-xs text-ink-muted">
+                {t('runbooks.runs.blockedAction')}
+              </p>
+            )}
 
             <div className="flex flex-wrap justify-end gap-2 border-t border-line-soft pt-3">
-              {run.state === 'waiting_manual' && waitingStep?.kind === 'manual' && (
+              {confirmShown && waitingStep && (
                 <Button
                   variant="primary"
                   size="sm"
@@ -223,7 +247,7 @@ export function RunDetail({ runId, onClose }: { runId: string; onClose?: () => v
                   {t('runbooks.runs.confirm')}
                 </Button>
               )}
-              {run.state === 'failed' && run.runbookId && !runbookDeleted && (
+              {resumeShown && (
                 <Button size="sm" disabled={!canResume || resume.isPending} onClick={openResume}>
                   {t('runbooks.runs.resume')}
                 </Button>
@@ -394,7 +418,7 @@ function RunStepRow({ step, language, t }: { step: RunbookRunStep; language: str
         {step.timeoutSeconds !== undefined && step.timeoutSeconds > 0 && (
           <MetadataRow
             label={t('runbooks.runs.timeout')}
-            value={t('runbooks.runs.timeoutValue', { seconds: step.timeoutSeconds })}
+            value={t('runbooks.runs.timeoutValue', { count: step.timeoutSeconds })}
           />
         )}
         {step.startedAt && (

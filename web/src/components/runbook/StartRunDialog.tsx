@@ -11,6 +11,7 @@ import type {
 import { Button } from '../ui/Button';
 import { Dialog } from '../ui/Dialog';
 import { ElevationConfirm } from '../manager/ElevationConfirm';
+import { runErrorMessage } from './runErrors';
 
 export function StartRunDialog({
   runbook,
@@ -25,7 +26,7 @@ export function StartRunDialog({
 }) {
   const { t } = useTranslation();
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const [startError, setStartError] = useState(false);
+  const [startError, setStartError] = useState<string | null>(null);
   const [conflict, setConflict] = useState<RunbookRunConflict | null>(null);
   const elevationToken = useRef<string | null>(null);
 
@@ -58,7 +59,7 @@ export function StartRunDialog({
 
   const close = () => {
     setConfirmOpen(false);
-    setStartError(false);
+    setStartError(null);
     setConflict(null);
     elevationToken.current = null;
     onClose();
@@ -72,7 +73,7 @@ export function StartRunDialog({
 
   const start = async (token: string | null) => {
     elevationToken.current = token;
-    setStartError(false);
+    setStartError(null);
     setConflict(null);
     try {
       const result = await startRequest.mutateAsync({
@@ -81,7 +82,7 @@ export function StartRunDialog({
       });
       if ('canStart' in result) {
         setConfirmOpen(false);
-        setStartError(true);
+        setStartError(t('runbooks.runs.startError'));
         return;
       }
       setConfirmOpen(false);
@@ -91,7 +92,7 @@ export function StartRunDialog({
       const activeRun = getRunbookRunConflict(error);
       setConfirmOpen(false);
       if (activeRun) setConflict(activeRun);
-      else setStartError(true);
+      else setStartError(runErrorMessage(error, t, 'runbooks.runs.startError'));
     } finally {
       elevationToken.current = null;
     }
@@ -140,7 +141,7 @@ export function StartRunDialog({
 
                 {startError && (
                   <p role="alert" className="text-sm text-err">
-                    {t('runbooks.runs.startError')}
+                    {startError}
                   </p>
                 )}
                 {conflict && (
@@ -179,7 +180,7 @@ export function StartRunDialog({
               <Button
                 variant="primary"
                 onClick={() => {
-                  setStartError(false);
+                  setStartError(null);
                   setConflict(null);
                   setConfirmOpen(true);
                 }}

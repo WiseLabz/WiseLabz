@@ -10,7 +10,7 @@
  * is trapped, and is restored on close; Escape and backdrop-click cancel.
  */
 import {useState} from 'react';
-import {useTranslation} from 'react-i18next';
+import {Trans, useTranslation} from 'react-i18next';
 import {useGetAuthConfig} from '../../api/generated/settings/settings';
 import {Button} from '../ui/Button';
 import {Dialog} from '../ui/Dialog';
@@ -78,11 +78,14 @@ export function ElevationConfirm({
                 {/* Type-to-confirm */}
                 <div>
                     <label htmlFor="elevation-confirm-name" className="mb-1.5 block text-2xs text-ink-faint">
-                        {t('elevationConfirm.typeName', {name: resourceName})}
+                        <Trans
+                            i18nKey="elevationConfirm.typeName"
+                            values={{name: resourceName}}
+                            components={{name: <span className="font-mono text-ink"/>}}
+                        />
                     </label>
                     <input
                         id="elevation-confirm-name"
-                        name="confirmation"
                         value={typed}
                         onChange={(e) => setTyped(e.target.value)}
                         autoComplete="off"
@@ -95,7 +98,7 @@ export function ElevationConfirm({
                     <StepUp action={action} target={target} onElevated={setToken}/>
                 )}
                 {stepUpRequired && token && (
-                    <p className="text-2xs text-ok" role="status">{t('elevationConfirm.ready')}</p>
+                    <p className="text-2xs text-ok">{t('elevationConfirm.ready')}</p>
                 )}
 
                 <div className="flex items-center justify-end gap-2 pt-1">
