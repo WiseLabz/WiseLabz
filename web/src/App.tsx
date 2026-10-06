@@ -211,15 +211,6 @@ const router = createBrowserRouter([
   { path: '/share/:token', element: <ShareLinkPage /> },
   { path: '/share/:token/docs/:docId', element: <ShareLinkPage /> },
   {
-    path: '/runbook-runs/:runId',
-    element: (
-      <RequireAuth>
-        <AppShell />
-      </RequireAuth>
-    ),
-    children: [{ index: true, element: <RunPage /> }],
-  },
-  {
     // Onboarding sits under auth only (NOT RequireOnboarded) so it never loops.
     path: '/onboarding',
     element: (
@@ -274,6 +265,7 @@ const router = createBrowserRouter([
       },
       { path: 'entities/:id', element: <EntityDetailPage /> },
       { path: 'changes/:changeId', element: <ChangeDetailPage /> },
+      { path: 'runbook-runs/:runId', element: <RunPage /> },
       { path: 'attention', element: <AttentionPage /> },
       { path: 'alerts', element: <AlertsPage /> },
       { path: 'findings', element: <FindingsPage /> },

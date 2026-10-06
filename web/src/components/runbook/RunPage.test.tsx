@@ -44,7 +44,11 @@ afterEach(() => {
 afterAll(() => server.close());
 
 async function openRun(response: RunbookRun) {
-  server.use(http.get('/api/runbook-runs/run-route', () => HttpResponse.json(response)));
+  server.use(
+    http.get('/api/runbook-runs/run-route', () => HttpResponse.json(response)),
+    // RequireOnboarded lets the route through only once a connector exists.
+    http.get('/api/connectors', () => HttpResponse.json([{ id: 'conn-1' }]))
+  );
   useAuth.setState({
     status: 'authenticated',
     bootstrap: vi.fn().mockResolvedValue(undefined),
@@ -76,8 +80,7 @@ describe('run detail route', () => {
         'This runbook was deleted. This run can still be reviewed, but it cannot be resumed.'
       )
     ).toBeInTheDocument();
-    const resume = screen.queryByRole('button', { name: 'Resume run' });
-    if (resume) expect(resume).toBeDisabled();
+    expect(screen.queryByRole('button', { name: 'Resume run' })).not.toBeInTheDocument();
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 });
