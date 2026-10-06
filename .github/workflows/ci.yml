@@ -59,6 +59,9 @@ jobs:
       - name: Check classification rules
         run: scripts/ci/changes.sh check
 
+      - name: Check CI status gate
+        run: scripts/ci/status-test.sh
+
       - name: Classify changes
         id: classify
         env:
@@ -543,9 +546,34 @@ jobs:
 
     steps:
       - name: Check overall status
+        env:
+          NEEDS: ${{ toJSON(needs) }}
         run: |
-          if [[ "${{ contains(needs.*.result, 'failure') }}" == "true" ]] || [[ "${{ contains(needs.*.result, 'cancelled') }}" == "true" ]]; then
-            echo "One or more required jobs failed or were cancelled."
-            exit 1
-          fi
+          jq -e '
+            if .changes.result != "success" then
+              error("Detect changes must succeed; got \(.changes.result)")
+            else . end
+            | . as $needs
+            | .changes.outputs as $outputs
+            | [
+                (if $outputs.workflows == "true" then "actionlint" else empty end),
+                (if $outputs.draft != "true" then
+                  (if $outputs.backend == "true" then
+                    "lint-backend", "staticcheck", "test-backend", "test-backend-race"
+                  else empty end),
+                  (if $outputs.frontend == "true" then "lint-frontend", "test-frontend" else empty end),
+                  (if $outputs.gomod == "true" then "govulncheck" else empty end),
+                  (if $outputs.postgres == "true" then "test-backend-postgres" else empty end),
+                  (if $outputs.backend == "true" or $outputs.frontend == "true" then "build" else empty end),
+                  (if $outputs.compose == "true" then "compose-smoke" else empty end)
+                else empty end)
+              ] as $required
+            | [
+                ($required[] | select($needs[.].result != "success")
+                  | "\(.): expected success, got \($needs[.].result)"),
+                (to_entries[] | select(.value.result == "failure" or .value.result == "cancelled")
+                  | "\(.key): \(.value.result)")
+              ]
+            | if length > 0 then error(join("; ")) else true end
+          ' <<<"$NEEDS"
           echo "All required jobs passed (or were correctly skipped by the path filter)."
