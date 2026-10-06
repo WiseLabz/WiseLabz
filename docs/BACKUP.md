@@ -29,6 +29,13 @@ text and connector/doc/entity links. Import restores them additively by ID.
   each (`GET /api/docs/{id}/versions` equivalent).
 - **Attachments** — metadata plus deduplicated file bytes, including attachments of trash docs.
 - **Templates** — all template records, plus every section of each.
+- **Entity identity overrides** (`entityIdentityOverrides`) — manual identity
+  merges and detaches: ID, action, member keys (connector ID, kind, ref),
+  note, creator and creation time. Identities and their memberships
+  (`entities`, `entity_members`) are not exported: they are rebuilt from
+  connector snapshots at the next sync, and overrides refer to members by that
+  connector-local key, so a restored override stays *dormant* until its member
+  is observed again and then applies without further action.
 - **AI config summary** (`aiConfig`) — `enabled`, `provider`, `model`,
   `baseUrl`, `mode`. Informational only (see Exclusions).
 
@@ -59,7 +66,7 @@ validated before database writes; temporary staging files are removed afterwards
 Top-level bundle JSON fields: `version` (integer, currently `2`), `exportedAt`
 (RFC3339 timestamp), `connectors`, `docs`, `docVersions`, `templates`,
 `templateSections` (arrays mirroring the corresponding store records), and
-`attachments` and optionally `aiConfig`. See `docs/openapi.yaml` (`BackupBundle` schema) for
+`attachments`, optionally `entityIdentityOverrides` and optionally `aiConfig`. See `docs/openapi.yaml` (`BackupBundle` schema) for
 the exact shape.
 
 ## Import behavior
@@ -68,7 +75,8 @@ the exact shape.
   a `docs[].id` present in the bundle; every `templateSections[].templateId`
   must reference a `templates[].id` present in the bundle; every
   `connectors[].category` must be one of `virtualization`, `containers_paas`,
-  `networking`. The first validation failure aborts the whole import with a
+  `networking`; every `entityIdentityOverrides[]` entry must be a well-formed
+  detach or same-kind merge whose connectors are in `connectors`. The first validation failure aborts the whole import with a
   400 `invalid_backup` response — no partial writes.
 - **Additive and idempotent.** Each record is created only if its ID doesn't
   already exist in the target instance; an existing ID is left untouched and
