@@ -88,6 +88,7 @@ describe('RunbookPanel', () => {
 
     expect(await screen.findByText('Restart the hung agent')).toBeInTheDocument();
     expect(screen.getByText('Step 1: SSH in.', { exact: false })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Start run' })).toBeDisabled();
   });
 });
 
@@ -150,6 +151,32 @@ describe('RunbookPanel steps', () => {
     const buttons = screen.getAllByRole('button', { name: 'Execute' });
     expect(buttons[1]).toBeDisabled();
     expect(screen.getByText('You need operator access to docker1.')).toBeInTheDocument();
+  });
+
+  it('opens history and a run with a restricted step from the inline panel', async () => {
+    const savedRun = {
+      id: 'run-history',
+      runbookId: 'rb-1',
+      runbookTitle: 'Saved runbook title',
+      state: 'succeeded',
+      startedBy: 'user-1',
+      startedAt: '2026-10-06T12:00:00Z',
+      updatedAt: '2026-10-06T12:00:00Z',
+      steps: [
+        { id: 'hidden-step', position: 0, redacted: true, canExecute: false, state: 'succeeded' },
+      ],
+    };
+    server.use(
+      http.get('/api/runbooks/rb-1/runs', () =>
+        HttpResponse.json({ items: [savedRun], total: 1, page: 1, pageSize: 10 })
+      ),
+      http.get('/api/runbook-runs/run-history', () => HttpResponse.json(savedRun))
+    );
+    renderPanel(stepsRunbook);
+    fireEvent.click(await screen.findByRole('button', { name: 'Run history' }));
+    fireEvent.click(await screen.findByRole('link', { name: /Saved runbook title/ }));
+    expect(await screen.findByText('Restricted step')).toBeInTheDocument();
+    expect(screen.getByText('Saved runbook title')).toBeInTheDocument();
   });
 
   it('runs the dry-run preview then executes with the elevation token', async () => {

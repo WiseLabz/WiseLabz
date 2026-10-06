@@ -1,0 +1,314 @@
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { http, HttpResponse } from 'msw';
+import { setupServer } from 'msw/node';
+import type { RunbookRun } from '../../api/model';
+import i18n from '../../i18n';
+import { RunDetail } from './RunDetail';
+
+type ElevationProps = {
+  open: boolean;
+  title: string;
+  action: string;
+  target?: string;
+  confirmLabel?: string;
+  isPending?: boolean;
+  onClose: () => void;
+  onConfirm: (token: string | null) => Promise<void> | void;
+};
+
+vi.mock('../manager/ElevationConfirm', () => ({
+  ElevationConfirm: ({
+    open,
+    title,
+    action,
+    target,
+    confirmLabel,
+    isPending,
+    onClose,
+    onConfirm,
+  }: ElevationProps) =>
+    open ? (
+      <div role="dialog" aria-label={title}>
+        <p>{action}</p>
+        <p>{target}</p>
+        <button disabled={isPending} onClick={() => onConfirm('fresh-elevation-token')}>
+          {confirmLabel}
+        </button>
+        <button onClick={onClose}>Close elevation</button>
+      </div>
+    ) : null,
+}));
+
+vi.mock('../../lib/toast', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+
+const server = setupServer();
+
+const baseRun: RunbookRun = {
+  id: 'run-1',
+  runbookId: 'runbook-1',
+  runbookTitle: 'Failover runbook',
+  state: 'failed',
+  reason: 'interrupted',
+  startedBy: 'user-started',
+  resumedBy: 'user-resumed',
+  cancelledBy: 'user-cancelled',
+  startedAt: '2026-10-01T10:00:00Z',
+  updatedAt: '2026-10-01T10:10:00Z',
+  finishedAt: '2026-10-01T10:10:00Z',
+  steps: [
+    {
+      id: 'step-1',
+      position: 0,
+      kind: 'lifecycle',
+      title: 'Restart primary',
+      connectorId: 'connector-1',
+      connectorName: 'primary',
+      verb: 'restart',
+      entityRef: 'vm:100',
+      timeoutSeconds: 300,
+      state: 'failed',
+      startedAt: '2026-10-01T10:02:00Z',
+      finishedAt: '2026-10-01T10:03:00Z',
+      error: 'Connector refused the restart',
+      confirmedBy: 'user-confirmed',
+      redacted: false,
+      canExecute: true,
+    },
+  ],
+};
+
+let currentRun = structuredClone(baseRun);
+
+beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
+beforeEach(() => {
+  currentRun = structuredClone(baseRun);
+  server.use(http.get('/api/runbook-runs/:runId', () => HttpResponse.json(currentRun)));
+});
+afterEach(() => server.resetHandlers());
+afterAll(() => server.close());
+
+function renderDetail(runId = 'run-1') {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
+  return render(
+    <QueryClientProvider client={client}>
+      <RunDetail runId={runId} />
+    </QueryClientProvider>
+  );
+}
+
+describe('RunDetail', () => {
+  it.each([
+    ['running', 'Running'],
+    ['waiting_manual', 'Waiting for manual confirmation'],
+    ['failed', 'Failed'],
+    ['succeeded', 'Succeeded'],
+    ['cancelled', 'Cancelled'],
+    ['expired', 'Expired'],
+  ] as const)('labels the %s run state', async (state, label) => {
+    currentRun = { ...baseRun, state };
+    renderDetail();
+    const detail = screen.getByRole('region', { name: 'Run details' });
+    const stateLabels = await within(detail).findAllByText(label);
+    expect(stateLabels.some((element) => element.closest('[aria-live="polite"]'))).toBe(true);
+  });
+
+  it.each([
+    ['pending', 'Pending'],
+    ['running', 'Running'],
+    ['waiting', 'Waiting'],
+    ['succeeded', 'Succeeded'],
+    ['failed', 'Failed'],
+    ['skipped', 'Skipped'],
+    ['unknown', 'Unknown'],
+  ] as const)('labels the %s step state', async (state, label) => {
+    currentRun = {
+      ...baseRun,
+      state: 'running',
+      steps: [{ ...baseRun.steps[0], state }],
+    };
+    renderDetail();
+    const detail = screen.getByRole('region', { name: 'Run details' });
+    const stateLabels = await within(detail).findAllByText(label);
+    expect(stateLabels.some((element) => element.closest('[aria-live="polite"]'))).toBe(true);
+  });
+
+  it('shows frozen step data, reasons, times, and actor IDs', async () => {
+    renderDetail();
+
+    expect(await screen.findByText('Restart primary')).toBeInTheDocument();
+    expect(screen.getByText('primary')).toBeInTheDocument();
+    expect(screen.getByText('connector-1')).toBeInTheDocument();
+    expect(screen.getByText('vm:100')).toBeInTheDocument();
+    expect(screen.getByText('Connector refused the restart')).toBeInTheDocument();
+    expect(screen.getByText('interrupted')).toBeInTheDocument();
+    for (const actor of ['user-started', 'user-resumed', 'user-cancelled', 'user-confirmed']) {
+      expect(screen.getByText(actor)).toBeInTheDocument();
+    }
+    expect(screen.getAllByText(/Oct 1, 2026/).length).toBeGreaterThan(0);
+  });
+
+  it('renders redacted steps as neutral restricted rows without exposing hidden fields', async () => {
+    currentRun = {
+      ...baseRun,
+      steps: [
+        {
+          ...baseRun.steps[0],
+          id: 'hidden-step',
+          position: 1,
+          redacted: true,
+          title: 'SECRET step title',
+          connectorId: 'secret-connector-id',
+          connectorName: 'SECRET connector name',
+          kind: 'lifecycle',
+          entityRef: 'SECRET entity',
+          error: 'SECRET step error',
+        },
+      ],
+    };
+    renderDetail();
+
+    expect(await screen.findByText('Restricted step')).toBeInTheDocument();
+    expect(screen.getByText('user-confirmed')).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('SECRET');
+  });
+
+  it('confirms a waiting manual step without elevation', async () => {
+    currentRun = {
+      ...baseRun,
+      state: 'waiting_manual',
+      steps: [
+        {
+          ...baseRun.steps[0],
+          id: 'manual-step',
+          kind: 'manual',
+          title: 'Verify failover',
+          connectorId: undefined,
+          connectorName: undefined,
+          verb: undefined,
+          state: 'waiting',
+        },
+      ],
+    };
+    let confirmed = false;
+    server.use(
+      http.post('/api/runbook-runs/:runId/steps/:stepId/confirm', ({ params }) => {
+        confirmed = params.runId === 'run-1' && params.stepId === 'manual-step';
+        return new HttpResponse(null, { status: 204 });
+      })
+    );
+    renderDetail();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Confirm step' }));
+    await waitFor(() => expect(confirmed).toBe(true));
+    expect(screen.queryByText('runbook.run')).not.toBeInTheDocument();
+  });
+
+  it('warns before elevation when the first unfinished step is unknown', async () => {
+    currentRun = {
+      ...baseRun,
+      steps: [
+        { ...baseRun.steps[0], state: 'succeeded' },
+        { ...baseRun.steps[0], id: 'unknown-step', position: 1, state: 'unknown' },
+      ],
+    };
+    let elevationToken = '';
+    server.use(
+      http.post('/api/runbook-runs/:runId/resume', ({ request }) => {
+        elevationToken = request.headers.get('X-Elevation-Token') ?? '';
+        return HttpResponse.json({ ...currentRun, state: 'running' }, { status: 202 });
+      })
+    );
+    renderDetail();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Resume run' }));
+    expect(
+      await screen.findByText(i18n.t('runbooks.runs.resumeWarningUnknown'))
+    ).toBeInTheDocument();
+    expect(screen.queryByText('runbook.run')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Continue to approval' }));
+
+    const elevation = await screen.findByRole('dialog', { name: 'Resume run' });
+    expect(elevation).toHaveTextContent('runbook.run');
+    expect(elevation).toHaveTextContent('runbook-1');
+    fireEvent.click(within(elevation).getByRole('button', { name: 'Resume run' }));
+    await waitFor(() => expect(elevationToken).toBe('fresh-elevation-token'));
+  });
+
+  it('opens elevation directly when the first unfinished step is known', async () => {
+    currentRun = {
+      ...baseRun,
+      steps: [{ ...baseRun.steps[0], state: 'failed' }],
+    };
+    renderDetail();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Resume run' }));
+    expect(await screen.findByText('runbook.run')).toBeInTheDocument();
+    expect(screen.queryByText(/unknown result/i)).not.toBeInTheDocument();
+  });
+
+  it('shows the API reason when a deleted runbook rejects resume with 409', async () => {
+    const apiMessage = 'The runbook no longer exists; this run cannot be resumed';
+    server.use(
+      http.post('/api/runbook-runs/:runId/resume', () =>
+        HttpResponse.json({ code: 'runbook_deleted', message: apiMessage }, { status: 409 })
+      )
+    );
+    renderDetail();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Resume run' }));
+    const elevation = await screen.findByRole('dialog', { name: 'Resume run' });
+    fireEvent.click(within(elevation).getByRole('button', { name: 'Resume run' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(apiMessage);
+    expect(screen.queryByRole('button', { name: 'Resume run' })).not.toBeInTheDocument();
+  });
+
+  it('explains why a deleted runbook run cannot be resumed', async () => {
+    currentRun = { ...baseRun, runbookId: undefined };
+    renderDetail();
+
+    expect(
+      await screen.findByText(
+        'This runbook was deleted. This run can still be reviewed, but it cannot be resumed.'
+      )
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Resume run' })).not.toBeInTheDocument();
+  });
+
+  it('requires a separate confirmation before cancelling', async () => {
+    let cancelled = false;
+    server.use(
+      http.post('/api/runbook-runs/:runId/cancel', () => {
+        cancelled = true;
+        return new HttpResponse(null, { status: 204 });
+      })
+    );
+    renderDetail();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Cancel run' }));
+    const confirmation = await screen.findByRole('dialog', { name: 'Cancel run' });
+    expect(cancelled).toBe(false);
+    fireEvent.click(within(confirmation).getByRole('button', { name: 'Yes, cancel run' }));
+    await waitFor(() => expect(cancelled).toBe(true));
+  });
+
+  it('disables run actions when any frozen step is not executable', async () => {
+    currentRun = {
+      ...baseRun,
+      state: 'waiting_manual',
+      steps: [{ ...baseRun.steps[0], kind: 'manual', state: 'waiting', canExecute: false }],
+    };
+    renderDetail();
+
+    expect(await screen.findByRole('button', { name: 'Confirm step' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Cancel run' })).toBeDisabled();
+    expect(
+      screen.getByText(
+        'You need operator access to every connector in this run to perform this action.'
+      )
+    ).toBeInTheDocument();
+  });
+});

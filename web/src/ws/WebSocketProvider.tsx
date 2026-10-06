@@ -14,6 +14,10 @@ import { getGetFindingsQueryKey } from '../api/generated/findings/findings';
 import { getGetNotificationsQueryKey } from '../api/generated/notifications/notifications';
 import { getGetSearchQueryKey } from '../api/generated/search/search';
 import { getGetDocsTreeQueryKey } from '../api/generated/docs/docs';
+import {
+  getGetRunbookRunQueryKey,
+  getListRunbookRunsQueryKey,
+} from '../api/generated/runbooks/runbooks';
 import { useLive } from '../store/live';
 import { toast } from '../lib/toast';
 import { navigateTo } from '../lib/navigation';
@@ -106,6 +110,16 @@ function resync(qc: ReturnType<typeof useQueryClient>) {
   qc.invalidateQueries({ queryKey: getGetChangesQueryKey() });
   qc.invalidateQueries({ queryKey: getGetConnectorsQueryKey() });
   qc.invalidateQueries({ queryKey: getGetDashboardOverviewQueryKey() });
+  qc.invalidateQueries({ queryKey: getGetNotificationsQueryKey() });
+  qc.invalidateQueries({
+    predicate: (query) => {
+      const path = query.queryKey[0];
+      return (
+        typeof path === 'string' &&
+        (path.startsWith('/runbook-runs/') || /^\/runbooks\/[^/]+\/runs$/.test(path))
+      );
+    },
+  });
 }
 
 export function WebSocketProvider({ children }: { children: React.ReactNode }) {
@@ -305,12 +319,24 @@ function handle(frame: WsEvent, qc: ReturnType<typeof useQueryClient>) {
       break;
     }
     case 'finding.created':
-    case 'system.job_failed': {
+    case 'system.job_failed':
+    case 'runbook.run_failed':
+    case 'runbook.run_waiting': {
       // Per-user notification dispatch (Dispatcher.NotifyFindingCreated /
       // NotifySystemEvent), not the broadcast-to-everyone
       // 'quality.finding.created' above — refresh the notification bell the
       // same way 'alert.resolved' does.
       qc.invalidateQueries({ queryKey: getGetNotificationsQueryKey() });
+      break;
+    }
+    case 'runbook.run.updated': {
+      // Events carry identifiers and state only; REST applies step redaction.
+      void qc.invalidateQueries({ queryKey: getGetRunbookRunQueryKey(frame.payload.runId) });
+      if (frame.payload.runbookId) {
+        void qc.invalidateQueries({
+          queryKey: getListRunbookRunsQueryKey(frame.payload.runbookId),
+        });
+      }
       break;
     }
     case 'doc.generated': {

@@ -5,7 +5,7 @@
  * both import from here, so the contract stays in one place. Enums are reused from
  * the orval-generated models where they already exist (Severity, ServiceStatus).
  */
-import type { ServiceStatus, Severity } from '../api/model';
+import type { RunbookRunUpdatedEvent, ServiceStatus, Severity } from '../api/model';
 
 /** `domain.action`, see WS_CONTRACT.md §naming. */
 export type WsEventType =
@@ -19,6 +19,9 @@ export type WsEventType =
   | 'quality.findings.changed'
   | 'finding.created'
   | 'system.job_failed'
+  | 'runbook.run.updated'
+  | 'runbook.run_failed'
+  | 'runbook.run_waiting'
   | 'doc.generated'
   | 'doc.ai_suggestion'
   | 'doc.lock.acquired'
@@ -178,6 +181,9 @@ export interface WsEventMap {
   'quality.findings.changed': QualityFindingsChangedPayload;
   'finding.created': FindingNotificationPayload;
   'system.job_failed': SystemJobFailedPayload;
+  'runbook.run.updated': RunbookRunUpdatedEvent;
+  'runbook.run_failed': FindingNotificationPayload;
+  'runbook.run_waiting': FindingNotificationPayload;
   'doc.generated': DocGeneratedPayload;
   'doc.ai_suggestion': DocAiSuggestionPayload;
   'doc.lock.acquired': DocLockAcquiredPayload;

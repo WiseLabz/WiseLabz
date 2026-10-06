@@ -157,6 +157,9 @@ const ShareLinkPage = lazy(() =>
 const RunbooksPage = lazy(() =>
   import('./features/settings').then(({ RunbooksPage }) => ({ default: RunbooksPage }))
 );
+const RunPage = lazy(() =>
+  import('./components/runbook/RunPage').then(({ RunPage }) => ({ default: RunPage }))
+);
 const AuditPage = lazy(() =>
   import('./features/settings').then(({ AuditPage }) => ({ default: AuditPage }))
 );
@@ -207,6 +210,15 @@ const router = createBrowserRouter([
   // /login, outside RequireAuth: no account needed to view a shared doc tree.
   { path: '/share/:token', element: <ShareLinkPage /> },
   { path: '/share/:token/docs/:docId', element: <ShareLinkPage /> },
+  {
+    path: '/runbook-runs/:runId',
+    element: (
+      <RequireAuth>
+        <AppShell />
+      </RequireAuth>
+    ),
+    children: [{ index: true, element: <RunPage /> }],
+  },
   {
     // Onboarding sits under auth only (NOT RequireOnboarded) so it never loops.
     path: '/onboarding',

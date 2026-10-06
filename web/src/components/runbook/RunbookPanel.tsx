@@ -8,8 +8,9 @@
  * dry-run-preview / elevation-confirm flow as ServiceDetailPage (#282). Linking
  * a step grants nothing by itself — `canExecute` reflects whether the caller
  * currently holds an operator grant on the step's connector, and a disabled
- * button surfaces why. There is no "run all".
+ * button surfaces why. Whole-run execution has its own preview and history.
  */
+import { useId, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { useGetRunbooks, useGetRunbooksRunbookId } from '../../api/generated/runbooks/runbooks';
@@ -20,6 +21,11 @@ import { FileTextIcon, PlayIcon } from '../icons';
 import { useMutatingOp } from '../manager/useMutatingOp';
 import { MutatingOpDialogs, type MutatingOpMessages } from '../manager/LifecycleOp';
 import { toast } from '../../lib/toast';
+import { Button } from '../ui/Button';
+import { Dialog } from '../ui/Dialog';
+import { StartRunDialog } from './StartRunDialog';
+import { RunHistory } from './RunHistory';
+import { RunDetail } from './RunDetail';
 
 type RunbookPanelProps =
   | { changeType: string; alertSeverity?: never; runbookId?: never }
@@ -29,6 +35,10 @@ type RunbookPanelProps =
 export function RunbookPanel(props: RunbookPanelProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const headingId = useId();
+  const [startOpen, setStartOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [runId, setRunId] = useState<string | null>(null);
   const byTarget = useGetRunbooks(
     'changeType' in props && props.changeType
       ? { changeType: props.changeType }
@@ -47,13 +57,23 @@ export function RunbookPanel(props: RunbookPanelProps) {
   if (isLoading || !runbook) return null;
 
   return (
-    <section className="mt-4 rounded-lg border border-line-soft bg-canvas-sunken p-3" aria-labelledby="runbook-heading">
-      <h2 id="runbook-heading" className="text-xs font-medium text-ink">
+    <section
+      className="mt-4 rounded-lg border border-line-soft bg-canvas-sunken p-3"
+      aria-labelledby={headingId}
+    >
+      <h2 id={headingId} className="text-xs font-medium text-ink">
         {t('runbooks.heading')}
       </h2>
       <p className="mt-1.5 text-sm font-medium text-ink">{runbook.title}</p>
       <p className="mt-1 whitespace-pre-wrap text-xs leading-relaxed text-ink-muted">{runbook.body}</p>
       <div className="mt-2 flex flex-wrap items-center gap-2">
+        <Button size="sm" onClick={() => setStartOpen(true)} disabled={runbook.steps.length === 0}>
+          <PlayIcon size={13} aria-hidden="true" />
+          {t('runbooks.runs.start')}
+        </Button>
+        <Button size="sm" variant="ghost" onClick={() => setHistoryOpen(true)}>
+          {t('runbooks.runs.history')}
+        </Button>
         {runbook.docId && (
           <button
             onClick={() => navigate(`/docs/${runbook.docId}`)}
@@ -79,6 +99,42 @@ export function RunbookPanel(props: RunbookPanelProps) {
             ))}
           </ul>
         </div>
+      )}
+      {startOpen && (
+        <StartRunDialog
+          runbook={runbook}
+          open
+          onClose={() => setStartOpen(false)}
+          onStarted={(id) => {
+            setStartOpen(false);
+            setRunId(id);
+          }}
+        />
+      )}
+      {historyOpen && !runId && (
+        <Dialog
+          open
+          onClose={() => setHistoryOpen(false)}
+          title={t('runbooks.runs.historyTitle', { title: runbook.title })}
+          size="lg"
+        >
+          <RunHistory runbookId={runbook.id} onSelectRun={setRunId} />
+          <div className="mt-4 flex justify-end">
+            <Button size="sm" variant="ghost" onClick={() => setHistoryOpen(false)}>
+              {t('common.close')}
+            </Button>
+          </div>
+        </Dialog>
+      )}
+      {runId && (
+        <Dialog
+          open
+          onClose={() => setRunId(null)}
+          title={t('runbooks.runs.detailTitle')}
+          size="lg"
+        >
+          <RunDetail key={runId} runId={runId} onClose={() => setRunId(null)} />
+        </Dialog>
       )}
     </section>
   );

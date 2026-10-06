@@ -6,6 +6,11 @@ import { getGetSearchQueryKey } from '../api/generated/search/search';
 import { getGetChangesQueryKey } from '../api/generated/changes/changes';
 import { getGetConnectorsQueryKey } from '../api/generated/connectors/connectors';
 import { getGetDashboardOverviewQueryKey } from '../api/generated/dashboard/dashboard';
+import { getGetNotificationsQueryKey } from '../api/generated/notifications/notifications';
+import {
+  getGetRunbookRunQueryKey,
+  getListRunbookRunsQueryKey,
+} from '../api/generated/runbooks/runbooks';
 import i18n from '../i18n';
 import { useAuth } from '../store/auth';
 import { useLive } from '../store/live';
@@ -173,6 +178,64 @@ describe('WebSocketProvider', () => {
     payload: { alertId, serviceId: 'svc-1', severity: 'warning', title: 'Disk space low' },
     ...extra,
   });
+
+  it('refetches run detail and history for every run update without caching the event payload', async () => {
+    const queryClient = new QueryClient();
+    const invalidateQueries = vi.spyOn(queryClient, 'invalidateQueries');
+    const refetch = vi
+      .fn()
+      .mockResolvedValue({
+        id: 'run-1',
+        state: 'succeeded',
+        steps: [{ title: 'Server-redacted detail' }],
+      });
+    await renderProvider(queryClient);
+    const { QueryObserver } = await import('@tanstack/react-query');
+    const observer = new QueryObserver(queryClient, {
+      queryKey: getGetRunbookRunQueryKey('run-1'),
+      queryFn: refetch,
+    });
+    const unsubscribe = observer.subscribe(() => {});
+    await waitFor(() => expect(refetch).toHaveBeenCalledTimes(1));
+
+    for (const id of ['run-update-1', 'run-update-2']) {
+      send({
+        type: 'runbook.run.updated',
+        id,
+        payload: {
+          runId: 'run-1',
+          runbookId: 'rb-1',
+          state: 'running',
+          step: { id: 'step-1', state: 'running' },
+        },
+      });
+      await waitFor(() => expect(refetch).toHaveBeenCalledTimes(id === 'run-update-1' ? 2 : 3));
+    }
+    expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: getGetRunbookRunQueryKey('run-1') });
+    expect(invalidateQueries).toHaveBeenCalledWith({
+      queryKey: getListRunbookRunsQueryKey('rb-1'),
+    });
+    expect(queryClient.getQueryData(getGetRunbookRunQueryKey('run-1'))).toMatchObject({
+      state: 'succeeded',
+      steps: [{ title: 'Server-redacted detail' }],
+    });
+    unsubscribe();
+  });
+
+  it.each(['runbook.run_failed', 'runbook.run_waiting'])(
+    'refreshes the notification bell on %s',
+    async (type) => {
+      const queryClient = new QueryClient();
+      const invalidateQueries = vi.spyOn(queryClient, 'invalidateQueries');
+      await renderProvider(queryClient);
+      send({
+        type,
+        id: type,
+        payload: { alertId: '', title: 'Run update', message: 'Step needs attention' },
+      });
+      expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: getGetNotificationsQueryKey() });
+    }
+  );
 
   it('handles a frame with a repeated id only once', async () => {
     await renderProvider();
@@ -385,10 +448,13 @@ describe('WebSocketProvider', () => {
     getGetChangesQueryKey(),
     getGetConnectorsQueryKey(),
     getGetDashboardOverviewQueryKey(),
+    getGetNotificationsQueryKey(),
   ];
 
   const invalidatedKeys = (spy: { mock: { calls: unknown[][] } }) =>
-    spy.mock.calls.map((c) => (c[0] as { queryKey: unknown }).queryKey);
+    spy.mock.calls
+      .filter((c) => 'queryKey' in (c[0] as object))
+      .map((c) => (c[0] as { queryKey: unknown }).queryKey);
 
   it('does not resync on the first open', async () => {
     window.WebSocket = TestWebSocket as unknown as typeof WebSocket;
@@ -450,6 +516,8 @@ describe('WebSocketProvider', () => {
     useAuth.setState({ status: 'authenticated' });
     const queryClient = new QueryClient();
     const invalidateQueries = vi.spyOn(queryClient, 'invalidateQueries');
+    queryClient.setQueryData(getGetRunbookRunQueryKey('missed-run'), { state: 'running' });
+    queryClient.setQueryData(getListRunbookRunsQueryKey('rb-1', { page: 2 }), { items: [] });
 
     render(
       <QueryClientProvider client={queryClient}>
@@ -478,6 +546,12 @@ describe('WebSocketProvider', () => {
 
     expect(invalidatedKeys(invalidateQueries)).toEqual(volatileKeys());
     expect(useLive.getState().jobs).toEqual({});
+    expect(queryClient.getQueryState(getGetRunbookRunQueryKey('missed-run'))?.isInvalidated).toBe(
+      true
+    );
+    expect(
+      queryClient.getQueryState(getListRunbookRunsQueryKey('rb-1', { page: 2 }))?.isInvalidated
+    ).toBe(true);
   });
   it('delivers AI results through the cache keyed by document and request', async () => {
     const client = new QueryClient();

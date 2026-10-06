@@ -10,6 +10,7 @@
  * is trapped, and is restored on close; Escape and backdrop-click cancel.
  */
 import {useState} from 'react';
+import {useTranslation} from 'react-i18next';
 import {useGetAuthConfig} from '../../api/generated/settings/settings';
 import {Button} from '../ui/Button';
 import {Dialog} from '../ui/Dialog';
@@ -23,7 +24,7 @@ export function ElevationConfirm({
                                       target,
                                       title,
                                       description,
-                                      confirmLabel = 'Confirm',
+                                      confirmLabel,
                                       onClose,
                                       onConfirm,
                                       isPending = false,
@@ -40,6 +41,7 @@ export function ElevationConfirm({
     onConfirm: (elevationToken: string | null) => Promise<void> | void;
     isPending?: boolean;
 }) {
+    const {t} = useTranslation();
     const [typed, setTyped] = useState('');
     const [token, setToken] = useState<string | null>(null);
 
@@ -76,10 +78,11 @@ export function ElevationConfirm({
                 {/* Type-to-confirm */}
                 <div>
                     <label htmlFor="elevation-confirm-name" className="mb-1.5 block text-2xs text-ink-faint">
-                        Type <span className="font-mono text-ink">{resourceName}</span> to confirm
+                        {t('elevationConfirm.typeName', {name: resourceName})}
                     </label>
                     <input
                         id="elevation-confirm-name"
+                        name="confirmation"
                         value={typed}
                         onChange={(e) => setTyped(e.target.value)}
                         autoComplete="off"
@@ -92,12 +95,12 @@ export function ElevationConfirm({
                     <StepUp action={action} target={target} onElevated={setToken}/>
                 )}
                 {stepUpRequired && token && (
-                    <p className="text-2xs text-ok">Re-authenticated — ready to continue.</p>
+                    <p className="text-2xs text-ok" role="status">{t('elevationConfirm.ready')}</p>
                 )}
 
                 <div className="flex items-center justify-end gap-2 pt-1">
                     <Button variant="ghost" size="md" onClick={close}>
-                        Cancel
+                        {t('common.cancel')}
                     </Button>
                     <Button
                         variant="danger"
@@ -105,7 +108,7 @@ export function ElevationConfirm({
                         disabled={!canConfirm}
                         onClick={() => onConfirm(token)}
                     >
-                        {isPending ? 'Working…' : confirmLabel}
+                        {isPending ? t('elevationConfirm.working') : (confirmLabel ?? t('elevationConfirm.confirm'))}
                     </Button>
                 </div>
             </div>

@@ -47,9 +47,9 @@
 ## 8. Web
 
 - [x] 8.1 Extend the step editor in `RunbooksPage` for the new kinds and timeout; verify vitest for adding each kind and showing field errors.
-- [ ] 8.2 Add the start-run dialog in `RunbookPanel` showing the aggregated preview, blocked reasons and `ElevationConfirm` for `runbook.run`; verify vitest for preview rendering, disabled start on a blocked step and the 409 message.
-- [ ] 8.3 Add the live run view driven by `runbook.run.updated` with confirm, resume (with the unknown-step warning) and cancel; verify vitest for each action and state.
-- [ ] 8.4 Add the run history list and detail with redacted steps, en and pt-BR strings, and a user documentation page for runs; verify vitest, typecheck and lint.
+- [x] 8.2 Add the start-run dialog in `RunbookPanel` showing the aggregated preview, blocked reasons and `ElevationConfirm` for `runbook.run`; verify vitest for preview rendering, disabled start on a blocked step and the 409 message.
+- [x] 8.3 Add the live run view driven by `runbook.run.updated` with confirm, resume (with the unknown-step warning) and cancel; verify vitest for each action and state.
+- [x] 8.4 Add the run history list and detail with redacted steps, en and pt-BR strings, and a user documentation page for runs; verify vitest, typecheck and lint.
 
 ## 9. Integration
 
