@@ -241,3 +241,59 @@ func TestGetRunbookByTarget(t *testing.T) {
 		t.Fatalf("GetRunbookByTarget(not found) error = %v, want ErrNotFound", err)
 	}
 }
+
+func TestRunbookStepKindsRoundTrip(t *testing.T) {
+	ctx := context.Background()
+	s := newDocTestStore(t)
+	c := &ConnectorRecord{Name: "svc", Category: "virtualization", Type: "proxmox", URL: "https://example.com"}
+	if err := s.CreateConnector(ctx, c); err != nil {
+		t.Fatal(err)
+	}
+	r, saved, err := s.CreateRunbookWithSteps(ctx, &RunbookRecord{
+		Title: "Kinds", TargetType: "change_type", TargetValue: "kinds",
+	}, []*RunbookStepRecord{
+		{Title: "Legacy lifecycle", ConnectorID: c.ID, Verb: "restart", EntityRef: "vm-1"},
+		{Title: "Sync", Kind: "sync_and_wait", ConnectorID: c.ID},
+		{Title: "Wait", Kind: "wait_until_healthy", ConnectorID: c.ID, TimeoutSeconds: 1800},
+		{Title: "Confirm", Kind: "manual"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(saved) != 4 || saved[0].Kind != "lifecycle" || saved[1].TimeoutSeconds != 300 {
+		t.Fatalf("saved = %+v; want four kinds with default lifecycle", saved)
+	}
+	for i, want := range saved {
+		got, err := s.GetRunbookStep(ctx, r.ID, want.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if *got != *want {
+			t.Fatalf("step %d = %+v; want %+v", i, got, want)
+		}
+	}
+	all, err := s.ListRunbookSteps(ctx, []string{r.ID})
+	if err != nil || len(all[r.ID]) != 4 {
+		t.Fatalf("list steps = %+v, %v", all, err)
+	}
+	var nullConnector, nullVerb bool
+	if err := s.DB().QueryRowContext(ctx,
+		`SELECT connector_id IS NULL, verb IS NULL FROM runbook_steps WHERE id = ?`, saved[3].ID,
+	).Scan(&nullConnector, &nullVerb); err != nil || !nullConnector || !nullVerb {
+		t.Fatalf("manual connector and verb null = %v, %v, %v", nullConnector, nullVerb, err)
+	}
+	_, replaced, err := s.UpdateRunbookWithSteps(ctx, r.ID, nil, []*RunbookStepRecord{
+		{ID: saved[1].ID, Title: "Updated sync", Kind: "sync_and_wait", ConnectorID: c.ID, TimeoutSeconds: 10},
+		{ID: saved[3].ID, Title: "Updated manual", Kind: "manual"},
+	}, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.ListRunbookStepsFor(ctx, r.ID)
+	if err != nil || len(got) != 2 || got[0].TimeoutSeconds != 10 || got[1].Kind != "manual" {
+		t.Fatalf("replaced steps = %+v, %v", got, err)
+	}
+	if replaced[0].ID != saved[1].ID || replaced[1].ID != saved[3].ID {
+		t.Fatal("replacing kinds lost owned step IDs")
+	}
+}

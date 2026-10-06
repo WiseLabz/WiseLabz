@@ -1631,10 +1631,11 @@ func attachmentTableExists(t *testing.T, db *sql.DB, driver, table string) bool 
 	return n > 0
 }
 
-// rollbackEntityIdentityOverrides runs migration 000061 down and checks it
-// removed only the override table.
+// rollbackEntityIdentityOverrides first rolls back the newer runbook migrations,
+// then runs 000061 down and checks it removed only the override table.
 func rollbackEntityIdentityOverrides(t *testing.T, db *sql.DB, driver string, logger *slog.Logger) {
 	t.Helper()
+	rollbackRunbookRuns(t, db, driver, logger)
 	if !attachmentTableExists(t, db, driver, "entity_identity_overrides") {
 		t.Fatal("entity_identity_overrides missing before 000061 rollback")
 	}

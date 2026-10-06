@@ -260,4 +260,11 @@ func TestEntityDetailRunbookStepsOrderedWithoutDistinct(t *testing.T) {
 	if limited, err := f.s.ListEntityRunbookSteps(ctx, []EntityMemberKey{{ConnectorID: f.c1.ID, Kind: "vm", Ref: "a"}}, 2); err != nil || len(limited) != 2 {
 		t.Fatalf("limited steps = %+v, %v", limited, err)
 	}
+
+	// A step without a verb (verb is NULL) must not break the scan.
+	mk("C runbook", "v3", &RunbookStepRecord{Kind: "sync_and_wait", Title: "sync b", ConnectorID: f.c1.ID, EntityRef: "b"})
+	noVerb, err := f.s.ListEntityRunbookSteps(ctx, []EntityMemberKey{{ConnectorID: f.c1.ID, Kind: "vm", Ref: "b"}}, 10)
+	if err != nil || len(noVerb) != 1 || noVerb[0].StepTitle != "sync b" || noVerb[0].StepVerb != "" {
+		t.Fatalf("verbless steps = %+v, %v; want the sync_and_wait step with an empty verb", noVerb, err)
+	}
 }

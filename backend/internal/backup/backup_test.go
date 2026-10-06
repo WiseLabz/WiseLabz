@@ -2,14 +2,17 @@ package backup_test
 
 import (
 	"archive/zip"
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -19,6 +22,7 @@ import (
 	_ "modernc.org/sqlite"
 
 	"github.com/WiseLabz/wiselabz/internal/backup"
+	"github.com/WiseLabz/wiselabz/internal/blobstore"
 	"github.com/WiseLabz/wiselabz/internal/store"
 	"github.com/WiseLabz/wiselabz/internal/store/storetest"
 
@@ -766,4 +770,396 @@ func TestValidateBundleRejectsMalformedOverrides(t *testing.T) {
 			t.Errorf("%s: ValidateBundle accepted it", name)
 		}
 	}
+}
+
+func TestRunbookBackupJSONAndZIPRoundTrip(t *testing.T) {
+	ctx, src, runbook, _ := runbookBackupFixture(t)
+	bundle, err := backup.Export(ctx, src)
+	if err != nil {
+		t.Fatalf("Export(): %v", err)
+	}
+	if len(bundle.Runbooks) != 1 || len(bundle.RunbookSteps) != 4 {
+		t.Fatalf("exported runbooks/steps = %d/%d, want 1/4", len(bundle.Runbooks), len(bundle.RunbookSteps))
+	}
+	if bundle.Runbooks[0].SnapshotID != nil {
+		t.Fatalf("exported snapshotId = %v, want nil", bundle.Runbooks[0].SnapshotID)
+	}
+	if bundle.Runbooks[0].DocID == nil || *bundle.Runbooks[0].DocID != *runbook.DocID {
+		t.Fatalf("exported docId = %v, want %q", bundle.Runbooks[0].DocID, *runbook.DocID)
+	}
+	wantKinds := map[string]bool{"lifecycle": false, "sync_and_wait": false, "wait_until_healthy": false, "manual": false}
+	for _, step := range bundle.RunbookSteps {
+		wantKinds[step.Kind] = true
+	}
+	for kind, found := range wantKinds {
+		if !found {
+			t.Errorf("export omitted step kind %q", kind)
+		}
+	}
+	if bundle.RunbookSteps[1].TimeoutSeconds != 75 || bundle.RunbookSteps[2].TimeoutSeconds != 120 {
+		t.Fatalf("exported wait timeouts = %d/%d, want 75/120", bundle.RunbookSteps[1].TimeoutSeconds, bundle.RunbookSteps[2].TimeoutSeconds)
+	}
+	if got := backupRowCount(t, src, "runbook_runs"); got != 1 {
+		t.Fatalf("source runbook history rows = %d, want 1", got)
+	}
+	if got := backupRowCount(t, src, "runbook_run_steps"); got != 1 {
+		t.Fatalf("source frozen step rows = %d, want 1", got)
+	}
+
+	jsonData, err := json.Marshal(bundle)
+	if err != nil {
+		t.Fatalf("marshal JSON bundle: %v", err)
+	}
+	jsonPath := filepath.Join(t.TempDir(), "wiselabz-backup-runbooks.json")
+	if err := os.WriteFile(jsonPath, jsonData, 0o600); err != nil {
+		t.Fatalf("write JSON backup: %v", err)
+	}
+	manifest := backup.BuildManifest(bundle, jsonData, backup.AppVersion(), 0)
+	if err := backup.WriteManifest(backup.ManifestPath(jsonPath), manifest); err != nil {
+		t.Fatalf("write JSON manifest: %v", err)
+	}
+	manifest, err = backup.ReadManifest(backup.ManifestPath(jsonPath))
+	if err != nil || manifest.Counts["runbooks"] != 1 || manifest.Counts["runbookSteps"] != 4 {
+		t.Fatalf("runbook manifest counts = %+v, %v; want 1/4", manifest.Counts, err)
+	}
+	verified := backup.VerifyBundleFile(ctx, jsonPath)
+	if verified.Status != "pass" || verified.ActualCounts["runbooks"] != 1 || verified.ActualCounts["runbookSteps"] != 4 {
+		t.Fatalf("runbook backup verification = %+v; want pass with 1/4 rows", verified)
+	}
+	var jsonFields map[string]json.RawMessage
+	if err := json.Unmarshal(jsonData, &jsonFields); err != nil {
+		t.Fatalf("decode JSON backup: %v", err)
+	}
+	for _, included := range []string{"runbooks", "runbookSteps"} {
+		if _, ok := jsonFields[included]; !ok {
+			t.Errorf("JSON backup omitted authored field %q", included)
+		}
+	}
+	for _, excluded := range []string{"runbookRuns", "runbookRunSteps"} {
+		if _, ok := jsonFields[excluded]; ok {
+			t.Errorf("JSON backup contains operational history field %q", excluded)
+		}
+	}
+	jsonDst := newTestStore(t)
+	jsonResult, err := backup.ImportFromFile(ctx, jsonDst, jsonPath)
+	if err != nil {
+		t.Fatalf("ImportFromFile(JSON): %v", err)
+	}
+	if jsonResult.Runbooks.Imported != 1 || jsonResult.RunbookSteps.Imported != 4 {
+		t.Fatalf("JSON import counts = %+v/%+v, want 1/4 imported", jsonResult.Runbooks, jsonResult.RunbookSteps)
+	}
+	assertRunbookBackupEqual(ctx, t, jsonDst, bundle.Runbooks[0], bundle.RunbookSteps)
+	assertNoRunbookHistory(t, jsonDst)
+	if got := backupRowCount(t, jsonDst, "service_snapshots"); got != 0 {
+		t.Fatalf("restored snapshots = %d, want 0", got)
+	}
+
+	// An existing parent is skipped as a whole so an edited local step list is
+	// never mixed with the backup's historical children.
+	localSteps, err := jsonDst.ReplaceRunbookSteps(ctx, runbook.ID, []*store.RunbookStepRecord{{Kind: "manual", Title: "local addition"}})
+	if err != nil {
+		t.Fatalf("replace local steps: %v", err)
+	}
+	if len(localSteps) != 1 {
+		t.Fatalf("local step count = %d, want 1", len(localSteps))
+	}
+	second, err := backup.ImportFromFile(ctx, jsonDst, jsonPath)
+	if err != nil {
+		t.Fatalf("repeat JSON import: %v", err)
+	}
+	if second.Runbooks.Imported != 0 || second.Runbooks.Skipped != 1 || second.RunbookSteps.Imported != 0 || second.RunbookSteps.Skipped != 4 {
+		t.Fatalf("repeat import counts = %+v/%+v", second.Runbooks, second.RunbookSteps)
+	}
+	stepsAfterRepeat, err := jsonDst.ListRunbookStepsFor(ctx, runbook.ID)
+	if err != nil || len(stepsAfterRepeat) != 1 || stepsAfterRepeat[0].Title != "local addition" {
+		t.Fatalf("steps after repeat import = %+v, %v; want local edit only", stepsAfterRepeat, err)
+	}
+	assertNoRunbookHistory(t, jsonDst)
+
+	var archive bytes.Buffer
+	if err := backup.WriteArchive(ctx, src, blobstore.New(t.TempDir(), 0), &archive, bundle); err != nil {
+		t.Fatalf("WriteArchive(): %v", err)
+	}
+	zipDst := newTestStore(t)
+	zipResult, err := backup.ImportStream(ctx, zipDst, bytes.NewReader(archive.Bytes()), backup.ArchiveOptions{BlobDir: t.TempDir()})
+	if err != nil {
+		t.Fatalf("ImportStream(ZIP): %v", err)
+	}
+	if zipResult.Runbooks.Imported != 1 || zipResult.RunbookSteps.Imported != 4 {
+		t.Fatalf("ZIP import counts = %+v/%+v, want 1/4 imported", zipResult.Runbooks, zipResult.RunbookSteps)
+	}
+	assertRunbookBackupEqual(ctx, t, zipDst, bundle.Runbooks[0], bundle.RunbookSteps)
+	assertNoRunbookHistory(t, zipDst)
+	if got := backupRowCount(t, zipDst, "service_snapshots"); got != 0 {
+		t.Fatalf("ZIP restored snapshots = %d, want 0", got)
+	}
+}
+
+func TestRunbookImportSkipsExistingTargetWithDifferentID(t *testing.T) {
+	ctx, src, runbook, _ := runbookBackupFixture(t)
+	bundle, err := backup.Export(ctx, src)
+	if err != nil {
+		t.Fatalf("Export(): %v", err)
+	}
+
+	dst := newTestStore(t)
+	local, _, err := dst.CreateRunbookWithSteps(ctx,
+		&store.RunbookRecord{ID: "local-runbook", Title: "Local remediation", TargetType: runbook.TargetType, TargetValue: runbook.TargetValue},
+		[]*store.RunbookStepRecord{{Kind: "manual", Title: "local step"}})
+	if err != nil {
+		t.Fatalf("create local runbook: %v", err)
+	}
+
+	res, err := backup.Import(ctx, dst, bundle)
+	if err != nil {
+		t.Fatalf("Import() with a runbook target already in use: %v", err)
+	}
+	if res.Runbooks.Imported != 0 || res.Runbooks.Skipped != 1 {
+		t.Fatalf("runbook import counts = %+v, want 0 imported / 1 skipped", res.Runbooks)
+	}
+	if res.RunbookSteps.Imported != 0 || res.RunbookSteps.Skipped != len(bundle.RunbookSteps) {
+		t.Fatalf("runbook step import counts = %+v, want 0 imported / %d skipped", res.RunbookSteps, len(bundle.RunbookSteps))
+	}
+	got, err := dst.GetRunbook(ctx, local.ID)
+	if err != nil || got.Title != "Local remediation" {
+		t.Fatalf("local runbook = %+v, %v; want it unchanged", got, err)
+	}
+	if _, err := dst.GetRunbook(ctx, runbook.ID); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("GetRunbook(bundled id) error = %v, want ErrNotFound", err)
+	}
+	if got := backupRowCount(t, dst, "runbook_steps"); got != 1 {
+		t.Fatalf("runbook step rows = %d, want only the local step", got)
+	}
+}
+
+func TestLegacyRunbookStepDefaultsAndWaitTimeout(t *testing.T) {
+	ctx := context.Background()
+	src := newTestStore(t)
+	connectorRecord := store.ConnectorRecord{Name: "legacy connector", Category: "virtualization", Type: "proxmox", URL: "https://legacy.example.com"}
+	if err := src.CreateConnector(ctx, &connectorRecord); err != nil {
+		t.Fatalf("CreateConnector(): %v", err)
+	}
+	bundle, err := backup.Export(ctx, src)
+	if err != nil {
+		t.Fatalf("Export(): %v", err)
+	}
+	bundle.Runbooks = []store.RunbookRecord{{ID: "legacy-runbook", Title: "Legacy", TargetType: "change_type", TargetValue: "legacy", CreatedAt: "2024-01-02T03:04:05Z", UpdatedAt: "2024-01-02T03:04:05Z"}}
+	bundle.RunbookSteps = []store.RunbookStepRecord{
+		{ID: "legacy-lifecycle", RunbookID: "legacy-runbook", Position: 0, Title: "Restart", ConnectorID: connectorRecord.ID, Verb: "restart", CreatedAt: "2024-01-02T03:04:05Z", UpdatedAt: "2024-01-02T03:04:05Z"},
+		{ID: "default-timeout", RunbookID: "legacy-runbook", Position: 1, Kind: "sync_and_wait", Title: "Sync", ConnectorID: connectorRecord.ID, CreatedAt: "2024-01-02T03:04:05Z", UpdatedAt: "2024-01-02T03:04:05Z"},
+	}
+	raw, err := json.Marshal(bundle)
+	if err != nil {
+		t.Fatalf("marshal bundle: %v", err)
+	}
+	var object map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &object); err != nil {
+		t.Fatalf("decode bundle object: %v", err)
+	}
+	var stepObjects []map[string]json.RawMessage
+	if err := json.Unmarshal(object["runbookSteps"], &stepObjects); err != nil {
+		t.Fatalf("decode step objects: %v", err)
+	}
+	delete(stepObjects[0], "kind")
+	delete(stepObjects[1], "timeoutSeconds")
+	object["runbookSteps"], err = json.Marshal(stepObjects)
+	if err != nil {
+		t.Fatalf("marshal legacy step objects: %v", err)
+	}
+	legacyJSON, err := json.Marshal(object)
+	if err != nil {
+		t.Fatalf("marshal legacy bundle: %v", err)
+	}
+	dst := newTestStore(t)
+	res, err := backup.ImportStream(ctx, dst, bytes.NewReader(legacyJSON), backup.ArchiveOptions{})
+	if err != nil {
+		t.Fatalf("ImportStream(legacy JSON): %v", err)
+	}
+	if res.Runbooks.Imported != 1 || res.RunbookSteps.Imported != 2 {
+		t.Fatalf("legacy import counts = %+v/%+v", res.Runbooks, res.RunbookSteps)
+	}
+	lifecycle, err := dst.GetRunbookStep(ctx, "legacy-runbook", "legacy-lifecycle")
+	if err != nil || lifecycle.Kind != "lifecycle" {
+		t.Fatalf("legacy kind = %+v, %v; want lifecycle", lifecycle, err)
+	}
+	wait, err := dst.GetRunbookStep(ctx, "legacy-runbook", "default-timeout")
+	if err != nil || wait.TimeoutSeconds != 300 {
+		t.Fatalf("default wait timeout = %+v, %v; want 300", wait, err)
+	}
+}
+
+func TestImportRejectsInvalidRunbookBundleBeforeWriting(t *testing.T) {
+	ctx := context.Background()
+	dst := newTestStore(t)
+	bundle := &backup.Bundle{
+		Version: backup.BundleVersion,
+		Connectors: []store.ConnectorRecord{{
+			ID: "must-not-import", Name: "Will not import", Category: "virtualization", Type: "proxmox", URL: "https://backup.example.com",
+		}},
+		Runbooks:     []store.RunbookRecord{{ID: "invalid-parent", Title: "Invalid", TargetType: "change_type", TargetValue: "invalid", CreatedAt: "2024-01-02T03:04:05Z", UpdatedAt: "2024-01-02T03:04:05Z"}},
+		RunbookSteps: []store.RunbookStepRecord{{ID: "invalid-step", RunbookID: "invalid-parent", Position: 0, Kind: "lifecycle", Title: "Restart", ConnectorID: "missing-connector", Verb: "restart", CreatedAt: "2024-01-02T03:04:05Z", UpdatedAt: "2024-01-02T03:04:05Z"}},
+	}
+	if _, err := backup.Import(ctx, dst, bundle); err == nil {
+		t.Fatal("Import() accepted a runbook step referencing an unknown connector")
+	}
+	connectors, err := dst.ListAllConnectors(ctx)
+	if err != nil || len(connectors) != 0 {
+		t.Fatalf("connectors after rejected import = %d, %v; want none", len(connectors), err)
+	}
+	runbooks, err := dst.ListRunbooks(ctx)
+	if err != nil || len(runbooks) != 0 {
+		t.Fatalf("runbooks after rejected import = %d, %v; want none", len(runbooks), err)
+	}
+}
+
+func TestValidateBundleRejectsInvalidRunbookStepShape(t *testing.T) {
+	baseRunbook := store.RunbookRecord{ID: "rb", Title: "Runbook", TargetType: "change_type", TargetValue: "target", CreatedAt: "2024-01-02T03:04:05Z", UpdatedAt: "2024-01-02T03:04:05Z"}
+	baseStep := store.RunbookStepRecord{ID: "step-1", RunbookID: "rb", Position: 0, Kind: "manual", Title: "Manual", CreatedAt: "2024-01-02T03:04:05Z", UpdatedAt: "2024-01-02T03:04:05Z"}
+	valid := func(steps []store.RunbookStepRecord) *backup.Bundle {
+		return &backup.Bundle{Version: backup.BundleVersion, Runbooks: []store.RunbookRecord{baseRunbook}, RunbookSteps: steps,
+			Connectors: []store.ConnectorRecord{{ID: "c1", Category: "virtualization"}}}
+	}
+	second := baseStep
+	second.Position = 1
+	cases := map[string]*backup.Bundle{
+		"duplicate step id": valid([]store.RunbookStepRecord{baseStep, second}),
+		"duplicate position": func() *backup.Bundle {
+			s := second
+			s.ID = "step-2"
+			s.Position = 0
+			return valid([]store.RunbookStepRecord{baseStep, s})
+		}(),
+		"negative position": func() *backup.Bundle { s := baseStep; s.Position = -1; return valid([]store.RunbookStepRecord{s}) }(),
+		"too many steps": func() *backup.Bundle {
+			steps := make([]store.RunbookStepRecord, 21)
+			for i := range steps {
+				s := baseStep
+				s.ID = fmt.Sprintf("step-%d", i)
+				s.Position = i
+				steps[i] = s
+			}
+			return valid(steps)
+		}(),
+		"wait timeout below minimum": func() *backup.Bundle {
+			s := baseStep
+			s.Kind = "sync_and_wait"
+			s.ConnectorID = "c1"
+			s.TimeoutSeconds = 9
+			return valid([]store.RunbookStepRecord{s})
+		}(),
+		"wait timeout above maximum": func() *backup.Bundle {
+			s := baseStep
+			s.Kind = "wait_until_healthy"
+			s.ConnectorID = "c1"
+			s.TimeoutSeconds = 1801
+			return valid([]store.RunbookStepRecord{s})
+		}(),
+		"unknown kind": func() *backup.Bundle { s := baseStep; s.Kind = "unknown"; return valid([]store.RunbookStepRecord{s}) }(),
+	}
+	for name, bundle := range cases {
+		if err := backup.ValidateBundle(bundle); err == nil {
+			t.Errorf("%s: ValidateBundle accepted it", name)
+		}
+	}
+}
+
+func runbookBackupFixture(t *testing.T) (context.Context, *store.Store, store.RunbookRecord, []store.RunbookStepRecord) {
+	t.Helper()
+	ctx := context.Background()
+	src := newTestStore(t)
+	conn := store.ConnectorRecord{Name: "runbook connector", Category: "virtualization", Type: "proxmox", URL: "https://runbook.example.com"}
+	if err := src.CreateConnector(ctx, &conn); err != nil {
+		t.Fatalf("CreateConnector(): %v", err)
+	}
+	doc := store.DocRecord{Title: "Runbook notes", Kind: "lab", Content: "instructions"}
+	if err := src.CreateDoc(ctx, &doc); err != nil {
+		t.Fatalf("CreateDoc(): %v", err)
+	}
+	snapshot := store.SnapshotRecord{ID: "operational-snapshot", ConnectorID: conn.ID, Data: `{}`, FetchedAt: "2024-01-02T03:04:05Z"}
+	if err := src.CreateSnapshot(ctx, &snapshot); err != nil {
+		t.Fatalf("CreateSnapshot(): %v", err)
+	}
+	runbook := &store.RunbookRecord{
+		ID: "backup-runbook", Title: "Service remediation", Body: "Follow each step",
+		TargetType: "change_type", TargetValue: "service.down", SnapshotID: &snapshot.ID, DocID: &doc.ID,
+		CreatedAt: "2024-01-02T03:04:05Z", UpdatedAt: "2024-01-03T04:05:06Z",
+	}
+	steps := []*store.RunbookStepRecord{
+		{Kind: "lifecycle", Title: "Restart connector", ConnectorID: conn.ID, Verb: "restart"},
+		{Kind: "sync_and_wait", TimeoutSeconds: 75, Title: "Sync connector", ConnectorID: conn.ID},
+		{Kind: "wait_until_healthy", TimeoutSeconds: 120, Title: "Wait for health", ConnectorID: conn.ID},
+		{Kind: "manual", Title: "Check the dashboard"},
+	}
+	created, savedSteps, err := src.CreateRunbookWithSteps(ctx, runbook, steps)
+	if err != nil {
+		t.Fatalf("CreateRunbookWithSteps(): %v", err)
+	}
+	if _, err := src.DB().ExecContext(ctx, `
+		INSERT INTO runbook_runs (id, runbook_id, runbook_title, state, started_by, started_at, updated_at)
+		VALUES (?, ?, ?, 'running', 'backup-test-actor', '2024-01-03T04:05:06Z', '2024-01-03T04:05:06Z')
+	`, "operational-run", created.ID, created.Title); err != nil {
+		t.Fatalf("insert operational run fixture: %v", err)
+	}
+	if _, err := src.DB().ExecContext(ctx, `
+		INSERT INTO runbook_run_steps (id, run_id, position, kind, title, state)
+		VALUES ('operational-run-step', 'operational-run', 0, 'manual', 'History only', 'pending')
+	`); err != nil {
+		t.Fatalf("insert operational run step fixture: %v", err)
+	}
+	records := make([]store.RunbookStepRecord, len(savedSteps))
+	for i, step := range savedSteps {
+		records[i] = *step
+	}
+	return ctx, src, *created, records
+}
+
+func assertRunbookBackupEqual(ctx context.Context, t *testing.T, s *store.Store, wantRunbook store.RunbookRecord, wantSteps []store.RunbookStepRecord) {
+	t.Helper()
+	gotRunbook, err := s.GetRunbook(ctx, wantRunbook.ID)
+	if err != nil {
+		t.Fatalf("GetRunbook(): %v", err)
+	}
+	if gotRunbook.ID != wantRunbook.ID || gotRunbook.Title != wantRunbook.Title || gotRunbook.Body != wantRunbook.Body ||
+		gotRunbook.TargetType != wantRunbook.TargetType || gotRunbook.TargetValue != wantRunbook.TargetValue ||
+		gotRunbook.CreatedAt != wantRunbook.CreatedAt || gotRunbook.UpdatedAt != wantRunbook.UpdatedAt || gotRunbook.SnapshotID != nil ||
+		!sameOptionalString(gotRunbook.DocID, wantRunbook.DocID) {
+		t.Fatalf("restored runbook = %+v, want authored record %+v with snapshot pointer cleared", gotRunbook, wantRunbook)
+	}
+	gotSteps, err := s.ListRunbookStepsFor(ctx, wantRunbook.ID)
+	if err != nil {
+		t.Fatalf("ListRunbookStepsFor(): %v", err)
+	}
+	if len(gotSteps) != len(wantSteps) {
+		t.Fatalf("restored step count = %d, want %d", len(gotSteps), len(wantSteps))
+	}
+	for i := range wantSteps {
+		if *gotSteps[i] != wantSteps[i] {
+			t.Errorf("restored step %d = %+v, want %+v", i, gotSteps[i], wantSteps[i])
+		}
+	}
+}
+
+func sameOptionalString(a, b *string) bool {
+	if a == nil || b == nil {
+		return a == nil && b == nil
+	}
+	return *a == *b
+}
+
+func assertNoRunbookHistory(t *testing.T, s *store.Store) {
+	t.Helper()
+	for _, table := range []string{"runbook_runs", "runbook_run_steps"} {
+		if got := backupRowCount(t, s, table); got != 0 {
+			t.Errorf("restored %s rows = %d, want 0", table, got)
+		}
+	}
+}
+
+func backupRowCount(t *testing.T, s *store.Store, table string) int {
+	t.Helper()
+	var count int
+	if err := s.DB().QueryRowContext(context.Background(), "SELECT COUNT(*) FROM "+table).Scan(&count); err != nil {
+		t.Fatalf("count %s: %v", table, err)
+	}
+	return count
 }

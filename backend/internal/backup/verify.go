@@ -140,6 +140,8 @@ func VerifyBundleFile(ctx context.Context, bundlePath string) VerificationResult
 		"docVersions":             importResult.DocVersions.Imported,
 		"templates":               importResult.Templates.Imported,
 		"templateSections":        importResult.TemplateSections.Imported,
+		"runbooks":                importResult.Runbooks.Imported,
+		"runbookSteps":            importResult.RunbookSteps.Imported,
 		"entityIdentityOverrides": importResult.EntityIdentityOverrides.Imported,
 	}
 	for entity, want := range res.ExpectedCounts {

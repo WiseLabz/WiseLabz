@@ -40,6 +40,8 @@ func BundleCounts(b *Bundle) map[string]int {
 		"docVersions":             len(b.DocVersions),
 		"templates":               len(b.Templates),
 		"templateSections":        len(b.TemplateSections),
+		"runbooks":                len(b.Runbooks),
+		"runbookSteps":            len(b.RunbookSteps),
 		"entityIdentityOverrides": len(b.EntityIdentityOverrides),
 	}
 }

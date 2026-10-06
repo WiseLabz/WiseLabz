@@ -2,10 +2,10 @@
 
 ## 1. Schema and store
 
-- [ ] 1.1 Add paired sqlite/postgres migration `000062`: `kind` and `timeout_seconds` on `runbook_steps`, nullable `connector_id`/`verb`, tables `runbook_runs` and `runbook_run_steps`, partial unique index for one active run per runbook; verify the migration up/down tests pass on both dialects.
-- [ ] 1.2 Extend `RunbookStepRecord` and step CRUD with kind and timeout, and carry them through backup export/import; verify store tests and a backup round-trip test.
-- [ ] 1.3 Add run store functions (create with frozen steps, get, list by runbook with pagination, step and run transitions that touch `updated_at`, interrupt-running, expire-open, prune-finished); verify store tests including the 409 path for a second active run and survival of runs after runbook deletion.
-- [ ] 1.4 Add migration `000063` with `runbook_open_run_hours` and `runbook_run_days` on `retention_settings` and extend `RetentionSettings` get/update; verify retention settings store tests.
+- [x] 1.1 Add paired sqlite/postgres migration `000062`: `kind` and `timeout_seconds` on `runbook_steps`, nullable `connector_id`/`verb`, tables `runbook_runs` and `runbook_run_steps`, partial unique index for one active run per runbook; verify the migration up/down tests pass on both dialects.
+- [x] 1.2 Extend `RunbookStepRecord` and step CRUD with kind and timeout, and carry them through backup export/import; verify store tests and a backup round-trip test.
+- [x] 1.3 Add run store functions (create with frozen steps, get, list by runbook with pagination, step and run transitions that touch `updated_at`, interrupt-running, expire-open, prune-finished); verify store tests including the 409 path for a second active run and survival of runs after runbook deletion.
+- [x] 1.4 Add migration `000063` with `runbook_open_run_hours` and `runbook_run_days` on `retention_settings` and extend `RetentionSettings` get/update; verify retention settings store tests.
 
 ## 2. Step kinds in authoring
 

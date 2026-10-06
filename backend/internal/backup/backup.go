@@ -1,5 +1,5 @@
 // Package backup exports and imports portable ZIP backups (and legacy JSON) of WiseLabz
-// configuration and content (connectors, docs, templates) for disaster
+// configuration and authored content (connectors, docs, templates, runbooks) for disaster
 // recovery and migration between instances.
 //
 // Secrets are never included: connector secret fields (as declared by each
@@ -18,6 +18,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -57,6 +58,8 @@ type AIConfigSummary struct {
 type Bundle struct {
 	JournalEntries   []store.JournalEntry          `json:"journalEntries,omitempty"`
 	Attachments      []store.DocAttachment         `json:"attachments,omitempty"`
+	Runbooks         []store.RunbookRecord         `json:"runbooks,omitempty"`
+	RunbookSteps     []store.RunbookStepRecord     `json:"runbookSteps,omitempty"`
 	Version          int                           `json:"version"`
 	ExportedAt       string                        `json:"exportedAt"`
 	Connectors       []store.ConnectorRecord       `json:"connectors"`
@@ -83,6 +86,8 @@ type Result struct {
 	DocVersions             Counts `json:"docVersions"`
 	Templates               Counts `json:"templates"`
 	TemplateSections        Counts `json:"templateSections"`
+	Runbooks                Counts `json:"runbooks"`
+	RunbookSteps            Counts `json:"runbookSteps"`
 	EntityIdentityOverrides Counts `json:"entityIdentityOverrides"`
 }
 
@@ -111,7 +116,7 @@ func Export(ctx context.Context, s *store.Store) (*Bundle, error) {
 }
 
 // exportWithin builds the bundle from a single transaction-bound Store so
-// the connector/doc/template listings and their COUNT(*) totals all see one
+// the connector/doc/template/runbook listings all see one
 // consistent snapshot, even while syncs or edits are writing concurrently.
 func exportWithin(ctx context.Context, s *store.Store) (*Bundle, error) {
 	connectors, err := s.ListAllConnectors(ctx)
@@ -160,6 +165,37 @@ func exportWithin(ctx context.Context, s *store.Store) (*Bundle, error) {
 	if err != nil {
 		return nil, fmt.Errorf("export entity identity overrides: %w", err)
 	}
+	runbooks, err := s.ListRunbooks(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("export runbooks: %w", err)
+	}
+	runbookRecords := make([]store.RunbookRecord, 0, len(runbooks))
+	runbookIDs := make([]string, 0, len(runbooks))
+	for _, runbook := range runbooks {
+		rec := *runbook
+		// Snapshots are operational state and aren't part of backups. Keep the
+		// authored doc link, but don't export a pointer that cannot be restored.
+		rec.SnapshotID = nil
+		runbookRecords = append(runbookRecords, rec)
+		runbookIDs = append(runbookIDs, rec.ID)
+	}
+	stepsByRunbook, err := s.ListRunbookSteps(ctx, runbookIDs)
+	if err != nil {
+		return nil, fmt.Errorf("export runbook steps: %w", err)
+	}
+	runbookSteps := make([]store.RunbookStepRecord, 0)
+	for _, runbookID := range runbookIDs {
+		for _, step := range stepsByRunbook[runbookID] {
+			rec := *step
+			if rec.Kind == "" {
+				rec.Kind = "lifecycle"
+			}
+			if rec.TimeoutSeconds == 0 && isWaitStepKind(rec.Kind) {
+				rec.TimeoutSeconds = 300
+			}
+			runbookSteps = append(runbookSteps, rec)
+		}
+	}
 	return &Bundle{
 		EntityIdentityOverrides: overrides,
 		JournalEntries:          journal,
@@ -171,6 +207,8 @@ func exportWithin(ctx context.Context, s *store.Store) (*Bundle, error) {
 		DocVersions:             docVersions,
 		Templates:               templates,
 		TemplateSections:        sections,
+		Runbooks:                runbookRecords,
+		RunbookSteps:            runbookSteps,
 		AIConfig:                LoadAIConfigSummary(ctx, s),
 	}, nil
 }
@@ -237,6 +275,9 @@ func LoadAIConfigSummary(ctx context.Context, s *store.Store) *AIConfigSummary {
 // ValidateBundle checks referential integrity and format version without
 // touching the database. It returns the first problem found.
 func ValidateBundle(b *Bundle) error {
+	if b == nil {
+		return errors.New("backup bundle is required")
+	}
 	if b.Version != 1 && b.Version != BundleVersion {
 		return fmt.Errorf("unsupported backup version: got %d, expected %d", b.Version, BundleVersion)
 	}
@@ -321,8 +362,113 @@ func ValidateBundle(b *Bundle) error {
 			return fmt.Errorf("connector %q has invalid category %q", c.ID, c.Category)
 		}
 	}
+	if err := validateRunbooks(b, docIDs, connectorIDs); err != nil {
+		return err
+	}
 
 	return nil
+}
+
+func validateRunbooks(b *Bundle, docIDs, connectorIDs map[string]bool) error {
+	runbookIDs := make(map[string]bool, len(b.Runbooks))
+	targets := make(map[string]bool, len(b.Runbooks))
+	for _, runbook := range b.Runbooks {
+		if runbook.ID == "" || runbookIDs[runbook.ID] || strings.TrimSpace(runbook.Title) == "" ||
+			strings.TrimSpace(runbook.TargetValue) == "" || !validRunbookTargetType(runbook.TargetType) ||
+			(runbook.DocID != nil && !docIDs[*runbook.DocID]) ||
+			!validBackupTimestamp(runbook.CreatedAt) || !validBackupTimestamp(runbook.UpdatedAt) {
+			return fmt.Errorf("invalid runbook %q", runbook.ID)
+		}
+		target := runbook.TargetType + "\x00" + runbook.TargetValue
+		if targets[target] {
+			return fmt.Errorf("duplicate runbook target %q", runbook.TargetValue)
+		}
+		runbookIDs[runbook.ID] = true
+		targets[target] = true
+	}
+
+	stepIDs := make(map[string]bool, len(b.RunbookSteps))
+	stepCounts := make(map[string]int, len(b.Runbooks))
+	positions := make(map[string]map[int]bool, len(b.Runbooks))
+	for _, step := range b.RunbookSteps {
+		kind := step.Kind
+		if kind == "" {
+			kind = "lifecycle"
+		}
+		if step.ID == "" || stepIDs[step.ID] || !runbookIDs[step.RunbookID] || step.Position < 0 ||
+			strings.TrimSpace(step.Title) == "" || !validBackupTimestamp(step.CreatedAt) || !validBackupTimestamp(step.UpdatedAt) {
+			return fmt.Errorf("invalid runbook step %q", step.ID)
+		}
+		stepCounts[step.RunbookID]++
+		if stepCounts[step.RunbookID] > 20 {
+			return fmt.Errorf("runbook %q exceeds maximum of 20 steps", step.RunbookID)
+		}
+		if positions[step.RunbookID] == nil {
+			positions[step.RunbookID] = make(map[int]bool)
+		}
+		if positions[step.RunbookID][step.Position] {
+			return fmt.Errorf("duplicate position %d in runbook %q", step.Position, step.RunbookID)
+		}
+		positions[step.RunbookID][step.Position] = true
+		if step.ConnectorID != "" && !connectorIDs[step.ConnectorID] {
+			return fmt.Errorf("runbook step %q references unknown connector %q", step.ID, step.ConnectorID)
+		}
+		if step.Verb != "" && !validLifecycleVerb(step.Verb) {
+			return fmt.Errorf("runbook step %q has invalid verb %q", step.ID, step.Verb)
+		}
+		if connector.ValidateCompositeRef(step.EntityRef) != nil {
+			return fmt.Errorf("runbook step %q has invalid entity reference", step.ID)
+		}
+		switch kind {
+		case "lifecycle":
+			if step.ConnectorID == "" || step.Verb == "" {
+				return fmt.Errorf("lifecycle step %q requires a connector and verb", step.ID)
+			}
+		case "sync_and_wait", "wait_until_healthy":
+			if step.ConnectorID == "" {
+				return fmt.Errorf("runbook step %q requires a connector", step.ID)
+			}
+			timeout := step.TimeoutSeconds
+			if timeout == 0 {
+				timeout = 300
+			}
+			if timeout < 10 || timeout > 1800 {
+				return fmt.Errorf("runbook step %q timeout must be between 10 and 1800 seconds", step.ID)
+			}
+		case "manual":
+		default:
+			return fmt.Errorf("runbook step %q has invalid kind %q", step.ID, step.Kind)
+		}
+		stepIDs[step.ID] = true
+	}
+	return nil
+}
+
+func validRunbookTargetType(targetType string) bool {
+	switch targetType {
+	case "change_type", "alert_severity", "finding_check_type":
+		return true
+	default:
+		return false
+	}
+}
+
+func validLifecycleVerb(verb string) bool {
+	switch verb {
+	case "restart", "start", "stop":
+		return true
+	default:
+		return false
+	}
+}
+
+func validBackupTimestamp(value string) bool {
+	_, err := time.Parse(time.RFC3339Nano, value)
+	return err == nil
+}
+
+func isWaitStepKind(kind string) bool {
+	return kind == "sync_and_wait" || kind == "wait_until_healthy"
 }
 
 // validateOverride checks one backed-up override's shape and that every member
@@ -484,7 +630,66 @@ func importBundle(ctx context.Context, s *store.Store, b *Bundle) (Result, error
 			res.EntityIdentityOverrides.Skipped++
 		}
 	}
+	if err := importRunbooks(ctx, s, b.Runbooks, b.RunbookSteps, &res); err != nil {
+		return res, err
+	}
 	return res, nil
+}
+
+func importRunbooks(ctx context.Context, s *store.Store, runbooks []store.RunbookRecord, steps []store.RunbookStepRecord, res *Result) error {
+	existingRunbooks, err := s.ListRunbooks(ctx)
+	if err != nil {
+		return fmt.Errorf("check existing runbooks: %w", err)
+	}
+	existingIDs := make(map[string]bool, len(existingRunbooks))
+	existingTargets := make(map[string]bool, len(existingRunbooks))
+	for _, runbook := range existingRunbooks {
+		existingIDs[runbook.ID] = true
+		existingTargets[runbook.TargetType+"\x00"+runbook.TargetValue] = true
+	}
+	stepsByRunbook := make(map[string][]store.RunbookStepRecord, len(runbooks))
+	for _, step := range steps {
+		stepsByRunbook[step.RunbookID] = append(stepsByRunbook[step.RunbookID], step)
+	}
+	for _, runbook := range runbooks {
+		// runbooks has a unique index on (target_type, target_value), so a target match must skip too.
+		if existingIDs[runbook.ID] || existingTargets[runbook.TargetType+"\x00"+runbook.TargetValue] {
+			res.Runbooks.Skipped++
+			res.RunbookSteps.Skipped += len(stepsByRunbook[runbook.ID])
+			continue
+		}
+		if _, err := s.DB().ExecContext(ctx, `
+			INSERT INTO runbooks (id, title, body, target_type, target_value, snapshot_id, doc_id, created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+		`, runbook.ID, runbook.Title, runbook.Body, runbook.TargetType, runbook.TargetValue, nil, runbook.DocID, runbook.CreatedAt, runbook.UpdatedAt); err != nil {
+			return fmt.Errorf("import runbook %q: %w", runbook.ID, err)
+		}
+		res.Runbooks.Imported++
+		for _, step := range stepsByRunbook[runbook.ID] {
+			if step.Kind == "" {
+				step.Kind = "lifecycle"
+			}
+			if step.TimeoutSeconds == 0 && isWaitStepKind(step.Kind) {
+				step.TimeoutSeconds = 300
+			}
+			if _, err := s.DB().ExecContext(ctx, `
+				INSERT INTO runbook_steps (id, runbook_id, position, kind, timeout_seconds, title, connector_id, verb, entity_ref, created_at, updated_at)
+				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			`, step.ID, step.RunbookID, step.Position, step.Kind, step.TimeoutSeconds, step.Title,
+				nullableBackupString(step.ConnectorID), nullableBackupString(step.Verb), step.EntityRef, step.CreatedAt, step.UpdatedAt); err != nil {
+				return fmt.Errorf("import runbook step %q: %w", step.ID, err)
+			}
+			res.RunbookSteps.Imported++
+		}
+	}
+	return nil
+}
+
+func nullableBackupString(value string) any {
+	if value == "" {
+		return nil
+	}
+	return value
 }
 
 func importConnectors(ctx context.Context, s *store.Store, connectors []store.ConnectorRecord, res *Result) error {
