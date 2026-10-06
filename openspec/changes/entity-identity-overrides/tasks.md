@@ -13,7 +13,7 @@
 
 - [ ] 2.1 Add list, create and delete handlers in `backend/internal/api/entities/` that reconcile after a mutation and return the resulting identity IDs; register them in `routes_workflow.go` under `auth.RequireInstanceAdmin`; verify handler tests for 403 on non-admin, 400 on each validation failure, 409 on duplicate and the identity IDs in the create and delete responses
 - [ ] 2.2 Record `entity.override.create` and `entity.override.delete` with `RecordAuditFromContext` and document both in `docs/AUDIT.md`; verify a handler test finds one audit row per mutation with the override ID and members
-- [ ] 2.3 Specify the three endpoints and their schemas in `docs/openapi.yaml`; verify the OpenAPI lint and the generated-client check used by CI pass
+- [ ] 2.3 Specify the three endpoints and their schemas in `docs/openapi.yaml`, and add the optional `entityIdentityOverrides` property to the `BackupBundle` schema and to `BackupImportResult` (an imported/skipped `BackupCounts`), which PR 1 added to backup export and import; verify the OpenAPI lint and the generated-client check used by CI pass
 
 ## 3. Web workflow and translations (PR 3)
 
