@@ -15,8 +15,8 @@
 
 ## 3. Lifecycle cores
 
-- [ ] 3.1 Split `lifecycleOpPreview` and `lifecycleOpMutate` in `internal/api/connectors/lifecycle.go` into context-based cores (explicit actor, extra audit detail, no elevation) with the HTTP handlers as wrappers; verify all existing lifecycle, bulk restart and runbook handler tests pass without modification.
-- [ ] 3.2 Add tests calling the cores directly for preview output, failure alert and audit detail with run and step identifiers.
+- [x] 3.1 Split `lifecycleOpPreview` and `lifecycleOpMutate` in `internal/api/connectors/lifecycle.go` into context-based cores (explicit actor, extra audit detail, no elevation) with the HTTP handlers as wrappers; verify all existing lifecycle, bulk restart and runbook handler tests pass without modification.
+- [x] 3.2 Add tests calling the cores directly for preview output, failure alert and audit detail with run and step identifiers.
 
 ## 4. Run executor
 
