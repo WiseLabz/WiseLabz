@@ -10,6 +10,7 @@ import (
 
 func rollbackRunbookRuns(t *testing.T, db *sql.DB, driver string, logger *slog.Logger) {
 	t.Helper()
+	rollbackConnectorCategories(t, db, driver, logger)
 	if !hasColumn(t, db, driver, "retention_settings", "runbook_run_days") {
 		t.Fatal("runbook retention columns missing before 000063 rollback")
 	}

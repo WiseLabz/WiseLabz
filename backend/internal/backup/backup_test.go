@@ -219,6 +219,45 @@ func TestImportRejectsInvalidBundleBeforeWriting(t *testing.T) {
 	}
 }
 
+func TestImportConnectorWithMonitoringCategory(t *testing.T) {
+	ctx := context.Background()
+	s := newTestStore(t)
+	b := &backup.Bundle{
+		Version: backup.BundleVersion,
+		Connectors: []store.ConnectorRecord{{
+			ID: "c-mon", Name: "Monitoring Service", Category: "monitoring", Type: "custom", URL: "https://mon.example.com",
+		}},
+	}
+
+	res, err := backup.Import(ctx, s, b)
+	if err != nil {
+		t.Fatalf("Import() error = %v", err)
+	}
+	if res.Connectors.Imported != 1 {
+		t.Errorf("Imported = %d, want 1", res.Connectors.Imported)
+	}
+
+	c, err := s.GetConnector(ctx, "c-mon")
+	if err != nil {
+		t.Fatalf("GetConnector: %v", err)
+	}
+	if c.Category != "monitoring" {
+		t.Errorf("Category = %q, want monitoring", c.Category)
+	}
+}
+
+func TestValidateBundleRejectsInvalidConnectorCategory(t *testing.T) {
+	b := &backup.Bundle{
+		Version: backup.BundleVersion,
+		Connectors: []store.ConnectorRecord{{
+			ID: "c-bad", Name: "Gaming Service", Category: "gaming", Type: "custom", URL: "https://gaming.example.com",
+		}},
+	}
+	if err := backup.ValidateBundle(b); err == nil {
+		t.Error("ValidateBundle accepted category gaming; want error")
+	}
+}
+
 func TestImportIsIdempotent(t *testing.T) {
 	ctx := context.Background()
 	src := newTestStore(t)

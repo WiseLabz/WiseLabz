@@ -84,7 +84,7 @@ the exact shape.
   a `docs[].id` present in the bundle; every `templateSections[].templateId`
   must reference a `templates[].id` present in the bundle; every
   `connectors[].category` must be one of `virtualization`, `containers_paas`,
-  `networking`; every `entityIdentityOverrides[]` entry must be a well-formed
+  `networking`, `dns`, `storage`, `monitoring`, `media`, `other`; every `entityIdentityOverrides[]` entry must be a well-formed
   detach or same-kind merge whose connectors are in `connectors`. The first validation failure aborts the whole import with a
   400 `invalid_backup` response — no partial writes.
 - **Additive and idempotent.** Each record is created only if its ID doesn't

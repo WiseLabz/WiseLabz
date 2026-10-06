@@ -34,13 +34,36 @@ const BundleVersion = 2
 
 const exportPageSize = 1000
 
-// validCategories mirrors the connectors.category CHECK constraint in
-// migrations/sqlite/000001_init.up.sql.
-var validCategories = map[string]bool{
+// Categories lists all valid connector categories in canonical order.
+var Categories = []string{
+	"virtualization",
+	"containers_paas",
+	"networking",
+	"dns",
+	"storage",
+	"monitoring",
+	"media",
+	"other",
+}
+
+// ValidCategories mirrors the connectors.category CHECK constraint in
+// migrations/sqlite/000064_connector_categories.up.sql.
+var ValidCategories = map[string]bool{
 	"virtualization":  true,
 	"containers_paas": true,
 	"networking":      true,
 	"dns":             true,
+	"storage":         true,
+	"monitoring":      true,
+	"media":           true,
+	"other":           true,
+}
+
+var validCategories = ValidCategories
+
+// ValidCategory reports whether category is one of the valid connector categories.
+func ValidCategory(category string) bool {
+	return ValidCategories[category]
 }
 
 // AIConfigSummary is an informational, secret-free snapshot of the AI

@@ -4583,7 +4583,7 @@ components:
       enum: [open, resolved]
     ConnectorCategory:
       type: string
-      enum: [virtualization, containers_paas, networking, dns]
+      enum: [virtualization, containers_paas, networking, dns, storage, monitoring, media, other]
     SyncPhase:
       type: string
       enum: [queued, fetching, diffing, generating, done, error]

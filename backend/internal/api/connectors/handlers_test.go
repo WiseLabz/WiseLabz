@@ -13,6 +13,7 @@ import (
 	"github.com/WiseLabz/wiselabz/internal/auth"
 	"github.com/WiseLabz/wiselabz/internal/config"
 	"github.com/WiseLabz/wiselabz/internal/connector"
+	"github.com/WiseLabz/wiselabz/internal/httputil"
 	"github.com/WiseLabz/wiselabz/internal/sync"
 
 	// Register connector implementations (proxmox, custom, ...) for restart tests.
@@ -93,6 +94,52 @@ func TestCreate(t *testing.T) {
 			t.Fatalf("status = %d, want %d; body=%s", rr.Code, http.StatusCreated, rr.Body.String())
 		}
 	})
+
+	t.Run("new category accepted", func(t *testing.T) {
+		for _, cat := range []string{"storage", "monitoring", "media", "other"} {
+			body := `{"name":"NewCat ` + cat + `","category":"` + cat + `","type":"custom","url":"https://` + cat + `.example.com"}`
+			req := httptest.NewRequest(http.MethodPost, "/api/connectors", strings.NewReader(body))
+			rr := httptest.NewRecorder()
+			h.Create(rr, req)
+			if rr.Code != http.StatusCreated {
+				t.Fatalf("category %s status = %d, want %d; body=%s", cat, rr.Code, http.StatusCreated, rr.Body.String())
+			}
+			var created map[string]any
+			if err := json.Unmarshal(rr.Body.Bytes(), &created); err != nil {
+				t.Fatalf("unmarshal: %v", err)
+			}
+			if created["category"] != cat {
+				t.Errorf("category = %v, want %s", created["category"], cat)
+			}
+		}
+	})
+
+	t.Run("unknown category rejected with field error", func(t *testing.T) {
+		body := `{"name":"Invalid","category":"gaming","type":"custom","url":"https://gaming.example.com"}`
+		req := httptest.NewRequest(http.MethodPost, "/api/connectors", strings.NewReader(body))
+		rr := httptest.NewRecorder()
+		h.Create(rr, req)
+		if rr.Code != http.StatusBadRequest {
+			t.Fatalf("status = %d, want %d; body=%s", rr.Code, http.StatusBadRequest, rr.Body.String())
+		}
+		var resp struct {
+			Code    string                `json:"code"`
+			Details []httputil.FieldError `json:"details"`
+		}
+		if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("unmarshal error response: %v", err)
+		}
+		found := false
+		for _, d := range resp.Details {
+			if d.Field == "category" {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("expected field error on category, got details: %+v", resp.Details)
+		}
+	})
 }
 
 func TestUpdate(t *testing.T) {
@@ -142,6 +189,50 @@ func TestUpdate(t *testing.T) {
 		}
 		if !strings.Contains(rr.Body.String(), "Renamed") {
 			t.Errorf("update did not apply: %s", rr.Body.String())
+		}
+	})
+
+	t.Run("update category to new category accepted", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPut, "/api/connectors/"+id, strings.NewReader(`{"category":"media"}`))
+		req.SetPathValue("id", id)
+		rr := httptest.NewRecorder()
+		h.Update(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("status = %d, want %d; body=%s", rr.Code, http.StatusOK, rr.Body.String())
+		}
+		var updated map[string]any
+		if err := json.Unmarshal(rr.Body.Bytes(), &updated); err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+		if updated["category"] != "media" {
+			t.Errorf("category = %v, want media", updated["category"])
+		}
+	})
+
+	t.Run("update to unknown category rejected with field error", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPut, "/api/connectors/"+id, strings.NewReader(`{"category":"gaming"}`))
+		req.SetPathValue("id", id)
+		rr := httptest.NewRecorder()
+		h.Update(rr, req)
+		if rr.Code != http.StatusBadRequest {
+			t.Fatalf("status = %d, want %d; body=%s", rr.Code, http.StatusBadRequest, rr.Body.String())
+		}
+		var resp struct {
+			Code    string                `json:"code"`
+			Details []httputil.FieldError `json:"details"`
+		}
+		if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("unmarshal error response: %v", err)
+		}
+		found := false
+		for _, d := range resp.Details {
+			if d.Field == "category" {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("expected field error on category, got details: %+v", resp.Details)
 		}
 	})
 }

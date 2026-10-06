@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/WiseLabz/wiselabz/internal/auth"
+	"github.com/WiseLabz/wiselabz/internal/backup"
 	"github.com/WiseLabz/wiselabz/internal/config"
 	"github.com/WiseLabz/wiselabz/internal/connector"
 	"github.com/WiseLabz/wiselabz/internal/health"
@@ -110,6 +111,9 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		if f.value == "" {
 			fieldErrs = append(fieldErrs, httputil.FieldError{Field: f.name, Msg: "is required"})
 		}
+	}
+	if req.Category != "" && !backup.ValidCategory(req.Category) {
+		fieldErrs = append(fieldErrs, httputil.FieldError{Field: "category", Msg: "is not a valid category"})
 	}
 	if req.URL == "" && connector.URLRequired(req.Type) {
 		fieldErrs = append(fieldErrs, httputil.FieldError{Field: "url", Msg: "is required"})
@@ -233,6 +237,13 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	updates, fieldErrs := parseScheduleUpdates(req.ScheduleSeconds, req.UserExpiresAt, req.RotationMaxAgeDays)
+	if req.Category != nil {
+		if *req.Category == "" {
+			fieldErrs = append(fieldErrs, httputil.FieldError{Field: "category", Msg: "is required"})
+		} else if !backup.ValidCategory(*req.Category) {
+			fieldErrs = append(fieldErrs, httputil.FieldError{Field: "category", Msg: "is not a valid category"})
+		}
+	}
 	if len(fieldErrs) > 0 {
 		httputil.ErrorWithDetails(w, http.StatusBadRequest, "invalid_request", "Request validation failed", fieldErrs)
 		return
