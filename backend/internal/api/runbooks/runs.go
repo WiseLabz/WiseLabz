@@ -9,6 +9,7 @@ import (
 	"github.com/WiseLabz/wiselabz/internal/api/connectors"
 	"github.com/WiseLabz/wiselabz/internal/auth"
 	"github.com/WiseLabz/wiselabz/internal/httputil"
+	"github.com/WiseLabz/wiselabz/internal/logsafe"
 	"github.com/WiseLabz/wiselabz/internal/runbookrun"
 	"github.com/WiseLabz/wiselabz/internal/store"
 )
@@ -214,13 +215,12 @@ func (h *Handler) previewRun(w http.ResponseWriter, r *http.Request, id string, 
 	canStart := len(views) > 0
 	for i := range views {
 		view := &views[i]
-		if view.Kind == kindLifecycle && !view.Redacted {
+		if view.Kind == kindLifecycle && view.CanExecute {
 			preview, err := h.ConnH.PreviewLifecycleOp(r.Context(), view.ConnectorID, view.Verb, view.EntityRef)
 			if err != nil {
+				slog.Warn("runbook run preview failed", "error", logsafe.Err(err))
 				view.CanExecute = false
-				if view.ExecuteBlockedReason == "" {
-					view.ExecuteBlockedReason = err.Error()
-				}
+				view.ExecuteBlockedReason = "preview_unavailable"
 			} else {
 				view.Preview = preview
 			}

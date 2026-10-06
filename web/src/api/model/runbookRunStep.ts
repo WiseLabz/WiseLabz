@@ -31,6 +31,7 @@ export interface RunbookRunStep {
   confirmedBy?: string;
   redacted: boolean;
   canExecute: boolean;
+  /** Machine code for why canExecute is false; one of no_viewer_grant, no_operator_grant, preview_unavailable. */
   executeBlockedReason?: string;
   preview?: RestartPreview;
 }

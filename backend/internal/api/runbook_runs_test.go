@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -95,5 +96,48 @@ func TestRunRoutesExecuteAndAuthorize(t *testing.T) {
 				t.Fatalf("audit=%+v total=%d err=%v", records, total, err)
 			}
 		})
+	}
+}
+
+func TestRunStartWithRealElevation(t *testing.T) {
+	app := newTestApp(t)
+	user, token := app.user(t, "viewer")
+	ctx := context.Background()
+	rb, _, err := app.Store.CreateRunbookWithSteps(ctx, &store.RunbookRecord{Title: "Manual recovery", TargetType: "change_type", TargetValue: "manual.elevate"}, []*store.RunbookStepRecord{{Kind: "manual", Title: "Confirm one"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	elevate := func(target string) string {
+		t.Helper()
+		rr := app.req(t, http.MethodPost, "/api/auth/elevate", map[string]any{"password": "password123", "action": "runbook.run", "target": target}, token)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("elevate %q=%d %s", target, rr.Code, rr.Body.String())
+		}
+		var resp struct {
+			Token string `json:"token"`
+		}
+		if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil || resp.Token == "" {
+			t.Fatalf("elevate body=%s err=%v", rr.Body.String(), err)
+		}
+		return resp.Token
+	}
+	start := func(elevation string) *httptest.ResponseRecorder {
+		r := app.newRequest(t, http.MethodPost, "/api/runbooks/"+rb.ID+"/run", nil, token)
+		r.Header.Set("X-Elevation-Token", elevation)
+		return app.serve(r)
+	}
+
+	if rr := start(elevate("another-runbook")); rr.Code != http.StatusUnauthorized {
+		t.Fatalf("other target=%d %s", rr.Code, rr.Body.String())
+	}
+	if runs, _, err := app.Store.ListRunbookRuns(ctx, rb.ID, 10, 0); err != nil || len(runs) != 0 {
+		t.Fatalf("runs after rejected start=%v err=%v", runs, err)
+	}
+	if rr := start(elevate(rb.ID)); rr.Code != http.StatusAccepted {
+		t.Fatalf("start=%d %s", rr.Code, rr.Body.String())
+	}
+	records, total, err := app.Store.ListAuditRecords(ctx, "runbook.run.start", "runbook_run", "", "", 0, 10)
+	if err != nil || total != 1 || records[0].ActorUserID != user {
+		t.Fatalf("audit=%+v total=%d err=%v", records, total, err)
 	}
 }

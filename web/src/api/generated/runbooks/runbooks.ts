@@ -702,7 +702,7 @@ export const getStartRunbookRunMutationOptions = <
     | ForbiddenResponse
     | NotFoundResponse
     | RunbookRunConflict
-    | void
+    | Error
   >,
   TContext = unknown,
 >(options?: {
@@ -748,7 +748,7 @@ export type StartRunbookRunMutationError = ErrorType<
   | ForbiddenResponse
   | NotFoundResponse
   | RunbookRunConflict
-  | void
+  | Error
 >;
 export type StartRunbookRunMutationVariables = {
   runbookId: string;
@@ -765,7 +765,7 @@ export const useStartRunbookRun = <
     | ForbiddenResponse
     | NotFoundResponse
     | RunbookRunConflict
-    | void
+    | Error
   >,
   TContext = unknown,
 >(
@@ -1054,7 +1054,7 @@ export const confirmRunbookRunStep = (
 export const getConfirmRunbookRunStepMutationKey = () => ['confirmRunbookRunStep'] as const;
 
 export const getConfirmRunbookRunStepMutationOptions = <
-  TError = ErrorType<UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | void>,
+  TError = ErrorType<UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | Error>,
   TContext = unknown,
 >(options?: {
   mutation?: UseMutationOptions<
@@ -1094,7 +1094,7 @@ export type ConfirmRunbookRunStepMutationResult = NonNullable<
 >;
 
 export type ConfirmRunbookRunStepMutationError = ErrorType<
-  UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | void
+  UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | Error
 >;
 export type ConfirmRunbookRunStepMutationVariables = { runId: string; stepId: string };
 
@@ -1102,7 +1102,7 @@ export type ConfirmRunbookRunStepMutationVariables = { runId: string; stepId: st
  * @summary Confirm a waiting manual step and continue
  */
 export const useConfirmRunbookRunStep = <
-  TError = ErrorType<UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | void>,
+  TError = ErrorType<UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | Error>,
   TContext = unknown,
 >(
   options?: {
@@ -1142,7 +1142,7 @@ export const getResumeRunbookRunMutationKey = () => ['resumeRunbookRun'] as cons
 
 export const getResumeRunbookRunMutationOptions = <
   TError = ErrorType<
-    BadRequestResponse | ElevationRequiredResponse | ForbiddenResponse | NotFoundResponse | void
+    BadRequestResponse | ElevationRequiredResponse | ForbiddenResponse | NotFoundResponse | Error
   >,
   TContext = unknown,
 >(options?: {
@@ -1183,7 +1183,7 @@ export type ResumeRunbookRunMutationResult = NonNullable<
 >;
 
 export type ResumeRunbookRunMutationError = ErrorType<
-  BadRequestResponse | ElevationRequiredResponse | ForbiddenResponse | NotFoundResponse | void
+  BadRequestResponse | ElevationRequiredResponse | ForbiddenResponse | NotFoundResponse | Error
 >;
 export type ResumeRunbookRunMutationVariables = { runId: string };
 
@@ -1192,7 +1192,7 @@ export type ResumeRunbookRunMutationVariables = { runId: string };
  */
 export const useResumeRunbookRun = <
   TError = ErrorType<
-    BadRequestResponse | ElevationRequiredResponse | ForbiddenResponse | NotFoundResponse | void
+    BadRequestResponse | ElevationRequiredResponse | ForbiddenResponse | NotFoundResponse | Error
   >,
   TContext = unknown,
 >(
@@ -1232,7 +1232,7 @@ export const cancelRunbookRun = (
 export const getCancelRunbookRunMutationKey = () => ['cancelRunbookRun'] as const;
 
 export const getCancelRunbookRunMutationOptions = <
-  TError = ErrorType<UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | void>,
+  TError = ErrorType<UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | Error>,
   TContext = unknown,
 >(options?: {
   mutation?: UseMutationOptions<
@@ -1272,7 +1272,7 @@ export type CancelRunbookRunMutationResult = NonNullable<
 >;
 
 export type CancelRunbookRunMutationError = ErrorType<
-  UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | void
+  UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | Error
 >;
 export type CancelRunbookRunMutationVariables = { runId: string };
 
@@ -1280,7 +1280,7 @@ export type CancelRunbookRunMutationVariables = { runId: string };
  * @summary Cancel a running, waiting or failed run
  */
 export const useCancelRunbookRun = <
-  TError = ErrorType<UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | void>,
+  TError = ErrorType<UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | Error>,
   TContext = unknown,
 >(
   options?: {

@@ -171,3 +171,7 @@ Starting and resuming a whole run require the `runbook.run` elevation action,
 targeted at the runbook ID (ADR 0006). Elevation is validated once; lifecycle
 steps retain their `connector.<verb>` audit action with runId, runbookId and
 stepId in detail. Preview, confirmation and cancellation need no elevation.
+
+The start, resume and confirm entries are also written when the request ends
+in 503 during shutdown, because the transition was already recorded (the run
+exists as failed/interrupted, the manual step stays confirmed).

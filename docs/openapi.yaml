@@ -3128,7 +3128,9 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/RunbookRunConflict' }
-        '503': { description: Work refused during shutdown; the run is failed with reason interrupted }
+        '503':
+          description: Work refused during shutdown; the run is failed with reason interrupted
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
   /runbooks/{runbookId}/runs:
     parameters:
       - { $ref: '#/components/parameters/RunbookId' }
@@ -3178,8 +3180,12 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
-        '409': { description: Run or manual step is not waiting }
-        '503': { description: Continuation refused during shutdown; confirmed step stays succeeded and run is interrupted }
+        '409':
+          description: Run or manual step is not waiting
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+        '503':
+          description: Continuation refused during shutdown; confirmed step stays succeeded and run is interrupted
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
   /runbook-runs/{runId}/resume:
     parameters:
       - { $ref: '#/components/parameters/RunbookRunId' }
@@ -3196,9 +3202,9 @@ paths:
       parameters:
         - name: X-Elevation-Token
           in: header
-          required: true
+          required: false
           schema: { type: string }
-          description: Fresh runbook.run elevation targeted at the runbook id.
+          description: Fresh runbook.run elevation targeted at the runbook id (when step-up is on).
       responses:
         '202':
           description: Execution accepted; resuming user recorded
@@ -3209,8 +3215,12 @@ paths:
         '401': { $ref: '#/components/responses/ElevationRequired' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
-        '409': { description: 'Run is not failed, or runbook was deleted (code runbook_deleted)' }
-        '503': { description: Work refused during shutdown; run remains failed with reason interrupted }
+        '409':
+          description: 'Run is not failed, or runbook was deleted (code runbook_deleted)'
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+        '503':
+          description: Work refused during shutdown; run remains failed with reason interrupted
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
   /runbook-runs/{runId}/cancel:
     parameters:
       - { $ref: '#/components/parameters/RunbookRunId' }
@@ -3227,7 +3237,9 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
-        '409': { description: Run is already terminal }
+        '409':
+          description: Run is already terminal
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
 
   # ───────────────────────── quality findings ─────────────────────────
   /findings:
@@ -6175,7 +6187,9 @@ components:
         confirmedBy: { type: string }
         redacted: { type: boolean }
         canExecute: { type: boolean }
-        executeBlockedReason: { type: string }
+        executeBlockedReason:
+          type: string
+          description: Machine code for why canExecute is false; one of no_viewer_grant, no_operator_grant, preview_unavailable.
         preview: { $ref: '#/components/schemas/RestartPreview' }
     RunbookRun:
       allOf:
@@ -6550,7 +6564,8 @@ components:
           description: >-
             ID of the resource the token is bound to, for actions on one (the user
             for `user.delete`, `user.resetPassword`, `user.resetMfa`, `user.update`;
-            the provider for `authProvider.toggle`). The token is also bound to the
+            the provider for `authProvider.toggle`, the runbook for `runbook.run`).
+            The token is also bound to the
             caller's session and is single-use.
         password: { type: string, format: password }
         totp: { type: string, description: 6-digit TOTP code when 2FA is configured }
