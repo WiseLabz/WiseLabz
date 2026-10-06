@@ -25,6 +25,18 @@ export interface RetentionSettings {
    * @minimum 0
    */
   deletedDocsDays?: number;
+  /**
+   * Expire open runbook runs after this many hours of inactivity; must be between 1 and 8760
+   * @minimum 1
+   * @maximum 8760
+   */
+  runbookOpenRunHours?: number;
+  /**
+   * Delete finished runbook runs older than this many days; 0 keeps run history forever; must be between 0 and 3650
+   * @minimum 0
+   * @maximum 3650
+   */
+  runbookRunDays?: number;
   /** Delete generated reports older than this many days; 0 disables cleanup for this category */
   reportDays: number;
   /** 5-field or 6-field (with leading seconds) cron expression */

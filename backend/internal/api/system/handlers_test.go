@@ -2,6 +2,8 @@ package system
 
 import (
 	"database/sql"
+	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -152,6 +154,41 @@ func TestGetRetentionSettingsDefault(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d; body=%s", rr.Code, http.StatusOK, rr.Body.String())
 	}
+	var resp map[string]any
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+	if resp["runbookOpenRunHours"] != float64(store.DefaultRunbookOpenRunHours) {
+		t.Errorf("runbookOpenRunHours = %v, want %d", resp["runbookOpenRunHours"], store.DefaultRunbookOpenRunHours)
+	}
+	if resp["runbookRunDays"] != float64(store.DefaultRunbookRunDays) {
+		t.Errorf("runbookRunDays = %v, want %d", resp["runbookRunDays"], store.DefaultRunbookRunDays)
+	}
+}
+
+// assertFieldError fails unless body is an error response with the given code
+// whose details name field.
+func assertFieldError(t *testing.T, body []byte, code, field string) {
+	t.Helper()
+	var resp struct {
+		Code    string `json:"code"`
+		Details []struct {
+			Field string `json:"field"`
+			Msg   string `json:"msg"`
+		} `json:"details"`
+	}
+	if err := json.Unmarshal(body, &resp); err != nil {
+		t.Fatalf("unmarshal error body: %v; body=%s", err, body)
+	}
+	if resp.Code != code {
+		t.Errorf("code = %q, want %q; body=%s", resp.Code, code, body)
+	}
+	for _, d := range resp.Details {
+		if d.Field == field {
+			return
+		}
+	}
+	t.Errorf("details %+v do not name field %q; body=%s", resp.Details, field, body)
 }
 
 func TestUpdateRetentionSettings(t *testing.T) {
@@ -193,12 +230,68 @@ func TestUpdateRetentionSettings(t *testing.T) {
 		}
 	})
 
+	t.Run("runbook open run hours bounds", func(t *testing.T) {
+		for _, hours := range []int{0, -5, 8761} {
+			body := fmt.Sprintf(`{"cronExpr":"0 0 * * *","runbookOpenRunHours":%d}`, hours)
+			req := httptest.NewRequest(http.MethodPut, "/api/system/settings/retention", strings.NewReader(body))
+			rr := httptest.NewRecorder()
+			h.UpdateRetentionSettings(rr, req)
+			if rr.Code != http.StatusBadRequest {
+				t.Fatalf("hours=%d: status = %d, want 400; body=%s", hours, rr.Code, rr.Body.String())
+			}
+			assertFieldError(t, rr.Body.Bytes(), "invalid_hours", "runbookOpenRunHours")
+		}
+	})
+
+	t.Run("runbook run days bounds", func(t *testing.T) {
+		for _, days := range []int{-1, 3651} {
+			body := fmt.Sprintf(`{"cronExpr":"0 0 * * *","runbookRunDays":%d}`, days)
+			req := httptest.NewRequest(http.MethodPut, "/api/system/settings/retention", strings.NewReader(body))
+			rr := httptest.NewRecorder()
+			h.UpdateRetentionSettings(rr, req)
+			if rr.Code != http.StatusBadRequest {
+				t.Fatalf("days=%d: status = %d, want 400; body=%s", days, rr.Code, rr.Body.String())
+			}
+			assertFieldError(t, rr.Body.Bytes(), "invalid_days", "runbookRunDays")
+		}
+	})
+
+	t.Run("runbook run days zero keeps forever", func(t *testing.T) {
+		body := `{"cronExpr":"0 0 * * *","runbookRunDays":0,"runbookOpenRunHours":12}`
+		req := httptest.NewRequest(http.MethodPut, "/api/system/settings/retention", strings.NewReader(body))
+		rr := httptest.NewRecorder()
+		h.UpdateRetentionSettings(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200; body=%s", rr.Code, rr.Body.String())
+		}
+		var resp map[string]any
+		if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+		if resp["runbookRunDays"] != float64(0) {
+			t.Errorf("runbookRunDays = %v, want 0", resp["runbookRunDays"])
+		}
+		if resp["runbookOpenRunHours"] != float64(12) {
+			t.Errorf("runbookOpenRunHours = %v, want 12", resp["runbookOpenRunHours"])
+		}
+	})
+
 	t.Run("happy path", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodPut, "/api/system/settings/retention", strings.NewReader(`{"cronExpr":"0 0 * * *","snapshotDays":30,"docVersionDays":60,"alertDays":90,"syncRunDays":30,"auditDays":90}`))
+		req := httptest.NewRequest(http.MethodPut, "/api/system/settings/retention", strings.NewReader(`{"cronExpr":"0 0 * * *","snapshotDays":30,"docVersionDays":60,"alertDays":90,"syncRunDays":30,"auditDays":90,"runbookOpenRunHours":48,"runbookRunDays":180}`))
 		rr := httptest.NewRecorder()
 		h.UpdateRetentionSettings(rr, req)
 		if rr.Code != http.StatusOK {
 			t.Fatalf("status = %d, want %d; body=%s", rr.Code, http.StatusOK, rr.Body.String())
+		}
+		var resp map[string]any
+		if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+		if resp["runbookOpenRunHours"] != float64(48) {
+			t.Errorf("runbookOpenRunHours = %v, want 48", resp["runbookOpenRunHours"])
+		}
+		if resp["runbookRunDays"] != float64(180) {
+			t.Errorf("runbookRunDays = %v, want 180", resp["runbookRunDays"])
 		}
 	})
 
@@ -219,6 +312,29 @@ func TestUpdateRetentionSettings(t *testing.T) {
 		}
 		if rs.DeletedDocsDays != 7 {
 			t.Fatalf("DeletedDocsDays = %d, want 7", rs.DeletedDocsDays)
+		}
+	})
+
+	t.Run("omitted runbook run settings keep stored values", func(t *testing.T) {
+		put := func(body string) {
+			t.Helper()
+			rr := httptest.NewRecorder()
+			h.UpdateRetentionSettings(rr, httptest.NewRequest(http.MethodPut, "/api/system/settings/retention", strings.NewReader(body)))
+			if rr.Code != http.StatusOK {
+				t.Fatalf("status = %d, want %d; body=%s", rr.Code, http.StatusOK, rr.Body.String())
+			}
+		}
+		put(`{"cronExpr":"0 0 * * *","runbookOpenRunHours":48,"runbookRunDays":180}`)
+		put(`{"cronExpr":"0 0 * * *","snapshotDays":45}`)
+		rs, err := h.Store.GetRetentionSettings(t.Context())
+		if err != nil {
+			t.Fatalf("GetRetentionSettings() error: %v", err)
+		}
+		if rs.SnapshotDays != 45 {
+			t.Fatalf("SnapshotDays = %d, want 45", rs.SnapshotDays)
+		}
+		if rs.RunbookOpenRunHours != 48 || rs.RunbookRunDays != 180 {
+			t.Fatalf("runbook run settings = %d hours / %d days, want 48 / 180", rs.RunbookOpenRunHours, rs.RunbookRunDays)
 		}
 	})
 }

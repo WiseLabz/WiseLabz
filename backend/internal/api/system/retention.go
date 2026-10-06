@@ -43,30 +43,34 @@ func (h *Handler) GetRetentionSettings(w http.ResponseWriter, r *http.Request) {
 	}
 
 	httputil.JSON(w, http.StatusOK, map[string]any{
-		"snapshotDays":    rs.SnapshotDays,
-		"docVersionDays":  rs.DocVersionDays,
-		"alertDays":       rs.AlertDays,
-		"syncRunDays":     rs.SyncRunDays,
-		"auditDays":       rs.AuditDays,
-		"healthCheckDays": rs.HealthCheckDays,
-		"reportDays":      rs.ReportDays,
-		"deletedDocsDays": rs.DeletedDocsDays,
-		"cronExpr":        rs.CronExpr,
-		"updatedAt":       rs.UpdatedAt,
+		"snapshotDays":        rs.SnapshotDays,
+		"docVersionDays":      rs.DocVersionDays,
+		"alertDays":           rs.AlertDays,
+		"syncRunDays":         rs.SyncRunDays,
+		"auditDays":           rs.AuditDays,
+		"healthCheckDays":     rs.HealthCheckDays,
+		"reportDays":          rs.ReportDays,
+		"deletedDocsDays":     rs.DeletedDocsDays,
+		"runbookOpenRunHours": rs.RunbookOpenRunHours,
+		"runbookRunDays":      rs.RunbookRunDays,
+		"cronExpr":            rs.CronExpr,
+		"updatedAt":           rs.UpdatedAt,
 	})
 }
 
 // RetentionSettingsRequest is the request body for PUT /api/system/settings/retention.
 type RetentionSettingsRequest struct {
-	SnapshotDays    int    `json:"snapshotDays"`
-	DocVersionDays  int    `json:"docVersionDays"`
-	AlertDays       int    `json:"alertDays"`
-	SyncRunDays     int    `json:"syncRunDays"`
-	AuditDays       int    `json:"auditDays"`
-	HealthCheckDays int    `json:"healthCheckDays"`
-	DeletedDocsDays *int   `json:"deletedDocsDays"`
-	ReportDays      int    `json:"reportDays"`
-	CronExpr        string `json:"cronExpr"`
+	SnapshotDays        int    `json:"snapshotDays"`
+	DocVersionDays      int    `json:"docVersionDays"`
+	AlertDays           int    `json:"alertDays"`
+	SyncRunDays         int    `json:"syncRunDays"`
+	AuditDays           int    `json:"auditDays"`
+	HealthCheckDays     int    `json:"healthCheckDays"`
+	DeletedDocsDays     *int   `json:"deletedDocsDays"`
+	RunbookOpenRunHours *int   `json:"runbookOpenRunHours"`
+	RunbookRunDays      *int   `json:"runbookRunDays"`
+	ReportDays          int    `json:"reportDays"`
+	CronExpr            string `json:"cronExpr"`
 }
 
 // UpdateRetentionSettings handles PUT /api/system/settings/retention. Operator-only.
@@ -90,8 +94,8 @@ func (h *Handler) UpdateRetentionSettings(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Omitting deletedDocsDays keeps the stored value so older clients don't reset it.
-	// The runbook run settings are not part of the request yet, so they always carry through.
+	// Omitting deletedDocsDays or the runbook run settings keeps the stored
+	// values so older clients don't reset them.
 	deletedDays := 30
 	runbookOpenRunHours := store.DefaultRunbookOpenRunHours
 	runbookRunDays := store.DefaultRunbookRunDays
@@ -105,6 +109,18 @@ func (h *Handler) UpdateRetentionSettings(w http.ResponseWriter, r *http.Request
 	} else if currentErr == nil {
 		deletedDays = current.DeletedDocsDays
 	}
+	if req.RunbookOpenRunHours != nil {
+		runbookOpenRunHours = *req.RunbookOpenRunHours
+	}
+	if req.RunbookRunDays != nil {
+		runbookRunDays = *req.RunbookRunDays
+	}
+
+	if runbookOpenRunHours < 1 || runbookOpenRunHours > 8760 {
+		httputil.ErrorWithDetails(w, http.StatusBadRequest, "invalid_hours", "runbookOpenRunHours must be between 1 and 8760", []httputil.FieldError{{Field: "runbookOpenRunHours", Msg: "must be between 1 and 8760"}})
+		return
+	}
+
 	var dayErrs []httputil.FieldError
 	for _, f := range []struct {
 		name string
@@ -122,6 +138,9 @@ func (h *Handler) UpdateRetentionSettings(w http.ResponseWriter, r *http.Request
 		if f.days < 0 {
 			dayErrs = append(dayErrs, httputil.FieldError{Field: f.name, Msg: "must be >= 0 (0 disables cleanup)"})
 		}
+	}
+	if runbookRunDays < 0 || runbookRunDays > 3650 {
+		dayErrs = append(dayErrs, httputil.FieldError{Field: "runbookRunDays", Msg: "must be between 0 and 3650 (0 disables cleanup)"})
 	}
 	if len(dayErrs) > 0 {
 		httputil.ErrorWithDetails(w, http.StatusBadRequest, "invalid_days", "retention day values must be >= 0 (0 disables cleanup)", dayErrs)
@@ -153,16 +172,18 @@ func (h *Handler) UpdateRetentionSettings(w http.ResponseWriter, r *http.Request
 	h.reregisterRetentionJob(newSettings)
 
 	httputil.JSON(w, http.StatusOK, map[string]any{
-		"snapshotDays":    newSettings.SnapshotDays,
-		"docVersionDays":  newSettings.DocVersionDays,
-		"alertDays":       newSettings.AlertDays,
-		"syncRunDays":     newSettings.SyncRunDays,
-		"auditDays":       newSettings.AuditDays,
-		"healthCheckDays": newSettings.HealthCheckDays,
-		"reportDays":      newSettings.ReportDays,
-		"deletedDocsDays": newSettings.DeletedDocsDays,
-		"cronExpr":        newSettings.CronExpr,
-		"updatedAt":       newSettings.UpdatedAt,
+		"snapshotDays":        newSettings.SnapshotDays,
+		"docVersionDays":      newSettings.DocVersionDays,
+		"alertDays":           newSettings.AlertDays,
+		"syncRunDays":         newSettings.SyncRunDays,
+		"auditDays":           newSettings.AuditDays,
+		"healthCheckDays":     newSettings.HealthCheckDays,
+		"reportDays":          newSettings.ReportDays,
+		"deletedDocsDays":     newSettings.DeletedDocsDays,
+		"runbookOpenRunHours": newSettings.RunbookOpenRunHours,
+		"runbookRunDays":      newSettings.RunbookRunDays,
+		"cronExpr":            newSettings.CronExpr,
+		"updatedAt":           newSettings.UpdatedAt,
 	})
 }
 

@@ -27,6 +27,8 @@ interface FormState {
   healthCheckDays: string;
   reportDays: string;
   deletedDocsDays: string;
+  runbookOpenRunHours: string;
+  runbookRunDays: string;
   cronExpr: string;
 }
 
@@ -39,6 +41,8 @@ function toForm(data: {
   healthCheckDays: number;
   reportDays: number;
   deletedDocsDays?: number;
+  runbookOpenRunHours?: number;
+  runbookRunDays?: number;
   cronExpr: string;
 }): FormState {
   return {
@@ -50,6 +54,8 @@ function toForm(data: {
     healthCheckDays: String(data.healthCheckDays),
     reportDays: String(data.reportDays),
     deletedDocsDays: String(data.deletedDocsDays ?? 30),
+    runbookOpenRunHours: String(data.runbookOpenRunHours ?? 24),
+    runbookRunDays: String(data.runbookRunDays ?? 90),
     cronExpr: data.cronExpr,
   };
 }
@@ -99,12 +105,18 @@ export function RetentionPage() {
     form.healthCheckDays !== String(data.healthCheckDays) ||
     form.reportDays !== String(data.reportDays) ||
     form.deletedDocsDays !== String(data.deletedDocsDays ?? 30) ||
+    form.runbookOpenRunHours !== String(data.runbookOpenRunHours ?? 24) ||
+    form.runbookRunDays !== String(data.runbookRunDays ?? 90) ||
     form.cronExpr !== data.cronExpr;
 
   // Empty or non-numeric day fields must not silently coerce to 0 (which
   // would disable that retention category) when saved.
   const isValidDays = (v: string) =>
     v.trim() !== '' && Number.isInteger(Number(v)) && Number(v) >= 0;
+  const isValidHours = (v: string) =>
+    v.trim() !== '' && Number.isInteger(Number(v)) && Number(v) >= 1 && Number(v) <= 8760;
+  const isValidRunDays = (v: string) =>
+    v.trim() !== '' && Number.isInteger(Number(v)) && Number(v) >= 0 && Number(v) <= 3650;
   const daysValid =
     isValidDays(form.snapshotDays) &&
     isValidDays(form.docVersionDays) &&
@@ -113,7 +125,9 @@ export function RetentionPage() {
     isValidDays(form.auditDays) &&
     isValidDays(form.healthCheckDays) &&
     isValidDays(form.reportDays) &&
-    isValidDays(form.deletedDocsDays);
+    isValidDays(form.deletedDocsDays) &&
+    isValidHours(form.runbookOpenRunHours) &&
+    isValidRunDays(form.runbookRunDays);
 
   const set = (field: keyof FormState) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm((f) => (f ? { ...f, [field]: e.target.value } : f));
@@ -206,6 +220,33 @@ export function RetentionPage() {
             />
           </Field>
           <Field
+            label={t('settings.retention.runbookOpenRunHours')}
+            htmlFor="ret-runbook-open-run-hours"
+          >
+            <TextInput
+              id="ret-runbook-open-run-hours"
+              type="number"
+              min={1}
+              max={8760}
+              value={form.runbookOpenRunHours}
+              onChange={set('runbookOpenRunHours')}
+            />
+          </Field>
+          <Field
+            label={t('settings.retention.runbookRunDays')}
+            htmlFor="ret-runbook-run-days"
+            hint={t('settings.retention.runbookRunDaysHint')}
+          >
+            <TextInput
+              id="ret-runbook-run-days"
+              type="number"
+              min={0}
+              max={3650}
+              value={form.runbookRunDays}
+              onChange={set('runbookRunDays')}
+            />
+          </Field>
+          <Field
             label={t('settings.retention.cronExpr')}
             htmlFor="ret-cron-expr"
             hint={t('settings.retention.cronHint')}
@@ -233,6 +274,8 @@ export function RetentionPage() {
                 healthCheckDays: Number(form.healthCheckDays),
                 reportDays: Number(form.reportDays),
                 deletedDocsDays: Number(form.deletedDocsDays),
+                runbookOpenRunHours: Number(form.runbookOpenRunHours),
+                runbookRunDays: Number(form.runbookRunDays),
                 cronExpr: form.cronExpr,
               })
             }

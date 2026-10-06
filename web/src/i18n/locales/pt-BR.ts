@@ -287,6 +287,23 @@ export const ptBR: Catalog = {
     clauseMaxReached: 'Máximo de 5 cláusulas de entidade relacionada permitido',
   },
   settings: {
+    runbooks: {
+      steps: {
+        kindLabel: 'Tipo',
+        kinds: {
+          lifecycle: 'Ciclo de vida',
+          sync_and_wait: 'Sincronizar e aguardar',
+          wait_until_healthy: 'Aguardar ficar saudável',
+          manual: 'Manual',
+        },
+        timeoutLabel: 'Tempo limite (segundos)',
+        manualHint: 'Uma instrução manual para o operador confirmar durante a execução.',
+        restricted: 'Etapa restrita',
+        redactedHint: 'Esta etapa usa um conector que você não tem permissão para visualizar.',
+        lockedHint:
+          'Este runbook tem etapas em conectores que você não pode visualizar, então as etapas não podem ser editadas aqui. Suas outras alterações são salvas e as etapas permanecem como estão.',
+      },
+    },
     language: {
       heading: 'Idioma',
       desc: 'Idioma da interface. O texto sem tradução aparece em inglês.',
@@ -313,6 +330,27 @@ export const ptBR: Catalog = {
       contrastDesc: 'Clareia o texto secundário para facilitar a leitura.',
       reduceTransparencyTitle: 'Reduzir transparência',
       reduceTransparencyDesc: 'Deixa o fundo de modais e sobreposições totalmente opaco.',
+    },
+    retention: {
+      saved: 'Configurações de retenção salvas.',
+      saveError: 'Não foi possível salvar as configurações de retenção.',
+      title: 'Retenção',
+      loadError: 'Não foi possível carregar as configurações de retenção.',
+      subtitle: 'Por quanto tempo os dados históricos são mantidos antes que a tarefa de limpeza os remova.',
+      daysTitle: 'Limites de limpeza',
+      daysDesc: 'Dias para manter cada categoria antes de ser removida; 0 desativa a limpeza para essa categoria.',
+      snapshotDays: 'Snapshots de serviço (dias)',
+      docVersionDays: 'Revisões de documentos (dias)',
+      alertDays: 'Alertas resolvidos/dispensados (dias)',
+      syncRunDays: 'Histórico de execuções de sincronização (dias)',
+      auditDays: 'Registro de auditoria (dias)',
+      healthCheckDays: 'Histórico de verificações de integridade (dias)',
+      reportDays: 'Relatórios gerados (dias)',
+      runbookOpenRunHours: 'Execuções abertas de runbook (horas)',
+      runbookRunDays: 'Histórico de execuções de runbook (dias)',
+      runbookRunDaysHint: '0 dias mantém o histórico para sempre.',
+      cronExpr: 'Agendamento de limpeza (cron)',
+      cronHint: 'Expressão cron de 5 ou 6 campos (com segundos iniciais).',
     },
   },
 };

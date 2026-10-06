@@ -565,7 +565,7 @@ export function useGetSystemSettingsRetention<
 }
 
 /**
- * @summary Update the data-retention cleanup configuration — operator. Each `*Days` field must be >= 0 (0 disables cleanup for that category, rejected otherwise with code `invalid_days`); `cronExpr` must be a valid 5-field or 6-field cron expression (code `invalid_cron` otherwise). Re-registers the retention cron job with the new schedule. Audited as `retention.settings.update`.
+ * @summary Update the data-retention cleanup configuration — operator. Each `*Days` field must be >= 0 (0 disables cleanup for that category, rejected otherwise with code `invalid_days`); `runbookOpenRunHours` must be between 1 and 8760 (code `invalid_hours` otherwise); `runbookRunDays` must be between 0 and 3650 (0 disables cleanup, rejected otherwise with code `invalid_days`); `cronExpr` must be a valid 5-field or 6-field cron expression (code `invalid_cron` otherwise). Re-registers the retention cron job with the new schedule. Audited as `retention.settings.update`.
  */
 export const putSystemSettingsRetention = (
   retentionSettings: BodyType<RetentionSettings>,
@@ -631,7 +631,7 @@ export type PutSystemSettingsRetentionMutationError = ErrorType<Error | Forbidde
 export type PutSystemSettingsRetentionMutationVariables = { data: BodyType<RetentionSettings> };
 
 /**
- * @summary Update the data-retention cleanup configuration — operator. Each `*Days` field must be >= 0 (0 disables cleanup for that category, rejected otherwise with code `invalid_days`); `cronExpr` must be a valid 5-field or 6-field cron expression (code `invalid_cron` otherwise). Re-registers the retention cron job with the new schedule. Audited as `retention.settings.update`.
+ * @summary Update the data-retention cleanup configuration — operator. Each `*Days` field must be >= 0 (0 disables cleanup for that category, rejected otherwise with code `invalid_days`); `runbookOpenRunHours` must be between 1 and 8760 (code `invalid_hours` otherwise); `runbookRunDays` must be between 0 and 3650 (0 disables cleanup, rejected otherwise with code `invalid_days`); `cronExpr` must be a valid 5-field or 6-field cron expression (code `invalid_cron` otherwise). Re-registers the retention cron job with the new schedule. Audited as `retention.settings.update`.
  */
 export const usePutSystemSettingsRetention = <
   TError = ErrorType<Error | ForbiddenResponse>,
