@@ -14,9 +14,9 @@ import (
 // RunbookRecord represents a row in the runbooks table: a binding from a
 // change type, alert severity, or finding check type to operator guidance,
 // plus optional pointers to a known-good snapshot and a doc, and zero or
-// more steps (RunbookStepRecord) referencing connector lifecycle
-// operations. Linking a runbook — and its steps — to a target grants no
-// mutation permission by itself: executing a step still requires the
+// more steps (RunbookStepRecord) for lifecycle operations, syncs, health
+// waits, or manual confirmation. Linking a runbook — and its steps — to a
+// target grants no mutation permission by itself: executing a step still requires the
 // caller to hold an operator grant on the step's connector and to
 // step-up/confirm through the same elevation flow as a direct connector
 // restart/start/stop. SnapshotID/DocID remain inert references only.
@@ -241,23 +241,26 @@ func scanRunbook(row rowScanner) (*RunbookRecord, error) {
 }
 
 // RunbookStepRecord represents a row in the runbook_steps table: one
-// lifecycle operation (restart/start/stop) a runbook points at, bound to a
-// specific connector and, optionally, a specific entity on that connector.
+// lifecycle, sync, health wait, or manual instruction in a runbook.
+// Automated steps target a connector and may target a specific entity.
 // Authoring a step grants no mutation permission by itself — see
 // RunbookRecord's doc comment.
 type RunbookStepRecord struct {
-	ID          string `json:"id"`
-	RunbookID   string `json:"runbookId"`
-	Position    int    `json:"position"`
-	Title       string `json:"title"`
-	ConnectorID string `json:"connectorId"`
-	Verb        string `json:"verb"`
-	EntityRef   string `json:"entityRef"`
-	CreatedAt   string `json:"createdAt"`
-	UpdatedAt   string `json:"updatedAt"`
+	ID             string `json:"id"`
+	RunbookID      string `json:"runbookId"`
+	Position       int    `json:"position"`
+	Kind           string `json:"kind"`
+	TimeoutSeconds int    `json:"timeoutSeconds"`
+	Title          string `json:"title"`
+	ConnectorID    string `json:"connectorId"`
+	Verb           string `json:"verb"`
+	EntityRef      string `json:"entityRef"`
+	CreatedAt      string `json:"createdAt"`
+	UpdatedAt      string `json:"updatedAt"`
 }
 
-const runbookStepColumns = `id, runbook_id, position, title, connector_id, verb, entity_ref, created_at, updated_at`
+const runbookStepColumns = `id, runbook_id, position, kind, timeout_seconds, title,
+	connector_id, verb, entity_ref, created_at, updated_at`
 
 // ListRunbookSteps returns the steps belonging to any of runbookIDs,
 // grouped by runbook ID and ordered by position within each group. Missing
@@ -346,21 +349,33 @@ func (s *Store) ReplaceRunbookSteps(ctx context.Context, runbookID string, steps
 		if id == "" || !existingIDs[id] {
 			id = uuid.New().String()
 		}
+		kind := st.Kind
+		if kind == "" {
+			kind = "lifecycle"
+		}
+		timeout := st.TimeoutSeconds
+		if timeout == 0 && (kind == "sync_and_wait" || kind == "wait_until_healthy") {
+			timeout = 300
+		}
 		rec := &RunbookStepRecord{
-			ID:          id,
-			RunbookID:   runbookID,
-			Position:    i,
-			Title:       st.Title,
-			ConnectorID: st.ConnectorID,
-			Verb:        st.Verb,
-			EntityRef:   st.EntityRef,
-			CreatedAt:   now,
-			UpdatedAt:   now,
+			ID:             id,
+			RunbookID:      runbookID,
+			Position:       i,
+			Kind:           kind,
+			TimeoutSeconds: timeout,
+			Title:          st.Title,
+			ConnectorID:    st.ConnectorID,
+			Verb:           st.Verb,
+			EntityRef:      st.EntityRef,
+			CreatedAt:      now,
+			UpdatedAt:      now,
 		}
 		if _, err := s.db.ExecContext(ctx, `
-			INSERT INTO runbook_steps (id, runbook_id, position, title, connector_id, verb, entity_ref, created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-		`, rec.ID, rec.RunbookID, rec.Position, rec.Title, rec.ConnectorID, rec.Verb, rec.EntityRef, rec.CreatedAt, rec.UpdatedAt); err != nil {
+			INSERT INTO runbook_steps (id, runbook_id, position, kind, timeout_seconds, title,
+				connector_id, verb, entity_ref, created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		`, rec.ID, rec.RunbookID, rec.Position, rec.Kind, rec.TimeoutSeconds, rec.Title,
+			nilToStr(rec.ConnectorID), nilToStr(rec.Verb), rec.EntityRef, rec.CreatedAt, rec.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("insert runbook step: %w", err)
 		}
 		saved = append(saved, rec)
@@ -370,12 +385,16 @@ func (s *Store) ReplaceRunbookSteps(ctx context.Context, runbookID string, steps
 
 func scanRunbookStep(row rowScanner) (*RunbookStepRecord, error) {
 	var st RunbookStepRecord
-	err := row.Scan(&st.ID, &st.RunbookID, &st.Position, &st.Title, &st.ConnectorID, &st.Verb, &st.EntityRef, &st.CreatedAt, &st.UpdatedAt)
+	var connectorID, verb sql.NullString
+	err := row.Scan(&st.ID, &st.RunbookID, &st.Position, &st.Kind, &st.TimeoutSeconds, &st.Title,
+		&connectorID, &verb, &st.EntityRef, &st.CreatedAt, &st.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
 	if err != nil {
 		return nil, err
 	}
+	st.ConnectorID = connectorID.String
+	st.Verb = verb.String
 	return &st, nil
 }
