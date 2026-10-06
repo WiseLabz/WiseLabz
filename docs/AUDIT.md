@@ -87,6 +87,8 @@ object, action-specific), and `createdAt`.
 | `runbook.create` | `POST /api/runbooks` | runbook / new ID |
 | `runbook.update` | `PUT /api/runbooks/{id}` | runbook / id |
 | `runbook.delete` | `DELETE /api/runbooks/{id}` | runbook / id |
+| `entity.override.create` | `POST /api/entity-overrides` | entity_override / new ID |
+| `entity.override.delete` | `DELETE /api/entity-overrides/{id}` | entity_override / id |
 | `compliance_rule.create` | `POST /api/compliance/rules` | compliance_rule / new ID |
 | `compliance_rule.update` | `PUT /api/compliance/rules/{id}` | compliance_rule / id |
 | `compliance_rule.delete` | `DELETE /api/compliance/rules/{id}` | compliance_rule / id |
@@ -111,6 +113,11 @@ valid elevation token for `connector.<verb>`. `runbook.create`/
 `id`, `connectorId`, `verb`, `entityRef`); `runbook.update` additionally
 records `changedFields`, the list of top-level keys present in the request
 body. `runbook.delete` records the deleted runbook's `title`.
+
+`entity.override.create`/`entity.override.delete` record the override's
+`action` (`detach` or `merge`), `note` and `members` (each `connectorId`,
+`kind`, `ref`; one for a detach, two for a merge). Identity IDs are not
+recorded: they change on merge and split.
 
 ## What's not recorded
 

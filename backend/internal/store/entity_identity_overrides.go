@@ -275,22 +275,36 @@ func (s *Store) DeleteEntityIdentityOverride(ctx context.Context, id string) err
 }
 
 func (s *Store) entityOverrideView(ctx context.Context, o EntityIdentityOverride) (EntityIdentityOverrideView, error) {
-	view := EntityIdentityOverrideView{EntityIdentityOverride: o, State: EntityOverrideActive}
+	members, err := s.EntityOverrideMembers(ctx, o)
+	view := EntityIdentityOverrideView{EntityIdentityOverride: o, State: EntityOverrideActive, Members: members}
+	if err != nil {
+		return view, err
+	}
+	for _, member := range members {
+		if member.EntityID == "" || member.Gone {
+			view.State = EntityOverrideDormant
+		}
+	}
+	return view, nil
+}
+
+// EntityOverrideMembers resolves the one (detach) or two (merge) members an
+// override references to their names and current identity IDs. Callers use it
+// after reconciliation to report where each member now lives.
+func (s *Store) EntityOverrideMembers(ctx context.Context, o EntityIdentityOverride) ([]EntityOverrideMember, error) {
 	refs := [][3]string{{o.ConnectorID, o.Kind, o.Ref}}
 	if o.Action == EntityOverrideMerge {
 		refs = append(refs, [3]string{o.OtherConnectorID, o.OtherKind, o.OtherRef})
 	}
+	members := make([]EntityOverrideMember, 0, len(refs))
 	for _, ref := range refs {
 		member, err := s.entityOverrideMember(ctx, ref[0], ref[1], ref[2])
 		if err != nil {
-			return view, err
+			return members, err
 		}
-		if member.EntityID == "" || member.Gone {
-			view.State = EntityOverrideDormant
-		}
-		view.Members = append(view.Members, member)
+		members = append(members, member)
 	}
-	return view, nil
+	return members, nil
 }
 
 // entityOverrideMember reads the member's connector name and its current row:

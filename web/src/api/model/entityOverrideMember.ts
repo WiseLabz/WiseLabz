@@ -6,15 +6,14 @@
  *
  * OpenAPI spec version: 0.1.0
  */
-import type { BackupCounts } from './backupCounts';
 
-export interface BackupImportResult {
-  journalEntries?: BackupCounts;
-  attachments?: BackupCounts;
-  connectors: BackupCounts;
-  docs: BackupCounts;
-  docVersions: BackupCounts;
-  templates: BackupCounts;
-  templateSections: BackupCounts;
-  entityIdentityOverrides?: BackupCounts;
+export interface EntityOverrideMember {
+  connectorId: string;
+  connectorName: string;
+  kind: string;
+  /** Connector-local reference of the member */
+  ref: string;
+  name: string;
+  /** Identity the member belongs to now; empty when it has no stored membership */
+  entityId: string;
 }

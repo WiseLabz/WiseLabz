@@ -167,7 +167,7 @@ func newRouterDeps(cfg Config) routerDeps {
 		alertH:      alerthandler.NewHandler(cfg.Store),
 		attentionH:  attentionhandler.NewHandler(cfg.Store),
 		findingH:    findinghandler.NewHandler(cfg.Store),
-		entityH:     entityhandler.NewHandler(cfg.Store),
+		entityH:     entityhandler.NewHandler(cfg.Store, cfg.DocEngine),
 		notifH:      notifhandler.NewHandler(cfg.Store),
 		runbookH:    runbookhandler.NewHandler(cfg.Store, connH),
 		dashH:       dashhandler.NewHandler(cfg.Store),
