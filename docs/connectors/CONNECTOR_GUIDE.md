@@ -572,6 +572,32 @@ The Proxmox VE connector supplies the `tags` attribute these rules use: a
 sorted string array, empty when the guest has no tags, on `vm` and `container`
 entities, read from the guest list response.
 
+## Firewall entity identities
+
+OPNsense and pfSense interfaces use their device names as local keys. OPNsense
+rules use upstream UUIDs; pfSense rules use tracker IDs rather than the API's
+positional rule IDs, which change when rules are reordered. Display names and
+descriptions remain separate from these keys. When an upstream key is absent,
+the connector derives a composite key from interface identifiers or rule
+match fields. Description, enabled state and logging changes do not change
+that key. Changing match fields can change a fallback key; identical fallback
+rows use occurrence suffixes because the API provides no way to distinguish
+them across reorders.
+
+Device names, trackers and fallback keys are scoped to the connector type and
+configured API URL, so unrelated firewalls do not merge just because they use
+the same local key. Trailing URL slashes are ignored. OPNsense UUIDs remain
+unqualified. Changing the API URL changes the scope, including when switching
+to a different URL for the same appliance. pfSense rule updates resolve the
+stable reference to the current API rule ID before writing; missing or
+ambiguous targets are rejected. OPNsense fallback rules cannot be updated
+without an upstream UUID.
+
+Existing installations see a one-time reference transition on re-sync. Old
+name-based members become gone members. A merged identity retains its ID when
+an unchanged member still anchors the match; without such an anchor, a changed
+reference receives a new identity.
+
 ## Keeping snapshots stable
 
 A snapshot is diffed against the previous one, so anything that changes on

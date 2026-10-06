@@ -4,10 +4,12 @@ package opnsense
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -15,6 +17,8 @@ import (
 )
 
 const typeName = "opnsense"
+
+const fallbackEntityIDPrefix = "fallback:"
 
 func init() {
 	connector.Register(connector.TypeSchema{
@@ -128,6 +132,9 @@ func (c *Connector) Fetch(ctx context.Context, _ map[string]any) (snapshot *conn
 	// --- Interfaces ---
 	if raw, err := c.doRequest(ctx, "GET", "/api/diagnostics/interface/getInterfaces"); err == nil {
 		content, ifaceEntities := buildInterfaceTable(raw)
+		for i := range ifaceEntities {
+			ifaceEntities[i].ExternalID = connector.ScopedExternalID(typeName, c.url, ifaceEntities[i].ExternalID)
+		}
 		sections = append(sections, connector.SnapshotSection{
 			Title:   "Interfaces",
 			Content: content,
@@ -143,6 +150,11 @@ func (c *Connector) Fetch(ctx context.Context, _ map[string]any) (snapshot *conn
 	// --- Firewall rules ---
 	if raw, err := c.doRequest(ctx, "GET", "/api/firewall/filter/searchRule"); err == nil {
 		content, ruleEntities := buildRuleTable(raw)
+		for i := range ruleEntities {
+			if strings.HasPrefix(ruleEntities[i].ExternalID, fallbackEntityIDPrefix) {
+				ruleEntities[i].ExternalID = connector.ScopedExternalID(typeName, c.url, ruleEntities[i].ExternalID)
+			}
+		}
 		sections = append(sections, connector.SnapshotSection{
 			Title:   "Firewall Rules",
 			Content: content,
@@ -251,6 +263,9 @@ func (c *Connector) ConfigPush(ctx context.Context, _ map[string]any, entityRef,
 	if entityRef == "" {
 		return fmt.Errorf("opnsense config-push requires a target rule UUID")
 	}
+	if isFallbackExternalID(entityRef) {
+		return fmt.Errorf("opnsense config-push requires an upstream rule UUID, got fallback entity ID")
+	}
 	if err := connector.ValidateRefSegment(entityRef); err != nil {
 		return fmt.Errorf("invalid entityRef: %w", err)
 	}
@@ -317,14 +332,16 @@ func (c *Connector) doRequestBody(ctx context.Context, method, path string, body
 func buildInterfaceTable(raw []byte) (string, []connector.SnapshotEntity) {
 	var resp struct {
 		Rows []struct {
-			Device    string `json:"device"`
-			IPAddress string `json:"ipaddr"`
-			IPv6      string `json:"ipv6"`
-			Status    string `json:"status"`
-			Media     string `json:"media"`
-			Enabled   bool   `json:"enabled"`
-			Type      string `json:"type"`
-			Gateway   string `json:"gateway"`
+			Identifier string `json:"identifier"`
+			Device     string `json:"device"`
+			MAC        string `json:"macaddr"`
+			IPAddress  string `json:"ipaddr"`
+			IPv6       string `json:"ipv6"`
+			Status     string `json:"status"`
+			Media      string `json:"media"`
+			Enabled    bool   `json:"enabled"`
+			Type       string `json:"type"`
+			Gateway    string `json:"gateway"`
 		} `json:"rows"`
 	}
 	if err := json.Unmarshal(raw, &resp); err != nil || len(resp.Rows) == 0 {
@@ -334,6 +351,7 @@ func buildInterfaceTable(raw []byte) (string, []connector.SnapshotEntity) {
 	b.WriteString("| Device | IP Address | Status | Media |\n")
 	b.WriteString("|--------|------------|--------|-------|\n")
 	var entities []connector.SnapshotEntity
+	fallbackOccurrences := make(map[string]int, len(resp.Rows))
 	for _, iface := range resp.Rows {
 		_, err := fmt.Fprintf(&b, "| %s | %s | %s | %s |\n",
 			iface.Device, iface.IPAddress, iface.Status, iface.Media)
@@ -351,7 +369,17 @@ func buildInterfaceTable(raw []byte) (string, []connector.SnapshotEntity) {
 		if iface.Gateway != "" {
 			attrs["gateway"] = iface.Gateway
 		}
-		entities = append(entities, connector.SnapshotEntity{Kind: "interface", Name: iface.Device, IP: iface.IPAddress, Attributes: attrs})
+		externalID := iface.Device
+		if externalID == "" {
+			externalID = fallbackExternalID("interface", fallbackOccurrences, iface.Identifier, iface.MAC)
+		}
+		entities = append(entities, connector.SnapshotEntity{
+			Kind:       "interface",
+			Name:       iface.Device,
+			IP:         iface.IPAddress,
+			ExternalID: externalID,
+			Attributes: attrs,
+		})
 	}
 	return b.String(), entities
 }
@@ -402,6 +430,7 @@ func primaryGatewayName(raw []byte) string {
 func buildRuleTable(raw []byte) (string, []connector.SnapshotEntity) {
 	var resp struct {
 		Rows []struct {
+			UUID            string `json:"uuid"`
 			Description     string `json:"description"`
 			Action          string `json:"action"`
 			Protocol        string `json:"protocol"`
@@ -418,12 +447,19 @@ func buildRuleTable(raw []byte) (string, []connector.SnapshotEntity) {
 	if err := json.Unmarshal(raw, &resp); err != nil || len(resp.Rows) == 0 {
 		return "_No firewall rules returned_", nil
 	}
+	var rawResp struct {
+		Rows []json.RawMessage `json:"rows"`
+	}
+	if err := json.Unmarshal(raw, &rawResp); err != nil {
+		return "_No firewall rules returned_", nil
+	}
 	var b strings.Builder
 	b.WriteString("| Description | Action | Protocol | Source | Destination | Enabled |\n")
 	b.WriteString("|-------------|--------|----------|--------|-------------|--------|\n")
 	var entities []connector.SnapshotEntity
+	fallbackOccurrences := make(map[string]int, len(resp.Rows))
 	count := 0
-	for _, r := range resp.Rows {
+	for i, r := range resp.Rows {
 		if count >= 50 {
 			_, err := fmt.Fprintf(&b, "\n_...and %d more rules_", len(resp.Rows)-50)
 			if err != nil {
@@ -460,10 +496,71 @@ func buildRuleTable(raw []byte) (string, []connector.SnapshotEntity) {
 		if r.DisabledReason != "" {
 			attrs["disabled_reason"] = r.DisabledReason
 		}
-		entities = append(entities, connector.SnapshotEntity{Kind: "rule", Name: r.Description, Attributes: attrs})
+		externalID := r.UUID
+		if externalID == "" {
+			var err error
+			externalID, err = ruleFallbackExternalID(rawResp.Rows[i], fallbackOccurrences)
+			if err != nil {
+				return "_No firewall rules returned_", nil
+			}
+		}
+		entities = append(entities, connector.SnapshotEntity{
+			Kind:       "rule",
+			Name:       r.Description,
+			ExternalID: externalID,
+			Attributes: attrs,
+		})
 		count++
 	}
 	return b.String(), entities
+}
+
+// ruleFallbackExternalID includes uncommon match fields without maintaining a
+// second catalog of the upstream rule schema. Display, state and order fields
+// do not identify the rule.
+func ruleFallbackExternalID(raw json.RawMessage, occurrences map[string]int) (string, error) {
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.UseNumber()
+	fields := make(map[string]any)
+	if err := decoder.Decode(&fields); err != nil {
+		return "", fmt.Errorf("decode rule identity: %w", err)
+	}
+	for _, field := range []string{
+		"uuid", "sequence", "description", "enabled", "log", "disabled_reason",
+		"created_by", "created_time", "updated_by", "updated_time",
+	} {
+		delete(fields, field)
+	}
+	canonical, err := json.Marshal(fields)
+	if err != nil {
+		return "", fmt.Errorf("encode rule identity: %w", err)
+	}
+	return fallbackExternalID("rule", occurrences, string(canonical)), nil
+}
+
+// fallbackExternalID hashes stable upstream fields when the API omits its
+// normal identifier.
+// ponytail: occurrence suffixes distinguish identical rows; a stable upstream
+// ID is required to track each such row individually across reorders.
+func fallbackExternalID(kind string, occurrences map[string]int, fields ...string) string {
+	var identity strings.Builder
+	for _, field := range fields {
+		identity.WriteString(strconv.Itoa(len(field)))
+		identity.WriteByte(':')
+		identity.WriteString(field)
+	}
+
+	digest := sha256.Sum256([]byte(identity.String()))
+	base := fmt.Sprintf("%s%s:%x", fallbackEntityIDPrefix, kind, digest)
+	occurrences[base]++
+	if occurrences[base] > 1 {
+		return base + ":" + strconv.Itoa(occurrences[base])
+	}
+	return base
+}
+
+func isFallbackExternalID(externalID string) bool {
+	return strings.HasPrefix(externalID, fallbackEntityIDPrefix) || strings.Contains(externalID, ":"+fallbackEntityIDPrefix)
 }
 
 func buildGatewayTable(raw []byte) string {

@@ -102,6 +102,78 @@ func TestFetchSurfacesWANAndUpstreamDependencies(t *testing.T) {
 	}
 }
 
+func TestFetchScopesInterfaceAndFallbackRuleIDsBySource(t *testing.T) {
+	newServer := func() *httptest.Server {
+		return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			switch r.URL.Path {
+			case "/api/core/firmware/status":
+				_, _ = w.Write([]byte(`{"product_name":"OPNsense","product_version":"24.1"}`))
+			case "/api/diagnostics/interface/getInterfaces":
+				_, _ = w.Write([]byte(`{"rows":[{"device":"igb0","ipaddr":"203.0.113.5","status":"up"}]}`))
+			case "/api/firewall/filter/searchRule":
+				_, _ = w.Write([]byte(`{"rows":[
+					{"uuid":"f4cba8a1-0c93-4cb2-9c5c-821331233db9","description":"UUID rule","action":"pass","protocol":"tcp","source_net":"any","destination_net":"any","destination_port":"22"},
+					{"description":"Fallback rule","action":"block","protocol":"udp","ipprotocol":"inet","source_net":"10.0.0.0/8","source_port":"53","destination_net":"any","interface":"lan","direction":"in"}
+				]}`))
+			case "/api/routes/gateway/status":
+				_, _ = w.Write([]byte(`{"items":[]}`))
+			default:
+				t.Fatalf("unexpected request path: %s", r.URL.Path)
+			}
+		}))
+	}
+
+	firstServer := newServer()
+	defer firstServer.Close()
+	secondServer := newServer()
+	defer secondServer.Close()
+
+	newConnector := func(server *httptest.Server) *Connector {
+		return &Connector{url: server.URL, apiKey: "key", apiSecret: "secret", client: server.Client()}
+	}
+	first, err := newConnector(firstServer).Fetch(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("first Fetch() error = %v", err)
+	}
+	repeated, err := newConnector(firstServer).Fetch(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("repeated Fetch() error = %v", err)
+	}
+	otherSource, err := newConnector(secondServer).Fetch(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("other-source Fetch() error = %v", err)
+	}
+
+	findEntity := func(snapshot *connector.ServiceSnapshot, kind, name string) connector.SnapshotEntity {
+		t.Helper()
+		for _, entity := range snapshot.Entities {
+			if entity.Kind == kind && entity.Name == name {
+				return entity
+			}
+		}
+		t.Fatalf("snapshot has no %s entity named %q: %+v", kind, name, snapshot.Entities)
+		return connector.SnapshotEntity{}
+	}
+	firstDevice := findEntity(first, "interface", "igb0")
+	repeatedDevice := findEntity(repeated, "interface", "igb0")
+	otherDevice := findEntity(otherSource, "interface", "igb0")
+	if firstDevice.ExternalID == "" || firstDevice.ExternalID != repeatedDevice.ExternalID || firstDevice.ExternalID == otherDevice.ExternalID {
+		t.Errorf("scoped interface IDs: first %q, repeated %q, other source %q", firstDevice.ExternalID, repeatedDevice.ExternalID, otherDevice.ExternalID)
+	}
+	firstFallback := findEntity(first, "rule", "Fallback rule")
+	repeatedFallback := findEntity(repeated, "rule", "Fallback rule")
+	otherFallback := findEntity(otherSource, "rule", "Fallback rule")
+	if firstFallback.ExternalID == "" || firstFallback.ExternalID != repeatedFallback.ExternalID || firstFallback.ExternalID == otherFallback.ExternalID {
+		t.Errorf("scoped fallback-rule IDs: first %q, repeated %q, other source %q", firstFallback.ExternalID, repeatedFallback.ExternalID, otherFallback.ExternalID)
+	}
+	for _, snapshot := range []*connector.ServiceSnapshot{first, repeated, otherSource} {
+		if got := findEntity(snapshot, "rule", "UUID rule").ExternalID; got != "f4cba8a1-0c93-4cb2-9c5c-821331233db9" {
+			t.Errorf("upstream UUID ExternalID = %q, want unchanged UUID", got)
+		}
+	}
+}
+
 func TestDoRequestErrorCases(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -341,6 +413,8 @@ func TestConfigPush(t *testing.T) {
 	}{
 		{name: "success", entityRef: "rule-uuid", fieldKey: "enabled", value: true},
 		{name: "empty entityRef errors", entityRef: "", fieldKey: "enabled", value: true, wantErr: true},
+		{name: "fallback entityRef errors", entityRef: "fallback:rule:deadbeef", fieldKey: "enabled", value: true, wantErr: true},
+		{name: "scoped fallback entityRef errors", entityRef: "opnsense:deadbeef:fallback:rule:deadbeef", fieldKey: "enabled", value: true, wantErr: true},
 		{name: "unsupported field errors", entityRef: "rule-uuid", fieldKey: "action", value: "block", wantErr: true},
 	}
 	for _, tt := range tests {
@@ -365,6 +439,9 @@ func TestConfigPush(t *testing.T) {
 			if tt.wantErr {
 				if err == nil {
 					t.Fatalf("ConfigPush() error = nil, want error")
+				}
+				if setRuleCalled || applyCalled {
+					t.Errorf("invalid ConfigPush() called upstream: setRule=%v apply=%v", setRuleCalled, applyCalled)
 				}
 				return
 			}
