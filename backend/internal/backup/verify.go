@@ -133,13 +133,14 @@ func VerifyBundleFile(ctx context.Context, bundlePath string) VerificationResult
 		res.ExpectedCounts = BundleCounts(bundle)
 	}
 	res.ActualCounts = map[string]int{
-		"attachments":      importResult.Attachments.Imported,
-		"journalEntries":   importResult.JournalEntries.Imported,
-		"connectors":       importResult.Connectors.Imported,
-		"docs":             importResult.Docs.Imported,
-		"docVersions":      importResult.DocVersions.Imported,
-		"templates":        importResult.Templates.Imported,
-		"templateSections": importResult.TemplateSections.Imported,
+		"attachments":             importResult.Attachments.Imported,
+		"journalEntries":          importResult.JournalEntries.Imported,
+		"connectors":              importResult.Connectors.Imported,
+		"docs":                    importResult.Docs.Imported,
+		"docVersions":             importResult.DocVersions.Imported,
+		"templates":               importResult.Templates.Imported,
+		"templateSections":        importResult.TemplateSections.Imported,
+		"entityIdentityOverrides": importResult.EntityIdentityOverrides.Imported,
 	}
 	for entity, want := range res.ExpectedCounts {
 		if got := res.ActualCounts[entity]; got != want {

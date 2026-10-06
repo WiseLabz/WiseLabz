@@ -64,6 +64,11 @@ type Bundle struct {
 	DocVersions      []store.DocVersionRecord      `json:"docVersions"`
 	Templates        []store.TemplateRecord        `json:"templates"`
 	TemplateSections []store.TemplateSectionRecord `json:"templateSections"`
+	// EntityIdentityOverrides are manual identity merges and detaches. They
+	// refer to members by connector-local key; entities and entity_members are
+	// rebuilt from snapshots, so an override stays dormant until its member is
+	// observed again.
+	EntityIdentityOverrides []store.EntityIdentityOverride `json:"entityIdentityOverrides,omitempty"`
 	// AIConfig is informational only; see Import.
 	AIConfig *AIConfigSummary `json:"aiConfig,omitempty"`
 }
@@ -71,13 +76,14 @@ type Bundle struct {
 // Result reports how many records of each entity were imported vs. skipped
 // (skipped = an existing record with the same ID was found, left untouched).
 type Result struct {
-	JournalEntries   Counts `json:"journalEntries"`
-	Attachments      Counts `json:"attachments"`
-	Connectors       Counts `json:"connectors"`
-	Docs             Counts `json:"docs"`
-	DocVersions      Counts `json:"docVersions"`
-	Templates        Counts `json:"templates"`
-	TemplateSections Counts `json:"templateSections"`
+	JournalEntries          Counts `json:"journalEntries"`
+	Attachments             Counts `json:"attachments"`
+	Connectors              Counts `json:"connectors"`
+	Docs                    Counts `json:"docs"`
+	DocVersions             Counts `json:"docVersions"`
+	Templates               Counts `json:"templates"`
+	TemplateSections        Counts `json:"templateSections"`
+	EntityIdentityOverrides Counts `json:"entityIdentityOverrides"`
 }
 
 // Counts is the imported/skipped tally for one entity kind.
@@ -150,17 +156,22 @@ func exportWithin(ctx context.Context, s *store.Store) (*Bundle, error) {
 	if err != nil {
 		return nil, fmt.Errorf("export journal: %w", err)
 	}
+	overrides, err := s.LoadEntityIdentityOverrides(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("export entity identity overrides: %w", err)
+	}
 	return &Bundle{
-		JournalEntries:   journal,
-		Attachments:      attachments,
-		Version:          BundleVersion,
-		ExportedAt:       time.Now().UTC().Format(time.RFC3339),
-		Connectors:       connectors,
-		Docs:             docs,
-		DocVersions:      docVersions,
-		Templates:        templates,
-		TemplateSections: sections,
-		AIConfig:         LoadAIConfigSummary(ctx, s),
+		EntityIdentityOverrides: overrides,
+		JournalEntries:          journal,
+		Attachments:             attachments,
+		Version:                 BundleVersion,
+		ExportedAt:              time.Now().UTC().Format(time.RFC3339),
+		Connectors:              connectors,
+		Docs:                    docs,
+		DocVersions:             docVersions,
+		Templates:               templates,
+		TemplateSections:        sections,
+		AIConfig:                LoadAIConfigSummary(ctx, s),
 	}, nil
 }
 
@@ -297,12 +308,43 @@ func ValidateBundle(b *Bundle) error {
 		}
 	}
 
+	seenOverrides := map[string]bool{}
+	for _, o := range b.EntityIdentityOverrides {
+		if err := validateOverride(o, connectorIDs); err != nil || seenOverrides[o.ID] {
+			return fmt.Errorf("invalid entity identity override %q", o.ID)
+		}
+		seenOverrides[o.ID] = true
+	}
+
 	for _, c := range b.Connectors {
 		if !validCategories[c.Category] {
 			return fmt.Errorf("connector %q has invalid category %q", c.ID, c.Category)
 		}
 	}
 
+	return nil
+}
+
+// validateOverride checks one backed-up override's shape and that every member
+// connector is part of the bundle. An unsorted merge pair is valid: the store
+// puts it in sorted order on import.
+func validateOverride(o store.EntityIdentityOverride, connectorIDs map[string]bool) error {
+	if o.ID == "" || o.Kind == "" || o.Ref == "" || !connectorIDs[o.ConnectorID] || o.CreatedBy == "" || o.CreatedAt == "" {
+		return errors.New("missing field or unknown connector")
+	}
+	switch o.Action {
+	case store.EntityOverrideDetach:
+		if o.OtherConnectorID != "" || o.OtherKind != "" || o.OtherRef != "" {
+			return errors.New("detach names a second member")
+		}
+	case store.EntityOverrideMerge:
+		if o.OtherKind != o.Kind || o.OtherRef == "" || !connectorIDs[o.OtherConnectorID] ||
+			(o.OtherConnectorID == o.ConnectorID && o.OtherRef == o.Ref) {
+			return errors.New("merge needs two different members of one kind")
+		}
+	default:
+		return errors.New("unknown action")
+	}
 	return nil
 }
 
@@ -430,6 +472,17 @@ func importBundle(ctx context.Context, s *store.Store, b *Bundle) (Result, error
 			return res, err
 		}
 		res.JournalEntries.Imported++
+	}
+	for _, o := range b.EntityIdentityOverrides {
+		imported, err := s.ImportEntityIdentityOverride(ctx, o)
+		if err != nil {
+			return res, fmt.Errorf("import entity identity override %q: %w", o.ID, err)
+		}
+		if imported {
+			res.EntityIdentityOverrides.Imported++
+		} else {
+			res.EntityIdentityOverrides.Skipped++
+		}
 	}
 	return res, nil
 }

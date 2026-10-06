@@ -3,6 +3,7 @@ package doc
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"testing"
 
 	"github.com/WiseLabz/wiselabz/internal/connector"
@@ -16,7 +17,7 @@ func TestIdentityClustersUseTransitiveStrongMatchesOnly(t *testing.T) {
 		{ConnectorID: "c", Kind: "host", Ref: "third", Name: "third", Hostname: "NODE.EXAMPLE"},
 		{ConnectorID: "d", Kind: "vm", Ref: "fourth", Name: "fourth"},
 	}
-	clusters := identityClusters(members)
+	clusters := identityClusters(members, nil)
 	if len(clusters) != 2 {
 		t.Fatalf("got %d clusters, want 2: %+v", len(clusters), clusters)
 	}
@@ -40,7 +41,7 @@ func TestIdentityClusterTreatsHostnameAsStrongWhenIPAlsoMatches(t *testing.T) {
 	clusters := identityClusters([]store.EntityMemberRecord{
 		{ConnectorID: "a", Kind: a.Kind, Ref: "a", Name: a.Name, Hostname: a.Hostname},
 		{ConnectorID: "b", Kind: b.Kind, Ref: "b", Name: b.Name, Hostname: b.Hostname},
-	})
+	}, nil)
 	if len(clusters) != 1 || len(clusters[0]) != 2 {
 		t.Fatalf("hostname match with shared IP produced clusters: %+v", clusters)
 	}
@@ -249,5 +250,121 @@ func TestBackfillFirewallLocalIDsMatchOnlyWithinSource(t *testing.T) {
 		if members != 3 || identities != 2 {
 			t.Fatalf("%s members=%d identities=%d, want 3 observations across 2 sources", kind, members, identities)
 		}
+	}
+}
+
+func overrideMembers() []store.EntityMemberRecord {
+	return []store.EntityMemberRecord{
+		{ConnectorID: "a", Kind: "host", Ref: "a", Name: "a", Hostname: "node.example"},
+		{ConnectorID: "b", Kind: "host", Ref: "b", Name: "b", Hostname: "NODE.EXAMPLE"},
+		{ConnectorID: "c", Kind: "host", Ref: "c", Name: "c", Hostname: "node.example"},
+		{ConnectorID: "d", Kind: "host", Ref: "d", Name: "d"},
+	}
+}
+
+func clusterRefs(clusters [][]store.EntityMemberRecord) [][]string {
+	out := make([][]string, 0, len(clusters))
+	for _, c := range clusters {
+		refs := make([]string, 0, len(c))
+		for _, m := range c {
+			refs = append(refs, m.Ref)
+		}
+		out = append(out, refs)
+	}
+	return out
+}
+
+func override(action, connectorID, ref, otherConnectorID, otherRef string) store.EntityIdentityOverride {
+	return store.EntityIdentityOverride{Action: action, ConnectorID: connectorID, Kind: "host", Ref: ref, OtherConnectorID: otherConnectorID, OtherKind: "host", OtherRef: otherRef}
+}
+
+func TestIdentityClustersDetachLeavesHostnameCluster(t *testing.T) {
+	got := clusterRefs(identityClusters(overrideMembers(), []store.EntityIdentityOverride{override(store.EntityOverrideDetach, "b", "b", "", "")}))
+	want := [][]string{{"a", "c"}, {"b"}, {"d"}}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("clusters = %v, want %v", got, want)
+	}
+}
+
+func TestIdentityClustersMergeJoinsUnmatchedMembers(t *testing.T) {
+	got := clusterRefs(identityClusters(overrideMembers(), []store.EntityIdentityOverride{override(store.EntityOverrideMerge, "a", "a", "d", "d")}))
+	want := [][]string{{"a", "b", "c", "d"}}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("clusters = %v, want %v", got, want)
+	}
+}
+
+func TestIdentityClustersDetachPlusMergeMovesMember(t *testing.T) {
+	got := clusterRefs(identityClusters(overrideMembers(), []store.EntityIdentityOverride{
+		override(store.EntityOverrideDetach, "b", "b", "", ""),
+		override(store.EntityOverrideMerge, "b", "b", "d", "d"),
+	}))
+	want := [][]string{{"a", "c"}, {"b", "d"}}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("clusters = %v, want %v", got, want)
+	}
+}
+
+func TestIdentityClustersOverridesWithoutEffectLeaveOutputUnchanged(t *testing.T) {
+	members := overrideMembers()
+	base := identityClusters(members, nil)
+	for name, overrides := range map[string][]store.EntityIdentityOverride{
+		"empty":                 {},
+		"merge missing member":  {override(store.EntityOverrideMerge, "a", "a", "gone", "gone")},
+		"detach missing member": {override(store.EntityOverrideDetach, "gone", "gone", "", "")},
+	} {
+		if got := identityClusters(members, overrides); !reflect.DeepEqual(got, base) {
+			t.Fatalf("%s: clusters = %v, want %v", name, clusterRefs(got), clusterRefs(base))
+		}
+	}
+}
+
+func TestBackfillEntityIdentitiesAppliesStoredOverrides(t *testing.T) {
+	ctx := context.Background()
+	s := newEngineTestStore(t)
+	a := seedEngineConnectorWithEntities(t, s, "a", "virtualization", "proxmox", []connector.SnapshotEntity{{Kind: "host", Name: "a", Hostname: "node.example"}})
+	b := seedEngineConnectorWithEntities(t, s, "b", "networking", "unifi", []connector.SnapshotEntity{{Kind: "host", Name: "b", Hostname: "NODE.EXAMPLE"}})
+	c := seedEngineConnectorWithEntities(t, s, "c", "networking", "unifi", []connector.SnapshotEntity{{Kind: "host", Name: "c", Hostname: "node.example"}})
+	d := seedEngineConnectorWithEntities(t, s, "d", "networking", "unifi", []connector.SnapshotEntity{{Kind: "host", Name: "d"}})
+	e := NewEngine(s)
+	id := func(connectorID string) string {
+		t.Helper()
+		var got string
+		if err := s.DB().QueryRowContext(ctx, `SELECT entity_id FROM entity_members WHERE connector_id = ?`, connectorID).Scan(&got); err != nil {
+			t.Fatal(err)
+		}
+		return got
+	}
+	if _, err := e.BackfillEntityIdentities(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if id(a) != id(b) || id(b) != id(c) || id(d) == id(a) {
+		t.Fatal("automatic clustering did not group the three hostname members apart from d")
+	}
+
+	detach := &store.EntityIdentityOverride{Action: store.EntityOverrideDetach, ConnectorID: b, Kind: "host", Ref: "b", CreatedBy: "admin"}
+	merge := &store.EntityIdentityOverride{Action: store.EntityOverrideMerge, ConnectorID: b, Kind: "host", Ref: "b", OtherConnectorID: d, OtherKind: "host", OtherRef: "d", CreatedBy: "admin"}
+	for _, o := range []*store.EntityIdentityOverride{detach, merge} {
+		if err := s.CreateEntityIdentityOverride(ctx, o); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := e.BackfillEntityIdentities(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if id(a) != id(c) || id(b) != id(d) || id(a) == id(b) {
+		t.Fatalf("detach plus merge: a=%q b=%q c=%q d=%q; want {a,c} and {b,d}", id(a), id(b), id(c), id(d))
+	}
+
+	for _, o := range []*store.EntityIdentityOverride{detach, merge} {
+		if err := s.DeleteEntityIdentityOverride(ctx, o.ID); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := e.BackfillEntityIdentities(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if id(a) != id(b) || id(b) != id(c) || id(d) == id(a) {
+		t.Fatalf("removing overrides did not restore automatic clustering: a=%q b=%q c=%q d=%q", id(a), id(b), id(c), id(d))
 	}
 }

@@ -499,7 +499,9 @@ func clusterKey(cluster []EntityMemberRecord) string {
 
 // DeleteExpiredEntityIdentities removes rows gone, or merged, before cutoff
 // (merged age is measured from merged_at, not last observation);
-// member history is removed by the entity_members foreign-key cascade.
+// member history is removed by the entity_members foreign-key cascade. In the
+// same transaction it deletes manual overrides whose member history is removed by
+// this run; overrides of members that were never observed are kept.
 func (s *Store) DeleteExpiredEntityIdentities(ctx context.Context, cutoff string) (int64, error) {
 	var removed int64
 	entityIdentityReconcileMu.Lock()
@@ -510,7 +512,21 @@ func (s *Store) DeleteExpiredEntityIdentities(ctx context.Context, cutoff string
 				return fmt.Errorf("lock entity identity purge: %w", err)
 			}
 		}
-		predicate := `(gone_at IS NOT NULL AND gone_at < ?) OR (merged_into IS NOT NULL AND merged_at < ?)`
+		const predicate = `(gone_at IS NOT NULL AND gone_at < ?) OR (merged_into IS NOT NULL AND merged_at < ?)`
+		// Overrides go first, while the member rows they are judged by still
+		// exist: an override is purged only when this run removes the history of
+		// one of its members (it has rows and every row is expiring). A member
+		// that was never observed, e.g. after a restore, keeps its override.
+		const historyExpires = `(EXISTS (SELECT 1 FROM entity_members m WHERE m.connector_id = %[1]s AND m.kind = %[2]s AND m.ref = %[3]s)
+			AND NOT EXISTS (SELECT 1 FROM entity_members m WHERE m.connector_id = %[1]s AND m.kind = %[2]s AND m.ref = %[3]s
+				AND m.entity_id NOT IN (SELECT id FROM entities WHERE ` + predicate + `)))`
+		const o = "entity_identity_overrides."
+		overrideQuery := `DELETE FROM entity_identity_overrides WHERE ` +
+			fmt.Sprintf(historyExpires, o+"connector_id", o+"kind", o+"ref") +
+			` OR (other_connector_id IS NOT NULL AND ` + fmt.Sprintf(historyExpires, o+"other_connector_id", o+"other_kind", o+"other_ref") + `)`
+		if _, err := tx.db.ExecContext(ctx, overrideQuery, cutoff, cutoff, cutoff, cutoff); err != nil {
+			return fmt.Errorf("delete overrides of expired entity members: %w", err)
+		}
 		if _, err := tx.db.ExecContext(ctx, `DELETE FROM entity_members WHERE entity_id IN (SELECT id FROM entities WHERE `+predicate+`)`, cutoff, cutoff); err != nil {
 			return fmt.Errorf("delete expired entity members: %w", err)
 		}
