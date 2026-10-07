@@ -29,6 +29,16 @@ const schemas = [
       { name: 'config_json', label: 'Caddy JSON config', kind: 'secret', required: false },
     ],
   },
+  {
+    type: 'custom',
+    category: 'virtualization',
+    displayName: 'Custom HTTP',
+    isCredentialRefresher: false,
+    fields: [
+      { name: 'url', label: 'Endpoint URL', kind: 'text', required: true },
+      { name: 'recipe', label: 'Recipe (YAML)', kind: 'textarea', required: false },
+    ],
+  },
 ];
 
 vi.mock('../../api/generated/connectors/connectors', () => ({
@@ -105,5 +115,34 @@ describe('ConnectorForm Caddy mode switch', () => {
     const body = postConnectors.mock.calls[postConnectors.mock.calls.length - 1][0] as Record<string, unknown>;
     expect(body).not.toHaveProperty('url');
     expect(body.config).toEqual({ config_json: '{"apps":{}}' });
+  });
+});
+
+describe('ConnectorForm derived category', () => {
+  async function submitCustom(recipe: string) {
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <ConnectorForm onCreated={vi.fn()} />
+      </QueryClientProvider>,
+    );
+    fireEvent.click(screen.getByText('Custom HTTP'));
+    fireEvent.change(screen.getByLabelText(/display name/i), { target: { value: 'library' } });
+    fireEvent.change(screen.getByLabelText(/endpoint url/i), { target: { value: 'https://library.example' } });
+    if (recipe) fireEvent.change(screen.getByLabelText(/recipe/i), { target: { value: recipe } });
+    postConnectors.mockClear();
+    fireEvent.click(screen.getByRole('button', { name: /test & add/i }));
+    await waitFor(() => expect(postConnectors).toHaveBeenCalled());
+    return postConnectors.mock.calls[postConnectors.mock.calls.length - 1][0] as Record<string, unknown>;
+  }
+
+  it('omits category when a recipe is typed so the server derives it', async () => {
+    const body = await submitCustom('version: 1\ncategory: media\n');
+    expect(body).not.toHaveProperty('category');
+    expect(body.config).toEqual({ recipe: 'version: 1\ncategory: media\n' });
+  });
+
+  it('sends the schema category without a recipe', async () => {
+    const body = await submitCustom('');
+    expect(body.category).toBe('virtualization');
   });
 });
