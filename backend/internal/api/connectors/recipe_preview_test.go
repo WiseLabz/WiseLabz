@@ -304,3 +304,21 @@ func TestRecipePreviewEditedRecipeUsesStoredToken(t *testing.T) {
 	assertPreviewWrites(t, h, 1)
 	assertPreviewAudit(t, h, actor, rec.ID, server.URL, "stored-private-token")
 }
+
+func TestPreviewRedactionScalarCredentialAttributesPreservesCounts(t *testing.T) {
+	redact := previewRedactor(map[string]any{"auth_token": "987654", "auth_password": "true"}, "https://api.example")
+	value := map[string]any{
+		"count": json.Number("987654"),
+		"attributes": map[string]any{
+			"token": json.Number("987654"), "password": true, "year": json.Number("2032"),
+		},
+	}
+	got := redactPreviewValue(value, redact).(map[string]any)
+	attributes := got["attributes"].(map[string]any)
+	if attributes["token"] != "[REDACTED]" || attributes["password"] != "[REDACTED]" {
+		t.Fatalf("scalar credentials leaked: %+v", attributes)
+	}
+	if attributes["year"] != json.Number("2032") || got["count"] != json.Number("987654") {
+		t.Fatalf("non-credential scalars changed: %+v", got)
+	}
+}

@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -212,17 +213,35 @@ func previewRedactor(cfg map[string]any, targetURL string) func(string) string {
 }
 
 func redactPreviewValue(value any, redact func(string) string) any {
+	return redactPreviewData(value, redact, false)
+}
+
+func redactPreviewData(value any, redact func(string) string, attribute bool) any {
 	switch typed := value.(type) {
 	case string:
 		return redact(typed)
+	case json.Number:
+		if attribute {
+			if masked := redact(typed.String()); masked != typed.String() {
+				return masked
+			}
+		}
+	case bool:
+		if attribute {
+			text := strconv.FormatBool(typed)
+			if masked := redact(text); masked != text {
+				return masked
+			}
+		}
 	case []any:
 		for i := range typed {
-			typed[i] = redactPreviewValue(typed[i], redact)
+			typed[i] = redactPreviewData(typed[i], redact, attribute)
 		}
 	case map[string]any:
 		output := make(map[string]any, len(typed))
 		for key, child := range typed {
-			output[redact(key)] = redactPreviewValue(child, redact)
+			// Counts are computed by the runner; attributes can echo any scalar.
+			output[redact(key)] = redactPreviewData(child, redact, attribute || key == "attributes")
 		}
 		return output
 	}
