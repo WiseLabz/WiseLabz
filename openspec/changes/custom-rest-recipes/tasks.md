@@ -9,20 +9,20 @@
 
 ## 2. Recipe format and validation (PR 2)
 
-- [ ] 2.1 Add `github.com/tidwall/gjson` to `go.mod`; verify `go build ./...` and `go mod tidy` leave no diff.
-- [ ] 2.2 Add the `textarea` schema field kind (multi-line, not encrypted, returned by the API) to the registry and config validation; verify registry tests and that `store.IsSecretFieldType` does not treat it as secret.
-- [ ] 2.3 Implement recipe types, strict YAML parsing and semantic validation with located, aggregated errors in `internal/connector/custom/recipe.go`; verify table tests for every validation error in the spec, the 64 KiB and 20 endpoint limits, and several errors reported together.
-- [ ] 2.4 Register the `recipe`, `auth_token`, `auth_username` and `auth_password` fields on the custom type and validate mode-required credentials as config field errors; verify custom connector config tests and `ValidateDeclared` tests for a valid and an invalid declared recipe.
+- [x] 2.1 Add `github.com/tidwall/gjson` to `go.mod`; verify `go build ./...` and `go mod tidy` leave no diff.
+- [x] 2.2 Add the `textarea` schema field kind (multi-line, not encrypted, returned by the API) to the registry and config validation; verify registry tests and that `store.IsSecretFieldType` does not treat it as secret.
+- [x] 2.3 Implement recipe types, strict YAML parsing and semantic validation with located, aggregated errors in `internal/connector/custom/recipe.go`; verify table tests for every validation error in the spec, the 64 KiB and 20 endpoint limits, and several errors reported together.
+- [x] 2.4 Register the `recipe`, `auth_token`, `auth_username` and `auth_password` fields on the custom type and validate mode-required credentials as config field errors; verify custom connector config tests and `ValidateDeclared` tests for a valid and an invalid declared recipe.
 
 ## 3. Recipe fetch and mapping (PR 2)
 
-- [ ] 3.1 Implement request building for GET and POST with static body, query, headers, the four auth modes and the same-origin check; verify `httptest` tests for each auth mode, a rejected absolute path and the legacy headers still applied.
-- [ ] 3.2 Implement entity mapping with required external ID, skipped-item counting and duplicate detection; verify tests for mapped items, an item without identifier and a duplicate identifier.
-- [ ] 3.3 Implement attribute mapping: path, constant, template, type conversion, value map and default; verify table tests for every attribute scenario in the spec including conversion failure.
-- [ ] 3.4 Implement dependency mapping from constants and paths with de-duplication; verify tests for both sources.
-- [ ] 3.5 Branch `Fetch` and `Validate` on the presence of a recipe, fail the whole sync on any endpoint error with the endpoint named and classified, and add the URL redaction helper; verify all existing `custom_test.go` tests pass unchanged, plus tests for one endpoint down, items path not a list, 401 as auth error and a query token absent from the error text.
-- [ ] 3.6 Derive the category from the recipe in the connectors create/update handlers and in `reconcile` through a per-type registry hook; verify handler and reconcile tests for recipe-set category, a conflicting request category and a recipe-less connector staying `virtualization`.
-- [ ] 3.7 Write the recipe format reference in `docs/connectors` and the declared-connector example in `docs/CONNECTORS_IN_CONFIG.md`; verify the documented example is loaded by a test.
+- [x] 3.1 Implement request building for GET and POST with static body, query, headers, the four auth modes and the same-origin check; verify `httptest` tests for each auth mode, a rejected absolute path and the legacy headers still applied.
+- [x] 3.2 Implement entity mapping with required external ID, skipped-item counting and duplicate detection; verify tests for mapped items, an item without identifier and a duplicate identifier.
+- [x] 3.3 Implement attribute mapping: path, constant, template, type conversion, value map and default; verify table tests for every attribute scenario in the spec including conversion failure.
+- [x] 3.4 Implement dependency mapping from constants and paths with de-duplication; verify tests for both sources.
+- [x] 3.5 Branch `Fetch` and `Validate` on the presence of a recipe, fail the whole sync on any endpoint error with the endpoint named and classified, and add the URL redaction helper; verify all existing `custom_test.go` tests pass unchanged, plus tests for one endpoint down, items path not a list, 401 as auth error and a query token absent from the error text.
+- [x] 3.6 Derive the category from the recipe in the connectors create/update handlers and in `reconcile` through a per-type registry hook; verify handler and reconcile tests for recipe-set category, a conflicting request category and a recipe-less connector staying `virtualization`.
+- [x] 3.7 Write the recipe format reference in `docs/connectors` and the declared-connector example in `docs/CONNECTORS_IN_CONFIG.md`; verify the documented example is loaded by a test.
 
 ## 4. Pagination (PR 3)
 

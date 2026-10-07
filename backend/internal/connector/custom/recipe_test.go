@@ -1,0 +1,378 @@
+package custom
+
+import (
+	"errors"
+	"fmt"
+	"strings"
+	"testing"
+
+	"github.com/WiseLabz/wiselabz/internal/connector"
+)
+
+const validRecipe = `version: 1
+category: media
+auth:
+  mode: none
+endpoints:
+  - name: items
+    path: /api/items
+    method: GET
+    items: items
+    entity:
+      kind: media_item
+      name: title
+      external_id: id
+`
+
+func TestParseRecipeValid(t *testing.T) {
+	recipe, err := ParseRecipe(validRecipe)
+	if err != nil {
+		t.Fatalf("ParseRecipe(): %v", err)
+	}
+	if recipe.Category != "media" || len(recipe.Endpoints) != 1 {
+		t.Fatalf("recipe = %+v", recipe)
+	}
+}
+
+func TestParseRecipeValidationLocations(t *testing.T) {
+	tests := []struct {
+		name   string
+		recipe string
+		want   string
+	}{
+		{name: "unknown key", recipe: strings.Replace(validRecipe, "    method: GET", "    methd: GET", 1), want: "endpoints[0].methd: unknown field"},
+		{name: "unsupported version", recipe: strings.Replace(validRecipe, "version: 1", "version: 2", 1), want: "version: must be 1"},
+		{name: "unknown category", recipe: strings.Replace(validRecipe, "category: media", "category: gaming", 1), want: "category: must be one of"},
+		{name: "unknown auth mode", recipe: strings.Replace(validRecipe, "mode: none", "mode: kerberos", 1), want: "auth.mode: must be one of"},
+		{name: "unsupported method", recipe: strings.Replace(validRecipe, "method: GET", "method: DELETE", 1), want: "endpoints[0].method: must be GET or POST"},
+		{name: "malformed item path", recipe: strings.Replace(validRecipe, "items: items", "items: items[", 1), want: "endpoints[0].items: path expression is malformed"},
+		{name: "absolute endpoint URL", recipe: strings.Replace(validRecipe, "/api/items", "https://other.example/items", 1), want: "endpoints[0].path: must be relative to the connector URL"},
+		{name: "missing name mapping", recipe: strings.Replace(validRecipe, "      name: title\n", "", 1), want: "endpoints[0].entity.name: mapping is required"},
+		{name: "missing identifier mapping", recipe: strings.Replace(validRecipe, "      external_id: id\n", "", 1), want: "endpoints[0].entity.external_id: mapping is required"},
+		{name: "pagination unsupported", recipe: strings.Replace(validRecipe, "    items: items", "    items: items\n    pagination: {type: page, param: page, size: 100}", 1), want: "endpoints[0].pagination: pagination is not supported yet"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := ParseRecipe(tt.recipe)
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("ParseRecipe() error = %v, want containing %q", err, tt.want)
+			}
+		})
+	}
+}
+
+func TestParseRecipeAggregatesValidationErrors(t *testing.T) {
+	raw := strings.Replace(validRecipe, "    method: GET", "    method: DELETE", 1)
+	raw = strings.Replace(raw, "items: items", "items: items[", 1)
+	_, err := ParseRecipe(raw)
+	if err == nil {
+		t.Fatal("ParseRecipe() error = nil")
+	}
+	for _, want := range []string{"endpoints[0].method", "endpoints[0].items"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("ParseRecipe() error %q does not include %q", err, want)
+		}
+	}
+}
+
+func TestParseRecipeLimits(t *testing.T) {
+	t.Run("size", func(t *testing.T) {
+		accepted := validRecipe + strings.Repeat(" ", maxRecipeBytes-len(validRecipe))
+		if _, err := ParseRecipe(accepted); err != nil {
+			t.Fatalf("ParseRecipe(exactly %d bytes): %v", maxRecipeBytes, err)
+		}
+		raw := accepted + " "
+		_, err := ParseRecipe(raw)
+		if err == nil || !strings.Contains(err.Error(), "must be at most 65536 bytes") {
+			t.Fatalf("ParseRecipe() error = %v", err)
+		}
+	})
+	t.Run("endpoint count", func(t *testing.T) {
+		if _, err := ParseRecipe(recipeWithEndpointCount(maxRecipeEndpoints)); err != nil {
+			t.Fatalf("ParseRecipe(exactly %d endpoints): %v", maxRecipeEndpoints, err)
+		}
+		raw := recipeWithEndpointCount(maxRecipeEndpoints + 1)
+		_, err := ParseRecipe(raw)
+		if err == nil || !strings.Contains(err.Error(), "must contain at most 20 endpoints") {
+			t.Fatalf("ParseRecipe() error = %v", err)
+		}
+	})
+}
+
+func recipeWithEndpointCount(count int) string {
+	var endpoints strings.Builder
+	for i := 0; i < count; i++ {
+		fmt.Fprintf(&endpoints, "  - name: endpoint-%02d\n    path: /api\n    method: GET\n    items: items\n    entity: {kind: service, name: name, external_id: id}\n", i)
+	}
+	return "version: 1\ncategory: other\nauth: {mode: none}\nendpoints:\n" + endpoints.String()
+}
+
+func TestParseRecipeRejectsMalformedAndMultipleDocuments(t *testing.T) {
+	tests := []struct {
+		name string
+		raw  string
+		want string
+	}{
+		{name: "malformed YAML", raw: "version: [", want: "invalid YAML"},
+		{name: "multiple documents", raw: validRecipe + "---\nversion: 1\n", want: "exactly one YAML document"},
+		{name: "zero endpoints", raw: "version: 1\ncategory: other\nauth: {mode: none}\nendpoints: []\n", want: "endpoints: must contain at least one endpoint"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := ParseRecipe(test.raw)
+			if err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("ParseRecipe() error = %v, want containing %q", err, test.want)
+			}
+		})
+	}
+}
+
+func TestParseRecipeRejectsDuplicateEndpointNames(t *testing.T) {
+	raw := recipeWithEndpointCount(2)
+	raw = strings.Replace(raw, "endpoint-01", "endpoint-00", 1)
+	_, err := ParseRecipe(raw)
+	if err == nil || !strings.Contains(err.Error(), "endpoints[1].name: must be unique") {
+		t.Fatalf("ParseRecipe() error = %v, want duplicate endpoint location", err)
+	}
+}
+
+func TestParseRecipeUnknownKeysHaveDottedLocations(t *testing.T) {
+	raw := strings.Replace(validRecipe, "  mode: none", "  mode: none\n  extra: true", 1)
+	raw = strings.Replace(raw, "    method: GET", "    method: GET\n    pagination: {type: page, param: page, size: 10, extra: true}", 1)
+	raw = strings.Replace(raw, "    entity:\n", "    dependencies:\n      - kind: host\n        const: host-1\n        extra: true\n    entity:\n", 1)
+	_, err := ParseRecipe(raw)
+	if err == nil {
+		t.Fatal("ParseRecipe() error = nil")
+	}
+	for _, want := range []string{"auth.extra: unknown field", "endpoints[0].pagination.extra: unknown field", "endpoints[0].dependencies[0].extra: unknown field"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("ParseRecipe() error %q does not include %q", err, want)
+		}
+	}
+}
+
+func TestParseRecipeAttributeValidation(t *testing.T) {
+	tests := []struct {
+		name string
+		attr string
+		want string
+	}{
+		{name: "source count", attr: "enabled: {path: enabled, const: true}", want: "attributes.enabled: must define exactly one"},
+		{name: "source missing", attr: "enabled: {type: bool}", want: "attributes.enabled: must define exactly one"},
+		{name: "unsupported type", attr: "enabled: {const: true, type: object}", want: "attributes.enabled.type: must be string"},
+		{name: "malformed path", attr: "enabled: {path: 'enabled[', type: bool}", want: "attributes.enabled.path: path expression is malformed"},
+		{name: "malformed template", attr: "enabled: {template: '{enabled', type: string}", want: "attributes.enabled.template: template has an unclosed placeholder"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			raw := strings.Replace(validRecipe, "      external_id: id", "      external_id: id\n      attributes:\n        "+test.attr, 1)
+			_, err := ParseRecipe(raw)
+			if err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("ParseRecipe() error = %v, want containing %q", err, test.want)
+			}
+		})
+	}
+}
+
+func TestParseRecipeGETBodyAndStaticPOSTBody(t *testing.T) {
+	t.Run("GET null body is omitted", func(t *testing.T) {
+		raw := strings.Replace(validRecipe, "    method: GET", "    method: GET\n    body: null", 1)
+		if _, err := ParseRecipe(raw); err != nil {
+			t.Fatalf("ParseRecipe(GET body null): %v", err)
+		}
+	})
+	t.Run("GET non-null body rejected", func(t *testing.T) {
+		raw := strings.Replace(validRecipe, "    method: GET", "    method: GET\n    body: {active: true}", 1)
+		_, err := ParseRecipe(raw)
+		if err == nil || !strings.Contains(err.Error(), "endpoints[0].body: is only allowed with POST") {
+			t.Fatalf("ParseRecipe(GET body): %v", err)
+		}
+	})
+	t.Run("POST static JSON body accepted", func(t *testing.T) {
+		raw := strings.Replace(validRecipe, "    method: GET", "    method: POST\n    body: {active: true, tags: [a, b]}", 1)
+		if _, err := ParseRecipe(raw); err != nil {
+			t.Fatalf("ParseRecipe(POST body): %v", err)
+		}
+	})
+	t.Run("POST timestamp rejected", func(t *testing.T) {
+		raw := strings.Replace(validRecipe, "    method: GET", "    method: POST\n    body: {created: 2026-10-06}", 1)
+		_, err := ParseRecipe(raw)
+		if err == nil || !strings.Contains(err.Error(), "endpoints[0].body: must be a static JSON value") {
+			t.Fatalf("ParseRecipe(POST timestamp): %v", err)
+		}
+	})
+	t.Run("cyclic alias rejected", func(t *testing.T) {
+		raw := strings.Replace(validRecipe, "    method: GET", "    method: POST\n    body: &loop {self: *loop}", 1)
+		_, err := ParseRecipe(raw)
+		if err == nil || !strings.Contains(err.Error(), "cyclic YAML aliases are not supported") {
+			t.Fatalf("ParseRecipe(cyclic alias): %v", err)
+		}
+	})
+}
+
+func TestParseRecipePaginationBlocksAreValidatedAndRejected(t *testing.T) {
+	blocks := []string{
+		"{type: page, param: page, size: 50}",
+		"{type: offset, param: offset, size_param: limit, size: 50}",
+		"{type: cursor, param: cursor, cursor_path: next}",
+		"{type: next_link, next_path: next}",
+	}
+	for _, block := range blocks {
+		raw := strings.Replace(validRecipe, "    items: items", "    items: items\n    pagination: "+block, 1)
+		_, err := ParseRecipe(raw)
+		if err == nil || !strings.Contains(err.Error(), "endpoints[0].pagination: pagination is not supported yet") {
+			t.Errorf("ParseRecipe(pagination %s) error = %v", block, err)
+		}
+	}
+}
+
+func TestParseRecipeAcceptsGJSONPathForms(t *testing.T) {
+	for _, path := range []string{`items.#(active==true)`, `items.#.name`, `{items.0.name,items.1.name}`, `meta.a\.b`, `meta.\.leading`, `items.#(name==\"one\").id`, `@this`} {
+		if err := validateGJSONPath(path); err != nil {
+			t.Errorf("validateGJSONPath(%q): %v", path, err)
+		}
+	}
+	if err := validateEndpointPath("/items?format=json"); err != nil {
+		t.Errorf("validateEndpointPath(relative query): %v", err)
+	}
+}
+
+func TestParseRecipeRejectsUnknownNestedKeysTogether(t *testing.T) {
+	raw := strings.Replace(validRecipe, "    method: GET", "    method: PATCH\n    extra: true", 1)
+	raw = strings.Replace(raw, "      external_id: id", "      external_id: id\n      attributes:\n        enabled: {path: isEnabled, typ: bool}", 1)
+	_, err := ParseRecipe(raw)
+	if err == nil {
+		t.Fatal("ParseRecipe() error = nil")
+	}
+	for _, want := range []string{"endpoints[0].method", "endpoints[0].extra", "endpoints[0].entity.attributes.enabled.typ"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("ParseRecipe() error %q does not include %q", err, want)
+		}
+	}
+}
+
+func TestCategoryForConfig(t *testing.T) {
+	category, err := CategoryForConfig(map[string]any{})
+	if err != nil || category != "virtualization" {
+		t.Fatalf("CategoryForConfig(empty) = %q, %v", category, err)
+	}
+	category, err = CategoryForConfig(map[string]any{"recipe": validRecipe})
+	if err != nil || category != "media" {
+		t.Fatalf("CategoryForConfig(recipe) = %q, %v", category, err)
+	}
+	_, err = CategoryForConfig(map[string]any{"recipe": "not: [yaml"})
+	var fieldErr *connector.ConfigValidationError
+	if !errors.As(err, &fieldErr) || fieldErr.Field != "recipe" {
+		t.Fatalf("CategoryForConfig(invalid) = %v, want recipe field error", err)
+	}
+}
+
+func TestValidateCustomConfigRecipeCredentials(t *testing.T) {
+	tests := []struct {
+		name        string
+		mode        string
+		credentials map[string]any
+		wantError   string
+	}{
+		{name: "none", mode: "none"},
+		{name: "header missing token", mode: "header", wantError: "auth_token"},
+		{name: "header token", mode: "header", credentials: map[string]any{"auth_token": "token"}},
+		{name: "query missing token", mode: "query", wantError: "auth_token"},
+		{name: "query token", mode: "query", credentials: map[string]any{"auth_token": "token"}},
+		{name: "basic reports both missing fields", mode: "basic", wantError: "auth_username"},
+		{name: "basic username only", mode: "basic", credentials: map[string]any{"auth_username": "operator"}, wantError: "auth_password"},
+		{name: "basic credentials", mode: "basic", credentials: map[string]any{"auth_username": "operator", "auth_password": "secret"}},
+		{name: "basic username colon", mode: "basic", credentials: map[string]any{"auth_username": "bad:name", "auth_password": "secret"}, wantError: "auth_username"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			raw := strings.Replace(validRecipe, "mode: none", "mode: "+test.mode, 1)
+			if test.mode == "header" {
+				raw = strings.Replace(raw, "mode: header", "mode: header\n  name: Authorization\n  prefix: 'Bearer '", 1)
+			}
+			if test.mode == "query" {
+				raw = strings.Replace(raw, "mode: query", "mode: query\n  name: api_key", 1)
+			}
+			config := map[string]any{"recipe": raw}
+			for key, value := range test.credentials {
+				config[key] = value
+			}
+			err := validateCustomConfig(config)
+			if test.wantError == "" && err != nil {
+				t.Fatalf("validateCustomConfig() = %v, want nil", err)
+			}
+			if test.wantError != "" && (err == nil || !strings.Contains(err.Error(), test.wantError)) {
+				t.Fatalf("validateCustomConfig() = %v, want containing %q", err, test.wantError)
+			}
+		})
+	}
+}
+
+func TestValidateCustomConfigURLCredentialsRejected(t *testing.T) {
+	err := validateCustomConfig(map[string]any{
+		"url":    "https://operator:secret@api.example.test",
+		"recipe": validRecipe,
+	})
+	if err == nil || !strings.Contains(err.Error(), "must not contain credentials") {
+		t.Fatalf("validateCustomConfig() = %v, want URL credential rejection", err)
+	}
+	if strings.Contains(err.Error(), "secret") {
+		t.Fatalf("error exposes URL password: %v", err)
+	}
+}
+
+func TestCustomRecipeAndCredentialsUseExpectedFieldKinds(t *testing.T) {
+	schema, err := connector.GetTypeSchema(typeName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]struct {
+		typ string
+		max int
+	}{
+		"recipe":        {typ: "textarea", max: maxRecipeBytes},
+		"auth_token":    {typ: "password"},
+		"auth_username": {typ: "password"},
+		"auth_password": {typ: "password"},
+	}
+	for _, field := range schema.Fields {
+		if expectation, ok := want[field.Key]; ok {
+			if field.Type != expectation.typ || (expectation.max != 0 && field.MaxLength != expectation.max) {
+				t.Errorf("field %q = type %q max %d; want type %q max %d", field.Key, field.Type, field.MaxLength, expectation.typ, expectation.max)
+			}
+			delete(want, field.Key)
+		}
+	}
+	if len(want) != 0 {
+		t.Errorf("missing schema fields %v", want)
+	}
+}
+
+func TestCategoryForConfigAggregatesLocatedErrors(t *testing.T) {
+	raw := strings.Replace(validRecipe, "    method: GET", "    method: DELETE", 1)
+	raw = strings.Replace(raw, "    items: items", "    items: items[", 1)
+	_, err := CategoryForConfig(map[string]any{"recipe": raw})
+	if err == nil {
+		t.Fatal("CategoryForConfig() error = nil")
+	}
+	for _, want := range []string{`field "recipe.endpoints[0].method"`, `field "recipe.endpoints[0].items"`} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("CategoryForConfig() error %q does not include %q", err, want)
+		}
+	}
+}
+
+func TestRecipeValidationErrorsRedactEmbeddedURLQueries(t *testing.T) {
+	raw := strings.Replace(validRecipe, "    method: GET", "    method: GET\n    'https://api.example.test/items?token=query-secret': true", 1)
+	_, err := ParseRecipe(raw)
+	if err == nil || strings.Contains(err.Error(), "query-secret") {
+		t.Fatalf("ParseRecipe() error = %v; want unknown key with query redacted", err)
+	}
+	var fieldErr *connector.ConfigValidationError
+	if !errors.As(recipeConfigErrors(err), &fieldErr) {
+		t.Fatalf("recipeConfigErrors() = %v; want located config error", recipeConfigErrors(err))
+	}
+	if strings.Contains(fieldErr.Field, "query-secret") || strings.Contains(fieldErr.Message, "query-secret") {
+		t.Fatalf("structured error exposes URL query token: %#v", fieldErr)
+	}
+}

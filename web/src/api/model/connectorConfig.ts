@@ -7,14 +7,7 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export type SchemaFieldKind = (typeof SchemaFieldKind)[keyof typeof SchemaFieldKind];
-
-export const SchemaFieldKind = {
-  string: 'string',
-  number: 'number',
-  boolean: 'boolean',
-  password: 'password',
-  select: 'select',
-  secret: 'secret',
-  textarea: 'textarea',
-} as const;
+/**
+ * Shareable textarea configuration such as recipes; credentials are omitted.
+ */
+export type ConnectorConfig = { [key: string]: string };

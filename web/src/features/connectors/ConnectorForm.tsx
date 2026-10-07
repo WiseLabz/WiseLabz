@@ -229,7 +229,7 @@ export function Field({
       </label>
     );
   }
-  if (field.kind === 'secret') {
+  if (field.kind === 'secret' || field.kind === 'textarea') {
     return (
       <label className="block">
         <span className="mb-1 block text-2xs text-ink-faint">

@@ -38,6 +38,8 @@ type TypeSchema struct {
 	// ConfigCheck is an optional cross-field rule (e.g. "exactly one of url
 	// or config_json") applied by ValidateConfig after the per-field checks.
 	ConfigCheck func(config map[string]any) error `json:"-"`
+	// CategoryForConfig optionally derives the category from the configuration.
+	CategoryForConfig func(config map[string]any) (string, error) `json:"-"`
 	// Capabilities is computed from the connector's optional interfaces.
 	Capabilities CapabilityDescriptor `json:"capabilities"`
 }
@@ -51,11 +53,19 @@ func (s TypeSchema) DegradedLatencyThreshold() time.Duration {
 	return time.Duration(s.DegradedLatencyThresholdMs) * time.Millisecond
 }
 
+// ConfigCategory returns the category derived by the type, or its default.
+func (s TypeSchema) ConfigCategory(config map[string]any) (string, error) {
+	if s.CategoryForConfig != nil {
+		return s.CategoryForConfig(config)
+	}
+	return s.Category, nil
+}
+
 // SchemaField describes a single configuration field.
 type SchemaField struct {
 	Key   string `json:"name"`
 	Label string `json:"label"`
-	Type  string `json:"kind"` // "text", "password", "number", "select", "toggle", "secret"
+	Type  string `json:"kind"` // "text", "password", "number", "select", "toggle", "secret", "textarea"
 	// "secret" is a multi-line paste field for PEM certs/keys and similar
 	// blobs. It validates like "text" and is encrypted at rest like
 	// "password" (see store.IsSecretFieldType); unlike "password" it isn't
@@ -64,7 +74,8 @@ type SchemaField struct {
 	Default     string `json:"default,omitempty"`
 	Placeholder string `json:"placeholder,omitempty"`
 	Description string `json:"description,omitempty"`
-	// Pattern, MinLength, MaxLength apply to "text"/"password" fields.
+	// "textarea" is multi-line text returned by the API and stored without encryption.
+	// Pattern, MinLength, MaxLength apply to string fields.
 	Pattern   string `json:"pattern,omitempty"`
 	MinLength int    `json:"minLength,omitempty"`
 	MaxLength int    `json:"maxLength,omitempty"`
@@ -93,6 +104,9 @@ func ValidateConfig(schema TypeSchema, config map[string]any) error {
 	for _, f := range schema.Fields {
 		raw, present := config[f.Key]
 		str, isStr := raw.(string)
+		if present && raw != nil && f.Type == "textarea" && !isStr {
+			return &ConfigValidationError{Field: f.Key, Message: "must be a string"}
+		}
 		if !present || !isStr || str == "" {
 			continue
 		}

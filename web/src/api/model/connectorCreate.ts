@@ -13,7 +13,7 @@ export interface ConnectorCreate {
   name: string;
   /** @nullable */
   owner?: string | null;
-  category: ConnectorCategory;
+  category?: ConnectorCategory;
   type: string;
   /** Required unless the connector type's schema marks its `url` field optional (for example Caddy in pasted config_json mode); an empty value is rejected with 400 for types that require it. */
   url?: string;

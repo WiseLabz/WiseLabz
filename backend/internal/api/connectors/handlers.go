@@ -50,7 +50,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 
 	out := make([]connectorWithRole, 0, len(rows))
 	for _, c := range rows {
-		out = append(out, connectorWithRole{ConnectorRecord: c.ConnectorRecord, MyRole: c.Role})
+		out = append(out, connectorWithRole{ConnectorRecord: c.ConnectorRecord, MyRole: c.Role, Config: textareaConfig(&c.ConnectorRecord)})
 	}
 
 	// Spec: GET /connectors returns a bare Connector[] (see openapi.yaml).
@@ -66,22 +66,45 @@ type connectorWithRole struct {
 	// ConfigData shadows the embedded record's field so it is never serialized:
 	// it holds non-secret credentials and secret ciphertexts (or legacy
 	// plaintext) that no viewer should receive.
-	ConfigData string `json:"configData,omitempty"`
+	ConfigData string            `json:"configData,omitempty"`
+	Config     map[string]string `json:"config,omitempty"`
 }
 
-// connectorView is a connector record without its stored config, for
-// responses that carry no role.
+// connectorView exposes only shareable textarea configuration, for responses
+// that carry no role.
 type connectorView struct {
 	store.ConnectorRecord
-	ConfigData string `json:"configData,omitempty"`
+	ConfigData string            `json:"configData,omitempty"`
+	Config     map[string]string `json:"config,omitempty"`
 }
 
-// viewOf wraps a possibly-nil record for a config-free response.
+// viewOf wraps a possibly-nil record without exposing stored credentials.
 func viewOf(c *store.ConnectorRecord) any {
 	if c == nil {
 		return nil
 	}
-	return connectorView{ConnectorRecord: *c}
+	return connectorView{ConnectorRecord: *c, Config: textareaConfig(c)}
+}
+
+// textareaConfig exposes shareable multi-line data, never stored credentials.
+func textareaConfig(rec *store.ConnectorRecord) map[string]string {
+	schema, err := connector.GetTypeSchema(rec.Type)
+	if err != nil {
+		return nil
+	}
+	var stored map[string]any
+	if err := json.Unmarshal([]byte(rec.ConfigData), &stored); err != nil {
+		return nil
+	}
+	out := map[string]string{}
+	for _, field := range schema.Fields {
+		if field.Type == "textarea" {
+			if value, ok := stored[field.Key].(string); ok {
+				out[field.Key] = value
+			}
+		}
+	}
+	return out
 }
 
 // Create handles POST /api/connectors.
@@ -100,6 +123,18 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	}](w, r)
 	if !ok {
 		return
+	}
+	if schema, err := connector.GetTypeSchema(req.Type); err == nil && schema.CategoryForConfig != nil {
+		category, err := schema.ConfigCategory(req.Config)
+		if err != nil {
+			writeConfigRejection(w, err)
+			return
+		}
+		if req.Category != "" && req.Category != category {
+			writeCategoryConflict(w)
+			return
+		}
+		req.Category = category
 	}
 	var fieldErrs []httputil.FieldError
 	for _, f := range []struct{ name, value string }{
@@ -179,7 +214,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		slog.Error("failed to record audit", "action", "connector.create", "error", err)
 	}
 
-	httputil.JSON(w, http.StatusCreated, connectorWithRole{ConnectorRecord: *c, MyRole: "operator"})
+	httputil.JSON(w, http.StatusCreated, connectorWithRole{ConnectorRecord: *c, MyRole: "operator", Config: textareaConfig(c)})
 }
 
 // Get handles GET /api/connectors/{id}. Default deny: 404s (not 403, to
@@ -204,7 +239,7 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 		httputil.Error(w, http.StatusNotFound, "not_found", "Connector not found")
 		return
 	}
-	httputil.JSON(w, http.StatusOK, connectorWithRole{ConnectorRecord: *c, MyRole: role})
+	httputil.JSON(w, http.StatusOK, connectorWithRole{ConnectorRecord: *c, MyRole: role, Config: textareaConfig(c)})
 }
 
 // updateConnectorRequest is the PUT /api/connectors/{id} request body.
@@ -394,7 +429,7 @@ func applyConnectorScalarUpdates(updates map[string]any, req *updateConnectorReq
 // without a config body is a no-op. It writes the error response and reports
 // false when the update must not proceed.
 func (h *Handler) applyConnectorConfigUpdate(w http.ResponseWriter, r *http.Request, id string, req *updateConnectorRequest, updates map[string]any) bool {
-	if req.Config == nil && req.URL == nil && req.Type == nil && req.VerifyTLS == nil {
+	if req.Config == nil && req.URL == nil && req.Type == nil && req.VerifyTLS == nil && req.Category == nil {
 		return true
 	}
 	rec, err := h.Store.GetConnector(r.Context(), id)
@@ -431,6 +466,18 @@ func (h *Handler) applyConnectorConfigUpdate(w http.ResponseWriter, r *http.Requ
 	if err := validateConnectorConfig(typ, url, verifyTLS, effective); err != nil {
 		writeConfigRejection(w, err)
 		return false
+	}
+	if schema, err := connector.GetTypeSchema(typ); err == nil && schema.CategoryForConfig != nil {
+		category, err := schema.ConfigCategory(effective)
+		if err != nil {
+			writeConfigRejection(w, err)
+			return false
+		}
+		if req.Category != nil && *req.Category != category {
+			writeCategoryConflict(w)
+			return false
+		}
+		updates["category"] = category
 	}
 	if req.Config == nil {
 		return true
@@ -918,13 +965,35 @@ func configRequestField(schemaKey string) string {
 // server-side defect, not a field the caller can fix, so it keeps the plain
 // envelope.
 func writeConfigRejection(w http.ResponseWriter, err error) {
-	var invalid *connector.ConfigValidationError
-	if !errors.As(err, &invalid) {
+	details := configErrorDetails(err)
+	if len(details) == 0 {
 		httputil.Error(w, http.StatusBadRequest, "invalid_request", err.Error())
 		return
 	}
-	httputil.ErrorWithDetails(w, http.StatusBadRequest, "invalid_request", err.Error(),
-		[]httputil.FieldError{{Field: configRequestField(invalid.Field), Msg: invalid.Message}})
+	httputil.ErrorWithDetails(w, http.StatusBadRequest, "invalid_request", err.Error(), details)
+}
+
+func configErrorDetails(err error) []httputil.FieldError {
+	if joined, ok := err.(interface{ Unwrap() []error }); ok {
+		details := []httputil.FieldError{}
+		for _, child := range joined.Unwrap() {
+			details = append(details, configErrorDetails(child)...)
+		}
+		return details
+	}
+	if wrapped, ok := err.(interface{ Unwrap() error }); ok {
+		return configErrorDetails(wrapped.Unwrap())
+	}
+	var invalid *connector.ConfigValidationError
+	if errors.As(err, &invalid) {
+		return []httputil.FieldError{{Field: configRequestField(invalid.Field), Msg: invalid.Message}}
+	}
+	return nil
+}
+
+func writeCategoryConflict(w http.ResponseWriter) {
+	httputil.ErrorWithDetails(w, http.StatusBadRequest, "invalid_request", "Category conflicts with connector configuration",
+		[]httputil.FieldError{{Field: "category", Msg: "must match the category derived from the recipe"}})
 }
 
 // Schema handles GET /api/connectors/schema.

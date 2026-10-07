@@ -34,7 +34,9 @@ connectors:
 | `config` | depends on type | The type's own fields (tokens, usernames and so on). |
 | `grants` | no | Users (`user` is the username) and their `role`, `viewer` or `operator`. |
 
-The category is taken from the type and is not declared.
+The category is taken from the type and is not declared. For a custom connector
+with a recipe it comes from the recipe; a recipe-less custom connector uses
+`virtualization`.
 
 ## Secrets
 
@@ -142,3 +144,54 @@ group_connector_roles:
 
 Names are resolved at login and match case-insensitively. A name matching no
 connector, or more than one, is skipped with a warning.
+
+## Custom REST recipes
+
+A custom connector can map JSON responses with a YAML recipe. The recipe is
+plain configuration and is returned by the API; credentials belong in separate,
+encrypted fields. `auth_token`, `auth_username` and `auth_password` support the
+same environment and `_file` sources as other connector credentials.
+
+The following declared connector uses one request to map the service's items.
+The [recipe reference](connectors/RECIPE_FORMAT.md) describes every field,
+mapping rule and validation limit. Pagination is not supported yet: a recipe
+that declares it is rejected before any request.
+
+<!-- custom-rest-recipe-example -->
+```yaml
+connectors:
+  - name: library
+    type: custom
+    url: https://library.example
+    config:
+      auth_token: ${LIBRARY_TOKEN}
+      recipe: |
+        version: 1
+        category: media
+        auth:
+          mode: header
+          name: X-Api-Key
+        endpoints:
+          - name: items
+            path: /api/items
+            method: GET
+            items: items
+            entity:
+              kind: media_item
+              name: title
+              external_id: id
+              attributes:
+                enabled: {path: enabled, type: bool}
+                source: {const: library}
+            dependencies:
+              - {kind: upstream_service, path: "items.#.downloadClient"}
+        dependencies:
+          - {kind: storage, const: tank}
+```
+<!-- /custom-rest-recipe-example -->
+
+An invalid recipe skips only that connector during reconciliation. Existing
+connectors retain their last applied state. Changing the recipe's category
+changes the stored category at the next reconciliation. Recipe-less custom
+connectors keep their existing request method, legacy headers and raw response
+section behavior.
