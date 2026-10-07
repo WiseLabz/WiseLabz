@@ -9,8 +9,10 @@ import (
 	"net/http/httptest"
 	"reflect"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/WiseLabz/wiselabz/internal/api/apitest"
 	"github.com/WiseLabz/wiselabz/internal/auth"
@@ -31,6 +33,8 @@ func assertPreviewWrites(t *testing.T, h *Handler, connectors int) {
 	t.Helper()
 	for table, want := range map[string]int{
 		"connectors": connectors, "service_snapshots": 0, "sync_runs": 0, "changes": 0, "alerts": 0,
+		"entities": 0, "entity_members": 0, "entity_index": 0, "health_checks": 0, "topology_edges": 0,
+		"notification_deliveries": 0, "in_app_notifications": 0,
 	} {
 		var count int
 		if err := h.Store.DB().QueryRowContext(context.Background(), "SELECT COUNT(*) FROM "+table).Scan(&count); err != nil {
@@ -320,5 +324,149 @@ func TestPreviewRedactionScalarCredentialAttributesPreservesCounts(t *testing.T)
 	}
 	if attributes["year"] != json.Number("2032") || got["count"] != json.Number("987654") {
 		t.Fatalf("non-credential scalars changed: %+v", got)
+	}
+}
+
+// tokenServer counts requests and records the X-Api-Key header it receives.
+func tokenServer(t *testing.T) (*httptest.Server, *atomic.Int32, *atomic.Value) {
+	t.Helper()
+	var requests atomic.Int32
+	var key atomic.Value
+	key.Store("")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		key.Store(r.Header.Get("X-Api-Key"))
+		_, _ = fmt.Fprint(w, `[{"id":1,"title":"Item"}]`)
+	}))
+	t.Cleanup(server.Close)
+	return server, &requests, &key
+}
+
+func createStoredTokenConnector(t *testing.T, h *Handler, targetURL string, verifyTLS bool, managedBy string) (*store.ConnectorRecord, string) {
+	t.Helper()
+	recipe := strings.Replace(apiRecipe("media"), "auth: {mode: none}", "auth: {mode: header, name: X-Api-Key}", 1)
+	data, err := store.MarshalConnectorConfig("custom", map[string]any{"recipe": recipe, "auth_token": "stored-private-token"}, h.Config.Encryption.Key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := &store.ConnectorRecord{Name: "Saved " + managedBy, Type: "custom", Category: "media", URL: targetURL,
+		ConfigData: data, VerifyTLS: verifyTLS, ManagedBy: managedBy}
+	if err := h.Store.CreateConnector(context.Background(), rec); err != nil {
+		t.Fatal(err)
+	}
+	return rec, recipe
+}
+
+func assertPreviewRejectedField(t *testing.T, w *httptest.ResponseRecorder, field string) {
+	t.Helper()
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status=%d: %s", w.Code, w.Body.String())
+	}
+	var response struct{ Details []httputil.FieldError }
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	if len(response.Details) != 1 || response.Details[0].Field != field {
+		t.Fatalf("details=%+v want field %q", response.Details, field)
+	}
+	if strings.Contains(w.Body.String(), "stored-private-token") {
+		t.Errorf("response contains stored credential: %s", w.Body.String())
+	}
+}
+
+func TestRecipePreviewStoredSecretsRejectOtherOriginWithoutRequests(t *testing.T) {
+	for _, managedBy := range []string{store.ManagedByUI, store.ManagedByConfig} {
+		t.Run(managedBy, func(t *testing.T) {
+			h := newTestHandler(t)
+			actor := apitest.NewUser(t, h.Store, "operator")
+			serverA, requestsA, _ := tokenServer(t)
+			serverB, requestsB, _ := tokenServer(t)
+			rec, recipe := createStoredTokenConnector(t, h, serverA.URL, true, managedBy)
+			w := previewRequest(t, h, actor, map[string]any{"connectorId": rec.ID, "url": serverB.URL,
+				"config": map[string]any{"recipe": recipe, "auth_token": ""}})
+			assertPreviewRejectedField(t, w, "url")
+			if requestsA.Load() != 0 || requestsB.Load() != 0 {
+				t.Fatalf("requests A/B = %d/%d, want 0/0", requestsA.Load(), requestsB.Load())
+			}
+			assertPreviewWrites(t, h, 1)
+			assertPreviewAudit(t, h, actor, rec.ID, serverB.URL, "stored-private-token")
+		})
+	}
+}
+
+func TestRecipePreviewStoredSecretsRejectWeakenedTLS(t *testing.T) {
+	h := newTestHandler(t)
+	actor := apitest.NewUser(t, h.Store, "operator")
+	server, requests, _ := tokenServer(t)
+	rec, recipe := createStoredTokenConnector(t, h, server.URL, true, store.ManagedByUI)
+	w := previewRequest(t, h, actor, map[string]any{"connectorId": rec.ID, "url": server.URL, "verifyTls": false,
+		"config": map[string]any{"recipe": recipe}})
+	assertPreviewRejectedField(t, w, "verifyTls")
+	if requests.Load() != 0 {
+		t.Fatalf("requests = %d, want 0", requests.Load())
+	}
+	assertPreviewWrites(t, h, 1)
+	assertPreviewAudit(t, h, actor, rec.ID, server.URL, "stored-private-token")
+}
+
+func TestRecipePreviewConfigManagedConnectorSameOriginSendsStoredToken(t *testing.T) {
+	h := newTestHandler(t)
+	actor := apitest.NewUser(t, h.Store, "operator")
+	server, requests, key := tokenServer(t)
+	rec, recipe := createStoredTokenConnector(t, h, server.URL, true, store.ManagedByConfig)
+	w := previewRequest(t, h, actor, map[string]any{"connectorId": rec.ID, "url": server.URL + "/other?x=1",
+		"config": map[string]any{"recipe": recipe}})
+	if w.Code != http.StatusOK || requests.Load() != 1 || key.Load() != "stored-private-token" {
+		t.Fatalf("status=%d requests=%d key=%v: %s", w.Code, requests.Load(), key.Load(), w.Body.String())
+	}
+	if strings.Contains(w.Body.String(), "stored-private-token") {
+		t.Errorf("response contains stored credential: %s", w.Body.String())
+	}
+}
+
+func TestRecipePreviewOtherOriginAllowedWhenCallerSuppliesCredentials(t *testing.T) {
+	h := newTestHandler(t)
+	actor := apitest.NewUser(t, h.Store, "operator")
+	serverA, requestsA, _ := tokenServer(t)
+	serverB, requestsB, keyB := tokenServer(t)
+	rec, recipe := createStoredTokenConnector(t, h, serverA.URL, true, store.ManagedByUI)
+	w := previewRequest(t, h, actor, map[string]any{"connectorId": rec.ID, "url": serverB.URL, "verifyTls": false,
+		"config": map[string]any{"recipe": recipe, "auth_token": "caller-token"}})
+	if w.Code != http.StatusOK || requestsA.Load() != 0 || requestsB.Load() != 1 || keyB.Load() != "caller-token" {
+		t.Fatalf("status=%d requests A/B=%d/%d key=%v: %s", w.Code, requestsA.Load(), requestsB.Load(), keyB.Load(), w.Body.String())
+	}
+}
+
+func TestRecipePreviewAuditBoundsCallerControlledValues(t *testing.T) {
+	h := newTestHandler(t)
+	actor := apitest.NewUser(t, h.Store, "operator")
+	id := strings.Repeat("é", 200)
+	w := previewRequest(t, h, actor, map[string]any{"connectorId": id, "url": "https://api.example/" + strings.Repeat("é", 3000),
+		"config": map[string]any{"recipe": apiRecipe("media")}})
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("status=%d: %s", w.Code, w.Body.String())
+	}
+	rows, total, err := h.Store.ListAuditRecords(context.Background(), "connector.recipe_preview", "connector", "", "", 0, 20)
+	if err != nil || total != 1 || len(rows) != 1 {
+		t.Fatalf("audit rows=%+v total=%d err=%v", rows, total, err)
+	}
+	var detail map[string]string
+	if err := json.Unmarshal([]byte(rows[0].Detail), &detail); err != nil {
+		t.Fatal(err)
+	}
+	if len(rows[0].TargetID) > maxPreviewAuditIDBytes || !utf8.ValidString(rows[0].TargetID) || rows[0].TargetID == "" {
+		t.Errorf("target id length=%d valid=%t", len(rows[0].TargetID), utf8.ValidString(rows[0].TargetID))
+	}
+	if len(detail["url"]) > maxPreviewAuditURLBytes || !utf8.ValidString(detail["url"]) || !strings.HasPrefix(detail["url"], "https://api.example/") {
+		t.Errorf("url length=%d valid=%t", len(detail["url"]), utf8.ValidString(detail["url"]))
+	}
+}
+
+func TestPreviewRedactionWhitespaceTrimmedCredentials(t *testing.T) {
+	redact := previewRedactor(map[string]any{"auth_token": "  abc ", "headers": `{"X-Legacy":" legacy-secret\t"}`}, "https://api.example")
+	for _, value := range []string{"Bearer abc", "abc", "legacy-secret"} {
+		if got := redact(value); strings.Contains(got, "abc") || strings.Contains(got, "legacy-secret") {
+			t.Errorf("trimmed credential leaked in %q: %q", value, got)
+		}
 	}
 }

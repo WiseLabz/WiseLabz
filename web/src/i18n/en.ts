@@ -609,6 +609,7 @@ export const en = {
     recipePreview: {
       title: 'Test recipe',
       description: 'Run the current recipe against its target without saving changes.',
+      storedCredentialsHint: 'Saved credentials are reused only for the saved URL. To test a different URL, or with TLS verification turned off, re-enter the credentials.',
       test: 'Test recipe',
       testing: 'Testing recipe…',
       validationTitle: 'Validation errors',

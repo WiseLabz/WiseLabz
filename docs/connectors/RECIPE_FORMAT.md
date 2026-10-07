@@ -272,16 +272,23 @@ Instance administrators can use **Test recipe** in the custom connector form
 before saving, or call `POST /api/connectors/recipe-preview` with
 `{url, verifyTls?, config: {recipe, ...}, connectorId?}`. When editing an
 existing custom connector, `connectorId` lets omitted or empty secret fields
-use its stored credentials. The current recipe and URL are always supplied
-by the caller.
+use its stored credentials, but only when the request URL has the same origin
+(scheme, host and port) as the saved connector URL and TLS verification is not
+turned off for a connector that verifies it. Otherwise the request is rejected
+with a located 400 error and the credentials must be re-entered. This applies
+to every connector, including ones declared in `config.yaml`. The recipe and
+the URL path and query are always supplied by the caller.
 
 The preview reports each endpoint's selected item count, mapped entity count,
-skipped count, dependencies and error, plus at most 20 sample entities across
-the entire recipe. An endpoint failure leaves other endpoint results visible.
+skipped count, dependencies and error, plus at most 20 sample entities for
+each endpoint. An endpoint failure leaves other endpoint results visible.
 The same request, pagination, origin, response-size, entity and mapped-data
 bounds as a sync apply; previews also have a 30-second deadline and at most
 four previews can run concurrently. Credentials and URL queries are redacted
-from preview output, including echoed values in sample attributes.
+from preview output, including echoed values in sample attributes. Redaction
+matches credential values and their URL-encoded and basic-auth encodings; a
+service that returns a transformed credential (hashed, truncated or re-encoded)
+cannot be recognised.
 
 A preview leaves the connector, snapshots, changes, alerts and sync status
 untouched. Its only write is a `connector.recipe_preview` audit entry containing

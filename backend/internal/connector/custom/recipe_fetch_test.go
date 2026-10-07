@@ -464,6 +464,25 @@ func TestSameOriginComparesSchemeHostAndNormalizedPort(t *testing.T) {
 	}
 }
 
+func TestSameOriginURLNormalizesDefaultPorts(t *testing.T) {
+	tests := []struct {
+		a, b string
+		want bool
+	}{
+		{"https://h", "https://H:443", true},
+		{"http://h/a?x=1", "http://h:80/b", true},
+		{"http://h", "https://h", false},
+		{"https://h:8443", "https://h", false},
+		{"https://h", "://bad", false},
+		{"%zz", "https://h", false},
+	}
+	for _, test := range tests {
+		if got := SameOrigin(test.a, test.b); got != test.want {
+			t.Errorf("SameOrigin(%q, %q) = %t, want %t", test.a, test.b, got, test.want)
+		}
+	}
+}
+
 func TestFetchRecipeDoesNotFollowRedirects(t *testing.T) {
 	var sourceCalls, targetCalls atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

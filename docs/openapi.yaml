@@ -955,7 +955,7 @@ paths:
       tags: [connectors]
       operationId: previewConnectorRecipe
       summary: Preview a custom REST recipe without saving (instance admin only)
-      description: Uses the guarded sync fetch pipeline, a 30-second deadline and a four-request concurrency limit. Empty secret fields use stored credentials when connectorId is supplied. Results contain at most 20 sample entities overall and no credentials. Writes only a connector.recipe_preview audit entry.
+      description: Uses the guarded sync fetch pipeline, a 30-second deadline and a four-request concurrency limit. Empty secret fields use stored credentials when connectorId is supplied, but only when url has the saved connector's origin (scheme, host and port) and verifyTls is not turned off for a connector that verifies TLS; otherwise the request is rejected with 400 and the credentials must be re-entered. Results contain at most 20 sample entities per endpoint and no credentials. Writes only a connector.recipe_preview audit entry.
       requestBody:
         required: true
         content:
@@ -970,8 +970,16 @@ paths:
         '400': { $ref: '#/components/responses/BadRequest' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
-        '413': { description: Request body exceeds the JSON body limit }
-        '429': { description: Preview concurrency limit reached }
+        '413':
+          description: Request body exceeds the JSON body limit
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '429':
+          description: Preview concurrency limit reached
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
   /connectors/schema:
     get:
       tags: [connectors]
@@ -5354,7 +5362,9 @@ components:
       type: object
       required: [url, config]
       properties:
-        connectorId: { type: string, description: Existing custom connector whose stored credentials may be reused }
+        connectorId:
+          type: string
+          description: Existing custom connector whose stored credentials may be reused for empty secret fields. Only honored when url has the saved connector's origin and verifyTls is not weakened; otherwise the request is rejected with 400.
         url: { type: string }
         verifyTls: { type: boolean, default: true }
         config:

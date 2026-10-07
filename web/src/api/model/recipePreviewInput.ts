@@ -9,7 +9,7 @@
 import type { RecipePreviewInputConfig } from './recipePreviewInputConfig';
 
 export interface RecipePreviewInput {
-  /** Existing custom connector whose stored credentials may be reused */
+  /** Existing custom connector whose stored credentials may be reused for empty secret fields. Only honored when url has the saved connector's origin and verifyTls is not weakened; otherwise the request is rejected with 400. */
   connectorId?: string;
   url: string;
   verifyTls?: boolean;

@@ -519,6 +519,7 @@ export const ptBR: Catalog = {
     recipePreview: {
       title: 'Testar receita',
       description: 'Execute a receita atual no destino sem salvar alterações.',
+      storedCredentialsHint: 'As credenciais salvas são reutilizadas apenas para a URL salva. Para testar outra URL, ou com a verificação TLS desativada, informe as credenciais novamente.',
       test: 'Testar receita',
       testing: 'Testando receita…',
       validationTitle: 'Erros de validação',

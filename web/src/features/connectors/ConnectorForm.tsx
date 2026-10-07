@@ -181,7 +181,7 @@ export function ConnectorForm({
             </div>
           )}
           {create.isError && createErrors.length === 0 && (
-            <p className="mt-3 text-2xs text-err" role="alert" aria-live="polite">
+            <p className="mt-3 text-2xs text-err" role="alert">
               {t('connectors.connectFailed')}
             </p>
           )}

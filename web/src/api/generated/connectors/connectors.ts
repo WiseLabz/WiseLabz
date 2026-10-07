@@ -296,7 +296,7 @@ export const usePostConnectors = <
   return useMutation(getPostConnectorsMutationOptions(options), queryClient);
 };
 /**
- * Uses the guarded sync fetch pipeline, a 30-second deadline and a four-request concurrency limit. Empty secret fields use stored credentials when connectorId is supplied. Results contain at most 20 sample entities overall and no credentials. Writes only a connector.recipe_preview audit entry.
+ * Uses the guarded sync fetch pipeline, a 30-second deadline and a four-request concurrency limit. Empty secret fields use stored credentials when connectorId is supplied, but only when url has the saved connector's origin (scheme, host and port) and verifyTls is not turned off for a connector that verifies TLS; otherwise the request is rejected with 400 and the credentials must be re-entered. Results contain at most 20 sample entities per endpoint and no credentials. Writes only a connector.recipe_preview audit entry.
  * @summary Preview a custom REST recipe without saving (instance admin only)
  */
 export const previewConnectorRecipe = (
@@ -319,7 +319,7 @@ export const previewConnectorRecipe = (
 export const getPreviewConnectorRecipeMutationKey = () => ['previewConnectorRecipe'] as const;
 
 export const getPreviewConnectorRecipeMutationOptions = <
-  TError = ErrorType<BadRequestResponse | ForbiddenResponse | NotFoundResponse | void>,
+  TError = ErrorType<BadRequestResponse | ForbiddenResponse | NotFoundResponse | Error>,
   TContext = unknown,
 >(options?: {
   mutation?: UseMutationOptions<
@@ -359,7 +359,7 @@ export type PreviewConnectorRecipeMutationResult = NonNullable<
 >;
 export type PreviewConnectorRecipeMutationBody = BodyType<RecipePreviewInput>;
 export type PreviewConnectorRecipeMutationError = ErrorType<
-  BadRequestResponse | ForbiddenResponse | NotFoundResponse | void
+  BadRequestResponse | ForbiddenResponse | NotFoundResponse | Error
 >;
 export type PreviewConnectorRecipeMutationVariables = { data: BodyType<RecipePreviewInput> };
 
@@ -367,7 +367,7 @@ export type PreviewConnectorRecipeMutationVariables = { data: BodyType<RecipePre
  * @summary Preview a custom REST recipe without saving (instance admin only)
  */
 export const usePreviewConnectorRecipe = <
-  TError = ErrorType<BadRequestResponse | ForbiddenResponse | NotFoundResponse | void>,
+  TError = ErrorType<BadRequestResponse | ForbiddenResponse | NotFoundResponse | Error>,
   TContext = unknown,
 >(
   options?: {

@@ -109,7 +109,6 @@ type recipeRunState struct {
 	seenDependencies  map[string]struct{}
 	entityCount       int
 	mappedOutputBytes int
-	sampleCount       int
 	entities          []connector.SnapshotEntity
 	dependencies      []connector.ServiceDependency
 }
@@ -163,13 +162,9 @@ func (c *Connector) runRecipe(ctx context.Context, config map[string]any, recipe
 	}
 	client := c.recipeHTTPClient(config)
 	for i, endpoint := range recipe.Endpoints {
-		remainingEndpoints := len(recipe.Endpoints) - i - 1
 		sampleLimit := 0
 		if preview {
-			sampleLimit = maxPreviewSamples - state.sampleCount - remainingEndpoints
-			if sampleLimit < 0 {
-				sampleLimit = 0
-			}
+			sampleLimit = maxPreviewSamples
 		}
 		endpointRun, err := runRecipeEndpoint(ctx, recipeEndpointRunInput{
 			baseURL:     baseURL,
@@ -361,7 +356,6 @@ func (input recipeEndpointRunInput) acceptPage(pageNumber int, body []byte, resu
 				break
 			}
 			result.preview.Samples = append(result.preview.Samples, entity)
-			input.state.sampleCount++
 		}
 	} else {
 		input.state.entities = append(input.state.entities, mapped.Entities...)
@@ -785,6 +779,20 @@ func sameOrigin(base, target *url.URL) bool {
 		return false
 	}
 	return normalizedPort(base) == normalizedPort(target)
+}
+
+// SameOrigin reports whether two absolute URLs share scheme, host and effective
+// port. Unparsable URLs never match.
+func SameOrigin(a, b string) bool {
+	base, err := url.Parse(a)
+	if err != nil {
+		return false
+	}
+	target, err := url.Parse(b)
+	if err != nil {
+		return false
+	}
+	return sameOrigin(base, target)
 }
 
 func normalizedPort(u *url.URL) string {

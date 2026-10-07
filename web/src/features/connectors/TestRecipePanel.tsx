@@ -8,6 +8,16 @@ import { useIsInstanceAdmin } from '../../hooks/useRole';
 import { LocatedErrors } from './LocatedErrors';
 import { focusFirstLocatedError, locatedErrorsFrom } from './recipeForm';
 
+// Non-reversible 32-bit FNV-1a fingerprint, so panel state never holds typed credentials.
+function fingerprint(value: string): string {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < value.length; i++) {
+    hash ^= value.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0).toString(16);
+}
+
 export function TestRecipePanel(input: RecipePreviewInput) {
   const isAdmin = useIsInstanceAdmin();
   return isAdmin ? <AdminTestRecipePanel input={input} /> : null;
@@ -15,9 +25,9 @@ export function TestRecipePanel(input: RecipePreviewInput) {
 
 function AdminTestRecipePanel({ input }: { input: RecipePreviewInput }) {
   const { t } = useTranslation();
-  const preview = usePreviewConnectorRecipe();
+  const preview = usePreviewConnectorRecipe({ mutation: { gcTime: 0 } });
   const recipe = String(input.config.recipe ?? '').trim();
-  const inputKey = JSON.stringify(input);
+  const inputKey = fingerprint(JSON.stringify(input));
   const [submittedKey, setSubmittedKey] = useState<string | null>(null);
   const [completedKey, setCompletedKey] = useState<string | null>(null);
   const canPreview = Boolean(input.url.trim() && recipe);
@@ -39,6 +49,9 @@ function AdminTestRecipePanel({ input }: { input: RecipePreviewInput }) {
               {t('connectors.recipePreview.title')}
             </h2>
             <p className="mt-1 text-xs text-ink-muted">{t('connectors.recipePreview.description')}</p>
+            {input.connectorId && (
+              <p className="mt-1 text-xs text-ink-muted">{t('connectors.recipePreview.storedCredentialsHint')}</p>
+            )}
           </div>
           <Button
             variant="secondary"
@@ -71,7 +84,7 @@ function AdminTestRecipePanel({ input }: { input: RecipePreviewInput }) {
           </div>
         )}
         {hasCurrentResult && preview.isError && validationErrors.length === 0 && (
-          <p className="mt-4 text-xs text-err" role="alert" aria-live="polite">
+          <p className="mt-4 text-xs text-err" role="alert">
             {t('connectors.recipePreview.requestError')}
           </p>
         )}

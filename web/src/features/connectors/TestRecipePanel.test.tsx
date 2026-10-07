@@ -1,5 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { RecipePreviewInput } from '../../api/model';
 import { setLanguagePreference } from '../../i18n';
 import { TestRecipePanel } from './TestRecipePanel';
 
@@ -34,14 +35,20 @@ const input = {
   config: { recipe: 'version: 1\ncategory: media', auth_token: '' },
 };
 
-function renderPanel() {
-  return render(
+function panelTree(panelInput: RecipePreviewInput) {
+  return (
     <>
+      <label htmlFor="connector-field-url">URL</label>
+      <input id="connector-field-url" />
       <label htmlFor="connector-field-recipe">Recipe</label>
       <textarea id="connector-field-recipe" />
-      <TestRecipePanel {...input} />
-    </>,
+      <TestRecipePanel {...panelInput} />
+    </>
   );
+}
+
+function renderPanel(panelInput: RecipePreviewInput = input) {
+  return render(panelTree(panelInput));
 }
 
 beforeEach(() => {
@@ -116,6 +123,52 @@ describe('TestRecipePanel', () => {
     expect(screen.getByText('config.recipe.endpoints[0].entity.external_id')).toBeInTheDocument();
     expect(screen.getByText(/is required/)).toBeInTheDocument();
     expect(screen.getByRole('textbox', { name: /recipe/i })).toHaveFocus();
+  });
+
+  it('shows a located url error and focuses the url field', () => {
+    panelState.preview = {
+      isPending: false,
+      isError: true,
+      data: undefined,
+      error: { response: { data: { details: [{ field: 'url', msg: 'must match the saved connector URL' }] } } },
+    };
+    renderPanel();
+    fireEvent.click(screen.getByRole('button', { name: /test recipe/i }));
+    expect(screen.getByText('url')).toBeInTheDocument();
+    expect(screen.getByText(/must match the saved connector URL/)).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'URL' })).toHaveFocus();
+  });
+
+  it('shows the stored credentials hint only when a connector id is set', () => {
+    const { unmount } = renderPanel();
+    expect(screen.getByText(/Saved credentials are reused only for the saved URL/)).toBeInTheDocument();
+    unmount();
+    renderPanel({ ...input, connectorId: undefined });
+    expect(screen.queryByText(/Saved credentials are reused only for the saved URL/)).not.toBeInTheDocument();
+  });
+
+  it('disables the button and shows progress while the preview is pending', () => {
+    panelState.preview = { isPending: true, isError: false, data: undefined, error: undefined };
+    renderPanel();
+    const button = screen.getByRole('button', { name: 'Testing recipe…' });
+    expect(button).toBeDisabled();
+    expect(screen.getAllByText('Testing recipe…').length).toBeGreaterThan(1);
+  });
+
+  it('shows a generic message for a request error without validation details', () => {
+    panelState.preview = { isPending: false, isError: true, data: undefined, error: new Error('network down') };
+    renderPanel();
+    fireEvent.click(screen.getByRole('button', { name: /test recipe/i }));
+    expect(screen.getByRole('alert')).toHaveTextContent('Could not test this recipe. Check the URL and try again.');
+  });
+
+  it('hides a completed result once the input changes', () => {
+    panelState.preview.data = { endpoints: [], dependencies: [], errors: [] };
+    const { rerender } = renderPanel();
+    fireEvent.click(screen.getByRole('button', { name: /test recipe/i }));
+    expect(screen.getByText('Preview completed successfully.')).toBeInTheDocument();
+    rerender(panelTree({ ...input, config: { ...input.config, recipe: 'version: 1\ncategory: other' } }));
+    expect(screen.queryByText('Preview completed successfully.')).not.toBeInTheDocument();
   });
 
   it('renders the panel in Brazilian Portuguese', async () => {

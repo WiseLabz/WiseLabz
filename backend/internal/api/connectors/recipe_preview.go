@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -12,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/WiseLabz/wiselabz/internal/auth"
 	"github.com/WiseLabz/wiselabz/internal/connector"
@@ -20,7 +22,12 @@ import (
 	"github.com/WiseLabz/wiselabz/internal/store"
 )
 
-const recipePreviewTimeout = 30 * time.Second
+const (
+	recipePreviewTimeout = 30 * time.Second
+	// The request body may be 4 MiB; the audit entry keeps only a bounded echo.
+	maxPreviewAuditIDBytes  = 128
+	maxPreviewAuditURLBytes = 2048
+)
 
 var recipePreviewSlots = make(chan struct{}, 4)
 
@@ -59,12 +66,13 @@ func (h *Handler) RecipePreview(w http.ResponseWriter, r *http.Request) {
 			ctx,
 			"connector.recipe_preview",
 			"connector",
-			req.ConnectorID,
-			map[string]any{"url": redact(connector.RedactURL(req.URL))},
+			truncatePreviewAudit(req.ConnectorID, maxPreviewAuditIDBytes),
+			map[string]any{"url": truncatePreviewAudit(redact(connector.RedactURL(req.URL)), maxPreviewAuditURLBytes)},
 		); err != nil {
 			slog.Error("failed to record audit", "action", "connector.recipe_preview", "error", err)
 		}
 	}()
+	verifyTLS := req.VerifyTLS == nil || *req.VerifyTLS
 	if req.ConnectorID != "" {
 		rec, err := h.Store.GetConnector(r.Context(), req.ConnectorID)
 		if err != nil {
@@ -85,14 +93,34 @@ func (h *Handler) RecipePreview(w http.ResponseWriter, r *http.Request) {
 			httputil.Errorf(w, err)
 			return
 		}
+		fill := map[string]string{}
 		for _, field := range schema.Fields {
 			value, sent := cfg[field.Key]
-			if store.IsSecretFieldType(field.Type) && (!sent || value == nil || value == "") {
-				cfg[field.Key] = stored[field.Key]
+			secret, _ := stored[field.Key].(string)
+			if store.IsSecretFieldType(field.Type) && (!sent || value == nil || value == "") && secret != "" {
+				fill[field.Key] = secret
 			}
 		}
+		// Stored secrets may only go to the saved target, whoever owns its settings.
+		if len(fill) > 0 {
+			var rejection *connector.ConfigValidationError
+			switch {
+			case !custom.SameOrigin(rec.URL, req.URL):
+				rejection = &connector.ConfigValidationError{Field: "url",
+					Message: "must match the saved connector URL to use its stored credentials; re-enter the credentials or save the new URL first"}
+			case rec.VerifyTLS && !verifyTLS:
+				rejection = &connector.ConfigValidationError{Field: "verify_tls",
+					Message: "cannot be turned off while using the saved connector's stored credentials; re-enter the credentials"}
+			}
+			if rejection != nil {
+				writePreviewRejection(w, rejection, previewRedactor(cfg, req.URL))
+				return
+			}
+		}
+		for key, secret := range fill {
+			cfg[key] = secret
+		}
 	}
-	verifyTLS := req.VerifyTLS == nil || *req.VerifyTLS
 	connector.ApplyRecordConfig(cfg, req.URL, verifyTLS)
 	redact := previewRedactor(cfg, req.URL)
 	recipe, recipePresent := cfg["recipe"]
@@ -110,9 +138,14 @@ func (h *Handler) RecipePreview(w http.ResponseWriter, r *http.Request) {
 		writePreviewRejection(w, err, redact)
 		return
 	}
+	customConn, ok := conn.(*custom.Connector)
+	if !ok {
+		httputil.Errorf(w, fmt.Errorf("recipe preview: unexpected connector type %T", conn))
+		return
+	}
 	ctx, cancel := context.WithTimeout(r.Context(), recipePreviewTimeout)
 	defer cancel()
-	result, err := conn.(*custom.Connector).PreviewRecipe(ctx, cfg)
+	result, err := customConn.PreviewRecipe(ctx, cfg)
 	if err != nil {
 		writePreviewRejection(w, err, redact)
 		return
@@ -132,6 +165,18 @@ func (h *Handler) RecipePreview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httputil.JSON(w, http.StatusOK, redactPreviewValue(output, redact))
+}
+
+// truncatePreviewAudit caps s at limit bytes without splitting a rune.
+func truncatePreviewAudit(s string, limit int) string {
+	if len(s) <= limit {
+		return s
+	}
+	s = s[:limit]
+	for len(s) > 0 && !utf8.ValidString(s) {
+		s = s[:len(s)-1]
+	}
+	return s
 }
 
 func writePreviewRejection(w http.ResponseWriter, err error, redact func(string) string) {
@@ -194,6 +239,12 @@ func previewRedactor(cfg map[string]any, targetURL string) func(string) string {
 					secrets = append(secrets, value)
 				}
 			}
+		}
+	}
+	// net/http trims header values on the wire, so a stored " abc " is echoed as "abc".
+	for _, secret := range append([]string{}, secrets...) {
+		if trimmed := strings.TrimSpace(secret); trimmed != "" && trimmed != secret {
+			secrets = append(secrets, trimmed)
 		}
 	}
 	for _, secret := range append([]string{}, secrets...) {
