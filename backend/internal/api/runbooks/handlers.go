@@ -11,7 +11,6 @@ import (
 	"log/slog"
 	"net/http"
 	"regexp"
-	"strconv"
 	"strings"
 
 	"github.com/WiseLabz/wiselabz/internal/api/connectors"
@@ -70,6 +69,8 @@ const (
 	maxStepTimeoutSeconds       = 30 * 60
 	defaultStepTimeoutSeconds   = 5 * 60
 	maxRegexLength              = 256
+	maxAttributeLength          = 256
+	maxStepValueBytes           = 1024
 )
 
 // blockedNotLifecycle is the executeBlockedReason of a step that cannot be
@@ -229,7 +230,7 @@ func (h *Handler) validateSteps(ctx context.Context, inputs []stepInput) ([]*sto
 			EntityRef:      in.EntityRef,
 			FieldKey:       targetFieldKey,
 			TargetValue:    targetValueJSON,
-			Attribute:      in.Attribute,
+			Attribute:      strings.TrimSpace(in.Attribute),
 			Operator:       in.Operator,
 			ExpectedValue:  expectedValueJSON,
 		})
@@ -327,8 +328,10 @@ func validateWaitForEntityStep(prefix string, in stepInput) (string, []httputil.
 		errs = append(errs, httputil.FieldError{Field: prefix + ".entityRef", Msg: "invalid entityRef"})
 	}
 
-	if strings.TrimSpace(in.Attribute) == "" {
+	if attr := strings.TrimSpace(in.Attribute); attr == "" {
 		errs = append(errs, httputil.FieldError{Field: prefix + ".attribute", Msg: "is required"})
+	} else if len(attr) > maxAttributeLength {
+		errs = append(errs, httputil.FieldError{Field: prefix + ".attribute", Msg: fmt.Sprintf("must be at most %d characters", maxAttributeLength)})
 	}
 
 	if in.Operator == "" {
@@ -339,6 +342,10 @@ func validateWaitForEntityStep(prefix string, in stepInput) (string, []httputil.
 
 	if len(in.ExpectedValue) == 0 || string(bytes.TrimSpace(in.ExpectedValue)) == "null" {
 		errs = append(errs, httputil.FieldError{Field: prefix + ".expectedValue", Msg: "is required"})
+		return expectedValue, errs
+	}
+	if len(bytes.TrimSpace(in.ExpectedValue)) > maxStepValueBytes {
+		errs = append(errs, httputil.FieldError{Field: prefix + ".expectedValue", Msg: fmt.Sprintf("must be at most %d bytes", maxStepValueBytes)})
 		return expectedValue, errs
 	}
 
@@ -365,7 +372,10 @@ func validateWaitForEntityStep(prefix string, in stepInput) (string, []httputil.
 		if _, ok := expVal.(float64); ok {
 			expectedValue = string(bytes.TrimSpace(in.ExpectedValue))
 		} else if s, ok := expVal.(string); ok {
-			if _, err := strconv.ParseFloat(s, 64); err == nil {
+			// Stored verbatim, so it must be a valid JSON number literal.
+			var lit any
+			_ = json.Unmarshal([]byte(s), &lit)
+			if _, isNum := lit.(float64); isNum {
 				expectedValue = s
 			} else {
 				errs = append(errs, httputil.FieldError{Field: prefix + ".expectedValue", Msg: "must be a number"})
@@ -453,7 +463,9 @@ func (h *Handler) validateConfigPushStep(prefix string, in stepInput, connRec *s
 			errs = append(errs, httputil.FieldError{Field: prefix + ".targetValue", Msg: "is required"})
 		} else {
 			var rawVal any
-			if err := json.Unmarshal(in.TargetValue, &rawVal); err != nil {
+			if len(bytes.TrimSpace(in.TargetValue)) > maxStepValueBytes {
+				errs = append(errs, httputil.FieldError{Field: prefix + ".targetValue", Msg: fmt.Sprintf("must be at most %d bytes", maxStepValueBytes)})
+			} else if err := json.Unmarshal(in.TargetValue, &rawVal); err != nil {
 				errs = append(errs, httputil.FieldError{Field: prefix + ".targetValue", Msg: "must be valid JSON"})
 			} else {
 				val, valErr := validateTargetValueShape(prefix, targetField, rawVal, in.TargetValue)
@@ -485,17 +497,11 @@ func validateTargetValueShape(prefix string, targetField *connector.ConfigField,
 	case "toggle":
 		if bVal, ok := rawVal.(bool); ok {
 			return fmt.Sprintf("%v", bVal), nil
-		} else if sVal, ok := rawVal.(string); ok && (sVal == "true" || sVal == "false") {
-			return sVal, nil
 		}
 		return "", &httputil.FieldError{Field: prefix + ".targetValue", Msg: "must be a boolean"}
 	case "number":
 		if _, ok := rawVal.(float64); ok {
 			return string(bytes.TrimSpace(rawBytes)), nil
-		} else if sVal, ok := rawVal.(string); ok {
-			if _, err := strconv.ParseFloat(sVal, 64); err == nil {
-				return sVal, nil
-			}
 		}
 		return "", &httputil.FieldError{Field: prefix + ".targetValue", Msg: "must be a number"}
 	case "text":

@@ -822,6 +822,20 @@ func (f *fakePusher) ConfigPush(_ context.Context, _ map[string]any, _, _ string
 	return nil
 }
 
+// getRunbook fetches a runbook through the Get handler as userID.
+func getRunbook(t *testing.T, h *Handler, userID, id string) runbookResponse {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodGet, "/api/runbooks/"+id, nil)
+	req.SetPathValue("id", id)
+	req = req.WithContext(auth.ContextWithUser(req.Context(), userID, false))
+	rec := httptest.NewRecorder()
+	h.Get(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("get status = %d; body=%s", rec.Code, rec.Body.String())
+	}
+	return decodeRunbook(t, rec)
+}
+
 func seedCustomPusherConnector(t *testing.T, h *Handler, fields []connector.ConfigField) string {
 	t.Helper()
 	typ := fmt.Sprintf("fake_pusher_%d", time.Now().UnixNano())
@@ -870,7 +884,7 @@ func TestAuthoringConfigPushHappyPath(t *testing.T) {
 
 	rr := createWithSteps(t, h, op, "push_happy", `
 		{"kind":"config_push","title":"Set Memory","connectorId":"`+proxmoxID+`","entityRef":"100","fieldKey":"memory","targetValue":4096},
-		{"kind":"config_push","title":"Set Cores","connectorId":"`+proxmoxID+`","entityRef":"100","fieldKey":"cores","targetValue":"4"},
+		{"kind":"config_push","title":"Set Cores","connectorId":"`+proxmoxID+`","entityRef":"100","fieldKey":"cores","targetValue":4},
 		{"kind":"config_push","title":"Set Restart","connectorId":"`+dockerID+`","entityRef":"web","fieldKey":"restartPolicy","targetValue":"unless-stopped"},
 		{"kind":"config_push","title":"Global Toggle","connectorId":"`+fakeID+`","fieldKey":"enabled","targetValue":true},
 		{"kind":"config_push","title":"Scoped Text","connectorId":"`+fakeID+`","entityRef":"node-1","fieldKey":"hostname","targetValue":"app-node"}`)
@@ -908,6 +922,20 @@ func TestAuthoringConfigPushHappyPath(t *testing.T) {
 			t.Errorf("step %d timeout = %d, want 0", i, st.TimeoutSeconds)
 		}
 	}
+
+	got := getRunbook(t, h, op, created.ID).Steps
+	if len(got) != len(created.Steps) {
+		t.Fatalf("round-trip len(steps) = %d, want %d", len(got), len(created.Steps))
+	}
+	for i, st := range got {
+		c := created.Steps[i]
+		if st.FieldKey != c.FieldKey || st.TargetValue != c.TargetValue {
+			t.Errorf("round-trip step %d = fieldKey %q targetValue %q, want %q %q", i, st.FieldKey, st.TargetValue, c.FieldKey, c.TargetValue)
+		}
+		if !json.Valid([]byte(st.TargetValue)) {
+			t.Errorf("round-trip step %d targetValue %q is not valid JSON", i, st.TargetValue)
+		}
+	}
 }
 
 func TestAuthoringConfigPushValidation(t *testing.T) {
@@ -919,6 +947,7 @@ func TestAuthoringConfigPushValidation(t *testing.T) {
 		{Key: "global_toggle", Label: "Global Toggle", Type: "toggle", EntityScope: false},
 		{Key: "secret_token", Label: "Secret Token", Type: "password", EntityScope: false},
 		{Key: "scoped_toggle", Label: "Scoped Toggle", Type: "toggle", EntityScope: true},
+		{Key: "global_text", Label: "Global Text", Type: "text", EntityScope: false},
 	})
 
 	cases := []struct {
@@ -936,6 +965,9 @@ func TestAuthoringConfigPushValidation(t *testing.T) {
 		{"invalid JSON targetValue", `{"kind":"config_push","title":"t","connectorId":"` + proxmoxID + `","entityRef":"100","fieldKey":"memory","targetValue":"{bad"}`, "steps[0].targetValue"},
 		{"toggle with invalid non-bool", `{"kind":"config_push","title":"t","connectorId":"` + fakeID + `","fieldKey":"global_toggle","targetValue":"invalid_bool"}`, "steps[0].targetValue"},
 		{"number with invalid non-number", `{"kind":"config_push","title":"t","connectorId":"` + proxmoxID + `","entityRef":"100","fieldKey":"memory","targetValue":"abc"}`, "steps[0].targetValue"},
+		{"number given numeric string", `{"kind":"config_push","title":"t","connectorId":"` + proxmoxID + `","entityRef":"100","fieldKey":"cores","targetValue":"4"}`, "steps[0].targetValue"},
+		{"toggle given string true", `{"kind":"config_push","title":"t","connectorId":"` + fakeID + `","fieldKey":"global_toggle","targetValue":"true"}`, "steps[0].targetValue"},
+		{"text over 1024 bytes", `{"kind":"config_push","title":"t","connectorId":"` + fakeID + `","fieldKey":"global_text","targetValue":"` + strings.Repeat("a", 1025) + `"}`, "steps[0].targetValue"},
 		{"docker select with invalid option", `{"kind":"config_push","title":"t","connectorId":"` + dockerID + `","entityRef":"web","fieldKey":"restartPolicy","targetValue":"sometimes"}`, "steps[0].targetValue"},
 		{"verb present", `{"kind":"config_push","title":"t","connectorId":"` + proxmoxID + `","entityRef":"100","fieldKey":"memory","targetValue":4096,"verb":"restart"}`, "steps[0].verb"},
 		{"timeout present", `{"kind":"config_push","title":"t","connectorId":"` + proxmoxID + `","entityRef":"100","fieldKey":"memory","targetValue":4096,"timeoutSeconds":120}`, "steps[0].timeoutSeconds"},
@@ -1009,6 +1041,20 @@ func TestAuthoringWaitForEntityHappyPath(t *testing.T) {
 			t.Errorf("step %d canExecute/reason = %v/%q, want false/not_lifecycle", i, st.CanExecute, st.ExecuteBlockedReason)
 		}
 	}
+
+	got := getRunbook(t, h, op, created.ID).Steps
+	if len(got) != len(created.Steps) {
+		t.Fatalf("round-trip len(steps) = %d, want %d", len(got), len(created.Steps))
+	}
+	for i, st := range got {
+		c := created.Steps[i]
+		if st.Attribute != c.Attribute || st.Operator != c.Operator || st.ExpectedValue != c.ExpectedValue {
+			t.Errorf("round-trip step %d = attr %q op %q exp %q, want %q %q %q", i, st.Attribute, st.Operator, st.ExpectedValue, c.Attribute, c.Operator, c.ExpectedValue)
+		}
+		if !json.Valid([]byte(st.ExpectedValue)) {
+			t.Errorf("round-trip step %d expectedValue %q is not valid JSON", i, st.ExpectedValue)
+		}
+	}
 }
 
 func TestAuthoringWaitForEntityValidation(t *testing.T) {
@@ -1032,6 +1078,11 @@ func TestAuthoringWaitForEntityValidation(t *testing.T) {
 		{"invalid uncompilable regex", `{"kind":"wait_for_entity","title":"t","connectorId":"` + connID + `","entityRef":"100","attribute":"status","operator":"regex","expectedValue":"[a-"}`, "steps[0].expectedValue"},
 		{"regex length over 256", `{"kind":"wait_for_entity","title":"t","connectorId":"` + connID + `","entityRef":"100","attribute":"status","operator":"regex","expectedValue":"` + strings.Repeat("a", 257) + `"}`, "steps[0].expectedValue"},
 		{"gt non-numeric expectedValue", `{"kind":"wait_for_entity","title":"t","connectorId":"` + connID + `","entityRef":"100","attribute":"cores","operator":"gt","expectedValue":"two"}`, "steps[0].expectedValue"},
+		{"gt NaN expectedValue", `{"kind":"wait_for_entity","title":"t","connectorId":"` + connID + `","entityRef":"100","attribute":"cores","operator":"gt","expectedValue":"NaN"}`, "steps[0].expectedValue"},
+		{"gt plus-prefixed expectedValue", `{"kind":"wait_for_entity","title":"t","connectorId":"` + connID + `","entityRef":"100","attribute":"cores","operator":"gt","expectedValue":"+5"}`, "steps[0].expectedValue"},
+		{"gt leading-dot expectedValue", `{"kind":"wait_for_entity","title":"t","connectorId":"` + connID + `","entityRef":"100","attribute":"cores","operator":"gt","expectedValue":".5"}`, "steps[0].expectedValue"},
+		{"eq expectedValue over 1024 bytes", `{"kind":"wait_for_entity","title":"t","connectorId":"` + connID + `","entityRef":"100","attribute":"status","operator":"eq","expectedValue":"` + strings.Repeat("a", 1025) + `"}`, "steps[0].expectedValue"},
+		{"attribute over 256 characters", `{"kind":"wait_for_entity","title":"t","connectorId":"` + connID + `","entityRef":"100","attribute":"` + strings.Repeat("a", 257) + `","operator":"eq","expectedValue":"running"}`, "steps[0].attribute"},
 		{"lt non-numeric expectedValue", `{"kind":"wait_for_entity","title":"t","connectorId":"` + connID + `","entityRef":"100","attribute":"cores","operator":"lt","expectedValue":true}`, "steps[0].expectedValue"},
 		{"timeout below 60 seconds", `{"kind":"wait_for_entity","title":"t","connectorId":"` + connID + `","entityRef":"100","attribute":"status","operator":"eq","expectedValue":"running","timeoutSeconds":30}`, "steps[0].timeoutSeconds"},
 		{"timeout 0 seconds", `{"kind":"wait_for_entity","title":"t","connectorId":"` + connID + `","entityRef":"100","attribute":"status","operator":"eq","expectedValue":"running","timeoutSeconds":0}`, "steps[0].timeoutSeconds"},

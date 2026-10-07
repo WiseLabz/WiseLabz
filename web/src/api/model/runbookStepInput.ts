@@ -25,13 +25,13 @@ export interface RunbookStepInput {
   entityRef?: string;
   /** Configuration field key for config_push steps. */
   fieldKey?: string;
-  /** Target value for config_push steps (boolean, number, string, or JSON text). */
+  /** Target value for config_push steps: a JSON boolean, number or string matching the field's type. At most 1024 bytes. */
   targetValue?: unknown;
   /** Entity attribute name for wait_for_entity steps. */
   attribute?: string;
   /** Comparison operator for wait_for_entity steps. */
   operator?: RunbookStepInputOperator;
-  /** Expected attribute value for wait_for_entity steps (number, string, or JSON text). */
+  /** Expected attribute value for wait_for_entity steps: a JSON string or number (gt and lt need a number or a numeric string, regex a pattern of at most 256 characters). At most 1024 bytes. */
   expectedValue?: unknown;
   /**
    * For sync_and_wait and wait_until_healthy it must be between 10 and 1800 seconds and defaults to 300 when omitted. For wait_for_entity it must be between 60 and 1800 seconds and defaults to 300 when omitted. Lifecycle, config_push and manual steps accept only 0 or omission.

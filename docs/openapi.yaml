@@ -6471,7 +6471,7 @@ components:
           type: string
           description: Configuration field key for config_push steps.
         targetValue:
-          description: Target value for config_push steps (boolean, number, string, or JSON text).
+          description: "Target value for config_push steps: a JSON boolean, number or string matching the field's type. At most 1024 bytes."
         attribute:
           type: string
           description: Entity attribute name for wait_for_entity steps.
@@ -6480,7 +6480,7 @@ components:
           enum: [eq, neq, contains, regex, gt, lt]
           description: Comparison operator for wait_for_entity steps.
         expectedValue:
-          description: Expected attribute value for wait_for_entity steps (number, string, or JSON text).
+          description: "Expected attribute value for wait_for_entity steps: a JSON string or number (gt and lt need a number or a numeric string, regex a pattern of at most 256 characters). At most 1024 bytes."
         timeoutSeconds:
           type: integer
           minimum: 0
