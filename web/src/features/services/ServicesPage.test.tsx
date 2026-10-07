@@ -87,7 +87,7 @@ describe('ServicesPage category presentation (#513)', () => {
     expect(screen.getByText('Armazenamento')).toBeInTheDocument();
     expect(screen.getByText('Monitoramento')).toBeInTheDocument();
     expect(screen.getByText('Mídia')).toBeInTheDocument();
-    expect(screen.getByText('Outro')).toBeInTheDocument();
+    expect(screen.getByText('Outros')).toBeInTheDocument();
     expect(screen.getByText('Virtualização')).toBeInTheDocument();
     expect(screen.getByText('Contêineres')).toBeInTheDocument();
     expect(screen.getByText('Rede')).toBeInTheDocument();

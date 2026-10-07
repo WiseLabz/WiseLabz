@@ -524,19 +524,11 @@ export const ptBR: Catalog = {
       storage: 'Armazenamento',
       monitoring: 'Monitoramento',
       media: 'Mídia',
-      other: 'Outro',
+      other: 'Outros',
     },
   },
   templates: {
-    category: {
-      virtualization: 'Virtualização',
-      containers_paas: 'Contêineres',
-      networking: 'Rede',
-      dns: 'DNS',
-      storage: 'Armazenamento',
-      monitoring: 'Monitoramento',
-      media: 'Mídia',
-      other: 'Outro',
-    },
+    categoryLabel: 'Categoria do conector',
+    anyCategory: 'Qualquer categoria',
   },
 };

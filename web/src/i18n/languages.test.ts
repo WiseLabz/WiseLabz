@@ -50,11 +50,9 @@ describe('connector category labels (#513)', () => {
     const { load } = LANGUAGES[code];
     const catalog = load ? await load() : en;
     for (const cat of Object.values(ConnectorCategory)) {
-      for (const ns of ['services', 'templates']) {
-        const label = lookup(catalog, `${ns}.category.${cat}`);
-        expect(label, `${ns}.category.${cat}`).toEqual(expect.any(String));
-        expect((label as string).trim(), `${ns}.category.${cat}`).not.toBe('');
-      }
+      const label = lookup(catalog, `services.category.${cat}`);
+      expect(label, `services.category.${cat}`).toEqual(expect.any(String));
+      expect((label as string).trim(), `services.category.${cat}`).not.toBe('');
     }
   });
 });

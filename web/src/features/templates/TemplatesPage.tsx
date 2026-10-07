@@ -228,7 +228,7 @@ export function AppliesToLabel({ template }: { template: Template }) {
   return (
     <span className="text-accent-secondary-bright">
       {cat
-        ? t(`templates.category.${cat}`, { defaultValue: cat })
+        ? t(`services.category.${cat}`, { defaultValue: cat })
         : t('templates.appliesAnyCategory')}
       {type ? ` / ${type}` : ''}
     </span>

@@ -103,7 +103,7 @@ describe('TemplateEditorPage categories (#513)', () => {
       </QueryClientProvider>,
     );
 
-    const select = screen.getByRole('combobox', { name: /connector category/i });
+    const select = screen.getByRole('combobox', { name: /categoria do conector/i });
     expect(select).toBeInTheDocument();
 
     const options = Array.from(select.querySelectorAll('option')).map((o) => ({
@@ -112,7 +112,7 @@ describe('TemplateEditorPage categories (#513)', () => {
     }));
 
     expect(options).toEqual([
-      { value: '', text: 'Any category' },
+      { value: '', text: 'Qualquer categoria' },
       { value: 'virtualization', text: 'Virtualização' },
       { value: 'containers_paas', text: 'Contêineres' },
       { value: 'networking', text: 'Rede' },
@@ -120,7 +120,7 @@ describe('TemplateEditorPage categories (#513)', () => {
       { value: 'storage', text: 'Armazenamento' },
       { value: 'monitoring', text: 'Monitoramento' },
       { value: 'media', text: 'Mídia' },
-      { value: 'other', text: 'Outro' },
+      { value: 'other', text: 'Outros' },
     ]);
   });
 
