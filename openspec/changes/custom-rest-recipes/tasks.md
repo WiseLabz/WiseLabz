@@ -2,10 +2,10 @@
 
 ## 1. Connector categories (PR 1)
 
-- [ ] 1.1 Add a paired sqlite/postgres migration widening the connector category CHECK constraint to the eight values, with a down migration; verify migration up/down tests on both dialects and that existing rows keep their category.
-- [ ] 1.2 Add the four categories to `backup.validCategories` and validate category against the shared list in the connectors create/update handlers; verify handler tests for an accepted new category and a rejected unknown one, and a backup import test with category `monitoring`.
-- [ ] 1.3 Extend the OpenAPI `ConnectorCategory` enum and regenerate the web client; verify the OpenAPI contract test and web typecheck.
-- [ ] 1.4 Add icons in `categoryIcon.ts`, the template editor `CATEGORIES` entries and en and pt-BR labels; verify vitest for the grouped connector list and template editor, and update `docs/BACKUP.md` where categories are listed.
+- [x] 1.1 Add a paired sqlite/postgres migration widening the connector category CHECK constraint to the eight values, with a down migration; verify migration up/down tests on both dialects and that existing rows keep their category.
+- [x] 1.2 Add the four categories to `backup.validCategories` and validate category against the shared list in the connectors create/update handlers; verify handler tests for an accepted new category and a rejected unknown one, and a backup import test with category `monitoring`.
+- [x] 1.3 Extend the OpenAPI `ConnectorCategory` enum and regenerate the web client; verify the OpenAPI contract test and web typecheck.
+- [x] 1.4 Add icons in `categoryIcon.ts`, the template editor `CATEGORIES` entries and en and pt-BR labels; verify vitest for the grouped connector list and template editor, and update `docs/BACKUP.md` where categories are listed.
 
 ## 2. Recipe format and validation (PR 2)
 

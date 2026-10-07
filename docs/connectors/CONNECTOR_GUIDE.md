@@ -30,7 +30,7 @@ type Connector interface {
 |-------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `Name()`                | Display name, e.g. `"Proxmox VE"`.                                                                                                                                      |
 | `Type()`                | Stable type identifier, e.g. `"proxmox"`. Must match the string used during registration.                                                                               |
-| `Category()`            | Grouping label, e.g. `"virtualization"`, `"networking"`.                                                                                                                |
+| `Category()`            | Grouping label. Must be one of `virtualization`, `containers_paas`, `networking`, `dns`, `storage`, `monitoring`, `media`, `other`.                                     |
 | `Fetch(ctx, config)`    | Connect to the service, pull the data you care about, and return a `ServiceSnapshot`. The context carries a deadline — don't ignore it.                                 |
 | `Validate(ctx, config)` | Test that the connector's configuration is usable before we attempt a `Fetch`. Return `nil` if everything looks good, or an error describing what's missing or invalid. |
 
@@ -127,7 +127,7 @@ const typeName = "mynewservice"
 func init() {
     connector.Register(connector.TypeSchema{
         Type:     typeName,
-        Category: "infrastructure",   // groups connectors in the UI
+        Category: "other",            // groups connectors in the UI
         Name:     "My New Service",
         Fields: []connector.SchemaField{
             {Key: "url", Label: "API URL", Type: "text", Required: true, Placeholder: "https://..."},
@@ -187,7 +187,7 @@ func New(config map[string]any) (*Connector, error) {
 
 func (c *Connector) Name() string     { return "My New Service" }
 func (c *Connector) Type() string     { return typeName }
-func (c *Connector) Category() string { return "infrastructure" }
+func (c *Connector) Category() string { return "other" }
 
 func (c *Connector) Validate(ctx context.Context, _ map[string]any) error {
     if c.url == "" {

@@ -39,6 +39,10 @@ import {
   CopyIcon as PhCopy,
   ChatCircleIcon as PhChatCircle,
   GlobeIcon as PhGlobe,
+  DatabaseIcon as PhDatabase,
+  ActivityIcon as PhActivity,
+  FilmStripIcon as PhFilmStrip,
+  DotsThreeIcon as PhDotsThree,
   ShareNetworkIcon as PhShareNetwork,
   ShieldCheckIcon as PhShieldCheck,
 } from '@phosphor-icons/react';
@@ -80,3 +84,7 @@ export const ShareIcon = (p: IconProps) => <PhShareNetwork size={18} weight="reg
 export const ShieldIcon = (p: IconProps) => <PhShieldCheck size={18} weight="regular" aria-hidden="true" {...p} />;
 export const ChatIcon = (p: IconProps) => <PhChatCircle size={18} weight="regular" aria-hidden="true" {...p} />;
 export const GlobeIcon = (p: IconProps) => <PhGlobe size={18} weight="regular" aria-hidden="true" {...p} />;
+export const DatabaseIcon = (p: IconProps) => <PhDatabase size={18} weight="regular" aria-hidden="true" {...p} />;
+export const ActivityIcon = (p: IconProps) => <PhActivity size={18} weight="regular" aria-hidden="true" {...p} />;
+export const FilmStripIcon = (p: IconProps) => <PhFilmStrip size={18} weight="regular" aria-hidden="true" {...p} />;
+export const DotsThreeIcon = (p: IconProps) => <PhDotsThree size={18} weight="regular" aria-hidden="true" {...p} />;

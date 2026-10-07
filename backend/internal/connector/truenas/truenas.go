@@ -28,9 +28,9 @@ import (
 
 const (
 	typeName = "truenas"
-	// category is the closest fit among the categories the connectors table
-	// allows (virtualization|containers_paas|networking|dns); there is no
-	// storage category and adding one would need a migration.
+	// category stays virtualization: the storage category exists since
+	// migration 000064, but existing connector types are deliberately not
+	// recategorised by that change.
 	category = "virtualization"
 )
 

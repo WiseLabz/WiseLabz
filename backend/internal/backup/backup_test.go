@@ -13,16 +13,19 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	_ "github.com/jackc/pgx/v5/stdlib"
+	"go.yaml.in/yaml/v3"
 	_ "modernc.org/sqlite"
 
 	"github.com/WiseLabz/wiselabz/internal/backup"
 	"github.com/WiseLabz/wiselabz/internal/blobstore"
+	"github.com/WiseLabz/wiselabz/internal/connector"
 	"github.com/WiseLabz/wiselabz/internal/store"
 	"github.com/WiseLabz/wiselabz/internal/store/storetest"
 
@@ -216,6 +219,45 @@ func TestImportRejectsInvalidBundleBeforeWriting(t *testing.T) {
 	}
 	if len(connectors) != 0 {
 		t.Fatalf("connectors after rejected import = %d, want 0", len(connectors))
+	}
+}
+
+func TestImportConnectorWithMonitoringCategory(t *testing.T) {
+	ctx := context.Background()
+	s := newTestStore(t)
+	b := &backup.Bundle{
+		Version: backup.BundleVersion,
+		Connectors: []store.ConnectorRecord{{
+			ID: "c-mon", Name: "Monitoring Service", Category: "monitoring", Type: "custom", URL: "https://mon.example.com",
+		}},
+	}
+
+	res, err := backup.Import(ctx, s, b)
+	if err != nil {
+		t.Fatalf("Import() error = %v", err)
+	}
+	if res.Connectors.Imported != 1 {
+		t.Errorf("Imported = %d, want 1", res.Connectors.Imported)
+	}
+
+	c, err := s.GetConnector(ctx, "c-mon")
+	if err != nil {
+		t.Fatalf("GetConnector: %v", err)
+	}
+	if c.Category != "monitoring" {
+		t.Errorf("Category = %q, want monitoring", c.Category)
+	}
+}
+
+func TestValidateBundleRejectsInvalidConnectorCategory(t *testing.T) {
+	b := &backup.Bundle{
+		Version: backup.BundleVersion,
+		Connectors: []store.ConnectorRecord{{
+			ID: "c-bad", Name: "Gaming Service", Category: "gaming", Type: "custom", URL: "https://gaming.example.com",
+		}},
+	}
+	if err := backup.ValidateBundle(b); err == nil {
+		t.Error("ValidateBundle accepted category gaming; want error")
 	}
 }
 
@@ -1162,4 +1204,54 @@ func backupRowCount(t *testing.T, s *store.Store, table string) int {
 		t.Fatalf("count %s: %v", table, err)
 	}
 	return count
+}
+
+func TestCategoriesMatchOpenAPIEnum(t *testing.T) {
+	raw, err := os.ReadFile("../../../docs/openapi.yaml")
+	if err != nil {
+		t.Fatalf("read spec: %v", err)
+	}
+	var doc struct {
+		Components struct {
+			Schemas map[string]struct {
+				Enum []string `yaml:"enum"`
+			} `yaml:"schemas"`
+		} `yaml:"components"`
+	}
+	if err := yaml.Unmarshal(raw, &doc); err != nil {
+		t.Fatalf("parse spec: %v", err)
+	}
+	got := doc.Components.Schemas["ConnectorCategory"].Enum
+	if want := connector.Categories(); !reflect.DeepEqual(got, want) {
+		t.Fatalf("openapi ConnectorCategory enum = %v, want %v", got, want)
+	}
+}
+
+func TestCategoriesMatchMigrationCheckConstraint(t *testing.T) {
+	inList := "category IN ('" + strings.Join(connector.Categories(), "','") + "')"
+	for _, dialect := range []string{"sqlite", "postgres"} {
+		path := filepath.Join("..", "store", "migrations", dialect, "000064_connector_categories.up.sql")
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s migration: %v", dialect, err)
+		}
+		if !strings.Contains(string(raw), inList) {
+			t.Errorf("%s does not contain %q", path, inList)
+		}
+	}
+}
+
+// Connectors declared in config have no category field; reconcile stores the
+// registered type's category (reconcile.go), so this guarantees a declared
+// connector can never carry an unknown category.
+func TestRegisteredConnectorTypesHaveValidCategory(t *testing.T) {
+	schemas := connector.ListSchemas()
+	if len(schemas) == 0 {
+		t.Fatal("no connector types registered")
+	}
+	for _, s := range schemas {
+		if !connector.ValidCategory(s.Category) {
+			t.Errorf("connector type %q has invalid category %q", s.Type, s.Category)
+		}
+	}
 }

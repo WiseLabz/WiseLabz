@@ -111,6 +111,9 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 			fieldErrs = append(fieldErrs, httputil.FieldError{Field: f.name, Msg: "is required"})
 		}
 	}
+	if req.Category != "" && !connector.ValidCategory(req.Category) {
+		fieldErrs = append(fieldErrs, httputil.FieldError{Field: "category", Msg: "is not a valid category"})
+	}
 	if req.URL == "" && connector.URLRequired(req.Type) {
 		fieldErrs = append(fieldErrs, httputil.FieldError{Field: "url", Msg: "is required"})
 	}
@@ -233,6 +236,13 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	updates, fieldErrs := parseScheduleUpdates(req.ScheduleSeconds, req.UserExpiresAt, req.RotationMaxAgeDays)
+	if req.Category != nil {
+		if *req.Category == "" {
+			fieldErrs = append(fieldErrs, httputil.FieldError{Field: "category", Msg: "is required"})
+		} else if !connector.ValidCategory(*req.Category) {
+			fieldErrs = append(fieldErrs, httputil.FieldError{Field: "category", Msg: "is not a valid category"})
+		}
+	}
 	if len(fieldErrs) > 0 {
 		httputil.ErrorWithDetails(w, http.StatusBadRequest, "invalid_request", "Request validation failed", fieldErrs)
 		return
@@ -302,11 +312,12 @@ func (h *Handler) pullInNextRun(w http.ResponseWriter, r *http.Request, id strin
 // connector connects. Repointing one makes the server send its stored
 // credentials to the new endpoint, so changing url, type or verifyTls is an
 // instance-admin action. Endpoint-defining config keys follow the same rule;
-// operators may still send unchanged values. It
-// writes the error response and reports false when the update must not
-// proceed.
+// operators may still send unchanged values. So does category: it selects the
+// sync transformers, the templates that match the connector and the
+// category-scoped notification routes. It writes the error response and
+// reports false when the update must not proceed.
 func (h *Handler) authorizeConnectorRepoint(w http.ResponseWriter, r *http.Request, id string, req *updateConnectorRequest) bool {
-	if req.URL == nil && req.Type == nil && req.VerifyTLS == nil && req.Config == nil {
+	if req.URL == nil && req.Type == nil && req.VerifyTLS == nil && req.Category == nil && req.Config == nil {
 		return true
 	}
 	if auth.InstanceAdminFromContext(r.Context()) {
@@ -323,8 +334,9 @@ func (h *Handler) authorizeConnectorRepoint(w http.ResponseWriter, r *http.Reque
 	}
 	if (req.URL != nil && *req.URL != current.URL) ||
 		(req.Type != nil && *req.Type != current.Type) ||
-		(req.VerifyTLS != nil && *req.VerifyTLS != current.VerifyTLS) {
-		httputil.Error(w, http.StatusForbidden, "forbidden", "Changing url, type or verifyTls requires an instance admin")
+		(req.VerifyTLS != nil && *req.VerifyTLS != current.VerifyTLS) ||
+		(req.Category != nil && *req.Category != current.Category) {
+		httputil.Error(w, http.StatusForbidden, "forbidden", "Changing url, type, verifyTls or category requires an instance admin")
 		return false
 	}
 

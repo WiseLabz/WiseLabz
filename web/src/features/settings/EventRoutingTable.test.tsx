@@ -81,4 +81,24 @@ describe('EventRoutingTable', () => {
     expect(find('alert.created', 'webhook')?.enabled).toBe(true);
     expect(find('finding.created', 'webhook')?.enabled).toBe(true);
   });
+
+  it('offers every connector category with its English label in the category filter', () => {
+    render(<EventRoutingTable config={{ channels, routing: [] }} onChange={vi.fn()} />);
+    const select = screen.getAllByRole('combobox', { name: /category filter/i })[0];
+    const options = Array.from(select.querySelectorAll('option')).map((o) => ({
+      value: o.value,
+      text: o.textContent?.trim(),
+    }));
+    expect(options).toEqual([
+      { value: '', text: 'Any category' },
+      { value: 'virtualization', text: 'Virtualization' },
+      { value: 'containers_paas', text: 'Containers' },
+      { value: 'networking', text: 'Networking' },
+      { value: 'dns', text: 'DNS' },
+      { value: 'storage', text: 'Storage' },
+      { value: 'monitoring', text: 'Monitoring' },
+      { value: 'media', text: 'Media' },
+      { value: 'other', text: 'Other' },
+    ]);
+  });
 });

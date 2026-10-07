@@ -34,15 +34,6 @@ const BundleVersion = 2
 
 const exportPageSize = 1000
 
-// validCategories mirrors the connectors.category CHECK constraint in
-// migrations/sqlite/000001_init.up.sql.
-var validCategories = map[string]bool{
-	"virtualization":  true,
-	"containers_paas": true,
-	"networking":      true,
-	"dns":             true,
-}
-
 // AIConfigSummary is an informational, secret-free snapshot of the AI
 // configuration. It is exported for operator visibility only — Import never
 // applies it, since the encrypted API key can't be restored from a backup.
@@ -358,7 +349,7 @@ func ValidateBundle(b *Bundle) error {
 	}
 
 	for _, c := range b.Connectors {
-		if !validCategories[c.Category] {
+		if !connector.ValidCategory(c.Category) {
 			return fmt.Errorf("connector %q has invalid category %q", c.ID, c.Category)
 		}
 	}

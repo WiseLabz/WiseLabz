@@ -515,4 +515,20 @@ export const ptBR: Catalog = {
       cronHint: 'Expressão cron de 5 ou 6 campos (com segundos iniciais).',
     },
   },
+  services: {
+    category: {
+      virtualization: 'Virtualização',
+      containers_paas: 'Contêineres',
+      networking: 'Rede',
+      dns: 'DNS',
+      storage: 'Armazenamento',
+      monitoring: 'Monitoramento',
+      media: 'Mídia',
+      other: 'Outros',
+    },
+  },
+  templates: {
+    categoryLabel: 'Categoria do conector',
+    anyCategory: 'Qualquer categoria',
+  },
 };

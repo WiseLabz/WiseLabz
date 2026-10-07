@@ -13,6 +13,7 @@ import (
 	"github.com/WiseLabz/wiselabz/internal/auth"
 	"github.com/WiseLabz/wiselabz/internal/config"
 	"github.com/WiseLabz/wiselabz/internal/connector"
+	"github.com/WiseLabz/wiselabz/internal/httputil"
 	"github.com/WiseLabz/wiselabz/internal/sync"
 
 	// Register connector implementations (proxmox, custom, ...) for restart tests.
@@ -34,6 +35,27 @@ func newTestHandler(t *testing.T) *Handler {
 		}
 	})
 	return h
+}
+
+// requireCategoryFieldError fails unless rr is a 400 validation response with a
+// field error on category.
+func requireCategoryFieldError(t *testing.T, rr *httptest.ResponseRecorder) {
+	t.Helper()
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d; body=%s", rr.Code, http.StatusBadRequest, rr.Body.String())
+	}
+	var resp struct {
+		Details []httputil.FieldError `json:"details"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal error response: %v", err)
+	}
+	for _, d := range resp.Details {
+		if d.Field == "category" {
+			return
+		}
+	}
+	t.Errorf("expected field error on category, got details: %+v", resp.Details)
 }
 
 func TestListEmpty(t *testing.T) {
@@ -93,6 +115,40 @@ func TestCreate(t *testing.T) {
 			t.Fatalf("status = %d, want %d; body=%s", rr.Code, http.StatusCreated, rr.Body.String())
 		}
 	})
+
+	t.Run("new category accepted", func(t *testing.T) {
+		for _, cat := range []string{"storage", "monitoring", "media", "other"} {
+			body := `{"name":"NewCat ` + cat + `","category":"` + cat + `","type":"custom","url":"https://` + cat + `.example.com"}`
+			req := httptest.NewRequest(http.MethodPost, "/api/connectors", strings.NewReader(body))
+			rr := httptest.NewRecorder()
+			h.Create(rr, req)
+			if rr.Code != http.StatusCreated {
+				t.Fatalf("category %s status = %d, want %d; body=%s", cat, rr.Code, http.StatusCreated, rr.Body.String())
+			}
+			var created map[string]any
+			if err := json.Unmarshal(rr.Body.Bytes(), &created); err != nil {
+				t.Fatalf("unmarshal: %v", err)
+			}
+			if created["category"] != cat {
+				t.Errorf("category = %v, want %s", created["category"], cat)
+			}
+		}
+	})
+
+	t.Run("category is matched exactly, without trimming", func(t *testing.T) {
+		body := `{"name":"Padded","category":" media","type":"custom","url":"https://padded.example.com"}`
+		rr := httptest.NewRecorder()
+		h.Create(rr, httptest.NewRequest(http.MethodPost, "/api/connectors", strings.NewReader(body)))
+		requireCategoryFieldError(t, rr)
+	})
+
+	t.Run("unknown category rejected with field error", func(t *testing.T) {
+		body := `{"name":"Invalid","category":"gaming","type":"custom","url":"https://gaming.example.com"}`
+		req := httptest.NewRequest(http.MethodPost, "/api/connectors", strings.NewReader(body))
+		rr := httptest.NewRecorder()
+		h.Create(rr, req)
+		requireCategoryFieldError(t, rr)
+	})
 }
 
 func TestUpdate(t *testing.T) {
@@ -142,6 +198,44 @@ func TestUpdate(t *testing.T) {
 		}
 		if !strings.Contains(rr.Body.String(), "Renamed") {
 			t.Errorf("update did not apply: %s", rr.Body.String())
+		}
+	})
+
+	t.Run("update category to new category accepted", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPut, "/api/connectors/"+id, strings.NewReader(`{"category":"media"}`))
+		req.SetPathValue("id", id)
+		req = req.WithContext(auth.ContextWithUser(req.Context(), "u1", true))
+		rr := httptest.NewRecorder()
+		h.Update(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("status = %d, want %d; body=%s", rr.Code, http.StatusOK, rr.Body.String())
+		}
+		var updated map[string]any
+		if err := json.Unmarshal(rr.Body.Bytes(), &updated); err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+		if updated["category"] != "media" {
+			t.Errorf("category = %v, want media", updated["category"])
+		}
+	})
+
+	t.Run("update to unknown category rejected with field error", func(t *testing.T) {
+		// Admin context: validation runs before authorization, so the 400 must
+		// not depend on the caller's role, and an admin cannot mask a bad value.
+		for name, category := range map[string]string{
+			"unknown":       "gaming",
+			"empty":         "",
+			"leading space": " media",
+			"wrong case":    "DNS",
+		} {
+			t.Run(name, func(t *testing.T) {
+				req := httptest.NewRequest(http.MethodPut, "/api/connectors/"+id, strings.NewReader(`{"category":"`+category+`"}`))
+				req.SetPathValue("id", id)
+				req = req.WithContext(auth.ContextWithUser(req.Context(), "u1", true))
+				rr := httptest.NewRecorder()
+				h.Update(rr, req)
+				requireCategoryFieldError(t, rr)
+			})
 		}
 	})
 }
@@ -546,6 +640,61 @@ func TestUpdateEndpointChangeRequiresInstanceAdmin(t *testing.T) {
 	}
 	if got := patch(true, `{"url":"https://b.example.com"}`); got != http.StatusOK {
 		t.Errorf("admin url change: status = %d, want 200", got)
+	}
+}
+
+func TestUpdateCategoryChangeRequiresInstanceAdmin(t *testing.T) {
+	t.Parallel()
+	h := newTestHandler(t)
+
+	createRR := httptest.NewRecorder()
+	h.Create(createRR, httptest.NewRequest(http.MethodPost, "/api/connectors",
+		strings.NewReader(`{"name":"C","category":"virtualization","type":"custom","url":"https://a.example.com"}`)))
+	var created map[string]any
+	if err := json.Unmarshal(createRR.Body.Bytes(), &created); err != nil {
+		t.Fatalf("unmarshal create: %v", err)
+	}
+	id, _ := created["id"].(string)
+
+	put := func(admin bool, body string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodPut, "/api/connectors/"+id, strings.NewReader(body))
+		req.SetPathValue("id", id)
+		req = req.WithContext(auth.ContextWithUser(req.Context(), "u1", admin))
+		rr := httptest.NewRecorder()
+		h.Update(rr, req)
+		return rr
+	}
+	storedCategory := func() string {
+		t.Helper()
+		c, err := h.Store.GetConnector(context.Background(), id)
+		if err != nil {
+			t.Fatalf("get connector: %v", err)
+		}
+		return c.Category
+	}
+
+	if rr := put(false, `{"category":"storage"}`); rr.Code != http.StatusForbidden {
+		t.Errorf("operator category change: status = %d, want 403; body=%s", rr.Code, rr.Body.String())
+	}
+	if got := storedCategory(); got != "virtualization" {
+		t.Errorf("category after rejected operator change = %q, want virtualization", got)
+	}
+	if rr := put(false, `{"name":"Renamed","category":"virtualization"}`); rr.Code != http.StatusOK {
+		t.Errorf("operator resending unchanged category: status = %d, want 200; body=%s", rr.Code, rr.Body.String())
+	}
+	rr := put(true, `{"category":"storage"}`)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("admin category change: status = %d, want 200; body=%s", rr.Code, rr.Body.String())
+	}
+	var updated map[string]any
+	if err := json.Unmarshal(rr.Body.Bytes(), &updated); err != nil {
+		t.Fatalf("unmarshal update: %v", err)
+	}
+	if updated["category"] != "storage" {
+		t.Errorf("response category = %v, want storage", updated["category"])
+	}
+	if got := storedCategory(); got != "storage" {
+		t.Errorf("stored category = %q, want storage", got)
 	}
 }
 

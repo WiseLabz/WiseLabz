@@ -1050,6 +1050,10 @@ paths:
     put:
       tags: [connectors]
       summary: Update a connector (operator)
+      description: >
+        Changing url, type, verifyTls, category or endpoint config requires an
+        instance admin (403 otherwise); operators may resend the unchanged
+        values.
       requestBody:
         required: true
         content:
@@ -4583,7 +4587,7 @@ components:
       enum: [open, resolved]
     ConnectorCategory:
       type: string
-      enum: [virtualization, containers_paas, networking, dns]
+      enum: [virtualization, containers_paas, networking, dns, storage, monitoring, media, other]
     SyncPhase:
       type: string
       enum: [queued, fetching, diffing, generating, done, error]
@@ -4946,6 +4950,9 @@ components:
         owner: { type: string, nullable: true }
         url: { type: string }
         verifyTls: { type: boolean }
+        category:
+          allOf: [{ $ref: '#/components/schemas/ConnectorCategory' }]
+          description: 'Changing the category requires an instance admin (403 otherwise); resending the stored value is allowed'
         config:
           type: object
           additionalProperties: true

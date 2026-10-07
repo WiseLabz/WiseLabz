@@ -272,7 +272,7 @@ export function TemplateEditorPage() {
                       <option value="">{t('templates.anyCategory')}</option>
                       {CATEGORIES.map((c) => (
                         <option key={c} value={c}>
-                          {t(`templates.category.${c}`, { defaultValue: c })}
+                          {t(`services.category.${c}`, { defaultValue: c })}
                         </option>
                       ))}
                     </select>

@@ -548,6 +548,7 @@ export function useGetConnectorsConnectorId<
 }
 
 /**
+ * Changing url, type, verifyTls, category or endpoint config requires an instance admin (403 otherwise); operators may resend the unchanged values.
  * @summary Update a connector (operator)
  */
 export const putConnectorsConnectorId = (

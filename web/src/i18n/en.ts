@@ -482,6 +482,10 @@ export const en = {
       containers_paas: 'Containers',
       networking: 'Networking',
       dns: 'DNS',
+      storage: 'Storage',
+      monitoring: 'Monitoring',
+      media: 'Media',
+      other: 'Other',
     },
     detail: {
       back: 'All services',

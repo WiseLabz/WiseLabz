@@ -232,7 +232,7 @@ export function EventRoutingTable({
                   <option value="">{t('settings.notifications.anyConnectorCategory')}</option>
                   {Object.values(ConnectorCategory).map((cat) => (
                     <option key={cat} value={cat}>
-                      {cat}
+                      {t(`services.category.${cat}`, { defaultValue: cat })}
                     </option>
                   ))}
                 </Select>

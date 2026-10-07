@@ -27,7 +27,7 @@ import {
 import { useGetSearch } from '../../api/generated/search/search';
 import { useGetDocsTree } from '../../api/generated/docs/docs';
 import type { Connector, DocNode } from '../../api/model';
-import { categoryIcon } from '../categoryIcon';
+import { categoryIconFor } from '../categoryIcon';
 import {
   GaugeIcon,
   LayersIcon,
@@ -148,7 +148,7 @@ function buildCommands(ctx: CommandCtx, connectors: Connector[], docNodes: DocNo
         label: cn.name,
         hint: cn.type,
         group: 'services',
-        Icon: categoryIcon[cn.category],
+        Icon: categoryIconFor(cn.category),
         run: (c) => c.navigate(`/services/${cn.id}`),
       },
     ];

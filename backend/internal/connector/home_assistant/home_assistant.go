@@ -34,9 +34,10 @@ import (
 
 const (
 	typeName = "home_assistant"
-	// category is constrained by the connectors.category CHECK in the
-	// store migrations; Home Assistant is filed under the same
-	// general-purpose bucket the custom connector uses.
+	// category stays virtualization, the general-purpose bucket the custom
+	// connector uses: the wider set (storage, monitoring, media, other)
+	// exists since migration 000064, but existing connector types are
+	// deliberately not recategorised by that change.
 	category = "virtualization"
 	// defaultMaxEntities caps how many entities a snapshot carries. A
 	// mature Home Assistant instance exposes thousands of entities, most
