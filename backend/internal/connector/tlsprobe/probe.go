@@ -105,7 +105,7 @@ func probeTarget(ctx context.Context, t target) probeResult {
 		// is deliberately not judged, so verification is off. Nothing is ever
 		// sent over the connection and nothing read from it is acted on, which
 		// is why this is safe here. Confined to this package.
-		InsecureSkipVerify: true, //nolint:gosec // see above; codeql[go/disabled-certificate-check]
+		InsecureSkipVerify: true, // codeql[go/disabled-certificate-check]
 		MinVersion:         tls.VersionTLS12,
 	}
 	if !t.isIP() {
