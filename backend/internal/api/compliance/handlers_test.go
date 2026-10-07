@@ -3,6 +3,7 @@ package compliance_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -669,5 +670,68 @@ func TestComplianceRelatedClauseValidation(t *testing.T) {
 				t.Errorf("expected error field %q with substring %q, got details: %v", tc.errorField, tc.errorSubstr, errResp.Details)
 			}
 		})
+	}
+}
+
+func TestSaveRuleDaysLeftValidation(t *testing.T) {
+	s := apitest.NewStore(t)
+	h := compliance.NewHandler(s, nil)
+	for _, op := range []string{"days_left_lt", "days_left_gt"} {
+		for _, tc := range []struct {
+			name, value string
+			valid       bool
+		}{
+			{"whole", "8", true},
+			{"negative", "-1", true},
+			{"fraction", "1.5", false},
+			{"text", `"soon"`, false},
+			{"numeric text", `"8"`, false},
+			{"null", "null", false},
+			{"boolean", "true", false},
+		} {
+			t.Run(op+"/"+tc.name, func(t *testing.T) {
+				record := &store.ComplianceRuleRecord{Name: "existing", Title: "Expiry", ConnectorType: "npm", EntityKind: "certificate",
+					Conditions: `[{"attribute":"not_after","op":"exists","value":true}]`, Severity: "warning"}
+				if err := s.CreateComplianceRule(context.Background(), record); err != nil {
+					t.Fatal(err)
+				}
+				body := fmt.Sprintf(`{"name":"expiry-%s-%s","title":"Expiry","connectorType":"npm","entityKind":"certificate","conditions":[{"attribute":"not_after","op":%q,"value":%s}],"severity":"warning"}`, op, tc.name, op, tc.value)
+				for _, method := range []string{http.MethodPost, http.MethodPut} {
+					r := httptest.NewRequest(method, "/api/compliance/rules/"+record.ID, strings.NewReader(body))
+					r.SetPathValue("id", record.ID)
+					rr := httptest.NewRecorder()
+					if method == http.MethodPost {
+						h.Create(rr, r)
+					} else {
+						h.Update(rr, r)
+					}
+					wantStatus := http.StatusBadRequest
+					if tc.valid {
+						wantStatus = http.StatusOK
+						if method == http.MethodPost {
+							wantStatus = http.StatusCreated
+						}
+					}
+					if rr.Code != wantStatus {
+						t.Fatalf("%s status %d, want %d: %s", method, rr.Code, wantStatus, rr.Body.String())
+					}
+					if tc.valid {
+						continue
+					}
+					var response struct {
+						Details []struct {
+							Field string `json:"field"`
+							Msg   string `json:"msg"`
+						} `json:"details"`
+					}
+					if err := json.Unmarshal(rr.Body.Bytes(), &response); err != nil {
+						t.Fatal(err)
+					}
+					if len(response.Details) != 1 || response.Details[0].Field != "conditions[0].value" || !strings.Contains(response.Details[0].Msg, "whole number") {
+						t.Fatalf("%s details = %+v, want whole-number condition value error", method, response.Details)
+					}
+				}
+			})
+		}
 	}
 }

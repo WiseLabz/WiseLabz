@@ -4,10 +4,12 @@ package compliance
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"reflect"
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 )
 
 const (
@@ -153,6 +155,13 @@ func validateConditions(pathPrefix string, attributes []AttributeSpec, condition
 			return invalidField(path, fmt.Sprintf("is not a valid operator for %s attributes", spec.Type),
 				"operator %q is not valid for %s attribute %q", condition.Op, spec.Type, condition.Attribute)
 		}
+		if condition.Op == "days_left_lt" || condition.Op == "days_left_gt" {
+			if _, ok := wholeNumber(condition.Value); !ok {
+				path := fmt.Sprintf("%s[%d].value", pathPrefix, i)
+				return invalidField(path, "must be a whole number when op is days_left_lt or days_left_gt",
+					"days-left value for %q must be a whole number", condition.Attribute)
+			}
+		}
 		if condition.Op != "regex" {
 			continue
 		}
@@ -260,13 +269,34 @@ func Validate(rule Rule, catalog Catalog) error {
 	return nil
 }
 
+// Evaluator evaluates rules using Now as its clock. A nil Now uses time.Now.
+type Evaluator struct {
+	Now func() time.Time
+}
+
+func (e Evaluator) now() time.Time {
+	if e.Now != nil {
+		return e.Now()
+	}
+	return time.Now()
+}
+
 // Evaluate returns matching entities in snapshot order. A missing attribute is
 // false for every operator except neq, not_contains and exists. exists uses a boolean value:
 // true requires presence and false requires absence.
 func Evaluate(rule Rule, snapshot Snapshot) []Entity {
+	return (Evaluator{}).Evaluate(rule, snapshot)
+}
+
+// Evaluate returns matching entities using the evaluator's clock.
+func (e Evaluator) Evaluate(rule Rule, snapshot Snapshot) []Entity {
+	return evaluate(rule, snapshot, e.now())
+}
+
+func evaluate(rule Rule, snapshot Snapshot, now time.Time) []Entity {
 	matches := make([]Entity, 0)
 	for _, entity := range snapshot.Entities {
-		if entity.Kind != rule.EntityKind || !matchesAll(entity, rule.Conditions) {
+		if entity.Kind != rule.EntityKind || !matchesAll(entity, rule.Conditions, now) {
 			continue
 		}
 		matches = append(matches, entity)
@@ -360,8 +390,14 @@ func validJoinField(field string, attributes []AttributeSpec) bool {
 // skipped is true, and matches nil, when a clause's connector type is absent
 // from related. A rule without clauses returns exactly Evaluate's result.
 func EvaluateWithRelated(rule Rule, snapshot Snapshot, related RelatedEntities) (matches []Entity, skipped bool) {
+	return (Evaluator{}).EvaluateWithRelated(rule, snapshot, related)
+}
+
+// EvaluateWithRelated evaluates source and related conditions at the same time.
+func (e Evaluator) EvaluateWithRelated(rule Rule, snapshot Snapshot, related RelatedEntities) (matches []Entity, skipped bool) {
+	now := e.now()
 	if len(rule.Related) == 0 {
-		return Evaluate(rule, snapshot), false
+		return evaluate(rule, snapshot, now), false
 	}
 
 	// Check if any clause refers to a missing connector type; if so, skip the rule.
@@ -372,7 +408,7 @@ func EvaluateWithRelated(rule Rule, snapshot Snapshot, related RelatedEntities) 
 	}
 
 	// Get source entities by filtering on own conditions and kind.
-	sources := Evaluate(rule, snapshot)
+	sources := evaluate(rule, snapshot, now)
 
 	// For each clause, build a map of (lowercased trimmed) join values that satisfy
 	// kind + conditions. We build the map once per clause to avoid O(source*related).
@@ -380,7 +416,7 @@ func EvaluateWithRelated(rule Rule, snapshot Snapshot, related RelatedEntities) 
 	for i, clause := range rule.Related {
 		candidateMap := make(map[string]bool)
 		for _, relEntity := range related[clause.ConnectorType] {
-			if relEntity.Kind != clause.EntityKind || !matchesAll(relEntity, clause.Conditions) {
+			if relEntity.Kind != clause.EntityKind || !matchesAll(relEntity, clause.Conditions, now) {
 				continue
 			}
 			joinVal, ok := fieldValue(relEntity, clause.Join.RelatedField)
@@ -437,7 +473,7 @@ func findAttribute(attributes []AttributeSpec, name string) (AttributeSpec, bool
 func validOp(attributeType, op string) bool {
 	switch attributeType {
 	case "string":
-		return op == "eq" || op == "neq" || op == "contains" || op == "not_contains" || op == "regex" || op == "exists"
+		return op == "eq" || op == "neq" || op == "contains" || op == "not_contains" || op == "regex" || op == "exists" || op == "days_left_lt" || op == "days_left_gt"
 	case "string_array":
 		return op == "eq" || op == "neq" || op == "contains" || op == "not_contains" || op == "exists"
 	case "number":
@@ -449,17 +485,17 @@ func validOp(attributeType, op string) bool {
 	}
 }
 
-func matchesAll(entity Entity, conditions []Condition) bool {
+func matchesAll(entity Entity, conditions []Condition, now time.Time) bool {
 	for _, condition := range conditions {
 		value, present := entity.Attributes[condition.Attribute]
-		if !matches(value, present, condition) {
+		if !matches(value, present, condition, now) {
 			return false
 		}
 	}
 	return true
 }
 
-func matches(value any, present bool, condition Condition) bool {
+func matches(value any, present bool, condition Condition, now time.Time) bool {
 	if condition.Op == "exists" {
 		want, ok := condition.Value.(bool)
 		return ok && present == want
@@ -495,6 +531,18 @@ func matches(value any, present bool, condition Condition) bool {
 		}
 		re, err := regexp.Compile(pattern)
 		return err == nil && re.MatchString(s)
+	case "days_left_lt", "days_left_gt":
+		timestamp, ok := value.(string)
+		if !ok {
+			return false
+		}
+		expiry, err := time.Parse(time.RFC3339, timestamp)
+		threshold, ok := wholeNumber(condition.Value)
+		if err != nil || !ok {
+			return false
+		}
+		days := math.Floor(expiry.Sub(now).Hours() / 24)
+		return condition.Op == "days_left_lt" && days < threshold || condition.Op == "days_left_gt" && days > threshold
 	case "gt", "lt":
 		left, leftOK := number(value)
 		right, rightOK := number(condition.Value)
@@ -596,4 +644,9 @@ func number(value any) (float64, bool) {
 	default:
 		return 0, false
 	}
+}
+
+func wholeNumber(value any) (float64, bool) {
+	n, ok := number(value)
+	return n, ok && !math.IsInf(n, 0) && !math.IsNaN(n) && math.Trunc(n) == n
 }

@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/WiseLabz/wiselabz/internal/connector"
 	"github.com/WiseLabz/wiselabz/internal/connector/snapshotutil"
@@ -54,6 +55,7 @@ var attributeCatalog = map[string][]connector.AttributeSpec{
 		{Name: "provider", Type: "string", Description: "Certificate provider reported by NPM"},
 		{Name: "domain_names", Type: "string_array", Description: "Certificate domains, sorted for stable snapshots"},
 		{Name: "expires_on", Type: "string", Description: "Certificate expiration timestamp as reported by NPM"},
+		{Name: "not_after", Type: "string", Description: "Certificate expiration timestamp normalized to UTC"},
 	},
 	"access_list": {
 		{Name: "satisfy_any", Type: "boolean", Description: "Whether any access list rule may match"},
@@ -126,6 +128,16 @@ func hostIdentity(domains []string) (string, []string) {
 }
 
 func numericID(id int) string { return strconv.Itoa(id) }
+
+func normalizeExpiry(expiresOn string) (string, bool) {
+	for _, layout := range []string{time.RFC3339Nano, "2006-01-02 15:04:05", "2006-01-02"} {
+		expiresAt, err := time.Parse(layout, expiresOn)
+		if err == nil {
+			return expiresAt.UTC().Truncate(time.Second).Format(time.RFC3339), true
+		}
+	}
+	return "", false
+}
 
 func buildProxyHostTable(raw []byte) (string, []connector.SnapshotEntity, []connector.ServiceDependency, error) {
 	var items []proxyHost
@@ -271,6 +283,9 @@ func buildCertificateTable(raw []byte) (string, []connector.SnapshotEntity, []co
 		snapshotutil.PutString(attrs, "provider", cert.Provider)
 		snapshotutil.PutStrings(attrs, "domain_names", sortedUnique(cert.DomainNames))
 		snapshotutil.PutString(attrs, "expires_on", cert.ExpiresOn)
+		if notAfter, ok := normalizeExpiry(cert.ExpiresOn); ok {
+			attrs["not_after"] = notAfter
+		}
 		entities = append(entities, connector.SnapshotEntity{Kind: "certificate", Name: name, ExternalID: numericID(cert.ID), Attributes: attrs})
 	}
 	return resourceTable("certificates", []string{"Certificate", "Provider", "Domains", "Expires on"}, rows), entities, nil, nil

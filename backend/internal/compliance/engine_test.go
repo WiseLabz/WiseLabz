@@ -3,8 +3,10 @@ package compliance
 import (
 	"encoding/json"
 	"errors"
+	"math"
 	"strings"
 	"testing"
+	"time"
 )
 
 func testCatalog() Catalog {
@@ -1061,5 +1063,78 @@ func TestEvaluateWithRelatedSkipsWhenAnyClauseTypeMissing(t *testing.T) {
 	got, skipped := EvaluateWithRelated(rule, snapshot, RelatedEntities{"pbs": {}})
 	if !skipped || got != nil {
 		t.Fatalf("got %v skipped %v, want nil and skipped", got, skipped)
+	}
+}
+
+func TestEvaluateDaysLeft(t *testing.T) {
+	now := time.Date(2026, 10, 7, 12, 0, 0, 0, time.UTC)
+	evaluator := Evaluator{Now: func() time.Time { return now }}
+	tests := []struct {
+		name       string
+		value      any
+		conditions []Condition
+		want       bool
+	}{
+		{"inside window", now.Add(5*24*time.Hour + 3*time.Hour).Format(time.RFC3339), []Condition{{"not_after", "days_left_lt", 8}}, true},
+		{"expired", now.Add(-2 * 24 * time.Hour).Format(time.RFC3339), []Condition{{"not_after", "days_left_lt", 2}}, true},
+		{"negative floor", now.Add(-time.Hour).Format(time.RFC3339), []Condition{{"not_after", "days_left_lt", 0}}, true},
+		{"negative floor gt", now.Add(-time.Hour).Format(time.RFC3339), []Condition{{"not_after", "days_left_gt", -1}}, false},
+		{"band excludes partial second day", now.Add(36 * time.Hour).Format(time.RFC3339), []Condition{{"not_after", "days_left_lt", 8}, {"not_after", "days_left_gt", 1}}, false},
+		{"greater", now.Add(48 * time.Hour).Format(time.RFC3339), []Condition{{"not_after", "days_left_gt", 1}}, true},
+		{"less strict boundary", now.Add(8 * 24 * time.Hour).Format(time.RFC3339), []Condition{{"not_after", "days_left_lt", 8}}, false},
+		{"timezone", "2026-10-09T15:00:00+03:00", []Condition{{"not_after", "days_left_gt", 1}}, true},
+		{"missing lt", nil, []Condition{{"not_after", "days_left_lt", 8}}, false},
+		{"missing gt", nil, []Condition{{"not_after", "days_left_gt", -1}}, false},
+		{"invalid lt", "soon", []Condition{{"not_after", "days_left_lt", 8}}, false},
+		{"invalid gt", "soon", []Condition{{"not_after", "days_left_gt", -1}}, false},
+		{"non string", 42, []Condition{{"not_after", "days_left_lt", 8}}, false},
+		{"fractional threshold", now.Format(time.RFC3339), []Condition{{"not_after", "days_left_lt", 1.5}}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			attributes := map[string]any{}
+			if tt.value != nil {
+				attributes["not_after"] = tt.value
+			}
+			got := evaluator.Evaluate(Rule{EntityKind: "certificate", Conditions: tt.conditions}, Snapshot{Entities: []Entity{{Kind: "certificate", Attributes: attributes}}})
+			if (len(got) == 1) != tt.want {
+				t.Fatalf("matches = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestValidateDaysLeft(t *testing.T) {
+	for _, op := range []string{"days_left_lt", "days_left_gt"} {
+		for _, value := range []any{8, -1, float64(2), json.Number("3"), "soon", "8", 1.5, true, nil, math.NaN(), math.Inf(1)} {
+			rule := Rule{ConnectorType: "docker", EntityKind: "container", Conditions: []Condition{{"name", op, value}}}
+			err := Validate(rule, testCatalog())
+			valid := value == 8 || value == -1 || value == float64(2) || value == json.Number("3")
+			if valid {
+				if err != nil {
+					t.Fatalf("%s %v: %v", op, value, err)
+				}
+				continue
+			}
+			var invalid *ValidationError
+			if !errors.As(err, &invalid) || len(invalid.Fields) != 1 || invalid.Fields[0].Field != "conditions[0].value" {
+				t.Fatalf("%s %v: error = %v, want condition value field error", op, value, err)
+			}
+		}
+	}
+}
+
+func TestEvaluateDaysLeftRelatedUsesOneClockReading(t *testing.T) {
+	now := time.Date(2026, 10, 7, 12, 0, 0, 0, time.UTC)
+	calls := 0
+	evaluator := Evaluator{Now: func() time.Time { calls++; return now.Add(time.Duration(calls-1) * 24 * time.Hour) }}
+	rule := Rule{EntityKind: "certificate", Conditions: []Condition{{"not_after", "days_left_gt", 1}}, Related: []RelatedClause{{
+		Mode: ModeForbids, ConnectorType: "npm", EntityKind: "certificate", Join: Join{SourceField: "name", RelatedField: "name"},
+		Conditions: []Condition{{"not_after", "days_left_gt", 1}},
+	}}}
+	entity := Entity{Kind: "certificate", Name: "lab", Attributes: map[string]any{"not_after": now.Add(48 * time.Hour).Format(time.RFC3339)}}
+	matches, skipped := evaluator.EvaluateWithRelated(rule, Snapshot{Entities: []Entity{entity}}, RelatedEntities{"npm": {entity}})
+	if skipped || len(matches) != 1 || calls != 1 {
+		t.Fatalf("matches = %v, skipped = %v, clock calls = %d", matches, skipped, calls)
 	}
 }

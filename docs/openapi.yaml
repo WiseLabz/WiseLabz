@@ -5132,7 +5132,7 @@ components:
       required: [attribute, op, value]
       properties:
         attribute: { type: string }
-        op: { type: string, enum: [eq, neq, contains, not_contains, regex, exists, gt, lt] }
+        op: { type: string, enum: [eq, neq, contains, not_contains, regex, exists, gt, lt, days_left_lt, days_left_gt] }
         value: {}
     ComplianceJoin:
       type: object

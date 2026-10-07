@@ -19,4 +19,6 @@ export const ComplianceConditionOp = {
   exists: 'exists',
   gt: 'gt',
   lt: 'lt',
+  days_left_lt: 'days_left_lt',
+  days_left_gt: 'days_left_gt',
 } as const;

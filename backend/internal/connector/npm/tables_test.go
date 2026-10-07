@@ -104,6 +104,9 @@ func TestOtherBuildersMapUpstreamFields(t *testing.T) {
 	if err != nil || len(certs) != 2 || certs[0].Name != "Wildcard cert" || certs[0].Attributes["expires_on"] != "2026-11-15T04:17:54.000Z" {
 		t.Errorf("certificate mapping: %v %+v", err, certs)
 	}
+	if got := certs[0].Attributes["not_after"]; got != "2026-11-15T04:17:54Z" {
+		t.Errorf("certificate not_after = %v, want UTC timestamp with whole seconds", got)
+	}
 	if !strings.Contains(certContent, "2026-11-15T04:17:54.000Z") {
 		t.Errorf("certificate table lost reported timestamp: %s", certContent)
 	}
@@ -115,6 +118,49 @@ func TestOtherBuildersMapUpstreamFields(t *testing.T) {
 	encoded, _ := json.Marshal(lists[0])
 	if strings.Contains(string(encoded), "password") || strings.Contains(string(encoded), "items") {
 		t.Errorf("access list entity exposed credentials: %s", encoded)
+	}
+}
+
+func TestBuildCertificateTableNormalizesExpiryLayouts(t *testing.T) {
+	raw := []byte(`[
+		{"id":1,"expires_on":"2026-11-15T04:17:54.000Z"},
+		{"id":2,"expires_on":"2026-11-15 04:17:54"},
+		{"id":3,"expires_on":"2026-11-15"},
+		{"id":4,"expires_on":"2026-11-15T06:17:54+02:00"},
+		{"id":5,"expires_on":"not a timestamp"}
+	]`)
+	_, entities, _, err := buildCertificateTable(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entities) != 5 {
+		t.Fatalf("built %d certificates, want 5", len(entities))
+	}
+	wantNormalized := map[string]string{
+		"1": "2026-11-15T04:17:54Z",
+		"2": "2026-11-15T04:17:54Z",
+		"3": "2026-11-15T00:00:00Z",
+		"4": "2026-11-15T04:17:54Z",
+	}
+	wantOriginal := map[string]string{
+		"1": "2026-11-15T04:17:54.000Z",
+		"2": "2026-11-15 04:17:54",
+		"3": "2026-11-15",
+		"4": "2026-11-15T06:17:54+02:00",
+		"5": "not a timestamp",
+	}
+	for _, entity := range entities {
+		if got := entity.Attributes["expires_on"]; got != wantOriginal[entity.ExternalID] {
+			t.Errorf("certificate %s expires_on = %v, want original %q", entity.ExternalID, got, wantOriginal[entity.ExternalID])
+		}
+		want, ok := wantNormalized[entity.ExternalID]
+		got, present := entity.Attributes["not_after"]
+		if ok && (!present || got != want) {
+			t.Errorf("certificate %s not_after = %v, want %q", entity.ExternalID, got, want)
+		}
+		if !ok && present {
+			t.Errorf("certificate %s has not_after %v for an unparseable expiry", entity.ExternalID, got)
+		}
 	}
 }
 
