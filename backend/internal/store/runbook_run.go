@@ -746,8 +746,8 @@ func updateRunbookRunStep(ctx context.Context, db DBTX, runID, stepID, expectedS
 	if key, ok := unsupportedRunbookRunField(updates, allowed); ok {
 		return fmt.Errorf("unsupported runbook run step field %q", key)
 	}
-	sets := make([]string, 0, len(updates))
-	args := make([]any, 0, len(updates)+3)
+	sets := make([]string, 0, len(allowed))
+	args := make([]any, 0, len(allowed)+3)
 	for _, key := range allowed {
 		value, ok := updates[key]
 		if !ok {
@@ -895,7 +895,7 @@ func normalizedRunbookRunUpdates(updates map[string]any, now string) (map[string
 }
 
 func normalizedRunbookRunStepUpdates(updates map[string]any, expectedState, now string) (map[string]any, error) {
-	normalized := make(map[string]any, len(updates)+3)
+	normalized := make(map[string]any)
 	for key, value := range updates {
 		normalized[key] = value
 	}
