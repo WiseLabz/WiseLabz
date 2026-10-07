@@ -2,8 +2,10 @@ package compliance
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"go.yaml.in/yaml/v3"
 )
@@ -240,5 +242,134 @@ func TestJSONKeys(t *testing.T) {
 	// Verify snake_case is NOT present
 	if strings.Contains(jsonStr, "\"connector_type\"") {
 		t.Error("snake_case key 'connector_type' found in JSON, should be 'connectorType'")
+	}
+}
+
+func TestCertificateExpiryPack(t *testing.T) {
+	pack, ok, err := FindPack("certificate-expiry")
+	if err != nil {
+		t.Fatalf("FindPack(certificate-expiry) error: %v", err)
+	}
+	if !ok {
+		t.Fatal("FindPack(certificate-expiry) not found")
+	}
+	if pack.Name != "Certificate expiry" {
+		t.Errorf("pack name = %q, want 'Certificate expiry'", pack.Name)
+	}
+	if len(pack.Rules) != 6 {
+		t.Fatalf("len(pack.Rules) = %d, want 6", len(pack.Rules))
+	}
+
+	// Verify rule names are unique and non-empty
+	seenNames := make(map[string]bool)
+	for _, rule := range pack.Rules {
+		if rule.Name == "" {
+			t.Error("found rule with empty name")
+		}
+		if seenNames[rule.Name] {
+			t.Errorf("duplicate rule name %q", rule.Name)
+		}
+		seenNames[rule.Name] = true
+		if rule.EntityKind != "certificate" {
+			t.Errorf("rule %q entityKind = %q, want 'certificate'", rule.Name, rule.EntityKind)
+		}
+		if rule.Title == "" {
+			t.Errorf("rule %q has empty title", rule.Name)
+		}
+	}
+
+	sources := []string{"npm", "tlsprobe"}
+	now := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
+	evaluator := Evaluator{Now: func() time.Time { return now }}
+
+	for _, source := range sources {
+		sourceRules := make([]Rule, 0)
+		for _, r := range pack.Rules {
+			if r.ConnectorType == source {
+				sourceRules = append(sourceRules, r)
+			}
+		}
+		if len(sourceRules) != 3 {
+			t.Fatalf("source %s: found %d rules, want 3", source, len(sourceRules))
+		}
+
+		for daysLeft := -5; daysLeft <= 40; daysLeft++ {
+			// Test both whole-day and fractional-day offsets (e.g. 6 hours into the day)
+			for _, hourOffset := range []int{0, 6, 18} {
+				expiry := now.Add(time.Duration(daysLeft)*24*time.Hour + time.Duration(hourOffset)*time.Hour)
+				entity := Entity{
+					Kind: "certificate",
+					Name: fmt.Sprintf("test-cert-%d-%d", daysLeft, hourOffset),
+					Attributes: map[string]any{
+						"not_after": expiry.Format(time.RFC3339),
+					},
+				}
+				snap := Snapshot{Entities: []Entity{entity}}
+
+				var matchedRules []Rule
+				for _, r := range sourceRules {
+					matches := evaluator.Evaluate(r, snap)
+					if len(matches) > 0 {
+						matchedRules = append(matchedRules, r)
+					}
+				}
+
+				if len(matchedRules) > 1 {
+					t.Fatalf("source %s daysLeft %d (hour %d): matched %d bands, expected at most 1",
+						source, daysLeft, hourOffset, len(matchedRules))
+				}
+
+				switch {
+				case daysLeft >= 31:
+					if len(matchedRules) != 0 {
+						t.Errorf("source %s daysLeft %d: matched %q, want 0 matches",
+							source, daysLeft, matchedRules[0].Name)
+					}
+				case daysLeft >= 8:
+					if len(matchedRules) != 1 {
+						t.Fatalf("source %s daysLeft %d: matched %d bands, want 1",
+							source, daysLeft, len(matchedRules))
+					}
+					if matchedRules[0].Severity != "info" {
+						t.Errorf("source %s daysLeft %d: severity = %q, want 'info'",
+							source, daysLeft, matchedRules[0].Severity)
+					}
+				case daysLeft >= 2:
+					if len(matchedRules) != 1 {
+						t.Fatalf("source %s daysLeft %d: matched %d bands, want 1",
+							source, daysLeft, len(matchedRules))
+					}
+					if matchedRules[0].Severity != "warning" {
+						t.Errorf("source %s daysLeft %d: severity = %q, want 'warning'",
+							source, daysLeft, matchedRules[0].Severity)
+					}
+				default: // daysLeft <= 1 (including negative / expired)
+					if len(matchedRules) != 1 {
+						t.Fatalf("source %s daysLeft %d: matched %d bands, want 1",
+							source, daysLeft, len(matchedRules))
+					}
+					if matchedRules[0].Severity != "critical" {
+						t.Errorf("source %s daysLeft %d: severity = %q, want 'critical'",
+							source, daysLeft, matchedRules[0].Severity)
+					}
+				}
+			}
+		}
+
+		// Verify missing or invalid not_after matches nothing
+		for _, invalidAttrs := range []map[string]any{
+			{},
+			{"not_after": ""},
+			{"not_after": "not-a-timestamp"},
+		} {
+			entity := Entity{Kind: "certificate", Name: "invalid", Attributes: invalidAttrs}
+			snap := Snapshot{Entities: []Entity{entity}}
+			for _, r := range sourceRules {
+				matches := evaluator.Evaluate(r, snap)
+				if len(matches) > 0 {
+					t.Errorf("source %s rule %q matched invalid entity attrs: %v", source, r.Name, invalidAttrs)
+				}
+			}
+		}
 	}
 }

@@ -508,3 +508,40 @@ func (h *Handler) InstallPack(w http.ResponseWriter, r *http.Request) {
 	}
 	httputil.JSON(w, http.StatusOK, map[string]any{"installed": installed, "skipped": skipped})
 }
+
+// ListPacks handles GET /api/compliance/packs. It returns all built-in compliance
+// rule packs with an installed boolean indicating whether every rule in the pack
+// is currently present in the store (matched by name).
+func (h *Handler) ListPacks(w http.ResponseWriter, r *http.Request) {
+	packs, err := compliance.LoadPacks()
+	if err != nil {
+		httputil.Errorf(w, err)
+		return
+	}
+	existing, err := h.Store.ListComplianceRules(r.Context())
+	if err != nil {
+		httputil.Errorf(w, err)
+		return
+	}
+	names := make(map[string]bool, len(existing))
+	for _, rule := range existing {
+		names[rule.Name] = true
+	}
+	items := make([]map[string]any, len(packs))
+	for i, pack := range packs {
+		installed := len(pack.Rules) > 0
+		for _, rule := range pack.Rules {
+			if !names[rule.Name] {
+				installed = false
+				break
+			}
+		}
+		items[i] = map[string]any{
+			"id":          pack.ID,
+			"name":        pack.Name,
+			"description": pack.Description,
+			"installed":   installed,
+		}
+	}
+	httputil.JSON(w, http.StatusOK, map[string]any{"items": items})
+}

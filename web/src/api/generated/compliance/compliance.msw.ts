@@ -12,12 +12,14 @@ import type { RequestHandlerOptions } from 'msw';
 import type {
   ComplianceRule,
   ComplianceRulePackInstallResult,
+  ComplianceRulePackPage,
   ComplianceRulePage,
   ComplianceRuleTestResult,
   ComplianceSchema,
 } from '../../model';
 
 import {
+  getGetCompliancePacksResponseMock,
   getGetComplianceRulesIdResponseMock,
   getGetComplianceRulesResponseMock,
   getGetComplianceSchemaResponseMock,
@@ -34,6 +36,7 @@ export {
   getGetComplianceRulesIdResponseMock,
   getPutComplianceRulesIdResponseMock,
   getPostComplianceRulesTestResponseMock,
+  getGetCompliancePacksResponseMock,
   getPostCompliancePacksIdInstallResponseMock,
 } from './compliance.faker';
 
@@ -199,6 +202,30 @@ export const getPostComplianceRulesTestMockHandler = (
   );
 };
 
+export const getGetCompliancePacksMockHandler = (
+  overrideResponse?:
+    | ComplianceRulePackPage
+    | ((
+        info: Parameters<Parameters<typeof http.get>[1]>[0]
+      ) => Promise<ComplianceRulePackPage> | ComplianceRulePackPage),
+  options?: RequestHandlerOptions
+) => {
+  return http.get(
+    '*/compliance/packs',
+    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+      return HttpResponse.json(
+        overrideResponse !== undefined
+          ? typeof overrideResponse === 'function'
+            ? await overrideResponse(info)
+            : overrideResponse
+          : getGetCompliancePacksResponseMock(),
+        { status: 200 }
+      );
+    },
+    options
+  );
+};
+
 export const getPostCompliancePacksIdInstallMockHandler = (
   overrideResponse?:
     | ComplianceRulePackInstallResult
@@ -230,5 +257,6 @@ export const getComplianceMock = () => [
   getPutComplianceRulesIdMockHandler(),
   getDeleteComplianceRulesIdMockHandler(),
   getPostComplianceRulesTestMockHandler(),
+  getGetCompliancePacksMockHandler(),
   getPostCompliancePacksIdInstallMockHandler(),
 ];

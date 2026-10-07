@@ -249,7 +249,8 @@ func (c *Checker) evaluateComplianceRule(ctx context.Context, connectorID string
 	if snapshot == nil {
 		return nil, nil
 	}
-	matches, skipped := compliance.EvaluateWithRelated(rule, *snapshot, related)
+	evaluator := compliance.Evaluator{Now: c.now}
+	matches, skipped := evaluator.EvaluateWithRelated(rule, *snapshot, related)
 	if skipped || len(matches) == 0 {
 		return nil, c.store.ResolveQualityFindingForRule(ctx, connectorID, rule.ID)
 	}

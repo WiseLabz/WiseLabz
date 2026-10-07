@@ -12,6 +12,7 @@ import { Severity } from '../../model';
 import type {
   ComplianceRule,
   ComplianceRulePackInstallResult,
+  ComplianceRulePackPage,
   ComplianceRulePage,
   ComplianceRuleTestResult,
   ComplianceSchema,
@@ -330,6 +331,18 @@ export const getPostComplianceRulesTestResponseMock = (
     entities: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(
       () => ({})
     ),
+  })),
+  ...overrideResponse,
+});
+
+export const getGetCompliancePacksResponseMock = (
+  overrideResponse: Partial<Extract<ComplianceRulePackPage, object>> = {}
+): ComplianceRulePackPage => ({
+  items: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() => ({
+    id: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    name: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    description: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    installed: faker.datatype.boolean(),
   })),
   ...overrideResponse,
 });

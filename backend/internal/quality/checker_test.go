@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/WiseLabz/wiselabz/internal/compliance"
 	"github.com/WiseLabz/wiselabz/internal/connector"
 	"github.com/WiseLabz/wiselabz/internal/store"
 	"github.com/WiseLabz/wiselabz/internal/store/storetest"
@@ -1009,5 +1010,174 @@ func TestComplianceAllResolvedThenRefiresNotifiesAgain(t *testing.T) {
 	evalRuleN(t, checker, rule.ID, 1)
 	if notifier.calls != 3 {
 		t.Fatalf("calls=%d after full replacement, want 3", notifier.calls)
+	}
+}
+
+func TestCertificateExpiryQualityScenario(t *testing.T) {
+	ctx := context.Background()
+	s := newTestStore(t)
+
+	pack, ok, err := compliance.FindPack("certificate-expiry")
+	if err != nil || !ok {
+		t.Fatalf("FindPack(certificate-expiry) failed: %v", err)
+	}
+	for _, rule := range pack.Rules {
+		conditionsJSON, err := json.Marshal(rule.Conditions)
+		if err != nil {
+			t.Fatal(err)
+		}
+		rec := &store.ComplianceRuleRecord{
+			Name:            rule.Name,
+			ConnectorType:   rule.ConnectorType,
+			EntityKind:      rule.EntityKind,
+			Conditions:      string(conditionsJSON),
+			Severity:        rule.Severity,
+			Title:           rule.Title,
+			RemediationLink: rule.RemediationLink,
+			Enabled:         true,
+		}
+		if err := s.CreateComplianceRule(ctx, rec); err != nil {
+			t.Fatalf("CreateComplianceRule(%s) error: %v", rule.Name, err)
+		}
+	}
+
+	testCases := []struct {
+		connectorType string
+		entityName    string
+		externalID    string
+	}{
+		{connectorType: "npm", entityName: "app.example.test", externalID: "cert-npm-1"},
+		{connectorType: "tlsprobe", entityName: "nas.lab:443", externalID: "nas.lab:443"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.connectorType, func(t *testing.T) {
+			conn := &store.ConnectorRecord{
+				Name:     "Test " + tc.connectorType,
+				Category: "monitoring",
+				Type:     tc.connectorType,
+				Owner:    "platform-team",
+			}
+			if err := s.CreateConnector(ctx, conn); err != nil {
+				t.Fatalf("CreateConnector error: %v", err)
+			}
+
+			clock := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
+			notifier := &fakeNotifier{}
+			checker := NewChecker(s, nil, notifier, RotationConfig{MaxAgeDays: 90, WarnDays: 14})
+			checker.now = func() time.Time { return clock }
+
+			setSnapshot := func(notAfter string, reachable bool, fetchedAt string) {
+				attrs := map[string]any{
+					"not_after": notAfter,
+					"reachable": reachable,
+				}
+				if tc.connectorType == "npm" {
+					attrs["expires_on"] = notAfter
+				}
+				if !reachable {
+					attrs["error"] = "refused: connection refused"
+				}
+				data, err := json.Marshal(connector.ServiceSnapshot{
+					Type: tc.connectorType,
+					Entities: []connector.SnapshotEntity{
+						{
+							Kind:       "certificate",
+							Name:       tc.entityName,
+							ExternalID: tc.externalID,
+							Attributes: attrs,
+						},
+					},
+				})
+				if err != nil {
+					t.Fatal(err)
+				}
+				if err := s.CreateSnapshot(ctx, &store.SnapshotRecord{
+					ConnectorID: conn.ID,
+					Data:        string(data),
+					FetchedAt:   fetchedAt,
+				}); err != nil {
+					t.Fatalf("CreateSnapshot error: %v", err)
+				}
+			}
+
+			// 1. 21 days left gives one info finding and dispatches a notification
+			certExpiry := clock.Add(21 * 24 * time.Hour)
+			setSnapshot(certExpiry.Format(time.RFC3339), true, "2026-06-01T12:00:00Z")
+			if err := checker.RunForConnector(ctx, conn.ID); err != nil {
+				t.Fatalf("RunForConnector(21 days) error: %v", err)
+			}
+			open := findings(t, s, conn.ID, "compliance", "open")
+			if len(open) != 1 {
+				t.Fatalf("open findings at 21 days = %d, want 1", len(open))
+			}
+			if open[0].Severity != "info" {
+				t.Errorf("finding severity at 21 days = %q, want 'info'", open[0].Severity)
+			}
+			if notifier.calls != 1 {
+				t.Fatalf("notifier.calls at 21 days = %d, want 1", notifier.calls)
+			}
+
+			// 2. Moving to 7 days resolves info and opens warning with notification (re-notify)
+			clock = clock.Add(14 * 24 * time.Hour) // now 7 days left until certExpiry
+			if err := checker.RunForConnector(ctx, conn.ID); err != nil {
+				t.Fatalf("RunForConnector(7 days) error: %v", err)
+			}
+			open = findings(t, s, conn.ID, "compliance", "open")
+			if len(open) != 1 {
+				t.Fatalf("open findings at 7 days = %d, want 1", len(open))
+			}
+			if open[0].Severity != "warning" {
+				t.Errorf("finding severity at 7 days = %q, want 'warning'", open[0].Severity)
+			}
+			resolved := findings(t, s, conn.ID, "compliance", "resolved")
+			if len(resolved) != 1 || resolved[0].Severity != "info" {
+				t.Fatalf("resolved info findings = %+v, want 1 info finding resolved", resolved)
+			}
+			if notifier.calls != 2 {
+				t.Fatalf("notifier.calls at 7 days escalation = %d, want 2", notifier.calls)
+			}
+
+			// 3. Expired gives one critical finding
+			clock = clock.Add(8 * 24 * time.Hour) // now certExpiry is 1 day in the past (-1 days left)
+			if err := checker.RunForConnector(ctx, conn.ID); err != nil {
+				t.Fatalf("RunForConnector(expired) error: %v", err)
+			}
+			open = findings(t, s, conn.ID, "compliance", "open")
+			if len(open) != 1 {
+				t.Fatalf("open findings when expired = %d, want 1", len(open))
+			}
+			if open[0].Severity != "critical" {
+				t.Errorf("finding severity when expired = %q, want 'critical'", open[0].Severity)
+			}
+			if notifier.calls != 3 {
+				t.Fatalf("notifier.calls at critical = %d, want 3", notifier.calls)
+			}
+
+			// 4. Renewal resolves all expiry findings
+			renewedExpiry := clock.Add(90 * 24 * time.Hour)
+			setSnapshot(renewedExpiry.Format(time.RFC3339), true, "2026-06-25T12:00:00Z")
+			if err := checker.RunForConnector(ctx, conn.ID); err != nil {
+				t.Fatalf("RunForConnector(renewal) error: %v", err)
+			}
+			open = findings(t, s, conn.ID, "compliance", "open")
+			if len(open) != 0 {
+				t.Fatalf("open findings after renewal = %d, want 0", len(open))
+			}
+
+			// 5. Unreachable target (reachable=false) with last-known date still matches
+			lastKnownExpiry := clock.Add(3 * 24 * time.Hour) // 3 days left -> warning band
+			setSnapshot(lastKnownExpiry.Format(time.RFC3339), false, "2026-06-26T12:00:00Z")
+			if err := checker.RunForConnector(ctx, conn.ID); err != nil {
+				t.Fatalf("RunForConnector(unreachable) error: %v", err)
+			}
+			open = findings(t, s, conn.ID, "compliance", "open")
+			if len(open) != 1 {
+				t.Fatalf("open findings for unreachable target = %d, want 1", len(open))
+			}
+			if open[0].Severity != "warning" {
+				t.Errorf("unreachable target finding severity = %q, want 'warning'", open[0].Severity)
+			}
+		})
 	}
 }

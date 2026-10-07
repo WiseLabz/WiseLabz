@@ -27,6 +27,7 @@ import type {
   ComplianceRule,
   ComplianceRuleInput,
   ComplianceRulePackInstallResult,
+  ComplianceRulePackPage,
   ComplianceRulePage,
   ComplianceRuleTestResult,
   ComplianceSchema,
@@ -779,6 +780,120 @@ export const usePostComplianceRulesTest = <
 > => {
   return useMutation(getPostComplianceRulesTestMutationOptions(options), queryClient);
 };
+/**
+ * @summary List built-in compliance rule packs (admin only)
+ */
+export const getCompliancePacks = (
+  options?: SecondParameter<typeof customInstance>,
+  signal?: AbortSignal
+) => {
+  return customInstance<ComplianceRulePackPage>(
+    { url: `/compliance/packs`, method: 'GET', signal },
+    options
+  );
+};
+
+export const getGetCompliancePacksQueryKey = () => {
+  return [`/compliance/packs`] as const;
+};
+
+export const getGetCompliancePacksQueryOptions = <
+  TData = Awaited<ReturnType<typeof getCompliancePacks>>,
+  TError = ErrorType<ForbiddenResponse>,
+>(options?: {
+  query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getCompliancePacks>>, TError, TData>>;
+  request?: SecondParameter<typeof customInstance>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetCompliancePacksQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getCompliancePacks>>> = ({ signal }) =>
+    getCompliancePacks(requestOptions, signal);
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getCompliancePacks>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type GetCompliancePacksQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getCompliancePacks>>
+>;
+export type GetCompliancePacksQueryError = ErrorType<ForbiddenResponse>;
+
+export function useGetCompliancePacks<
+  TData = Awaited<ReturnType<typeof getCompliancePacks>>,
+  TError = ErrorType<ForbiddenResponse>,
+>(
+  options: {
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof getCompliancePacks>>, TError, TData>> &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getCompliancePacks>>,
+          TError,
+          Awaited<ReturnType<typeof getCompliancePacks>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useGetCompliancePacks<
+  TData = Awaited<ReturnType<typeof getCompliancePacks>>,
+  TError = ErrorType<ForbiddenResponse>,
+>(
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getCompliancePacks>>, TError, TData>
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getCompliancePacks>>,
+          TError,
+          Awaited<ReturnType<typeof getCompliancePacks>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useGetCompliancePacks<
+  TData = Awaited<ReturnType<typeof getCompliancePacks>>,
+  TError = ErrorType<ForbiddenResponse>,
+>(
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getCompliancePacks>>, TError, TData>>;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * @summary List built-in compliance rule packs (admin only)
+ */
+
+export function useGetCompliancePacks<
+  TData = Awaited<ReturnType<typeof getCompliancePacks>>,
+  TError = ErrorType<ForbiddenResponse>,
+>(
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getCompliancePacks>>, TError, TData>>;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getGetCompliancePacksQueryOptions(options);
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
 /**
  * @summary Install a built-in compliance rule pack, skipping rules whose name already exists (admin only)
  */
