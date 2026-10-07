@@ -190,6 +190,11 @@ connectors:
 ```
 <!-- /custom-rest-recipe-example -->
 
+Warning: `${VAR}` references inside a declared `recipe` are expanded from the
+server environment like in any other config string, and the expanded text is
+stored and returned by the API. Check a recipe copied from elsewhere for `${`
+before pasting it.
+
 An invalid recipe skips only that connector during reconciliation. Existing
 connectors retain their last applied state. Changing the recipe's category
 changes the stored category at the next reconciliation. Recipe-less custom

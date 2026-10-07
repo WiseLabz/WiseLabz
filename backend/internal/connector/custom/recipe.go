@@ -409,10 +409,34 @@ func validateRecipeEntity(entity RecipeEntity, base string) []RecipeIssue {
 		if attr.Type != "" && !validAttributeType(attr.Type) {
 			add(location+".type", "must be string, number, bool, boolean, or list")
 		}
+		mapKeys := make([]string, 0, len(attr.Map))
 		for key := range attr.Map {
+			mapKeys = append(mapKeys, key)
+		}
+		sort.Strings(mapKeys)
+		for _, key := range mapKeys {
 			if strings.ContainsAny(key, "\r\n") {
 				add(location+".map", "keys must not contain line breaks")
 				break
+			}
+		}
+		// Static values must be convertible now, not on every sync.
+		if attr.Type != "" && !validAttributeType(attr.Type) {
+			continue // the type error above already covers every value.
+		}
+		if attr.HasConst && attr.Map == nil {
+			if _, err := convertRecipeAttribute(attr.Const, attr.Type); err != nil {
+				add(location+".const", err.Error())
+			}
+		}
+		for _, key := range mapKeys {
+			if _, err := convertRecipeAttribute(attr.Map[key], attr.Type); err != nil {
+				add(location+".map."+key, err.Error())
+			}
+		}
+		if attr.HasDefault {
+			if _, err := convertRecipeAttribute(attr.Default, attr.Type); err != nil {
+				add(location+".default", err.Error())
 			}
 		}
 	}
@@ -516,9 +540,21 @@ func validateEndpointPath(raw string) error {
 	return nil
 }
 
+// gjsonModifiers are the only modifiers a recipe path may use. Modifiers such
+// as @tostr and @pretty can multiply the size of a response, so they are not
+// accepted; a key that contains @ must be escaped as \@.
+var gjsonModifiers = map[string]bool{
+	"this": true, "reverse": true, "flatten": true, "join": true, "keys": true, "values": true,
+}
+
+const maxGJSONPathBytes = 1024
+
 func validateGJSONPath(path string) error {
 	if strings.TrimSpace(path) == "" {
 		return errors.New("path expression is required")
+	}
+	if len(path) > maxGJSONPathBytes {
+		return errors.New("path expression is too long")
 	}
 	if strings.TrimSpace(path) != path || strings.ContainsAny(path, "\r\n\t") {
 		return errors.New("path expression has invalid whitespace")
@@ -550,6 +586,15 @@ func validateGJSONPath(path string) error {
 		if r == '"' || r == '\'' {
 			quote = r
 			continue
+		}
+		if r == '@' {
+			name := path[i+1:]
+			if end := strings.IndexAny(name, ":|.,)]} \t\n\v\f\r"); end >= 0 {
+				name = name[:end]
+			}
+			if !gjsonModifiers[name] {
+				return fmt.Errorf("path expression uses unsupported modifier %q", "@"+name)
+			}
 		}
 		switch r {
 		case '[', '(', '{':
@@ -749,10 +794,14 @@ func validateYAMLGraph(root *yaml.Node) []RecipeIssue {
 	const maxNodes = 100_000
 	active := make(map[*yaml.Node]bool)
 	remaining := maxNodes
+	// A budget of the document size bounds the bytes an alias expansion can
+	// materialize: a document without aliases can never exceed it.
+	remainingBytes := maxRecipeBytes
+	exhausted := false
 	var issues []RecipeIssue
 	var visit func(node *yaml.Node, path string, depth int)
 	visit = func(node *yaml.Node, path string, depth int) {
-		if node == nil {
+		if node == nil || exhausted {
 			return
 		}
 		if depth > maxDepth {
@@ -760,7 +809,11 @@ func validateYAMLGraph(root *yaml.Node) []RecipeIssue {
 			return
 		}
 		remaining--
-		if remaining < 0 {
+		if node.Kind == yaml.ScalarNode {
+			remainingBytes -= len(node.Value)
+		}
+		if remaining < 0 || remainingBytes < 0 {
+			exhausted = true
 			issues = append(issues, RecipeIssue{Location: path, Message: "YAML alias expansion exceeds the validation limit"})
 			return
 		}
@@ -782,6 +835,7 @@ func validateYAMLGraph(root *yaml.Node) []RecipeIssue {
 				if key.Kind == yaml.ScalarNode && key.Tag == "!!str" {
 					childPath += "." + key.Value
 				}
+				visit(key, childPath, depth+1)
 				visit(value, childPath, depth+1)
 			}
 		case yaml.SequenceNode:

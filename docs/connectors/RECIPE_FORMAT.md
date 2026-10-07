@@ -5,7 +5,9 @@ JSON responses to entities, attributes and service dependencies. A recipe is
 shareable data: put credentials only in the connector's separate
 `auth_token`, `auth_username` and `auth_password` fields, all encrypted at rest.
 The recipe itself is a non-secret `textarea` field returned by the API and
-included unchanged in backups. See the [declared connector example](../CONNECTORS_IN_CONFIG.md#custom-rest-recipes).
+included unchanged in backups. Everything in a recipe, including static
+`query`, `headers` and `body` values, is stored unencrypted and readable by
+every user who can view the connector. See the [declared connector example](../CONNECTORS_IN_CONFIG.md#custom-rest-recipes).
 
 ## Document and validation
 
@@ -20,6 +22,10 @@ Unknown keys, invalid values and malformed paths are rejected before requests.
 Errors are collected together and carry dotted locations such as
 `endpoints[1].entity.external_id`. Validation runs when saving, declaring,
 fetching or testing the connector. YAML contains no executable expressions.
+
+YAML anchors and aliases are allowed only while the expanded document stays
+within the 64 KiB limit; a recipe whose aliases expand beyond it is rejected.
+Merge keys (`<<`) and duplicate mapping keys are rejected.
 
 ## Authentication
 
@@ -47,7 +53,11 @@ choose service endpoints whose requests only read data.
 
 Paths may begin with `/` but cannot contain a URL scheme or begin with `//`.
 Each request is resolved against the connector URL and checked for the same
-scheme, hostname and port. Redirects are refused, loopback and link-local
+scheme, hostname and port. A path starting with `/` replaces the path of the
+connector URL, while a path without a leading `/` is resolved relative to it.
+A service behind a reverse-proxy sub-path therefore needs a connector URL that
+ends in `/` (for example `https://host/prefix/`) and relative endpoint paths
+(`api/items`). Redirects are refused, loopback and link-local
 blocking still applies, and responses use the shared body size limit.
 
 Every endpoint currently makes exactly one request. The format recognizes a
@@ -67,7 +77,10 @@ connection test requests only the first endpoint once with the configured auth.
 
 Paths use [GJSON syntax](https://github.com/tidwall/gjson#path-syntax): `items`
 selects a field, `@this` selects the root, and `items.#.name` projects names
-from an array. `items` selects the response list. Entity paths are evaluated
+from an array. Only the modifiers `@this`, `@reverse`, `@flatten`, `@join`,
+`@keys` and `@values` are accepted; a key containing `@` must be escaped as
+`\@`. A path expression is limited to 1024 bytes. `items` selects the response
+list. Entity paths are evaluated
 against each item; dependency paths are evaluated against the response root.
 
 `entity.kind` is a fixed string. `entity.name` and `entity.external_id` are

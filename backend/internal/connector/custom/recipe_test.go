@@ -1,8 +1,11 @@
 package custom
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"io"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -374,5 +377,162 @@ func TestRecipeValidationErrorsRedactEmbeddedURLQueries(t *testing.T) {
 	}
 	if strings.Contains(fieldErr.Field, "query-secret") || strings.Contains(fieldErr.Message, "query-secret") {
 		t.Fatalf("structured error exposes URL query token: %#v", fieldErr)
+	}
+}
+
+func postRecipeWithBody(body string) string {
+	return strings.Replace(validRecipe, "    method: GET", "    method: POST\n    body: "+body, 1)
+}
+
+func TestParseRecipeBoundsYAMLAliasExpansion(t *testing.T) {
+	const want = "YAML alias expansion exceeds the validation limit"
+	long := strings.Repeat("x", 20*1024)
+	t.Run("aliased values", func(t *testing.T) {
+		raw := postRecipeWithBody(`[&a "` + long + `"` + strings.Repeat(", *a", 3000) + "]")
+		if len(raw) >= maxRecipeBytes {
+			t.Fatalf("test recipe is %d bytes, want under %d", len(raw), maxRecipeBytes)
+		}
+		_, err := ParseRecipe(raw)
+		if err == nil || !strings.Contains(err.Error(), want) {
+			t.Fatalf("ParseRecipe() error = %v, want %q", err, want)
+		}
+	})
+	t.Run("aliased mapping keys", func(t *testing.T) {
+		raw := postRecipeWithBody(`[{? &k "` + long + `" : 1}` + strings.Repeat(", {*k : 1}", 3000) + "]")
+		if len(raw) >= maxRecipeBytes {
+			t.Fatalf("test recipe is %d bytes, want under %d", len(raw), maxRecipeBytes)
+		}
+		_, err := ParseRecipe(raw)
+		if err == nil || !strings.Contains(err.Error(), want) {
+			t.Fatalf("ParseRecipe() error = %v, want %q", err, want)
+		}
+	})
+	t.Run("aliased attribute values", func(t *testing.T) {
+		raw := strings.Replace(validRecipe, "      external_id: id", "      external_id: id\n      attributes:\n        a: {const: &a \""+long+"\"}\n"+
+			strings.Repeat("        b: {map: {k: *a}}\n", 1), 1)
+		raw = strings.Replace(raw, "        b: {map: {k: *a}}\n", "        b: {map: {"+strings.TrimPrefix(strings.Repeat(", k: *a", 3000), ", ")+"}}\n", 1)
+		_, err := ParseRecipe(raw)
+		if err == nil || !strings.Contains(err.Error(), want) {
+			t.Fatalf("ParseRecipe() error = %v, want %q", err, want)
+		}
+	})
+	t.Run("small alias still works", func(t *testing.T) {
+		recipe, err := ParseRecipe(postRecipeWithBody("{a: &x one, b: *x}"))
+		if err != nil {
+			t.Fatalf("ParseRecipe(): %v", err)
+		}
+		baseURL, err := url.Parse("https://api.example.test")
+		if err != nil {
+			t.Fatal(err)
+		}
+		request, err := buildRecipeRequest(context.Background(), baseURL, recipe, recipe.Endpoints[0], nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		body, err := io.ReadAll(request.Body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(body) != `{"a":"one","b":"one"}` {
+			t.Fatalf("request body = %s", body)
+		}
+	})
+}
+
+func TestParseRecipeRejectsMergeAndDuplicateKeys(t *testing.T) {
+	tests := []struct {
+		name   string
+		recipe string
+		want   string
+	}{
+		{
+			name:   "merge key in endpoint",
+			recipe: "version: 1\ncategory: media\nauth: {mode: none}\nendpoints:\n  - &base {name: base, path: /api, method: GET, items: items, entity: {kind: k, name: n, external_id: id}}\n  - <<: *base\n    name: other\n",
+			want:   "endpoints[1]: mapping keys must be strings",
+		},
+		{
+			name:   "merge key in entity",
+			recipe: strings.Replace(validRecipe, "    entity:\n      kind: media_item\n", "    entity:\n      <<: {kind: media_item}\n", 1),
+			want:   "endpoints[0].entity: mapping keys must be strings",
+		},
+		{
+			name:   "duplicate endpoint key",
+			recipe: strings.Replace(validRecipe, "    method: GET", "    method: GET\n    method: POST", 1),
+			want:   "endpoints[0]",
+		},
+		{
+			name:   "duplicate query key",
+			recipe: strings.Replace(validRecipe, "    method: GET", "    method: GET\n    query:\n      page: '1'\n      page: '2'", 1),
+			want:   "endpoints[0].query",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := ParseRecipe(test.recipe)
+			if err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("ParseRecipe() error = %v, want containing %q", err, test.want)
+			}
+		})
+	}
+}
+
+func TestValidateGJSONPathModifiersAndLength(t *testing.T) {
+	for _, path := range []string{`@this`, `items.@reverse`, `items.@flatten`, `items.@keys`, `meta.\@type`, `items|@values`, `{a:@this}`} {
+		if err := validateGJSONPath(path); err != nil {
+			t.Errorf("validateGJSONPath(%q): %v", path, err)
+		}
+	}
+	for _, path := range []string{`@tostr`, `items|@tostr|@tostr`, `@pretty:{"indent":"xxxx"}`, `{a:@ugly}`, `items.#(@valid==true)`, `@fromstr`, strings.Repeat("a", maxGJSONPathBytes+1)} {
+		if err := validateGJSONPath(path); err == nil {
+			t.Errorf("validateGJSONPath(%.40q) error = nil, want rejection", path)
+		}
+	}
+	if err := validateGJSONPath(strings.Repeat("a", maxGJSONPathBytes)); err != nil {
+		t.Errorf("validateGJSONPath(%d bytes): %v", maxGJSONPathBytes, err)
+	}
+	err := validateGJSONPath(strings.Repeat("a", maxGJSONPathBytes+1))
+	if err == nil || err.Error() != "path expression is too long" {
+		t.Errorf("long path error = %v", err)
+	}
+	err = validateGJSONPath(`items|@tostr`)
+	if err == nil || err.Error() != `path expression uses unsupported modifier "@tostr"` {
+		t.Errorf("modifier error = %v", err)
+	}
+	_, err = ParseRecipe(strings.Replace(validRecipe, "items: items", "items: '@tostr'", 1))
+	if err == nil || !strings.Contains(err.Error(), `endpoints[0].items: path expression uses unsupported modifier "@tostr"`) {
+		t.Fatalf("ParseRecipe() error = %v", err)
+	}
+}
+
+func TestParseRecipeValidatesStaticAttributeValues(t *testing.T) {
+	tests := []struct {
+		name string
+		attr string
+		want string
+	}{
+		{name: "nested const", attr: "x: {const: {a: 1}}", want: "attributes.x.const: "},
+		{name: "timestamp const", attr: "x: {const: 2026-10-06}", want: "attributes.x.const: "},
+		{name: "infinite const", attr: "x: {const: .inf}", want: "attributes.x.const: value is not a finite number"},
+		{name: "non-numeric const", attr: "x: {const: abc, type: number}", want: "attributes.x.const: value is not a number"},
+		{name: "bad map value", attr: "x: {path: state, type: number, map: {up: 1, down: abc}}", want: "attributes.x.map.down: value is not a number"},
+		{name: "bad default", attr: "x: {path: state, type: bool, map: {up: true}, default: maybe}", want: "attributes.x.default: value is not a boolean"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			raw := strings.Replace(validRecipe, "      external_id: id", "      external_id: id\n      attributes:\n        "+test.attr, 1)
+			_, err := ParseRecipe(raw)
+			if err == nil || !strings.Contains(err.Error(), "endpoints[0].entity."+test.want) {
+				t.Fatalf("ParseRecipe() error = %v, want containing %q", err, test.want)
+			}
+		})
+	}
+	valid := `
+        a: {const: 3, type: number}
+        b: {path: state, type: bool, map: {up: true, down: false}, default: false}
+        c: {const: [x, y], type: list}
+        d: {const: text}`
+	raw := strings.Replace(validRecipe, "      external_id: id", "      external_id: id\n      attributes:"+valid, 1)
+	if _, err := ParseRecipe(raw); err != nil {
+		t.Fatalf("ParseRecipe(valid static values): %v", err)
 	}
 }

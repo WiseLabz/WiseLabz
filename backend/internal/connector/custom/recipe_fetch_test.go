@@ -520,3 +520,98 @@ func TestFetchRecipeInvalidJSONNamesEndpoint(t *testing.T) {
 		t.Fatalf("Fetch() = %#v, %v; want nil snapshot and endpoint-scoped malformed response", snapshot, err)
 	}
 }
+
+func TestFetchRecipeConnectorCredentialsOverrideRecipeValues(t *testing.T) {
+	endpoint := func(extra string) string {
+		return strings.Replace(fetchEndpoint, "    entity:", extra+"    entity:", 1)
+	}
+	tests := []struct {
+		name        string
+		auth        string
+		endpoints   string
+		credentials map[string]any
+		check       func(*http.Request) error
+	}{
+		{
+			name: "header auth beats recipe headers of any case", auth: "  mode: header\n  name: X-Api-Key",
+			endpoints:   endpoint("    headers: {X-Api-Key: from-recipe, x-api-key: also}\n"),
+			credentials: map[string]any{"auth_token": "connector-token"},
+			check: func(r *http.Request) error {
+				if got := r.Header.Values("X-Api-Key"); len(got) != 1 || got[0] != "connector-token" {
+					return fmt.Errorf("X-Api-Key = %q, want only the connector token", got)
+				}
+				return nil
+			},
+		},
+		{
+			name: "basic auth beats recipe Authorization header", auth: "  mode: basic",
+			endpoints:   endpoint("    headers: {Authorization: recipe-value}\n"),
+			credentials: map[string]any{"auth_username": "operator", "auth_password": "basic-secret"},
+			check: func(r *http.Request) error {
+				username, password, ok := r.BasicAuth()
+				if !ok || username != "operator" || password != "basic-secret" {
+					return fmt.Errorf("BasicAuth() = %q, %q, %t; Authorization = %q", username, password, ok, r.Header.Get("Authorization"))
+				}
+				return nil
+			},
+		},
+		{
+			name: "query auth beats recipe path and query values", auth: "  mode: query\n  name: apikey",
+			endpoints:   strings.Replace(endpoint("    query: {apikey: fromRecipe}\n"), "/api/items", "/api/items?apikey=fromPath", 1),
+			credentials: map[string]any{"auth_token": "connector-token"},
+			check: func(r *http.Request) error {
+				if got := r.URL.Query()["apikey"]; len(got) != 1 || got[0] != "connector-token" {
+					return fmt.Errorf("apikey = %q, want only the connector token", got)
+				}
+				return nil
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if err := test.check(r); err != nil {
+					t.Error(err)
+				}
+				_, _ = io.WriteString(w, `{"items":[]}`)
+			}))
+			defer server.Close()
+			config := map[string]any{"url": server.URL, "recipe": recipeForFetch(test.auth, test.endpoints)}
+			for key, value := range test.credentials {
+				config[key] = value
+			}
+			if _, err := (&Connector{client: server.Client()}).Fetch(context.Background(), config); err != nil {
+				t.Fatalf("Fetch() error = %v", err)
+			}
+		})
+	}
+}
+
+func TestFetchRecipeEndpointPathResolvesAgainstConnectorURLPrefix(t *testing.T) {
+	tests := []struct {
+		name         string
+		endpointPath string
+		wantPath     string
+	}{
+		{name: "relative path keeps the prefix", endpointPath: "api/items", wantPath: "/prefix/api/items"},
+		{name: "rooted path replaces the prefix", endpointPath: "/api/items", wantPath: "/api/items"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			var gotPath string
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				gotPath = r.URL.Path
+				_, _ = io.WriteString(w, `{"items":[]}`)
+			}))
+			defer server.Close()
+			endpoints := strings.Replace(fetchEndpoint, "/api/items", test.endpointPath, 1)
+			config := map[string]any{"url": server.URL + "/prefix/", "recipe": recipeForFetch("  mode: none", endpoints)}
+			if _, err := (&Connector{client: server.Client()}).Fetch(context.Background(), config); err != nil {
+				t.Fatalf("Fetch() error = %v", err)
+			}
+			if gotPath != test.wantPath {
+				t.Fatalf("request path = %q, want %q", gotPath, test.wantPath)
+			}
+		})
+	}
+}
