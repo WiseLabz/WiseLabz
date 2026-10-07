@@ -60,8 +60,11 @@ describe('locale catalogs', () => {
       'widgets.certificates.band.week',
       'widgets.certificates.band.month',
       'widgets.certificates.band.later',
-      'widgets.certificates.daysLeft',
-      'widgets.certificates.expiredDaysAgo',
+      'widgets.certificates.daysLeft_one',
+      'widgets.certificates.daysLeft_other',
+      'widgets.certificates.expiredDaysAgo_one',
+      'widgets.certificates.expiredDaysAgo_other',
+      'widgets.certificates.expiredRecently',
       'widgets.certificates.unreachable',
     ];
     for (const catalog of [en, ptBR]) {
@@ -88,7 +91,6 @@ describe('locale catalogs', () => {
       'runbooks.runs.unknownCurrentToTarget',
       'runbooks.runs.waitConditionLabel',
       'runbooks.runs.waitCondition',
-      'runbooks.runs.timeoutReason',
       'runbooks.runs.blocked.unsupported_field',
       'settings.runbooks.steps.kinds.config_push',
       'settings.runbooks.steps.kinds.wait_for_entity',

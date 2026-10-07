@@ -436,14 +436,16 @@ function RunStepRow({
           <MetadataRow
             label={t('runbooks.runs.configPushValueLabel')}
             value={
-              step.currentValueKnown
-                ? t('runbooks.runs.currentToTarget', {
-                    current: formatRunbookValue(step.currentValue),
-                    target: formatRunbookValue(step.targetValue, true),
-                  })
-                : t('runbooks.runs.unknownCurrentToTarget', {
-                    target: formatRunbookValue(step.targetValue, true),
-                  })
+              step.currentValueKnown === undefined
+                ? formatRunbookValue(step.targetValue, true)
+                : step.currentValueKnown
+                  ? t('runbooks.runs.currentToTarget', {
+                      current: formatRunbookValue(step.currentValue),
+                      target: formatRunbookValue(step.targetValue, true),
+                    })
+                  : t('runbooks.runs.unknownCurrentToTarget', {
+                      target: formatRunbookValue(step.targetValue, true),
+                    })
             }
           />
         )}

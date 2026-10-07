@@ -21,6 +21,8 @@ import {
   useGetConnectors,
   useGetConnectorsSchema,
   useGetConnectorsConnectorIdConfigFields,
+  useGetConnectorsConnectorIdSnapshots,
+  useGetConnectorsConnectorIdSnapshotsSnapshotId,
 } from '../../api/generated/connectors/connectors';
 import { useGetComplianceSchema } from '../../api/generated/compliance/compliance';
 import type {
@@ -752,7 +754,7 @@ export function RunbooksPage() {
                                       attribute: '',
                                       operator: RunbookStepOperator.eq,
                                       expectedValue: '',
-                                      timeoutSeconds: step.timeoutSeconds || '',
+                                      timeoutSeconds: '',
                                     });
                                   } else {
                                     // lifecycle
@@ -1000,6 +1002,27 @@ function RunbookStepKindFields({
   const configFields = useGetConnectorsConnectorIdConfigFields(step.connectorId, {
     query: { enabled: step.kind === 'config_push' && !!step.connectorId },
   });
+  // A loaded wait step has no entityKind until the user re-picks the entity, so
+  // derive it from the picker's own (cached) latest-snapshot data.
+  const needsEntityKind =
+    step.kind === 'wait_for_entity' && !!step.connectorId && !step.entityKind && !!step.entityRef;
+  const latestSnapshots = useGetConnectorsConnectorIdSnapshots(
+    step.connectorId,
+    { limit: 1 },
+    { query: { enabled: needsEntityKind } }
+  );
+  const latestSnapshotId = latestSnapshots.data?.[0]?.id ?? '';
+  const latestSnapshot = useGetConnectorsConnectorIdSnapshotsSnapshotId(
+    step.connectorId,
+    latestSnapshotId,
+    { query: { enabled: needsEntityKind && !!latestSnapshotId } }
+  );
+  const entityKind =
+    step.entityKind ||
+    (needsEntityKind
+      ? (latestSnapshot.data?.entities.find((entity) => entity.externalId === step.entityRef)
+          ?.kind ?? '')
+      : '');
   if (step.kind === 'config_push') {
     const fields = configFields.data ?? [];
     const field = fields.find((candidate) => candidate.key === step.fieldKey);
@@ -1084,13 +1107,13 @@ function RunbookStepKindFields({
           </label>
         )}
 
-        {step.connectorId && (
+        {step.connectorId && field?.entityScope && (
           <EntityPicker
             connectorId={step.connectorId}
             value={step.entityRef}
             label={t('settings.runbooks.steps.entityLabel')}
             disabled={disabled}
-            hideWholeService={field?.entityScope}
+            hideWholeService
             onChange={(entityRef) => onChange({ entityRef })}
           />
         )}
@@ -1099,21 +1122,23 @@ function RunbookStepKindFields({
   }
 
   const attributes = Object.values(complianceAttributes ?? {}).flat();
-  const attributesForEntity = step.entityKind
-    ? Object.values(complianceAttributes?.[step.entityKind] ?? {}).flat()
+  const attributesForEntity = entityKind
+    ? Object.values(complianceAttributes?.[entityKind] ?? {}).flat()
     : attributes;
   const attributeNames = [
     ...new Set(
-      attributes.map((attribute) => attribute.name)
+      attributesForEntity.map((attribute) => attribute.name)
     ),
   ].sort();
   const attributeType = uniqueAttributeType(attributesForEntity, step.attribute);
   const numericOperator =
     step.operator === RunbookStepOperator.gt || step.operator === RunbookStepOperator.lt;
+  const textOperator =
+    step.operator === RunbookStepOperator.regex || step.operator === RunbookStepOperator.contains;
   const numericExpectedValue =
-    numericOperator || attributeType === ComplianceAttributeSpecType.number;
+    numericOperator || (!textOperator && attributeType === ComplianceAttributeSpecType.number);
   const booleanExpectedValue =
-    !numericOperator && attributeType === ComplianceAttributeSpecType.boolean;
+    !numericOperator && !textOperator && attributeType === ComplianceAttributeSpecType.boolean;
   const arrayExpectedValue =
     !numericOperator &&
     (step.operator === RunbookStepOperator.eq || step.operator === RunbookStepOperator.neq) &&
@@ -1299,6 +1324,9 @@ function parseExpectedValue(
   type: string | undefined,
   operator: RunbookStepInputOperator | ''
 ): unknown {
+  if (operator === RunbookStepOperator.regex || operator === RunbookStepOperator.contains) {
+    return value;
+  }
   if (
     operator === RunbookStepOperator.gt ||
     operator === RunbookStepOperator.lt ||

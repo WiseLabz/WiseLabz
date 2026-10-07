@@ -617,9 +617,13 @@ export function ExpiringCertificatesWidget({ title, icon }: WidgetProps) {
           const href = certificate.entityId
             ? `/entities/${encodeURIComponent(certificate.entityId)}`
             : `/services/${encodeURIComponent(certificate.connectorId)}`;
-          const daysLabel = certificate.daysLeft < 0
-            ? t('widgets.certificates.expiredDaysAgo', { count: -certificate.daysLeft })
-            : t('widgets.certificates.daysLeft', { count: certificate.daysLeft });
+          // The server floors days left, so -1 means expired less than a full day ago.
+          const expiredDays = -certificate.daysLeft - 1;
+          const daysLabel = certificate.daysLeft >= 0
+            ? t('widgets.certificates.daysLeft', { count: certificate.daysLeft })
+            : expiredDays === 0
+              ? t('widgets.certificates.expiredRecently')
+              : t('widgets.certificates.expiredDaysAgo', { count: expiredDays });
           return (
             <li key={`${certificate.connectorId}:${certificate.externalId}`}>
               <Link

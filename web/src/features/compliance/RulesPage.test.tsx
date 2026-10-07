@@ -78,6 +78,21 @@ describe('RulesPage', () => {
     expect(body?.conditions).toEqual([{ attribute: 'not_after', op: 'days_left_lt', value: 8 }]);
   });
 
+  it('keeps the typed value across non-days-left operators and clears it when crossing to days-left', async () => {
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'New rule' }));
+    await screen.findByRole('option', { name: 'tlsprobe' });
+    fireEvent.change(screen.getByLabelText('Connector type'), { target: { value: 'tlsprobe' } });
+    fireEvent.change(screen.getByLabelText('Entity kind'), { target: { value: 'certificate' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add condition' }));
+    fireEvent.change(screen.getByLabelText('Attribute'), { target: { value: 'not_after' } });
+    fireEvent.change(screen.getByLabelText('Value'), { target: { value: 'wild' } });
+    fireEvent.change(screen.getByLabelText('Operator'), { target: { value: 'contains' } });
+    expect(screen.getByLabelText('Value')).toHaveValue('wild');
+    fireEvent.change(screen.getByLabelText('Operator'), { target: { value: 'days_left_lt' } });
+    expect(screen.getByLabelText('Value')).toHaveValue(null);
+  });
+
   it('installs the recommended pack from the empty state', async () => {
     let installed = false;
     server.use(

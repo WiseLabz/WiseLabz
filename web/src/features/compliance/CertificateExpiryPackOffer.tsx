@@ -10,6 +10,7 @@ import {
 import { useGetMe } from '../../api/generated/me/me';
 import { Button } from '../../components/ui/Button';
 import { Dialog } from '../../components/ui/Dialog';
+import { useIsInstanceAdmin } from '../../hooks/useRole';
 
 const PACK_ID = 'certificate-expiry';
 const DISMISSED_KEY = 'wiselabz.certificate-expiry-pack-dismissed';
@@ -41,7 +42,7 @@ export function CertificateExpiryPackOffer({
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const me = useGetMe();
-  const mayInstall = (me.data as { role?: string } | undefined)?.role === 'admin';
+  const mayInstall = useIsInstanceAdmin();
   const [dismissed, setDismissed] = useState(readDismissed);
   const completed = useRef(false);
   const packs = useGetCompliancePacks({
@@ -74,6 +75,9 @@ export function CertificateExpiryPackOffer({
       void queryClient.invalidateQueries({ queryKey: getGetCompliancePacksQueryKey() });
       void queryClient.invalidateQueries({ queryKey: getGetComplianceRulesQueryKey() });
       finish();
+    },
+    onError: () => {
+      // The dialog shows the failure inline; defining onError opts out of the global fallback toast.
     },
   });
 

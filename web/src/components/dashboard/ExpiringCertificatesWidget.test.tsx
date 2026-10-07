@@ -42,8 +42,23 @@ describe('ExpiringCertificatesWidget', () => {
     expect(screen.getByText('30 days or fewer')).toBeInTheDocument();
     expect(screen.getByText('Later')).toBeInTheDocument();
     expect(screen.getByText('Unreachable')).toBeInTheDocument();
+    expect(screen.getByText('Expired less than a day ago')).toBeInTheDocument();
+    expect(screen.getByText('7 days left')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /expired\.lab:443/ })).toHaveAttribute('href', '/entities/entity-1');
     expect(screen.getByRole('link', { name: /soon\.lab:443/ })).toHaveAttribute('href', '/services/c1');
+  });
+
+  it('uses singular and plural wording for days left and days since expiry', async () => {
+    server.use(http.get('/api/certificates', () => HttpResponse.json([
+      { name: 'old.lab:443', connectorId: 'c1', connectorName: 'TLS Probe', externalId: 'old.lab:443', notAfter: '2026-09-01T00:00:00Z', daysLeft: -4, unreachable: false },
+      { name: 'yesterday.lab:443', connectorId: 'c1', connectorName: 'TLS Probe', externalId: 'yesterday.lab:443', notAfter: '2026-10-05T00:00:00Z', daysLeft: -2, unreachable: false },
+      { name: 'tomorrow.lab:443', connectorId: 'c1', connectorName: 'TLS Probe', externalId: 'tomorrow.lab:443', notAfter: '2026-10-08T00:00:00Z', daysLeft: 1, unreachable: false },
+    ])));
+    renderWidget();
+
+    expect(await screen.findByText('Expired 3 days ago')).toBeInTheDocument();
+    expect(screen.getByText('Expired 1 day ago')).toBeInTheDocument();
+    expect(screen.getByText('1 day left')).toBeInTheDocument();
   });
 
   it('explains how to add a source when no certificates are available', async () => {

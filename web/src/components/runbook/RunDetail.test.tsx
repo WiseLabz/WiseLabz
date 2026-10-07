@@ -197,6 +197,28 @@ describe('RunDetail', () => {
     expect(await screen.findByText('Current value unknown → 512')).toBeInTheDocument();
   });
 
+  it('shows only the target for a config-push step without current value information', async () => {
+    currentRun = {
+      ...baseRun,
+      state: 'succeeded',
+      steps: [
+        {
+          ...baseRun.steps[0],
+          kind: 'config_push',
+          title: 'Set VM memory',
+          fieldKey: 'memory',
+          targetValue: '512',
+          verb: undefined,
+        },
+      ],
+    };
+    renderDetail();
+
+    expect(await screen.findByText('512')).toBeInTheDocument();
+    expect(screen.queryByText(/Current value unknown/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Current:/)).not.toBeInTheDocument();
+  });
+
   it('marks a withdrawn config-push field as not executable', async () => {
     currentRun = {
       ...baseRun,
