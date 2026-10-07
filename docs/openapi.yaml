@@ -6833,6 +6833,10 @@ components:
         label: { type: string }
         type: { type: string, description: 'Reuses the SchemaField Type vocabulary (text, number, toggle, select, ...).' }
         entityScope: { type: boolean, description: 'true if per-entity (requires entityRef), false if connector-global.' }
+        options:
+          type: array
+          description: Allowed choices when type is select.
+          items: { type: string }
     OidcProvider:
       type: object
       description: >

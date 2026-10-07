@@ -218,6 +218,35 @@ func TestConfigFieldsHandler(t *testing.T) {
 			t.Fatalf("status=%d body=%s, want 200 with ip field", rr.Code, rr.Body.String())
 		}
 	})
+	t.Run("select fields include their choices", func(t *testing.T) {
+		h := newTestHandler(t)
+		body := `{"name":"Docker","category":"containers_paas","type":"docker","url":"https://docker.example.com","config":{"host":"tcp://docker.example.com:2375","verify_tls":true}}`
+		create := httptest.NewRecorder()
+		h.Create(create, httptest.NewRequest(http.MethodPost, "/api/connectors", strings.NewReader(body)))
+		if create.Code != http.StatusCreated {
+			t.Fatalf("create status=%d body=%s", create.Code, create.Body.String())
+		}
+		var created struct {
+			ID string `json:"id"`
+		}
+		if err := json.Unmarshal(create.Body.Bytes(), &created); err != nil {
+			t.Fatal(err)
+		}
+		req := httptest.NewRequest(http.MethodGet, "/api/connectors/"+created.ID+"/config-fields", nil)
+		req.SetPathValue("id", created.ID)
+		response := httptest.NewRecorder()
+		h.ConfigFields(response, req)
+		var fields []struct {
+			Key     string   `json:"key"`
+			Options []string `json:"options"`
+		}
+		if err := json.Unmarshal(response.Body.Bytes(), &fields); err != nil {
+			t.Fatal(err)
+		}
+		if response.Code != http.StatusOK || len(fields) != 1 || fields[0].Key != "restartPolicy" || strings.Join(fields[0].Options, ",") != "no,always,unless-stopped,on-failure" {
+			t.Fatalf("status=%d fields=%+v body=%s, want Docker restart policy choices", response.Code, fields, response.Body.String())
+		}
+	})
 }
 
 func itoa(n int) string {

@@ -557,6 +557,12 @@ export const getGetConnectorsConnectorIdConfigFieldsResponseMock = (): ConfigFie
     label: faker.string.alpha({ length: { min: 10, max: 20 } }),
     type: faker.string.alpha({ length: { min: 10, max: 20 } }),
     entityScope: faker.datatype.boolean(),
+    options: faker.helpers.arrayElement([
+      Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() =>
+        faker.string.alpha({ length: { min: 10, max: 20 } })
+      ),
+      undefined,
+    ]),
   }));
 
 export const getPostConnectorsConnectorIdConfigPushResponseMock = (

@@ -96,10 +96,11 @@ func supportedLifecycleVerbs(conn Connector) []string {
 // curated subset of what the connector's config schema could theoretically
 // write, deliberately narrower than the full Fetch/Validate config shape.
 type ConfigField struct {
-	Key         string `json:"key"`
-	Label       string `json:"label"`
-	Type        string `json:"type"`        // reuse the existing SchemaField Type vocabulary
-	EntityScope bool   `json:"entityScope"` // true if per-entity (needs entityRef), false if connector-global
+	Key         string   `json:"key"`
+	Label       string   `json:"label"`
+	Type        string   `json:"type"`        // reuse the existing SchemaField Type vocabulary
+	EntityScope bool     `json:"entityScope"` // true if per-entity (needs entityRef), false if connector-global
+	Options     []string `json:"options,omitempty"`
 }
 
 // ConfigPusher is implemented by connectors that expose a curated whitelist

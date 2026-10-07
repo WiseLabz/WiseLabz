@@ -703,6 +703,10 @@ func TestDockerWritableFields(t *testing.T) {
 	fields := c.WritableFields()
 	if len(fields) != 1 || fields[0].Key != "restartPolicy" {
 		t.Errorf("WritableFields() = %+v, want one field \"restartPolicy\"", fields)
+		return
+	}
+	if got, want := strings.Join(fields[0].Options, ","), "no,always,unless-stopped,on-failure"; got != want {
+		t.Errorf("restartPolicy options = %q, want %q", got, want)
 	}
 }
 

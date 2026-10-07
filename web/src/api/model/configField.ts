@@ -17,4 +17,6 @@ export interface ConfigField {
   type: string;
   /** true if per-entity (requires entityRef), false if connector-global. */
   entityScope: boolean;
+  /** Allowed choices when type is select. */
+  options?: string[];
 }
