@@ -6,11 +6,12 @@
  *
  * OpenAPI spec version: 0.1.0
  */
+import type { RunbookStepInputOperator } from './runbookStepInputOperator';
 import type { RunbookStepKind } from './runbookStepKind';
 import type { RunbookStepVerb } from './runbookStepVerb';
 
 /**
- * Which of connectorId, verb and timeoutSeconds apply depends on kind. lifecycle (the default) requires connectorId and verb. sync_and_wait and wait_until_healthy require connectorId, must not carry a verb or entityRef, and accept a timeoutSeconds. manual carries no connectorId, verb or timeout. Violations are reported as field errors on the step, for example steps[2].timeoutSeconds.
+ * Which of connectorId, verb, timeoutSeconds, fieldKey, targetValue, attribute, operator and expectedValue apply depends on kind. lifecycle (the default) requires connectorId and verb. sync_and_wait and wait_until_healthy require connectorId, must not carry a verb or entityRef, and accept a timeoutSeconds. manual carries no connectorId, verb or timeout. config_push requires connectorId, fieldKey and targetValue, and accepts entityRef. wait_for_entity requires connectorId, entityRef, attribute, operator, expectedValue, and accepts timeoutSeconds. Violations are reported as field errors on the step, for example steps[2].timeoutSeconds.
  */
 export interface RunbookStepInput {
   /** An existing step's ID, to keep it (and its identity in audit history) across a replace-all update. Omit for a new step, or when creating a runbook; any ID that didn't already belong to this runbook is ignored and a fresh one is generated. */
@@ -22,8 +23,18 @@ export interface RunbookStepInput {
   /** Required for lifecycle steps; must be omitted for the other kinds. */
   verb?: RunbookStepVerb;
   entityRef?: string;
+  /** Configuration field key for config_push steps. */
+  fieldKey?: string;
+  /** Target value for config_push steps: a JSON boolean, number or string matching the field's type. At most 1024 bytes. */
+  targetValue?: unknown;
+  /** Entity attribute name for wait_for_entity steps. */
+  attribute?: string;
+  /** Comparison operator for wait_for_entity steps. */
+  operator?: RunbookStepInputOperator;
+  /** Expected attribute value for wait_for_entity steps: a JSON string or number (gt and lt need a number or a numeric string, regex a pattern of at most 256 characters). At most 1024 bytes. */
+  expectedValue?: unknown;
   /**
-   * For sync_and_wait and wait_until_healthy it must be between 10 and 1800 seconds and defaults to 300 when omitted. Lifecycle and manual steps accept only 0 or omission.
+   * For sync_and_wait and wait_until_healthy it must be between 10 and 1800 seconds and defaults to 300 when omitted. For wait_for_entity it must be between 60 and 1800 seconds and defaults to 300 when omitted. Lifecycle, config_push and manual steps accept only 0 or omission.
    * @minimum 0
    * @maximum 1800
    */

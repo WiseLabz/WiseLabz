@@ -3,6 +3,7 @@ package runbooks
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -13,6 +14,7 @@ import (
 	"github.com/WiseLabz/wiselabz/internal/api/connectors"
 	"github.com/WiseLabz/wiselabz/internal/auth"
 	"github.com/WiseLabz/wiselabz/internal/config"
+	"github.com/WiseLabz/wiselabz/internal/connector"
 	"github.com/WiseLabz/wiselabz/internal/store"
 	"github.com/WiseLabz/wiselabz/internal/sync"
 
@@ -800,5 +802,431 @@ func TestStepKindsRedactedWithoutViewerGrant(t *testing.T) {
 	manual := steps[2]
 	if manual.Title != "Confirm the failover" || manual.Kind != "manual" || manual.ExecuteBlockedReason != "not_lifecycle" {
 		t.Errorf("manual step = %+v, want visible title, kind manual and reason not_lifecycle", manual)
+	}
+}
+
+type fakePusher struct {
+	typ    string
+	fields []connector.ConfigField
+}
+
+func (f *fakePusher) Name() string     { return "Fake Pusher" }
+func (f *fakePusher) Type() string     { return f.typ }
+func (f *fakePusher) Category() string { return "virtualization" }
+func (f *fakePusher) Fetch(_ context.Context, _ map[string]any) (*connector.ServiceSnapshot, error) {
+	return &connector.ServiceSnapshot{}, nil
+}
+func (f *fakePusher) Validate(_ context.Context, _ map[string]any) error { return nil }
+func (f *fakePusher) WritableFields() []connector.ConfigField            { return f.fields }
+func (f *fakePusher) ConfigPush(_ context.Context, _ map[string]any, _, _ string, _ any) error {
+	return nil
+}
+
+// getRunbook fetches a runbook through the Get handler as userID.
+func getRunbook(t *testing.T, h *Handler, userID, id string) runbookResponse {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodGet, "/api/runbooks/"+id, nil)
+	req.SetPathValue("id", id)
+	req = req.WithContext(auth.ContextWithUser(req.Context(), userID, false))
+	rec := httptest.NewRecorder()
+	h.Get(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("get status = %d; body=%s", rec.Code, rec.Body.String())
+	}
+	return decodeRunbook(t, rec)
+}
+
+func seedCustomPusherConnector(t *testing.T, h *Handler, fields []connector.ConfigField) string {
+	t.Helper()
+	typ := fmt.Sprintf("fake_pusher_%d", time.Now().UnixNano())
+	fake := &fakePusher{typ: typ, fields: fields}
+	connector.Register(connector.TypeSchema{Type: typ, Name: "Fake", Category: "virtualization"},
+		func(map[string]any) (connector.Connector, error) {
+			return fake, nil
+		})
+	c := &store.ConnectorRecord{Name: "Fake Pusher", Category: "virtualization", Type: typ, URL: "https://example.com"}
+	if err := h.Store.CreateConnector(context.Background(), c); err != nil {
+		t.Fatalf("CreateConnector error: %v", err)
+	}
+	return c.ID
+}
+
+func seedDockerConnector(t *testing.T, h *Handler) string {
+	t.Helper()
+	c := &store.ConnectorRecord{Name: "Docker", Category: "containers_paas", Type: "docker", URL: "https://example.com"}
+	if err := h.Store.CreateConnector(context.Background(), c); err != nil {
+		t.Fatalf("CreateConnector error: %v", err)
+	}
+	return c.ID
+}
+
+func seedTrueNASConnector(t *testing.T, h *Handler) string {
+	t.Helper()
+	c := &store.ConnectorRecord{Name: "TrueNAS", Category: "storage", Type: "truenas", URL: "https://example.com"}
+	if err := h.Store.CreateConnector(context.Background(), c); err != nil {
+		t.Fatalf("CreateConnector error: %v", err)
+	}
+	return c.ID
+}
+
+func TestAuthoringConfigPushHappyPath(t *testing.T) {
+	h := newTestHandler(t)
+	proxmoxID := seedProxmoxConnector(t, h)
+	dockerID := seedDockerConnector(t, h)
+	fakeID := seedCustomPusherConnector(t, h, []connector.ConfigField{
+		{Key: "enabled", Label: "Enabled", Type: "toggle", EntityScope: false},
+		{Key: "hostname", Label: "Hostname", Type: "text", EntityScope: true},
+	})
+
+	op := operatorOn(t, h, proxmoxID)
+	apitest.GrantConnectorRole(t, h.Store, op, dockerID, "operator")
+	apitest.GrantConnectorRole(t, h.Store, op, fakeID, "operator")
+
+	rr := createWithSteps(t, h, op, "push_happy", `
+		{"kind":"config_push","title":"Set Memory","connectorId":"`+proxmoxID+`","entityRef":"100","fieldKey":"memory","targetValue":4096},
+		{"kind":"config_push","title":"Set Cores","connectorId":"`+proxmoxID+`","entityRef":"100","fieldKey":"cores","targetValue":4},
+		{"kind":"config_push","title":"Set Restart","connectorId":"`+dockerID+`","entityRef":"web","fieldKey":"restartPolicy","targetValue":"unless-stopped"},
+		{"kind":"config_push","title":"Global Toggle","connectorId":"`+fakeID+`","fieldKey":"enabled","targetValue":true},
+		{"kind":"config_push","title":"Scoped Text","connectorId":"`+fakeID+`","entityRef":"node-1","fieldKey":"hostname","targetValue":"app-node"}`)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want 201; body=%s", rr.Code, rr.Body.String())
+	}
+
+	created := decodeRunbook(t, rr)
+	if len(created.Steps) != 5 {
+		t.Fatalf("len(steps) = %d, want 5", len(created.Steps))
+	}
+
+	want := []struct {
+		kind        string
+		fieldKey    string
+		targetValue string
+		entityRef   string
+	}{
+		{"config_push", "memory", "4096", "100"},
+		{"config_push", "cores", "4", "100"},
+		{"config_push", "restartPolicy", `"unless-stopped"`, "web"},
+		{"config_push", "enabled", "true", ""},
+		{"config_push", "hostname", `"app-node"`, "node-1"},
+	}
+
+	for i, w := range want {
+		st := created.Steps[i]
+		if st.Kind != w.kind || st.FieldKey != w.fieldKey || st.TargetValue != w.targetValue || st.EntityRef != w.entityRef {
+			t.Errorf("step %d = %+v, want kind=%q fieldKey=%q targetValue=%q entityRef=%q", i, st, w.kind, w.fieldKey, w.targetValue, w.entityRef)
+		}
+		if st.CanExecute || st.ExecuteBlockedReason != "not_lifecycle" {
+			t.Errorf("step %d canExecute/reason = %v/%q, want false/not_lifecycle", i, st.CanExecute, st.ExecuteBlockedReason)
+		}
+		if st.TimeoutSeconds != 0 {
+			t.Errorf("step %d timeout = %d, want 0", i, st.TimeoutSeconds)
+		}
+	}
+
+	got := getRunbook(t, h, op, created.ID).Steps
+	if len(got) != len(created.Steps) {
+		t.Fatalf("round-trip len(steps) = %d, want %d", len(got), len(created.Steps))
+	}
+	for i, st := range got {
+		c := created.Steps[i]
+		if st.FieldKey != c.FieldKey || st.TargetValue != c.TargetValue {
+			t.Errorf("round-trip step %d = fieldKey %q targetValue %q, want %q %q", i, st.FieldKey, st.TargetValue, c.FieldKey, c.TargetValue)
+		}
+		if !json.Valid([]byte(st.TargetValue)) {
+			t.Errorf("round-trip step %d targetValue %q is not valid JSON", i, st.TargetValue)
+		}
+	}
+}
+
+func TestAuthoringConfigPushValidation(t *testing.T) {
+	h := newTestHandler(t)
+	proxmoxID := seedProxmoxConnector(t, h)
+	dockerID := seedDockerConnector(t, h)
+	truenasID := seedTrueNASConnector(t, h)
+	fakeID := seedCustomPusherConnector(t, h, []connector.ConfigField{
+		{Key: "global_toggle", Label: "Global Toggle", Type: "toggle", EntityScope: false},
+		{Key: "secret_token", Label: "Secret Token", Type: "password", EntityScope: false},
+		{Key: "scoped_toggle", Label: "Scoped Toggle", Type: "toggle", EntityScope: true},
+		{Key: "global_text", Label: "Global Text", Type: "text", EntityScope: false},
+	})
+
+	cases := []struct {
+		name  string
+		step  string
+		field string
+	}{
+		{"connector does not support config push", `{"kind":"config_push","title":"t","connectorId":"` + truenasID + `","fieldKey":"f","targetValue":"v"}`, "steps[0].connectorId"},
+		{"missing fieldKey", `{"kind":"config_push","title":"t","connectorId":"` + proxmoxID + `","entityRef":"100","targetValue":4096}`, "steps[0].fieldKey"},
+		{"field not writable", `{"kind":"config_push","title":"t","connectorId":"` + proxmoxID + `","entityRef":"100","fieldKey":"disk_size","targetValue":4096}`, "steps[0].fieldKey"},
+		{"entity-scoped field missing entity", `{"kind":"config_push","title":"t","connectorId":"` + proxmoxID + `","fieldKey":"memory","targetValue":4096}`, "steps[0].entityRef"},
+		{"global field with entityRef", `{"kind":"config_push","title":"t","connectorId":"` + fakeID + `","fieldKey":"global_toggle","entityRef":"100","targetValue":true}`, "steps[0].entityRef"},
+		{"secret field type rejected", `{"kind":"config_push","title":"t","connectorId":"` + fakeID + `","fieldKey":"secret_token","targetValue":"secret123"}`, "steps[0].fieldKey"},
+		{"missing targetValue", `{"kind":"config_push","title":"t","connectorId":"` + proxmoxID + `","entityRef":"100","fieldKey":"memory"}`, "steps[0].targetValue"},
+		{"invalid JSON targetValue", `{"kind":"config_push","title":"t","connectorId":"` + proxmoxID + `","entityRef":"100","fieldKey":"memory","targetValue":"{bad"}`, "steps[0].targetValue"},
+		{"toggle with invalid non-bool", `{"kind":"config_push","title":"t","connectorId":"` + fakeID + `","fieldKey":"global_toggle","targetValue":"invalid_bool"}`, "steps[0].targetValue"},
+		{"number with invalid non-number", `{"kind":"config_push","title":"t","connectorId":"` + proxmoxID + `","entityRef":"100","fieldKey":"memory","targetValue":"abc"}`, "steps[0].targetValue"},
+		{"number given numeric string", `{"kind":"config_push","title":"t","connectorId":"` + proxmoxID + `","entityRef":"100","fieldKey":"cores","targetValue":"4"}`, "steps[0].targetValue"},
+		{"toggle given string true", `{"kind":"config_push","title":"t","connectorId":"` + fakeID + `","fieldKey":"global_toggle","targetValue":"true"}`, "steps[0].targetValue"},
+		{"text over 1024 bytes", `{"kind":"config_push","title":"t","connectorId":"` + fakeID + `","fieldKey":"global_text","targetValue":"` + strings.Repeat("a", 1025) + `"}`, "steps[0].targetValue"},
+		{"docker select with invalid option", `{"kind":"config_push","title":"t","connectorId":"` + dockerID + `","entityRef":"web","fieldKey":"restartPolicy","targetValue":"sometimes"}`, "steps[0].targetValue"},
+		{"verb present", `{"kind":"config_push","title":"t","connectorId":"` + proxmoxID + `","entityRef":"100","fieldKey":"memory","targetValue":4096,"verb":"restart"}`, "steps[0].verb"},
+		{"timeout present", `{"kind":"config_push","title":"t","connectorId":"` + proxmoxID + `","entityRef":"100","fieldKey":"memory","targetValue":4096,"timeoutSeconds":120}`, "steps[0].timeoutSeconds"},
+		{"attribute present", `{"kind":"config_push","title":"t","connectorId":"` + proxmoxID + `","entityRef":"100","fieldKey":"memory","targetValue":4096,"attribute":"status"}`, "steps[0].attribute"},
+		{"operator present", `{"kind":"config_push","title":"t","connectorId":"` + proxmoxID + `","entityRef":"100","fieldKey":"memory","targetValue":4096,"operator":"eq"}`, "steps[0].operator"},
+		{"expectedValue present", `{"kind":"config_push","title":"t","connectorId":"` + proxmoxID + `","entityRef":"100","fieldKey":"memory","targetValue":4096,"expectedValue":"val"}`, "steps[0].expectedValue"},
+	}
+
+	for i, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			rr := createWithSteps(t, h, "", fmt.Sprintf("val_push_%d", i), c.step)
+			if rr.Code != http.StatusBadRequest {
+				t.Fatalf("status = %d, want 400; body=%s", rr.Code, rr.Body.String())
+			}
+			found := false
+			for _, f := range fieldErrorFields(t, rr) {
+				if f == c.field {
+					found = true
+				}
+			}
+			if !found {
+				t.Errorf("field errors %v do not include %q; body=%s", fieldErrorFields(t, rr), c.field, rr.Body.String())
+			}
+		})
+	}
+}
+
+func TestAuthoringWaitForEntityHappyPath(t *testing.T) {
+	h := newTestHandler(t)
+	connID := seedProxmoxConnector(t, h)
+	op := operatorOn(t, h, connID)
+
+	rr := createWithSteps(t, h, op, "wait_happy", `
+		{"kind":"wait_for_entity","title":"Wait Running","connectorId":"`+connID+`","entityRef":"100","attribute":"status","operator":"eq","expectedValue":"running"},
+		{"kind":"wait_for_entity","title":"Wait Not Stopped","connectorId":"`+connID+`","entityRef":"100","attribute":"status","operator":"neq","expectedValue":"stopped","timeoutSeconds":60},
+		{"kind":"wait_for_entity","title":"Wait Contains","connectorId":"`+connID+`","entityRef":"100","attribute":"name","operator":"contains","expectedValue":"prod","timeoutSeconds":1800},
+		{"kind":"wait_for_entity","title":"Wait Regex","connectorId":"`+connID+`","entityRef":"100","attribute":"version","operator":"regex","expectedValue":"^v[0-9]+$","timeoutSeconds":120},
+		{"kind":"wait_for_entity","title":"Wait GT","connectorId":"`+connID+`","entityRef":"100","attribute":"cores","operator":"gt","expectedValue":2,"timeoutSeconds":120},
+		{"kind":"wait_for_entity","title":"Wait LT","connectorId":"`+connID+`","entityRef":"100","attribute":"memory","operator":"lt","expectedValue":"8192","timeoutSeconds":120},
+		{"kind":"wait_for_entity","title":"Undeclared Free Text Attribute","connectorId":"`+connID+`","entityRef":"100","attribute":"custom_undeclared_attr","operator":"eq","expectedValue":"ok"}`)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want 201; body=%s", rr.Code, rr.Body.String())
+	}
+
+	created := decodeRunbook(t, rr)
+	if len(created.Steps) != 7 {
+		t.Fatalf("len(steps) = %d, want 7", len(created.Steps))
+	}
+
+	want := []struct {
+		attribute     string
+		operator      string
+		expectedValue string
+		timeout       int
+	}{
+		{"status", "eq", `"running"`, 300},
+		{"status", "neq", `"stopped"`, 60},
+		{"name", "contains", `"prod"`, 1800},
+		{"version", "regex", `"^v[0-9]+$"`, 120},
+		{"cores", "gt", "2", 120},
+		{"memory", "lt", "8192", 120},
+		{"custom_undeclared_attr", "eq", `"ok"`, 300},
+	}
+
+	for i, w := range want {
+		st := created.Steps[i]
+		if st.Kind != "wait_for_entity" || st.Attribute != w.attribute || st.Operator != w.operator || st.ExpectedValue != w.expectedValue || st.TimeoutSeconds != w.timeout {
+			t.Errorf("step %d = %+v, want attr=%q op=%q exp=%q timeout=%d", i, st, w.attribute, w.operator, w.expectedValue, w.timeout)
+		}
+		if st.CanExecute || st.ExecuteBlockedReason != "not_lifecycle" {
+			t.Errorf("step %d canExecute/reason = %v/%q, want false/not_lifecycle", i, st.CanExecute, st.ExecuteBlockedReason)
+		}
+	}
+
+	got := getRunbook(t, h, op, created.ID).Steps
+	if len(got) != len(created.Steps) {
+		t.Fatalf("round-trip len(steps) = %d, want %d", len(got), len(created.Steps))
+	}
+	for i, st := range got {
+		c := created.Steps[i]
+		if st.Attribute != c.Attribute || st.Operator != c.Operator || st.ExpectedValue != c.ExpectedValue {
+			t.Errorf("round-trip step %d = attr %q op %q exp %q, want %q %q %q", i, st.Attribute, st.Operator, st.ExpectedValue, c.Attribute, c.Operator, c.ExpectedValue)
+		}
+		if !json.Valid([]byte(st.ExpectedValue)) {
+			t.Errorf("round-trip step %d expectedValue %q is not valid JSON", i, st.ExpectedValue)
+		}
+	}
+}
+
+func TestAuthoringWaitForEntityValidation(t *testing.T) {
+	h := newTestHandler(t)
+	connID := seedProxmoxConnector(t, h)
+
+	cases := []struct {
+		name  string
+		step  string
+		field string
+	}{
+		{"missing connector", `{"kind":"wait_for_entity","title":"t","entityRef":"100","attribute":"status","operator":"eq","expectedValue":"running"}`, "steps[0].connectorId"},
+		{"missing entityRef", `{"kind":"wait_for_entity","title":"t","connectorId":"` + connID + `","attribute":"status","operator":"eq","expectedValue":"running"}`, "steps[0].entityRef"},
+		{"invalid composite entityRef", `{"kind":"wait_for_entity","title":"t","connectorId":"` + connID + `","entityRef":"../invalid","attribute":"status","operator":"eq","expectedValue":"running"}`, "steps[0].entityRef"},
+		{"missing attribute", `{"kind":"wait_for_entity","title":"t","connectorId":"` + connID + `","entityRef":"100","operator":"eq","expectedValue":"running"}`, "steps[0].attribute"},
+		{"missing operator", `{"kind":"wait_for_entity","title":"t","connectorId":"` + connID + `","entityRef":"100","attribute":"status","expectedValue":"running"}`, "steps[0].operator"},
+		{"unsupported operator startswith", `{"kind":"wait_for_entity","title":"t","connectorId":"` + connID + `","entityRef":"100","attribute":"status","operator":"startswith","expectedValue":"run"}`, "steps[0].operator"},
+		{"unsupported operator days_left_gt", `{"kind":"wait_for_entity","title":"t","connectorId":"` + connID + `","entityRef":"100","attribute":"status","operator":"days_left_gt","expectedValue":"30"}`, "steps[0].operator"},
+		{"missing expectedValue", `{"kind":"wait_for_entity","title":"t","connectorId":"` + connID + `","entityRef":"100","attribute":"status","operator":"eq"}`, "steps[0].expectedValue"},
+		{"regex non-string expectedValue", `{"kind":"wait_for_entity","title":"t","connectorId":"` + connID + `","entityRef":"100","attribute":"status","operator":"regex","expectedValue":123}`, "steps[0].expectedValue"},
+		{"invalid uncompilable regex", `{"kind":"wait_for_entity","title":"t","connectorId":"` + connID + `","entityRef":"100","attribute":"status","operator":"regex","expectedValue":"[a-"}`, "steps[0].expectedValue"},
+		{"regex length over 256", `{"kind":"wait_for_entity","title":"t","connectorId":"` + connID + `","entityRef":"100","attribute":"status","operator":"regex","expectedValue":"` + strings.Repeat("a", 257) + `"}`, "steps[0].expectedValue"},
+		{"gt non-numeric expectedValue", `{"kind":"wait_for_entity","title":"t","connectorId":"` + connID + `","entityRef":"100","attribute":"cores","operator":"gt","expectedValue":"two"}`, "steps[0].expectedValue"},
+		{"gt NaN expectedValue", `{"kind":"wait_for_entity","title":"t","connectorId":"` + connID + `","entityRef":"100","attribute":"cores","operator":"gt","expectedValue":"NaN"}`, "steps[0].expectedValue"},
+		{"gt plus-prefixed expectedValue", `{"kind":"wait_for_entity","title":"t","connectorId":"` + connID + `","entityRef":"100","attribute":"cores","operator":"gt","expectedValue":"+5"}`, "steps[0].expectedValue"},
+		{"gt leading-dot expectedValue", `{"kind":"wait_for_entity","title":"t","connectorId":"` + connID + `","entityRef":"100","attribute":"cores","operator":"gt","expectedValue":".5"}`, "steps[0].expectedValue"},
+		{"eq expectedValue over 1024 bytes", `{"kind":"wait_for_entity","title":"t","connectorId":"` + connID + `","entityRef":"100","attribute":"status","operator":"eq","expectedValue":"` + strings.Repeat("a", 1025) + `"}`, "steps[0].expectedValue"},
+		{"attribute over 256 characters", `{"kind":"wait_for_entity","title":"t","connectorId":"` + connID + `","entityRef":"100","attribute":"` + strings.Repeat("a", 257) + `","operator":"eq","expectedValue":"running"}`, "steps[0].attribute"},
+		{"lt non-numeric expectedValue", `{"kind":"wait_for_entity","title":"t","connectorId":"` + connID + `","entityRef":"100","attribute":"cores","operator":"lt","expectedValue":true}`, "steps[0].expectedValue"},
+		{"timeout below 60 seconds", `{"kind":"wait_for_entity","title":"t","connectorId":"` + connID + `","entityRef":"100","attribute":"status","operator":"eq","expectedValue":"running","timeoutSeconds":30}`, "steps[0].timeoutSeconds"},
+		{"timeout 0 seconds", `{"kind":"wait_for_entity","title":"t","connectorId":"` + connID + `","entityRef":"100","attribute":"status","operator":"eq","expectedValue":"running","timeoutSeconds":0}`, "steps[0].timeoutSeconds"},
+		{"timeout above 1800 seconds", `{"kind":"wait_for_entity","title":"t","connectorId":"` + connID + `","entityRef":"100","attribute":"status","operator":"eq","expectedValue":"running","timeoutSeconds":2700}`, "steps[0].timeoutSeconds"},
+		{"verb present", `{"kind":"wait_for_entity","title":"t","connectorId":"` + connID + `","entityRef":"100","attribute":"status","operator":"eq","expectedValue":"running","verb":"restart"}`, "steps[0].verb"},
+		{"fieldKey present", `{"kind":"wait_for_entity","title":"t","connectorId":"` + connID + `","entityRef":"100","attribute":"status","operator":"eq","expectedValue":"running","fieldKey":"cores"}`, "steps[0].fieldKey"},
+		{"targetValue present", `{"kind":"wait_for_entity","title":"t","connectorId":"` + connID + `","entityRef":"100","attribute":"status","operator":"eq","expectedValue":"running","targetValue":"4"}`, "steps[0].targetValue"},
+	}
+
+	for i, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			rr := createWithSteps(t, h, "", fmt.Sprintf("val_wait_%d", i), c.step)
+			if rr.Code != http.StatusBadRequest {
+				t.Fatalf("status = %d, want 400; body=%s", rr.Code, rr.Body.String())
+			}
+			found := false
+			for _, f := range fieldErrorFields(t, rr) {
+				if f == c.field {
+					found = true
+				}
+			}
+			if !found {
+				t.Errorf("field errors %v do not include %q; body=%s", fieldErrorFields(t, rr), c.field, rr.Body.String())
+			}
+		})
+	}
+}
+
+func TestNewStepKindsMultipleErrorsCollected(t *testing.T) {
+	h := newTestHandler(t)
+	connID := seedProxmoxConnector(t, h)
+
+	rr := createWithSteps(t, h, "", "multi_err", `{"kind":"wait_for_entity","title":"Bad Step","connectorId":"`+connID+`","entityRef":"100","attribute":"status","operator":"startswith","expectedValue":"run","timeoutSeconds":30}`)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400; body=%s", rr.Code, rr.Body.String())
+	}
+	fields := fieldErrorFields(t, rr)
+	hasOp := false
+	hasTimeout := false
+	for _, f := range fields {
+		if f == "steps[0].operator" {
+			hasOp = true
+		}
+		if f == "steps[0].timeoutSeconds" {
+			hasTimeout = true
+		}
+	}
+	if !hasOp || !hasTimeout {
+		t.Errorf("expected both steps[0].operator and steps[0].timeoutSeconds, got %v", fields)
+	}
+}
+
+func TestExecuteStepRejectsNewKinds(t *testing.T) {
+	h := newTestHandler(t)
+	connID := seedProxmoxConnector(t, h)
+
+	rr := createWithSteps(t, h, "", "exec_new_kinds", `
+		{"kind":"config_push","title":"Push","connectorId":"`+connID+`","entityRef":"100","fieldKey":"memory","targetValue":4096},
+		{"kind":"wait_for_entity","title":"Wait","connectorId":"`+connID+`","entityRef":"100","attribute":"status","operator":"eq","expectedValue":"running"}`)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("create status = %d; body=%s", rr.Code, rr.Body.String())
+	}
+	created := decodeRunbook(t, rr)
+
+	user := apitest.NewUser(t, h.Store, "operator")
+	apitest.GrantConnectorRole(t, h.Store, user, connID, "operator")
+
+	for _, dryRun := range []string{"", "?dryRun=true"} {
+		for _, st := range created.Steps {
+			req := httptest.NewRequest(http.MethodPost, "/api/runbooks/"+created.ID+"/steps/"+st.ID+"/execute"+dryRun, nil)
+			req.SetPathValue("id", created.ID)
+			req.SetPathValue("stepId", st.ID)
+			req = req.WithContext(auth.ContextWithUser(req.Context(), user, false))
+			rec := httptest.NewRecorder()
+			h.ExecuteStep(rec, req)
+			if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "unsupported_step_kind") {
+				t.Errorf("%s dryRun=%q: status = %d body=%s, want 400 unsupported_step_kind", st.Kind, dryRun, rec.Code, rec.Body.String())
+			}
+		}
+	}
+
+	// Caller without operator grant gets 403 first, hiding the kind.
+	stranger := apitest.NewUser(t, h.Store, "stranger")
+	for _, dryRun := range []string{"", "?dryRun=true"} {
+		for _, st := range created.Steps {
+			req := httptest.NewRequest(http.MethodPost, "/api/runbooks/"+created.ID+"/steps/"+st.ID+"/execute"+dryRun, nil)
+			req.SetPathValue("id", created.ID)
+			req.SetPathValue("stepId", st.ID)
+			req = req.WithContext(auth.ContextWithUser(req.Context(), stranger, false))
+			rec := httptest.NewRecorder()
+			h.ExecuteStep(rec, req)
+			if rec.Code != http.StatusForbidden {
+				t.Errorf("stranger %s dryRun=%q: status = %d body=%s, want 403", st.Kind, dryRun, rec.Code, rec.Body.String())
+			}
+		}
+	}
+}
+
+func TestNewStepKindsRedactionWithoutViewerGrant(t *testing.T) {
+	h := newTestHandler(t)
+	connID := seedProxmoxConnector(t, h)
+
+	rr := createWithSteps(t, h, "", "new_kinds_redact", `
+		{"kind":"config_push","title":"Push","connectorId":"`+connID+`","entityRef":"100","fieldKey":"memory","targetValue":4096},
+		{"kind":"wait_for_entity","title":"Wait","connectorId":"`+connID+`","entityRef":"100","attribute":"status","operator":"eq","expectedValue":"running"}`)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("create status = %d; body=%s", rr.Code, rr.Body.String())
+	}
+	created := decodeRunbook(t, rr)
+
+	stranger := apitest.NewUser(t, h.Store, "stranger")
+	req := httptest.NewRequest(http.MethodGet, "/api/runbooks/"+created.ID, nil)
+	req.SetPathValue("id", created.ID)
+	req = req.WithContext(auth.ContextWithUser(req.Context(), stranger, false))
+	getRR := httptest.NewRecorder()
+	h.Get(getRR, req)
+	if getRR.Code != http.StatusOK {
+		t.Fatalf("get status = %d; body=%s", getRR.Code, getRR.Body.String())
+	}
+
+	steps := decodeRunbook(t, getRR).Steps
+	if len(steps) != 2 {
+		t.Fatalf("len(steps) = %d, want 2", len(steps))
+	}
+	for i, st := range steps {
+		if st.Title != "Restricted step" || st.Kind != "" || st.ConnectorID != "" || st.ConnectorName != "" ||
+			st.Verb != "" || st.EntityRef != "" || st.TimeoutSeconds != 0 || st.CanExecute ||
+			st.ExecuteBlockedReason != "no_viewer_grant" || st.FieldKey != "" || st.TargetValue != "" ||
+			st.Attribute != "" || st.Operator != "" || st.ExpectedValue != "" {
+			t.Errorf("step %d not properly redacted: %+v", i, st)
+		}
+	}
+
+	var raw struct {
+		Steps []map[string]any `json:"steps"`
+	}
+	if err := json.Unmarshal(getRR.Body.Bytes(), &raw); err != nil {
+		t.Fatalf("unmarshal raw: %v", err)
+	}
+	for i, st := range raw.Steps {
+		for _, key := range []string{"kind", "fieldKey", "targetValue", "attribute", "operator", "expectedValue"} {
+			if _, ok := st[key]; ok {
+				t.Errorf("step %d contains redacted key %q: %v", i, key, st)
+			}
+		}
 	}
 }

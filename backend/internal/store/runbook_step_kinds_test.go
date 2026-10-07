@@ -96,3 +96,35 @@ func TestRunbookRunNewStepFieldsRemainFrozen(t *testing.T) {
 		t.Fatalf("frozen step changed after edits: %+v, want %+v", got, want)
 	}
 }
+
+func TestListEntityRunbookStepsReturnsNewKinds(t *testing.T) {
+	ctx := context.Background()
+	s := newDocTestStore(t)
+	book, connectorID := createRunbookRunFixture(t, s)
+	inputs := []*RunbookStepRecord{
+		{Kind: "config_push", Title: "Push config", ConnectorID: connectorID, EntityRef: "100",
+			FieldKey: "enabled", TargetValue: `true`},
+		{Kind: "wait_for_entity", Title: "Wait for entity", ConnectorID: connectorID, EntityRef: "100",
+			TimeoutSeconds: 120, Attribute: "status", Operator: "eq", ExpectedValue: `"running"`},
+		{Kind: "config_push", Title: "Other entity", ConnectorID: connectorID, EntityRef: "200",
+			FieldKey: "enabled", TargetValue: `false`},
+	}
+	_, _, err := s.UpdateRunbookWithSteps(ctx, book.ID, nil, inputs, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := s.ListEntityRunbookSteps(ctx, []EntityMemberKey{{ConnectorID: connectorID, Kind: "vm", Ref: "100"}}, 10)
+	if err != nil {
+		t.Fatalf("ListEntityRunbookSteps error: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("ListEntityRunbookSteps returned %d steps, want 2; got: %+v", len(got), got)
+	}
+	if got[0].StepTitle != "Push config" || got[0].StepVerb != "" {
+		t.Errorf("step 0 = %+v, want title 'Push config' and empty verb", got[0])
+	}
+	if got[1].StepTitle != "Wait for entity" || got[1].StepVerb != "" {
+		t.Errorf("step 1 = %+v, want title 'Wait for entity' and empty verb", got[1])
+	}
+}

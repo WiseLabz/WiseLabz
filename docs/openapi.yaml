@@ -6270,12 +6270,28 @@ components:
       properties:
         id: { type: string }
         position: { type: integer }
-        kind: { type: string, enum: [lifecycle, sync_and_wait, wait_until_healthy, manual] }
+        kind: { type: string, enum: [lifecycle, sync_and_wait, wait_until_healthy, manual, config_push, wait_for_entity] }
         title: { type: string }
         connectorId: { type: string }
         connectorName: { type: string }
         verb: { type: string, enum: [restart, start, stop] }
         entityRef: { type: string }
+        fieldKey:
+          type: string
+          description: Configuration field key for config_push steps.
+        targetValue:
+          type: string
+          description: Target value for config_push steps, formatted as JSON text.
+        attribute:
+          type: string
+          description: Entity attribute name for wait_for_entity steps.
+        operator:
+          type: string
+          enum: [eq, neq, contains, regex, gt, lt]
+          description: Comparison operator for wait_for_entity steps.
+        expectedValue:
+          type: string
+          description: Expected attribute value for wait_for_entity steps, formatted as JSON text.
         timeoutSeconds: { type: integer }
         state: { $ref: '#/components/schemas/RunbookRunStepState' }
         startedAt: { type: string, format: date-time }
@@ -6357,12 +6373,14 @@ components:
       description: A lifecycle step's verb; empty for every other step kind and for a redacted step.
     RunbookStepKind:
       type: string
-      enum: [lifecycle, sync_and_wait, wait_until_healthy, manual]
+      enum: [lifecycle, sync_and_wait, wait_until_healthy, manual, config_push, wait_for_entity]
       description: >
         lifecycle restarts, starts or stops a connector (optionally one
         entity); sync_and_wait syncs a connector and waits for the sync to
         finish; wait_until_healthy waits until a connector's health check
-        reports online; manual waits for a human to confirm.
+        reports online; manual waits for a human to confirm;
+        config_push updates a writable connector configuration field;
+        wait_for_entity waits until an entity's attribute matches an expected value.
     RunbookStep:
       type: object
       required: [id, position, title, connectorId, connectorName, verb, entityRef, timeoutSeconds, canExecute, executeBlockedReason]
@@ -6376,19 +6394,35 @@ components:
         connectorId: { type: string, description: 'Empty for a manual step, and for a step redacted because the caller cannot view its connector.' }
         connectorName: { type: string, description: "The referenced connector's display name, for rendering without a second lookup." }
         verb: { $ref: '#/components/schemas/RunbookStepStoredVerb' }
-        timeoutSeconds:
-          type: integer
-          minimum: 0
-          maximum: 1800
-          description: >
-            Timeout of a sync_and_wait or wait_until_healthy step, in seconds.
-            Always 0 for lifecycle and manual steps, whenever the step was
-            created, and for a redacted step.
         entityRef:
           type: string
           description: >
             Target entity's SnapshotEntity.externalId, or empty for
             connectors that manage a single implicit service.
+        fieldKey:
+          type: string
+          description: Configuration field key for config_push steps.
+        targetValue:
+          type: string
+          description: Target value for config_push steps, formatted as JSON text.
+        attribute:
+          type: string
+          description: Entity attribute name for wait_for_entity steps.
+        operator:
+          type: string
+          enum: [eq, neq, contains, regex, gt, lt]
+          description: Comparison operator for wait_for_entity steps.
+        expectedValue:
+          type: string
+          description: Expected attribute value for wait_for_entity steps, formatted as JSON text.
+        timeoutSeconds:
+          type: integer
+          minimum: 0
+          maximum: 1800
+          description: >
+            Timeout of a sync_and_wait, wait_until_healthy or wait_for_entity step, in seconds.
+            Always 0 for lifecycle, config_push and manual steps, whenever the step was
+            created, and for a redacted step.
         canExecute:
           type: boolean
           description: >
@@ -6406,12 +6440,16 @@ components:
       type: object
       required: [title]
       description: >
-        Which of connectorId, verb and timeoutSeconds apply depends on kind.
+        Which of connectorId, verb, timeoutSeconds, fieldKey, targetValue,
+        attribute, operator and expectedValue apply depends on kind.
         lifecycle (the default) requires connectorId and verb. sync_and_wait
         and wait_until_healthy require connectorId, must not carry a verb or
         entityRef, and accept a timeoutSeconds. manual carries no connectorId,
-        verb or timeout. Violations are reported as field errors on the step,
-        for example steps[2].timeoutSeconds.
+        verb or timeout. config_push requires connectorId, fieldKey and targetValue,
+        and accepts entityRef. wait_for_entity requires connectorId, entityRef,
+        attribute, operator, expectedValue, and accepts timeoutSeconds.
+        Violations are reported as field errors on the step, for example
+        steps[2].timeoutSeconds.
       properties:
         id:
           type: string
@@ -6429,6 +6467,20 @@ components:
           allOf: [{ $ref: '#/components/schemas/RunbookStepVerb' }]
           description: Required for lifecycle steps; must be omitted for the other kinds.
         entityRef: { type: string, default: '' }
+        fieldKey:
+          type: string
+          description: Configuration field key for config_push steps.
+        targetValue:
+          description: "Target value for config_push steps: a JSON boolean, number or string matching the field's type. At most 1024 bytes."
+        attribute:
+          type: string
+          description: Entity attribute name for wait_for_entity steps.
+        operator:
+          type: string
+          enum: [eq, neq, contains, regex, gt, lt]
+          description: Comparison operator for wait_for_entity steps.
+        expectedValue:
+          description: "Expected attribute value for wait_for_entity steps: a JSON string or number (gt and lt need a number or a numeric string, regex a pattern of at most 256 characters). At most 1024 bytes."
         timeoutSeconds:
           type: integer
           minimum: 0
@@ -6436,8 +6488,9 @@ components:
           default: 300
           description: >
             For sync_and_wait and wait_until_healthy it must be between 10 and
-            1800 seconds and defaults to 300 when omitted. Lifecycle and
-            manual steps accept only 0 or omission.
+            1800 seconds and defaults to 300 when omitted. For wait_for_entity
+            it must be between 60 and 1800 seconds and defaults to 300 when
+            omitted. Lifecycle, config_push and manual steps accept only 0 or omission.
     Runbook:
       type: object
       required: [id, title, body, targetType, targetValue, steps, createdAt, updatedAt]
@@ -7003,8 +7056,8 @@ components:
           minimum: 0
           maximum: 1800
           description: >
-            Timeout of a sync_and_wait or wait_until_healthy step; 0 or absent
-            means the 300 second default. Not meaningful for lifecycle and
+            Timeout of a sync_and_wait, wait_until_healthy or wait_for_entity step; 0 or absent
+            means the 300 second default. Not meaningful for lifecycle, config_push and
             manual steps.
         title: { type: string }
         connectorId: { type: string, description: 'Empty for a manual step.' }
@@ -7012,6 +7065,22 @@ components:
           allOf: [{ $ref: '#/components/schemas/RunbookStepStoredVerb' }]
           description: Empty for every kind except lifecycle.
         entityRef: { type: string }
+        fieldKey:
+          type: string
+          description: Configuration field key for config_push steps.
+        targetValue:
+          type: string
+          description: Target value for config_push steps, formatted as JSON text.
+        attribute:
+          type: string
+          description: Entity attribute name for wait_for_entity steps.
+        operator:
+          type: string
+          enum: [eq, neq, contains, regex, gt, lt]
+          description: Comparison operator for wait_for_entity steps.
+        expectedValue:
+          type: string
+          description: Expected attribute value for wait_for_entity steps, formatted as JSON text.
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
     EntityIdentityOverrideRecord:
