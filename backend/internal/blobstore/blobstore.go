@@ -39,11 +39,39 @@ type Store struct {
 	MaxBytes int64
 }
 
-// Blob describes the immutable bytes published by Put.
+// Blob describes validated attachment bytes.
 type Blob struct {
 	SHA256      string
 	ContentType string
 	Size        int64
+}
+
+// StagedBlob holds validated bytes until publication or cleanup with Close.
+type StagedBlob struct {
+	blob     Blob
+	tempPath string
+	path     string
+}
+
+// Publish atomically moves staged bytes to their digest path. The caller must
+// hold PublicationMu from publication through the attachment metadata commit.
+func (b *StagedBlob) Publish() (Blob, error) {
+	if err := os.MkdirAll(filepath.Dir(b.path), 0o700); err != nil {
+		return b.blob, fmt.Errorf("create hash directory: %w", err)
+	}
+	if err := os.Rename(b.tempPath, b.path); err != nil {
+		return b.blob, fmt.Errorf("publish upload: %w", err)
+	}
+	return b.blob, nil
+}
+
+// Close discards unpublished bytes; published blobs are left for orphan GC.
+func (b *StagedBlob) Close() error {
+	err := os.Remove(b.tempPath)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	return err
 }
 
 // New returns a blob store with defaults for empty settings.
@@ -67,54 +95,67 @@ func (s *Store) path(hash string) (string, error) {
 }
 
 // Put streams, validates and atomically publishes bytes under their SHA256 digest.
+// Callers persisting metadata must hold PublicationMu through its commit. Use
+// Stage before acquiring that lock when the reader can block on a client.
 func (s *Store) Put(r io.Reader) (Blob, error) {
-	var blob Blob
+	staged, err := s.Stage(r)
+	if err != nil {
+		return Blob{}, err
+	}
+	defer func() { _ = staged.Close() }()
+	return staged.Publish()
+}
+
+// Stage streams, hashes, validates and syncs an upload without publishing it.
+// It needs no PublicationMu: Sweep ignores the temporary upload filename.
+func (s *Store) Stage(r io.Reader) (*StagedBlob, error) {
 	if err := os.MkdirAll(s.Dir, 0o700); err != nil {
-		return blob, fmt.Errorf("create blob directory: %w", err)
+		return nil, fmt.Errorf("create blob directory: %w", err)
 	}
 	f, err := os.CreateTemp(s.Dir, ".upload-*")
 	if err != nil {
-		return blob, fmt.Errorf("create upload: %w", err)
+		return nil, fmt.Errorf("create upload: %w", err)
 	}
-	defer func() { _ = f.Close(); _ = os.Remove(f.Name()) }()
+	staged := false
+	defer func() {
+		_ = f.Close()
+		if !staged {
+			_ = os.Remove(f.Name())
+		}
+	}()
 	hash := sha256.New()
 	n, err := io.Copy(io.MultiWriter(f, hash), io.LimitReader(r, s.MaxBytes+1))
 	if err != nil {
-		return blob, fmt.Errorf("stream upload: %w", err)
+		return nil, fmt.Errorf("stream upload: %w", err)
 	}
 	if n > s.MaxBytes {
-		return blob, ErrTooLarge
+		return nil, ErrTooLarge
 	}
 	if _, err := f.Seek(0, io.SeekStart); err != nil {
-		return blob, fmt.Errorf("rewind upload: %w", err)
+		return nil, fmt.Errorf("rewind upload: %w", err)
 	}
 	head := make([]byte, 512)
 	count, err := f.Read(head)
 	if err != nil && !errors.Is(err, io.EOF) {
-		return blob, fmt.Errorf("sniff upload: %w", err)
+		return nil, fmt.Errorf("sniff upload: %w", err)
 	}
 	ct := http.DetectContentType(head[:count])
 	if !Allowed(ct, head[:count]) {
-		return blob, ErrUnsupported
+		return nil, ErrUnsupported
 	}
-	blob = Blob{SHA256: hex.EncodeToString(hash.Sum(nil)), ContentType: ct, Size: n}
+	blob := Blob{SHA256: hex.EncodeToString(hash.Sum(nil)), ContentType: ct, Size: n}
 	path, err := s.path(blob.SHA256)
 	if err != nil {
-		return blob, err
-	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return blob, fmt.Errorf("create hash directory: %w", err)
+		return nil, err
 	}
 	if err := f.Sync(); err != nil {
-		return blob, fmt.Errorf("sync upload: %w", err)
+		return nil, fmt.Errorf("sync upload: %w", err)
 	}
 	if err := f.Close(); err != nil {
-		return blob, fmt.Errorf("close upload: %w", err)
+		return nil, fmt.Errorf("close upload: %w", err)
 	}
-	if err := os.Rename(f.Name(), path); err != nil {
-		return blob, fmt.Errorf("publish upload: %w", err)
-	}
-	return blob, nil
+	staged = true
+	return &StagedBlob{blob: blob, tempPath: f.Name(), path: path}, nil
 }
 
 // Allowed checks sniffed MIME types and rejects SVG masquerading as text.
