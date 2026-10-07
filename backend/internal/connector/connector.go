@@ -30,6 +30,11 @@ type CredentialRefresher interface {
 	RefreshCredentials(ctx context.Context, config map[string]any) (newConfig map[string]any, expiresAt time.Time, err error)
 }
 
+// SnapshotDependent connectors declare which stored snapshots they need for Fetch.
+type SnapshotDependent interface {
+	SnapshotInputs(config map[string]any) (relatedConnectorIDs []string, wantPrevious bool)
+}
+
 // Restarter is implemented by connectors whose vendor API exposes a restart
 // action. entityRef is the target entity's SnapshotEntity.ExternalID (a VM
 // ID, container ID, service name, ...), or "" for connectors that manage a
@@ -206,6 +211,20 @@ func RequestedFields(config map[string]any) []string {
 	default:
 		return nil
 	}
+}
+
+// RelatedSnapshots returns the related connector snapshots supplied for Fetch.
+// It returns nil when the config has no snapshots or carries a different type.
+func RelatedSnapshots(config map[string]any) map[string]*ServiceSnapshot {
+	snapshots, _ := config["_related_snapshots"].(map[string]*ServiceSnapshot)
+	return snapshots
+}
+
+// PreviousSnapshot returns the connector's previous snapshot supplied for Fetch.
+// It returns nil when the config has no snapshot or carries a different type.
+func PreviousSnapshot(config map[string]any) *ServiceSnapshot {
+	snapshot, _ := config["_previous_snapshot"].(*ServiceSnapshot)
+	return snapshot
 }
 
 // WantsField reports whether field should be included given a fields hint.

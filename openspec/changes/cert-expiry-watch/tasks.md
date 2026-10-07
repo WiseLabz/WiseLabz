@@ -8,8 +8,8 @@
 
 ## 2. Snapshot inputs for connectors
 
-- [ ] 2.1 Add the optional `SnapshotDependent` interface and the `RelatedSnapshots` / `PreviousSnapshot` config helpers in `internal/connector`; verify unit tests for the helpers with present and absent inputs.
-- [ ] 2.2 Supply related and previous snapshots before `Fetch` in `internal/sync/run.go` for connectors that implement the interface, tolerating a missing connector or snapshot; verify a sync test with a fake dependent connector that receives both, and one where the related connector was deleted.
+- [x] 2.1 Add the optional `SnapshotDependent` interface and the `RelatedSnapshots` / `PreviousSnapshot` config helpers in `internal/connector`; verify unit tests for the helpers with present and absent inputs.
+- [x] 2.2 Supply related and previous snapshots before `Fetch` in `internal/sync/run.go` for connectors that implement the interface, tolerating a missing connector or snapshot; verify a sync test with a fake dependent connector that receives both, and one where the related connector was deleted.
 
 ## 3. TLS probe connector
 

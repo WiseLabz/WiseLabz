@@ -363,6 +363,11 @@ func (e *Engine) refreshSyncCredentials(ctx context.Context, connectorID string,
 }
 
 func (e *Engine) fetchSyncSnapshot(ctx context.Context, connectorID, jobID string, conn connector.Connector, cfg map[string]any, broadcast func(string, int)) (*connector.ServiceSnapshot, error) {
+	if err := e.syncSnapshotInputs(ctx, connectorID, conn, cfg); err != nil {
+		slog.Error("sync snapshot inputs failed", "connector", logsafe.Sanitize(connectorID), "error", logsafe.Sanitize(err.Error()))
+		e.broadcastSyncError(connectorID, jobID, err)
+		return nil, fmt.Errorf("snapshot inputs: %w", err)
+	}
 	_ = e.store.UpdateConnector(ctx, connectorID, map[string]any{"status": "online", "status_message": "Syncing..."})
 	broadcast("fetching", 28)
 	sn, err := conn.Fetch(ctx, cfg)
@@ -373,6 +378,81 @@ func (e *Engine) fetchSyncSnapshot(ctx context.Context, connectorID, jobID strin
 	slog.Error("sync fetch failed", "connector", logsafe.Sanitize(connectorID), "error", logsafe.Sanitize(err.Error()))
 	e.broadcastSyncError(connectorID, jobID, err)
 	return nil, err
+}
+
+func (e *Engine) syncSnapshotInputs(ctx context.Context, connectorID string, conn connector.Connector, cfg map[string]any) error {
+	dependent, ok := conn.(connector.SnapshotDependent)
+	if !ok {
+		return nil
+	}
+	// Only the engine may supply these inputs, never stored or request config.
+	delete(cfg, "_related_snapshots")
+	delete(cfg, "_previous_snapshot")
+	requestedIDs, wantPrevious := dependent.SnapshotInputs(cfg)
+	relatedIDs := make([]string, 0, len(requestedIDs))
+	seen := make(map[string]bool, len(requestedIDs))
+	for _, id := range requestedIDs {
+		if id == "" || seen[id] {
+			continue
+		}
+		seen[id] = true
+		relatedIDs = append(relatedIDs, id)
+	}
+	existingIDs, err := e.store.ExistingConnectorIDs(ctx, relatedIDs)
+	if err != nil {
+		return fmt.Errorf("check related connectors: %w", err)
+	}
+	related := make(map[string]*connector.ServiceSnapshot, len(relatedIDs))
+	for _, id := range relatedIDs {
+		if !existingIDs[id] {
+			continue
+		}
+		snapshot, err := e.loadSnapshotInput(ctx, id)
+		if err != nil {
+			return fmt.Errorf("related connector %q: %w", id, err)
+		}
+		if snapshot != nil {
+			related[id] = snapshot
+		}
+	}
+	if len(related) > 0 {
+		cfg["_related_snapshots"] = related
+	}
+	if wantPrevious {
+		previous, err := e.loadSnapshotInput(ctx, connectorID)
+		if errors.Is(err, errDecodeSnapshot) {
+			// Like persistSyncSnapshot, treat an unparseable baseline as absent
+			// so the next sync can store a fresh snapshot instead of wedging.
+			slog.Warn("ignoring undecodable previous snapshot", "connector", logsafe.Sanitize(connectorID), "error", logsafe.Sanitize(err.Error()))
+			previous, err = nil, nil
+		}
+		if err != nil {
+			return fmt.Errorf("previous snapshot: %w", err)
+		}
+		if previous != nil {
+			cfg["_previous_snapshot"] = previous
+		}
+	}
+	return nil
+}
+
+// errDecodeSnapshot marks a stored snapshot that cannot be decoded, as opposed
+// to a store failure.
+var errDecodeSnapshot = errors.New("decode snapshot")
+
+func (e *Engine) loadSnapshotInput(ctx context.Context, connectorID string) (*connector.ServiceSnapshot, error) {
+	record, err := e.store.GetLatestSnapshot(ctx, connectorID)
+	if errors.Is(err, store.ErrNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var snapshot connector.ServiceSnapshot
+	if err := json.Unmarshal([]byte(record.Data), &snapshot); err != nil {
+		return nil, fmt.Errorf("%w: %w", errDecodeSnapshot, err)
+	}
+	return &snapshot, nil
 }
 
 func (e *Engine) persistSyncSnapshot(ctx context.Context, connectorID string, sn *connector.ServiceSnapshot) ([]*store.ChangeRecord, []*store.AlertRecord, string, error) {
