@@ -7,6 +7,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { ConnectorCategory } from './connectorCategory';
+import type { ConnectorConfig } from './connectorConfig';
 import type { ConnectorManagedBy } from './connectorManagedBy';
 import type { ServiceStatus } from './serviceStatus';
 
@@ -23,6 +24,8 @@ export interface Connector {
   status: ServiceStatus;
   url?: string;
   verifyTls?: boolean;
+  /** Shareable textarea configuration such as recipes; credentials are omitted. */
+  readonly config?: ConnectorConfig;
   /**
    * RFC 3339 timestamp of the last completed sync, or the empty string when the connector has never synced.
    * @pattern ^$|^[0-9]{4}-[0-9]{2}-[0-9]{2}T

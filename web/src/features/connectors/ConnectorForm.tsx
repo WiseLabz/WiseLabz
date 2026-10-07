@@ -62,7 +62,11 @@ export function ConnectorForm({
         if (isTopLevelField(f)) continue;
         config[f.name] = values[f.name] ?? fieldDefault(f);
       }
-      return postConnectors({ name, owner: owner || undefined, category: schema.category, type: schema.type, ...(url ? { url } : {}), verifyTls, config });
+      // A type with a textarea field (the custom recipe) can derive its category
+      // from that text; sending the schema default would conflict with it, so
+      // leave the category to the server once the text is filled in.
+      const derivesCategory = schema.fields.some((f) => f.kind === 'textarea' && String(config[f.name] ?? '').trim() !== '');
+      return postConnectors({ name, owner: owner || undefined, ...(derivesCategory ? {} : { category: schema.category }), type: schema.type, ...(url ? { url } : {}), verifyTls, config });
     },
     onSuccess: (created) => {
       queryClient.invalidateQueries({ queryKey: getGetConnectorsQueryKey() });
@@ -229,7 +233,7 @@ export function Field({
       </label>
     );
   }
-  if (field.kind === 'secret') {
+  if (field.kind === 'secret' || field.kind === 'textarea') {
     return (
       <label className="block">
         <span className="mb-1 block text-2xs text-ink-faint">

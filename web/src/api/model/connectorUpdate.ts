@@ -15,8 +15,9 @@ export interface ConnectorUpdate {
   owner?: string | null;
   url?: string;
   verifyTls?: boolean;
-  /** Changing the category requires an instance admin (403 otherwise); resending the stored value is allowed */
+  /** Changing the category requires an instance admin (403 otherwise); resending the stored value is allowed. For a type that derives its category (`custom`), a value different from the derived one is rejected with 400, and a change of the derived category through the configuration also requires an instance admin */
   category?: ConnectorCategory;
+  /** Replaces the stored config. Secret fields and `textarea` fields (such as a custom connector recipe) are kept when omitted and cleared by an explicit empty string */
   config?: ConnectorUpdateConfig;
   /**
    * Auto-sync cadence in seconds; null disables scheduled sync (manual only)

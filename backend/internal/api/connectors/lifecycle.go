@@ -228,7 +228,7 @@ func (h *Handler) lifecycleOpMutate(w http.ResponseWriter, r *http.Request, conn
 		UserID:        auth.UserIDFromContext(r.Context()),
 		InstanceAdmin: auth.InstanceAdminFromContext(r.Context()),
 	}
-	if err := h.mutateLifecycleOp(r.Context(), prepared, verb, entityRef, actor, extraAudit); err != nil {
+	if err := h.mutateLifecycleOp(r.Context(), prepared, verb, entityRef, actor, extraAudit, false); err != nil {
 		writeLifecycleError(w, err)
 		return
 	}
@@ -237,22 +237,42 @@ func (h *Handler) lifecycleOpMutate(w http.ResponseWriter, r *http.Request, conn
 
 // MutateLifecycleOp performs an already-authorized lifecycle operation.
 // Callers must verify the connector operator grant first; HTTP mutation
-// handlers must also validate elevation. Per ADR 0001/0002, a failed operation
-// is not rolled back, creates a critical alert, and is not audited; success is
-// audited. An operation that ends only because the caller's context was done
-// still returns the failure but creates no alert. The core does not inspect
-// elevation tokens or request actors.
+// handlers must also validate elevation. A failed operation creates a
+// critical alert even if the caller's context was cancelled; success is
+// audited. The core does not inspect elevation tokens or request actors.
 func (h *Handler) MutateLifecycleOp(
 	ctx context.Context,
 	connectorID, verb, entityRef string,
 	actor LifecycleActor,
 	extraAudit map[string]any,
 ) error {
+	return h.mutateLifecycleOpCore(ctx, connectorID, verb, entityRef, actor, extraAudit, false)
+}
+
+// MutateRunbookLifecycleOp performs a lifecycle step for the run executor.
+// Only this path suppresses a failure alert when the step ended because its
+// run was cancelled or the server shut down.
+func (h *Handler) MutateRunbookLifecycleOp(
+	ctx context.Context,
+	connectorID, verb, entityRef string,
+	actor LifecycleActor,
+	extraAudit map[string]any,
+) error {
+	return h.mutateLifecycleOpCore(ctx, connectorID, verb, entityRef, actor, extraAudit, true)
+}
+
+func (h *Handler) mutateLifecycleOpCore(
+	ctx context.Context,
+	connectorID, verb, entityRef string,
+	actor LifecycleActor,
+	extraAudit map[string]any,
+	suppressAbandonedAlert bool,
+) error {
 	prepared, err := h.prepareLifecycleOp(ctx, connectorID, verb)
 	if err != nil {
 		return err
 	}
-	return h.mutateLifecycleOp(ctx, prepared, verb, entityRef, actor, extraAudit)
+	return h.mutateLifecycleOp(ctx, prepared, verb, entityRef, actor, extraAudit, suppressAbandonedAlert)
 }
 
 func (h *Handler) prepareLifecycleOp(ctx context.Context, connectorID, verb string) (*preparedLifecycleOp, error) {
@@ -298,6 +318,7 @@ func (h *Handler) mutateLifecycleOp(
 	verb, entityRef string,
 	actor LifecycleActor,
 	extraAudit map[string]any,
+	suppressAbandonedAlert bool,
 ) error {
 	rec := prepared.record
 	connectorID := rec.ID
@@ -317,7 +338,7 @@ func (h *Handler) mutateLifecycleOp(
 			message: err.Error(),
 			cause:   err,
 		}
-		if abandonedByCaller(ctx, err) {
+		if suppressAbandonedAlert && abandonedByCaller(ctx, err) {
 			slog.Info("connector "+verb+" abandoned by caller", "connector", connectorID, "error", err)
 			return failure
 		}
@@ -354,10 +375,10 @@ func (h *Handler) mutateLifecycleOp(
 	return nil
 }
 
-// abandonedByCaller reports whether err is the caller's own context error: a
-// user cancelling a run, a dropped request or a shutdown says nothing about the
-// connector, so it must not raise a failure alert. A different error is a real
-// failure even when the context happens to be done as well.
+// abandonedByCaller reports whether err is the caller's own context error. The
+// run executor suppresses alerts for this case because cancellation or shutdown
+// says nothing about the connector; HTTP lifecycle calls still alert. A
+// different error is a real failure even when the context is also done.
 func abandonedByCaller(ctx context.Context, err error) bool {
 	ctxErr := ctx.Err()
 	return ctxErr != nil && errors.Is(err, ctxErr)

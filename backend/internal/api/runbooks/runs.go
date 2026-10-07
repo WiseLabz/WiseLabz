@@ -49,8 +49,9 @@ type runPreviewResponse struct {
 }
 
 // runAuthorized checks all distinct frozen connectors before inspecting state
-// or elevation. Store role checks apply API-key connector restrictions too.
-// CancelRun alone passes only the steps whose connector still exists.
+// or elevation. When none remain to check, an instance admin or an operator on
+// any connector may act. Store role checks apply API-key connector restrictions
+// too. CancelRun alone passes only the steps whose connector still exists.
 func (h *Handler) runAuthorized(w http.ResponseWriter, r *http.Request, steps []*store.RunbookRunStepRecord) bool {
 	checked := map[string]bool{}
 	for _, step := range steps {
@@ -68,12 +69,32 @@ func (h *Handler) runAuthorized(w http.ResponseWriter, r *http.Request, steps []
 			return false
 		}
 	}
-	// A manual-only run must not let a read-only key mutate history.
+	if len(checked) == 0 {
+		ok, err := h.connectorlessRunAuthorized(r.Context(), auth.UserIDFromContext(r.Context()))
+		if err != nil {
+			httputil.Errorf(w, err)
+			return false
+		}
+		if !ok {
+			httputil.Error(w, http.StatusForbidden, "forbidden", "insufficient permissions")
+			return false
+		}
+	}
+	// A read-only key must not mutate run history, including on manual-only runs.
 	if auth.APIKeyRestrictionFromContext(r.Context()).ReadOnly {
 		httputil.Error(w, http.StatusForbidden, "forbidden", "insufficient permissions")
 		return false
 	}
 	return true
+}
+
+// connectorlessRunAuthorized prevents manual-only runs (and cancellations
+// after every connector was deleted) from becoming writable by any user.
+func (h *Handler) connectorlessRunAuthorized(ctx context.Context, userID string) (bool, error) {
+	if auth.InstanceAdminFromContext(ctx) {
+		return true, nil
+	}
+	return h.Store.UserHasAnyConnectorRole(ctx, userID, "operator")
 }
 
 func writeRunError(w http.ResponseWriter, err error) {
@@ -108,6 +129,21 @@ func (h *Handler) runStepViews(ctx context.Context, steps []*store.RunbookRunSte
 	views := make([]RunStepResponse, 0, len(steps))
 	roles := map[string]string{}
 	names := map[string]string{}
+	hasConnector := false
+	for _, step := range steps {
+		if step.ConnectorID != "" {
+			hasConnector = true
+			break
+		}
+	}
+	connectorlessCanExecute := false
+	if len(steps) > 0 && !hasConnector {
+		var err error
+		connectorlessCanExecute, err = h.connectorlessRunAuthorized(ctx, auth.UserIDFromContext(ctx))
+		if err != nil {
+			return nil, err
+		}
+	}
 	for _, step := range steps {
 		view := RunStepResponse{ID: step.ID, Position: step.Position, State: step.State, StartedAt: step.StartedAt, FinishedAt: step.FinishedAt, ConfirmedBy: step.ConfirmedBy}
 		role := "operator"
@@ -132,6 +168,9 @@ func (h *Handler) runStepViews(ctx context.Context, steps []*store.RunbookRunSte
 		view.TimeoutSeconds = reportedTimeout(view.Kind, step.TimeoutSeconds)
 		view.Error = step.Error
 		view.CanExecute = role == "operator" && !auth.APIKeyRestrictionFromContext(ctx).ReadOnly
+		if step.ConnectorID == "" && !hasConnector {
+			view.CanExecute = connectorlessCanExecute && !auth.APIKeyRestrictionFromContext(ctx).ReadOnly
+		}
 		if !view.CanExecute {
 			view.ExecuteBlockedReason = "no_operator_grant"
 		}

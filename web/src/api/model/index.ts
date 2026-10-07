@@ -100,6 +100,7 @@ export * from './connectorBulkSyncRequest';
 export * from './connectorBulkSyncResponse';
 export * from './connectorCapabilities';
 export * from './connectorCategory';
+export * from './connectorConfig';
 export * from './connectorCreate';
 export * from './connectorCreateConfig';
 export * from './connectorManagedBy';

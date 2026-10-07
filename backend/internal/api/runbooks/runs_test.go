@@ -173,15 +173,51 @@ func assertNoRunAudit(t *testing.T, h *Handler, action string) {
 	}
 }
 
-// manualRun seeds a manual-only runbook with one run paused on its first step.
-func manualRun(t *testing.T, h *Handler, user, value string) (string, *store.RunbookRunRecord, []*store.RunbookRunStepRecord) {
+func createManualRunbook(t *testing.T, h *Handler, value string) string {
 	t.Helper()
 	rb, _, err := h.Store.CreateRunbookWithSteps(context.Background(), &store.RunbookRecord{Title: "Manual " + value, TargetType: "change_type", TargetValue: value}, []*store.RunbookStepRecord{{Kind: "manual", Title: "Check " + value}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	run, steps := seededRun(t, h, rb.ID, user, true)
-	return rb.ID, run, steps
+	return rb.ID
+}
+
+// manualRun seeds a manual-only runbook with one run paused on its first step.
+func manualRun(t *testing.T, h *Handler, user, value string) (string, *store.RunbookRunRecord, []*store.RunbookRunStepRecord) {
+	t.Helper()
+	runbookID := createManualRunbook(t, h, value)
+	run, steps := seededRun(t, h, runbookID, user, true)
+	return runbookID, run, steps
+}
+
+func connectorlessActor(t *testing.T, h *Handler, mode string) (string, bool, *auth.APIKeyRestriction) {
+	t.Helper()
+	role := "viewer"
+	if mode == "admin" {
+		role = "operator"
+	}
+	user := apitest.NewUser(t, h.Store, role)
+	admin := mode == "admin"
+	switch mode {
+	case "viewer", "operator":
+		connectorID := seedProxmoxConnector(t, h)
+		grantRole := mode
+		apitest.GrantConnectorRole(t, h.Store, user, connectorID, grantRole)
+	case "restricted_operator":
+		grantedConnector := seedProxmoxConnector(t, h)
+		apitest.GrantConnectorRole(t, h.Store, user, grantedConnector, "operator")
+		restrictedTo := seedProxmoxConnector(t, h)
+		return user, admin, &auth.APIKeyRestriction{ConnectorIDs: []string{restrictedTo}}
+	}
+	return user, admin, nil
+}
+
+func withConnectorlessActor(r *http.Request, user string, admin bool, restriction *auth.APIKeyRestriction) *http.Request {
+	r = r.WithContext(auth.ContextWithUser(r.Context(), user, admin))
+	if restriction != nil {
+		r = r.WithContext(auth.ContextWithAPIKeyRestriction(r.Context(), *restriction))
+	}
+	return r
 }
 
 func assertRunAudit(t *testing.T, h *Handler, action, runID, rbID, user string) {
@@ -621,23 +657,44 @@ func TestCancelRunAfterConnectorDeleted(t *testing.T) {
 		assertRunState(t, h, run.ID, "failed")
 		assertNoRunAudit(t, h, "runbook.run.cancel")
 	})
-	t.Run("all connectors deleted", func(t *testing.T) {
+	t.Run("viewer on surviving connector with operator elsewhere", func(t *testing.T) {
 		h, id, user, a, b := runFixture(t)
 		run, _ := seededRun(t, h, id, user, false)
-		deleteRunConnectors(t, h, a, b)
-		r := runRequest(user, id, run.ID, "")
-		readOnly := r.WithContext(auth.ContextWithAPIKeyRestriction(r.Context(), auth.APIKeyRestriction{ReadOnly: true}))
+		deleteRunConnectors(t, h, b)
+		if _, err := h.Store.UpsertConnectorGrant(context.Background(), user, a, "viewer"); err != nil {
+			t.Fatal(err)
+		}
+		apitest.GrantConnectorRole(t, h.Store, user, seedProxmoxConnector(t, h), "operator")
 		rr := httptest.NewRecorder()
-		h.CancelRun(rr, readOnly)
+		h.CancelRun(rr, runRequest(user, id, run.ID, ""))
 		assertRunStatus(t, rr, 403)
 		assertRunState(t, h, run.ID, "failed")
 		assertNoRunAudit(t, h, "runbook.run.cancel")
-		rr = httptest.NewRecorder()
-		h.CancelRun(rr, r)
-		assertRunStatus(t, rr, 204)
-		assertRunState(t, h, run.ID, "cancelled")
-		assertRunAudit(t, h, "runbook.run.cancel", run.ID, id, user)
 	})
+	for _, mode := range []string{"none", "viewer", "operator", "admin"} {
+		t.Run("all connectors deleted/"+mode, func(t *testing.T) {
+			h, id, starter, a, b := runFixture(t)
+			run, _ := seededRun(t, h, id, starter, false)
+			deleteRunConnectors(t, h, a, b)
+			user, admin, restriction := connectorlessActor(t, h, mode)
+			r := withConnectorlessActor(runRequest(user, id, run.ID, ""), user, admin, restriction)
+			rr := httptest.NewRecorder()
+			h.CancelRun(rr, r)
+			allowed := mode == "operator" || mode == "admin"
+			want := http.StatusForbidden
+			if allowed {
+				want = http.StatusNoContent
+			}
+			assertRunStatus(t, rr, want)
+			if !allowed {
+				assertRunState(t, h, run.ID, "failed")
+				assertNoRunAudit(t, h, "runbook.run.cancel")
+				return
+			}
+			assertRunState(t, h, run.ID, "cancelled")
+			assertRunAudit(t, h, "runbook.run.cancel", run.ID, id, user)
+		})
+	}
 }
 
 func TestConfirmResumeStillRequireDeletedConnectorGrant(t *testing.T) {
@@ -663,4 +720,87 @@ func TestConfirmResumeStillRequireDeletedConnectorGrant(t *testing.T) {
 		assertRunState(t, h, run.ID, "failed")
 		assertNoRunAudit(t, h, "runbook.run.resume")
 	})
+}
+
+func TestConnectorlessRunActionsAuthorization(t *testing.T) {
+	for _, action := range []string{"start", "confirm", "resume", "cancel"} {
+		for _, mode := range []string{"none", "viewer", "operator", "admin", "restricted_operator"} {
+			t.Run(action+"/"+mode, func(t *testing.T) {
+				h, _, starter, _, _ := runFixture(t)
+				runbookID := createManualRunbook(t, h, action+"."+mode)
+				var run *store.RunbookRunRecord
+				var steps []*store.RunbookRunStepRecord
+				if action != "start" {
+					run, steps = seededRun(t, h, runbookID, starter, action != "resume")
+				}
+				user, admin, restriction := connectorlessActor(t, h, mode)
+				r := runRequest(user, runbookID, "", "")
+				if run != nil {
+					r.SetPathValue("runId", run.ID)
+					r.SetPathValue("stepId", steps[0].ID)
+				}
+				r = withConnectorlessActor(r, user, admin, restriction)
+				allowed := mode == "operator" || mode == "admin"
+				if allowed && (action == "start" || action == "resume") {
+					elevateRun(t, h, r, runbookID)
+				}
+				rr := httptest.NewRecorder()
+				switch action {
+				case "start":
+					h.StartRun(rr, r)
+				case "confirm":
+					h.ConfirmRunStep(rr, r)
+				case "resume":
+					h.ResumeRun(rr, r)
+				case "cancel":
+					h.CancelRun(rr, r)
+				}
+				want := http.StatusForbidden
+				if allowed {
+					want = http.StatusNoContent
+					if action == "start" || action == "resume" {
+						want = http.StatusAccepted
+					}
+				}
+				assertRunStatus(t, rr, want)
+				if !allowed {
+					assertNoRunAudit(t, h, "runbook.run."+action)
+					return
+				}
+				runID := ""
+				if run != nil {
+					runID = run.ID
+				} else {
+					runs, total, err := h.Store.ListRunbookRuns(context.Background(), runbookID, 20, 0)
+					if err != nil || total != 1 {
+						t.Fatalf("runs=%+v total=%d err=%v", runs, total, err)
+					}
+					runID = runs[0].ID
+				}
+				assertRunAudit(t, h, "runbook.run."+action, runID, runbookID, user)
+			})
+		}
+	}
+}
+
+func TestConnectorlessRunViewActionPermission(t *testing.T) {
+	for _, mode := range []string{"none", "viewer", "operator", "admin", "restricted_operator"} {
+		t.Run(mode, func(t *testing.T) {
+			h, runbookID, starter, _, _ := runFixture(t)
+			_, run, _ := manualRun(t, h, starter, "view."+mode)
+			user, admin, restriction := connectorlessActor(t, h, mode)
+			r := withConnectorlessActor(runRequest(user, runbookID, run.ID, ""), user, admin, restriction)
+			rr := httptest.NewRecorder()
+			h.GetRun(rr, r)
+			assertRunStatus(t, rr, http.StatusOK)
+			var view RunResponse
+			if err := json.Unmarshal(rr.Body.Bytes(), &view); err != nil {
+				t.Fatal(err)
+			}
+			want := mode == "operator" || mode == "admin"
+			if got := view.Steps[0].CanExecute; got != want {
+				t.Fatalf("CanExecute=%v want=%v for %s", got, want, mode)
+			}
+		})
+	}
 }

@@ -113,7 +113,7 @@ type Store interface {
 // failure alert and audit record. It does not check grants or elevation.
 // *connectors.Handler satisfies it.
 type Lifecycle interface {
-	MutateLifecycleOp(ctx context.Context, connectorID, verb, entityRef string, actor connectors.LifecycleActor, extraAudit map[string]any) error
+	MutateRunbookLifecycleOp(ctx context.Context, connectorID, verb, entityRef string, actor connectors.LifecycleActor, extraAudit map[string]any) error
 }
 
 // Syncer runs one connector sync and blocks until it ends. While another sync

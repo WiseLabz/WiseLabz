@@ -113,6 +113,10 @@ func apply(ctx context.Context, s *store.Store, encKey string, e config.Resolved
 	if err != nil {
 		return err
 	}
+	category, err := schema.ConfigCategory(e.Config)
+	if err != nil {
+		return err
+	}
 	hash, err := fingerprint(e.ConnectorEntry, encKey)
 	if err != nil {
 		return err
@@ -127,14 +131,14 @@ func apply(ctx context.Context, s *store.Store, encKey string, e config.Resolved
 			return err
 		}
 		if rec == nil {
-			return create(ctx, tx, encKey, e, schema.Category, hash, res)
+			return create(ctx, tx, encKey, e, category, hash, res)
 		}
 		res.ConnectorID = rec.ID
 		if rec.ManagedBy == store.ManagedByConfig && rec.ConfigHash == hash {
 			res.Action = Unchanged
 			return nil
 		}
-		return update(ctx, tx, encKey, e, rec, schema.Category, hash, res)
+		return update(ctx, tx, encKey, e, rec, category, hash, res)
 	})
 	if err != nil {
 		return err

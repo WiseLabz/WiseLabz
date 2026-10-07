@@ -102,15 +102,39 @@ func redactURLQuery(err error) error {
 		return err
 	}
 	redacted := *ue
-	if u, perr := url.Parse(ue.URL); perr == nil {
-		u.RawQuery = ""
-		u.Fragment = ""
-		u.User = nil
-		redacted.URL = u.String()
-	} else if i := strings.IndexAny(ue.URL, "?#"); i >= 0 {
-		redacted.URL = ue.URL[:i]
-	}
+	redacted.URL = RedactURL(ue.URL)
 	return &redacted
+}
+
+// RedactURL removes URL query parameters, fragments, and userinfo before a
+// request URL is included in an error, log message, or sync result. Query
+// parameters are all removed because APIs may choose any name for a token.
+func RedactURL(raw string) string {
+	if u, err := url.Parse(raw); err == nil {
+		u.RawQuery = ""
+		u.ForceQuery = false
+		u.Fragment = ""
+		u.RawFragment = ""
+		u.User = nil
+		return u.String()
+	}
+	redacted := raw
+	if i := strings.IndexAny(redacted, "?#"); i >= 0 {
+		redacted = redacted[:i]
+	}
+	if schemeEnd := strings.Index(redacted, "://"); schemeEnd >= 0 {
+		authorityStart := schemeEnd + 3
+		authorityEnd := strings.IndexByte(redacted[authorityStart:], '/')
+		if authorityEnd < 0 {
+			authorityEnd = len(redacted)
+		} else {
+			authorityEnd += authorityStart
+		}
+		if at := strings.LastIndex(redacted[authorityStart:authorityEnd], "@"); at >= 0 {
+			redacted = redacted[:authorityStart] + redacted[authorityStart+at+1:]
+		}
+	}
+	return redacted
 }
 
 // IsTimeout reports whether err represents a request deadline being

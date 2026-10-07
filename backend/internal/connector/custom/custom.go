@@ -4,9 +4,11 @@ package custom
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
+	"sort"
 	"strings"
 	"time"
 
@@ -17,16 +19,27 @@ const typeName = "custom"
 
 func init() {
 	connector.Register(connector.TypeSchema{
-		Type:     typeName,
-		Category: "virtualization",
-		Name:     "Custom HTTP",
+		Type:               typeName,
+		Category:           "virtualization",
+		CategoryForConfig:  CategoryForConfig,
+		EndpointConfigKeys: []string{"url", "recipe"},
+		ConfigCheck:        validateCustomConfig,
+		Name:               "Custom HTTP",
 		Fields: []connector.SchemaField{
 			{Key: "url", Label: "Endpoint URL", Type: "text", Required: true, Placeholder: "https://api.example.com/status"},
 			{Key: "method", Label: "HTTP Method", Type: "select", Required: false, Default: "GET"},
 			{Key: "headers", Label: "Headers (JSON)", Type: "secret", Required: false, Placeholder: `{"Authorization": "Bearer token"}`},
+			{Key: "auth_token", Label: "Recipe token", Type: "password", Required: false},
+			{Key: "auth_username", Label: "Recipe username", Type: "password", Required: false},
+			{Key: "auth_password", Label: "Recipe password", Type: "password", Required: false},
+			{Key: "recipe", Label: "Recipe (YAML)", Type: "textarea", Required: false, MaxLength: maxRecipeBytes, Placeholder: "version: 1\ncategory: other\nauth:\n  mode: none\nendpoints: []"},
 		},
-	}, func(_ map[string]any) (connector.Connector, error) {
-		return &Connector{client: newGuardedClient()}, nil
+	}, func(config map[string]any) (connector.Connector, error) {
+		category, err := CategoryForConfig(config)
+		if err != nil {
+			return nil, err
+		}
+		return &Connector{client: newGuardedClient(), category: category}, nil
 	})
 	// Custom connectors pass through whatever attributes the source payload provides.
 	// No fixed catalog — the point is operator-defined data passthrough.
@@ -37,7 +50,8 @@ func init() {
 
 // Connector is a configurable HTTP connector for custom APIs.
 type Connector struct {
-	client *http.Client
+	client   *http.Client
+	category string
 }
 
 // Name returns the connector display name.
@@ -47,10 +61,26 @@ func (c *Connector) Name() string { return "Custom HTTP" }
 func (c *Connector) Type() string { return typeName }
 
 // Category returns the connector category.
-func (c *Connector) Category() string { return "virtualization" }
+func (c *Connector) Category() string {
+	if c.category == "" {
+		return "virtualization"
+	}
+	return c.category
+}
 
 // Validate tests the connection to the configured HTTP endpoint.
 func (c *Connector) Validate(ctx context.Context, config map[string]any) error {
+	if recipeConfigured(config) {
+		if err := validateCustomConfig(config); err != nil {
+			return redactURLsInRecipeError(err)
+		}
+		recipe, err := recipeFromConfig(config)
+		if err != nil {
+			return err
+		}
+		return redactURLsInRecipeError(sanitizeRecipeError(config, c.validateRecipeConnection(ctx, config, recipe)))
+	}
+
 	rawURL, ok := config["url"].(string)
 	if !ok || rawURL == "" {
 		return fmt.Errorf("url is required")
@@ -93,6 +123,18 @@ func (c *Connector) Validate(ctx context.Context, config map[string]any) error {
 
 // Fetch retrieves data from the configured HTTP endpoint.
 func (c *Connector) Fetch(ctx context.Context, config map[string]any) (*connector.ServiceSnapshot, error) {
+	if recipeConfigured(config) {
+		if err := validateCustomConfig(config); err != nil {
+			return nil, redactURLsInRecipeError(err)
+		}
+		recipe, err := recipeFromConfig(config)
+		if err != nil {
+			return nil, err
+		}
+		snapshot, err := c.fetchRecipe(ctx, config, recipe)
+		return snapshot, redactURLsInRecipeError(sanitizeRecipeError(config, err))
+	}
+
 	rawURL, ok := config["url"].(string)
 	if !ok || rawURL == "" {
 		return nil, fmt.Errorf("url is required")
@@ -151,6 +193,112 @@ func (c *Connector) Fetch(ctx context.Context, config map[string]any) (*connecto
 	}
 
 	return snapshot, nil
+}
+
+func validateCustomConfig(config map[string]any) error {
+	if !recipeConfigured(config) {
+		return nil
+	}
+	raw, ok := config["recipe"].(string)
+	if !ok {
+		return &connector.ConfigValidationError{Field: "recipe", Message: "must be a YAML string"}
+	}
+	if strings.TrimSpace(raw) == "" {
+		return nil
+	}
+	recipe, parseErr := ParseRecipe(raw)
+	var issues []error
+	issues = append(issues, validateLegacyHeaders(config))
+	if _, present := config["url"]; present {
+		_, urlErr := recipeBaseURL(config)
+		issues = append(issues, urlErr)
+	}
+	if parseErr != nil {
+		issues = append(issues, recipeConfigErrors(parseErr))
+		recipe = &Recipe{Auth: RecipeAuth{Mode: recipeAuthMode(raw)}}
+	}
+	issues = append(issues, recipeCredentialErrors(config, recipe.Auth.Mode)...)
+	return redactURLsInRecipeError(errors.Join(issues...))
+}
+
+func validateLegacyHeaders(config map[string]any) error {
+	raw, present := config["headers"]
+	if !present || raw == nil || raw == "" {
+		return nil
+	}
+	var headers map[string]string
+	switch value := raw.(type) {
+	case string:
+		if err := json.Unmarshal([]byte(value), &headers); err != nil {
+			return &connector.ConfigValidationError{Field: "headers", Message: "must be a JSON object of string values"}
+		}
+	case map[string]string:
+		headers = value
+	default:
+		return &connector.ConfigValidationError{Field: "headers", Message: "must be a JSON object of string values"}
+	}
+	var issues []error
+	names := make([]string, 0, len(headers))
+	for name := range headers {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		value := headers[name]
+		if !validHeaderName(name) {
+			issues = append(issues, &connector.ConfigValidationError{Field: "headers", Message: redactEmbeddedRecipeURLs(fmt.Sprintf("%q is not a valid HTTP header name", name))})
+		}
+		if !validHeaderValue(value) {
+			issues = append(issues, &connector.ConfigValidationError{Field: "headers", Message: redactEmbeddedRecipeURLs(fmt.Sprintf("%q contains an invalid HTTP header control byte", name))})
+		}
+	}
+	return errors.Join(issues...)
+}
+
+func recipeCredentialErrors(config map[string]any, mode string) []error {
+	var fields []string
+	switch mode {
+	case "header", "query":
+		fields = []string{"auth_token"}
+	case "basic":
+		fields = []string{"auth_username", "auth_password"}
+	}
+	var issues []error
+	for _, field := range fields {
+		value, ok := config[field].(string)
+		if !ok || strings.TrimSpace(value) == "" {
+			issues = append(issues, &connector.ConfigValidationError{Field: field, Message: "is required for the recipe authentication mode"})
+		} else if !validHeaderValue(value) {
+			issues = append(issues, &connector.ConfigValidationError{Field: field, Message: "contains an invalid control byte"})
+		} else if field == "auth_username" && strings.Contains(value, ":") {
+			issues = append(issues, &connector.ConfigValidationError{Field: field, Message: "must not contain a colon"})
+		}
+	}
+	return issues
+}
+
+func recipeConfigured(config map[string]any) bool {
+	raw, ok := config["recipe"]
+	if !ok || raw == nil {
+		return false
+	}
+	text, ok := raw.(string)
+	if !ok {
+		return true
+	}
+	return strings.TrimSpace(text) != ""
+}
+
+func recipeFromConfig(config map[string]any) (*Recipe, error) {
+	raw, ok := config["recipe"].(string)
+	if !ok {
+		return nil, &connector.ConfigValidationError{Field: "recipe", Message: "must be a YAML string"}
+	}
+	recipe, err := ParseRecipe(raw)
+	if err != nil {
+		return nil, recipeConfigErrors(err)
+	}
+	return recipe, nil
 }
 
 func setHeaders(req *http.Request, config map[string]any) {

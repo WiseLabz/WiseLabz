@@ -250,6 +250,40 @@ func TestMutateLifecycleOpFailureBroadcastsAlertPayload(t *testing.T) {
 	state.failure = errors.New("device offline")
 	state.mu.Unlock()
 
+	wsConn := lifecycleReviewWebsocket(t, h)
+	err := h.MutateLifecycleOp(context.Background(), connectorID, "restart", "vm-100", LifecycleActor{}, nil)
+	assertReviewLifecycleError(t, err, http.StatusBadGateway, "restart_failed")
+	if err := wsConn.SetReadDeadline(time.Now().Add(2 * time.Second)); err != nil {
+		t.Fatalf("SetReadDeadline() error = %v", err)
+	}
+	var event ws.Envelope
+	if err := wsConn.ReadJSON(&event); err != nil {
+		t.Fatalf("ReadJSON(alert event) error = %v", err)
+	}
+	if event.Type != ws.EventAlertCreated || event.ConnectorID != connectorID {
+		t.Fatalf("event type/connector = %q/%q, want %q/%q", event.Type, event.ConnectorID, ws.EventAlertCreated, connectorID)
+	}
+	payload, ok := event.Payload.(map[string]any)
+	if !ok {
+		t.Fatalf("event payload = %#v, want object", event.Payload)
+	}
+	alerts := lifecycleReviewAlerts(t, h, connectorID)
+	if len(alerts) != 1 {
+		t.Fatalf("persisted alerts = %+v, want one", alerts)
+	}
+	wantPayload := map[string]any{
+		"alertId":   alerts[0].ID,
+		"serviceId": connectorID,
+		"severity":  "critical",
+		"title":     "Restart failed for Lifecycle Review",
+	}
+	if !reflect.DeepEqual(payload, wantPayload) {
+		t.Errorf("alert payload = %+v, want %+v", payload, wantPayload)
+	}
+}
+
+func lifecycleReviewWebsocket(t *testing.T, h *Handler) *websocket.Conn {
+	t.Helper()
 	hub := ws.NewHub()
 	hub.SetConnectorAudience(func(context.Context, string) ([]string, error) {
 		return []string{"reader"}, nil
@@ -293,36 +327,7 @@ func TestMutateLifecycleOpFailureBroadcastsAlertPayload(t *testing.T) {
 	if hub.ClientCount() != 1 {
 		t.Fatal("websocket client did not register")
 	}
-
-	err = h.MutateLifecycleOp(context.Background(), connectorID, "restart", "vm-100", LifecycleActor{}, nil)
-	assertReviewLifecycleError(t, err, http.StatusBadGateway, "restart_failed")
-	if err := wsConn.SetReadDeadline(time.Now().Add(2 * time.Second)); err != nil {
-		t.Fatalf("SetReadDeadline() error = %v", err)
-	}
-	var event ws.Envelope
-	if err := wsConn.ReadJSON(&event); err != nil {
-		t.Fatalf("ReadJSON(alert event) error = %v", err)
-	}
-	if event.Type != ws.EventAlertCreated || event.ConnectorID != connectorID {
-		t.Fatalf("event type/connector = %q/%q, want %q/%q", event.Type, event.ConnectorID, ws.EventAlertCreated, connectorID)
-	}
-	payload, ok := event.Payload.(map[string]any)
-	if !ok {
-		t.Fatalf("event payload = %#v, want object", event.Payload)
-	}
-	alerts := lifecycleReviewAlerts(t, h, connectorID)
-	if len(alerts) != 1 {
-		t.Fatalf("persisted alerts = %+v, want one", alerts)
-	}
-	wantPayload := map[string]any{
-		"alertId":   alerts[0].ID,
-		"serviceId": connectorID,
-		"severity":  "critical",
-		"title":     "Restart failed for Lifecycle Review",
-	}
-	if !reflect.DeepEqual(payload, wantPayload) {
-		t.Errorf("alert payload = %+v, want %+v", payload, wantPayload)
-	}
+	return wsConn
 }
 
 func TestMutateLifecycleOpPersistsSideEffectsAfterOperationCancelsContext(t *testing.T) {
@@ -398,7 +403,7 @@ func TestMutateLifecycleOpCancellationBeforeLookupStopsOperation(t *testing.T) {
 	}
 }
 
-func TestMutateLifecycleOpCallerContextEndSkipsFailureAlert(t *testing.T) {
+func TestMutateRunbookLifecycleOpCallerContextEndSkipsFailureAlert(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
 		name string
@@ -424,7 +429,7 @@ func TestMutateLifecycleOpCallerContextEndSkipsFailureAlert(t *testing.T) {
 
 			done := make(chan error, 1)
 			go func() {
-				done <- h.MutateLifecycleOp(ctx, connectorID, "restart", "vm-100", LifecycleActor{}, nil)
+				done <- h.MutateRunbookLifecycleOp(ctx, connectorID, "restart", "vm-100", LifecycleActor{}, nil)
 			}()
 			<-started
 			cancel()
@@ -454,7 +459,7 @@ func TestMutateLifecycleOpCallerContextEndSkipsFailureAlert(t *testing.T) {
 
 		done := make(chan error, 1)
 		go func() {
-			done <- h.MutateLifecycleOp(ctx, connectorID, "restart", "vm-100", LifecycleActor{}, nil)
+			done <- h.MutateRunbookLifecycleOp(ctx, connectorID, "restart", "vm-100", LifecycleActor{}, nil)
 		}()
 		<-started
 		close(ctx.done)
@@ -466,6 +471,68 @@ func TestMutateLifecycleOpCallerContextEndSkipsFailureAlert(t *testing.T) {
 		}
 		assertNoReviewFailureSideEffects(t, h, connectorID)
 	})
+}
+
+func TestHTTPMutationCallerCancellationCreatesCriticalAlert(t *testing.T) {
+	t.Parallel()
+	h := newTestHandler(t)
+	connectorID, state := newLifecycleReviewConnector(t, h)
+	userID := apitest.NewUser(t, h.Store, "operator")
+	apitest.GrantConnectorRole(t, h.Store, userID, connectorID, "operator")
+	elevation, err := h.JWT.IssueElevation(userID, "connector.restart")
+	if err != nil {
+		t.Fatalf("IssueElevation() error = %v", err)
+	}
+
+	started := make(chan struct{})
+	state.mu.Lock()
+	state.operation = func(ctx context.Context) error {
+		close(started)
+		<-ctx.Done()
+		return ctx.Err()
+	}
+	state.mu.Unlock()
+	wsConn := lifecycleReviewWebsocket(t, h)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	req := httptest.NewRequest(http.MethodPost, "/api/connectors/"+connectorID+"/restart", nil)
+	req.SetPathValue("id", connectorID)
+	req.Header.Set("X-Elevation-Token", elevation.Token)
+	req = req.WithContext(auth.ContextWithUser(ctx, userID, false))
+	done := make(chan *httptest.ResponseRecorder, 1)
+	go func() {
+		rr := httptest.NewRecorder()
+		h.RestartPreview(rr, req)
+		done <- rr
+	}()
+	<-started
+	cancel()
+	rr := <-done
+	if rr.Code != http.StatusBadGateway {
+		t.Fatalf("RestartPreview() status = %d, body = %s; want 502", rr.Code, rr.Body.String())
+	}
+	alerts := lifecycleReviewAlerts(t, h, connectorID)
+	if len(alerts) != 1 || alerts[0].Severity != "critical" || alerts[0].Title != "Restart failed for Lifecycle Review" {
+		t.Fatalf("alerts = %+v, want one critical restart alert", alerts)
+	}
+	if err := wsConn.SetReadDeadline(time.Now().Add(2 * time.Second)); err != nil {
+		t.Fatalf("SetReadDeadline() error = %v", err)
+	}
+	var event ws.Envelope
+	if err := wsConn.ReadJSON(&event); err != nil {
+		t.Fatalf("ReadJSON(alert event) error = %v", err)
+	}
+	if event.Type != ws.EventAlertCreated || event.ConnectorID != connectorID {
+		t.Fatalf("event type/connector = %q/%q, want %q/%q", event.Type, event.ConnectorID, ws.EventAlertCreated, connectorID)
+	}
+	payload, ok := event.Payload.(map[string]any)
+	if !ok || payload["severity"] != "critical" || payload["title"] != "Restart failed for Lifecycle Review" {
+		t.Fatalf("alert payload = %#v, want critical restart failure", event.Payload)
+	}
+	if records := lifecycleReviewAudit(t, h, connectorID); len(records) != 0 {
+		t.Fatalf("audit records = %+v, want none after failure", records)
+	}
 }
 
 // deadlineContext is a context whose deadline "expires" when the test closes

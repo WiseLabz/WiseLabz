@@ -14,6 +14,8 @@ health steps wait for an online health check; manual steps wait for a person.
 
 Any blocked step disables Start. You need operator access to every connector in
 the run, and steps on connectors you cannot view appear as **Restricted step**.
+For a run with no connectors, only an instance admin or someone with operator
+access to at least one connector can start it.
 After reviewing the preview, confirm the runbook’s name and authenticate when
 prompted. This approval is scoped to that runbook and covers the entire run.
 A runbook with no steps cannot start.
@@ -31,17 +33,22 @@ or **Unknown**. Detail shows available timestamps, reasons, errors, and the user
 who started, resumed, confirmed, or cancelled the run.
 
 - **Confirm step** continues a waiting manual step. It needs operator access to
-  every connector in the run, but no additional authentication approval.
+  every connector in the run, but no additional authentication approval. For a
+  run with no connectors, only an instance admin or someone with operator access
+  to at least one connector can confirm it.
 - **Resume run** requires fresh approval for the original runbook and retries
   from the first step that did not succeed. Completed steps are not repeated.
+  When the run has no connectors, the caller must be an instance admin or have
+  operator access to at least one connector.
   If that step is **Unknown**, its real outcome is not known, usually because the
   backend restarted during execution. Inspect the connector before approving:
   resuming repeats that operation and may repeat a change that already happened.
 - **Cancel run** asks for confirmation and prevents further steps. It does not
   undo completed operations. Unfinished steps become skipped. Any user with
   operator access to every connector in the run that still exists can cancel it;
-  connectors deleted since the run started do not count. Cancelling needs no
-  additional authentication approval.
+  connectors deleted since the run started do not count. If no connectors
+  remain, the caller must be an instance admin or have operator access to at
+  least one connector. Cancelling needs no additional authentication approval.
 
 A backend restart never automatically continues an interrupted run. A running
 run becomes failed and its active step becomes unknown; a waiting manual step

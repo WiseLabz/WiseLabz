@@ -315,9 +315,41 @@ describe('RunDetail', () => {
     expect(screen.getByRole('button', { name: 'Cancel run' })).toBeEnabled();
     expect(
       screen.getByText(
-        'You need operator access to every connector in this run to perform this action.'
+        'You need operator access to every connector in this run, or to at least one connector when the run has none.'
       )
     ).toBeInTheDocument();
+  });
+
+  it('disables manual confirmation without connectorless-run access and shows cancellation errors', async () => {
+    currentRun = {
+      ...baseRun,
+      state: 'waiting_manual',
+      steps: [
+        {
+          ...baseRun.steps[0],
+          kind: 'manual',
+          connectorId: undefined,
+          connectorName: undefined,
+          state: 'waiting',
+          canExecute: false,
+        },
+      ],
+    };
+    server.use(
+      http.post('/api/runbook-runs/:runId/cancel', () =>
+        HttpResponse.json(
+          { code: 'forbidden', message: 'insufficient permissions' },
+          { status: 403 }
+        )
+      )
+    );
+    renderDetail();
+
+    expect(await screen.findByRole('button', { name: 'Confirm step' })).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel run' }));
+    const confirmation = await screen.findByRole('dialog', { name: 'Cancel run' });
+    fireEvent.click(within(confirmation).getByRole('button', { name: 'Yes, cancel run' }));
+    await waitFor(() => expect(toast.error).toHaveBeenCalled());
   });
 
   it('keeps a run with a deleted connector cancellable', async () => {

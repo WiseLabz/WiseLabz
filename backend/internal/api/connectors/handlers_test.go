@@ -118,7 +118,7 @@ func TestCreate(t *testing.T) {
 
 	t.Run("new category accepted", func(t *testing.T) {
 		for _, cat := range []string{"storage", "monitoring", "media", "other"} {
-			body := `{"name":"NewCat ` + cat + `","category":"` + cat + `","type":"custom","url":"https://` + cat + `.example.com"}`
+			body := `{"name":"NewCat ` + cat + `","category":"` + cat + `","type":"proxmox","url":"https://` + cat + `.example.com"}`
 			req := httptest.NewRequest(http.MethodPost, "/api/connectors", strings.NewReader(body))
 			rr := httptest.NewRecorder()
 			h.Create(rr, req)
@@ -156,7 +156,7 @@ func TestUpdate(t *testing.T) {
 	h := newTestHandler(t)
 
 	createReq := httptest.NewRequest(http.MethodPost, "/api/connectors",
-		strings.NewReader(`{"name":"Original","category":"virtualization","type":"custom","url":"https://a.example.com"}`))
+		strings.NewReader(`{"name":"Original","category":"virtualization","type":"proxmox","url":"https://a.example.com"}`))
 	createRR := httptest.NewRecorder()
 	h.Create(createRR, createReq)
 	var created map[string]any
@@ -649,7 +649,7 @@ func TestUpdateCategoryChangeRequiresInstanceAdmin(t *testing.T) {
 
 	createRR := httptest.NewRecorder()
 	h.Create(createRR, httptest.NewRequest(http.MethodPost, "/api/connectors",
-		strings.NewReader(`{"name":"C","category":"virtualization","type":"custom","url":"https://a.example.com"}`)))
+		strings.NewReader(`{"name":"C","category":"virtualization","type":"proxmox","url":"https://a.example.com"}`)))
 	var created map[string]any
 	if err := json.Unmarshal(createRR.Body.Bytes(), &created); err != nil {
 		t.Fatalf("unmarshal create: %v", err)

@@ -50,7 +50,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 
 	out := make([]connectorWithRole, 0, len(rows))
 	for _, c := range rows {
-		out = append(out, connectorWithRole{ConnectorRecord: c.ConnectorRecord, MyRole: c.Role})
+		out = append(out, connectorWithRole{ConnectorRecord: c.ConnectorRecord, MyRole: c.Role, Config: textareaConfig(&c.ConnectorRecord)})
 	}
 
 	// Spec: GET /connectors returns a bare Connector[] (see openapi.yaml).
@@ -66,22 +66,45 @@ type connectorWithRole struct {
 	// ConfigData shadows the embedded record's field so it is never serialized:
 	// it holds non-secret credentials and secret ciphertexts (or legacy
 	// plaintext) that no viewer should receive.
-	ConfigData string `json:"configData,omitempty"`
+	ConfigData string            `json:"configData,omitempty"`
+	Config     map[string]string `json:"config,omitempty"`
 }
 
-// connectorView is a connector record without its stored config, for
-// responses that carry no role.
+// connectorView exposes only shareable textarea configuration, for responses
+// that carry no role.
 type connectorView struct {
 	store.ConnectorRecord
-	ConfigData string `json:"configData,omitempty"`
+	ConfigData string            `json:"configData,omitempty"`
+	Config     map[string]string `json:"config,omitempty"`
 }
 
-// viewOf wraps a possibly-nil record for a config-free response.
+// viewOf wraps a possibly-nil record without exposing stored credentials.
 func viewOf(c *store.ConnectorRecord) any {
 	if c == nil {
 		return nil
 	}
-	return connectorView{ConnectorRecord: *c}
+	return connectorView{ConnectorRecord: *c, Config: textareaConfig(c)}
+}
+
+// textareaConfig exposes shareable multi-line data, never stored credentials.
+func textareaConfig(rec *store.ConnectorRecord) map[string]string {
+	schema, err := connector.GetTypeSchema(rec.Type)
+	if err != nil {
+		return nil
+	}
+	var stored map[string]any
+	if err := json.Unmarshal([]byte(rec.ConfigData), &stored); err != nil {
+		return nil
+	}
+	out := map[string]string{}
+	for _, field := range schema.Fields {
+		if field.Type == "textarea" {
+			if value, ok := stored[field.Key].(string); ok {
+				out[field.Key] = value
+			}
+		}
+	}
+	return out
 }
 
 // Create handles POST /api/connectors.
@@ -100,6 +123,18 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	}](w, r)
 	if !ok {
 		return
+	}
+	if schema, err := connector.GetTypeSchema(req.Type); err == nil && schema.CategoryForConfig != nil {
+		category, err := schema.ConfigCategory(req.Config)
+		if err != nil {
+			writeConfigRejection(w, err)
+			return
+		}
+		if req.Category != "" && req.Category != category {
+			writeCategoryConflict(w)
+			return
+		}
+		req.Category = category
 	}
 	var fieldErrs []httputil.FieldError
 	for _, f := range []struct{ name, value string }{
@@ -179,7 +214,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		slog.Error("failed to record audit", "action", "connector.create", "error", err)
 	}
 
-	httputil.JSON(w, http.StatusCreated, connectorWithRole{ConnectorRecord: *c, MyRole: "operator"})
+	httputil.JSON(w, http.StatusCreated, connectorWithRole{ConnectorRecord: *c, MyRole: "operator", Config: textareaConfig(c)})
 }
 
 // Get handles GET /api/connectors/{id}. Default deny: 404s (not 403, to
@@ -204,7 +239,7 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 		httputil.Error(w, http.StatusNotFound, "not_found", "Connector not found")
 		return
 	}
-	httputil.JSON(w, http.StatusOK, connectorWithRole{ConnectorRecord: *c, MyRole: role})
+	httputil.JSON(w, http.StatusOK, connectorWithRole{ConnectorRecord: *c, MyRole: role, Config: textareaConfig(c)})
 }
 
 // updateConnectorRequest is the PUT /api/connectors/{id} request body.
@@ -312,9 +347,10 @@ func (h *Handler) pullInNextRun(w http.ResponseWriter, r *http.Request, id strin
 // connector connects. Repointing one makes the server send its stored
 // credentials to the new endpoint, so changing url, type or verifyTls is an
 // instance-admin action. Endpoint-defining config keys follow the same rule;
-// operators may still send unchanged values. So does category: it selects the
-// sync transformers, the templates that match the connector and the
-// category-scoped notification routes. It writes the error response and
+// operators may still send unchanged values, and may omit a key whose field
+// is kept when omitted (see configKeptWhenOmitted). So does category: it
+// selects the sync transformers, the templates that match the connector and
+// the category-scoped notification routes. It writes the error response and
 // reports false when the update must not proceed.
 func (h *Handler) authorizeConnectorRepoint(w http.ResponseWriter, r *http.Request, id string, req *updateConnectorRequest) bool {
 	if req.URL == nil && req.Type == nil && req.VerifyTLS == nil && req.Category == nil && req.Config == nil {
@@ -351,7 +387,10 @@ func (h *Handler) authorizeConnectorRepoint(w http.ResponseWriter, r *http.Reque
 			return false
 		}
 		for _, key := range schema.EndpointConfigKeys {
-			// Config is replaced, so omitting a key also changes the endpoint.
+			if _, sent := req.Config[key]; !sent && fieldKeptWhenOmitted(schema, key) {
+				continue
+			}
+			// Config is replaced, so omitting any other key also changes the endpoint.
 			if !reflect.DeepEqual(req.Config[key], oldConfig[key]) {
 				httputil.Error(w, http.StatusForbidden, "forbidden", "Changing endpoint config requires an instance admin")
 				return false
@@ -394,7 +433,7 @@ func applyConnectorScalarUpdates(updates map[string]any, req *updateConnectorReq
 // without a config body is a no-op. It writes the error response and reports
 // false when the update must not proceed.
 func (h *Handler) applyConnectorConfigUpdate(w http.ResponseWriter, r *http.Request, id string, req *updateConnectorRequest, updates map[string]any) bool {
-	if req.Config == nil && req.URL == nil && req.Type == nil && req.VerifyTLS == nil {
+	if req.Config == nil && req.URL == nil && req.Type == nil && req.VerifyTLS == nil && req.Category == nil {
 		return true
 	}
 	rec, err := h.Store.GetConnector(r.Context(), id)
@@ -423,14 +462,41 @@ func (h *Handler) applyConnectorConfigUpdate(w http.ResponseWriter, r *http.Requ
 			[]httputil.FieldError{{Field: "url", Msg: "is required"}})
 		return false
 	}
-	effective, err := h.effectiveConnectorConfig(rec, typ, req.Config)
+	stored, err := store.ParseConnectorConfig(rec.Type, rec.ConfigData, h.Config.Encryption.Key)
 	if err != nil {
 		httputil.Errorf(w, err)
 		return false
 	}
+	effective := effectiveConnectorConfig(stored, rec.Type, typ, req.Config)
 	if err := validateConnectorConfig(typ, url, verifyTLS, effective); err != nil {
 		writeConfigRejection(w, err)
 		return false
+	}
+	if schema, err := connector.GetTypeSchema(typ); err == nil && schema.CategoryForConfig != nil {
+		derived, err := schema.ConfigCategory(effective)
+		if err != nil {
+			writeConfigRejection(w, err)
+			return false
+		}
+		// A connector whose derived category did not change keeps whatever
+		// category it has: recipe-less custom connectors created or repointed
+		// before the category was derived may legitimately hold another one.
+		unchanged := false
+		if typ == rec.Type {
+			storedDerived, storedErr := schema.ConfigCategory(stored)
+			unchanged = storedErr == nil && storedDerived == derived
+		}
+		if req.Category != nil && *req.Category != derived && (!unchanged || *req.Category != rec.Category) {
+			writeCategoryConflict(w)
+			return false
+		}
+		if !unchanged {
+			if derived != rec.Category && !auth.InstanceAdminFromContext(r.Context()) {
+				httputil.Error(w, http.StatusForbidden, "forbidden", "Changing category requires an instance admin")
+				return false
+			}
+			updates["category"] = derived
+		}
 	}
 	if req.Config == nil {
 		return true
@@ -453,31 +519,47 @@ func (h *Handler) applyConnectorConfigUpdate(w http.ResponseWriter, r *http.Requ
 	return true
 }
 
-// effectiveConnectorConfig is the config an update would leave behind: the
-// request's config, plus the stored value of every secret field the request
-// leaves out. Credentials are write-only over the API, so a client that does
-// not re-enter one means "keep it"; an explicit empty string clears it. A
-// request without a config body keeps the whole stored config. Validation
-// runs against this merged state so cross-field rules (Caddy's exactly-one-of
-// url/config_json) hold for every PUT shape.
-func (h *Handler) effectiveConnectorConfig(rec *store.ConnectorRecord, typ string, requested map[string]any) (map[string]any, error) {
-	stored, err := store.ParseConnectorConfig(rec.Type, rec.ConfigData, h.Config.Encryption.Key)
-	if err != nil {
-		return nil, err
+// configKeptWhenOmitted reports whether a field of this kind keeps its stored
+// value when a PUT's config leaves the key out. Secrets are write-only over the
+// API, and textarea fields (such as a recipe) are edited on a separate page
+// that never resends them.
+func configKeptWhenOmitted(kind string) bool {
+	return store.IsSecretFieldType(kind) || kind == "textarea"
+}
+
+// fieldKeptWhenOmitted reports whether the schema declares key as a field
+// that configKeptWhenOmitted.
+func fieldKeptWhenOmitted(schema *connector.TypeSchema, key string) bool {
+	for _, f := range schema.Fields {
+		if f.Key == key {
+			return configKeptWhenOmitted(f.Type)
+		}
 	}
+	return false
+}
+
+// effectiveConnectorConfig is the config an update would leave behind: the
+// request's config, plus the stored value of every secret and textarea field
+// the request leaves out. Credentials are write-only over the API and the web
+// edit page never resends a recipe, so a client that does not re-enter one
+// means "keep it"; an explicit empty string clears it. A request without a
+// config body keeps the whole stored config. Validation runs against this
+// merged state so cross-field rules (Caddy's exactly-one-of url/config_json)
+// hold for every PUT shape.
+func effectiveConnectorConfig(stored map[string]any, storedType, typ string, requested map[string]any) map[string]any {
 	if requested == nil {
-		return stored, nil
+		return stored
 	}
 	merged := make(map[string]any, len(requested))
 	for k, v := range requested {
 		merged[k] = v
 	}
 	schema, err := connector.GetTypeSchema(typ)
-	if err != nil || typ != rec.Type {
-		return merged, nil //nolint:nilerr // unknown or changed type: nothing to carry over
+	if err != nil || typ != storedType {
+		return merged // unknown or changed type: nothing to carry over
 	}
 	for _, f := range schema.Fields {
-		if !store.IsSecretFieldType(f.Type) {
+		if !configKeptWhenOmitted(f.Type) {
 			continue
 		}
 		if _, sent := merged[f.Key]; sent {
@@ -487,7 +569,7 @@ func (h *Handler) effectiveConnectorConfig(rec *store.ConnectorRecord, typ strin
 			merged[f.Key] = v
 		}
 	}
-	return merged, nil
+	return merged
 }
 
 // recordConnectorUpdateAudit records only which fields changed, not their
@@ -918,13 +1000,35 @@ func configRequestField(schemaKey string) string {
 // server-side defect, not a field the caller can fix, so it keeps the plain
 // envelope.
 func writeConfigRejection(w http.ResponseWriter, err error) {
-	var invalid *connector.ConfigValidationError
-	if !errors.As(err, &invalid) {
+	details := configErrorDetails(err)
+	if len(details) == 0 {
 		httputil.Error(w, http.StatusBadRequest, "invalid_request", err.Error())
 		return
 	}
-	httputil.ErrorWithDetails(w, http.StatusBadRequest, "invalid_request", err.Error(),
-		[]httputil.FieldError{{Field: configRequestField(invalid.Field), Msg: invalid.Message}})
+	httputil.ErrorWithDetails(w, http.StatusBadRequest, "invalid_request", err.Error(), details)
+}
+
+func configErrorDetails(err error) []httputil.FieldError {
+	if joined, ok := err.(interface{ Unwrap() []error }); ok {
+		details := []httputil.FieldError{}
+		for _, child := range joined.Unwrap() {
+			details = append(details, configErrorDetails(child)...)
+		}
+		return details
+	}
+	if wrapped, ok := err.(interface{ Unwrap() error }); ok {
+		return configErrorDetails(wrapped.Unwrap())
+	}
+	var invalid *connector.ConfigValidationError
+	if errors.As(err, &invalid) {
+		return []httputil.FieldError{{Field: configRequestField(invalid.Field), Msg: invalid.Message}}
+	}
+	return nil
+}
+
+func writeCategoryConflict(w http.ResponseWriter) {
+	httputil.ErrorWithDetails(w, http.StatusBadRequest, "invalid_request", "Category conflicts with connector configuration",
+		[]httputil.FieldError{{Field: "category", Msg: "must match the category derived from the recipe"}})
 }
 
 // Schema handles GET /api/connectors/schema.

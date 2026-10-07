@@ -51,6 +51,12 @@ export const getGetConnectorsResponseMock = (): Connector[] =>
       undefined,
     ]),
     verifyTls: faker.helpers.arrayElement([faker.datatype.boolean(), undefined]),
+    config: faker.helpers.arrayElement([
+      {
+        [faker.string.alphanumeric(5)]: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      },
+      undefined,
+    ]),
     lastSyncAt: faker.helpers.arrayElement([
       faker.helpers.fromRegExp('^$|^[0-9]{4}-[0-9]{2}-[0-9]{2}T'),
       undefined,
@@ -104,6 +110,12 @@ export const getPostConnectorsResponseMock = (
     undefined,
   ]),
   verifyTls: faker.helpers.arrayElement([faker.datatype.boolean(), undefined]),
+  config: faker.helpers.arrayElement([
+    {
+      [faker.string.alphanumeric(5)]: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    },
+    undefined,
+  ]),
   lastSyncAt: faker.helpers.arrayElement([
     faker.helpers.fromRegExp('^$|^[0-9]{4}-[0-9]{2}-[0-9]{2}T'),
     undefined,
@@ -159,6 +171,7 @@ export const getGetConnectorsSchemaResponseMock = (): ConnectorTypeSchema[] =>
           'password',
           'select',
           'secret',
+          'textarea',
         ] as const),
         required: faker.datatype.boolean(),
         secret: faker.helpers.arrayElement([faker.datatype.boolean(), undefined]),
@@ -222,6 +235,12 @@ export const getGetConnectorsConnectorIdResponseMock = (
     undefined,
   ]),
   verifyTls: faker.helpers.arrayElement([faker.datatype.boolean(), undefined]),
+  config: faker.helpers.arrayElement([
+    {
+      [faker.string.alphanumeric(5)]: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    },
+    undefined,
+  ]),
   lastSyncAt: faker.helpers.arrayElement([
     faker.helpers.fromRegExp('^$|^[0-9]{4}-[0-9]{2}-[0-9]{2}T'),
     undefined,
@@ -276,6 +295,12 @@ export const getPutConnectorsConnectorIdResponseMock = (
     undefined,
   ]),
   verifyTls: faker.helpers.arrayElement([faker.datatype.boolean(), undefined]),
+  config: faker.helpers.arrayElement([
+    {
+      [faker.string.alphanumeric(5)]: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    },
+    undefined,
+  ]),
   lastSyncAt: faker.helpers.arrayElement([
     faker.helpers.fromRegExp('^$|^[0-9]{4}-[0-9]{2}-[0-9]{2}T'),
     undefined,
@@ -330,6 +355,12 @@ export const getPostConnectorsConnectorIdReleaseResponseMock = (
     undefined,
   ]),
   verifyTls: faker.helpers.arrayElement([faker.datatype.boolean(), undefined]),
+  config: faker.helpers.arrayElement([
+    {
+      [faker.string.alphanumeric(5)]: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    },
+    undefined,
+  ]),
   lastSyncAt: faker.helpers.arrayElement([
     faker.helpers.fromRegExp('^$|^[0-9]{4}-[0-9]{2}-[0-9]{2}T'),
     undefined,
@@ -832,6 +863,12 @@ export const getPutConnectorsConnectorIdEnabledResponseMock = (
     undefined,
   ]),
   verifyTls: faker.helpers.arrayElement([faker.datatype.boolean(), undefined]),
+  config: faker.helpers.arrayElement([
+    {
+      [faker.string.alphanumeric(5)]: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    },
+    undefined,
+  ]),
   lastSyncAt: faker.helpers.arrayElement([
     faker.helpers.fromRegExp('^$|^[0-9]{4}-[0-9]{2}-[0-9]{2}T'),
     undefined,

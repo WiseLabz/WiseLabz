@@ -17,6 +17,8 @@ func TestRunRoutesExecuteAndAuthorize(t *testing.T) {
 		t.Run(prefix, func(t *testing.T) {
 			app := newTestApp(t)
 			user, token := app.user(t, "viewer")
+			connectorID := seedPreviewConnector(t, app, "Run operator", "virtualization", "custom", false)
+			app.connectorGrant(t, user, connectorID, "operator")
 			rb, _, err := app.Store.CreateRunbookWithSteps(context.Background(), &store.RunbookRecord{Title: "Manual recovery", TargetType: "change_type", TargetValue: "manual.route"}, []*store.RunbookStepRecord{{Kind: "manual", Title: "Confirm one"}, {Kind: "manual", Title: "Confirm two"}})
 			if err != nil {
 				t.Fatal(err)
@@ -102,6 +104,8 @@ func TestRunRoutesExecuteAndAuthorize(t *testing.T) {
 func TestRunStartWithRealElevation(t *testing.T) {
 	app := newTestApp(t)
 	user, token := app.user(t, "viewer")
+	connectorID := seedPreviewConnector(t, app, "Run operator", "virtualization", "custom", false)
+	app.connectorGrant(t, user, connectorID, "operator")
 	ctx := context.Background()
 	rb, _, err := app.Store.CreateRunbookWithSteps(ctx, &store.RunbookRecord{Title: "Manual recovery", TargetType: "change_type", TargetValue: "manual.elevate"}, []*store.RunbookStepRecord{{Kind: "manual", Title: "Confirm one"}})
 	if err != nil {

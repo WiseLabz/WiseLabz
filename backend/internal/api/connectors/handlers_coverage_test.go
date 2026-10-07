@@ -219,7 +219,7 @@ func TestConnectorStoreErrorPaths(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			cancel()
-			req := httptest.NewRequest("POST", "/", strings.NewReader(`{"name":"Test","category":"networking","type":"custom","url":"https://example.com","enabled":false}`)).WithContext(ctx)
+			req := httptest.NewRequest("POST", "/", strings.NewReader(`{"name":"Test","category":"virtualization","type":"custom","url":"https://example.com","enabled":false}`)).WithContext(ctx)
 			req.SetPathValue("id", "missing")
 			req.Header.Set("X-Elevation-Token", "present")
 			req = req.WithContext(auth.ContextWithUser(req.Context(), "", true))

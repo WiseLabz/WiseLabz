@@ -9,11 +9,8 @@ import (
 	"github.com/WiseLabz/wiselabz/internal/crypto"
 )
 
-// IsSecretFieldType reports whether a SchemaField.Type holds a value that
-// must be encrypted at rest in config_data. "password" is the only kind
-// today; "secret" (a future multi-line paste field for PEM certs/SSH keys)
-// must be treated the same way, so check this helper rather than comparing
-// against "password" directly.
+// IsSecretFieldType reports whether a SchemaField.Type must be encrypted at
+// rest. Multi-line "secret" fields are encrypted; "textarea" fields are not.
 func IsSecretFieldType(t string) bool {
 	return t == "password" || t == "secret"
 }
