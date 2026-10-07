@@ -215,9 +215,10 @@ func New(deps Deps) *Executor {
 
 // FreezeSteps copies authored steps into the form a run stores, so later
 // edits to the runbook cannot change what the run executes. A step without a
-// kind is a lifecycle step. Only the wait kinds have a timeout: the value
-// stored on any other step (legacy rows hold the column default) is dropped,
-// and a wait step without one gets DefaultStepTimeout.
+// kind is a lifecycle step. Only the wait kinds (sync_and_wait,
+// wait_until_healthy and wait_for_entity) keep a timeout: the value stored on
+// any other step (legacy rows hold the column default) is dropped, and a wait
+// step without one gets DefaultStepTimeout.
 func FreezeSteps(steps []*store.RunbookStepRecord) []*store.RunbookRunStepRecord {
 	frozen := make([]*store.RunbookRunStepRecord, 0, len(steps))
 	for _, step := range steps {
@@ -230,7 +231,7 @@ func FreezeSteps(steps []*store.RunbookStepRecord) []*store.RunbookRunStepRecord
 			kind = KindLifecycle
 		}
 		timeout := 0
-		if hasTimeout(kind) {
+		if hasTimeout(kind) || kind == "wait_for_entity" {
 			timeout = step.TimeoutSeconds
 			if timeout <= 0 {
 				timeout = int(DefaultStepTimeout / time.Second)

@@ -1023,7 +1023,8 @@ func TestStepHelpers(t *testing.T) {
 		{Kind: KindSyncAndWait, Title: "Sync", ConnectorID: "c", TimeoutSeconds: 60},
 		{Kind: KindWaitUntilHealthy, Title: "Wait", ConnectorID: "c"},
 		{Kind: "config_push", Title: "Configure", ConnectorID: "c", EntityRef: "100", FieldKey: "enabled", TargetValue: `false`},
-		{Kind: "wait_for_entity", Title: "Observe", ConnectorID: "c", EntityRef: "100", Attribute: "status", Operator: "eq", ExpectedValue: `"running"`},
+		{Kind: "wait_for_entity", Title: "Observe", ConnectorID: "c", EntityRef: "100", Attribute: "status", Operator: "eq", ExpectedValue: `"running"`, TimeoutSeconds: 600},
+		{Kind: "wait_for_entity", Title: "Observe default", ConnectorID: "c", EntityRef: "100", Attribute: "status", Operator: "eq", ExpectedValue: `"running"`},
 	})
 	want := []*store.RunbookRunStepRecord{
 		{Kind: KindLifecycle, Title: "Restart", ConnectorID: "c", Verb: "restart", EntityRef: "100"},
@@ -1033,7 +1034,8 @@ func TestStepHelpers(t *testing.T) {
 		{Kind: KindSyncAndWait, Title: "Sync", ConnectorID: "c", TimeoutSeconds: 60},
 		{Kind: KindWaitUntilHealthy, Title: "Wait", ConnectorID: "c", TimeoutSeconds: 300},
 		{Kind: "config_push", Title: "Configure", ConnectorID: "c", EntityRef: "100", FieldKey: "enabled", TargetValue: `false`},
-		{Kind: "wait_for_entity", Title: "Observe", ConnectorID: "c", EntityRef: "100", Attribute: "status", Operator: "eq", ExpectedValue: `"running"`},
+		{Kind: "wait_for_entity", Title: "Observe", ConnectorID: "c", EntityRef: "100", Attribute: "status", Operator: "eq", ExpectedValue: `"running"`, TimeoutSeconds: 600},
+		{Kind: "wait_for_entity", Title: "Observe default", ConnectorID: "c", EntityRef: "100", Attribute: "status", Operator: "eq", ExpectedValue: `"running"`, TimeoutSeconds: 300},
 	}
 	if !reflect.DeepEqual(frozen, want) {
 		t.Fatalf("FreezeSteps() = %+v, want %+v", frozen, want)
