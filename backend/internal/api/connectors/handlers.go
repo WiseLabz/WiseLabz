@@ -50,7 +50,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 
 	out := make([]connectorWithRole, 0, len(rows))
 	for _, c := range rows {
-		out = append(out, connectorWithRole{ConnectorRecord: c.ConnectorRecord, MyRole: c.Role, Config: textareaConfig(&c.ConnectorRecord)})
+		out = append(out, connectorWithRole{ConnectorRecord: c.ConnectorRecord, MyRole: c.Role, Config: safeConnectorConfig(&c.ConnectorRecord)})
 	}
 
 	// Spec: GET /connectors returns a bare Connector[] (see openapi.yaml).
@@ -83,24 +83,44 @@ func viewOf(c *store.ConnectorRecord) any {
 	if c == nil {
 		return nil
 	}
-	return connectorView{ConnectorRecord: *c, Config: textareaConfig(c)}
+	return connectorView{ConnectorRecord: *c, Config: safeConnectorConfig(c)}
 }
 
-// textareaConfig exposes shareable multi-line data, never stored credentials.
-func textareaConfig(rec *store.ConnectorRecord) map[string]string {
+// safeConnectorConfig exposes only explicitly shareable config, never stored credentials.
+func safeConnectorConfig(rec *store.ConnectorRecord) map[string]string {
 	schema, err := connector.GetTypeSchema(rec.Type)
 	if err != nil {
 		return nil
 	}
-	var stored map[string]any
+	var stored map[string]json.RawMessage
 	if err := json.Unmarshal([]byte(rec.ConfigData), &stored); err != nil {
 		return nil
 	}
-	out := map[string]string{}
+	allowed := make(map[string]bool)
 	for _, field := range schema.Fields {
 		if field.Type == "textarea" {
-			if value, ok := stored[field.Key].(string); ok {
-				out[field.Key] = value
+			allowed[field.Key] = true
+		}
+	}
+	if rec.Type == tlsProbeType {
+		allowed["import_connector_id"] = true
+		allowed["import_port"] = true
+	}
+	out := map[string]string{}
+	for key := range allowed {
+		raw, ok := stored[key]
+		if !ok {
+			continue
+		}
+		var value string
+		if err := json.Unmarshal(raw, &value); err == nil {
+			out[key] = value
+			continue
+		}
+		if rec.Type == tlsProbeType && key == "import_port" {
+			var number float64
+			if err := json.Unmarshal(raw, &number); err == nil {
+				out[key] = strconv.FormatFloat(number, 'f', -1, 64)
 			}
 		}
 	}
@@ -217,7 +237,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		slog.Error("failed to record audit", "action", "connector.create", "error", err)
 	}
 
-	httputil.JSON(w, http.StatusCreated, connectorWithRole{ConnectorRecord: *c, MyRole: "operator", Config: textareaConfig(c)})
+	httputil.JSON(w, http.StatusCreated, connectorWithRole{ConnectorRecord: *c, MyRole: "operator", Config: safeConnectorConfig(c)})
 }
 
 // Get handles GET /api/connectors/{id}. Default deny: 404s (not 403, to
@@ -242,7 +262,7 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 		httputil.Error(w, http.StatusNotFound, "not_found", "Connector not found")
 		return
 	}
-	httputil.JSON(w, http.StatusOK, connectorWithRole{ConnectorRecord: *c, MyRole: role, Config: textareaConfig(c)})
+	httputil.JSON(w, http.StatusOK, connectorWithRole{ConnectorRecord: *c, MyRole: role, Config: safeConnectorConfig(c)})
 }
 
 // updateConnectorRequest is the PUT /api/connectors/{id} request body.
@@ -533,9 +553,16 @@ func configKeptWhenOmitted(kind string) bool {
 	return store.IsSecretFieldType(kind) || kind == "textarea"
 }
 
-// fieldKeptWhenOmitted reports whether the schema declares key as a field
-// that configKeptWhenOmitted.
+// fieldKeptWhenOmitted reports whether a field keeps its stored value when a
+// PUT's config omits it.
 func fieldKeptWhenOmitted(schema *connector.TypeSchema, key string) bool {
+	if schema.Type == tlsProbeType {
+		for _, endpointKey := range schema.EndpointConfigKeys {
+			if endpointKey == key {
+				return true
+			}
+		}
+	}
 	for _, f := range schema.Fields {
 		if f.Key == key {
 			return configKeptWhenOmitted(f.Type)
@@ -545,8 +572,8 @@ func fieldKeptWhenOmitted(schema *connector.TypeSchema, key string) bool {
 }
 
 // effectiveConnectorConfig is the config an update would leave behind: the
-// request's config, plus the stored value of every secret and textarea field
-// the request leaves out. Credentials are write-only over the API and the web
+// request's config, plus the stored value of every omitted field that is kept
+// by fieldKeptWhenOmitted. Credentials are write-only over the API and the web
 // edit page never resends a recipe, so a client that does not re-enter one
 // means "keep it"; an explicit empty string clears it. A request without a
 // config body keeps the whole stored config. Validation runs against this
@@ -565,14 +592,22 @@ func effectiveConnectorConfig(stored map[string]any, storedType, typ string, req
 		return merged // unknown or changed type: nothing to carry over
 	}
 	for _, f := range schema.Fields {
-		if !configKeptWhenOmitted(f.Type) {
+		if !fieldKeptWhenOmitted(schema, f.Key) {
 			continue
 		}
 		if _, sent := merged[f.Key]; sent {
 			continue
 		}
-		if v, ok := stored[f.Key].(string); ok && v != "" {
+		v, ok := stored[f.Key]
+		if !ok {
+			continue
+		}
+		if schema.Type == tlsProbeType {
 			merged[f.Key] = v
+			continue
+		}
+		if text, ok := v.(string); ok && text != "" {
+			merged[f.Key] = text
 		}
 	}
 	return merged
