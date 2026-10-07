@@ -168,8 +168,8 @@ func TestConfigPushThenWaitForEntityRun(t *testing.T) {
 		t.Fatalf("memory = %d after pushes %v, want 4096 written once", memory, pushes)
 	}
 	details := auditDetails(t, e.s, "connector.configPush")
-	if len(details) != 1 || details[0]["runId"] != run.ID || details[0]["stepId"] != frozen[0].ID || details[0]["fieldKey"] != "memory" || details[0]["entityRef"] != "100" {
-		t.Fatalf("config push audit = %v, want one entry carrying the run and step", details)
+	if len(details) != 1 || details[0]["runId"] != run.ID || details[0]["stepId"] != frozen[0].ID || details[0]["fieldKey"] != "memory" || details[0]["entityRef"] != "100" || details[0]["stepIndex"] != float64(frozen[0].Position) {
+		t.Fatalf("config push audit = %v, want one entry carrying the run, step and step index", details)
 	}
 	if alerts, _, err := e.s.ListAlerts(context.Background(), connectorID, "", "", "", 0, 10); err != nil || len(alerts) != 0 {
 		t.Fatalf("alerts = %v, err = %v; want none", alerts, err)
@@ -204,7 +204,8 @@ func TestCancelDuringConfigPushFinishesTheCore(t *testing.T) {
 	close(fake.pushGate.release)
 	e.settle()
 
-	if got, _ := e.get(run.ID); got.State != RunCancelled {
+	got, steps := e.get(run.ID)
+	if got.State != RunCancelled {
 		t.Fatalf("run = %+v, want cancelled", got)
 	}
 	if memory, _ := fake.current(); memory != 4096 {
@@ -217,7 +218,7 @@ func TestCancelDuringConfigPushFinishesTheCore(t *testing.T) {
 	if alerts, _, err := e.s.ListAlerts(context.Background(), connectorID, "", "", "", 0, 10); err != nil || len(alerts) != 0 {
 		t.Fatalf("alerts = %v, err = %v; want no alert for a cancelled run", alerts, err)
 	}
-	if e.sync.count() != 0 {
-		t.Fatal("the wait ran after the cancel")
+	if steps[1].State != StepSkipped {
+		t.Fatalf("wait step = %s, want skipped: the wait must not run after the cancel", steps[1].State)
 	}
 }

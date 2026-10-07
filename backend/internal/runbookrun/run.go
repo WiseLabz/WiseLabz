@@ -116,9 +116,12 @@ func (e *Executor) runStep(ctx context.Context, run *store.RunbookRunRecord, ste
 		return e.recordSuccess(ctx, run, started, isLastUnfinished(steps, step))
 	}
 	if ctx.Err() != nil {
-		// Cancelled or shutting down: the error says nothing about the
-		// connector. Cancel has already marked the step unknown; after a
-		// shutdown, startup recovery does.
+		// Cancelled or shutting down. For the other kinds the error says
+		// nothing about the connector. A config_push core does finish and
+		// report after a cancel or shutdown (it has raised its own alert on a
+		// mismatch), but the outcome is still not recorded here: cancel has
+		// already marked the step unknown and, after a shutdown, startup
+		// recovery does, and a resume re-reads the field before writing.
 		return false
 	}
 	e.recordFailure(ctx, run, started, StepFailed, failure)
@@ -279,14 +282,20 @@ func (e *Executor) perform(ctx context.Context, run *store.RunbookRunRecord, ste
 			waitingFor += " (last status: " + last + ")"
 		}
 	case KindConfigPush:
+		if e.configPush == nil {
+			return &stepFailure{reason: ReasonStepFailed, message: "Config push is not configured."}
+		}
 		err = e.performConfigPush(ctx, run, step, actor)
 	case KindWaitForEntity:
+		if e.entities == nil {
+			return &stepFailure{reason: ReasonStepFailed, message: "Entity loading is not configured."}
+		}
 		var last string
 		last, err = e.waitForEntity(stepCtx, step, cond)
-		waitingFor = fmt.Sprintf("entity %s to satisfy %s", step.EntityRef, cond)
-		if last != "" {
-			waitingFor += " (last observed: " + last + ")"
+		if last == "" {
+			last = noObservation
 		}
+		waitingFor = fmt.Sprintf("entity %s to satisfy %s (last observed: %s)", step.EntityRef, cond, last)
 	default:
 		return &stepFailure{reason: ReasonStepFailed, message: fmt.Sprintf("Unsupported step kind %q.", step.Kind)}
 	}
@@ -304,10 +313,10 @@ func (e *Executor) perform(ctx context.Context, run *store.RunbookRunRecord, ste
 // performConfigPush writes the field and value frozen at run start through the
 // shared config-push core, under the run's acting user. The core's write,
 // verification and revert run on a context detached from the run's
-// cancellation, bounded by configPushTimeout: a cancel or shutdown after the
-// write began must not leave the field half-changed, or make the core skip the
-// audit entry or raise a false mismatch alert. A step that is already
-// cancelled when it gets here does not start.
+// cancellation, bounded by the executor's configPushTimeout (two minutes by
+// default): a cancel or shutdown after the write began must not leave the field
+// half-changed, or make the core skip the audit entry or raise a false mismatch
+// alert. A step that is already cancelled when it gets here does not start.
 func (e *Executor) performConfigPush(ctx context.Context, run *store.RunbookRunRecord, step *store.RunbookRunStepRecord, actor connectors.LifecycleActor) error {
 	var value any
 	if err := json.Unmarshal([]byte(step.TargetValue), &value); err != nil {
@@ -316,11 +325,17 @@ func (e *Executor) performConfigPush(ctx context.Context, run *store.RunbookRunR
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	pushCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), configPushTimeout)
+	pushCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), e.configPushTimeout)
 	defer cancel()
 	detail := auditDetail(run, step)
 	detail["stepIndex"] = step.Position
-	return e.configPush.MutateRunbookConfigPush(pushCtx, step.ConnectorID, step.EntityRef, step.FieldKey, value, actor, detail)
+	err := e.configPush.MutateRunbookConfigPush(pushCtx, step.ConnectorID, step.EntityRef, step.FieldKey, value, actor, detail)
+	if err != nil && errors.Is(pushCtx.Err(), context.DeadlineExceeded) {
+		// The bound cut the core short, so whether the write reached the
+		// connector, and whether it was verified or reverted, is not known.
+		return fmt.Errorf("the config push did not finish within %s, so the field may or may not have been written: %w", e.configPushTimeout, err)
+	}
+	return err
 }
 
 // entityCondition is a frozen wait_for_entity condition.
@@ -476,9 +491,6 @@ func (e *Executor) waitForEntity(ctx context.Context, step *store.RunbookRunStep
 // snapshot. observed describes what it saw: the entity is absent, the attribute
 // is absent, or the attribute's value.
 func (e *Executor) checkEntity(ctx context.Context, step *store.RunbookRunStepRecord, cond *entityCondition) (holds bool, observed string, err error) {
-	if e.entities == nil {
-		return false, "", errors.New("entity loading is not configured")
-	}
 	snapshot, err := e.entities.LatestEntities(ctx, step.ConnectorID)
 	if err != nil {
 		return false, "", err

@@ -89,6 +89,10 @@ const (
 	// lastObservationLimit truncates (in bytes) the last observed attribute value that a
 	// wait_for_entity timeout reports.
 	lastObservationLimit = 80
+	// noObservation stands in for the last observation of a wait_for_entity
+	// step that never got one: every sync or entity read failed, or none
+	// finished.
+	noObservation = "nothing: no sync result was available"
 	// healthStatusOnline is the only status wait_until_healthy accepts.
 	healthStatusOnline = "online"
 )
@@ -216,6 +220,7 @@ type Executor struct {
 
 	healthPollInterval time.Duration
 	entityPollInterval time.Duration
+	configPushTimeout  time.Duration
 	stepTimeout        func(*store.RunbookRunStepRecord) time.Duration
 
 	mu     sync.Mutex
@@ -244,6 +249,7 @@ func New(deps Deps) *Executor {
 		spawner:            deps.Spawner,
 		healthPollInterval: HealthPollInterval,
 		entityPollInterval: EntityPollInterval,
+		configPushTimeout:  configPushTimeout,
 		stepTimeout:        StepTimeout,
 		active:             make(map[string]*activeRun),
 	}

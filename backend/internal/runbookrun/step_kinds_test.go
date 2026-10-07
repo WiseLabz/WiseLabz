@@ -263,6 +263,40 @@ func TestConfigPushStep(t *testing.T) {
 		}
 	})
 
+	t.Run("a push that outlives its bound fails and says the outcome is unknown", func(t *testing.T) {
+		e := newEnv(t)
+		e.exec.configPushTimeout = 20 * time.Millisecond
+		a := e.connector()
+		e.push.fn = func(ctx context.Context, _ int, _ configPushCall) error {
+			<-ctx.Done()
+			return ctx.Err()
+		}
+		run, _ := e.start(configPushStep(a, "memory", `4096`), lifecycleStep(a, "restart"))
+		e.settle()
+		got, steps := e.get(run.ID)
+		if got.State != RunFailed || got.Reason != ReasonStepFailed || !reflect.DeepEqual(stepStates(steps), []string{StepFailed, StepPending}) {
+			t.Fatalf("run = %+v, steps = %v; want the push and the run failed", got, stepStates(steps))
+		}
+		if !strings.Contains(steps[0].Error, "may or may not have been written") {
+			t.Fatalf("step error = %q, want the unknown outcome described", steps[0].Error)
+		}
+		if len(e.lifecycle.snapshot()) != 0 {
+			t.Fatal("a step ran after the failed push")
+		}
+	})
+
+	t.Run("a missing config push dependency fails the step", func(t *testing.T) {
+		e := newEnv(t)
+		e.exec.configPush = nil
+		a := e.connector()
+		run, _ := e.start(configPushStep(a, "memory", `4096`))
+		e.settle()
+		got, steps := e.get(run.ID)
+		if got.State != RunFailed || steps[0].State != StepFailed || !strings.Contains(steps[0].Error, "not configured") {
+			t.Fatalf("run = %+v, step = %+v; want a failure naming the missing dependency", got, steps[0])
+		}
+	})
+
 	t.Run("a malformed frozen value fails the step", func(t *testing.T) {
 		e := newEnv(t)
 		a := e.connector()
@@ -385,6 +419,39 @@ func TestWaitForEntityStep(t *testing.T) {
 		}
 		if !strings.Contains(steps[0].Error, `status = "starting"`) || !strings.Contains(steps[0].Error, "status eq running") {
 			t.Fatalf("step error = %q, want the condition and the last value", steps[0].Error)
+		}
+	})
+
+	t.Run("timeout with no sync ever succeeding says so", func(t *testing.T) {
+		e := newEnv(t)
+		shortTimeout(e, 100*time.Millisecond)
+		a := e.connector()
+		e.sync.fn = func(context.Context, int) (*syncengine.RunResult, error) {
+			return nil, errors.New("connector unreachable")
+		}
+		run, _ := e.start(waitEntityStep(a, "status", "eq", `"running"`))
+		e.settle()
+		got, steps := e.get(run.ID)
+		if got.State != RunFailed || got.Reason != ReasonStepTimeout || !strings.Contains(steps[0].Error, noObservation) {
+			t.Fatalf("run = %+v, step = %+v; want a timeout saying nothing was observed", got, steps[0])
+		}
+		if e.entities.count() != 0 {
+			t.Fatalf("loads = %d, want none: a failed sync must not be evaluated", e.entities.count())
+		}
+	})
+
+	t.Run("a missing entity loader fails the step without syncing", func(t *testing.T) {
+		e := newEnv(t)
+		e.exec.entities = nil
+		a := e.connector()
+		run, _ := e.start(waitEntityStep(a, "status", "eq", `"running"`))
+		e.settle()
+		got, steps := e.get(run.ID)
+		if got.State != RunFailed || got.Reason != ReasonStepFailed || !strings.Contains(steps[0].Error, "not configured") {
+			t.Fatalf("run = %+v, step = %+v; want a failure naming the missing dependency", got, steps[0])
+		}
+		if e.sync.count() != 0 {
+			t.Fatalf("syncs = %d, want none", e.sync.count())
 		}
 	})
 
@@ -516,6 +583,10 @@ func TestWaitForEntityStep(t *testing.T) {
 			waitEntityStep("", "status", "days_left_lt", `10`),
 			waitEntityStep("", "status", "eq", `{bad`),
 			waitEntityStep("", "", "eq", `"x"`),
+			waitEntityStep("", "status", "days_left_gt", `10`),
+			waitEntityStep("", "status", "not_contains", `"x"`),
+			waitEntityStep("", "status", "exists", `true`),
+			waitEntityStep("", "status", "startswith", `"x"`),
 		} {
 			e := newEnv(t)
 			step.ConnectorID = e.connector()
@@ -552,6 +623,16 @@ func TestWaitForEntityStep(t *testing.T) {
 			t.Fatalf("step error = %q, want the secret withheld", steps[0].Error)
 		}
 	})
+}
+
+func TestExecutorDefaults(t *testing.T) {
+	exec := New(Deps{})
+	if exec.entityPollInterval != 30*time.Second {
+		t.Fatalf("entityPollInterval = %s, want 30s", exec.entityPollInterval)
+	}
+	if exec.configPushTimeout != 2*time.Minute {
+		t.Fatalf("configPushTimeout = %s, want 2m", exec.configPushTimeout)
+	}
 }
 
 func entityResult(status string) *syncengine.RunResult {
