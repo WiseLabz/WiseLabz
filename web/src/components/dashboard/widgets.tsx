@@ -22,7 +22,7 @@ import { StatusPill, SeverityTag } from '../ui/StatusDot';
 import { statusMeta, toneColor } from '../ui/status';
 import { SkeletonRows, EmptyState, ErrorState } from '../ui/states';
 import { ArrowRightIcon, FileTextIcon, CheckIcon } from '../icons';
-import { categoryIcon } from '../categoryIcon';
+import { categoryIconFor } from '../categoryIcon';
 import { WidgetFrame } from './WidgetFrame';
 import type { Connector, ServiceStatus, Severity } from '../../api/model';
 
@@ -134,7 +134,7 @@ export function ServiceRosterWidget({ title, icon }: WidgetProps) {
 
         <div className="min-h-0 flex-1 overflow-y-auto">
           {merged.map((c) => {
-            const Icon = categoryIcon[c.category];
+            const Icon = categoryIconFor(c.category);
             const live = overrides[c.id] && overrides[c.id] !== c.status;
             return (
               <button

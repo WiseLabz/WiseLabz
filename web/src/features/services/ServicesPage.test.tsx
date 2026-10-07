@@ -6,7 +6,7 @@ import { setLanguagePreference } from '../../i18n';
 import { ServicesPage } from './ServicesPage';
 import type { Connector } from '../../api/model';
 
-const connectorsList: Connector[] = [
+let connectorsList: Connector[] = [
   { id: 'c1', name: 'PVE Cluster', category: 'virtualization', type: 'proxmox', url: 'https://pve.local', enabled: true, status: 'online' },
   { id: 'c2', name: 'Docker Host', category: 'containers_paas', type: 'docker', url: 'https://docker.local', enabled: true, status: 'online' },
   { id: 'c3', name: 'Core Switch', category: 'networking', type: 'opnsense', url: 'https://switch.local', enabled: true, status: 'online' },
@@ -92,5 +92,35 @@ describe('ServicesPage category presentation (#513)', () => {
     expect(screen.getByText('Contêineres')).toBeInTheDocument();
     expect(screen.getByText('Rede')).toBeInTheDocument();
     expect(screen.getByText('DNS')).toBeInTheDocument();
+  });
+
+  it('renders a connector with a category this bundle does not know', () => {
+    const original = connectorsList;
+    connectorsList = [
+      ...original,
+      {
+        id: 'c9',
+        name: 'Arcade Cabinet',
+        category: 'gaming' as unknown as Connector['category'],
+        type: 'custom',
+        url: 'https://arcade.local',
+        enabled: true,
+        status: 'online',
+      },
+    ];
+    try {
+      render(
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter>
+            <ServicesPage />
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+
+      expect(screen.getByText('Arcade Cabinet')).toBeInTheDocument();
+      expect(screen.getByText('gaming')).toBeInTheDocument();
+    } finally {
+      connectorsList = original;
+    }
   });
 });

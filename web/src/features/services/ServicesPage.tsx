@@ -30,7 +30,7 @@ import { MaintenanceWindowMenu } from '../../components/manager/MaintenanceWindo
 import { relativeTime } from '../../lib/time';
 import { toast } from '../../lib/toast';
 import { SearchIcon, SyncIcon, PlusIcon, XIcon } from '../../components/icons';
-import { categoryIcon } from '../../components/categoryIcon';
+import { categoryIconFor } from '../../components/categoryIcon';
 import type { Connector, ServiceStatus } from '../../api/model';
 import type { ConnectorBulkSyncItemResult } from '../../api/model';
 
@@ -220,7 +220,7 @@ export function ServicesPage() {
             </thead>
             <tbody>
               {rows.map((c, idx) => {
-                const Icon = categoryIcon[c.category];
+                const Icon = categoryIconFor(c.category);
                 return (
                   <motion.tr
                     key={c.id}
@@ -285,7 +285,7 @@ export function ServicesPage() {
                       </div>
                     </td>
                     <td className="hidden px-4 py-3 text-ink-muted sm:table-cell">
-                      {t(`services.category.${c.category}`)}
+                      {t(`services.category.${c.category}`, { defaultValue: c.category })}
                     </td>
                     <td className="hidden px-4 py-3 font-mono text-2xs text-ink-faint md:table-cell">
                       {c.url?.replace(/^https?:\/\//, '')}

@@ -8,7 +8,7 @@
  * Owns no page chrome — the caller supplies surrounding layout and decides what
  * happens on success via `onCreated`.
  */
-import { useMemo, useState } from 'react';
+import { createElement, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -20,7 +20,7 @@ import type { Connector, ConnectorTypeSchema, SchemaField } from '../../api/mode
 import { Button } from '../../components/ui/Button';
 import { Panel } from '../../components/ui/Panel';
 import { ErrorState, SkeletonRows } from '../../components/ui/states';
-import { categoryIcon } from '../../components/categoryIcon';
+import { categoryIconFor } from '../../components/categoryIcon';
 import { CheckIcon } from '../../components/icons';
 import { fieldDefault, isSecretField, isToggleField, isTopLevelField, isVerifyTlsField } from './schemaFields';
 
@@ -177,7 +177,6 @@ function TypeCard({
   onPick: () => void;
 }) {
   const { t } = useTranslation();
-  const Icon = categoryIcon[schema.category];
   return (
     <button
       onClick={onPick}
@@ -189,7 +188,7 @@ function TypeCard({
       }
     >
       <span className="flex h-8 w-8 items-center justify-center rounded-md bg-canvas-sunken text-ink-faint">
-        <Icon size={16} />
+        {createElement(categoryIconFor(schema.category), { size: 16 })}
       </span>
       <span className="text-sm font-medium text-ink">{schema.displayName}</span>
       {schema.stub && (

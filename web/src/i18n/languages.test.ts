@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import i18n, { setLanguagePreference } from '.';
 import { en } from './en';
+import { ConnectorCategory } from '../api/model';
 import { LANGUAGES, detectLanguage, getLanguagePreference, resolveLanguage } from './languages';
 
 function keys(obj: object, prefix = ''): string[] {
@@ -39,6 +40,23 @@ describe('locale catalogs', () => {
       expect(keys(catalog).filter((k) => !known.has(k))).toEqual([]);
     }
   );
+});
+
+describe('connector category labels (#513)', () => {
+  const lookup = (catalog: object, path: string) =>
+    path.split('.').reduce<unknown>((o, k) => (o as Record<string, unknown> | undefined)?.[k], catalog);
+
+  it.each(['en', 'pt-BR'])('%s labels every connector category', async (code) => {
+    const { load } = LANGUAGES[code];
+    const catalog = load ? await load() : en;
+    for (const cat of Object.values(ConnectorCategory)) {
+      for (const ns of ['services', 'templates']) {
+        const label = lookup(catalog, `${ns}.category.${cat}`);
+        expect(label, `${ns}.category.${cat}`).toEqual(expect.any(String));
+        expect((label as string).trim(), `${ns}.category.${cat}`).not.toBe('');
+      }
+    }
+  });
 });
 
 describe('setLanguagePreference', () => {
