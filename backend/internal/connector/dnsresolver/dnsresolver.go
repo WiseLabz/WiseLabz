@@ -66,6 +66,8 @@ type Connector struct {
 	client *http.Client
 }
 
+var _ connector.ConfigReader = (*Connector)(nil)
+
 // Name returns the connector display name.
 func (c *Connector) Name() string { return "DNS Resolver" }
 
@@ -115,6 +117,34 @@ func (c *Connector) WritableFields() []connector.ConfigField {
 	return []connector.ConfigField{
 		{Key: "ip", Label: "Host Override IP", Type: "text", EntityScope: true},
 	}
+}
+
+// ConfigRead returns the current IP for a host override from a fresh snapshot.
+func (c *Connector) ConfigRead(ctx context.Context, config map[string]any, entityRef, fieldKey string) (any, error) {
+	if fieldKey != "ip" {
+		return nil, fmt.Errorf("unsupported field %q", fieldKey)
+	}
+	if entityRef == "" {
+		return nil, fmt.Errorf("dnsresolver config-read requires a target hostname")
+	}
+	if err := connector.ValidateRefSegment(entityRef); err != nil {
+		return nil, fmt.Errorf("invalid entityRef: %w", err)
+	}
+
+	snapshot, err := c.Fetch(ctx, config)
+	if err != nil {
+		return nil, fmt.Errorf("fetch current config value: %w", err)
+	}
+	for _, entity := range snapshot.Entities {
+		if entity.Kind != "dns_record" || entity.Hostname != entityRef {
+			continue
+		}
+		if entity.IP == "" {
+			return nil, fmt.Errorf("field %q is unavailable for hostname %q", fieldKey, entityRef)
+		}
+		return entity.IP, nil
+	}
+	return nil, fmt.Errorf("host override %q not found", entityRef)
 }
 
 // ConfigPush repoints the host override identified by entityRef (its

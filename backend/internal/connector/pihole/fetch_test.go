@@ -17,8 +17,14 @@ import (
 // wrong path fails loudly.
 func v6Server(t *testing.T) *httptest.Server {
 	t.Helper()
+	return v6ServerWithHosts(t, `["10.0.0.5 nas.internal.example.com"]`)
+}
+
+// v6ServerWithHosts is v6Server with a caller-supplied hosts JSON array.
+func v6ServerWithHosts(t *testing.T, hosts string) *httptest.Server {
+	t.Helper()
 	bodies := map[string]string{
-		"/api/config/dns/hosts": `{"config":{"dns":{"hosts":["10.0.0.5 nas.internal.example.com"]}}}`,
+		"/api/config/dns/hosts": `{"config":{"dns":{"hosts":` + hosts + `}}}`,
 		"/api/groups":           `{"groups":[{"id":0,"name":"Default","comment":"default","enabled":true},{"id":1,"name":"Kids","enabled":true}]}`,
 		"/api/lists":            `{"lists":[{"address":"https://lists.example.com/ads","type":"block","comment":"ads","enabled":true,"groups":[0]}]}`,
 		"/api/clients":          `{"clients":[{"client":"10.0.0.20","comment":"tablet","groups":[1]}]}`,
@@ -46,6 +52,12 @@ func v6Server(t *testing.T) *httptest.Server {
 // by query action, token-checked the way v5 does it (empty array on refusal).
 func v5Server(t *testing.T) *httptest.Server {
 	t.Helper()
+	return v5ServerWithCustomDNS(t, `[["10.0.0.5","nas.internal.example.com"]]`)
+}
+
+// v5ServerWithCustomDNS is v5Server with a caller-supplied custom DNS JSON array.
+func v5ServerWithCustomDNS(t *testing.T, records string) *httptest.Server {
+	t.Helper()
 	actions := map[string]string{
 		"get_groups":  `{"data":[{"id":0,"name":"Default","description":"default","enabled":1},{"id":1,"name":"Kids","enabled":1}]}`,
 		"get_adlists": `{"data":[{"id":1,"address":"https://lists.example.com/ads","comment":"ads","enabled":1,"groups":[0]}]}`,
@@ -66,7 +78,7 @@ func v5Server(t *testing.T) *httptest.Server {
 			}
 			_, _ = w.Write([]byte(`{"status":"enabled"}`))
 		case v5CustomDNSPHP:
-			_, _ = w.Write([]byte(`{"data":[["10.0.0.5","nas.internal.example.com"]]}`))
+			_, _ = w.Write([]byte(`{"data":` + records + `}`))
 		case v5GroupsPHP:
 			body, ok := actions[q.Get("action")]
 			if !ok {
@@ -348,5 +360,66 @@ func TestConfigPushV5(t *testing.T) {
 		if actions[i] != w {
 			t.Errorf("actions[%d] = %q, want %q", i, actions[i], w)
 		}
+	}
+}
+
+func TestConfigReadBothVersions(t *testing.T) {
+	tests := []struct {
+		name       string
+		server     func(*testing.T) *httptest.Server
+		apiVersion string
+		password   string
+	}{
+		{name: "v6", server: func(t *testing.T) *httptest.Server {
+			// A decoy host listed first must not be read for the target.
+			return v6ServerWithHosts(t, `["10.0.0.9 other.internal.example.com","10.0.0.5 nas.internal.example.com"]`)
+		}, apiVersion: version6, password: "secret"},
+		{name: "v5", server: func(t *testing.T) *httptest.Server {
+			return v5ServerWithCustomDNS(t, `[["10.0.0.9","other.internal.example.com"],["10.0.0.5","nas.internal.example.com"]]`)
+		}, apiVersion: version5, password: "token"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := tt.server(t)
+			defer server.Close()
+
+			c := &Connector{url: server.URL, password: tt.password, apiVersion: tt.apiVersion, client: server.Client()}
+			got, err := c.ConfigRead(context.Background(), nil, "nas.internal.example.com", "ip")
+			if err != nil {
+				t.Fatalf("ConfigRead() error = %v", err)
+			}
+			if got != "10.0.0.5" {
+				t.Errorf("ConfigRead() = %#v, want %q", got, "10.0.0.5")
+			}
+		})
+	}
+}
+
+func TestConfigReadRejectsInvalidRefAndField(t *testing.T) {
+	var requests int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests++
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+	c := &Connector{url: server.URL, client: server.Client()}
+
+	for _, tt := range []struct {
+		name      string
+		entityRef string
+		fieldKey  string
+	}{
+		{name: "empty ref", entityRef: "", fieldKey: "ip"},
+		{name: "path traversal ref", entityRef: "../host", fieldKey: "ip"},
+		{name: "unsupported field", entityRef: "nas.internal.example.com", fieldKey: "ttl"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			if _, err := c.ConfigRead(context.Background(), nil, tt.entityRef, tt.fieldKey); err == nil {
+				t.Fatal("ConfigRead() error = nil, want invalid input error")
+			}
+		})
+	}
+	if requests != 0 {
+		t.Errorf("ConfigRead() made %d requests for invalid input, want 0", requests)
 	}
 }

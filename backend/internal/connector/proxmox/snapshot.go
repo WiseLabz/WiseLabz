@@ -164,12 +164,18 @@ func (p *Connector) fetchVMs(ctx context.Context, node string, wantEntities bool
 		}
 		attrs := map[string]any{"status": vm.Status}
 		if wantEntities {
+			if vm.MaxMem > 0 {
+				attrs["memory"] = vm.MaxMem / bytesPerMB
+			}
 			attrs["node"] = node
 			attrs["tags"] = parseTags(vm.Tags)
 			if vm.Status == "running" {
 				ent.IP = p.fetchQemuIP(ctx, node, vm.VMID)
 			}
 			if cfg, ok := p.fetchQemuConfig(ctx, node, vm.VMID); ok {
+				if cfg.Cores != nil {
+					attrs["cores"] = *cfg.Cores
+				}
 				attrs["onboot"] = cfg.Onboot != 0
 				attrs["protection"] = cfg.Protection != 0
 				attrs["template"] = cfg.Template != 0
@@ -211,12 +217,18 @@ func (p *Connector) fetchContainers(ctx context.Context, node string, wantEntiti
 		}
 		attrs := map[string]any{"status": ct.Status}
 		if wantEntities {
+			if ct.MaxMem > 0 {
+				attrs["memory"] = ct.MaxMem / bytesPerMB
+			}
 			attrs["node"] = node
 			attrs["tags"] = parseTags(ct.Tags)
 			if ct.Status == "running" {
 				ent.IP = p.fetchLxcIP(ctx, node, ct.VMID)
 			}
 			if cfg, ok := p.fetchLxcConfig(ctx, node, ct.VMID); ok {
+				if cfg.Cores != nil {
+					attrs["cores"] = *cfg.Cores
+				}
 				attrs["onboot"] = cfg.Onboot != 0
 				attrs["protection"] = cfg.Protection != 0
 				attrs["template"] = cfg.Template != 0

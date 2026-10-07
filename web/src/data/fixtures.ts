@@ -580,7 +580,7 @@ export const connectorSchemas: ConnectorTypeSchema[] = [
     category: 'virtualization',
     type: 'proxmox',
     displayName: 'Proxmox VE',
-    capabilities: { restart: true, start: true, stop: true, configPush: true, credentialRefresh: false },
+    capabilities: { restart: true, start: true, stop: true, configPush: true, configRead: true, credentialRefresh: false },
     fields: [
       { name: 'url', label: 'API URL', kind: 'string', required: true, placeholder: 'https://10.0.0.11:8006' },
       { name: 'tokenId', label: 'API token ID', kind: 'string', required: true, placeholder: 'root@pam!wiselabz' },
@@ -592,7 +592,7 @@ export const connectorSchemas: ConnectorTypeSchema[] = [
     category: 'containers_paas',
     type: 'portainer',
     displayName: 'Portainer',
-    capabilities: { restart: false, start: false, stop: false, configPush: false, credentialRefresh: false },
+    capabilities: { restart: false, start: false, stop: false, configPush: false, configRead: false, credentialRefresh: false },
     fields: [
       { name: 'url', label: 'API URL', kind: 'string', required: true, placeholder: 'https://10.0.0.20:9443' },
       { name: 'apiKey', label: 'API key', kind: 'password', required: true, secret: true },
@@ -603,7 +603,7 @@ export const connectorSchemas: ConnectorTypeSchema[] = [
     category: 'networking',
     type: 'opnsense',
     displayName: 'OPNsense',
-    capabilities: { restart: true, start: true, stop: true, configPush: true, credentialRefresh: false },
+    capabilities: { restart: true, start: true, stop: true, configPush: true, configRead: true, credentialRefresh: false },
     fields: [
       { name: 'url', label: 'API URL', kind: 'string', required: true, placeholder: 'https://10.0.0.1' },
       { name: 'apiKey', label: 'API key', kind: 'string', required: true },

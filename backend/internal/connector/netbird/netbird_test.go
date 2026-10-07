@@ -75,3 +75,61 @@ func TestConnector_ConfigPush(t *testing.T) {
 		t.Fatal("ConfigPush() did not send a request body")
 	}
 }
+
+func TestConnector_ConfigRead(t *testing.T) {
+	var peerRequests int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/api/peers":
+			peerRequests++
+			_, _ = w.Write([]byte(`[{"id":"p0","name":"phone","approval_required":true,"connected":true},{"id":"p1","name":"laptop","approval_required":false,"connected":true}]`))
+		case "/api/routes", "/api/policies":
+			_, _ = w.Write([]byte(`[]`))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+
+	c := &Connector{url: srv.URL, apiToken: "fake-token", client: srv.Client()}
+	got, err := c.ConfigRead(context.Background(), nil, "p1", "approved")
+	if err != nil {
+		t.Fatalf("ConfigRead() error = %v", err)
+	}
+	if got != true {
+		t.Errorf("ConfigRead() = %#v, want true", got)
+	}
+	if peerRequests != 1 {
+		t.Errorf("peer fetch requests = %d, want 1 fresh read", peerRequests)
+	}
+}
+
+func TestConnector_ConfigReadRejectsInvalidRefAndField(t *testing.T) {
+	var requests int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests++
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+	c := &Connector{url: srv.URL, client: srv.Client()}
+
+	for _, tt := range []struct {
+		name      string
+		entityRef string
+		fieldKey  string
+	}{
+		{name: "empty ref", entityRef: "", fieldKey: "approved"},
+		{name: "path traversal ref", entityRef: "../peer", fieldKey: "approved"},
+		{name: "unsupported field", entityRef: "p1", fieldKey: "connected"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			if _, err := c.ConfigRead(context.Background(), nil, tt.entityRef, tt.fieldKey); err == nil {
+				t.Fatal("ConfigRead() error = nil, want invalid input error")
+			}
+		})
+	}
+	if requests != 0 {
+		t.Errorf("ConfigRead() made %d requests for invalid input, want 0", requests)
+	}
+}

@@ -73,6 +73,8 @@ type Connector struct {
 	client   *http.Client
 }
 
+var _ connector.ConfigReader = (*Connector)(nil)
+
 // Name returns the connector display name.
 func (c *Connector) Name() string { return "Netbird" }
 
@@ -134,6 +136,36 @@ func (c *Connector) WritableFields() []connector.ConfigField {
 	return []connector.ConfigField{
 		{Key: "approved", Label: "Peer Approved", Type: "toggle", EntityScope: true},
 	}
+}
+
+// ConfigRead returns the current approval state of a peer from a fresh
+// Netbird snapshot.
+func (c *Connector) ConfigRead(ctx context.Context, config map[string]any, entityRef, fieldKey string) (any, error) {
+	if fieldKey != "approved" {
+		return nil, fmt.Errorf("unsupported field %q", fieldKey)
+	}
+	if entityRef == "" {
+		return nil, fmt.Errorf("netbird config-read requires a target peer ID")
+	}
+	if err := connector.ValidateRefSegment(entityRef); err != nil {
+		return nil, fmt.Errorf("invalid entityRef: %w", err)
+	}
+
+	snapshot, err := c.Fetch(ctx, config)
+	if err != nil {
+		return nil, fmt.Errorf("fetch current config value: %w", err)
+	}
+	for _, entity := range snapshot.Entities {
+		if entity.Kind != "peer" || entity.ExternalID != entityRef {
+			continue
+		}
+		value, ok := entity.Attributes[fieldKey]
+		if !ok {
+			return nil, fmt.Errorf("field %q is unavailable for peer %q", fieldKey, entityRef)
+		}
+		return value, nil
+	}
+	return nil, fmt.Errorf("peer %q not found", entityRef)
 }
 
 // ConfigPush toggles the "approved" state of the peer identified by

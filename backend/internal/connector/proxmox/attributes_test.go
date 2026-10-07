@@ -83,6 +83,7 @@ func TestFetchEntityAttributes(t *testing.T) {
 
 	wantWeb1 := map[string]any{
 		"status":           "running",
+		"memory":           int64(1024),
 		"node":             "pve1",
 		"onboot":           true,
 		"protection":       false,
@@ -98,6 +99,7 @@ func TestFetchEntityAttributes(t *testing.T) {
 
 	wantTmpl1 := map[string]any{
 		"status":           "stopped",
+		"memory":           int64(512),
 		"node":             "pve1",
 		"onboot":           false,
 		"protection":       true,
@@ -113,6 +115,7 @@ func TestFetchEntityAttributes(t *testing.T) {
 
 	wantVM102 := map[string]any{
 		"status":           "running",
+		"memory":           int64(512),
 		"node":             "pve1",
 		"onboot":           true,
 		"protection":       false,
@@ -128,6 +131,7 @@ func TestFetchEntityAttributes(t *testing.T) {
 
 	wantCt1 := map[string]any{
 		"status":           "running",
+		"memory":           int64(256),
 		"node":             "pve1",
 		"onboot":           true,
 		"protection":       false,
@@ -144,6 +148,7 @@ func TestFetchEntityAttributes(t *testing.T) {
 
 	wantCt2 := map[string]any{
 		"status":           "stopped",
+		"memory":           int64(256),
 		"node":             "pve1",
 		"onboot":           false,
 		"protection":       false,
@@ -160,6 +165,7 @@ func TestFetchEntityAttributes(t *testing.T) {
 
 	wantCt3 := map[string]any{
 		"status":           "running",
+		"memory":           int64(256),
 		"node":             "pve1",
 		"onboot":           true,
 		"protection":       false,
@@ -241,7 +247,7 @@ func TestFetchEntityAttributesDegradesOnConfigError(t *testing.T) {
 	if len(snap.Entities) != 2 {
 		t.Fatalf("Entities = %+v, want node and VM", snap.Entities)
 	}
-	want := map[string]any{"status": "stopped", "tags": []string{}, "node": "pve1"}
+	want := map[string]any{"status": "stopped", "memory": int64(1024), "tags": []string{}, "node": "pve1"}
 	var vm *connector.SnapshotEntity
 	for i := range snap.Entities {
 		if snap.Entities[i].Kind == "vm" {
@@ -381,12 +387,12 @@ func TestAttributeCatalogCoversEmittedKeys(t *testing.T) {
 	catalog := attributeCatalog
 	emitted := map[string]map[string]string{
 		"vm": {
-			"status": "string", "firewall_enabled": "boolean", "onboot": "boolean",
+			"status": "string", "memory": "number", "cores": "number", "firewall_enabled": "boolean", "onboot": "boolean",
 			"agent_enabled": "boolean", "protection": "boolean", "template": "boolean", "os_type": "string",
 			"tags": "string_array",
 		},
 		"container": {
-			"status": "string", "firewall_enabled": "boolean", "onboot": "boolean",
+			"status": "string", "memory": "number", "cores": "number", "firewall_enabled": "boolean", "onboot": "boolean",
 			"agent_enabled": "boolean", "protection": "boolean", "template": "boolean", "os_type": "string",
 			"unprivileged": "boolean", "tags": "string_array",
 		},

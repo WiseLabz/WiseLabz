@@ -77,6 +77,8 @@ type Connector struct {
 	baseURL   string
 }
 
+var _ connector.ConfigReader = (*Connector)(nil)
+
 // Name returns the connector display name.
 func (c *Connector) Name() string { return "Cloudflare" }
 
@@ -220,6 +222,52 @@ func (c *Connector) WritableFields() []connector.ConfigField {
 		{Key: "proxied", Label: "DNS Record Proxied", Type: "toggle", EntityScope: true},
 		{Key: "enabled", Label: "Access Policy Enabled", Type: "toggle", EntityScope: true},
 	}
+}
+
+// ConfigRead returns the current value of a writable DNS record or Access
+// policy field from a fresh Cloudflare snapshot.
+func (c *Connector) ConfigRead(ctx context.Context, config map[string]any, entityRef, fieldKey string) (any, error) {
+	kind := ""
+	switch fieldKey {
+	case "proxied":
+		kind = "dns_record"
+	case "enabled":
+		kind = "policy"
+	default:
+		return nil, fmt.Errorf("unsupported field %q", fieldKey)
+	}
+
+	parts := strings.Split(entityRef, "/")
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		return nil, fmt.Errorf("cloudflare config-read requires an entityRef of the form \"<parentID>/<id>\", got %q", entityRef)
+	}
+	if err := connector.ValidateCompositeRef(entityRef); err != nil {
+		return nil, fmt.Errorf("invalid entityRef: %w", err)
+	}
+
+	snapshot, err := c.Fetch(ctx, config)
+	if err != nil {
+		return nil, fmt.Errorf("fetch current config value: %w", err)
+	}
+	for _, entity := range snapshot.Entities {
+		if entity.Kind != kind || entity.ExternalID != entityRef {
+			continue
+		}
+		if fieldKey == "enabled" {
+			// ConfigPush can only write allow or deny, so for bypass or
+			// non_identity policies true is not a value a revert could restore.
+			decision, _ := entity.Attributes["decision"].(string)
+			if !strings.EqualFold(decision, "allow") && !strings.EqualFold(decision, "deny") {
+				return nil, nil
+			}
+		}
+		value, ok := entity.Attributes[fieldKey]
+		if !ok {
+			return nil, fmt.Errorf("field %q is unavailable for entity %q", fieldKey, entityRef)
+		}
+		return value, nil
+	}
+	return nil, fmt.Errorf("entity %q not found", entityRef)
 }
 
 // ConfigPush toggles a writable field on the entity identified by entityRef.

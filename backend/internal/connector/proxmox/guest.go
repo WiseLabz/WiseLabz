@@ -76,15 +76,15 @@ func (p *Connector) fetchLxcIP(ctx context.Context, node string, vmid int) strin
 }
 
 // qemuConfig holds the subset of VM /config fields we surface as
-// Attributes. Fields absent from the Proxmox response decode to their zero
-// value, which is the correct "disabled"/"unset" reading for each of these
-// flags.
+// Attributes. Missing flag values decode to their zero value; Cores stays nil
+// when Proxmox does not report a configured value so ConfigRead can fail soft.
 type qemuConfig struct {
 	Onboot     int    `json:"onboot"`
 	Protection int    `json:"protection"`
 	Agent      string `json:"agent"`
 	Template   int    `json:"template"`
 	OSType     string `json:"ostype"`
+	Cores      *int   `json:"cores"`
 }
 
 // fetchQemuConfig fetches a VM's /config and returns the fields relevant to
@@ -113,6 +113,7 @@ type lxcConfig struct {
 	Agent        string `json:"agent"`
 	Unprivileged int    `json:"unprivileged"`
 	OSType       string `json:"ostype"`
+	Cores        *int   `json:"cores"`
 }
 
 // fetchLxcConfig fetches a container's /config and returns the fields
