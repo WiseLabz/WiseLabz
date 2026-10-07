@@ -6315,6 +6315,11 @@ components:
           type: string
           description: Expected attribute value for wait_for_entity steps, formatted as JSON text.
         timeoutSeconds: { type: integer }
+        currentValue:
+          description: Current configuration value for config_push steps in a preview.
+        currentValueKnown:
+          type: boolean
+          description: Whether the connector could report the current configuration value in a preview.
         state: { $ref: '#/components/schemas/RunbookRunStepState' }
         startedAt: { type: string, format: date-time }
         finishedAt: { type: string, format: date-time }
@@ -6324,7 +6329,7 @@ components:
         canExecute: { type: boolean }
         executeBlockedReason:
           type: string
-          description: Machine code for why canExecute is false; one of no_viewer_grant, no_operator_grant, preview_unavailable.
+          description: Machine code for why canExecute is false; one of no_viewer_grant, no_operator_grant, preview_unavailable, unsupported_field.
         preview: { $ref: '#/components/schemas/RestartPreview' }
     RunbookRun:
       allOf:

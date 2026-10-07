@@ -724,6 +724,9 @@ This file records the _outcome_ of each decision; the ADRs record the _reasoning
 - [`0006-runbook-runs-elevation-and-execution.md`](adr/0006-runbook-runs-elevation-and-execution.md) —
   whole-runbook run elevation model (`runbook.run`), step authorization re-checks,
   manual step confirmation, and crash interruption recovery, extending ADR 0001/0002.
+- [`0007-config-push-inside-runbook-runs.md`](adr/0007-config-push-inside-runbook-runs.md) —
+  config push inside whole-runbook runs under single `runbook.run` elevation, frozen
+  target values, optional ConfigReader and already-at-target idempotency, extending ADR 0003/0006.
 
 ---
 

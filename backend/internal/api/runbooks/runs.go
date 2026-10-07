@@ -5,9 +5,12 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"sync"
+	"time"
 
 	"github.com/WiseLabz/wiselabz/internal/api/connectors"
 	"github.com/WiseLabz/wiselabz/internal/auth"
+	"github.com/WiseLabz/wiselabz/internal/connector"
 	"github.com/WiseLabz/wiselabz/internal/httputil"
 	"github.com/WiseLabz/wiselabz/internal/logsafe"
 	"github.com/WiseLabz/wiselabz/internal/runbookrun"
@@ -24,6 +27,11 @@ type RunStepResponse struct {
 	ConnectorName        string                       `json:"connectorName,omitempty"`
 	Verb                 string                       `json:"verb,omitempty"`
 	EntityRef            string                       `json:"entityRef,omitempty"`
+	FieldKey             string                       `json:"fieldKey,omitempty"`
+	TargetValue          string                       `json:"targetValue,omitempty"`
+	Attribute            string                       `json:"attribute,omitempty"`
+	Operator             string                       `json:"operator,omitempty"`
+	ExpectedValue        string                       `json:"expectedValue,omitempty"`
 	TimeoutSeconds       int                          `json:"timeoutSeconds,omitempty"`
 	State                string                       `json:"state,omitempty"`
 	StartedAt            string                       `json:"startedAt,omitempty"`
@@ -34,6 +42,8 @@ type RunStepResponse struct {
 	CanExecute           bool                         `json:"canExecute"`
 	ExecuteBlockedReason string                       `json:"executeBlockedReason,omitempty"`
 	Preview              *connectors.LifecyclePreview `json:"preview,omitempty"`
+	CurrentValue         any                          `json:"currentValue,omitempty"`
+	CurrentValueKnown    *bool                        `json:"currentValueKnown,omitempty"`
 }
 
 // RunResponse is the history projection shared by HTTP and read-only MCP tools.
@@ -165,6 +175,11 @@ func (h *Handler) runStepViews(ctx context.Context, steps []*store.RunbookRunSte
 		view.ConnectorID = step.ConnectorID
 		view.Verb = step.Verb
 		view.EntityRef = step.EntityRef
+		view.FieldKey = step.FieldKey
+		view.TargetValue = step.TargetValue
+		view.Attribute = step.Attribute
+		view.Operator = step.Operator
+		view.ExpectedValue = step.ExpectedValue
 		view.TimeoutSeconds = reportedTimeout(view.Kind, step.TimeoutSeconds)
 		view.Error = step.Error
 		view.CanExecute = role == "operator" && !auth.APIKeyRestrictionFromContext(ctx).ReadOnly
@@ -240,6 +255,12 @@ func (h *Handler) StartRun(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusAccepted, resp)
 }
 
+const (
+	previewOverallTimeout = 5 * time.Second
+	previewStepTimeout    = 2 * time.Second
+	previewMaxConcurrency = 4
+)
+
 func (h *Handler) previewRun(w http.ResponseWriter, r *http.Request, id string, authored []*store.RunbookStepRecord, frozen []*store.RunbookRunStepRecord) {
 	// FreezeSteps intentionally copies execution fields only, so preview IDs and
 	// positions come from the authored rows rather than newly created run rows.
@@ -252,24 +273,144 @@ func (h *Handler) previewRun(w http.ResponseWriter, r *http.Request, id string, 
 		httputil.Errorf(w, err)
 		return
 	}
-	canStart := len(views) > 0
+
+	previewCtx, cancel := context.WithTimeout(r.Context(), previewOverallTimeout)
+	defer cancel()
+
+	sem := make(chan struct{}, previewMaxConcurrency)
+	var wg sync.WaitGroup
+
 	for i := range views {
 		view := &views[i]
-		if view.Kind == kindLifecycle && view.CanExecute {
-			preview, err := h.ConnH.PreviewLifecycleOp(r.Context(), view.ConnectorID, view.Verb, view.EntityRef)
-			if err != nil {
-				slog.Warn("runbook run preview failed", "error", logsafe.Err(err))
-				view.CanExecute = false
-				view.ExecuteBlockedReason = "preview_unavailable"
-			} else {
-				view.Preview = preview
-			}
+		if view.Redacted {
+			continue
 		}
-		if !view.CanExecute {
+		if view.Kind == kindLifecycle && view.CanExecute {
+			wg.Add(1)
+			go func(v *RunStepResponse) {
+				defer wg.Done()
+				sem <- struct{}{}
+				defer func() { <-sem }()
+
+				stepCtx, stepCancel := context.WithTimeout(previewCtx, previewStepTimeout)
+				defer stepCancel()
+
+				preview, err := h.ConnH.PreviewLifecycleOp(stepCtx, v.ConnectorID, v.Verb, v.EntityRef)
+				if err != nil {
+					slog.Warn("runbook run preview failed", "error", logsafe.Err(err))
+					v.CanExecute = false
+					v.ExecuteBlockedReason = "preview_unavailable"
+				} else {
+					v.Preview = preview
+				}
+			}(view)
+		} else if view.Kind == kindConfigPush {
+			wg.Add(1)
+			go func(v *RunStepResponse) {
+				defer wg.Done()
+				sem <- struct{}{}
+				defer func() { <-sem }()
+
+				stepCtx, stepCancel := context.WithTimeout(previewCtx, previewStepTimeout)
+				defer stepCancel()
+
+				h.previewConfigPushStep(stepCtx, v)
+			}(view)
+		}
+	}
+	wg.Wait()
+
+	canStart := len(views) > 0
+	for i := range views {
+		if !views[i].CanExecute {
 			canStart = false
+			break
 		}
 	}
 	httputil.JSON(w, http.StatusOK, runPreviewResponse{ID: id, CanStart: canStart, Steps: views})
+}
+
+func (h *Handler) previewConfigPushStep(ctx context.Context, view *RunStepResponse) {
+	conn, rec, cfg, err := h.resolveConnector(ctx, view.ConnectorID)
+	if err != nil || rec == nil {
+		if view.ExecuteBlockedReason == "" {
+			view.ExecuteBlockedReason = "unsupported_field"
+		}
+		view.CanExecute = false
+		known := false
+		view.CurrentValueKnown = &known
+		return
+	}
+	pusher, ok := conn.(connector.ConfigPusher)
+	if !ok {
+		if view.ExecuteBlockedReason == "" {
+			view.ExecuteBlockedReason = "unsupported_field"
+		}
+		view.CanExecute = false
+		known := false
+		view.CurrentValueKnown = &known
+		return
+	}
+	var targetField *connector.ConfigField
+	for _, wf := range pusher.WritableFields() {
+		if wf.Key == view.FieldKey {
+			targetField = &wf
+			break
+		}
+	}
+	if targetField == nil {
+		if view.ExecuteBlockedReason == "" {
+			view.ExecuteBlockedReason = "unsupported_field"
+		}
+		view.CanExecute = false
+		known := false
+		view.CurrentValueKnown = &known
+		return
+	}
+	if store.IsSecretFieldType(targetField.Type) {
+		known := false
+		view.CurrentValueKnown = &known
+		return
+	}
+	reader, ok := conn.(connector.ConfigReader)
+	if !ok {
+		known := false
+		view.CurrentValueKnown = &known
+		return
+	}
+	val, err := reader.ConfigRead(ctx, cfg, view.EntityRef, view.FieldKey)
+	if err != nil || val == nil {
+		if err != nil {
+			slog.Warn("runbook run preview config read failed", "connector", logsafe.Sanitize(view.ConnectorID), "field", logsafe.Sanitize(view.FieldKey), "error", logsafe.Err(err))
+		}
+		known := false
+		view.CurrentValueKnown = &known
+		return
+	}
+	known := true
+	view.CurrentValueKnown = &known
+	view.CurrentValue = val
+}
+
+func (h *Handler) resolveConnector(ctx context.Context, connectorID string) (connector.Connector, *store.ConnectorRecord, map[string]any, error) {
+	rec, err := h.Store.GetConnector(ctx, connectorID)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	var encKey string
+	if h.ConnH != nil && h.ConnH.Config != nil {
+		encKey = h.ConnH.Config.Encryption.Key
+	}
+	cfg, err := store.ParseConnectorConfig(rec.Type, rec.ConfigData, encKey)
+	if err != nil {
+		return nil, rec, nil, err
+	}
+	connector.ApplyRecordConfig(cfg, rec.URL, rec.VerifyTLS)
+	conn, err := connector.Get(rec.Type, cfg)
+	if err != nil {
+		return nil, rec, cfg, err
+	}
+	return conn, rec, cfg, nil
 }
 
 // ListRuns returns paginated history newest first, with per-caller step redaction.

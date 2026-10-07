@@ -34,6 +34,11 @@ type runbookStepView struct {
 	ConnectorName  string `json:"connectorName,omitempty"`
 	Verb           string `json:"verb,omitempty"`
 	EntityRef      string `json:"entityRef,omitempty"`
+	FieldKey       string `json:"fieldKey,omitempty"`
+	TargetValue    string `json:"targetValue,omitempty"`
+	Attribute      string `json:"attribute,omitempty"`
+	Operator       string `json:"operator,omitempty"`
+	ExpectedValue  string `json:"expectedValue,omitempty"`
 	TimeoutSeconds int    `json:"timeoutSeconds,omitempty"`
 	Redacted       bool   `json:"redacted,omitempty"`
 }
@@ -135,14 +140,19 @@ func registerGetRunbook(s *mcpserver.MCPServer, d Deps) {
 				kind = "lifecycle"
 			}
 			timeout := 0
-			if kind == "sync_and_wait" || kind == "wait_until_healthy" {
+			if kind == "sync_and_wait" || kind == "wait_until_healthy" || kind == "wait_for_entity" {
 				timeout = st.TimeoutSeconds
 				if timeout == 0 {
 					timeout = 300
 				}
 			}
 			if st.ConnectorID == "" {
-				views = append(views, runbookStepView{Position: st.Position, Kind: kind, Title: st.Title})
+				views = append(views, runbookStepView{
+					Position: st.Position, Kind: kind, Title: st.Title,
+					EntityRef: st.EntityRef, TimeoutSeconds: timeout,
+					FieldKey: st.FieldKey, TargetValue: st.TargetValue,
+					Attribute: st.Attribute, Operator: st.Operator, ExpectedValue: st.ExpectedValue,
+				})
 				continue
 			}
 			if !allowed[st.ConnectorID] {
@@ -156,6 +166,8 @@ func registerGetRunbook(s *mcpserver.MCPServer, d Deps) {
 			views = append(views, runbookStepView{
 				Position: st.Position, Kind: kind, Title: st.Title, ConnectorID: st.ConnectorID,
 				ConnectorName: name, Verb: st.Verb, EntityRef: st.EntityRef, TimeoutSeconds: timeout,
+				FieldKey: st.FieldKey, TargetValue: st.TargetValue,
+				Attribute: st.Attribute, Operator: st.Operator, ExpectedValue: st.ExpectedValue,
 			})
 		}
 

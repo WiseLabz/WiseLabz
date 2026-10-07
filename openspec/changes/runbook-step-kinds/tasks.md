@@ -27,10 +27,10 @@
 
 ## 5. Preview, history and MCP
 
-- [ ] 5.1 Extend the run preview with field, target, current value or `currentValueKnown: false`, and the wait condition; mark a push step not executable when its field is no longer writable; verify handler tests for each preview scenario in the spec delta, including redaction on a hidden connector.
-- [ ] 5.2 Include the new fields in run detail/list responses and in `internal/mcp/runbooks.go` with the existing redaction; verify handler and MCP tests with mixed grants.
-- [ ] 5.3 Document the run-originated `connector.configPush` audit detail in `docs/AUDIT.md`; verify the audit assertions in 4.1 match the documented fields.
-- [ ] 5.4 Write ADR `0007` (config push inside runbook runs: single elevation, frozen value, reader and revert rules) extending 0003 and 0006, linked where the other ADRs are indexed; verify the link resolves.
+- [x] 5.1 Extend the run preview with field, target, current value or `currentValueKnown: false`, and the wait condition; mark a push step not executable when its field is no longer writable; verify handler tests for each preview scenario in the spec delta, including redaction on a hidden connector.
+- [x] 5.2 Include the new fields in run detail/list responses and in `internal/mcp/runbooks.go` with the existing redaction; verify handler and MCP tests with mixed grants.
+- [x] 5.3 Document the run-originated `connector.configPush` audit detail in `docs/AUDIT.md`; verify the audit assertions in 4.1 match the documented fields.
+- [x] 5.4 Write ADR `0007` (config push inside runbook runs: single elevation, frozen value, reader and revert rules) extending 0003 and 0006, linked where the other ADRs are indexed; verify the link resolves.
 
 ## 6. Web
 
