@@ -44,5 +44,5 @@
 
 ## 7. Integration
 
-- [ ] 7.1 Run `openspec validate custom-rest-recipes --strict`, backend tests and lint with `GOFLAGS=-p=4 GOMAXPROCS=4`, then web tests, lint and typecheck at concurrency 4, sequentially; record the results.
-- [ ] 7.2 Run the app, create a custom connector from the Sonarr example against a local mock, preview it, sync it, confirm entities, category grouping and a recipe-less custom connector still syncing; then run `graphify update .`.
+- [x] 7.1 Run `openspec validate custom-rest-recipes --strict`, backend tests and lint with `GOFLAGS=-p=4 GOMAXPROCS=4`, then web tests, lint and typecheck at concurrency 4, sequentially; record the results.
+- [x] 7.2 Run the app, create a custom connector from the Sonarr example against a local mock, preview it, sync it, confirm entities, category grouping and a recipe-less custom connector still syncing; then run `graphify update .`.
