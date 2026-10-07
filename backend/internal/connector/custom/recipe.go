@@ -547,8 +547,24 @@ var gjsonModifiers = map[string]bool{
 	"this": true, "reverse": true, "flatten": true, "join": true, "keys": true, "values": true,
 }
 
-const maxGJSONPathBytes = 1024
+const (
+	maxGJSONPathBytes = 1024
+	// maxGJSONMultipathGroups and maxGJSONMultipathSelectors bound the one
+	// piece of path syntax that can build a value larger than its input.
+	maxGJSONMultipathGroups    = 1
+	maxGJSONMultipathSelectors = 8
+)
 
+// validateGJSONPath checks a path a recipe (untrusted, shareable input) asks
+// gjson to evaluate against a response of up to 10 MiB. gjson gives quotes a
+// meaning only inside a #(...) query value, so the modifier, group and comma
+// checks look at every character that is not backslash-escaped, quoted or not.
+// Without modifier arguments, and with at most one multipath group of at most
+// maxGJSONMultipathSelectors selectors, every stage other than that group
+// yields output no larger than its input, so one evaluation is bounded at
+// roughly eight times the response size. An @, brace, bracket or comma that is
+// data must therefore be escaped, or written as a JSON unicode escape (\u0040)
+// inside a quoted query value.
 func validateGJSONPath(path string) error {
 	if strings.TrimSpace(path) == "" {
 		return errors.New("path expression is required")
@@ -567,6 +583,7 @@ func validateGJSONPath(path string) error {
 	var quote rune
 	escaped := false
 	lastSeparator := false
+	groups, commas, hashAt := 0, 0, -2
 	for i, r := range path {
 		if escaped {
 			escaped = false
@@ -577,6 +594,33 @@ func validateGJSONPath(path string) error {
 			escaped = true
 			continue
 		}
+		switch r {
+		case '@':
+			name := path[i+1:]
+			if end := strings.IndexAny(name, ":|.,)]} \t\n\v\f\r"); end >= 0 {
+				name = name[:end]
+			}
+			if !gjsonModifiers[name] {
+				return fmt.Errorf("path expression uses unsupported modifier %q", "@"+name)
+			}
+			if i+1+len(name) < len(path) && path[i+1+len(name)] == ':' {
+				return errors.New("path expression uses unsupported modifier arguments")
+			}
+		case '#':
+			hashAt = i
+		case '{', '[':
+			if r == '{' || hashAt != i-1 {
+				groups++
+				if groups > maxGJSONMultipathGroups {
+					return errors.New("path expression may contain at most one multipath group")
+				}
+			}
+		case ',':
+			commas++
+			if commas >= maxGJSONMultipathSelectors {
+				return fmt.Errorf("path expression may select at most %d values", maxGJSONMultipathSelectors)
+			}
+		}
 		if quote != 0 {
 			if r == quote {
 				quote = 0
@@ -586,15 +630,6 @@ func validateGJSONPath(path string) error {
 		if r == '"' || r == '\'' {
 			quote = r
 			continue
-		}
-		if r == '@' {
-			name := path[i+1:]
-			if end := strings.IndexAny(name, ":|.,)]} \t\n\v\f\r"); end >= 0 {
-				name = name[:end]
-			}
-			if !gjsonModifiers[name] {
-				return fmt.Errorf("path expression uses unsupported modifier %q", "@"+name)
-			}
 		}
 		switch r {
 		case '[', '(', '{':

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/url"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -477,12 +478,14 @@ func TestParseRecipeRejectsMergeAndDuplicateKeys(t *testing.T) {
 }
 
 func TestValidateGJSONPathModifiersAndLength(t *testing.T) {
-	for _, path := range []string{`@this`, `items.@reverse`, `items.@flatten`, `items.@keys`, `meta.\@type`, `items|@values`, `{a:@this}`} {
+	for _, path := range []string{`@this`, `items.@reverse`, `items.@flatten`, `items.@keys`, `meta.\@type`, `items|@values`, `{a:@this}`, `[hostname,fqdn]`, `[a,b,c,d,e,f,g,h]`, `items.#[active==true]`, `items.#(email=="a\u0040b.example")`, `items.#(name=="x").id`} {
 		if err := validateGJSONPath(path); err != nil {
 			t.Errorf("validateGJSONPath(%q): %v", path, err)
 		}
 	}
-	for _, path := range []string{`@tostr`, `items|@tostr|@tostr`, `@pretty:{"indent":"xxxx"}`, `{a:@ugly}`, `items.#(@valid==true)`, `@fromstr`, strings.Repeat("a", maxGJSONPathBytes+1)} {
+	for _, path := range []string{`@tostr`, `items|@tostr|@tostr`, `@pretty:{"indent":"xxxx"}`, `{a:@ugly}`, `items.#(@valid==true)`, `@fromstr`, strings.Repeat("a", maxGJSONPathBytes+1),
+		`x'|@tostr|@tostr|y'`, `x"|@tostr|y"`, `items.#(email=="a@b.example")`, `@flatten:{"deep":true}`,
+		`@this|[@this,@this]|[@this,@this]`, `{a:{b,c}}`, `[a,b].[c,d]`, `[a,a,a,a,a,a,a,a,a]`} {
 		if err := validateGJSONPath(path); err == nil {
 			t.Errorf("validateGJSONPath(%.40q) error = nil, want rejection", path)
 		}
@@ -501,6 +504,41 @@ func TestValidateGJSONPathModifiersAndLength(t *testing.T) {
 	_, err = ParseRecipe(strings.Replace(validRecipe, "items: items", "items: '@tostr'", 1))
 	if err == nil || !strings.Contains(err.Error(), `endpoints[0].items: path expression uses unsupported modifier "@tostr"`) {
 		t.Fatalf("ParseRecipe() error = %v", err)
+	}
+}
+
+func TestValidateGJSONPathMultipathErrors(t *testing.T) {
+	tests := map[string]string{
+		`@flatten:{"deep":true}`:        "path expression uses unsupported modifier arguments",
+		`[a,b].[c,d]`:                   "path expression may contain at most one multipath group",
+		`[a,a,a,a,a,a,a,a,a]`:           "path expression may select at most 8 values",
+		`items.#(email=="a@b.example")`: `path expression uses unsupported modifier "@b"`,
+		`x'|@tostr|@tostr|y'`:           `path expression uses unsupported modifier "@tostr"`,
+	}
+	for path, want := range tests {
+		if err := validateGJSONPath(path); err == nil || err.Error() != want {
+			t.Errorf("validateGJSONPath(%q) error = %v, want %q", path, err, want)
+		}
+	}
+}
+
+func TestMapEndpointEvaluatesMultipathAliasesAndUnicodeEscapedQuery(t *testing.T) {
+	raw := strings.Replace(validRecipe, "      external_id: id\n", "      external_id: id\n      aliases: '[hostname,fqdn]'\n", 1)
+	recipe, err := ParseRecipe(raw)
+	if err != nil {
+		t.Fatalf("ParseRecipe(): %v", err)
+	}
+	body := []byte(`{"items":[{"id":"1","name":"n","title":"n","hostname":"h","fqdn":"h.example"}]}`)
+	result, err := mapEndpoint(recipe, recipe.Endpoints[0], body, make(map[string]struct{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Entities) != 1 || !reflect.DeepEqual(result.Entities[0].Aliases, []string{"h", "h.example"}) {
+		t.Fatalf("result = %+v, want aliases [h h.example]", result)
+	}
+	got := jsonPathValue([]byte(`{"items":[{"email":"a@b.example","id":"x"}]}`), `items.#(email=="a\u0040b.example").id`)
+	if got.String() != "x" {
+		t.Errorf("unicode-escaped query value = %q, want x", got.String())
 	}
 }
 

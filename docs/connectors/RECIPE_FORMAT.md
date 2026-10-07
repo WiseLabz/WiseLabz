@@ -79,7 +79,11 @@ Paths use [GJSON syntax](https://github.com/tidwall/gjson#path-syntax): `items`
 selects a field, `@this` selects the root, and `items.#.name` projects names
 from an array. Only the modifiers `@this`, `@reverse`, `@flatten`, `@join`,
 `@keys` and `@values` are accepted; a key containing `@` must be escaped as
-`\@`. A path expression is limited to 1024 bytes. `items` selects the response
+`\@`. Modifier arguments (`@name:...`) are not accepted. A path may contain at
+most one multipath group (`[a,b]` or `{a,b}`) selecting at most 8 values. An
+`@`, brace, bracket or comma that is data must be escaped with a backslash, or
+written as a JSON unicode escape (`\u0040` for `@`) inside a quoted query
+value. A path expression is limited to 1024 bytes. `items` selects the response
 list. Entity paths are evaluated
 against each item; dependency paths are evaluated against the response root.
 
