@@ -42,17 +42,21 @@ with a recipe it comes from the recipe; a recipe-less custom connector uses
 
 Inside `connectors` only, two sources keep secrets out of the file:
 
-- `${VAR}` is replaced with the environment variable `VAR`. An unset variable
-  makes the entry invalid; a variable set to an empty string is allowed.
+- `${VAR}` in `url` and non-`textarea` connector config fields is replaced with
+  the environment variable `VAR`. An unset variable makes the entry invalid; a
+  variable set to the empty string is allowed.
 - `<field>_file: /path` reads the field's value from a file and trims
   surrounding whitespace, which fits Docker and Kubernetes secrets. For example
   `token_secret_file: /run/secrets/pve`.
 
-Nothing else in `config.yaml` is interpolated, so existing values that contain
-`$` keep their meaning. Secret fields are encrypted in the database exactly like
-secrets entered in the UI. `server config print --redacted` masks every literal
-string under `config` and keeps `${VAR}` references and `_file` paths, since
-those name a source rather than hold a secret.
+Values in `textarea` fields are preserved verbatim, so `${...}` inside a recipe
+remains literal whether or not a matching environment variable exists. Only
+connector URLs and non-`textarea` connector config fields use `${VAR}`
+interpolation; other settings in `config.yaml` keep their literal meaning.
+Secret fields are encrypted in the database exactly like secrets entered in the
+UI. `server config print --redacted` masks every literal string under `config`
+and keeps `${VAR}` references and `_file` paths, since those name a source rather
+than hold a secret.
 
 ## What happens at startup
 
@@ -154,8 +158,7 @@ same environment and `_file` sources as other connector credentials.
 
 The following declared connector uses one request to map the service's items.
 The [recipe reference](connectors/RECIPE_FORMAT.md) describes every field,
-mapping rule and validation limit. Pagination is not supported yet: a recipe
-that declares it is rejected before any request.
+mapping rule, pagination style and validation limit.
 
 <!-- custom-rest-recipe-example -->
 ```yaml
@@ -183,6 +186,7 @@ connectors:
               attributes:
                 enabled: {path: enabled, type: bool}
                 source: {const: library}
+                literal: {const: "${WL_RECIPE_LITERAL}/${WL_RECIPE_UNSET}"}
             dependencies:
               - {kind: upstream_service, path: "items.#.downloadClient"}
         dependencies:
@@ -190,10 +194,9 @@ connectors:
 ```
 <!-- /custom-rest-recipe-example -->
 
-Warning: `${VAR}` references inside a declared `recipe` are expanded from the
-server environment like in any other config string, and the expanded text is
-stored and returned by the API. Check a recipe copied from elsewhere for `${`
-before pasting it.
+The `recipe` field is a `textarea`, so its contents are stored and returned
+verbatim. It does not support environment interpolation; put credentials in
+the separate `auth_token`, `auth_username` or `auth_password` fields.
 
 An invalid recipe skips only that connector during reconciliation. Existing
 connectors retain their last applied state. Changing the recipe's category

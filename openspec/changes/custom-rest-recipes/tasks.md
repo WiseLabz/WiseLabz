@@ -26,9 +26,9 @@
 
 ## 4. Pagination (PR 3)
 
-- [ ] 4.1 Implement the pagination loop with page-number and offset styles and the 100 page and 10,000 entity caps; verify tests for stop on empty page and both caps failing the sync.
-- [ ] 4.2 Implement cursor and next-link styles (body path and `Link` header) with non-advancing detection and the same-origin check on links; verify tests for each end condition, a repeated cursor and a cross-origin next link that sends no request.
-- [ ] 4.3 Document pagination in the recipe reference; verify each documented snippet parses in a test.
+- [x] 4.1 Implement the pagination loop with page-number and offset styles and the 100 page and 10,000 entity caps; verify tests for stop on empty page and both caps failing the sync.
+- [x] 4.2 Implement cursor and next-link styles (body path and `Link` header) with non-advancing detection and the same-origin check on links; verify tests for each end condition, a repeated cursor and a cross-origin next link that sends no request.
+- [x] 4.3 Document pagination in the recipe reference; verify each documented snippet parses in a test.
 
 ## 5. Preview endpoint (PR 4)
 

@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/WiseLabz/wiselabz/internal/connector"
 )
 
 func loadYAML(t *testing.T, yaml string) *Config {
@@ -146,6 +148,74 @@ func TestResolveConnectors(t *testing.T) {
 		if !strings.Contains(got[8].Err.Error(), want) {
 			t.Errorf("grant entry: err = %v, want %q", got[8].Err, want)
 		}
+	}
+}
+
+func TestResolveConnectorsPreservesTextareaAndExpandsOtherFields(t *testing.T) {
+	const textareaType = "config_test_textarea"
+	connector.Register(connector.TypeSchema{
+		Type: textareaType,
+		Fields: []connector.SchemaField{
+			{Key: "recipe", Type: "textarea"},
+			{Key: "token", Type: "password"},
+		},
+	}, nil)
+	const textType = "config_test_text"
+	connector.Register(connector.TypeSchema{
+		Type:   textType,
+		Fields: []connector.SchemaField{{Key: "recipe", Type: "text"}},
+	}, nil)
+	const unsetVar = "WL_CONFIG_RECIPE_UNSET"
+	oldUnsetValue, wasSet := os.LookupEnv(unsetVar)
+	if err := os.Unsetenv(unsetVar); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if wasSet {
+			_ = os.Setenv(unsetVar, oldUnsetValue)
+			return
+		}
+		_ = os.Unsetenv(unsetVar)
+	})
+	t.Setenv("WL_CONFIG_RECIPE_VALUE", "must-not-expand")
+	t.Setenv("WL_CONFIG_TOKEN", "expanded-token")
+
+	const recipe = "value: ${WL_CONFIG_RECIPE_VALUE}\nunset: ${WL_CONFIG_RECIPE_UNSET}\n"
+	cfg := loadYAML(t, `
+connectors:
+  - name: custom
+    type: config_test_textarea
+    url: https://example.test
+    config:
+      recipe: |
+        value: ${WL_CONFIG_RECIPE_VALUE}
+        unset: ${WL_CONFIG_RECIPE_UNSET}
+      token: ${WL_CONFIG_TOKEN}
+  - name: text
+    type: config_test_text
+    url: https://example.test
+    config:
+      recipe: ${WL_CONFIG_RECIPE_VALUE}
+`)
+
+	got := cfg.ResolveConnectors()
+	if len(got) != 2 {
+		t.Fatalf("len(ResolveConnectors()) = %d, want 2", len(got))
+	}
+	if got[0].Err != nil {
+		t.Fatalf("textarea entry error = %v", got[0].Err)
+	}
+	if got[0].Config["recipe"] != recipe {
+		t.Errorf("textarea recipe = %q, want literal %q", got[0].Config["recipe"], recipe)
+	}
+	if got[0].Config["token"] != "expanded-token" {
+		t.Errorf("token = %v, want environment expansion", got[0].Config["token"])
+	}
+	if got[1].Err != nil {
+		t.Fatalf("text entry error = %v", got[1].Err)
+	}
+	if got[1].Config["recipe"] != "must-not-expand" {
+		t.Errorf("text recipe = %v, want environment expansion", got[1].Config["recipe"])
 	}
 }
 

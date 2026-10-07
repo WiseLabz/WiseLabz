@@ -23,6 +23,8 @@ type recipeEndpointResult struct {
 
 // recipeBudget bounds the data one endpoint maps. A recipe selects and repeats
 // fields, so without a bound it could multiply a response many times over.
+// used may start above zero when earlier pages or endpoints already spent part
+// of a shared limit; the error always reports the limit itself.
 type recipeBudget struct {
 	endpoint string
 	limit    int
@@ -45,6 +47,12 @@ func mapEndpoint(recipe *Recipe, endpoint RecipeEndpoint, body []byte, seen map[
 }
 
 func mapEndpointLimited(recipe *Recipe, endpoint RecipeEndpoint, body []byte, seen map[string]struct{}, limit int) (recipeEndpointResult, error) {
+	return mapEndpointBudgeted(recipe, endpoint, body, seen, limit, 0)
+}
+
+// mapEndpointBudgeted is mapEndpointLimited with used bytes already charged
+// against limit.
+func mapEndpointBudgeted(recipe *Recipe, endpoint RecipeEndpoint, body []byte, seen map[string]struct{}, limit, used int) (recipeEndpointResult, error) {
 	if recipe == nil {
 		return recipeEndpointResult{}, fmt.Errorf("endpoint %q: recipe is required", endpoint.Name)
 	}
@@ -60,7 +68,7 @@ func mapEndpointLimited(recipe *Recipe, endpoint RecipeEndpoint, body []byte, se
 	for key := range seen {
 		known[key] = struct{}{}
 	}
-	budget := &recipeBudget{endpoint: endpoint.Name, limit: limit}
+	budget := &recipeBudget{endpoint: endpoint.Name, limit: limit, used: used}
 	result := recipeEndpointResult{Items: len(items.Array())}
 	for _, item := range items.Array() {
 		entity, externalID, skip, err := mapRecipeEntity(endpoint, []byte(item.Raw), budget)
