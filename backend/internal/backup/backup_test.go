@@ -815,13 +815,26 @@ func TestValidateBundleRejectsMalformedOverrides(t *testing.T) {
 }
 
 func TestRunbookBackupJSONAndZIPRoundTrip(t *testing.T) {
-	ctx, src, runbook, _ := runbookBackupFixture(t)
+	ctx, src, runbook, authored := runbookBackupFixture(t)
+	steps := make([]*store.RunbookStepRecord, 0, len(authored)+2)
+	for i := range authored {
+		steps = append(steps, &authored[i])
+	}
+	steps = append(steps,
+		&store.RunbookStepRecord{Kind: "config_push", Title: "Enable VM", ConnectorID: authored[0].ConnectorID,
+			EntityRef: "100", FieldKey: "enabled", TargetValue: `false`},
+		&store.RunbookStepRecord{Kind: "wait_for_entity", Title: "Wait for VM", ConnectorID: authored[0].ConnectorID,
+			EntityRef: "100", TimeoutSeconds: 180, Attribute: "status", Operator: "eq", ExpectedValue: `"running"`},
+	)
+	if _, err := src.ReplaceRunbookSteps(ctx, runbook.ID, steps); err != nil {
+		t.Fatalf("add new step kinds: %v", err)
+	}
 	bundle, err := backup.Export(ctx, src)
 	if err != nil {
 		t.Fatalf("Export(): %v", err)
 	}
-	if len(bundle.Runbooks) != 1 || len(bundle.RunbookSteps) != 4 {
-		t.Fatalf("exported runbooks/steps = %d/%d, want 1/4", len(bundle.Runbooks), len(bundle.RunbookSteps))
+	if len(bundle.Runbooks) != 1 || len(bundle.RunbookSteps) != 6 {
+		t.Fatalf("exported runbooks/steps = %d/%d, want 1/6", len(bundle.Runbooks), len(bundle.RunbookSteps))
 	}
 	if bundle.Runbooks[0].SnapshotID != nil {
 		t.Fatalf("exported snapshotId = %v, want nil", bundle.Runbooks[0].SnapshotID)
@@ -829,7 +842,7 @@ func TestRunbookBackupJSONAndZIPRoundTrip(t *testing.T) {
 	if bundle.Runbooks[0].DocID == nil || *bundle.Runbooks[0].DocID != *runbook.DocID {
 		t.Fatalf("exported docId = %v, want %q", bundle.Runbooks[0].DocID, *runbook.DocID)
 	}
-	wantKinds := map[string]bool{"lifecycle": false, "sync_and_wait": false, "wait_until_healthy": false, "manual": false}
+	wantKinds := map[string]bool{"lifecycle": false, "sync_and_wait": false, "wait_until_healthy": false, "manual": false, "config_push": false, "wait_for_entity": false}
 	for _, step := range bundle.RunbookSteps {
 		wantKinds[step.Kind] = true
 	}
@@ -840,6 +853,11 @@ func TestRunbookBackupJSONAndZIPRoundTrip(t *testing.T) {
 	}
 	if bundle.RunbookSteps[1].TimeoutSeconds != 75 || bundle.RunbookSteps[2].TimeoutSeconds != 120 {
 		t.Fatalf("exported wait timeouts = %d/%d, want 75/120", bundle.RunbookSteps[1].TimeoutSeconds, bundle.RunbookSteps[2].TimeoutSeconds)
+	}
+	if bundle.RunbookSteps[4].FieldKey != "enabled" || bundle.RunbookSteps[4].TargetValue != `false` ||
+		bundle.RunbookSteps[5].Attribute != "status" || bundle.RunbookSteps[5].Operator != "eq" ||
+		bundle.RunbookSteps[5].ExpectedValue != `"running"` || bundle.RunbookSteps[5].TimeoutSeconds != 180 {
+		t.Fatalf("exported new step fields = %+v / %+v", bundle.RunbookSteps[4], bundle.RunbookSteps[5])
 	}
 	if got := backupRowCount(t, src, "runbook_runs"); got != 1 {
 		t.Fatalf("source runbook history rows = %d, want 1", got)
@@ -861,12 +879,12 @@ func TestRunbookBackupJSONAndZIPRoundTrip(t *testing.T) {
 		t.Fatalf("write JSON manifest: %v", err)
 	}
 	manifest, err = backup.ReadManifest(backup.ManifestPath(jsonPath))
-	if err != nil || manifest.Counts["runbooks"] != 1 || manifest.Counts["runbookSteps"] != 4 {
-		t.Fatalf("runbook manifest counts = %+v, %v; want 1/4", manifest.Counts, err)
+	if err != nil || manifest.Counts["runbooks"] != 1 || manifest.Counts["runbookSteps"] != 6 {
+		t.Fatalf("runbook manifest counts = %+v, %v; want 1/6", manifest.Counts, err)
 	}
 	verified := backup.VerifyBundleFile(ctx, jsonPath)
-	if verified.Status != "pass" || verified.ActualCounts["runbooks"] != 1 || verified.ActualCounts["runbookSteps"] != 4 {
-		t.Fatalf("runbook backup verification = %+v; want pass with 1/4 rows", verified)
+	if verified.Status != "pass" || verified.ActualCounts["runbooks"] != 1 || verified.ActualCounts["runbookSteps"] != 6 {
+		t.Fatalf("runbook backup verification = %+v; want pass with 1/6 rows", verified)
 	}
 	var jsonFields map[string]json.RawMessage
 	if err := json.Unmarshal(jsonData, &jsonFields); err != nil {
@@ -887,8 +905,8 @@ func TestRunbookBackupJSONAndZIPRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ImportFromFile(JSON): %v", err)
 	}
-	if jsonResult.Runbooks.Imported != 1 || jsonResult.RunbookSteps.Imported != 4 {
-		t.Fatalf("JSON import counts = %+v/%+v, want 1/4 imported", jsonResult.Runbooks, jsonResult.RunbookSteps)
+	if jsonResult.Runbooks.Imported != 1 || jsonResult.RunbookSteps.Imported != 6 {
+		t.Fatalf("JSON import counts = %+v/%+v, want 1/6 imported", jsonResult.Runbooks, jsonResult.RunbookSteps)
 	}
 	assertRunbookBackupEqual(ctx, t, jsonDst, bundle.Runbooks[0], bundle.RunbookSteps)
 	assertNoRunbookHistory(t, jsonDst)
@@ -909,7 +927,7 @@ func TestRunbookBackupJSONAndZIPRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("repeat JSON import: %v", err)
 	}
-	if second.Runbooks.Imported != 0 || second.Runbooks.Skipped != 1 || second.RunbookSteps.Imported != 0 || second.RunbookSteps.Skipped != 4 {
+	if second.Runbooks.Imported != 0 || second.Runbooks.Skipped != 1 || second.RunbookSteps.Imported != 0 || second.RunbookSteps.Skipped != 6 {
 		t.Fatalf("repeat import counts = %+v/%+v", second.Runbooks, second.RunbookSteps)
 	}
 	stepsAfterRepeat, err := jsonDst.ListRunbookStepsFor(ctx, runbook.ID)
@@ -927,8 +945,8 @@ func TestRunbookBackupJSONAndZIPRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ImportStream(ZIP): %v", err)
 	}
-	if zipResult.Runbooks.Imported != 1 || zipResult.RunbookSteps.Imported != 4 {
-		t.Fatalf("ZIP import counts = %+v/%+v, want 1/4 imported", zipResult.Runbooks, zipResult.RunbookSteps)
+	if zipResult.Runbooks.Imported != 1 || zipResult.RunbookSteps.Imported != 6 {
+		t.Fatalf("ZIP import counts = %+v/%+v, want 1/6 imported", zipResult.Runbooks, zipResult.RunbookSteps)
 	}
 	assertRunbookBackupEqual(ctx, t, zipDst, bundle.Runbooks[0], bundle.RunbookSteps)
 	assertNoRunbookHistory(t, zipDst)
@@ -1101,6 +1119,78 @@ func TestValidateBundleRejectsInvalidRunbookStepShape(t *testing.T) {
 	for name, bundle := range cases {
 		if err := backup.ValidateBundle(bundle); err == nil {
 			t.Errorf("%s: ValidateBundle accepted it", name)
+		}
+	}
+}
+
+func TestValidateBundleNewRunbookStepKinds(t *testing.T) {
+	base := store.RunbookStepRecord{
+		ID: "step", RunbookID: "book", Kind: "config_push", Title: "Configure", ConnectorID: "connector",
+		EntityRef: "100", FieldKey: "enabled", TargetValue: `false`, Attribute: "status", Operator: "eq",
+		ExpectedValue: `"running"`, TimeoutSeconds: 60,
+		CreatedAt: "2024-01-02T03:04:05Z", UpdatedAt: "2024-01-02T03:04:05Z",
+	}
+	validate := func(step store.RunbookStepRecord) error {
+		return backup.ValidateBundle(&backup.Bundle{
+			Version:    backup.BundleVersion,
+			Connectors: []store.ConnectorRecord{{ID: "connector", Category: "virtualization"}},
+			Runbooks: []store.RunbookRecord{{ID: "book", Title: "New kinds", TargetType: "change_type", TargetValue: "changed",
+				CreatedAt: base.CreatedAt, UpdatedAt: base.UpdatedAt}},
+			RunbookSteps: []store.RunbookStepRecord{step},
+		})
+	}
+	for _, kind := range []string{"config_push", "wait_for_entity"} {
+		t.Run(kind, func(t *testing.T) {
+			step := base
+			step.Kind = kind
+			if err := validate(step); err != nil {
+				t.Fatalf("valid step rejected: %v", err)
+			}
+			cases := map[string]func(*store.RunbookStepRecord){
+				"missing connector": func(s *store.RunbookStepRecord) { s.ConnectorID = "" },
+			}
+			if kind == "config_push" {
+				cases["missing field"] = func(s *store.RunbookStepRecord) { s.FieldKey = " " }
+				cases["missing target"] = func(s *store.RunbookStepRecord) { s.TargetValue = "" }
+				cases["invalid target JSON"] = func(s *store.RunbookStepRecord) { s.TargetValue = "no" }
+			} else {
+				cases["missing entity"] = func(s *store.RunbookStepRecord) { s.EntityRef = "" }
+				cases["missing attribute"] = func(s *store.RunbookStepRecord) { s.Attribute = " " }
+				cases["missing operator"] = func(s *store.RunbookStepRecord) { s.Operator = "" }
+				cases["unknown operator"] = func(s *store.RunbookStepRecord) { s.Operator = "startswith" }
+				cases["missing expected value"] = func(s *store.RunbookStepRecord) { s.ExpectedValue = "" }
+				cases["invalid expected JSON"] = func(s *store.RunbookStepRecord) { s.ExpectedValue = "running" }
+				cases["timeout too short"] = func(s *store.RunbookStepRecord) { s.TimeoutSeconds = 59 }
+				cases["timeout too long"] = func(s *store.RunbookStepRecord) { s.TimeoutSeconds = 1801 }
+				cases["negative timeout"] = func(s *store.RunbookStepRecord) { s.TimeoutSeconds = -1 }
+				cases["non-numeric gt"] = func(s *store.RunbookStepRecord) { s.Operator = "gt" }
+				cases["non-numeric lt"] = func(s *store.RunbookStepRecord) { s.Operator = "lt" }
+				cases["invalid regex"] = func(s *store.RunbookStepRecord) { s.Operator, s.ExpectedValue = "regex", `"["` }
+				cases["non-string regex"] = func(s *store.RunbookStepRecord) { s.Operator, s.ExpectedValue = "regex", `true` }
+			}
+			for name, mutate := range cases {
+				t.Run(name, func(t *testing.T) {
+					invalid := step
+					mutate(&invalid)
+					if err := validate(invalid); err == nil {
+						t.Fatal("invalid step accepted")
+					}
+				})
+			}
+		})
+	}
+	base.Kind = "wait_for_entity"
+	for _, operator := range []string{"eq", "neq", "contains", "regex", "gt", "lt"} {
+		step := base
+		step.Operator = operator
+		if operator == "gt" || operator == "lt" {
+			step.ExpectedValue = `42`
+		}
+		for _, timeout := range []int{0, 60, 1800} {
+			step.TimeoutSeconds = timeout
+			if err := validate(step); err != nil {
+				t.Errorf("valid operator %q with timeout %d rejected: %v", operator, timeout, err)
+			}
 		}
 	}
 }

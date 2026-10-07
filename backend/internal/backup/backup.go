@@ -18,6 +18,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -427,10 +428,49 @@ func validateRunbooks(b *Bundle, docIDs, connectorIDs map[string]bool) error {
 				return fmt.Errorf("runbook step %q timeout must be between 10 and 1800 seconds", step.ID)
 			}
 		case "manual":
+		case "config_push":
+			if step.ConnectorID == "" || strings.TrimSpace(step.FieldKey) == "" || !json.Valid([]byte(step.TargetValue)) {
+				return fmt.Errorf("config-push step %q requires a connector, field key and JSON target value", step.ID)
+			}
+		case "wait_for_entity":
+			if err := validateEntityWaitStep(step); err != nil {
+				return err
+			}
 		default:
 			return fmt.Errorf("runbook step %q has invalid kind %q", step.ID, step.Kind)
 		}
 		stepIDs[step.ID] = true
+	}
+	return nil
+}
+
+func validateEntityWaitStep(step store.RunbookStepRecord) error {
+	if step.ConnectorID == "" || step.EntityRef == "" || strings.TrimSpace(step.Attribute) == "" {
+		return fmt.Errorf("entity-wait step %q requires a connector, entity and attribute", step.ID)
+	}
+	var value any
+	if err := json.Unmarshal([]byte(step.ExpectedValue), &value); err != nil {
+		return fmt.Errorf("entity-wait step %q requires a JSON expected value: %w", step.ID, err)
+	}
+	switch step.Operator {
+	case "eq", "neq", "contains":
+	case "regex":
+		pattern, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("entity-wait step %q requires a string regex value", step.ID)
+		}
+		if _, err := regexp.Compile(pattern); err != nil {
+			return fmt.Errorf("entity-wait step %q has an invalid regex: %w", step.ID, err)
+		}
+	case "gt", "lt":
+		if _, ok := value.(float64); !ok {
+			return fmt.Errorf("entity-wait step %q requires a numeric expected value", step.ID)
+		}
+	default:
+		return fmt.Errorf("entity-wait step %q has invalid operator %q", step.ID, step.Operator)
+	}
+	if step.TimeoutSeconds != 0 && (step.TimeoutSeconds < 60 || step.TimeoutSeconds > 1800) {
+		return fmt.Errorf("entity-wait step %q timeout must be between 60 and 1800 seconds", step.ID)
 	}
 	return nil
 }
@@ -459,7 +499,7 @@ func validBackupTimestamp(value string) bool {
 }
 
 func isWaitStepKind(kind string) bool {
-	return kind == "sync_and_wait" || kind == "wait_until_healthy"
+	return kind == "sync_and_wait" || kind == "wait_until_healthy" || kind == "wait_for_entity"
 }
 
 // validateOverride checks one backed-up override's shape and that every member
@@ -664,10 +704,13 @@ func importRunbooks(ctx context.Context, s *store.Store, runbooks []store.Runboo
 				step.TimeoutSeconds = 300
 			}
 			if _, err := s.DB().ExecContext(ctx, `
-				INSERT INTO runbook_steps (id, runbook_id, position, kind, timeout_seconds, title, connector_id, verb, entity_ref, created_at, updated_at)
-				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+				INSERT INTO runbook_steps (id, runbook_id, position, kind, timeout_seconds, title, connector_id, verb, entity_ref,
+					field_key, target_value, attribute, operator, expected_value, created_at, updated_at)
+				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 			`, step.ID, step.RunbookID, step.Position, step.Kind, step.TimeoutSeconds, step.Title,
-				nullableBackupString(step.ConnectorID), nullableBackupString(step.Verb), step.EntityRef, step.CreatedAt, step.UpdatedAt); err != nil {
+				nullableBackupString(step.ConnectorID), nullableBackupString(step.Verb), step.EntityRef,
+				step.FieldKey, step.TargetValue, step.Attribute, step.Operator, step.ExpectedValue,
+				step.CreatedAt, step.UpdatedAt); err != nil {
 				return fmt.Errorf("import runbook step %q: %w", step.ID, err)
 			}
 			res.RunbookSteps.Imported++

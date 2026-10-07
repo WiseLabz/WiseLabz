@@ -242,6 +242,11 @@ func FreezeSteps(steps []*store.RunbookStepRecord) []*store.RunbookRunStepRecord
 			ConnectorID:    step.ConnectorID,
 			Verb:           step.Verb,
 			EntityRef:      step.EntityRef,
+			FieldKey:       step.FieldKey,
+			TargetValue:    step.TargetValue,
+			Attribute:      step.Attribute,
+			Operator:       step.Operator,
+			ExpectedValue:  step.ExpectedValue,
 			TimeoutSeconds: timeout,
 		})
 	}
