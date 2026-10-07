@@ -112,7 +112,11 @@ func normalizeHost(host string) (string, error) {
 			}
 		}
 	}
-	if last := labels[len(labels)-1]; strings.Trim(last, "0123456789") == "" {
+	// Some resolvers (getaddrinfo) read an all-digit or 0x-hex last label as an
+	// IPv4 address. The dial guard would still block a loopback result, but such
+	// a name should not pass validation.
+	last := labels[len(labels)-1]
+	if strings.Trim(last, "0123456789") == "" || (strings.HasPrefix(last, "0x") && strings.Trim(last[2:], "0123456789abcdef") == "") {
 		return "", fmt.Errorf("invalid IP address %q", host)
 	}
 	return host, nil

@@ -43,7 +43,7 @@ func (h *Handler) authorizeImportReference(w http.ResponseWriter, r *http.Reques
 		}
 	}
 	if role == "" {
-		httputil.Error(w, http.StatusForbidden, "forbidden", "You do not have access to the connector to import hosts from")
+		httputil.Error(w, http.StatusForbidden, "forbidden", "You do not have access to the connector named in config.import_connector_id")
 		return false
 	}
 	if rec.Type != traefikType {

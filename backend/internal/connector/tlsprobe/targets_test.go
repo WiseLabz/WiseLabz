@@ -20,6 +20,8 @@ func TestParseTarget(t *testing.T) {
 		"[FD00:0::10]:443": "[fd00::10]:443",
 		"host_1.lab:1":     "host_1.lab:1",
 		"nas:65535":        "nas:65535",
+		// An IPv4-mapped literal is canonicalized to plain IPv4.
+		"[::ffff:10.0.0.5]:443": "10.0.0.5:443",
 	}
 	for in, want := range good {
 		got, err := parseTarget(in)
@@ -52,6 +54,20 @@ func TestParseTarget(t *testing.T) {
 		"300.1.1.1:443":                      "invalid IP",
 		"[fe80::1%eth0]:443":                 "invalid host name",
 		strings.Repeat("a", 64) + ".lab:443": "invalid host name",
+		// Forms some resolvers read as IPv4 addresses.
+		"2130706433:443":    "invalid IP",
+		"0177.0.0.1:443":    "invalid IP",
+		"0x7f.0.0.1:443":    "invalid IP",
+		"127.1:443":         "invalid IP",
+		"0x7f000001:443":    "invalid IP",
+		"nas.0x10:443":      "invalid IP",
+		"localhost.:443":    "invalid host name",
+		"nas\x00.lab:443":   "invalid host name",
+		"nas.lab\r:443":     "invalid host name",
+		"na\u200bs.lab:443": "invalid host name",
+		"nas.lab:44\x003":   "invalid port",
+		"nas.lab:443\tx":    "spaces",
+		"nas.lab:443:443":   "brackets",
 	}
 	for in, want := range bad {
 		_, err := parseTarget(in)
@@ -79,6 +95,13 @@ func TestValidateLocatesBadLine(t *testing.T) {
 	var invalid *connector.ConfigValidationError
 	if !errors.As(err, &invalid) || invalid.Field != "targets" {
 		t.Errorf("error is not a targets field error: %v", err)
+	}
+}
+
+func TestValidateLocatesControlCharacterLine(t *testing.T) {
+	err := (&Connector{}).Validate(context.Background(), targetsConfig("a.lab:443", "b\x00.lab:443"))
+	if err == nil || !strings.Contains(err.Error(), "line 2 (") {
+		t.Fatalf("error %v does not locate line 2", err)
 	}
 }
 

@@ -18,13 +18,22 @@ A connector has no URL; the targets are its configuration. Saving checks the
 syntax of every line and the limits below without contacting anything, and a
 rejected save names the line that is wrong.
 
+Host names are ASCII (letters, digits, `-`, `_` and dots); an internationalised
+name must be given in its punycode (`xn--`) form.
+
+Because `targets`, `import_connector_id` and `import_port` decide where the
+WiseLabz host connects, creating a probe and changing any of them requires an
+instance admin. Connector operators can still sync and view a probe, and can
+save it with those settings unchanged.
+
 ## What is probed
 
 On every sync the connector dials each target, sends the target's host name as
 the TLS server name (SNI; not sent for an IP address), completes the handshake,
 reads the **leaf certificate** from the connection and closes it. **Nothing is
 written to the connection** beyond the handshake itself, and only the leaf
-certificate is read.
+certificate is read. The handshake offers TLS 1.2 or newer, so an endpoint that
+only speaks TLS 1.0 or 1.1 shows up as unreachable with class `handshake`.
 
 The handshake is limited to **5 seconds per target** (connect plus handshake)
 and at most **8 targets are probed at once**. A connector holds at most
@@ -39,9 +48,10 @@ target that resolves to a refused address is reported as unreachable with class
 
 > **Network egress.** The probe makes outbound connections from the WiseLabz
 > host to the targets you list (and to the hosts a referenced Traefik connector
-> exposes). Make sure that is acceptable on your network, and note that anyone
-> who can create or edit a TLS probe connector chooses where those connections
-> go.
+> exposes). Make sure that is acceptable on your network. Creating a probe, and
+> changing its `targets`, `import_connector_id` or `import_port`, requires an
+> instance admin, because those settings choose where the connections go;
+> connector operators can still sync and view it.
 
 ## Certificates are read without trust validation
 
@@ -50,13 +60,14 @@ name**. It reads what the server presents so that expiry can be tracked, which
 means a self-signed certificate, a certificate from a private certificate
 authority and a certificate for a different name are all recorded like any
 other, and none of them raises a finding by itself. Verification is switched
-off in exactly one place, in the connector's dial code (`InsecureSkipVerify`),
-with a comment explaining why; this is safe because the probe sends no data and
+off in exactly one place, a function in the connector's dial code named
+`insecureSkipVerifyConfig` (it sets `InsecureSkipVerify`), whose comment explains
+why; this is safe because the probe sends no data and
 acts on nothing it reads except the certificate fields it stores.
 
 Values that come from the certificate (issuer, subject, DNS names) are untrusted
-input. They are cleaned of control characters and capped (256 characters each,
-50 DNS names) before being stored.
+input. Non-printable characters are removed from them and they are capped
+(256 bytes each, 50 DNS names) before being stored.
 
 ## Entities
 
@@ -112,7 +123,8 @@ literal host names from the `Host(...)` matchers of routers that terminate TLS:
 - ``Host(`a.example.com`)``, `Host("a.example.com")`, several arguments, and
   matchers joined with `||` or `&&` all count.
 - `HostRegexp`, `HostSNI`, wildcard or `{name:regexp}` hosts, and negated
-  matchers (`!Host(...)`) contribute nothing, as do routers without TLS.
+  matchers (`!Host(...)`) contribute nothing, nor do matchers inside a negated
+  group (`!(...)`), as do routers without TLS.
 - Names are lower-cased and de-duplicated, also against listed targets: a host
   that is both listed and imported on the same port is probed once.
 
@@ -131,7 +143,12 @@ anyone who can view the probe connector can see them. For that reason saving a
 probe that references a Traefik connector requires that you can view that
 Traefik connector (otherwise the save is rejected with 403, the same answer for
 a connector that does not exist), and that it is a Traefik connector (otherwise
-the `config.import_connector_id` field is rejected).
+the `config.import_connector_id` field is rejected). The check is made when the
+probe is saved: hosts already imported stay visible on the probe if your access
+to the Traefik connector is revoked later. If the referenced connector is
+deleted or stops being a Traefik connector, the import yields nothing, and
+saving the probe is refused until `import_connector_id` is cleared or
+corrected.
 
 ## Limits
 
@@ -140,8 +157,9 @@ the `config.import_connector_id` field is rejected).
 | Targets per connector (listed + imported) | 100 |
 | Time per target (connect + handshake) | 5 seconds |
 | Concurrent handshakes | 8 |
-| Certificate fields stored | 256 characters each, 50 DNS names |
+| Certificate fields stored | 256 bytes each, 50 DNS names |
 
-The connector cannot yet be declared in `config.yaml` (see
-[CONNECTORS_IN_CONFIG.md](../CONNECTORS_IN_CONFIG.md)), which requires a `url`
-for every entry; create it in the web UI or through the API.
+Entries in `config.yaml` require a `url`, which this connector does not have, so
+declaring a TLS probe there is not supported yet (see
+[CONNECTORS_IN_CONFIG.md](../CONNECTORS_IN_CONFIG.md)); create it in the web UI
+or through the API.

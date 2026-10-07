@@ -35,6 +35,9 @@ func init() {
 		},
 		NoURL:       true,
 		ConfigCheck: checkConfig,
+		// These settings decide where the server dials, so changing them is an
+		// instance-admin action.
+		EndpointConfigKeys: []string{"targets", "import_connector_id", "import_port"},
 	}, newConnector)
 	connector.RegisterAttributeCatalog(typeName, attributeCatalog)
 }

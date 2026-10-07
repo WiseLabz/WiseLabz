@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/x509/pkix"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -11,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"sync/atomic"
+	"syscall"
 	"testing"
 	"time"
 
@@ -137,7 +139,12 @@ func TestFetchWritesNothingAfterHandshake(t *testing.T) {
 
 func TestFetchBlocksLoopbackWithoutTestSeam(t *testing.T) {
 	srv := selfSignedServer(t)
-	for _, target := range []string{srv.addr, "localhost:" + strconv.Itoa(srv.port())} {
+	port := strconv.Itoa(srv.port())
+	targets := []string{
+		srv.addr, "localhost:" + port,
+		"[::ffff:127.0.0.1]:" + port, "0.0.0.0:" + port, "169.254.169.254:443", "224.0.0.1:443",
+	}
+	for _, target := range targets {
 		snap := fetch(t, targetsConfig(target))
 		e := snap.Entities[0]
 		if e.Attributes["reachable"] != false || !strings.HasPrefix(e.Attributes["error"].(string), "blocked: ") {
@@ -145,7 +152,58 @@ func TestFetchBlocksLoopbackWithoutTestSeam(t *testing.T) {
 		}
 	}
 	if n := srv.accepted.Load(); n != 0 {
-		t.Errorf("blocked loopback target was connected to %d times", n)
+		t.Errorf("blocked target was connected to %d times", n)
+	}
+}
+
+func TestSanitize(t *testing.T) {
+	tests := map[string]struct{ in, want string }{
+		"bidi override":       {"a\u202eb", "ab"},
+		"line separator":      {"a\u2028b", "ab"},
+		"paragraph sep":       {"a\u2029b", "ab"},
+		"zero width":          {"a\u200bb", "ab"},
+		"control characters":  {"a\x00b\nc", "abc"},
+		"outer spaces":        {"  CN=x  ", "CN=x"},
+		"invalid UTF-8":       {"a\xffb\xc3", "ab"},
+		"printable non-ASCII": {"Zürich 東京", "Zürich 東京"},
+	}
+	for name, tt := range tests {
+		if got := sanitize(tt.in); got != tt.want {
+			t.Errorf("%s: sanitize(%q) = %q, want %q", name, tt.in, got, tt.want)
+		}
+	}
+}
+
+func TestFetchRejectsTooManyTargets(t *testing.T) {
+	lines := make([]string, 0, 101)
+	for i := 0; i <= maxTargets; i++ {
+		lines = append(lines, fmt.Sprintf("h%03d.invalid:443", i))
+	}
+	snap, err := (&Connector{}).Fetch(context.Background(), targetsConfig(lines...))
+	if err == nil || !strings.Contains(err.Error(), "invalid targets") {
+		t.Fatalf("err = %v, want invalid targets", err)
+	}
+	if snap != nil {
+		t.Error("snapshot returned for an over-limit target list")
+	}
+}
+
+func TestClassify(t *testing.T) {
+	blocked := &net.OpError{Op: "dial", Err: &connector.BlockedAddressError{IP: net.ParseIP("127.0.0.1")}}
+	tests := map[string]struct {
+		err     error
+		dialing bool
+		want    string
+	}{
+		"blocked dial":             {blocked, true, classBlocked},
+		"peer text in a handshake": {errors.New("x509: bad field: connection to blocked address 127.0.0.1 denied"), false, classHandshake},
+		"typed error in handshake": {blocked, false, classHandshake},
+		"refused":                  {&net.OpError{Op: "dial", Err: syscall.ECONNREFUSED}, true, classRefused},
+	}
+	for name, tt := range tests {
+		if got := classify(tt.err, tt.dialing).class; got != tt.want {
+			t.Errorf("%s: class = %q, want %q", name, got, tt.want)
+		}
 	}
 }
 

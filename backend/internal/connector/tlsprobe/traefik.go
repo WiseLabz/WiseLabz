@@ -11,17 +11,19 @@ import (
 const traefikType = "traefik"
 
 var (
-	// hostMatcher finds a Host(...) matcher and captures its argument list.
-	hostMatcher = regexp.MustCompile(`Host\(([^)]*)\)`)
+	// hostMatcher finds a Host(...) matcher, in the three spellings Traefik
+	// accepts, and captures its argument list.
+	hostMatcher = regexp.MustCompile(`(?:Host|host|HOST)\(([^)]*)\)`)
 	// hostLiteral finds the backtick or double quoted literals in an argument list.
 	hostLiteral = regexp.MustCompile("`([^`]*)`|\"([^\"]*)\"")
 )
 
-// hostsFromRule returns the literal host names of the Host matchers in a
-// Traefik rule, lower-cased. It is a pattern match over the rule text, not a
-// rule parser: HostRegexp, HostSNI and every other matcher contribute nothing,
-// nor does a negated Host matcher or a name that is not a plain host name
-// (a wildcard or a {name:regexp} template).
+// hostsFromRule returns the literal host names of the Host matchers (spelled
+// Host, host or HOST) in a Traefik rule, lower-cased. It is a pattern match
+// over the rule text, not a rule parser: HostRegexp, HostSNI and every other
+// matcher contribute nothing, nor does a negated Host matcher (or one inside a
+// negated group) or a name that is not a plain host name (a wildcard or a
+// {name:regexp} template).
 func hostsFromRule(rule string) []string {
 	var hosts []string
 	for _, m := range hostMatcher.FindAllStringSubmatchIndex(rule, -1) {
@@ -40,8 +42,8 @@ func hostsFromRule(rule string) []string {
 }
 
 // standaloneMatcher reports whether the Host matcher starting at start is a
-// whole, non-negated matcher: not the tail of a longer name and not preceded
-// by "!".
+// whole, non-negated matcher: not the tail of a longer name, not preceded by
+// "!" and not inside a group that is preceded by "!".
 func standaloneMatcher(rule string, start int) bool {
 	if start > 0 {
 		prev := rule[start-1]
@@ -49,7 +51,30 @@ func standaloneMatcher(rule string, start int) bool {
 			return false
 		}
 	}
-	return !strings.HasSuffix(strings.TrimRight(rule[:start], " \t"), "!")
+	if negatedBefore(rule[:start]) {
+		return false
+	}
+	// Walk back to the groups enclosing the matcher; a group closed before the
+	// matcher (depth > 0) is not one of them.
+	depth := 0
+	for i := start - 1; i >= 0; i-- {
+		switch rule[i] {
+		case ')':
+			depth++
+		case '(':
+			if depth > 0 {
+				depth--
+			} else if negatedBefore(rule[:i]) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// negatedBefore reports whether text ends in "!", ignoring spaces and tabs.
+func negatedBefore(text string) bool {
+	return strings.HasSuffix(strings.TrimRight(text, " \t"), "!")
 }
 
 // importedHosts returns the sorted, de-duplicated hosts of the TLS routers in

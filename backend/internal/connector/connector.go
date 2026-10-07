@@ -290,6 +290,14 @@ type ServiceDependency struct {
 	Ref  string `json:"ref,omitempty"` // optional connector/service ID if known
 }
 
+// BlockedAddressError is returned by GuardedDialer's Control for an address it
+// refuses, so callers can tell a blocked dial from other failures with errors.As.
+type BlockedAddressError struct{ IP net.IP }
+
+func (e *BlockedAddressError) Error() string {
+	return fmt.Sprintf("connection to blocked address %s denied", e.IP)
+}
+
 // GuardedDialer returns a *net.Dialer whose Control rejects connections to
 // loopback and link-local addresses (the latter covers cloud metadata
 // endpoints like 169.254.169.254). Private ranges (RFC 1918) are allowed
@@ -311,7 +319,7 @@ func GuardedDialer(timeout time.Duration) *net.Dialer {
 				return fmt.Errorf("unresolvable address %q", host)
 			}
 			if IsDangerousIP(ip) && (allowLoopbackForTest.Load() == 0 || !ip.IsLoopback()) {
-				return fmt.Errorf("connection to blocked address %s denied", ip)
+				return &BlockedAddressError{IP: ip}
 			}
 			return nil
 		},

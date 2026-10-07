@@ -99,19 +99,7 @@ func probeTarget(ctx context.Context, t target) probeResult {
 		_ = conn.SetDeadline(deadline)
 	}
 
-	cfg := &tls.Config{
-		// The probe reads the certificate a server presents so its expiry can
-		// be tracked; whether the certificate is trusted or matches the name
-		// is deliberately not judged, so verification is off. Nothing is ever
-		// sent over the connection and nothing read from it is acted on, which
-		// is why this is safe here. Confined to this package.
-		InsecureSkipVerify: true, // codeql[go/disabled-certificate-check]
-		MinVersion:         tls.VersionTLS12,
-	}
-	if !t.isIP() {
-		cfg.ServerName = t.host
-	}
-	tlsConn := tls.Client(conn, cfg)
+	tlsConn := tls.Client(conn, insecureSkipVerifyConfig(t))
 	if err := tlsConn.HandshakeContext(ctx); err != nil {
 		return probeResult{err: classify(err, false)}
 	}
@@ -122,11 +110,37 @@ func probeTarget(ctx context.Context, t target) probeResult {
 	return probeResult{cert: peers[0]}
 }
 
+// insecureSkipVerifyConfig is the TLS client config of a probe, with
+// certificate verification off. The probe reads the certificate a server
+// presents so its expiry can be tracked; whether the certificate is trusted or
+// matches the name is deliberately not judged. Nothing is ever sent over the
+// connection and nothing read from it is acted on, which is why this is safe
+// here. Confined to this package.
+//
+// The name states the insecurity on purpose: CodeQL's disabled-certificate-check
+// query exempts a function named like this, which keeps the exemption to this one
+// function while every other query still scans the file. Inline codeql[...]
+// comments have no effect in this pipeline.
+func insecureSkipVerifyConfig(t target) *tls.Config {
+	cfg := &tls.Config{
+		InsecureSkipVerify: true, //nolint:gosec // deliberate, see the function comment
+		MinVersion:         tls.VersionTLS12,
+	}
+	if !t.isIP() {
+		cfg.ServerName = t.host
+	}
+	return cfg
+}
+
 // classify reduces a dial or handshake error to a stable class and message.
 func classify(err error, dialing bool) *probeError {
-	var dnsErr *net.DNSError
+	var (
+		blocked *connector.BlockedAddressError
+		dnsErr  *net.DNSError
+	)
 	switch {
-	case strings.Contains(err.Error(), "blocked address"):
+	// Only the dial can be blocked; handshake error text may come from the peer.
+	case dialing && errors.As(err, &blocked):
 		return &probeError{classBlocked, "address is not allowed (loopback, link-local, unspecified or multicast)"}
 	case errors.As(err, &dnsErr):
 		switch {
@@ -184,11 +198,12 @@ func isSelfSigned(cert *x509.Certificate) bool {
 		cert.CheckSignature(cert.SignatureAlgorithm, cert.RawTBSCertificate, cert.Signature) == nil
 }
 
-// sanitize makes a certificate string plain, printable and bounded.
+// sanitize makes a certificate string plain, printable and bounded: control,
+// format (bidi overrides, zero-width) and separator characters are dropped.
 func sanitize(s string) string {
 	s = strings.ToValidUTF8(s, "")
 	s = strings.Map(func(r rune) rune {
-		if unicode.IsControl(r) {
+		if !unicode.IsPrint(r) {
 			return -1
 		}
 		return r
