@@ -68,7 +68,8 @@ location with **pagination is not supported yet**. Do not declare it for this
 version of the implementation.
 
 An endpoint transport error, non-success HTTP status, invalid JSON, oversized
-response or `items` path that does not select a list aborts the complete sync.
+response, `items` path that does not select a list or mapped entities and
+attributes larger than the response size limit aborts the complete sync.
 The error names the endpoint. No partial snapshot is stored; authentication
 and availability errors retain their connector error classifications. A
 connection test requests only the first endpoint once with the configured auth.

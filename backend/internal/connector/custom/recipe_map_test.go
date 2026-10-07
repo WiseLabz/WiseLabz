@@ -3,6 +3,7 @@ package custom
 import (
 	"encoding/json"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -317,4 +318,61 @@ func TestMapEndpointRequiresItemsList(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), `endpoint "records"`) || !strings.Contains(err.Error(), `items`) {
 		t.Fatalf("error = %v, want endpoint and items path", err)
 	}
+}
+
+func TestMapEndpointLimitsMappedData(t *testing.T) {
+	field := strings.Repeat("x", 100)
+	body := []byte(`{"items":[{"id":"1","name":"one","overview":"` + field + `"}]}`)
+	endpoint := func(attributes map[string]RecipeAttribute) RecipeEndpoint {
+		return RecipeEndpoint{
+			Name: "series", Items: "items",
+			Entity: RecipeEntity{Kind: "series", Name: "name", ExternalID: "id", Attributes: attributes},
+		}
+	}
+	repeated := endpoint(map[string]RecipeAttribute{
+		"text": {Template: strings.Repeat("{overview}", 5), HasTemplate: true},
+	})
+	attributes := make(map[string]RecipeAttribute)
+	for i := 0; i < 5; i++ {
+		attributes["a"+strconv.Itoa(i)] = RecipeAttribute{Path: "overview", HasPath: true}
+	}
+	copied := endpoint(attributes)
+
+	_, err := mapEndpointLimited(&Recipe{}, repeated, body, nil, 256)
+	for _, want := range []string{`endpoint "series"`, `attribute "text"`, "template output is too large"} {
+		if err == nil || !strings.Contains(err.Error(), want) {
+			t.Fatalf("repeated template error = %v, want %q", err, want)
+		}
+	}
+
+	result, err := mapEndpointLimited(&Recipe{}, copied, body, nil, 256)
+	if err == nil || !strings.Contains(err.Error(), `endpoint "series" maps more than 256 bytes of data`) {
+		t.Fatalf("copied attributes error = %v, want data limit error", err)
+	}
+	if len(result.Entities) != 0 {
+		t.Fatalf("entities = %#v, want none on error", result.Entities)
+	}
+
+	for name, definition := range map[string]RecipeEndpoint{"repeated": repeated, "copied": copied} {
+		result, err := mapEndpointLimited(&Recipe{}, definition, body, nil, 1<<20)
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if len(result.Entities) != 1 || len(result.Entities[0].Attributes) != len(definition.Entity.Attributes) {
+			t.Fatalf("%s: entities = %#v", name, result.Entities)
+		}
+	}
+	if text := mustMapText(t, repeated, body); text != strings.Repeat(field, 5) {
+		t.Fatalf("repeated text = %q", text)
+	}
+}
+
+func mustMapText(t *testing.T, endpoint RecipeEndpoint, body []byte) string {
+	t.Helper()
+	result, err := mapEndpointLimited(&Recipe{}, endpoint, body, nil, 1<<20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text, _ := result.Entities[0].Attributes["text"].(string)
+	return text
 }

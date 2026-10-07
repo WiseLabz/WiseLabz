@@ -21,9 +21,30 @@ type recipeEndpointResult struct {
 	Skipped      int
 }
 
+// recipeBudget bounds the data one endpoint maps. A recipe selects and repeats
+// fields, so without a bound it could multiply a response many times over.
+type recipeBudget struct {
+	endpoint string
+	limit    int
+	used     int
+}
+
+func (b *recipeBudget) add(n int) error {
+	b.used += n
+	if b.used > b.limit {
+		return fmt.Errorf("endpoint %q maps more than %d bytes of data", b.endpoint, b.limit)
+	}
+	return nil
+}
+
 // mapEndpoint maps one endpoint response atomically. The caller shares seen
-// across endpoints so duplicate identifiers are detected across the sync.
+// across endpoints so duplicate identifiers are detected across the sync. The
+// mapped data is bounded by the response size limit.
 func mapEndpoint(recipe *Recipe, endpoint RecipeEndpoint, body []byte, seen map[string]struct{}) (recipeEndpointResult, error) {
+	return mapEndpointLimited(recipe, endpoint, body, seen, connector.MaxResponseBytes)
+}
+
+func mapEndpointLimited(recipe *Recipe, endpoint RecipeEndpoint, body []byte, seen map[string]struct{}, limit int) (recipeEndpointResult, error) {
 	if recipe == nil {
 		return recipeEndpointResult{}, fmt.Errorf("endpoint %q: recipe is required", endpoint.Name)
 	}
@@ -39,9 +60,10 @@ func mapEndpoint(recipe *Recipe, endpoint RecipeEndpoint, body []byte, seen map[
 	for key := range seen {
 		known[key] = struct{}{}
 	}
+	budget := &recipeBudget{endpoint: endpoint.Name, limit: limit}
 	result := recipeEndpointResult{Items: len(items.Array())}
 	for _, item := range items.Array() {
-		entity, externalID, skip, err := mapRecipeEntity(endpoint, []byte(item.Raw))
+		entity, externalID, skip, err := mapRecipeEntity(endpoint, []byte(item.Raw), budget)
 		if err != nil {
 			return recipeEndpointResult{}, err
 		}
@@ -84,7 +106,7 @@ func mapEndpoint(recipe *Recipe, endpoint RecipeEndpoint, body []byte, seen map[
 	return result, nil
 }
 
-func mapRecipeEntity(endpoint RecipeEndpoint, item []byte) (connector.SnapshotEntity, string, bool, error) {
+func mapRecipeEntity(endpoint RecipeEndpoint, item []byte, budget *recipeBudget) (connector.SnapshotEntity, string, bool, error) {
 	entityConfig := endpoint.Entity
 	externalID, exists, err := recipePathString(item, entityConfig.ExternalID)
 	if err != nil {
@@ -133,14 +155,25 @@ func mapRecipeEntity(endpoint RecipeEndpoint, item []byte) (connector.SnapshotEn
 		}
 	}
 
+	size := len(entity.Kind) + len(entity.Name) + len(entity.ExternalID) + len(entity.IP) + len(entity.Hostname) + len(entity.MAC)
+	for _, alias := range entity.Aliases {
+		size += len(alias)
+	}
+	if err := budget.add(size); err != nil {
+		return connector.SnapshotEntity{}, "", false, err
+	}
+
 	if len(entityConfig.Attributes) > 0 {
 		entity.Attributes = make(map[string]any, len(entityConfig.Attributes))
 		for _, name := range sortedRecipeAttributeNames(entityConfig.Attributes) {
-			attribute, include, err := mapRecipeAttribute(item, entityConfig.Attributes[name])
+			attribute, include, err := mapRecipeAttribute(item, entityConfig.Attributes[name], budget.limit)
 			if err != nil {
 				return connector.SnapshotEntity{}, "", false, fmt.Errorf("endpoint %q attribute %q: %w", endpoint.Name, name, err)
 			}
 			if include {
+				if err := budget.add(len(name) + recipeValueSize(attribute)); err != nil {
+					return connector.SnapshotEntity{}, "", false, err
+				}
 				entity.Attributes[name] = attribute
 			}
 		}
@@ -160,7 +193,7 @@ func sortedRecipeAttributeNames(attributes map[string]RecipeAttribute) []string 
 	return names
 }
 
-func mapRecipeAttribute(item []byte, attribute RecipeAttribute) (any, bool, error) {
+func mapRecipeAttribute(item []byte, attribute RecipeAttribute, limit int) (any, bool, error) {
 	hasPath := attribute.HasPath || attribute.Path != ""
 	hasConst := attribute.HasConst || attribute.Const != nil
 	hasTemplate := attribute.HasTemplate || attribute.Template != ""
@@ -181,7 +214,7 @@ func mapRecipeAttribute(item []byte, attribute RecipeAttribute) (any, bool, erro
 	} else if hasConst {
 		value = attribute.Const
 	} else {
-		template, found, err := expandRecipeTemplate(item, attribute.Template)
+		template, found, err := expandRecipeTemplate(item, attribute.Template, limit)
 		if err != nil {
 			return nil, false, err
 		}
@@ -208,6 +241,24 @@ func mapRecipeAttribute(item []byte, attribute RecipeAttribute) (any, bool, erro
 		return nil, false, err
 	}
 	return converted, true, nil
+}
+
+// recipeValueSize approximates the bytes an attribute value adds to a snapshot.
+func recipeValueSize(value any) int {
+	switch v := value.(type) {
+	case string:
+		return len(v)
+	case json.Number:
+		return len(v)
+	case []string:
+		size := 0
+		for _, item := range v {
+			size += len(item)
+		}
+		return size
+	default:
+		return 8
+	}
 }
 
 func boolCount(values ...bool) int {
@@ -315,7 +366,7 @@ func recipePathStrings(data []byte, path string) ([]string, bool, error) {
 	return stringsOut, true, nil
 }
 
-func expandRecipeTemplate(data []byte, template string) (string, bool, error) {
+func expandRecipeTemplate(data []byte, template string, limit int) (string, bool, error) {
 	var output strings.Builder
 	for i := 0; i < len(template); {
 		switch template[i] {
@@ -336,6 +387,9 @@ func expandRecipeTemplate(data []byte, template string) (string, bool, error) {
 			}
 			if !found {
 				return "", false, nil
+			}
+			if output.Len()+len(value) > limit {
+				return "", false, errors.New("template output is too large")
 			}
 			output.WriteString(value)
 			i += end + 2
