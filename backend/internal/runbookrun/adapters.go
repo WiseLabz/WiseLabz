@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/WiseLabz/wiselabz/internal/api/connectors"
+	"github.com/WiseLabz/wiselabz/internal/compliance"
 	"github.com/WiseLabz/wiselabz/internal/health"
 	"github.com/WiseLabz/wiselabz/internal/notifications"
 	"github.com/WiseLabz/wiselabz/internal/store"
@@ -18,6 +19,8 @@ var (
 	_ Store         = (*store.Store)(nil)
 	_ RecoveryStore = (*store.Store)(nil)
 	_ Lifecycle     = (*connectors.Handler)(nil)
+	_ ConfigPush    = (*connectors.Handler)(nil)
+	_ Entities      = StoreEntities{}
 	_ Syncer        = (*syncengine.Engine)(nil)
 	_ Spawner       = (*syncengine.Engine)(nil)
 	_ HealthChecker = StoreHealth{}
@@ -77,4 +80,15 @@ func (h StoreHealth) CheckHealth(ctx context.Context, connectorID string) (strin
 		return "", err
 	}
 	return result.Status, nil
+}
+
+// StoreEntities loads entities from the connector's latest stored snapshot,
+// the same read the quality checker evaluates compliance rules against.
+type StoreEntities struct {
+	Store *store.Store
+}
+
+// LatestEntities implements Entities.
+func (e StoreEntities) LatestEntities(ctx context.Context, connectorID string) (*compliance.Snapshot, error) {
+	return compliance.LoadLatestSnapshot(ctx, e.Store, connectorID)
 }

@@ -1139,3 +1139,30 @@ func TestEvaluateDaysLeftRelatedUsesOneClockReading(t *testing.T) {
 		t.Fatalf("matches = %v, skipped = %v, clock calls = %d", matches, skipped, calls)
 	}
 }
+
+func TestMatchesConditionUsesRuleSemantics(t *testing.T) {
+	entity := Entity{Attributes: map[string]any{"status": "running", "memory": 4096, "expires": "2026-01-10T00:00:00Z"}}
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	for _, tc := range []struct {
+		condition Condition
+		want      bool
+	}{
+		{Condition{Attribute: "status", Op: "eq", Value: "running"}, true},
+		{Condition{Attribute: "status", Op: "eq", Value: "stopped"}, false},
+		{Condition{Attribute: "status", Op: "neq", Value: "stopped"}, true},
+		{Condition{Attribute: "status", Op: "contains", Value: "run"}, true},
+		{Condition{Attribute: "status", Op: "regex", Value: "^run"}, true},
+		{Condition{Attribute: "memory", Op: "gt", Value: 1024}, true},
+		{Condition{Attribute: "memory", Op: "lt", Value: 1024}, false},
+		{Condition{Attribute: "missing", Op: "eq", Value: "x"}, false},
+		{Condition{Attribute: "missing", Op: "neq", Value: "x"}, true},
+	} {
+		if got := MatchesCondition(entity, tc.condition); got != tc.want {
+			t.Errorf("MatchesCondition(%+v) = %v, want %v", tc.condition, got, tc.want)
+		}
+	}
+	days := Condition{Attribute: "expires", Op: "days_left_lt", Value: 30}
+	if !(Evaluator{Now: func() time.Time { return now }}).MatchesCondition(entity, days) {
+		t.Error("the evaluator's clock was not used for days_left_lt")
+	}
+}

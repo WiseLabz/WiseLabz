@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/WiseLabz/wiselabz/internal/api/connectors"
+	"github.com/WiseLabz/wiselabz/internal/compliance"
 	"github.com/WiseLabz/wiselabz/internal/logsafe"
 	"github.com/WiseLabz/wiselabz/internal/store"
 	syncengine "github.com/WiseLabz/wiselabz/internal/sync"
@@ -47,6 +48,8 @@ const (
 	KindSyncAndWait      = "sync_and_wait"
 	KindWaitUntilHealthy = "wait_until_healthy"
 	KindManual           = "manual"
+	KindConfigPush       = "config_push"
+	KindWaitForEntity    = "wait_for_entity"
 )
 
 // Reasons recorded on a failed run. The failed step carries the
@@ -69,12 +72,27 @@ const (
 	// HealthPollInterval is how often a wait_until_healthy step checks its
 	// connector.
 	HealthPollInterval = 10 * time.Second
-	// DefaultStepTimeout applies to a sync_and_wait or wait_until_healthy step
-	// without a timeout.
+	// EntityPollInterval is how often a wait_for_entity step syncs its
+	// connector and re-evaluates its condition. It is a floor: each sync also
+	// waits behind one already running.
+	EntityPollInterval = 30 * time.Second
+	// DefaultStepTimeout applies to a sync_and_wait, wait_until_healthy or
+	// wait_for_entity step without a timeout.
 	DefaultStepTimeout = 5 * time.Minute
 	// storeTimeout bounds one state read or write. Writes are detached from
 	// the run's context so an outcome is still recorded while it is cancelled.
 	storeTimeout = 15 * time.Second
+	// configPushTimeout bounds one config_push step's write, verification and
+	// revert, which run detached from the run's cancellation so they are not
+	// abandoned halfway.
+	configPushTimeout = 2 * time.Minute
+	// lastObservationLimit truncates (in bytes) the last observed attribute value that a
+	// wait_for_entity timeout reports.
+	lastObservationLimit = 80
+	// noObservation stands in for the last observation of a wait_for_entity
+	// step that never got one: every sync or entity read failed, or none
+	// finished.
+	noObservation = "nothing: no sync result was available"
 	// healthStatusOnline is the only status wait_until_healthy accepts.
 	healthStatusOnline = "online"
 )
@@ -114,6 +132,20 @@ type Store interface {
 // *connectors.Handler satisfies it.
 type Lifecycle interface {
 	MutateRunbookLifecycleOp(ctx context.Context, connectorID, verb, entityRef string, actor connectors.LifecycleActor, extraAudit map[string]any) error
+}
+
+// ConfigPush performs an already-authorized config push with its verification,
+// revert, alert and audit record. It does not check grants or elevation.
+// *connectors.Handler satisfies it.
+type ConfigPush interface {
+	MutateRunbookConfigPush(ctx context.Context, connectorID, entityRef, fieldKey string, value any, actor connectors.LifecycleActor, extraAudit map[string]any) error
+}
+
+// Entities loads a connector's latest synced entities in the shape the
+// compliance engine reads. A nil snapshot means there is none yet.
+// StoreEntities satisfies it.
+type Entities interface {
+	LatestEntities(ctx context.Context, connectorID string) (*compliance.Snapshot, error)
 }
 
 // Syncer runs one connector sync and blocks until it ends. While another sync
@@ -156,14 +188,16 @@ type Spawner interface {
 
 // Deps are the executor's collaborators. Events and Notifier may be nil.
 type Deps struct {
-	Store     Store
-	Lifecycle Lifecycle
-	Sync      Syncer
-	Health    HealthChecker
-	Grants    Grants
-	Events    Publisher
-	Notifier  Notifier
-	Spawner   Spawner
+	Store      Store
+	Lifecycle  Lifecycle
+	ConfigPush ConfigPush
+	Entities   Entities
+	Sync       Syncer
+	Health     HealthChecker
+	Grants     Grants
+	Events     Publisher
+	Notifier   Notifier
+	Spawner    Spawner
 }
 
 // Executor runs runbook runs, one goroutine per active run. It executes in
@@ -173,16 +207,20 @@ type Deps struct {
 // run that a slot holder reads as running is therefore driven by nobody else
 // here.
 type Executor struct {
-	store     Store
-	lifecycle Lifecycle
-	syncer    Syncer
-	health    HealthChecker
-	grants    Grants
-	events    Publisher
-	notifier  Notifier
-	spawner   Spawner
+	store      Store
+	lifecycle  Lifecycle
+	configPush ConfigPush
+	entities   Entities
+	syncer     Syncer
+	health     HealthChecker
+	grants     Grants
+	events     Publisher
+	notifier   Notifier
+	spawner    Spawner
 
 	healthPollInterval time.Duration
+	entityPollInterval time.Duration
+	configPushTimeout  time.Duration
 	stepTimeout        func(*store.RunbookRunStepRecord) time.Duration
 
 	mu     sync.Mutex
@@ -201,6 +239,8 @@ func New(deps Deps) *Executor {
 	return &Executor{
 		store:              deps.Store,
 		lifecycle:          deps.Lifecycle,
+		configPush:         deps.ConfigPush,
+		entities:           deps.Entities,
 		syncer:             deps.Sync,
 		health:             deps.Health,
 		grants:             deps.Grants,
@@ -208,15 +248,18 @@ func New(deps Deps) *Executor {
 		notifier:           deps.Notifier,
 		spawner:            deps.Spawner,
 		healthPollInterval: HealthPollInterval,
+		entityPollInterval: EntityPollInterval,
+		configPushTimeout:  configPushTimeout,
 		stepTimeout:        StepTimeout,
 		active:             make(map[string]*activeRun),
 	}
 }
 
 // FreezeSteps copies authored steps into the form a run stores, so later
-// edits to the runbook cannot change what the run executes. A step without a
-// kind is a lifecycle step. Only the wait kinds (sync_and_wait,
-// wait_until_healthy and wait_for_entity) keep a timeout: the value stored on
+// edits to the runbook cannot change what the run executes, including the
+// config_push target value. A step without a kind is a lifecycle step. Only
+// the wait kinds (sync_and_wait, wait_until_healthy and wait_for_entity) keep a
+// timeout: the value stored on
 // any other step (legacy rows hold the column default) is dropped, and a wait
 // step without one gets DefaultStepTimeout.
 func FreezeSteps(steps []*store.RunbookStepRecord) []*store.RunbookRunStepRecord {
@@ -231,7 +274,7 @@ func FreezeSteps(steps []*store.RunbookStepRecord) []*store.RunbookRunStepRecord
 			kind = KindLifecycle
 		}
 		timeout := 0
-		if hasTimeout(kind) || kind == "wait_for_entity" {
+		if hasTimeout(kind) {
 			timeout = step.TimeoutSeconds
 			if timeout <= 0 {
 				timeout = int(DefaultStepTimeout / time.Second)
@@ -256,11 +299,11 @@ func FreezeSteps(steps []*store.RunbookStepRecord) []*store.RunbookRunStepRecord
 
 // hasTimeout reports whether steps of kind wait and therefore time out.
 func hasTimeout(kind string) bool {
-	return kind == KindSyncAndWait || kind == KindWaitUntilHealthy
+	return kind == KindSyncAndWait || kind == KindWaitUntilHealthy || kind == KindWaitForEntity
 }
 
-// StepTimeout returns how long a step may run. Only sync_and_wait and
-// wait_until_healthy steps have a timeout; a lifecycle step is bounded by the
+// StepTimeout returns how long a step may run. Only the wait kinds have a
+// timeout; a lifecycle step is bounded by the
 // connector call itself (zero), whatever its row holds.
 func StepTimeout(step *store.RunbookRunStepRecord) time.Duration {
 	if !hasTimeout(step.Kind) {
