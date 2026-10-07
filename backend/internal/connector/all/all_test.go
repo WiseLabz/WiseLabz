@@ -26,6 +26,7 @@ func TestAllConnectorImplementationsRegister(t *testing.T) {
 		{typ: "portainer", category: "containers_paas"},
 		{typ: "pihole", category: "dns"},
 		{typ: "proxmox", category: "virtualization"},
+		{typ: "tlsprobe", category: "monitoring"},
 		{typ: "traefik", category: "networking"},
 		{typ: "truenas", category: "virtualization"},
 		{typ: "unifi", category: "networking"},
@@ -74,7 +75,7 @@ func TestConnectorFailureContract(t *testing.T) {
 		{"truenas", map[string]any{"api_key": "bad"}, false},
 		{"unifi", map[string]any{"auth_mode": "api_key", "api_key": "bad", "controller_type": "unifi_os"}, false},
 	}
-	covered := map[string]bool{"cloudflare": true, "docker": true} // suites in their packages need access to private client fields
+	covered := map[string]bool{"cloudflare": true, "docker": true, "tlsprobe": true} // suites in their packages need access to private client fields; tlsprobe has no HTTP endpoint
 	for _, tt := range tests {
 		covered[tt.typ] = true
 		t.Run(tt.typ, func(t *testing.T) {
@@ -130,11 +131,11 @@ func countLifecycle(c connector.CapabilityDescriptor) int {
 	return n
 }
 
-// TestURLRequiredPerType pins that caddy is the only registered type whose
-// top-level url is optional; every other type keeps the url required.
+// TestURLRequiredPerType pins that caddy and tlsprobe (which has no url field)
+// are the only registered types whose top-level url is optional.
 func TestURLRequiredPerType(t *testing.T) {
 	for _, s := range connector.ListSchemas() {
-		want := s.Type != "caddy"
+		want := s.Type != "caddy" && s.Type != "tlsprobe"
 		if got := connector.URLRequired(s.Type); got != want {
 			t.Errorf("URLRequired(%q) = %v, want %v", s.Type, got, want)
 		}

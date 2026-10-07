@@ -18,6 +18,9 @@ type TypeSchema struct {
 	Category           string        `json:"category"`
 	Name               string        `json:"displayName"`
 	Fields             []SchemaField `json:"fields"`
+	// NoURL marks a type whose configuration has no top-level url at all (the
+	// TLS probe lists its targets instead), so saving one without a url is valid.
+	NoURL bool `json:"-"`
 	// Stub is true for connector types with no real implementation yet
 	// (Fetch/Validate always fail). The UI hides/disables Test, Sync, and
 	// data-viewing actions for these.
@@ -146,7 +149,7 @@ func ValidateConfig(schema TypeSchema, config map[string]any) error {
 
 // URLRequired reports whether the connector type's schema requires the
 // top-level url. Unknown types and types without a url field keep the
-// historical behaviour (required).
+// historical behaviour (required) unless the type sets NoURL.
 func URLRequired(typ string) bool {
 	schema, err := GetTypeSchema(typ)
 	if err != nil {
@@ -157,7 +160,7 @@ func URLRequired(typ string) bool {
 			return f.Required
 		}
 	}
-	return true
+	return !schema.NoURL
 }
 
 // ApplyRecordConfig folds a connector record's top-level url and verify_tls

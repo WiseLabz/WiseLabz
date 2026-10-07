@@ -116,6 +116,7 @@ connectors against their type's fields) and `server config print
 | UniFi              | Built-in             |
 | TrueNAS            | Built-in             |
 | DNS Resolver       | Built-in             |
+| [TLS Probe](docs/connectors/TLS_PROBE.md) | Built-in |
 | Custom HTTP API    | Built-in             |
 | Everything else    | Community connectors |
 

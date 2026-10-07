@@ -181,6 +181,9 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		writeConfigRejection(w, err)
 		return
 	}
+	if !h.authorizeImportReference(w, r, req.Type, req.Config) {
+		return
+	}
 
 	c := &store.ConnectorRecord{
 		Name:               req.Name,
@@ -470,6 +473,9 @@ func (h *Handler) applyConnectorConfigUpdate(w http.ResponseWriter, r *http.Requ
 	effective := effectiveConnectorConfig(stored, rec.Type, typ, req.Config)
 	if err := validateConnectorConfig(typ, url, verifyTLS, effective); err != nil {
 		writeConfigRejection(w, err)
+		return false
+	}
+	if !h.authorizeImportReference(w, r, typ, effective) {
 		return false
 	}
 	if schema, err := connector.GetTypeSchema(typ); err == nil && schema.CategoryForConfig != nil {

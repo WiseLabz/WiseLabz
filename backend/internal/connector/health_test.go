@@ -47,3 +47,27 @@ func TestClassifyHealthPerTypeThreshold(t *testing.T) {
 		t.Errorf("status with zero override = %q, want degraded (falls back to default)", status)
 	}
 }
+
+func TestReportedOffline(t *testing.T) {
+	md := map[string]string{}
+	ReportOffline(md, 1)
+	if got, ok := SnapshotOfflineMessage(&ServiceSnapshot{Metadata: md}); !ok || got != "All 1 target unreachable" {
+		t.Errorf("SnapshotOfflineMessage = %q, %v", got, ok)
+	}
+	for _, msg := range []string{AllTargetsUnreachable(1), AllTargetsUnreachable(12)} {
+		if !IsAllTargetsUnreachable(msg) {
+			t.Errorf("IsAllTargetsUnreachable(%q) = false", msg)
+		}
+	}
+	for _, msg := range []string{"", "Healthy", "connection refused", "All targets unreachable"} {
+		if IsAllTargetsUnreachable(msg) {
+			t.Errorf("IsAllTargetsUnreachable(%q) = true", msg)
+		}
+	}
+	if _, ok := SnapshotOfflineMessage(&ServiceSnapshot{Metadata: map[string]string{"health_status": "online"}}); ok {
+		t.Error("online snapshot reported offline")
+	}
+	if _, ok := SnapshotOfflineMessage(nil); ok {
+		t.Error("nil snapshot reported offline")
+	}
+}

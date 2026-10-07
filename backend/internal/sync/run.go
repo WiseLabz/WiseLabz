@@ -174,6 +174,12 @@ func (e *Engine) runClaimed(ctx context.Context, connectorID, jobID string, fiel
 		return markError(result, start, fmt.Errorf("fetch: %w", err))
 	}
 
+	// A connector can report itself offline from what it fetched (a probe
+	// whose every target is down) while the sync itself succeeds.
+	if msg, offline := connector.SnapshotOfflineMessage(sn); offline {
+		result.offlineMessage = msg
+	}
+
 	// Post-fetch transform/enrich pipeline: normalize field names, filter
 	// PII, merge/derive data — registered per connector category.
 	if err := runTransformers(ctx, rec.Category, sn); err != nil {
@@ -278,6 +284,10 @@ func (e *Engine) finishSync(ctx context.Context, connectorID, jobID string, rec 
 	if status == "success" {
 		updates["status"] = "online"
 		updates["status_message"] = "Sync successful"
+		if result.offlineMessage != "" {
+			updates["status"] = "offline"
+			updates["status_message"] = result.offlineMessage
+		}
 		updates["last_sync_at"] = time.Now().UTC().Format(time.RFC3339)
 	}
 	if runErr != nil {
