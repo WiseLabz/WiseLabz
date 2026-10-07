@@ -17,7 +17,7 @@ func TestConfigRead(t *testing.T) {
 		case "/api/v2/interfaces":
 			_, _ = w.Write([]byte(`{"data":[]}`))
 		case "/api/v2/firewall/rules":
-			_, _ = w.Write([]byte(`{"data":[{"id":1,"tracker":"rule-ssh","descr":"SSH","disabled":false}]}`))
+			_, _ = w.Write([]byte(`{"data":[{"id":0,"tracker":"rule-dns","descr":"DNS","disabled":true},{"id":1,"tracker":"rule-ssh","descr":"SSH","disabled":false}]}`))
 		case "/api/v2/routing/gateways":
 			_, _ = w.Write([]byte(`{"data":[]}`))
 		default:

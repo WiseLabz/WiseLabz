@@ -2,14 +2,16 @@ package docker
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"github.com/WiseLabz/wiselabz/internal/connector"
 )
 
-// ConfigRead returns a container's current restart policy from a fresh inspect
-// included in Fetch.
-func (d *Connector) ConfigRead(ctx context.Context, config map[string]any, entityRef, fieldKey string) (any, error) {
+// ConfigRead returns a container's current restart policy from one inspect
+// call for exactly the addressed container. An empty policy name is reported
+// as "no", which is how Docker treats it.
+func (d *Connector) ConfigRead(ctx context.Context, _ map[string]any, entityRef, fieldKey string) (any, error) {
 	if fieldKey != "restartPolicy" {
 		return nil, fmt.Errorf("unsupported field %q", fieldKey)
 	}
@@ -20,25 +22,25 @@ func (d *Connector) ConfigRead(ctx context.Context, config map[string]any, entit
 		return nil, fmt.Errorf("invalid entityRef: %w", err)
 	}
 
-	fetchConfig := make(map[string]any, len(config)+1)
-	for key, value := range config {
-		fetchConfig[key] = value
-	}
-	fetchConfig["fields"] = []string{"containers"}
-
-	snapshot, err := d.Fetch(ctx, fetchConfig)
+	raw, err := d.doRequest(ctx, "/containers/"+entityRef+"/json")
 	if err != nil {
-		return nil, fmt.Errorf("fetch docker config value: %w", err)
+		return nil, fmt.Errorf("inspect docker container %q: %w", entityRef, err)
 	}
-	for _, entity := range snapshot.Entities {
-		if entity.Kind != "container" || entity.ExternalID != entityRef {
-			continue
-		}
-		value, ok := entity.Attributes["restart_policy"].(string)
-		if !ok || value == "" {
-			return nil, fmt.Errorf("docker restart policy is unavailable for container %q", entityRef)
-		}
-		return value, nil
+	var inspect struct {
+		HostConfig *struct {
+			RestartPolicy *struct {
+				Name string `json:"Name"`
+			} `json:"RestartPolicy"`
+		} `json:"HostConfig"`
 	}
-	return nil, fmt.Errorf("docker container %q not found", entityRef)
+	if err := json.Unmarshal(raw, &inspect); err != nil {
+		return nil, fmt.Errorf("decode docker container %q: %w", entityRef, connector.NewMalformedResponseError(err))
+	}
+	if inspect.HostConfig == nil || inspect.HostConfig.RestartPolicy == nil {
+		return nil, fmt.Errorf("docker restart policy is unavailable for container %q", entityRef)
+	}
+	if name := inspect.HostConfig.RestartPolicy.Name; name != "" {
+		return name, nil
+	}
+	return "no", nil
 }

@@ -15,7 +15,7 @@ func TestConfigRead(t *testing.T) {
 		case "/api/diagnostics/interface/getInterfaces":
 			_, _ = w.Write([]byte(`{"rows":[]}`))
 		case "/api/firewall/filter/searchRule":
-			_, _ = w.Write([]byte(`{"rows":[{"uuid":"rule-1","description":"SSH","action":"pass","protocol":"tcp","source_net":"any","destination_net":"any","enabled":"1"}]}`))
+			_, _ = w.Write([]byte(`{"rows":[{"uuid":"rule-0","description":"DNS","action":"pass","protocol":"udp","source_net":"any","destination_net":"any","enabled":"0"},{"uuid":"rule-1","description":"SSH","action":"pass","protocol":"tcp","source_net":"any","destination_net":"any","enabled":"1"}]}`))
 		case "/api/routes/gateway/status":
 			_, _ = w.Write([]byte(`{"items":[]}`))
 		default:

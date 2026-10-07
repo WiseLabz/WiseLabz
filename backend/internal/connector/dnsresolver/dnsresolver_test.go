@@ -68,7 +68,8 @@ func TestDNSResolverWritableFields(t *testing.T) {
 }
 
 func TestDNSResolverConfigRead(t *testing.T) {
-	listBody := `{"data":[{"id":1,"host":"web","domain":"example.com","ip":"10.0.0.5","descr":""}]}`
+	// A decoy override listed first must not be read for the target.
+	listBody := `{"data":[{"id":0,"host":"db","domain":"example.com","ip":"10.0.0.9","descr":""},{"id":1,"host":"web","domain":"example.com","ip":"10.0.0.5","descr":""}]}`
 	var requests int
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requests++

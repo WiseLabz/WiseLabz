@@ -83,7 +83,7 @@ func TestConnector_ConfigRead(t *testing.T) {
 		switch r.URL.Path {
 		case "/api/peers":
 			peerRequests++
-			_, _ = w.Write([]byte(`[{"id":"p1","name":"laptop","approval_required":false,"connected":true}]`))
+			_, _ = w.Write([]byte(`[{"id":"p0","name":"phone","approval_required":true,"connected":true},{"id":"p1","name":"laptop","approval_required":false,"connected":true}]`))
 		case "/api/routes", "/api/policies":
 			_, _ = w.Write([]byte(`[]`))
 		default:

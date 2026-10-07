@@ -138,10 +138,12 @@ func (h *Handler) mutateConfigPush(
 		if err != nil {
 			return nil, fmt.Errorf("pre-push config read: %w", err)
 		}
-		if configValuesEqual(current, req.Value) {
+		// The reader's answer, including "unknown" (nil), replaces the browser's
+		// previousValue so a client cannot choose the revert value.
+		previous, known = current, current != nil
+		if known && configValuesEqual(current, req.Value) {
 			return nil, nil
 		}
-		previous, known = current, true
 	}
 	pre, err := prepared.conn.Fetch(ctx, prepared.config)
 	if err != nil {

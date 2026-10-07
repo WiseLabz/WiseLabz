@@ -253,6 +253,14 @@ func (c *Connector) ConfigRead(ctx context.Context, config map[string]any, entit
 		if entity.Kind != kind || entity.ExternalID != entityRef {
 			continue
 		}
+		if fieldKey == "enabled" {
+			// ConfigPush can only write allow or deny, so for bypass or
+			// non_identity policies true is not a value a revert could restore.
+			decision, _ := entity.Attributes["decision"].(string)
+			if !strings.EqualFold(decision, "allow") && !strings.EqualFold(decision, "deny") {
+				return nil, nil
+			}
+		}
 		value, ok := entity.Attributes[fieldKey]
 		if !ok {
 			return nil, fmt.Errorf("field %q is unavailable for entity %q", fieldKey, entityRef)

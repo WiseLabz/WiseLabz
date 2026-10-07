@@ -108,6 +108,9 @@ type ConfigPusher interface {
 
 // ConfigReader optionally reports a writable field's current value from live data.
 // It is separate from ConfigPusher so a pusher need not support reads.
+// A nil value with a nil error means the entity was read but the connector
+// cannot report a current value for the field (for example it is unset
+// upstream); callers must then treat the previous value as unknown.
 type ConfigReader interface {
 	ConfigRead(ctx context.Context, config map[string]any, entityRef, fieldKey string) (value any, err error)
 }

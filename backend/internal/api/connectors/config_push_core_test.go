@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"math"
 	"net/http"
 	"reflect"
 	"strings"
@@ -121,7 +122,7 @@ func TestMutateRunbookConfigPushVerifiedWrite(t *testing.T) {
 
 func TestMutateRunbookConfigPushAlreadyAtTarget(t *testing.T) {
 	t.Parallel()
-	for _, value := range []any{2048, false, "same", nil} {
+	for _, value := range []any{2048, false, "same"} {
 		t.Run(stringMustJSON(t, value), func(t *testing.T) {
 			h := newTestHandler(t)
 			fake := &configPushCoreConnector{current: value}
@@ -155,13 +156,14 @@ func TestMutateRunbookConfigPushMismatch(t *testing.T) {
 	for _, tt := range []struct {
 		name      string
 		reader    bool
+		revert    bool
 		previous  any
 		revertErr error
 	}{
-		{name: "known", reader: true, previous: 2048},
-		{name: "known false", reader: true, previous: false},
-		{name: "known nil", reader: true, previous: nil},
-		{name: "revert failed", reader: true, previous: 2048, revertErr: errors.New("revert rejected")},
+		{name: "known", reader: true, revert: true, previous: 2048},
+		{name: "known false", reader: true, revert: true, previous: false},
+		{name: "reader unknown", reader: true, previous: nil},
+		{name: "revert failed", reader: true, revert: true, previous: 2048, revertErr: errors.New("revert rejected")},
 		{name: "unknown", previous: 2048},
 		{name: "unknown already at target", previous: 4096},
 	} {
@@ -171,17 +173,17 @@ func TestMutateRunbookConfigPushMismatch(t *testing.T) {
 			id := seedConfigPushCore(t, h, fake, tt.reader)
 			err := h.MutateRunbookConfigPush(context.Background(), id, "100", "memory", 4096, LifecycleActor{}, nil)
 			var mismatch *ConfigPushMismatchError
-			if !errors.As(err, &mismatch) || mismatch.RevertAttempted != tt.reader {
+			if !errors.As(err, &mismatch) || mismatch.RevertAttempted != tt.revert {
 				t.Fatalf("mismatch=%+v err=%v", mismatch, err)
 			}
 			want := []any{4096}
-			if tt.reader {
+			if tt.revert {
 				want = append(want, tt.previous)
 			}
 			if !reflect.DeepEqual(fake.values, want) {
 				t.Fatalf("writes=%v want=%v", fake.values, want)
 			}
-			if !tt.reader && !strings.Contains(err.Error(), "could not verify") {
+			if !tt.revert && !strings.Contains(err.Error(), "could not verify") {
 				t.Fatalf("unknown mismatch reason=%v", err)
 			}
 			if tt.revertErr != nil && !errors.Is(err, tt.revertErr) {
@@ -223,6 +225,23 @@ func TestMutateRunbookConfigPushWithdrawnField(t *testing.T) {
 	assertConfigPushRecords(t, h, id, 0, false)
 }
 
+func TestMutateRunbookConfigPushWriteFailure(t *testing.T) {
+	t.Parallel()
+	h := newTestHandler(t)
+	pushErr := errors.New("push rejected")
+	fake := &configPushCoreConnector{current: 2048, pushErr: pushErr}
+	id := seedConfigPushCore(t, h, fake, true)
+	err := h.MutateRunbookConfigPush(context.Background(), id, "100", "memory", 4096, LifecycleActor{}, nil)
+	var pushFailure *lifecycleError
+	if !errors.As(err, &pushFailure) || pushFailure.status != http.StatusBadGateway || pushFailure.code != "config_push_failed" {
+		t.Fatalf("push error=%v", err)
+	}
+	if !reflect.DeepEqual(fake.values, []any{4096}) {
+		t.Fatalf("writes=%v, want a single write and no revert", fake.values)
+	}
+	assertConfigPushRecords(t, h, id, 0, false)
+}
+
 func TestMutateRunbookConfigPushReadFailure(t *testing.T) {
 	t.Parallel()
 	h := newTestHandler(t)
@@ -253,6 +272,7 @@ func TestConfigPushWrapperPreviousValue(t *testing.T) {
 		{name: "browser fallback", current: 2048, previous: 1024, value: 4096, status: http.StatusConflict, writes: []any{float64(4096), float64(1024)}},
 		{name: "browser false known", current: true, previous: false, value: 4096, status: http.StatusConflict, writes: []any{float64(4096), false}},
 		{name: "no reader unknown", current: 2048, value: 4096, status: http.StatusConflict, writes: []any{float64(4096)}},
+		{name: "reader unknown ignores browser", reader: true, current: nil, previous: 1024, value: 4096, status: http.StatusConflict, writes: []any{float64(4096)}},
 		{name: "reader skip", reader: true, current: 2048, previous: 1024, value: 2048, status: http.StatusOK},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
@@ -279,6 +299,37 @@ func TestConfigPushWrapperPreviousValue(t *testing.T) {
 				}
 			}
 			assertConfigPushRecords(t, h, id, alertCount, false)
+		})
+	}
+}
+
+func TestConfigValuesEqual(t *testing.T) {
+	t.Parallel()
+	for _, tt := range []struct {
+		name    string
+		current any
+		target  any
+		equal   bool
+	}{
+		{name: "int and float", current: 2048, target: float64(2048), equal: true},
+		{name: "int64 and float", current: int64(1), target: float64(1), equal: true},
+		{name: "string", current: "always", target: "always", equal: true},
+		{name: "bool", current: true, target: true, equal: true},
+		{name: "nil", equal: true},
+		{name: "string and number", current: "1", target: float64(1)},
+		{name: "bool and string", current: true, target: "true"},
+		{name: "false and nil", current: false},
+		{name: "empty string and nil", current: ""},
+		{name: "zero and false", current: 0, target: false},
+		{name: "case", current: "Always", target: "always"},
+		{name: "whitespace", current: "a ", target: "a"},
+		{name: "fraction", current: 1.5, target: float64(1)},
+		{name: "NaN", current: math.NaN(), target: math.NaN()},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := configValuesEqual(tt.current, tt.target); got != tt.equal {
+				t.Fatalf("configValuesEqual(%#v, %#v) = %v, want %v", tt.current, tt.target, got, tt.equal)
+			}
 		})
 	}
 }

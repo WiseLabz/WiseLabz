@@ -69,6 +69,9 @@ func TestConfigRead(t *testing.T) {
 	if _, err := c.ConfigRead(context.Background(), nil, "101", "memory"); err == nil {
 		t.Error("ConfigRead() memory error = nil when maxmem is absent")
 	}
+	if value, err := c.ConfigRead(context.Background(), nil, "101", "cores"); err != nil || value != nil {
+		t.Errorf("ConfigRead() cores for null config cores = (%#v, %v), want (nil, nil)", value, err)
+	}
 
 	failQemuConfig = true
 	if _, err := c.ConfigRead(context.Background(), nil, "100", "cores"); err == nil {
@@ -79,7 +82,7 @@ func TestConfigRead(t *testing.T) {
 	}
 
 	lxcCoresNull = true
-	if _, err := c.ConfigRead(context.Background(), nil, "200", "cores"); err == nil {
-		t.Error("ConfigRead() cores error = nil for null LXC cores, which must not be treated as zero")
+	if value, err := c.ConfigRead(context.Background(), nil, "200", "cores"); err != nil || value != nil {
+		t.Errorf("ConfigRead() cores for null LXC cores = (%#v, %v), want (nil, nil), not zero", value, err)
 	}
 }
