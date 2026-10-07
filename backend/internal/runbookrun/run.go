@@ -2,14 +2,17 @@ package runbookrun
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
 
 	"github.com/WiseLabz/wiselabz/internal/api/connectors"
+	"github.com/WiseLabz/wiselabz/internal/compliance"
 	"github.com/WiseLabz/wiselabz/internal/logsafe"
 	"github.com/WiseLabz/wiselabz/internal/store"
 )
@@ -255,6 +258,13 @@ func (e *Executor) perform(ctx context.Context, run *store.RunbookRunRecord, ste
 
 	var err error
 	var waitingFor string
+	var cond *entityCondition
+	if step.Kind == KindWaitForEntity {
+		var failure *stepFailure
+		if cond, failure = parseEntityCondition(step); failure != nil {
+			return failure
+		}
+	}
 	switch step.Kind {
 	case KindLifecycle:
 		err = e.lifecycle.MutateRunbookLifecycleOp(stepCtx, step.ConnectorID, step.Verb, step.EntityRef, actor, auditDetail(run, step))
@@ -268,6 +278,15 @@ func (e *Executor) perform(ctx context.Context, run *store.RunbookRunRecord, ste
 		if last != "" {
 			waitingFor += " (last status: " + last + ")"
 		}
+	case KindConfigPush:
+		err = e.performConfigPush(ctx, run, step, actor)
+	case KindWaitForEntity:
+		var last string
+		last, err = e.waitForEntity(stepCtx, step, cond)
+		waitingFor = fmt.Sprintf("entity %s to satisfy %s", step.EntityRef, cond)
+		if last != "" {
+			waitingFor += " (last observed: " + last + ")"
+		}
 	default:
 		return &stepFailure{reason: ReasonStepFailed, message: fmt.Sprintf("Unsupported step kind %q.", step.Kind)}
 	}
@@ -280,6 +299,57 @@ func (e *Executor) perform(ctx context.Context, run *store.RunbookRunRecord, ste
 		return &stepFailure{reason: ReasonStepTimeout, message: fmt.Sprintf("Timed out after %s waiting for %s.", timeout, waitingFor)}
 	}
 	return &stepFailure{reason: ReasonStepFailed, message: err.Error()}
+}
+
+// performConfigPush writes the field and value frozen at run start through the
+// shared config-push core, under the run's acting user. The core's write,
+// verification and revert run on a context detached from the run's
+// cancellation, bounded by configPushTimeout: a cancel or shutdown after the
+// write began must not leave the field half-changed, or make the core skip the
+// audit entry or raise a false mismatch alert. A step that is already
+// cancelled when it gets here does not start.
+func (e *Executor) performConfigPush(ctx context.Context, run *store.RunbookRunRecord, step *store.RunbookRunStepRecord, actor connectors.LifecycleActor) error {
+	var value any
+	if err := json.Unmarshal([]byte(step.TargetValue), &value); err != nil {
+		return fmt.Errorf("the target value is not valid JSON: %w", err)
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	pushCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), configPushTimeout)
+	defer cancel()
+	detail := auditDetail(run, step)
+	detail["stepIndex"] = step.Position
+	return e.configPush.MutateRunbookConfigPush(pushCtx, step.ConnectorID, step.EntityRef, step.FieldKey, value, actor, detail)
+}
+
+// entityCondition is a frozen wait_for_entity condition.
+type entityCondition struct {
+	compliance.Condition
+}
+
+// String renders the condition for a timeout reason.
+func (c *entityCondition) String() string {
+	return fmt.Sprintf("%s %s %v", c.Attribute, c.Op, c.Value)
+}
+
+// entityOperators are the operators wait_for_entity supports: the compliance
+// operators without the days-left ones, which a wait does not offer.
+var entityOperators = map[string]bool{"eq": true, "neq": true, "contains": true, "regex": true, "gt": true, "lt": true}
+
+// parseEntityCondition decodes the condition frozen on a wait_for_entity step.
+func parseEntityCondition(step *store.RunbookRunStepRecord) (*entityCondition, *stepFailure) {
+	if step.EntityRef == "" || step.Attribute == "" {
+		return nil, &stepFailure{reason: ReasonStepFailed, message: "The step has no entity or attribute to wait for."}
+	}
+	if !entityOperators[step.Operator] {
+		return nil, &stepFailure{reason: ReasonStepFailed, message: fmt.Sprintf("Unsupported wait operator %q.", step.Operator)}
+	}
+	var expected any
+	if err := json.Unmarshal([]byte(step.ExpectedValue), &expected); err != nil {
+		return nil, &stepFailure{reason: ReasonStepFailed, message: "The expected value is not valid JSON."}
+	}
+	return &entityCondition{compliance.Condition{Attribute: step.Attribute, Op: step.Operator, Value: expected}}, nil
 }
 
 // authorize re-checks, immediately before the step, that the user who started
@@ -367,6 +437,94 @@ func (e *Executor) waitUntilHealthy(ctx context.Context, connectorID string) (st
 			return last, err
 		}
 	}
+}
+
+// waitForEntity syncs the connector now and then every poll interval until the
+// named entity satisfies cond. A failed sync or entity read counts as "not yet",
+// so one flaky poll does not fail a restart still in progress. It returns a
+// description of the last observation, truncated, with ctx's error when the wait
+// is cut short.
+func (e *Executor) waitForEntity(ctx context.Context, step *store.RunbookRunStepRecord, cond *entityCondition) (string, error) {
+	last := ""
+	for {
+		if err := e.syncAndWait(ctx, step.ConnectorID); err != nil {
+			if ctx.Err() != nil {
+				return last, ctx.Err()
+			}
+			slog.Warn("runbook run: entity wait sync failed", "step", logsafe.Sanitize(step.ID), "connector", logsafe.Sanitize(step.ConnectorID), "error", logsafe.Err(err))
+		} else {
+			holds, observed, err := e.checkEntity(ctx, step, cond)
+			switch {
+			case err != nil:
+				if ctx.Err() != nil {
+					return last, ctx.Err()
+				}
+				slog.Warn("runbook run: entity wait read failed", "step", logsafe.Sanitize(step.ID), "connector", logsafe.Sanitize(step.ConnectorID), "error", logsafe.Err(err))
+			case holds:
+				return observed, nil
+			default:
+				last = observed
+			}
+		}
+		if err := sleep(ctx, e.entityPollInterval); err != nil {
+			return last, err
+		}
+	}
+}
+
+// checkEntity evaluates cond against the entity in the connector's latest
+// snapshot. observed describes what it saw: the entity is absent, the attribute
+// is absent, or the attribute's value.
+func (e *Executor) checkEntity(ctx context.Context, step *store.RunbookRunStepRecord, cond *entityCondition) (holds bool, observed string, err error) {
+	if e.entities == nil {
+		return false, "", errors.New("entity loading is not configured")
+	}
+	snapshot, err := e.entities.LatestEntities(ctx, step.ConnectorID)
+	if err != nil {
+		return false, "", err
+	}
+	if snapshot == nil {
+		return false, "entity not found", nil
+	}
+	for _, entity := range snapshot.Entities {
+		if entity.ExternalID != step.EntityRef && (entity.ExternalID != "" || entity.Name != step.EntityRef) {
+			continue
+		}
+		value, present := entity.Attributes[cond.Attribute]
+		return compliance.MatchesCondition(entity, cond.Condition), describeObservation(cond.Attribute, value, present), nil
+	}
+	return false, "entity not found", nil
+}
+
+// describeObservation formats an attribute's observed value for a timeout
+// reason. The value comes from a connector, so it is truncated and withheld
+// outright for attributes whose names look like secrets.
+func describeObservation(attribute string, value any, present bool) string {
+	if !present {
+		return fmt.Sprintf("attribute %s not present", attribute)
+	}
+	if secretAttribute(attribute) {
+		return attribute + " = <redacted>"
+	}
+	text := fmt.Sprint(value)
+	if encoded, err := json.Marshal(value); err == nil {
+		text = string(encoded)
+	}
+	if runes := []rune(text); len(runes) > lastObservationLimit {
+		text = string(runes[:lastObservationLimit]) + "…"
+	}
+	return attribute + " = " + text
+}
+
+// secretAttribute reports whether an attribute name suggests a credential.
+func secretAttribute(name string) bool {
+	lower := strings.ToLower(name)
+	for _, hint := range []string{"password", "passwd", "secret", "token", "key", "credential", "psk", "passphrase", "auth"} {
+		if strings.Contains(lower, hint) {
+			return true
+		}
+	}
+	return false
 }
 
 // readRun loads the run and its steps.

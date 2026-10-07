@@ -241,20 +241,7 @@ func complianceRule(record *store.ComplianceRuleRecord) (compliance.Rule, error)
 }
 
 func (c *Checker) loadComplianceSnapshot(ctx context.Context, connectorID string) (*compliance.Snapshot, error) {
-	record, err := c.store.GetLatestSnapshot(ctx, connectorID)
-	if errors.Is(err, store.ErrNotFound) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	var snapshot connector.ServiceSnapshot
-	if err := json.Unmarshal([]byte(record.Data), &snapshot); err != nil {
-		slog.Warn("skipping malformed snapshot for compliance rule", "error", err)
-		return nil, nil
-	}
-	result := compliance.SnapshotFromConnector(snapshot)
-	return &result, nil
+	return compliance.LoadLatestSnapshot(ctx, c.store, connectorID)
 }
 
 func (c *Checker) evaluateComplianceRule(ctx context.Context, connectorID string, rule compliance.Rule, snapshot *compliance.Snapshot, related compliance.RelatedEntities) ([]*store.QualityFindingRecord, error) {

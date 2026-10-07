@@ -20,10 +20,10 @@
 
 ## 4. Executor
 
-- [ ] 4.1 Add a `ConfigPush` dependency to `runbookrun.Deps` and the `config_push` case in `perform`, reusing `authorize` and `auditDetail`; verify executor tests with a fake for success, frozen value after a runbook edit, already-at-target, mismatch failing the run, field withdrawn, revoked grant, and resume of an `unknown` step.
-- [ ] 4.2 Export the compliance condition matcher and make the connector entity loader importable from `runbookrun` without importing `quality`; verify existing compliance and quality tests pass unchanged.
-- [ ] 4.3 Implement `wait_for_entity` with `EntityPollInterval` of 30 seconds, last-observation tracking and timeout reasons; verify tests with fake sync and entities for: holds on first sync, holds on third, entity absent then present, timeout with last value, timeout with entity never found, a failed sync mid-wait, cancel mid-wait.
-- [ ] 4.4 Wire the new dependencies in `cmd/server/main.go`; verify the server starts and an integration test runs a `config_push` then `wait_for_entity` run to `succeeded` against the fake connector.
+- [x] 4.1 Add a `ConfigPush` dependency to `runbookrun.Deps` and the `config_push` case in `perform`, reusing `authorize` and `auditDetail`; verify executor tests with a fake for success, frozen value after a runbook edit, already-at-target, mismatch failing the run, field withdrawn, revoked grant, and resume of an `unknown` step.
+- [x] 4.2 Export the compliance condition matcher and make the connector entity loader importable from `runbookrun` without importing `quality`; verify existing compliance and quality tests pass unchanged.
+- [x] 4.3 Implement `wait_for_entity` with `EntityPollInterval` of 30 seconds, last-observation tracking and timeout reasons; verify tests with fake sync and entities for: holds on first sync, holds on third, entity absent then present, timeout with last value, timeout with entity never found, a failed sync mid-wait, cancel mid-wait.
+- [x] 4.4 Wire the new dependencies in `cmd/server/main.go`; verify the server starts and an integration test runs a `config_push` then `wait_for_entity` run to `succeeded` against the fake connector.
 
 ## 5. Preview, history and MCP
 

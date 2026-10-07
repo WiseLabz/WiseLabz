@@ -11,6 +11,7 @@ import (
 
 	"github.com/WiseLabz/wiselabz/internal/api/apitest"
 	"github.com/WiseLabz/wiselabz/internal/api/connectors"
+	"github.com/WiseLabz/wiselabz/internal/compliance"
 	"github.com/WiseLabz/wiselabz/internal/store"
 	syncengine "github.com/WiseLabz/wiselabz/internal/sync"
 )
@@ -22,6 +23,8 @@ type env struct {
 	t         *testing.T
 	s         *store.Store
 	lifecycle *fakeLifecycle
+	push      *fakeConfigPush
+	entities  *fakeEntities
 	sync      *fakeSync
 	health    *fakeHealth
 	events    *eventRecorder
@@ -39,6 +42,8 @@ func newEnv(t *testing.T) *env {
 		t:         t,
 		s:         s,
 		lifecycle: &fakeLifecycle{},
+		push:      &fakeConfigPush{},
+		entities:  &fakeEntities{},
 		sync:      &fakeSync{},
 		health:    &fakeHealth{},
 		events:    &eventRecorder{},
@@ -54,16 +59,19 @@ func newEnv(t *testing.T) *env {
 // polling intervals.
 func (e *env) newExecutor(st Store) *Executor {
 	exec := New(Deps{
-		Store:     st,
-		Lifecycle: e.lifecycle,
-		Sync:      e.sync,
-		Health:    e.health,
-		Grants:    StoreGrants{Store: e.s},
-		Events:    e.events,
-		Notifier:  e.notes,
-		Spawner:   e.spawner,
+		Store:      st,
+		Lifecycle:  e.lifecycle,
+		ConfigPush: e.push,
+		Entities:   e.entities,
+		Sync:       e.sync,
+		Health:     e.health,
+		Grants:     StoreGrants{Store: e.s},
+		Events:     e.events,
+		Notifier:   e.notes,
+		Spawner:    e.spawner,
 	})
 	exec.healthPollInterval = time.Millisecond
+	exec.entityPollInterval = time.Millisecond
 	return exec
 }
 
@@ -153,6 +161,15 @@ func syncStep(connectorID string) *store.RunbookStepRecord {
 
 func healthStep(connectorID string) *store.RunbookStepRecord {
 	return &store.RunbookStepRecord{Kind: KindWaitUntilHealthy, Title: "Wait", ConnectorID: connectorID, TimeoutSeconds: 300}
+}
+
+func configPushStep(connectorID, field, target string) *store.RunbookStepRecord {
+	return &store.RunbookStepRecord{Kind: KindConfigPush, Title: "Push " + field, ConnectorID: connectorID, EntityRef: "100", FieldKey: field, TargetValue: target}
+}
+
+func waitEntityStep(connectorID, attribute, op, expected string) *store.RunbookStepRecord {
+	return &store.RunbookStepRecord{Kind: KindWaitForEntity, Title: "Wait for " + attribute, ConnectorID: connectorID, EntityRef: "100",
+		Attribute: attribute, Operator: op, ExpectedValue: expected, TimeoutSeconds: 300}
 }
 
 func manualStep(title string) *store.RunbookStepRecord {
@@ -273,6 +290,66 @@ func (f *fakeLifecycle) snapshot() []lifecycleCall {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return append([]lifecycleCall(nil), f.calls...)
+}
+
+type configPushCall struct {
+	ConnectorID string
+	EntityRef   string
+	FieldKey    string
+	Value       any
+	Actor       connectors.LifecycleActor
+	Audit       map[string]any
+}
+
+type fakeConfigPush struct {
+	mu    sync.Mutex
+	calls []configPushCall
+	// fn decides the outcome of the n-th call (from 1); nil succeeds.
+	fn func(ctx context.Context, n int, call configPushCall) error
+}
+
+func (f *fakeConfigPush) MutateRunbookConfigPush(ctx context.Context, connectorID, entityRef, fieldKey string, value any, actor connectors.LifecycleActor, extraAudit map[string]any) error {
+	call := configPushCall{ConnectorID: connectorID, EntityRef: entityRef, FieldKey: fieldKey, Value: value, Actor: actor, Audit: extraAudit}
+	f.mu.Lock()
+	f.calls = append(f.calls, call)
+	n := len(f.calls)
+	fn := f.fn
+	f.mu.Unlock()
+	if fn == nil {
+		return nil
+	}
+	return fn(ctx, n, call)
+}
+
+func (f *fakeConfigPush) snapshot() []configPushCall {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]configPushCall(nil), f.calls...)
+}
+
+type fakeEntities struct {
+	mu    sync.Mutex
+	loads int
+	// fn decides the outcome of the n-th load (from 1); nil finds nothing.
+	fn func(ctx context.Context, n int) (*compliance.Snapshot, error)
+}
+
+func (f *fakeEntities) LatestEntities(ctx context.Context, _ string) (*compliance.Snapshot, error) {
+	f.mu.Lock()
+	f.loads++
+	n := f.loads
+	fn := f.fn
+	f.mu.Unlock()
+	if fn == nil {
+		return nil, nil
+	}
+	return fn(ctx, n)
+}
+
+func (f *fakeEntities) count() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.loads
 }
 
 type fakeSync struct {

@@ -485,6 +485,18 @@ func validOp(attributeType, op string) bool {
 	}
 }
 
+// MatchesCondition reports whether entity satisfies one condition, with the
+// comparison rules rule evaluation uses. A condition on a missing attribute is
+// false for every operator except neq, not_contains and exists.
+func MatchesCondition(entity Entity, condition Condition) bool {
+	return (Evaluator{}).MatchesCondition(entity, condition)
+}
+
+// MatchesCondition is MatchesCondition using the evaluator's clock.
+func (e Evaluator) MatchesCondition(entity Entity, condition Condition) bool {
+	return matchesAll(entity, []Condition{condition}, e.now())
+}
+
 func matchesAll(entity Entity, conditions []Condition, now time.Time) bool {
 	for _, condition := range conditions {
 		value, present := entity.Attributes[condition.Attribute]
