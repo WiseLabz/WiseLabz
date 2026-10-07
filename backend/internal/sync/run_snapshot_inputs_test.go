@@ -205,27 +205,59 @@ func TestRunSyncDoesNotLoadUnrequestedPreviousSnapshot(t *testing.T) {
 	}
 }
 
-func TestRunSyncInvalidSnapshotInputFailsBeforeFetch(t *testing.T) {
-	for _, input := range []string{"related", "previous"} {
-		t.Run(input, func(t *testing.T) {
-			c := newSnapshotRecordingConnector()
-			s, rec, engine := setupSnapshotInputSync(t, c, "{}")
-			if input == "related" {
-				c.relatedIDs = []string{rec.ID}
-			} else {
-				c.wantPrevious = true
-			}
-			if err := s.CreateSnapshot(context.Background(), &store.SnapshotRecord{ConnectorID: rec.ID, Data: "invalid snapshot"}); err != nil {
-				t.Fatalf("CreateSnapshot: %v", err)
-			}
-			result, err := engine.RunSync(context.Background(), rec.ID, "invalid-input")
-			if err == nil || !strings.Contains(err.Error(), "decode snapshot") || result.Status != "error" {
-				t.Fatalf("RunSync = %#v, %v, want decode error", result, err)
-			}
-			if c.config != nil {
-				t.Fatal("Fetch called after snapshot input failed to decode")
-			}
-		})
+func TestRunSyncInvalidRelatedSnapshotFailsBeforeFetch(t *testing.T) {
+	c := newSnapshotRecordingConnector()
+	s, rec, engine := setupSnapshotInputSync(t, c, "{}")
+	c.relatedIDs = []string{rec.ID}
+	if err := s.CreateSnapshot(context.Background(), &store.SnapshotRecord{ConnectorID: rec.ID, Data: "invalid snapshot"}); err != nil {
+		t.Fatalf("CreateSnapshot: %v", err)
+	}
+	result, err := engine.RunSync(context.Background(), rec.ID, "invalid-related")
+	if err == nil || !strings.Contains(err.Error(), "decode snapshot") || result.Status != "error" {
+		t.Fatalf("RunSync = %#v, %v, want decode error", result, err)
+	}
+	if c.config != nil {
+		t.Fatal("Fetch called after related snapshot failed to decode")
+	}
+}
+
+func TestRunSyncInvalidPreviousSnapshotTreatedAsAbsent(t *testing.T) {
+	c := newSnapshotRecordingConnector()
+	c.wantPrevious = true
+	s, rec, engine := setupSnapshotInputSync(t, c, "{}")
+	if err := s.CreateSnapshot(context.Background(), &store.SnapshotRecord{ConnectorID: rec.ID, Data: "invalid snapshot"}); err != nil {
+		t.Fatalf("CreateSnapshot: %v", err)
+	}
+	// persistSyncSnapshot also tolerates the corrupt baseline, so the sync can store a fresh snapshot.
+	result, err := engine.RunSync(context.Background(), rec.ID, "invalid-previous")
+	if err != nil || result.Status != "success" {
+		t.Fatalf("RunSync = %#v, %v, want success", result, err)
+	}
+	if c.config == nil {
+		t.Fatal("Fetch not called after previous snapshot failed to decode")
+	}
+	if got := connector.PreviousSnapshot(c.config); got != nil {
+		t.Fatalf("previous snapshot = %#v, want absent", got)
+	}
+}
+
+func TestRunSyncDuplicateRelatedIDsLoadedOnce(t *testing.T) {
+	c := newSnapshotRecordingConnector()
+	s, rec, engine := setupSnapshotInputSync(t, c, "{}")
+	ctx := context.Background()
+	source := &store.ConnectorRecord{Name: "source", Type: "unregistered", Category: "networking"}
+	if err := s.CreateConnector(ctx, source); err != nil {
+		t.Fatalf("CreateConnector source: %v", err)
+	}
+	related := &connector.ServiceSnapshot{ServiceName: "source", FetchedAt: time.Now().UTC().Truncate(time.Second)}
+	saveSnapshotInput(t, s, source.ID, related)
+	c.relatedIDs = []string{source.ID, source.ID, ""}
+	result, err := engine.RunSync(ctx, rec.ID, "duplicate-related")
+	if err != nil || result.Status != "success" {
+		t.Fatalf("RunSync = %#v, %v, want success", result, err)
+	}
+	if got := connector.RelatedSnapshots(c.config); len(got) != 1 || !reflect.DeepEqual(got[source.ID], related) {
+		t.Fatalf("related snapshots = %#v, want exactly one entry %#v", got, related)
 	}
 }
 
