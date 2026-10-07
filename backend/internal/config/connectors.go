@@ -7,12 +7,15 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/WiseLabz/wiselabz/internal/connector"
 )
 
 // ConnectorEntry declares a connector in config.yaml (#500). The list is
 // file-only, like auth.oidc. Values are kept exactly as written: `${VAR}`
-// references and `_file` sources are resolved by ResolveConnectors, never by
-// Load, so a missing secret cannot stop the commands that share Load.
+// references and `_file` sources are resolved by ResolveConnectors, except
+// that textarea field contents stay literal. Resolution happens after Load so
+// a missing secret cannot stop the commands that share Load.
 type ConnectorEntry struct {
 	Name string `mapstructure:"name"`
 	Type string `mapstructure:"type"`
@@ -112,8 +115,9 @@ func rawKeys(v any) map[string]bool {
 
 // ResolveConnectors returns the declared connectors with `${VAR}` references
 // expanded from the environment and `<field>_file` keys replaced by the trimmed
-// content of the named file. Only the connectors list is interpolated. Problems
-// are reported per entry so one bad entry does not affect the others.
+// content of the named file. Textarea fields are preserved verbatim. Only the
+// connectors list is interpolated. Problems are reported per entry so one bad
+// entry does not affect the others.
 func (c *Config) ResolveConnectors() []ResolvedConnector {
 	seen := make(map[string]int, len(c.Connectors))
 	for _, e := range c.Connectors {
@@ -169,7 +173,7 @@ func (c *Config) ResolveConnectors() []ResolvedConnector {
 			errs = append(errs, errors.New("url is required"))
 		}
 
-		resolved, cfgErrs := resolveConnectorConfig(e.Config)
+		resolved, cfgErrs := resolveConnectorConfig(e.Type, e.Config)
 		e.Config = resolved
 		errs = append(errs, cfgErrs...)
 
@@ -178,12 +182,25 @@ func (c *Config) ResolveConnectors() []ResolvedConnector {
 	return out
 }
 
-func resolveConnectorConfig(in map[string]any) (map[string]any, []error) {
+func resolveConnectorConfig(typ string, in map[string]any) (map[string]any, []error) {
 	out := make(map[string]any, len(in))
 	var errs []error
+	textareaFields := make(map[string]bool)
+	if schema, err := connector.GetTypeSchema(typ); err == nil {
+		for _, field := range schema.Fields {
+			if field.Type == "textarea" {
+				textareaFields[field.Key] = true
+			}
+		}
+	}
+
 	for k, v := range in {
 		field, isFile := strings.CutSuffix(k, fileSuffix)
 		if !isFile || field == "" {
+			if textareaFields[k] {
+				out[k] = v
+				continue
+			}
 			expanded, err := expandEnv(v)
 			if err != nil {
 				errs = append(errs, fmt.Errorf("config.%s: %w", k, err))

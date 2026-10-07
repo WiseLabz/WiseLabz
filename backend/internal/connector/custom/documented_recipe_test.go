@@ -16,6 +16,18 @@ import (
 
 func TestDocumentedDeclaredRecipe(t *testing.T) {
 	connector.AllowLoopbackForTest(t)
+	t.Setenv("WL_RECIPE_LITERAL", "must-not-expand")
+	oldUnset, wasSet := os.LookupEnv("WL_RECIPE_UNSET")
+	if err := os.Unsetenv("WL_RECIPE_UNSET"); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if wasSet {
+			_ = os.Setenv("WL_RECIPE_UNSET", oldUnset)
+			return
+		}
+		_ = os.Unsetenv("WL_RECIPE_UNSET")
+	})
 	doc, err := os.ReadFile("../../../../docs/CONNECTORS_IN_CONFIG.md")
 	if err != nil {
 		t.Fatal(err)
@@ -78,7 +90,7 @@ func TestDocumentedDeclaredRecipe(t *testing.T) {
 	if requests != 1 || len(snapshot.Entities) != 2 {
 		t.Fatalf("requests/entities %d/%d", requests, len(snapshot.Entities))
 	}
-	if snapshot.Entities[0].Name != "One" || snapshot.Entities[0].ExternalID != "1" || snapshot.Entities[0].Attributes["enabled"] != true || snapshot.Entities[0].Attributes["source"] != "library" {
+	if snapshot.Entities[0].Name != "One" || snapshot.Entities[0].ExternalID != "1" || snapshot.Entities[0].Attributes["enabled"] != true || snapshot.Entities[0].Attributes["source"] != "library" || snapshot.Entities[0].Attributes["literal"] != "${WL_RECIPE_LITERAL}/${WL_RECIPE_UNSET}" {
 		t.Fatalf("entity %+v", snapshot.Entities[0])
 	}
 	if len(snapshot.Dependencies) != 2 {
