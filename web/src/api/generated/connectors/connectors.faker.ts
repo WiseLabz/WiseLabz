@@ -252,16 +252,9 @@ export const getGetConnectorsSchemaResponseMock = (): ConnectorTypeSchema[] =>
         minLength: faker.helpers.arrayElement([faker.number.int(), undefined]),
         maxLength: faker.helpers.arrayElement([faker.number.int(), undefined]),
         options: faker.helpers.arrayElement([
-          Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() => ({
-            value: faker.helpers.arrayElement([
-              faker.string.alpha({ length: { min: 10, max: 20 } }),
-              undefined,
-            ]),
-            label: faker.helpers.arrayElement([
-              faker.string.alpha({ length: { min: 10, max: 20 } }),
-              undefined,
-            ]),
-          })),
+          Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() =>
+            faker.string.alpha({ length: { min: 10, max: 20 } })
+          ),
           undefined,
         ]),
       })

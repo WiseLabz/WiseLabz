@@ -390,7 +390,6 @@ export * from './savedViewCreateFilters';
 export * from './savedViewSurface';
 export * from './schemaField';
 export * from './schemaFieldKind';
-export * from './schemaFieldOptionsItem';
 export * from './searchHit';
 export * from './searchHitType';
 export * from './searchResults';

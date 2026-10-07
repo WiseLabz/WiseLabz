@@ -60,6 +60,10 @@ func TestUpdateTLSProbeEndpointSettingsRequireInstanceAdmin(t *testing.T) {
 		t.Errorf("operator changed the stored config:\n%s\n%s", before, after)
 	}
 
+	requireStatus(t, put(false, `{"config":{"targets":"nas.lab:443","import_connector_id":"`+env.traefik.ID+`","import_port":8443}}`), http.StatusOK)
+	if after := stored(); after != before {
+		t.Errorf("resending the stored endpoint settings changed the stored config:\n%s\n%s", before, after)
+	}
 	requireStatus(t, put(false, `{"config":{}}`), http.StatusOK)
 	if after := stored(); after != before {
 		t.Errorf("omitting tlsprobe endpoint keys changed the stored config:\n%s\n%s", before, after)
@@ -67,6 +71,10 @@ func TestUpdateTLSProbeEndpointSettingsRequireInstanceAdmin(t *testing.T) {
 	requireStatus(t, put(true, `{"config":{"import_port":9443}}`), http.StatusOK)
 	if after := stored(); after == before || !strings.Contains(after, `"import_port":9443`) || !strings.Contains(after, env.traefik.ID) || !strings.Contains(after, "nas.lab:443") {
 		t.Errorf("instance admin's change was not stored with omitted endpoint keys preserved: %s", after)
+	}
+	requireStatus(t, put(true, `{"config":{"import_connector_id":""}}`), http.StatusOK)
+	if after := stored(); strings.Contains(after, env.traefik.ID) || !strings.Contains(after, "nas.lab:443") || !strings.Contains(after, `"import_port":9443`) {
+		t.Errorf("instance admin clearing the import did not keep targets and port: %s", after)
 	}
 }
 

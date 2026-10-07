@@ -55,6 +55,24 @@ const schemas = [
       { name: 'auth_token', label: 'Token', kind: 'password', required: false },
     ],
   },
+  {
+    type: 'traefik',
+    category: 'networking',
+    displayName: 'Traefik Proxy',
+    isCredentialRefresher: false,
+    fields: [
+      { name: 'auth_mode', label: 'Auth mode', kind: 'select', required: false, options: ['none', 'basic', 'token'] },
+    ],
+  },
+  {
+    type: 'methodless',
+    category: 'networking',
+    displayName: 'Methodless HTTP',
+    isCredentialRefresher: false,
+    fields: [
+      { name: 'method', label: 'Method', kind: 'select', required: false },
+    ],
+  },
 ];
 
 vi.mock('../../api/generated/connectors/connectors', () => ({
@@ -187,6 +205,37 @@ describe('ConnectorForm TLS probe', () => {
     await waitFor(() => expect(postConnectors).toHaveBeenCalled());
     const body = postConnectors.mock.calls[postConnectors.mock.calls.length - 1][0] as Record<string, unknown>;
     expect(body.config).toEqual({});
+  });
+});
+
+describe('ConnectorForm select fields', () => {
+  it('renders string options, lets the user choose one and sends it in the body', async () => {
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <ConnectorForm onCreated={vi.fn()} />
+      </QueryClientProvider>,
+    );
+    fireEvent.click(screen.getByText('Traefik Proxy'));
+    fireEvent.change(screen.getByLabelText(/display name/i), { target: { value: 'edge' } });
+    const select = screen.getByLabelText('Auth mode');
+    expect(select.tagName).toBe('SELECT');
+    expect(Array.from((select as HTMLSelectElement).options).map((o) => o.value)).toEqual(['', 'none', 'basic', 'token']);
+    fireEvent.change(select, { target: { value: 'basic' } });
+    postConnectors.mockClear();
+    fireEvent.click(screen.getByRole('button', { name: /test & add/i }));
+    await waitFor(() => expect(postConnectors).toHaveBeenCalled());
+    const body = postConnectors.mock.calls[postConnectors.mock.calls.length - 1][0] as Record<string, unknown>;
+    expect(body.config).toEqual({ auth_mode: 'basic' });
+  });
+
+  it('renders a select field without options as a text input', () => {
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <ConnectorForm onCreated={vi.fn()} />
+      </QueryClientProvider>,
+    );
+    fireEvent.click(screen.getByText('Methodless HTTP'));
+    expect(screen.getByLabelText('Method').tagName).toBe('INPUT');
   });
 });
 

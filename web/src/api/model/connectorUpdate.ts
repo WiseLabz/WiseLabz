@@ -17,7 +17,7 @@ export interface ConnectorUpdate {
   verifyTls?: boolean;
   /** Changing the category requires an instance admin (403 otherwise); resending the stored value is allowed. For a type that derives its category (`custom`), a value different from the derived one is rejected with 400, and a change of the derived category through the configuration also requires an instance admin */
   category?: ConnectorCategory;
-  /** Replaces the stored config. Secret fields and `textarea` fields (such as a custom connector recipe) are kept when omitted and cleared by an explicit empty string */
+  /** Replaces the stored config. Secret fields and `textarea` fields (such as a custom connector recipe) are kept when omitted and cleared by an explicit empty string. For `tlsprobe` connectors all three endpoint settings (`targets`, `import_connector_id`, `import_port`) are kept when omitted, an explicit empty string clears one, and changing them requires an instance admin */
   config?: ConnectorUpdateConfig;
   /**
    * Auto-sync cadence in seconds; null disables scheduled sync (manual only)

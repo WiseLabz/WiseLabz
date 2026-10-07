@@ -223,7 +223,7 @@ export function ConnectorForm({
             <Button
               variant="primary"
               size="md"
-              disabled={!requiredFilled || create.isPending}
+              disabled={!requiredFilled || create.isPending || createdTlsProbe !== null}
               onClick={() => create.mutate()}
             >
               <CheckIcon size={15} />
@@ -322,12 +322,9 @@ export function Field({
       </label>
     );
   }
-  if (selectOptions || field.kind === 'select') {
-    const options = (selectOptions ?? field.options ?? []).map((option) => ({
-      value: option.value ?? '',
-      label: option.label ?? option.value ?? '',
-      disabled: 'disabled' in option ? Boolean(option.disabled) : false,
-    }));
+  if (selectOptions || (field.kind === 'select' && field.options && field.options.length > 0)) {
+    const options: { value: string; label: string; disabled?: boolean }[] =
+      selectOptions ?? (field.options ?? []).map((option) => ({ value: option, label: option }));
     return (
       <div>
         <label className="block" htmlFor={fieldId}>

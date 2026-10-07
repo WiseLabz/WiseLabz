@@ -8,6 +8,6 @@
  */
 
 /**
- * Replaces the stored config. Secret fields and `textarea` fields (such as a custom connector recipe) are kept when omitted and cleared by an explicit empty string
+ * Replaces the stored config. Secret fields and `textarea` fields (such as a custom connector recipe) are kept when omitted and cleared by an explicit empty string. For `tlsprobe` connectors all three endpoint settings (`targets`, `import_connector_id`, `import_port`) are kept when omitted, an explicit empty string clears one, and changing them requires an instance admin
  */
 export type ConnectorUpdateConfig = { [key: string]: unknown };
