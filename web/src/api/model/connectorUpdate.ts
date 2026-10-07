@@ -6,6 +6,7 @@
  *
  * OpenAPI spec version: 0.1.0
  */
+import type { ConnectorCategory } from './connectorCategory';
 import type { ConnectorUpdateConfig } from './connectorUpdateConfig';
 
 export interface ConnectorUpdate {
@@ -14,6 +15,8 @@ export interface ConnectorUpdate {
   owner?: string | null;
   url?: string;
   verifyTls?: boolean;
+  /** Changing the category requires an instance admin (403 otherwise); resending the stored value is allowed */
+  category?: ConnectorCategory;
   config?: ConnectorUpdateConfig;
   /**
    * Auto-sync cadence in seconds; null disables scheduled sync (manual only)

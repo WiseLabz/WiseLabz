@@ -1222,13 +1222,13 @@ func TestCategoriesMatchOpenAPIEnum(t *testing.T) {
 		t.Fatalf("parse spec: %v", err)
 	}
 	got := doc.Components.Schemas["ConnectorCategory"].Enum
-	if want := backup.Categories(); !reflect.DeepEqual(got, want) {
+	if want := connector.Categories(); !reflect.DeepEqual(got, want) {
 		t.Fatalf("openapi ConnectorCategory enum = %v, want %v", got, want)
 	}
 }
 
 func TestCategoriesMatchMigrationCheckConstraint(t *testing.T) {
-	inList := "category IN ('" + strings.Join(backup.Categories(), "','") + "')"
+	inList := "category IN ('" + strings.Join(connector.Categories(), "','") + "')"
 	for _, dialect := range []string{"sqlite", "postgres"} {
 		path := filepath.Join("..", "store", "migrations", dialect, "000064_connector_categories.up.sql")
 		raw, err := os.ReadFile(path)
@@ -1250,7 +1250,7 @@ func TestRegisteredConnectorTypesHaveValidCategory(t *testing.T) {
 		t.Fatal("no connector types registered")
 	}
 	for _, s := range schemas {
-		if !backup.ValidCategory(s.Category) {
+		if !connector.ValidCategory(s.Category) {
 			t.Errorf("connector type %q has invalid category %q", s.Type, s.Category)
 		}
 	}
