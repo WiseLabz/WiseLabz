@@ -256,7 +256,7 @@ type fakeLifecycle struct {
 	fn func(ctx context.Context, n int, call lifecycleCall) error
 }
 
-func (f *fakeLifecycle) MutateLifecycleOp(ctx context.Context, connectorID, verb, entityRef string, actor connectors.LifecycleActor, extraAudit map[string]any) error {
+func (f *fakeLifecycle) MutateRunbookLifecycleOp(ctx context.Context, connectorID, verb, entityRef string, actor connectors.LifecycleActor, extraAudit map[string]any) error {
 	call := lifecycleCall{ConnectorID: connectorID, Verb: verb, EntityRef: entityRef, Actor: actor, Audit: extraAudit}
 	f.mu.Lock()
 	f.calls = append(f.calls, call)

@@ -257,7 +257,7 @@ func (e *Executor) perform(ctx context.Context, run *store.RunbookRunRecord, ste
 	var waitingFor string
 	switch step.Kind {
 	case KindLifecycle:
-		err = e.lifecycle.MutateLifecycleOp(stepCtx, step.ConnectorID, step.Verb, step.EntityRef, actor, auditDetail(run, step))
+		err = e.lifecycle.MutateRunbookLifecycleOp(stepCtx, step.ConnectorID, step.Verb, step.EntityRef, actor, auditDetail(run, step))
 	case KindSyncAndWait:
 		waitingFor = "the sync to finish"
 		err = e.syncAndWait(stepCtx, step.ConnectorID)
