@@ -32,11 +32,11 @@
 
 ## 6. Web
 
-- [ ] 6.1 Support the TLS probe type in the connector form: targets list input, optional Traefik connector picker limited to viewable Traefik connectors, import port; verify component tests for save and for server field errors.
-- [ ] 6.2 Offer the pack install after creating a TLS probe connector and when enabling the widget, only when `installed` is false and the user may install packs, remembering a dismissal; verify component tests for shown, already installed, and no permission.
-- [ ] 6.3 Add the two operators to the compliance rule editor with a whole-number input; verify `RulesPage.test.tsx` covers creating a rule with `days_left_lt`.
-- [ ] 6.4 Add the `ExpiringCertificatesWidget` (default disabled) with expired / 7 days / 30 days / later states, an unreachable marker, entity links and the empty state, and register it in the dashboard store; verify a widget test modelled on `FleetUptimeWidget.test.tsx` for populated, default-hidden and empty.
-- [ ] 6.5 Add en and pt-BR strings for the connector, operators, pack prompt and widget; verify the i18n key parity test and web lint.
+- [x] 6.1 Support the TLS probe type in the connector form: targets list input, optional Traefik connector picker limited to viewable Traefik connectors, import port; verify component tests for save and for server field errors.
+- [x] 6.2 Offer the pack install after creating a TLS probe connector and when enabling the widget, only when `installed` is false and the user may install packs, remembering a dismissal; verify component tests for shown, already installed, and no permission.
+- [x] 6.3 Add the two operators to the compliance rule editor with a whole-number input; verify `RulesPage.test.tsx` covers creating a rule with `days_left_lt`.
+- [x] 6.4 Add the `ExpiringCertificatesWidget` (default disabled) with expired / 7 days / 30 days / later states, an unreachable marker, entity links and the empty state, and register it in the dashboard store; verify a widget test modelled on `FleetUptimeWidget.test.tsx` for populated, default-hidden and empty.
+- [x] 6.5 Add en and pt-BR strings for the connector, operators, pack prompt and widget; verify the i18n key parity test and web lint.
 
 ## 7. Integration
 

@@ -1,5 +1,5 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { setupServer } from 'msw/node';
@@ -82,5 +82,20 @@ describe('DashboardPage', () => {
     fireEvent.click(resetButton);
 
     await waitFor(() => expect(resetCalled).toBe(true));
+  });
+
+  it('offers the certificate pack after an admin enables the certificates widget', async () => {
+    server.use(http.get('/api/compliance/packs', () => HttpResponse.json({ items: [
+      { id: 'certificate-expiry', name: 'Certificate expiry', description: '', installed: false },
+    ] })), http.put('/api/dashboard/layout', () => HttpResponse.json(baseLayout)));
+    renderDashboard({ role: 'admin', canManageDashboardDefaults: false });
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit layout' }));
+    const row = (await screen.findByText('Expiring certificates')).closest('li');
+    expect(row).not.toBeNull();
+    fireEvent.click(within(row as HTMLElement).getByRole('switch'));
+
+    expect(await screen.findByRole('dialog')).toBeInTheDocument();
+    expect(screen.getByText('Track certificate expiry with rules')).toBeInTheDocument();
   });
 });

@@ -32,6 +32,7 @@ let schemas: Array<Record<string, unknown>> = [
 
 vi.mock('../../api/generated/connectors/connectors', () => ({
   useGetConnectorsConnectorId: () => ({ data: connectorData, isLoading: false, isError: false, refetch: vi.fn() }),
+  useGetConnectors: () => ({ data: [{ id: 'visible-traefik', name: 'Visible Traefik', type: 'traefik' }] }),
   useGetConnectorsSchema: () => ({ data: schemas }),
   putConnectorsConnectorId: (...args: unknown[]) => putConnectorsConnectorId(...args),
   postConnectorsConnectorIdTest: (...args: unknown[]) => testMock(...args),
@@ -147,6 +148,71 @@ describe('ConnectorEditPage verify_tls (#613)', () => {
       expect(body.config).not.toHaveProperty('verify_tls');
     } finally {
       schemas = original;
+    }
+  });
+});
+
+describe('ConnectorEditPage TLS probe endpoint settings', () => {
+  const tlsProbeSchema = {
+    type: 'tlsprobe',
+    category: 'monitoring',
+    displayName: 'TLS Probe',
+    isCredentialRefresher: false,
+    fields: [
+      { name: 'targets', label: 'Targets', kind: 'textarea', required: false },
+      { name: 'import_connector_id', label: 'Import hosts from Traefik connector', kind: 'text', required: false },
+      { name: 'import_port', label: 'Port for imported hosts', kind: 'number', required: false, default: '443' },
+    ],
+  };
+
+  it('shows endpoint settings read-only to non-admins and omits them from an unrelated save', async () => {
+    const originalSchemas = schemas;
+    const originalConnector = connectorData;
+    schemas = [tlsProbeSchema];
+    connectorData = {
+      ...connectorData,
+      type: 'tlsprobe',
+      url: '',
+      config: { targets: 'nas.lab:443', import_connector_id: 'traefik-1', import_port: '8443' },
+    };
+    roleState.isAdmin = false;
+    putConnectorsConnectorId.mockClear();
+    try {
+      renderPage();
+      expect(screen.getByLabelText('Targets')).toHaveValue('nas.lab:443');
+      expect(screen.getByLabelText('Targets')).toBeDisabled();
+      expect(screen.getByLabelText('Import hosts from Traefik connector')).toHaveValue('traefik-1');
+      expect(screen.getByLabelText('Import hosts from Traefik connector')).toBeDisabled();
+      expect(screen.getByLabelText('Port for imported hosts')).toHaveValue(8443);
+      expect(screen.getByLabelText('Port for imported hosts')).toBeDisabled();
+      fireEvent.change(screen.getByLabelText(/display name/i), { target: { value: 'renamed probe' } });
+      fireEvent.click(screen.getByRole('button', { name: /save/i }));
+      await waitFor(() => expect(putConnectorsConnectorId).toHaveBeenCalled());
+      const body = putConnectorsConnectorId.mock.calls[0][1] as { config: Record<string, unknown> };
+      expect(body.config).toEqual({});
+    } finally {
+      schemas = originalSchemas;
+      connectorData = originalConnector;
+    }
+  });
+
+  it('offers only viewable Traefik connectors to admins', () => {
+    const originalSchemas = schemas;
+    const originalConnector = connectorData;
+    schemas = [tlsProbeSchema];
+    connectorData = { ...connectorData, type: 'tlsprobe', url: '', config: { targets: '', import_connector_id: 'traefik-1', import_port: '443' } };
+    roleState.isAdmin = true;
+    try {
+      renderPage();
+      const picker = screen.getByLabelText('Import hosts from Traefik connector');
+      expect(picker.tagName).toBe('SELECT');
+      expect(picker).toHaveValue('traefik-1');
+      expect(screen.getByRole('option', { name: /traefik-1/ })).toBeDisabled();
+      expect(screen.getByRole('option', { name: 'Visible Traefik' })).toHaveValue('visible-traefik');
+      expect(screen.queryByRole('option', { name: 'NPM' })).not.toBeInTheDocument();
+    } finally {
+      schemas = originalSchemas;
+      connectorData = originalConnector;
     }
   });
 });

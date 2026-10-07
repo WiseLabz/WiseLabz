@@ -26,7 +26,7 @@ type WireWidget = WidgetPlacement & {
   pollingEnabled?: boolean;
 };
 
-export type WidgetId = 'roster' | 'changes' | 'alerts' | 'sync' | 'docs' | 'attention' | 'uptime';
+export type WidgetId = 'roster' | 'changes' | 'alerts' | 'sync' | 'docs' | 'attention' | 'uptime' | 'certificates';
 
 export interface WidgetDef {
   id: WidgetId;
@@ -61,6 +61,7 @@ export const DEFAULT_LAYOUT: WidgetDef[] = [
   // disabled by default — existing users shouldn't get a new widget forced on
   { id: 'attention', enabled: false, span: 2 },
   { id: 'uptime', enabled: false, span: 2 },
+  { id: 'certificates', enabled: false, span: 3 },
 ];
 
 // The OpenAPI contract models widgets as position/size placements
@@ -76,6 +77,7 @@ const WIDGET_TYPE: Record<WidgetId, WidgetPlacementType> = {
   docs: WidgetPlacementType.docs_health,
   attention: WidgetPlacementType.attention,
   uptime: WidgetPlacementType.uptime,
+  certificates: WidgetPlacementType.expiring_certificates,
 };
 
 const STORAGE_KEY = 'wiselabz.dashboard.layout';
@@ -131,7 +133,11 @@ function loadCache(): WidgetDef[] {
 
 function persistCache(layout: WidgetDef[]) {
   if (typeof window !== 'undefined') {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(widgetsToWire(layout).widgets));
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(widgetsToWire(layout).widgets));
+    } catch {
+      // The server remains the source of truth when browser storage is unavailable.
+    }
   }
 }
 

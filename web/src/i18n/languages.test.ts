@@ -33,6 +33,42 @@ describe('detectLanguage', () => {
 });
 
 describe('locale catalogs', () => {
+  it('keeps certificate expiry keys present in both catalogs', () => {
+    const paths = [
+      'connectors.tlsProbe.targetsLabel',
+      'connectors.tlsProbe.targetsHint',
+      'connectors.tlsProbe.importConnectorLabel',
+      'connectors.tlsProbe.importConnectorHint',
+      'connectors.tlsProbe.importPortLabel',
+      'connectors.tlsProbe.importPortHint',
+      'connectors.tlsProbe.adminOnlyHint',
+      'connectors.tlsProbe.noTraefikImport',
+      'connectors.tlsProbe.currentImportUnavailable',
+      'compliance.daysLeftLt',
+      'compliance.daysLeftGt',
+      'compliance.certificateExpiryOffer.title',
+      'compliance.certificateExpiryOffer.description',
+      'compliance.certificateExpiryOffer.install',
+      'compliance.certificateExpiryOffer.installing',
+      'compliance.certificateExpiryOffer.notNow',
+      'compliance.certificateExpiryOffer.installError',
+      'dashboard.widget.certificates',
+      'widgets.loadCertificatesError',
+      'widgets.certificates.emptyTitle',
+      'widgets.certificates.emptyDesc',
+      'widgets.certificates.band.expired',
+      'widgets.certificates.band.week',
+      'widgets.certificates.band.month',
+      'widgets.certificates.band.later',
+      'widgets.certificates.daysLeft',
+      'widgets.certificates.expiredDaysAgo',
+      'widgets.certificates.unreachable',
+    ];
+    for (const catalog of [en, ptBR]) {
+      const translatedKeys = new Set(keys(catalog));
+      expect(paths.filter((path) => !translatedKeys.has(path))).toEqual([]);
+    }
+  });
   it.each(Object.entries(LANGUAGES).filter(([, l]) => l.load))(
     '%s only uses keys that exist in English',
     async (_code, lang) => {
@@ -75,7 +111,10 @@ describe('locale catalogs', () => {
     const lookup = (catalog: object, path: string) =>
       path
         .split('.')
-        .reduce<unknown>((value, key) => (value as Record<string, unknown> | undefined)?.[key], catalog);
+        .reduce<unknown>(
+          (value, key) => (value as Record<string, unknown> | undefined)?.[key],
+          catalog
+        );
 
     for (const path of paths) {
       expect(lookup(en, path), `English translation for ${path}`).toEqual(expect.any(String));
@@ -86,7 +125,9 @@ describe('locale catalogs', () => {
 
 describe('connector category labels (#513)', () => {
   const lookup = (catalog: object, path: string) =>
-    path.split('.').reduce<unknown>((o, k) => (o as Record<string, unknown> | undefined)?.[k], catalog);
+    path
+      .split('.')
+      .reduce<unknown>((o, k) => (o as Record<string, unknown> | undefined)?.[k], catalog);
 
   it.each(['en', 'pt-BR'])('%s labels every connector category', async (code) => {
     const { load } = LANGUAGES[code];

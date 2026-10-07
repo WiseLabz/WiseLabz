@@ -12,6 +12,7 @@ import { useTranslation } from 'react-i18next';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   useGetConnectorsConnectorId,
+  useGetConnectors,
   useGetConnectorsSchema,
   putConnectorsConnectorId,
   postConnectorsConnectorIdTest,
@@ -25,8 +26,8 @@ import { Panel } from '../../components/ui/Panel';
 import { SkeletonRows, ErrorState } from '../../components/ui/states';
 import { toast } from '../../lib/toast';
 import { ArrowRightIcon, CheckIcon } from '../../components/icons';
-import { useConnectorRole } from '../../hooks/useRole';
-import { isSecretField, isToggleField, isTopLevelField, isVerifyTlsField } from './schemaFields';
+import { useConnectorRole, useIsInstanceAdmin } from '../../hooks/useRole';
+import { fieldDefault, isSecretField, isTlsProbeEndpointField, isToggleField, isTopLevelField, isVerifyTlsField, tlsProbeFieldTranslations } from './schemaFields';
 import { LocatedErrors } from './LocatedErrors';
 import { TestRecipePanel } from './TestRecipePanel';
 import { errorsForField, focusFirstLocatedError, locatedErrorsFrom, recipePreviewConfig } from './recipeForm';
@@ -43,6 +44,9 @@ function editFieldValue(field: SchemaField, connector: Connector, values: FormVa
   if (values[field.name] !== undefined) return values[field.name];
   if (field.name === 'url') return connector.url ?? '';
   if (isVerifyTlsField(field)) return Boolean(connector.verifyTls);
+  if (isTlsProbeEndpointField(connector.type, field.name)) {
+    return String(connector.config?.[field.name] ?? (field.name === 'import_port' ? fieldDefault(field) : ''));
+  }
   if (isToggleField(field)) return false;
   if (field.kind === 'textarea') return connector.config?.[field.name] ?? '';
   return '';
@@ -55,8 +59,10 @@ export function ConnectorEditPage() {
   const queryClient = useQueryClient();
 
   const connector = useGetConnectorsConnectorId(id);
+  const { data: connectors } = useGetConnectors();
   const { data: schemas } = useGetConnectorsSchema();
   const canEdit = useConnectorRole(id) === 'operator';
+  const isInstanceAdmin = useIsInstanceAdmin();
 
   const schema = useMemo(
     () => schemas?.find((s) => s.type === connector.data?.type) ?? null,
@@ -87,6 +93,10 @@ export function ConnectorEditPage() {
       const tlsField = schema?.fields.find(isVerifyTlsField);
       for (const f of schema?.fields ?? []) {
         if (isTopLevelField(f)) continue;
+        if (isTlsProbeEndpointField(connector.data?.type ?? '', f.name)) {
+          if (isInstanceAdmin && values[f.name] !== undefined) config[f.name] = values[f.name];
+          continue;
+        }
         if (f.kind === 'textarea') {
           const value = values[f.name] ?? connector.data?.config?.[f.name];
           if (value !== undefined) config[f.name] = value;
@@ -227,19 +237,37 @@ export function ConnectorEditPage() {
             value={ownerValue}
             onChange={(v) => setOwner(String(v))}
           />
-          {schema?.fields.map((f) => (
-            <div key={f.name}>
+          {schema?.fields.map((f) => {
+            const probeTranslations = c.type === 'tlsprobe' ? tlsProbeFieldTranslations[f.name] : undefined;
+            const disabled = !isInstanceAdmin && isTlsProbeEndpointField(c.type, f.name);
+            const selectedImportId = String(c.config?.import_connector_id ?? '');
+            const visibleTraefik = (connectors ?? []).filter((item) => item.type === 'traefik');
+            const selectedImportAvailable = visibleTraefik.some((item) => item.id === selectedImportId);
+            return <div key={f.name}>
               <Field
-                field={isSecretField(f) ? { ...f, placeholder: t('connectors.edit.secretPlaceholder') } : f}
+                field={probeTranslations
+                  ? { ...f, label: t(probeTranslations.label) }
+                  : isSecretField(f) ? { ...f, placeholder: t('connectors.edit.secretPlaceholder') } : f}
                 value={editFieldValue(f, c, values)}
                 error={errorsForField(saveErrors, f.name)}
+                disabled={disabled}
+                helperText={disabled ? t('connectors.tlsProbe.adminOnlyHint') : probeTranslations ? t(probeTranslations.hint) : undefined}
+                selectOptions={isInstanceAdmin && c.type === 'tlsprobe' && f.name === 'import_connector_id'
+                  ? [
+                      { value: '', label: t('connectors.tlsProbe.noTraefikImport') },
+                      ...(selectedImportId && !selectedImportAvailable
+                        ? [{ value: selectedImportId, label: t('connectors.tlsProbe.currentImportUnavailable', { id: selectedImportId }), disabled: true }]
+                        : []),
+                      ...visibleTraefik.map((item) => ({ value: item.id, label: item.name })),
+                    ]
+                  : undefined}
                 onChange={(v) => setValues((s) => ({ ...s, [f.name]: v }))}
               />
               {schema?.type === 'custom' && f.name === 'recipe' && (
                 <RecipeCategoryDisplay recipe={String(values[f.name] ?? c.config?.[f.name] ?? '')} />
               )}
-            </div>
-          ))}
+            </div>;
+          })}
           {!schema?.isCredentialRefresher && (
             <>
               {c.secretRotatedAt && (

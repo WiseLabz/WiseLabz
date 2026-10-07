@@ -3,7 +3,8 @@ import { renderHook, act } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { setupServer } from 'msw/node';
 import { http, HttpResponse } from 'msw';
-import { useDashboard, useWidgetPolling, useRangeDays, DEFAULT_LAYOUT, type WidgetId } from './dashboard';
+import { useDashboard, useWidgetPolling, useRangeDays, DEFAULT_LAYOUT, widgetsToWire, type WidgetId } from './dashboard';
+import { WidgetPlacementType } from '../api/model';
 
 const server = setupServer();
 
@@ -61,6 +62,27 @@ describe('dashboard store', () => {
       enabled: boolean;
     };
     expect(alertsWire.enabled).toBe(false);
+  });
+
+  it('registers certificates disabled by default and keeps toggling when localStorage is unavailable', async () => {
+    let savedType: string | undefined;
+    server.use(http.put('/api/dashboard/layout', async ({ request }) => {
+      const body = await request.json() as { widgets: { id: string; type: string; enabled: boolean }[] };
+      savedType = body.widgets.find((widget) => widget.id === 'certificates')?.type;
+      return HttpResponse.json(body);
+    }));
+    const certificatesWire = widgetsToWire(DEFAULT_LAYOUT).widgets.find((widget) => widget.id === 'certificates');
+    expect(DEFAULT_LAYOUT.find((widget) => widget.id === 'certificates')?.enabled).toBe(false);
+    expect(certificatesWire?.type).toBe(WidgetPlacementType.expiring_certificates);
+
+    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('storage blocked'); });
+    try {
+      useDashboard.getState().toggle('certificates');
+      expect(useDashboard.getState().layout.find((widget) => widget.id === 'certificates')?.enabled).toBe(true);
+      await vi.waitFor(() => expect(savedType).toBe(WidgetPlacementType.expiring_certificates));
+    } finally {
+      setItem.mockRestore();
+    }
   });
 
   it('setOrder reorders the layout locally', () => {

@@ -17,4 +17,5 @@ export const WidgetPlacementType = {
   docs_health: 'docs_health',
   attention: 'attention',
   uptime: 'uptime',
+  expiring_certificates: 'expiring_certificates',
 } as const;

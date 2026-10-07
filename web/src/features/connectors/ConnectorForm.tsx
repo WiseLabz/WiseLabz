@@ -14,6 +14,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   getGetConnectorsQueryKey,
   postConnectors,
+  useGetConnectors,
   useGetConnectorsSchema,
 } from '../../api/generated/connectors/connectors';
 import type { Connector, ConnectorTypeSchema, SchemaField } from '../../api/model';
@@ -22,7 +23,9 @@ import { Panel } from '../../components/ui/Panel';
 import { ErrorState, SkeletonRows } from '../../components/ui/states';
 import { categoryIconFor } from '../../components/categoryIcon';
 import { CheckIcon } from '../../components/icons';
-import { fieldDefault, isSecretField, isToggleField, isTopLevelField, isVerifyTlsField } from './schemaFields';
+import { useIsInstanceAdmin } from '../../hooks/useRole';
+import { CertificateExpiryPackOffer } from '../compliance/CertificateExpiryPackOffer';
+import { fieldDefault, isSecretField, isTlsProbeEndpointField, isToggleField, isTopLevelField, isVerifyTlsField, tlsProbeFieldTranslations } from './schemaFields';
 import { LocatedErrors } from './LocatedErrors';
 import { TestRecipePanel } from './TestRecipePanel';
 import {
@@ -46,11 +49,14 @@ export function ConnectorForm({
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const { data: schemas, isLoading, isError, refetch } = useGetConnectorsSchema();
+  const { data: connectors } = useGetConnectors();
+  const isInstanceAdmin = useIsInstanceAdmin();
 
   const [typeKey, setTypeKey] = useState<string | null>(null);
   const [name, setName] = useState('');
   const [owner, setOwner] = useState('');
   const [values, setValues] = useState<FormValues>({});
+  const [createdTlsProbe, setCreatedTlsProbe] = useState<Connector | null>(null);
 
   const schema = useMemo(
     () => schemas?.find((s) => s.type === typeKey) ?? null,
@@ -69,6 +75,7 @@ export function ConnectorForm({
       const config: Record<string, unknown> = {};
       for (const f of schema.fields) {
         if (isTopLevelField(f)) continue;
+        if (!isInstanceAdmin && isTlsProbeEndpointField(schema.type, f.name)) continue;
         config[f.name] = values[f.name] ?? fieldDefault(f);
       }
       // A custom recipe determines its category, so omit the schema default.
@@ -85,7 +92,8 @@ export function ConnectorForm({
     },
     onSuccess: (created) => {
       queryClient.invalidateQueries({ queryKey: getGetConnectorsQueryKey() });
-      onCreated(created as Connector);
+      if (schema?.type === 'tlsprobe') setCreatedTlsProbe(created as Connector);
+      else onCreated(created as Connector);
     },
   });
 
@@ -160,19 +168,29 @@ export function ConnectorForm({
               value={owner}
               onChange={(v) => setOwner(String(v))}
             />
-            {schema.fields.map((f) => (
-              <div key={f.name}>
+            {schema.fields.map((f) => {
+              const probeTranslations = schema.type === 'tlsprobe' ? tlsProbeFieldTranslations[f.name] : undefined;
+              const disabled = !isInstanceAdmin && isTlsProbeEndpointField(schema.type, f.name);
+              return <div key={f.name}>
                 <Field
-                  field={f}
+                  field={probeTranslations ? { ...f, label: t(probeTranslations.label) } : f}
                   value={values[f.name] ?? fieldDefault(f)}
                   error={errorsForField(createErrors, f.name)}
+                  disabled={disabled}
+                  helperText={disabled ? t('connectors.tlsProbe.adminOnlyHint') : probeTranslations ? t(probeTranslations.hint) : undefined}
+                  selectOptions={schema.type === 'tlsprobe' && f.name === 'import_connector_id'
+                    ? [
+                        { value: '', label: t('connectors.tlsProbe.noTraefikImport') },
+                        ...(connectors ?? []).filter((connector) => connector.type === 'traefik').map((connector) => ({ value: connector.id, label: connector.name })),
+                      ]
+                    : undefined}
                   onChange={(v) => setValues((s) => ({ ...s, [f.name]: v }))}
                 />
                 {schema.type === 'custom' && f.name === 'recipe' && (
                   <RecipeCategoryDisplay recipe={String(values[f.name] ?? '')} />
                 )}
-              </div>
-            ))}
+              </div>;
+            })}
           </div>
 
           {createErrors.length > 0 && (
@@ -214,6 +232,15 @@ export function ConnectorForm({
           </div>
         </Panel>
       )}
+      <CertificateExpiryPackOffer
+        requested={createdTlsProbe !== null}
+        onFinished={() => {
+          if (!createdTlsProbe) return;
+          const created = createdTlsProbe;
+          setCreatedTlsProbe(null);
+          onCreated(created);
+        }}
+      />
     </div>
   );
 }
@@ -256,14 +283,22 @@ export function Field({
   value,
   onChange,
   error,
+  disabled = false,
+  helperText,
+  selectOptions,
 }: {
   field: SchemaField;
   value: string | boolean;
   onChange: (v: string | boolean) => void;
   error?: string;
+  disabled?: boolean;
+  helperText?: string;
+  selectOptions?: { value: string; label: string; disabled?: boolean }[];
 }) {
   const fieldId = `connector-field-${field.name}`;
   const errorId = error ? `${fieldId}-error` : undefined;
+  const helperId = helperText ? `${fieldId}-hint` : undefined;
+  const describedBy = [helperId, errorId].filter(Boolean).join(' ') || undefined;
   if (isToggleField(field)) {
     return (
       <label className="flex items-center justify-between gap-3">
@@ -273,8 +308,10 @@ export function Field({
           role="switch"
           aria-label={field.label}
           aria-checked={!!value}
+          aria-describedby={describedBy}
+          disabled={disabled}
           onClick={() => onChange(!value)}
-          className="relative h-5 w-9 rounded-full transition-colors"
+          className="relative h-5 w-9 rounded-full transition-colors disabled:opacity-50"
           style={{ backgroundColor: value ? 'var(--color-accent-primary)' : 'var(--color-line-strong)' }}
         >
           <span
@@ -283,6 +320,40 @@ export function Field({
           />
         </button>
       </label>
+    );
+  }
+  if (selectOptions || field.kind === 'select') {
+    const options = (selectOptions ?? field.options ?? []).map((option) => ({
+      value: option.value ?? '',
+      label: option.label ?? option.value ?? '',
+      disabled: 'disabled' in option ? Boolean(option.disabled) : false,
+    }));
+    return (
+      <div>
+        <label className="block" htmlFor={fieldId}>
+          <span className="mb-1 block text-2xs text-ink-faint">
+            {field.label}
+            {field.required && <span className="text-err"> *</span>}
+          </span>
+          <select
+            id={fieldId}
+            name={field.name}
+            value={String(value)}
+            disabled={disabled}
+            aria-invalid={!!error}
+            aria-describedby={describedBy}
+            onChange={(e) => onChange(e.target.value)}
+            className="h-9 w-full rounded-sm border border-line bg-surface px-2.5 text-sm text-ink outline-none focus-visible:border-accent-primary-soft disabled:opacity-50"
+          >
+            {!selectOptions && !field.required && <option value="" />}
+            {options.map((option) => (
+              <option key={option.value} value={option.value} disabled={option.disabled}>{option.label}</option>
+            ))}
+          </select>
+        </label>
+        {helperText && <p id={helperId} className="mt-1 text-2xs text-ink-faint">{helperText}</p>}
+        {error && <p id={errorId} className="mt-1 text-2xs text-err" aria-live="polite">{error}</p>}
+      </div>
     );
   }
   if (field.kind === 'secret' || field.kind === 'textarea') {
@@ -302,11 +373,13 @@ export function Field({
             autoComplete="off"
             spellCheck={false}
             aria-invalid={!!error}
-            aria-describedby={errorId}
+            aria-describedby={describedBy}
+            disabled={disabled}
             onChange={(e) => onChange(e.target.value)}
             className={`w-full rounded-sm border border-line bg-surface px-2.5 py-2 font-mono text-xs text-ink outline-none placeholder:text-ink-faint focus-visible:border-accent-primary-soft ${field.kind === 'textarea' ? 'resize-y' : ''}`}
           />
         </label>
+        {helperText && <p id={helperId} className="mt-1 text-2xs text-ink-faint">{helperText}</p>}
         {error && <p id={errorId} className="mt-1 text-2xs text-err" aria-live="polite">{error}</p>}
       </div>
     );
@@ -332,11 +405,13 @@ export function Field({
           placeholder={field.placeholder}
           autoComplete={type === 'password' ? 'new-password' : 'off'}
           aria-invalid={!!error}
-          aria-describedby={errorId}
+          aria-describedby={describedBy}
+          disabled={disabled}
           onChange={(e) => onChange(e.target.value)}
           className="h-9 w-full rounded-sm border border-line bg-surface px-2.5 text-sm text-ink outline-none placeholder:text-ink-faint focus-visible:border-accent-primary-soft"
         />
       </label>
+      {helperText && <p id={helperId} className="mt-1 text-2xs text-ink-faint">{helperText}</p>}
       {error && <p id={errorId} className="mt-1 text-2xs text-err" aria-live="polite">{error}</p>}
     </div>
   );

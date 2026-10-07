@@ -24,6 +24,17 @@ const schemas = [
     ],
   },
   {
+    type: 'tlsprobe',
+    category: 'monitoring',
+    displayName: 'TLS Probe',
+    isCredentialRefresher: false,
+    fields: [
+      { name: 'targets', label: 'Targets', kind: 'textarea', required: false },
+      { name: 'import_connector_id', label: 'Import hosts from Traefik connector', kind: 'text', required: false },
+      { name: 'import_port', label: 'Port for imported hosts', kind: 'number', required: false, default: '443' },
+    ],
+  },
+  {
     type: 'caddy',
     category: 'networking',
     displayName: 'Caddy',
@@ -48,6 +59,7 @@ const schemas = [
 
 vi.mock('../../api/generated/connectors/connectors', () => ({
   useGetConnectorsSchema: () => ({ data: schemas, isLoading: false, isError: false, refetch: vi.fn() }),
+  useGetConnectors: () => ({ data: [{ id: 'traefik-visible', name: 'Visible Traefik', type: 'traefik' }, { id: 'npm', name: 'NPM', type: 'npm' }] }),
   postConnectors: (...args: unknown[]) => postConnectors(...args),
   usePreviewConnectorRecipe: () => ({
     mutate: (...args: unknown[]) => previewRecipe(...args),
@@ -55,6 +67,12 @@ vi.mock('../../api/generated/connectors/connectors', () => ({
     isError: false,
   }),
   getGetConnectorsQueryKey: () => [],
+}));
+
+vi.mock('../compliance/CertificateExpiryPackOffer', () => ({
+  CertificateExpiryPackOffer: ({ requested }: { requested: boolean }) => {
+    return requested ? <div data-testid="certificate-expiry-pack-offer" /> : null;
+  },
 }));
 
 vi.mock('../../hooks/useRole', () => ({ useIsInstanceAdmin: () => roleState.isAdmin }));
@@ -94,6 +112,81 @@ describe('ConnectorForm verify_tls (#613)', () => {
     const body = await fillAndSubmit(true);
     expect(body.verifyTls).toBe(false);
     expect(body.config).toEqual({ token_secret: 's3cret' });
+  });
+});
+
+describe('ConnectorForm TLS probe', () => {
+  it('saves targets, the selected viewable Traefik connector and import port without a URL', async () => {
+    roleState.isAdmin = true;
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <ConnectorForm onCreated={vi.fn()} />
+      </QueryClientProvider>,
+    );
+    fireEvent.click(screen.getByText('TLS Probe'));
+    fireEvent.change(screen.getByLabelText(/display name/i), { target: { value: 'tls-check' } });
+    fireEvent.change(screen.getByLabelText('Targets'), { target: { value: 'nas.lab:443\nrouter.lab:8443' } });
+    fireEvent.change(screen.getByLabelText('Import hosts from Traefik connector'), { target: { value: 'traefik-visible' } });
+    fireEvent.change(screen.getByLabelText('Port for imported hosts'), { target: { value: '8443' } });
+    fireEvent.click(screen.getByRole('button', { name: /test & add/i }));
+
+    await waitFor(() => expect(postConnectors).toHaveBeenCalled());
+    const body = postConnectors.mock.calls[postConnectors.mock.calls.length - 1][0] as Record<string, unknown>;
+    expect(body).not.toHaveProperty('url');
+    expect(body.config).toEqual({ targets: 'nas.lab:443\nrouter.lab:8443', import_connector_id: 'traefik-visible', import_port: '8443' });
+  });
+
+  it('requests the certificate pack offer after creating a TLS probe', async () => {
+    roleState.isAdmin = true;
+    postConnectors.mockResolvedValueOnce({ id: 'tls1', type: 'tlsprobe' });
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <ConnectorForm onCreated={vi.fn()} />
+      </QueryClientProvider>,
+    );
+    fireEvent.click(screen.getByText('TLS Probe'));
+    fireEvent.change(screen.getByLabelText(/display name/i), { target: { value: 'tls-check' } });
+    fireEvent.click(screen.getByRole('button', { name: /test & add/i }));
+
+    expect(await screen.findByTestId('certificate-expiry-pack-offer')).toBeInTheDocument();
+  });
+
+  it('shows server field errors on the target list', async () => {
+    roleState.isAdmin = true;
+    postConnectors.mockRejectedValueOnce(Object.assign(new Error('invalid target'), {
+      response: { data: { details: [{ field: 'config.targets', msg: 'must include a valid port' }] } },
+    }));
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <ConnectorForm onCreated={vi.fn()} />
+      </QueryClientProvider>,
+    );
+    fireEvent.click(screen.getByText('TLS Probe'));
+    fireEvent.change(screen.getByLabelText(/display name/i), { target: { value: 'tls-check' } });
+    fireEvent.change(screen.getByLabelText('Targets'), { target: { value: 'bad-target' } });
+    fireEvent.click(screen.getByRole('button', { name: /test & add/i }));
+
+    expect(await screen.findByText('must include a valid port')).toBeInTheDocument();
+    expect(screen.getByLabelText('Targets')).toHaveFocus();
+  });
+
+  it('keeps TLS probe endpoint settings disabled for non-admin connector creation', async () => {
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <ConnectorForm onCreated={vi.fn()} />
+      </QueryClientProvider>,
+    );
+    fireEvent.click(screen.getByText('TLS Probe'));
+    fireEvent.change(screen.getByLabelText(/display name/i), { target: { value: 'tls-check' } });
+    expect(screen.getByLabelText('Targets')).toBeDisabled();
+    expect(screen.getByLabelText('Import hosts from Traefik connector')).toBeDisabled();
+    expect(screen.getByLabelText('Port for imported hosts')).toBeDisabled();
+    expect(screen.getAllByText(/only an instance administrator can change/i)).toHaveLength(3);
+    fireEvent.click(screen.getByRole('button', { name: /test & add/i }));
+
+    await waitFor(() => expect(postConnectors).toHaveBeenCalled());
+    const body = postConnectors.mock.calls[postConnectors.mock.calls.length - 1][0] as Record<string, unknown>;
+    expect(body.config).toEqual({});
   });
 });
 

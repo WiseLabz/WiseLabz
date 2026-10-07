@@ -338,6 +338,7 @@ export const en = {
       docs: 'Documentation',
       attention: 'Attention queue',
       uptime: 'Fleet uptime',
+      certificates: 'Expiring certificates',
     },
     range: {
       '24h': '24h',
@@ -390,6 +391,20 @@ export const en = {
       checks: '{{count}} checks',
     },
     loadUptimeError: "Couldn't load fleet uptime.",
+    loadCertificatesError: "Couldn't load certificates.",
+    certificates: {
+      emptyTitle: 'No certificates to show',
+      emptyDesc: 'Add a TLS probe or Nginx Proxy Manager connector to track certificate expiry.',
+      band: {
+        expired: 'Expired',
+        week: '7 days or fewer',
+        month: '30 days or fewer',
+        later: 'Later',
+      },
+      daysLeft: '{{count}} days left',
+      expiredDaysAgo: 'Expired {{count}} days ago',
+      unreachable: 'Unreachable',
+    },
   },
   services: {
     snapshots: {
@@ -597,6 +612,20 @@ export const en = {
     },
   },
   connectors: {
+    tlsProbe: {
+      targetsLabel: 'Targets',
+      targetsHint:
+        'One host:port per line, up to 100 targets including imports. Put IPv6 addresses in brackets.',
+      importConnectorLabel: 'Import hosts from Traefik connector',
+      importConnectorHint:
+        'Probe literal Host names from the viewable Traefik connector’s TLS routers.',
+      importPortLabel: 'Port for imported hosts',
+      importPortHint: 'Port to probe on imported hosts (default 443).',
+      adminOnlyHint:
+        'Only an instance administrator can change TLS probe targets and import settings.',
+      noTraefikImport: 'No Traefik import',
+      currentImportUnavailable: 'Current import is not in the viewable list ({{id}})',
+    },
     back: 'Back to services',
     title: 'Add connector',
     subtitle: 'Connect a service so WiseLabz can track and document it.',
@@ -609,7 +638,8 @@ export const en = {
     recipePreview: {
       title: 'Test recipe',
       description: 'Run the current recipe against its target without saving changes.',
-      storedCredentialsHint: 'Saved credentials are reused only for the saved URL. To test a different URL, or with TLS verification turned off, re-enter the credentials.',
+      storedCredentialsHint:
+        'Saved credentials are reused only for the saved URL. To test a different URL, or with TLS verification turned off, re-enter the credentials.',
       test: 'Test recipe',
       testing: 'Testing recipe…',
       validationTitle: 'Validation errors',
@@ -869,8 +899,7 @@ export const en = {
         no_viewer_grant: 'You do not have permission to view this step.',
         no_operator_grant: 'You need operator access to {{connector}}.',
         preview_unavailable: 'The preview for this step is unavailable. Try again.',
-        unsupported_field:
-          'Not executable: this configuration field is no longer writable.',
+        unsupported_field: 'Not executable: this configuration field is no longer writable.',
         unknown: 'This step cannot be executed.',
       },
       timeoutValue_one: '{{count}} second',
@@ -1186,6 +1215,17 @@ export const en = {
     fallbackUsed: 'fallback provider',
   },
   compliance: {
+    daysLeftLt: 'Days left less than',
+    daysLeftGt: 'Days left greater than',
+    certificateExpiryOffer: {
+      title: 'Track certificate expiry with rules',
+      description:
+        'Install the Certificate expiry pack to create findings as Nginx Proxy Manager and TLS probe certificates approach expiry. Your connector and widget also work without these rules.',
+      install: 'Install certificate expiry rules',
+      installing: 'Installing rules…',
+      notNow: 'Not now',
+      installError: 'Could not install certificate expiry rules.',
+    },
     title: 'Compliance rules',
     subtitle: 'Evaluate synced entities against rules you define.',
     new: 'New rule',

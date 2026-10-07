@@ -34,6 +34,7 @@ import { Button } from '../../components/ui/Button';
 import { Dialog } from '../../components/ui/Dialog';
 import { ErrorState } from '../../components/ui/states';
 import { WidgetFrame } from '../../components/dashboard/WidgetFrame';
+import { CertificateExpiryPackOffer } from '../compliance/CertificateExpiryPackOffer';
 import {
   ServiceRosterWidget,
   AlertSummaryWidget,
@@ -42,6 +43,7 @@ import {
   DocsHealthWidget,
   AttentionQueueWidget,
   FleetUptimeWidget,
+  ExpiringCertificatesWidget,
 } from '../../components/dashboard/widgets';
 import {
   LayersIcon,
@@ -51,6 +53,7 @@ import {
   FileTextIcon,
   GripIcon,
   GaugeIcon,
+  ShieldIcon,
   CheckIcon,
   ChevronDownIcon,
 } from '../../components/icons';
@@ -75,6 +78,7 @@ const REGISTRY: Record<WidgetId, WidgetMeta> = {
     minH: 300,
   },
   uptime: { title: 'Fleet uptime', Icon: GaugeIcon, Component: FleetUptimeWidget, minH: 300 },
+  certificates: { title: 'Expiring certificates', Icon: ShieldIcon, Component: ExpiringCertificatesWidget, minH: 300 },
 };
 
 const RANGE_PRESETS: RangePreset[] = ['24h', '7d', '30d', '90d'];
@@ -102,6 +106,7 @@ export function DashboardPage() {
   const syncing = !!job && job.phase !== 'done' && job.phase !== 'error';
   const { data: me } = useGetMe();
   const [adminDefaultOpen, setAdminDefaultOpen] = useState(false);
+  const [certificatePackOfferRequested, setCertificatePackOfferRequested] = useState(false);
 
   const reset = useMutation({
     mutationFn: resetLayout,
@@ -164,10 +169,14 @@ export function DashboardPage() {
       </header>
 
       <AdminDefaultDialog open={adminDefaultOpen} onClose={() => setAdminDefaultOpen(false)} />
+      <CertificateExpiryPackOffer
+        requested={certificatePackOfferRequested}
+        onFinished={() => setCertificatePackOfferRequested(false)}
+      />
 
       <AnimatePresence mode="wait">
         {editing ? (
-          <EditMode key="edit" />
+          <EditMode key="edit" onEnableCertificates={() => setCertificatePackOfferRequested(true)} />
         ) : (
           <motion.div
             key="view"
@@ -214,7 +223,7 @@ export function DashboardPage() {
 
 /* ── Edit mode: reorder + toggle ───────────────────────────────────────── */
 
-function EditMode() {
+function EditMode({ onEnableCertificates }: { onEnableCertificates: () => void }) {
   const { t } = useTranslation();
   const layout = useDashboard((s) => s.layout);
   const setOrder = useDashboard((s) => s.setOrder);
@@ -249,7 +258,11 @@ function EditMode() {
             key={id}
             id={id}
             enabled={layout.find((w) => w.id === id)?.enabled ?? true}
-            onToggle={() => toggle(id)}
+            onToggle={() => {
+              const enabling = !(layout.find((widget) => widget.id === id)?.enabled ?? true);
+              toggle(id);
+              if (id === 'certificates' && enabling) onEnableCertificates();
+            }}
             onMoveUp={() => move(index, -1)}
             onMoveDown={() => move(index, 1)}
             canMoveUp={index > 0}

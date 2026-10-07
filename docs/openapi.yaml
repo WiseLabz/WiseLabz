@@ -4924,7 +4924,7 @@ components:
         id: { type: string }
         type:
           type: string
-          enum: [service_status, recent_changes, alert_summary, sync_activity, docs_health, attention, uptime]
+          enum: [service_status, recent_changes, alert_summary, sync_activity, docs_health, attention, uptime, expiring_certificates]
         x: { type: integer }
         y: { type: integer }
         w: { type: integer }
