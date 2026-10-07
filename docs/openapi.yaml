@@ -21,6 +21,7 @@ tags:
   - name: users
   - name: dashboard
   - name: connectors
+  - name: certificates
   - name: compliance
   - name: docs
   - name: search
@@ -1499,6 +1500,24 @@ paths:
               schema: { $ref: '#/components/schemas/UptimeHistory' }
         '400': { $ref: '#/components/responses/BadRequest' }
         '404': { $ref: '#/components/responses/NotFound' }
+  /certificates:
+    get:
+      tags: [certificates]
+      summary: Certificates ordered by expiry across viewable connectors
+      description: Uses latest snapshots independently of installed compliance rules, applying viewer grants and API-key connector restrictions. Limits above 100 are capped at 100.
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 10 }
+      responses:
+        '200':
+          description: Certificates with parseable expiry dates, expired first
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/CertificateExpiry' }
+        '400': { $ref: '#/components/responses/BadRequest' }
   /uptime:
     get:
       tags: [connectors]
@@ -5284,6 +5303,18 @@ components:
         buckets:
           type: array
           items: { $ref: '#/components/schemas/UptimeHistoryBucket' }
+    CertificateExpiry:
+      type: object
+      required: [name, connectorId, connectorName, externalId, notAfter, daysLeft, unreachable]
+      properties:
+        name: { type: string }
+        connectorId: { type: string }
+        connectorName: { type: string }
+        externalId: { type: string }
+        entityId: { type: string, description: Active entity identity when reconciliation has run }
+        notAfter: { type: string, format: date-time }
+        daysLeft: { type: integer, description: 'Whole days until expiry rounded down, negative after expiry' }
+        unreachable: { type: boolean, description: True when the source explicitly reported reachable false }
     FleetUptimeEntry:
       type: object
       required: [connectorId, name, checkCount, availabilityPct, mttrSeconds, outageCount]

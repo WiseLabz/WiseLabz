@@ -1,6 +1,7 @@
 export * from './alerts/alerts';
 export * from './attention/attention';
 export * from './auth/auth';
+export * from './certificates/certificates';
 export * from './changes/changes';
 export * from './chat/chat';
 export * from './compliance/compliance';

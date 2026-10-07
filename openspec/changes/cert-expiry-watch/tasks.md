@@ -28,7 +28,7 @@
 
 ## 5. Certificates listing
 
-- [ ] 5.1 Implement `GET /api/certificates` (limit default 10, max 100) over viewable connectors' latest snapshots with days left and the unreachable flag, register the route, add OpenAPI and regenerate the web client; verify handler tests for ordering with expired first, a hidden connector, a restricted API key, and no rules installed.
+- [x] 5.1 Implement `GET /api/certificates` (limit default 10, max 100) over viewable connectors' latest snapshots with days left and the unreachable flag, register the route, add OpenAPI and regenerate the web client; verify handler tests for ordering with expired first, a hidden connector, a restricted API key, and no rules installed.
 
 ## 6. Web
 
