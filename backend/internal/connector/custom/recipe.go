@@ -525,7 +525,8 @@ func validatePagination(pagination *RecipePagination, base string, auth RecipeAu
 		forbid(pagination.LinkHeader, ".link_header", "is only allowed for next_link pagination")
 	case "next_link":
 		forbid(pagination.HasParam, ".param", "is not allowed for next_link pagination")
-		forbid(pagination.HasSize || pagination.HasSizeParam, ".size", "size fields are only allowed for page, offset, or cursor pagination")
+		forbid(pagination.HasSize, ".size", "is only allowed for page, offset, or cursor pagination")
+		forbid(pagination.HasSizeParam, ".size_param", "is only allowed for page, offset, or cursor pagination")
 		forbid(pagination.HasStart, ".start", "is only allowed for page or offset pagination")
 		forbid(pagination.CursorPath != "", ".cursor_path", "is only allowed for cursor pagination")
 		if pagination.LinkHeader == (pagination.NextPath != "") {
@@ -542,7 +543,8 @@ func validatePagination(pagination *RecipePagination, base string, auth RecipeAu
 	if pagination.Start < 0 {
 		add(".start", "must not be negative")
 	}
-	if pagination.SizeParam != "" && pagination.Size <= 0 {
+	// page and offset already report a non-positive size above.
+	if pagination.Type == "cursor" && pagination.SizeParam != "" && pagination.Size <= 0 {
 		add(".size", "must be greater than zero when size_param is set")
 	}
 	if auth.Mode == "query" {

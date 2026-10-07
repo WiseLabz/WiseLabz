@@ -22,6 +22,10 @@ import (
 const (
 	maxRecipePages    = 100
 	maxRecipeEntities = 10_000
+	// maxRecipePaginationValueBytes bounds a cursor or next link taken from a
+	// response. Each one is remembered to detect cycles and sent back to the
+	// server, so an unbounded value could pin up to a response body per page.
+	maxRecipePaginationValueBytes = 8 << 10
 )
 
 func (c *Connector) validateRecipeConnection(ctx context.Context, config map[string]any, recipe *Recipe) error {
@@ -87,46 +91,60 @@ func (c *Connector) fetchRecipe(ctx context.Context, config map[string]any, reci
 		}
 		var endpointStatus, endpointItems, endpointSkipped int
 		for pageNumber := 1; ; pageNumber++ {
+			// Errors from a paginated endpoint name the page. Unpaginated
+			// endpoints keep the plain endpoint-only message.
+			fail := func(err error) error {
+				if endpoint.Pagination != nil {
+					err = fmt.Errorf("page %d: %w", pageNumber, err)
+				}
+				return recipeEndpointError(endpoint.Name, err)
+			}
 			if err := ctx.Err(); err != nil {
-				return nil, recipeEndpointError(endpoint.Name, connector.MapTransportError(err))
+				return nil, fail(connector.MapTransportError(err))
 			}
 			response, err := client.Do(request) // codeql[go/request-forgery]
 			if err != nil {
-				return nil, recipeEndpointError(endpoint.Name, connector.MapTransportError(err))
+				return nil, fail(connector.MapTransportError(err))
 			}
 			body, readErr := connector.ReadBody(response.Body)
 			closeErr := response.Body.Close()
 			if statusErr := connector.CheckStatus(response.StatusCode, nil); statusErr != nil {
-				return nil, recipeEndpointError(endpoint.Name, statusErr)
+				return nil, fail(statusErr)
 			}
 			if statusErr := checkRecipeSuccessStatus(response.StatusCode); statusErr != nil {
-				return nil, recipeEndpointError(endpoint.Name, statusErr)
+				return nil, fail(statusErr)
 			}
 			if readErr != nil {
 				if ctx.Err() != nil {
-					return nil, recipeEndpointError(endpoint.Name, connector.MapTransportError(ctx.Err()))
+					return nil, fail(connector.MapTransportError(ctx.Err()))
 				}
-				return nil, recipeEndpointError(endpoint.Name, connector.NewMalformedResponseError(readErr))
+				return nil, fail(connector.NewMalformedResponseError(readErr))
 			}
 			if closeErr != nil {
-				return nil, recipeEndpointError(endpoint.Name, fmt.Errorf("close response body: %w", closeErr))
+				return nil, fail(fmt.Errorf("close response body: %w", closeErr))
 			}
 			if !json.Valid(body) {
-				return nil, recipeEndpointError(endpoint.Name, connector.NewMalformedResponseError(errors.New("response is not valid JSON")))
+				return nil, fail(connector.NewMalformedResponseError(errors.New("response is not valid JSON")))
 			}
 
-			mapped, err := mapEndpointLimited(
+			mapped, err := mapEndpointBudgeted(
 				recipe,
 				endpoint,
 				body,
 				seenEntities,
-				connector.MaxResponseBytes-mappedOutputBytes,
+				connector.MaxResponseBytes,
+				mappedOutputBytes,
 			)
 			if err != nil {
-				return nil, recipeEndpointError(endpoint.Name, connector.NewMalformedResponseError(err))
+				return nil, fail(connector.NewMalformedResponseError(err))
+			}
+			// Page maxRecipePages+1 is only an end probe: it may confirm that
+			// pagination ended, but it must not return more data.
+			if pageNumber > maxRecipePages && mapped.Items > 0 {
+				return nil, fail(fmt.Errorf("pagination exceeds the %d-page limit", maxRecipePages))
 			}
 			if len(entities)+len(mapped.Entities) > maxRecipeEntities {
-				return nil, recipeEndpointError(endpoint.Name, fmt.Errorf("recipe exceeds the %d-entity limit", maxRecipeEntities))
+				return nil, fail(fmt.Errorf("recipe exceeds the %d-entity limit", maxRecipeEntities))
 			}
 			pageOutputBytes := recipeEntitiesSize(mapped.Entities)
 			for _, dependency := range mapped.Dependencies {
@@ -137,7 +155,7 @@ func (c *Connector) fetchRecipe(ctx context.Context, config map[string]any, reci
 				pageOutputBytes += len(dependency.Kind) + len(dependency.Name)
 			}
 			if mappedOutputBytes+pageOutputBytes > connector.MaxResponseBytes {
-				return nil, recipeEndpointError(endpoint.Name, fmt.Errorf("recipe maps more than %d bytes of data", connector.MaxResponseBytes))
+				return nil, fail(fmt.Errorf("recipe maps more than %d bytes of data", connector.MaxResponseBytes))
 			}
 			mappedOutputBytes += pageOutputBytes
 			entities = append(entities, mapped.Entities...)
@@ -160,16 +178,16 @@ func (c *Connector) fetchRecipe(ctx context.Context, config map[string]any, reci
 				items:   mapped.Items,
 			})
 			if ctx.Err() != nil {
-				return nil, recipeEndpointError(endpoint.Name, connector.MapTransportError(ctx.Err()))
+				return nil, fail(connector.MapTransportError(ctx.Err()))
 			}
 			if err != nil {
-				return nil, recipeEndpointError(endpoint.Name, err)
+				return nil, fail(err)
 			}
 			if !hasNext {
 				break
 			}
-			if pageNumber >= maxRecipePages {
-				return nil, recipeEndpointError(endpoint.Name, fmt.Errorf("pagination exceeds the %d-page limit", maxRecipePages))
+			if pageNumber > maxRecipePages {
+				return nil, fail(fmt.Errorf("pagination exceeds the %d-page limit", maxRecipePages))
 			}
 			request = next
 		}
@@ -265,6 +283,9 @@ func (s *cursorPaginationStrategy) next(ctx context.Context, previous recipePage
 	if !found || cursor == "" {
 		return nil, false, nil
 	}
+	if len(cursor) > maxRecipePaginationValueBytes {
+		return nil, false, fmt.Errorf("cursor exceeds the %d-byte limit", maxRecipePaginationValueBytes)
+	}
 	if cursor == s.sent {
 		return nil, false, errors.New("cursor did not advance")
 	}
@@ -315,6 +336,9 @@ func (s *nextLinkPaginationStrategy) next(ctx context.Context, previous recipePa
 	}
 	if !found || strings.TrimSpace(link) == "" {
 		return nil, false, nil
+	}
+	if len(strings.TrimSpace(link)) > maxRecipePaginationValueBytes {
+		return nil, false, fmt.Errorf("next link exceeds the %d-byte limit", maxRecipePaginationValueBytes)
 	}
 	request, err := buildRecipeRequestForNextLink(ctx, s.baseURL, s.recipe, s.endpoint, s.config, link)
 	if err != nil {
