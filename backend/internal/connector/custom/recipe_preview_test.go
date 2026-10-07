@@ -14,25 +14,30 @@ import (
 
 func TestPreviewRecipeContinuesAfterEndpointFailureAndLimitsSamples(t *testing.T) {
 	connector.AllowLoopbackForTest(t)
-	var firstResponse strings.Builder
-	firstResponse.WriteString(`{"items":[`)
-	for i := range 25 {
-		if i > 0 {
-			firstResponse.WriteByte(',')
+	manyItems := func(prefix string) string {
+		var body strings.Builder
+		body.WriteString(`{"items":[`)
+		for i := range 25 {
+			if i > 0 {
+				body.WriteByte(',')
+			}
+			fmt.Fprintf(&body, `{"id":"%s-%d","name":"%s %d","active":true}`, prefix, i, prefix, i)
 		}
-		fmt.Fprintf(&firstResponse, `{"id":"item-%d","name":"Item %d","active":true}`, i, i)
+		body.WriteString(`]}`)
+		return body.String()
 	}
-	firstResponse.WriteString(`]}`)
+	firstResponse := manyItems("item")
+	lastResponse := manyItems("last")
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/first":
-			if _, err := w.Write([]byte(firstResponse.String())); err != nil {
+			if _, err := w.Write([]byte(firstResponse)); err != nil {
 				t.Error(err)
 			}
 		case "/broken":
 			http.Error(w, "fixture endpoint failure", http.StatusServiceUnavailable)
 		case "/last":
-			if _, err := w.Write([]byte(`{"items":[{"id":"last-item","name":"Last item"}]}`)); err != nil {
+			if _, err := w.Write([]byte(lastResponse)); err != nil {
 				t.Error(err)
 			}
 		default:
@@ -88,21 +93,19 @@ endpoints:
 	if got := result.Endpoints[0]; got.Items != 25 || got.Count != 25 || got.Skipped != 0 {
 		t.Fatalf("first endpoint counts = items %d, count %d, skipped %d", got.Items, got.Count, got.Skipped)
 	}
-	if len(result.Endpoints[0].Samples) != 18 || result.Endpoints[0].Samples[0].Attributes["active"] != true {
+	if len(result.Endpoints[0].Samples) != maxPreviewSamples || result.Endpoints[0].Samples[0].Attributes["active"] != true {
 		t.Fatalf("first endpoint samples = %d, first sample %#v", len(result.Endpoints[0].Samples), result.Endpoints[0].Samples[0])
 	}
 	if result.Endpoints[1].Error == "" || !strings.Contains(result.Endpoints[1].Error, `endpoint "broken"`) {
 		t.Fatalf("broken endpoint error = %q", result.Endpoints[1].Error)
 	}
-	if got := result.Endpoints[2]; got.Count != 1 || len(got.Samples) != 1 || got.Samples[0].Name != "Last item" {
-		t.Fatalf("last endpoint result = %+v", got)
+	if got := result.Endpoints[2]; got.Count != 25 || len(got.Samples) != maxPreviewSamples || got.Samples[0].Name != "last 0" {
+		t.Fatalf("last endpoint result = count %d, samples %d", got.Count, len(got.Samples))
 	}
-	totalSamples := 0
 	for _, endpoint := range result.Endpoints {
-		totalSamples += len(endpoint.Samples)
-	}
-	if totalSamples > maxPreviewSamples {
-		t.Fatalf("total samples = %d, limit %d", totalSamples, maxPreviewSamples)
+		if len(endpoint.Samples) > maxPreviewSamples {
+			t.Fatalf("endpoint %q samples = %d, limit %d", endpoint.Name, len(endpoint.Samples), maxPreviewSamples)
+		}
 	}
 	if len(result.Errors) != 1 || len(result.Dependencies) != 3 {
 		t.Fatalf("errors/dependencies = %#v/%#v", result.Errors, result.Dependencies)

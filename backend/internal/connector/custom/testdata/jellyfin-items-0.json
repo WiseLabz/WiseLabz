@@ -13,6 +13,13 @@
       "Type": "Movie",
       "ProductionYear": 2033,
       "Path": "/media/movies/quiet-orbit.mkv"
+    },
+    {
+      "Id": "10000000000000000000000000000003",
+      "Name": "Paper Moons",
+      "Type": "Movie",
+      "ProductionYear": 2034,
+      "Path": "/media/movies/paper-moons.mkv"
     }
   ],
   "StartIndex": 0,

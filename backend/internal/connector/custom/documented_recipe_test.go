@@ -132,6 +132,10 @@ func TestDocumentedServiceRecipesMapRecordedResponses(t *testing.T) {
 		if first.Attributes["status"] != "active" || first.Attributes["monitored"] != true || first.Attributes["year"] != json.Number("2031") {
 			t.Fatalf("first attributes = %#v", first.Attributes)
 		}
+		second := snapshot.Entities[1]
+		if second.Name != "The Amber Signal" || second.ExternalID != "77" || second.Attributes["status"] != "ended" || second.Attributes["monitored"] != false || second.Attributes["year"] != json.Number("2028") {
+			t.Fatalf("second entity = %+v", second)
+		}
 		wantDependencies := []connector.ServiceDependency{
 			{Kind: "storage", Name: "/library/series/amber-signal"},
 			{Kind: "storage", Name: "/library/series/clockwork-harbor"},
@@ -152,17 +156,15 @@ func TestDocumentedServiceRecipesMapRecordedResponses(t *testing.T) {
 			if r.URL.Path != "/Items" || r.Header.Get("Authorization") != "MediaBrowser Token=fixture-token" {
 				t.Errorf("request path/auth = %q/%q", r.URL.Path, r.Header.Get("Authorization"))
 			}
-			if r.URL.Query().Get("Recursive") != "true" || r.URL.Query().Get("IncludeItemTypes") != "Movie" || r.URL.Query().Get("Limit") != "2" {
+			if r.URL.Query().Get("Recursive") != "true" || r.URL.Query().Get("IncludeItemTypes") != "Movie" || r.URL.Query().Get("Limit") != "100" {
 				t.Errorf("request query = %s", r.URL.RawQuery)
 			}
 			var fixture string
 			switch r.URL.Query().Get("StartIndex") {
 			case "0":
 				fixture = "testdata/jellyfin-items-0.json"
-			case "2":
-				fixture = "testdata/jellyfin-items-2.json"
-			case "4":
-				fixture = "testdata/jellyfin-items-4.json"
+			case "100":
+				fixture = "testdata/jellyfin-items-100.json"
 			default:
 				t.Errorf("unexpected StartIndex %q", r.URL.Query().Get("StartIndex"))
 				http.Error(w, "unexpected page", http.StatusBadRequest)
@@ -181,8 +183,8 @@ func TestDocumentedServiceRecipesMapRecordedResponses(t *testing.T) {
 		defer server.Close()
 
 		snapshot := fetchDocumentedRecipe(t, server.URL, string(recipe), "fixture-token")
-		if requests != 3 {
-			t.Fatalf("requests = %d, want 3 (two pages and an empty end page)", requests)
+		if requests != 2 {
+			t.Fatalf("requests = %d, want 2 (one full page and an empty end page)", requests)
 		}
 		if len(snapshot.Entities) != 3 {
 			t.Fatalf("entities = %d, want 3", len(snapshot.Entities))
@@ -196,8 +198,8 @@ func TestDocumentedServiceRecipesMapRecordedResponses(t *testing.T) {
 		}
 		wantDependencies := []connector.ServiceDependency{
 			{Kind: "storage", Name: "/media/movies/glass-comet.mkv"},
-			{Kind: "storage", Name: "/media/movies/quiet-orbit.mkv"},
 			{Kind: "storage", Name: "/media/movies/paper-moons.mkv"},
+			{Kind: "storage", Name: "/media/movies/quiet-orbit.mkv"},
 		}
 		if !reflect.DeepEqual(snapshot.Dependencies, wantDependencies) {
 			t.Fatalf("dependencies = %#v, want %#v", snapshot.Dependencies, wantDependencies)

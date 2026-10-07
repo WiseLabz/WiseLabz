@@ -13,9 +13,7 @@ endpoints:
       type: offset
       param: StartIndex
       size_param: Limit
-      # Small pages make this recorded pagination example easy to inspect.
-      # Increase the size (for example to 100) for a larger library.
-      size: 2
+      size: 100
     entity:
       kind: media_item
       name: Name
