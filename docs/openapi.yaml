@@ -6286,8 +6286,10 @@ components:
       type: object
       description: >
         Frozen step and its current outcome. A redacted step carries no kind, title, connector,
-        entity, verb, timeout, error or preview; only identifiers, position, state, times,
-        confirming user and permission flags remain. Manual steps have no connector and are visible.
+        entity, verb, timeout, error or preview, and none of the config-push or entity-wait fields
+        (field key, target value, attribute, operator, expected value, current value); only
+        identifiers, position, state, times, confirming user and permission flags remain. Manual
+        steps have no connector and are visible.
       required: [id, position, redacted, canExecute]
       properties:
         id: { type: string }
@@ -6315,6 +6317,11 @@ components:
           type: string
           description: Expected attribute value for wait_for_entity steps, formatted as JSON text.
         timeoutSeconds: { type: integer }
+        currentValue:
+          description: Current configuration value for config_push steps in a preview.
+        currentValueKnown:
+          type: boolean
+          description: Whether the connector could report the current configuration value in a preview.
         state: { $ref: '#/components/schemas/RunbookRunStepState' }
         startedAt: { type: string, format: date-time }
         finishedAt: { type: string, format: date-time }
@@ -6324,7 +6331,7 @@ components:
         canExecute: { type: boolean }
         executeBlockedReason:
           type: string
-          description: Machine code for why canExecute is false; one of no_viewer_grant, no_operator_grant, preview_unavailable.
+          description: Machine code for why canExecute is false; one of no_viewer_grant, no_operator_grant, preview_unavailable, unsupported_field.
         preview: { $ref: '#/components/schemas/RestartPreview' }
     RunbookRun:
       allOf:

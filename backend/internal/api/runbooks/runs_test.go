@@ -3,13 +3,18 @@ package runbooks
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/WiseLabz/wiselabz/internal/api/apitest"
 	"github.com/WiseLabz/wiselabz/internal/auth"
+	"github.com/WiseLabz/wiselabz/internal/connector"
 	"github.com/WiseLabz/wiselabz/internal/runbookrun"
 	"github.com/WiseLabz/wiselabz/internal/store"
 )
@@ -800,6 +805,598 @@ func TestConnectorlessRunViewActionPermission(t *testing.T) {
 			want := mode == "operator" || mode == "admin"
 			if got := view.Steps[0].CanExecute; got != want {
 				t.Fatalf("CanExecute=%v want=%v for %s", got, want, mode)
+			}
+		})
+	}
+}
+
+type fakePusherReader struct {
+	fakePusher
+	readVal    any
+	readErr    error
+	blockOnCtx bool
+	readDelay  time.Duration
+
+	mu          sync.Mutex
+	readCalls   int
+	pushCalls   int
+	inFlight    int
+	maxInFlight int
+}
+
+func (f *fakePusherReader) ConfigPush(_ context.Context, _ map[string]any, _, _ string, _ any) error {
+	f.mu.Lock()
+	f.pushCalls++
+	f.mu.Unlock()
+	return nil
+}
+
+func (f *fakePusherReader) ConfigRead(ctx context.Context, _ map[string]any, _, _ string) (any, error) {
+	f.mu.Lock()
+	f.readCalls++
+	f.inFlight++
+	if f.inFlight > f.maxInFlight {
+		f.maxInFlight = f.inFlight
+	}
+	f.mu.Unlock()
+	defer func() {
+		f.mu.Lock()
+		f.inFlight--
+		f.mu.Unlock()
+	}()
+
+	if f.blockOnCtx {
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}
+	if f.readDelay > 0 {
+		select {
+		case <-time.After(f.readDelay):
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
+	return f.readVal, f.readErr
+}
+
+func seedFakePusherReader(t *testing.T, h *Handler, fields []connector.ConfigField, readVal any, readErr error) (string, *fakePusherReader) {
+	t.Helper()
+	typ := fmt.Sprintf("fake_pusher_reader_%d", time.Now().UnixNano())
+	fake := &fakePusherReader{
+		fakePusher: fakePusher{typ: typ, fields: fields},
+		readVal:    readVal,
+		readErr:    readErr,
+	}
+	connector.Register(connector.TypeSchema{Type: typ, Name: "Fake Pusher Reader", Category: "virtualization"},
+		func(map[string]any) (connector.Connector, error) {
+			return fake, nil
+		})
+	c := &store.ConnectorRecord{Name: "Fake Reader Connector", Category: "virtualization", Type: typ, URL: "https://example.com"}
+	if err := h.Store.CreateConnector(context.Background(), c); err != nil {
+		t.Fatalf("CreateConnector error: %v", err)
+	}
+	return c.ID, fake
+}
+
+func TestRunPreviewScenarios(t *testing.T) {
+	ctx := context.Background()
+	h := newTestHandler(t)
+	user := apitest.NewUser(t, h.Store, "operator")
+
+	t.Run("known value shows current and target without writing", func(t *testing.T) {
+		fields := []connector.ConfigField{{Key: "memory", Type: "number", EntityScope: true}}
+		connID, fake := seedFakePusherReader(t, h, fields, float64(4096), nil)
+		apitest.GrantConnectorRole(t, h.Store, user, connID, "operator")
+
+		rb, _, err := h.Store.CreateRunbookWithSteps(ctx,
+			&store.RunbookRecord{Title: "Preview Known", TargetType: "change_type", TargetValue: "preview.known"},
+			[]*store.RunbookStepRecord{
+				{Kind: "config_push", Title: "Push Mem", ConnectorID: connID, EntityRef: "vm:100", FieldKey: "memory", TargetValue: "4096"},
+			})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		r := runRequest(user, rb.ID, "", "")
+		r.URL.RawQuery = "dryRun=true"
+		rr := httptest.NewRecorder()
+		h.StartRun(rr, r)
+		assertRunStatus(t, rr, http.StatusOK)
+
+		var preview runPreviewResponse
+		if err := json.Unmarshal(rr.Body.Bytes(), &preview); err != nil {
+			t.Fatal(err)
+		}
+		if !preview.CanStart {
+			t.Fatalf("preview cannot start: %+v", preview)
+		}
+		if len(preview.Steps) != 1 {
+			t.Fatalf("steps count = %d, want 1", len(preview.Steps))
+		}
+		st := preview.Steps[0]
+		if !st.CanExecute || st.ExecuteBlockedReason != "" {
+			t.Fatalf("step canExecute=%v reason=%s", st.CanExecute, st.ExecuteBlockedReason)
+		}
+		if st.FieldKey != "memory" || st.TargetValue != "4096" {
+			t.Fatalf("step fieldKey=%q targetValue=%q", st.FieldKey, st.TargetValue)
+		}
+		if st.CurrentValueKnown == nil || !*st.CurrentValueKnown {
+			t.Fatalf("CurrentValueKnown = %v, want true", st.CurrentValueKnown)
+		}
+		if st.CurrentValue != float64(4096) {
+			t.Fatalf("CurrentValue = %v, want 4096", st.CurrentValue)
+		}
+		if fake.readCalls != 1 || fake.pushCalls != 0 {
+			t.Fatalf("readCalls=%d pushCalls=%d, want readCalls=1 pushCalls=0", fake.readCalls, fake.pushCalls)
+		}
+	})
+
+	t.Run("unknown value because connector lacks reader is still startable", func(t *testing.T) {
+		fields := []connector.ConfigField{{Key: "memory", Type: "number", EntityScope: true}}
+		connID := seedCustomPusherConnector(t, h, fields)
+		apitest.GrantConnectorRole(t, h.Store, user, connID, "operator")
+
+		rb, _, err := h.Store.CreateRunbookWithSteps(ctx,
+			&store.RunbookRecord{Title: "Preview No Reader", TargetType: "change_type", TargetValue: "preview.no_reader"},
+			[]*store.RunbookStepRecord{
+				{Kind: "config_push", Title: "Push Mem", ConnectorID: connID, EntityRef: "vm:100", FieldKey: "memory", TargetValue: "4096"},
+			})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		r := runRequest(user, rb.ID, "", "")
+		r.URL.RawQuery = "dryRun=true"
+		rr := httptest.NewRecorder()
+		h.StartRun(rr, r)
+		assertRunStatus(t, rr, http.StatusOK)
+
+		var preview runPreviewResponse
+		if err := json.Unmarshal(rr.Body.Bytes(), &preview); err != nil {
+			t.Fatal(err)
+		}
+		if !preview.CanStart {
+			t.Fatalf("preview cannot start: %+v", preview)
+		}
+		st := preview.Steps[0]
+		if !st.CanExecute {
+			t.Fatalf("step canExecute=false, want true")
+		}
+		if st.CurrentValueKnown == nil || *st.CurrentValueKnown {
+			t.Fatalf("CurrentValueKnown = %v, want false", st.CurrentValueKnown)
+		}
+		if st.CurrentValue != nil {
+			t.Fatalf("CurrentValue = %v, want nil", st.CurrentValue)
+		}
+		if st.TargetValue != "4096" {
+			t.Fatalf("TargetValue = %q, want 4096", st.TargetValue)
+		}
+	})
+
+	t.Run("reader error fails soft and run is still startable", func(t *testing.T) {
+		fields := []connector.ConfigField{{Key: "memory", Type: "number", EntityScope: true}}
+		connID, _ := seedFakePusherReader(t, h, fields, nil, errors.New("temporary upstream timeout"))
+		apitest.GrantConnectorRole(t, h.Store, user, connID, "operator")
+
+		rb, _, err := h.Store.CreateRunbookWithSteps(ctx,
+			&store.RunbookRecord{Title: "Preview Reader Err", TargetType: "change_type", TargetValue: "preview.err"},
+			[]*store.RunbookStepRecord{
+				{Kind: "config_push", Title: "Push Mem", ConnectorID: connID, EntityRef: "vm:100", FieldKey: "memory", TargetValue: "4096"},
+			})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		r := runRequest(user, rb.ID, "", "")
+		r.URL.RawQuery = "dryRun=true"
+		rr := httptest.NewRecorder()
+		h.StartRun(rr, r)
+		assertRunStatus(t, rr, http.StatusOK)
+
+		var preview runPreviewResponse
+		if err := json.Unmarshal(rr.Body.Bytes(), &preview); err != nil {
+			t.Fatal(err)
+		}
+		if !preview.CanStart {
+			t.Fatalf("preview cannot start: %+v", preview)
+		}
+		st := preview.Steps[0]
+		if !st.CanExecute {
+			t.Fatalf("step canExecute=false, want true")
+		}
+		if st.CurrentValueKnown == nil || *st.CurrentValueKnown {
+			t.Fatalf("CurrentValueKnown = %v, want false", st.CurrentValueKnown)
+		}
+		if st.CurrentValue != nil {
+			t.Fatalf("CurrentValue = %v, want nil", st.CurrentValue)
+		}
+	})
+
+	t.Run("field withdrawn marks step not executable and blocks run start", func(t *testing.T) {
+		fields := []connector.ConfigField{{Key: "cores", Type: "number", EntityScope: true}}
+		connID, _ := seedFakePusherReader(t, h, fields, float64(4), nil)
+		apitest.GrantConnectorRole(t, h.Store, user, connID, "operator")
+
+		rb, _, err := h.Store.CreateRunbookWithSteps(ctx,
+			&store.RunbookRecord{Title: "Preview Withdrawn", TargetType: "change_type", TargetValue: "preview.withdrawn"},
+			[]*store.RunbookStepRecord{
+				{Kind: "config_push", Title: "Push Memory", ConnectorID: connID, EntityRef: "vm:100", FieldKey: "memory", TargetValue: "4096"},
+			})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		r := runRequest(user, rb.ID, "", "")
+		r.URL.RawQuery = "dryRun=true"
+		rr := httptest.NewRecorder()
+		h.StartRun(rr, r)
+		assertRunStatus(t, rr, http.StatusOK)
+
+		var preview runPreviewResponse
+		if err := json.Unmarshal(rr.Body.Bytes(), &preview); err != nil {
+			t.Fatal(err)
+		}
+		if preview.CanStart {
+			t.Fatal("preview canStart = true, want false")
+		}
+		st := preview.Steps[0]
+		if st.CanExecute {
+			t.Fatal("step canExecute = true, want false")
+		}
+		if st.ExecuteBlockedReason != "unsupported_field" {
+			t.Fatalf("executeBlockedReason = %q, want unsupported_field", st.ExecuteBlockedReason)
+		}
+	})
+
+	t.Run("wait condition is returned in preview", func(t *testing.T) {
+		connID := seedProxmoxConnector(t, h)
+		apitest.GrantConnectorRole(t, h.Store, user, connID, "operator")
+
+		rb, _, err := h.Store.CreateRunbookWithSteps(ctx,
+			&store.RunbookRecord{Title: "Preview Wait", TargetType: "change_type", TargetValue: "preview.wait"},
+			[]*store.RunbookStepRecord{
+				{
+					Kind:           "wait_for_entity",
+					Title:          "Wait for VM running",
+					ConnectorID:    connID,
+					EntityRef:      "vm:100",
+					Attribute:      "status",
+					Operator:       "eq",
+					ExpectedValue:  `"running"`,
+					TimeoutSeconds: 600,
+				},
+			})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		r := runRequest(user, rb.ID, "", "")
+		r.URL.RawQuery = "dryRun=true"
+		rr := httptest.NewRecorder()
+		h.StartRun(rr, r)
+		assertRunStatus(t, rr, http.StatusOK)
+
+		var preview runPreviewResponse
+		if err := json.Unmarshal(rr.Body.Bytes(), &preview); err != nil {
+			t.Fatal(err)
+		}
+		if !preview.CanStart {
+			t.Fatalf("preview cannot start: %+v", preview)
+		}
+		st := preview.Steps[0]
+		if !st.CanExecute {
+			t.Fatalf("step canExecute=false, want true")
+		}
+		if st.Kind != "wait_for_entity" || st.EntityRef != "vm:100" || st.Attribute != "status" || st.Operator != "eq" || st.ExpectedValue != `"running"` || st.TimeoutSeconds != 600 {
+			t.Fatalf("wait step condition mismatch: %+v", st)
+		}
+	})
+
+	t.Run("hidden connector redaction hides all metadata and current value in preview", func(t *testing.T) {
+		fields := []connector.ConfigField{{Key: "memory", Type: "number", EntityScope: true}}
+		visibleID, _ := seedFakePusherReader(t, h, fields, float64(2048), nil)
+		hiddenID, hiddenFake := seedFakePusherReader(t, h, fields, float64(4096), nil)
+
+		apitest.GrantConnectorRole(t, h.Store, user, visibleID, "operator")
+		// hiddenID has no grant for user
+
+		rb, _, err := h.Store.CreateRunbookWithSteps(ctx,
+			&store.RunbookRecord{Title: "Mixed Preview", TargetType: "change_type", TargetValue: "preview.mixed"},
+			[]*store.RunbookStepRecord{
+				{Kind: "config_push", Title: "Visible Push", ConnectorID: visibleID, EntityRef: "vm:10", FieldKey: "memory", TargetValue: "2048"},
+				{Kind: "config_push", Title: "Secret Push", ConnectorID: hiddenID, EntityRef: "vm:20", FieldKey: "memory", TargetValue: "4096"},
+				{Kind: "wait_for_entity", Title: "Secret Wait", ConnectorID: hiddenID, EntityRef: "vm:20", Attribute: "status", Operator: "eq", ExpectedValue: `"running"`, TimeoutSeconds: 300},
+			})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		r := runRequest(user, rb.ID, "", "")
+		r.URL.RawQuery = "dryRun=true"
+		rr := httptest.NewRecorder()
+		h.StartRun(rr, r)
+		assertRunStatus(t, rr, http.StatusOK)
+
+		var raw map[string]any
+		if err := json.Unmarshal(rr.Body.Bytes(), &raw); err != nil {
+			t.Fatal(err)
+		}
+		if raw["canStart"] != false {
+			t.Fatal("canStart = true, want false when hidden steps cannot be executed")
+		}
+
+		steps := raw["steps"].([]any)
+		if len(steps) != 3 {
+			t.Fatalf("steps count = %d, want 3", len(steps))
+		}
+
+		// Visible step 0
+		vis := steps[0].(map[string]any)
+		if vis["redacted"] != false || vis["canExecute"] != true || vis["fieldKey"] != "memory" || vis["targetValue"] != "2048" || vis["currentValueKnown"] != true || vis["currentValue"] != float64(2048) {
+			t.Fatalf("visible step = %+v", vis)
+		}
+
+		// Hidden push step 1
+		hidPush := steps[1].(map[string]any)
+		if hidPush["redacted"] != true || hidPush["executeBlockedReason"] != "no_viewer_grant" {
+			t.Fatalf("hidden push step = %+v", hidPush)
+		}
+		for _, forbidden := range []string{"fieldKey", "targetValue", "currentValue", "currentValueKnown", "connectorId", "connectorName", "entityRef", "title", "kind"} {
+			if _, exists := hidPush[forbidden]; exists {
+				t.Fatalf("hidden push step leaked %s: %+v", forbidden, hidPush)
+			}
+		}
+
+		// Hidden wait step 2
+		hidWait := steps[2].(map[string]any)
+		if hidWait["redacted"] != true || hidWait["executeBlockedReason"] != "no_viewer_grant" {
+			t.Fatalf("hidden wait step = %+v", hidWait)
+		}
+		for _, forbidden := range []string{"attribute", "operator", "expectedValue", "timeoutSeconds", "connectorId", "connectorName", "entityRef", "title", "kind"} {
+			if _, exists := hidWait[forbidden]; exists {
+				t.Fatalf("hidden wait step leaked %s: %+v", forbidden, hidWait)
+			}
+		}
+		if hiddenFake.readCalls != 0 {
+			t.Fatalf("hidden connector readCalls = %d, want 0", hiddenFake.readCalls)
+		}
+	})
+
+	t.Run("secret-typed field is never read in preview", func(t *testing.T) {
+		fields := []connector.ConfigField{{Key: "api_token", Type: "password", EntityScope: true}}
+		connID, fake := seedFakePusherReader(t, h, fields, "super-secret", nil)
+		apitest.GrantConnectorRole(t, h.Store, user, connID, "operator")
+
+		rb, _, err := h.Store.CreateRunbookWithSteps(ctx,
+			&store.RunbookRecord{Title: "Preview Secret", TargetType: "change_type", TargetValue: "preview.secret"},
+			[]*store.RunbookStepRecord{
+				{Kind: "config_push", Title: "Push Token", ConnectorID: connID, EntityRef: "vm:100", FieldKey: "api_token", TargetValue: "new-token"},
+			})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		r := runRequest(user, rb.ID, "", "")
+		r.URL.RawQuery = "dryRun=true"
+		rr := httptest.NewRecorder()
+		h.StartRun(rr, r)
+		assertRunStatus(t, rr, http.StatusOK)
+
+		var preview runPreviewResponse
+		if err := json.Unmarshal(rr.Body.Bytes(), &preview); err != nil {
+			t.Fatal(err)
+		}
+		if !preview.CanStart {
+			t.Fatalf("preview cannot start: %+v", preview)
+		}
+		st := preview.Steps[0]
+		if !st.CanExecute {
+			t.Fatal("step canExecute=false, want true")
+		}
+		if st.CurrentValueKnown == nil || *st.CurrentValueKnown {
+			t.Fatalf("CurrentValueKnown = %v, want false", st.CurrentValueKnown)
+		}
+		if st.CurrentValue != nil {
+			t.Fatalf("CurrentValue = %v, want nil", st.CurrentValue)
+		}
+		if strings.Contains(rr.Body.String(), "super-secret") {
+			t.Fatal("preview response leaked the secret value")
+		}
+		if fake.readCalls != 0 {
+			t.Fatalf("readCalls = %d, want 0", fake.readCalls)
+		}
+	})
+
+	t.Run("hung reader fails soft within the step timeout", func(t *testing.T) {
+		fields := []connector.ConfigField{{Key: "memory", Type: "number", EntityScope: true}}
+		connID, fake := seedFakePusherReader(t, h, fields, float64(4096), nil)
+		fake.blockOnCtx = true
+		apitest.GrantConnectorRole(t, h.Store, user, connID, "operator")
+
+		rb, _, err := h.Store.CreateRunbookWithSteps(ctx,
+			&store.RunbookRecord{Title: "Preview Hung", TargetType: "change_type", TargetValue: "preview.hung"},
+			[]*store.RunbookStepRecord{
+				{Kind: "config_push", Title: "Push Mem", ConnectorID: connID, EntityRef: "vm:100", FieldKey: "memory", TargetValue: "4096"},
+			})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		r := runRequest(user, rb.ID, "", "")
+		r.URL.RawQuery = "dryRun=true"
+		rr := httptest.NewRecorder()
+		start := time.Now()
+		h.StartRun(rr, r)
+		elapsed := time.Since(start)
+		assertRunStatus(t, rr, http.StatusOK)
+		if elapsed >= 4*time.Second {
+			t.Fatalf("preview took %s, want < 4s", elapsed)
+		}
+
+		var preview runPreviewResponse
+		if err := json.Unmarshal(rr.Body.Bytes(), &preview); err != nil {
+			t.Fatal(err)
+		}
+		if !preview.CanStart {
+			t.Fatalf("preview cannot start: %+v", preview)
+		}
+		st := preview.Steps[0]
+		if !st.CanExecute {
+			t.Fatal("step canExecute=false, want true")
+		}
+		if st.CurrentValueKnown == nil || *st.CurrentValueKnown {
+			t.Fatalf("CurrentValueKnown = %v, want false", st.CurrentValueKnown)
+		}
+		if st.CurrentValue != nil {
+			t.Fatalf("CurrentValue = %v, want nil", st.CurrentValue)
+		}
+	})
+
+	t.Run("config reads run with bounded concurrency", func(t *testing.T) {
+		fields := []connector.ConfigField{{Key: "memory", Type: "number", EntityScope: true}}
+		connID, fake := seedFakePusherReader(t, h, fields, float64(4096), nil)
+		fake.readDelay = 50 * time.Millisecond
+		apitest.GrantConnectorRole(t, h.Store, user, connID, "operator")
+
+		const stepCount = 12
+		steps := make([]*store.RunbookStepRecord, 0, stepCount)
+		for i := 0; i < stepCount; i++ {
+			steps = append(steps, &store.RunbookStepRecord{
+				Kind: "config_push", Title: fmt.Sprintf("Push Mem %d", i), ConnectorID: connID,
+				EntityRef: fmt.Sprintf("vm:%d", 100+i), FieldKey: "memory", TargetValue: "4096",
+			})
+		}
+		rb, _, err := h.Store.CreateRunbookWithSteps(ctx,
+			&store.RunbookRecord{Title: "Preview Concurrency", TargetType: "change_type", TargetValue: "preview.concurrency"},
+			steps)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		r := runRequest(user, rb.ID, "", "")
+		r.URL.RawQuery = "dryRun=true"
+		rr := httptest.NewRecorder()
+		h.StartRun(rr, r)
+		assertRunStatus(t, rr, http.StatusOK)
+
+		var preview runPreviewResponse
+		if err := json.Unmarshal(rr.Body.Bytes(), &preview); err != nil {
+			t.Fatal(err)
+		}
+		if len(preview.Steps) != stepCount {
+			t.Fatalf("steps count = %d, want %d", len(preview.Steps), stepCount)
+		}
+		for i, st := range preview.Steps {
+			if st.CurrentValueKnown == nil || !*st.CurrentValueKnown {
+				t.Fatalf("step %d CurrentValueKnown = %v, want true", i, st.CurrentValueKnown)
+			}
+		}
+		fake.mu.Lock()
+		maxInFlight, readCalls := fake.maxInFlight, fake.readCalls
+		fake.mu.Unlock()
+		if readCalls != stepCount {
+			t.Fatalf("readCalls = %d, want %d", readCalls, stepCount)
+		}
+		if maxInFlight > previewMaxConcurrency || maxInFlight <= 1 {
+			t.Fatalf("max in-flight reads = %d, want between 2 and %d", maxInFlight, previewMaxConcurrency)
+		}
+	})
+}
+
+func TestRunHistoryDetailAndListMixedGrants(t *testing.T) {
+	ctx := context.Background()
+	h := newTestHandler(t)
+	if _, err := h.Store.DB().ExecContext(ctx, "PRAGMA foreign_keys = ON"); err != nil {
+		t.Fatal(err)
+	}
+
+	visibleID := seedProxmoxConnector(t, h)
+	hiddenID := seedProxmoxConnector(t, h)
+	creator := apitest.NewUser(t, h.Store, "operator")
+	viewer := apitest.NewUser(t, h.Store, "viewer")
+
+	apitest.GrantConnectorRole(t, h.Store, creator, visibleID, "operator")
+	apitest.GrantConnectorRole(t, h.Store, creator, hiddenID, "operator")
+	apitest.GrantConnectorRole(t, h.Store, viewer, visibleID, "viewer")
+	// viewer has no grant on hiddenID
+
+	rb, err := h.Store.CreateRunbook(ctx, &store.RunbookRecord{
+		Title: "History RB", TargetType: "change_type", TargetValue: "hist.mixed",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	run, _, err := h.Store.CreateRunbookRun(ctx, rb.ID, creator, []*store.RunbookRunStepRecord{
+		{Kind: "config_push", Title: "Push Visible", ConnectorID: visibleID, EntityRef: "vm:100", FieldKey: "memory", TargetValue: "4096"},
+		{Kind: "wait_for_entity", Title: "Wait Visible", ConnectorID: visibleID, EntityRef: "vm:100", Attribute: "status", Operator: "eq", ExpectedValue: `"running"`, TimeoutSeconds: 300},
+		{Kind: "config_push", Title: "Push Secret", ConnectorID: hiddenID, EntityRef: "vm:200", FieldKey: "cores", TargetValue: "8"},
+		{Kind: "wait_for_entity", Title: "Wait Secret", ConnectorID: hiddenID, EntityRef: "vm:200", Attribute: "health", Operator: "eq", ExpectedValue: `"ok"`, TimeoutSeconds: 180},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, endpoint := range []string{"get", "list"} {
+		t.Run(endpoint, func(t *testing.T) {
+			r := runRequest(viewer, rb.ID, run.ID, "")
+			rr := httptest.NewRecorder()
+			if endpoint == "get" {
+				h.GetRun(rr, r)
+			} else {
+				h.ListRuns(rr, r)
+			}
+			assertRunStatus(t, rr, http.StatusOK)
+
+			var root map[string]any
+			if err := json.Unmarshal(rr.Body.Bytes(), &root); err != nil {
+				t.Fatal(err)
+			}
+			if endpoint == "list" {
+				items := root["items"].([]any)
+				if len(items) != 1 {
+					t.Fatalf("items len = %d, want 1", len(items))
+				}
+				root = items[0].(map[string]any)
+			}
+
+			steps := root["steps"].([]any)
+			if len(steps) != 4 {
+				t.Fatalf("steps len = %d, want 4", len(steps))
+			}
+
+			// Step 0: visible config_push
+			s0 := steps[0].(map[string]any)
+			if s0["redacted"] != false || s0["fieldKey"] != "memory" || s0["targetValue"] != "4096" || s0["connectorId"] != visibleID {
+				t.Fatalf("step 0 = %+v", s0)
+			}
+
+			// Step 1: visible wait_for_entity
+			s1 := steps[1].(map[string]any)
+			if s1["redacted"] != false || s1["entityRef"] != "vm:100" || s1["attribute"] != "status" || s1["operator"] != "eq" || s1["expectedValue"] != `"running"` || s1["timeoutSeconds"] != float64(300) {
+				t.Fatalf("step 1 = %+v", s1)
+			}
+
+			// Step 2: hidden config_push
+			s2 := steps[2].(map[string]any)
+			if s2["redacted"] != true || s2["executeBlockedReason"] != "no_viewer_grant" {
+				t.Fatalf("step 2 = %+v", s2)
+			}
+			for _, k := range []string{"fieldKey", "targetValue", "currentValue", "currentValueKnown", "connectorId", "connectorName", "entityRef", "title", "kind"} {
+				if _, ok := s2[k]; ok {
+					t.Fatalf("hidden step 2 leaked %s: %+v", k, s2)
+				}
+			}
+
+			// Step 3: hidden wait_for_entity
+			s3 := steps[3].(map[string]any)
+			if s3["redacted"] != true || s3["executeBlockedReason"] != "no_viewer_grant" {
+				t.Fatalf("step 3 = %+v", s3)
+			}
+			for _, k := range []string{"attribute", "operator", "expectedValue", "timeoutSeconds", "connectorId", "connectorName", "entityRef", "title", "kind"} {
+				if _, ok := s3[k]; ok {
+					t.Fatalf("hidden step 3 leaked %s: %+v", k, s3)
+				}
 			}
 		})
 	}

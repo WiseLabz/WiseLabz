@@ -241,7 +241,7 @@ func TestRunHistoryToolsVisibility(t *testing.T) {
 				if secret["redacted"] != true {
 					t.Fatalf("hidden=%+v", secret)
 				}
-				for _, key := range []string{"kind", "title", "connectorId", "connectorName", "entityRef", "verb", "timeoutSeconds", "error", "preview"} {
+				for _, key := range []string{"kind", "title", "connectorId", "connectorName", "entityRef", "verb", "timeoutSeconds", "error", "preview", "fieldKey", "targetValue", "attribute", "operator", "expectedValue", "currentValue", "currentValueKnown"} {
 					if _, ok := secret[key]; ok {
 						t.Fatalf("hidden field %s: %+v", key, secret)
 					}
@@ -283,5 +283,147 @@ func TestRunHistoryToolsVisibility(t *testing.T) {
 		if err != nil || !res.IsError {
 			t.Fatalf("missing %s res=%+v err=%v", tool, res, err)
 		}
+	}
+}
+
+func TestRunbookStepKindsMCPMixedGrants(t *testing.T) {
+	ctx := context.Background()
+	h := newTestHarness(t)
+	if _, err := h.Store.DB().ExecContext(ctx, "PRAGMA foreign_keys = ON"); err != nil {
+		t.Fatal(err)
+	}
+
+	visible := createConnector(t, h.Store, "visible_conn", "virtualization")
+	hidden := createConnector(t, h.Store, "hidden_conn", "networking")
+	operator := createUser(t, h.Store)
+	mixedUser := createUser(t, h.Store)
+
+	for _, id := range []string{visible, hidden} {
+		if _, err := h.Store.UpsertConnectorGrant(ctx, operator, id, "operator"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := h.Store.UpsertConnectorGrant(ctx, mixedUser, visible, "viewer"); err != nil {
+		t.Fatal(err)
+	}
+	// mixedUser has no grant on hidden
+
+	rb, _, err := h.Store.CreateRunbookWithSteps(ctx,
+		&store.RunbookRecord{Title: "Mixed Kinds Runbook", TargetType: "alert_severity", TargetValue: "critical"},
+		[]*store.RunbookStepRecord{
+			{Kind: "config_push", Title: "Push Mem", ConnectorID: visible, EntityRef: "vm:10", FieldKey: "memory", TargetValue: "4096"},
+			{Kind: "wait_for_entity", Title: "Wait Visible", ConnectorID: visible, EntityRef: "vm:10", Attribute: "status", Operator: "eq", ExpectedValue: `"running"`, TimeoutSeconds: 300},
+			{Kind: "config_push", Title: "Push Secret", ConnectorID: hidden, EntityRef: "vm:20", FieldKey: "secret_field", TargetValue: `"secret_val"`},
+			{Kind: "wait_for_entity", Title: "Wait Secret", ConnectorID: hidden, EntityRef: "vm:20", Attribute: "health", Operator: "eq", ExpectedValue: `"ok"`, TimeoutSeconds: 180},
+		})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	t.Run("get_runbook with mixed grants", func(t *testing.T) {
+		var out struct {
+			Steps []map[string]any `json:"steps"`
+		}
+		h.callTool(userCtx(mixedUser), t, "get_runbook", map[string]any{"id": rb.ID}, &out)
+		if len(out.Steps) != 4 {
+			t.Fatalf("steps len = %d, want 4", len(out.Steps))
+		}
+
+		// Visible config_push
+		s0 := out.Steps[0]
+		if s0["redacted"] == true || s0["fieldKey"] != "memory" || s0["targetValue"] != "4096" || s0["connectorId"] != visible {
+			t.Fatalf("s0 = %+v", s0)
+		}
+
+		// Visible wait_for_entity
+		s1 := out.Steps[1]
+		if s1["redacted"] == true || s1["entityRef"] != "vm:10" || s1["attribute"] != "status" || s1["operator"] != "eq" || s1["expectedValue"] != `"running"` || s1["timeoutSeconds"] != float64(300) {
+			t.Fatalf("s1 = %+v", s1)
+		}
+
+		// Hidden config_push
+		s2 := out.Steps[2]
+		if s2["redacted"] != true || s2["title"] != "Restricted step" {
+			t.Fatalf("s2 = %+v", s2)
+		}
+		for _, k := range []string{"fieldKey", "targetValue", "connectorId", "connectorName", "entityRef", "kind"} {
+			if _, ok := s2[k]; ok {
+				t.Fatalf("s2 leaked %s: %+v", k, s2)
+			}
+		}
+
+		// Hidden wait_for_entity
+		s3 := out.Steps[3]
+		if s3["redacted"] != true || s3["title"] != "Restricted step" {
+			t.Fatalf("s3 = %+v", s3)
+		}
+		for _, k := range []string{"attribute", "operator", "expectedValue", "timeoutSeconds", "connectorId", "connectorName", "entityRef", "kind"} {
+			if _, ok := s3[k]; ok {
+				t.Fatalf("s3 leaked %s: %+v", k, s3)
+			}
+		}
+	})
+
+	// Create a run in store
+	run, _, err := h.Store.CreateRunbookRun(ctx, rb.ID, operator, []*store.RunbookRunStepRecord{
+		{Kind: "config_push", Title: "Push Mem", ConnectorID: visible, EntityRef: "vm:10", FieldKey: "memory", TargetValue: "4096"},
+		{Kind: "wait_for_entity", Title: "Wait Visible", ConnectorID: visible, EntityRef: "vm:10", Attribute: "status", Operator: "eq", ExpectedValue: `"running"`, TimeoutSeconds: 300},
+		{Kind: "config_push", Title: "Push Secret", ConnectorID: hidden, EntityRef: "vm:20", FieldKey: "secret_field", TargetValue: `"secret_val"`},
+		{Kind: "wait_for_entity", Title: "Wait Secret", ConnectorID: hidden, EntityRef: "vm:20", Attribute: "health", Operator: "eq", ExpectedValue: `"ok"`, TimeoutSeconds: 180},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, tool := range []string{"get_runbook_run", "list_runbook_runs"} {
+		t.Run(tool+" with mixed grants", func(t *testing.T) {
+			args := map[string]any{"id": run.ID}
+			if tool == "list_runbook_runs" {
+				args = map[string]any{"runbookId": rb.ID}
+			}
+			var out map[string]any
+			h.callTool(userCtx(mixedUser), t, tool, args, &out)
+			if tool == "list_runbook_runs" {
+				out = out["runs"].([]any)[0].(map[string]any)
+			}
+			steps := out["steps"].([]any)
+			if len(steps) != 4 {
+				t.Fatalf("steps len = %d, want 4", len(steps))
+			}
+
+			// Visible config_push
+			s0 := steps[0].(map[string]any)
+			if s0["redacted"] != false || s0["fieldKey"] != "memory" || s0["targetValue"] != "4096" || s0["connectorId"] != visible {
+				t.Fatalf("s0 = %+v", s0)
+			}
+
+			// Visible wait_for_entity
+			s1 := steps[1].(map[string]any)
+			if s1["redacted"] != false || s1["entityRef"] != "vm:10" || s1["attribute"] != "status" || s1["operator"] != "eq" || s1["expectedValue"] != `"running"` || s1["timeoutSeconds"] != float64(300) {
+				t.Fatalf("s1 = %+v", s1)
+			}
+
+			// Hidden config_push
+			s2 := steps[2].(map[string]any)
+			if s2["redacted"] != true || s2["executeBlockedReason"] != "no_viewer_grant" {
+				t.Fatalf("s2 = %+v", s2)
+			}
+			for _, k := range []string{"fieldKey", "targetValue", "currentValue", "currentValueKnown", "connectorId", "connectorName", "entityRef", "title", "kind"} {
+				if _, ok := s2[k]; ok {
+					t.Fatalf("s2 leaked %s: %+v", k, s2)
+				}
+			}
+
+			// Hidden wait_for_entity
+			s3 := steps[3].(map[string]any)
+			if s3["redacted"] != true || s3["executeBlockedReason"] != "no_viewer_grant" {
+				t.Fatalf("s3 = %+v", s3)
+			}
+			for _, k := range []string{"attribute", "operator", "expectedValue", "timeoutSeconds", "connectorId", "connectorName", "entityRef", "title", "kind"} {
+				if _, ok := s3[k]; ok {
+					t.Fatalf("s3 leaked %s: %+v", k, s3)
+				}
+			}
+		})
 	}
 }

@@ -356,6 +356,8 @@ export const getStartRunbookRunResponseMock = (
             undefined,
           ]),
           timeoutSeconds: faker.helpers.arrayElement([faker.number.int(), undefined]),
+          currentValue: faker.helpers.arrayElement([{}, undefined]),
+          currentValueKnown: faker.helpers.arrayElement([faker.datatype.boolean(), undefined]),
           state: faker.helpers.arrayElement([
             faker.helpers.arrayElement(Object.values(RunbookRunStepState)),
             undefined,
@@ -496,6 +498,8 @@ export const getStartRunbookRunResponseMock = (
               undefined,
             ]),
             timeoutSeconds: faker.helpers.arrayElement([faker.number.int(), undefined]),
+            currentValue: faker.helpers.arrayElement([{}, undefined]),
+            currentValueKnown: faker.helpers.arrayElement([faker.datatype.boolean(), undefined]),
             state: faker.helpers.arrayElement([
               faker.helpers.arrayElement(Object.values(RunbookRunStepState)),
               undefined,
@@ -641,6 +645,8 @@ export const getListRunbookRunsResponseMock = (
             undefined,
           ]),
           timeoutSeconds: faker.helpers.arrayElement([faker.number.int(), undefined]),
+          currentValue: faker.helpers.arrayElement([{}, undefined]),
+          currentValueKnown: faker.helpers.arrayElement([faker.datatype.boolean(), undefined]),
           state: faker.helpers.arrayElement([
             faker.helpers.arrayElement(Object.values(RunbookRunStepState)),
             undefined,
@@ -787,6 +793,8 @@ export const getGetRunbookRunResponseMock = (): RunbookRun => ({
           undefined,
         ]),
         timeoutSeconds: faker.helpers.arrayElement([faker.number.int(), undefined]),
+        currentValue: faker.helpers.arrayElement([{}, undefined]),
+        currentValueKnown: faker.helpers.arrayElement([faker.datatype.boolean(), undefined]),
         state: faker.helpers.arrayElement([
           faker.helpers.arrayElement(Object.values(RunbookRunStepState)),
           undefined,

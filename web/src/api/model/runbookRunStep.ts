@@ -13,7 +13,7 @@ import type { RunbookRunStepState } from './runbookRunStepState';
 import type { RunbookRunStepVerb } from './runbookRunStepVerb';
 
 /**
- * Frozen step and its current outcome. A redacted step carries no kind, title, connector, entity, verb, timeout, error or preview; only identifiers, position, state, times, confirming user and permission flags remain. Manual steps have no connector and are visible.
+ * Frozen step and its current outcome. A redacted step carries no kind, title, connector, entity, verb, timeout, error or preview, and none of the config-push or entity-wait fields (field key, target value, attribute, operator, expected value, current value); only identifiers, position, state, times, confirming user and permission flags remain. Manual steps have no connector and are visible.
  */
 export interface RunbookRunStep {
   id: string;
@@ -35,6 +35,10 @@ export interface RunbookRunStep {
   /** Expected attribute value for wait_for_entity steps, formatted as JSON text. */
   expectedValue?: string;
   timeoutSeconds?: number;
+  /** Current configuration value for config_push steps in a preview. */
+  currentValue?: unknown;
+  /** Whether the connector could report the current configuration value in a preview. */
+  currentValueKnown?: boolean;
   state?: RunbookRunStepState;
   startedAt?: string;
   finishedAt?: string;
@@ -42,7 +46,7 @@ export interface RunbookRunStep {
   confirmedBy?: string;
   redacted: boolean;
   canExecute: boolean;
-  /** Machine code for why canExecute is false; one of no_viewer_grant, no_operator_grant, preview_unavailable. */
+  /** Machine code for why canExecute is false; one of no_viewer_grant, no_operator_grant, preview_unavailable, unsupported_field. */
   executeBlockedReason?: string;
   preview?: RestartPreview;
 }

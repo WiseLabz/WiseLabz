@@ -53,7 +53,7 @@ object, action-specific), and `createdAt`.
 | `connector.restart` | `POST /api/connectors/{id}/restart` (dryRun omitted/false), or `POST /api/runbooks/{id}/steps/{stepId}/execute` for a `restart` step | connector / id |
 | `connector.start` | `POST /api/connectors/{id}/start` (dryRun omitted/false), or `POST /api/runbooks/{id}/steps/{stepId}/execute` for a `start` step | connector / id |
 | `connector.stop` | `POST /api/connectors/{id}/stop` (dryRun omitted/false), or `POST /api/runbooks/{id}/steps/{stepId}/execute` for a `stop` step | connector / id |
-| `connector.configPush` | `POST /api/connectors/{id}/config-push` (successful, verified push only) | connector / id |
+| `connector.configPush` | `POST /api/connectors/{id}/config-push` (successful, verified push only), or a `config_push` step in a runbook run started via `POST /api/runbooks/{id}/run` or resumed via `POST /api/runbook-runs/{runId}/resume` | connector / id |
 | `connector.maintenanceWindow.open` | `POST /api/connectors/{id}/maintenance-window` | connector / id |
 | `connector.maintenanceWindow.close` | `DELETE /api/connectors/{id}/maintenance-window` (only when a window was actually active) | connector / id |
 | `connector.bulk_sync` | `POST /api/connectors/bulk-sync` | connector / id — one record per resolved item |
@@ -105,7 +105,16 @@ object, action-specific), and `createdAt`.
 their values — connector config can hold credentials, and this keeps the
 audit log safe to expose to any instance admin without redaction logic.
 `connector.configPush` follows the same discipline: `detail` records the
-pushed `fieldKey` (name) and `entityRef`, never the pushed `value`.
+pushed `fieldKey` (name) and `entityRef`, never the pushed `value`. For a direct
+push (`POST /api/connectors/{id}/config-push`), `detail` contains `fieldKey` and
+`entityRef`. When triggered by a `config_push` step in a runbook run, `detail`
+additionally identifies the run: `runId`, `stepId`, `stepIndex` (the 0-based
+step position), and `runbookId` (when the run originated from an existing runbook).
+The audit actor is the run's acting user: the user who last resumed the run,
+otherwise the user who started it (`runbookrun.ActingUser`).
+Like direct pushes, only successful verified writes produce an audit record; a push
+step that finds the field already at target succeeds without writing and records
+no audit entry.
 
 `connector.restart`/`connector.start`/`connector.stop` triggered by
 `POST /api/runbooks/{id}/steps/{stepId}/execute` carry `runbookId` and
@@ -172,7 +181,9 @@ objects. CSV has a header row with the columns `id`, `actorUserId`,
 Starting and resuming a whole run require the `runbook.run` elevation action,
 targeted at the runbook ID (ADR 0006). Elevation is validated once; lifecycle
 steps retain their `connector.<verb>` audit action with runId, runbookId and
-stepId in detail. Preview, confirmation and cancellation need no elevation.
+stepId in detail, and config-push steps retain `connector.configPush` with runId,
+runbookId, stepId, stepIndex (0-based), fieldKey and entityRef. Preview,
+confirmation and cancellation need no elevation.
 
 The start, resume and confirm entries are also written when the request ends
 in 503 during shutdown, because the transition was already recorded (the run
