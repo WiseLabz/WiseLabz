@@ -2,9 +2,9 @@
 
 ## 1. Days-left operators and NPM normalization
 
-- [ ] 1.1 Add `days_left_lt` and `days_left_gt` to the compliance matcher with an injectable clock; verify unit tests for inside the window, expired (negative), the two-condition band at 1 day 12 hours, missing attribute and non-timestamp attribute.
-- [ ] 1.2 Validate the operators on rule save (whole-number value) and include them wherever operators are listed (rule API validation, `GET /api/compliance/schema` if it lists operators, OpenAPI enum); verify handler tests for a valid rule and the non-integer rejection, and the OpenAPI contract test.
-- [ ] 1.3 Add `not_after` to NPM certificate entities and the NPM attribute catalog, keeping `expires_on`; verify `tables_test.go` for the normalized value and for an unparseable expiry, and that the NPM snapshot stability test still passes.
+- [x] 1.1 Add `days_left_lt` and `days_left_gt` to the compliance matcher with an injectable clock; verify unit tests for inside the window, expired (negative), the two-condition band at 1 day 12 hours, missing attribute and non-timestamp attribute.
+- [x] 1.2 Validate the operators on rule save (whole-number value) and include them wherever operators are listed (rule API validation, `GET /api/compliance/schema` if it lists operators, OpenAPI enum); verify handler tests for a valid rule and the non-integer rejection, and the OpenAPI contract test.
+- [x] 1.3 Add `not_after` to NPM certificate entities and the NPM attribute catalog, keeping `expires_on`; verify `tables_test.go` for the normalized value and for an unparseable expiry, and that the NPM snapshot stability test still passes.
 
 ## 2. Snapshot inputs for connectors
 
