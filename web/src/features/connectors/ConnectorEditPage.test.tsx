@@ -1,13 +1,15 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import '../../i18n';
 import { ConnectorEditPage } from './ConnectorEditPage';
 
-const { putConnectorsConnectorId, testMock, toastError } = vi.hoisted(() => ({
+const { putConnectorsConnectorId, previewRecipe, roleState, testMock, toastError } = vi.hoisted(() => ({
   toastError: vi.fn(),
   putConnectorsConnectorId: vi.fn().mockResolvedValue({}),
+  previewRecipe: vi.fn(),
+  roleState: { isAdmin: false },
   testMock: vi.fn(),
 }));
 
@@ -33,14 +35,24 @@ vi.mock('../../api/generated/connectors/connectors', () => ({
   useGetConnectorsSchema: () => ({ data: schemas }),
   putConnectorsConnectorId: (...args: unknown[]) => putConnectorsConnectorId(...args),
   postConnectorsConnectorIdTest: (...args: unknown[]) => testMock(...args),
+  usePreviewConnectorRecipe: () => ({
+    mutate: (...args: unknown[]) => previewRecipe(args[0]),
+    isPending: false,
+    isError: false,
+  }),
   getGetConnectorsQueryKey: () => [],
 }));
 
 vi.mock('../../lib/toast', () => ({ toast: { success: vi.fn(), error: (...args: unknown[]) => toastError(...args) } }));
 
-vi.mock('../../hooks/useRole', () => ({ useConnectorRole: () => 'operator' }));
+vi.mock('../../hooks/useRole', () => ({ useConnectorRole: () => 'operator', useIsInstanceAdmin: () => roleState.isAdmin }));
 
 vi.mock('./ConnectorPermissionsTab', () => ({ ConnectorPermissionsTab: () => null }));
+
+afterEach(() => {
+  roleState.isAdmin = false;
+  previewRecipe.mockClear();
+});
 
 function renderPage() {
   return render(
@@ -222,6 +234,117 @@ describe('ConnectorEditPage Caddy input mode (pasted JSON vs url)', () => {
       await waitFor(() => expect(toastError).toHaveBeenCalledWith(expect.stringContaining('set either url or config_json')));
     } finally {
       schemas = originalSchemas;
+    }
+  });
+});
+
+describe('ConnectorEditPage recipe editing', () => {
+  const recipe = [
+    'version: 1',
+    'category: media',
+    'auth:',
+    '  mode: none',
+    'endpoints:',
+    '  - name: shows',
+  ].join('\n');
+  const customSchema = {
+    type: 'custom',
+    category: 'virtualization',
+    displayName: 'Custom HTTP',
+    isCredentialRefresher: false,
+    fields: [
+      { name: 'url', label: 'Target URL', kind: 'text', required: true },
+      { name: 'recipe', label: 'Recipe (YAML)', kind: 'textarea', required: false },
+      { name: 'auth_token', label: 'Token', kind: 'password', required: false },
+    ],
+  };
+
+  it('shows and preserves the stored recipe when saving without editing it', async () => {
+    const originalSchemas = schemas;
+    const originalConnector = connectorData;
+    schemas = [customSchema];
+    connectorData = {
+      ...connectorData,
+      type: 'custom',
+      config: { recipe },
+    };
+    putConnectorsConnectorId.mockClear();
+    try {
+      renderPage();
+      expect(screen.getByLabelText(/recipe/i)).toHaveValue(recipe);
+      expect(screen.getByText('Media')).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: /save/i }));
+      await waitFor(() => expect(putConnectorsConnectorId).toHaveBeenCalled());
+      const body = putConnectorsConnectorId.mock.calls[0][1] as { category?: string; config: Record<string, unknown> };
+      expect(body.config.recipe).toBe(recipe);
+      expect(body).not.toHaveProperty('category');
+    } finally {
+      schemas = originalSchemas;
+      connectorData = originalConnector;
+    }
+  });
+
+  it('derives a changed category from the edited recipe and shows its located validation error', async () => {
+    const originalSchemas = schemas;
+    const originalConnector = connectorData;
+    schemas = [customSchema];
+    connectorData = { ...connectorData, type: 'custom', config: { recipe } };
+    putConnectorsConnectorId.mockRejectedValueOnce(
+      Object.assign(new Error('invalid recipe'), {
+        isAxiosError: true,
+        response: { status: 400, data: { details: [{ field: 'config.recipe.endpoints[0].entity.external_id', msg: 'is required' }] } },
+      }),
+    );
+    try {
+      renderPage();
+      fireEvent.change(screen.getByLabelText(/recipe/i), { target: { value: recipe.replace('category: media', 'category: monitoring') } });
+      expect(screen.getByText('Monitoring')).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: /save/i }));
+      await waitFor(() => expect(screen.getByText('config.recipe.endpoints[0].entity.external_id')).toBeInTheDocument());
+      expect(screen.getByLabelText(/recipe/i)).toHaveFocus();
+      const body = putConnectorsConnectorId.mock.calls[0][1] as { category?: string; config: Record<string, unknown> };
+      expect(body.config.recipe).toContain('category: monitoring');
+      expect(body).not.toHaveProperty('category');
+    } finally {
+      schemas = originalSchemas;
+      connectorData = originalConnector;
+    }
+  });
+
+  it('previews the current edited recipe with the connector id and stored URL', () => {
+    const originalSchemas = schemas;
+    const originalConnector = connectorData;
+    schemas = [customSchema];
+    connectorData = {
+      ...connectorData,
+      type: 'custom',
+      url: 'https://media.example',
+      verifyTls: false,
+      config: { recipe },
+    };
+    roleState.isAdmin = true;
+    try {
+      renderPage();
+      fireEvent.change(screen.getByRole('textbox', { name: /recipe/i }), {
+        target: { value: recipe.replace('name: shows', 'name: movies') },
+      });
+      fireEvent.change(screen.getByLabelText(/token/i), { target: { value: 'new-token' } });
+      fireEvent.click(screen.getByRole('button', { name: /test recipe/i }));
+      expect(previewRecipe).toHaveBeenCalledWith({
+        data: {
+          connectorId: 'c1',
+          url: 'https://media.example',
+          verifyTls: false,
+          config: {
+            recipe: recipe.replace('name: shows', 'name: movies'),
+            auth_token: 'new-token',
+          },
+        },
+      });
+    } finally {
+      roleState.isAdmin = false;
+      schemas = originalSchemas;
+      connectorData = originalConnector;
     }
   });
 });

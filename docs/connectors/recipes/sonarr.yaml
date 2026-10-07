@@ -1,0 +1,29 @@
+version: 1
+category: media
+auth:
+  mode: header
+  name: X-Api-Key
+endpoints:
+  - name: series
+    path: /api/v3/series
+    method: GET
+    items: "@this"
+    entity:
+      kind: media_series
+      name: title
+      external_id: id
+      attributes:
+        status:
+          path: status
+          map:
+            continuing: active
+            ended: ended
+        monitored:
+          path: monitored
+          type: bool
+        year:
+          path: year
+          type: number
+    dependencies:
+      - kind: storage
+        path: "#.path"

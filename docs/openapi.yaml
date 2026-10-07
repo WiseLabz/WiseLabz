@@ -950,6 +950,36 @@ paths:
               schema: { $ref: '#/components/schemas/Connector' }
         '400': { $ref: '#/components/responses/BadRequest' }
         '403': { $ref: '#/components/responses/Forbidden' }
+  /connectors/recipe-preview:
+    post:
+      tags: [connectors]
+      operationId: previewConnectorRecipe
+      summary: Preview a custom REST recipe without saving (instance admin only)
+      description: Uses the guarded sync fetch pipeline, a 30-second deadline and a four-request concurrency limit. Empty secret fields use stored credentials when connectorId is supplied, but only when url has the saved connector's origin (scheme, host and port) and verifyTls is not turned off for a connector that verifies TLS; otherwise the request is rejected with 400 and the credentials must be re-entered. Results contain at most 20 sample entities per endpoint and no credentials. Writes only a connector.recipe_preview audit entry.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RecipePreviewInput' }
+      responses:
+        '200':
+          description: Per-endpoint results, including endpoint failures
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RecipePreview' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '413':
+          description: Request body exceeds the JSON body limit
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '429':
+          description: Preview concurrency limit reached
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
   /connectors/schema:
     get:
       tags: [connectors]
@@ -5328,6 +5358,48 @@ components:
       properties:
         title: { type: string }
         content: { type: string, description: Markdown }
+    RecipePreviewInput:
+      type: object
+      required: [url, config]
+      properties:
+        connectorId:
+          type: string
+          description: Existing custom connector whose stored credentials may be reused for empty secret fields. Only honored when url has the saved connector's origin and verifyTls is not weakened; otherwise the request is rejected with 400.
+        url: { type: string }
+        verifyTls: { type: boolean, default: true }
+        config:
+          type: object
+          additionalProperties: true
+          description: Custom connector configuration including the recipe and optional credentials
+    RecipePreview:
+      type: object
+      required: [endpoints, dependencies, errors]
+      properties:
+        endpoints:
+          type: array
+          items: { $ref: '#/components/schemas/RecipeEndpointPreview' }
+        dependencies:
+          type: array
+          items: { $ref: '#/components/schemas/SnapshotDependency' }
+        errors:
+          type: array
+          items: { type: string }
+    RecipeEndpointPreview:
+      type: object
+      required: [name, items, count, skipped, samples, dependencies]
+      properties:
+        name: { type: string }
+        items: { type: integer, description: Items selected from successfully mapped pages }
+        count: { type: integer, description: Entities mapped from successfully mapped pages }
+        skipped: { type: integer }
+        samples:
+          type: array
+          maxItems: 20
+          items: { $ref: '#/components/schemas/SnapshotEntity' }
+        dependencies:
+          type: array
+          items: { $ref: '#/components/schemas/SnapshotDependency' }
+        error: { type: string }
     SnapshotEntity:
       type: object
       required: [kind, name]

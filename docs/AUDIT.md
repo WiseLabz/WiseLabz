@@ -46,6 +46,7 @@ object, action-specific), and `createdAt`.
 | `connector.update` | `PUT /api/connectors/{id}` | connector / id |
 | `connector.delete` | `DELETE /api/connectors/{id}` | connector / id |
 | `connector.toggle_enabled` | `PUT /api/connectors/{id}/enabled` | connector / id |
+| `connector.recipe_preview` | `POST /api/connectors/recipe-preview` (including validation or endpoint errors) | connector / optional existing ID; detail contains only the redacted target URL |
 | `connector.sync` | `POST /api/connectors/{id}/sync` | connector / id |
 | `snapshot.diff.export` | `GET /api/connectors/{id}/snapshots/diff?from=…&to=…&format=json\|csv\|md\|html` | connector / id |
 | `connector.sync_all` | `POST /api/sync` | connector / (none) |
@@ -125,8 +126,9 @@ recorded: they change on merge and split.
 
 ## What's not recorded
 
-- **Failed attempts, except elevation denials.** An audit entry is written
-  only after the action itself succeeds. A failed create/update/delete never
+- **Failed attempts, except elevation denials and recipe previews.** An audit entry is written
+  only after the action itself succeeds. Recipe previews are also audited when
+  validation or an endpoint fails. A failed create/update/delete never
   reaches the audit log — this is a deliberate scope cut: this endpoint
   answers "what happened," not "what was attempted." Elevation-token denials
   are the exception because they are security-relevant attempts.

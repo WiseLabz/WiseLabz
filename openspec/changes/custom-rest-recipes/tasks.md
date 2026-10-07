@@ -32,15 +32,15 @@
 
 ## 5. Preview endpoint (PR 4)
 
-- [ ] 5.1 Add a non-aborting run mode returning per-endpoint counts, skipped counts, up to 20 sample entities, dependencies and errors; verify a test where one endpoint fails and the others still report results.
-- [ ] 5.2 Add admin-only `POST /api/connectors/recipe-preview` with stored-credential fill-in for an existing connector, audit entry `connector.recipe_preview` and credential-free output; verify handler tests for unsaved preview, stored credentials, 403 for non-admin, validation errors, and that no snapshot, change or alert is written.
-- [ ] 5.3 Add the endpoint to OpenAPI, regenerate the web client and add the action to `docs/AUDIT.md`; verify the OpenAPI contract test.
+- [x] 5.1 Add a non-aborting run mode returning per-endpoint counts, skipped counts, up to 20 sample entities, dependencies and errors; verify a test where one endpoint fails and the others still report results.
+- [x] 5.2 Add admin-only `POST /api/connectors/recipe-preview` with stored-credential fill-in for an existing connector, audit entry `connector.recipe_preview` and credential-free output; verify handler tests for unsaved preview, stored credentials, 403 for non-admin, validation errors, and that no snapshot, change or alert is written.
+- [x] 5.3 Add the endpoint to OpenAPI, regenerate the web client and add the action to `docs/AUDIT.md`; verify the OpenAPI contract test.
 
 ## 6. Web editor and examples (PR 4)
 
-- [ ] 6.1 Render `textarea` fields as a monospace multi-line editor in the connector form and show located recipe validation errors; verify vitest for editing, error display and that the stored recipe is shown when editing a connector.
-- [ ] 6.2 Add the Test recipe panel showing per-endpoint results, samples and errors, and show the recipe's category as read-only in the form; verify vitest for success, endpoint error and validation error states, with en and pt-BR strings.
-- [ ] 6.3 Add `docs/connectors/recipes/sonarr.yaml` and `jellyfin.yaml` with recorded anonymised responses in `testdata`; verify tests that load the documented files and assert the expected entities, attributes and dependencies.
+- [x] 6.1 Render `textarea` fields as a monospace multi-line editor in the connector form and show located recipe validation errors; verify vitest for editing, error display and that the stored recipe is shown when editing a connector.
+- [x] 6.2 Add the Test recipe panel showing per-endpoint results, samples and errors, and show the recipe's category as read-only in the form; verify vitest for success, endpoint error and validation error states, with en and pt-BR strings.
+- [x] 6.3 Add `docs/connectors/recipes/sonarr.yaml` and `jellyfin.yaml` with recorded anonymised responses in `testdata`; verify tests that load the documented files and assert the expected entities, attributes and dependencies.
 
 ## 7. Integration
 

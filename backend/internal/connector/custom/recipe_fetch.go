@@ -22,6 +22,7 @@ import (
 const (
 	maxRecipePages    = 100
 	maxRecipeEntities = 10_000
+	maxPreviewSamples = 20
 	// maxRecipePaginationValueBytes bounds a cursor or next link taken from a
 	// response. Each one is remembered to detect cycles and sent back to the
 	// server, so an unbounded value could pin up to a response body per page.
@@ -60,6 +61,75 @@ func (c *Connector) validateRecipeConnection(ctx context.Context, config map[str
 }
 
 func (c *Connector) fetchRecipe(ctx context.Context, config map[string]any, recipe *Recipe) (*connector.ServiceSnapshot, error) {
+	run, err := c.runRecipe(ctx, config, recipe, false)
+	if err != nil {
+		return nil, err
+	}
+
+	return &connector.ServiceSnapshot{
+		ServiceName:  "Custom: " + connector.RedactURL(run.baseURL.String()),
+		Type:         typeName,
+		Sections:     run.sections,
+		Dependencies: run.dependencies,
+		Entities:     run.entities,
+		Metadata:     run.metadata,
+		FetchedAt:    time.Now(),
+	}, nil
+}
+
+// RecipePreviewResult contains mapped preview data without persisting a snapshot.
+type RecipePreviewResult struct {
+	Endpoints    []RecipeEndpointPreview       `json:"endpoints"`
+	Dependencies []connector.ServiceDependency `json:"dependencies"`
+	Errors       []string                      `json:"errors"`
+}
+
+// RecipeEndpointPreview summarizes one endpoint's preview run.
+type RecipeEndpointPreview struct {
+	Name         string                        `json:"name"`
+	Items        int                           `json:"items"`
+	Count        int                           `json:"count"`
+	Skipped      int                           `json:"skipped"`
+	Samples      []connector.SnapshotEntity    `json:"samples"`
+	Dependencies []connector.ServiceDependency `json:"dependencies"`
+	Error        string                        `json:"error,omitempty"`
+}
+
+type recipeRunResult struct {
+	baseURL      *url.URL
+	entities     []connector.SnapshotEntity
+	dependencies []connector.ServiceDependency
+	metadata     map[string]string
+	sections     []connector.SnapshotSection
+	preview      RecipePreviewResult
+}
+
+type recipeRunState struct {
+	seenEntities      map[string]struct{}
+	seenDependencies  map[string]struct{}
+	entityCount       int
+	mappedOutputBytes int
+	entities          []connector.SnapshotEntity
+	dependencies      []connector.ServiceDependency
+}
+
+// PreviewRecipe validates and runs a recipe without persisting connector state.
+func (c *Connector) PreviewRecipe(ctx context.Context, config map[string]any) (*RecipePreviewResult, error) {
+	if err := validateCustomConfig(config); err != nil {
+		return nil, redactURLsInRecipeError(err)
+	}
+	recipe, err := recipeFromConfig(config)
+	if err != nil {
+		return nil, err
+	}
+	run, err := c.runRecipe(ctx, config, recipe, true)
+	if err != nil {
+		return nil, redactURLsInRecipeError(sanitizeRecipeError(config, err))
+	}
+	return &run.preview, nil
+}
+
+func (c *Connector) runRecipe(ctx context.Context, config map[string]any, recipe *Recipe, preview bool) (*recipeRunResult, error) {
 	baseURL, err := recipeBaseURL(config)
 	if err != nil {
 		return nil, err
@@ -75,141 +145,242 @@ func (c *Connector) fetchRecipe(ctx context.Context, config map[string]any, reci
 		}
 		initialRequests[i] = request
 	}
+	run := &recipeRunResult{
+		baseURL:  baseURL,
+		metadata: map[string]string{"url": connector.RedactURL(baseURL.String())},
+		sections: make([]connector.SnapshotSection, 0, len(recipe.Endpoints)),
+		preview: RecipePreviewResult{
+			Endpoints: make([]RecipeEndpointPreview, 0, len(recipe.Endpoints)),
+			Errors:    make([]string, 0),
+		},
+	}
+	state := &recipeRunState{
+		seenEntities:     make(map[string]struct{}),
+		seenDependencies: make(map[string]struct{}),
+		entities:         make([]connector.SnapshotEntity, 0),
+		dependencies:     make([]connector.ServiceDependency, 0),
+	}
 	client := c.recipeHTTPClient(config)
-	entities := make([]connector.SnapshotEntity, 0)
-	dependencies := make([]connector.ServiceDependency, 0)
-	seenEntities := make(map[string]struct{})
-	seenDependencies := make(map[string]struct{})
-	mappedOutputBytes := 0
-	metadata := map[string]string{"url": connector.RedactURL(baseURL.String())}
-	sections := make([]connector.SnapshotSection, 0, len(recipe.Endpoints))
 	for i, endpoint := range recipe.Endpoints {
-		request := initialRequests[i]
-		strategy, err := newRecipePaginationStrategy(baseURL, recipe, endpoint, config, request)
-		if err != nil {
-			return nil, recipeEndpointError(endpoint.Name, err)
+		sampleLimit := 0
+		if preview {
+			sampleLimit = maxPreviewSamples
 		}
-		var endpointStatus, endpointItems, endpointSkipped int
-		for pageNumber := 1; ; pageNumber++ {
-			// Errors from a paginated endpoint name the page. Unpaginated
-			// endpoints keep the plain endpoint-only message.
-			fail := func(err error) error {
-				if endpoint.Pagination != nil {
-					err = fmt.Errorf("page %d: %w", pageNumber, err)
-				}
-				return recipeEndpointError(endpoint.Name, err)
+		endpointRun, err := runRecipeEndpoint(ctx, recipeEndpointRunInput{
+			baseURL:     baseURL,
+			client:      client,
+			config:      config,
+			recipe:      recipe,
+			endpoint:    endpoint,
+			request:     initialRequests[i],
+			state:       state,
+			preview:     preview,
+			sampleLimit: sampleLimit,
+		})
+		if err != nil {
+			if !preview {
+				return nil, err
 			}
-			if err := ctx.Err(); err != nil {
-				return nil, fail(connector.MapTransportError(err))
-			}
-			response, err := client.Do(request) // codeql[go/request-forgery]
-			if err != nil {
-				return nil, fail(connector.MapTransportError(err))
-			}
-			body, readErr := connector.ReadBody(response.Body)
-			closeErr := response.Body.Close()
-			if statusErr := connector.CheckStatus(response.StatusCode, nil); statusErr != nil {
-				return nil, fail(statusErr)
-			}
-			if statusErr := checkRecipeSuccessStatus(response.StatusCode); statusErr != nil {
-				return nil, fail(statusErr)
-			}
-			if readErr != nil {
-				if ctx.Err() != nil {
-					return nil, fail(connector.MapTransportError(ctx.Err()))
-				}
-				return nil, fail(connector.NewMalformedResponseError(readErr))
-			}
-			if closeErr != nil {
-				return nil, fail(fmt.Errorf("close response body: %w", closeErr))
-			}
-			if !json.Valid(body) {
-				return nil, fail(connector.NewMalformedResponseError(errors.New("response is not valid JSON")))
-			}
-
-			mapped, err := mapEndpointBudgeted(
-				recipe,
-				endpoint,
-				body,
-				seenEntities,
-				connector.MaxResponseBytes,
-				mappedOutputBytes,
-			)
-			if err != nil {
-				return nil, fail(connector.NewMalformedResponseError(err))
-			}
-			// Page maxRecipePages+1 is only an end probe: it may confirm that
-			// pagination ended, but it must not return more data.
-			if pageNumber > maxRecipePages && mapped.Items > 0 {
-				return nil, fail(fmt.Errorf("pagination exceeds the %d-page limit", maxRecipePages))
-			}
-			if len(entities)+len(mapped.Entities) > maxRecipeEntities {
-				return nil, fail(fmt.Errorf("recipe exceeds the %d-entity limit", maxRecipeEntities))
-			}
-			pageOutputBytes := recipeEntitiesSize(mapped.Entities)
-			for _, dependency := range mapped.Dependencies {
-				key := dependency.Kind + "\x00" + dependency.Name
-				if _, ok := seenDependencies[key]; ok {
-					continue
-				}
-				pageOutputBytes += len(dependency.Kind) + len(dependency.Name)
-			}
-			if mappedOutputBytes+pageOutputBytes > connector.MaxResponseBytes {
-				return nil, fail(fmt.Errorf("recipe maps more than %d bytes of data", connector.MaxResponseBytes))
-			}
-			mappedOutputBytes += pageOutputBytes
-			entities = append(entities, mapped.Entities...)
-			for _, dependency := range mapped.Dependencies {
-				key := dependency.Kind + "\x00" + dependency.Name
-				if _, ok := seenDependencies[key]; ok {
-					continue
-				}
-				seenDependencies[key] = struct{}{}
-				dependencies = append(dependencies, dependency)
-			}
-			endpointStatus = response.StatusCode
-			endpointItems += mapped.Items
-			endpointSkipped += mapped.Skipped
-
-			next, hasNext, err := strategy.next(ctx, recipePageResponse{
-				request: request,
-				header:  response.Header,
-				body:    body,
-				items:   mapped.Items,
-			})
-			if ctx.Err() != nil {
-				return nil, fail(connector.MapTransportError(ctx.Err()))
-			}
-			if err != nil {
-				return nil, fail(err)
-			}
-			if !hasNext {
-				break
-			}
-			if pageNumber > maxRecipePages {
-				return nil, fail(fmt.Errorf("pagination exceeds the %d-page limit", maxRecipePages))
-			}
-			request = next
+			endpointRun.preview.Error = redactURLsInRecipeError(sanitizeRecipeError(config, err)).Error()
+			run.preview.Errors = append(run.preview.Errors, endpointRun.preview.Error)
+		}
+		if preview {
+			run.preview.Endpoints = append(run.preview.Endpoints, endpointRun.preview)
 		}
 		prefix := "endpoint." + endpoint.Name + "."
-		metadata[prefix+"status_code"] = strconv.Itoa(endpointStatus)
-		metadata[prefix+"items"] = strconv.Itoa(endpointItems)
-		metadata[prefix+"skipped"] = strconv.Itoa(endpointSkipped)
-		sections = append(sections, connector.SnapshotSection{
+		run.metadata[prefix+"status_code"] = strconv.Itoa(endpointRun.statusCode)
+		run.metadata[prefix+"items"] = strconv.Itoa(endpointRun.preview.Items)
+		run.metadata[prefix+"skipped"] = strconv.Itoa(endpointRun.preview.Skipped)
+		run.sections = append(run.sections, connector.SnapshotSection{
 			Title:   endpoint.Name,
-			Content: fmt.Sprintf("%d items mapped; %d items skipped", endpointItems-endpointSkipped, endpointSkipped),
+			Content: fmt.Sprintf("%d items mapped; %d items skipped", endpointRun.preview.Count, endpointRun.preview.Skipped),
 		})
 	}
+	run.entities = state.entities
+	run.dependencies = state.dependencies
+	run.preview.Dependencies = state.dependencies
+	return run, nil
+}
 
-	return &connector.ServiceSnapshot{
-		ServiceName:  "Custom: " + connector.RedactURL(baseURL.String()),
-		Type:         typeName,
-		Sections:     sections,
-		Dependencies: dependencies,
-		Entities:     entities,
-		Metadata:     metadata,
-		FetchedAt:    time.Now(),
-	}, nil
+type recipeEndpointRunResult struct {
+	preview    RecipeEndpointPreview
+	statusCode int
+}
+
+type recipeEndpointRunInput struct {
+	baseURL     *url.URL
+	client      *http.Client
+	config      map[string]any
+	recipe      *Recipe
+	endpoint    RecipeEndpoint
+	request     *http.Request
+	state       *recipeRunState
+	preview     bool
+	sampleLimit int
+}
+
+type fetchedRecipePage struct {
+	response *http.Response
+	body     []byte
+}
+
+func runRecipeEndpoint(ctx context.Context, input recipeEndpointRunInput) (recipeEndpointRunResult, error) {
+	result := recipeEndpointRunResult{preview: RecipeEndpointPreview{
+		Name:         input.endpoint.Name,
+		Dependencies: make([]connector.ServiceDependency, 0),
+	}}
+	if input.preview {
+		result.preview.Samples = make([]connector.SnapshotEntity, 0, input.sampleLimit)
+	}
+	strategy, err := newRecipePaginationStrategy(input.baseURL, input.recipe, input.endpoint, input.config, input.request)
+	if err != nil {
+		return result, recipeEndpointError(input.endpoint.Name, err)
+	}
+	var endpointDependencies map[string]struct{}
+	if input.preview {
+		endpointDependencies = make(map[string]struct{})
+	}
+	for pageNumber := 1; ; pageNumber++ {
+		fail := func(err error) error {
+			if input.endpoint.Pagination != nil {
+				err = fmt.Errorf("page %d: %w", pageNumber, err)
+			}
+			return recipeEndpointError(input.endpoint.Name, err)
+		}
+		if err := ctx.Err(); err != nil {
+			return result, fail(connector.MapTransportError(err))
+		}
+		page, err := fetchRecipePage(ctx, input.client, input.request)
+		if err != nil {
+			return result, fail(err)
+		}
+		pageItems, err := input.acceptPage(pageNumber, page.body, &result, endpointDependencies)
+		if err != nil {
+			return result, fail(err)
+		}
+		result.statusCode = page.response.StatusCode
+
+		next, hasNext, err := strategy.next(ctx, recipePageResponse{
+			request: input.request,
+			header:  page.response.Header,
+			body:    page.body,
+			items:   pageItems,
+		})
+		if ctx.Err() != nil {
+			return result, fail(connector.MapTransportError(ctx.Err()))
+		}
+		if err != nil {
+			return result, fail(err)
+		}
+		if !hasNext {
+			break
+		}
+		if pageNumber > maxRecipePages {
+			return result, fail(fmt.Errorf("pagination exceeds the %d-page limit", maxRecipePages))
+		}
+		input.request = next
+	}
+	return result, nil
+}
+
+func fetchRecipePage(ctx context.Context, client *http.Client, request *http.Request) (fetchedRecipePage, error) {
+	response, err := client.Do(request) // codeql[go/request-forgery]
+	if err != nil {
+		return fetchedRecipePage{}, connector.MapTransportError(err)
+	}
+	body, readErr := connector.ReadBody(response.Body)
+	closeErr := response.Body.Close()
+	if statusErr := connector.CheckStatus(response.StatusCode, nil); statusErr != nil {
+		return fetchedRecipePage{}, statusErr
+	}
+	if statusErr := checkRecipeSuccessStatus(response.StatusCode); statusErr != nil {
+		return fetchedRecipePage{}, statusErr
+	}
+	if readErr != nil {
+		if ctx.Err() != nil {
+			return fetchedRecipePage{}, connector.MapTransportError(ctx.Err())
+		}
+		return fetchedRecipePage{}, connector.NewMalformedResponseError(readErr)
+	}
+	if closeErr != nil {
+		return fetchedRecipePage{}, fmt.Errorf("close response body: %w", closeErr)
+	}
+	if !json.Valid(body) {
+		return fetchedRecipePage{}, connector.NewMalformedResponseError(errors.New("response is not valid JSON"))
+	}
+	return fetchedRecipePage{response: response, body: body}, nil
+}
+
+func (input recipeEndpointRunInput) acceptPage(pageNumber int, body []byte, result *recipeEndpointRunResult, endpointDependencies map[string]struct{}) (int, error) {
+	mapped, err := mapEndpointBudgeted(input.recipe, input.endpoint, body, input.state.seenEntities, connector.MaxResponseBytes, input.state.mappedOutputBytes)
+	if err != nil {
+		return 0, connector.NewMalformedResponseError(err)
+	}
+	// Page maxRecipePages+1 is only an end probe: it may confirm that
+	// pagination ended, but it must not return more data.
+	var capErr error
+	if pageNumber > maxRecipePages && mapped.Items > 0 {
+		capErr = fmt.Errorf("pagination exceeds the %d-page limit", maxRecipePages)
+	}
+	if capErr == nil && input.state.entityCount+len(mapped.Entities) > maxRecipeEntities {
+		capErr = fmt.Errorf("recipe exceeds the %d-entity limit", maxRecipeEntities)
+	}
+	pageOutputBytes := recipeEntitiesSize(mapped.Entities)
+	for _, dependency := range mapped.Dependencies {
+		key := dependency.Kind + "\x00" + dependency.Name
+		if _, ok := input.state.seenDependencies[key]; !ok {
+			pageOutputBytes += len(dependency.Kind) + len(dependency.Name)
+		}
+		if input.preview {
+			if _, ok := endpointDependencies[key]; !ok {
+				pageOutputBytes += len(dependency.Kind) + len(dependency.Name)
+			}
+		}
+	}
+	if capErr == nil && input.state.mappedOutputBytes+pageOutputBytes > connector.MaxResponseBytes {
+		capErr = fmt.Errorf("recipe maps more than %d bytes of data", connector.MaxResponseBytes)
+	}
+	if capErr != nil {
+		rollbackRecipeEntities(input.state.seenEntities, mapped.Entities)
+		return 0, capErr
+	}
+
+	input.state.mappedOutputBytes += pageOutputBytes
+	input.state.entityCount += len(mapped.Entities)
+	result.preview.Items += mapped.Items
+	result.preview.Count += len(mapped.Entities)
+	result.preview.Skipped += mapped.Skipped
+	if input.preview {
+		for _, entity := range mapped.Entities {
+			if len(result.preview.Samples) >= input.sampleLimit {
+				break
+			}
+			result.preview.Samples = append(result.preview.Samples, entity)
+		}
+	} else {
+		input.state.entities = append(input.state.entities, mapped.Entities...)
+	}
+	for _, dependency := range mapped.Dependencies {
+		key := dependency.Kind + "\x00" + dependency.Name
+		if input.preview {
+			if _, ok := endpointDependencies[key]; !ok {
+				endpointDependencies[key] = struct{}{}
+				result.preview.Dependencies = append(result.preview.Dependencies, dependency)
+			}
+		}
+		if _, ok := input.state.seenDependencies[key]; ok {
+			continue
+		}
+		input.state.seenDependencies[key] = struct{}{}
+		input.state.dependencies = append(input.state.dependencies, dependency)
+	}
+	return mapped.Items, nil
+}
+
+func rollbackRecipeEntities(seen map[string]struct{}, entities []connector.SnapshotEntity) {
+	for _, entity := range entities {
+		delete(seen, entity.Kind+"\x00"+entity.ExternalID)
+	}
 }
 
 type recipePageResponse struct {
@@ -608,6 +779,20 @@ func sameOrigin(base, target *url.URL) bool {
 		return false
 	}
 	return normalizedPort(base) == normalizedPort(target)
+}
+
+// SameOrigin reports whether two absolute URLs share scheme, host and effective
+// port. Unparsable URLs never match.
+func SameOrigin(a, b string) bool {
+	base, err := url.Parse(a)
+	if err != nil {
+		return false
+	}
+	target, err := url.Parse(b)
+	if err != nil {
+		return false
+	}
+	return sameOrigin(base, target)
 }
 
 func normalizedPort(u *url.URL) string {
