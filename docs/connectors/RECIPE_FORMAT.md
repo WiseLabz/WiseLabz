@@ -5,7 +5,9 @@ JSON responses to entities, attributes and service dependencies. A recipe is
 shareable data: put credentials only in the connector's separate
 `auth_token`, `auth_username` and `auth_password` fields, all encrypted at rest.
 The recipe itself is a non-secret `textarea` field returned by the API and
-included unchanged in backups. Everything in a recipe, including static
+included unchanged in backups. When the connector is declared in `config.yaml`,
+the recipe text is used verbatim and `${VAR}` references inside it are not
+expanded. Everything in a recipe, including static
 `query`, `headers` and `body` values, is stored unencrypted and readable by
 every user who can view the connector. See the [declared connector example](../CONNECTORS_IN_CONFIG.md#custom-rest-recipes).
 
@@ -90,13 +92,19 @@ values and relation values such as `rel="prev next"`. Relative and absolute
 next URLs are resolved against the connector URL. Every next URL must retain
 the connector's scheme, hostname and port; cross-origin links, URL user
 information and fragments fail before a request is sent. Repeating a next
-URL also fails. Query-token authentication is applied once on every page and
+URL also fails. For every next link, the connector URL's query, the endpoint
+path's query and the endpoint's static `query` are applied again, in that
+order; a parameter present in the link replaces the same-named value from
+those sources. Query-token authentication is applied once on every page and
 cannot be replaced by a paging or link query parameter.
 
-The runner sends at most 100 requests per endpoint. If the 100th response
-requires another page, it fails without sending request 101. It also fails if
-the complete sync maps more than 10,000 entities or more than the existing
-10 MiB mapped-output budget. A cap failure returns no snapshot.
+The runner reads at most 100 pages per endpoint. When the 100th page still
+announces another page, a single extra request confirms the end of the data:
+the sync fails if that response returns any items or announces a further page,
+and succeeds if it is empty and ends pagination. It also fails if the complete
+sync maps more than 10,000 entities or more than the existing 10 MiB
+mapped-output budget. A cursor or next link longer than 8 KiB (8192 bytes)
+also fails the sync. A cap failure returns no snapshot.
 
 These complete recipes demonstrate each pagination form and are parsed by the
 custom connector tests:
@@ -183,7 +191,8 @@ endpoints:
 An endpoint transport error, non-success HTTP status, invalid JSON, oversized
 response, `items` path that does not select a list or mapped entities and
 attributes larger than the response size limit aborts the complete sync.
-The error names the endpoint. No partial snapshot is stored; authentication
+The error names the endpoint, and for a paginated endpoint also the page, for
+example `endpoint "items": page 3: ...`. No partial snapshot is stored; authentication
 and availability errors retain their connector error classifications. A
 connection test requests only the first endpoint once with the configured auth.
 

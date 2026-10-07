@@ -281,6 +281,58 @@ func TestParseRecipePaginationStyleCombinations(t *testing.T) {
 	})
 }
 
+func TestParseRecipePaginationInvalidBlocksHaveLocatedErrors(t *testing.T) {
+	const prefix = "endpoints[0].pagination"
+	tests := []struct {
+		name       string
+		pagination string
+		auth       string
+		want       string
+	}{
+		{name: "unknown type", pagination: "{type: keyset}", want: prefix + ".type: must be page, offset, cursor, or next_link"},
+		{name: "missing type", pagination: "{param: page}", want: prefix + ".type: must be page, offset, cursor, or next_link"},
+		{name: "page without param", pagination: "{type: page, size: 10}", want: prefix + ".param: is required for page pagination"},
+		{name: "page without size", pagination: "{type: page, param: page}", want: prefix + ".size: must be greater than zero"},
+		{name: "page size zero", pagination: "{type: page, param: page, size: 0}", want: prefix + ".size: must be greater than zero"},
+		{name: "page size negative", pagination: "{type: page, param: page, size: -1}", want: prefix + ".size: must be greater than zero"},
+		{name: "offset without size param", pagination: "{type: offset, param: offset, size: 10}", want: prefix + ".size_param: is required for offset pagination"},
+		{name: "offset without param", pagination: "{type: offset, size_param: limit, size: 10}", want: prefix + ".param: is required for offset pagination"},
+		{name: "offset forbids link header", pagination: "{type: offset, param: offset, size_param: limit, size: 10, link_header: true}", want: prefix + ".link_header: is only allowed for next_link pagination"},
+		{name: "cursor without param", pagination: "{type: cursor, cursor_path: next}", want: prefix + ".param: is required for cursor pagination"},
+		{name: "cursor without cursor path", pagination: "{type: cursor, param: cursor}", want: prefix + ".cursor_path: path expression is required"},
+		{name: "cursor with malformed cursor path", pagination: "{type: cursor, param: cursor, cursor_path: 'next['}", want: prefix + ".cursor_path: path expression is malformed"},
+		{name: "cursor size param with zero size", pagination: "{type: cursor, param: cursor, cursor_path: next, size_param: limit, size: 0}", want: prefix + ".size: must be greater than zero when size_param is set"},
+		{name: "next link without a source", pagination: "{type: next_link}", want: prefix + ": must define exactly one of next_path or link_header"},
+		{name: "next link with malformed next path", pagination: "{type: next_link, next_path: 'next['}", want: prefix + ".next_path: path expression is malformed"},
+		{name: "next link forbids size param", pagination: "{type: next_link, next_path: next, size_param: limit}", want: prefix + ".size_param: is only allowed"},
+		{name: "next link forbids size", pagination: "{type: next_link, next_path: next, size: 10}", want: prefix + ".size: is only allowed"},
+		{name: "next link forbids cursor path", pagination: "{type: next_link, next_path: next, cursor_path: next}", want: prefix + ".cursor_path: is only allowed for cursor pagination"},
+		{name: "negative start", pagination: "{type: page, param: page, size: 10, start: -1}", want: prefix + ".start: must not be negative"},
+		{name: "query auth name used as size param", pagination: "{type: page, param: page, size_param: token, size: 10}", auth: "auth: {mode: query, name: token}", want: prefix + ".size_param: must differ from auth.name"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			raw := validRecipe
+			if test.auth != "" {
+				raw = strings.Replace(raw, "auth:\n  mode: none", test.auth, 1)
+			}
+			raw = strings.Replace(raw, "    items: items", "    items: items\n    pagination: "+test.pagination, 1)
+			_, err := ParseRecipe(raw)
+			if err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("ParseRecipe() error = %v, want containing %q", err, test.want)
+			}
+		})
+	}
+
+	t.Run("page size zero with size param reports one size issue", func(t *testing.T) {
+		raw := strings.Replace(validRecipe, "    items: items", "    items: items\n    pagination: {type: page, param: page, size_param: limit, size: 0}", 1)
+		_, err := ParseRecipe(raw)
+		if err == nil || strings.Count(err.Error(), prefix+".size:") != 1 {
+			t.Fatalf("ParseRecipe() error = %v, want exactly one %s.size issue", err, prefix)
+		}
+	})
+}
+
 func TestParseRecipeAcceptsGJSONPathForms(t *testing.T) {
 	for _, path := range []string{`items.#(active==true)`, `items.#.name`, `{items.0.name,items.1.name}`, `meta.a\.b`, `meta.\.leading`, `items.#(name==\"one\").id`, `@this`} {
 		if err := validateGJSONPath(path); err != nil {

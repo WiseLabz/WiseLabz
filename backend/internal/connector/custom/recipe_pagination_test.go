@@ -548,8 +548,8 @@ func TestFetchRecipePaginationCapsFailWithoutSnapshot(t *testing.T) {
 		defer server.Close()
 
 		snapshot, err := fetchPaginationRecipe(context.Background(), server.URL, "  mode: none", "{type: page, param: page, size: 1}", "", nil, server.Client())
-		if snapshot != nil || calls.Load() != maxRecipePages || err == nil || !strings.Contains(err.Error(), "100-page limit") {
-			t.Fatalf("Fetch() = %#v, requests %d, error %v; want 100-page failure without request 101", snapshot, calls.Load(), err)
+		if snapshot != nil || calls.Load() != maxRecipePages+1 || err == nil || !strings.Contains(err.Error(), "100-page limit") {
+			t.Fatalf("Fetch() = %#v, requests %d, error %v; want 100-page failure after exactly one probe request", snapshot, calls.Load(), err)
 		}
 	})
 
@@ -628,8 +628,9 @@ func TestFetchRecipePaginationKeepsWholeSyncMappedOutputBudget(t *testing.T) {
 	defer server.Close()
 
 	snapshot, err := fetchPaginationRecipe(context.Background(), server.URL, "  mode: none", "{type: page, param: page, size: 1}", "", nil, server.Client())
-	if snapshot != nil || calls.Load() != 2 || err == nil || !strings.Contains(err.Error(), "maps more than") {
-		t.Fatalf("Fetch() = %#v, requests %d, error %v; want cumulative output-budget failure", snapshot, calls.Load(), err)
+	wantLimit := fmt.Sprintf("maps more than %d bytes", connector.MaxResponseBytes)
+	if snapshot != nil || calls.Load() != 2 || err == nil || !strings.Contains(err.Error(), wantLimit) {
+		t.Fatalf("Fetch() = %#v, requests %d, error %v; want cumulative output-budget failure reporting %q", snapshot, calls.Load(), err, wantLimit)
 	}
 }
 
@@ -708,5 +709,546 @@ func TestDocumentedPaginationRecipesParse(t *testing.T) {
 	}
 	if count != 5 {
 		t.Fatalf("parsed %d pagination recipes, want 5", count)
+	}
+}
+
+func TestFetchRecipePaginationEndProbeAfterLastAllowedPage(t *testing.T) {
+	t.Run("page mode with exactly 100 non-empty pages succeeds", func(t *testing.T) {
+		var calls atomic.Int32
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			page := calls.Add(1)
+			if page > maxRecipePages {
+				_, _ = io.WriteString(w, `{"items":[]}`)
+				return
+			}
+			_, _ = io.WriteString(w, `{"items":[{"id":"`+fmt.Sprint(page)+`","name":"item"}]}`)
+		}))
+		defer server.Close()
+
+		snapshot, err := fetchPaginationRecipe(context.Background(), server.URL, "  mode: none", "{type: page, param: page, size: 1}", "", nil, server.Client())
+		if err != nil {
+			t.Fatalf("Fetch() error = %v", err)
+		}
+		if calls.Load() != maxRecipePages+1 || len(snapshot.Entities) != maxRecipePages {
+			t.Fatalf("requests/entities = %d/%d, want %d/%d", calls.Load(), len(snapshot.Entities), maxRecipePages+1, maxRecipePages)
+		}
+	})
+
+	t.Run("cursor mode ending on page 100 sends no probe", func(t *testing.T) {
+		var calls atomic.Int32
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			page := calls.Add(1)
+			cursor := ""
+			if page < maxRecipePages {
+				cursor = fmt.Sprintf(`,"nextCursor":"c%d"`, page)
+			}
+			_, _ = io.WriteString(w, `{"items":[{"id":"`+fmt.Sprint(page)+`","name":"item"}]`+cursor+`}`)
+		}))
+		defer server.Close()
+
+		snapshot, err := fetchPaginationRecipe(context.Background(), server.URL, "  mode: none", "{type: cursor, param: cursor, cursor_path: nextCursor}", "", nil, server.Client())
+		if err != nil {
+			t.Fatalf("Fetch() error = %v", err)
+		}
+		if calls.Load() != maxRecipePages || len(snapshot.Entities) != maxRecipePages {
+			t.Fatalf("requests/entities = %d/%d, want %d/%d", calls.Load(), len(snapshot.Entities), maxRecipePages, maxRecipePages)
+		}
+	})
+
+	t.Run("empty pages that keep announcing a next page are bounded", func(t *testing.T) {
+		var calls atomic.Int32
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			page := calls.Add(1)
+			_, _ = fmt.Fprintf(w, `{"items":[],"nextCursor":"c%d"}`, page)
+		}))
+		defer server.Close()
+
+		snapshot, err := fetchPaginationRecipe(context.Background(), server.URL, "  mode: none", "{type: cursor, param: cursor, cursor_path: nextCursor}", "", nil, server.Client())
+		if snapshot != nil || calls.Load() != maxRecipePages+1 || err == nil || !strings.Contains(err.Error(), "100-page limit") {
+			t.Fatalf("Fetch() = %#v, requests %d, error %v; want 100-page failure after %d requests", snapshot, calls.Load(), err, maxRecipePages+1)
+		}
+	})
+}
+
+func TestFetchRecipeRejectsOversizedPaginationValues(t *testing.T) {
+	oversized := strings.Repeat("c", maxRecipePaginationValueBytes+1)
+	tests := []struct {
+		name       string
+		pagination string
+		serve      func(http.ResponseWriter)
+		want       string
+	}{
+		{
+			name:       "cursor",
+			pagination: "{type: cursor, param: cursor, cursor_path: nextCursor}",
+			serve: func(w http.ResponseWriter) {
+				_, _ = io.WriteString(w, `{"items":[{"id":"1","name":"one"}],"nextCursor":"`+oversized+`"}`)
+			},
+			want: "cursor exceeds",
+		},
+		{
+			name:       "next link from body",
+			pagination: "{type: next_link, next_path: paging.next}",
+			serve: func(w http.ResponseWriter) {
+				link := "/api/items?pad=" + strings.Repeat("a", maxRecipePaginationValueBytes+1-len("/api/items?pad="))
+				_, _ = io.WriteString(w, `{"items":[{"id":"1","name":"one"}],"paging":{"next":"`+link+`"}}`)
+			},
+			want: "next link exceeds",
+		},
+		{
+			name:       "next link from Link header",
+			pagination: "{type: next_link, link_header: true}",
+			serve: func(w http.ResponseWriter) {
+				link := "/api/items?pad=" + strings.Repeat("a", maxRecipePaginationValueBytes+1-len("/api/items?pad="))
+				w.Header().Set("Link", "<"+link+`>; rel="next"`)
+				_, _ = io.WriteString(w, `{"items":[{"id":"1","name":"one"}]}`)
+			},
+			want: "next link exceeds",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			var calls atomic.Int32
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				calls.Add(1)
+				test.serve(w)
+			}))
+			defer server.Close()
+
+			snapshot, err := fetchPaginationRecipe(context.Background(), server.URL, "  mode: none", test.pagination, "", nil, server.Client())
+			if snapshot != nil || calls.Load() != 1 || err == nil || !strings.Contains(err.Error(), test.want) || !strings.Contains(err.Error(), "8192-byte limit") {
+				t.Fatalf("Fetch() = %#v, requests %d, error %v; want %q failure after one request", snapshot, calls.Load(), err, test.want)
+			}
+			if strings.Contains(err.Error(), "ccccc") || strings.Contains(err.Error(), "aaaaa") {
+				t.Fatalf("error includes the pagination value: %.200s", err)
+			}
+		})
+	}
+
+	t.Run("cursor at the limit is followed", func(t *testing.T) {
+		atLimit := strings.Repeat("c", maxRecipePaginationValueBytes)
+		var calls atomic.Int32
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if calls.Add(1) == 1 {
+				_, _ = io.WriteString(w, `{"items":[{"id":"1","name":"one"}],"nextCursor":"`+atLimit+`"}`)
+				return
+			}
+			if got := r.URL.Query().Get("cursor"); got != atLimit {
+				t.Errorf("cursor length = %d, want %d", len(got), len(atLimit))
+			}
+			_, _ = io.WriteString(w, `{"items":[]}`)
+		}))
+		defer server.Close()
+
+		snapshot, err := fetchPaginationRecipe(context.Background(), server.URL, "  mode: none", "{type: cursor, param: cursor, cursor_path: nextCursor}", "", nil, server.Client())
+		if err != nil {
+			t.Fatalf("Fetch() error = %v", err)
+		}
+		if calls.Load() != 2 || len(snapshot.Entities) != 1 {
+			t.Fatalf("requests/entities = %d/%d, want 2/1", calls.Load(), len(snapshot.Entities))
+		}
+	})
+}
+
+func TestBuildRecipeRequestForNextLinkOriginAndNormalization(t *testing.T) {
+	base, err := recipeBaseURL(map[string]any{"url": "https://api.example.test/root/"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	recipe := &Recipe{Auth: RecipeAuth{Mode: "none"}}
+	endpoint := RecipeEndpoint{Name: "items", Path: "/api/items", Method: "GET"}
+
+	for _, link := range []string{
+		"https://evil.example.test/items",
+		"//evil.example.test/items",
+		"http://api.example.test/items",
+		"https://api.example.test:8443/items",
+		"https://api.example.test./items",
+		"https://user@api.example.test/items",
+		"https://api.example.test@evil.example.test/items",
+		"https:evil.example.test/items",
+		"https:///items",
+		"https://[::1]/items",
+		"/items#frag",
+		"/items\r\nX-Injected: 1",
+	} {
+		t.Run("rejects "+link, func(t *testing.T) {
+			request, err := buildRecipeRequestForNextLink(context.Background(), base, recipe, endpoint, nil, link)
+			if err == nil || request != nil {
+				t.Fatalf("buildRecipeRequestForNextLink(%q) = %v, %v; want rejection", link, request, err)
+			}
+		})
+	}
+
+	for _, link := range []string{
+		"https://API.EXAMPLE.TEST:443/items?page=2",
+		`/\evil.example.test/items`,
+		`\\evil.example.test\items`,
+		"/a/../../items",
+		"/%2e%2e/%2fevil.example.test",
+		"?page=2",
+	} {
+		t.Run("accepts "+link, func(t *testing.T) {
+			request, err := buildRecipeRequestForNextLink(context.Background(), base, recipe, endpoint, nil, link)
+			if err != nil {
+				t.Fatalf("buildRecipeRequestForNextLink(%q) error = %v", link, err)
+			}
+			if got := request.URL.Hostname(); !strings.EqualFold(got, "api.example.test") || !sameOrigin(base, request.URL) {
+				t.Fatalf("request URL = %s (host %q), want same-origin api.example.test", request.URL, got)
+			}
+		})
+	}
+}
+
+func TestFetchRecipeDuplicateExternalIDAcrossPagesFails(t *testing.T) {
+	var calls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		calls.Add(1)
+		_, _ = io.WriteString(w, `{"items":[{"id":"1","name":"one"}]}`)
+	}))
+	defer server.Close()
+
+	snapshot, err := fetchPaginationRecipe(context.Background(), server.URL, "  mode: none", "{type: page, param: page, size: 1}", "", nil, server.Client())
+	if snapshot != nil || calls.Load() != 2 || err == nil {
+		t.Fatalf("Fetch() = %#v, requests %d, error %v; want duplicate failure after two requests", snapshot, calls.Load(), err)
+	}
+	for _, want := range []string{`endpoint "items"`, "page 2", `duplicate identifier "1"`} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error %q does not contain %q", err, want)
+		}
+	}
+}
+
+func TestFetchRecipeLaterPageFailureIsClassifiedAndDiscardsEarlierPages(t *testing.T) {
+	tests := []struct {
+		name   string
+		status int
+		check  func(*testing.T, error)
+	}{
+		{name: "401", status: http.StatusUnauthorized, check: func(t *testing.T, err error) {
+			var target *connector.AuthError
+			if !errors.As(err, &target) {
+				t.Errorf("error %v is not an AuthError", err)
+			}
+		}},
+		{name: "403", status: http.StatusForbidden, check: func(t *testing.T, err error) {
+			var target *connector.AuthError
+			if !errors.As(err, &target) {
+				t.Errorf("error %v is not an AuthError", err)
+			}
+		}},
+		{name: "503", status: http.StatusServiceUnavailable, check: func(t *testing.T, err error) {
+			var target *connector.ServiceUnavailableError
+			if !errors.As(err, &target) {
+				t.Errorf("error %v is not a ServiceUnavailableError", err)
+			}
+		}},
+		{name: "500", status: http.StatusInternalServerError, check: func(t *testing.T, err error) {
+			var auth *connector.AuthError
+			var unavailable *connector.ServiceUnavailableError
+			if errors.As(err, &auth) || errors.As(err, &unavailable) {
+				t.Errorf("error %v is classified, want a plain error", err)
+			}
+		}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			var calls atomic.Int32
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				if calls.Add(1) == 1 {
+					_, _ = io.WriteString(w, `{"items":[{"id":"1","name":"one"}]}`)
+					return
+				}
+				w.WriteHeader(test.status)
+			}))
+			defer server.Close()
+
+			snapshot, err := fetchPaginationRecipe(context.Background(), server.URL, "  mode: none", "{type: page, param: page, size: 1}", "", nil, server.Client())
+			if snapshot != nil || calls.Load() != 2 || err == nil {
+				t.Fatalf("Fetch() = %#v, requests %d, error %v; want failure on page 2 without snapshot", snapshot, calls.Load(), err)
+			}
+			if !strings.Contains(err.Error(), `endpoint "items"`) || !strings.Contains(err.Error(), "page 2") {
+				t.Errorf("error %q does not name the endpoint and page 2", err)
+			}
+			test.check(t, err)
+
+			unpaginated := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(test.status)
+			}))
+			defer unpaginated.Close()
+			_, err = (&Connector{client: unpaginated.Client()}).Fetch(context.Background(), map[string]any{
+				"url":    unpaginated.URL,
+				"recipe": recipeForFetch("  mode: none", fetchEndpoint),
+			})
+			if err == nil || !strings.Contains(err.Error(), `endpoint "items"`) || strings.Contains(err.Error(), "page") {
+				t.Errorf("unpaginated error = %v, want endpoint-only message", err)
+			}
+		})
+	}
+}
+
+func TestFetchRecipeSkippedItemsSumAcrossPages(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Query().Get("page") {
+		case "1":
+			_, _ = io.WriteString(w, `{"items":[{"name":"no id"},{"id":"1","name":"one"}]}`)
+		case "2":
+			_, _ = io.WriteString(w, `{"items":[{"name":"no id either"},{"id":"2","name":"two"}]}`)
+		default:
+			_, _ = io.WriteString(w, `{"items":[]}`)
+		}
+	}))
+	defer server.Close()
+
+	snapshot, err := fetchPaginationRecipe(context.Background(), server.URL, "  mode: none", "{type: page, param: page, size: 2}", "", nil, server.Client())
+	if err != nil {
+		t.Fatalf("Fetch() error = %v", err)
+	}
+	if got := snapshot.Metadata["endpoint.items.skipped"]; got != "2" {
+		t.Errorf("skipped = %q, want 2", got)
+	}
+	if got := snapshot.Metadata["endpoint.items.items"]; got != "4" {
+		t.Errorf("items = %q, want 4", got)
+	}
+	if len(snapshot.Entities) != 2 {
+		t.Errorf("entities = %d, want 2", len(snapshot.Entities))
+	}
+}
+
+func TestFetchRecipeNextLinkBodyValueTypes(t *testing.T) {
+	for _, value := range []string{"42", "true", `{"href":"/api/items?page=2"}`, `["/api/items?page=2"]`} {
+		t.Run(value, func(t *testing.T) {
+			var calls atomic.Int32
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				calls.Add(1)
+				_, _ = io.WriteString(w, `{"items":[{"id":"1","name":"one"}],"paging":{"next":`+value+`}}`)
+			}))
+			defer server.Close()
+
+			snapshot, err := fetchPaginationRecipe(context.Background(), server.URL, "  mode: none", "{type: next_link, next_path: paging.next}", "", nil, server.Client())
+			if snapshot != nil || calls.Load() != 1 || err == nil || !strings.Contains(err.Error(), "next link path must resolve to a string") {
+				t.Fatalf("Fetch() = %#v, requests %d, error %v; want string-type failure after one request", snapshot, calls.Load(), err)
+			}
+		})
+	}
+
+	t.Run("null stops", func(t *testing.T) {
+		var calls atomic.Int32
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			calls.Add(1)
+			_, _ = io.WriteString(w, `{"items":[{"id":"1","name":"one"}],"paging":{"next":null}}`)
+		}))
+		defer server.Close()
+
+		snapshot, err := fetchPaginationRecipe(context.Background(), server.URL, "  mode: none", "{type: next_link, next_path: paging.next}", "", nil, server.Client())
+		if err != nil {
+			t.Fatalf("Fetch() error = %v", err)
+		}
+		if calls.Load() != 1 || len(snapshot.Entities) != 1 {
+			t.Fatalf("requests/entities = %d/%d, want 1/1", calls.Load(), len(snapshot.Entities))
+		}
+	})
+}
+
+func TestFetchRecipePaginationCyclesFail(t *testing.T) {
+	t.Run("next links", func(t *testing.T) {
+		links := []string{"/api/items?p=a", "/api/items?p=b", "/api/items?p=a"}
+		var calls atomic.Int32
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			call := int(calls.Add(1))
+			_, _ = fmt.Fprintf(w, `{"items":[{"id":"%d","name":"item"}],"paging":{"next":%q}}`, call, links[call-1])
+		}))
+		defer server.Close()
+
+		snapshot, err := fetchPaginationRecipe(context.Background(), server.URL, "  mode: none", "{type: next_link, next_path: paging.next}", "", nil, server.Client())
+		if snapshot != nil || calls.Load() != 3 || err == nil || !strings.Contains(err.Error(), "next link repeated") {
+			t.Fatalf("Fetch() = %#v, requests %d, error %v; want repeated link failure after three requests", snapshot, calls.Load(), err)
+		}
+	})
+
+	t.Run("cursors", func(t *testing.T) {
+		cursors := []string{"a", "b", "a"}
+		var calls atomic.Int32
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			call := int(calls.Add(1))
+			_, _ = fmt.Fprintf(w, `{"items":[{"id":"%d","name":"item"}],"nextCursor":%q}`, call, cursors[call-1])
+		}))
+		defer server.Close()
+
+		snapshot, err := fetchPaginationRecipe(context.Background(), server.URL, "  mode: none", "{type: cursor, param: cursor, cursor_path: nextCursor}", "", nil, server.Client())
+		if snapshot != nil || calls.Load() != 3 || err == nil || !strings.Contains(err.Error(), "cursor repeated") {
+			t.Fatalf("Fetch() = %#v, requests %d, error %v; want repeated cursor failure after three requests", snapshot, calls.Load(), err)
+		}
+	})
+}
+
+func TestFetchRecipeEntityCapBoundaryAllowsExactlyMaxEntities(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if err := writePaginationItems(w, "item", maxRecipeEntities, ""); err != nil {
+			t.Error(err)
+		}
+	}))
+	defer server.Close()
+
+	snapshot, err := (&Connector{client: server.Client()}).Fetch(context.Background(), map[string]any{
+		"url":    server.URL,
+		"recipe": recipeForFetch("  mode: none", fetchEndpoint),
+	})
+	if err != nil {
+		t.Fatalf("Fetch() error = %v", err)
+	}
+	if len(snapshot.Entities) != maxRecipeEntities {
+		t.Fatalf("entities = %d, want %d", len(snapshot.Entities), maxRecipeEntities)
+	}
+}
+
+func TestFetchRecipePOSTPaginationRepeatsStaticBodyOnEveryPage(t *testing.T) {
+	const wantBody = `{"query":"query { items }"}`
+	var calls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		call := calls.Add(1)
+		if r.Method != http.MethodPost {
+			t.Errorf("request %d method = %q, want POST", call, r.Method)
+		}
+		if got := r.Header.Get("Content-Type"); got != "application/json" {
+			t.Errorf("request %d Content-Type = %q, want application/json", call, got)
+		}
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Errorf("read request %d body: %v", call, err)
+		}
+		if string(body) != wantBody {
+			t.Errorf("request %d body = %q, want %q", call, body, wantBody)
+		}
+		if got := r.URL.Query().Get("page"); got != fmt.Sprint(call) {
+			t.Errorf("request %d page = %q, want %d", call, got, call)
+		}
+		if call <= 2 {
+			_, _ = fmt.Fprintf(w, `{"items":[{"id":"%d","name":"item"}]}`, call)
+			return
+		}
+		_, _ = io.WriteString(w, `{"items":[]}`)
+	}))
+	defer server.Close()
+
+	endpoints := `  - name: items
+    path: /api/items
+    method: POST
+    body: {query: "query { items }"}
+    items: items
+    pagination: {type: page, param: page, size: 1}
+    entity: {kind: media_item, name: name, external_id: id}
+`
+	snapshot, err := (&Connector{client: server.Client()}).Fetch(context.Background(), map[string]any{
+		"url":    server.URL,
+		"recipe": recipeForFetch("  mode: none", endpoints),
+	})
+	if err != nil {
+		t.Fatalf("Fetch() error = %v", err)
+	}
+	if calls.Load() != 3 || len(snapshot.Entities) != 2 {
+		t.Fatalf("requests/entities = %d/%d, want 3/2", calls.Load(), len(snapshot.Entities))
+	}
+}
+
+func TestFetchRecipePaginationKeepsStaticQueryAndReplacesPaginationParameter(t *testing.T) {
+	t.Run("endpoint path and static query", func(t *testing.T) {
+		var calls atomic.Int32
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			call := calls.Add(1)
+			query := r.URL.Query()
+			if got := query["fixed"]; len(got) != 1 || got[0] != "1" {
+				t.Errorf("request %d fixed = %q, want [1]", call, got)
+			}
+			if got := query["extra"]; len(got) != 1 || got[0] != "x" {
+				t.Errorf("request %d extra = %q, want [x]", call, got)
+			}
+			if got := query["page"]; len(got) != 1 || got[0] != fmt.Sprint(call) {
+				t.Errorf("request %d page = %q, want [%d]", call, got, call)
+			}
+			if call == 1 {
+				_, _ = io.WriteString(w, `{"items":[{"id":"1","name":"one"}]}`)
+				return
+			}
+			_, _ = io.WriteString(w, `{"items":[]}`)
+		}))
+		defer server.Close()
+
+		endpoints := `  - name: items
+    path: /api/items?fixed=1&page=9
+    method: GET
+    query: {extra: x}
+    items: items
+    pagination: {type: page, param: page, size: 2}
+    entity: {kind: media_item, name: name, external_id: id}
+`
+		snapshot, err := (&Connector{client: server.Client()}).Fetch(context.Background(), map[string]any{
+			"url":    server.URL,
+			"recipe": recipeForFetch("  mode: none", endpoints),
+		})
+		if err != nil {
+			t.Fatalf("Fetch() error = %v", err)
+		}
+		if calls.Load() != 2 || len(snapshot.Entities) != 1 {
+			t.Fatalf("requests/entities = %d/%d, want 2/1", calls.Load(), len(snapshot.Entities))
+		}
+	})
+
+	t.Run("query auth with cursor pagination", func(t *testing.T) {
+		var calls atomic.Int32
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			call := calls.Add(1)
+			if got := r.URL.Query()["api_token"]; len(got) != 1 || got[0] != "query-token" {
+				t.Errorf("request %d api_token = %q, want one query-token", call, got)
+			}
+			if call == 1 {
+				_, _ = io.WriteString(w, `{"items":[{"id":"1","name":"one"}],"nextCursor":"next"}`)
+				return
+			}
+			_, _ = io.WriteString(w, `{"items":[]}`)
+		}))
+		defer server.Close()
+
+		snapshot, err := fetchPaginationRecipe(
+			context.Background(),
+			server.URL,
+			"  mode: query\n  name: api_token",
+			"{type: cursor, param: cursor, cursor_path: nextCursor}",
+			"",
+			map[string]any{"auth_token": "query-token"},
+			server.Client(),
+		)
+		if err != nil {
+			t.Fatalf("Fetch() error = %v", err)
+		}
+		if calls.Load() != 2 || len(snapshot.Entities) != 1 {
+			t.Fatalf("requests/entities = %d/%d, want 2/1", calls.Load(), len(snapshot.Entities))
+		}
+	})
+}
+
+func TestFetchRecipeFollowsNextRelationInSeparateLinkHeaderLines(t *testing.T) {
+	var calls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		call := calls.Add(1)
+		if call == 1 {
+			w.Header().Add("Link", `</api/items?page=0>; rel="prev"`)
+			w.Header().Add("Link", `</api/items?page=2>; rel="next"`)
+			_, _ = io.WriteString(w, `{"items":[{"id":"1","name":"one"}]}`)
+			return
+		}
+		if got := r.URL.Query().Get("page"); got != "2" {
+			t.Errorf("page = %q, want 2", got)
+		}
+		_, _ = io.WriteString(w, `{"items":[{"id":"2","name":"two"}]}`)
+	}))
+	defer server.Close()
+
+	snapshot, err := fetchPaginationRecipe(context.Background(), server.URL, "  mode: none", "{type: next_link, link_header: true}", "", nil, server.Client())
+	if err != nil {
+		t.Fatalf("Fetch() error = %v", err)
+	}
+	if calls.Load() != 2 || len(snapshot.Entities) != 2 {
+		t.Fatalf("requests/entities = %d/%d, want 2/2", calls.Load(), len(snapshot.Entities))
 	}
 }
