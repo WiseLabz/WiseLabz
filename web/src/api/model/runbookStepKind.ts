@@ -8,7 +8,7 @@
  */
 
 /**
- * lifecycle restarts, starts or stops a connector (optionally one entity); sync_and_wait syncs a connector and waits for the sync to finish; wait_until_healthy waits until a connector's health check reports online; manual waits for a human to confirm.
+ * lifecycle restarts, starts or stops a connector (optionally one entity); sync_and_wait syncs a connector and waits for the sync to finish; wait_until_healthy waits until a connector's health check reports online; manual waits for a human to confirm; config_push updates a writable connector configuration field; wait_for_entity waits until an entity's attribute matches an expected value.
  */
 export type RunbookStepKind = (typeof RunbookStepKind)[keyof typeof RunbookStepKind];
 
@@ -17,4 +17,6 @@ export const RunbookStepKind = {
   sync_and_wait: 'sync_and_wait',
   wait_until_healthy: 'wait_until_healthy',
   manual: 'manual',
+  config_push: 'config_push',
+  wait_for_entity: 'wait_for_entity',
 } as const;

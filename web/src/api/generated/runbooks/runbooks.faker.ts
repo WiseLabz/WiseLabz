@@ -51,8 +51,28 @@ export const getGetRunbooksResponseMock = (
         connectorId: faker.string.alpha({ length: { min: 10, max: 20 } }),
         connectorName: faker.string.alpha({ length: { min: 10, max: 20 } }),
         verb: faker.helpers.arrayElement(Object.values(RunbookStepStoredVerb)),
-        timeoutSeconds: faker.number.int({ min: 0, max: 1800 }),
         entityRef: faker.string.alpha({ length: { min: 10, max: 20 } }),
+        fieldKey: faker.helpers.arrayElement([
+          faker.string.alpha({ length: { min: 10, max: 20 } }),
+          undefined,
+        ]),
+        targetValue: faker.helpers.arrayElement([
+          faker.string.alpha({ length: { min: 10, max: 20 } }),
+          undefined,
+        ]),
+        attribute: faker.helpers.arrayElement([
+          faker.string.alpha({ length: { min: 10, max: 20 } }),
+          undefined,
+        ]),
+        operator: faker.helpers.arrayElement([
+          faker.helpers.arrayElement(['eq', 'neq', 'contains', 'regex', 'gt', 'lt'] as const),
+          undefined,
+        ]),
+        expectedValue: faker.helpers.arrayElement([
+          faker.string.alpha({ length: { min: 10, max: 20 } }),
+          undefined,
+        ]),
+        timeoutSeconds: faker.number.int({ min: 0, max: 1800 }),
         canExecute: faker.datatype.boolean(),
         executeBlockedReason: faker.helpers.arrayElement([
           '',
@@ -95,8 +115,28 @@ export const getPostRunbooksResponseMock = (
     connectorId: faker.string.alpha({ length: { min: 10, max: 20 } }),
     connectorName: faker.string.alpha({ length: { min: 10, max: 20 } }),
     verb: faker.helpers.arrayElement(Object.values(RunbookStepStoredVerb)),
-    timeoutSeconds: faker.number.int({ min: 0, max: 1800 }),
     entityRef: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    fieldKey: faker.helpers.arrayElement([
+      faker.string.alpha({ length: { min: 10, max: 20 } }),
+      undefined,
+    ]),
+    targetValue: faker.helpers.arrayElement([
+      faker.string.alpha({ length: { min: 10, max: 20 } }),
+      undefined,
+    ]),
+    attribute: faker.helpers.arrayElement([
+      faker.string.alpha({ length: { min: 10, max: 20 } }),
+      undefined,
+    ]),
+    operator: faker.helpers.arrayElement([
+      faker.helpers.arrayElement(['eq', 'neq', 'contains', 'regex', 'gt', 'lt'] as const),
+      undefined,
+    ]),
+    expectedValue: faker.helpers.arrayElement([
+      faker.string.alpha({ length: { min: 10, max: 20 } }),
+      undefined,
+    ]),
+    timeoutSeconds: faker.number.int({ min: 0, max: 1800 }),
     canExecute: faker.datatype.boolean(),
     executeBlockedReason: faker.helpers.arrayElement([
       '',
@@ -134,8 +174,28 @@ export const getGetRunbooksRunbookIdResponseMock = (
     connectorId: faker.string.alpha({ length: { min: 10, max: 20 } }),
     connectorName: faker.string.alpha({ length: { min: 10, max: 20 } }),
     verb: faker.helpers.arrayElement(Object.values(RunbookStepStoredVerb)),
-    timeoutSeconds: faker.number.int({ min: 0, max: 1800 }),
     entityRef: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    fieldKey: faker.helpers.arrayElement([
+      faker.string.alpha({ length: { min: 10, max: 20 } }),
+      undefined,
+    ]),
+    targetValue: faker.helpers.arrayElement([
+      faker.string.alpha({ length: { min: 10, max: 20 } }),
+      undefined,
+    ]),
+    attribute: faker.helpers.arrayElement([
+      faker.string.alpha({ length: { min: 10, max: 20 } }),
+      undefined,
+    ]),
+    operator: faker.helpers.arrayElement([
+      faker.helpers.arrayElement(['eq', 'neq', 'contains', 'regex', 'gt', 'lt'] as const),
+      undefined,
+    ]),
+    expectedValue: faker.helpers.arrayElement([
+      faker.string.alpha({ length: { min: 10, max: 20 } }),
+      undefined,
+    ]),
+    timeoutSeconds: faker.number.int({ min: 0, max: 1800 }),
     canExecute: faker.datatype.boolean(),
     executeBlockedReason: faker.helpers.arrayElement([
       '',
@@ -173,8 +233,28 @@ export const getPutRunbooksRunbookIdResponseMock = (
     connectorId: faker.string.alpha({ length: { min: 10, max: 20 } }),
     connectorName: faker.string.alpha({ length: { min: 10, max: 20 } }),
     verb: faker.helpers.arrayElement(Object.values(RunbookStepStoredVerb)),
-    timeoutSeconds: faker.number.int({ min: 0, max: 1800 }),
     entityRef: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    fieldKey: faker.helpers.arrayElement([
+      faker.string.alpha({ length: { min: 10, max: 20 } }),
+      undefined,
+    ]),
+    targetValue: faker.helpers.arrayElement([
+      faker.string.alpha({ length: { min: 10, max: 20 } }),
+      undefined,
+    ]),
+    attribute: faker.helpers.arrayElement([
+      faker.string.alpha({ length: { min: 10, max: 20 } }),
+      undefined,
+    ]),
+    operator: faker.helpers.arrayElement([
+      faker.helpers.arrayElement(['eq', 'neq', 'contains', 'regex', 'gt', 'lt'] as const),
+      undefined,
+    ]),
+    expectedValue: faker.helpers.arrayElement([
+      faker.string.alpha({ length: { min: 10, max: 20 } }),
+      undefined,
+    ]),
+    timeoutSeconds: faker.number.int({ min: 0, max: 1800 }),
     canExecute: faker.datatype.boolean(),
     executeBlockedReason: faker.helpers.arrayElement([
       '',
@@ -230,6 +310,8 @@ export const getStartRunbookRunResponseMock = (
               'sync_and_wait',
               'wait_until_healthy',
               'manual',
+              'config_push',
+              'wait_for_entity',
             ] as const),
             undefined,
           ]),
@@ -250,6 +332,26 @@ export const getStartRunbookRunResponseMock = (
             undefined,
           ]),
           entityRef: faker.helpers.arrayElement([
+            faker.string.alpha({ length: { min: 10, max: 20 } }),
+            undefined,
+          ]),
+          fieldKey: faker.helpers.arrayElement([
+            faker.string.alpha({ length: { min: 10, max: 20 } }),
+            undefined,
+          ]),
+          targetValue: faker.helpers.arrayElement([
+            faker.string.alpha({ length: { min: 10, max: 20 } }),
+            undefined,
+          ]),
+          attribute: faker.helpers.arrayElement([
+            faker.string.alpha({ length: { min: 10, max: 20 } }),
+            undefined,
+          ]),
+          operator: faker.helpers.arrayElement([
+            faker.helpers.arrayElement(['eq', 'neq', 'contains', 'regex', 'gt', 'lt'] as const),
+            undefined,
+          ]),
+          expectedValue: faker.helpers.arrayElement([
             faker.string.alpha({ length: { min: 10, max: 20 } }),
             undefined,
           ]),
@@ -348,6 +450,8 @@ export const getStartRunbookRunResponseMock = (
                 'sync_and_wait',
                 'wait_until_healthy',
                 'manual',
+                'config_push',
+                'wait_for_entity',
               ] as const),
               undefined,
             ]),
@@ -368,6 +472,26 @@ export const getStartRunbookRunResponseMock = (
               undefined,
             ]),
             entityRef: faker.helpers.arrayElement([
+              faker.string.alpha({ length: { min: 10, max: 20 } }),
+              undefined,
+            ]),
+            fieldKey: faker.helpers.arrayElement([
+              faker.string.alpha({ length: { min: 10, max: 20 } }),
+              undefined,
+            ]),
+            targetValue: faker.helpers.arrayElement([
+              faker.string.alpha({ length: { min: 10, max: 20 } }),
+              undefined,
+            ]),
+            attribute: faker.helpers.arrayElement([
+              faker.string.alpha({ length: { min: 10, max: 20 } }),
+              undefined,
+            ]),
+            operator: faker.helpers.arrayElement([
+              faker.helpers.arrayElement(['eq', 'neq', 'contains', 'regex', 'gt', 'lt'] as const),
+              undefined,
+            ]),
+            expectedValue: faker.helpers.arrayElement([
               faker.string.alpha({ length: { min: 10, max: 20 } }),
               undefined,
             ]),
@@ -471,6 +595,8 @@ export const getListRunbookRunsResponseMock = (
               'sync_and_wait',
               'wait_until_healthy',
               'manual',
+              'config_push',
+              'wait_for_entity',
             ] as const),
             undefined,
           ]),
@@ -491,6 +617,26 @@ export const getListRunbookRunsResponseMock = (
             undefined,
           ]),
           entityRef: faker.helpers.arrayElement([
+            faker.string.alpha({ length: { min: 10, max: 20 } }),
+            undefined,
+          ]),
+          fieldKey: faker.helpers.arrayElement([
+            faker.string.alpha({ length: { min: 10, max: 20 } }),
+            undefined,
+          ]),
+          targetValue: faker.helpers.arrayElement([
+            faker.string.alpha({ length: { min: 10, max: 20 } }),
+            undefined,
+          ]),
+          attribute: faker.helpers.arrayElement([
+            faker.string.alpha({ length: { min: 10, max: 20 } }),
+            undefined,
+          ]),
+          operator: faker.helpers.arrayElement([
+            faker.helpers.arrayElement(['eq', 'neq', 'contains', 'regex', 'gt', 'lt'] as const),
+            undefined,
+          ]),
+          expectedValue: faker.helpers.arrayElement([
             faker.string.alpha({ length: { min: 10, max: 20 } }),
             undefined,
           ]),
@@ -595,6 +741,8 @@ export const getGetRunbookRunResponseMock = (): RunbookRun => ({
             'sync_and_wait',
             'wait_until_healthy',
             'manual',
+            'config_push',
+            'wait_for_entity',
           ] as const),
           undefined,
         ]),
@@ -615,6 +763,26 @@ export const getGetRunbookRunResponseMock = (): RunbookRun => ({
           undefined,
         ]),
         entityRef: faker.helpers.arrayElement([
+          faker.string.alpha({ length: { min: 10, max: 20 } }),
+          undefined,
+        ]),
+        fieldKey: faker.helpers.arrayElement([
+          faker.string.alpha({ length: { min: 10, max: 20 } }),
+          undefined,
+        ]),
+        targetValue: faker.helpers.arrayElement([
+          faker.string.alpha({ length: { min: 10, max: 20 } }),
+          undefined,
+        ]),
+        attribute: faker.helpers.arrayElement([
+          faker.string.alpha({ length: { min: 10, max: 20 } }),
+          undefined,
+        ]),
+        operator: faker.helpers.arrayElement([
+          faker.helpers.arrayElement(['eq', 'neq', 'contains', 'regex', 'gt', 'lt'] as const),
+          undefined,
+        ]),
+        expectedValue: faker.helpers.arrayElement([
           faker.string.alpha({ length: { min: 10, max: 20 } }),
           undefined,
         ]),

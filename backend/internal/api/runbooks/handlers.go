@@ -3,12 +3,15 @@
 package runbooks
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
+	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/WiseLabz/wiselabz/internal/api/connectors"
@@ -56,13 +59,17 @@ const (
 	kindSyncAndWait      = "sync_and_wait"
 	kindWaitUntilHealthy = "wait_until_healthy"
 	kindManual           = "manual"
+	kindConfigPush       = "config_push"
+	kindWaitForEntity    = "wait_for_entity"
 )
 
 // Bounds and default for the timeout of the automated wait kinds.
 const (
-	minStepTimeoutSeconds     = 10
-	maxStepTimeoutSeconds     = 30 * 60
-	defaultStepTimeoutSeconds = 5 * 60
+	minStepTimeoutSeconds       = 10
+	minEntityWaitTimeoutSeconds = 60
+	maxStepTimeoutSeconds       = 30 * 60
+	defaultStepTimeoutSeconds   = 5 * 60
+	maxRegexLength              = 256
 )
 
 // blockedNotLifecycle is the executeBlockedReason of a step that cannot be
@@ -70,12 +77,21 @@ const (
 const blockedNotLifecycle = "not_lifecycle"
 
 func validKind(k string) bool {
-	return k == kindLifecycle || k == kindSyncAndWait || k == kindWaitUntilHealthy || k == kindManual
+	return k == kindLifecycle || k == kindSyncAndWait || k == kindWaitUntilHealthy || k == kindManual || k == kindConfigPush || k == kindWaitForEntity
 }
 
 // hasTimeout reports whether kind carries an authorable timeout.
 func hasTimeout(kind string) bool {
-	return kind == kindSyncAndWait || kind == kindWaitUntilHealthy
+	return kind == kindSyncAndWait || kind == kindWaitUntilHealthy || kind == kindWaitForEntity
+}
+
+func validEntityWaitOperator(op string) bool {
+	switch op {
+	case "eq", "neq", "contains", "regex", "gt", "lt":
+		return true
+	default:
+		return false
+	}
 }
 
 // effectiveKind maps the stored empty kind to lifecycle.
@@ -104,13 +120,18 @@ func reportedTimeout(kind string, stored int) int {
 // TimeoutSeconds is a pointer so an omitted timeout (default) can be told
 // apart from an explicit one that is out of range.
 type stepInput struct {
-	ID             string `json:"id"`
-	Kind           string `json:"kind"`
-	Title          string `json:"title"`
-	ConnectorID    string `json:"connectorId"`
-	Verb           string `json:"verb"`
-	EntityRef      string `json:"entityRef"`
-	TimeoutSeconds *int   `json:"timeoutSeconds"`
+	ID             string          `json:"id"`
+	Kind           string          `json:"kind"`
+	Title          string          `json:"title"`
+	ConnectorID    string          `json:"connectorId"`
+	Verb           string          `json:"verb"`
+	EntityRef      string          `json:"entityRef"`
+	TimeoutSeconds *int            `json:"timeoutSeconds"`
+	FieldKey       string          `json:"fieldKey"`
+	TargetValue    json.RawMessage `json:"targetValue"`
+	Attribute      string          `json:"attribute"`
+	Operator       string          `json:"operator"`
+	ExpectedValue  json.RawMessage `json:"expectedValue"`
 }
 
 // stepResponse is one element of the "steps" array in a runbook response.
@@ -128,6 +149,11 @@ type stepResponse struct {
 	TimeoutSeconds       int    `json:"timeoutSeconds"`
 	CanExecute           bool   `json:"canExecute"`
 	ExecuteBlockedReason string `json:"executeBlockedReason"`
+	FieldKey             string `json:"fieldKey,omitempty"`
+	TargetValue          string `json:"targetValue,omitempty"`
+	Attribute            string `json:"attribute,omitempty"`
+	Operator             string `json:"operator,omitempty"`
+	ExpectedValue        string `json:"expectedValue,omitempty"`
 }
 
 // runbookResponse is a RunbookRecord plus its steps, as returned by
@@ -156,7 +182,7 @@ func (h *Handler) validateSteps(ctx context.Context, inputs []stepInput) ([]*sto
 
 		kind := effectiveKind(in.Kind)
 		if !validKind(kind) {
-			fieldErrs = append(fieldErrs, httputil.FieldError{Field: prefix + ".kind", Msg: "must be lifecycle, sync_and_wait, wait_until_healthy, or manual"})
+			fieldErrs = append(fieldErrs, httputil.FieldError{Field: prefix + ".kind", Msg: "must be lifecycle, sync_and_wait, wait_until_healthy, manual, config_push, or wait_for_entity"})
 			kind = ""
 		}
 
@@ -164,14 +190,23 @@ func (h *Handler) validateSteps(ctx context.Context, inputs []stepInput) ([]*sto
 			fieldErrs = append(fieldErrs, httputil.FieldError{Field: prefix + ".title", Msg: "is required"})
 		}
 
-		// The connector and verb rules depend on the kind: lifecycle needs
-		// both, the wait kinds need a connector and no verb, manual neither.
+		var targetFieldKey, targetValueJSON, expectedValueJSON string
 		if kind != "" {
-			fieldErrs = append(fieldErrs, h.validateStepTarget(ctx, prefix, kind, in)...)
+			var errs []httputil.FieldError
+			targetFieldKey, targetValueJSON, expectedValueJSON, errs = h.validateStepTarget(ctx, prefix, kind, in)
+			fieldErrs = append(fieldErrs, errs...)
 		}
 
 		timeout := 0
 		switch {
+		case kind == kindWaitForEntity:
+			timeout = defaultStepTimeoutSeconds
+			if in.TimeoutSeconds != nil {
+				timeout = *in.TimeoutSeconds
+				if timeout < minEntityWaitTimeoutSeconds || timeout > maxStepTimeoutSeconds {
+					fieldErrs = append(fieldErrs, httputil.FieldError{Field: prefix + ".timeoutSeconds", Msg: fmt.Sprintf("must be between %d and %d seconds", minEntityWaitTimeoutSeconds, maxStepTimeoutSeconds)})
+				}
+			}
 		case hasTimeout(kind):
 			timeout = defaultStepTimeoutSeconds
 			if in.TimeoutSeconds != nil {
@@ -181,7 +216,7 @@ func (h *Handler) validateSteps(ctx context.Context, inputs []stepInput) ([]*sto
 				}
 			}
 		case kind != "" && in.TimeoutSeconds != nil && *in.TimeoutSeconds != 0:
-			fieldErrs = append(fieldErrs, httputil.FieldError{Field: prefix + ".timeoutSeconds", Msg: "is only allowed for sync_and_wait and wait_until_healthy steps"})
+			fieldErrs = append(fieldErrs, httputil.FieldError{Field: prefix + ".timeoutSeconds", Msg: "is only allowed for sync_and_wait, wait_until_healthy, and wait_for_entity steps"})
 		}
 
 		steps = append(steps, &store.RunbookStepRecord{
@@ -192,6 +227,11 @@ func (h *Handler) validateSteps(ctx context.Context, inputs []stepInput) ([]*sto
 			ConnectorID:    in.ConnectorID,
 			Verb:           in.Verb,
 			EntityRef:      in.EntityRef,
+			FieldKey:       targetFieldKey,
+			TargetValue:    targetValueJSON,
+			Attribute:      in.Attribute,
+			Operator:       in.Operator,
+			ExpectedValue:  expectedValueJSON,
 		})
 	}
 	if len(fieldErrs) > 0 {
@@ -200,11 +240,10 @@ func (h *Handler) validateSteps(ctx context.Context, inputs []stepInput) ([]*sto
 	return steps, nil
 }
 
-// validateStepTarget checks the connector, verb and entityRef of one step
-// against its (valid) kind and returns field errors keyed under prefix.
-func (h *Handler) validateStepTarget(ctx context.Context, prefix, kind string, in stepInput) []httputil.FieldError {
-	var errs []httputil.FieldError
-
+// validateStepTarget checks the connector, verb, entityRef and kind-specific
+// fields of one step against its (valid) kind and returns field errors keyed under prefix.
+func (h *Handler) validateStepTarget(ctx context.Context, prefix, kind string, in stepInput) (targetFieldKey, targetValue, expectedValue string, errs []httputil.FieldError) {
+	var connRec *store.ConnectorRecord
 	if kind == kindManual {
 		if in.ConnectorID != "" {
 			errs = append(errs, httputil.FieldError{Field: prefix + ".connectorId", Msg: "must be empty for a manual step"})
@@ -212,26 +251,281 @@ func (h *Handler) validateStepTarget(ctx context.Context, prefix, kind string, i
 	} else {
 		if in.ConnectorID == "" {
 			errs = append(errs, httputil.FieldError{Field: prefix + ".connectorId", Msg: "is required"})
-		} else if conn, err := h.Store.GetConnector(ctx, in.ConnectorID); err != nil {
-			errs = append(errs, httputil.FieldError{Field: prefix + ".connectorId", Msg: "connector not found"})
-		} else if kind == kindLifecycle && validVerb(in.Verb) && !connector.SupportsLifecycleVerb(conn.Type, in.Verb) {
-			errs = append(errs, httputil.FieldError{Field: prefix + ".verb", Msg: "connector does not support this verb"})
+		} else {
+			c, err := h.Store.GetConnector(ctx, in.ConnectorID)
+			if err != nil {
+				errs = append(errs, httputil.FieldError{Field: prefix + ".connectorId", Msg: "connector not found"})
+			} else {
+				connRec = c
+			}
 		}
 	}
 
-	switch {
-	case kind == kindLifecycle && !validVerb(in.Verb):
-		errs = append(errs, httputil.FieldError{Field: prefix + ".verb", Msg: "must be restart, start, or stop"})
-	case kind != kindLifecycle && in.Verb != "":
-		errs = append(errs, httputil.FieldError{Field: prefix + ".verb", Msg: "must be empty for a " + kind + " step"})
+	switch kind {
+	case kindLifecycle:
+		if !validVerb(in.Verb) {
+			errs = append(errs, httputil.FieldError{Field: prefix + ".verb", Msg: "must be restart, start, or stop"})
+		} else if connRec != nil && !connector.SupportsLifecycleVerb(connRec.Type, in.Verb) {
+			errs = append(errs, httputil.FieldError{Field: prefix + ".verb", Msg: "connector does not support this verb"})
+		}
+	default:
+		if in.Verb != "" {
+			errs = append(errs, httputil.FieldError{Field: prefix + ".verb", Msg: "must be empty for a " + kind + " step"})
+		}
 	}
 
-	if kind != kindLifecycle && in.EntityRef != "" {
-		errs = append(errs, httputil.FieldError{Field: prefix + ".entityRef", Msg: "must be empty for a " + kind + " step"})
+	if kind != kindConfigPush {
+		if in.FieldKey != "" {
+			errs = append(errs, httputil.FieldError{Field: prefix + ".fieldKey", Msg: "must be empty for a " + kind + " step"})
+		}
+		if len(in.TargetValue) > 0 && string(bytes.TrimSpace(in.TargetValue)) != "null" {
+			errs = append(errs, httputil.FieldError{Field: prefix + ".targetValue", Msg: "must be empty for a " + kind + " step"})
+		}
+	}
+
+	if kind != kindWaitForEntity {
+		if in.Attribute != "" {
+			errs = append(errs, httputil.FieldError{Field: prefix + ".attribute", Msg: "must be empty for a " + kind + " step"})
+		}
+		if in.Operator != "" {
+			errs = append(errs, httputil.FieldError{Field: prefix + ".operator", Msg: "must be empty for a " + kind + " step"})
+		}
+		if len(in.ExpectedValue) > 0 && string(bytes.TrimSpace(in.ExpectedValue)) != "null" {
+			errs = append(errs, httputil.FieldError{Field: prefix + ".expectedValue", Msg: "must be empty for a " + kind + " step"})
+		}
+	}
+
+	switch kind {
+	case kindManual, kindSyncAndWait, kindWaitUntilHealthy:
+		if in.EntityRef != "" {
+			errs = append(errs, httputil.FieldError{Field: prefix + ".entityRef", Msg: "must be empty for a " + kind + " step"})
+		}
+	case kindLifecycle:
+		if in.EntityRef != "" {
+			if err := connector.ValidateCompositeRef(in.EntityRef); err != nil {
+				errs = append(errs, httputil.FieldError{Field: prefix + ".entityRef", Msg: "invalid entityRef"})
+			}
+		}
+	case kindWaitForEntity:
+		var waitErrs []httputil.FieldError
+		expectedValue, waitErrs = validateWaitForEntityStep(prefix, in)
+		errs = append(errs, waitErrs...)
+	case kindConfigPush:
+		var pushErrs []httputil.FieldError
+		targetFieldKey, targetValue, pushErrs = h.validateConfigPushStep(prefix, in, connRec)
+		errs = append(errs, pushErrs...)
+	}
+	return targetFieldKey, targetValue, expectedValue, errs
+}
+
+func validateWaitForEntityStep(prefix string, in stepInput) (string, []httputil.FieldError) {
+	var errs []httputil.FieldError
+	var expectedValue string
+	if in.EntityRef == "" {
+		errs = append(errs, httputil.FieldError{Field: prefix + ".entityRef", Msg: "is required"})
 	} else if err := connector.ValidateCompositeRef(in.EntityRef); err != nil {
 		errs = append(errs, httputil.FieldError{Field: prefix + ".entityRef", Msg: "invalid entityRef"})
 	}
-	return errs
+
+	if strings.TrimSpace(in.Attribute) == "" {
+		errs = append(errs, httputil.FieldError{Field: prefix + ".attribute", Msg: "is required"})
+	}
+
+	if in.Operator == "" {
+		errs = append(errs, httputil.FieldError{Field: prefix + ".operator", Msg: "is required"})
+	} else if !validEntityWaitOperator(in.Operator) {
+		errs = append(errs, httputil.FieldError{Field: prefix + ".operator", Msg: "must be eq, neq, contains, regex, gt, or lt"})
+	}
+
+	if len(in.ExpectedValue) == 0 || string(bytes.TrimSpace(in.ExpectedValue)) == "null" {
+		errs = append(errs, httputil.FieldError{Field: prefix + ".expectedValue", Msg: "is required"})
+		return expectedValue, errs
+	}
+
+	var expVal any
+	if err := json.Unmarshal(in.ExpectedValue, &expVal); err != nil {
+		errs = append(errs, httputil.FieldError{Field: prefix + ".expectedValue", Msg: "must be valid JSON"})
+		return expectedValue, errs
+	}
+
+	switch in.Operator {
+	case "regex":
+		pattern, ok := expVal.(string)
+		if !ok {
+			errs = append(errs, httputil.FieldError{Field: prefix + ".expectedValue", Msg: "must be a string regular expression"})
+		} else if len(pattern) > maxRegexLength {
+			errs = append(errs, httputil.FieldError{Field: prefix + ".expectedValue", Msg: fmt.Sprintf("must be at most %d characters", maxRegexLength)})
+		} else if _, err := regexp.Compile(pattern); err != nil {
+			errs = append(errs, httputil.FieldError{Field: prefix + ".expectedValue", Msg: "invalid regular expression: " + err.Error()})
+		} else {
+			b, _ := json.Marshal(pattern)
+			expectedValue = string(b)
+		}
+	case "gt", "lt":
+		if _, ok := expVal.(float64); ok {
+			expectedValue = string(bytes.TrimSpace(in.ExpectedValue))
+		} else if s, ok := expVal.(string); ok {
+			if _, err := strconv.ParseFloat(s, 64); err == nil {
+				expectedValue = s
+			} else {
+				errs = append(errs, httputil.FieldError{Field: prefix + ".expectedValue", Msg: "must be a number"})
+			}
+		} else {
+			errs = append(errs, httputil.FieldError{Field: prefix + ".expectedValue", Msg: "must be a number"})
+		}
+	default:
+		if sVal, ok := expVal.(string); ok {
+			b, _ := json.Marshal(sVal)
+			expectedValue = string(b)
+		} else {
+			expectedValue = string(bytes.TrimSpace(in.ExpectedValue))
+		}
+	}
+	return expectedValue, errs
+}
+
+func (h *Handler) validateConfigPushStep(prefix string, in stepInput, connRec *store.ConnectorRecord) (string, string, []httputil.FieldError) {
+	var errs []httputil.FieldError
+	var targetFieldKey, targetValue string
+
+	var pusher connector.ConfigPusher
+	if connRec != nil {
+		var encKey string
+		if h.ConnH != nil && h.ConnH.Config != nil {
+			encKey = h.ConnH.Config.Encryption.Key
+		}
+		cfg, err := store.ParseConnectorConfig(connRec.Type, connRec.ConfigData, encKey)
+		if err != nil {
+			errs = append(errs, httputil.FieldError{Field: prefix + ".connectorId", Msg: "failed to load connector config"})
+		} else {
+			connector.ApplyRecordConfig(cfg, connRec.URL, connRec.VerifyTLS)
+			conn, err := connector.Get(connRec.Type, cfg)
+			if err != nil {
+				errs = append(errs, httputil.FieldError{Field: prefix + ".connectorId", Msg: "failed to initialize connector"})
+			} else if p, ok := conn.(connector.ConfigPusher); ok {
+				pusher = p
+			} else {
+				errs = append(errs, httputil.FieldError{Field: prefix + ".connectorId", Msg: "connector does not support config push"})
+			}
+		}
+	}
+
+	var targetField *connector.ConfigField
+	if pusher != nil {
+		if strings.TrimSpace(in.FieldKey) == "" {
+			errs = append(errs, httputil.FieldError{Field: prefix + ".fieldKey", Msg: "is required"})
+		} else {
+			for _, wf := range pusher.WritableFields() {
+				if wf.Key == in.FieldKey {
+					targetField = &wf
+					break
+				}
+			}
+			if targetField == nil {
+				errs = append(errs, httputil.FieldError{Field: prefix + ".fieldKey", Msg: fmt.Sprintf("field %q is not writable for this connector", in.FieldKey)})
+			}
+		}
+	} else if connRec == nil {
+		if strings.TrimSpace(in.FieldKey) == "" {
+			errs = append(errs, httputil.FieldError{Field: prefix + ".fieldKey", Msg: "is required"})
+		}
+	}
+
+	if targetField != nil {
+		targetFieldKey = targetField.Key
+		if store.IsSecretFieldType(targetField.Type) {
+			errs = append(errs, httputil.FieldError{Field: prefix + ".fieldKey", Msg: "field type cannot be password or secret"})
+		}
+
+		if targetField.EntityScope {
+			if in.EntityRef == "" {
+				errs = append(errs, httputil.FieldError{Field: prefix + ".entityRef", Msg: "is required for entity-scoped field"})
+			} else if err := connector.ValidateCompositeRef(in.EntityRef); err != nil {
+				errs = append(errs, httputil.FieldError{Field: prefix + ".entityRef", Msg: "invalid entityRef"})
+			}
+		} else {
+			if in.EntityRef != "" {
+				errs = append(errs, httputil.FieldError{Field: prefix + ".entityRef", Msg: "must be empty for global field"})
+			}
+		}
+
+		if len(in.TargetValue) == 0 || string(bytes.TrimSpace(in.TargetValue)) == "null" {
+			errs = append(errs, httputil.FieldError{Field: prefix + ".targetValue", Msg: "is required"})
+		} else {
+			var rawVal any
+			if err := json.Unmarshal(in.TargetValue, &rawVal); err != nil {
+				errs = append(errs, httputil.FieldError{Field: prefix + ".targetValue", Msg: "must be valid JSON"})
+			} else {
+				val, valErr := validateTargetValueShape(prefix, targetField, rawVal, in.TargetValue)
+				if valErr != nil {
+					errs = append(errs, *valErr)
+				} else {
+					targetValue = val
+				}
+			}
+		}
+	} else {
+		targetFieldKey = in.FieldKey
+		if in.EntityRef != "" {
+			if err := connector.ValidateCompositeRef(in.EntityRef); err != nil {
+				errs = append(errs, httputil.FieldError{Field: prefix + ".entityRef", Msg: "invalid entityRef"})
+			}
+		}
+		if len(in.TargetValue) == 0 || string(bytes.TrimSpace(in.TargetValue)) == "null" {
+			errs = append(errs, httputil.FieldError{Field: prefix + ".targetValue", Msg: "is required"})
+		} else {
+			targetValue = string(bytes.TrimSpace(in.TargetValue))
+		}
+	}
+	return targetFieldKey, targetValue, errs
+}
+
+func validateTargetValueShape(prefix string, targetField *connector.ConfigField, rawVal any, rawBytes []byte) (string, *httputil.FieldError) {
+	switch targetField.Type {
+	case "toggle":
+		if bVal, ok := rawVal.(bool); ok {
+			return fmt.Sprintf("%v", bVal), nil
+		} else if sVal, ok := rawVal.(string); ok && (sVal == "true" || sVal == "false") {
+			return sVal, nil
+		}
+		return "", &httputil.FieldError{Field: prefix + ".targetValue", Msg: "must be a boolean"}
+	case "number":
+		if _, ok := rawVal.(float64); ok {
+			return string(bytes.TrimSpace(rawBytes)), nil
+		} else if sVal, ok := rawVal.(string); ok {
+			if _, err := strconv.ParseFloat(sVal, 64); err == nil {
+				return sVal, nil
+			}
+		}
+		return "", &httputil.FieldError{Field: prefix + ".targetValue", Msg: "must be a number"}
+	case "text":
+		if sVal, ok := rawVal.(string); ok {
+			b, _ := json.Marshal(sVal)
+			return string(b), nil
+		}
+		return "", &httputil.FieldError{Field: prefix + ".targetValue", Msg: "must be a string"}
+	case "select":
+		sVal, ok := rawVal.(string)
+		if !ok {
+			return "", &httputil.FieldError{Field: prefix + ".targetValue", Msg: "must be a string"}
+		}
+		if targetField.Key == "restartPolicy" {
+			switch sVal {
+			case "always", "unless-stopped", "on-failure", "no":
+				b, _ := json.Marshal(sVal)
+				return string(b), nil
+			default:
+				return "", &httputil.FieldError{Field: prefix + ".targetValue", Msg: "must be one of: always, unless-stopped, on-failure, no"}
+			}
+		}
+		if strings.TrimSpace(sVal) == "" {
+			return "", &httputil.FieldError{Field: prefix + ".targetValue", Msg: "is required"}
+		}
+		b, _ := json.Marshal(sVal)
+		return string(b), nil
+	default:
+		return string(bytes.TrimSpace(rawBytes)), nil
+	}
 }
 
 // toStepResponses builds the response steps for one runbook's steps,
@@ -310,6 +604,11 @@ func (h *Handler) toStepResponses(ctx context.Context, userID string, steps []*s
 			TimeoutSeconds:       timeout,
 			CanExecute:           can,
 			ExecuteBlockedReason: reason,
+			FieldKey:             st.FieldKey,
+			TargetValue:          st.TargetValue,
+			Attribute:            st.Attribute,
+			Operator:             st.Operator,
+			ExpectedValue:        st.ExpectedValue,
 		})
 	}
 	return out, nil
@@ -343,14 +642,30 @@ func stepAuditDetail(steps []*store.RunbookStepRecord) []map[string]any {
 	out := make([]map[string]any, 0, len(steps))
 	for _, st := range steps {
 		kind := effectiveKind(st.Kind)
-		out = append(out, map[string]any{
+		entry := map[string]any{
 			"id":             st.ID,
 			"kind":           kind,
 			"connectorId":    st.ConnectorID,
 			"verb":           st.Verb,
 			"entityRef":      st.EntityRef,
 			"timeoutSeconds": reportedTimeout(kind, st.TimeoutSeconds),
-		})
+		}
+		if st.FieldKey != "" {
+			entry["fieldKey"] = st.FieldKey
+		}
+		if st.TargetValue != "" {
+			entry["targetValue"] = st.TargetValue
+		}
+		if st.Attribute != "" {
+			entry["attribute"] = st.Attribute
+		}
+		if st.Operator != "" {
+			entry["operator"] = st.Operator
+		}
+		if st.ExpectedValue != "" {
+			entry["expectedValue"] = st.ExpectedValue
+		}
+		out = append(out, entry)
 	}
 	return out
 }

@@ -7,13 +7,17 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export type RunbookRunStepKind = (typeof RunbookRunStepKind)[keyof typeof RunbookRunStepKind];
+/**
+ * Comparison operator for wait_for_entity steps.
+ */
+export type RunbookStepInputOperator =
+  (typeof RunbookStepInputOperator)[keyof typeof RunbookStepInputOperator];
 
-export const RunbookRunStepKind = {
-  lifecycle: 'lifecycle',
-  sync_and_wait: 'sync_and_wait',
-  wait_until_healthy: 'wait_until_healthy',
-  manual: 'manual',
-  config_push: 'config_push',
-  wait_for_entity: 'wait_for_entity',
+export const RunbookStepInputOperator = {
+  eq: 'eq',
+  neq: 'neq',
+  contains: 'contains',
+  regex: 'regex',
+  gt: 'gt',
+  lt: 'lt',
 } as const;

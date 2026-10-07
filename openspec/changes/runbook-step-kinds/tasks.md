@@ -14,9 +14,9 @@
 
 ## 3. Authoring
 
-- [ ] 3.1 Extend `validateSteps`, step input/response and `toStepResponses` for `config_push` (pusher, writable field, entity scope, field type not password/secret, value shape) and `wait_for_entity` (entity, attribute, operator set, regex compile, numeric `gt`/`lt`, 1 to 30 minute timeout); verify a handler test for every authoring scenario in the spec delta.
-- [ ] 3.2 Confirm single-step execution rejects both new kinds and `ListEntityRunbookSteps` returns them for their entity; verify handler and store tests.
-- [ ] 3.3 Update OpenAPI `RunbookStep`, `RunbookStepInput`, `RunbookRunStep` and the kind enums, then regenerate the web client; verify the OpenAPI contract test and web typecheck.
+- [x] 3.1 Extend `validateSteps`, step input/response and `toStepResponses` for `config_push` (pusher, writable field, entity scope, field type not password/secret, value shape) and `wait_for_entity` (entity, attribute, operator set, regex compile, numeric `gt`/`lt`, 1 to 30 minute timeout); verify a handler test for every authoring scenario in the spec delta.
+- [x] 3.2 Confirm single-step execution rejects both new kinds and `ListEntityRunbookSteps` returns them for their entity; verify handler and store tests.
+- [x] 3.3 Update OpenAPI `RunbookStep`, `RunbookStepInput`, `RunbookRunStep` and the kind enums, then regenerate the web client; verify the OpenAPI contract test and web typecheck.
 
 ## 4. Executor
 

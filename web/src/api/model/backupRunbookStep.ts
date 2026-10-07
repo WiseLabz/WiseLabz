@@ -6,6 +6,7 @@
  *
  * OpenAPI spec version: 0.1.0
  */
+import type { BackupRunbookStepOperator } from './backupRunbookStepOperator';
 import type { RunbookStepKind } from './runbookStepKind';
 import type { RunbookStepStoredVerb } from './runbookStepStoredVerb';
 
@@ -19,7 +20,7 @@ export interface BackupRunbookStep {
   position: number;
   kind?: RunbookStepKind;
   /**
-   * Timeout of a sync_and_wait or wait_until_healthy step; 0 or absent means the 300 second default. Not meaningful for lifecycle and manual steps.
+   * Timeout of a sync_and_wait, wait_until_healthy or wait_for_entity step; 0 or absent means the 300 second default. Not meaningful for lifecycle, config_push and manual steps.
    * @minimum 0
    * @maximum 1800
    */
@@ -30,6 +31,16 @@ export interface BackupRunbookStep {
   /** Empty for every kind except lifecycle. */
   verb: RunbookStepStoredVerb;
   entityRef: string;
+  /** Configuration field key for config_push steps. */
+  fieldKey?: string;
+  /** Target value for config_push steps, formatted as JSON text. */
+  targetValue?: string;
+  /** Entity attribute name for wait_for_entity steps. */
+  attribute?: string;
+  /** Comparison operator for wait_for_entity steps. */
+  operator?: BackupRunbookStepOperator;
+  /** Expected attribute value for wait_for_entity steps, formatted as JSON text. */
+  expectedValue?: string;
   createdAt: string;
   updatedAt: string;
 }

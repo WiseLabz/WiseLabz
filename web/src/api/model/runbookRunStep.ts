@@ -8,6 +8,7 @@
  */
 import type { RestartPreview } from './restartPreview';
 import type { RunbookRunStepKind } from './runbookRunStepKind';
+import type { RunbookRunStepOperator } from './runbookRunStepOperator';
 import type { RunbookRunStepState } from './runbookRunStepState';
 import type { RunbookRunStepVerb } from './runbookRunStepVerb';
 
@@ -23,6 +24,16 @@ export interface RunbookRunStep {
   connectorName?: string;
   verb?: RunbookRunStepVerb;
   entityRef?: string;
+  /** Configuration field key for config_push steps. */
+  fieldKey?: string;
+  /** Target value for config_push steps, formatted as JSON text. */
+  targetValue?: string;
+  /** Entity attribute name for wait_for_entity steps. */
+  attribute?: string;
+  /** Comparison operator for wait_for_entity steps. */
+  operator?: RunbookRunStepOperator;
+  /** Expected attribute value for wait_for_entity steps, formatted as JSON text. */
+  expectedValue?: string;
   timeoutSeconds?: number;
   state?: RunbookRunStepState;
   startedAt?: string;

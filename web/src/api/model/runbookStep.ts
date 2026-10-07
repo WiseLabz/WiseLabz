@@ -8,6 +8,7 @@
  */
 import type { RunbookStepExecuteBlockedReason } from './runbookStepExecuteBlockedReason';
 import type { RunbookStepKind } from './runbookStepKind';
+import type { RunbookStepOperator } from './runbookStepOperator';
 import type { RunbookStepStoredVerb } from './runbookStepStoredVerb';
 
 export interface RunbookStep {
@@ -22,14 +23,24 @@ export interface RunbookStep {
   /** The referenced connector's display name, for rendering without a second lookup. */
   connectorName: string;
   verb: RunbookStepStoredVerb;
+  /** Target entity's SnapshotEntity.externalId, or empty for connectors that manage a single implicit service. */
+  entityRef: string;
+  /** Configuration field key for config_push steps. */
+  fieldKey?: string;
+  /** Target value for config_push steps, formatted as JSON text. */
+  targetValue?: string;
+  /** Entity attribute name for wait_for_entity steps. */
+  attribute?: string;
+  /** Comparison operator for wait_for_entity steps. */
+  operator?: RunbookStepOperator;
+  /** Expected attribute value for wait_for_entity steps, formatted as JSON text. */
+  expectedValue?: string;
   /**
-   * Timeout of a sync_and_wait or wait_until_healthy step, in seconds. Always 0 for lifecycle and manual steps, whenever the step was created, and for a redacted step.
+   * Timeout of a sync_and_wait, wait_until_healthy or wait_for_entity step, in seconds. Always 0 for lifecycle, config_push and manual steps, whenever the step was created, and for a redacted step.
    * @minimum 0
    * @maximum 1800
    */
   timeoutSeconds: number;
-  /** Target entity's SnapshotEntity.externalId, or empty for connectors that manage a single implicit service. */
-  entityRef: string;
   /** Whether the calling user can execute this step on its own: it is a lifecycle step and they hold at least an operator grant on connectorId. */
   canExecute: boolean;
   /** Empty when canExecute is true; "no_operator_grant" or "no_viewer_grant" when the caller lacks the grant, and "not_lifecycle" for a step whose kind only runs inside a run. */
