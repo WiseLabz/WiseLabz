@@ -7,7 +7,6 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { SchemaFieldKind } from './schemaFieldKind';
-import type { SchemaFieldOptionsItem } from './schemaFieldOptionsItem';
 
 export interface SchemaField {
   name: string;
@@ -22,5 +21,6 @@ export interface SchemaField {
   pattern?: string;
   minLength?: number;
   maxLength?: number;
-  options?: SchemaFieldOptionsItem[];
+  /** Allowed values of a select field */
+  options?: string[];
 }

@@ -155,6 +155,111 @@ describe('StartRunDialog', () => {
     expect(screen.getByRole('button', { name: 'Start run' })).toBeDisabled();
   });
 
+  it('shows a known config-push value changing to its frozen target', async () => {
+    server.use(
+      http.post('/api/runbooks/rb-1/run', () =>
+        HttpResponse.json({
+          id: 'rb-1',
+          canStart: true,
+          steps: [
+            step({
+              kind: 'config_push',
+              title: 'Set memory',
+              fieldKey: 'memory',
+              targetValue: '512',
+              currentValue: 256,
+              currentValueKnown: true,
+              verb: undefined,
+            }),
+          ],
+        })
+      )
+    );
+    renderDialog();
+
+    expect(await screen.findByText('Current: 256 → 512')).toBeInTheDocument();
+  });
+
+  it('states that the config-push current value is unknown', async () => {
+    server.use(
+      http.post('/api/runbooks/rb-1/run', () =>
+        HttpResponse.json({
+          id: 'rb-1',
+          canStart: true,
+          steps: [
+            step({
+              kind: 'config_push',
+              title: 'Set memory',
+              fieldKey: 'memory',
+              targetValue: '512',
+              currentValueKnown: false,
+              verb: undefined,
+            }),
+          ],
+        })
+      )
+    );
+    renderDialog();
+
+    expect(await screen.findByText('Current value unknown → 512')).toBeInTheDocument();
+  });
+
+  it('marks a withdrawn config-push field as not executable', async () => {
+    server.use(
+      http.post('/api/runbooks/rb-1/run', () =>
+        HttpResponse.json({
+          id: 'rb-1',
+          canStart: false,
+          steps: [
+            step({
+              kind: 'config_push',
+              title: 'Set memory',
+              fieldKey: 'memory',
+              targetValue: '512',
+              currentValueKnown: false,
+              canExecute: false,
+              executeBlockedReason: 'unsupported_field',
+              verb: undefined,
+            }),
+          ],
+        })
+      )
+    );
+    renderDialog();
+
+    expect(
+      await screen.findByText('Not executable: this configuration field is no longer writable.')
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Start run' })).toBeDisabled();
+  });
+
+  it('shows the wait-for-entity condition and timeout in the preview', async () => {
+    server.use(
+      http.post('/api/runbooks/rb-1/run', () =>
+        HttpResponse.json({
+          id: 'rb-1',
+          canStart: true,
+          steps: [
+            step({
+              kind: 'wait_for_entity',
+              title: 'Wait for the VM',
+              entityRef: 'vm-100',
+              attribute: 'status',
+              operator: 'eq',
+              expectedValue: '"running"',
+              timeoutSeconds: 300,
+              verb: undefined,
+            }),
+          ],
+        })
+      )
+    );
+    renderDialog();
+
+    expect(await screen.findByText('status eq running')).toBeInTheDocument();
+    expect(screen.getByText('300 seconds')).toBeInTheDocument();
+  });
+
   it('binds elevation to runbook.run and starts with the elevation token', async () => {
     let receivedToken: string | null = null;
     let dryRunToken: string | null = 'unset';

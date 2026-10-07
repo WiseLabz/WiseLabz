@@ -36,7 +36,7 @@ import { Field, Select, SubHeader, TextInput, Toggle } from '../settings/parts';
 type Draft = Omit<ComplianceRuleInput, 'conditions' | 'related'> & { conditions: ComplianceCondition[]; related: ComplianceRelatedClause[] };
 
 const OPS: Record<ComplianceAttributeSpecType, ComplianceConditionOp[]> = {
-  string: [ComplianceConditionOp.eq, ComplianceConditionOp.neq, ComplianceConditionOp.contains, ComplianceConditionOp.not_contains, ComplianceConditionOp.regex, ComplianceConditionOp.exists],
+  string: [ComplianceConditionOp.eq, ComplianceConditionOp.neq, ComplianceConditionOp.contains, ComplianceConditionOp.not_contains, ComplianceConditionOp.regex, ComplianceConditionOp.exists, ComplianceConditionOp.days_left_lt, ComplianceConditionOp.days_left_gt],
   string_array: [ComplianceConditionOp.eq, ComplianceConditionOp.neq, ComplianceConditionOp.contains, ComplianceConditionOp.not_contains, ComplianceConditionOp.exists],
   number: [ComplianceConditionOp.eq, ComplianceConditionOp.neq, ComplianceConditionOp.gt, ComplianceConditionOp.lt, ComplianceConditionOp.exists],
   boolean: [ComplianceConditionOp.eq, ComplianceConditionOp.neq, ComplianceConditionOp.exists],
@@ -46,6 +46,10 @@ const emptyDraft: Draft = {
   name: '', connectorType: '', entityKind: '', conditions: [], related: [], severity: Severity.warning,
   title: '', remediationLink: '', enabled: false,
 };
+
+function isDaysLeftOp(op: ComplianceConditionOp) {
+  return op === ComplianceConditionOp.days_left_lt || op === ComplianceConditionOp.days_left_gt;
+}
 
 function valueFor(type: ComplianceAttributeSpecType, value: unknown) {
   if (type === ComplianceAttributeSpecType.boolean) return String(value === true);
@@ -67,7 +71,9 @@ function ConditionRow({ conditions, onChange, onRemove, attributeList }: { condi
       {conditions.map((condition, index) => {
         const attribute = attributeList.find((item) => item.name === condition.attribute);
         const type = attribute?.type ?? ComplianceAttributeSpecType.string;
-        return <div key={index} className="mb-2 grid gap-2 sm:grid-cols-[1fr_0.7fr_1fr_auto]"><Select aria-label={t('compliance.attribute')} value={condition.attribute} onChange={(e) => onChange(index, { attribute: e.target.value, op: OPS[attributeList.find((item) => item.name === e.target.value)?.type ?? ComplianceAttributeSpecType.string][0], value: '' })}><option value="">{t('compliance.attribute')}</option>{attributeList.map((item) => <option key={item.name} value={item.name}>{item.name}</option>)}</Select><Select aria-label={t('compliance.operator')} value={condition.op} onChange={(e) => onChange(index, { op: e.target.value as ComplianceConditionOp })}>{OPS[type].map((op) => <option key={op}>{op}</option>)}</Select>{condition.op === ComplianceConditionOp.exists ? <span /> : type === ComplianceAttributeSpecType.boolean ? <Select aria-label={t('compliance.value')} value={valueFor(type, condition.value)} onChange={(e) => onChange(index, { value: parseValue(type, e.target.value) })}><option value="true">true</option><option value="false">false</option></Select> : <TextInput aria-label={t('compliance.value')} type={type === ComplianceAttributeSpecType.number ? 'number' : 'text'} placeholder={type === ComplianceAttributeSpecType.string_array ? t('compliance.arrayHint') : undefined} value={valueFor(type, condition.value)} onChange={(e) => onChange(index, { value: parseValue(type, e.target.value) })} />}<IconButton label={t('compliance.removeCondition')} onClick={() => onRemove(index)}><XIcon size={15} /></IconButton></div>;
+        const daysLeft = condition.op === ComplianceConditionOp.days_left_lt || condition.op === ComplianceConditionOp.days_left_gt;
+        const updateValue = (value: string) => onChange(index, { value: daysLeft ? (value === '' ? '' : Number(value)) : parseValue(type, value) });
+        return <div key={index} className="mb-2 grid gap-2 sm:grid-cols-[1fr_0.7fr_1fr_auto]"><Select aria-label={t('compliance.attribute')} value={condition.attribute} onChange={(e) => onChange(index, { attribute: e.target.value, op: OPS[attributeList.find((item) => item.name === e.target.value)?.type ?? ComplianceAttributeSpecType.string][0], value: '' })}><option value="">{t('compliance.attribute')}</option>{attributeList.map((item) => <option key={item.name} value={item.name}>{item.name}</option>)}</Select><Select aria-label={t('compliance.operator')} value={condition.op} onChange={(e) => { const op = e.target.value as ComplianceConditionOp; onChange(index, isDaysLeftOp(op) === daysLeft ? { op } : { op, value: '' }); }}>{OPS[type].map((op) => <option key={op} value={op}>{op === ComplianceConditionOp.days_left_lt ? t('compliance.daysLeftLt') : op === ComplianceConditionOp.days_left_gt ? t('compliance.daysLeftGt') : op}</option>)}</Select>{condition.op === ComplianceConditionOp.exists ? <span /> : type === ComplianceAttributeSpecType.boolean ? <Select aria-label={t('compliance.value')} value={valueFor(type, condition.value)} onChange={(e) => onChange(index, { value: parseValue(type, e.target.value) })}><option value="true">true</option><option value="false">false</option></Select> : <TextInput aria-label={t('compliance.value')} type={daysLeft || type === ComplianceAttributeSpecType.number ? 'number' : 'text'} step={daysLeft ? 1 : undefined} placeholder={type === ComplianceAttributeSpecType.string_array ? t('compliance.arrayHint') : undefined} value={valueFor(type, condition.value)} onChange={(e) => updateValue(e.target.value)} />}<IconButton label={t('compliance.removeCondition')} onClick={() => onRemove(index)}><XIcon size={15} /></IconButton></div>;
       })}
     </>
   );

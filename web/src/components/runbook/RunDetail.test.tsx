@@ -153,6 +153,121 @@ describe('RunDetail', () => {
     expect(screen.getAllByText(/Oct 1, 2026/).length).toBeGreaterThan(0);
   });
 
+  it('shows the current and target values for a config-push step', async () => {
+    currentRun = {
+      ...baseRun,
+      state: 'running',
+      steps: [
+        {
+          ...baseRun.steps[0],
+          kind: 'config_push',
+          title: 'Set VM memory',
+          fieldKey: 'memory',
+          targetValue: '512',
+          currentValue: 256,
+          currentValueKnown: true,
+          verb: undefined,
+        },
+      ],
+    };
+    renderDetail();
+
+    expect(await screen.findByText('Current: 256 → 512')).toBeInTheDocument();
+    expect(screen.getByText('memory')).toBeInTheDocument();
+  });
+
+  it('states when a config-push current value is unknown', async () => {
+    currentRun = {
+      ...baseRun,
+      state: 'running',
+      steps: [
+        {
+          ...baseRun.steps[0],
+          kind: 'config_push',
+          title: 'Set VM memory',
+          fieldKey: 'memory',
+          targetValue: '512',
+          currentValueKnown: false,
+          verb: undefined,
+        },
+      ],
+    };
+    renderDetail();
+
+    expect(await screen.findByText('Current value unknown → 512')).toBeInTheDocument();
+  });
+
+  it('shows only the target for a config-push step without current value information', async () => {
+    currentRun = {
+      ...baseRun,
+      state: 'succeeded',
+      steps: [
+        {
+          ...baseRun.steps[0],
+          kind: 'config_push',
+          title: 'Set VM memory',
+          fieldKey: 'memory',
+          targetValue: '512',
+          verb: undefined,
+        },
+      ],
+    };
+    renderDetail();
+
+    expect(await screen.findByText('512')).toBeInTheDocument();
+    expect(screen.queryByText(/Current value unknown/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Current:/)).not.toBeInTheDocument();
+  });
+
+  it('marks a withdrawn config-push field as not executable', async () => {
+    currentRun = {
+      ...baseRun,
+      steps: [
+        {
+          ...baseRun.steps[0],
+          kind: 'config_push',
+          fieldKey: 'memory',
+          targetValue: '512',
+          canExecute: false,
+          executeBlockedReason: 'unsupported_field',
+          verb: undefined,
+        },
+      ],
+    };
+    renderDetail();
+
+    expect(
+      await screen.findByText('Not executable: this configuration field is no longer writable.')
+    ).toBeInTheDocument();
+  });
+
+  it('shows a wait condition and its timeout reason', async () => {
+    currentRun = {
+      ...baseRun,
+      steps: [
+        {
+          ...baseRun.steps[0],
+          kind: 'wait_for_entity',
+          title: 'Wait for the VM',
+          entityRef: 'vm-100',
+          attribute: 'status',
+          operator: 'eq',
+          expectedValue: '"running"',
+          timeoutSeconds: 300,
+          error: 'Timed out waiting for status; last value was starting',
+          verb: undefined,
+        },
+      ],
+    };
+    renderDetail();
+
+    expect(await screen.findByText('status eq running')).toBeInTheDocument();
+    const timeoutReason = screen.getByText(/Timed out waiting for status/);
+    expect(timeoutReason.closest('p')).toHaveTextContent(
+      'Step error: Timed out waiting for status; last value was starting'
+    );
+  });
+
   it('renders redacted steps as neutral restricted rows without exposing hidden fields', async () => {
     currentRun = {
       ...baseRun,

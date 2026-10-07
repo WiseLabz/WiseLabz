@@ -12,6 +12,7 @@ import { Button } from '../ui/Button';
 import { Dialog } from '../ui/Dialog';
 import { ElevationConfirm } from '../manager/ElevationConfirm';
 import { runErrorMessage } from './runErrors';
+import { formatRunbookValue } from './runbookStepValues';
 
 export function StartRunDialog({
   runbook,
@@ -259,6 +260,53 @@ function PreviewStep({ step }: { step: RunbookRunStep }) {
                   </dd>
                 </div>
               )}
+              {kind === 'config_push' && (
+                <>
+                  {step.fieldKey && (
+                    <div>
+                      <dt className="text-2xs text-ink-faint">{t('runbooks.runs.fieldLabel')}</dt>
+                      <dd className="mt-0.5 font-mono text-ink">{step.fieldKey}</dd>
+                    </div>
+                  )}
+                  <div>
+                    <dt className="text-2xs text-ink-faint">
+                      {t('runbooks.runs.configPushValueLabel')}
+                    </dt>
+                    <dd className="mt-0.5 text-ink">
+                      {step.currentValueKnown
+                        ? t('runbooks.runs.currentToTarget', {
+                            current: formatRunbookValue(step.currentValue),
+                            target: formatRunbookValue(step.targetValue, true),
+                          })
+                        : t('runbooks.runs.unknownCurrentToTarget', {
+                            target: formatRunbookValue(step.targetValue, true),
+                          })}
+                    </dd>
+                  </div>
+                </>
+              )}
+              {kind === 'wait_for_entity' && (
+                <>
+                  <div>
+                    <dt className="text-2xs text-ink-faint">
+                      {t('runbooks.runs.waitConditionLabel')}
+                    </dt>
+                    <dd className="mt-0.5 font-mono text-ink">
+                      {t('runbooks.runs.waitCondition', {
+                        attribute: step.attribute ?? '',
+                        operator: step.operator ?? '',
+                        expected: formatRunbookValue(step.expectedValue, true),
+                      })}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-2xs text-ink-faint">{t('runbooks.runs.timeoutLabel')}</dt>
+                    <dd className="mt-0.5 font-mono text-ink">
+                      {t('runbooks.runs.timeoutSeconds', { count: step.timeoutSeconds ?? 0 })}
+                    </dd>
+                  </div>
+                </>
+              )}
             </dl>
 
             {kind === 'lifecycle' && step.preview && <LifecycleImpact preview={step.preview} />}
@@ -345,6 +393,10 @@ function getKindLabel(kind: RunbookRunStepKind, t: Translate) {
       return t('runbooks.runs.kind.wait_until_healthy');
     case 'manual':
       return t('runbooks.runs.kind.manual');
+    case 'config_push':
+      return t('runbooks.runs.kind.config_push');
+    case 'wait_for_entity':
+      return t('runbooks.runs.kind.wait_for_entity');
   }
 }
 
@@ -357,6 +409,8 @@ function getBlockedReason(step: RunbookRunStep, t: Translate) {
       return t('runbooks.runs.blocked.no_operator_grant', { connector: step.connectorName ?? '' });
     case 'preview_unavailable':
       return t('runbooks.runs.blocked.preview_unavailable');
+    case 'unsupported_field':
+      return t('runbooks.runs.blocked.unsupported_field');
     default:
       return t('runbooks.runs.blocked.unknown');
   }

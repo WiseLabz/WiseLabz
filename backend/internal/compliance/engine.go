@@ -553,7 +553,7 @@ func matches(value any, present bool, condition Condition, now time.Time) bool {
 		if err != nil || !ok {
 			return false
 		}
-		days := math.Floor(expiry.Sub(now).Hours() / 24)
+		days := float64(DaysLeft(expiry, now))
 		return condition.Op == "days_left_lt" && days < threshold || condition.Op == "days_left_gt" && days > threshold
 	case "gt", "lt":
 		left, leftOK := number(value)

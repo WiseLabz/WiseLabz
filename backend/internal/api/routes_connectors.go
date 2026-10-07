@@ -18,6 +18,7 @@ func mountConnectorRoutes(r chi.Router, d routerDeps) {
 	// Fleet availability: cross-connector, so it filters by grant inside the
 	// handler (like GET /connectors) rather than via a per-{id} middleware.
 	r.Get("/uptime", d.connH.FleetUptime)
+	r.Get("/certificates", d.connH.Certificates)
 
 	r.Route("/connectors", func(r chi.Router) {
 		// List/maintenance-windows are cross-connector and filter inside

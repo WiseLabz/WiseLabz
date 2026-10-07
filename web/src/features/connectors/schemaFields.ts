@@ -22,6 +22,17 @@ export function isVerifyTlsField(f: SchemaField): boolean {
   return f.name === 'verify_tls' || f.name === 'verifyTls';
 }
 
+/** Connector settings that change a TLS probe's outbound targets. */
+export function isTlsProbeEndpointField(type: string, fieldName: string): boolean {
+  return type === 'tlsprobe' && ['targets', 'import_connector_id', 'import_port'].includes(fieldName);
+}
+
+export const tlsProbeFieldTranslations: Record<string, { label: string; hint: string }> = {
+  targets: { label: 'connectors.tlsProbe.targetsLabel', hint: 'connectors.tlsProbe.targetsHint' },
+  import_connector_id: { label: 'connectors.tlsProbe.importConnectorLabel', hint: 'connectors.tlsProbe.importConnectorHint' },
+  import_port: { label: 'connectors.tlsProbe.importPortLabel', hint: 'connectors.tlsProbe.importPortHint' },
+};
+
 /** True for fields sent at the top level of the request, not inside `config`. */
 export function isTopLevelField(f: SchemaField): boolean {
   return f.name === 'url' || isVerifyTlsField(f);

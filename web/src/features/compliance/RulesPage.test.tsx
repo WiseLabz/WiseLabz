@@ -14,6 +14,7 @@ const schema = {
     docker: { container: [{ name: 'privileged', type: 'boolean', description: '' }] },
     proxmox: { vm: [{ name: 'template', type: 'boolean', description: '' }] },
     pbs: { backup: [{ name: 'last_backup_age_days', type: 'number', description: '' }] },
+    tlsprobe: { certificate: [{ name: 'not_after', type: 'string', description: '' }] },
   },
   joinFields: ['external_id', 'name', 'ip', 'hostname', 'mac'],
 };
@@ -50,6 +51,46 @@ describe('RulesPage', () => {
     fireEvent.click(screen.getByRole('switch', { name: 'Enable No privileged containers' }));
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(enabled).toBe(true);
+  });
+
+  it('creates a days-left rule with a whole-number threshold', async () => {
+    let body: Record<string, unknown> | undefined;
+    server.use(http.post('/api/compliance/rules', async ({ request }) => {
+      body = await request.json() as Record<string, unknown>;
+      return HttpResponse.json({ ...body, id: 'new', createdAt: '', updatedAt: '' });
+    }));
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'New rule' }));
+    fireEvent.change(await screen.findByLabelText('Rule name'), { target: { value: 'Certificate expiring soon' } });
+    fireEvent.change(screen.getByLabelText('Finding title'), { target: { value: 'Certificate expires soon' } });
+    await screen.findByRole('option', { name: 'tlsprobe' });
+    fireEvent.change(screen.getByLabelText('Connector type'), { target: { value: 'tlsprobe' } });
+    fireEvent.change(screen.getByLabelText('Entity kind'), { target: { value: 'certificate' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add condition' }));
+    fireEvent.change(screen.getByLabelText('Attribute'), { target: { value: 'not_after' } });
+    fireEvent.change(screen.getByLabelText('Operator'), { target: { value: 'days_left_lt' } });
+    expect(screen.getByLabelText('Value')).toHaveAttribute('type', 'number');
+    expect(screen.getByLabelText('Value')).toHaveAttribute('step', '1');
+    fireEvent.change(screen.getByLabelText('Value'), { target: { value: '8' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(body).toBeDefined());
+    expect(body?.conditions).toEqual([{ attribute: 'not_after', op: 'days_left_lt', value: 8 }]);
+  });
+
+  it('keeps the typed value across non-days-left operators and clears it when crossing to days-left', async () => {
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'New rule' }));
+    await screen.findByRole('option', { name: 'tlsprobe' });
+    fireEvent.change(screen.getByLabelText('Connector type'), { target: { value: 'tlsprobe' } });
+    fireEvent.change(screen.getByLabelText('Entity kind'), { target: { value: 'certificate' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add condition' }));
+    fireEvent.change(screen.getByLabelText('Attribute'), { target: { value: 'not_after' } });
+    fireEvent.change(screen.getByLabelText('Value'), { target: { value: 'wild' } });
+    fireEvent.change(screen.getByLabelText('Operator'), { target: { value: 'contains' } });
+    expect(screen.getByLabelText('Value')).toHaveValue('wild');
+    fireEvent.change(screen.getByLabelText('Operator'), { target: { value: 'days_left_lt' } });
+    expect(screen.getByLabelText('Value')).toHaveValue(null);
   });
 
   it('installs the recommended pack from the empty state', async () => {

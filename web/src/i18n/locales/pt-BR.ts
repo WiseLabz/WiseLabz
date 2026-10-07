@@ -2,6 +2,31 @@ import type { Catalog } from '../languages';
 
 /** Brazilian Portuguese. Partial: untranslated keys fall back to English. */
 export const ptBR: Catalog = {
+  dashboard: {
+    widget: {
+      certificates: 'Certificados próximos do vencimento',
+    },
+  },
+  widgets: {
+    loadCertificatesError: 'Não foi possível carregar os certificados.',
+    certificates: {
+      emptyTitle: 'Nenhum certificado para exibir',
+      emptyDesc:
+        'Adicione um conector TLS probe ou Nginx Proxy Manager para acompanhar o vencimento dos certificados.',
+      band: {
+        expired: 'Vencido',
+        week: '7 dias ou menos',
+        month: '30 dias ou menos',
+        later: 'Mais tarde',
+      },
+      daysLeft_one: '{{count}} dia restante',
+      daysLeft_other: '{{count}} dias restantes',
+      expiredDaysAgo_one: 'Vencido há {{count}} dia',
+      expiredDaysAgo_other: 'Vencido há {{count}} dias',
+      expiredRecently: 'Vencido há menos de um dia',
+      unreachable: 'Inacessível',
+    },
+  },
   stepUp: {
     password: 'Confirme sua senha',
     securityKey: 'Confirme com sua chave de segurança',
@@ -92,8 +117,16 @@ export const ptBR: Catalog = {
         lifecycle: 'Ação de ciclo de vida',
         sync_and_wait: 'Sincronizar e aguardar',
         wait_until_healthy: 'Aguardar estado saudável',
+        config_push: 'Alteração de configuração',
+        wait_for_entity: 'Aguardar entidade',
         manual: 'Confirmação manual',
       },
+      fieldLabel: 'Campo gravável',
+      configPushValueLabel: 'Valor de configuração',
+      currentToTarget: 'Atual: {{current}} → {{target}}',
+      unknownCurrentToTarget: 'Valor atual desconhecido → {{target}}',
+      waitConditionLabel: 'Condição de espera',
+      waitCondition: '{{attribute}} {{operator}} {{expected}}',
       verbLabel: 'Ação',
       verb: {
         restart: 'Reiniciar',
@@ -142,6 +175,7 @@ export const ptBR: Catalog = {
         no_viewer_grant: 'Você não tem acesso de visualização a esta etapa.',
         no_operator_grant: 'Você precisa de acesso de operador a {{connector}}.',
         preview_unavailable: 'A prévia desta etapa está indisponível. Tente novamente.',
+        unsupported_field: 'Não executável: este campo de configuração não é mais gravável.',
         unknown: 'Esta etapa não pode ser executada.',
       },
       timeoutValue_one: '{{count}} segundo',
@@ -431,6 +465,17 @@ export const ptBR: Catalog = {
     signOut: 'Sair',
   },
   compliance: {
+    daysLeftLt: 'Dias restantes menores que',
+    daysLeftGt: 'Dias restantes maiores que',
+    certificateExpiryOffer: {
+      title: 'Acompanhar o vencimento dos certificados com regras',
+      description:
+        'Instale o pacote de vencimento de certificados para criar alertas quando os certificados do Nginx Proxy Manager e do TLS probe se aproximarem do vencimento. O conector e o widget também funcionam sem essas regras.',
+      install: 'Instalar regras de vencimento de certificados',
+      installing: 'Instalando regras…',
+      notNow: 'Agora não',
+      installError: 'Não foi possível instalar as regras de vencimento de certificados.',
+    },
     relatedTitle: 'Entidades relacionadas',
     relatedHint:
       'Opcionalmente exija ou proíba entidades relacionadas em outros serviços. Todas as cláusulas devem ser satisfeitas.',
@@ -454,8 +499,27 @@ export const ptBR: Catalog = {
           lifecycle: 'Ciclo de vida',
           sync_and_wait: 'Sincronizar e aguardar',
           wait_until_healthy: 'Aguardar ficar saudável',
+          config_push: 'Alteração de configuração',
+          wait_for_entity: 'Aguardar entidade',
           manual: 'Manual',
         },
+        fieldLabel: 'Campo gravável',
+        fieldPlaceholder: 'Selecione um campo gravável',
+        valueLabel: 'Valor de destino',
+        valuePlaceholder: 'Selecione um valor',
+        entityLabel: 'Entidade',
+        attributeLabel: 'Atributo',
+        operatorLabel: 'Operador',
+        operators: {
+          eq: 'Igual a',
+          neq: 'Diferente de',
+          contains: 'Contém',
+          regex: 'Corresponde à expressão regular',
+          gt: 'Maior que',
+          lt: 'Menor que',
+        },
+        expectedValueLabel: 'Valor esperado',
+        timeoutMinutesLabel: 'Tempo limite (minutos)',
         timeoutLabel: 'Tempo limite (segundos)',
         manualHint: 'Uma instrução manual para o operador confirmar durante a execução.',
         restricted: 'Etapa restrita',
@@ -516,10 +580,25 @@ export const ptBR: Catalog = {
     },
   },
   connectors: {
+    tlsProbe: {
+      targetsLabel: 'Destinos',
+      targetsHint:
+        'Um host:porta por linha, até 100 destinos incluindo importações. Coloque endereços IPv6 entre colchetes.',
+      importConnectorLabel: 'Importar hosts do conector Traefik',
+      importConnectorHint:
+        'Verifica os nomes literais de Host dos roteadores TLS do conector Traefik visível.',
+      importPortLabel: 'Porta dos hosts importados',
+      importPortHint: 'Porta a verificar nos hosts importados (padrão 443).',
+      adminOnlyHint:
+        'Somente um administrador da instância pode alterar os destinos e as configurações de importação do TLS probe.',
+      noTraefikImport: 'Sem importação do Traefik',
+      currentImportUnavailable: 'A importação atual não está na lista de conectores visíveis ({{id}})',
+    },
     recipePreview: {
       title: 'Testar receita',
       description: 'Execute a receita atual no destino sem salvar alterações.',
-      storedCredentialsHint: 'As credenciais salvas são reutilizadas apenas para a URL salva. Para testar outra URL, ou com a verificação TLS desativada, informe as credenciais novamente.',
+      storedCredentialsHint:
+        'As credenciais salvas são reutilizadas apenas para a URL salva. Para testar outra URL, ou com a verificação TLS desativada, informe as credenciais novamente.',
       test: 'Testar receita',
       testing: 'Testando receita…',
       validationTitle: 'Erros de validação',

@@ -23,6 +23,7 @@ export function EntityPicker({
   kind,
   placeholder,
   hideWholeService,
+  disabled = false,
 }: {
   connectorId: string;
   value: string;
@@ -33,6 +34,7 @@ export function EntityPicker({
   kind?: string;
   placeholder?: string;
   hideWholeService?: boolean;
+  disabled?: boolean;
 }) {
   const { t } = useTranslation();
   const latest = useGetConnectorsConnectorIdSnapshots(
@@ -78,6 +80,7 @@ export function EntityPicker({
           id={id}
           aria-label={pickerLabel}
           value={value}
+          disabled={disabled}
           onChange={(e) => {
             onChange(e.target.value);
             onEntityChange?.(entities.find((entity) => getEntityRef(entity) === e.target.value));
@@ -92,7 +95,8 @@ export function EntityPicker({
             const ref = getEntityRef(entity) ?? '';
             return (
               <option key={ref} value={ref}>
-                {entity.name}{entity.externalId ? ` (${entity.externalId})` : ''}
+                {entity.name}
+                {entity.externalId ? ` (${entity.externalId})` : ''}
               </option>
             );
           })}

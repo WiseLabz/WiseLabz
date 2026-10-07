@@ -51,7 +51,7 @@ func (d *Connector) Stop(ctx context.Context, _ map[string]any, entityRef string
 // extension once recreate-with-rollback is designed.
 func (d *Connector) WritableFields() []connector.ConfigField {
 	return []connector.ConfigField{
-		{Key: "restartPolicy", Label: "Restart Policy", Type: "select", EntityScope: true},
+		{Key: "restartPolicy", Label: "Restart Policy", Type: "select", EntityScope: true, Options: []string{"no", "always", "unless-stopped", "on-failure"}},
 	}
 }
 

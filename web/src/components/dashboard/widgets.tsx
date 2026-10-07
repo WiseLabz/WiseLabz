@@ -6,10 +6,11 @@
  * sync is a live timeline, docs is a coverage meter.
  */
 import type { ReactNode } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { AnimatePresence, motion } from 'motion/react';
 import { useGetConnectors, useGetUptime } from '../../api/generated/connectors/connectors';
+import { useGetCertificates } from '../../api/generated/certificates/certificates';
 import { useGetDashboardOverview } from '../../api/generated/dashboard/dashboard';
 import { useGetAlerts } from '../../api/generated/alerts/alerts';
 import { useGetDocsTree } from '../../api/generated/docs/docs';
@@ -21,7 +22,7 @@ import { relativeTime } from '../../lib/time';
 import { StatusPill, SeverityTag } from '../ui/StatusDot';
 import { statusMeta, toneColor } from '../ui/status';
 import { SkeletonRows, EmptyState, ErrorState } from '../ui/states';
-import { ArrowRightIcon, FileTextIcon, CheckIcon } from '../icons';
+import { ArrowRightIcon, FileTextIcon, CheckIcon, ShieldIcon } from '../icons';
 import { categoryIconFor } from '../categoryIcon';
 import { WidgetFrame } from './WidgetFrame';
 import type { Connector, ServiceStatus, Severity } from '../../api/model';
@@ -551,6 +552,102 @@ export function FleetUptimeWidget({ title, icon }: WidgetProps) {
           </button>
         ))}
       </div>
+    );
+  }
+
+  return (
+    <WidgetFrame
+      title={title}
+      icon={icon}
+      onRefresh={() => void refetch()}
+      pollingEnabled={pollingEnabled}
+      onTogglePolling={togglePolling}
+    >
+      {body}
+    </WidgetFrame>
+  );
+}
+
+/* ── Expiring certificates ─────────────────────────────────────────────── */
+
+type CertificateBand = 'expired' | 'week' | 'month' | 'later';
+
+function certificateBand(daysLeft: number): CertificateBand {
+  if (daysLeft < 0) return 'expired';
+  if (daysLeft <= 7) return 'week';
+  if (daysLeft <= 30) return 'month';
+  return 'later';
+}
+
+function certificateBandClass(band: CertificateBand): string {
+  switch (band) {
+    case 'expired': return 'text-err';
+    case 'week': return 'text-warn';
+    case 'month': return 'text-accent-primary-bright';
+    default: return 'text-ink-muted';
+  }
+}
+
+export function ExpiringCertificatesWidget({ title, icon }: WidgetProps) {
+  const { t } = useTranslation();
+  const { pollingEnabled, refetchInterval, togglePolling } = useWidgetPolling('certificates');
+  const { data, isLoading, isError, refetch } = useGetCertificates(
+    { limit: 10 },
+    { query: { refetchInterval } },
+  );
+
+  let body: ReactNode;
+  if (isLoading) {
+    body = <SkeletonRows rows={4} />;
+  } else if (isError || !data) {
+    body = <ErrorState description={t('widgets.loadCertificatesError')} onRetry={() => refetch()} />;
+  } else if (data.length === 0) {
+    body = (
+      <EmptyState
+        icon={<ShieldIcon size={20} />}
+        title={t('widgets.certificates.emptyTitle')}
+        description={t('widgets.certificates.emptyDesc')}
+      />
+    );
+  } else {
+    body = (
+      <ul className="min-h-0 flex-1 divide-y divide-line-soft overflow-y-auto px-2 py-1">
+        {data.map((certificate) => {
+          const band = certificateBand(certificate.daysLeft);
+          const href = certificate.entityId
+            ? `/entities/${encodeURIComponent(certificate.entityId)}`
+            : `/services/${encodeURIComponent(certificate.connectorId)}`;
+          // The server floors days left, so -1 means expired less than a full day ago.
+          const expiredDays = -certificate.daysLeft - 1;
+          const daysLabel = certificate.daysLeft >= 0
+            ? t('widgets.certificates.daysLeft', { count: certificate.daysLeft })
+            : expiredDays === 0
+              ? t('widgets.certificates.expiredRecently')
+              : t('widgets.certificates.expiredDaysAgo', { count: expiredDays });
+          return (
+            <li key={`${certificate.connectorId}:${certificate.externalId}`}>
+              <Link
+                to={href}
+                className="flex items-center gap-3 rounded-md px-2 py-2.5 text-left transition-colors hover:bg-surface-raised focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent-primary-soft"
+              >
+                <span className="flex min-w-0 flex-1 flex-col">
+                  <span className="truncate text-sm font-medium text-ink">{certificate.name}</span>
+                  <span className="truncate text-2xs text-ink-faint">{certificate.connectorName}</span>
+                </span>
+                <span className={`shrink-0 text-right font-mono text-2xs ${certificateBandClass(band)}`}>
+                  <span className="block">{t(`widgets.certificates.band.${band}`)}</span>
+                  <span className="block">{daysLabel}</span>
+                </span>
+                {certificate.unreachable && (
+                  <span className="shrink-0 rounded-sm bg-warn-tint px-1.5 py-1 text-2xs font-medium text-warn">
+                    {t('widgets.certificates.unreachable')}
+                  </span>
+                )}
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
     );
   }
 

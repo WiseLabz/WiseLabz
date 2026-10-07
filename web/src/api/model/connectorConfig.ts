@@ -8,6 +8,6 @@
  */
 
 /**
- * Shareable textarea configuration such as recipes; credentials are omitted.
+ * Shareable textarea configuration such as recipes; credentials are omitted. A TLS probe connector also returns its `targets`, `import_connector_id` and `import_port`, all as strings.
  */
 export type ConnectorConfig = { [key: string]: string };

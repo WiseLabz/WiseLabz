@@ -34,9 +34,9 @@
 
 ## 6. Web
 
-- [ ] 6.1 Add both kinds to the step editor in `features/settings/RunbooksPage.tsx`: field picker from the connector's writable fields with a typed value input, entity picker, attribute combobox fed by the compliance schema with free text, operator select, expected value, timeout; verify `RunbooksPage.test.tsx` covers saving each kind and showing server field errors.
-- [ ] 6.2 Show current -> target (or "current value unknown") and wait conditions in `StartRunDialog.tsx` and the run view, including the timeout reason; verify component tests for known, unknown and not-executable push steps.
-- [ ] 6.3 Add en and pt-BR strings for the new kinds, fields and errors; verify the i18n key parity test and web lint.
+- [x] 6.1 Add both kinds to the step editor in `features/settings/RunbooksPage.tsx`: field picker from the connector's writable fields with a typed value input, entity picker, attribute combobox fed by the compliance schema with free text, operator select, expected value, timeout; verify `RunbooksPage.test.tsx` covers saving each kind and showing server field errors.
+- [x] 6.2 Show current -> target (or "current value unknown") and wait conditions in `StartRunDialog.tsx` and the run view, including the timeout reason; verify component tests for known, unknown and not-executable push steps.
+- [x] 6.3 Add en and pt-BR strings for the new kinds, fields and errors; verify the i18n key parity test and web lint.
 
 ## 7. Integration
 
