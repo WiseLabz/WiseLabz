@@ -41,4 +41,4 @@
 ## 7. Integration
 
 - [x] 7.1 Run backend tests, web tests, lint and typecheck with the low-memory settings, then `graphify update .`; verify all pass in CI on the PR.
-- [ ] 7.2 Manually create a TLS probe connector against real lab hosts with a Traefik import, install the pack and enable the widget; verify entities, an expiry finding for a short-lived test certificate, and the widget match the spec scenarios.
+- [x] 7.2 Manually create a TLS probe connector against real lab hosts with a Traefik import, install the pack and enable the widget; verify entities, an expiry finding for a short-lived test certificate, and the widget match the spec scenarios.
