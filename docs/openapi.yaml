@@ -6286,8 +6286,10 @@ components:
       type: object
       description: >
         Frozen step and its current outcome. A redacted step carries no kind, title, connector,
-        entity, verb, timeout, error or preview; only identifiers, position, state, times,
-        confirming user and permission flags remain. Manual steps have no connector and are visible.
+        entity, verb, timeout, error or preview, and none of the config-push or entity-wait fields
+        (field key, target value, attribute, operator, expected value, current value); only
+        identifiers, position, state, times, confirming user and permission flags remain. Manual
+        steps have no connector and are visible.
       required: [id, position, redacted, canExecute]
       properties:
         id: { type: string }

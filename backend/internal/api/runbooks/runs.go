@@ -334,7 +334,7 @@ func (h *Handler) previewConfigPushStep(ctx context.Context, view *RunStepRespon
 	conn, rec, cfg, err := h.resolveConnector(ctx, view.ConnectorID)
 	if err != nil || rec == nil {
 		if view.ExecuteBlockedReason == "" {
-			view.ExecuteBlockedReason = "unsupported_field"
+			view.ExecuteBlockedReason = "preview_unavailable"
 		}
 		view.CanExecute = false
 		known := false

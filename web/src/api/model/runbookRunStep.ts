@@ -13,7 +13,7 @@ import type { RunbookRunStepState } from './runbookRunStepState';
 import type { RunbookRunStepVerb } from './runbookRunStepVerb';
 
 /**
- * Frozen step and its current outcome. A redacted step carries no kind, title, connector, entity, verb, timeout, error or preview; only identifiers, position, state, times, confirming user and permission flags remain. Manual steps have no connector and are visible.
+ * Frozen step and its current outcome. A redacted step carries no kind, title, connector, entity, verb, timeout, error or preview, and none of the config-push or entity-wait fields (field key, target value, attribute, operator, expected value, current value); only identifiers, position, state, times, confirming user and permission flags remain. Manual steps have no connector and are visible.
  */
 export interface RunbookRunStep {
   id: string;

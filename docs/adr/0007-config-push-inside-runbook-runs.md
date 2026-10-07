@@ -113,17 +113,27 @@ cancels the step before the bounded core completes:
   re-executes. Because of the already-at-target rule (D4), if the interrupted write had
   actually landed upstream, the re-execution observes the target value and succeeds cleanly
   without writing again or triggering a false mismatch.
+- This only works when the connector implements `ConfigReader`. Without a reader, a resumed
+  step whose write had landed fails with the could-not-verify mismatch alert (D4).
+- If the 2-minute bound (`configPushTimeout`) cuts the core short, the step fails with a
+  message that the field may or may not have been written; the outcome is unknown.
 
 ### 7. Known limitations (#677)
 
 Two known connector-specific limitations are tracked in GitHub issue #677 and validated
 during manual verification (task 7.2):
 
-1. **OPNsense:** When saving a rule succeeds but applying the configuration fails, a subsequent
-   retry re-reads the saved rule via `ConfigRead`. Because the saved rule reflects the target
-   state, the already-at-target check considers the step satisfied and skips the write and apply,
-   leaving the unapplied rule pending in OPNsense until the next manual or scheduled apply.
-2. **Proxmox:** Guest memory is read from the running guest list (`maxmem`) rather than the
-   pending configuration file. If a previous push updated memory for a running guest that has
-   not yet rebooted, `ConfigRead` observes the old running memory value rather than the pending
-   configuration value.
+1. **OPNsense:** `ConfigPush` saves the rule (`setRule`) and then calls `filter/apply`, while
+   the reader returns the saved state. If the save succeeds and the apply fails or is cut off,
+   the push errors; on retry, or on resume of a step left `unknown`, the reader sees the saved
+   value equal to the target, so the core skips the write and reports success. The rule is saved
+   but not applied (not live), so a rule the operator disabled may still be enforced.
+   Direction: use OPNsense's savepoint flow (`savepoint`, `setRule`, `apply/<revision>`,
+   `cancelRollback/<revision>`) so a failed apply rolls the save back, or undo the save when
+   apply fails.
+2. **Proxmox:** The reader takes `memory` from the running guest (`maxmem` in the node's guest
+   list), while `ConfigPush` writes the config key `memory` (`cores` is already read from
+   `/config`). A running VM with 4096 MB live and a pending change to 2048 reads as 4096, so a
+   push targeting the running value is treated as already at target, and a failed verification
+   would revert to the live value and overwrite the pending one.
+   Direction: read `memory` from the guest `/config` already fetched for `cores`.

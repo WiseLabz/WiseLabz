@@ -53,7 +53,7 @@ object, action-specific), and `createdAt`.
 | `connector.restart` | `POST /api/connectors/{id}/restart` (dryRun omitted/false), or `POST /api/runbooks/{id}/steps/{stepId}/execute` for a `restart` step | connector / id |
 | `connector.start` | `POST /api/connectors/{id}/start` (dryRun omitted/false), or `POST /api/runbooks/{id}/steps/{stepId}/execute` for a `start` step | connector / id |
 | `connector.stop` | `POST /api/connectors/{id}/stop` (dryRun omitted/false), or `POST /api/runbooks/{id}/steps/{stepId}/execute` for a `stop` step | connector / id |
-| `connector.configPush` | `POST /api/connectors/{id}/config-push` (successful, verified push only), or a `config_push` step in a runbook run | connector / id |
+| `connector.configPush` | `POST /api/connectors/{id}/config-push` (successful, verified push only), or a `config_push` step in a runbook run started via `POST /api/runbooks/{id}/run` or resumed via `POST /api/runbook-runs/{runId}/resume` | connector / id |
 | `connector.maintenanceWindow.open` | `POST /api/connectors/{id}/maintenance-window` | connector / id |
 | `connector.maintenanceWindow.close` | `DELETE /api/connectors/{id}/maintenance-window` (only when a window was actually active) | connector / id |
 | `connector.bulk_sync` | `POST /api/connectors/bulk-sync` | connector / id — one record per resolved item |
@@ -110,6 +110,8 @@ push (`POST /api/connectors/{id}/config-push`), `detail` contains `fieldKey` and
 `entityRef`. When triggered by a `config_push` step in a runbook run, `detail`
 additionally identifies the run: `runId`, `stepId`, `stepIndex` (the 0-based
 step position), and `runbookId` (when the run originated from an existing runbook).
+The audit actor is the run's acting user: the user who last resumed the run,
+otherwise the user who started it (`runbookrun.ActingUser`).
 Like direct pushes, only successful verified writes produce an audit record; a push
 step that finds the field already at target succeeds without writing and records
 no audit entry.
