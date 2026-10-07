@@ -138,3 +138,21 @@ func TestCertificatesLimitBounds(t *testing.T) {
 		}
 	}
 }
+
+func TestCertificatesEntityLinkFallsBackToName(t *testing.T) {
+	t.Parallel()
+	app := newTestApp(t)
+	user, token := app.user(t, "viewer")
+	probe := seedHealthTestConnector(t, app, "tlsprobe")
+	app.connectorGrant(t, user, probe.ID, "viewer")
+	now := time.Now().UTC()
+	seedSnapshots(t, app, probe, []snap{{at: now.Format(time.RFC3339), entities: []connector.SnapshotEntity{
+		{Kind: "certificate", Name: "unnamed-id", Attributes: map[string]any{"not_after": now.Add(24 * time.Hour).Format(time.RFC3339)}},
+	}}})
+	entityID := newID()
+	seedEntity(t, app, entityID, "unnamed-id", "certificate", probe.ID, "unnamed-id", "unnamed-id", "")
+	items := listCertificates(t, app, token, "")
+	if len(items) != 1 || items[0].ExternalID != "" || items[0].EntityID != entityID {
+		t.Fatalf("certificate without external id = %+v, want entityId %q", items, entityID)
+	}
+}

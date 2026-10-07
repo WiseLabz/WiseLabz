@@ -1,9 +1,11 @@
 package connectors
 
 import (
+	"cmp"
 	"net/http"
 	"slices"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/WiseLabz/wiselabz/internal/auth"
@@ -89,10 +91,24 @@ func (h *Handler) Certificates(w http.ResponseWriter, r *http.Request) {
 			})
 		}
 	}
-	slices.SortStableFunc(items, func(a, b certificateExpiry) int { return a.NotAfter.Compare(b.NotAfter) })
+	// The order must be total so equal expiries (common for wildcard certificates)
+	// cut deterministically at the limit.
+	slices.SortFunc(items, func(a, b certificateExpiry) int {
+		return cmp.Or(
+			a.NotAfter.Compare(b.NotAfter),
+			strings.Compare(a.ConnectorID, b.ConnectorID),
+			strings.Compare(a.ExternalID, b.ExternalID),
+			strings.Compare(a.Name, b.Name),
+		)
+	})
 	items = items[:min(limit, len(items))]
 	for i := range items {
-		id, err := h.Store.CertificateEntityID(ctx, items[i].ConnectorID, items[i].ExternalID)
+		// Identity reconciliation stores the external ID, else the name, as the member ref.
+		ref := items[i].ExternalID
+		if ref == "" {
+			ref = items[i].Name
+		}
+		id, err := h.Store.CertificateEntityID(ctx, items[i].ConnectorID, ref)
 		if err != nil {
 			httputil.Errorf(w, err)
 			return
