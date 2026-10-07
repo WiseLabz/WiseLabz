@@ -13,16 +13,19 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	_ "github.com/jackc/pgx/v5/stdlib"
+	"go.yaml.in/yaml/v3"
 	_ "modernc.org/sqlite"
 
 	"github.com/WiseLabz/wiselabz/internal/backup"
 	"github.com/WiseLabz/wiselabz/internal/blobstore"
+	"github.com/WiseLabz/wiselabz/internal/connector"
 	"github.com/WiseLabz/wiselabz/internal/store"
 	"github.com/WiseLabz/wiselabz/internal/store/storetest"
 
@@ -1201,4 +1204,54 @@ func backupRowCount(t *testing.T, s *store.Store, table string) int {
 		t.Fatalf("count %s: %v", table, err)
 	}
 	return count
+}
+
+func TestCategoriesMatchOpenAPIEnum(t *testing.T) {
+	raw, err := os.ReadFile("../../../docs/openapi.yaml")
+	if err != nil {
+		t.Fatalf("read spec: %v", err)
+	}
+	var doc struct {
+		Components struct {
+			Schemas map[string]struct {
+				Enum []string `yaml:"enum"`
+			} `yaml:"schemas"`
+		} `yaml:"components"`
+	}
+	if err := yaml.Unmarshal(raw, &doc); err != nil {
+		t.Fatalf("parse spec: %v", err)
+	}
+	got := doc.Components.Schemas["ConnectorCategory"].Enum
+	if want := backup.Categories(); !reflect.DeepEqual(got, want) {
+		t.Fatalf("openapi ConnectorCategory enum = %v, want %v", got, want)
+	}
+}
+
+func TestCategoriesMatchMigrationCheckConstraint(t *testing.T) {
+	inList := "category IN ('" + strings.Join(backup.Categories(), "','") + "')"
+	for _, dialect := range []string{"sqlite", "postgres"} {
+		path := filepath.Join("..", "store", "migrations", dialect, "000064_connector_categories.up.sql")
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s migration: %v", dialect, err)
+		}
+		if !strings.Contains(string(raw), inList) {
+			t.Errorf("%s does not contain %q", path, inList)
+		}
+	}
+}
+
+// Connectors declared in config have no category field; reconcile stores the
+// registered type's category (reconcile.go), so this guarantees a declared
+// connector can never carry an unknown category.
+func TestRegisteredConnectorTypesHaveValidCategory(t *testing.T) {
+	schemas := connector.ListSchemas()
+	if len(schemas) == 0 {
+		t.Fatal("no connector types registered")
+	}
+	for _, s := range schemas {
+		if !backup.ValidCategory(s.Category) {
+			t.Errorf("connector type %q has invalid category %q", s.Type, s.Category)
+		}
+	}
 }

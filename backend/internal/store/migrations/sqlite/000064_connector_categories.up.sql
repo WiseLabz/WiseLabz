@@ -5,6 +5,13 @@
 --
 -- Preserves all columns, default values, and indexes on connectors.
 -- As in 000022, we build the replacement under a fresh name and rename it into place.
+--
+-- DROP TABLE on a referenced table performs an implicit DELETE that fires
+-- ON DELETE CASCADE / SET NULL in child tables when foreign keys are enforced.
+-- RunMigrations/RunMigrationsDown switch foreign keys off around the migration
+-- (runSQLiteWithForeignKeysOff in internal/store/migrations.go) and run
+-- PRAGMA foreign_key_check afterwards, so this file must only ever be applied
+-- through that runner.
 
 DROP INDEX IF EXISTS idx_connectors_category;
 

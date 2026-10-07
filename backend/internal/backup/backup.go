@@ -34,8 +34,11 @@ const BundleVersion = 2
 
 const exportPageSize = 1000
 
-// Categories lists all valid connector categories in canonical order.
-var Categories = []string{
+// categories is the single list of valid connector categories, in canonical
+// order. It must match the connectors.category CHECK constraint (migration
+// 000064, both dialects) and the OpenAPI ConnectorCategory enum; the backup
+// tests pin both.
+var categories = []string{
 	"virtualization",
 	"containers_paas",
 	"networking",
@@ -46,24 +49,22 @@ var Categories = []string{
 	"other",
 }
 
-// ValidCategories mirrors the connectors.category CHECK constraint in
-// migrations/sqlite/000064_connector_categories.up.sql.
-var ValidCategories = map[string]bool{
-	"virtualization":  true,
-	"containers_paas": true,
-	"networking":      true,
-	"dns":             true,
-	"storage":         true,
-	"monitoring":      true,
-	"media":           true,
-	"other":           true,
-}
+var validCategories = func() map[string]bool {
+	set := make(map[string]bool, len(categories))
+	for _, c := range categories {
+		set[c] = true
+	}
+	return set
+}()
 
-var validCategories = ValidCategories
+// Categories returns a copy of the valid connector categories in canonical order.
+func Categories() []string {
+	return append([]string(nil), categories...)
+}
 
 // ValidCategory reports whether category is one of the valid connector categories.
 func ValidCategory(category string) bool {
-	return ValidCategories[category]
+	return validCategories[category]
 }
 
 // AIConfigSummary is an informational, secret-free snapshot of the AI
