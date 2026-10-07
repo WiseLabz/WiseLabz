@@ -217,3 +217,24 @@ func TestRunHealthCheckSkipsUnchangedStatusWrite(t *testing.T) {
 		t.Error("history row must still be recorded")
 	}
 }
+
+func TestRunHealthCheckKeepsSyncReportedOffline(t *testing.T) {
+	s := newStore(t)
+	typ := register(t, &fakeConn{})
+	ctx := context.Background()
+	rec := seed(t, s, typ, "probe", true)
+	rec.Status, rec.StatusMessage = "offline", connector.AllTargetsUnreachable(2)
+	if err := s.UpdateConnector(ctx, rec.ID, map[string]any{"status": rec.Status, "status_message": rec.StatusMessage}); err != nil {
+		t.Fatal(err)
+	}
+	// Validate passes, but it cannot see that every target failed to answer.
+	res, err := RunHealthCheck(ctx, s, rec, "")
+	if err != nil || res.Status != "offline" || res.Message != "All 2 targets unreachable" {
+		t.Fatalf("RunHealthCheck = %+v, %v; want the sync-reported offline kept", res, err)
+	}
+	// Any other offline status still recovers when Validate passes.
+	rec.StatusMessage = "connection refused"
+	if res, err = RunHealthCheck(ctx, s, rec, ""); err != nil || res.Status != "online" {
+		t.Fatalf("RunHealthCheck = %+v, %v; want online", res, err)
+	}
+}

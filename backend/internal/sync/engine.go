@@ -149,6 +149,10 @@ type RunResult struct {
 	Status       string `json:"status"` // "success", "error"
 	Error        string `json:"error,omitempty"`
 	Duration     string `json:"duration"`
+
+	// offlineMessage is set when the fetched snapshot reports the connector
+	// offline (connector.SnapshotOfflineMessage) although the sync succeeded.
+	offlineMessage string
 }
 
 // RunSyncAll runs sync for all enabled connectors.

@@ -2,6 +2,7 @@ package connector
 
 import (
 	"fmt"
+	"regexp"
 	"time"
 )
 
@@ -32,4 +33,50 @@ func ClassifyHealth(err error, latency time.Duration, threshold ...time.Duration
 		return "degraded", fmt.Sprintf("Slow response (%s)", latency.Round(time.Millisecond))
 	}
 	return "online", "Healthy"
+}
+
+// Reserved snapshot metadata keys by which a connector reports a status that
+// only its fetch can see (Validate runs without stored snapshots). The sync
+// engine honours MetadataHealthStatus when a sync succeeds.
+const (
+	MetadataHealthStatus  = "health_status"
+	MetadataHealthMessage = "health_message"
+)
+
+// ReportOffline marks a successful fetch's metadata as an offline connector:
+// the sync still succeeds and stores its entities, but the connector's status
+// becomes offline with the message AllTargetsUnreachable(n).
+func ReportOffline(metadata map[string]string, targets int) {
+	metadata[MetadataHealthStatus] = "offline"
+	metadata[MetadataHealthMessage] = AllTargetsUnreachable(targets)
+}
+
+// SnapshotOfflineMessage returns the offline message a snapshot reports via
+// ReportOffline, if it does.
+func SnapshotOfflineMessage(sn *ServiceSnapshot) (string, bool) {
+	if sn == nil || sn.Metadata[MetadataHealthStatus] != "offline" {
+		return "", false
+	}
+	if msg := sn.Metadata[MetadataHealthMessage]; msg != "" {
+		return msg, true
+	}
+	return "Offline", true
+}
+
+// AllTargetsUnreachable is the status message of a connector none of whose
+// targets could be reached.
+func AllTargetsUnreachable(n int) string {
+	if n == 1 {
+		return "All 1 target unreachable"
+	}
+	return fmt.Sprintf("All %d targets unreachable", n)
+}
+
+var allTargetsUnreachablePattern = regexp.MustCompile(`^All \d+ targets? unreachable$`)
+
+// IsAllTargetsUnreachable reports whether a stored status message is the one
+// AllTargetsUnreachable wrote. A health check, which cannot see fetch results,
+// leaves such an offline status for the next sync to clear.
+func IsAllTargetsUnreachable(message string) bool {
+	return allTargetsUnreachablePattern.MatchString(message)
 }

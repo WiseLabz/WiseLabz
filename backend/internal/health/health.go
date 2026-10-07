@@ -50,6 +50,11 @@ func RunHealthCheck(ctx context.Context, s *store.Store, rec *store.ConnectorRec
 		threshold = schema.DegradedLatencyThreshold()
 	}
 	status, message := connector.ClassifyHealth(validateErr, latency, threshold)
+	// Validate cannot see what a fetch observed: keep the offline status a sync
+	// reported (every probe target down) until the next sync clears it.
+	if validateErr == nil && rec.Status == "offline" && connector.IsAllTargetsUnreachable(rec.StatusMessage) {
+		status, message = rec.Status, rec.StatusMessage
+	}
 
 	// A cancelled parent (shutdown, client disconnect) says nothing about the
 	// connector: write nothing rather than a false offline. Only the check's
