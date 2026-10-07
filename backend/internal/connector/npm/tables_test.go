@@ -127,20 +127,24 @@ func TestBuildCertificateTableNormalizesExpiryLayouts(t *testing.T) {
 		{"id":2,"expires_on":"2026-11-15 04:17:54"},
 		{"id":3,"expires_on":"2026-11-15"},
 		{"id":4,"expires_on":"2026-11-15T06:17:54+02:00"},
-		{"id":5,"expires_on":"not a timestamp"}
+		{"id":5,"expires_on":"not a timestamp"},
+		{"id":6,"expires_on":"2026-11-15T04:17:54"},
+		{"id":7,"expires_on":"2026-11-15 06:17:54+02:00"}
 	]`)
 	_, entities, _, err := buildCertificateTable(raw)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(entities) != 5 {
-		t.Fatalf("built %d certificates, want 5", len(entities))
+	if len(entities) != 7 {
+		t.Fatalf("built %d certificates, want 7", len(entities))
 	}
 	wantNormalized := map[string]string{
 		"1": "2026-11-15T04:17:54Z",
 		"2": "2026-11-15T04:17:54Z",
 		"3": "2026-11-15T00:00:00Z",
 		"4": "2026-11-15T04:17:54Z",
+		"6": "2026-11-15T04:17:54Z",
+		"7": "2026-11-15T04:17:54Z",
 	}
 	wantOriginal := map[string]string{
 		"1": "2026-11-15T04:17:54.000Z",
@@ -148,6 +152,8 @@ func TestBuildCertificateTableNormalizesExpiryLayouts(t *testing.T) {
 		"3": "2026-11-15",
 		"4": "2026-11-15T06:17:54+02:00",
 		"5": "not a timestamp",
+		"6": "2026-11-15T04:17:54",
+		"7": "2026-11-15 06:17:54+02:00",
 	}
 	for _, entity := range entities {
 		if got := entity.Attributes["expires_on"]; got != wantOriginal[entity.ExternalID] {

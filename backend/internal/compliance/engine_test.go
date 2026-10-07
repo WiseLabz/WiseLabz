@@ -1080,6 +1080,7 @@ func TestEvaluateDaysLeft(t *testing.T) {
 		{"negative floor", now.Add(-time.Hour).Format(time.RFC3339), []Condition{{"not_after", "days_left_lt", 0}}, true},
 		{"negative floor gt", now.Add(-time.Hour).Format(time.RFC3339), []Condition{{"not_after", "days_left_gt", -1}}, false},
 		{"band excludes partial second day", now.Add(36 * time.Hour).Format(time.RFC3339), []Condition{{"not_after", "days_left_lt", 8}, {"not_after", "days_left_gt", 1}}, false},
+		{"band lt 2 gt 0 at 1d12h", now.Add(36 * time.Hour).Format(time.RFC3339), []Condition{{"not_after", "days_left_lt", 2}, {"not_after", "days_left_gt", 0}}, true},
 		{"greater", now.Add(48 * time.Hour).Format(time.RFC3339), []Condition{{"not_after", "days_left_gt", 1}}, true},
 		{"less strict boundary", now.Add(8 * 24 * time.Hour).Format(time.RFC3339), []Condition{{"not_after", "days_left_lt", 8}}, false},
 		{"timezone", "2026-10-09T15:00:00+03:00", []Condition{{"not_after", "days_left_gt", 1}}, true},

@@ -130,7 +130,7 @@ func hostIdentity(domains []string) (string, []string) {
 func numericID(id int) string { return strconv.Itoa(id) }
 
 func normalizeExpiry(expiresOn string) (string, bool) {
-	for _, layout := range []string{time.RFC3339Nano, "2006-01-02 15:04:05", "2006-01-02"} {
+	for _, layout := range []string{time.RFC3339Nano, "2006-01-02T15:04:05", "2006-01-02 15:04:05Z07:00", "2006-01-02 15:04:05", "2006-01-02"} {
 		expiresAt, err := time.Parse(layout, expiresOn)
 		if err == nil {
 			return expiresAt.UTC().Truncate(time.Second).Format(time.RFC3339), true
