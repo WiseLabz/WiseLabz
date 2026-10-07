@@ -32,6 +32,7 @@ import type {
   RunbookStepVerb,
   RunbookTargetType,
 } from '../../api/model';
+import { ComplianceAttributeSpecType } from '../../api/model/complianceAttributeSpecType';
 import { RunbookStepInputOperator as RunbookStepOperator } from '../../api/model/runbookStepInputOperator';
 import { Severity } from '../../api/model/severity';
 import { Button, IconButton } from '../../components/ui/Button';
@@ -85,6 +86,8 @@ interface StepDraft {
   /** Empty for a loaded step that is not a lifecycle step. */
   verb: RunbookStepVerb | '';
   entityRef: string;
+  /** UI-only kind learned from the selected entity. */
+  entityKind?: string;
   timeoutSeconds?: number | '';
   fieldKey: string;
   targetValue: unknown;
@@ -103,6 +106,7 @@ function newStepDraft(): StepDraft {
     connectorId: '',
     verb: 'restart',
     entityRef: '',
+    entityKind: '',
     timeoutSeconds: '',
     fieldKey: '',
     targetValue: '',
@@ -190,6 +194,7 @@ export function RunbooksPage() {
         connectorId: s.connectorId,
         verb: s.verb as RunbookStepVerb | '',
         entityRef: s.entityRef,
+        entityKind: '',
         timeoutSeconds: s.timeoutSeconds > 0 ? s.timeoutSeconds : '',
         fieldKey: s.fieldKey ?? '',
         targetValue: parseStepValue(s.targetValue),
@@ -700,6 +705,7 @@ export function RunbooksPage() {
                                       connectorId: '',
                                       verb: '',
                                       entityRef: '',
+                                      entityKind: '',
                                       timeoutSeconds: '',
                                       fieldKey: '',
                                       targetValue: '',
@@ -715,6 +721,7 @@ export function RunbooksPage() {
                                       kind: nextKind,
                                       verb: '',
                                       entityRef: '',
+                                      entityKind: '',
                                       timeoutSeconds: step.timeoutSeconds || '',
                                       fieldKey: '',
                                       targetValue: '',
@@ -727,6 +734,7 @@ export function RunbooksPage() {
                                       kind: nextKind,
                                       verb: '',
                                       entityRef: '',
+                                      entityKind: '',
                                       timeoutSeconds: '',
                                       fieldKey: '',
                                       targetValue: '',
@@ -738,6 +746,7 @@ export function RunbooksPage() {
                                     updateStep(step.key, {
                                       kind: nextKind,
                                       verb: '',
+                                      entityKind: '',
                                       fieldKey: '',
                                       targetValue: '',
                                       attribute: '',
@@ -756,6 +765,7 @@ export function RunbooksPage() {
                                     updateStep(step.key, {
                                       kind: nextKind,
                                       verb: (verbs[0] ?? 'restart') as RunbookStepVerb,
+                                      entityKind: '',
                                       timeoutSeconds: '',
                                     });
                                   }
@@ -803,6 +813,7 @@ export function RunbooksPage() {
                                       updateStep(step.key, {
                                         connectorId,
                                         entityRef: '',
+                                        entityKind: '',
                                         verb: (verbs[0] ??
                                           step.verb ??
                                           'restart') as RunbookStepVerb,
@@ -811,6 +822,7 @@ export function RunbooksPage() {
                                       updateStep(step.key, {
                                         connectorId,
                                         entityRef: '',
+                                        entityKind: '',
                                         fieldKey: '',
                                         targetValue: '',
                                         attribute: '',
@@ -1086,13 +1098,26 @@ function RunbookStepKindFields({
     );
   }
 
+  const attributes = Object.values(complianceAttributes ?? {}).flat();
+  const attributesForEntity = step.entityKind
+    ? Object.values(complianceAttributes?.[step.entityKind] ?? {}).flat()
+    : attributes;
   const attributeNames = [
     ...new Set(
-      Object.values(complianceAttributes ?? {})
-        .flat()
-        .map((attribute) => attribute.name)
+      attributes.map((attribute) => attribute.name)
     ),
   ].sort();
+  const attributeType = uniqueAttributeType(attributesForEntity, step.attribute);
+  const numericOperator =
+    step.operator === RunbookStepOperator.gt || step.operator === RunbookStepOperator.lt;
+  const numericExpectedValue =
+    numericOperator || attributeType === ComplianceAttributeSpecType.number;
+  const booleanExpectedValue =
+    !numericOperator && attributeType === ComplianceAttributeSpecType.boolean;
+  const arrayExpectedValue =
+    !numericOperator &&
+    (step.operator === RunbookStepOperator.eq || step.operator === RunbookStepOperator.neq) &&
+    attributeType === ComplianceAttributeSpecType.string_array;
   const listId = `runbook-attributes-${step.key}`;
   const waitTimeoutMinutes =
     typeof step.timeoutSeconds === 'number' ? step.timeoutSeconds / 60 : '';
@@ -1106,6 +1131,21 @@ function RunbookStepKindFields({
           disabled={disabled}
           hideWholeService
           onChange={(entityRef) => onChange({ entityRef })}
+          onEntityChange={(entity) => {
+            const entityKind = entity?.kind ?? '';
+            const nextAttributes = entityKind
+              ? Object.values(complianceAttributes?.[entityKind] ?? {}).flat()
+              : attributes;
+            const nextType = uniqueAttributeType(nextAttributes, step.attribute);
+            onChange({
+              entityKind,
+              expectedValue: parseExpectedValue(
+                expectedValueToInput(step.expectedValue, nextType),
+                nextType,
+                step.operator
+              ),
+            });
+          }}
         />
       )}
       <label className="block">
@@ -1117,7 +1157,18 @@ function RunbookStepKindFields({
           list={listId}
           disabled={disabled}
           value={step.attribute}
-          onChange={(event) => onChange({ attribute: event.target.value })}
+          onChange={(event) => {
+            const attribute = event.target.value;
+            const nextType = uniqueAttributeType(attributesForEntity, attribute);
+            onChange({
+              attribute,
+              expectedValue: parseExpectedValue(
+                expectedValueToInput(step.expectedValue, nextType),
+                nextType,
+                step.operator
+              ),
+            });
+          }}
         />
         <datalist id={listId}>
           {attributeNames.map((name) => (
@@ -1137,10 +1188,11 @@ function RunbookStepKindFields({
             const operator = event.target.value as RunbookStepInputOperator;
             onChange({
               operator,
-              expectedValue:
-                operator === RunbookStepOperator.gt || operator === RunbookStepOperator.lt
-                  ? inputValueToNumber(step.expectedValue)
-                  : getInputValue(step.expectedValue),
+              expectedValue: parseExpectedValue(
+                expectedValueToInput(step.expectedValue, attributeType),
+                attributeType,
+                operator
+              ),
             });
           }}
         >
@@ -1155,31 +1207,42 @@ function RunbookStepKindFields({
         <span className="mb-1 block text-2xs text-ink-faint">
           {t('settings.runbooks.steps.expectedValueLabel')}
         </span>
-        <TextInput
-          aria-label={t('settings.runbooks.steps.expectedValueLabel')}
-          type={
-            step.operator === RunbookStepOperator.gt || step.operator === RunbookStepOperator.lt
-              ? 'number'
-              : 'text'
-          }
-          step={
-            step.operator === RunbookStepOperator.gt || step.operator === RunbookStepOperator.lt
-              ? 'any'
-              : undefined
-          }
-          disabled={disabled}
-          value={getInputValue(step.expectedValue)}
-          onChange={(event) =>
-            onChange({
-              expectedValue:
-                step.operator === RunbookStepOperator.gt || step.operator === RunbookStepOperator.lt
-                  ? event.target.value === ''
-                    ? ''
-                    : Number(event.target.value)
-                  : event.target.value,
-            })
-          }
-        />
+        {booleanExpectedValue ? (
+          <Select
+            aria-label={t('settings.runbooks.steps.expectedValueLabel')}
+            disabled={disabled}
+            value={expectedValueToInput(step.expectedValue, attributeType)}
+            onChange={(event) =>
+              onChange({
+                expectedValue: parseExpectedValue(event.target.value, attributeType, step.operator),
+              })
+            }
+          >
+            <option value="" disabled>
+              {t('settings.runbooks.steps.valuePlaceholder')}
+            </option>
+            <option value="true">true</option>
+            <option value="false">false</option>
+          </Select>
+        ) : (
+          <TextInput
+            aria-label={t('settings.runbooks.steps.expectedValueLabel')}
+            type={numericExpectedValue ? 'number' : 'text'}
+            step={numericExpectedValue ? 'any' : undefined}
+            placeholder={arrayExpectedValue ? t('compliance.arrayHint') : undefined}
+            disabled={disabled}
+            value={expectedValueToInput(step.expectedValue, attributeType)}
+            onChange={(event) =>
+              onChange({
+                expectedValue: parseExpectedValue(
+                  event.target.value,
+                  attributeType,
+                  step.operator
+                ),
+              })
+            }
+          />
+        )}
       </label>
       <label className="block">
         <span className="mb-1 block text-2xs text-ink-faint">
@@ -1222,4 +1285,45 @@ function inputValueToNumber(value: unknown): number | '' {
   if (value === '' || value === undefined || value === null) return '';
   const parsed = typeof value === 'number' ? value : Number(value);
   return Number.isFinite(parsed) ? parsed : '';
+}
+
+function expectedValueToInput(value: unknown, type?: string): string {
+  if (type === ComplianceAttributeSpecType.string_array && Array.isArray(value)) {
+    return value.join(', ');
+  }
+  return getInputValue(value);
+}
+
+function parseExpectedValue(
+  value: string,
+  type: string | undefined,
+  operator: RunbookStepInputOperator | ''
+): unknown {
+  if (
+    operator === RunbookStepOperator.gt ||
+    operator === RunbookStepOperator.lt ||
+    type === ComplianceAttributeSpecType.number
+  ) {
+    return inputValueToNumber(value);
+  }
+  if (type === ComplianceAttributeSpecType.boolean) {
+    if (value === 'true') return true;
+    if (value === 'false') return false;
+    return value;
+  }
+  if (
+    type === ComplianceAttributeSpecType.string_array &&
+    (operator === RunbookStepOperator.eq || operator === RunbookStepOperator.neq)
+  ) {
+    return value.split(',').map((item) => item.trim()).filter(Boolean);
+  }
+  return value;
+}
+
+function uniqueAttributeType(
+  attributes: { name: string; type: string }[],
+  name: string
+): string | undefined {
+  const types = new Set(attributes.filter((attribute) => attribute.name === name).map((a) => a.type));
+  return types.size === 1 ? [...types][0] : undefined;
 }

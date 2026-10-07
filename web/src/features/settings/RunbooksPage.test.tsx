@@ -87,7 +87,7 @@ vi.mock('../../api/generated/connectors/connectors', () => ({
   }),
   useGetConnectorsConnectorIdSnapshots: () => ({ data: [{ id: 'snap-1' }] }),
   useGetConnectorsConnectorIdSnapshotsSnapshotId: () => ({
-    data: { entities: [{ name: 'vm-100', externalId: '100' }] },
+    data: { entities: [{ name: 'vm-100', externalId: '100', kind: 'virtual_machine' }] },
   }),
 }));
 
@@ -96,7 +96,15 @@ vi.mock('../../api/generated/compliance/compliance', () => ({
     data: {
       attributes: {
         proxmox: {
-          virtual_machine: [{ name: 'status', type: 'string', description: 'VM state' }],
+          virtual_machine: [
+            { name: 'status', type: 'string', description: 'VM state' },
+            { name: 'enabled', type: 'boolean', description: 'Whether the VM is enabled' },
+            { name: 'cpu', type: 'number', description: 'CPU count' },
+            { name: 'tags', type: 'string_array', description: 'VM tags' },
+          ],
+        },
+        container: {
+          container: [{ name: 'cpu', type: 'string', description: 'CPU label' }],
         },
       },
       joinFields: [],
@@ -387,6 +395,75 @@ describe('RunbooksPage steps editor', () => {
         timeoutSeconds: 420,
       },
     ]);
+  });
+
+  it('saves a boolean wait expected value as a boolean', async () => {
+    renderPage();
+    fireEvent.click(screen.getAllByRole('button', { name: 'New runbook' })[0]);
+    fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Wait for VM' } });
+    fireEvent.change(screen.getByLabelText('Target', { exact: false }), {
+      target: { value: 'vm.created' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Add step' }));
+    fireEvent.change(screen.getByPlaceholderText('e.g. Restart the sync worker'), {
+      target: { value: 'Wait until enabled' },
+    });
+    fireEvent.change(screen.getByLabelText('Kind'), { target: { value: 'wait_for_entity' } });
+    fireEvent.change(screen.getByLabelText('Connector'), { target: { value: 'conn-1' } });
+    fireEvent.change(screen.getByLabelText('Entity'), { target: { value: '100' } });
+    fireEvent.change(screen.getByLabelText('Attribute'), { target: { value: 'enabled' } });
+    fireEvent.change(screen.getByLabelText('Operator'), { target: { value: 'eq' } });
+    fireEvent.change(screen.getByLabelText('Expected value'), { target: { value: 'true' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(postRunbooks).toHaveBeenCalledTimes(1));
+    expect(postRunbooks.mock.calls[0][0].steps[0].expectedValue).toBe(true);
+  });
+
+  it('saves a numeric eq wait expected value as a number', async () => {
+    renderPage();
+    fireEvent.click(screen.getAllByRole('button', { name: 'New runbook' })[0]);
+    fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Wait for VM' } });
+    fireEvent.change(screen.getByLabelText('Target', { exact: false }), {
+      target: { value: 'vm.created' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Add step' }));
+    fireEvent.change(screen.getByPlaceholderText('e.g. Restart the sync worker'), {
+      target: { value: 'Wait for CPU count' },
+    });
+    fireEvent.change(screen.getByLabelText('Kind'), { target: { value: 'wait_for_entity' } });
+    fireEvent.change(screen.getByLabelText('Connector'), { target: { value: 'conn-1' } });
+    fireEvent.change(screen.getByLabelText('Entity'), { target: { value: '100' } });
+    fireEvent.change(screen.getByLabelText('Attribute'), { target: { value: 'cpu' } });
+    fireEvent.change(screen.getByLabelText('Operator'), { target: { value: 'eq' } });
+    fireEvent.change(screen.getByLabelText('Expected value'), { target: { value: '4.5' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(postRunbooks).toHaveBeenCalledTimes(1));
+    expect(postRunbooks.mock.calls[0][0].steps[0].expectedValue).toBe(4.5);
+  });
+
+  it('keeps string-array contains expected values as a string needle', async () => {
+    renderPage();
+    fireEvent.click(screen.getAllByRole('button', { name: 'New runbook' })[0]);
+    fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Wait for VM' } });
+    fireEvent.change(screen.getByLabelText('Target', { exact: false }), {
+      target: { value: 'vm.created' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Add step' }));
+    fireEvent.change(screen.getByPlaceholderText('e.g. Restart the sync worker'), {
+      target: { value: 'Wait for tag' },
+    });
+    fireEvent.change(screen.getByLabelText('Kind'), { target: { value: 'wait_for_entity' } });
+    fireEvent.change(screen.getByLabelText('Connector'), { target: { value: 'conn-1' } });
+    fireEvent.change(screen.getByLabelText('Entity'), { target: { value: '100' } });
+    fireEvent.change(screen.getByLabelText('Attribute'), { target: { value: 'tags' } });
+    fireEvent.change(screen.getByLabelText('Operator'), { target: { value: 'contains' } });
+    fireEvent.change(screen.getByLabelText('Expected value'), { target: { value: 'production' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(postRunbooks).toHaveBeenCalledTimes(1));
+    expect(postRunbooks.mock.calls[0][0].steps[0].expectedValue).toBe('production');
   });
 
   it('shows server field errors for a wait step', async () => {
