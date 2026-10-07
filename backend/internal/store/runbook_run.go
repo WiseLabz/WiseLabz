@@ -43,6 +43,11 @@ type RunbookRunStepRecord struct {
 	ConnectorID    string `json:"connectorId,omitempty"`
 	Verb           string `json:"verb,omitempty"`
 	EntityRef      string `json:"entityRef,omitempty"`
+	FieldKey       string `json:"fieldKey"`
+	TargetValue    string `json:"targetValue"`
+	Attribute      string `json:"attribute"`
+	Operator       string `json:"operator"`
+	ExpectedValue  string `json:"expectedValue"`
 	TimeoutSeconds int    `json:"timeoutSeconds"`
 	State          string `json:"state"`
 	StartedAt      string `json:"startedAt,omitempty"`
@@ -89,7 +94,9 @@ func isActiveRunbookRunViolation(err error) bool {
 
 const runbookRunColumns = `id, runbook_id, runbook_title, state, reason, started_by, resumed_by, cancelled_by, started_at, updated_at, finished_at`
 
-const runbookRunStepColumns = `id, run_id, position, kind, title, connector_id, verb, entity_ref, timeout_seconds, state, started_at, finished_at, error, confirmed_by`
+const runbookRunStepColumns = `id, run_id, position, kind, title, connector_id, verb, entity_ref,
+	field_key, target_value, attribute, operator, expected_value, timeout_seconds, state,
+	started_at, finished_at, error, confirmed_by`
 
 // CreateRunbookRun atomically stores a new active run and its frozen steps.
 // The runbook title is read inside the transaction, and the supplied steps
@@ -120,6 +127,11 @@ func (s *Store) CreateRunbookRun(ctx context.Context, runbookID, startedBy strin
 			ConnectorID:    step.ConnectorID,
 			Verb:           step.Verb,
 			EntityRef:      step.EntityRef,
+			FieldKey:       step.FieldKey,
+			TargetValue:    step.TargetValue,
+			Attribute:      step.Attribute,
+			Operator:       step.Operator,
+			ExpectedValue:  step.ExpectedValue,
 			TimeoutSeconds: step.TimeoutSeconds,
 			State:          "pending",
 		})
@@ -144,9 +156,13 @@ func (s *Store) CreateRunbookRun(ctx context.Context, runbookID, startedBy strin
 		}
 		for _, step := range savedSteps {
 			if _, err := tx.db.ExecContext(ctx, `
-				INSERT INTO runbook_run_steps (id, run_id, position, kind, title, connector_id, verb, entity_ref, timeout_seconds, state, started_at, finished_at, error, confirmed_by)
-				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-			`, step.ID, step.RunID, step.Position, step.Kind, step.Title, nilToStr(step.ConnectorID), nilToStr(step.Verb), step.EntityRef, step.TimeoutSeconds, step.State, nilToStr(step.StartedAt), nilToStr(step.FinishedAt), step.Error, nilToStr(step.ConfirmedBy)); err != nil {
+				INSERT INTO runbook_run_steps (id, run_id, position, kind, title, connector_id, verb, entity_ref,
+					field_key, target_value, attribute, operator, expected_value, timeout_seconds, state,
+					started_at, finished_at, error, confirmed_by)
+				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			`, step.ID, step.RunID, step.Position, step.Kind, step.Title, nilToStr(step.ConnectorID), nilToStr(step.Verb), step.EntityRef,
+				step.FieldKey, step.TargetValue, step.Attribute, step.Operator, step.ExpectedValue, step.TimeoutSeconds,
+				step.State, nilToStr(step.StartedAt), nilToStr(step.FinishedAt), step.Error, nilToStr(step.ConfirmedBy)); err != nil {
 				return fmt.Errorf("insert frozen runbook step: %w", err)
 			}
 		}
@@ -669,7 +685,9 @@ func listRunbookRunSteps(ctx context.Context, db DBTX, runID string) ([]*Runbook
 func scanRunbookRunStep(row rowScanner) (*RunbookRunStepRecord, error) {
 	var step RunbookRunStepRecord
 	var connectorID, verb, startedAt, finishedAt, confirmedBy sql.NullString
-	err := row.Scan(&step.ID, &step.RunID, &step.Position, &step.Kind, &step.Title, &connectorID, &verb, &step.EntityRef, &step.TimeoutSeconds, &step.State, &startedAt, &finishedAt, &step.Error, &confirmedBy)
+	err := row.Scan(&step.ID, &step.RunID, &step.Position, &step.Kind, &step.Title, &connectorID, &verb, &step.EntityRef,
+		&step.FieldKey, &step.TargetValue, &step.Attribute, &step.Operator, &step.ExpectedValue,
+		&step.TimeoutSeconds, &step.State, &startedAt, &finishedAt, &step.Error, &confirmedBy)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}

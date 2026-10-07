@@ -110,6 +110,7 @@ func connectorCategoriesWider(t *testing.T, db *sql.DB, driver string) bool {
 
 func rollbackConnectorCategories(t *testing.T, db *sql.DB, driver string, logger *slog.Logger) {
 	t.Helper()
+	rollbackRunbookStepKinds(t, db, driver, logger)
 	if !connectorCategoriesWider(t, db, driver) {
 		return
 	}
@@ -298,12 +299,12 @@ func TestConnectorCategoriesMigrationUpDownUp(t *testing.T) {
 	run := func(t *testing.T, db *sql.DB, driver string) {
 		requireSQLiteForeignKeysOn(t, db, driver, "before the first migration")
 
-		// Ensure all migrations up to 000064 are applied initially.
+		// Ensure all migrations are applied initially.
 		if err := RunMigrations(db, driver, logger); err != nil {
 			t.Fatalf("initial RunMigrations: %v", err)
 		}
 
-		// Roll back 000064 so we are at schema 000063.
+		// Roll back 000065 and 000064 so we are at schema 000063.
 		rollbackConnectorCategories(t, db, driver, logger)
 
 		insertStmt := func(id, cat string) error {
@@ -346,9 +347,13 @@ func TestConnectorCategoriesMigrationUpDownUp(t *testing.T) {
 			t.Fatal("000063 accepted category 'storage'; want check constraint error")
 		}
 
-		// 3. Migrate UP to 000064.
+		// 3. Migrate UP through 000065, then roll back 000065 so this test can
+		// exercise 000064's category check directly.
 		if err := RunMigrations(db, driver, logger); err != nil {
-			t.Fatalf("RunMigrations() up to 000064 error: %v", err)
+			t.Fatalf("RunMigrations() up to 000065 error: %v", err)
+		}
+		if err := RunMigrationsDown(db, driver, logger); err != nil {
+			t.Fatalf("rollback 000065 before category assertions: %v", err)
 		}
 		if !connectorCategoriesWider(t, db, driver) {
 			t.Fatal("connectors_category_check was not widened after 000064 up")

@@ -2,8 +2,8 @@
 
 ## 1. Schema and store
 
-- [ ] 1.1 Add paired sqlite/postgres migration `000065`: nullable `field_key`, `target_value`, `attribute`, `operator`, `expected_value` on `runbook_steps` and `runbook_run_steps`, with a down migration that deletes steps of kind `config_push`/`wait_for_entity` before dropping the columns; verify the migration up/down test on both drivers.
-- [ ] 1.2 Extend `RunbookStepRecord`, `RunbookRunStepRecord`, step CRUD, `FreezeSteps` and backup export/import with the five fields; verify store tests, a freeze test that copies them, and a backup round-trip test.
+- [x] 1.1 Add paired sqlite/postgres migration `000065`: nullable `field_key`, `target_value`, `attribute`, `operator`, `expected_value` on `runbook_steps` and `runbook_run_steps`, with a down migration that deletes steps of kind `config_push`/`wait_for_entity` before dropping the columns; verify the migration up/down test on both drivers.
+- [x] 1.2 Extend `RunbookStepRecord`, `RunbookRunStepRecord`, step CRUD, `FreezeSteps` and backup export/import with the five fields; verify store tests, a freeze test that copies them, and a backup round-trip test.
 
 ## 2. Config-push core and reader
 
