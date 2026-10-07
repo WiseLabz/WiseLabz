@@ -1,0 +1,284 @@
+package connectors
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"net/http"
+	"reflect"
+	"strings"
+	"testing"
+
+	"github.com/WiseLabz/wiselabz/internal/api/apitest"
+	"github.com/WiseLabz/wiselabz/internal/auth"
+	"github.com/WiseLabz/wiselabz/internal/connector"
+)
+
+type configPushCoreConnector struct {
+	bulkFakeConnector
+	current   any
+	values    []any
+	land      bool
+	withdrawn bool
+	fetches   int
+	readErr   error
+	pushErr   error
+	revertErr error
+}
+
+func (c *configPushCoreConnector) WritableFields() []connector.ConfigField {
+	if c.withdrawn {
+		return []connector.ConfigField{}
+	}
+	return []connector.ConfigField{{Key: "memory", Type: "number", EntityScope: true}}
+}
+
+func (c *configPushCoreConnector) Fetch(context.Context, map[string]any) (*connector.ServiceSnapshot, error) {
+	c.fetches++
+	value, err := json.Marshal(c.current)
+	if err != nil {
+		return nil, err
+	}
+	return &connector.ServiceSnapshot{
+		ServiceName: "push fixture",
+		Sections:    []connector.SnapshotSection{{Title: "memory", Content: string(value)}},
+	}, nil
+}
+
+func (c *configPushCoreConnector) ConfigPush(_ context.Context, _ map[string]any, _, _ string, value any) error {
+	c.values = append(c.values, value)
+	if len(c.values) == 1 && c.pushErr != nil {
+		return c.pushErr
+	}
+	if len(c.values) == 2 && c.revertErr != nil {
+		return c.revertErr
+	}
+	if c.land {
+		c.current = value
+	}
+	return nil
+}
+
+type configPushCoreReader struct{ *configPushCoreConnector }
+
+func (c *configPushCoreReader) ConfigRead(context.Context, map[string]any, string, string) (any, error) {
+	return c.current, c.readErr
+}
+
+func seedConfigPushCore(t *testing.T, h *Handler, fake *configPushCoreConnector, reader bool) string {
+	t.Helper()
+	typ := "config_push_core/" + t.Name()
+	connector.Register(connector.TypeSchema{Type: typ, Name: "Push", Category: "networking"},
+		func(map[string]any) (connector.Connector, error) {
+			if reader {
+				return &configPushCoreReader{fake}, nil
+			}
+			return fake, nil
+		})
+	c := seedCoverageConnector(t, h, "push", "networking")
+	if err := h.Store.UpdateConnector(context.Background(), c.ID, map[string]any{"type": typ}); err != nil {
+		t.Fatal(err)
+	}
+	return c.ID
+}
+
+func TestMutateRunbookConfigPushVerifiedWrite(t *testing.T) {
+	t.Parallel()
+	h := newTestHandler(t)
+	fake := &configPushCoreConnector{current: 2048, land: true}
+	id := seedConfigPushCore(t, h, fake, true)
+	actorID := apitest.NewUser(t, h.Store, "operator")
+	contextID := apitest.NewUser(t, h.Store, "viewer")
+	extra := map[string]any{"runId": "run-1", "stepId": "step-2", "runbookId": "runbook-3", "fieldKey": "ignored"}
+	original := map[string]any{"runId": "run-1", "stepId": "step-2", "runbookId": "runbook-3", "fieldKey": "ignored"}
+	err := h.MutateRunbookConfigPush(auth.ContextWithUser(context.Background(), contextID, false),
+		id, "100", "memory", float64(4096), LifecycleActor{UserID: actorID, InstanceAdmin: true}, extra)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(extra, original) {
+		t.Fatalf("extra audit mutated: %v", extra)
+	}
+	if !reflect.DeepEqual(fake.values, []any{float64(4096)}) || fake.fetches != 2 {
+		t.Fatalf("writes=%v fetches=%d", fake.values, fake.fetches)
+	}
+	rows, _, err := h.Store.ListAuditRecords(context.Background(), "connector.configPush", "connector", "", "", 0, 10)
+	if err != nil || len(rows) != 1 {
+		t.Fatalf("audit=%v err=%v", rows, err)
+	}
+	if rows[0].ActorUserID != actorID || rows[0].ActorRole != "admin" || rows[0].TargetID != id {
+		t.Fatalf("audit actor/target=%+v", rows[0])
+	}
+	var detail map[string]any
+	if err := json.Unmarshal([]byte(rows[0].Detail), &detail); err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]any{"runId": "run-1", "stepId": "step-2", "runbookId": "runbook-3", "fieldKey": "memory", "entityRef": "100"}
+	if !reflect.DeepEqual(detail, want) {
+		t.Fatalf("audit detail=%v want=%v", detail, want)
+	}
+}
+
+func TestMutateRunbookConfigPushAlreadyAtTarget(t *testing.T) {
+	t.Parallel()
+	for _, value := range []any{2048, false, "same", nil} {
+		t.Run(stringMustJSON(t, value), func(t *testing.T) {
+			h := newTestHandler(t)
+			fake := &configPushCoreConnector{current: value}
+			id := seedConfigPushCore(t, h, fake, true)
+			target := value
+			if value == 2048 {
+				target = float64(2048)
+			}
+			if err := h.MutateRunbookConfigPush(context.Background(), id, "100", "memory", target, LifecycleActor{}, nil); err != nil {
+				t.Fatal(err)
+			}
+			if len(fake.values) != 0 || fake.fetches != 0 {
+				t.Fatalf("writes=%v fetches=%d, want no operation after read", fake.values, fake.fetches)
+			}
+			assertConfigPushRecords(t, h, id, 0, false)
+		})
+	}
+}
+
+func stringMustJSON(t *testing.T, value any) string {
+	t.Helper()
+	b, err := json.Marshal(value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b)
+}
+
+func TestMutateRunbookConfigPushMismatch(t *testing.T) {
+	t.Parallel()
+	for _, tt := range []struct {
+		name      string
+		reader    bool
+		previous  any
+		revertErr error
+	}{
+		{name: "known", reader: true, previous: 2048},
+		{name: "known false", reader: true, previous: false},
+		{name: "known nil", reader: true, previous: nil},
+		{name: "revert failed", reader: true, previous: 2048, revertErr: errors.New("revert rejected")},
+		{name: "unknown", previous: 2048},
+		{name: "unknown already at target", previous: 4096},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			h := newTestHandler(t)
+			fake := &configPushCoreConnector{current: tt.previous, revertErr: tt.revertErr}
+			id := seedConfigPushCore(t, h, fake, tt.reader)
+			err := h.MutateRunbookConfigPush(context.Background(), id, "100", "memory", 4096, LifecycleActor{}, nil)
+			var mismatch *ConfigPushMismatchError
+			if !errors.As(err, &mismatch) || mismatch.RevertAttempted != tt.reader {
+				t.Fatalf("mismatch=%+v err=%v", mismatch, err)
+			}
+			want := []any{4096}
+			if tt.reader {
+				want = append(want, tt.previous)
+			}
+			if !reflect.DeepEqual(fake.values, want) {
+				t.Fatalf("writes=%v want=%v", fake.values, want)
+			}
+			if !tt.reader && !strings.Contains(err.Error(), "could not verify") {
+				t.Fatalf("unknown mismatch reason=%v", err)
+			}
+			if tt.revertErr != nil && !errors.Is(err, tt.revertErr) {
+				t.Fatalf("missing revert error=%v", err)
+			}
+			assertConfigPushRecords(t, h, id, 1, tt.revertErr != nil)
+		})
+	}
+}
+
+func assertConfigPushRecords(t *testing.T, h *Handler, id string, alertCount int, revertFailed bool) {
+	t.Helper()
+	rows, _, err := h.Store.ListAuditRecords(context.Background(), "connector.configPush", "connector", "", "", 0, 10)
+	if err != nil || len(rows) != 0 {
+		t.Fatalf("audit=%v err=%v", rows, err)
+	}
+	alerts, _, err := h.Store.ListAlerts(context.Background(), id, "", "", "", 0, 10)
+	if err != nil || len(alerts) != alertCount {
+		t.Fatalf("alerts=%v err=%v", alerts, err)
+	}
+	if alertCount > 0 && (alerts[0].Severity != "critical" || strings.Contains(alerts[0].Description, "FAILED") != revertFailed) {
+		t.Fatalf("mismatch alert=%+v", alerts[0])
+	}
+}
+
+func TestMutateRunbookConfigPushWithdrawnField(t *testing.T) {
+	t.Parallel()
+	h := newTestHandler(t)
+	fake := &configPushCoreConnector{current: 2048, withdrawn: true}
+	id := seedConfigPushCore(t, h, fake, true)
+	err := h.MutateRunbookConfigPush(context.Background(), id, "100", "memory", 4096, LifecycleActor{}, nil)
+	var fieldErr *lifecycleError
+	if !errors.As(err, &fieldErr) || fieldErr.status != http.StatusBadRequest || fieldErr.code != "unsupported_field" {
+		t.Fatalf("field error=%v", err)
+	}
+	if len(fake.values) != 0 || fake.fetches != 0 {
+		t.Fatalf("writes=%v fetches=%d", fake.values, fake.fetches)
+	}
+	assertConfigPushRecords(t, h, id, 0, false)
+}
+
+func TestMutateRunbookConfigPushReadFailure(t *testing.T) {
+	t.Parallel()
+	h := newTestHandler(t)
+	readErr := errors.New("read failed")
+	fake := &configPushCoreConnector{readErr: readErr}
+	id := seedConfigPushCore(t, h, fake, true)
+	if err := h.MutateRunbookConfigPush(context.Background(), id, "100", "memory", 4096, LifecycleActor{}, nil); !errors.Is(err, readErr) {
+		t.Fatalf("read error=%v", err)
+	}
+	if len(fake.values) != 0 || fake.fetches != 0 {
+		t.Fatalf("writes=%v fetches=%d", fake.values, fake.fetches)
+	}
+	assertConfigPushRecords(t, h, id, 0, false)
+}
+
+func TestConfigPushWrapperPreviousValue(t *testing.T) {
+	t.Parallel()
+	for _, tt := range []struct {
+		name     string
+		reader   bool
+		current  any
+		previous any
+		value    any
+		status   int
+		writes   []any
+	}{
+		{name: "reader wins", reader: true, current: 2048, previous: 1024, value: 4096, status: http.StatusConflict, writes: []any{float64(4096), 2048}},
+		{name: "browser fallback", current: 2048, previous: 1024, value: 4096, status: http.StatusConflict, writes: []any{float64(4096), float64(1024)}},
+		{name: "browser false known", current: true, previous: false, value: 4096, status: http.StatusConflict, writes: []any{float64(4096), false}},
+		{name: "no reader unknown", current: 2048, value: 4096, status: http.StatusConflict, writes: []any{float64(4096)}},
+		{name: "reader skip", reader: true, current: 2048, previous: 1024, value: 2048, status: http.StatusOK},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			h := newTestHandler(t)
+			fake := &configPushCoreConnector{current: tt.current}
+			id := seedConfigPushCore(t, h, fake, tt.reader)
+			payload := stringMustJSON(t, map[string]any{"entityRef": "100", "fieldKey": "memory", "value": tt.value, "previousValue": tt.previous})
+			r := actionRequest(id, payload)
+			token, err := h.JWT.IssueElevation("", "connector.configPush")
+			if err != nil {
+				t.Fatal(err)
+			}
+			r.Header.Set("X-Elevation-Token", token.Token)
+			rr := actionResponse(t, h.ConfigPush, r, tt.status)
+			if !reflect.DeepEqual(fake.values, tt.writes) {
+				t.Fatalf("writes=%v want=%v", fake.values, tt.writes)
+			}
+			alertCount := 1
+			if tt.status == http.StatusOK {
+				alertCount = 0
+				var snapshot connector.ServiceSnapshot
+				if err := json.Unmarshal(rr.Body.Bytes(), &snapshot); err != nil || snapshot.ServiceName != "push fixture" {
+					t.Fatalf("snapshot=%v err=%v", snapshot, err)
+				}
+			}
+			assertConfigPushRecords(t, h, id, alertCount, false)
+		})
+	}
+}

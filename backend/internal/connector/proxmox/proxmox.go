@@ -49,6 +49,8 @@ func init() {
 var attributeCatalog = map[string][]connector.AttributeSpec{
 	"vm": {
 		{Name: "status", Type: "string", Description: "Guest power state (running, stopped, ...)"},
+		{Name: "memory", Type: "number", Description: "Configured memory in MB"},
+		{Name: "cores", Type: "number", Description: "Configured cores per socket"},
 		{Name: "firewall_enabled", Type: "boolean", Description: "Whether the per-guest firewall is enabled"},
 		{Name: "onboot", Type: "boolean", Description: "Whether the guest starts automatically on host boot"},
 		{Name: "agent_enabled", Type: "boolean", Description: "Whether the QEMU guest agent is enabled"},
@@ -59,6 +61,8 @@ var attributeCatalog = map[string][]connector.AttributeSpec{
 	},
 	"container": {
 		{Name: "status", Type: "string", Description: "Guest power state (running, stopped, ...)"},
+		{Name: "memory", Type: "number", Description: "Configured memory in MB"},
+		{Name: "cores", Type: "number", Description: "Configured CPU cores"},
 		{Name: "firewall_enabled", Type: "boolean", Description: "Whether the per-guest firewall is enabled"},
 		{Name: "onboot", Type: "boolean", Description: "Whether the guest starts automatically on host boot"},
 		{Name: "agent_enabled", Type: "boolean", Description: "Whether the QEMU guest agent is enabled"},

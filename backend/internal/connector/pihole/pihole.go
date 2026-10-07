@@ -117,6 +117,8 @@ type Connector struct {
 	client     *http.Client
 }
 
+var _ connector.ConfigReader = (*Connector)(nil)
+
 // Name returns the connector display name.
 func (c *Connector) Name() string { return "Pi-hole" }
 
@@ -389,6 +391,35 @@ func (c *Connector) WritableFields() []connector.ConfigField {
 	return []connector.ConfigField{
 		{Key: "ip", Label: "Record IP", Type: "text", EntityScope: true},
 	}
+}
+
+// ConfigRead returns the current IP for a local DNS hostname from a fresh
+// Pi-hole snapshot.
+func (c *Connector) ConfigRead(ctx context.Context, config map[string]any, entityRef, fieldKey string) (any, error) {
+	if fieldKey != "ip" {
+		return nil, fmt.Errorf("unsupported field %q", fieldKey)
+	}
+	if entityRef == "" {
+		return nil, fmt.Errorf("pihole config-read requires a target hostname")
+	}
+	if err := connector.ValidateRefSegment(entityRef); err != nil {
+		return nil, fmt.Errorf("invalid entityRef: %w", err)
+	}
+
+	snapshot, err := c.Fetch(ctx, config)
+	if err != nil {
+		return nil, fmt.Errorf("fetch current config value: %w", err)
+	}
+	for _, entity := range snapshot.Entities {
+		if entity.Kind != "dns_record" || entity.Hostname != entityRef {
+			continue
+		}
+		if entity.IP == "" {
+			return nil, fmt.Errorf("field %q is unavailable for hostname %q", fieldKey, entityRef)
+		}
+		return entity.IP, nil
+	}
+	return nil, fmt.Errorf("hostname %q not found", entityRef)
 }
 
 // ConfigPush repoints the local DNS record for the hostname identified by

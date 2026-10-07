@@ -1,6 +1,9 @@
 package connectors
 
 import (
+	"bytes"
+	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -22,9 +25,7 @@ type configPushRequest struct {
 	Value     any    `json:"value"`
 	// PreviousValue is the field's currently-displayed value, as the
 	// frontend read it from GET /{id}/data before the user edited it.
-	// The handler has no generic way to re-derive "the old value of
-	// fieldKey" from a rendered ServiceSnapshot, so the revert path
-	// (ADR 0003) re-pushes this rather than something inferred.
+	// Used for revert only when the connector has no ConfigReader.
 	PreviousValue any `json:"previousValue"`
 }
 
@@ -42,47 +43,143 @@ func (h *Handler) ConfigPush(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	conn, pusher, cfg, rec, ok := h.resolveConfigPusher(w, r, id, req.FieldKey)
-	if !ok {
+	prepared, err := h.prepareConfigPush(r.Context(), id, req.FieldKey)
+	if err != nil {
+		writeConfigPushError(w, err)
 		return
 	}
-
 	if err := auth.ValidateElevationHeader(h.JWT, h.Store, "connector.configPush", r); err != nil {
 		auth.WriteElevationError(w, err)
 		return
 	}
-
-	pre, err := conn.Fetch(r.Context(), cfg)
+	actor := LifecycleActor{
+		UserID:        auth.UserIDFromContext(r.Context()),
+		InstanceAdmin: auth.InstanceAdminFromContext(r.Context()),
+	}
+	post, err := h.mutateConfigPush(r.Context(), prepared, req, actor, nil)
 	if err != nil {
-		httputil.Errorf(w, fmt.Errorf("pre-push fetch: %w", err))
+		writeConfigPushError(w, err)
 		return
 	}
+	if post == nil {
+		post, err = prepared.conn.Fetch(r.Context(), prepared.config)
+		if err != nil {
+			httputil.Errorf(w, err)
+			return
+		}
+	}
+	httputil.JSON(w, http.StatusOK, post)
+}
 
-	if err := pusher.ConfigPush(r.Context(), cfg, req.EntityRef, req.FieldKey, req.Value); err != nil {
-		slog.Error("connector config-push failed", "connector", logsafe.Sanitize(id), "field", logsafe.Sanitize(req.FieldKey), "error", logsafe.Err(err))
-		httputil.Error(w, http.StatusBadGateway, "config_push_failed", err.Error())
+// ConfigPushMismatchError indicates the write could not be verified.
+// RevertAttempted reports whether a known previous value was written back.
+type ConfigPushMismatchError struct {
+	RevertAttempted bool
+	RevertErr       error
+}
+
+func (e *ConfigPushMismatchError) Error() string {
+	if e.RevertAttempted {
+		return "pushed value did not verify; auto-revert attempted, see the new alert"
+	}
+	return "could not verify pushed value; previous value unknown, see the new alert"
+}
+
+func (e *ConfigPushMismatchError) Unwrap() error { return e.RevertErr }
+
+type preparedConfigPush struct {
+	conn   connector.Connector
+	pusher connector.ConfigPusher
+	config map[string]any
+	record *store.ConnectorRecord
+}
+
+func writeConfigPushError(w http.ResponseWriter, err error) {
+	var mismatch *ConfigPushMismatchError
+	if errors.As(err, &mismatch) {
+		httputil.Error(w, http.StatusConflict, "config_push_mismatch", mismatch.Error())
 		return
 	}
+	writeLifecycleError(w, err)
+}
 
-	post, err := conn.Fetch(r.Context(), cfg)
+// MutateRunbookConfigPush performs an already-authorized config-push step.
+// Callers must check operator grants and elevation before invoking the core.
+func (h *Handler) MutateRunbookConfigPush(
+	ctx context.Context,
+	connectorID, entityRef, fieldKey string,
+	value any,
+	actor LifecycleActor,
+	extraAudit map[string]any,
+) error {
+	if err := connector.ValidateCompositeRef(entityRef); err != nil {
+		return &lifecycleError{status: http.StatusBadRequest, code: "invalid_request", message: "invalid entityRef", cause: err}
+	}
+	prepared, err := h.prepareConfigPush(ctx, connectorID, fieldKey)
 	if err != nil {
-		httputil.Errorf(w, fmt.Errorf("post-push fetch: %w", err))
-		return
+		return err
 	}
+	_, err = h.mutateConfigPush(ctx, prepared, configPushRequest{
+		EntityRef: entityRef, FieldKey: fieldKey, Value: value,
+	}, actor, extraAudit)
+	return err
+}
 
+func (h *Handler) mutateConfigPush(
+	ctx context.Context,
+	prepared *preparedConfigPush,
+	req configPushRequest,
+	actor LifecycleActor,
+	extraAudit map[string]any,
+) (*connector.ServiceSnapshot, error) {
+	previous, known := req.PreviousValue, req.PreviousValue != nil
+	if reader, ok := prepared.conn.(connector.ConfigReader); ok {
+		current, err := reader.ConfigRead(ctx, prepared.config, req.EntityRef, req.FieldKey)
+		if err != nil {
+			return nil, fmt.Errorf("pre-push config read: %w", err)
+		}
+		if configValuesEqual(current, req.Value) {
+			return nil, nil
+		}
+		previous, known = current, true
+	}
+	pre, err := prepared.conn.Fetch(ctx, prepared.config)
+	if err != nil {
+		return nil, fmt.Errorf("pre-push fetch: %w", err)
+	}
+	if err := prepared.pusher.ConfigPush(ctx, prepared.config, req.EntityRef, req.FieldKey, req.Value); err != nil {
+		slog.Error("connector config-push failed", "connector", logsafe.Sanitize(prepared.record.ID),
+			"field", logsafe.Sanitize(req.FieldKey), "error", logsafe.Err(err))
+		return nil, &lifecycleError{status: http.StatusBadGateway, code: "config_push_failed", message: err.Error(), cause: err}
+	}
+	post, err := prepared.conn.Fetch(ctx, prepared.config)
+	if err != nil {
+		return nil, fmt.Errorf("post-push fetch: %w", err)
+	}
 	if !configPushLanded(pre, post) {
-		h.revertConfigPush(w, r, pusher, cfg, rec, req.EntityRef, req.FieldKey, req.PreviousValue)
-		return
+		return nil, h.revertConfigPush(ctx, prepared, req.EntityRef, req.FieldKey, previous, known)
 	}
 
-	if err := h.Store.RecordAuditFromContext(r.Context(), "connector.configPush", "connector", id, map[string]any{
-		"fieldKey":  req.FieldKey,
-		"entityRef": req.EntityRef,
-	}); err != nil {
+	detail := make(map[string]any, len(extraAudit)+2)
+	for k, v := range extraAudit {
+		detail[k] = v
+	}
+	detail["fieldKey"] = req.FieldKey
+	detail["entityRef"] = req.EntityRef
+	if err := h.recordLifecycleAudit(context.WithoutCancel(ctx), actor, "connector.configPush", prepared.record.ID, detail); err != nil {
 		slog.Error("failed to record audit", "action", "connector.configPush", "error", err)
 	}
+	return post, nil
+}
 
-	httputil.JSON(w, http.StatusOK, post)
+// JSON represents driver numbers and browser numbers identically (int vs float64).
+func configValuesEqual(current, target any) bool {
+	a, err := json.Marshal(current)
+	if err != nil {
+		return false
+	}
+	b, err := json.Marshal(target)
+	return err == nil && bytes.Equal(a, b)
 }
 
 // validateConfigPushRequest checks the body's addressing fields. It writes
@@ -99,43 +196,35 @@ func validateConfigPushRequest(w http.ResponseWriter, req *configPushRequest) bo
 	return true
 }
 
-// resolveConfigPusher loads the connector record, builds its live config and
-// client, and confirms the client supports config-push for fieldKey. It
-// writes the error response and reports false when any of that fails.
-func (h *Handler) resolveConfigPusher(w http.ResponseWriter, r *http.Request, id, fieldKey string) (connector.Connector, connector.ConfigPusher, map[string]any, *store.ConnectorRecord, bool) {
-	rec, err := h.Store.GetConnector(r.Context(), id)
+// prepareConfigPush resolves the live connector and its writable-field whitelist.
+func (h *Handler) prepareConfigPush(ctx context.Context, id, fieldKey string) (*preparedConfigPush, error) {
+	rec, err := h.Store.GetConnector(ctx, id)
 	if errors.Is(err, store.ErrNotFound) {
-		httputil.Error(w, http.StatusNotFound, "not_found", "Connector not found")
-		return nil, nil, nil, nil, false
+		return nil, &lifecycleError{status: http.StatusNotFound, code: "not_found", message: "Connector not found", cause: err}
 	}
 	if err != nil {
-		httputil.Errorf(w, err)
-		return nil, nil, nil, nil, false
+		return nil, err
 	}
-
 	cfg, err := store.ParseConnectorConfig(rec.Type, rec.ConfigData, h.Config.Encryption.Key)
 	if err != nil {
-		httputil.Errorf(w, fmt.Errorf("parse config: %w", err))
-		return nil, nil, nil, nil, false
+		return nil, fmt.Errorf("parse config: %w", err)
 	}
 	connector.ApplyRecordConfig(cfg, rec.URL, rec.VerifyTLS)
-
 	conn, err := connector.Get(rec.Type, cfg)
 	if err != nil {
-		httputil.Errorf(w, err)
-		return nil, nil, nil, nil, false
+		return nil, err
 	}
-
 	pusher, ok := conn.(connector.ConfigPusher)
 	if !ok {
-		httputil.Error(w, http.StatusBadRequest, "unsupported_operation", "connector does not support config-push")
-		return nil, nil, nil, nil, false
+		return nil, &lifecycleError{status: http.StatusBadRequest, code: "unsupported_operation", message: "connector does not support config-push"}
 	}
 	if !isWritableField(pusher, fieldKey) {
-		httputil.Error(w, http.StatusBadRequest, "unsupported_field", fmt.Sprintf("field %q is not writable for this connector", fieldKey))
-		return nil, nil, nil, nil, false
+		return nil, &lifecycleError{
+			status: http.StatusBadRequest, code: "unsupported_field",
+			message: fmt.Sprintf("field %q is not writable for this connector", fieldKey),
+		}
 	}
-	return conn, pusher, cfg, rec, true
+	return &preparedConfigPush{conn: conn, pusher: pusher, config: cfg, record: rec}, nil
 }
 
 // isWritableField reports whether key is on the connector's config-push
@@ -161,41 +250,37 @@ func configPushLanded(pre, post *connector.ServiceSnapshot) bool {
 	return len(sync.Compare(pre, post)) > 0
 }
 
-// revertConfigPush handles ADR 0003's mismatch path: re-push the field's
-// pre-push value (the revert), then raise a critical alert describing the
-// mismatch — escalating further if the revert call itself fails, since
-// that's the one hard stop in this feature set requiring manual
-// intervention. No further automation is attempted either way.
-// ponytail: reverts exactly one field per call by design (matches
-// ConfigPush's own one-field-per-call contract), not a multi-field batch.
-func (h *Handler) revertConfigPush(w http.ResponseWriter, r *http.Request, pusher connector.ConfigPusher, cfg map[string]any, rec *store.ConnectorRecord, entityRef, fieldKey string, previousValue any) {
-	id := rec.ID
-	revertErr := pusher.ConfigPush(r.Context(), cfg, entityRef, fieldKey, previousValue)
-
-	desc := fmt.Sprintf("Pushed field %q did not verify after write; auto-revert to the pre-push value was attempted.", fieldKey)
-	if revertErr != nil {
-		desc = fmt.Sprintf("Pushed field %q did not verify after write; auto-revert FAILED (%v) — manual intervention required.", fieldKey, revertErr)
-		slog.Error("config-push auto-revert failed", "connector", logsafe.Sanitize(id), "field", logsafe.Sanitize(fieldKey), "error", logsafe.Err(revertErr))
-	} else {
-		slog.Warn("config-push mismatch, auto-reverted", "connector", logsafe.Sanitize(id), "field", logsafe.Sanitize(fieldKey))
+// revertConfigPush restores a known previous value and raises the mismatch alert.
+func (h *Handler) revertConfigPush(
+	ctx context.Context,
+	prepared *preparedConfigPush,
+	entityRef, fieldKey string,
+	previousValue any,
+	known bool,
+) error {
+	id := prepared.record.ID
+	mismatch := &ConfigPushMismatchError{RevertAttempted: known}
+	desc := fmt.Sprintf("Pushed field %q could not verify after write; previous value unknown, no auto-revert attempted.", fieldKey)
+	if known {
+		mismatch.RevertErr = prepared.pusher.ConfigPush(ctx, prepared.config, entityRef, fieldKey, previousValue)
+		desc = fmt.Sprintf("Pushed field %q did not verify after write; auto-revert to the pre-push value was attempted.", fieldKey)
+		if mismatch.RevertErr != nil {
+			desc = fmt.Sprintf("Pushed field %q did not verify after write; auto-revert FAILED (%v) — manual intervention required.", fieldKey, mismatch.RevertErr)
+			slog.Error("config-push auto-revert failed", "connector", logsafe.Sanitize(id), "field", logsafe.Sanitize(fieldKey), "error", logsafe.Err(mismatch.RevertErr))
+		} else {
+			slog.Warn("config-push mismatch, auto-reverted", "connector", logsafe.Sanitize(id), "field", logsafe.Sanitize(fieldKey))
+		}
 	}
-
 	alert := &store.AlertRecord{
-		ServiceID:   id,
-		Severity:    "critical",
-		Title:       fmt.Sprintf("Config push mismatch for %s", rec.Name),
-		Description: desc,
+		ServiceID: id, Severity: "critical",
+		Title: fmt.Sprintf("Config push mismatch for %s", prepared.record.Name), Description: desc,
 	}
-	if createErr := h.Store.CreateAlert(r.Context(), alert); createErr != nil {
+	if createErr := h.Store.CreateAlert(context.WithoutCancel(ctx), alert); createErr != nil {
 		slog.Error("failed to create config-push mismatch alert", "error", createErr)
 	} else if h.WSHub != nil {
 		h.WSHub.BroadcastConnector(id, ws.EventAlertCreated, map[string]any{
-			"alertId":   alert.ID,
-			"serviceId": id,
-			"severity":  alert.Severity,
-			"title":     alert.Title,
+			"alertId": alert.ID, "serviceId": id, "severity": alert.Severity, "title": alert.Title,
 		})
 	}
-
-	httputil.Error(w, http.StatusConflict, "config_push_mismatch", "pushed value did not verify; auto-revert attempted, see the new alert")
+	return mismatch
 }

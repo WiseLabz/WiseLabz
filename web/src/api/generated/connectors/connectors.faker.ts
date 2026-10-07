@@ -278,6 +278,7 @@ export const getGetConnectorsSchemaResponseMock = (): ConnectorTypeSchema[] =>
       start: faker.datatype.boolean(),
       stop: faker.datatype.boolean(),
       configPush: faker.datatype.boolean(),
+      configRead: faker.datatype.boolean(),
       credentialRefresh: faker.datatype.boolean(),
     },
   }));

@@ -107,8 +107,9 @@ func TestConnectorCapabilitiesMatchOptionalInterfaces(t *testing.T) {
 			_, start := implementation.(connector.Starter)
 			_, stop := implementation.(connector.Stopper)
 			_, push := implementation.(connector.ConfigPusher)
+			_, read := implementation.(connector.ConfigReader)
 			_, refresh := implementation.(connector.CredentialRefresher)
-			want := connector.CapabilityDescriptor{Restart: restart, Start: start, Stop: stop, ConfigPush: push, CredentialRefresh: refresh}
+			want := connector.CapabilityDescriptor{Restart: restart, Start: start, Stop: stop, ConfigPush: push, ConfigRead: read, CredentialRefresh: refresh}
 			if !reflect.DeepEqual(got, want) {
 				t.Fatalf("capabilities = %+v, want %+v", got, want)
 			}
@@ -140,5 +141,25 @@ func TestURLRequiredPerType(t *testing.T) {
 	}
 	if !connector.URLRequired("no-such-type") {
 		t.Error("unknown type must keep url required")
+	}
+}
+
+func TestConnectorConfigReadCapability(t *testing.T) {
+	for _, tt := range []struct {
+		typ  string
+		read bool
+	}{
+		{typ: "cloudflare", read: true},
+		{typ: "custom", read: false},
+	} {
+		t.Run(tt.typ, func(t *testing.T) {
+			implementation, err := connector.Get(tt.typ, map[string]any{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := connector.Capabilities(implementation).ConfigRead; got != tt.read {
+				t.Fatalf("configRead=%v, want %v", got, tt.read)
+			}
+		})
 	}
 }

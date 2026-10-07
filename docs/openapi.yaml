@@ -5076,12 +5076,13 @@ components:
           $ref: '#/components/schemas/ConnectorCapabilities'
     ConnectorCapabilities:
       type: object
-      required: [restart, start, stop, configPush, credentialRefresh]
+      required: [restart, start, stop, configPush, configRead, credentialRefresh]
       properties:
         restart: { type: boolean }
         start: { type: boolean }
         stop: { type: boolean }
         configPush: { type: boolean }
+        configRead: { type: boolean }
         credentialRefresh: { type: boolean }
     SchemaField:
       type: object

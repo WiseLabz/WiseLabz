@@ -106,6 +106,12 @@ type ConfigPusher interface {
 	ConfigPush(ctx context.Context, config map[string]any, entityRef, fieldKey string, value any) error
 }
 
+// ConfigReader optionally reports a writable field's current value from live data.
+// It is separate from ConfigPusher so a pusher need not support reads.
+type ConfigReader interface {
+	ConfigRead(ctx context.Context, config map[string]any, entityRef, fieldKey string) (value any, err error)
+}
+
 // CapabilityDescriptor describes optional operations implemented by a connector.
 // It is derived from the optional interfaces so advertised support cannot drift.
 type CapabilityDescriptor struct {
@@ -113,6 +119,7 @@ type CapabilityDescriptor struct {
 	Start             bool `json:"start"`
 	Stop              bool `json:"stop"`
 	ConfigPush        bool `json:"configPush"`
+	ConfigRead        bool `json:"configRead"`
 	CredentialRefresh bool `json:"credentialRefresh"`
 }
 
@@ -122,8 +129,12 @@ func Capabilities(conn Connector) CapabilityDescriptor {
 	_, start := conn.(Starter)
 	_, stop := conn.(Stopper)
 	_, configPush := conn.(ConfigPusher)
+	_, configRead := conn.(ConfigReader)
 	_, credentialRefresh := conn.(CredentialRefresher)
-	return CapabilityDescriptor{restart, start, stop, configPush, credentialRefresh}
+	return CapabilityDescriptor{
+		Restart: restart, Start: start, Stop: stop,
+		ConfigPush: configPush, ConfigRead: configRead, CredentialRefresh: credentialRefresh,
+	}
 }
 
 // AuthError indicates a connector rejected credentials (expired, revoked, or

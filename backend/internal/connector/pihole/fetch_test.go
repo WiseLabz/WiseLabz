@@ -350,3 +350,59 @@ func TestConfigPushV5(t *testing.T) {
 		}
 	}
 }
+
+func TestConfigReadBothVersions(t *testing.T) {
+	tests := []struct {
+		name       string
+		server     func(*testing.T) *httptest.Server
+		apiVersion string
+		password   string
+	}{
+		{name: "v6", server: v6Server, apiVersion: version6, password: "secret"},
+		{name: "v5", server: v5Server, apiVersion: version5, password: "token"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := tt.server(t)
+			defer server.Close()
+
+			c := &Connector{url: server.URL, password: tt.password, apiVersion: tt.apiVersion, client: server.Client()}
+			got, err := c.ConfigRead(context.Background(), nil, "nas.internal.example.com", "ip")
+			if err != nil {
+				t.Fatalf("ConfigRead() error = %v", err)
+			}
+			if got != "10.0.0.5" {
+				t.Errorf("ConfigRead() = %#v, want %q", got, "10.0.0.5")
+			}
+		})
+	}
+}
+
+func TestConfigReadRejectsInvalidRefAndField(t *testing.T) {
+	var requests int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests++
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+	c := &Connector{url: server.URL, client: server.Client()}
+
+	for _, tt := range []struct {
+		name      string
+		entityRef string
+		fieldKey  string
+	}{
+		{name: "empty ref", entityRef: "", fieldKey: "ip"},
+		{name: "path traversal ref", entityRef: "../host", fieldKey: "ip"},
+		{name: "unsupported field", entityRef: "nas.internal.example.com", fieldKey: "ttl"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			if _, err := c.ConfigRead(context.Background(), nil, tt.entityRef, tt.fieldKey); err == nil {
+				t.Fatal("ConfigRead() error = nil, want invalid input error")
+			}
+		})
+	}
+	if requests != 0 {
+		t.Errorf("ConfigRead() made %d requests for invalid input, want 0", requests)
+	}
+}

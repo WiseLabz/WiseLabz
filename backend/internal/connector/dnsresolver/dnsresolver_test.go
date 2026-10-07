@@ -67,6 +67,64 @@ func TestDNSResolverWritableFields(t *testing.T) {
 	}
 }
 
+func TestDNSResolverConfigRead(t *testing.T) {
+	listBody := `{"data":[{"id":1,"host":"web","domain":"example.com","ip":"10.0.0.5","descr":""}]}`
+	var requests int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		if r.Method != http.MethodGet || r.URL.Path != "/api/v2/services/dns_resolver/host_override" {
+			t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
+		}
+		_, _ = w.Write([]byte(listBody))
+	}))
+	defer server.Close()
+
+	c := &Connector{url: server.URL, apiKey: "key", client: server.Client()}
+	got, err := c.ConfigRead(context.Background(), nil, "web.example.com", "ip")
+	if err != nil {
+		t.Fatalf("ConfigRead() error = %v", err)
+	}
+	if got != "10.0.0.5" {
+		t.Errorf("ConfigRead() = %#v, want %q", got, "10.0.0.5")
+	}
+	if requests != 1 {
+		t.Errorf("Fetch requests = %d, want one fresh read", requests)
+	}
+
+	if _, err := c.ConfigRead(context.Background(), nil, "missing.example.com", "ip"); err == nil {
+		t.Fatal("ConfigRead() error = nil for missing host override")
+	}
+}
+
+func TestDNSResolverConfigReadRejectsInvalidRefAndField(t *testing.T) {
+	var requests int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests++
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+	c := &Connector{url: server.URL, client: server.Client()}
+
+	for _, tt := range []struct {
+		name      string
+		entityRef string
+		fieldKey  string
+	}{
+		{name: "empty ref", entityRef: "", fieldKey: "ip"},
+		{name: "path traversal ref", entityRef: "../host", fieldKey: "ip"},
+		{name: "unsupported field", entityRef: "web.example.com", fieldKey: "ttl"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			if _, err := c.ConfigRead(context.Background(), nil, tt.entityRef, tt.fieldKey); err == nil {
+				t.Fatal("ConfigRead() error = nil, want invalid input error")
+			}
+		})
+	}
+	if requests != 0 {
+		t.Errorf("ConfigRead() made %d requests for invalid input, want 0", requests)
+	}
+}
+
 func TestBuildHostOverrideTableMalformedCases(t *testing.T) {
 	tests := []struct {
 		name string

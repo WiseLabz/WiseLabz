@@ -12,5 +12,6 @@ export interface ConnectorCapabilities {
   start: boolean;
   stop: boolean;
   configPush: boolean;
+  configRead: boolean;
   credentialRefresh: boolean;
 }

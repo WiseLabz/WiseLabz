@@ -7,10 +7,10 @@
 
 ## 2. Config-push core and reader
 
-- [ ] 2.1 Add the optional `ConfigReader` interface and a `configRead` capability flag in `internal/connector/connector.go`; verify the capability descriptor test covers a connector with and without it.
-- [ ] 2.2 Implement `ConfigRead` on each existing pusher (docker, proxmox, cloudflare, pfsense, netbird, pihole, opnsense) where the value is available from data the connector already fetches; verify a unit test per implemented connector, and file one follow-up GitHub issue listing any pusher left without a reader and why.
-- [ ] 2.3 Extract `MutateRunbookConfigPush` (writable check, read-and-skip when already at target, fetch/push/fetch/verify, revert when the previous value is known, alert, audit with extra detail) from `config_push.go` and make the HTTP handler a wrapper; verify all existing config-push handler tests pass unchanged.
-- [ ] 2.4 Add tests calling the core directly: verified write with audit detail, already-at-target with no write and no audit, mismatch with revert and alert, mismatch without a known previous value (no revert, alert), field no longer writable.
+- [x] 2.1 Add the optional `ConfigReader` interface and a `configRead` capability flag in `internal/connector/connector.go`; verify the capability descriptor test covers a connector with and without it.
+- [x] 2.2 Implement `ConfigRead` on each existing pusher (docker, proxmox, cloudflare, pfsense, netbird, pihole, opnsense, dnsresolver) where the value is available from data the connector already fetches; verify a unit test per implemented connector, and file one follow-up GitHub issue listing any pusher left without a reader and why.
+- [x] 2.3 Extract `MutateRunbookConfigPush` (writable check, read-and-skip when already at target, fetch/push/fetch/verify, revert when the previous value is known, alert, audit with extra detail) from `config_push.go` and make the HTTP handler a wrapper; verify all existing config-push handler tests pass unchanged.
+- [x] 2.4 Add tests calling the core directly: verified write with audit detail, already-at-target with no write and no audit, mismatch with revert and alert, mismatch without a known previous value (no revert, alert), field no longer writable.
 
 ## 3. Authoring
 
