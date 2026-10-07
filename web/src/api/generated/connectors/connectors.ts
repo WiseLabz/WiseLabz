@@ -64,6 +64,8 @@ import type {
   PutConnectorsConnectorIdEnabledBody,
   PutConnectorsConnectorIdPermissionsUserId200,
   PutConnectorsConnectorIdPermissionsUserIdBody,
+  RecipePreview,
+  RecipePreviewInput,
   RemovalImpact,
   RestartPreview,
   ServiceSnapshot,
@@ -292,6 +294,99 @@ export const usePostConnectors = <
   TContext
 > => {
   return useMutation(getPostConnectorsMutationOptions(options), queryClient);
+};
+/**
+ * Uses the guarded sync fetch pipeline, a 30-second deadline and a four-request concurrency limit. Empty secret fields use stored credentials when connectorId is supplied. Results contain at most 20 sample entities overall and no credentials. Writes only a connector.recipe_preview audit entry.
+ * @summary Preview a custom REST recipe without saving (instance admin only)
+ */
+export const previewConnectorRecipe = (
+  recipePreviewInput: BodyType<RecipePreviewInput>,
+  options?: SecondParameter<typeof customInstance>,
+  signal?: AbortSignal
+) => {
+  return customInstance<RecipePreview>(
+    {
+      url: `/connectors/recipe-preview`,
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      data: recipePreviewInput,
+      signal,
+    },
+    options
+  );
+};
+
+export const getPreviewConnectorRecipeMutationKey = () => ['previewConnectorRecipe'] as const;
+
+export const getPreviewConnectorRecipeMutationOptions = <
+  TError = ErrorType<BadRequestResponse | ForbiddenResponse | NotFoundResponse | void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof previewConnectorRecipe>>,
+    TError,
+    PreviewConnectorRecipeMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof previewConnectorRecipe>>,
+  TError,
+  PreviewConnectorRecipeMutationVariables,
+  TContext
+> => {
+  const mutationKey = getPreviewConnectorRecipeMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof previewConnectorRecipe>>,
+    PreviewConnectorRecipeMutationVariables
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return previewConnectorRecipe(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type PreviewConnectorRecipeMutationResult = NonNullable<
+  Awaited<ReturnType<typeof previewConnectorRecipe>>
+>;
+export type PreviewConnectorRecipeMutationBody = BodyType<RecipePreviewInput>;
+export type PreviewConnectorRecipeMutationError = ErrorType<
+  BadRequestResponse | ForbiddenResponse | NotFoundResponse | void
+>;
+export type PreviewConnectorRecipeMutationVariables = { data: BodyType<RecipePreviewInput> };
+
+/**
+ * @summary Preview a custom REST recipe without saving (instance admin only)
+ */
+export const usePreviewConnectorRecipe = <
+  TError = ErrorType<BadRequestResponse | ForbiddenResponse | NotFoundResponse | void>,
+  TContext = unknown,
+>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof previewConnectorRecipe>>,
+      TError,
+      PreviewConnectorRecipeMutationVariables,
+      TContext
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseMutationResult<
+  Awaited<ReturnType<typeof previewConnectorRecipe>>,
+  TError,
+  PreviewConnectorRecipeMutationVariables,
+  TContext
+> => {
+  return useMutation(getPreviewConnectorRecipeMutationOptions(options), queryClient);
 };
 /**
  * @summary Category/type field metadata used to render schema-driven forms

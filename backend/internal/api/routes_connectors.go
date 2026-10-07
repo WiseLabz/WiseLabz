@@ -49,6 +49,7 @@ func mountConnectorRoutes(r chi.Router, d routerDeps) {
 		// it's instance-admin only; the creator is auto-granted operator
 		// on the new connector (see connH.Create).
 		r.With(auth.RequireInstanceAdmin).Post("/", d.connH.Create)
+		r.With(auth.RequireInstanceAdmin).Post("/recipe-preview", d.connH.RecipePreview)
 
 		// Instance-admin-only grant management for this connector — a
 		// deliberate exception to the per-connector-role pattern below,

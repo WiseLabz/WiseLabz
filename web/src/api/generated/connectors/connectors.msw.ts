@@ -24,6 +24,7 @@ import type {
   HealthCheckResult,
   MaintenanceWindow,
   PutConnectorsConnectorIdPermissionsUserId200,
+  RecipePreview,
   RemovalImpact,
   RestartPreview,
   ServiceSnapshot,
@@ -72,6 +73,7 @@ import {
   getPostConnectorsConnectorIdTestResponseMock,
   getPostConnectorsResponseMock,
   getPostSyncResponseMock,
+  getPreviewConnectorRecipeResponseMock,
   getPutConnectorsConnectorIdEnabledResponseMock,
   getPutConnectorsConnectorIdPermissionsUserIdResponseMock,
   getPutConnectorsConnectorIdResponseMock,
@@ -80,6 +82,7 @@ import {
 export {
   getGetConnectorsResponseMock,
   getPostConnectorsResponseMock,
+  getPreviewConnectorRecipeResponseMock,
   getGetConnectorsSchemaResponseMock,
   getGetConnectorsConnectorIdResponseMock,
   getPutConnectorsConnectorIdResponseMock,
@@ -155,6 +158,30 @@ export const getPostConnectorsMockHandler = (
             : overrideResponse
           : getPostConnectorsResponseMock(),
         { status: 201 }
+      );
+    },
+    options
+  );
+};
+
+export const getPreviewConnectorRecipeMockHandler = (
+  overrideResponse?:
+    | RecipePreview
+    | ((
+        info: Parameters<Parameters<typeof http.post>[1]>[0]
+      ) => Promise<RecipePreview> | RecipePreview),
+  options?: RequestHandlerOptions
+) => {
+  return http.post(
+    '*/connectors/recipe-preview',
+    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+      return HttpResponse.json(
+        overrideResponse !== undefined
+          ? typeof overrideResponse === 'function'
+            ? await overrideResponse(info)
+            : overrideResponse
+          : getPreviewConnectorRecipeResponseMock(),
+        { status: 200 }
       );
     },
     options
@@ -1033,6 +1060,7 @@ export const getDeleteConnectorsConnectorIdPermissionsUserIdMockHandler = (
 export const getConnectorsMock = () => [
   getGetConnectorsMockHandler(),
   getPostConnectorsMockHandler(),
+  getPreviewConnectorRecipeMockHandler(),
   getGetConnectorsSchemaMockHandler(),
   getGetConnectorsConnectorIdMockHandler(),
   getPutConnectorsConnectorIdMockHandler(),

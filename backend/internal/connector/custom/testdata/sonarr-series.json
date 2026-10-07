@@ -1,0 +1,18 @@
+[
+  {
+    "id": 42,
+    "title": "Clockwork Harbor",
+    "status": "continuing",
+    "monitored": true,
+    "year": 2031,
+    "path": "/library/series/clockwork-harbor"
+  },
+  {
+    "id": 77,
+    "title": "The Amber Signal",
+    "status": "ended",
+    "monitored": false,
+    "year": 2028,
+    "path": "/library/series/amber-signal"
+  }
+]

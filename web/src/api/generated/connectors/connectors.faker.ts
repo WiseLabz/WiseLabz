@@ -24,6 +24,7 @@ import type {
   HealthCheckResult,
   MaintenanceWindow,
   PutConnectorsConnectorIdPermissionsUserId200,
+  RecipePreview,
   RemovalImpact,
   RestartPreview,
   ServiceSnapshot,
@@ -152,6 +153,67 @@ export const getPostConnectorsResponseMock = (
     faker.helpers.arrayElement(['ui', 'config', 'config-orphaned'] as const),
     undefined,
   ]),
+  ...overrideResponse,
+});
+
+export const getPreviewConnectorRecipeResponseMock = (
+  overrideResponse: Partial<Extract<RecipePreview, object>> = {}
+): RecipePreview => ({
+  endpoints: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(
+    () => ({
+      name: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      items: faker.number.int(),
+      count: faker.number.int(),
+      skipped: faker.number.int(),
+      samples: Array.from({ length: faker.number.int({ min: 1, max: 20 }) }, (_, i) => i + 1).map(
+        () => ({
+          kind: faker.string.alpha({ length: { min: 10, max: 20 } }),
+          name: faker.string.alpha({ length: { min: 10, max: 20 } }),
+          ip: faker.helpers.arrayElement([
+            faker.string.alpha({ length: { min: 10, max: 20 } }),
+            undefined,
+          ]),
+          hostname: faker.helpers.arrayElement([
+            faker.string.alpha({ length: { min: 10, max: 20 } }),
+            undefined,
+          ]),
+          externalId: faker.helpers.arrayElement([
+            faker.string.alpha({ length: { min: 10, max: 20 } }),
+            undefined,
+          ]),
+          attributes: faker.helpers.arrayElement([{}, undefined]),
+        })
+      ),
+      dependencies: Array.from(
+        { length: faker.number.int({ min: 1, max: 4 }) },
+        (_, i) => i + 1
+      ).map(() => ({
+        kind: faker.string.alpha({ length: { min: 10, max: 20 } }),
+        name: faker.string.alpha({ length: { min: 10, max: 20 } }),
+        ref: faker.helpers.arrayElement([
+          faker.string.alpha({ length: { min: 10, max: 20 } }),
+          undefined,
+        ]),
+      })),
+      error: faker.helpers.arrayElement([
+        faker.string.alpha({ length: { min: 10, max: 20 } }),
+        undefined,
+      ]),
+    })
+  ),
+  dependencies: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(
+    () => ({
+      kind: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      name: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      ref: faker.helpers.arrayElement([
+        faker.string.alpha({ length: { min: 10, max: 20 } }),
+        undefined,
+      ]),
+    })
+  ),
+  errors: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() =>
+    faker.string.alpha({ length: { min: 10, max: 20 } })
+  ),
   ...overrideResponse,
 });
 

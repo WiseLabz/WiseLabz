@@ -2,9 +2,11 @@ package custom_test
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -96,4 +98,127 @@ func TestDocumentedDeclaredRecipe(t *testing.T) {
 	if len(snapshot.Dependencies) != 2 {
 		t.Fatalf("dependencies %+v", snapshot.Dependencies)
 	}
+}
+
+func TestDocumentedServiceRecipesMapRecordedResponses(t *testing.T) {
+	connector.AllowLoopbackForTest(t)
+	t.Run("Sonarr", func(t *testing.T) {
+		recipe, err := os.ReadFile("../../../../docs/connectors/recipes/sonarr.yaml")
+		if err != nil {
+			t.Fatal(err)
+		}
+		response, err := os.ReadFile("testdata/sonarr-series.json")
+		if err != nil {
+			t.Fatal(err)
+		}
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path != "/api/v3/series" || r.Header.Get("X-Api-Key") != "fixture-token" {
+				t.Errorf("request path/auth = %q/%q", r.URL.Path, r.Header.Get("X-Api-Key"))
+			}
+			if _, err := w.Write(response); err != nil {
+				t.Error(err)
+			}
+		}))
+		defer server.Close()
+
+		snapshot := fetchDocumentedRecipe(t, server.URL, string(recipe), "fixture-token")
+		if len(snapshot.Entities) != 2 {
+			t.Fatalf("entities = %d, want 2", len(snapshot.Entities))
+		}
+		first := snapshot.Entities[0]
+		if first.Kind != "media_series" || first.Name != "Clockwork Harbor" || first.ExternalID != "42" {
+			t.Fatalf("first entity = %+v", first)
+		}
+		if first.Attributes["status"] != "active" || first.Attributes["monitored"] != true || first.Attributes["year"] != json.Number("2031") {
+			t.Fatalf("first attributes = %#v", first.Attributes)
+		}
+		wantDependencies := []connector.ServiceDependency{
+			{Kind: "storage", Name: "/library/series/amber-signal"},
+			{Kind: "storage", Name: "/library/series/clockwork-harbor"},
+		}
+		if !reflect.DeepEqual(snapshot.Dependencies, wantDependencies) {
+			t.Fatalf("dependencies = %#v, want %#v", snapshot.Dependencies, wantDependencies)
+		}
+	})
+
+	t.Run("Jellyfin", func(t *testing.T) {
+		recipe, err := os.ReadFile("../../../../docs/connectors/recipes/jellyfin.yaml")
+		if err != nil {
+			t.Fatal(err)
+		}
+		requests := 0
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			requests++
+			if r.URL.Path != "/Items" || r.Header.Get("Authorization") != "MediaBrowser Token=fixture-token" {
+				t.Errorf("request path/auth = %q/%q", r.URL.Path, r.Header.Get("Authorization"))
+			}
+			if r.URL.Query().Get("Recursive") != "true" || r.URL.Query().Get("IncludeItemTypes") != "Movie" || r.URL.Query().Get("Limit") != "2" {
+				t.Errorf("request query = %s", r.URL.RawQuery)
+			}
+			var fixture string
+			switch r.URL.Query().Get("StartIndex") {
+			case "0":
+				fixture = "testdata/jellyfin-items-0.json"
+			case "2":
+				fixture = "testdata/jellyfin-items-2.json"
+			case "4":
+				fixture = "testdata/jellyfin-items-4.json"
+			default:
+				t.Errorf("unexpected StartIndex %q", r.URL.Query().Get("StartIndex"))
+				http.Error(w, "unexpected page", http.StatusBadRequest)
+				return
+			}
+			response, err := os.ReadFile(fixture)
+			if err != nil {
+				t.Error(err)
+				http.Error(w, "missing fixture", http.StatusInternalServerError)
+				return
+			}
+			if _, err := w.Write(response); err != nil {
+				t.Error(err)
+			}
+		}))
+		defer server.Close()
+
+		snapshot := fetchDocumentedRecipe(t, server.URL, string(recipe), "fixture-token")
+		if requests != 3 {
+			t.Fatalf("requests = %d, want 3 (two pages and an empty end page)", requests)
+		}
+		if len(snapshot.Entities) != 3 {
+			t.Fatalf("entities = %d, want 3", len(snapshot.Entities))
+		}
+		first := snapshot.Entities[0]
+		if first.Kind != "media_item" || first.Name != "Glass Comet" || first.ExternalID != "10000000000000000000000000000001" {
+			t.Fatalf("first entity = %+v", first)
+		}
+		if first.Attributes["media_type"] != "Movie" || first.Attributes["year"] != json.Number("2032") {
+			t.Fatalf("first attributes = %#v", first.Attributes)
+		}
+		wantDependencies := []connector.ServiceDependency{
+			{Kind: "storage", Name: "/media/movies/glass-comet.mkv"},
+			{Kind: "storage", Name: "/media/movies/quiet-orbit.mkv"},
+			{Kind: "storage", Name: "/media/movies/paper-moons.mkv"},
+		}
+		if !reflect.DeepEqual(snapshot.Dependencies, wantDependencies) {
+			t.Fatalf("dependencies = %#v, want %#v", snapshot.Dependencies, wantDependencies)
+		}
+	})
+}
+
+func fetchDocumentedRecipe(t *testing.T, targetURL, recipe, token string) *connector.ServiceSnapshot {
+	t.Helper()
+	config := map[string]any{
+		"url":        targetURL,
+		"recipe":     recipe,
+		"auth_token": token,
+	}
+	instance, err := connector.Get("custom", config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err := instance.Fetch(context.Background(), config)
+	if err != nil {
+		t.Fatalf("fetch documented recipe: %v", err)
+	}
+	return snapshot
 }

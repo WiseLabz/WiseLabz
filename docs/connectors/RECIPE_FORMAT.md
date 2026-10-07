@@ -188,6 +188,19 @@ endpoints:
 
 <!-- pagination-recipes-end -->
 
+## Service examples
+
+The [Sonarr recipe](recipes/sonarr.yaml) maps series, status, monitoring and
+series-directory storage dependencies from `/api/v3/series`. The [Jellyfin recipe](recipes/jellyfin.yaml)
+maps movie items and storage dependencies from `/Items`, using offset pagination
+with `StartIndex` and `Limit`. Its `Authorization` header uses Jellyfin's
+`MediaBrowser Token=` form.
+
+Both files are loaded directly by the custom connector tests against recorded,
+anonymized responses under `backend/internal/connector/custom/testdata`. Their
+query parameters and response fields follow the [Sonarr API reference](https://sonarr.tv/docs/api/)
+and [Jellyfin `GetItems` request reference](https://typescript-sdk.jellyfin.org/interfaces/generated-client.LibraryApiGetItemsRequest.html).
+
 An endpoint transport error, non-success HTTP status, invalid JSON, oversized
 response, `items` path that does not select a list or mapped entities and
 attributes larger than the response size limit aborts the complete sync.
@@ -252,3 +265,25 @@ name source: `const` or `path`. Root path definitions are evaluated against each
 paths are evaluated against that endpoint's complete response. Multi-value paths
 produce one dependency per distinct name. Duplicate kind/name pairs are
 removed and dependencies are stored with the snapshot.
+
+## Testing recipes
+
+Instance administrators can use **Test recipe** in the custom connector form
+before saving, or call `POST /api/connectors/recipe-preview` with
+`{url, verifyTls?, config: {recipe, ...}, connectorId?}`. When editing an
+existing custom connector, `connectorId` lets omitted or empty secret fields
+use its stored credentials. The current recipe and URL are always supplied
+by the caller.
+
+The preview reports each endpoint's selected item count, mapped entity count,
+skipped count, dependencies and error, plus at most 20 sample entities across
+the entire recipe. An endpoint failure leaves other endpoint results visible.
+The same request, pagination, origin, response-size, entity and mapped-data
+bounds as a sync apply; previews also have a 30-second deadline and at most
+four previews can run concurrently. Credentials and URL queries are redacted
+from preview output, including echoed values in sample attributes.
+
+A preview leaves the connector, snapshots, changes, alerts and sync status
+untouched. Its only write is a `connector.recipe_preview` audit entry containing
+the actor, optional connector ID and redacted target URL. Validation errors
+retain their recipe locations so the editor can show where to make a correction.

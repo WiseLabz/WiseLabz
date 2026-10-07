@@ -1,0 +1,31 @@
+version: 1
+category: media
+auth:
+  mode: header
+  name: Authorization
+  prefix: "MediaBrowser Token="
+endpoints:
+  - name: movies
+    path: /Items?Recursive=true&IncludeItemTypes=Movie&Fields=Path
+    method: GET
+    items: Items
+    pagination:
+      type: offset
+      param: StartIndex
+      size_param: Limit
+      # Small pages make this recorded pagination example easy to inspect.
+      # Increase the size (for example to 100) for a larger library.
+      size: 2
+    entity:
+      kind: media_item
+      name: Name
+      external_id: Id
+      attributes:
+        media_type:
+          path: Type
+        year:
+          path: ProductionYear
+          type: number
+    dependencies:
+      - kind: storage
+        path: Items.#.Path

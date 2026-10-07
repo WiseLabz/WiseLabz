@@ -8,7 +8,7 @@
  * Owns no page chrome — the caller supplies surrounding layout and decides what
  * happens on success via `onCreated`.
  */
-import { createElement, useMemo, useState } from 'react';
+import { createElement, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -23,6 +23,15 @@ import { ErrorState, SkeletonRows } from '../../components/ui/states';
 import { categoryIconFor } from '../../components/categoryIcon';
 import { CheckIcon } from '../../components/icons';
 import { fieldDefault, isSecretField, isToggleField, isTopLevelField, isVerifyTlsField } from './schemaFields';
+import { LocatedErrors } from './LocatedErrors';
+import { TestRecipePanel } from './TestRecipePanel';
+import {
+  errorsForField,
+  focusFirstLocatedError,
+  locatedErrorsFrom,
+  readRecipeCategory,
+  recipePreviewConfig,
+} from './recipeForm';
 
 type FormValues = Record<string, string | boolean>;
 
@@ -62,11 +71,17 @@ export function ConnectorForm({
         if (isTopLevelField(f)) continue;
         config[f.name] = values[f.name] ?? fieldDefault(f);
       }
-      // A type with a textarea field (the custom recipe) can derive its category
-      // from that text; sending the schema default would conflict with it, so
-      // leave the category to the server once the text is filled in.
-      const derivesCategory = schema.fields.some((f) => f.kind === 'textarea' && String(config[f.name] ?? '').trim() !== '');
-      return postConnectors({ name, owner: owner || undefined, ...(derivesCategory ? {} : { category: schema.category }), type: schema.type, ...(url ? { url } : {}), verifyTls, config });
+      // A custom recipe determines its category, so omit the schema default.
+      const derivesCategory = String(config.recipe ?? '').trim() !== '';
+      return postConnectors({
+        name,
+        owner: owner || undefined,
+        ...(derivesCategory ? {} : { category: schema.category }),
+        type: schema.type,
+        ...(url ? { url } : {}),
+        verifyTls,
+        config,
+      });
     },
     onSuccess: (created) => {
       queryClient.invalidateQueries({ queryKey: getGetConnectorsQueryKey() });
@@ -78,6 +93,14 @@ export function ConnectorForm({
     !!name &&
     !!schema &&
     schema.fields.every((f) => !f.required || String(values[f.name] ?? '').length > 0);
+  const createErrors = create.isError ? locatedErrorsFrom(create.error) : [];
+  const tlsField = schema?.fields.find(isVerifyTlsField);
+  const previewVerifyTls = tlsField ? Boolean(values[tlsField.name] ?? fieldDefault(tlsField)) : true;
+  useEffect(() => {
+    if (!create.isError) return;
+    const errors = locatedErrorsFrom(create.error);
+    if (errors.length) focusFirstLocatedError(errors, schema?.type === 'custom' ? 'recipe' : undefined);
+  }, [create.isError, create.error, schema?.type]);
 
   if (isLoading) {
     return (
@@ -138,16 +161,40 @@ export function ConnectorForm({
               onChange={(v) => setOwner(String(v))}
             />
             {schema.fields.map((f) => (
-              <Field
-                key={f.name}
-                field={f}
-                value={values[f.name] ?? fieldDefault(f)}
-                onChange={(v) => setValues((s) => ({ ...s, [f.name]: v }))}
-              />
+              <div key={f.name}>
+                <Field
+                  field={f}
+                  value={values[f.name] ?? fieldDefault(f)}
+                  error={errorsForField(createErrors, f.name)}
+                  onChange={(v) => setValues((s) => ({ ...s, [f.name]: v }))}
+                />
+                {schema.type === 'custom' && f.name === 'recipe' && (
+                  <RecipeCategoryDisplay recipe={String(values[f.name] ?? '')} />
+                )}
+              </div>
             ))}
           </div>
 
-          {create.isError && <p className="mt-3 text-2xs text-err">{t('connectors.connectFailed')}</p>}
+          {createErrors.length > 0 && (
+            <div className="mt-3">
+              <LocatedErrors title={t('connectors.recipePreview.validationTitle')} errors={createErrors} />
+            </div>
+          )}
+          {create.isError && createErrors.length === 0 && (
+            <p className="mt-3 text-2xs text-err" role="alert" aria-live="polite">
+              {t('connectors.connectFailed')}
+            </p>
+          )}
+
+          {schema.type === 'custom' && (
+            <div className="mt-5">
+              <TestRecipePanel
+                url={String(values.url ?? '')}
+                verifyTls={previewVerifyTls}
+                config={recipePreviewConfig(schema, values)}
+              />
+            </div>
+          )}
 
           <div className="mt-5 flex items-center justify-end gap-2">
             {onCancel && (
@@ -208,11 +255,15 @@ export function Field({
   field,
   value,
   onChange,
+  error,
 }: {
   field: SchemaField;
   value: string | boolean;
   onChange: (v: string | boolean) => void;
+  error?: string;
 }) {
+  const fieldId = `connector-field-${field.name}`;
+  const errorId = error ? `${fieldId}-error` : undefined;
   if (isToggleField(field)) {
     return (
       <label className="flex items-center justify-between gap-3">
@@ -220,6 +271,7 @@ export function Field({
         <button
           type="button"
           role="switch"
+          aria-label={field.label}
           aria-checked={!!value}
           onClick={() => onChange(!value)}
           className="relative h-5 w-9 rounded-full transition-colors"
@@ -235,19 +287,28 @@ export function Field({
   }
   if (field.kind === 'secret' || field.kind === 'textarea') {
     return (
-      <label className="block">
-        <span className="mb-1 block text-2xs text-ink-faint">
-          {field.label}
-          {field.required && <span className="text-err"> *</span>}
-        </span>
-        <textarea
-          value={String(value)}
-          placeholder={field.placeholder}
-          rows={4}
-          onChange={(e) => onChange(e.target.value)}
-          className="w-full rounded-sm border border-line bg-surface px-2.5 py-2 font-mono text-xs text-ink outline-none placeholder:text-ink-faint focus-visible:border-accent-primary-soft"
-        />
-      </label>
+      <div>
+        <label className="block">
+          <span className="mb-1 block text-2xs text-ink-faint">
+            {field.label}
+            {field.required && <span className="text-err"> *</span>}
+          </span>
+          <textarea
+            id={fieldId}
+            name={field.name}
+            value={String(value)}
+            placeholder={field.placeholder}
+            rows={field.kind === 'textarea' ? 12 : 4}
+            autoComplete="off"
+            spellCheck={false}
+            aria-invalid={!!error}
+            aria-describedby={errorId}
+            onChange={(e) => onChange(e.target.value)}
+            className={`w-full rounded-sm border border-line bg-surface px-2.5 py-2 font-mono text-xs text-ink outline-none placeholder:text-ink-faint focus-visible:border-accent-primary-soft ${field.kind === 'textarea' ? 'resize-y' : ''}`}
+          />
+        </label>
+        {error && <p id={errorId} className="mt-1 text-2xs text-err" aria-live="polite">{error}</p>}
+      </div>
     );
   }
   const type =
@@ -257,19 +318,39 @@ export function Field({
         ? 'number'
         : 'text';
   return (
-    <label className="block">
-      <span className="mb-1 block text-2xs text-ink-faint">
-        {field.label}
-        {field.required && <span className="text-err"> *</span>}
-      </span>
-      <input
-        type={type}
-        value={String(value)}
-        placeholder={field.placeholder}
-        autoComplete={type === 'password' ? 'new-password' : 'off'}
-        onChange={(e) => onChange(e.target.value)}
-        className="h-9 w-full rounded-sm border border-line bg-surface px-2.5 text-sm text-ink outline-none placeholder:text-ink-faint focus-visible:border-accent-primary-soft"
-      />
-    </label>
+    <div>
+      <label className="block">
+        <span className="mb-1 block text-2xs text-ink-faint">
+          {field.label}
+          {field.required && <span className="text-err"> *</span>}
+        </span>
+        <input
+          id={fieldId}
+          name={field.name}
+          type={type}
+          value={String(value)}
+          placeholder={field.placeholder}
+          autoComplete={type === 'password' ? 'new-password' : 'off'}
+          aria-invalid={!!error}
+          aria-describedby={errorId}
+          onChange={(e) => onChange(e.target.value)}
+          className="h-9 w-full rounded-sm border border-line bg-surface px-2.5 text-sm text-ink outline-none placeholder:text-ink-faint focus-visible:border-accent-primary-soft"
+        />
+      </label>
+      {error && <p id={errorId} className="mt-1 text-2xs text-err" aria-live="polite">{error}</p>}
+    </div>
+  );
+}
+
+export function RecipeCategoryDisplay({ recipe }: { recipe: string }) {
+  const { t } = useTranslation();
+  const category = readRecipeCategory(recipe);
+  return (
+    <dl className="mt-2 flex items-baseline gap-2 text-xs">
+      <dt className="text-ink-muted">{t('connectors.recipePreview.categoryLabel')}</dt>
+      <dd className="text-ink" aria-live="polite">
+        {category ? t(`services.category.${category}`) : t('connectors.recipePreview.categoryUnset')}
+      </dd>
+    </dl>
   );
 }

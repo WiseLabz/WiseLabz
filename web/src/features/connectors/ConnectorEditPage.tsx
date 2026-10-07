@@ -5,7 +5,7 @@
  * empty and are only sent when re-entered (credential rotation). Re-test and save
  * are operator actions, enforced server-side.
  */
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { isAxiosError } from 'axios';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -17,7 +17,8 @@ import {
   postConnectorsConnectorIdTest,
   getGetConnectorsQueryKey,
 } from '../../api/generated/connectors/connectors';
-import { Field } from './ConnectorForm';
+import type { Connector, SchemaField } from '../../api/model';
+import { Field, RecipeCategoryDisplay } from './ConnectorForm';
 import { ConnectorPermissionsTab } from './ConnectorPermissionsTab';
 import { Button } from '../../components/ui/Button';
 import { Panel } from '../../components/ui/Panel';
@@ -26,6 +27,9 @@ import { toast } from '../../lib/toast';
 import { ArrowRightIcon, CheckIcon } from '../../components/icons';
 import { useConnectorRole } from '../../hooks/useRole';
 import { isSecretField, isToggleField, isTopLevelField, isVerifyTlsField } from './schemaFields';
+import { LocatedErrors } from './LocatedErrors';
+import { TestRecipePanel } from './TestRecipePanel';
+import { errorsForField, focusFirstLocatedError, locatedErrorsFrom, recipePreviewConfig } from './recipeForm';
 
 type FormValues = Record<string, string | boolean>;
 
@@ -33,6 +37,15 @@ type FormValues = Record<string, string | boolean>;
 function daysAgo(iso: string): number {
   const ms = Date.now() - new Date(iso).getTime();
   return Math.max(0, Math.floor(ms / (24 * 60 * 60 * 1000)));
+}
+
+function editFieldValue(field: SchemaField, connector: Connector, values: FormValues): string | boolean {
+  if (values[field.name] !== undefined) return values[field.name];
+  if (field.name === 'url') return connector.url ?? '';
+  if (isVerifyTlsField(field)) return Boolean(connector.verifyTls);
+  if (isToggleField(field)) return false;
+  if (field.kind === 'textarea') return connector.config?.[field.name] ?? '';
+  return '';
 }
 
 export function ConnectorEditPage() {
@@ -74,6 +87,11 @@ export function ConnectorEditPage() {
       const tlsField = schema?.fields.find(isVerifyTlsField);
       for (const f of schema?.fields ?? []) {
         if (isTopLevelField(f)) continue;
+        if (f.kind === 'textarea') {
+          const value = values[f.name] ?? connector.data?.config?.[f.name];
+          if (value !== undefined) config[f.name] = value;
+          continue;
+        }
         // Only send secret/config fields the user actually re-entered.
         if (values[f.name] !== undefined && String(values[f.name]).length > 0) config[f.name] = values[f.name];
       }
@@ -114,6 +132,24 @@ export function ConnectorEditPage() {
       toast.error(fieldMsg ? `${t('connectors.edit.saveError')} ${fieldMsg}` : t('connectors.edit.saveError'));
     },
   });
+  const saveErrors = save.isError ? locatedErrorsFrom(save.error) : [];
+  const storedRecipe = String(connector.data?.config?.recipe ?? '');
+  const recipeDirty = values.recipe !== undefined && String(values.recipe) !== storedRecipe;
+  useEffect(() => {
+    if (save.isError) {
+      const errors = locatedErrorsFrom(save.error);
+      if (errors.length) focusFirstLocatedError(errors, schema?.type === 'custom' ? 'recipe' : undefined);
+    }
+  }, [save.isError, save.error, schema?.type]);
+  useEffect(() => {
+    if (!recipeDirty) return;
+    const warnBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', warnBeforeUnload);
+    return () => window.removeEventListener('beforeunload', warnBeforeUnload);
+  }, [recipeDirty]);
 
   if (connector.isLoading) {
     return (
@@ -192,21 +228,17 @@ export function ConnectorEditPage() {
             onChange={(v) => setOwner(String(v))}
           />
           {schema?.fields.map((f) => (
-            <Field
-              key={f.name}
-              field={isSecretField(f) ? { ...f, placeholder: t('connectors.edit.secretPlaceholder') } : f}
-              value={
-                values[f.name] ??
-                (f.name === 'url'
-                  ? (c.url ?? '')
-                  : isVerifyTlsField(f)
-                    ? Boolean(c.verifyTls)
-                    : isToggleField(f)
-                      ? false
-                      : '')
-              }
-              onChange={(v) => setValues((s) => ({ ...s, [f.name]: v }))}
-            />
+            <div key={f.name}>
+              <Field
+                field={isSecretField(f) ? { ...f, placeholder: t('connectors.edit.secretPlaceholder') } : f}
+                value={editFieldValue(f, c, values)}
+                error={errorsForField(saveErrors, f.name)}
+                onChange={(v) => setValues((s) => ({ ...s, [f.name]: v }))}
+              />
+              {schema?.type === 'custom' && f.name === 'recipe' && (
+                <RecipeCategoryDisplay recipe={String(values[f.name] ?? c.config?.[f.name] ?? '')} />
+              )}
+            </div>
           ))}
           {!schema?.isCredentialRefresher && (
             <>
@@ -241,6 +273,12 @@ export function ConnectorEditPage() {
           )}
         </div>
 
+        {saveErrors.length > 0 && (
+          <div className="mt-3">
+            <LocatedErrors title={t('connectors.recipePreview.validationTitle')} errors={saveErrors} />
+          </div>
+        )}
+
         <div className="mt-5 flex items-center justify-between gap-2">
           <Button
             variant="secondary"
@@ -262,6 +300,17 @@ export function ConnectorEditPage() {
           </div>
         </div>
       </Panel>
+
+      {schema?.type === 'custom' && (
+        <div className="mt-4">
+          <TestRecipePanel
+            connectorId={id}
+            url={String(values.url ?? c.url ?? '')}
+            verifyTls={Boolean(values[schema.fields.find(isVerifyTlsField)?.name ?? 'verify_tls'] ?? c.verifyTls ?? true)}
+            config={recipePreviewConfig(schema, values, c.config ?? {})}
+          />
+        </div>
+      )}
 
       <ConnectorPermissionsTab connectorId={id} />
     </div>
