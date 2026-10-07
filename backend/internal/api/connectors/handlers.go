@@ -347,9 +347,10 @@ func (h *Handler) pullInNextRun(w http.ResponseWriter, r *http.Request, id strin
 // connector connects. Repointing one makes the server send its stored
 // credentials to the new endpoint, so changing url, type or verifyTls is an
 // instance-admin action. Endpoint-defining config keys follow the same rule;
-// operators may still send unchanged values. So does category: it selects the
-// sync transformers, the templates that match the connector and the
-// category-scoped notification routes. It writes the error response and
+// operators may still send unchanged values, and may omit a key whose field
+// is kept when omitted (see configKeptWhenOmitted). So does category: it
+// selects the sync transformers, the templates that match the connector and
+// the category-scoped notification routes. It writes the error response and
 // reports false when the update must not proceed.
 func (h *Handler) authorizeConnectorRepoint(w http.ResponseWriter, r *http.Request, id string, req *updateConnectorRequest) bool {
 	if req.URL == nil && req.Type == nil && req.VerifyTLS == nil && req.Category == nil && req.Config == nil {
@@ -386,7 +387,10 @@ func (h *Handler) authorizeConnectorRepoint(w http.ResponseWriter, r *http.Reque
 			return false
 		}
 		for _, key := range schema.EndpointConfigKeys {
-			// Config is replaced, so omitting a key also changes the endpoint.
+			if _, sent := req.Config[key]; !sent && fieldKeptWhenOmitted(schema, key) {
+				continue
+			}
+			// Config is replaced, so omitting any other key also changes the endpoint.
 			if !reflect.DeepEqual(req.Config[key], oldConfig[key]) {
 				httputil.Error(w, http.StatusForbidden, "forbidden", "Changing endpoint config requires an instance admin")
 				return false
@@ -458,26 +462,41 @@ func (h *Handler) applyConnectorConfigUpdate(w http.ResponseWriter, r *http.Requ
 			[]httputil.FieldError{{Field: "url", Msg: "is required"}})
 		return false
 	}
-	effective, err := h.effectiveConnectorConfig(rec, typ, req.Config)
+	stored, err := store.ParseConnectorConfig(rec.Type, rec.ConfigData, h.Config.Encryption.Key)
 	if err != nil {
 		httputil.Errorf(w, err)
 		return false
 	}
+	effective := effectiveConnectorConfig(stored, rec.Type, typ, req.Config)
 	if err := validateConnectorConfig(typ, url, verifyTLS, effective); err != nil {
 		writeConfigRejection(w, err)
 		return false
 	}
 	if schema, err := connector.GetTypeSchema(typ); err == nil && schema.CategoryForConfig != nil {
-		category, err := schema.ConfigCategory(effective)
+		derived, err := schema.ConfigCategory(effective)
 		if err != nil {
 			writeConfigRejection(w, err)
 			return false
 		}
-		if req.Category != nil && *req.Category != category {
+		// A connector whose derived category did not change keeps whatever
+		// category it has: recipe-less custom connectors created or repointed
+		// before the category was derived may legitimately hold another one.
+		unchanged := false
+		if typ == rec.Type {
+			storedDerived, storedErr := schema.ConfigCategory(stored)
+			unchanged = storedErr == nil && storedDerived == derived
+		}
+		if req.Category != nil && *req.Category != derived && (!unchanged || *req.Category != rec.Category) {
 			writeCategoryConflict(w)
 			return false
 		}
-		updates["category"] = category
+		if !unchanged {
+			if derived != rec.Category && !auth.InstanceAdminFromContext(r.Context()) {
+				httputil.Error(w, http.StatusForbidden, "forbidden", "Changing category requires an instance admin")
+				return false
+			}
+			updates["category"] = derived
+		}
 	}
 	if req.Config == nil {
 		return true
@@ -500,31 +519,47 @@ func (h *Handler) applyConnectorConfigUpdate(w http.ResponseWriter, r *http.Requ
 	return true
 }
 
-// effectiveConnectorConfig is the config an update would leave behind: the
-// request's config, plus the stored value of every secret field the request
-// leaves out. Credentials are write-only over the API, so a client that does
-// not re-enter one means "keep it"; an explicit empty string clears it. A
-// request without a config body keeps the whole stored config. Validation
-// runs against this merged state so cross-field rules (Caddy's exactly-one-of
-// url/config_json) hold for every PUT shape.
-func (h *Handler) effectiveConnectorConfig(rec *store.ConnectorRecord, typ string, requested map[string]any) (map[string]any, error) {
-	stored, err := store.ParseConnectorConfig(rec.Type, rec.ConfigData, h.Config.Encryption.Key)
-	if err != nil {
-		return nil, err
+// configKeptWhenOmitted reports whether a field of this kind keeps its stored
+// value when a PUT's config leaves the key out. Secrets are write-only over the
+// API, and textarea fields (such as a recipe) are edited on a separate page
+// that never resends them.
+func configKeptWhenOmitted(kind string) bool {
+	return store.IsSecretFieldType(kind) || kind == "textarea"
+}
+
+// fieldKeptWhenOmitted reports whether the schema declares key as a field
+// that configKeptWhenOmitted.
+func fieldKeptWhenOmitted(schema *connector.TypeSchema, key string) bool {
+	for _, f := range schema.Fields {
+		if f.Key == key {
+			return configKeptWhenOmitted(f.Type)
+		}
 	}
+	return false
+}
+
+// effectiveConnectorConfig is the config an update would leave behind: the
+// request's config, plus the stored value of every secret and textarea field
+// the request leaves out. Credentials are write-only over the API and the web
+// edit page never resends a recipe, so a client that does not re-enter one
+// means "keep it"; an explicit empty string clears it. A request without a
+// config body keeps the whole stored config. Validation runs against this
+// merged state so cross-field rules (Caddy's exactly-one-of url/config_json)
+// hold for every PUT shape.
+func effectiveConnectorConfig(stored map[string]any, storedType, typ string, requested map[string]any) map[string]any {
 	if requested == nil {
-		return stored, nil
+		return stored
 	}
 	merged := make(map[string]any, len(requested))
 	for k, v := range requested {
 		merged[k] = v
 	}
 	schema, err := connector.GetTypeSchema(typ)
-	if err != nil || typ != rec.Type {
-		return merged, nil //nolint:nilerr // unknown or changed type: nothing to carry over
+	if err != nil || typ != storedType {
+		return merged // unknown or changed type: nothing to carry over
 	}
 	for _, f := range schema.Fields {
-		if !store.IsSecretFieldType(f.Type) {
+		if !configKeptWhenOmitted(f.Type) {
 			continue
 		}
 		if _, sent := merged[f.Key]; sent {
@@ -534,7 +569,7 @@ func (h *Handler) effectiveConnectorConfig(rec *store.ConnectorRecord, typ strin
 			merged[f.Key] = v
 		}
 	}
-	return merged, nil
+	return merged
 }
 
 // recordConnectorUpdateAudit records only which fields changed, not their

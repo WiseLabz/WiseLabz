@@ -7,4 +7,7 @@
  * OpenAPI spec version: 0.1.0
  */
 
+/**
+ * Replaces the stored config. Secret fields and `textarea` fields (such as a custom connector recipe) are kept when omitted and cleared by an explicit empty string
+ */
 export type ConnectorUpdateConfig = { [key: string]: unknown };

@@ -4934,7 +4934,9 @@ components:
       properties:
         name: { type: string }
         owner: { type: string, nullable: true }
-        category: { $ref: '#/components/schemas/ConnectorCategory' }
+        category:
+          allOf: [{ $ref: '#/components/schemas/ConnectorCategory' }]
+          description: 'Required unless the connector type derives the category from its configuration, as `custom` does from its recipe; a value conflicting with the derived one is rejected with 400'
         type: { type: string }
         url:
           type: string
@@ -4957,10 +4959,11 @@ components:
         verifyTls: { type: boolean }
         category:
           allOf: [{ $ref: '#/components/schemas/ConnectorCategory' }]
-          description: 'Changing the category requires an instance admin (403 otherwise); resending the stored value is allowed'
+          description: 'Changing the category requires an instance admin (403 otherwise); resending the stored value is allowed. For a type that derives its category (`custom`), a value different from the derived one is rejected with 400, and a change of the derived category through the configuration also requires an instance admin'
         config:
           type: object
           additionalProperties: true
+          description: 'Replaces the stored config. Secret fields and `textarea` fields (such as a custom connector recipe) are kept when omitted and cleared by an explicit empty string'
         scheduleSeconds:
           { type: integer, nullable: true, description: 'Auto-sync cadence in seconds; null disables scheduled sync (manual only)' }
         userExpiresAt:
