@@ -40,5 +40,5 @@
 
 ## 7. Integration
 
-- [ ] 7.1 Run backend tests, web tests, lint and typecheck with the low-memory settings, then `graphify update .`; verify all pass in CI on the PR.
+- [x] 7.1 Run backend tests, web tests, lint and typecheck with the low-memory settings, then `graphify update .`; verify all pass in CI on the PR.
 - [ ] 7.2 Manually run a runbook against a real pusher connector: restart, `wait_for_entity status eq running`, `config_push`; verify the run history, audit log and preview match the spec delta scenarios.
