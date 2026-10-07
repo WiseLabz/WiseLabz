@@ -53,7 +53,6 @@ func TestParseRecipeValidationLocations(t *testing.T) {
 		{name: "absolute endpoint URL", recipe: strings.Replace(validRecipe, "/api/items", "https://other.example/items", 1), want: "endpoints[0].path: must be relative to the connector URL"},
 		{name: "missing name mapping", recipe: strings.Replace(validRecipe, "      name: title\n", "", 1), want: "endpoints[0].entity.name: mapping is required"},
 		{name: "missing identifier mapping", recipe: strings.Replace(validRecipe, "      external_id: id\n", "", 1), want: "endpoints[0].entity.external_id: mapping is required"},
-		{name: "pagination unsupported", recipe: strings.Replace(validRecipe, "    items: items", "    items: items\n    pagination: {type: page, param: page, size: 100}", 1), want: "endpoints[0].pagination: pagination is not supported yet"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -214,20 +213,72 @@ func TestParseRecipeGETBodyAndStaticPOSTBody(t *testing.T) {
 	})
 }
 
-func TestParseRecipePaginationBlocksAreValidatedAndRejected(t *testing.T) {
+func TestParseRecipeAcceptsPaginationStyles(t *testing.T) {
 	blocks := []string{
 		"{type: page, param: page, size: 50}",
 		"{type: offset, param: offset, size_param: limit, size: 50}",
 		"{type: cursor, param: cursor, cursor_path: next}",
+		"{type: cursor, param: cursor, cursor_path: next, size_param: limit, size: 50}",
 		"{type: next_link, next_path: next}",
+		"{type: next_link, link_header: true}",
 	}
 	for _, block := range blocks {
 		raw := strings.Replace(validRecipe, "    items: items", "    items: items\n    pagination: "+block, 1)
-		_, err := ParseRecipe(raw)
-		if err == nil || !strings.Contains(err.Error(), "endpoints[0].pagination: pagination is not supported yet") {
+		if _, err := ParseRecipe(raw); err != nil {
 			t.Errorf("ParseRecipe(pagination %s) error = %v", block, err)
 		}
 	}
+}
+
+func TestParseRecipePaginationStyleCombinations(t *testing.T) {
+	tests := []struct {
+		name       string
+		pagination string
+		auth       string
+		want       string
+	}{
+		{name: "cursor forbids explicit zero start", pagination: "{type: cursor, param: cursor, cursor_path: next, start: 0}", want: "pagination.start: is only allowed"},
+		{name: "next link forbids even empty parameter", pagination: "{type: next_link, param: '', next_path: next}", want: "pagination.param: is not allowed"},
+		{name: "next link forbids explicit zero start", pagination: "{type: next_link, next_path: next, start: 0}", want: "pagination.start: is only allowed"},
+		{name: "cursor size requires size parameter", pagination: "{type: cursor, param: cursor, cursor_path: next, size: 0}", want: "pagination.size: requires size_param"},
+		{name: "page forbids cursor path", pagination: "{type: page, param: page, size: 10, cursor_path: next}", want: "pagination.cursor_path: is only allowed for cursor"},
+		{name: "page parameter differs from size parameter", pagination: "{type: page, param: page, size_param: page, size: 10}", want: "pagination.size_param: must differ from param"},
+		{name: "query auth parameter differs from cursor", pagination: "{type: cursor, param: token, cursor_path: next}", auth: "auth: {mode: query, name: token}", want: "pagination.param: must differ from auth.name"},
+		{name: "next link sources are exclusive", pagination: "{type: next_link, next_path: next, link_header: true}", want: "pagination: must define exactly one"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			raw := validRecipe
+			if test.auth != "" {
+				raw = strings.Replace(raw, "auth:\n  mode: none", test.auth, 1)
+			}
+			raw = strings.Replace(raw, "    items: items", "    items: items\n    pagination: "+test.pagination, 1)
+			_, err := ParseRecipe(raw)
+			if err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("ParseRecipe() error = %v, want containing %q", err, test.want)
+			}
+		})
+	}
+
+	t.Run("page accepts the design example's unused neutral fields", func(t *testing.T) {
+		pagination := "{type: page, param: page, size_param: pageSize, size: 100, start: 1, cursor_path: '', next_path: '', link_header: false}"
+		raw := strings.Replace(validRecipe, "    items: items", "    items: items\n    pagination: "+pagination, 1)
+		if _, err := ParseRecipe(raw); err != nil {
+			t.Fatalf("ParseRecipe() error = %v", err)
+		}
+	})
+
+	t.Run("page preserves explicit zero start", func(t *testing.T) {
+		pagination := "{type: page, param: page, size: 10, start: 0}"
+		raw := strings.Replace(validRecipe, "    items: items", "    items: items\n    pagination: "+pagination, 1)
+		recipe, err := ParseRecipe(raw)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !recipe.Endpoints[0].Pagination.HasStart || recipe.Endpoints[0].Pagination.Start != 0 {
+			t.Fatalf("pagination = %+v, want explicit zero start", recipe.Endpoints[0].Pagination)
+		}
+	})
 }
 
 func TestParseRecipeAcceptsGJSONPathForms(t *testing.T) {

@@ -54,18 +54,20 @@ type RecipeEndpoint struct {
 	Dependencies []RecipeDependency `yaml:"dependencies"`
 }
 
-// RecipePagination describes the future pagination formats. The current
-// recipe runner validates these fields and rejects the block until the
-// pagination implementation is available.
+// RecipePagination describes how an endpoint requests subsequent pages.
 type RecipePagination struct {
-	Type       string `yaml:"type"`
-	Param      string `yaml:"param"`
-	SizeParam  string `yaml:"size_param"`
-	Size       int    `yaml:"size"`
-	Start      int    `yaml:"start"`
-	CursorPath string `yaml:"cursor_path"`
-	NextPath   string `yaml:"next_path"`
-	LinkHeader bool   `yaml:"link_header"`
+	Type         string `yaml:"type"`
+	Param        string `yaml:"param"`
+	SizeParam    string `yaml:"size_param"`
+	Size         int    `yaml:"size"`
+	Start        int    `yaml:"start"`
+	CursorPath   string `yaml:"cursor_path"`
+	NextPath     string `yaml:"next_path"`
+	LinkHeader   bool   `yaml:"link_header"`
+	HasParam     bool   `yaml:"-"`
+	HasSizeParam bool   `yaml:"-"`
+	HasSize      bool   `yaml:"-"`
+	HasStart     bool   `yaml:"-"`
 }
 
 // RecipeEntity defines the fixed kind and fields mapped from each item.
@@ -226,6 +228,12 @@ func markRecipePresence(root *yaml.Node, recipe *Recipe) {
 			if body := mappingValue(endpoint, "body"); body != nil {
 				recipe.Endpoints[i].Body = body
 			}
+			if pagination := mappingContent(mappingValue(endpoint, "pagination")); pagination != nil && recipe.Endpoints[i].Pagination != nil {
+				recipe.Endpoints[i].Pagination.HasParam = mappingValue(pagination, "param") != nil
+				recipe.Endpoints[i].Pagination.HasSizeParam = mappingValue(pagination, "size_param") != nil
+				recipe.Endpoints[i].Pagination.HasSize = mappingValue(pagination, "size") != nil
+				recipe.Endpoints[i].Pagination.HasStart = mappingValue(pagination, "start") != nil
+			}
 			entity := mappingContent(mappingValue(endpoint, "entity"))
 			if entity != nil {
 				attributes := mappingContent(mappingValue(entity, "attributes"))
@@ -351,8 +359,7 @@ func validateRecipe(recipe *Recipe) []RecipeIssue {
 		issues = append(issues, validateRecipeEntity(endpoint.Entity, base+".entity")...)
 		issues = append(issues, validateDependencies(endpoint.Dependencies, base+".dependencies")...)
 		if endpoint.Pagination != nil {
-			issues = append(issues, validatePagination(endpoint.Pagination, base+".pagination")...)
-			add(base+".pagination", "pagination is not supported yet")
+			issues = append(issues, validatePagination(endpoint.Pagination, base+".pagination", recipe.Auth)...)
 		}
 	}
 	issues = append(issues, validateDependencies(recipe.Dependencies, "dependencies")...)
@@ -469,10 +476,20 @@ func validateDependencies(dependencies []RecipeDependency, base string) []Recipe
 	return issues
 }
 
-func validatePagination(pagination *RecipePagination, base string) []RecipeIssue {
+func validatePagination(pagination *RecipePagination, base string, auth RecipeAuth) []RecipeIssue {
 	var issues []RecipeIssue
 	add := func(suffix, message string) {
 		issues = append(issues, RecipeIssue{Location: base + suffix, Message: message})
+	}
+	forbid := func(condition bool, suffix, message string) {
+		if condition {
+			add(suffix, message)
+		}
+	}
+	invalidPageLinkFields := func() {
+		forbid(pagination.CursorPath != "", ".cursor_path", "is only allowed for cursor pagination")
+		forbid(pagination.NextPath != "", ".next_path", "is only allowed for next_link pagination")
+		forbid(pagination.LinkHeader, ".link_header", "is only allowed for next_link pagination")
 	}
 	switch pagination.Type {
 	case "page":
@@ -482,6 +499,7 @@ func validatePagination(pagination *RecipePagination, base string) []RecipeIssue
 		if pagination.Size <= 0 {
 			add(".size", "must be greater than zero")
 		}
+		invalidPageLinkFields()
 	case "offset":
 		if pagination.Param == "" {
 			add(".param", "is required for offset pagination")
@@ -492,6 +510,7 @@ func validatePagination(pagination *RecipePagination, base string) []RecipeIssue
 		if pagination.Size <= 0 {
 			add(".size", "must be greater than zero")
 		}
+		invalidPageLinkFields()
 	case "cursor":
 		if pagination.Param == "" {
 			add(".param", "is required for cursor pagination")
@@ -499,7 +518,16 @@ func validatePagination(pagination *RecipePagination, base string) []RecipeIssue
 		if err := validateGJSONPath(pagination.CursorPath); err != nil {
 			add(".cursor_path", err.Error())
 		}
+		forbid(pagination.HasStart, ".start", "is only allowed for page or offset pagination")
+		forbid(pagination.HasSize && pagination.SizeParam == "", ".size", "requires size_param for cursor pagination")
+		forbid(pagination.HasSizeParam && pagination.SizeParam == "", ".size_param", "must not be empty when provided")
+		forbid(pagination.NextPath != "", ".next_path", "is only allowed for next_link pagination")
+		forbid(pagination.LinkHeader, ".link_header", "is only allowed for next_link pagination")
 	case "next_link":
+		forbid(pagination.HasParam, ".param", "is not allowed for next_link pagination")
+		forbid(pagination.HasSize || pagination.HasSizeParam, ".size", "size fields are only allowed for page, offset, or cursor pagination")
+		forbid(pagination.HasStart, ".start", "is only allowed for page or offset pagination")
+		forbid(pagination.CursorPath != "", ".cursor_path", "is only allowed for cursor pagination")
 		if pagination.LinkHeader == (pagination.NextPath != "") {
 			add("", "must define exactly one of next_path or link_header")
 		}
@@ -516,6 +544,17 @@ func validatePagination(pagination *RecipePagination, base string) []RecipeIssue
 	}
 	if pagination.SizeParam != "" && pagination.Size <= 0 {
 		add(".size", "must be greater than zero when size_param is set")
+	}
+	if auth.Mode == "query" {
+		if pagination.Param != "" && pagination.Param == auth.Name {
+			add(".param", "must differ from auth.name")
+		}
+		if pagination.SizeParam != "" && pagination.SizeParam == auth.Name {
+			add(".size_param", "must differ from auth.name")
+		}
+	}
+	if pagination.Param != "" && pagination.Param == pagination.SizeParam {
+		add(".size_param", "must differ from param")
 	}
 	return issues
 }

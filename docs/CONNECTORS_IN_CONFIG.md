@@ -158,8 +158,7 @@ same environment and `_file` sources as other connector credentials.
 
 The following declared connector uses one request to map the service's items.
 The [recipe reference](connectors/RECIPE_FORMAT.md) describes every field,
-mapping rule and validation limit. Pagination is not supported yet: a recipe
-that declares it is rejected before any request.
+mapping rule, pagination style and validation limit.
 
 <!-- custom-rest-recipe-example -->
 ```yaml

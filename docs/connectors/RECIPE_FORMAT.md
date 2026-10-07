@@ -60,12 +60,125 @@ ends in `/` (for example `https://host/prefix/`) and relative endpoint paths
 (`api/items`). Redirects are refused, loopback and link-local
 blocking still applies, and responses use the shared body size limit.
 
-Every endpoint currently makes exactly one request. The format recognizes a
-`pagination` block with `type` (`page`, `offset`, `cursor`, `next_link`),
-`param`, `size_param`, `size`, `start`, `cursor_path`, `next_path` and
-`link_header`. Its fields are validated, then the block is rejected at its
-location with **pagination is not supported yet**. Do not declare it for this
-version of the implementation.
+## Pagination
+
+An endpoint without `pagination` makes exactly one request. With pagination,
+the configured authentication, legacy headers, endpoint headers and static
+body are applied to every request. Page-number and offset pagination stop when
+`items` is an empty list. Cursor pagination stops when its response path is
+missing, null or an empty string. Next-link pagination stops when its body path
+is missing or empty, or when the `Link` header has no link with a `next` relation.
+
+Page numbers start at 1 when `start` is omitted; offsets start at 0. Set
+`start` to 0 for an API with zero-based page numbers. `size` is required for
+page and offset pagination; `size_param` sends that size to the API. Offset
+pagination requires both `param` and `size_param` and advances the offset by
+`size`. A page or offset request replaces a same-named static query parameter
+with the current paging value.
+
+Cursor pagination sends each response cursor as the next value of `param`. An
+initial cursor may come from the connector URL, the endpoint path or the
+endpoint's static `query`. A cursor equal to one already sent fails the sync.
+The response's `cursor_path` is evaluated against the complete JSON response.
+Cursor APIs may also declare `size_param` and a positive `size`; the size is
+sent on the initial and subsequent cursor requests.
+
+For `next_link`, choose exactly one source: a body `next_path`, or
+`link_header: true`. A body path must resolve to a URL string. Header parsing
+uses links whose relation contains the `next` token; it accepts multiple Link
+values and relation values such as `rel="prev next"`. Relative and absolute
+next URLs are resolved against the connector URL. Every next URL must retain
+the connector's scheme, hostname and port; cross-origin links, URL user
+information and fragments fail before a request is sent. Repeating a next
+URL also fails. Query-token authentication is applied once on every page and
+cannot be replaced by a paging or link query parameter.
+
+The runner sends at most 100 requests per endpoint. If the 100th response
+requires another page, it fails without sending request 101. It also fails if
+the complete sync maps more than 10,000 entities or more than the existing
+10 MiB mapped-output budget. A cap failure returns no snapshot.
+
+These complete recipes demonstrate each pagination form and are parsed by the
+custom connector tests:
+
+<!-- pagination-recipes-start -->
+
+### Page number
+
+```yaml
+version: 1
+category: media
+auth: {mode: none}
+endpoints:
+  - name: items
+    path: /api/items
+    method: GET
+    items: items
+    pagination: {type: page, param: page, size_param: pageSize, size: 100, start: 1}
+    entity: {kind: media_item, name: name, external_id: id}
+```
+
+### Offset
+
+```yaml
+version: 1
+category: media
+auth: {mode: none}
+endpoints:
+  - name: items
+    path: /api/items
+    method: GET
+    items: items
+    pagination: {type: offset, param: offset, size_param: limit, size: 100}
+    entity: {kind: media_item, name: name, external_id: id}
+```
+
+### Cursor
+
+```yaml
+version: 1
+category: media
+auth: {mode: none}
+endpoints:
+  - name: items
+    path: /api/items
+    method: GET
+    items: items
+    pagination: {type: cursor, param: cursor, cursor_path: nextCursor}
+    entity: {kind: media_item, name: name, external_id: id}
+```
+
+### Next link from the body
+
+```yaml
+version: 1
+category: media
+auth: {mode: none}
+endpoints:
+  - name: items
+    path: /api/items
+    method: GET
+    items: items
+    pagination: {type: next_link, next_path: paging.next}
+    entity: {kind: media_item, name: name, external_id: id}
+```
+
+### Next link from the Link header
+
+```yaml
+version: 1
+category: media
+auth: {mode: none}
+endpoints:
+  - name: items
+    path: /api/items
+    method: GET
+    items: items
+    pagination: {type: next_link, link_header: true}
+    entity: {kind: media_item, name: name, external_id: id}
+```
+
+<!-- pagination-recipes-end -->
 
 An endpoint transport error, non-success HTTP status, invalid JSON, oversized
 response, `items` path that does not select a list or mapped entities and

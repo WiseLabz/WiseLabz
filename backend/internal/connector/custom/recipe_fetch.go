@@ -16,6 +16,12 @@ import (
 
 	"github.com/WiseLabz/wiselabz/internal/connector"
 	"github.com/WiseLabz/wiselabz/internal/httpx"
+	"github.com/tidwall/gjson"
+)
+
+const (
+	maxRecipePages    = 100
+	maxRecipeEntities = 10_000
 )
 
 func (c *Connector) validateRecipeConnection(ctx context.Context, config map[string]any, recipe *Recipe) error {
@@ -57,65 +63,123 @@ func (c *Connector) fetchRecipe(ctx context.Context, config map[string]any, reci
 	if len(recipe.Endpoints) == 0 {
 		return nil, &connector.ConfigValidationError{Field: "recipe.endpoints", Message: "must contain at least one endpoint"}
 	}
-	requests := make([]*http.Request, len(recipe.Endpoints))
+	initialRequests := make([]*http.Request, len(recipe.Endpoints))
 	for i, endpoint := range recipe.Endpoints {
 		request, err := buildRecipeRequest(ctx, baseURL, recipe, endpoint, config)
 		if err != nil {
 			return nil, err
 		}
-		requests[i] = request
+		initialRequests[i] = request
 	}
-
 	client := c.recipeHTTPClient(config)
 	entities := make([]connector.SnapshotEntity, 0)
 	dependencies := make([]connector.ServiceDependency, 0)
 	seenEntities := make(map[string]struct{})
 	seenDependencies := make(map[string]struct{})
+	mappedOutputBytes := 0
 	metadata := map[string]string{"url": connector.RedactURL(baseURL.String())}
 	sections := make([]connector.SnapshotSection, 0, len(recipe.Endpoints))
 	for i, endpoint := range recipe.Endpoints {
-		response, err := client.Do(requests[i]) // codeql[go/request-forgery]
+		request := initialRequests[i]
+		strategy, err := newRecipePaginationStrategy(baseURL, recipe, endpoint, config, request)
 		if err != nil {
-			return nil, recipeEndpointError(endpoint.Name, connector.MapTransportError(err))
+			return nil, recipeEndpointError(endpoint.Name, err)
 		}
-		body, readErr := connector.ReadBody(response.Body)
-		closeErr := response.Body.Close()
-		if statusErr := connector.CheckStatus(response.StatusCode, nil); statusErr != nil {
-			return nil, recipeEndpointError(endpoint.Name, statusErr)
-		}
-		if statusErr := checkRecipeSuccessStatus(response.StatusCode); statusErr != nil {
-			return nil, recipeEndpointError(endpoint.Name, statusErr)
-		}
-		if readErr != nil {
-			return nil, recipeEndpointError(endpoint.Name, connector.NewMalformedResponseError(readErr))
-		}
-		if closeErr != nil {
-			return nil, recipeEndpointError(endpoint.Name, fmt.Errorf("close response body: %w", closeErr))
-		}
-		if !json.Valid(body) {
-			return nil, recipeEndpointError(endpoint.Name, connector.NewMalformedResponseError(errors.New("response is not valid JSON")))
-		}
-
-		mapped, err := mapEndpoint(recipe, endpoint, body, seenEntities)
-		if err != nil {
-			return nil, recipeEndpointError(endpoint.Name, connector.NewMalformedResponseError(err))
-		}
-		entities = append(entities, mapped.Entities...)
-		for _, dependency := range mapped.Dependencies {
-			key := dependency.Kind + "\x00" + dependency.Name
-			if _, ok := seenDependencies[key]; ok {
-				continue
+		var endpointStatus, endpointItems, endpointSkipped int
+		for pageNumber := 1; ; pageNumber++ {
+			if err := ctx.Err(); err != nil {
+				return nil, recipeEndpointError(endpoint.Name, connector.MapTransportError(err))
 			}
-			seenDependencies[key] = struct{}{}
-			dependencies = append(dependencies, dependency)
+			response, err := client.Do(request) // codeql[go/request-forgery]
+			if err != nil {
+				return nil, recipeEndpointError(endpoint.Name, connector.MapTransportError(err))
+			}
+			body, readErr := connector.ReadBody(response.Body)
+			closeErr := response.Body.Close()
+			if statusErr := connector.CheckStatus(response.StatusCode, nil); statusErr != nil {
+				return nil, recipeEndpointError(endpoint.Name, statusErr)
+			}
+			if statusErr := checkRecipeSuccessStatus(response.StatusCode); statusErr != nil {
+				return nil, recipeEndpointError(endpoint.Name, statusErr)
+			}
+			if readErr != nil {
+				if ctx.Err() != nil {
+					return nil, recipeEndpointError(endpoint.Name, connector.MapTransportError(ctx.Err()))
+				}
+				return nil, recipeEndpointError(endpoint.Name, connector.NewMalformedResponseError(readErr))
+			}
+			if closeErr != nil {
+				return nil, recipeEndpointError(endpoint.Name, fmt.Errorf("close response body: %w", closeErr))
+			}
+			if !json.Valid(body) {
+				return nil, recipeEndpointError(endpoint.Name, connector.NewMalformedResponseError(errors.New("response is not valid JSON")))
+			}
+
+			mapped, err := mapEndpointLimited(
+				recipe,
+				endpoint,
+				body,
+				seenEntities,
+				connector.MaxResponseBytes-mappedOutputBytes,
+			)
+			if err != nil {
+				return nil, recipeEndpointError(endpoint.Name, connector.NewMalformedResponseError(err))
+			}
+			if len(entities)+len(mapped.Entities) > maxRecipeEntities {
+				return nil, recipeEndpointError(endpoint.Name, fmt.Errorf("recipe exceeds the %d-entity limit", maxRecipeEntities))
+			}
+			pageOutputBytes := recipeEntitiesSize(mapped.Entities)
+			for _, dependency := range mapped.Dependencies {
+				key := dependency.Kind + "\x00" + dependency.Name
+				if _, ok := seenDependencies[key]; ok {
+					continue
+				}
+				pageOutputBytes += len(dependency.Kind) + len(dependency.Name)
+			}
+			if mappedOutputBytes+pageOutputBytes > connector.MaxResponseBytes {
+				return nil, recipeEndpointError(endpoint.Name, fmt.Errorf("recipe maps more than %d bytes of data", connector.MaxResponseBytes))
+			}
+			mappedOutputBytes += pageOutputBytes
+			entities = append(entities, mapped.Entities...)
+			for _, dependency := range mapped.Dependencies {
+				key := dependency.Kind + "\x00" + dependency.Name
+				if _, ok := seenDependencies[key]; ok {
+					continue
+				}
+				seenDependencies[key] = struct{}{}
+				dependencies = append(dependencies, dependency)
+			}
+			endpointStatus = response.StatusCode
+			endpointItems += mapped.Items
+			endpointSkipped += mapped.Skipped
+
+			next, hasNext, err := strategy.next(ctx, recipePageResponse{
+				request: request,
+				header:  response.Header,
+				body:    body,
+				items:   mapped.Items,
+			})
+			if ctx.Err() != nil {
+				return nil, recipeEndpointError(endpoint.Name, connector.MapTransportError(ctx.Err()))
+			}
+			if err != nil {
+				return nil, recipeEndpointError(endpoint.Name, err)
+			}
+			if !hasNext {
+				break
+			}
+			if pageNumber >= maxRecipePages {
+				return nil, recipeEndpointError(endpoint.Name, fmt.Errorf("pagination exceeds the %d-page limit", maxRecipePages))
+			}
+			request = next
 		}
 		prefix := "endpoint." + endpoint.Name + "."
-		metadata[prefix+"status_code"] = strconv.Itoa(response.StatusCode)
-		metadata[prefix+"items"] = strconv.Itoa(mapped.Items)
-		metadata[prefix+"skipped"] = strconv.Itoa(mapped.Skipped)
+		metadata[prefix+"status_code"] = strconv.Itoa(endpointStatus)
+		metadata[prefix+"items"] = strconv.Itoa(endpointItems)
+		metadata[prefix+"skipped"] = strconv.Itoa(endpointSkipped)
 		sections = append(sections, connector.SnapshotSection{
 			Title:   endpoint.Name,
-			Content: fmt.Sprintf("%d items mapped; %d items skipped", mapped.Items-mapped.Skipped, mapped.Skipped),
+			Content: fmt.Sprintf("%d items mapped; %d items skipped", endpointItems-endpointSkipped, endpointSkipped),
 		})
 	}
 
@@ -128,6 +192,207 @@ func (c *Connector) fetchRecipe(ctx context.Context, config map[string]any, reci
 		Metadata:     metadata,
 		FetchedAt:    time.Now(),
 	}, nil
+}
+
+type recipePageResponse struct {
+	request *http.Request
+	header  http.Header
+	body    []byte
+	items   int
+}
+
+type recipePaginationStrategy interface {
+	next(context.Context, recipePageResponse) (*http.Request, bool, error)
+}
+
+type singlePageStrategy struct{}
+
+func (singlePageStrategy) next(context.Context, recipePageResponse) (*http.Request, bool, error) {
+	return nil, false, nil
+}
+
+type numericPaginationStrategy struct {
+	baseURL    *url.URL
+	recipe     *Recipe
+	endpoint   RecipeEndpoint
+	config     map[string]any
+	pagination RecipePagination
+	value      int
+	step       int
+}
+
+func (s *numericPaginationStrategy) next(ctx context.Context, previous recipePageResponse) (*http.Request, bool, error) {
+	if previous.items == 0 {
+		return nil, false, nil
+	}
+	maxInt := int(^uint(0) >> 1)
+	if s.value > maxInt-s.step {
+		return nil, false, errors.New("pagination value exceeds the integer limit")
+	}
+	value := s.value + s.step
+	request, err := buildRecipeRequestForPaginationValue(
+		ctx,
+		s.baseURL,
+		s.recipe,
+		s.endpoint,
+		s.config,
+		previous.request.URL,
+		s.pagination,
+		value,
+	)
+	if err != nil {
+		return nil, false, err
+	}
+	s.value = value
+	return request, true, nil
+}
+
+type cursorPaginationStrategy struct {
+	baseURL    *url.URL
+	recipe     *Recipe
+	endpoint   RecipeEndpoint
+	config     map[string]any
+	pagination RecipePagination
+	sent       string
+	seen       map[string]struct{}
+}
+
+func (s *cursorPaginationStrategy) next(ctx context.Context, previous recipePageResponse) (*http.Request, bool, error) {
+	cursor, found, err := recipePathString(previous.body, s.pagination.CursorPath)
+	if err != nil {
+		return nil, false, fmt.Errorf("cursor path did not resolve to a scalar: %w", err)
+	}
+	if !found || cursor == "" {
+		return nil, false, nil
+	}
+	if cursor == s.sent {
+		return nil, false, errors.New("cursor did not advance")
+	}
+	if _, exists := s.seen[cursor]; exists {
+		return nil, false, errors.New("cursor repeated")
+	}
+	request, err := buildRecipeRequestForPaginationValue(
+		ctx,
+		s.baseURL,
+		s.recipe,
+		s.endpoint,
+		s.config,
+		previous.request.URL,
+		s.pagination,
+		cursor,
+	)
+	if err != nil {
+		return nil, false, err
+	}
+	s.sent = cursor
+	s.seen[cursor] = struct{}{}
+	return request, true, nil
+}
+
+type nextLinkPaginationStrategy struct {
+	baseURL    *url.URL
+	recipe     *Recipe
+	endpoint   RecipeEndpoint
+	config     map[string]any
+	pagination RecipePagination
+	seen       map[string]struct{}
+}
+
+func (s *nextLinkPaginationStrategy) next(ctx context.Context, previous recipePageResponse) (*http.Request, bool, error) {
+	var link string
+	var found bool
+	if s.pagination.LinkHeader {
+		link, found = recipeNextLink(previous.header)
+	} else {
+		result := jsonPathValue(previous.body, s.pagination.NextPath)
+		if !result.Exists() || result.Type == gjson.Null {
+			return nil, false, nil
+		}
+		if result.Type != gjson.String {
+			return nil, false, errors.New("next link path must resolve to a string")
+		}
+		link, found = result.Str, true
+	}
+	if !found || strings.TrimSpace(link) == "" {
+		return nil, false, nil
+	}
+	request, err := buildRecipeRequestForNextLink(ctx, s.baseURL, s.recipe, s.endpoint, s.config, link)
+	if err != nil {
+		return nil, false, err
+	}
+	key := recipeRequestURLKey(request.URL)
+	if _, exists := s.seen[key]; exists {
+		return nil, false, errors.New("next link repeated")
+	}
+	s.seen[key] = struct{}{}
+	return request, true, nil
+}
+
+func newRecipePaginationStrategy(baseURL *url.URL, recipe *Recipe, endpoint RecipeEndpoint, config map[string]any, initial *http.Request) (recipePaginationStrategy, error) {
+	pagination := endpoint.Pagination
+	if pagination == nil {
+		return singlePageStrategy{}, nil
+	}
+	switch pagination.Type {
+	case "page", "offset":
+		start := pagination.Start
+		if pagination.Type == "page" && !pagination.HasStart {
+			start = 1
+		}
+		step := 1
+		if pagination.Type == "offset" {
+			step = pagination.Size
+		}
+		return &numericPaginationStrategy{
+			baseURL:    baseURL,
+			recipe:     recipe,
+			endpoint:   endpoint,
+			config:     config,
+			pagination: *pagination,
+			value:      start,
+			step:       step,
+		}, nil
+	case "cursor":
+		initialCursor := initial.URL.Query().Get(pagination.Param)
+		seen := make(map[string]struct{})
+		if initialCursor != "" {
+			seen[initialCursor] = struct{}{}
+		}
+		return &cursorPaginationStrategy{
+			baseURL:    baseURL,
+			recipe:     recipe,
+			endpoint:   endpoint,
+			config:     config,
+			pagination: *pagination,
+			sent:       initialCursor,
+			seen:       seen,
+		}, nil
+	case "next_link":
+		return &nextLinkPaginationStrategy{
+			baseURL:    baseURL,
+			recipe:     recipe,
+			endpoint:   endpoint,
+			config:     config,
+			pagination: *pagination,
+			seen:       map[string]struct{}{recipeRequestURLKey(initial.URL): {}},
+		}, nil
+	default:
+		return nil, fmt.Errorf("unsupported pagination type %q", pagination.Type)
+	}
+}
+
+func recipeEntitiesSize(entities []connector.SnapshotEntity) int {
+	size := 0
+	for _, entity := range entities {
+		size += len(entity.Kind) + len(entity.Name) + len(entity.ExternalID) + len(entity.IP) + len(entity.Hostname) + len(entity.MAC)
+		for _, alias := range entity.Aliases {
+			size += len(alias)
+		}
+		for name, value := range entity.Attributes {
+			size += len(name) + recipeValueSize(value)
+		}
+	}
+	return size
 }
 
 func recipeBaseURL(config map[string]any) (*url.URL, error) {
@@ -180,6 +445,103 @@ func buildRecipeRequest(ctx context.Context, baseURL *url.URL, recipe *Recipe, e
 	for key, value := range endpoint.Query {
 		query.Set(key, value)
 	}
+	setInitialPaginationQuery(query, endpoint.Pagination)
+	if recipe.Auth.Mode == "query" {
+		token, _ := config["auth_token"].(string)
+		query.Set(recipe.Auth.Name, token)
+	}
+	resolved.RawQuery = query.Encode()
+	resolved.ForceQuery = false
+	return buildRecipeRequestAt(ctx, baseURL, recipe, endpoint, config, resolved)
+}
+
+func setInitialPaginationQuery(query url.Values, pagination *RecipePagination) {
+	if pagination == nil {
+		return
+	}
+	if pagination.Type == "cursor" {
+		if pagination.SizeParam != "" {
+			query.Set(pagination.SizeParam, strconv.Itoa(pagination.Size))
+		}
+		return
+	}
+	if pagination.Type != "page" && pagination.Type != "offset" {
+		return
+	}
+	start := pagination.Start
+	if pagination.Type == "page" && !pagination.HasStart {
+		start = 1
+	}
+	query.Set(pagination.Param, strconv.Itoa(start))
+	if pagination.SizeParam != "" {
+		query.Set(pagination.SizeParam, strconv.Itoa(pagination.Size))
+	}
+}
+
+func buildRecipeRequestForPaginationValue(
+	ctx context.Context,
+	baseURL *url.URL,
+	recipe *Recipe,
+	endpoint RecipeEndpoint,
+	config map[string]any,
+	previousURL *url.URL,
+	pagination RecipePagination,
+	value any,
+) (*http.Request, error) {
+	resolved := *previousURL
+	query := resolved.Query()
+	query.Set(pagination.Param, fmt.Sprint(value))
+	if pagination.SizeParam != "" {
+		query.Set(pagination.SizeParam, strconv.Itoa(pagination.Size))
+	}
+	resolved.RawQuery = query.Encode()
+	return buildRecipeRequestAt(ctx, baseURL, recipe, endpoint, config, &resolved)
+}
+
+func buildRecipeRequestForNextLink(
+	ctx context.Context,
+	baseURL *url.URL,
+	recipe *Recipe,
+	endpoint RecipeEndpoint,
+	config map[string]any,
+	rawLink string,
+) (*http.Request, error) {
+	reference, err := url.Parse(strings.TrimSpace(rawLink))
+	if err != nil {
+		return nil, fmt.Errorf("next link is malformed")
+	}
+	if reference.User != nil || reference.Fragment != "" || reference.RawFragment != "" || strings.Contains(rawLink, "#") {
+		return nil, fmt.Errorf("next link must not contain user information or a fragment")
+	}
+	resolved := baseURL.ResolveReference(reference)
+	if !sameOrigin(baseURL, resolved) {
+		return nil, fmt.Errorf("next link resolves outside connector origin: %s", connector.RedactURL(resolved.String()))
+	}
+
+	query := baseURL.Query()
+	endpointReference, err := url.Parse(endpoint.Path)
+	if err != nil {
+		return nil, fmt.Errorf("endpoint path is malformed")
+	}
+	for key, values := range endpointReference.Query() {
+		query[key] = append([]string(nil), values...)
+	}
+	for key, value := range endpoint.Query {
+		query.Set(key, value)
+	}
+	for key, values := range reference.Query() {
+		query[key] = append([]string(nil), values...)
+	}
+	resolved.RawQuery = query.Encode()
+	return buildRecipeRequestAt(ctx, baseURL, recipe, endpoint, config, resolved)
+}
+
+func buildRecipeRequestAt(ctx context.Context, baseURL *url.URL, recipe *Recipe, endpoint RecipeEndpoint, config map[string]any, target *url.URL) (*http.Request, error) {
+	resolved := *target
+	if !sameOrigin(baseURL, &resolved) {
+		return nil, fmt.Errorf("endpoint %q resolves outside connector origin: %s", endpoint.Name, connector.RedactURL(resolved.String()))
+	}
+	query := resolved.Query()
 	if recipe.Auth.Mode == "query" {
 		token, _ := config["auth_token"].(string)
 		query.Set(recipe.Auth.Name, token)
@@ -236,6 +598,129 @@ func normalizedPort(u *url.URL) string {
 	default:
 		return ""
 	}
+}
+
+func recipeRequestURLKey(u *url.URL) string {
+	canonical := *u
+	canonical.Scheme = strings.ToLower(canonical.Scheme)
+	canonical.Host = strings.ToLower(canonical.Host)
+	canonical.RawQuery = canonical.Query().Encode()
+	canonical.ForceQuery = false
+	canonical.Fragment = ""
+	canonical.RawFragment = ""
+	return canonical.String()
+}
+
+func recipeNextLink(header http.Header) (string, bool) {
+	for _, value := range header.Values("Link") {
+		for _, segment := range splitLinkHeader(value) {
+			href, relation := parseRecipeLinkSegment(segment)
+			for _, rel := range strings.Fields(relation) {
+				if strings.EqualFold(rel, "next") && href != "" {
+					return href, true
+				}
+			}
+		}
+	}
+	return "", false
+}
+
+func splitLinkHeader(value string) []string {
+	var segments []string
+	start := 0
+	inAngle, inQuote, escaped := false, false, false
+	for i, r := range value {
+		if inQuote {
+			if escaped {
+				escaped = false
+				continue
+			}
+			switch r {
+			case '\\':
+				escaped = true
+			case '"':
+				inQuote = false
+			}
+			continue
+		}
+		switch r {
+		case '"':
+			inQuote = true
+		case '<':
+			inAngle = true
+		case '>':
+			inAngle = false
+		case ',':
+			if !inAngle {
+				segments = append(segments, strings.TrimSpace(value[start:i]))
+				start = i + 1
+			}
+		}
+	}
+	segments = append(segments, strings.TrimSpace(value[start:]))
+	return segments
+}
+
+func parseRecipeLinkSegment(segment string) (string, string) {
+	segment = strings.TrimSpace(segment)
+	if !strings.HasPrefix(segment, "<") {
+		return "", ""
+	}
+	closingAngle := strings.IndexByte(segment, '>')
+	if closingAngle < 1 {
+		return "", ""
+	}
+	href := segment[1:closingAngle]
+	var relation string
+	for _, parameter := range splitLinkParameters(segment[closingAngle+1:]) {
+		name, value, ok := strings.Cut(strings.TrimSpace(parameter), "=")
+		if !ok || !strings.EqualFold(strings.TrimSpace(name), "rel") {
+			continue
+		}
+		value = strings.TrimSpace(value)
+		if strings.HasPrefix(value, "\"") {
+			if len(value) < 2 || !strings.HasSuffix(value, "\"") {
+				continue
+			}
+			decoded, err := strconv.Unquote(value)
+			if err != nil {
+				continue
+			}
+			value = decoded
+		}
+		relation = value
+	}
+	return href, relation
+}
+
+func splitLinkParameters(value string) []string {
+	var parameters []string
+	start := 0
+	inQuote, escaped := false, false
+	for i, r := range value {
+		if inQuote {
+			if escaped {
+				escaped = false
+				continue
+			}
+			switch r {
+			case '\\':
+				escaped = true
+			case '"':
+				inQuote = false
+			}
+			continue
+		}
+		switch r {
+		case '"':
+			inQuote = true
+		case ';':
+			parameters = append(parameters, value[start:i])
+			start = i + 1
+		}
+	}
+	parameters = append(parameters, value[start:])
+	return parameters
 }
 
 func (c *Connector) recipeHTTPClient(config map[string]any) *http.Client {
