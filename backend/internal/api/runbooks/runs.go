@@ -94,23 +94,7 @@ func (h *Handler) connectorlessRunAuthorized(ctx context.Context, userID string)
 	if auth.InstanceAdminFromContext(ctx) {
 		return true, nil
 	}
-
-	const pageSize = 100
-	for offset := 0; ; {
-		connectors, total, err := h.Store.ListConnectorsForUser(ctx, userID, "", offset, pageSize)
-		if err != nil {
-			return false, err
-		}
-		for _, connector := range connectors {
-			if connector.Role == "operator" {
-				return true, nil
-			}
-		}
-		offset += len(connectors)
-		if len(connectors) == 0 || offset >= total {
-			return false, nil
-		}
-	}
+	return h.Store.UserHasAnyConnectorRole(ctx, userID, "operator")
 }
 
 func writeRunError(w http.ResponseWriter, err error) {

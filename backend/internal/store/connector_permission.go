@@ -3,7 +3,9 @@ package store
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/WiseLabz/wiselabz/internal/auth"
@@ -112,6 +114,41 @@ func (s *Store) UserHasConnectorRole(ctx context.Context, userID, connectorID, m
 		return false, nil
 	}
 	return connectorRoleRank[role] >= connectorRoleRank[minRole], nil
+}
+
+// UserHasAnyConnectorRole reports whether userID holds at least minRole on any
+// existing connector, honouring a connector-restricted API key. Unlike
+// UserHasConnectorRole it does not apply the key's read-only clamp; callers
+// reject read-only keys separately.
+func (s *Store) UserHasAnyConnectorRole(ctx context.Context, userID, minRole string) (bool, error) {
+	var roles []string
+	for role, rank := range connectorRoleRank {
+		if rank >= connectorRoleRank[minRole] {
+			roles = append(roles, role)
+		}
+	}
+	if len(roles) == 0 {
+		return false, nil
+	}
+	slices.Sort(roles)
+	args := []any{userID}
+	for _, role := range roles {
+		args = append(args, role)
+	}
+	keyFilter, keyArgs := apiKeyConnectorFilter(ctx, "c.id")
+	args = append(args, keyArgs...)
+	var found int
+	err := s.db.QueryRowContext(ctx, `
+		SELECT 1 FROM user_connector_roles r JOIN connectors c ON c.id = r.connector_id
+		WHERE r.user_id = ? AND r.role IN (`+placeholders(len(roles))+`)`+keyFilter+` LIMIT 1`, args...,
+	).Scan(&found)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("check any connector role: %w", err)
+	}
+	return true, nil
 }
 
 // ListConnectorGrants returns every user's grant on a connector (one row per

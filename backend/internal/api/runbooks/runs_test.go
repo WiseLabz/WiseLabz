@@ -657,6 +657,20 @@ func TestCancelRunAfterConnectorDeleted(t *testing.T) {
 		assertRunState(t, h, run.ID, "failed")
 		assertNoRunAudit(t, h, "runbook.run.cancel")
 	})
+	t.Run("viewer on surviving connector with operator elsewhere", func(t *testing.T) {
+		h, id, user, a, b := runFixture(t)
+		run, _ := seededRun(t, h, id, user, false)
+		deleteRunConnectors(t, h, b)
+		if _, err := h.Store.UpsertConnectorGrant(context.Background(), user, a, "viewer"); err != nil {
+			t.Fatal(err)
+		}
+		apitest.GrantConnectorRole(t, h.Store, user, seedProxmoxConnector(t, h), "operator")
+		rr := httptest.NewRecorder()
+		h.CancelRun(rr, runRequest(user, id, run.ID, ""))
+		assertRunStatus(t, rr, 403)
+		assertRunState(t, h, run.ID, "failed")
+		assertNoRunAudit(t, h, "runbook.run.cancel")
+	})
 	for _, mode := range []string{"none", "viewer", "operator", "admin"} {
 		t.Run("all connectors deleted/"+mode, func(t *testing.T) {
 			h, id, starter, a, b := runFixture(t)

@@ -678,7 +678,7 @@ export const useExecuteRunbookStep = <
   return useMutation(getExecuteRunbookStepMutationOptions(options), queryClient);
 };
 /**
- * dryRun=true returns the ordered, redacted preview without elevation or mutation. Starting requires operator on every referenced connector (including API-key restrictions) before any other rejection, and one fresh runbook.run elevation targeted at runbookId. Steps are frozen at start. An empty runbook cannot start. Existing single-step execution is unchanged.
+ * dryRun=true returns the ordered, redacted preview without elevation or mutation. Starting requires operator on every referenced connector (including API-key restrictions) before any other rejection, and one fresh runbook.run elevation targeted at runbookId. Steps are frozen at start. An empty runbook cannot start. Existing single-step execution is unchanged. When the runbook has no connector to check (manual steps only), the caller must be an instance admin or hold operator on at least one connector.
  * @summary Preview or start a whole-runbook run
  */
 export const startRunbookRun = (
@@ -1036,7 +1036,7 @@ export function useGetRunbookRun<
 }
 
 /**
- * Requires operator on every connector of the frozen run (API-key restrictions apply), checked before state or step validation. No elevation. Available after runbook deletion.
+ * Requires operator on every connector of the frozen run (API-key restrictions apply), checked before state or step validation. No elevation. Available after runbook deletion. When the run has no connector to check (manual steps only), the caller must be an instance admin or hold operator on at least one connector.
  * @summary Confirm a waiting manual step and continue
  */
 export const confirmRunbookRunStep = (
@@ -1124,7 +1124,7 @@ export const useConfirmRunbookRunStep = <
   return useMutation(getConfirmRunbookRunStepMutationOptions(options), queryClient);
 };
 /**
- * Requires operator on every frozen connector before state or elevation validation, and a fresh single-use runbook.run elevation targeted at the runbook id. Continues from the first non-succeeded step, including unknown outcomes. A deleted runbook cannot be resumed because its elevation target no longer exists: returns 409 runbook_deleted; history, cancellation and manual confirmation remain available.
+ * Requires operator on every frozen connector before state or elevation validation, and a fresh single-use runbook.run elevation targeted at the runbook id. When the run has no connector to check (manual steps only), the caller must be an instance admin or hold operator on at least one connector. Continues from the first non-succeeded step, including unknown outcomes. A deleted runbook cannot be resumed because its elevation target no longer exists: returns 409 runbook_deleted; history, cancellation and manual confirmation remain available.
  * @summary Resume a failed run with fresh elevation
  */
 export const resumeRunbookRun = (
@@ -1215,7 +1215,7 @@ export const useResumeRunbookRun = <
   return useMutation(getResumeRunbookRunMutationOptions(options), queryClient);
 };
 /**
- * Requires operator on every frozen connector (API-key restrictions apply), checked before state. No elevation. Stops execution before its next step and records the cancelling user. Available after runbook deletion. Connectors deleted since the run started do not count toward the grant requirement for cancellation (confirm and resume still require every frozen connector).
+ * Requires operator on every frozen connector (API-key restrictions apply), checked before state. No elevation. Stops execution before its next step and records the cancelling user. Available after runbook deletion. Connectors deleted since the run started do not count toward the grant requirement for cancellation (confirm and resume still require every frozen connector). When the run has no connector to check (manual steps only, or every connector was deleted), the caller must be an instance admin or hold operator on at least one connector.
  * @summary Cancel a running, waiting or failed run
  */
 export const cancelRunbookRun = (

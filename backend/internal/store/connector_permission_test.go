@@ -4,6 +4,8 @@ import (
 	"context"
 	"slices"
 	"testing"
+
+	"github.com/WiseLabz/wiselabz/internal/auth"
 )
 
 func newTestConnector(t *testing.T, s *Store, name string) *ConnectorRecord {
@@ -533,4 +535,59 @@ func TestListConnectorRefs(t *testing.T) {
 		}
 	}
 	t.Fatalf("ListConnectorRefs() = %v, want it to include %q named conn-list-refs", refs, c.ID)
+}
+
+func TestUserHasAnyConnectorRole(t *testing.T) {
+	s := newDocTestStore(t)
+	ctx := context.Background()
+	has := func(ctx context.Context, userID, minRole string) bool {
+		t.Helper()
+		ok, err := s.UserHasAnyConnectorRole(ctx, userID, minRole)
+		if err != nil {
+			t.Fatalf("UserHasAnyConnectorRole() error: %v", err)
+		}
+		return ok
+	}
+
+	u := newTestUser(t, s, "any-role-user")
+	if has(ctx, u.ID, "viewer") {
+		t.Error("no grant: want false")
+	}
+
+	viewerOn := newTestConnector(t, s, "any-viewer")
+	if _, err := s.UpsertConnectorGrant(ctx, u.ID, viewerOn.ID, "viewer"); err != nil {
+		t.Fatalf("UpsertConnectorGrant() error: %v", err)
+	}
+	if !has(ctx, u.ID, "viewer") {
+		t.Error("viewer grant: want true for viewer")
+	}
+	if has(ctx, u.ID, "operator") {
+		t.Error("viewer grant: want false for operator")
+	}
+
+	operatorOn := newTestConnector(t, s, "any-operator")
+	if _, err := s.UpsertConnectorGrant(ctx, u.ID, operatorOn.ID, "operator"); err != nil {
+		t.Fatalf("UpsertConnectorGrant() error: %v", err)
+	}
+	if !has(ctx, u.ID, "operator") {
+		t.Error("operator grant: want true for operator")
+	}
+
+	// A key restricted to another connector hides the operator grant, but a
+	// key restricted to it keeps it.
+	other := auth.ContextWithAPIKeyRestriction(ctx, auth.APIKeyRestriction{ConnectorIDs: []string{viewerOn.ID}})
+	if has(other, u.ID, "operator") {
+		t.Error("key restricted to another connector: want false")
+	}
+	same := auth.ContextWithAPIKeyRestriction(ctx, auth.APIKeyRestriction{ConnectorIDs: []string{operatorOn.ID}})
+	if !has(same, u.ID, "operator") {
+		t.Error("key restricted to the granted connector: want true")
+	}
+
+	if err := s.DeleteConnector(ctx, operatorOn.ID); err != nil {
+		t.Fatalf("DeleteConnector() error: %v", err)
+	}
+	if has(ctx, u.ID, "operator") {
+		t.Error("grant on a deleted connector: want false")
+	}
 }
