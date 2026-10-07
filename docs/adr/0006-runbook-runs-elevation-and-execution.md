@@ -69,6 +69,11 @@ the run's frozen steps:
 - Ticking a manual step (`POST /api/runbook-runs/{runId}/steps/{stepId}/confirm`)
   and cancelling (`POST /api/runbook-runs/{runId}/cancel`) require the operator
   grant on every connector of the run, but do **not** require elevation.
+- If there is no connector to check, the caller must be an instance admin or
+  hold an operator grant on at least one connector. This covers manual-only
+  runs and cancellation after every connector in a run has been deleted.
+- API-key connector restrictions still apply to the fallback operator grant;
+  a restricted key cannot use a grant outside its allowed connector set.
 
 ### Pre-step operator grant re-check
 

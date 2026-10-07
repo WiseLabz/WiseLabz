@@ -762,7 +762,7 @@ export const en = {
       nextPage: 'Next page',
       backToDashboard: 'Back to dashboard',
       blockedAction:
-        'You need operator access to every connector in this run to perform this action.',
+        'You need operator access to every connector in this run, or to at least one connector when the run has none.',
       start: 'Start run',
       status: {
         running: 'Running',

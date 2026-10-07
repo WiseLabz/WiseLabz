@@ -40,7 +40,7 @@ The system SHALL provide a dry-run preview of a run that changes nothing. The pr
 - **THEN** the preview SHALL mark that step as not executable with the reason, and SHALL indicate that the run cannot be started.
 
 ### Requirement: Starting a run
-Starting a run SHALL require a valid elevation token for the action `runbook.run` scoped to that runbook and an operator grant on every connector referenced by the runbook's steps. A successful start SHALL create a run in state `running`, record the starting user, respond without waiting for the run to finish, and return the run's identifier. A runbook with no steps SHALL NOT be startable.
+Starting a run SHALL require a valid elevation token for the action `runbook.run` scoped to that runbook and an operator grant on every connector referenced by the runbook's steps. When the runbook references no connectors, starting SHALL instead require an instance admin or an operator grant on at least one connector. A successful start SHALL create a run in state `running`, record the starting user, respond without waiting for the run to finish, and return the run's identifier. A runbook with no steps SHALL NOT be startable.
 
 #### Scenario: Successful start
 - **WHEN** an elevated user holding operator on every referenced connector starts a run
@@ -61,6 +61,14 @@ Starting a run SHALL require a valid elevation token for the action `runbook.run
 #### Scenario: Restricted API key
 - **WHEN** an API key restricted to a subset of connectors starts a run that references a connector outside that subset
 - **THEN** the request SHALL be rejected with status 403.
+
+#### Scenario: Start a connectorless run
+- **WHEN** an instance admin or a user with operator access on any connector starts a runbook whose steps reference no connectors
+- **THEN** the request SHALL be authorized after validating the runbook elevation token.
+
+#### Scenario: Start a connectorless run without fallback access
+- **WHEN** a caller with no operator grant on any connector starts a runbook whose steps reference no connectors
+- **THEN** the request SHALL be rejected with status 403 before elevation is checked.
 
 ### Requirement: Frozen steps
 A run SHALL execute and report the steps as they were when the run started. Editing or deleting the runbook or its steps afterwards SHALL NOT change a run's steps, its progress or its history.
@@ -107,7 +115,7 @@ When a step fails or exceeds its timeout, the run SHALL stop, the step SHALL be 
 - **THEN** the step SHALL be `failed` with a timeout reason and the run SHALL be `failed`.
 
 ### Requirement: Manual steps
-When a run reaches a `manual` step, the run SHALL become `waiting_manual` and the step `waiting`, and nothing further SHALL execute until a user confirms the step. Confirming SHALL require an operator grant on every connector referenced by the run's steps and SHALL NOT require elevation. On confirmation the step SHALL become `succeeded`, the confirming user SHALL be recorded, and the run SHALL continue.
+When a run reaches a `manual` step, the run SHALL become `waiting_manual` and the step `waiting`, and nothing further SHALL execute until a user confirms the step. Confirming SHALL require an operator grant on every connector referenced by the run's steps; if no connector is referenced, it SHALL require an instance admin or operator access on at least one connector. Confirmation SHALL NOT require elevation. On confirmation the step SHALL become `succeeded`, the confirming user SHALL be recorded, and the run SHALL continue.
 
 #### Scenario: Run pauses on manual step
 - **WHEN** a run reaches a manual step
@@ -121,12 +129,16 @@ When a run reaches a `manual` step, the run SHALL become `waiting_manual` and th
 - **WHEN** a user lacking an operator grant on one of the run's connectors confirms the waiting step
 - **THEN** the request SHALL be rejected with status 403 and the run SHALL stay `waiting_manual`.
 
+#### Scenario: Confirm a connectorless run
+- **WHEN** an instance admin or a user with operator access on any connector confirms a manual step in a run whose steps reference no connectors
+- **THEN** the step SHALL be confirmed and the run SHALL continue.
+
 #### Scenario: Confirm a step that is not waiting
 - **WHEN** a confirmation is sent for a step that is not in state `waiting`
 - **THEN** the request SHALL be rejected with status 409.
 
 ### Requirement: Resuming a failed run
-A `failed` run SHALL be resumable. Resuming SHALL require a fresh `runbook.run` elevation token for that runbook and an operator grant on every connector referenced by the run's steps. Resume SHALL execute again from the first step that is not `succeeded`, including a step in state `failed` or `unknown`, and SHALL record the resuming user. Runs in any other state SHALL NOT be resumable.
+A `failed` run SHALL be resumable. Resuming SHALL require a fresh `runbook.run` elevation token for that runbook and an operator grant on every connector referenced by the run's steps; if no connector is referenced, it SHALL require an instance admin or operator access on at least one connector. Resume SHALL execute again from the first step that is not `succeeded`, including a step in state `failed` or `unknown`, and SHALL record the resuming user. Runs in any other state SHALL NOT be resumable.
 
 #### Scenario: Resume after failure
 - **WHEN** an elevated, authorized user resumes a run whose third step failed
@@ -141,7 +153,7 @@ A `failed` run SHALL be resumable. Resuming SHALL require a fresh `runbook.run` 
 - **THEN** the request SHALL be rejected with status 409.
 
 ### Requirement: Cancelling a run
-A run in state `running`, `waiting_manual` or `failed` SHALL be cancellable by any user holding an operator grant on every connector referenced by the run's steps. Cancelling SHALL stop the run before its next step, make the run `cancelled`, mark not-yet-finished steps `skipped`, and record the cancelling user. A cancelled run SHALL NOT be resumable.
+A run in state `running`, `waiting_manual` or `failed` SHALL be cancellable by any user holding an operator grant on every connector referenced by the run's steps that still exists. If no connector remains to check, cancellation SHALL require an instance admin or operator access on at least one connector. Cancelling SHALL stop the run before its next step, make the run `cancelled`, mark not-yet-finished steps `skipped`, and record the cancelling user. A cancelled run SHALL NOT be resumable.
 
 #### Scenario: Cancel while waiting
 - **WHEN** an authorized user cancels a run that is `waiting_manual`

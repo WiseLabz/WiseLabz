@@ -69,7 +69,7 @@ export const ptBR: Catalog = {
       nextPage: 'Próxima página',
       backToDashboard: 'Voltar ao painel',
       blockedAction:
-        'Você precisa de acesso de operador a todos os conectores desta execução para realizar esta ação.',
+        'Você precisa de acesso de operador a todos os conectores desta execução ou a pelo menos um conector quando ela não tiver nenhum.',
       start: 'Iniciar execução',
       status: {
         running: 'Em execução',
