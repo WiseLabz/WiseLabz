@@ -86,7 +86,7 @@ const (
 	// revert, which run detached from the run's cancellation so they are not
 	// abandoned halfway.
 	configPushTimeout = 2 * time.Minute
-	// lastObservationLimit truncates the last observed attribute value that a
+	// lastObservationLimit truncates (in bytes) the last observed attribute value that a
 	// wait_for_entity timeout reports.
 	lastObservationLimit = 80
 	// healthStatusOnline is the only status wait_until_healthy accepts.

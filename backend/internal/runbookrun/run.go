@@ -510,8 +510,8 @@ func describeObservation(attribute string, value any, present bool) string {
 	if encoded, err := json.Marshal(value); err == nil {
 		text = string(encoded)
 	}
-	if runes := []rune(text); len(runes) > lastObservationLimit {
-		text = string(runes[:lastObservationLimit]) + "…"
+	if len(text) > lastObservationLimit {
+		text = strings.ToValidUTF8(text[:lastObservationLimit], "") + "…"
 	}
 	return attribute + " = " + text
 }
