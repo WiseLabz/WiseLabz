@@ -71,9 +71,36 @@ vi.mock('../../api/generated/connectors/connectors', () => ({
       },
     ],
   }),
+  useGetConnectorsConnectorIdConfigFields: () => ({
+    data: [
+      {
+        key: 'restartPolicy',
+        label: 'Restart Policy',
+        type: 'select',
+        entityScope: true,
+        options: ['no', 'on-failure', 'always', 'unless-stopped'],
+      },
+      { key: 'cores', label: 'CPU Cores', type: 'number', entityScope: true },
+      { key: 'enabled', label: 'Enabled', type: 'toggle', entityScope: false },
+      { key: 'name', label: 'Name', type: 'text', entityScope: false },
+    ],
+  }),
   useGetConnectorsConnectorIdSnapshots: () => ({ data: [{ id: 'snap-1' }] }),
   useGetConnectorsConnectorIdSnapshotsSnapshotId: () => ({
     data: { entities: [{ name: 'vm-100', externalId: '100' }] },
+  }),
+}));
+
+vi.mock('../../api/generated/compliance/compliance', () => ({
+  useGetComplianceSchema: () => ({
+    data: {
+      attributes: {
+        proxmox: {
+          virtual_machine: [{ name: 'status', type: 'string', description: 'VM state' }],
+        },
+      },
+      joinFields: [],
+    },
   }),
 }));
 
@@ -247,6 +274,147 @@ describe('RunbooksPage steps editor', () => {
         title: 'Confirm manually',
       },
     ]);
+  });
+
+  it('saves a config-push step with its writable field, typed value and entity', async () => {
+    renderPage();
+    fireEvent.click(screen.getAllByRole('button', { name: 'New runbook' })[0]);
+    fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Update policy' } });
+    fireEvent.change(screen.getByLabelText('Target', { exact: false }), {
+      target: { value: 'vm.created' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Add step' }));
+    fireEvent.change(screen.getByPlaceholderText('e.g. Restart the sync worker'), {
+      target: { value: 'Change restart policy' },
+    });
+    fireEvent.change(screen.getByLabelText('Kind'), { target: { value: 'config_push' } });
+    fireEvent.change(screen.getByLabelText('Connector'), { target: { value: 'conn-1' } });
+    fireEvent.change(screen.getByLabelText('Writable field'), {
+      target: { value: 'restartPolicy' },
+    });
+    fireEvent.change(screen.getByLabelText('Target value'), { target: { value: 'always' } });
+    fireEvent.change(screen.getByLabelText('Entity'), { target: { value: '100' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(postRunbooks).toHaveBeenCalledTimes(1));
+    expect(postRunbooks.mock.calls[0][0].steps).toStrictEqual([
+      {
+        kind: 'config_push',
+        title: 'Change restart policy',
+        connectorId: 'conn-1',
+        fieldKey: 'restartPolicy',
+        targetValue: 'always',
+        entityRef: '100',
+      },
+    ]);
+  });
+
+  it.each([
+    ['cores', '4', 4],
+    ['name', 'worker-1', 'worker-1'],
+  ])('keeps %s config-push values in their declared type', async (fieldKey, input, expected) => {
+    renderPage();
+    fireEvent.click(screen.getAllByRole('button', { name: 'New runbook' })[0]);
+    fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Change setting' } });
+    fireEvent.change(screen.getByLabelText('Target', { exact: false }), {
+      target: { value: 'vm.created' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Add step' }));
+    fireEvent.change(screen.getByPlaceholderText('e.g. Restart the sync worker'), {
+      target: { value: 'Push setting' },
+    });
+    fireEvent.change(screen.getByLabelText('Kind'), { target: { value: 'config_push' } });
+    fireEvent.change(screen.getByLabelText('Connector'), { target: { value: 'conn-1' } });
+    fireEvent.change(screen.getByLabelText('Writable field'), { target: { value: fieldKey } });
+    fireEvent.change(screen.getByLabelText('Target value'), { target: { value: input } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(postRunbooks).toHaveBeenCalledTimes(1));
+    expect(postRunbooks.mock.calls[0][0].steps[0].targetValue).toBe(expected);
+  });
+
+  it('saves toggle config-push values as booleans', async () => {
+    renderPage();
+    fireEvent.click(screen.getAllByRole('button', { name: 'New runbook' })[0]);
+    fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Enable service' } });
+    fireEvent.change(screen.getByLabelText('Target', { exact: false }), {
+      target: { value: 'vm.created' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Add step' }));
+    fireEvent.change(screen.getByPlaceholderText('e.g. Restart the sync worker'), {
+      target: { value: 'Enable service' },
+    });
+    fireEvent.change(screen.getByLabelText('Kind'), { target: { value: 'config_push' } });
+    fireEvent.change(screen.getByLabelText('Connector'), { target: { value: 'conn-1' } });
+    fireEvent.change(screen.getByLabelText('Writable field'), { target: { value: 'enabled' } });
+    fireEvent.click(screen.getByLabelText('Target value'));
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(postRunbooks).toHaveBeenCalledTimes(1));
+    expect(postRunbooks.mock.calls[0][0].steps[0].targetValue).toBe(true);
+  });
+
+  it('saves a wait-for-entity step with the compliance attribute and timeout', async () => {
+    renderPage();
+    fireEvent.click(screen.getAllByRole('button', { name: 'New runbook' })[0]);
+    fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Wait for VM' } });
+    fireEvent.change(screen.getByLabelText('Target', { exact: false }), {
+      target: { value: 'vm.created' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Add step' }));
+    fireEvent.change(screen.getByPlaceholderText('e.g. Restart the sync worker'), {
+      target: { value: 'Wait until running' },
+    });
+    fireEvent.change(screen.getByLabelText('Kind'), { target: { value: 'wait_for_entity' } });
+    fireEvent.change(screen.getByLabelText('Connector'), { target: { value: 'conn-1' } });
+    fireEvent.change(screen.getByLabelText('Entity'), { target: { value: '100' } });
+    fireEvent.change(screen.getByLabelText('Attribute'), { target: { value: 'status' } });
+    fireEvent.change(screen.getByLabelText('Operator'), { target: { value: 'eq' } });
+    fireEvent.change(screen.getByLabelText('Expected value'), { target: { value: 'running' } });
+    fireEvent.change(screen.getByLabelText('Timeout (minutes)'), { target: { value: '7' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(postRunbooks).toHaveBeenCalledTimes(1));
+    expect(postRunbooks.mock.calls[0][0].steps).toStrictEqual([
+      {
+        kind: 'wait_for_entity',
+        title: 'Wait until running',
+        connectorId: 'conn-1',
+        entityRef: '100',
+        attribute: 'status',
+        operator: 'eq',
+        expectedValue: 'running',
+        timeoutSeconds: 420,
+      },
+    ]);
+  });
+
+  it('shows server field errors for a wait step', async () => {
+    postRunbooks.mockRejectedValueOnce({
+      isAxiosError: true,
+      response: {
+        status: 400,
+        data: {
+          code: 'invalid_request',
+          message: 'bad',
+          details: [{ field: 'steps[0].attribute', msg: 'attribute is required' }],
+        },
+      },
+    });
+    renderPage();
+    fireEvent.click(screen.getAllByRole('button', { name: 'New runbook' })[0]);
+    fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Wait for VM' } });
+    fireEvent.change(screen.getByLabelText('Target', { exact: false }), {
+      target: { value: 'vm.created' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Add step' }));
+    fireEvent.change(screen.getByLabelText('Kind'), { target: { value: 'wait_for_entity' } });
+    fireEvent.change(screen.getByLabelText('Connector'), { target: { value: 'conn-1' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    const fieldError = await screen.findByText('attribute is required');
+    expect(fieldError.closest('p')).toHaveTextContent('Attribute: attribute is required');
+    expect(fieldError.closest('p')).toHaveAttribute('role', 'alert');
   });
 
   describe('switching step kind', () => {

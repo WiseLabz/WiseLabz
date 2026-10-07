@@ -20,6 +20,7 @@ import { toast } from '../../lib/toast';
 import { ToneTag } from '../ui/ToneTag';
 import type { Tone } from '../ui/status';
 import { isConflict, runErrorMessage } from './runErrors';
+import { formatRunbookValue } from './runbookStepValues';
 
 type RunT = ReturnType<typeof useTranslation>['t'];
 
@@ -225,7 +226,12 @@ export function RunDetail({
                   .slice()
                   .sort((a, b) => a.position - b.position)
                   .map((step) => (
-                    <RunStepRow key={step.id} step={step} language={i18n.language} t={t} />
+                    <RunStepRow
+                      key={step.id}
+                      step={step}
+                      language={i18n.language}
+                      t={t}
+                    />
                   ))}
               </ol>
             </section>
@@ -331,7 +337,15 @@ export function RunStateTag({ state, label }: { state: string; label: string }) 
   return <ToneTag tone={STATE_TONES[state] ?? 'idle'} label={label} />;
 }
 
-function RunStepRow({ step, language, t }: { step: RunbookRunStep; language: string; t: RunT }) {
+function RunStepRow({
+  step,
+  language,
+  t,
+}: {
+  step: RunbookRunStep;
+  language: string;
+  t: RunT;
+}) {
   const restricted =
     step.redacted || !step.kind || !step.title || (step.kind !== 'manual' && !step.connectorId);
   const stepNumber = step.position + 1;
@@ -415,6 +429,38 @@ function RunStepRow({ step, language, t }: { step: RunbookRunStep; language: str
         {step.entityRef && (
           <MetadataRow label={t('runbooks.runs.entity')} value={<code>{step.entityRef}</code>} />
         )}
+        {step.kind === 'config_push' && step.fieldKey && (
+          <MetadataRow label={t('runbooks.runs.fieldLabel')} value={<code>{step.fieldKey}</code>} />
+        )}
+        {step.kind === 'config_push' && (
+          <MetadataRow
+            label={t('runbooks.runs.configPushValueLabel')}
+            value={
+              step.currentValueKnown
+                ? t('runbooks.runs.currentToTarget', {
+                    current: formatRunbookValue(step.currentValue),
+                    target: formatRunbookValue(step.targetValue, true),
+                  })
+                : t('runbooks.runs.unknownCurrentToTarget', {
+                    target: formatRunbookValue(step.targetValue, true),
+                  })
+            }
+          />
+        )}
+        {step.kind === 'wait_for_entity' && step.attribute && (
+          <MetadataRow
+            label={t('runbooks.runs.waitConditionLabel')}
+            value={
+              <code>
+                {t('runbooks.runs.waitCondition', {
+                  attribute: step.attribute,
+                  operator: step.operator ?? '',
+                  expected: formatRunbookValue(step.expectedValue, true),
+                })}
+              </code>
+            }
+          />
+        )}
         {step.timeoutSeconds !== undefined && step.timeoutSeconds > 0 && (
           <MetadataRow
             label={t('runbooks.runs.timeout')}
@@ -440,9 +486,17 @@ function RunStepRow({ step, language, t }: { step: RunbookRunStep; language: str
           />
         )}
       </dl>
+      {step.kind === 'config_push' && step.executeBlockedReason === 'unsupported_field' && (
+        <p role="note" className="mt-3 text-xs text-warn">
+          {t('runbooks.runs.blocked.unsupported_field')}
+        </p>
+      )}
       {step.error && (
         <p className="mt-3 text-xs text-err">
-          <span className="font-medium">{t('runbooks.runs.stepError')}: </span>
+          <span className="font-medium">
+            {t('runbooks.runs.stepError')}
+            :{' '}
+          </span>
           {step.error}
         </p>
       )}

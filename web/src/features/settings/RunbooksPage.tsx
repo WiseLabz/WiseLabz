@@ -20,14 +20,19 @@ import {
 import {
   useGetConnectors,
   useGetConnectorsSchema,
+  useGetConnectorsConnectorIdConfigFields,
 } from '../../api/generated/connectors/connectors';
+import { useGetComplianceSchema } from '../../api/generated/compliance/compliance';
 import type {
+  ComplianceSchemaAttributes,
   Runbook,
   RunbookStepInput,
   RunbookStepKind,
+  RunbookStepInputOperator,
   RunbookStepVerb,
   RunbookTargetType,
 } from '../../api/model';
+import { RunbookStepInputOperator as RunbookStepOperator } from '../../api/model/runbookStepInputOperator';
 import { Severity } from '../../api/model/severity';
 import { Button, IconButton } from '../../components/ui/Button';
 import { Panel } from '../../components/ui/Panel';
@@ -56,6 +61,11 @@ const STEP_FIELD_LABEL_KEYS: Record<string, string> = {
   verb: 'settings.runbooks.steps.verbLabel',
   timeoutSeconds: 'settings.runbooks.steps.timeoutLabel',
   entityRef: 'entityPicker.label',
+  fieldKey: 'settings.runbooks.steps.fieldLabel',
+  targetValue: 'settings.runbooks.steps.valueLabel',
+  attribute: 'settings.runbooks.steps.attributeLabel',
+  operator: 'settings.runbooks.steps.operatorLabel',
+  expectedValue: 'settings.runbooks.steps.expectedValueLabel',
 };
 
 interface StepError {
@@ -76,6 +86,11 @@ interface StepDraft {
   verb: RunbookStepVerb | '';
   entityRef: string;
   timeoutSeconds?: number | '';
+  fieldKey: string;
+  targetValue: unknown;
+  attribute: string;
+  operator: RunbookStepInputOperator | '';
+  expectedValue: unknown;
   redacted?: boolean;
 }
 
@@ -89,6 +104,11 @@ function newStepDraft(): StepDraft {
     verb: 'restart',
     entityRef: '',
     timeoutSeconds: '',
+    fieldKey: '',
+    targetValue: '',
+    attribute: '',
+    operator: RunbookStepOperator.eq,
+    expectedValue: '',
     redacted: false,
   };
 }
@@ -143,6 +163,7 @@ export function RunbooksPage() {
 
   const connectors = useGetConnectors();
   const schemas = useGetConnectorsSchema();
+  const complianceSchema = useGetComplianceSchema({ query: { enabled: editing !== null } });
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: getGetRunbooksQueryKey() });
 
@@ -170,6 +191,11 @@ export function RunbooksPage() {
         verb: s.verb as RunbookStepVerb | '',
         entityRef: s.entityRef,
         timeoutSeconds: s.timeoutSeconds > 0 ? s.timeoutSeconds : '',
+        fieldKey: s.fieldKey ?? '',
+        targetValue: parseStepValue(s.targetValue),
+        attribute: s.attribute ?? '',
+        operator: s.operator ?? '',
+        expectedValue: parseStepValue(s.expectedValue),
         redacted: !s.kind,
       })),
     });
@@ -218,6 +244,32 @@ export function RunbooksPage() {
       };
     }
 
+    if (kind === 'config_push') {
+      return {
+        ...base,
+        connectorId: s.connectorId,
+        fieldKey: s.fieldKey,
+        targetValue: s.targetValue,
+        ...(s.entityRef ? { entityRef: s.entityRef } : {}),
+      };
+    }
+
+    if (kind === 'wait_for_entity') {
+      const timeout =
+        s.timeoutSeconds !== '' && s.timeoutSeconds !== undefined
+          ? Number(s.timeoutSeconds)
+          : undefined;
+      return {
+        ...base,
+        connectorId: s.connectorId,
+        entityRef: s.entityRef,
+        attribute: s.attribute,
+        operator: s.operator || undefined,
+        expectedValue: s.expectedValue,
+        ...(timeout !== undefined && !isNaN(timeout) ? { timeoutSeconds: timeout } : {}),
+      };
+    }
+
     // kind === 'manual'
     return base;
   };
@@ -236,8 +288,9 @@ export function RunbooksPage() {
 
   const applyFieldErrors = (error: unknown): boolean => {
     if (!isAxiosError(error) || error.response?.status !== 400) return false;
-    const details = (error.response?.data as { details?: { field: string; msg: string }[] } | undefined)
-      ?.details;
+    const details = (
+      error.response?.data as { details?: { field: string; msg: string }[] } | undefined
+    )?.details;
     if (!details || details.length === 0) return false;
     const nextStepErrors: Record<number, StepError[]> = {};
     const otherMessages: string[] = [];
@@ -252,7 +305,8 @@ export function RunbooksPage() {
     }
     setStepErrors(nextStepErrors);
     if (otherMessages.length > 0) setFormError(otherMessages.join(' '));
-    else if (Object.keys(nextStepErrors).length > 0) setFormError(t('settings.runbooks.steps.invalid'));
+    else if (Object.keys(nextStepErrors).length > 0)
+      setFormError(t('settings.runbooks.steps.invalid'));
     return true;
   };
 
@@ -306,7 +360,9 @@ export function RunbooksPage() {
   // Step errors are keyed by array index, so any structural change drops them.
   const addStep = () => {
     setStepErrors({});
-    setDraft((d) => (d.steps.length >= MAX_STEPS ? d : { ...d, steps: [...d.steps, newStepDraft()] }));
+    setDraft((d) =>
+      d.steps.length >= MAX_STEPS ? d : { ...d, steps: [...d.steps, newStepDraft()] }
+    );
   };
 
   const removeStep = (key: string) => {
@@ -518,7 +574,11 @@ export function RunbooksPage() {
           </Field>
 
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field label={t('settings.runbooks.docIdLabel')} htmlFor="runbook-doc-id" hint={t('settings.runbooks.docIdHint')}>
+            <Field
+              label={t('settings.runbooks.docIdLabel')}
+              htmlFor="runbook-doc-id"
+              hint={t('settings.runbooks.docIdHint')}
+            >
               <TextInput
                 id="runbook-doc-id"
                 value={draft.docId}
@@ -641,6 +701,11 @@ export function RunbooksPage() {
                                       verb: '',
                                       entityRef: '',
                                       timeoutSeconds: '',
+                                      fieldKey: '',
+                                      targetValue: '',
+                                      attribute: '',
+                                      operator: RunbookStepOperator.eq,
+                                      expectedValue: '',
                                     });
                                   } else if (
                                     nextKind === 'sync_and_wait' ||
@@ -651,6 +716,34 @@ export function RunbooksPage() {
                                       verb: '',
                                       entityRef: '',
                                       timeoutSeconds: step.timeoutSeconds || '',
+                                      fieldKey: '',
+                                      targetValue: '',
+                                      attribute: '',
+                                      operator: RunbookStepOperator.eq,
+                                      expectedValue: '',
+                                    });
+                                  } else if (nextKind === 'config_push') {
+                                    updateStep(step.key, {
+                                      kind: nextKind,
+                                      verb: '',
+                                      entityRef: '',
+                                      timeoutSeconds: '',
+                                      fieldKey: '',
+                                      targetValue: '',
+                                      attribute: '',
+                                      operator: RunbookStepOperator.eq,
+                                      expectedValue: '',
+                                    });
+                                  } else if (nextKind === 'wait_for_entity') {
+                                    updateStep(step.key, {
+                                      kind: nextKind,
+                                      verb: '',
+                                      fieldKey: '',
+                                      targetValue: '',
+                                      attribute: '',
+                                      operator: RunbookStepOperator.eq,
+                                      expectedValue: '',
+                                      timeoutSeconds: step.timeoutSeconds || '',
                                     });
                                   } else {
                                     // lifecycle
@@ -658,7 +751,8 @@ export function RunbooksPage() {
                                       (c) => c.id === step.connectorId
                                     )?.type;
                                     const verbs =
-                                      schemas.data?.find((s) => s.type === type)?.lifecycleVerbs ?? [];
+                                      schemas.data?.find((s) => s.type === type)?.lifecycleVerbs ??
+                                      [];
                                     updateStep(step.key, {
                                       kind: nextKind,
                                       verb: (verbs[0] ?? 'restart') as RunbookStepVerb,
@@ -667,10 +761,24 @@ export function RunbooksPage() {
                                   }
                                 }}
                               >
-                                <option value="lifecycle">{t('settings.runbooks.steps.kinds.lifecycle')}</option>
-                                <option value="sync_and_wait">{t('settings.runbooks.steps.kinds.sync_and_wait')}</option>
-                                <option value="wait_until_healthy">{t('settings.runbooks.steps.kinds.wait_until_healthy')}</option>
-                                <option value="manual">{t('settings.runbooks.steps.kinds.manual')}</option>
+                                <option value="lifecycle">
+                                  {t('settings.runbooks.steps.kinds.lifecycle')}
+                                </option>
+                                <option value="sync_and_wait">
+                                  {t('settings.runbooks.steps.kinds.sync_and_wait')}
+                                </option>
+                                <option value="wait_until_healthy">
+                                  {t('settings.runbooks.steps.kinds.wait_until_healthy')}
+                                </option>
+                                <option value="config_push">
+                                  {t('settings.runbooks.steps.kinds.config_push')}
+                                </option>
+                                <option value="wait_for_entity">
+                                  {t('settings.runbooks.steps.kinds.wait_for_entity')}
+                                </option>
+                                <option value="manual">
+                                  {t('settings.runbooks.steps.kinds.manual')}
+                                </option>
                               </Select>
                             </label>
 
@@ -685,16 +793,29 @@ export function RunbooksPage() {
                                   value={step.connectorId}
                                   onChange={(e) => {
                                     const connectorId = e.target.value;
-                                    if (kind === 'sync_and_wait' || kind === 'wait_until_healthy') {
-                                      updateStep(step.key, { connectorId });
-                                    } else {
-                                      const type = connectors.data?.find((c) => c.id === connectorId)?.type;
+                                    if (kind === 'lifecycle') {
+                                      const type = connectors.data?.find(
+                                        (c) => c.id === connectorId
+                                      )?.type;
                                       const verbs =
-                                        schemas.data?.find((s) => s.type === type)?.lifecycleVerbs ?? [];
+                                        schemas.data?.find((s) => s.type === type)
+                                          ?.lifecycleVerbs ?? [];
                                       updateStep(step.key, {
                                         connectorId,
                                         entityRef: '',
-                                        verb: (verbs[0] ?? step.verb ?? 'restart') as RunbookStepVerb,
+                                        verb: (verbs[0] ??
+                                          step.verb ??
+                                          'restart') as RunbookStepVerb,
+                                      });
+                                    } else {
+                                      updateStep(step.key, {
+                                        connectorId,
+                                        entityRef: '',
+                                        fieldKey: '',
+                                        targetValue: '',
+                                        attribute: '',
+                                        operator: RunbookStepOperator.eq,
+                                        expectedValue: '',
                                       });
                                     }
                                   }}
@@ -721,7 +842,9 @@ export function RunbooksPage() {
                                   disabled={stepsLocked}
                                   value={step.verb}
                                   onChange={(e) =>
-                                    updateStep(step.key, { verb: e.target.value as RunbookStepVerb })
+                                    updateStep(step.key, {
+                                      verb: e.target.value as RunbookStepVerb,
+                                    })
                                   }
                                 >
                                   {(() => {
@@ -768,7 +891,22 @@ export function RunbooksPage() {
                               <EntityPicker
                                 connectorId={step.connectorId}
                                 value={step.entityRef}
+                                disabled={stepsLocked}
                                 onChange={(entityRef) => updateStep(step.key, { entityRef })}
+                              />
+                            )}
+
+                            {(kind === 'config_push' || kind === 'wait_for_entity') && (
+                              <RunbookStepKindFields
+                                step={step}
+                                complianceAttributes={
+                                  complianceSchema.data?.attributes?.[
+                                    connectors.data?.find((c) => c.id === step.connectorId)?.type ??
+                                      ''
+                                  ]
+                                }
+                                disabled={stepsLocked}
+                                onChange={(patch) => updateStep(step.key, patch)}
                               />
                             )}
 
@@ -825,10 +963,263 @@ export function RunbooksPage() {
         tone="danger"
         title={t('settings.runbooks.deleteTitle')}
         description={t('settings.runbooks.deleteDesc', { title: toDelete?.title ?? '' })}
-        confirmLabel={remove.isPending ? t('settings.runbooks.deleting') : t('settings.runbooks.delete')}
+        confirmLabel={
+          remove.isPending ? t('settings.runbooks.deleting') : t('settings.runbooks.delete')
+        }
         cancelLabel={t('common.cancel')}
         confirmDisabled={remove.isPending}
       />
     </div>
   );
+}
+
+function RunbookStepKindFields({
+  step,
+  complianceAttributes,
+  disabled,
+  onChange,
+}: {
+  step: StepDraft;
+  complianceAttributes?: ComplianceSchemaAttributes[string];
+  disabled: boolean;
+  onChange: (patch: Partial<StepDraft>) => void;
+}) {
+  const { t } = useTranslation();
+  const configFields = useGetConnectorsConnectorIdConfigFields(step.connectorId, {
+    query: { enabled: step.kind === 'config_push' && !!step.connectorId },
+  });
+  if (step.kind === 'config_push') {
+    const fields = configFields.data ?? [];
+    const field = fields.find((candidate) => candidate.key === step.fieldKey);
+    const fieldLabel = t('settings.runbooks.steps.fieldLabel');
+    const valueLabel = t('settings.runbooks.steps.valueLabel');
+    const inputValue = getInputValue(step.targetValue);
+    return (
+      <>
+        <label className="block">
+          <span className="mb-1 block text-2xs text-ink-faint">{fieldLabel}</span>
+          <Select
+            aria-label={fieldLabel}
+            disabled={disabled}
+            value={step.fieldKey}
+            onChange={(event) => {
+              const next = fields.find((candidate) => candidate.key === event.target.value);
+              onChange({
+                fieldKey: event.target.value,
+                targetValue: next?.type === 'toggle' ? false : '',
+                entityRef: '',
+              });
+            }}
+          >
+            <option value="" disabled>
+              {t('settings.runbooks.steps.fieldPlaceholder')}
+            </option>
+            {fields.map((candidate) => (
+              <option key={candidate.key} value={candidate.key}>
+                {candidate.label}
+              </option>
+            ))}
+          </Select>
+        </label>
+
+        {field && (
+          <label className="block">
+            <span className="mb-1 block text-2xs text-ink-faint">{valueLabel}</span>
+            {field.type === 'select' ? (
+              <Select
+                aria-label={valueLabel}
+                disabled={disabled}
+                value={inputValue}
+                onChange={(event) => onChange({ targetValue: event.target.value })}
+              >
+                <option value="" disabled>
+                  {t('settings.runbooks.steps.valuePlaceholder')}
+                </option>
+                {(field.options ?? []).map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </Select>
+            ) : field.type === 'toggle' ? (
+              <input
+                aria-label={valueLabel}
+                type="checkbox"
+                checked={step.targetValue === true}
+                disabled={disabled}
+                onChange={(event) => onChange({ targetValue: event.target.checked })}
+                className="h-4 w-4 rounded border-line-strong text-accent-primary focus-visible:ring-accent-primary"
+              />
+            ) : (
+              <TextInput
+                aria-label={valueLabel}
+                type={field.type === 'number' ? 'number' : 'text'}
+                step={field.type === 'number' ? 'any' : undefined}
+                disabled={disabled}
+                value={inputValue}
+                onChange={(event) =>
+                  onChange({
+                    targetValue:
+                      field.type === 'number'
+                        ? event.target.value === ''
+                          ? ''
+                          : Number(event.target.value)
+                        : event.target.value,
+                  })
+                }
+              />
+            )}
+          </label>
+        )}
+
+        {step.connectorId && (
+          <EntityPicker
+            connectorId={step.connectorId}
+            value={step.entityRef}
+            label={t('settings.runbooks.steps.entityLabel')}
+            disabled={disabled}
+            hideWholeService={field?.entityScope}
+            onChange={(entityRef) => onChange({ entityRef })}
+          />
+        )}
+      </>
+    );
+  }
+
+  const attributeNames = [
+    ...new Set(
+      Object.values(complianceAttributes ?? {})
+        .flat()
+        .map((attribute) => attribute.name)
+    ),
+  ].sort();
+  const listId = `runbook-attributes-${step.key}`;
+  const waitTimeoutMinutes =
+    typeof step.timeoutSeconds === 'number' ? step.timeoutSeconds / 60 : '';
+  return (
+    <>
+      {step.connectorId && (
+        <EntityPicker
+          connectorId={step.connectorId}
+          value={step.entityRef}
+          label={t('settings.runbooks.steps.entityLabel')}
+          disabled={disabled}
+          hideWholeService
+          onChange={(entityRef) => onChange({ entityRef })}
+        />
+      )}
+      <label className="block">
+        <span className="mb-1 block text-2xs text-ink-faint">
+          {t('settings.runbooks.steps.attributeLabel')}
+        </span>
+        <TextInput
+          aria-label={t('settings.runbooks.steps.attributeLabel')}
+          list={listId}
+          disabled={disabled}
+          value={step.attribute}
+          onChange={(event) => onChange({ attribute: event.target.value })}
+        />
+        <datalist id={listId}>
+          {attributeNames.map((name) => (
+            <option key={name} value={name} />
+          ))}
+        </datalist>
+      </label>
+      <label className="block">
+        <span className="mb-1 block text-2xs text-ink-faint">
+          {t('settings.runbooks.steps.operatorLabel')}
+        </span>
+        <Select
+          aria-label={t('settings.runbooks.steps.operatorLabel')}
+          disabled={disabled}
+          value={step.operator}
+          onChange={(event) => {
+            const operator = event.target.value as RunbookStepInputOperator;
+            onChange({
+              operator,
+              expectedValue:
+                operator === RunbookStepOperator.gt || operator === RunbookStepOperator.lt
+                  ? inputValueToNumber(step.expectedValue)
+                  : getInputValue(step.expectedValue),
+            });
+          }}
+        >
+          {Object.values(RunbookStepOperator).map((operator) => (
+            <option key={operator} value={operator}>
+              {t(`settings.runbooks.steps.operators.${operator}`)}
+            </option>
+          ))}
+        </Select>
+      </label>
+      <label className="block">
+        <span className="mb-1 block text-2xs text-ink-faint">
+          {t('settings.runbooks.steps.expectedValueLabel')}
+        </span>
+        <TextInput
+          aria-label={t('settings.runbooks.steps.expectedValueLabel')}
+          type={
+            step.operator === RunbookStepOperator.gt || step.operator === RunbookStepOperator.lt
+              ? 'number'
+              : 'text'
+          }
+          step={
+            step.operator === RunbookStepOperator.gt || step.operator === RunbookStepOperator.lt
+              ? 'any'
+              : undefined
+          }
+          disabled={disabled}
+          value={getInputValue(step.expectedValue)}
+          onChange={(event) =>
+            onChange({
+              expectedValue:
+                step.operator === RunbookStepOperator.gt || step.operator === RunbookStepOperator.lt
+                  ? event.target.value === ''
+                    ? ''
+                    : Number(event.target.value)
+                  : event.target.value,
+            })
+          }
+        />
+      </label>
+      <label className="block">
+        <span className="mb-1 block text-2xs text-ink-faint">
+          {t('settings.runbooks.steps.timeoutMinutesLabel')}
+        </span>
+        <TextInput
+          aria-label={t('settings.runbooks.steps.timeoutMinutesLabel')}
+          type="number"
+          min={1}
+          max={30}
+          placeholder="5"
+          disabled={disabled}
+          value={waitTimeoutMinutes}
+          onChange={(event) =>
+            onChange({
+              timeoutSeconds: event.target.value === '' ? '' : Number(event.target.value) * 60,
+            })
+          }
+        />
+      </label>
+    </>
+  );
+}
+
+function parseStepValue(value?: string): unknown {
+  if (value === undefined) return '';
+  try {
+    return JSON.parse(value) as unknown;
+  } catch {
+    return value;
+  }
+}
+
+function getInputValue(value: unknown): string {
+  if (value === undefined || value === null) return '';
+  return typeof value === 'string' ? value : String(value);
+}
+
+function inputValueToNumber(value: unknown): number | '' {
+  if (value === '' || value === undefined || value === null) return '';
+  const parsed = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(parsed) ? parsed : '';
 }

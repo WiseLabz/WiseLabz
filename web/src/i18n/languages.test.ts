@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import i18n, { setLanguagePreference } from '.';
 import { en } from './en';
+import { ptBR } from './locales/pt-BR';
 import { ConnectorCategory } from '../api/model';
 import { LANGUAGES, detectLanguage, getLanguagePreference, resolveLanguage } from './languages';
 
@@ -40,6 +41,47 @@ describe('locale catalogs', () => {
       expect(keys(catalog).filter((k) => !known.has(k))).toEqual([]);
     }
   );
+
+  it('keeps every runbook step-kind key translated in English and pt-BR', () => {
+    const paths = [
+      'runbooks.runs.kind.config_push',
+      'runbooks.runs.kind.wait_for_entity',
+      'runbooks.runs.fieldLabel',
+      'runbooks.runs.configPushValueLabel',
+      'runbooks.runs.currentToTarget',
+      'runbooks.runs.unknownCurrentToTarget',
+      'runbooks.runs.waitConditionLabel',
+      'runbooks.runs.waitCondition',
+      'runbooks.runs.timeoutReason',
+      'runbooks.runs.blocked.unsupported_field',
+      'settings.runbooks.steps.kinds.config_push',
+      'settings.runbooks.steps.kinds.wait_for_entity',
+      'settings.runbooks.steps.fieldLabel',
+      'settings.runbooks.steps.fieldPlaceholder',
+      'settings.runbooks.steps.valueLabel',
+      'settings.runbooks.steps.valuePlaceholder',
+      'settings.runbooks.steps.entityLabel',
+      'settings.runbooks.steps.attributeLabel',
+      'settings.runbooks.steps.operatorLabel',
+      'settings.runbooks.steps.operators.eq',
+      'settings.runbooks.steps.operators.neq',
+      'settings.runbooks.steps.operators.contains',
+      'settings.runbooks.steps.operators.regex',
+      'settings.runbooks.steps.operators.gt',
+      'settings.runbooks.steps.operators.lt',
+      'settings.runbooks.steps.expectedValueLabel',
+      'settings.runbooks.steps.timeoutMinutesLabel',
+    ];
+    const lookup = (catalog: object, path: string) =>
+      path
+        .split('.')
+        .reduce<unknown>((value, key) => (value as Record<string, unknown> | undefined)?.[key], catalog);
+
+    for (const path of paths) {
+      expect(lookup(en, path), `English translation for ${path}`).toEqual(expect.any(String));
+      expect(lookup(ptBR, path), `pt-BR translation for ${path}`).toEqual(expect.any(String));
+    }
+  });
 });
 
 describe('connector category labels (#513)', () => {
