@@ -505,6 +505,85 @@ func TestInstallPack(t *testing.T) {
 	}
 }
 
+func TestListPacks(t *testing.T) {
+	s := apitest.NewStore(t)
+	ev := &mockEvaluator{}
+	h := compliance.NewHandler(s, ev)
+
+	list := func() map[string]bool {
+		r := httptest.NewRequest(http.MethodGet, "/api/compliance/packs", nil)
+		rr := httptest.NewRecorder()
+		h.ListPacks(rr, r)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("ListPacks status %d, want 200", rr.Code)
+		}
+		var out struct {
+			Items []struct {
+				ID          string `json:"id"`
+				Name        string `json:"name"`
+				Description string `json:"description"`
+				Installed   bool   `json:"installed"`
+			} `json:"items"`
+		}
+		if err := json.Unmarshal(rr.Body.Bytes(), &out); err != nil {
+			t.Fatalf("decode ListPacks response: %v", err)
+		}
+		res := make(map[string]bool)
+		for _, item := range out.Items {
+			res[item.ID] = item.Installed
+		}
+		return res
+	}
+
+	// 1. Before install: installed is false
+	installedMap := list()
+	if installedMap["certificate-expiry"] {
+		t.Errorf("certificate-expiry installed before install = true, want false")
+	}
+
+	// 2. After install: installed is true
+	installReq := httptest.NewRequest(http.MethodPost, "/api/compliance/packs/certificate-expiry/install", nil)
+	installReq.SetPathValue("id", "certificate-expiry")
+	installRec := httptest.NewRecorder()
+	h.InstallPack(installRec, installReq)
+	if installRec.Code != http.StatusOK {
+		t.Fatalf("InstallPack status %d, want 200", installRec.Code)
+	}
+
+	installedMap = list()
+	if !installedMap["certificate-expiry"] {
+		t.Errorf("certificate-expiry installed after install = false, want true")
+	}
+
+	// 3. After one pack rule is deleted: installed is false
+	rules, err := s.ListComplianceRules(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var deletedID string
+	for _, rule := range rules {
+		if rule.Name == "NPM certificate expires within 30 days" {
+			deletedID = rule.ID
+			break
+		}
+	}
+	if deletedID == "" {
+		t.Fatal("could not find pack rule to delete")
+	}
+	delReq := httptest.NewRequest(http.MethodDelete, "/api/compliance/rules/"+deletedID, nil)
+	delReq.SetPathValue("id", deletedID)
+	delRec := httptest.NewRecorder()
+	h.Delete(delRec, delReq)
+	if delRec.Code != http.StatusNoContent {
+		t.Fatalf("Delete rule status %d, want 204", delRec.Code)
+	}
+
+	installedMap = list()
+	if installedMap["certificate-expiry"] {
+		t.Errorf("certificate-expiry installed after deleting one rule = true, want false")
+	}
+}
+
 func TestUpdateRuleRelated(t *testing.T) {
 	s := apitest.NewStore(t)
 	h := compliance.NewHandler(s, nil)

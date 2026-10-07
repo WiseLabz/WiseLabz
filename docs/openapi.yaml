@@ -1056,6 +1056,15 @@ paths:
       responses:
         '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ComplianceRuleTestResult' } } } }
         '400': { $ref: '#/components/responses/BadRequest' }
+  /compliance/packs:
+    get:
+      tags: [compliance]
+      summary: List built-in compliance rule packs (admin only)
+      responses:
+        '200':
+          description: OK
+          content: { application/json: { schema: { $ref: '#/components/schemas/ComplianceRulePackPage' } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
   /compliance/packs/{id}/install:
     parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
     post:
@@ -5181,6 +5190,19 @@ components:
       required: [items]
       properties:
         items: { type: array, items: { $ref: '#/components/schemas/ComplianceRule' } }
+    ComplianceRulePack:
+      type: object
+      required: [id, name, description, installed]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        description: { type: string }
+        installed: { type: boolean, description: Whether every rule in the pack exists. }
+    ComplianceRulePackPage:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/ComplianceRulePack' } }
     ComplianceRulePackInstallResult:
       type: object
       required: [installed, skipped]

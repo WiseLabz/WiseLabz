@@ -22,9 +22,9 @@
 
 ## 4. Certificate expiry pack
 
-- [ ] 4.1 Add `compliance/packs/certificate-expiry.yaml` with the six banded rules; verify the pack loads and a test asserts that for every integer days-left from -5 to 40 at most one band matches, with the expected severity.
-- [ ] 4.2 Add `installed` to the pack listing response and OpenAPI, then regenerate the web client; verify handler tests before install, after install and after one pack rule is deleted.
-- [ ] 4.3 Add a quality checker test over NPM and TLS probe snapshots with a fixed clock: 21 days gives one info finding, moving to 7 days resolves it and opens a warning with a notification, expired gives one critical, renewal resolves, an unreachable target with a last-known date still matches.
+- [x] 4.1 Add `compliance/packs/certificate-expiry.yaml` with the six banded rules; verify the pack loads and a test asserts that for every integer days-left from -5 to 40 at most one band matches, with the expected severity.
+- [x] 4.2 Add `installed` to the pack listing response and OpenAPI, then regenerate the web client; verify handler tests before install, after install and after one pack rule is deleted.
+- [x] 4.3 Add a quality checker test over NPM and TLS probe snapshots with a fixed clock: 21 days gives one info finding, moving to 7 days resolves it and opens a warning with a notification, expired gives one critical, renewal resolves, an unreachable target with a last-known date still matches.
 
 ## 5. Certificates listing
 

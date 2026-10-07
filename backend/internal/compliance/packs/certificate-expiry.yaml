@@ -1,0 +1,50 @@
+id: certificate-expiry
+name: Certificate expiry
+description: Tracks TLS certificate expiration for Nginx Proxy Manager and TLS probe targets across warning and critical bands.
+rules:
+  - name: NPM certificate expires within 30 days
+    connectorType: npm
+    entityKind: certificate
+    severity: info
+    title: Certificate expires within 30 days
+    conditions:
+      - {attribute: not_after, op: days_left_lt, value: 31}
+      - {attribute: not_after, op: days_left_gt, value: 7}
+  - name: NPM certificate expires within 7 days
+    connectorType: npm
+    entityKind: certificate
+    severity: warning
+    title: Certificate expires within 7 days
+    conditions:
+      - {attribute: not_after, op: days_left_lt, value: 8}
+      - {attribute: not_after, op: days_left_gt, value: 1}
+  - name: NPM certificate expired or expires within 1 day
+    connectorType: npm
+    entityKind: certificate
+    severity: critical
+    title: Certificate expired or expires within 1 day
+    conditions:
+      - {attribute: not_after, op: days_left_lt, value: 2}
+  - name: TLS probe certificate expires within 30 days
+    connectorType: tlsprobe
+    entityKind: certificate
+    severity: info
+    title: Certificate expires within 30 days
+    conditions:
+      - {attribute: not_after, op: days_left_lt, value: 31}
+      - {attribute: not_after, op: days_left_gt, value: 7}
+  - name: TLS probe certificate expires within 7 days
+    connectorType: tlsprobe
+    entityKind: certificate
+    severity: warning
+    title: Certificate expires within 7 days
+    conditions:
+      - {attribute: not_after, op: days_left_lt, value: 8}
+      - {attribute: not_after, op: days_left_gt, value: 1}
+  - name: TLS probe certificate expired or expires within 1 day
+    connectorType: tlsprobe
+    entityKind: certificate
+    severity: critical
+    title: Certificate expired or expires within 1 day
+    conditions:
+      - {attribute: not_after, op: days_left_lt, value: 2}

@@ -58,6 +58,7 @@ func mountComplianceRoutes(r chi.Router, d routerDeps) {
 		r.Put("/rules/{id}", d.complianceH.Update)
 		r.Delete("/rules/{id}", d.complianceH.Delete)
 		r.Post("/rules/test", d.complianceH.Test)
+		r.Get("/packs", d.complianceH.ListPacks)
 		r.Post("/packs/{id}/install", d.complianceH.InstallPack)
 	})
 }
