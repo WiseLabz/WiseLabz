@@ -166,6 +166,33 @@ func TestDiscoveryNonAdminIsForbidden(t *testing.T) {
 	}
 }
 
+func TestDiscoveryNonAdminIsForbiddenWhenStepUpIsOn(t *testing.T) {
+	t.Parallel()
+	scanner := newScriptedScanner(false)
+	app := newDiscoveryApp(t, scanner)
+	stepUp(app, true)
+	_, viewer := app.user(t, "viewer")
+
+	for _, tc := range []struct{ method, path string }{
+		{http.MethodGet, "/api/discovery/suggestions"},
+		{http.MethodPost, "/api/discovery/scan"},
+		{http.MethodGet, "/api/discovery/scan"},
+		{http.MethodDelete, "/api/discovery/scan"},
+	} {
+		var body any
+		if tc.method == http.MethodPost {
+			body = map[string]string{"cidr": "192.168.1.0/24"}
+		}
+		rec := app.req(t, tc.method, tc.path, body, viewer)
+		if rec.Code != http.StatusForbidden || decodeErr(t, rec).Code == "elevation_required" {
+			t.Errorf("%s %s = %d, want 403 and not elevation_required; body = %s", tc.method, tc.path, rec.Code, rec.Body)
+		}
+	}
+	if scanner.calls.Load() != 0 {
+		t.Errorf("scanner ran %d times for refused requests", scanner.calls.Load())
+	}
+}
+
 func TestDiscoveryStartRequiresElevationWhenStepUpIsOn(t *testing.T) {
 	t.Parallel()
 	scanner := newScriptedScanner(false)
@@ -189,8 +216,8 @@ func TestDiscoveryStartRequiresElevationWhenStepUpIsOn(t *testing.T) {
 
 	// A token for another action does not open the scan.
 	rec = app.reqElevated(t, http.MethodPost, "/api/discovery/scan", map[string]string{"cidr": "192.168.1.0/24"}, token, "connector.delete")
-	if rec.Code == http.StatusAccepted {
-		t.Errorf("a token for another action started a scan")
+	if rec.Code != http.StatusUnauthorized || decodeErr(t, rec).Code != "unauthorized" {
+		t.Errorf("a token for another action: status = %d body = %s, want 401 unauthorized", rec.Code, rec.Body)
 	}
 
 	// Reading and cancelling never ask for elevation.
@@ -286,12 +313,13 @@ func TestDiscoveryConflictWhileRunning(t *testing.T) {
 		t.Fatalf("status = %d, want 409; body = %s", rec.Code, rec.Body)
 	}
 	var e struct {
-		Code    string `json:"code"`
-		Details struct{ Scan disc.Scan }
+		Code    string          `json:"code"`
+		Scan    disc.Scan       `json:"scan"`
+		Details json.RawMessage `json:"details"`
 	}
 	_ = json.Unmarshal(rec.Body.Bytes(), &e)
-	if e.Code != "scan_in_progress" || e.Details.Scan.ID != first.ID || e.Details.Scan.CIDR != "192.168.1.0/24" {
-		t.Errorf("conflict body = %s, want scan_in_progress naming the running scan", rec.Body)
+	if e.Code != "scan_in_progress" || e.Scan.ID != first.ID || e.Scan.CIDR != "192.168.1.0/24" || e.Details != nil {
+		t.Errorf("conflict body = %s, want scan_in_progress with the running scan at the top level and no details", rec.Body)
 	}
 	if got := decodeScan(t, app.req(t, http.MethodGet, "/api/discovery/scan", nil, token)); got.ID != first.ID || got.State != disc.StateRunning {
 		t.Errorf("running scan affected: %+v", got)
@@ -318,7 +346,7 @@ func TestDiscoveryHourlyLimit(t *testing.T) {
 		}
 		waitScanEnded(t, app, token)
 	}
-	rec := startScan(t, app, token, "192.168.1.0/24")
+	rec := startScan(t, app, token, "192.168.1.57/24")
 	if rec.Code != http.StatusTooManyRequests {
 		t.Fatalf("seventh start = %d, want 429; body = %s", rec.Code, rec.Body)
 	}
@@ -326,8 +354,23 @@ func TestDiscoveryHourlyLimit(t *testing.T) {
 	if err != nil || secs <= 0 || secs > 3600 {
 		t.Errorf("Retry-After = %q, want seconds within the hour", rec.Header().Get("Retry-After"))
 	}
-	if e := decodeErr(t, rec); e.Code != "rate_limited" {
-		t.Errorf("code = %q", e.Code)
+	var limited struct {
+		Code              string          `json:"code"`
+		RetryAfterSeconds int             `json:"retryAfterSeconds"`
+		Details           json.RawMessage `json:"details"`
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &limited)
+	if limited.Code != "rate_limited" || limited.RetryAfterSeconds != secs || limited.Details != nil {
+		t.Errorf("rate limit body = %s, want rate_limited with retryAfterSeconds %d at the top level and no details", rec.Body, secs)
+	}
+	rejects := auditEntries(t, app, disc.AuditReject)
+	var submitted bool
+	for _, e := range rejects {
+		d := detailOf(t, e)
+		submitted = submitted || (d["reason"] == "rate_limited" && d["range"] == "192.168.1.57/24")
+	}
+	if !submitted {
+		t.Errorf("reject entries = %+v, want the rate_limited one to hold the range as submitted", rejects)
 	}
 	if scanner.calls.Load() != 6 {
 		t.Errorf("scanner calls = %d, want 6", scanner.calls.Load())
@@ -340,7 +383,7 @@ func TestDiscoveryReadWhileRunningAndCancel(t *testing.T) {
 	t.Cleanup(scanner.finish)
 	app := newDiscoveryApp(t, scanner)
 	stepUp(app, false)
-	_, token := app.user(t, "operator")
+	starterID, token := app.user(t, "operator")
 
 	if rec := app.req(t, http.MethodGet, "/api/discovery/scan", nil, token); rec.Code != http.StatusNotFound {
 		t.Fatalf("read with no scan = %d, want 404", rec.Code)
@@ -364,7 +407,7 @@ func TestDiscoveryReadWhileRunningAndCancel(t *testing.T) {
 	}
 
 	// Another instance admin may read and cancel it.
-	_, other := app.user(t, "operator")
+	otherID, other := app.user(t, "operator")
 	rec := app.req(t, http.MethodDelete, "/api/discovery/scan", nil, other)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("cancel = %d, want 200; body = %s", rec.Code, rec.Body)
@@ -378,6 +421,16 @@ func TestDiscoveryReadWhileRunningAndCancel(t *testing.T) {
 	}
 	if got := decodeScan(t, app.req(t, http.MethodGet, "/api/discovery/scan", nil, token)); got.State != disc.StateCancelled {
 		t.Errorf("read after cancel = %+v", got)
+	}
+
+	// The cancel entry stays with the starter and names who cancelled.
+	var cancels []store.AuditRecord
+	waitUntil(t, "cancel audit entry", func() bool {
+		cancels = auditEntries(t, app, disc.AuditCancel)
+		return len(cancels) == 1
+	})
+	if cancels[0].ActorUserID != starterID || detailOf(t, cancels[0])["cancelledBy"] != otherID {
+		t.Errorf("cancel entry actor = %q, detail = %s, want actor %q and cancelledBy %q", cancels[0].ActorUserID, cancels[0].Detail, starterID, otherID)
 	}
 }
 
@@ -478,14 +531,14 @@ func TestDiscoveryAuditRecordsRejectedConflictAndLimitAndCancel(t *testing.T) {
 	_, token := app.user(t, "operator")
 
 	startScan(t, app, token, "192.168.1.0/24")
-	startScan(t, app, token, "192.168.2.0/24")
+	startScan(t, app, token, "192.168.2.57/24")
 	if rec := app.req(t, http.MethodDelete, "/api/discovery/scan", nil, token); rec.Code != http.StatusOK {
 		t.Fatalf("cancel = %d", rec.Code)
 	}
 	time.Sleep(30 * time.Millisecond)
 
 	rejects := auditEntries(t, app, disc.AuditReject)
-	if len(rejects) != 1 || detailOf(t, rejects[0])["reason"] != "scan_in_progress" || detailOf(t, rejects[0])["range"] != "192.168.2.0/24" {
+	if len(rejects) != 1 || detailOf(t, rejects[0])["reason"] != "scan_in_progress" || detailOf(t, rejects[0])["range"] != "192.168.2.57/24" {
 		t.Errorf("reject entries = %+v", rejects)
 	}
 	cancels := auditEntries(t, app, disc.AuditCancel)
@@ -511,6 +564,18 @@ func TestDiscoveryAuditRecordsRejectedConflictAndLimitAndCancel(t *testing.T) {
 	if long > 64 {
 		t.Errorf("audited range is %d bytes, want at most 64", long)
 	}
+}
+
+func waitUntil(t *testing.T, what string, cond func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		if cond() {
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatalf("timed out waiting for %s", what)
 }
 
 func detailOf(t *testing.T, e store.AuditRecord) map[string]any {

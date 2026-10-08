@@ -430,3 +430,61 @@ func TestScannerNoHintsOrNoHosts(t *testing.T) {
 		t.Errorf("zero range: progress = %+v", p)
 	}
 }
+
+func TestScannerPanickingMatcherIsNoMatch(t *testing.T) {
+	connector.AllowLoopbackForTest(t)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("fake-product"))
+	}))
+	defer srv.Close()
+	port := portOf(t, srv.URL)
+
+	var c collector
+	s := NewScanner([]connector.TypeDiscovery{
+		hint("fake_panics", "http", port, "/", func(connector.DiscoveryResponse) bool { panic("hostile body") }),
+		hint("fake_nil", "http", port, "/", nil),
+		hint("fake_ok", "http", port, "/", bodyIs("fake-product")),
+	})
+	p := s.Run(context.Background(), rangeOf(t, "127.0.0.1/32"), c.callbacks())
+
+	if len(c.candidates) != 1 || c.candidates[0].Type != "fake_ok" {
+		t.Errorf("candidates = %+v, want only the type whose matcher works", c.candidates)
+	}
+	if p != (Progress{Done: 1, Total: 1, Answered: 1}) {
+		t.Errorf("progress = %+v, want the scan finished", p)
+	}
+}
+
+func TestScannerCapsResponseHeaders(t *testing.T) {
+	connector.AllowLoopbackForTest(t)
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = l.Close() }()
+	go func() {
+		for {
+			conn, err := l.Accept()
+			if err != nil {
+				return
+			}
+			go func() {
+				defer func() { _ = conn.Close() }()
+				buf := make([]byte, 1024)
+				_, _ = conn.Read(buf)
+				_, _ = conn.Write([]byte("HTTP/1.1 200 OK\r\nX-Pad: " + strings.Repeat("a", 2*maxBody) + "\r\nContent-Length: 2\r\n\r\nok"))
+			}()
+		}
+	}()
+
+	var c collector
+	s := NewScanner([]connector.TypeDiscovery{hint("fake_a", "http", l.Addr().(*net.TCPAddr).Port, "/", func(r connector.DiscoveryResponse) bool { return r.Status == 200 })})
+	p := s.Run(context.Background(), rangeOf(t, "127.0.0.1/32"), c.callbacks())
+
+	if len(c.candidates) != 0 {
+		t.Errorf("candidates = %+v, want a header block over the cap rejected", c.candidates)
+	}
+	if p != (Progress{Done: 1, Total: 1, Answered: 1}) {
+		t.Errorf("progress = %+v, want the scan finished", p)
+	}
+}

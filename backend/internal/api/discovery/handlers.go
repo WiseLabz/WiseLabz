@@ -35,6 +35,9 @@ const maxAuditRange = 64
 type Options struct {
 	// Runner replaces the network scanner (tests).
 	Runner disc.Runner
+	// Manager replaces the scan manager NewHandler would build. The server
+	// builds it with NewManager so it can stop a running scan at shutdown.
+	Manager *disc.Manager
 	// InterfaceAddrs replaces net.InterfaceAddrs for range suggestions (tests).
 	InterfaceAddrs func() ([]net.Addr, error)
 }
@@ -47,10 +50,11 @@ type Handler struct {
 	interfaceAddrs func() ([]net.Addr, error)
 }
 
-// NewHandler builds the handler and the instance's scan manager. hub may be
-// nil, in which case no live events are sent.
-func NewHandler(s *store.Store, hub *ws.Hub, trustedProxies string, opts Options) *Handler {
-	runner := opts.Runner
+// NewManager builds the instance's scan manager: the network scanner (or
+// runner, when not nil), audit entries in s, live events through hub and the
+// already-connected marker from s's connectors. hub may be nil, in which case
+// no live events are sent.
+func NewManager(s *store.Store, hub *ws.Hub, runner disc.Runner) *disc.Manager {
 	if runner == nil {
 		runner = disc.NewScanner(connector.DiscoveryHints())
 	}
@@ -62,11 +66,21 @@ func NewHandler(s *store.Store, hub *ws.Hub, trustedProxies string, opts Options
 	if hub != nil {
 		cfg.Events = hub
 	}
+	return disc.NewManager(cfg)
+}
+
+// NewHandler builds the handler, using opts.Manager or else a new scan
+// manager (see NewManager).
+func NewHandler(s *store.Store, hub *ws.Hub, trustedProxies string, opts Options) *Handler {
+	mgr := opts.Manager
+	if mgr == nil {
+		mgr = NewManager(s, hub, opts.Runner)
+	}
 	addrs := opts.InterfaceAddrs
 	if addrs == nil {
 		addrs = net.InterfaceAddrs
 	}
-	return &Handler{Store: s, Manager: disc.NewManager(cfg), TrustedProxies: trustedProxies, interfaceAddrs: addrs}
+	return &Handler{Store: s, Manager: mgr, TrustedProxies: trustedProxies, interfaceAddrs: addrs}
 }
 
 // connectorEndpoints lists where the existing connectors of discoverable types
@@ -153,6 +167,22 @@ func privateSlash24(addr netip.Addr) (netip.Prefix, bool) {
 	return netip.PrefixFrom(addr, 24).Masked(), true
 }
 
+// conflictResponse is the 409 body: the standard error envelope plus the scan
+// that is already running.
+type conflictResponse struct {
+	Code    string    `json:"code"`
+	Message string    `json:"message"`
+	Scan    disc.Scan `json:"scan"`
+}
+
+// rateLimitedResponse is the 429 body: the standard error envelope plus how
+// long to wait (the Retry-After header carries the same number).
+type rateLimitedResponse struct {
+	Code              string `json:"code"`
+	Message           string `json:"message"`
+	RetryAfterSeconds int    `json:"retryAfterSeconds"`
+}
+
 type startRequest struct {
 	CIDR string `json:"cidr"`
 }
@@ -176,29 +206,34 @@ func (h *Handler) Start(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	scan, err := h.Manager.Start(rng, disc.Actor{
-		UserID:        auth.UserIDFromContext(r.Context()),
-		InstanceAdmin: auth.InstanceAdminFromContext(r.Context()),
-	})
+	// The start entry is written before the scan begins, so it always
+	// precedes the scan's own end entry.
+	recordStart := func(scan disc.Scan) {
+		detail := map[string]any{"range": scan.CIDR}
+		if err := h.Store.RecordAuditFromContext(r.Context(), disc.AuditStart, disc.AuditTargetType, scan.ID, detail); err != nil {
+			slog.Error("record discovery scan start audit entry", "error", err)
+		}
+	}
+	scan, err := h.Manager.Start(rng, actorFrom(r), recordStart)
 	var running *disc.ScanRunningError
 	var limited *disc.RateLimitError
 	switch {
 	case errors.As(err, &running):
-		h.reject(r, rng.String(), "scan_in_progress")
-		httputil.JSON(w, http.StatusConflict, httputil.ErrorResponse{
+		h.reject(r, req.CIDR, "scan_in_progress")
+		httputil.JSON(w, http.StatusConflict, conflictResponse{
 			Code:    "scan_in_progress",
 			Message: "A network scan is already running",
-			Details: map[string]any{"scan": running.Scan},
+			Scan:    running.Scan,
 		})
 		return
 	case errors.As(err, &limited):
-		h.reject(r, rng.String(), "rate_limited")
+		h.reject(r, req.CIDR, "rate_limited")
 		seconds := int(math.Ceil(limited.RetryAfter.Seconds()))
 		w.Header().Set("Retry-After", strconv.Itoa(seconds))
-		httputil.JSON(w, http.StatusTooManyRequests, httputil.ErrorResponse{
-			Code:    "rate_limited",
-			Message: "Too many network scans, try again later",
-			Details: map[string]any{"retryAfterSeconds": seconds},
+		httputil.JSON(w, http.StatusTooManyRequests, rateLimitedResponse{
+			Code:              "rate_limited",
+			Message:           "Too many network scans, try again later",
+			RetryAfterSeconds: seconds,
 		})
 		return
 	case err != nil:
@@ -206,10 +241,14 @@ func (h *Handler) Start(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.Store.RecordAuditFromContext(r.Context(), disc.AuditStart, disc.AuditTargetType, scan.ID, map[string]any{"range": scan.CIDR}); err != nil {
-		slog.Error("record discovery scan start audit entry", "error", err)
-	}
 	httputil.JSON(w, http.StatusAccepted, scanResponse{Scan: scan})
+}
+
+func actorFrom(r *http.Request) disc.Actor {
+	return disc.Actor{
+		UserID:        auth.UserIDFromContext(r.Context()),
+		InstanceAdmin: auth.InstanceAdminFromContext(r.Context()),
+	}
 }
 
 // reject writes the discovery.scan.reject audit entry. The range is what the
@@ -236,8 +275,8 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 }
 
 // Cancel handles DELETE /api/discovery/scan.
-func (h *Handler) Cancel(w http.ResponseWriter, _ *http.Request) {
-	scan, ok := h.Manager.Cancel()
+func (h *Handler) Cancel(w http.ResponseWriter, r *http.Request) {
+	scan, ok := h.Manager.Cancel(actorFrom(r))
 	if !ok {
 		httputil.Error(w, http.StatusNotFound, "not_found", "No network scan is running")
 		return

@@ -6,14 +6,14 @@
  *
  * OpenAPI spec version: 0.1.0
  */
+import type { DiscoveryScan } from './discoveryScan';
 import type { DiscoveryScanConflictCode } from './discoveryScanConflictCode';
-import type { DiscoveryScanConflictDetails } from './discoveryScanConflictDetails';
 
 /**
- * Body of 409 scan_in_progress; details.scan is the running scan.
+ * Body of 409 scan_in_progress: the Error envelope's code and message, plus the running scan at the top level (there is no `details`).
  */
 export interface DiscoveryScanConflict {
   code: DiscoveryScanConflictCode;
   message: string;
-  details: DiscoveryScanConflictDetails;
+  scan: DiscoveryScan;
 }

@@ -101,7 +101,7 @@ object, action-specific), and `createdAt`.
 | `compliance_rule.disable` | `PUT /api/compliance/rules/{id}` (enabled false) | compliance_rule / id |
 | `discovery.scan.start` | `POST /api/discovery/scan` (a scan was accepted) | discovery_scan / scan ID; detail `range` (the masked CIDR) |
 | `discovery.scan.complete` | A network scan ends on its own, as `completed` or `failed` (written by the scan, attributed to the admin who started it) | discovery_scan / scan ID; detail `range`, `state`, `probed`, `answered`, `candidates`, `durationMs`, `partial` |
-| `discovery.scan.cancel` | `DELETE /api/discovery/scan` stops a running scan (written by the scan, attributed to the admin who started it; same detail as complete, `state` `cancelled`) | discovery_scan / scan ID |
+| `discovery.scan.cancel` | `DELETE /api/discovery/scan` stops a running scan, or the server shuts down while one runs (written by the scan, attributed to the admin who started it; same detail as complete, `state` `cancelled`, plus `cancelledBy` or `cancelReason`) | discovery_scan / scan ID; detail also `cancelledBy` (user ID of the admin who cancelled, which may differ from the actor) or `cancelReason` `shutdown` (no `cancelledBy`) |
 | `discovery.scan.reject` | `POST /api/discovery/scan` refused, for an invalid range or while a scan runs, or over the hourly limit | discovery_scan / (none); detail `range` (as submitted, at most 64 characters) and `reason` |
 
 `detail` never carries secret values. `connector.update` and
@@ -137,8 +137,10 @@ only: `probed` is how many addresses were probed, `answered` how many accepted a
 connection on a listed port, and `candidates` the number of products found per
 connector type. It never contains the address of a scanned or found host. A range
 of `/32` is the one address the admin chose to scan, and it appears as that
-range. `discovery.scan.reject` `range` is the admin's own input, cut to 64
-characters, and `reason` is one of `invalid_cidr`, `not_ipv4`, `not_private`,
+range. A cancel entry names who cancelled in `cancelledBy` (the actor is always
+the admin who started the scan), or carries `cancelReason` `shutdown` when the
+server stopped the scan while shutting down. `discovery.scan.reject` `range` is
+the admin's own input exactly as submitted, cut to 64 characters, and `reason` is one of `invalid_cidr`, `not_ipv4`, `not_private`,
 `too_wide`, `scan_in_progress` or `rate_limited`.
 
 `entity.override.create`/`entity.override.delete` record the override's

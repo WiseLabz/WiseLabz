@@ -404,3 +404,38 @@ func TestShutdownKeepsStoreOpenIfSyncDrainFails(t *testing.T) {
 		t.Fatalf("closed store while syncs are still using it: %v", err)
 	}
 }
+
+type scanStopper func(context.Context)
+
+func (stop scanStopper) Shutdown(ctx context.Context) { stop(ctx) }
+
+// A running network scan is stopped after the HTTP server drained, while the
+// store is still open and before the work context is cancelled.
+func TestShutdownStopsNetworkScanAfterHTTPDrainBeforeStoreClose(t *testing.T) {
+	lc, _ := newTestLifecycle(t)
+	url := startTestLifecycle(t, lc)
+	called := false
+	lc.deps.Discovery = scanStopper(func(ctx context.Context) {
+		called = true
+		if ctx.Err() != nil {
+			t.Error("shutdown deadline expired before the scan was stopped")
+		}
+		client := &http.Client{Timeout: 5 * time.Second}
+		if resp, err := client.Get(url + "/healthz"); err == nil {
+			_ = resp.Body.Close()
+			t.Error("HTTP server still served a request when the scan was stopped")
+		}
+		if err := lc.deps.Store.Ping(context.Background()); err != nil {
+			t.Errorf("store closed before the scan was stopped: %v", err)
+		}
+		if lc.workCtx.Err() != nil {
+			t.Error("work context cancelled before the scan was stopped")
+		}
+	})
+	if err := lc.Shutdown(); err != nil {
+		t.Fatal(err)
+	}
+	if !called {
+		t.Fatal("the network scan was not stopped")
+	}
+}

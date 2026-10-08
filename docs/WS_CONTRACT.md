@@ -77,7 +77,7 @@ REST, as they do after a reconnect.
 `domain.action`, lowercase, dot-separated. Domains: `service`, `sync`, `change`,
 `alert`, `quality`, `doc`, `system`, `runbook`, `discovery`. Actions are past-tense/state nouns (`status`, `progress`,
 `complete`, `detected`, `created`, `resolved`, `generated`, `ai_suggestion`,
-`health`, `notice`, `resync`, `progress`, `candidate`, `complete`).
+`health`, `notice`, `resync`, `candidate`).
 
 ## Client dispatch model
 

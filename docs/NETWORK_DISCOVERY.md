@@ -82,10 +82,10 @@ networks you own or administer. You are responsible for the range you scan.
 | Traefik (`traefik`) | 8080 http | GET /api/version | JSON with `Version`, `Codename`, `startDate` |
 | Docker (`docker`) | 2375 http | GET /version | `Server: Docker/...` header, or JSON `ApiVersion` plus an `Engine` component |
 | Caddy (`caddy`) | 2019 http | GET /config/ | `Etag` header starting `"/config/ ` (Caddy admin API) |
-| Nginx Proxy Manager (`npm`) | 81 http | GET /api/ | JSON `status` OK, a boolean `setup`, `version.major` |
+| Nginx Proxy Manager (`npm`) | 81 http | GET /api/ | JSON `status` OK with numeric `version.major`, `minor` and `revision` (the `setup` flag exists only from 2.13) |
 | pfSense (`pfsense`) | 443 https, then 80 http | GET / | login page has `<body id="login"`, `/css/login.css` and a `usernamefld` field |
 | OPNsense (`opnsense`) | 443 https, then 80 http | GET / | login page title ends `| OPNsense` and has a `usernamefld` field |
-| TrueNAS (`truenas`) | 443 https, then 80 http | GET / | web UI shell with `id="main-page-title"` and an `<ix-root>` (or `<app-root>`) element |
+| TrueNAS (`truenas`) | 443 https, then 80 http | GET /ui/ | web UI shell with `id="main-page-title"` and an `<ix-root>` (or `<app-root>`) element |
 | Pi-hole (`pihole`) | 443 https, then 80 http | GET /admin/ | `X-Pi-hole` header (v5), or page title starting `Pi-hole` (v6) |
 
 For pfSense, OPNsense, TrueNAS and Pi-hole, https on 443 is tried first and then http
@@ -99,6 +99,8 @@ Recognition is best effort. Be aware of these cases:
   it is not recognized.
 - Pi-hole v6 behind a login redirect, with no page title, is not recognized.
 - TrueNAS CORE's legacy UI is not recognized.
+- TrueNAS is recognized at `/ui/` on 443, or on 80 only when its HTTP to HTTPS redirect
+  is off.
 - A product behind a reverse proxy, or on a port other than the ones listed, is not
   found. Add it by hand with the manual form.
 - Products are recognized by what they return today, not by version.

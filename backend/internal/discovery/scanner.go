@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/netip"
@@ -22,7 +23,9 @@ const (
 	connectTimeout = 500 * time.Millisecond
 	// requestTimeout bounds one probe request, connect included.
 	requestTimeout = 2 * time.Second
-	// maxBody caps the response body handed to a matcher.
+	// maxBody caps the response body handed to a matcher, and the response
+	// header block the transport buffers (the default is 10 MiB per response,
+	// which hostile hosts times maxConns probes could turn into gigabytes).
 	maxBody = 64 << 10
 	// maxConns bounds concurrent connections, TCP connects and probe requests
 	// together.
@@ -118,6 +121,7 @@ func (s *Scanner) Run(ctx context.Context, r Range, cb Callbacks) Progress {
 	sem := make(chan struct{}, s.maxConns)
 
 	var done, answered atomic.Int64
+	var warned sync.Map // matcher panics already logged this scan
 	var wg sync.WaitGroup
 	for _, host := range hosts {
 		wg.Add(1)
@@ -129,7 +133,7 @@ func (s *Scanner) Run(ctx context.Context, r Range, cb Callbacks) Progress {
 			open := s.openPorts(ctx, dialer, sem, host)
 			if len(open) > 0 {
 				answered.Add(1)
-				s.probeHost(ctx, client, sem, host, open, cb.OnCandidate)
+				s.probeHost(ctx, client, sem, &warned, host, open, cb.OnCandidate)
 			}
 			// A host abandoned mid-way by cancellation is not counted as done.
 			if ctx.Err() != nil {
@@ -160,10 +164,11 @@ func (s *Scanner) httpClient(dialer *net.Dialer) *http.Client {
 			// the first bytes of the body, the certificate itself) to recognise a
 			// product; nothing read is trusted beyond that. This is the only
 			// transport in the app that skips verification unconditionally.
-			TLSClientConfig:       &tls.Config{InsecureSkipVerify: true}, //nolint:gosec // see above
-			DisableKeepAlives:     true,
-			TLSHandshakeTimeout:   s.requestTimeout,
-			ResponseHeaderTimeout: s.requestTimeout,
+			TLSClientConfig:        &tls.Config{InsecureSkipVerify: true}, //nolint:gosec // see above
+			DisableKeepAlives:      true,
+			TLSHandshakeTimeout:    s.requestTimeout,
+			ResponseHeaderTimeout:  s.requestTimeout,
+			MaxResponseHeaderBytes: maxBody,
 		},
 	}
 }
@@ -207,7 +212,7 @@ func (s *Scanner) openPorts(ctx context.Context, dialer *net.Dialer, sem chan st
 // probeHost sends each type's probes for the open ports, in the order the
 // type declares them, and stops at the first that confirms the type, so a
 // type is reported at most once per host.
-func (s *Scanner) probeHost(ctx context.Context, client *http.Client, sem chan struct{}, host netip.Addr, open map[int]bool, onCandidate func(Candidate)) {
+func (s *Scanner) probeHost(ctx context.Context, client *http.Client, sem chan struct{}, warned *sync.Map, host netip.Addr, open map[int]bool, onCandidate func(Candidate)) {
 	var wg sync.WaitGroup
 	for _, hint := range s.hints {
 		wg.Add(1)
@@ -222,7 +227,7 @@ func (s *Scanner) probeHost(ctx context.Context, client *http.Client, sem chan s
 				}
 				resp, ok := s.probe(ctx, client, host, p)
 				<-sem
-				if !ok || !p.Match(resp) {
+				if !ok || !safeMatch(warned, hint.Type, p, resp) {
 					continue
 				}
 				if onCandidate != nil && ctx.Err() == nil {
@@ -244,6 +249,26 @@ func (s *Scanner) probeHost(ctx context.Context, client *http.Client, sem chan s
 		}(hint)
 	}
 	wg.Wait()
+}
+
+// safeMatch runs a probe's matcher on bytes any host on the scanned network
+// controls. A matcher that panics, or is missing, counts as no match: the
+// panic would otherwise end the process, since this runs outside the scan
+// goroutine's recover. It logs the first panic per connector type and port in
+// a scan, never the host.
+func safeMatch(warned *sync.Map, typ string, p connector.DiscoveryProbe, resp connector.DiscoveryResponse) (matched bool) {
+	if p.Match == nil {
+		return false
+	}
+	defer func() {
+		if recover() != nil {
+			matched = false
+			if _, dup := warned.LoadOrStore(typ+":"+strconv.Itoa(p.Port), true); !dup {
+				slog.Warn("network discovery matcher panicked", "type", typ, "port", p.Port)
+			}
+		}
+	}()
+	return p.Match(resp)
 }
 
 // probe sends one unauthenticated GET and captures the response for a matcher.

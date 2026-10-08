@@ -1,8 +1,10 @@
 package connectortest
 
 import (
+	"fmt"
 	"net/http"
 	"sort"
+	"strings"
 	"sync"
 	"testing"
 
@@ -81,7 +83,8 @@ func GenericWebResponses() []connector.DiscoveryResponse {
 // RunDiscovery checks a connector type's discovery hint against its fixtures
 // and against GenericWebResponses: every fixture must be judged as its Match
 // field says by the type's probes on that fixture's port, every probe must be
-// exercised by a fixture, and no probe may match a generic web page.
+// exercised by a fixture, no probe may match a generic web page, and no probe
+// may panic or match on hostile input (see hostileResponses).
 func RunDiscovery(t *testing.T, typ string) {
 	t.Helper()
 	var hint *connector.TypeDiscovery
@@ -145,6 +148,67 @@ func RunDiscovery(t *testing.T, typ string) {
 			}
 		}
 	}
+	t.Run("hostile input", func(t *testing.T) {
+		for _, p := range hint.Probes {
+			for _, h := range hostileResponses(fx) {
+				matched, panicked := safeMatch(p.Match, h.resp)
+				if panicked {
+					t.Errorf("%s: probe :%d %s panics on %s", typ, p.Port, p.Path, h.name)
+				} else if matched && !h.mayMatch {
+					t.Errorf("%s: probe :%d %s matches %s", typ, p.Port, p.Path, h.name)
+				}
+			}
+		}
+	})
+}
+
+type hostileResponse struct {
+	name string
+	resp connector.DiscoveryResponse
+	// mayMatch is set for a truncated body, which legitimately still matches
+	// when the identifying marker survived the cut.
+	mayMatch bool
+}
+
+// hostileResponses are what any host on the scanned network could send a
+// matcher: empty and malformed responses, wrong JSON shapes, an oversized
+// body, and every positive fixture's body cut short with its headers removed.
+func hostileResponses(fx []DiscoveryFixture) []hostileResponse {
+	out := []hostileResponse{
+		{name: "zero value response", resp: connector.DiscoveryResponse{}},
+		{name: "status 200 with nil header and body", resp: connector.DiscoveryResponse{Status: 200}},
+		{name: "invalid utf-8", resp: Response(200, "\xff\xfe\x00<title>\xc3\x28</title>\xed\xa0\x80")},
+		{name: "top-level json array", resp: Response(200, `[{"status":"OK","version":{"major":2}}]`, "Content-Type", "application/json")},
+		{name: "json with wrong types", resp: Response(200, `{"Version":5,"InstanceID":[],"meta":"x","version":{"major":"2"},"status":1}`, "Content-Type", "application/json")},
+		{name: "64 KiB of one byte", resp: Response(200, strings.Repeat("a", 64<<10))},
+	}
+	for _, f := range fx {
+		if !f.Match {
+			continue
+		}
+		body := f.Response.Body
+		for _, n := range []int{1, len(body) / 2, len(body) - 1} {
+			if n < 0 || n > len(body) {
+				continue
+			}
+			out = append(out, hostileResponse{
+				name:     fmt.Sprintf("fixture %q body cut to %d bytes", f.Name, n),
+				resp:     connector.DiscoveryResponse{Status: f.Response.Status, Body: body[:n]},
+				mayMatch: true,
+			})
+		}
+	}
+	return out
+}
+
+// safeMatch runs a matcher and reports whether it matched or panicked.
+func safeMatch(match func(connector.DiscoveryResponse) bool, r connector.DiscoveryResponse) (matched, panicked bool) {
+	defer func() {
+		if recover() != nil {
+			panicked = true
+		}
+	}()
+	return match(r), false
 }
 
 // RunDiscoveryCross checks every positive fixture against the probes of every

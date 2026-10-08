@@ -7,13 +7,12 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { DiscoveryRateLimitedCode } from './discoveryRateLimitedCode';
-import type { DiscoveryRateLimitedDetails } from './discoveryRateLimitedDetails';
 
 /**
- * Body of 429 rate_limited. The Retry-After header carries the same delay.
+ * Body of 429 rate_limited: the Error envelope's code and message, plus the delay at the top level (there is no `details`). The Retry-After header carries the same delay.
  */
 export interface DiscoveryRateLimited {
   code: DiscoveryRateLimitedCode;
   message: string;
-  details: DiscoveryRateLimitedDetails;
+  retryAfterSeconds: number;
 }

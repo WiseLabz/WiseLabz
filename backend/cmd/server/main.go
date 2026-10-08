@@ -18,6 +18,7 @@ import (
 
 	"github.com/WiseLabz/wiselabz/internal/ai"
 	"github.com/WiseLabz/wiselabz/internal/api"
+	discoveryhandler "github.com/WiseLabz/wiselabz/internal/api/discovery"
 	syshandler "github.com/WiseLabz/wiselabz/internal/api/system"
 	"github.com/WiseLabz/wiselabz/internal/auth"
 	"github.com/WiseLabz/wiselabz/internal/backup"
@@ -151,6 +152,8 @@ func main() {
 	if cfg.HA.LeaderElection {
 		elector = leader.New(s.RawDB(), cfg.HA.LockPollInterval)
 	}
+	// Built here, not inside the router, so shutdown can stop a running scan.
+	discoveryManager := discoveryhandler.NewManager(s, wsHub, nil)
 	routerCfg := api.Config{
 		Store:                  s,
 		JWT:                    jwtSvc,
@@ -166,6 +169,7 @@ func main() {
 		QualityChecker:         qualityChecker,
 		ReportManager:          reportManager,
 		Ready:                  readyState,
+		Discovery:              discoveryhandler.Options{Manager: discoveryManager},
 	}
 	if cfg.Server.Embed {
 		spaFiles, err := fs.Sub(web.DistFS, "dist")
@@ -188,7 +192,7 @@ func main() {
 	// The lifecycle manager owns every long-running goroutine (HTTP server,
 	// WS hub, scheduler, delivery retries, doc lock sweep) under one
 	// errgroup, and runs the ordered stop on shutdown: mark not-ready ->
-	// drain HTTP/WS -> stop scheduler -> wait for remaining goroutines ->
+	// drain HTTP/WS -> stop a running network scan -> stop scheduler -> wait for remaining goroutines ->
 	// wait for in-flight dispatch goroutines -> close the DB last.
 	lifecycle := newLifecycleManager(lifecycleDeps{
 		SyncEngine:          syncEngine,
@@ -198,6 +202,7 @@ func main() {
 		Scheduler:           jobRunner,
 		Dispatcher:          notifDispatcher,
 		Store:               s,
+		Discovery:           discoveryManager,
 		Ready:               readyState,
 		Elector:             elector,
 		LeaderElection:      cfg.HA.LeaderElection,

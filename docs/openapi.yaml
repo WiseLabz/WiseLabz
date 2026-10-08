@@ -4046,12 +4046,12 @@ paths:
               schema: { $ref: '#/components/schemas/Error' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '409':
-          description: Another scan is running; `details.scan` is that scan
+          description: Another scan is running; `scan` is that scan
           content:
             application/json:
               schema: { $ref: '#/components/schemas/DiscoveryScanConflict' }
         '429':
-          description: Hourly start limit reached (code `rate_limited`)
+          description: Hourly start limit reached (code `rate_limited`, with `retryAfterSeconds`)
           headers:
             Retry-After:
               description: Seconds until another scan may start
@@ -7195,28 +7195,25 @@ components:
         scan: { $ref: '#/components/schemas/DiscoveryScan' }
     DiscoveryScanConflict:
       type: object
-      description: Body of 409 scan_in_progress; details.scan is the running scan.
-      required: [code, message, details]
+      description: >
+        Body of 409 scan_in_progress: the Error envelope's code and message,
+        plus the running scan at the top level (there is no `details`).
+      required: [code, message, scan]
       properties:
         code: { type: string, enum: [scan_in_progress] }
         message: { type: string }
-        details:
-          type: object
-          required: [scan]
-          properties:
-            scan: { $ref: '#/components/schemas/DiscoveryScan' }
+        scan: { $ref: '#/components/schemas/DiscoveryScan' }
     DiscoveryRateLimited:
       type: object
-      description: Body of 429 rate_limited. The Retry-After header carries the same delay.
-      required: [code, message, details]
+      description: >
+        Body of 429 rate_limited: the Error envelope's code and message, plus
+        the delay at the top level (there is no `details`). The Retry-After
+        header carries the same delay.
+      required: [code, message, retryAfterSeconds]
       properties:
         code: { type: string, enum: [rate_limited] }
         message: { type: string }
-        details:
-          type: object
-          required: [retryAfterSeconds]
-          properties:
-            retryAfterSeconds: { type: integer }
+        retryAfterSeconds: { type: integer }
     DiscoveryProgressEvent:
       type: object
       description: >

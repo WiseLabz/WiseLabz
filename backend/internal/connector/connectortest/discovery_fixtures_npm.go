@@ -3,8 +3,16 @@ package connectortest
 func init() {
 	RegisterDiscoveryFixtures("npm",
 		DiscoveryFixture{
-			Name: "api root", Port: 81, Path: "/api/", Match: true,
-			Response: Response(200, `{"status":"OK","setup":true,"version":{"major":2,"minor":12,"revision":3}}`, "Content-Type", "application/json"),
+			Name: "api root 2.13.0 with setup flag", Port: 81, Path: "/api/", Match: true,
+			Response: Response(200, `{"status":"OK","setup":true,"version":{"major":2,"minor":13,"revision":0}}`, "Content-Type", "application/json"),
+		},
+		DiscoveryFixture{
+			Name: "api root before 2.13 has no setup flag", Port: 81, Path: "/api/", Match: true,
+			Response: Response(200, `{"status":"OK","version":{"major":2,"minor":12,"revision":6}}`, "Content-Type", "application/json"),
+		},
+		DiscoveryFixture{
+			Name: "version as a string", Port: 81, Path: "/api/", Match: false,
+			Response: Response(200, `{"status":"OK","version":"2.12.6"}`, "Content-Type", "application/json"),
 		},
 		DiscoveryFixture{
 			Name: "status only", Port: 81, Path: "/api/", Match: false,

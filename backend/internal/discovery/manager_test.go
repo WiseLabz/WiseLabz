@@ -146,7 +146,7 @@ func TestManagerStartAndComplete(t *testing.T) {
 	hub, aud, clock := &fakeHub{}, &fakeAudit{}, newClock()
 	m := NewManager(Config{Runner: quickRunner(haAt7, proxmoxAt5), Events: hub, Audit: aud, Now: clock.now})
 
-	started, err := m.Start(mustRange(t, "10.0.0.57/24"), admin)
+	started, err := m.Start(mustRange(t, "10.0.0.57/24"), admin, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -221,7 +221,7 @@ func TestManagerReadWhileRunning(t *testing.T) {
 		<-release
 		return Progress{Done: 254, Total: 254, Answered: 1}
 	}}})
-	if _, err := m.Start(mustRange(t, "10.0.0.0/24"), admin); err != nil {
+	if _, err := m.Start(mustRange(t, "10.0.0.0/24"), admin, nil); err != nil {
 		t.Fatal(err)
 	}
 	waitFor(t, "candidate", func() bool { s, _ := m.Current(context.Background()); return len(s.Candidates) == 1 })
@@ -235,7 +235,7 @@ func TestManagerReadWhileRunning(t *testing.T) {
 
 func TestManagerNothingFound(t *testing.T) {
 	m := NewManager(Config{Runner: quickRunner()})
-	if _, err := m.Start(mustRange(t, "10.0.0.0/24"), admin); err != nil {
+	if _, err := m.Start(mustRange(t, "10.0.0.0/24"), admin, nil); err != nil {
 		t.Fatal(err)
 	}
 	s := waitEnded(t, m)
@@ -249,7 +249,7 @@ func TestManagerNoScanBeforeAnyStart(t *testing.T) {
 	if _, ok := m.Current(context.Background()); ok {
 		t.Error("Current reported a scan before any start")
 	}
-	if _, ok := m.Cancel(); ok {
+	if _, ok := m.Cancel(admin); ok {
 		t.Error("Cancel reported a running scan before any start")
 	}
 }
@@ -260,11 +260,11 @@ func TestManagerRefusesSecondScanWhileRunning(t *testing.T) {
 		<-release
 		return Progress{}
 	}}})
-	first, err := m.Start(mustRange(t, "10.0.0.0/24"), admin)
+	first, err := m.Start(mustRange(t, "10.0.0.0/24"), admin, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = m.Start(mustRange(t, "10.0.1.0/24"), Actor{UserID: "user-2", InstanceAdmin: true})
+	_, err = m.Start(mustRange(t, "10.0.1.0/24"), Actor{UserID: "user-2", InstanceAdmin: true}, nil)
 	var running *ScanRunningError
 	if !errors.As(err, &running) || !errors.Is(err, ErrScanRunning) {
 		t.Fatalf("second start error = %v, want ScanRunningError", err)
@@ -286,7 +286,7 @@ func TestManagerHourlyLimit(t *testing.T) {
 		runs.Add(1)
 		return Progress{}
 	}}, Now: clock.now})
-	start := func() (Scan, error) { return m.Start(mustRange(t, "10.0.0.0/24"), admin) }
+	start := func() (Scan, error) { return m.Start(mustRange(t, "10.0.0.0/24"), admin, nil) }
 
 	// Five invalid ranges never reach the manager; and conflicts do not count:
 	// provoke some, then confirm six real starts are still possible.
@@ -327,11 +327,11 @@ func TestManagerRefusedStartsDoNotCount(t *testing.T) {
 		}
 		return Progress{}
 	}}, Now: clock.now})
-	if _, err := m.Start(mustRange(t, "10.0.0.0/24"), admin); err != nil {
+	if _, err := m.Start(mustRange(t, "10.0.0.0/24"), admin, nil); err != nil {
 		t.Fatal(err)
 	}
 	for i := 0; i < 10; i++ {
-		if _, err := m.Start(mustRange(t, "10.0.0.0/24"), admin); !errors.Is(err, ErrScanRunning) {
+		if _, err := m.Start(mustRange(t, "10.0.0.0/24"), admin, nil); !errors.Is(err, ErrScanRunning) {
 			t.Fatalf("conflict %d: %v", i, err)
 		}
 	}
@@ -339,13 +339,13 @@ func TestManagerRefusedStartsDoNotCount(t *testing.T) {
 	waitEnded(t, m)
 	// One real start so far; five more must fit in the window, the seventh must not.
 	for i := 0; i < 5; i++ {
-		if _, err := m.Start(mustRange(t, "10.0.0.0/24"), admin); err != nil {
+		if _, err := m.Start(mustRange(t, "10.0.0.0/24"), admin, nil); err != nil {
 			t.Fatalf("start %d after conflicts: %v", i+2, err)
 		}
 		waitEnded(t, m)
 	}
 	var limit *RateLimitError
-	if _, err := m.Start(mustRange(t, "10.0.0.0/24"), admin); !errors.As(err, &limit) {
+	if _, err := m.Start(mustRange(t, "10.0.0.0/24"), admin, nil); !errors.As(err, &limit) {
 		t.Fatalf("seventh start error = %v, want RateLimitError", err)
 	}
 }
@@ -362,12 +362,12 @@ func TestManagerCancelKeepsCandidatesAndAddsNoMore(t *testing.T) {
 		close(late)
 		return Progress{Done: 20, Total: 254, Answered: 2}
 	}}, Events: hub, Audit: aud})
-	if _, err := m.Start(mustRange(t, "10.0.0.0/24"), admin); err != nil {
+	if _, err := m.Start(mustRange(t, "10.0.0.0/24"), admin, nil); err != nil {
 		t.Fatal(err)
 	}
 	waitFor(t, "two candidates", func() bool { s, _ := m.Current(context.Background()); return len(s.Candidates) == 2 })
 
-	snap, ok := m.Cancel()
+	snap, ok := m.Cancel(Actor{UserID: "user-2", InstanceAdmin: true})
 	if !ok || snap.State != StateCancelled || snap.EndedAt == nil || len(snap.Candidates) != 2 {
 		t.Fatalf("Cancel = %+v, %v, want the scan returned as cancelled", snap, ok)
 	}
@@ -376,12 +376,15 @@ func TestManagerCancelKeepsCandidatesAndAddsNoMore(t *testing.T) {
 	if s.State != StateCancelled || s.Partial || len(s.Candidates) != 2 || s.EndedAt == nil {
 		t.Errorf("scan = %+v, want cancelled with exactly the two earlier candidates", s)
 	}
-	if _, ok := m.Cancel(); ok {
+	if _, ok := m.Cancel(admin); ok {
 		t.Error("Cancel on an ended scan reported a running scan")
 	}
 	entries := aud.all()
 	if len(entries) != 1 || entries[0].action != AuditCancel || entries[0].detail["state"] != "cancelled" {
-		t.Errorf("audit = %+v, want one cancel entry", entries)
+		t.Fatalf("audit = %+v, want one cancel entry", entries)
+	}
+	if entries[0].actor != "user-1" || entries[0].detail["cancelledBy"] != "user-2" || entries[0].detail["cancelReason"] != nil {
+		t.Errorf("cancel entry = %+v, want the starter as actor and the canceller in detail", entries[0])
 	}
 	if per := entries[0].detail["candidates"].(map[string]any); per["proxmox"] != float64(1) || per["home_assistant"] != float64(1) || len(per) != 2 {
 		t.Errorf("cancel counts = %v", per)
@@ -399,7 +402,7 @@ func TestManagerDeadlineEndsScanAsPartial(t *testing.T) {
 		<-ctx.Done()
 		return Progress{Done: 100, Total: 254, Answered: 1}
 	}}})
-	if _, err := m.Start(mustRange(t, "10.0.0.0/24"), admin); err != nil {
+	if _, err := m.Start(mustRange(t, "10.0.0.0/24"), admin, nil); err != nil {
 		t.Fatal(err)
 	}
 	s := waitEnded(t, m)
@@ -411,10 +414,180 @@ func TestManagerDeadlineEndsScanAsPartial(t *testing.T) {
 	}
 }
 
+func TestManagerFinishedScanAtDeadlineIsNotPartial(t *testing.T) {
+	m := NewManager(Config{Timeout: 40 * time.Millisecond, Runner: fakeRunner{run: func(ctx context.Context, r Range, cb Callbacks) Progress {
+		total := len(r.Hosts())
+		cb.OnProgress(Progress{Done: total, Total: total})
+		<-ctx.Done()
+		return Progress{Done: total, Total: total}
+	}}})
+	if _, err := m.Start(mustRange(t, "10.0.0.0/24"), admin, nil); err != nil {
+		t.Fatal(err)
+	}
+	if s := waitEnded(t, m); s.State != StateCompleted || s.Partial {
+		t.Errorf("scan = %+v, want completed and not partial", s)
+	}
+}
+
+func TestManagerLateCandidateSkipsLookup(t *testing.T) {
+	var lookups atomic.Int32
+	m := NewManager(Config{
+		Endpoints: func(context.Context) ([]Endpoint, error) { lookups.Add(1); return nil, nil },
+		Runner: fakeRunner{run: func(ctx context.Context, _ Range, cb Callbacks) Progress {
+			<-ctx.Done()
+			cb.OnCandidate(proxmoxAt5)
+			return Progress{}
+		}},
+	})
+	if _, err := m.Start(mustRange(t, "10.0.0.0/24"), admin, nil); err != nil {
+		t.Fatal(err)
+	}
+	m.Cancel(admin)
+	if s := waitEnded(t, m); len(s.Candidates) != 0 || lookups.Load() != 0 {
+		t.Errorf("candidates = %+v, lookups = %d, want a late candidate dropped without a lookup", s.Candidates, lookups.Load())
+	}
+}
+
+func TestManagerStartCallbackRunsBeforeTheScan(t *testing.T) {
+	var order []string
+	var mu sync.Mutex
+	note := func(what string) { mu.Lock(); order = append(order, what); mu.Unlock() }
+	m := NewManager(Config{Runner: fakeRunner{run: func(context.Context, Range, Callbacks) Progress {
+		note("run")
+		return Progress{}
+	}}})
+	var got Scan
+	started, err := m.Start(mustRange(t, "10.0.0.0/24"), admin, func(s Scan) { got = s; note("started") })
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitEnded(t, m)
+	mu.Lock()
+	defer mu.Unlock()
+	if strings.Join(order, ",") != "started,run" || got.ID != started.ID || got.State != StateRunning {
+		t.Errorf("order = %v, callback scan = %+v, want the callback first with the new scan", order, got)
+	}
+}
+
+func TestManagerStartCallbackPanicStillRunsTheScan(t *testing.T) {
+	m := NewManager(Config{Runner: quickRunner()})
+	func() {
+		defer func() { _ = recover() }()
+		_, _ = m.Start(mustRange(t, "10.0.0.0/24"), admin, func(Scan) { panic("audit write failed") })
+	}()
+	if s := waitEnded(t, m); s.State != StateCompleted {
+		t.Fatalf("scan = %+v, want it to run and complete", s)
+	}
+	if _, err := m.Start(mustRange(t, "10.0.0.0/24"), admin, nil); err != nil {
+		t.Errorf("second Start after a panicking callback = %v, want accepted", err)
+	}
+}
+
+func TestManagerConcurrentStartsAdmitOne(t *testing.T) {
+	release := make(chan struct{})
+	m := NewManager(Config{Runner: fakeRunner{run: func(context.Context, Range, Callbacks) Progress {
+		<-release
+		return Progress{}
+	}}})
+	const n = 16
+	var ok, running atomic.Int32
+	var wg sync.WaitGroup
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, err := m.Start(mustRange(t, "10.0.0.0/24"), admin, nil)
+			var re *ScanRunningError
+			switch {
+			case err == nil:
+				ok.Add(1)
+			case errors.As(err, &re):
+				running.Add(1)
+			default:
+				t.Errorf("Start error = %v", err)
+			}
+		}()
+	}
+	wg.Wait()
+	if ok.Load() != 1 || running.Load() != n-1 {
+		t.Errorf("%d started, %d refused as running, want 1 and %d", ok.Load(), running.Load(), n-1)
+	}
+	m.mu.Lock()
+	slots := len(m.starts)
+	m.mu.Unlock()
+	if slots != 1 {
+		t.Errorf("start slots used = %d, want 1", slots)
+	}
+	close(release)
+	waitEnded(t, m)
+}
+
+func TestManagerShutdownCancelsRunningScan(t *testing.T) {
+	aud := &fakeAudit{}
+	running := make(chan struct{})
+	m := NewManager(Config{Audit: aud, Runner: fakeRunner{run: func(ctx context.Context, _ Range, cb Callbacks) Progress {
+		cb.OnCandidate(proxmoxAt5)
+		close(running)
+		<-ctx.Done()
+		return Progress{Done: 3, Total: 254}
+	}}})
+	if _, err := m.Start(mustRange(t, "10.0.0.0/24"), admin, nil); err != nil {
+		t.Fatal(err)
+	}
+	<-running
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	m.Shutdown(ctx)
+
+	// Shutdown returns only once the scan ended and was audited.
+	entries := aud.all()
+	if len(entries) != 1 || entries[0].action != AuditCancel || entries[0].actor != "user-1" {
+		t.Fatalf("audit = %+v, want one cancel entry for the starter", entries)
+	}
+	if d := entries[0].detail; d["cancelReason"] != "shutdown" || d["cancelledBy"] != nil || d["state"] != "cancelled" {
+		t.Errorf("cancel detail = %v", d)
+	}
+	if s, _ := m.Current(context.Background()); s.State != StateCancelled || s.EndedAt == nil {
+		t.Errorf("scan = %+v, want cancelled", s)
+	}
+	m.Shutdown(ctx) // again: nothing to do
+}
+
+func TestManagerShutdownGivesUpWhenContextEnds(t *testing.T) {
+	release := make(chan struct{})
+	defer close(release)
+	m := NewManager(Config{Runner: fakeRunner{run: func(context.Context, Range, Callbacks) Progress {
+		<-release // ignores cancellation
+		return Progress{}
+	}}})
+	if _, err := m.Start(mustRange(t, "10.0.0.0/24"), admin, nil); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	m.Shutdown(ctx)
+	if time.Since(start) > 2*time.Second {
+		t.Errorf("Shutdown took %v with a 30ms context", time.Since(start))
+	}
+}
+
+func TestManagerShutdownWithoutScan(t *testing.T) {
+	m := NewManager(Config{Runner: quickRunner()})
+	done := make(chan struct{})
+	go func() { m.Shutdown(context.Background()); m.Shutdown(context.Background()); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("Shutdown with no scan did not return at once")
+	}
+}
+
 func TestManagerResultExpires(t *testing.T) {
 	clock := newClock()
 	m := NewManager(Config{Runner: quickRunner(proxmoxAt5), Now: clock.now})
-	first, err := m.Start(mustRange(t, "10.0.0.0/24"), admin)
+	first, err := m.Start(mustRange(t, "10.0.0.0/24"), admin, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -432,9 +605,9 @@ func TestManagerResultExpires(t *testing.T) {
 
 func TestManagerNewScanReplacesResult(t *testing.T) {
 	m := NewManager(Config{Runner: quickRunner(proxmoxAt5)})
-	first, _ := m.Start(mustRange(t, "10.0.0.0/24"), admin)
+	first, _ := m.Start(mustRange(t, "10.0.0.0/24"), admin, nil)
 	waitEnded(t, m)
-	second, err := m.Start(mustRange(t, "10.0.1.0/24"), admin)
+	second, err := m.Start(mustRange(t, "10.0.1.0/24"), admin, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -451,7 +624,7 @@ func TestManagerNewScanReplacesResult(t *testing.T) {
 func TestManagerRecoversFromRunnerPanic(t *testing.T) {
 	aud := &fakeAudit{}
 	m := NewManager(Config{Audit: aud, Runner: fakeRunner{run: func(context.Context, Range, Callbacks) Progress { panic("boom") }}})
-	if _, err := m.Start(mustRange(t, "10.0.0.0/24"), admin); err != nil {
+	if _, err := m.Start(mustRange(t, "10.0.0.0/24"), admin, nil); err != nil {
 		t.Fatal(err)
 	}
 	s := waitEnded(t, m)
@@ -462,7 +635,7 @@ func TestManagerRecoversFromRunnerPanic(t *testing.T) {
 		t.Errorf("audit = %+v", e)
 	}
 	// A failed scan is over: the next one may start.
-	if _, err := m.Start(mustRange(t, "10.0.0.0/24"), admin); err != nil {
+	if _, err := m.Start(mustRange(t, "10.0.0.0/24"), admin, nil); err != nil {
 		t.Errorf("start after a failed scan: %v", err)
 	}
 }
@@ -477,7 +650,7 @@ func TestManagerThrottlesProgressEventsAndDedupesCandidates(t *testing.T) {
 		}
 		return Progress{Done: 254, Total: 254, Answered: 1}
 	}}})
-	if _, err := m.Start(mustRange(t, "10.0.0.0/24"), admin); err != nil {
+	if _, err := m.Start(mustRange(t, "10.0.0.0/24"), admin, nil); err != nil {
 		t.Fatal(err)
 	}
 	s := waitEnded(t, m)
@@ -509,7 +682,7 @@ func TestManagerMarksCandidatesAlreadyConnected(t *testing.T) {
 			return append([]Endpoint(nil), endpoints...), nil
 		},
 	})
-	if _, err := m.Start(mustRange(t, "10.0.0.0/24"), admin); err != nil {
+	if _, err := m.Start(mustRange(t, "10.0.0.0/24"), admin, nil); err != nil {
 		t.Fatal(err)
 	}
 	s := waitEnded(t, m)

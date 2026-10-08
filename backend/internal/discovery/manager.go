@@ -38,6 +38,10 @@ const (
 	AuditTargetType = "discovery_scan"
 )
 
+// CancelReasonShutdown is the cancelReason in the cancel entry of a scan that
+// the server stopped while shutting down.
+const CancelReasonShutdown = "shutdown"
+
 // State is where a scan is in its lifecycle.
 type State string
 
@@ -80,8 +84,8 @@ type Scan struct {
 	Candidates []Candidate `json:"candidates"`
 }
 
-// Actor is who starts a scan: events go to them, and the end-of-scan audit
-// entry is attributed to them.
+// Actor is who starts (or cancels) a scan: events go to the starter, and the
+// end-of-scan audit entry is attributed to the starter.
 type Actor struct {
 	UserID        string
 	InstanceAdmin bool
@@ -140,6 +144,8 @@ type scanState struct {
 	starter       Actor
 	cancel        context.CancelFunc
 	cancelled     bool
+	cancelledBy   string        // user id of the admin who cancelled; empty on shutdown
+	cancelReason  string        // CancelReasonShutdown when the server stopped the scan
 	done          chan struct{} // closed once the scan has ended and been audited
 	lastProgress  time.Time
 	candidateKeys map[string]bool
@@ -171,8 +177,10 @@ func NewManager(cfg Config) *Manager {
 // Start begins a scan of r in the background and returns its snapshot. It
 // refuses while a scan runs (*ScanRunningError) and once MaxStarts scans were
 // started inside the window (*RateLimitError); a refused call does not count
-// towards the limit.
-func (m *Manager) Start(r Range, starter Actor) (Scan, error) {
+// towards the limit. started, when not nil, is called with the new scan's
+// snapshot after the scan is registered and before it begins, so whatever it
+// records precedes anything the scan itself records.
+func (m *Manager) Start(r Range, starter Actor, started func(Scan)) (Scan, error) {
 	m.mu.Lock()
 	now := m.cfg.Now()
 	if m.scan != nil && m.scan.State == StateRunning {
@@ -207,7 +215,12 @@ func (m *Manager) Start(r Range, starter Actor) (Scan, error) {
 	snap := s.snapshot()
 	m.mu.Unlock()
 
-	go m.run(ctx, cancel, s, r)
+	// Launched even when started panics, so the scan registered above always
+	// runs and ends instead of leaving the manager answering 409 forever.
+	defer func() { go m.run(ctx, cancel, s, r) }()
+	if started != nil {
+		started(snap)
+	}
 	return snap, nil
 }
 
@@ -234,15 +247,19 @@ func (m *Manager) Current(ctx context.Context) (Scan, bool) {
 // cancelWait bounds how long Cancel waits for the scan to wind down.
 const cancelWait = 3 * time.Second
 
-// Cancel stops the running scan and returns it as cancelled once its probes
-// have stopped (or as it stands after cancelWait). It reports false when no
-// scan is running.
-func (m *Manager) Cancel() (Scan, bool) {
+// Cancel stops the running scan on behalf of by and returns it as cancelled
+// once its probes have stopped (or as it stands after cancelWait). It reports
+// false when no scan is running. The scan's cancel audit entry stays
+// attributed to its starter and names by in its detail.
+func (m *Manager) Cancel(by Actor) (Scan, bool) {
 	m.mu.Lock()
 	s := m.scan
 	if s == nil || s.State != StateRunning {
 		m.mu.Unlock()
 		return Scan{}, false
+	}
+	if !s.cancelled {
+		s.cancelledBy = by.UserID
 	}
 	s.cancelled = true
 	s.cancel()
@@ -255,6 +272,29 @@ func (m *Manager) Cancel() (Scan, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return s.snapshot(), true
+}
+
+// Shutdown cancels the running scan, if any, and waits until it has ended and
+// been audited, or until ctx is done. The scan ends as cancelled with
+// cancelReason "shutdown". It is safe to call with no scan and repeatedly.
+func (m *Manager) Shutdown(ctx context.Context) {
+	m.mu.Lock()
+	s := m.scan
+	if s == nil {
+		m.mu.Unlock()
+		return
+	}
+	if s.State == StateRunning && !s.cancelled {
+		s.cancelled = true
+		s.cancelReason = CancelReasonShutdown
+	}
+	s.cancel()
+	m.mu.Unlock()
+
+	select {
+	case <-s.done:
+	case <-ctx.Done():
+	}
 }
 
 func (m *Manager) pruneStarts(now time.Time) {
@@ -294,15 +334,16 @@ func (m *Manager) run(ctx context.Context, cancel context.CancelFunc, s *scanSta
 	default:
 		s.State = StateCompleted
 		// The deadline cut the scan short: report what was found so far.
-		s.Partial = errors.Is(ctx.Err(), context.DeadlineExceeded)
+		// A scan that finished every host as the deadline fired is complete.
+		s.Partial = errors.Is(ctx.Err(), context.DeadlineExceeded) && s.Done < s.Total
 	}
 	snap := s.snapshot()
 	duration := end.Sub(s.StartedAt)
-	starter := s.starter
+	starter, cancelledBy, cancelReason := s.starter, s.cancelledBy, s.cancelReason
 	m.mu.Unlock()
 
 	m.emit(starter, ws.EventDiscoveryComplete, map[string]any{"scanId": snap.ID, "state": snap.State, "partial": snap.Partial})
-	m.audit(starter, snap, duration)
+	m.audit(starter, snap, duration, cancelledBy, cancelReason)
 }
 
 func (m *Manager) onProgress(s *scanState, p Progress) {
@@ -333,6 +374,11 @@ func (m *Manager) onProgress(s *scanState, p Progress) {
 }
 
 func (m *Manager) onCandidate(ctx context.Context, s *scanState, c Candidate) {
+	// A scan that ended or was cancelled takes no more candidates, and the
+	// lookup below must not hold Cancel up.
+	if ctx.Err() != nil {
+		return
+	}
 	one := []Candidate{c}
 	// The scan's own context may already be done; the lookup must not be.
 	lookup, cancelLookup := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
@@ -364,8 +410,9 @@ func (m *Manager) emit(to Actor, eventType string, payload any) {
 	}
 }
 
-// audit writes the end-of-scan entry as the admin who started it.
-func (m *Manager) audit(starter Actor, snap Scan, duration time.Duration) {
+// audit writes the end-of-scan entry as the admin who started it. A cancelled
+// scan's entry also says who cancelled it, or that the server shut down.
+func (m *Manager) audit(starter Actor, snap Scan, duration time.Duration, cancelledBy, cancelReason string) {
 	if m.cfg.Audit == nil {
 		return
 	}
@@ -385,6 +432,14 @@ func (m *Manager) audit(starter Actor, snap Scan, duration time.Duration) {
 		"candidates": perType,
 		"durationMs": duration.Milliseconds(),
 		"partial":    snap.Partial,
+	}
+	if snap.State == StateCancelled {
+		if cancelledBy != "" {
+			detail["cancelledBy"] = cancelledBy
+		}
+		if cancelReason != "" {
+			detail["cancelReason"] = cancelReason
+		}
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
