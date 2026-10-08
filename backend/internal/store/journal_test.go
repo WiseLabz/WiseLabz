@@ -215,6 +215,7 @@ func TestRecipeActionJournalAuditBoundary(t *testing.T) {
 	s := newDocTestStore(t)
 	ctx := auth.ContextWithUser(context.Background(), "reader", true)
 	cid := createTestConnector(ctx, t, s)
+	mustCreateUser(t, s, "reader")
 	if _, err := s.UpsertConnectorGrant(ctx, "reader", cid, "viewer"); err != nil {
 		t.Fatal(err)
 	}
