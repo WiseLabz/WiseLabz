@@ -740,7 +740,7 @@ export const usePutConnectorsConnectorId = <
   return useMutation(getPutConnectorsConnectorIdMutationOptions(options), queryClient);
 };
 /**
- * Destructive: cascades to the connector's snapshots and generated doc sections (see GET /removal-impact for the blast radius). When `stepUpForDestructive` is enabled, requires a valid `X-Elevation-Token` from POST /auth/elevate; missing tokens get a 400 `elevation_required`, and invalid or expired tokens get a 401 `unauthorized`.
+ * Destructive: cascades to the connector's snapshots and generated doc sections (see GET /removal-impact for the blast radius). When `stepUpForDestructive` is enabled, requires a valid single-use `X-Elevation-Token` for action `connector.delete` from POST /auth/elevate: a missing token gets 400 `elevation_required`, and an invalid, expired, already used or mismatched token (including an empty one) gets 401 `unauthorized`. The handler also refuses a request whose `X-Elevation-Token` header is absent or empty with 400 `elevation_required` even when step-up is disabled; with step-up off any non-empty value is accepted without being validated.
  * @summary Remove a connector (operator, destructive)
  */
 export const deleteConnectorsConnectorId = (
@@ -3291,7 +3291,7 @@ export const usePostConnectorsBulkReauth = <
   return useMutation(getPostConnectorsBulkReauthMutationOptions(options), queryClient);
 };
 /**
- * Gated by X-Elevation-Token, action `connector.bulkRestart` — one elevation covers the whole batch, not one per item. One bad ID never aborts the batch; one audit record is written per successfully-restarted item.
+ * When `stepUpForDestructive` is enabled, gated by X-Elevation-Token, action `connector.bulkRestart` — one elevation covers the whole batch, not one per item. A missing token gets 400 `elevation_required`; an invalid, expired, already used or mismatched token gets 401 `unauthorized`. One bad ID never aborts the batch; one audit record is written per successfully-restarted item.
  * @summary Restart an explicit list of connectors in one request
  */
 export const postConnectorsBulkRestart = (
@@ -3314,7 +3314,7 @@ export const postConnectorsBulkRestart = (
 export const getPostConnectorsBulkRestartMutationKey = () => ['postConnectorsBulkRestart'] as const;
 
 export const getPostConnectorsBulkRestartMutationOptions = <
-  TError = ErrorType<BadRequestResponse | UnauthorizedResponse>,
+  TError = ErrorType<Error>,
   TContext = unknown,
 >(options?: {
   mutation?: UseMutationOptions<
@@ -3353,9 +3353,7 @@ export type PostConnectorsBulkRestartMutationResult = NonNullable<
   Awaited<ReturnType<typeof postConnectorsBulkRestart>>
 >;
 export type PostConnectorsBulkRestartMutationBody = BodyType<ConnectorBulkRestartRequest>;
-export type PostConnectorsBulkRestartMutationError = ErrorType<
-  BadRequestResponse | UnauthorizedResponse
->;
+export type PostConnectorsBulkRestartMutationError = ErrorType<Error>;
 export type PostConnectorsBulkRestartMutationVariables = {
   data: BodyType<ConnectorBulkRestartRequest>;
 };
@@ -3363,10 +3361,7 @@ export type PostConnectorsBulkRestartMutationVariables = {
 /**
  * @summary Restart an explicit list of connectors in one request
  */
-export const usePostConnectorsBulkRestart = <
-  TError = ErrorType<BadRequestResponse | UnauthorizedResponse>,
-  TContext = unknown,
->(
+export const usePostConnectorsBulkRestart = <TError = ErrorType<Error>, TContext = unknown>(
   options?: {
     mutation?: UseMutationOptions<
       Awaited<ReturnType<typeof postConnectorsBulkRestart>>,

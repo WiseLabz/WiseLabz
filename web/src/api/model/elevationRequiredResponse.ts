@@ -9,6 +9,6 @@
 import type { Error } from './error';
 
 /**
- * Elevation required — step-up is enabled and the X-Elevation-Token was missing. Client should call POST /auth/elevate and retry. Error.code = `elevation_required`. (An invalid or expired token returns 401 `unauthorized`.)
+ * Elevation required — the operation needs step-up (the instance step-up setting is on, or always for MFA management) and the request carried no X-Elevation-Token header. Client should call POST /auth/elevate and retry. Error.code = `elevation_required`. A token that is invalid, expired, already used, or issued for a different action, target, user or session returns 401 `unauthorized` instead.
  */
 export type ElevationRequiredResponse = Error;

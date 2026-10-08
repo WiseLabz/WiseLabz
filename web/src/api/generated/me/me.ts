@@ -25,6 +25,8 @@ import type {
 import type {
   BadRequestResponse,
   ElevationRequiredResponse,
+  Error,
+  ForbiddenResponse,
   MfaStatus,
   NotFoundResponse,
   PasswordChange,
@@ -635,7 +637,7 @@ export function useGetMeMfa<
 }
 
 /**
- * Creates a pending factor (unusable for login/step-up until confirmed). The frontend renders `otpauthUrl` as a QR code client-side. Requires step-up elevation (action `mfa.manage`; a user with no factor elevates with their password), except for sessions confined to forced MFA enrollment. 400 `elevation_required` when the token is missing, 401 when invalid, 403 for API keys.
+ * Creates a pending factor (unusable for login/step-up until confirmed). The frontend renders `otpauthUrl` as a QR code client-side. Requires step-up elevation (action `mfa.manage`; a user with no factor elevates with their password), except for sessions confined to forced MFA enrollment. Elevation is required regardless of the step-up setting: a missing token gets 400 `elevation_required`, an invalid, expired, already used or mismatched token gets 401 `unauthorized`; 403 for API keys.
  * @summary Begin enrolling a TOTP factor
  */
 export const postMeMfaTotp = (
@@ -658,7 +660,7 @@ export const postMeMfaTotp = (
 export const getPostMeMfaTotpMutationKey = () => ['postMeMfaTotp'] as const;
 
 export const getPostMeMfaTotpMutationOptions = <
-  TError = ErrorType<BadRequestResponse | UnauthorizedResponse | void>,
+  TError = ErrorType<Error | UnauthorizedResponse | void>,
   TContext = unknown,
 >(options?: {
   mutation?: UseMutationOptions<
@@ -695,16 +697,14 @@ export const getPostMeMfaTotpMutationOptions = <
 
 export type PostMeMfaTotpMutationResult = NonNullable<Awaited<ReturnType<typeof postMeMfaTotp>>>;
 export type PostMeMfaTotpMutationBody = BodyType<PostMeMfaTotpBody> | undefined;
-export type PostMeMfaTotpMutationError = ErrorType<
-  BadRequestResponse | UnauthorizedResponse | void
->;
+export type PostMeMfaTotpMutationError = ErrorType<Error | UnauthorizedResponse | void>;
 export type PostMeMfaTotpMutationVariables = { data?: BodyType<PostMeMfaTotpBody> };
 
 /**
  * @summary Begin enrolling a TOTP factor
  */
 export const usePostMeMfaTotp = <
-  TError = ErrorType<BadRequestResponse | UnauthorizedResponse | void>,
+  TError = ErrorType<Error | UnauthorizedResponse | void>,
   TContext = unknown,
 >(
   options?: {
@@ -824,7 +824,7 @@ export const usePostMeMfaTotpFactorIdConfirm = <
   return useMutation(getPostMeMfaTotpFactorIdConfirmMutationOptions(options), queryClient);
 };
 /**
- * Requires step-up elevation (action `mfa.manage`; a user with no factor elevates with their password), except for sessions confined to forced MFA enrollment. 400 `elevation_required` when the token is missing, 401 when invalid, 403 for API keys.
+ * Requires step-up elevation (action `mfa.manage`; a user with no factor elevates with their password), except for sessions confined to forced MFA enrollment. Elevation is required regardless of the step-up setting: a missing token gets 400 `elevation_required`, an invalid, expired, already used or mismatched token gets 401 `unauthorized`; 403 for API keys.
  * @summary Begin registering a security key or passkey
  */
 export const postMeMfaWebauthnRegisterBegin = (
@@ -848,7 +848,7 @@ export const getPostMeMfaWebauthnRegisterBeginMutationKey = () =>
   ['postMeMfaWebauthnRegisterBegin'] as const;
 
 export const getPostMeMfaWebauthnRegisterBeginMutationOptions = <
-  TError = ErrorType<BadRequestResponse | UnauthorizedResponse | void>,
+  TError = ErrorType<Error | UnauthorizedResponse | void>,
   TContext = unknown,
 >(options?: {
   mutation?: UseMutationOptions<
@@ -889,7 +889,7 @@ export type PostMeMfaWebauthnRegisterBeginMutationResult = NonNullable<
 export type PostMeMfaWebauthnRegisterBeginMutationBody =
   BodyType<PostMeMfaWebauthnRegisterBeginBody> | undefined;
 export type PostMeMfaWebauthnRegisterBeginMutationError = ErrorType<
-  BadRequestResponse | UnauthorizedResponse | void
+  Error | UnauthorizedResponse | void
 >;
 export type PostMeMfaWebauthnRegisterBeginMutationVariables = {
   data?: BodyType<PostMeMfaWebauthnRegisterBeginBody>;
@@ -899,7 +899,7 @@ export type PostMeMfaWebauthnRegisterBeginMutationVariables = {
  * @summary Begin registering a security key or passkey
  */
 export const usePostMeMfaWebauthnRegisterBegin = <
-  TError = ErrorType<BadRequestResponse | UnauthorizedResponse | void>,
+  TError = ErrorType<Error | UnauthorizedResponse | void>,
   TContext = unknown,
 >(
   options?: {
@@ -1012,7 +1012,7 @@ export const usePostMeMfaWebauthnRegisterFinish = <
   return useMutation(getPostMeMfaWebauthnRegisterFinishMutationOptions(options), queryClient);
 };
 /**
- * Requires step-up elevation (action `mfa.manage`).
+ * Requires step-up elevation (action `mfa.manage`), always, regardless of the step-up setting: 400 `elevation_required` when the token is missing, 401 `unauthorized` when it is invalid, expired, already used or issued for a different action or session. 403 for API keys.
  * @summary Regenerate recovery codes
  */
 export const postMeMfaRecoveryCodes = (
@@ -1028,7 +1028,7 @@ export const postMeMfaRecoveryCodes = (
 export const getPostMeMfaRecoveryCodesMutationKey = () => ['postMeMfaRecoveryCodes'] as const;
 
 export const getPostMeMfaRecoveryCodesMutationOptions = <
-  TError = ErrorType<ElevationRequiredResponse | UnauthorizedResponse>,
+  TError = ErrorType<ElevationRequiredResponse | UnauthorizedResponse | ForbiddenResponse>,
   TContext = unknown,
 >(options?: {
   mutation?: UseMutationOptions<
@@ -1066,14 +1066,14 @@ export type PostMeMfaRecoveryCodesMutationResult = NonNullable<
 >;
 
 export type PostMeMfaRecoveryCodesMutationError = ErrorType<
-  ElevationRequiredResponse | UnauthorizedResponse
+  ElevationRequiredResponse | UnauthorizedResponse | ForbiddenResponse
 >;
 
 /**
  * @summary Regenerate recovery codes
  */
 export const usePostMeMfaRecoveryCodes = <
-  TError = ErrorType<ElevationRequiredResponse | UnauthorizedResponse>,
+  TError = ErrorType<ElevationRequiredResponse | UnauthorizedResponse | ForbiddenResponse>,
   TContext = unknown,
 >(
   options?: {
@@ -1095,7 +1095,7 @@ export const usePostMeMfaRecoveryCodes = <
   return useMutation(getPostMeMfaRecoveryCodesMutationOptions(options), queryClient);
 };
 /**
- * Requires step-up elevation (action `mfa.manage`). Refused with 409 `mfa_required_by_policy` when this is the last factor and the require_2fa policy still covers this user. Removing the last factor also wipes recovery codes.
+ * Requires step-up elevation (action `mfa.manage`), always, regardless of the step-up setting: 400 `elevation_required` when the token is missing, 401 `unauthorized` when it is invalid, expired, already used or issued for a different action or session. 403 for API keys. Refused with 409 `mfa_required_by_policy` when this is the last factor and the require_2fa policy still covers this user. Removing the last factor also wipes recovery codes.
  * @summary Remove one of own MFA factors
  */
 export const deleteMeMfaFactorsFactorId = (
@@ -1113,7 +1113,9 @@ export const getDeleteMeMfaFactorsFactorIdMutationKey = () =>
   ['deleteMeMfaFactorsFactorId'] as const;
 
 export const getDeleteMeMfaFactorsFactorIdMutationOptions = <
-  TError = ErrorType<ElevationRequiredResponse | UnauthorizedResponse | NotFoundResponse | void>,
+  TError = ErrorType<
+    ElevationRequiredResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | void
+  >,
   TContext = unknown,
 >(options?: {
   mutation?: UseMutationOptions<
@@ -1153,7 +1155,7 @@ export type DeleteMeMfaFactorsFactorIdMutationResult = NonNullable<
 >;
 
 export type DeleteMeMfaFactorsFactorIdMutationError = ErrorType<
-  ElevationRequiredResponse | UnauthorizedResponse | NotFoundResponse | void
+  ElevationRequiredResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | void
 >;
 export type DeleteMeMfaFactorsFactorIdMutationVariables = { factorId: string };
 
@@ -1161,7 +1163,9 @@ export type DeleteMeMfaFactorsFactorIdMutationVariables = { factorId: string };
  * @summary Remove one of own MFA factors
  */
 export const useDeleteMeMfaFactorsFactorId = <
-  TError = ErrorType<ElevationRequiredResponse | UnauthorizedResponse | NotFoundResponse | void>,
+  TError = ErrorType<
+    ElevationRequiredResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | void
+  >,
   TContext = unknown,
 >(
   options?: {

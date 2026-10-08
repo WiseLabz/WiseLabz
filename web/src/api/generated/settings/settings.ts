@@ -28,6 +28,7 @@ import type {
   AuthConfig,
   AuthSettingsUpdate,
   BadRequestResponse,
+  Error,
   ForbiddenResponse,
   NotFoundResponse,
   NotificationConfig,
@@ -166,7 +167,7 @@ export function useGetAuthConfig<
 }
 
 /**
- * Cannot create/edit OIDC providers or touch any credential. Accepts only local-login enablement and token lifetimes. When `stepUpForDestructive` is enabled, requires an `X-Elevation-Token` for action `authConfig.update`.
+ * Cannot create/edit OIDC providers or touch any credential. Accepts only local-login enablement and token lifetimes. When `stepUpForDestructive` is enabled, requires an `X-Elevation-Token` for action `authConfig.update`: a missing token gets 400 `elevation_required`, an invalid, expired, already used or mismatched token gets 401 `unauthorized`.
  * @summary Update mutable auth settings — operator (toggles + token TTLs only)
  */
 export const putAuthConfig = (
@@ -189,7 +190,7 @@ export const putAuthConfig = (
 export const getPutAuthConfigMutationKey = () => ['putAuthConfig'] as const;
 
 export const getPutAuthConfigMutationOptions = <
-  TError = ErrorType<ForbiddenResponse>,
+  TError = ErrorType<Error | ForbiddenResponse>,
   TContext = unknown,
 >(options?: {
   mutation?: UseMutationOptions<
@@ -226,13 +227,13 @@ export const getPutAuthConfigMutationOptions = <
 
 export type PutAuthConfigMutationResult = NonNullable<Awaited<ReturnType<typeof putAuthConfig>>>;
 export type PutAuthConfigMutationBody = BodyType<AuthSettingsUpdate>;
-export type PutAuthConfigMutationError = ErrorType<ForbiddenResponse>;
+export type PutAuthConfigMutationError = ErrorType<Error | ForbiddenResponse>;
 export type PutAuthConfigMutationVariables = { data: BodyType<AuthSettingsUpdate> };
 
 /**
  * @summary Update mutable auth settings — operator (toggles + token TTLs only)
  */
-export const usePutAuthConfig = <TError = ErrorType<ForbiddenResponse>, TContext = unknown>(
+export const usePutAuthConfig = <TError = ErrorType<Error | ForbiddenResponse>, TContext = unknown>(
   options?: {
     mutation?: UseMutationOptions<
       Awaited<ReturnType<typeof putAuthConfig>>,
@@ -252,7 +253,7 @@ export const usePutAuthConfig = <TError = ErrorType<ForbiddenResponse>, TContext
   return useMutation(getPutAuthConfigMutationOptions(options), queryClient);
 };
 /**
- * The only per-provider mutation exposed. Persists an enable/disable flag in the app DB; the provider definition itself stays in config/env. When `stepUpForDestructive` is enabled, requires an `X-Elevation-Token` for action `authProvider.toggle`, issued with the provider ID as `target`.
+ * The only per-provider mutation exposed. Persists an enable/disable flag in the app DB; the provider definition itself stays in config/env. When `stepUpForDestructive` is enabled, requires an `X-Elevation-Token` for action `authProvider.toggle`, issued with the provider ID as `target`: a missing token gets 400 `elevation_required`, an invalid, expired, already used or mismatched token gets 401 `unauthorized`.
  * @summary Enable/disable a file-defined OIDC provider — operator
  */
 export const putAuthProvidersProviderIdEnabled = (
@@ -277,7 +278,7 @@ export const getPutAuthProvidersProviderIdEnabledMutationKey = () =>
   ['putAuthProvidersProviderIdEnabled'] as const;
 
 export const getPutAuthProvidersProviderIdEnabledMutationOptions = <
-  TError = ErrorType<ForbiddenResponse | NotFoundResponse>,
+  TError = ErrorType<Error | ForbiddenResponse | NotFoundResponse>,
   TContext = unknown,
 >(options?: {
   mutation?: UseMutationOptions<
@@ -318,7 +319,7 @@ export type PutAuthProvidersProviderIdEnabledMutationResult = NonNullable<
 export type PutAuthProvidersProviderIdEnabledMutationBody =
   BodyType<PutAuthProvidersProviderIdEnabledBody>;
 export type PutAuthProvidersProviderIdEnabledMutationError = ErrorType<
-  ForbiddenResponse | NotFoundResponse
+  Error | ForbiddenResponse | NotFoundResponse
 >;
 export type PutAuthProvidersProviderIdEnabledMutationVariables = {
   providerId: string;
@@ -329,7 +330,7 @@ export type PutAuthProvidersProviderIdEnabledMutationVariables = {
  * @summary Enable/disable a file-defined OIDC provider — operator
  */
 export const usePutAuthProvidersProviderIdEnabled = <
-  TError = ErrorType<ForbiddenResponse | NotFoundResponse>,
+  TError = ErrorType<Error | ForbiddenResponse | NotFoundResponse>,
   TContext = unknown,
 >(
   options?: {
