@@ -14,6 +14,28 @@ func TestValidateDeclared(t *testing.T) {
 		{Key: "verify_tls", Type: "toggle"},
 	}}, func(map[string]any) (Connector, error) { return nil, nil })
 
+	Register(TypeSchema{
+		Type:     "tlsprobe",
+		Category: "monitoring",
+		Name:     "TLS Probe",
+		Fields: []SchemaField{
+			{Key: "targets", Type: "textarea"},
+			{Key: "import_connector_id", Type: "text"},
+			{Key: "import_port", Type: "number"},
+		},
+		NoURL: true,
+		ConfigCheck: func(config map[string]any) error {
+			if config["import_connector"] != nil && config["import_connector"] != "" &&
+				config["import_connector_id"] != nil && config["import_connector_id"] != "" {
+				return &ConfigValidationError{
+					Field:   "import_connector",
+					Message: "import_connector and import_connector_id are mutually exclusive",
+				}
+			}
+			return nil
+		},
+	}, func(map[string]any) (Connector, error) { return nil, nil })
+
 	valid := map[string]any{"token_id": "id", "token_secret": "secret"}
 	tests := []struct {
 		name   string
@@ -30,6 +52,11 @@ func TestValidateDeclared(t *testing.T) {
 		{name: "column field inside config", typ: "declared_test", config: map[string]any{"token_id": "id", "token_secret": "secret", "url": "https://x"}, want: []string{`"url": must be set on the connector entry`}},
 		{name: "field rule", typ: "declared_test", config: map[string]any{"token_id": "id", "token_secret": "abc"}, want: []string{"at least 4 characters"}},
 		{name: "select option", typ: "declared_test", config: map[string]any{"token_id": "id", "token_secret": "secret", "mode": "c"}, want: []string{"must be one of"}},
+		{name: "tlsprobe valid import_connector", typ: "tlsprobe", config: map[string]any{"import_connector": "traefik-lab"}},
+		{name: "tlsprobe valid targets and import_port", typ: "tlsprobe", config: map[string]any{"targets": "nas.lab:443", "import_port": 8443}},
+		{name: "tlsprobe mutually exclusive import keys", typ: "tlsprobe", config: map[string]any{"import_connector": "traefik-lab", "import_connector_id": "abc-123"}, want: []string{"mutually exclusive"}},
+		{name: "tlsprobe unknown key", typ: "tlsprobe", config: map[string]any{"unknown_key": "val"}, want: []string{`"unknown_key": is not a tlsprobe setting`}},
+		{name: "non-tlsprobe rejects import_connector", typ: "declared_test", config: map[string]any{"token_id": "id", "token_secret": "secret", "import_connector": "traefik-lab"}, want: []string{`"import_connector": is not a declared_test setting`}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

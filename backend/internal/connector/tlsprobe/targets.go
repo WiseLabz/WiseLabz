@@ -218,10 +218,30 @@ func checkConfig(config map[string]any) error {
 	if _, err := importPort(config); err != nil {
 		errs = append(errs, &connector.ConfigValidationError{Field: "import_port", Message: err.Error()})
 	}
+	var hasID, hasName bool
 	if raw, ok := config["import_connector_id"]; ok && raw != nil {
-		if _, isString := raw.(string); !isString {
+		if s, isString := raw.(string); isString {
+			if strings.TrimSpace(s) != "" {
+				hasID = true
+			}
+		} else {
 			errs = append(errs, &connector.ConfigValidationError{Field: "import_connector_id", Message: "must be a connector ID"})
 		}
+	}
+	if raw, ok := config["import_connector"]; ok && raw != nil {
+		if s, isString := raw.(string); isString {
+			if strings.TrimSpace(s) != "" {
+				hasName = true
+			}
+		} else {
+			errs = append(errs, &connector.ConfigValidationError{Field: "import_connector", Message: "must be a connector name"})
+		}
+	}
+	if hasID && hasName {
+		errs = append(errs, &connector.ConfigValidationError{
+			Field:   "import_connector",
+			Message: "import_connector and import_connector_id are mutually exclusive",
+		})
 	}
 	return errors.Join(errs...)
 }
