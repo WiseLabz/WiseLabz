@@ -727,6 +727,9 @@ This file records the _outcome_ of each decision; the ADRs record the _reasoning
 - [`0007-config-push-inside-runbook-runs.md`](adr/0007-config-push-inside-runbook-runs.md) —
   config push inside whole-runbook runs under single `runbook.run` elevation, frozen
   target values, optional ConfigReader and already-at-target idempotency, extending ADR 0003/0006.
+- [`0008-recipe-defined-actions.md`](adr/0008-recipe-defined-actions.md) —
+  fixed custom-recipe actions under the ADR 0001/0002 permission, elevation, audit
+  and dry-run boundary, including trusted config and backup imports.
 
 ---
 

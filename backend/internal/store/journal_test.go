@@ -210,3 +210,31 @@ func TestJournalSurvivesOperationalRetention(t *testing.T) {
 		t.Fatalf("retained %+v: %v", got, err)
 	}
 }
+
+func TestRecipeActionJournalAuditBoundary(t *testing.T) {
+	s := newDocTestStore(t)
+	ctx := auth.ContextWithUser(context.Background(), "reader", true)
+	cid := createTestConnector(ctx, t, s)
+	if _, err := s.UpsertConnectorGrant(ctx, "reader", cid, "viewer"); err != nil {
+		t.Fatal(err)
+	}
+	actions := []string{"connector.action", "backup.import", "runbook.run.step_resent", "runbook.run.step_marked_done", "connector.recipe_actions_changed"}
+	for _, action := range actions {
+		record := AuditRecord{Action: action, TargetType: "connector", TargetID: cid}
+		if err := s.CreateAuditRecord(ctx, &record); err != nil {
+			t.Fatal(err)
+		}
+	}
+	rows, total, _, err := s.ListTimeline(ctx, TimelineFilter{UserID: "reader", Admin: true, Kinds: []string{"audit"}}, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if total != 4 {
+		t.Fatalf("journal lab actions = %d, want 4", total)
+	}
+	for _, row := range rows {
+		if row.Title == "connector.recipe_actions_changed" {
+			t.Fatal("security boundary leaked into Journal")
+		}
+	}
+}

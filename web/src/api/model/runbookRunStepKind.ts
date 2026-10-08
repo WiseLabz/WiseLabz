@@ -16,4 +16,5 @@ export const RunbookRunStepKind = {
   manual: 'manual',
   config_push: 'config_push',
   wait_for_entity: 'wait_for_entity',
+  connector_action: 'connector_action',
 } as const;

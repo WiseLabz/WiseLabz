@@ -31,6 +31,8 @@ export interface BackupRunbookStep {
   /** Empty for every kind except lifecycle. */
   verb: RunbookStepStoredVerb;
   entityRef: string;
+  /** Named action of a connector_action step; empty for every other kind. */
+  action?: string;
   /** Configuration field key for config_push steps. */
   fieldKey?: string;
   /** Target value for config_push steps, formatted as JSON text. */

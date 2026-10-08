@@ -22,6 +22,9 @@ import (
 type stepFailure struct {
 	reason  string
 	message string
+	// state is the step's state after the failure. Empty means StepFailed;
+	// StepUnknown is for an outcome that could not be established.
+	state string
 }
 
 // execute runs runID's steps in order until the run pauses, fails, finishes,
@@ -124,7 +127,11 @@ func (e *Executor) runStep(ctx context.Context, run *store.RunbookRunRecord, ste
 		// recovery does, and a resume re-reads the field before writing.
 		return false
 	}
-	e.recordFailure(ctx, run, started, StepFailed, failure)
+	stepState := failure.state
+	if stepState == "" {
+		stepState = StepFailed
+	}
+	e.recordFailure(ctx, run, started, stepState, failure)
 	return false
 }
 
@@ -281,6 +288,8 @@ func (e *Executor) perform(ctx context.Context, run *store.RunbookRunRecord, ste
 		if last != "" {
 			waitingFor += " (last status: " + last + ")"
 		}
+	case KindConnectorAction:
+		return e.performConnectorAction(ctx, run, step, actor)
 	case KindConfigPush:
 		if e.configPush == nil {
 			return &stepFailure{reason: ReasonStepFailed, message: "Config push is not configured."}
@@ -306,6 +315,33 @@ func (e *Executor) perform(ctx context.Context, run *store.RunbookRunRecord, ste
 		// The step's own deadline expired. A deadline error from the operation
 		// itself, such as a connector's HTTP timeout, is an ordinary failure.
 		return &stepFailure{reason: ReasonStepTimeout, message: fmt.Sprintf("Timed out after %s waiting for %s.", timeout, waitingFor)}
+	}
+	return &stepFailure{reason: ReasonStepFailed, message: err.Error()}
+}
+
+// performConnectorAction sends the named action frozen at run start through the
+// shared connector implementation, under the run's acting user. The action is
+// refused, and nothing is sent, when its fingerprint changed since the run
+// started. A request that was written with no status received leaves the step
+// unknown. Any other failure leaves it failed. The response excerpt is never
+// recorded: it can carry the service's own text, so only the status and the
+// error are kept.
+func (e *Executor) performConnectorAction(ctx context.Context, run *store.RunbookRunRecord, step *store.RunbookRunStepRecord, actor connectors.LifecycleActor) *stepFailure {
+	if e.actions == nil {
+		return &stepFailure{reason: ReasonStepFailed, message: "Connector actions are not configured."}
+	}
+	detail := auditDetail(run, step)
+	detail["stepIndex"] = step.Position
+	result, err := e.actions.MutateRunbookAction(ctx, step.ConnectorID, step.Action, step.EntityRef, step.ActionFingerprint, actor, detail)
+	if err == nil {
+		return nil
+	}
+	switch {
+	case errors.Is(err, connectors.ErrActionChanged):
+		return &stepFailure{reason: ReasonStepFailed, message: "The action changed since the run started; nothing was sent."}
+	case result.Written && result.Status == 0:
+		return &stepFailure{reason: ReasonStepFailed, state: StepUnknown,
+			message: "The request was sent but no response status was received: " + err.Error()}
 	}
 	return &stepFailure{reason: ReasonStepFailed, message: err.Error()}
 }

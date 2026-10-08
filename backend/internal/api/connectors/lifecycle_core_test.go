@@ -83,15 +83,12 @@ func TestPreviewLifecycleOpCore(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	stopPreview, err := h.PreviewLifecycleOp(context.Background(), connectorID, "stop", "")
-	if err != nil {
-		t.Fatalf("PreviewLifecycleOp(stop) error = %v", err)
-	}
-	if stopPreview.EstimatedDowntimeSeconds != 0 {
-		t.Errorf("stop downtime = %d, want 0", stopPreview.EstimatedDowntimeSeconds)
-	}
-	if stopPreview.DependentServices == nil || stopPreview.AffectedEntities == nil {
-		t.Errorf("stop preview slices must be non-nil: %+v", stopPreview)
+	// The fake connector only restarts: a dry-run of an unsupported verb is
+	// rejected instead of previewing an operation that could never run.
+	_, err = h.PreviewLifecycleOp(context.Background(), connectorID, "stop", "")
+	var lifecycleErr *lifecycleError
+	if !errors.As(err, &lifecycleErr) || lifecycleErr.code != "unsupported_operation" || lifecycleErr.status != http.StatusBadRequest {
+		t.Fatalf("PreviewLifecycleOp(stop) error = %v, want 400 unsupported_operation", err)
 	}
 }
 

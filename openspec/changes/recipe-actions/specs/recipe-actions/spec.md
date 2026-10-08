@@ -45,11 +45,15 @@ An action SHALL define a method of POST, PUT, PATCH or DELETE and a path relativ
 - **THEN** those fields SHALL have no effect on the request sent to the service.
 
 ### Requirement: Target placeholders
-An entity action MAY use the placeholders `{external_id}` and `{attr.<name>}` in its path, in query parameter values and in string values of its body, where `<name>` is an attribute the endpoint maps. Placeholders SHALL be resolved from the target entity in the connector's latest stored snapshot. A value placed in the path SHALL be a single path segment and SHALL be escaped; a value that is empty, is `.` or `..`, or contains a path separator, `?`, `#`, `%`, `;` or a control character SHALL make the action fail before any request is sent. A service action SHALL NOT use placeholders. A placeholder naming an attribute the endpoint does not map SHALL be a validation error.
+An entity action MAY use the placeholders `{external_id}` and `{attr.<name>}` in its path, in query parameter values and in string values of its body, where `<name>` is an attribute the endpoint maps. Placeholders SHALL be resolved from the target entity in the connector's latest stored snapshot. A value placed in the path SHALL be a single path segment, SHALL be accepted only under the same rule built-in connectors apply to an entity reference segment, and SHALL be escaped; a value that is empty, is `.` or `..`, contains `..`, or contains a path separator, `?`, `#`, `%`, `;`, whitespace, a control character or a non-ASCII character SHALL make the action fail before any request is sent. A service action SHALL NOT use placeholders. A placeholder naming an attribute the endpoint does not map SHALL be a validation error.
 
 #### Scenario: External ID in the path
-- **WHEN** the action path is `/api/containers/{external_id}/restart` and the target entity's external ID is `web 1`
-- **THEN** the request path SHALL be `/api/containers/web%201/restart`.
+- **WHEN** the action path is `/api/containers/{external_id}/restart` and the target entity's external ID is `db|1`
+- **THEN** the request path SHALL be `/api/containers/db%7C1/restart`.
+
+#### Scenario: Whitespace in a path value
+- **WHEN** the target entity external ID is `web 1`
+- **THEN** the action SHALL fail with a validation error naming the value and no request SHALL be sent.
 
 #### Scenario: Value that would change the path
 - **WHEN** the target entity's external ID is `../admin`

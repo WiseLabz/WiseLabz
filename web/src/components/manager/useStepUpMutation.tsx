@@ -36,7 +36,13 @@ export function useStepUpMutation<V, R>({
   mutationFn: (vars: V, token: string | null) => Promise<R>;
   onSuccess?: (result: R) => void;
   onError?: (err: unknown) => void;
-}): { mutate: (vars: V) => void; isPending: boolean; dialog: ReactNode } {
+}): {
+  mutate: (vars: V) => void;
+  isPending: boolean;
+  isError: boolean;
+  error: unknown;
+  dialog: ReactNode;
+} {
   const { t } = useTranslation();
   const [pending, setPending] = useState<{ vars: V } | null>(null);
 
@@ -72,7 +78,9 @@ export function useStepUpMutation<V, R>({
 
   return {
     mutate: (vars) => mutation.mutate({ vars, token: null }),
-    isPending: mutation.isPending,
+    isPending: mutation.isPending || pending !== null,
+    isError: mutation.isError && !isElevationRequired(mutation.error),
+    error: mutation.error,
     dialog,
   };
 }

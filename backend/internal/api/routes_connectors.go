@@ -76,6 +76,7 @@ func mountConnectorRoutes(r chi.Router, d routerDeps) {
 				r.Post("/{id}/restart", d.connH.RestartPreview)
 				r.Post("/{id}/start", d.connH.StartPreview)
 				r.Post("/{id}/stop", d.connH.StopPreview)
+				r.Post("/{id}/actions/{name}", d.connH.Action)
 				r.Post("/{id}/config-push", d.connH.ConfigPush)
 				r.Post("/{id}/sync", d.connH.Sync)
 				r.Post("/{id}/maintenance-window", d.connH.OpenMaintenanceWindow) // no elevation: reversible and time-boxed

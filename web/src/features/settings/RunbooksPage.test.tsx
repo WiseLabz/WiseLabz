@@ -58,7 +58,24 @@ vi.mock('../../components/runbook/RunDetail', () => ({
 
 vi.mock('../../api/generated/connectors/connectors', () => ({
   useGetConnectors: () => ({
-    data: [{ id: 'conn-1', name: 'pve1', type: 'proxmox' }],
+    data: [
+      {
+        id: 'conn-1',
+        name: 'pve1',
+        type: 'proxmox',
+        actions: [
+          { name: 'rescan', entityScope: false, label: 'Rescan', downtimeSeconds: 0 },
+          { name: 'restart', entityScope: false, downtimeSeconds: 0 },
+          {
+            name: 'reindex',
+            entityScope: true,
+            entityKind: 'virtual_machine',
+            label: 'Reindex',
+            downtimeSeconds: 0,
+          },
+        ],
+      },
+    ],
   }),
   useGetConnectorsSchema: () => ({
     data: [
@@ -652,6 +669,90 @@ describe('RunbooksPage steps editor', () => {
       expect(postRunbooks.mock.calls[0][0].steps).toStrictEqual([
         { kind: 'lifecycle', title: 'Switch me', connectorId: 'conn-1', verb: 'restart' },
       ]);
+    });
+  });
+
+  describe('connector_action steps', () => {
+    const STEP_TITLE_PLACEHOLDER = 'e.g. Restart the sync worker';
+
+    function startConnectorActionStep() {
+      renderPage();
+      fireEvent.click(screen.getAllByRole('button', { name: 'New runbook' })[0]);
+      fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Rescan runbook' } });
+      fireEvent.change(screen.getByLabelText('Target', { exact: false }), {
+        target: { value: 'vm.created' },
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'Add step' }));
+      fireEvent.change(screen.getByPlaceholderText(STEP_TITLE_PLACEHOLDER), {
+        target: { value: 'Rescan the index' },
+      });
+      fireEvent.change(screen.getByLabelText('Kind'), { target: { value: 'connector_action' } });
+      fireEvent.change(screen.getByLabelText('Connector'), { target: { value: 'conn-1' } });
+    }
+
+    const optionValues = (select: HTMLElement) =>
+      Array.from((select as HTMLSelectElement).options, (option) => option.value).filter(
+        (value) => value !== ''
+      );
+
+    it('saves the connector and named action without a verb or timeout', async () => {
+      startConnectorActionStep();
+      fireEvent.change(screen.getByLabelText('Action name'), { target: { value: 'rescan' } });
+
+      fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+      await waitFor(() => expect(postRunbooks).toHaveBeenCalledTimes(1));
+      expect(postRunbooks.mock.calls[0][0].steps).toStrictEqual([
+        {
+          kind: 'connector_action',
+          title: 'Rescan the index',
+          connectorId: 'conn-1',
+          action: 'rescan',
+        },
+      ]);
+    });
+
+    it('lists only named actions for the chosen entity scope and saves the entity', async () => {
+      startConnectorActionStep();
+      expect(optionValues(screen.getByLabelText('Action name'))).toEqual(['rescan']);
+
+      fireEvent.change(screen.getByLabelText('Entity'), { target: { value: '100' } });
+      expect(optionValues(screen.getByLabelText('Action name'))).toEqual(['reindex']);
+      fireEvent.change(screen.getByLabelText('Action name'), { target: { value: 'reindex' } });
+
+      fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+      await waitFor(() => expect(postRunbooks).toHaveBeenCalledTimes(1));
+      expect(postRunbooks.mock.calls[0][0].steps).toStrictEqual([
+        {
+          kind: 'connector_action',
+          title: 'Rescan the index',
+          connectorId: 'conn-1',
+          action: 'reindex',
+          entityRef: '100',
+        },
+      ]);
+    });
+
+    it('shows a server field error on the action of the step', async () => {
+      postRunbooks.mockRejectedValueOnce({
+        isAxiosError: true,
+        response: {
+          status: 400,
+          data: {
+            code: 'invalid_request',
+            message: 'bad',
+            details: [{ field: 'steps[0].action', msg: 'unknown action' }],
+          },
+        },
+      });
+      startConnectorActionStep();
+      fireEvent.change(screen.getByLabelText('Action name'), { target: { value: 'rescan' } });
+
+      fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+      expect(await screen.findByText('unknown action')).toBeInTheDocument();
+      expect(screen.getByText('Action name:')).toBeInTheDocument();
     });
   });
 

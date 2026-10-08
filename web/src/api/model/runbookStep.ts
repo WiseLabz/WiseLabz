@@ -25,6 +25,8 @@ export interface RunbookStep {
   verb: RunbookStepStoredVerb;
   /** Target entity's SnapshotEntity.externalId, or empty for connectors that manage a single implicit service. */
   entityRef: string;
+  /** Named action of a connector_action step; absent for every other kind and for a redacted step. */
+  action?: string;
   /** Configuration field key for config_push steps. */
   fieldKey?: string;
   /** Target value for config_push steps, formatted as JSON text. */

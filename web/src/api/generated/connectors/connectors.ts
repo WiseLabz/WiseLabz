@@ -23,6 +23,8 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  ActionError,
+  ActionResult,
   BadRequestResponse,
   ConfigField,
   Connector,
@@ -49,10 +51,13 @@ import type {
   GetUptimeParams,
   GoldenSnapshot,
   HealthCheckResult,
+  LifecycleResult,
   MaintenanceWindow,
   NotFoundResponse,
   OpenMaintenanceWindowRequest,
   PinGoldenSnapshotRequest,
+  PostConnectorsConnectorIdActionsNameBody,
+  PostConnectorsConnectorIdActionsNameParams,
   PostConnectorsConnectorIdConfigPushBody,
   PostConnectorsConnectorIdRestartBody,
   PostConnectorsConnectorIdRestartParams,
@@ -208,6 +213,7 @@ export function useGetConnectors<
 }
 
 /**
+ * When `stepUpForDestructive` is enabled and the recipe declares actions, requires an `X-Elevation-Token` for action `connector.recipeActions`.
  * @summary Create a connector (operator)
  */
 export const postConnectors = (
@@ -230,7 +236,7 @@ export const postConnectors = (
 export const getPostConnectorsMutationKey = () => ['postConnectors'] as const;
 
 export const getPostConnectorsMutationOptions = <
-  TError = ErrorType<BadRequestResponse | ForbiddenResponse>,
+  TError = ErrorType<Error | ElevationRequiredResponse | ForbiddenResponse>,
   TContext = unknown,
 >(options?: {
   mutation?: UseMutationOptions<
@@ -267,14 +273,16 @@ export const getPostConnectorsMutationOptions = <
 
 export type PostConnectorsMutationResult = NonNullable<Awaited<ReturnType<typeof postConnectors>>>;
 export type PostConnectorsMutationBody = BodyType<ConnectorCreate>;
-export type PostConnectorsMutationError = ErrorType<BadRequestResponse | ForbiddenResponse>;
+export type PostConnectorsMutationError = ErrorType<
+  Error | ElevationRequiredResponse | ForbiddenResponse
+>;
 export type PostConnectorsMutationVariables = { data: BodyType<ConnectorCreate> };
 
 /**
  * @summary Create a connector (operator)
  */
 export const usePostConnectors = <
-  TError = ErrorType<BadRequestResponse | ForbiddenResponse>,
+  TError = ErrorType<Error | ElevationRequiredResponse | ForbiddenResponse>,
   TContext = unknown,
 >(
   options?: {
@@ -643,7 +651,7 @@ export function useGetConnectorsConnectorId<
 }
 
 /**
- * Changing url, type, verifyTls, category or endpoint config requires an instance admin (403 otherwise); operators may resend the unchanged values.
+ * Changing url, type, verifyTls, category or endpoint config requires an instance admin (403 otherwise); operators may resend the unchanged values. When `stepUpForDestructive` is enabled and the save changes the recipe's actions to a non-empty set, requires an `X-Elevation-Token` for action `connector.recipeActions` bound to the connector id.
  * @summary Update a connector (operator)
  */
 export const putConnectorsConnectorId = (
@@ -667,7 +675,9 @@ export const putConnectorsConnectorId = (
 export const getPutConnectorsConnectorIdMutationKey = () => ['putConnectorsConnectorId'] as const;
 
 export const getPutConnectorsConnectorIdMutationOptions = <
-  TError = ErrorType<BadRequestResponse | ForbiddenResponse | NotFoundResponse | void>,
+  TError = ErrorType<
+    Error | ElevationRequiredResponse | ForbiddenResponse | NotFoundResponse | void
+  >,
   TContext = unknown,
 >(options?: {
   mutation?: UseMutationOptions<
@@ -707,7 +717,7 @@ export type PutConnectorsConnectorIdMutationResult = NonNullable<
 >;
 export type PutConnectorsConnectorIdMutationBody = BodyType<ConnectorUpdate>;
 export type PutConnectorsConnectorIdMutationError = ErrorType<
-  BadRequestResponse | ForbiddenResponse | NotFoundResponse | void
+  Error | ElevationRequiredResponse | ForbiddenResponse | NotFoundResponse | void
 >;
 export type PutConnectorsConnectorIdMutationVariables = {
   connectorId: string;
@@ -718,7 +728,9 @@ export type PutConnectorsConnectorIdMutationVariables = {
  * @summary Update a connector (operator)
  */
 export const usePutConnectorsConnectorId = <
-  TError = ErrorType<BadRequestResponse | ForbiddenResponse | NotFoundResponse | void>,
+  TError = ErrorType<
+    Error | ElevationRequiredResponse | ForbiddenResponse | NotFoundResponse | void
+  >,
   TContext = unknown,
 >(
   options?: {
@@ -1082,7 +1094,7 @@ export const postConnectorsConnectorIdRestart = (
   options?: SecondParameter<typeof customInstance>,
   signal?: AbortSignal
 ) => {
-  return customInstance<RestartPreview>(
+  return customInstance<RestartPreview | LifecycleResult>(
     {
       url: `/connectors/${connectorId}/restart`,
       method: 'POST',
@@ -1099,7 +1111,9 @@ export const getPostConnectorsConnectorIdRestartMutationKey = () =>
   ['postConnectorsConnectorIdRestart'] as const;
 
 export const getPostConnectorsConnectorIdRestartMutationOptions = <
-  TError = ErrorType<Error | ElevationRequiredResponse | ForbiddenResponse | NotFoundResponse>,
+  TError = ErrorType<
+    Error | ElevationRequiredResponse | ForbiddenResponse | NotFoundResponse | ActionError
+  >,
   TContext = unknown,
 >(options?: {
   mutation?: UseMutationOptions<
@@ -1140,7 +1154,7 @@ export type PostConnectorsConnectorIdRestartMutationResult = NonNullable<
 export type PostConnectorsConnectorIdRestartMutationBody =
   BodyType<PostConnectorsConnectorIdRestartBody> | undefined;
 export type PostConnectorsConnectorIdRestartMutationError = ErrorType<
-  Error | ElevationRequiredResponse | ForbiddenResponse | NotFoundResponse
+  Error | ElevationRequiredResponse | ForbiddenResponse | NotFoundResponse | ActionError
 >;
 export type PostConnectorsConnectorIdRestartMutationVariables = {
   connectorId: string;
@@ -1152,7 +1166,9 @@ export type PostConnectorsConnectorIdRestartMutationVariables = {
  * @summary Preview or perform a service restart (operator, elevation-gated)
  */
 export const usePostConnectorsConnectorIdRestart = <
-  TError = ErrorType<Error | ElevationRequiredResponse | ForbiddenResponse | NotFoundResponse>,
+  TError = ErrorType<
+    Error | ElevationRequiredResponse | ForbiddenResponse | NotFoundResponse | ActionError
+  >,
   TContext = unknown,
 >(
   options?: {
@@ -1184,7 +1200,7 @@ export const postConnectorsConnectorIdStart = (
   options?: SecondParameter<typeof customInstance>,
   signal?: AbortSignal
 ) => {
-  return customInstance<RestartPreview>(
+  return customInstance<RestartPreview | LifecycleResult>(
     {
       url: `/connectors/${connectorId}/start`,
       method: 'POST',
@@ -1201,7 +1217,9 @@ export const getPostConnectorsConnectorIdStartMutationKey = () =>
   ['postConnectorsConnectorIdStart'] as const;
 
 export const getPostConnectorsConnectorIdStartMutationOptions = <
-  TError = ErrorType<Error | ElevationRequiredResponse | ForbiddenResponse | NotFoundResponse>,
+  TError = ErrorType<
+    Error | ElevationRequiredResponse | ForbiddenResponse | NotFoundResponse | ActionError
+  >,
   TContext = unknown,
 >(options?: {
   mutation?: UseMutationOptions<
@@ -1242,7 +1260,7 @@ export type PostConnectorsConnectorIdStartMutationResult = NonNullable<
 export type PostConnectorsConnectorIdStartMutationBody =
   BodyType<PostConnectorsConnectorIdStartBody> | undefined;
 export type PostConnectorsConnectorIdStartMutationError = ErrorType<
-  Error | ElevationRequiredResponse | ForbiddenResponse | NotFoundResponse
+  Error | ElevationRequiredResponse | ForbiddenResponse | NotFoundResponse | ActionError
 >;
 export type PostConnectorsConnectorIdStartMutationVariables = {
   connectorId: string;
@@ -1254,7 +1272,9 @@ export type PostConnectorsConnectorIdStartMutationVariables = {
  * @summary Preview or perform a service start (operator, elevation-gated)
  */
 export const usePostConnectorsConnectorIdStart = <
-  TError = ErrorType<Error | ElevationRequiredResponse | ForbiddenResponse | NotFoundResponse>,
+  TError = ErrorType<
+    Error | ElevationRequiredResponse | ForbiddenResponse | NotFoundResponse | ActionError
+  >,
   TContext = unknown,
 >(
   options?: {
@@ -1286,7 +1306,7 @@ export const postConnectorsConnectorIdStop = (
   options?: SecondParameter<typeof customInstance>,
   signal?: AbortSignal
 ) => {
-  return customInstance<RestartPreview>(
+  return customInstance<RestartPreview | LifecycleResult>(
     {
       url: `/connectors/${connectorId}/stop`,
       method: 'POST',
@@ -1303,7 +1323,9 @@ export const getPostConnectorsConnectorIdStopMutationKey = () =>
   ['postConnectorsConnectorIdStop'] as const;
 
 export const getPostConnectorsConnectorIdStopMutationOptions = <
-  TError = ErrorType<Error | ElevationRequiredResponse | ForbiddenResponse | NotFoundResponse>,
+  TError = ErrorType<
+    Error | ElevationRequiredResponse | ForbiddenResponse | NotFoundResponse | ActionError
+  >,
   TContext = unknown,
 >(options?: {
   mutation?: UseMutationOptions<
@@ -1344,7 +1366,7 @@ export type PostConnectorsConnectorIdStopMutationResult = NonNullable<
 export type PostConnectorsConnectorIdStopMutationBody =
   BodyType<PostConnectorsConnectorIdStopBody> | undefined;
 export type PostConnectorsConnectorIdStopMutationError = ErrorType<
-  Error | ElevationRequiredResponse | ForbiddenResponse | NotFoundResponse
+  Error | ElevationRequiredResponse | ForbiddenResponse | NotFoundResponse | ActionError
 >;
 export type PostConnectorsConnectorIdStopMutationVariables = {
   connectorId: string;
@@ -1356,7 +1378,9 @@ export type PostConnectorsConnectorIdStopMutationVariables = {
  * @summary Preview or perform a service stop (operator, elevation-gated)
  */
 export const usePostConnectorsConnectorIdStop = <
-  TError = ErrorType<Error | ElevationRequiredResponse | ForbiddenResponse | NotFoundResponse>,
+  TError = ErrorType<
+    Error | ElevationRequiredResponse | ForbiddenResponse | NotFoundResponse | ActionError
+  >,
   TContext = unknown,
 >(
   options?: {
@@ -1376,6 +1400,114 @@ export const usePostConnectorsConnectorIdStop = <
   TContext
 > => {
   return useMutation(getPostConnectorsConnectorIdStopMutationOptions(options), queryClient);
+};
+/**
+ * With dryRun=true, returns the exact resolved same-origin request without contacting the service or requiring elevation. Execution requires connector.action elevation bound to <connector id>:<action name>. Lifecycle verbs use their existing endpoints. Only the fixed recipe request is sent; extra operator input has no effect. Success is 2xx, audited without a response body; failures raise a critical alert.
+ * @summary Preview or perform a recipe-defined named action (operator)
+ */
+export const postConnectorsConnectorIdActionsName = (
+  connectorId: string,
+  name: string,
+  postConnectorsConnectorIdActionsNameBody?: BodyType<PostConnectorsConnectorIdActionsNameBody>,
+  params?: PostConnectorsConnectorIdActionsNameParams,
+  options?: SecondParameter<typeof customInstance>,
+  signal?: AbortSignal
+) => {
+  return customInstance<RestartPreview | ActionResult>(
+    {
+      url: `/connectors/${connectorId}/actions/${name}`,
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      data: postConnectorsConnectorIdActionsNameBody,
+      params,
+      signal,
+    },
+    options
+  );
+};
+
+export const getPostConnectorsConnectorIdActionsNameMutationKey = () =>
+  ['postConnectorsConnectorIdActionsName'] as const;
+
+export const getPostConnectorsConnectorIdActionsNameMutationOptions = <
+  TError = ErrorType<
+    Error | ElevationRequiredResponse | ForbiddenResponse | NotFoundResponse | ActionError
+  >,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof postConnectorsConnectorIdActionsName>>,
+    TError,
+    PostConnectorsConnectorIdActionsNameMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof postConnectorsConnectorIdActionsName>>,
+  TError,
+  PostConnectorsConnectorIdActionsNameMutationVariables,
+  TContext
+> => {
+  const mutationKey = getPostConnectorsConnectorIdActionsNameMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof postConnectorsConnectorIdActionsName>>,
+    PostConnectorsConnectorIdActionsNameMutationVariables
+  > = (props) => {
+    const { connectorId, name, data, params } = props ?? {};
+
+    return postConnectorsConnectorIdActionsName(connectorId, name, data, params, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type PostConnectorsConnectorIdActionsNameMutationResult = NonNullable<
+  Awaited<ReturnType<typeof postConnectorsConnectorIdActionsName>>
+>;
+export type PostConnectorsConnectorIdActionsNameMutationBody =
+  BodyType<PostConnectorsConnectorIdActionsNameBody> | undefined;
+export type PostConnectorsConnectorIdActionsNameMutationError = ErrorType<
+  Error | ElevationRequiredResponse | ForbiddenResponse | NotFoundResponse | ActionError
+>;
+export type PostConnectorsConnectorIdActionsNameMutationVariables = {
+  connectorId: string;
+  name: string;
+  data?: BodyType<PostConnectorsConnectorIdActionsNameBody>;
+  params?: PostConnectorsConnectorIdActionsNameParams;
+};
+
+/**
+ * @summary Preview or perform a recipe-defined named action (operator)
+ */
+export const usePostConnectorsConnectorIdActionsName = <
+  TError = ErrorType<
+    Error | ElevationRequiredResponse | ForbiddenResponse | NotFoundResponse | ActionError
+  >,
+  TContext = unknown,
+>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof postConnectorsConnectorIdActionsName>>,
+      TError,
+      PostConnectorsConnectorIdActionsNameMutationVariables,
+      TContext
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseMutationResult<
+  Awaited<ReturnType<typeof postConnectorsConnectorIdActionsName>>,
+  TError,
+  PostConnectorsConnectorIdActionsNameMutationVariables,
+  TContext
+> => {
+  return useMutation(getPostConnectorsConnectorIdActionsNameMutationOptions(options), queryClient);
 };
 /**
  * Returns the connector's WritableFields() (ADR 0003), or an empty array if the connector type doesn't implement config-push.

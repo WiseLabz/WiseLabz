@@ -19,6 +19,7 @@ import (
 
 	"github.com/WiseLabz/wiselabz/internal/config"
 	"github.com/WiseLabz/wiselabz/internal/connector"
+	"github.com/WiseLabz/wiselabz/internal/connector/custom"
 	"github.com/WiseLabz/wiselabz/internal/crypto"
 	"github.com/WiseLabz/wiselabz/internal/store"
 )
@@ -307,6 +308,10 @@ func match(ctx context.Context, tx *store.Store, name string) (*store.ConnectorR
 }
 
 func create(ctx context.Context, tx *store.Store, encKey string, e config.ResolvedConnector, category, hash string, res *Result) error {
+	newActions, err := recipeActions(e.Type, e.Config)
+	if err != nil {
+		return err
+	}
 	data, err := store.MarshalConnectorConfig(e.Type, e.Config, encKey)
 	if err != nil {
 		return err
@@ -333,11 +338,23 @@ func create(ctx context.Context, tx *store.Store, encKey string, e config.Resolv
 		return err
 	}
 	res.ConnectorID, res.Action = rec.ID, Created
-	return audit(ctx, tx, "connector.config_create", rec.ID, map[string]any{"name": rec.Name, "type": rec.Type})
+	if err := audit(ctx, tx, "connector.config_create", rec.ID, map[string]any{"name": rec.Name, "type": rec.Type}); err != nil {
+		return err
+	}
+	return auditRecipeActionDiff(ctx, tx, rec.ID, rec.Name, custom.DiffActions(nil, newActions))
 }
 
 func update(ctx context.Context, tx *store.Store, encKey string, e config.ResolvedConnector, rec *store.ConnectorRecord, category, hash string, res *Result) error {
 	newConfig := e.Config
+	oldActions, err := storedRecipeActions(rec, encKey)
+	if err != nil {
+		return err
+	}
+	newActions, err := recipeActions(e.Type, e.Config)
+	if err != nil {
+		return err
+	}
+	actionDiff := custom.DiffActions(oldActions, newActions)
 	rotated := rec.Type != e.Type
 	if !rotated {
 		// A credential-refreshing connector stores tokens it obtained itself
@@ -352,7 +369,6 @@ func update(ctx context.Context, tx *store.Store, encKey string, e config.Resolv
 			}
 			newConfig = current
 		}
-		var err error
 		rotated, err = store.SecretFieldsChanged(rec.Type, rec.ConfigData, newConfig, encKey)
 		if err != nil {
 			return err
@@ -399,9 +415,46 @@ func update(ctx context.Context, tx *store.Store, encKey string, e config.Resolv
 		}
 	}
 	res.Action = action
-	return audit(ctx, tx, auditAction, rec.ID, map[string]any{
+	if err := audit(ctx, tx, auditAction, rec.ID, map[string]any{
 		"name": rec.Name, "previousManagedBy": rec.ManagedBy, "fields": changedFields(rec, e, rotated),
+	}); err != nil {
+		return err
+	}
+	return auditRecipeActionDiff(ctx, tx, rec.ID, rec.Name, actionDiff)
+}
+
+func recipeActions(typ string, config map[string]any) (map[string]custom.RecipeAction, error) {
+	if typ != "custom" {
+		return map[string]custom.RecipeAction{}, nil
+	}
+	return custom.CanonicalActions(config)
+}
+
+func storedRecipeActions(rec *store.ConnectorRecord, encKey string) (map[string]custom.RecipeAction, error) {
+	if rec.Type != "custom" {
+		return map[string]custom.RecipeAction{}, nil
+	}
+	config, err := store.ParseConnectorConfig(rec.Type, rec.ConfigData, encKey)
+	if err != nil {
+		return nil, fmt.Errorf("parse previous custom connector config for action audit: %w", err)
+	}
+	return recipeActions(rec.Type, config)
+}
+
+func auditRecipeActionDiff(ctx context.Context, tx *store.Store, connectorID, name string, diff custom.ActionDiff) error {
+	if len(diff.Added)+len(diff.Changed)+len(diff.Removed) == 0 {
+		return nil
+	}
+	return audit(ctx, tx, "connector.recipe_actions_changed", connectorID, map[string]any{
+		"name": name, "added": nonNilActionNames(diff.Added), "changed": nonNilActionNames(diff.Changed), "removed": nonNilActionNames(diff.Removed),
 	})
+}
+
+func nonNilActionNames(names []string) []string {
+	if names == nil {
+		return []string{}
+	}
+	return names
 }
 
 // changedFields names what an update changed, for the audit trail. Secret

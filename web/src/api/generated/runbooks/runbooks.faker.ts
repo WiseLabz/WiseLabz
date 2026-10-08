@@ -52,6 +52,10 @@ export const getGetRunbooksResponseMock = (
         connectorName: faker.string.alpha({ length: { min: 10, max: 20 } }),
         verb: faker.helpers.arrayElement(Object.values(RunbookStepStoredVerb)),
         entityRef: faker.string.alpha({ length: { min: 10, max: 20 } }),
+        action: faker.helpers.arrayElement([
+          faker.string.alpha({ length: { min: 10, max: 20 } }),
+          undefined,
+        ]),
         fieldKey: faker.helpers.arrayElement([
           faker.string.alpha({ length: { min: 10, max: 20 } }),
           undefined,
@@ -116,6 +120,10 @@ export const getPostRunbooksResponseMock = (
     connectorName: faker.string.alpha({ length: { min: 10, max: 20 } }),
     verb: faker.helpers.arrayElement(Object.values(RunbookStepStoredVerb)),
     entityRef: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    action: faker.helpers.arrayElement([
+      faker.string.alpha({ length: { min: 10, max: 20 } }),
+      undefined,
+    ]),
     fieldKey: faker.helpers.arrayElement([
       faker.string.alpha({ length: { min: 10, max: 20 } }),
       undefined,
@@ -175,6 +183,10 @@ export const getGetRunbooksRunbookIdResponseMock = (
     connectorName: faker.string.alpha({ length: { min: 10, max: 20 } }),
     verb: faker.helpers.arrayElement(Object.values(RunbookStepStoredVerb)),
     entityRef: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    action: faker.helpers.arrayElement([
+      faker.string.alpha({ length: { min: 10, max: 20 } }),
+      undefined,
+    ]),
     fieldKey: faker.helpers.arrayElement([
       faker.string.alpha({ length: { min: 10, max: 20 } }),
       undefined,
@@ -234,6 +246,10 @@ export const getPutRunbooksRunbookIdResponseMock = (
     connectorName: faker.string.alpha({ length: { min: 10, max: 20 } }),
     verb: faker.helpers.arrayElement(Object.values(RunbookStepStoredVerb)),
     entityRef: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    action: faker.helpers.arrayElement([
+      faker.string.alpha({ length: { min: 10, max: 20 } }),
+      undefined,
+    ]),
     fieldKey: faker.helpers.arrayElement([
       faker.string.alpha({ length: { min: 10, max: 20 } }),
       undefined,
@@ -271,6 +287,29 @@ export const getPutRunbooksRunbookIdResponseMock = (
 export const getExecuteRunbookStepResponseMock = (
   overrideResponse: Partial<Extract<RestartPreview, object>> = {}
 ): RestartPreview => ({
+  userDefined: faker.helpers.arrayElement([faker.datatype.boolean(), undefined]),
+  label: faker.helpers.arrayElement([
+    faker.string.alpha({ length: { min: 10, max: 20 } }),
+    undefined,
+  ]),
+  description: faker.helpers.arrayElement([
+    faker.string.alpha({ length: { min: 10, max: 20 } }),
+    undefined,
+  ]),
+  request: faker.helpers.arrayElement([
+    {
+      method: faker.helpers.arrayElement(['POST', 'PUT', 'PATCH', 'DELETE'] as const),
+      url: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      headers: faker.helpers.arrayElement([
+        {
+          [faker.string.alphanumeric(5)]: faker.string.alpha({ length: { min: 10, max: 20 } }),
+        },
+        undefined,
+      ]),
+      body: faker.helpers.arrayElement([{}, undefined]),
+    },
+    undefined,
+  ]),
   targetService: faker.string.alpha({ length: { min: 10, max: 20 } }),
   estimatedDowntimeSeconds: faker.number.int({ min: 0 }),
   affectedEntities: faker.helpers.arrayElement([
@@ -312,6 +351,7 @@ export const getStartRunbookRunResponseMock = (
               'manual',
               'config_push',
               'wait_for_entity',
+              'connector_action',
             ] as const),
             undefined,
           ]),
@@ -332,6 +372,10 @@ export const getStartRunbookRunResponseMock = (
             undefined,
           ]),
           entityRef: faker.helpers.arrayElement([
+            faker.string.alpha({ length: { min: 10, max: 20 } }),
+            undefined,
+          ]),
+          action: faker.helpers.arrayElement([
             faker.string.alpha({ length: { min: 10, max: 20 } }),
             undefined,
           ]),
@@ -386,6 +430,31 @@ export const getStartRunbookRunResponseMock = (
           ]),
           preview: faker.helpers.arrayElement([
             {
+              userDefined: faker.helpers.arrayElement([faker.datatype.boolean(), undefined]),
+              label: faker.helpers.arrayElement([
+                faker.string.alpha({ length: { min: 10, max: 20 } }),
+                undefined,
+              ]),
+              description: faker.helpers.arrayElement([
+                faker.string.alpha({ length: { min: 10, max: 20 } }),
+                undefined,
+              ]),
+              request: faker.helpers.arrayElement([
+                {
+                  method: faker.helpers.arrayElement(['POST', 'PUT', 'PATCH', 'DELETE'] as const),
+                  url: faker.string.alpha({ length: { min: 10, max: 20 } }),
+                  headers: faker.helpers.arrayElement([
+                    {
+                      [faker.string.alphanumeric(5)]: faker.string.alpha({
+                        length: { min: 10, max: 20 },
+                      }),
+                    },
+                    undefined,
+                  ]),
+                  body: faker.helpers.arrayElement([{}, undefined]),
+                },
+                undefined,
+              ]),
               targetService: faker.string.alpha({ length: { min: 10, max: 20 } }),
               estimatedDowntimeSeconds: faker.number.int({ min: 0 }),
               affectedEntities: faker.helpers.arrayElement([
@@ -454,6 +523,7 @@ export const getStartRunbookRunResponseMock = (
                 'manual',
                 'config_push',
                 'wait_for_entity',
+                'connector_action',
               ] as const),
               undefined,
             ]),
@@ -474,6 +544,10 @@ export const getStartRunbookRunResponseMock = (
               undefined,
             ]),
             entityRef: faker.helpers.arrayElement([
+              faker.string.alpha({ length: { min: 10, max: 20 } }),
+              undefined,
+            ]),
+            action: faker.helpers.arrayElement([
               faker.string.alpha({ length: { min: 10, max: 20 } }),
               undefined,
             ]),
@@ -528,6 +602,31 @@ export const getStartRunbookRunResponseMock = (
             ]),
             preview: faker.helpers.arrayElement([
               {
+                userDefined: faker.helpers.arrayElement([faker.datatype.boolean(), undefined]),
+                label: faker.helpers.arrayElement([
+                  faker.string.alpha({ length: { min: 10, max: 20 } }),
+                  undefined,
+                ]),
+                description: faker.helpers.arrayElement([
+                  faker.string.alpha({ length: { min: 10, max: 20 } }),
+                  undefined,
+                ]),
+                request: faker.helpers.arrayElement([
+                  {
+                    method: faker.helpers.arrayElement(['POST', 'PUT', 'PATCH', 'DELETE'] as const),
+                    url: faker.string.alpha({ length: { min: 10, max: 20 } }),
+                    headers: faker.helpers.arrayElement([
+                      {
+                        [faker.string.alphanumeric(5)]: faker.string.alpha({
+                          length: { min: 10, max: 20 },
+                        }),
+                      },
+                      undefined,
+                    ]),
+                    body: faker.helpers.arrayElement([{}, undefined]),
+                  },
+                  undefined,
+                ]),
                 targetService: faker.string.alpha({ length: { min: 10, max: 20 } }),
                 estimatedDowntimeSeconds: faker.number.int({ min: 0 }),
                 affectedEntities: faker.helpers.arrayElement([
@@ -601,6 +700,7 @@ export const getListRunbookRunsResponseMock = (
               'manual',
               'config_push',
               'wait_for_entity',
+              'connector_action',
             ] as const),
             undefined,
           ]),
@@ -621,6 +721,10 @@ export const getListRunbookRunsResponseMock = (
             undefined,
           ]),
           entityRef: faker.helpers.arrayElement([
+            faker.string.alpha({ length: { min: 10, max: 20 } }),
+            undefined,
+          ]),
+          action: faker.helpers.arrayElement([
             faker.string.alpha({ length: { min: 10, max: 20 } }),
             undefined,
           ]),
@@ -675,6 +779,31 @@ export const getListRunbookRunsResponseMock = (
           ]),
           preview: faker.helpers.arrayElement([
             {
+              userDefined: faker.helpers.arrayElement([faker.datatype.boolean(), undefined]),
+              label: faker.helpers.arrayElement([
+                faker.string.alpha({ length: { min: 10, max: 20 } }),
+                undefined,
+              ]),
+              description: faker.helpers.arrayElement([
+                faker.string.alpha({ length: { min: 10, max: 20 } }),
+                undefined,
+              ]),
+              request: faker.helpers.arrayElement([
+                {
+                  method: faker.helpers.arrayElement(['POST', 'PUT', 'PATCH', 'DELETE'] as const),
+                  url: faker.string.alpha({ length: { min: 10, max: 20 } }),
+                  headers: faker.helpers.arrayElement([
+                    {
+                      [faker.string.alphanumeric(5)]: faker.string.alpha({
+                        length: { min: 10, max: 20 },
+                      }),
+                    },
+                    undefined,
+                  ]),
+                  body: faker.helpers.arrayElement([{}, undefined]),
+                },
+                undefined,
+              ]),
               targetService: faker.string.alpha({ length: { min: 10, max: 20 } }),
               estimatedDowntimeSeconds: faker.number.int({ min: 0 }),
               affectedEntities: faker.helpers.arrayElement([
@@ -749,6 +878,7 @@ export const getGetRunbookRunResponseMock = (): RunbookRun => ({
             'manual',
             'config_push',
             'wait_for_entity',
+            'connector_action',
           ] as const),
           undefined,
         ]),
@@ -769,6 +899,10 @@ export const getGetRunbookRunResponseMock = (): RunbookRun => ({
           undefined,
         ]),
         entityRef: faker.helpers.arrayElement([
+          faker.string.alpha({ length: { min: 10, max: 20 } }),
+          undefined,
+        ]),
+        action: faker.helpers.arrayElement([
           faker.string.alpha({ length: { min: 10, max: 20 } }),
           undefined,
         ]),
@@ -823,6 +957,31 @@ export const getGetRunbookRunResponseMock = (): RunbookRun => ({
         ]),
         preview: faker.helpers.arrayElement([
           {
+            userDefined: faker.helpers.arrayElement([faker.datatype.boolean(), undefined]),
+            label: faker.helpers.arrayElement([
+              faker.string.alpha({ length: { min: 10, max: 20 } }),
+              undefined,
+            ]),
+            description: faker.helpers.arrayElement([
+              faker.string.alpha({ length: { min: 10, max: 20 } }),
+              undefined,
+            ]),
+            request: faker.helpers.arrayElement([
+              {
+                method: faker.helpers.arrayElement(['POST', 'PUT', 'PATCH', 'DELETE'] as const),
+                url: faker.string.alpha({ length: { min: 10, max: 20 } }),
+                headers: faker.helpers.arrayElement([
+                  {
+                    [faker.string.alphanumeric(5)]: faker.string.alpha({
+                      length: { min: 10, max: 20 },
+                    }),
+                  },
+                  undefined,
+                ]),
+                body: faker.helpers.arrayElement([{}, undefined]),
+              },
+              undefined,
+            ]),
             targetService: faker.string.alpha({ length: { min: 10, max: 20 } }),
             estimatedDowntimeSeconds: faker.number.int({ min: 0 }),
             affectedEntities: faker.helpers.arrayElement([

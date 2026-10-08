@@ -19,6 +19,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -71,16 +72,17 @@ type Bundle struct {
 // Result reports how many records of each entity were imported vs. skipped
 // (skipped = an existing record with the same ID was found, left untouched).
 type Result struct {
-	JournalEntries          Counts `json:"journalEntries"`
-	Attachments             Counts `json:"attachments"`
-	Connectors              Counts `json:"connectors"`
-	Docs                    Counts `json:"docs"`
-	DocVersions             Counts `json:"docVersions"`
-	Templates               Counts `json:"templates"`
-	TemplateSections        Counts `json:"templateSections"`
-	Runbooks                Counts `json:"runbooks"`
-	RunbookSteps            Counts `json:"runbookSteps"`
-	EntityIdentityOverrides Counts `json:"entityIdentityOverrides"`
+	JournalEntries          Counts   `json:"journalEntries"`
+	Attachments             Counts   `json:"attachments"`
+	Connectors              Counts   `json:"connectors"`
+	ConnectorsWithActions   []string `json:"connectorsWithActions"`
+	Docs                    Counts   `json:"docs"`
+	DocVersions             Counts   `json:"docVersions"`
+	Templates               Counts   `json:"templates"`
+	TemplateSections        Counts   `json:"templateSections"`
+	Runbooks                Counts   `json:"runbooks"`
+	RunbookSteps            Counts   `json:"runbookSteps"`
+	EntityIdentityOverrides Counts   `json:"entityIdentityOverrides"`
 }
 
 // Counts is the imported/skipped tally for one entity kind.
@@ -353,6 +355,9 @@ func ValidateBundle(b *Bundle) error {
 		if !connector.ValidCategory(c.Category) {
 			return fmt.Errorf("connector %q has invalid category %q", c.ID, c.Category)
 		}
+		if err := validateConnectorImport(c); err != nil {
+			return fmt.Errorf("connector %q: %w", c.ID, err)
+		}
 	}
 	if err := validateRunbooks(b, docIDs, connectorIDs); err != nil {
 		return err
@@ -436,12 +441,46 @@ func validateRunbooks(b *Bundle, docIDs, connectorIDs map[string]bool) error {
 			if err := validateEntityWaitStep(step); err != nil {
 				return err
 			}
+		case "connector_action":
+			if step.ConnectorID == "" || strings.TrimSpace(step.Action) == "" {
+				return fmt.Errorf("connector-action step %q requires a connector and an action name", step.ID)
+			}
 		default:
 			return fmt.Errorf("runbook step %q has invalid kind %q", step.ID, step.Kind)
 		}
 		stepIDs[step.ID] = true
 	}
 	return nil
+}
+
+func validateConnectorImport(c store.ConnectorRecord) error {
+	schema, err := connector.GetTypeSchema(c.Type)
+	if err != nil || schema.ImportConfigCheck == nil {
+		// Unknown types and types without an explicit import hook retain their
+		// historical backup behavior.
+		return nil
+	}
+	config, err := connectorConfigForImport(c)
+	if err != nil {
+		return err
+	}
+	return connector.ValidateImportConfig(c.Type, config)
+}
+
+func connectorConfigForImport(c store.ConnectorRecord) (map[string]any, error) {
+	config := map[string]any{}
+	if strings.TrimSpace(c.ConfigData) != "" {
+		if err := json.Unmarshal([]byte(c.ConfigData), &config); err != nil {
+			return nil, fmt.Errorf("configData must be a JSON object: %w", err)
+		}
+		if config == nil {
+			config = map[string]any{}
+		}
+	}
+	// The record's top-level URL is authoritative for connector imports. In
+	// particular, it is the base URL recipe path checks must validate.
+	config["url"] = c.URL
+	return config, nil
 }
 
 func validateEntityWaitStep(step store.RunbookStepRecord) error {
@@ -578,7 +617,7 @@ func exportTemplates(ctx context.Context, s *store.Store) ([]store.TemplateRecor
 }
 
 func importBundle(ctx context.Context, s *store.Store, b *Bundle) (Result, error) {
-	var res Result
+	res := Result{ConnectorsWithActions: []string{}}
 
 	if err := importConnectors(ctx, s, b.Connectors, &res); err != nil {
 		return res, err
@@ -705,11 +744,11 @@ func importRunbooks(ctx context.Context, s *store.Store, runbooks []store.Runboo
 			}
 			if _, err := s.DB().ExecContext(ctx, `
 				INSERT INTO runbook_steps (id, runbook_id, position, kind, timeout_seconds, title, connector_id, verb, entity_ref,
-					field_key, target_value, attribute, operator, expected_value, created_at, updated_at)
-				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+					field_key, target_value, attribute, operator, expected_value, action, created_at, updated_at)
+				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 			`, step.ID, step.RunbookID, step.Position, step.Kind, step.TimeoutSeconds, step.Title,
 				nullableBackupString(step.ConnectorID), nullableBackupString(step.Verb), step.EntityRef,
-				step.FieldKey, step.TargetValue, step.Attribute, step.Operator, step.ExpectedValue,
+				step.FieldKey, step.TargetValue, step.Attribute, step.Operator, step.ExpectedValue, step.Action,
 				step.CreatedAt, step.UpdatedAt); err != nil {
 				return fmt.Errorf("import runbook step %q: %w", step.ID, err)
 			}
@@ -740,8 +779,33 @@ func importConnectors(ctx context.Context, s *store.Store, connectors []store.Co
 			return fmt.Errorf("import connector %q: %w", c.ID, err)
 		}
 		res.Connectors.Imported++
+		hasActions, err := importedConnectorHasActions(c)
+		if err != nil {
+			return fmt.Errorf("inspect imported connector %q actions: %w", c.ID, err)
+		}
+		if hasActions {
+			res.ConnectorsWithActions = append(res.ConnectorsWithActions, c.Name)
+		}
 	}
+	sort.Strings(res.ConnectorsWithActions)
 	return nil
+}
+
+func importedConnectorHasActions(c store.ConnectorRecord) (bool, error) {
+	schema, err := connector.GetTypeSchema(c.Type)
+	if err != nil || schema.ImportConfigCheck == nil {
+		return false, nil
+	}
+	config, err := connectorConfigForImport(c)
+	if err != nil {
+		return false, err
+	}
+	instance, err := connector.Get(c.Type, config)
+	if err != nil {
+		return false, err
+	}
+	capabilities, ok := instance.(connector.InstanceCapabilities)
+	return ok && len(capabilities.DeclaredActions()) > 0, nil
 }
 
 func importDocVersions(ctx context.Context, s *store.Store, versions []store.DocVersionRecord, ids []string, res *Result) error {

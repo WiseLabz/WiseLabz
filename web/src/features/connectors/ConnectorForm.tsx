@@ -10,14 +10,15 @@
  */
 import { createElement, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   getGetConnectorsQueryKey,
   postConnectors,
   useGetConnectors,
   useGetConnectorsSchema,
 } from '../../api/generated/connectors/connectors';
-import type { Connector, ConnectorTypeSchema, SchemaField } from '../../api/model';
+import type { Connector, ConnectorCreate, ConnectorTypeSchema, SchemaField } from '../../api/model';
+import { useStepUpMutation, elevationOptions } from '../../components/manager/useStepUpMutation';
 import { Button } from '../../components/ui/Button';
 import { Panel } from '../../components/ui/Panel';
 import { ErrorState, SkeletonRows } from '../../components/ui/states';
@@ -77,33 +78,35 @@ export function ConnectorForm({
     [schemas, typeKey],
   );
 
-  const create = useMutation({
-    mutationFn: () => {
-      if (!schema) throw new Error('no type selected');
-      // An empty url is omitted for every type; the API rejects it with a field
-      // error where the type requires one, and Caddy pasted-JSON mode needs it absent.
-      const url = String(values.url ?? '') || undefined;
-      const tlsField = schema.fields.find(isVerifyTlsField);
-      // Verify TLS is on unless the user switched it off.
-      const verifyTls = tlsField ? Boolean(values[tlsField.name] ?? fieldDefault(tlsField)) : true;
-      const config: Record<string, unknown> = {};
-      for (const f of schema.fields) {
-        if (isTopLevelField(f)) continue;
-        if (!isInstanceAdmin && isTlsProbeEndpointField(schema.type, f.name)) continue;
-        config[f.name] = values[f.name] ?? fieldDefault(f);
-      }
-      // A custom recipe determines its category, so omit the schema default.
-      const derivesCategory = String(config.recipe ?? '').trim() !== '';
-      return postConnectors({
-        name,
-        owner: owner || undefined,
-        ...(derivesCategory ? {} : { category: schema.category }),
-        type: schema.type,
-        ...(url ? { url } : {}),
-        verifyTls,
-        config,
-      });
-    },
+  const createBody = (): ConnectorCreate => {
+    if (!schema) throw new Error('no type selected');
+    // An empty url is omitted for every type; the API rejects it with a field
+    // error where the type requires one, and Caddy pasted-JSON mode needs it absent.
+    const url = String(values.url ?? '') || undefined;
+    const tlsField = schema.fields.find(isVerifyTlsField);
+    // Verify TLS is on unless the user switched it off.
+    const verifyTls = tlsField ? Boolean(values[tlsField.name] ?? fieldDefault(tlsField)) : true;
+    const config: Record<string, unknown> = {};
+    for (const f of schema.fields) {
+      if (isTopLevelField(f)) continue;
+      if (!isInstanceAdmin && isTlsProbeEndpointField(schema.type, f.name)) continue;
+      config[f.name] = values[f.name] ?? fieldDefault(f);
+    }
+    // A custom recipe determines its category, so omit the schema default.
+    const derivesCategory = String(config.recipe ?? '').trim() !== '';
+    return {
+      name,
+      owner: owner || undefined,
+      ...(derivesCategory ? {} : { category: schema.category }),
+      type: schema.type,
+      ...(url ? { url } : {}),
+      verifyTls,
+      config,
+    };
+  };
+  const create = useStepUpMutation<ConnectorCreate, Connector>({
+    action: 'connector.recipeActions',
+    mutationFn: (body, token) => token ? postConnectors(body, elevationOptions(token)) : postConnectors(body),
     onSuccess: (created) => {
       queryClient.invalidateQueries({ queryKey: getGetConnectorsQueryKey() });
       if (schema?.type === 'tlsprobe') setCreatedTlsProbe(created as Connector);
@@ -238,7 +241,7 @@ export function ConnectorForm({
               variant="primary"
               size="md"
               disabled={!requiredFilled || create.isPending || createdTlsProbe !== null}
-              onClick={() => create.mutate()}
+              onClick={() => create.mutate(createBody())}
             >
               <CheckIcon size={15} />
               {create.isPending ? t('connectors.submitPending') : t('connectors.submitIdle')}
@@ -246,6 +249,7 @@ export function ConnectorForm({
           </div>
         </Panel>
       )}
+      {create.dialog}
       <CertificateExpiryPackOffer
         requested={createdTlsProbe !== null}
         onFinished={() => {

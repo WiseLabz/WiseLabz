@@ -11,14 +11,17 @@ import {
   resumeRunbookRun,
   useGetRunbookRun,
 } from '../../api/generated/runbooks/runbooks';
+import { ResumeRunbookRunBodyDecision } from '../../api/model';
 import type { RunbookRunStep } from '../../api/model';
 import { ElevationConfirm } from '../manager/ElevationConfirm';
 import { Button } from '../ui/Button';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
+import { Dialog } from '../ui/Dialog';
 import { Skeleton } from '../ui/states';
 import { toast } from '../../lib/toast';
 import { ToneTag } from '../ui/ToneTag';
 import type { Tone } from '../ui/status';
+import { ConnectorActionRequest } from './ConnectorActionRequest';
 import { isConflict, runErrorMessage } from './runErrors';
 import { formatRunbookValue } from './runbookStepValues';
 
@@ -40,6 +43,8 @@ export function RunDetail({
   const { data: run, isLoading, isError, refetch } = useGetRunbookRun(runId);
   const [confirmCancelOpen, setConfirmCancelOpen] = useState(false);
   const [unknownWarningOpen, setUnknownWarningOpen] = useState(false);
+  const [decisionOpen, setDecisionOpen] = useState(false);
+  const [decision, setDecision] = useState<ResumeRunbookRunBodyDecision | null>(null);
   const [elevationOpen, setElevationOpen] = useState(false);
   const [runbookDeleted, setRunbookDeleted] = useState(false);
   const [resumeError, setResumeError] = useState<string | null>(null);
@@ -64,8 +69,18 @@ export function RunDetail({
   });
 
   const resume = useMutation({
-    mutationFn: (token: string | null) =>
-      resumeRunbookRun(runId, token ? { headers: { 'X-Elevation-Token': token } } : undefined),
+    mutationFn: ({
+      token,
+      decision,
+    }: {
+      token: string | null;
+      decision: ResumeRunbookRunBodyDecision | null;
+    }) =>
+      resumeRunbookRun(
+        runId,
+        decision ? { decision } : undefined,
+        token ? { headers: { 'X-Elevation-Token': token } } : undefined
+      ),
     onSuccess: () => {
       refresh();
       setElevationOpen(false);
@@ -81,6 +96,10 @@ export function RunDetail({
         setRunbookDeleted(true);
         refresh();
         setResumeError(t('runbooks.runs.resumeDeleted'));
+        return;
+      }
+      if (response?.code === 'unknown_step_decision_required') {
+        setResumeError(t('runbooks.runs.resumeDecisionRequired'));
         return;
       }
       if (isConflict(error)) refresh();
@@ -116,9 +135,16 @@ export function RunDetail({
     .sort((a, b) => a.position - b.position)
     .find((step) => step.state !== 'succeeded');
 
+  // An unknown connector_action step needs an explicit resend or mark-done choice
+  // before the resume request is sent; every other resume keeps its plain flow.
+  const decisionRequired =
+    firstUnfinishedStep?.state === 'unknown' && firstUnfinishedStep.kind === 'connector_action';
+
   const openResume = () => {
     setResumeError(null);
-    if (firstUnfinishedStep?.state === 'unknown') setUnknownWarningOpen(true);
+    setDecision(null);
+    if (decisionRequired) setDecisionOpen(true);
+    else if (firstUnfinishedStep?.state === 'unknown') setUnknownWarningOpen(true);
     else setElevationOpen(true);
   };
 
@@ -288,6 +314,18 @@ export function RunDetail({
         />
       )}
 
+      {decisionOpen && (
+        <ResumeDecisionDialog
+          decision={decision}
+          onDecisionChange={setDecision}
+          onClose={() => setDecisionOpen(false)}
+          onContinue={() => {
+            setDecisionOpen(false);
+            setElevationOpen(true);
+          }}
+        />
+      )}
+
       {elevationOpen && run?.runbookId && !runbookDeleted && (
         <ElevationConfirm
           open={elevationOpen}
@@ -298,7 +336,7 @@ export function RunDetail({
           description={t('runbooks.runs.resumeDescription')}
           confirmLabel={t('runbooks.runs.resume')}
           onClose={() => setElevationOpen(false)}
-          onConfirm={(token) => resume.mutate(token)}
+          onConfirm={(token) => resume.mutate({ token, decision })}
           isPending={resume.isPending}
         />
       )}
@@ -429,6 +467,9 @@ function RunStepRow({
         {step.entityRef && (
           <MetadataRow label={t('runbooks.runs.entity')} value={<code>{step.entityRef}</code>} />
         )}
+        {step.kind === 'connector_action' && step.action && (
+          <MetadataRow label={t('runbooks.runs.actionName')} value={<code>{step.action}</code>} />
+        )}
         {step.kind === 'config_push' && step.fieldKey && (
           <MetadataRow label={t('runbooks.runs.fieldLabel')} value={<code>{step.fieldKey}</code>} />
         )}
@@ -488,6 +529,11 @@ function RunStepRow({
           />
         )}
       </dl>
+      {step.kind === 'connector_action' && step.preview && (
+        <div className="mt-3">
+          <ConnectorActionRequest preview={step.preview} />
+        </div>
+      )}
       {step.kind === 'config_push' && step.executeBlockedReason === 'unsupported_field' && (
         <p role="note" className="mt-3 text-xs text-warn">
           {t('runbooks.runs.blocked.unsupported_field')}
@@ -503,6 +549,82 @@ function RunStepRow({
         </p>
       )}
     </li>
+  );
+}
+
+type DecisionCopy = { label: string; hint: string };
+
+const RESUME_DECISION_COPY: Record<ResumeRunbookRunBodyDecision, DecisionCopy> = {
+  [ResumeRunbookRunBodyDecision.resend]: {
+    label: 'runbooks.runs.resumeDecision.resend',
+    hint: 'runbooks.runs.resumeDecision.resendHint',
+  },
+  [ResumeRunbookRunBodyDecision.mark_done]: {
+    label: 'runbooks.runs.resumeDecision.markDone',
+    hint: 'runbooks.runs.resumeDecision.markDoneHint',
+  },
+};
+
+/** Asks which way to resume past an unknown connector_action step. Nothing
+ * is sent until one option is chosen; the chosen value is the resume body's
+ * `decision`. */
+function ResumeDecisionDialog({
+  decision,
+  onDecisionChange,
+  onClose,
+  onContinue,
+}: {
+  decision: ResumeRunbookRunBodyDecision | null;
+  onDecisionChange: (decision: ResumeRunbookRunBodyDecision) => void;
+  onClose: () => void;
+  onContinue: () => void;
+}) {
+  const { t } = useTranslation();
+  const groupName = useId();
+  return (
+    <Dialog open onClose={onClose} title={t('runbooks.runs.resumeTitle')} size="sm">
+      <div className="space-y-4">
+        <p role="note" className="text-xs text-warn">
+          {t('runbooks.runs.resumeDecisionWarning')}
+        </p>
+        <fieldset className="space-y-2">
+          <legend className="mb-2 text-xs text-ink-muted">
+            {t('runbooks.runs.resumeDecisionLegend')}
+          </legend>
+          {Object.values(ResumeRunbookRunBodyDecision).map((option) => (
+            <label
+              key={option}
+              className="flex cursor-pointer items-start gap-3 rounded-md border border-line-soft p-3"
+            >
+              <input
+                type="radio"
+                name={groupName}
+                value={option}
+                checked={decision === option}
+                onChange={() => onDecisionChange(option)}
+                className="mt-0.5 h-4 w-4 border-line-strong text-accent-primary focus-visible:ring-accent-primary"
+              />
+              <span className="min-w-0">
+                <span className="block text-sm text-ink">
+                  {t(RESUME_DECISION_COPY[option].label)}
+                </span>
+                <span className="block text-2xs text-ink-muted">
+                  {t(RESUME_DECISION_COPY[option].hint)}
+                </span>
+              </span>
+            </label>
+          ))}
+        </fieldset>
+        <div className="flex justify-end gap-2">
+          <Button size="sm" onClick={onClose}>
+            {t('common.cancel')}
+          </Button>
+          <Button variant="primary" size="sm" disabled={!decision} onClick={onContinue}>
+            {t('runbooks.runs.resumeContinue')}
+          </Button>
+        </div>
+      </div>
+    </Dialog>
   );
 }
 

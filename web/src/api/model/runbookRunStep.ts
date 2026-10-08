@@ -13,7 +13,7 @@ import type { RunbookRunStepState } from './runbookRunStepState';
 import type { RunbookRunStepVerb } from './runbookRunStepVerb';
 
 /**
- * Frozen step and its current outcome. A redacted step carries no kind, title, connector, entity, verb, timeout, error or preview, and none of the config-push or entity-wait fields (field key, target value, attribute, operator, expected value, current value); only identifiers, position, state, times, confirming user and permission flags remain. Manual steps have no connector and are visible.
+ * Frozen step and its current outcome. A redacted step carries no kind, title, connector, entity, verb, action, timeout, error or preview, and none of the config-push or entity-wait fields (field key, target value, attribute, operator, expected value, current value); only identifiers, position, state, times, confirming user and permission flags remain. Manual steps have no connector and are visible.
  */
 export interface RunbookRunStep {
   id: string;
@@ -24,6 +24,8 @@ export interface RunbookRunStep {
   connectorName?: string;
   verb?: RunbookRunStepVerb;
   entityRef?: string;
+  /** Named action of a connector_action step, as the recipe declares it. Never the frozen fingerprint, which is internal. */
+  action?: string;
   /** Configuration field key for config_push steps. */
   fieldKey?: string;
   /** Target value for config_push steps, formatted as JSON text. */

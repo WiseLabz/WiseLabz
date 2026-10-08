@@ -32,6 +32,7 @@ import type {
   ListRunbookRunsParams,
   NotFoundResponse,
   RestartPreview,
+  ResumeRunbookRunBody,
   Runbook,
   RunbookCreate,
   RunbookPage,
@@ -1124,16 +1125,23 @@ export const useConfirmRunbookRunStep = <
   return useMutation(getConfirmRunbookRunStepMutationOptions(options), queryClient);
 };
 /**
- * Requires operator on every frozen connector before state or elevation validation, and a fresh single-use runbook.run elevation targeted at the runbook id. When the run has no connector to check (manual steps only), the caller must be an instance admin or hold operator on at least one connector. Continues from the first non-succeeded step, including unknown outcomes. A deleted runbook cannot be resumed because its elevation target no longer exists: returns 409 runbook_deleted; history, cancellation and manual confirmation remain available.
+ * Requires operator on every frozen connector before state or elevation validation, and a fresh single-use runbook.run elevation targeted at the runbook id. When the run has no connector to check (manual steps only), the caller must be an instance admin or hold operator on at least one connector. Continues from the first non-succeeded step, including unknown outcomes. When that first step is a connector_action step in state unknown, the body must carry a decision: resend sends the action again (audited as runbook.run.step_resent), mark_done marks the step succeeded without sending anything (audited as runbook.run.step_marked_done). Without a decision the request is rejected with 409 unknown_step_decision_required and the run stays failed. The decision is ignored for every other first step, and an unknown lifecycle step repeats without one. A deleted runbook cannot be resumed because its elevation target no longer exists: returns 409 runbook_deleted; history, cancellation and manual confirmation remain available.
  * @summary Resume a failed run with fresh elevation
  */
 export const resumeRunbookRun = (
   runId: string,
+  resumeRunbookRunBody?: BodyType<ResumeRunbookRunBody>,
   options?: SecondParameter<typeof customInstance>,
   signal?: AbortSignal
 ) => {
   return customInstance<RunbookRunRecord>(
-    { url: `/runbook-runs/${runId}/resume`, method: 'POST', signal },
+    {
+      url: `/runbook-runs/${runId}/resume`,
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      data: resumeRunbookRunBody,
+      signal,
+    },
     options
   );
 };
@@ -1141,9 +1149,7 @@ export const resumeRunbookRun = (
 export const getResumeRunbookRunMutationKey = () => ['resumeRunbookRun'] as const;
 
 export const getResumeRunbookRunMutationOptions = <
-  TError = ErrorType<
-    BadRequestResponse | ElevationRequiredResponse | ForbiddenResponse | NotFoundResponse | Error
-  >,
+  TError = ErrorType<Error | ElevationRequiredResponse | ForbiddenResponse | NotFoundResponse>,
   TContext = unknown,
 >(options?: {
   mutation?: UseMutationOptions<
@@ -1170,9 +1176,9 @@ export const getResumeRunbookRunMutationOptions = <
     Awaited<ReturnType<typeof resumeRunbookRun>>,
     ResumeRunbookRunMutationVariables
   > = (props) => {
-    const { runId } = props ?? {};
+    const { runId, data } = props ?? {};
 
-    return resumeRunbookRun(runId, requestOptions);
+    return resumeRunbookRun(runId, data, requestOptions);
   };
 
   return { mutationFn, ...mutationOptions };
@@ -1181,19 +1187,20 @@ export const getResumeRunbookRunMutationOptions = <
 export type ResumeRunbookRunMutationResult = NonNullable<
   Awaited<ReturnType<typeof resumeRunbookRun>>
 >;
-
+export type ResumeRunbookRunMutationBody = BodyType<ResumeRunbookRunBody> | undefined;
 export type ResumeRunbookRunMutationError = ErrorType<
-  BadRequestResponse | ElevationRequiredResponse | ForbiddenResponse | NotFoundResponse | Error
+  Error | ElevationRequiredResponse | ForbiddenResponse | NotFoundResponse
 >;
-export type ResumeRunbookRunMutationVariables = { runId: string };
+export type ResumeRunbookRunMutationVariables = {
+  runId: string;
+  data?: BodyType<ResumeRunbookRunBody>;
+};
 
 /**
  * @summary Resume a failed run with fresh elevation
  */
 export const useResumeRunbookRun = <
-  TError = ErrorType<
-    BadRequestResponse | ElevationRequiredResponse | ForbiddenResponse | NotFoundResponse | Error
-  >,
+  TError = ErrorType<Error | ElevationRequiredResponse | ForbiddenResponse | NotFoundResponse>,
   TContext = unknown,
 >(
   options?: {

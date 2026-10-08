@@ -133,6 +133,52 @@ describe('StartRunDialog', () => {
     expect(dryRun).toBe(true);
   });
 
+  it('shows the named action and the request it will send in the preview', async () => {
+    server.use(
+      http.post('/api/runbooks/rb-1/run', () =>
+        HttpResponse.json({
+          id: 'rb-1',
+          canStart: true,
+          steps: [
+            step({
+              id: 'action-1',
+              kind: 'connector_action',
+              title: 'Rescan the index',
+              verb: undefined,
+              action: 'rescan',
+              preview: {
+                userDefined: true,
+                label: 'Rescan index',
+                description: 'Rebuilds the search index.',
+                targetService: 'search-worker',
+                estimatedDowntimeSeconds: 0,
+                dependentServices: [],
+                request: {
+                  method: 'POST',
+                  url: 'https://search.example/api/rescan',
+                  headers: { 'X-Mode': 'fast' },
+                  body: { force: true },
+                },
+              },
+            }),
+          ],
+        })
+      )
+    );
+
+    renderDialog();
+
+    expect(await screen.findByText('Rescan the index')).toBeInTheDocument();
+    expect(screen.getByText('rescan')).toBeInTheDocument();
+    expect(screen.getByText('Rescan index')).toBeInTheDocument();
+    expect(screen.getByText('User-defined')).toBeInTheDocument();
+    expect(screen.getByText('No downtime declared')).toBeInTheDocument();
+    expect(screen.getByText('POST')).toBeInTheDocument();
+    expect(screen.getByText('https://search.example/api/rescan')).toBeInTheDocument();
+    expect(screen.getByText(/"X-Mode": "fast"/)).toBeInTheDocument();
+    expect(screen.getByText(/"force": true/)).toBeInTheDocument();
+  });
+
   it('shows a blocked reason and keeps start disabled', async () => {
     server.use(
       http.post('/api/runbooks/rb-1/run', () =>

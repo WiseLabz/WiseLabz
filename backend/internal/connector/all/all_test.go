@@ -110,6 +110,13 @@ func TestConnectorCapabilitiesMatchOptionalInterfaces(t *testing.T) {
 			_, push := implementation.(connector.ConfigPusher)
 			_, read := implementation.(connector.ConfigReader)
 			_, refresh := implementation.(connector.CredentialRefresher)
+			if instance, ok := implementation.(connector.InstanceCapabilities); ok {
+				// Recipe-backed connectors decide lifecycle support per instance;
+				// a type-level instance with no config declares none.
+				restart = restart && instance.SupportsLifecycleVerb("restart")
+				start = start && instance.SupportsLifecycleVerb("start")
+				stop = stop && instance.SupportsLifecycleVerb("stop")
+			}
 			want := connector.CapabilityDescriptor{Restart: restart, Start: start, Stop: stop, ConfigPush: push, ConfigRead: read, CredentialRefresh: refresh}
 			if !reflect.DeepEqual(got, want) {
 				t.Fatalf("capabilities = %+v, want %+v", got, want)

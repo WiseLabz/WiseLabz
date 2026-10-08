@@ -24,27 +24,32 @@ export function useMutatingOp({
 }) {
   const [previewOpen, setPreviewOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [resultData, setResultData] = useState<unknown>();
 
   const preview = useMutation({ mutationFn: previewFn });
 
   const mutate = useMutation({
     mutationFn: (token: string | null) => executeFn(token),
-    onSuccess: () => {
+    onSuccess: (result) => {
+      setResultData(result);
       setConfirmOpen(false);
       setPreviewOpen(false);
       onSuccess?.();
     },
   });
 
-  const open = () => {
+  const open = (options?: { skipPreview?: boolean }) => {
     preview.reset();
+    setResultData(undefined);
     setPreviewOpen(true);
-    preview.mutate();
+    if (!options?.skipPreview) preview.mutate();
   };
 
   const rerunPreview = () => {
     preview.mutate();
   };
+
+  const clearResult = () => setResultData(undefined);
 
   return {
     previewOpen,
@@ -53,6 +58,8 @@ export function useMutatingOp({
     setConfirmOpen,
     preview,
     mutate,
+    resultData,
+    clearResult,
     open,
     rerunPreview,
   };

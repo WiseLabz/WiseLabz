@@ -33,8 +33,44 @@ describe('detectLanguage', () => {
 });
 
 describe('locale catalogs', () => {
+  it('keeps recipe action controls translated in English and pt-BR', () => {
+    const paths = [
+      'services.detail.actionEntityButton',
+      'services.detail.actionEntityPicker',
+      'services.detail.actionEntityRequired',
+      'services.detail.actionPreviewTitle',
+      'services.detail.actionPreviewNotice',
+      'services.detail.actionPreviewError',
+      'services.detail.actionFailed',
+      'services.detail.actionConfirmTitle',
+      'services.detail.actionConfirmDescription',
+      'services.detail.actionConfirm',
+      'services.detail.actionUserDefined',
+      'services.detail.actionLabel',
+      'services.detail.actionDescription',
+      'services.detail.actionRequest',
+      'services.detail.actionMethod',
+      'services.detail.actionUrl',
+      'services.detail.actionHeaders',
+      'services.detail.actionBody',
+      'services.detail.actionResultTitle',
+      'services.detail.actionStatus',
+      'services.detail.actionExcerpt',
+      'services.detail.actionResultClose',
+    ];
+    for (const catalog of [en, ptBR]) {
+      const translatedKeys = new Set(keys(catalog));
+      expect(paths.filter((path) => !translatedKeys.has(path))).toEqual([]);
+    }
+  });
+
   it('keeps certificate expiry keys present in both catalogs', () => {
     const paths = [
+      'journal.actionLabels.connectorAction',
+      'journal.actionLabels.recipeActionsChanged',
+      'journal.actionLabels.backupImport',
+      'journal.actionLabels.stepResent',
+      'journal.actionLabels.stepMarkedDone',
       'connectors.tlsProbe.targetsLabel',
       'connectors.tlsProbe.targetsHint',
       'connectors.tlsProbe.importConnectorLabel',
@@ -127,6 +163,35 @@ describe('locale catalogs', () => {
       expect(keys(catalog).filter((k) => !known.has(k))).toEqual([]);
     }
   );
+
+  it('keeps the connector_action step and resume-decision keys in both catalogs', () => {
+    const paths = [
+      'runbooks.runs.kind.connector_action',
+      'runbooks.runs.resumeDecisionWarning',
+      'runbooks.runs.resumeDecisionLegend',
+      'runbooks.runs.resumeDecision.resend',
+      'runbooks.runs.resumeDecision.resendHint',
+      'runbooks.runs.resumeDecision.markDone',
+      'runbooks.runs.resumeDecision.markDoneHint',
+      'runbooks.runs.resumeDecisionRequired',
+      'runbooks.runs.actionName',
+      'runbooks.runs.actionUserDefined',
+      'runbooks.runs.actionRequest',
+      'runbooks.runs.actionMethod',
+      'runbooks.runs.actionUrl',
+      'runbooks.runs.actionHeaders',
+      'runbooks.runs.actionBody',
+      'runbooks.runs.actionNoDowntime',
+      'settings.runbooks.steps.kinds.connector_action',
+      'settings.runbooks.steps.actionLabel',
+      'settings.runbooks.steps.actionPlaceholder',
+      'settings.runbooks.steps.noActions',
+    ];
+    for (const catalog of [en, ptBR]) {
+      const translatedKeys = new Set(keys(catalog));
+      expect(paths.filter((path) => !translatedKeys.has(path))).toEqual([]);
+    }
+  });
 
   it('keeps every runbook step-kind key translated in English and pt-BR', () => {
     const paths = [

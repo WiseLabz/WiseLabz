@@ -60,6 +60,7 @@ const (
 	kindManual           = "manual"
 	kindConfigPush       = "config_push"
 	kindWaitForEntity    = "wait_for_entity"
+	kindConnectorAction  = "connector_action"
 )
 
 // Bounds and default for the timeout of the automated wait kinds.
@@ -78,7 +79,7 @@ const (
 const blockedNotLifecycle = "not_lifecycle"
 
 func validKind(k string) bool {
-	return k == kindLifecycle || k == kindSyncAndWait || k == kindWaitUntilHealthy || k == kindManual || k == kindConfigPush || k == kindWaitForEntity
+	return k == kindLifecycle || k == kindSyncAndWait || k == kindWaitUntilHealthy || k == kindManual || k == kindConfigPush || k == kindWaitForEntity || k == kindConnectorAction
 }
 
 // hasTimeout reports whether kind carries an authorable timeout.
@@ -133,6 +134,7 @@ type stepInput struct {
 	Attribute      string          `json:"attribute"`
 	Operator       string          `json:"operator"`
 	ExpectedValue  json.RawMessage `json:"expectedValue"`
+	Action         string          `json:"action"`
 }
 
 // stepResponse is one element of the "steps" array in a runbook response.
@@ -155,6 +157,7 @@ type stepResponse struct {
 	Attribute            string `json:"attribute,omitempty"`
 	Operator             string `json:"operator,omitempty"`
 	ExpectedValue        string `json:"expectedValue,omitempty"`
+	Action               string `json:"action,omitempty"`
 }
 
 // runbookResponse is a RunbookRecord plus its steps, as returned by
@@ -183,7 +186,7 @@ func (h *Handler) validateSteps(ctx context.Context, inputs []stepInput) ([]*sto
 
 		kind := effectiveKind(in.Kind)
 		if !validKind(kind) {
-			fieldErrs = append(fieldErrs, httputil.FieldError{Field: prefix + ".kind", Msg: "must be lifecycle, sync_and_wait, wait_until_healthy, manual, config_push, or wait_for_entity"})
+			fieldErrs = append(fieldErrs, httputil.FieldError{Field: prefix + ".kind", Msg: "must be lifecycle, sync_and_wait, wait_until_healthy, manual, config_push, wait_for_entity, or connector_action"})
 			kind = ""
 		}
 
@@ -233,6 +236,7 @@ func (h *Handler) validateSteps(ctx context.Context, inputs []stepInput) ([]*sto
 			Attribute:      strings.TrimSpace(in.Attribute),
 			Operator:       in.Operator,
 			ExpectedValue:  expectedValueJSON,
+			Action:         in.Action,
 		})
 	}
 	if len(fieldErrs) > 0 {
@@ -266,13 +270,20 @@ func (h *Handler) validateStepTarget(ctx context.Context, prefix, kind string, i
 	case kindLifecycle:
 		if !validVerb(in.Verb) {
 			errs = append(errs, httputil.FieldError{Field: prefix + ".verb", Msg: "must be restart, start, or stop"})
-		} else if connRec != nil && !connector.SupportsLifecycleVerb(connRec.Type, in.Verb) {
-			errs = append(errs, httputil.FieldError{Field: prefix + ".verb", Msg: "connector does not support this verb"})
+		} else if connRec != nil {
+			cfg, err := store.ParseConnectorConfig(connRec.Type, connRec.ConfigData, h.ConnH.Config.Encryption.Key)
+			if err != nil || !connector.SupportsLifecycleVerb(connRec.Type, in.Verb, cfg) || !h.lifecycleScopeDeclared(connRec, in) {
+				errs = append(errs, httputil.FieldError{Field: prefix + ".verb", Msg: "connector does not support this verb"})
+			}
 		}
 	default:
 		if in.Verb != "" {
 			errs = append(errs, httputil.FieldError{Field: prefix + ".verb", Msg: "must be empty for a " + kind + " step"})
 		}
+	}
+
+	if kind != kindConnectorAction && in.Action != "" {
+		errs = append(errs, httputil.FieldError{Field: prefix + ".action", Msg: "must be empty for a " + kind + " step"})
 	}
 
 	if kind != kindConfigPush {
@@ -315,8 +326,82 @@ func (h *Handler) validateStepTarget(ctx context.Context, prefix, kind string, i
 		var pushErrs []httputil.FieldError
 		targetFieldKey, targetValue, pushErrs = h.validateConfigPushStep(prefix, in, connRec)
 		errs = append(errs, pushErrs...)
+	case kindConnectorAction:
+		if in.EntityRef != "" {
+			if err := connector.ValidateCompositeRef(in.EntityRef); err != nil {
+				errs = append(errs, httputil.FieldError{Field: prefix + ".entityRef", Msg: "invalid entityRef"})
+			}
+		}
+		errs = append(errs, h.validateConnectorActionStep(prefix, in, connRec)...)
 	}
 	return targetFieldKey, targetValue, expectedValue, errs
+}
+
+// validateConnectorActionStep checks the action name of a connector_action
+// step (runbook-runs spec, "Connector-action step authoring"). The connector
+// must be a custom connector whose recipe declares an action of that name for
+// the service (no entityRef) or for some entity kind (entityRef given). A
+// missing connector is already reported by validateStepTarget, so it is not
+// reported twice here.
+func (h *Handler) validateConnectorActionStep(prefix string, in stepInput, connRec *store.ConnectorRecord) []httputil.FieldError {
+	if in.Action == "" {
+		return []httputil.FieldError{{Field: prefix + ".action", Msg: "is required"}}
+	}
+	if validVerb(in.Action) {
+		return []httputil.FieldError{{Field: prefix + ".action", Msg: "must not be a lifecycle verb; use a lifecycle step"}}
+	}
+	if connRec == nil {
+		return nil
+	}
+	entityScope := in.EntityRef != ""
+	if h.recipeDeclaresAction(connRec, in.Action, entityScope) {
+		return nil
+	}
+	if entityScope {
+		return []httputil.FieldError{{Field: prefix + ".action", Msg: "is not declared by the connector's recipe for any entity kind"}}
+	}
+	return []httputil.FieldError{{Field: prefix + ".action", Msg: "is not declared by the connector's recipe for the service"}}
+}
+
+// lifecycleScopeDeclared reports whether a lifecycle step's verb is declared for
+// the step's scope. A custom connector's recipe must declare the verb on the
+// service when the step has no entityRef, and on some entity kind when it has
+// one; the per-instance verb support alone also counts entity actions, which a
+// service step cannot run. Other connector types pass.
+func (h *Handler) lifecycleScopeDeclared(connRec *store.ConnectorRecord, in stepInput) bool {
+	if connRec.Type != "custom" {
+		return true
+	}
+	return h.recipeDeclaresAction(connRec, in.Verb, in.EntityRef != "")
+}
+
+// recipeDeclaresAction reports whether connRec is a custom connector whose
+// recipe declares a named action called name, on the service (entityScope
+// false) or on some entity kind (entityScope true). It reads the same
+// per-instance declarations as the connectors handler's named-action path.
+func (h *Handler) recipeDeclaresAction(connRec *store.ConnectorRecord, name string, entityScope bool) bool {
+	if connRec.Type != "custom" {
+		return false
+	}
+	cfg, err := store.ParseConnectorConfig(connRec.Type, connRec.ConfigData, h.ConnH.Config.Encryption.Key)
+	if err != nil {
+		return false
+	}
+	connector.ApplyRecordConfig(cfg, connRec.URL, connRec.VerifyTLS)
+	conn, err := connector.Get(connRec.Type, cfg)
+	if err != nil {
+		return false
+	}
+	caps, ok := conn.(connector.InstanceCapabilities)
+	if !ok {
+		return false
+	}
+	for _, action := range caps.DeclaredActions() {
+		if action.Name == name && action.EntityScope == entityScope {
+			return true
+		}
+	}
+	return false
 }
 
 func validateWaitForEntityStep(prefix string, in stepInput) (string, []httputil.FieldError) {
@@ -615,6 +700,7 @@ func (h *Handler) toStepResponses(ctx context.Context, userID string, steps []*s
 			Attribute:            st.Attribute,
 			Operator:             st.Operator,
 			ExpectedValue:        st.ExpectedValue,
+			Action:               st.Action,
 		})
 	}
 	return out, nil
@@ -670,6 +756,9 @@ func stepAuditDetail(steps []*store.RunbookStepRecord) []map[string]any {
 		}
 		if st.ExpectedValue != "" {
 			entry["expectedValue"] = st.ExpectedValue
+		}
+		if st.Action != "" {
+			entry["action"] = st.Action
 		}
 		out = append(out, entry)
 	}

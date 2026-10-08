@@ -10,12 +10,14 @@ package runbookrun
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"sync"
 	"time"
 
 	"github.com/WiseLabz/wiselabz/internal/api/connectors"
 	"github.com/WiseLabz/wiselabz/internal/compliance"
+	"github.com/WiseLabz/wiselabz/internal/connector"
 	"github.com/WiseLabz/wiselabz/internal/logsafe"
 	"github.com/WiseLabz/wiselabz/internal/store"
 	syncengine "github.com/WiseLabz/wiselabz/internal/sync"
@@ -50,6 +52,9 @@ const (
 	KindManual           = "manual"
 	KindConfigPush       = "config_push"
 	KindWaitForEntity    = "wait_for_entity"
+	// KindConnectorAction runs a named action that a custom connector's recipe
+	// declares, on the service or on one entity.
+	KindConnectorAction = "connector_action"
 )
 
 // Reasons recorded on a failed run. The failed step carries the
@@ -100,6 +105,39 @@ const (
 // ErrNoActor rejects a start, resume, confirm or cancel without a user.
 var ErrNoActor = errors.New("runbook run: an acting user is required")
 
+// ErrActionUnavailable reports a run that cannot start because the fingerprint
+// of a connector_action step's action cannot be computed, for example because
+// the connector or the action is gone or no action service is configured.
+// Nothing is stored when it is returned. The cause is not included: it may
+// carry connector configuration.
+var ErrActionUnavailable = errors.New("runbook run: a connector action cannot be prepared")
+
+// ErrDecisionRequired rejects a resume of a run whose first unfinished step is
+// an unknown connector_action step when no decision is given. Nothing changes.
+var ErrDecisionRequired = errors.New("runbook run: the unknown connector action step needs a decision: resend or mark_done")
+
+// ErrInvalidDecision rejects a resume decision that is not a ResumeDecision
+// constant.
+var ErrInvalidDecision = errors.New("runbook run: unknown resume decision")
+
+// ResumeDecision is the caller's choice for the first unfinished step of a
+// failed run when that step is an unknown connector_action step.
+type ResumeDecision string
+
+// Resume decisions. ResumeNone is the decision of a resume that carries none.
+const (
+	ResumeNone     ResumeDecision = ""
+	ResumeResend   ResumeDecision = "resend"
+	ResumeMarkDone ResumeDecision = "mark_done"
+)
+
+// StepDecision reports a decision Resume applied to an unknown connector_action
+// step. Resume returns nil when no such decision was applied.
+type StepDecision struct {
+	StepID   string
+	Decision ResumeDecision
+}
+
 // ErrShuttingDown reports a start, resume or confirm that arrived after
 // shutdown began. The run was recorded as failed with reason interrupted and
 // can be resumed later.
@@ -124,6 +162,9 @@ type Store interface {
 	FailRunbookRunStep(ctx context.Context, runID, stepID, stepState, stepError, reason string) (*store.RunbookRunRecord, *store.RunbookRunStepRecord, error)
 	FinishRunbookRun(ctx context.Context, runID, stepID string) (*store.RunbookRunRecord, *store.RunbookRunStepRecord, error)
 	ConfirmRunbookRunStep(ctx context.Context, runID, stepID, confirmedBy string) error
+	// ResumeRunbookRunMarkingStepDone resumes a failed run and marks its first
+	// unfinished unknown step succeeded, in one transaction.
+	ResumeRunbookRunMarkingStepDone(ctx context.Context, runID, stepID, userID string) (*store.RunbookRunRecord, error)
 	CancelRunbookRun(ctx context.Context, id, cancelledBy string) error
 }
 
@@ -186,11 +227,26 @@ type Spawner interface {
 	TryGo(work func(context.Context)) bool
 }
 
-// Deps are the executor's collaborators. Events and Notifier may be nil.
+// ConnectorActions performs recipe-declared named actions for connector_action
+// steps. *connectors.Handler satisfies it, so a run and a direct request share
+// one implementation, audit detail and failure alert.
+type ConnectorActions interface {
+	// ActionFingerprint returns the fingerprint of the action's definition as
+	// the recipe declares it now. It sends nothing.
+	ActionFingerprint(ctx context.Context, connectorID, name, entityRef string) (string, error)
+	// MutateRunbookAction sends the action unless expectedFingerprint is not
+	// empty and differs from the action's current fingerprint. In that case it
+	// returns an error wrapping connectors.ErrActionChanged and sends nothing.
+	MutateRunbookAction(ctx context.Context, connectorID, name, entityRef, expectedFingerprint string, actor connectors.LifecycleActor, extraAudit map[string]any) (connector.ActionResult, error)
+}
+
+// Deps are the executor's collaborators. Events, Notifier and Actions may be
+// nil; Actions is needed to start a run that has a connector_action step.
 type Deps struct {
 	Store      Store
 	Lifecycle  Lifecycle
 	ConfigPush ConfigPush
+	Actions    ConnectorActions
 	Entities   Entities
 	Sync       Syncer
 	Health     HealthChecker
@@ -210,6 +266,7 @@ type Executor struct {
 	store      Store
 	lifecycle  Lifecycle
 	configPush ConfigPush
+	actions    ConnectorActions
 	entities   Entities
 	syncer     Syncer
 	health     HealthChecker
@@ -240,6 +297,7 @@ func New(deps Deps) *Executor {
 		store:              deps.Store,
 		lifecycle:          deps.Lifecycle,
 		configPush:         deps.ConfigPush,
+		actions:            deps.Actions,
 		entities:           deps.Entities,
 		syncer:             deps.Sync,
 		health:             deps.Health,
@@ -280,11 +338,16 @@ func FreezeSteps(steps []*store.RunbookStepRecord) []*store.RunbookRunStepRecord
 				timeout = int(DefaultStepTimeout / time.Second)
 			}
 		}
+		action := ""
+		if kind == KindConnectorAction {
+			action = step.Action
+		}
 		frozen = append(frozen, &store.RunbookRunStepRecord{
 			Kind:           kind,
 			Title:          step.Title,
 			ConnectorID:    step.ConnectorID,
 			Verb:           step.Verb,
+			Action:         action,
 			EntityRef:      step.EntityRef,
 			FieldKey:       step.FieldKey,
 			TargetValue:    step.TargetValue,
@@ -326,7 +389,11 @@ func (e *Executor) Start(ctx context.Context, runbookID, userID string, steps []
 	if userID == "" {
 		return nil, nil, ErrNoActor
 	}
-	run, frozen, err := e.store.CreateRunbookRun(ctx, runbookID, userID, FreezeSteps(steps))
+	frozenSteps := FreezeSteps(steps)
+	if err := e.freezeActionFingerprints(ctx, frozenSteps); err != nil {
+		return nil, nil, err
+	}
+	run, frozen, err := e.store.CreateRunbookRun(ctx, runbookID, userID, frozenSteps)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -335,6 +402,28 @@ func (e *Executor) Start(ctx context.Context, runbookID, userID string, steps []
 		return nil, nil, e.failShutdown(ctx, run.ID)
 	}
 	return run, frozen, nil
+}
+
+// freezeActionFingerprints stores on every connector_action step the
+// fingerprint of its action as the recipe declares it now, so the step can
+// refuse to send a changed action later. It fails before anything is stored
+// when a fingerprint cannot be computed or no action service is configured.
+func (e *Executor) freezeActionFingerprints(ctx context.Context, steps []*store.RunbookRunStepRecord) error {
+	for _, step := range steps {
+		if step == nil || step.Kind != KindConnectorAction {
+			continue
+		}
+		if e.actions == nil {
+			return fmt.Errorf("%w: step %q runs action %q", ErrActionUnavailable, step.Title, step.Action)
+		}
+		fingerprint, err := e.actions.ActionFingerprint(ctx, step.ConnectorID, step.Action, step.EntityRef)
+		if err != nil {
+			slog.Warn("runbook run: connector action unavailable", "connector", logsafe.Sanitize(step.ConnectorID), "action", logsafe.Sanitize(step.Action), "error", logsafe.Err(err))
+			return fmt.Errorf("%w: step %q runs action %q", ErrActionUnavailable, step.Title, step.Action)
+		}
+		step.ActionFingerprint = fingerprint
+	}
+	return nil
 }
 
 // Confirm completes the waiting manual step stepID as userID and continues the
@@ -367,20 +456,80 @@ func (e *Executor) Confirm(ctx context.Context, runID, stepID, userID string) er
 // records userID as the acting user for the steps that follow. It is
 // store.ErrConflict for a run in any other state. After shutdown began the run
 // is recorded as failed (interrupted) again and the error is ErrShuttingDown.
-func (e *Executor) Resume(ctx context.Context, runID, userID string) (*store.RunbookRunRecord, error) {
+//
+// When that first step is a connector_action step in state unknown, decision
+// is required: ErrDecisionRequired without a decision, which changes nothing.
+// ResumeResend starts the step again as any unknown step is started.
+// ResumeMarkDone marks the step succeeded without sending anything and
+// continues with the next step. The returned StepDecision reports the decision
+// applied to that step and is nil otherwise; a decision is ignored for any
+// other first step.
+func (e *Executor) Resume(ctx context.Context, runID, userID string, decision ResumeDecision) (*store.RunbookRunRecord, *StepDecision, error) {
 	if userID == "" {
-		return nil, ErrNoActor
+		return nil, nil, ErrNoActor
 	}
+	switch decision {
+	case ResumeNone, ResumeResend, ResumeMarkDone:
+	default:
+		return nil, nil, ErrInvalidDecision
+	}
+	run, steps, err := e.store.GetRunbookRun(ctx, runID)
+	if err != nil {
+		return nil, nil, err
+	}
+	if run.State != RunFailed {
+		return nil, nil, store.ErrConflict
+	}
+	step := firstUnfinished(steps)
+	if step == nil || step.Kind != KindConnectorAction || step.State != StepUnknown {
+		return e.resumeFailed(ctx, runID, userID, nil)
+	}
+	if decision == ResumeNone {
+		return nil, nil, ErrDecisionRequired
+	}
+	applied := &StepDecision{StepID: step.ID, Decision: decision}
+	if decision == ResumeMarkDone {
+		return e.resumeMarkingDone(ctx, runID, step.ID, userID, applied)
+	}
+	return e.resumeFailed(ctx, runID, userID, applied)
+}
+
+// resumeFailed moves a failed run to running as userID and starts its
+// goroutine. applied is returned unchanged.
+func (e *Executor) resumeFailed(ctx context.Context, runID, userID string, applied *StepDecision) (*store.RunbookRunRecord, *StepDecision, error) {
 	run, err := e.store.UpdateRunbookRun(ctx, runID, RunFailed, map[string]any{"state": RunRunning, "resumed_by": userID})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	e.awaitStopped(ctx, run.ID)
 	e.publishRun(run)
 	if !e.spawn(run.ID) {
-		return nil, e.failShutdown(ctx, run.ID)
+		return nil, nil, e.failShutdown(ctx, run.ID)
 	}
-	return run, nil
+	return run, applied, nil
+}
+
+// resumeMarkingDone marks the unknown step stepID succeeded and resumes the
+// run as userID in one store transaction, then publishes both and starts the
+// goroutine, which continues with the next step.
+func (e *Executor) resumeMarkingDone(ctx context.Context, runID, stepID, userID string, applied *StepDecision) (*store.RunbookRunRecord, *StepDecision, error) {
+	run, err := e.store.ResumeRunbookRunMarkingStepDone(ctx, runID, stepID, userID)
+	if err != nil {
+		return nil, nil, err
+	}
+	e.awaitStopped(ctx, run.ID)
+	if _, steps, err := e.store.GetRunbookRun(ctx, run.ID); err == nil {
+		for _, step := range steps {
+			if step.ID == stepID {
+				e.publishStep(run, step)
+			}
+		}
+	}
+	e.publishRun(run)
+	if !e.spawn(run.ID) {
+		return nil, nil, e.failShutdown(ctx, run.ID)
+	}
+	return run, applied, nil
 }
 
 // Cancel ends a running, waiting or failed run as userID and stops its

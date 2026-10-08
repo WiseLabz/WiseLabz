@@ -10,6 +10,7 @@ import { HttpResponse, http } from 'msw';
 import type { RequestHandlerOptions } from 'msw';
 
 import type {
+  ActionResult,
   ConfigField,
   Connector,
   ConnectorBulkReauthResponse,
@@ -22,6 +23,7 @@ import type {
   GetConnectorsConnectorIdPermissions200Item,
   GoldenSnapshot,
   HealthCheckResult,
+  LifecycleResult,
   MaintenanceWindow,
   PutConnectorsConnectorIdPermissionsUserId200,
   RecipePreview,
@@ -61,6 +63,7 @@ import {
   getPostConnectorsBulkReauthResponseMock,
   getPostConnectorsBulkRestartResponseMock,
   getPostConnectorsBulkSyncResponseMock,
+  getPostConnectorsConnectorIdActionsNameResponseMock,
   getPostConnectorsConnectorIdConfigPushResponseMock,
   getPostConnectorsConnectorIdGoldenSnapshotResponseMock,
   getPostConnectorsConnectorIdHealthResponseMock,
@@ -91,6 +94,7 @@ export {
   getPostConnectorsConnectorIdRestartResponseMock,
   getPostConnectorsConnectorIdStartResponseMock,
   getPostConnectorsConnectorIdStopResponseMock,
+  getPostConnectorsConnectorIdActionsNameResponseMock,
   getGetConnectorsConnectorIdConfigFieldsResponseMock,
   getPostConnectorsConnectorIdConfigPushResponseMock,
   getGetConnectorsConnectorIdDataResponseMock,
@@ -323,9 +327,10 @@ export const getGetConnectorsConnectorIdRemovalImpactMockHandler = (
 export const getPostConnectorsConnectorIdRestartMockHandler = (
   overrideResponse?:
     | RestartPreview
+    | LifecycleResult
     | ((
         info: Parameters<Parameters<typeof http.post>[1]>[0]
-      ) => Promise<RestartPreview> | RestartPreview),
+      ) => Promise<RestartPreview | LifecycleResult> | RestartPreview | LifecycleResult),
   options?: RequestHandlerOptions
 ) => {
   return http.post(
@@ -347,9 +352,10 @@ export const getPostConnectorsConnectorIdRestartMockHandler = (
 export const getPostConnectorsConnectorIdStartMockHandler = (
   overrideResponse?:
     | RestartPreview
+    | LifecycleResult
     | ((
         info: Parameters<Parameters<typeof http.post>[1]>[0]
-      ) => Promise<RestartPreview> | RestartPreview),
+      ) => Promise<RestartPreview | LifecycleResult> | RestartPreview | LifecycleResult),
   options?: RequestHandlerOptions
 ) => {
   return http.post(
@@ -371,9 +377,10 @@ export const getPostConnectorsConnectorIdStartMockHandler = (
 export const getPostConnectorsConnectorIdStopMockHandler = (
   overrideResponse?:
     | RestartPreview
+    | LifecycleResult
     | ((
         info: Parameters<Parameters<typeof http.post>[1]>[0]
-      ) => Promise<RestartPreview> | RestartPreview),
+      ) => Promise<RestartPreview | LifecycleResult> | RestartPreview | LifecycleResult),
   options?: RequestHandlerOptions
 ) => {
   return http.post(
@@ -385,6 +392,31 @@ export const getPostConnectorsConnectorIdStopMockHandler = (
             ? await overrideResponse(info)
             : overrideResponse
           : getPostConnectorsConnectorIdStopResponseMock(),
+        { status: 200 }
+      );
+    },
+    options
+  );
+};
+
+export const getPostConnectorsConnectorIdActionsNameMockHandler = (
+  overrideResponse?:
+    | RestartPreview
+    | ActionResult
+    | ((
+        info: Parameters<Parameters<typeof http.post>[1]>[0]
+      ) => Promise<RestartPreview | ActionResult> | RestartPreview | ActionResult),
+  options?: RequestHandlerOptions
+) => {
+  return http.post(
+    '*/connectors/:connectorId/actions/:name',
+    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+      return HttpResponse.json(
+        overrideResponse !== undefined
+          ? typeof overrideResponse === 'function'
+            ? await overrideResponse(info)
+            : overrideResponse
+          : getPostConnectorsConnectorIdActionsNameResponseMock(),
         { status: 200 }
       );
     },
@@ -1070,6 +1102,7 @@ export const getConnectorsMock = () => [
   getPostConnectorsConnectorIdRestartMockHandler(),
   getPostConnectorsConnectorIdStartMockHandler(),
   getPostConnectorsConnectorIdStopMockHandler(),
+  getPostConnectorsConnectorIdActionsNameMockHandler(),
   getGetConnectorsConnectorIdConfigFieldsMockHandler(),
   getPostConnectorsConnectorIdConfigPushMockHandler(),
   getGetConnectorsConnectorIdDataMockHandler(),

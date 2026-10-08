@@ -110,6 +110,7 @@ func connectorCategoriesWider(t *testing.T, db *sql.DB, driver string) bool {
 
 func rollbackConnectorCategories(t *testing.T, db *sql.DB, driver string, logger *slog.Logger) {
 	t.Helper()
+	rollbackRunbookConnectorAction(t, db, driver, logger)
 	rollbackRunbookStepKinds(t, db, driver, logger)
 	if !connectorCategoriesWider(t, db, driver) {
 		return
@@ -347,11 +348,12 @@ func TestConnectorCategoriesMigrationUpDownUp(t *testing.T) {
 			t.Fatal("000063 accepted category 'storage'; want check constraint error")
 		}
 
-		// 3. Migrate UP through 000065, then roll back 000065 so this test can
-		// exercise 000064's category check directly.
+		// 3. Migrate UP through 000066, roll back 000066 and then 000065 so this
+		// test can exercise 000064's category check directly.
 		if err := RunMigrations(db, driver, logger); err != nil {
-			t.Fatalf("RunMigrations() up to 000065 error: %v", err)
+			t.Fatalf("RunMigrations() up to 000066 error: %v", err)
 		}
+		rollbackRunbookConnectorAction(t, db, driver, logger)
 		if err := RunMigrationsDown(db, driver, logger); err != nil {
 			t.Fatalf("rollback 000065 before category assertions: %v", err)
 		}

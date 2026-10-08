@@ -53,6 +53,11 @@ object, action-specific), and `createdAt`.
 | `connector.restart` | `POST /api/connectors/{id}/restart` (dryRun omitted/false), or `POST /api/runbooks/{id}/steps/{stepId}/execute` for a `restart` step | connector / id |
 | `connector.start` | `POST /api/connectors/{id}/start` (dryRun omitted/false), or `POST /api/runbooks/{id}/steps/{stepId}/execute` for a `start` step | connector / id |
 | `connector.stop` | `POST /api/connectors/{id}/stop` (dryRun omitted/false), or `POST /api/runbooks/{id}/steps/{stepId}/execute` for a `stop` step | connector / id |
+| `connector.action` | `POST /api/connectors/{id}/actions/{name}`, or a named-action step in a run | connector / id; action, entity reference, method, URL without query or credentials, and status only |
+| `connector.recipe_actions_changed` | Saving or reconciling changed recipe actions | connector / id; added, changed and removed qualified action names |
+| `backup.import` | Successful backup restore | backup / (none); imported counts and names of imported connectors with actions |
+| `runbook.run.step_resent` | Resuming an unknown named-action step with `resend` | runbook_run / run id; step id and acting user |
+| `runbook.run.step_marked_done` | Resuming an unknown named-action step with `mark_done` | runbook_run / run id; step id and acting user |
 | `connector.configPush` | `POST /api/connectors/{id}/config-push` (successful, verified push only), or a `config_push` step in a runbook run started via `POST /api/runbooks/{id}/run` or resumed via `POST /api/runbook-runs/{runId}/resume` | connector / id |
 | `connector.maintenanceWindow.open` | `POST /api/connectors/{id}/maintenance-window` | connector / id |
 | `connector.maintenanceWindow.close` | `DELETE /api/connectors/{id}/maintenance-window` (only when a window was actually active) | connector / id |
@@ -204,3 +209,10 @@ confirmation and cancellation need no elevation.
 The start, resume and confirm entries are also written when the request ends
 in 503 during shutdown, because the transition was already recorded (the run
 exists as failed/interrupted, the manual step stays confirmed).
+
+Recipe actions follow ADR 0008: previews resolve from the stored snapshot and show
+the fixed request without credentials. Responses expose at most 512 bytes of
+plain text once to the operator; excerpts never enter audit details, alerts, logs
+or run records. The Journal includes named actions, backup imports and unknown
+step decisions as lab activity. Recipe-action enablement is a security boundary
+and remains in the admin audit log, outside the Journal lab-action list.

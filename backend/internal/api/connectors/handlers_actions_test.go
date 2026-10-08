@@ -31,6 +31,21 @@ func actionResponse(t *testing.T, fn http.HandlerFunc, r *http.Request, status i
 	return rr
 }
 
+func seedLifecyclePreviewConnector(t *testing.T, h *Handler, name string) *store.ConnectorRecord {
+	t.Helper()
+	record := &store.ConnectorRecord{
+		Name:       name,
+		Type:       "proxmox",
+		Category:   "virtualization",
+		URL:        "https://pve.example.com/api2/json",
+		ConfigData: `{"token_id":"operator@pam!preview","token_secret":"preview-secret"}`,
+	}
+	if err := h.Store.CreateConnector(context.Background(), record); err != nil {
+		t.Fatal(err)
+	}
+	return record
+}
+
 func TestActionMaintenanceLifecycle(t *testing.T) {
 	t.Parallel()
 	h := newTestHandler(t)
@@ -150,7 +165,7 @@ func TestActionLifecyclePreviews(t *testing.T) {
 			t.Run(verb+"/"+data, func(t *testing.T) {
 				h := newTestHandler(t)
 				fn := map[string]http.HandlerFunc{"restart": h.RestartPreview, "start": h.StartPreview, "stop": h.StopPreview}[verb]
-				c := seedCoverageConnector(t, h, "lab", "networking")
+				c := seedLifecyclePreviewConnector(t, h, "lab")
 				status := 200
 				switch data {
 				case "":
@@ -277,7 +292,7 @@ func TestActionInvalidConnectorConfig(t *testing.T) {
 func TestActionLifecyclePreviewAffectedEntities(t *testing.T) {
 	t.Parallel()
 	h := newTestHandler(t)
-	c := seedCoverageConnector(t, h, "lab", "networking")
+	c := seedLifecyclePreviewConnector(t, h, "lab")
 	data := `{"serviceName":"lab","entities":[
 		{"kind":"port","name":"Switch / Port 2","externalId":"aa:bb:cc:00:11:33:2","attributes":{"connectedDevices":["Living Room AP","Porch Camera"]}},
 		{"kind":"device","name":"Switch","externalId":"aa:bb:cc:00:11:33"}]}`

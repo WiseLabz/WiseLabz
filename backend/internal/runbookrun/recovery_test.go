@@ -100,7 +100,7 @@ func TestRecoverInterruptsRunningRunsAndNeverContinuesThem(t *testing.T) {
 		t.Fatalf("confirmed run = %+v, want succeeded", got)
 	}
 	resumer := e.operator(a)
-	if _, err := e.exec.Resume(ctx, midStep.ID, resumer); err != nil {
+	if _, _, err := e.exec.Resume(ctx, midStep.ID, resumer, ResumeNone); err != nil {
 		t.Fatalf("Resume() after recovery: %v", err)
 	}
 	e.settle()
@@ -138,7 +138,7 @@ func TestRecoverResumesRunWhoseLastStepHadSucceeded(t *testing.T) {
 	if n, err := Recover(ctx, e.s, e.events, e.notes); err != nil || n != 1 {
 		t.Fatalf("Recover() = %d, %v", n, err)
 	}
-	if _, err := e.exec.Resume(ctx, run.ID, e.starter); err != nil {
+	if _, _, err := e.exec.Resume(ctx, run.ID, e.starter, ResumeNone); err != nil {
 		t.Fatal(err)
 	}
 	e.settle()

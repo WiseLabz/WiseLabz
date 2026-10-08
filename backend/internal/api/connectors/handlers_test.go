@@ -14,6 +14,7 @@ import (
 	"github.com/WiseLabz/wiselabz/internal/config"
 	"github.com/WiseLabz/wiselabz/internal/connector"
 	"github.com/WiseLabz/wiselabz/internal/httputil"
+	"github.com/WiseLabz/wiselabz/internal/store"
 	"github.com/WiseLabz/wiselabz/internal/sync"
 
 	// Register connector implementations (proxmox, custom, ...) for restart tests.
@@ -469,15 +470,20 @@ func TestRestart(t *testing.T) {
 
 	t.Run("dry-run works without elevation token", func(t *testing.T) {
 		h := newTestHandler(t)
-		id := createConnector(t, h, "custom", "https://test.example.com")
+		id := createConnector(t, h, "proxmox", "https://test.example.com")
+		if err := h.Store.CreateSnapshot(context.Background(), &store.SnapshotRecord{
+			ConnectorID: id,
+			Data:        `{"serviceName":"test"}`,
+			FetchedAt:   "2026-01-01T00:00:00Z",
+		}); err != nil {
+			t.Fatal(err)
+		}
 		req := httptest.NewRequest(http.MethodPost, "/api/connectors/"+id+"/restart?dryRun=true", nil)
 		req.SetPathValue("id", id)
 		rr := httptest.NewRecorder()
 		h.RestartPreview(rr, req)
-		// No snapshot exists yet, but the important part is it's not rejected
-		// for missing elevation.
-		if rr.Code == http.StatusBadRequest && strings.Contains(rr.Body.String(), "elevation_required") {
-			t.Fatalf("dry-run required elevation: %s", rr.Body.String())
+		if rr.Code != http.StatusOK {
+			t.Fatalf("dry-run status = %d, want 200 without elevation: %s", rr.Code, rr.Body.String())
 		}
 	})
 

@@ -12,6 +12,7 @@ import { Button } from '../ui/Button';
 import { Dialog } from '../ui/Dialog';
 import { ElevationConfirm } from '../manager/ElevationConfirm';
 import { runErrorMessage } from './runErrors';
+import { ConnectorActionRequest } from './ConnectorActionRequest';
 import { formatRunbookValue } from './runbookStepValues';
 
 export function StartRunDialog({
@@ -252,6 +253,12 @@ function PreviewStep({ step }: { step: RunbookRunStep }) {
                   <dd className="mt-0.5 font-mono text-ink">{step.entityRef}</dd>
                 </div>
               )}
+              {kind === 'connector_action' && step.action && (
+                <div>
+                  <dt className="text-2xs text-ink-faint">{t('runbooks.runs.actionName')}</dt>
+                  <dd className="mt-0.5 font-mono text-ink">{step.action}</dd>
+                </div>
+              )}
               {(kind === 'sync_and_wait' || kind === 'wait_until_healthy') && (
                 <div>
                   <dt className="text-2xs text-ink-faint">{t('runbooks.runs.timeoutLabel')}</dt>
@@ -310,6 +317,10 @@ function PreviewStep({ step }: { step: RunbookRunStep }) {
             </dl>
 
             {kind === 'lifecycle' && step.preview && <LifecycleImpact preview={step.preview} />}
+
+            {kind === 'connector_action' && step.preview && (
+              <ConnectorActionRequest preview={step.preview} />
+            )}
 
             {blockedReason && (
               <p className="text-xs text-warn" role="note">
@@ -397,6 +408,8 @@ function getKindLabel(kind: RunbookRunStepKind, t: Translate) {
       return t('runbooks.runs.kind.config_push');
     case 'wait_for_entity':
       return t('runbooks.runs.kind.wait_for_entity');
+    case 'connector_action':
+      return t('runbooks.runs.kind.connector_action');
   }
 }
 

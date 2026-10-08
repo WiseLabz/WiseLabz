@@ -6,12 +6,17 @@
  *
  * OpenAPI spec version: 0.1.0
  */
+import type { ActionRequest } from './actionRequest';
 import type { RestartPreviewDependentServicesItem } from './restartPreviewDependentServicesItem';
 
 /**
  * Non-mutating preview of the future service.restart action.
  */
 export interface RestartPreview {
+  userDefined?: boolean;
+  label?: string;
+  description?: string;
+  request?: ActionRequest;
   targetService: string;
   /** @minimum 0 */
   estimatedDowntimeSeconds: number;

@@ -5,6 +5,7 @@
  */
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { auditActionLabel } from '../../lib/auditActionLabel';
 import { useGetSystemAudit } from '../../api/generated/system/system';
 import { GetSystemAuditExportFormat } from '../../api/model';
 import { AXIOS_INSTANCE } from '../../api/axios-instance';
@@ -35,7 +36,9 @@ export function AuditPage() {
     createdAfter: createdAfter ? new Date(createdAfter).toISOString() : undefined,
     // End of day (not midnight) so records created later on the selected
     // day aren't excluded by the backend's inclusive `<=` comparison.
-    createdBefore: createdBefore ? new Date(`${createdBefore}T23:59:59.999Z`).toISOString() : undefined,
+    createdBefore: createdBefore
+      ? new Date(`${createdBefore}T23:59:59.999Z`).toISOString()
+      : undefined,
   };
 
   const { data, isLoading, isError, refetch } = useGetSystemAudit({
@@ -159,7 +162,9 @@ export function AuditPage() {
                 <thead>
                   <tr className="border-b border-line-soft text-2xs font-mono text-ink-faint">
                     <th className="px-4 py-2 font-normal">{t('settings.audit.columnAction')}</th>
-                    <th className="px-4 py-2 font-normal">{t('settings.audit.columnTargetType')}</th>
+                    <th className="px-4 py-2 font-normal">
+                      {t('settings.audit.columnTargetType')}
+                    </th>
                     <th className="px-4 py-2 font-normal">{t('settings.audit.columnActor')}</th>
                     <th className="px-4 py-2 font-normal">{t('settings.audit.columnCreatedAt')}</th>
                   </tr>
@@ -167,7 +172,9 @@ export function AuditPage() {
                 <tbody className="divide-y divide-line-soft">
                   {data.items.map((r) => (
                     <tr key={r.id}>
-                      <td className="px-4 py-2 font-mono text-ink">{r.action}</td>
+                      <td className="px-4 py-2 font-mono text-ink">
+                        {auditActionLabel(r.action, t)}
+                      </td>
                       <td className="px-4 py-2 font-mono text-ink-muted">
                         {r.targetType || '—'}
                         {r.targetId ? `/${r.targetId}` : ''}

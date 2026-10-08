@@ -80,6 +80,20 @@ const baseRun: RunbookRun = {
   ],
 };
 
+const unknownActionStep: RunbookRun['steps'][number] = {
+  id: 'action-step',
+  position: 0,
+  kind: 'connector_action',
+  title: 'Rescan the index',
+  connectorId: 'connector-1',
+  connectorName: 'primary',
+  action: 'rescan',
+  entityRef: '',
+  state: 'unknown',
+  redacted: false,
+  canExecute: true,
+};
+
 let currentRun = structuredClone(baseRun);
 
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
@@ -356,6 +370,132 @@ describe('RunDetail', () => {
     expect(elevation).toHaveTextContent('runbook-1');
     fireEvent.click(within(elevation).getByRole('button', { name: 'Resume run' }));
     await waitFor(() => expect(elevationToken).toBe('fresh-elevation-token'));
+  });
+
+  it.each([
+    ['Send the action again', 'resend'],
+    ['Mark the step as done', 'mark_done'],
+  ] as const)(
+    'sends the "%s" decision when resuming past an unknown action step',
+    async (label, decision) => {
+      currentRun = { ...baseRun, steps: [unknownActionStep] };
+      let body: unknown;
+      let elevationToken = '';
+      server.use(
+        http.post('/api/runbook-runs/:runId/resume', async ({ request }) => {
+          body = await request.json();
+          elevationToken = request.headers.get('X-Elevation-Token') ?? '';
+          return HttpResponse.json({ ...currentRun, state: 'running' }, { status: 202 });
+        })
+      );
+      renderDetail();
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Resume run' }));
+      const decisionDialog = await screen.findByRole('dialog', { name: 'Resume run' });
+      expect(within(decisionDialog).getByRole('note')).toHaveTextContent(
+        i18n.t('runbooks.runs.resumeDecisionWarning')
+      );
+      const continueButton = within(decisionDialog).getByRole('button', {
+        name: 'Continue to approval',
+      });
+      expect(continueButton).toBeDisabled();
+
+      fireEvent.click(within(decisionDialog).getByRole('radio', { name: new RegExp(`^${label}`) }));
+      expect(continueButton).toBeEnabled();
+      fireEvent.click(continueButton);
+
+      const elevation = await screen.findByRole('dialog', { name: 'Resume run' });
+      fireEvent.click(within(elevation).getByRole('button', { name: 'Resume run' }));
+      await waitFor(() => expect(elevationToken).toBe('fresh-elevation-token'));
+      expect(body).toEqual({ decision });
+    }
+  );
+
+  it('shows a clear message when the server still needs a decision for the action step', async () => {
+    currentRun = { ...baseRun, steps: [unknownActionStep] };
+    server.use(
+      http.post('/api/runbook-runs/:runId/resume', () =>
+        HttpResponse.json(
+          { code: 'unknown_step_decision_required', message: 'decision required' },
+          { status: 409 }
+        )
+      )
+    );
+    renderDetail();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Resume run' }));
+    const decisionDialog = await screen.findByRole('dialog', { name: 'Resume run' });
+    fireEvent.click(within(decisionDialog).getByRole('radio', { name: /^Send the action again/ }));
+    fireEvent.click(within(decisionDialog).getByRole('button', { name: 'Continue to approval' }));
+    const elevation = await screen.findByRole('dialog', { name: 'Resume run' });
+    fireEvent.click(within(elevation).getByRole('button', { name: 'Resume run' }));
+
+    expect(
+      await screen.findByText(i18n.t('runbooks.runs.resumeDecisionRequired'))
+    ).toBeInTheDocument();
+  });
+
+  it('shows no decision choice and sends no body for an unknown lifecycle step', async () => {
+    currentRun = {
+      ...baseRun,
+      steps: [{ ...baseRun.steps[0], id: 'unknown-step', state: 'unknown' }],
+    };
+    let body: string | undefined;
+    let elevationToken = '';
+    server.use(
+      http.post('/api/runbook-runs/:runId/resume', async ({ request }) => {
+        body = await request.text();
+        elevationToken = request.headers.get('X-Elevation-Token') ?? '';
+        return HttpResponse.json({ ...currentRun, state: 'running' }, { status: 202 });
+      })
+    );
+    renderDetail();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Resume run' }));
+    expect(
+      await screen.findByText(i18n.t('runbooks.runs.resumeWarningUnknown'))
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('radio')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Continue to approval' }));
+
+    const elevation = await screen.findByRole('dialog', { name: 'Resume run' });
+    fireEvent.click(within(elevation).getByRole('button', { name: 'Resume run' }));
+    await waitFor(() => expect(elevationToken).toBe('fresh-elevation-token'));
+    expect(body).toBe('');
+  });
+
+  it('shows the named action and the request a connector action step sends', async () => {
+    currentRun = {
+      ...baseRun,
+      state: 'succeeded',
+      steps: [
+        {
+          ...unknownActionStep,
+          state: 'succeeded',
+          preview: {
+            userDefined: true,
+            label: 'Rescan index',
+            description: 'Rebuilds the search index.',
+            targetService: 'primary',
+            estimatedDowntimeSeconds: 0,
+            dependentServices: [],
+            request: {
+              method: 'POST',
+              url: 'https://primary.example/api/rescan',
+              body: { force: true },
+            },
+          },
+        },
+      ],
+    };
+    renderDetail();
+
+    const detail = screen.getByRole('region', { name: 'Run details' });
+    expect(await within(detail).findByText(i18n.t('runbooks.runs.actionName'))).toBeInTheDocument();
+    expect(within(detail).getByText('rescan')).toBeInTheDocument();
+    expect(within(detail).getByText('User-defined')).toBeInTheDocument();
+    expect(within(detail).getByText('https://primary.example/api/rescan')).toBeInTheDocument();
+    expect(within(detail).getByText(/"force": true/)).toBeInTheDocument();
   });
 
   it('opens elevation directly when the first unfinished step is known', async () => {

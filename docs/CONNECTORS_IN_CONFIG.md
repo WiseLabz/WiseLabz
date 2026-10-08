@@ -204,6 +204,12 @@ changes the stored category at the next reconciliation. Recipe-less custom
 connectors keep their existing request method, legacy headers and raw response
 section behavior.
 
+Recipe-declared actions in this file are trusted configuration and do not
+require elevation during startup reconciliation. When their canonical
+definitions are added, changed or removed, reconciliation records a
+`connector.recipe_actions_changed` audit entry with the qualified action names
+and the system actor; an unchanged recipe adds no action-change entry.
+
 ## TLS probe connectors
 
 The TLS probe connector does not require a base URL; it dials targets directly.

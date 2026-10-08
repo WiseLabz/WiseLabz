@@ -156,7 +156,7 @@ func newRouterDeps(cfg Config) routerDeps {
 
 	runbookH := runbookhandler.NewHandler(cfg.Store, connH)
 	deps := runbookrun.Deps{
-		Store: cfg.Store, Lifecycle: connH, ConfigPush: connH, Sync: cfg.SyncEngine, Spawner: cfg.SyncEngine,
+		Store: cfg.Store, Lifecycle: connH, ConfigPush: connH, Actions: connH, Sync: cfg.SyncEngine, Spawner: cfg.SyncEngine,
 		Entities: runbookrun.StoreEntities{Store: cfg.Store},
 		Health:   runbookrun.StoreHealth{Store: cfg.Store, EncryptionKey: cfg.Config.Encryption.Key},
 		Grants:   runbookrun.StoreGrants{Store: cfg.Store},

@@ -54,6 +54,8 @@ const MAX_STEPS = 20;
 const DEFAULT_TIMEOUT_SECONDS = 300;
 const MIN_TIMEOUT_SECONDS = 10;
 const MAX_TIMEOUT_SECONDS = 1800;
+/** Lifecycle verbs are never named actions; they stay `lifecycle` steps. */
+const LIFECYCLE_VERBS = ['restart', 'start', 'stop'];
 
 /** Maps a server step field name to the i18n key of its editor label; fields
  * without an entry fall back to the raw field name. */
@@ -62,6 +64,7 @@ const STEP_FIELD_LABEL_KEYS: Record<string, string> = {
   title: 'settings.runbooks.steps.titleLabel',
   connectorId: 'settings.runbooks.steps.connectorLabel',
   verb: 'settings.runbooks.steps.verbLabel',
+  action: 'settings.runbooks.steps.actionLabel',
   timeoutSeconds: 'settings.runbooks.steps.timeoutLabel',
   entityRef: 'entityPicker.label',
   fieldKey: 'settings.runbooks.steps.fieldLabel',
@@ -88,6 +91,8 @@ interface StepDraft {
   /** Empty for a loaded step that is not a lifecycle step. */
   verb: RunbookStepVerb | '';
   entityRef: string;
+  /** Named action of a connector_action step; empty for every other kind. */
+  action: string;
   /** UI-only kind learned from the selected entity. */
   entityKind?: string;
   timeoutSeconds?: number | '';
@@ -108,6 +113,7 @@ function newStepDraft(): StepDraft {
     connectorId: '',
     verb: 'restart',
     entityRef: '',
+    action: '',
     entityKind: '',
     timeoutSeconds: '',
     fieldKey: '',
@@ -196,6 +202,7 @@ export function RunbooksPage() {
         connectorId: s.connectorId,
         verb: s.verb as RunbookStepVerb | '',
         entityRef: s.entityRef,
+        action: s.action ?? '',
         entityKind: '',
         timeoutSeconds: s.timeoutSeconds > 0 ? s.timeoutSeconds : '',
         fieldKey: s.fieldKey ?? '',
@@ -274,6 +281,15 @@ export function RunbooksPage() {
         operator: s.operator || undefined,
         expectedValue: s.expectedValue,
         ...(timeout !== undefined && !isNaN(timeout) ? { timeoutSeconds: timeout } : {}),
+      };
+    }
+
+    if (kind === 'connector_action') {
+      return {
+        ...base,
+        connectorId: s.connectorId,
+        action: s.action,
+        ...(s.entityRef ? { entityRef: s.entityRef } : {}),
       };
     }
 
@@ -394,6 +410,17 @@ export function RunbooksPage() {
       ...d,
       steps: d.steps.map((s) => (s.key === key ? { ...s, ...patch } : s)),
     }));
+
+  // Named actions a connector_action step can run: the connector's own actions
+  // (never a lifecycle verb) whose entity scope matches the chosen target.
+  const actionOptions = (connectorId: string, entityRef: string) =>
+    (connectors.data?.find((c) => c.id === connectorId)?.actions ?? []).filter(
+      (action) => !LIFECYCLE_VERBS.includes(action.name) && action.entityScope === !!entityRef
+    );
+
+  // Keeps the chosen action only while it still matches the target's entity scope.
+  const keepAction = (connectorId: string, entityRef: string, action: string) =>
+    actionOptions(connectorId, entityRef).some((option) => option.name === action) ? action : '';
 
   return (
     <div>
@@ -707,6 +734,7 @@ export function RunbooksPage() {
                                       connectorId: '',
                                       verb: '',
                                       entityRef: '',
+                                      action: '',
                                       entityKind: '',
                                       timeoutSeconds: '',
                                       fieldKey: '',
@@ -723,6 +751,7 @@ export function RunbooksPage() {
                                       kind: nextKind,
                                       verb: '',
                                       entityRef: '',
+                                      action: '',
                                       entityKind: '',
                                       timeoutSeconds: step.timeoutSeconds || '',
                                       fieldKey: '',
@@ -736,6 +765,21 @@ export function RunbooksPage() {
                                       kind: nextKind,
                                       verb: '',
                                       entityRef: '',
+                                      action: '',
+                                      entityKind: '',
+                                      timeoutSeconds: '',
+                                      fieldKey: '',
+                                      targetValue: '',
+                                      attribute: '',
+                                      operator: RunbookStepOperator.eq,
+                                      expectedValue: '',
+                                    });
+                                  } else if (nextKind === 'connector_action') {
+                                    updateStep(step.key, {
+                                      kind: nextKind,
+                                      verb: '',
+                                      entityRef: '',
+                                      action: '',
                                       entityKind: '',
                                       timeoutSeconds: '',
                                       fieldKey: '',
@@ -748,6 +792,7 @@ export function RunbooksPage() {
                                     updateStep(step.key, {
                                       kind: nextKind,
                                       verb: '',
+                                      action: '',
                                       entityKind: '',
                                       fieldKey: '',
                                       targetValue: '',
@@ -767,6 +812,7 @@ export function RunbooksPage() {
                                     updateStep(step.key, {
                                       kind: nextKind,
                                       verb: (verbs[0] ?? 'restart') as RunbookStepVerb,
+                                      action: '',
                                       entityKind: '',
                                       timeoutSeconds: '',
                                     });
@@ -787,6 +833,9 @@ export function RunbooksPage() {
                                 </option>
                                 <option value="wait_for_entity">
                                   {t('settings.runbooks.steps.kinds.wait_for_entity')}
+                                </option>
+                                <option value="connector_action">
+                                  {t('settings.runbooks.steps.kinds.connector_action')}
                                 </option>
                                 <option value="manual">
                                   {t('settings.runbooks.steps.kinds.manual')}
@@ -824,6 +873,7 @@ export function RunbooksPage() {
                                       updateStep(step.key, {
                                         connectorId,
                                         entityRef: '',
+                                        action: '',
                                         entityKind: '',
                                         fieldKey: '',
                                         targetValue: '',
@@ -908,6 +958,45 @@ export function RunbooksPage() {
                                 disabled={stepsLocked}
                                 onChange={(entityRef) => updateStep(step.key, { entityRef })}
                               />
+                            )}
+
+                            {kind === 'connector_action' && step.connectorId && (
+                              <EntityPicker
+                                connectorId={step.connectorId}
+                                value={step.entityRef}
+                                disabled={stepsLocked}
+                                onChange={(entityRef) =>
+                                  updateStep(step.key, {
+                                    entityRef,
+                                    action: keepAction(step.connectorId, entityRef, step.action),
+                                  })
+                                }
+                              />
+                            )}
+
+                            {kind === 'connector_action' && step.connectorId && (
+                              <label className="block">
+                                <span className="mb-1 block text-2xs text-ink-faint">
+                                  {t('settings.runbooks.steps.actionLabel')}
+                                </span>
+                                <Select
+                                  aria-label={t('settings.runbooks.steps.actionLabel')}
+                                  disabled={stepsLocked}
+                                  value={step.action}
+                                  onChange={(e) => updateStep(step.key, { action: e.target.value })}
+                                >
+                                  <option value="" disabled>
+                                    {actionOptions(step.connectorId, step.entityRef).length === 0
+                                      ? t('settings.runbooks.steps.noActions')
+                                      : t('settings.runbooks.steps.actionPlaceholder')}
+                                  </option>
+                                  {actionOptions(step.connectorId, step.entityRef).map((action) => (
+                                    <option key={action.name} value={action.name}>
+                                      {action.label || action.name}
+                                    </option>
+                                  ))}
+                                </Select>
+                              </label>
                             )}
 
                             {(kind === 'config_push' || kind === 'wait_for_entity') && (

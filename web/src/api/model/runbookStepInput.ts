@@ -11,7 +11,7 @@ import type { RunbookStepKind } from './runbookStepKind';
 import type { RunbookStepVerb } from './runbookStepVerb';
 
 /**
- * Which of connectorId, verb, timeoutSeconds, fieldKey, targetValue, attribute, operator and expectedValue apply depends on kind. lifecycle (the default) requires connectorId and verb. sync_and_wait and wait_until_healthy require connectorId, must not carry a verb or entityRef, and accept a timeoutSeconds. manual carries no connectorId, verb or timeout. config_push requires connectorId, fieldKey and targetValue, and accepts entityRef. wait_for_entity requires connectorId, entityRef, attribute, operator, expectedValue, and accepts timeoutSeconds. Violations are reported as field errors on the step, for example steps[2].timeoutSeconds.
+ * Which of connectorId, verb, action, timeoutSeconds, fieldKey, targetValue, attribute, operator and expectedValue apply depends on kind. lifecycle (the default) requires connectorId and verb. sync_and_wait and wait_until_healthy require connectorId, must not carry a verb or entityRef, and accept a timeoutSeconds. manual carries no connectorId, verb or timeout. config_push requires connectorId, fieldKey and targetValue, and accepts entityRef. wait_for_entity requires connectorId, entityRef, attribute, operator, expectedValue, and accepts timeoutSeconds. connector_action requires connectorId and action (the name of an action the custom connector's recipe declares for the service, or for one entity kind when entityRef is given), accepts entityRef, and must not carry a verb or a timeout. The lifecycle verbs restart, start and stop are not actions. Violations are reported as field errors on the step, for example steps[2].timeoutSeconds.
  */
 export interface RunbookStepInput {
   /** An existing step's ID, to keep it (and its identity in audit history) across a replace-all update. Omit for a new step, or when creating a runbook; any ID that didn't already belong to this runbook is ignored and a fresh one is generated. */
@@ -23,6 +23,8 @@ export interface RunbookStepInput {
   /** Required for lifecycle steps; must be omitted for the other kinds. */
   verb?: RunbookStepVerb;
   entityRef?: string;
+  /** Required for connector_action steps (a named action the connector's recipe declares); must be omitted for the other kinds. */
+  action?: string;
   /** Configuration field key for config_push steps. */
   fieldKey?: string;
   /** Target value for config_push steps: a JSON boolean, number or string matching the field's type. At most 1024 bytes. */

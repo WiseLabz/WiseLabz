@@ -26,11 +26,12 @@ const (
 // connector snapshot entities. Credentials are deliberately kept in config
 // fields outside the recipe.
 type Recipe struct {
-	Version      int                `yaml:"version"`
-	Category     string             `yaml:"category"`
-	Auth         RecipeAuth         `yaml:"auth"`
-	Endpoints    []RecipeEndpoint   `yaml:"endpoints"`
-	Dependencies []RecipeDependency `yaml:"dependencies"`
+	Version      int                     `yaml:"version"`
+	Category     string                  `yaml:"category"`
+	Auth         RecipeAuth              `yaml:"auth"`
+	Endpoints    []RecipeEndpoint        `yaml:"endpoints"`
+	Dependencies []RecipeDependency      `yaml:"dependencies"`
+	Actions      map[string]RecipeAction `yaml:"actions"`
 }
 
 // RecipeAuth selects how a recipe request receives credentials.
@@ -80,6 +81,20 @@ type RecipeEntity struct {
 	MAC        string                     `yaml:"mac"`
 	Aliases    string                     `yaml:"aliases"`
 	Attributes map[string]RecipeAttribute `yaml:"attributes"`
+	Actions    map[string]RecipeAction    `yaml:"actions"`
+}
+
+// RecipeAction describes a fixed request declared by a recipe.
+type RecipeAction struct {
+	Method          string            `yaml:"method"`
+	Path            string            `yaml:"path"`
+	Query           map[string]string `yaml:"query"`
+	Headers         map[string]string `yaml:"headers"`
+	Body            any               `yaml:"body"`
+	Label           string            `yaml:"label"`
+	Description     string            `yaml:"description"`
+	DowntimeSeconds *int              `yaml:"downtime_seconds"`
+	HasBody         bool              `yaml:"-"`
 }
 
 // RecipeAttribute defines one attribute's source and optional conversion.
@@ -236,6 +251,7 @@ func markRecipePresence(root *yaml.Node, recipe *Recipe) {
 			}
 			entity := mappingContent(mappingValue(endpoint, "entity"))
 			if entity != nil {
+				markActionBodies(mappingValue(entity, "actions"), recipe.Endpoints[i].Entity.Actions)
 				attributes := mappingContent(mappingValue(entity, "attributes"))
 				for j := 0; attributes != nil && j+1 < len(attributes.Content); j += 2 {
 					name := attributes.Content[j].Value
@@ -252,7 +268,17 @@ func markRecipePresence(root *yaml.Node, recipe *Recipe) {
 			markDependencyPresence(dereferenceYAMLNode(mappingValue(endpoint, "dependencies")), recipe.Endpoints[i].Dependencies)
 		}
 	}
+	markActionBodies(mappingValue(root, "actions"), recipe.Actions)
 	markDependencyPresence(dereferenceYAMLNode(mappingValue(root, "dependencies")), recipe.Dependencies)
+}
+
+func markActionBodies(node *yaml.Node, actions map[string]RecipeAction) {
+	node = mappingContent(node)
+	for name, action := range actions {
+		definition := mappingContent(mappingValue(node, name))
+		action.HasBody = definition != nil && mappingValue(definition, "body") != nil
+		actions[name] = action
+	}
 }
 
 func markDependencyPresence(node *yaml.Node, dependencies []RecipeDependency) {
@@ -363,6 +389,7 @@ func validateRecipe(recipe *Recipe) []RecipeIssue {
 		}
 	}
 	issues = append(issues, validateDependencies(recipe.Dependencies, "dependencies")...)
+	issues = append(issues, validateRecipeActions(recipe)...)
 	return issues
 }
 
@@ -769,7 +796,7 @@ func knownRecipeField(path, key string) bool {
 	var fields string
 	switch path {
 	case "recipe":
-		fields = "version category auth endpoints dependencies"
+		fields = "version category auth endpoints dependencies actions"
 	case "recipe.auth":
 		fields = "mode name prefix"
 	case "recipe.endpoints[]":
@@ -777,9 +804,11 @@ func knownRecipeField(path, key string) bool {
 	case "recipe.endpoints[].pagination":
 		fields = "type param size_param size start cursor_path next_path link_header"
 	case "recipe.endpoints[].entity":
-		fields = "kind name external_id hostname ip mac aliases attributes"
+		fields = "kind name external_id hostname ip mac aliases attributes actions"
 	case "recipe.endpoints[].entity.attributes[]":
 		fields = "path const template type map default"
+	case "recipe.actions[]", "recipe.endpoints[].entity.actions[]":
+		fields = "method path query headers body label description downtime_seconds"
 	case "recipe.endpoints[].dependencies[]", "recipe.dependencies[]":
 		fields = "kind path const"
 	default:
@@ -800,6 +829,8 @@ func knownRecipeChildren(parent, key string, node *yaml.Node) []RecipeIssue {
 	switch {
 	case schemaParent == "recipe" && key == "auth":
 		return validateRecipeNode(node, path)
+	case schemaParent == "recipe" && key == "actions":
+		return validateActionSetNode(node, path)
 	case schemaParent == "recipe" && key == "endpoints":
 		if node.Kind != yaml.SequenceNode {
 			return []RecipeIssue{{Location: path, Message: "must be a list"}}
@@ -813,6 +844,8 @@ func knownRecipeChildren(parent, key string, node *yaml.Node) []RecipeIssue {
 		return validateRecipeNode(node, path)
 	case schemaParent == "recipe.endpoints[]" && key == "entity":
 		return validateRecipeNode(node, path)
+	case schemaParent == "recipe.endpoints[].entity" && key == "actions":
+		return validateActionSetNode(node, path)
 	case schemaParent == "recipe.endpoints[]" && key == "dependencies", schemaParent == "recipe" && key == "dependencies":
 		if node.Kind != yaml.SequenceNode {
 			return []RecipeIssue{{Location: path, Message: "must be a list"}}
@@ -838,8 +871,31 @@ func knownRecipeChildren(parent, key string, node *yaml.Node) []RecipeIssue {
 				return []RecipeIssue{{Location: path, Message: "must be a mapping"}}
 			}
 		}
+	case schemaParent == "recipe.actions[]", schemaParent == "recipe.endpoints[].entity.actions[]":
+		if key == "query" || key == "headers" {
+			if node.Kind != yaml.MappingNode {
+				return []RecipeIssue{{Location: path, Message: "must be a mapping"}}
+			}
+		}
 	}
 	return nil
+}
+
+func validateActionSetNode(node *yaml.Node, path string) []RecipeIssue {
+	node = dereferenceYAMLNode(node)
+	if node == nil || node.Kind != yaml.MappingNode {
+		return []RecipeIssue{{Location: path, Message: "must be a mapping"}}
+	}
+	var issues []RecipeIssue
+	for i := 0; i+1 < len(node.Content); i += 2 {
+		key := node.Content[i]
+		if key.Kind != yaml.ScalarNode || key.Tag != "!!str" {
+			issues = append(issues, RecipeIssue{Location: path, Message: "action names must be strings"})
+			continue
+		}
+		issues = append(issues, validateRecipeNode(node.Content[i+1], path+"."+key.Value)...)
+	}
+	return issues
 }
 
 func mappingContent(node *yaml.Node) *yaml.Node {
@@ -1133,6 +1189,18 @@ func normalizeRecipePath(path string) string {
 	}
 	if i := strings.Index(path, ".entity.attributes."); i >= 0 {
 		path = path[:i] + ".entity.attributes[]"
+	}
+	for _, marker := range []string{".entity.actions.", ".actions."} {
+		if i := strings.Index(path, marker); i >= 0 {
+			afterName := i + len(marker)
+			mapPath := strings.TrimSuffix(marker, ".") + "[]"
+			if end := strings.IndexByte(path[afterName:], '.'); end >= 0 {
+				path = path[:i] + mapPath + path[afterName+end:]
+			} else {
+				path = path[:i] + mapPath
+			}
+			break
+		}
 	}
 	return path
 }

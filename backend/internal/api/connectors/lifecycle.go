@@ -11,6 +11,7 @@ import (
 
 	"github.com/WiseLabz/wiselabz/internal/auth"
 	"github.com/WiseLabz/wiselabz/internal/connector"
+	"github.com/WiseLabz/wiselabz/internal/connector/custom"
 	"github.com/WiseLabz/wiselabz/internal/httputil"
 	"github.com/WiseLabz/wiselabz/internal/store"
 	"github.com/WiseLabz/wiselabz/internal/ws"
@@ -85,6 +86,10 @@ type LifecyclePreview struct {
 	EstimatedDowntimeSeconds int                           `json:"estimatedDowntimeSeconds"`
 	DependentServices        []connector.ServiceDependency `json:"dependentServices"`
 	AffectedEntities         []string                      `json:"affectedEntities"`
+	UserDefined              bool                          `json:"userDefined"`
+	Label                    string                        `json:"label,omitempty"`
+	Description              string                        `json:"description,omitempty"`
+	Request                  *connector.ActionRequest      `json:"request,omitempty"`
 }
 
 // LifecycleActor identifies the acting user explicitly, including the audit role.
@@ -106,7 +111,9 @@ func (e *lifecycleError) Unwrap() error { return e.cause }
 type preparedLifecycleOp struct {
 	record *store.ConnectorRecord
 	config map[string]any
+	conn   connector.Connector
 	apply  func(context.Context, map[string]any, string) error
+	action *connector.ResolvedAction
 }
 
 func writeLifecycleError(w http.ResponseWriter, err error) {
@@ -134,48 +141,45 @@ func (h *Handler) PreviewLifecycleOp(
 	ctx context.Context,
 	connectorID, verb, entityRef string,
 ) (*LifecyclePreview, error) {
-	if _, err := h.Store.GetConnector(ctx, connectorID); err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			return nil, &lifecycleError{
-				status:  http.StatusNotFound,
-				code:    "not_found",
-				message: "Connector not found",
-				cause:   err,
-			}
-		}
-		return nil, err
-	}
-
-	sn, err := h.Store.GetLatestSnapshot(ctx, connectorID)
-	if errors.Is(err, store.ErrNotFound) {
-		return nil, &lifecycleError{
-			status:  http.StatusNotFound,
-			code:    "not_found",
-			message: "No snapshot available for connector",
-			cause:   err,
-		}
-	}
+	prepared, err := h.prepareLifecycleOp(ctx, connectorID, verb)
 	if err != nil {
 		return nil, err
 	}
-
-	var snap connector.ServiceSnapshot
-	if err := json.Unmarshal([]byte(sn.Data), &snap); err != nil {
-		return nil, fmt.Errorf("decode service snapshot: %w", err)
+	snap, err := h.latestLifecycleSnapshot(ctx, connectorID)
+	if err != nil {
+		return nil, err
 	}
+	preview := lifecyclePreviewFromSnapshot(snap, entityRef, verb)
+	if executor, ok := prepared.conn.(connector.ActionExecutor); ok {
+		if err := connector.ValidateCompositeRef(entityRef); err != nil {
+			return nil, invalidEntityRef(err)
+		}
+		resolved, err := executor.ResolveAction(prepared.config, verb, entityRef, &snap)
+		if err != nil {
+			return nil, resolveLifecycleActionError(prepared.conn, verb, entityRef, err)
+		}
+		request := custom.RedactedActionRequest(prepared.config, resolved)
+		preview.UserDefined = true
+		preview.Label = resolved.Descriptor.Label
+		preview.Description = resolved.Descriptor.Description
+		preview.EstimatedDowntimeSeconds = resolved.Descriptor.DowntimeSeconds
+		preview.Request = &request
+	}
+	return preview, nil
+}
 
+func lifecyclePreviewFromSnapshot(snap connector.ServiceSnapshot, entityRef, verb string) *LifecyclePreview {
 	targetService := snap.ServiceName
 	affected := []string{}
 	if entityRef != "" {
-		for _, e := range snap.Entities {
-			if e.ExternalID == entityRef {
-				targetService = e.Name
-				affected = connectedDevices(e)
+		for _, entity := range snap.Entities {
+			if entity.ExternalID == entityRef {
+				targetService = entity.Name
+				affected = connectedDevices(entity)
 				break
 			}
 		}
 	}
-
 	dependencies := snap.Dependencies
 	if dependencies == nil {
 		dependencies = []connector.ServiceDependency{}
@@ -191,7 +195,55 @@ func (h *Handler) PreviewLifecycleOp(
 		EstimatedDowntimeSeconds: downtime,
 		DependentServices:        dependencies,
 		AffectedEntities:         affected,
-	}, nil
+	}
+}
+
+func (h *Handler) latestLifecycleSnapshot(ctx context.Context, connectorID string) (connector.ServiceSnapshot, error) {
+	record, err := h.Store.GetLatestSnapshot(ctx, connectorID)
+	if errors.Is(err, store.ErrNotFound) {
+		return connector.ServiceSnapshot{}, &lifecycleError{
+			status:  http.StatusNotFound,
+			code:    "not_found",
+			message: "No snapshot available for connector",
+			cause:   err,
+		}
+	}
+	if err != nil {
+		return connector.ServiceSnapshot{}, err
+	}
+	var snapshot connector.ServiceSnapshot
+	if err := json.Unmarshal([]byte(record.Data), &snapshot); err != nil {
+		return connector.ServiceSnapshot{}, fmt.Errorf("decode service snapshot: %w", err)
+	}
+	return snapshot, nil
+}
+
+func invalidEntityRef(err error) error {
+	return &lifecycleError{status: http.StatusBadRequest, code: "invalid_request", message: "invalid entityRef", cause: err}
+}
+
+func resolveLifecycleActionError(conn connector.Connector, verb, entityRef string, cause error) error {
+	code := "invalid_request"
+	message := cause.Error()
+	if strings.Contains(message, "not declared for entity kind") {
+		code = "unsupported_operation"
+	}
+	if entityRef == "" {
+		for _, descriptor := range declaredActions(conn) {
+			if descriptor.Name == verb && descriptor.EntityScope {
+				message = "action requires an entityRef"
+				break
+			}
+		}
+	}
+	return &lifecycleError{status: http.StatusBadRequest, code: code, message: message, cause: cause}
+}
+
+func declaredActions(conn connector.Connector) []connector.ActionDescriptor {
+	if capabilities, ok := conn.(connector.InstanceCapabilities); ok {
+		return capabilities.DeclaredActions()
+	}
+	return []connector.ActionDescriptor{}
 }
 
 // connectedDevices returns the names an entity powers or carries (its
@@ -224,15 +276,58 @@ func (h *Handler) lifecycleOpMutate(w http.ResponseWriter, r *http.Request, conn
 		auth.WriteElevationError(w, err)
 		return
 	}
+	if err := connector.ValidateCompositeRef(entityRef); err != nil {
+		writeLifecycleError(w, invalidEntityRef(err))
+		return
+	}
+	if executor, ok := prepared.conn.(connector.ActionExecutor); ok {
+		resolved, err := resolvePreparedAction(r.Context(), h, prepared, executor, verb, entityRef, false)
+		if err != nil {
+			writeLifecycleError(w, err)
+			return
+		}
+		prepared.action = resolved
+	}
 	actor := LifecycleActor{
 		UserID:        auth.UserIDFromContext(r.Context()),
 		InstanceAdmin: auth.InstanceAdminFromContext(r.Context()),
 	}
-	if err := h.mutateLifecycleOp(r.Context(), prepared, verb, entityRef, actor, extraAudit, false); err != nil {
+	result, err := h.mutateLifecycleOp(r.Context(), prepared, verb, entityRef, actor, extraAudit, false)
+	if err != nil {
+		writeLifecycleActionError(w, err, result)
+		return
+	}
+	response := map[string]any{"status": verb + "ed"}
+	if prepared.action != nil {
+		response["statusCode"] = result.Status
+		if result.Excerpt != "" {
+			response["excerpt"] = result.Excerpt
+		}
+	}
+	httputil.JSON(w, http.StatusOK, response)
+}
+
+func writeLifecycleActionError(w http.ResponseWriter, err error, result connector.ActionResult) {
+	var lifecycleErr *lifecycleError
+	if !errors.As(err, &lifecycleErr) {
+		httputil.Errorf(w, err)
+		return
+	}
+	if result.Status == 0 && result.Excerpt == "" {
 		writeLifecycleError(w, err)
 		return
 	}
-	httputil.JSON(w, http.StatusOK, map[string]any{"status": verb + "ed"})
+	response := map[string]any{
+		"code":    lifecycleErr.code,
+		"message": lifecycleErr.message,
+	}
+	if result.Status != 0 {
+		response["statusCode"] = result.Status
+	}
+	if result.Excerpt != "" {
+		response["excerpt"] = result.Excerpt
+	}
+	httputil.JSON(w, lifecycleErr.status, response)
 }
 
 // MutateLifecycleOp performs an already-authorized lifecycle operation.
@@ -246,7 +341,8 @@ func (h *Handler) MutateLifecycleOp(
 	actor LifecycleActor,
 	extraAudit map[string]any,
 ) error {
-	return h.mutateLifecycleOpCore(ctx, connectorID, verb, entityRef, actor, extraAudit, false)
+	_, err := h.mutateLifecycleOpCore(ctx, connectorID, verb, entityRef, actor, extraAudit, false)
+	return err
 }
 
 // MutateRunbookLifecycleOp performs a lifecycle step for the run executor.
@@ -258,7 +354,8 @@ func (h *Handler) MutateRunbookLifecycleOp(
 	actor LifecycleActor,
 	extraAudit map[string]any,
 ) error {
-	return h.mutateLifecycleOpCore(ctx, connectorID, verb, entityRef, actor, extraAudit, true)
+	_, err := h.mutateLifecycleOpCore(ctx, connectorID, verb, entityRef, actor, extraAudit, true)
+	return err
 }
 
 func (h *Handler) mutateLifecycleOpCore(
@@ -267,10 +364,20 @@ func (h *Handler) mutateLifecycleOpCore(
 	actor LifecycleActor,
 	extraAudit map[string]any,
 	suppressAbandonedAlert bool,
-) error {
+) (connector.ActionResult, error) {
 	prepared, err := h.prepareLifecycleOp(ctx, connectorID, verb)
 	if err != nil {
-		return err
+		return connector.ActionResult{}, err
+	}
+	if err := connector.ValidateCompositeRef(entityRef); err != nil {
+		return connector.ActionResult{}, invalidEntityRef(err)
+	}
+	if executor, ok := prepared.conn.(connector.ActionExecutor); ok {
+		resolved, err := resolvePreparedAction(ctx, h, prepared, executor, verb, entityRef, false)
+		if err != nil {
+			return connector.ActionResult{}, err
+		}
+		prepared.action = resolved
 	}
 	return h.mutateLifecycleOp(ctx, prepared, verb, entityRef, actor, extraAudit, suppressAbandonedAlert)
 }
@@ -309,7 +416,7 @@ func (h *Handler) prepareLifecycleOp(ctx context.Context, connectorID, verb stri
 		}
 	}
 
-	return &preparedLifecycleOp{record: rec, config: cfg, apply: fn}, nil
+	return &preparedLifecycleOp{record: rec, config: cfg, conn: conn, apply: fn}, nil
 }
 
 func (h *Handler) mutateLifecycleOp(
@@ -319,19 +426,15 @@ func (h *Handler) mutateLifecycleOp(
 	actor LifecycleActor,
 	extraAudit map[string]any,
 	suppressAbandonedAlert bool,
-) error {
+) (connector.ActionResult, error) {
 	rec := prepared.record
 	connectorID := rec.ID
 	if err := connector.ValidateCompositeRef(entityRef); err != nil {
-		return &lifecycleError{
-			status:  http.StatusBadRequest,
-			code:    "invalid_request",
-			message: "invalid entityRef",
-			cause:   err,
-		}
+		return connector.ActionResult{}, invalidEntityRef(err)
 	}
 
-	if err := prepared.apply(ctx, prepared.config, entityRef); err != nil {
+	result, err := h.performLifecycleOp(ctx, prepared, verb, entityRef)
+	if err != nil {
 		failure := &lifecycleError{
 			status:  http.StatusBadGateway,
 			code:    verb + "_failed",
@@ -340,7 +443,7 @@ func (h *Handler) mutateLifecycleOp(
 		}
 		if suppressAbandonedAlert && abandonedByCaller(ctx, err) {
 			slog.Info("connector "+verb+" abandoned by caller", "connector", connectorID, "error", err)
-			return failure
+			return result, failure
 		}
 		slog.Error("connector "+verb+" failed", "connector", connectorID, "error", err)
 		alert := &store.AlertRecord{
@@ -359,7 +462,7 @@ func (h *Handler) mutateLifecycleOp(
 				"title":     alert.Title,
 			})
 		}
-		return failure
+		return result, failure
 	}
 
 	detail := make(map[string]any, len(extraAudit)+1)
@@ -367,12 +470,63 @@ func (h *Handler) mutateLifecycleOp(
 		detail[k] = v
 	}
 	detail["entityRef"] = entityRef
+	if prepared.action != nil {
+		detail["method"] = prepared.action.Request.Method
+		detail["url"] = connector.RedactURL(prepared.action.Request.URL)
+		detail["status"] = result.Status
+	}
 	auditAction := "connector." + verb
 	if err := h.recordLifecycleAudit(context.WithoutCancel(ctx), actor, auditAction, connectorID, detail); err != nil {
 		slog.Error("failed to record audit", "action", auditAction, "error", err)
 	}
 
-	return nil
+	return result, nil
+}
+
+func resolvePreparedAction(
+	ctx context.Context,
+	h *Handler,
+	prepared *preparedLifecycleOp,
+	executor connector.ActionExecutor,
+	name, entityRef string,
+	loadServiceSnapshot bool,
+) (*connector.ResolvedAction, error) {
+	var snapshot *connector.ServiceSnapshot
+	if entityRef != "" || loadServiceSnapshot {
+		loaded, err := h.latestLifecycleSnapshot(ctx, prepared.record.ID)
+		if err != nil {
+			return nil, err
+		}
+		snapshot = &loaded
+	}
+	resolved, err := executor.ResolveAction(prepared.config, name, entityRef, snapshot)
+	if err != nil {
+		return nil, resolveLifecycleActionError(prepared.conn, name, entityRef, err)
+	}
+	return resolved, nil
+}
+
+func (h *Handler) performLifecycleOp(
+	ctx context.Context,
+	prepared *preparedLifecycleOp,
+	verb, entityRef string,
+) (connector.ActionResult, error) {
+	if executor, ok := prepared.conn.(connector.ActionExecutor); ok {
+		resolved := prepared.action
+		if resolved == nil {
+			var err error
+			resolved, err = resolvePreparedAction(ctx, h, prepared, executor, verb, entityRef, false)
+			if err != nil {
+				return connector.ActionResult{}, err
+			}
+			prepared.action = resolved
+		}
+		return executor.SendAction(ctx, prepared.config, resolved)
+	}
+	if err := prepared.apply(ctx, prepared.config, entityRef); err != nil {
+		return connector.ActionResult{}, err
+	}
+	return connector.ActionResult{}, nil
 }
 
 // abandonedByCaller reports whether err is the caller's own context error. The
@@ -423,11 +577,21 @@ func (h *Handler) BulkRestart(w http.ResponseWriter, r *http.Request) {
 	auditRecords := make([]store.AuditRecord, 0, len(allowedIDs))
 	for _, id := range allowedIDs {
 		rec := found[id]
-		if err := h.restartConnector(r.Context(), &rec); err != nil {
+		detail, err := h.restartConnector(r.Context(), &rec)
+		if err != nil {
 			results = append(results, bulkItemResult{ID: id, Status: "error", Reason: err.Error()})
 			continue
 		}
-		auditRecords = append(auditRecords, store.AuditRecord{TargetID: id})
+		auditRecord := store.AuditRecord{TargetID: id}
+		if len(detail) != 0 {
+			data, marshalErr := json.Marshal(detail)
+			if marshalErr != nil {
+				slog.Error("failed to marshal bulk restart audit detail", "connector", id, "error", marshalErr)
+			} else {
+				auditRecord.Detail = string(data)
+			}
+		}
+		auditRecords = append(auditRecords, auditRecord)
 		results = append(results, bulkItemResult{ID: id, Status: "success"})
 	}
 
@@ -444,29 +608,57 @@ func (h *Handler) BulkRestart(w http.ResponseWriter, r *http.Request) {
 // BulkRestart. The single-connector RestartPreview/ServeLifecycleOp path
 // still does its own per-call elevation + audit, since it isn't part of a
 // batch.
-func (h *Handler) restartConnector(ctx context.Context, rec *store.ConnectorRecord) error {
+func (h *Handler) restartConnector(ctx context.Context, rec *store.ConnectorRecord) (map[string]any, error) {
 	cfg, err := store.ParseConnectorConfig(rec.Type, rec.ConfigData, h.Config.Encryption.Key)
 	if err != nil {
-		return fmt.Errorf("parse config: %w", err)
+		return nil, fmt.Errorf("parse config: %w", err)
 	}
 	connector.ApplyRecordConfig(cfg, rec.URL, rec.VerifyTLS)
 
 	conn, err := connector.Get(rec.Type, cfg)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	restart, ok := connector.LifecycleOp(conn, "restart")
 	if !ok {
-		return fmt.Errorf("connector does not support restart")
+		return nil, fmt.Errorf("connector does not support restart")
 	}
 
-	if err := restart(ctx, cfg, ""); err != nil {
-		slog.Error("connector restart failed", "connector", rec.ID, "error", err)
+	detail := map[string]any{}
+	var operationErr error
+	if executor, ok := conn.(connector.ActionExecutor); ok {
+		serviceRestart := false
+		for _, action := range declaredActions(conn) {
+			if action.Name == "restart" && !action.EntityScope {
+				serviceRestart = true
+				break
+			}
+		}
+		if !serviceRestart {
+			return nil, fmt.Errorf("connector does not support service restart")
+		}
+		resolved, resolveErr := executor.ResolveAction(cfg, "restart", "", nil)
+		if resolveErr != nil {
+			operationErr = resolveErr
+		} else {
+			result, sendErr := executor.SendAction(ctx, cfg, resolved)
+			operationErr = sendErr
+			if sendErr == nil {
+				detail["method"] = resolved.Request.Method
+				detail["url"] = connector.RedactURL(resolved.Request.URL)
+				detail["status"] = result.Status
+			}
+		}
+	} else {
+		operationErr = restart(ctx, cfg, "")
+	}
+	if operationErr != nil {
+		slog.Error("connector restart failed", "connector", rec.ID, "error", operationErr)
 		alert := &store.AlertRecord{
 			ServiceID:   rec.ID,
 			Severity:    "critical",
 			Title:       fmt.Sprintf("Restart failed for %s", rec.Name),
-			Description: err.Error(),
+			Description: operationErr.Error(),
 		}
 		if createErr := h.Store.CreateAlert(ctx, alert); createErr != nil {
 			slog.Error("failed to create restart failure alert", "error", createErr)
@@ -478,7 +670,10 @@ func (h *Handler) restartConnector(ctx context.Context, rec *store.ConnectorReco
 				"title":     alert.Title,
 			})
 		}
-		return err
+		return nil, operationErr
 	}
-	return nil
+	if len(detail) == 0 {
+		return nil, nil
+	}
+	return detail, nil
 }

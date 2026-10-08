@@ -457,14 +457,14 @@ func TestResumeRunsFromFirstStepNotSucceeded(t *testing.T) {
 	if failed.State != RunFailed || !reflect.DeepEqual(stepStates(failedSteps), []string{StepSucceeded, StepSucceeded, StepFailed, StepPending}) {
 		t.Fatalf("run = %+v, steps = %v; want failed on the third step", failed, stepStates(failedSteps))
 	}
-	if _, err := e.exec.Resume(ctx, run.ID, ""); !errors.Is(err, ErrNoActor) {
+	if _, _, err := e.exec.Resume(ctx, run.ID, "", ResumeNone); !errors.Is(err, ErrNoActor) {
 		t.Fatalf("resume without a user = %v, want ErrNoActor", err)
 	}
-	if _, err := e.exec.Resume(ctx, "missing", resumer); !errors.Is(err, store.ErrNotFound) {
+	if _, _, err := e.exec.Resume(ctx, "missing", resumer, ResumeNone); !errors.Is(err, store.ErrNotFound) {
 		t.Fatalf("resume a missing run = %v, want ErrNotFound", err)
 	}
 
-	resumed, err := e.exec.Resume(ctx, run.ID, resumer)
+	resumed, _, err := e.exec.Resume(ctx, run.ID, resumer, ResumeNone)
 	if err != nil {
 		t.Fatalf("Resume() error: %v", err)
 	}
@@ -497,7 +497,7 @@ func TestResumeRunsFromFirstStepNotSucceeded(t *testing.T) {
 	}
 
 	// 409: finished runs are not resumable.
-	if _, err := e.exec.Resume(ctx, run.ID, resumer); !errors.Is(err, store.ErrConflict) {
+	if _, _, err := e.exec.Resume(ctx, run.ID, resumer, ResumeNone); !errors.Is(err, store.ErrConflict) {
 		t.Fatalf("resume a succeeded run = %v, want ErrConflict", err)
 	}
 }
@@ -512,7 +512,7 @@ func TestResumeRejectedOutsideFailedState(t *testing.T) {
 	e.lifecycle.fn = func(ctx context.Context, _ int, _ lifecycleCall) error { return g.block(ctx) }
 	running, _ := e.start(lifecycleStep(a, "restart"))
 	g.waitEntered(t)
-	if _, err := e.exec.Resume(ctx, running.ID, e.starter); !errors.Is(err, store.ErrConflict) {
+	if _, _, err := e.exec.Resume(ctx, running.ID, e.starter, ResumeNone); !errors.Is(err, store.ErrConflict) {
 		t.Fatalf("resume a running run = %v, want ErrConflict", err)
 	}
 	close(g.release)
@@ -521,13 +521,13 @@ func TestResumeRejectedOutsideFailedState(t *testing.T) {
 	// waiting_manual, then cancelled
 	waiting, _ := e.start(manualStep("Check"))
 	e.settle()
-	if _, err := e.exec.Resume(ctx, waiting.ID, e.starter); !errors.Is(err, store.ErrConflict) {
+	if _, _, err := e.exec.Resume(ctx, waiting.ID, e.starter, ResumeNone); !errors.Is(err, store.ErrConflict) {
 		t.Fatalf("resume a waiting run = %v, want ErrConflict", err)
 	}
 	if err := e.exec.Cancel(ctx, waiting.ID, e.starter); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := e.exec.Resume(ctx, waiting.ID, e.starter); !errors.Is(err, store.ErrConflict) {
+	if _, _, err := e.exec.Resume(ctx, waiting.ID, e.starter, ResumeNone); !errors.Is(err, store.ErrConflict) {
 		t.Fatalf("resume a cancelled run = %v, want ErrConflict", err)
 	}
 
@@ -541,7 +541,7 @@ func TestResumeRejectedOutsideFailedState(t *testing.T) {
 	if ids, err := e.s.ExpireOpenRunbookRuns(ctx, time.Now().UTC().Add(-24*time.Hour).Format(time.RFC3339)); err != nil || len(ids) != 1 {
 		t.Fatalf("ExpireOpenRunbookRuns() = %v, %v", ids, err)
 	}
-	if _, err := e.exec.Resume(ctx, expired.ID, e.starter); !errors.Is(err, store.ErrConflict) {
+	if _, _, err := e.exec.Resume(ctx, expired.ID, e.starter, ResumeNone); !errors.Is(err, store.ErrConflict) {
 		t.Fatalf("resume an expired run = %v, want ErrConflict", err)
 	}
 	if got, _ := e.get(expired.ID); got.State != RunExpired {
@@ -579,7 +579,7 @@ func TestCancel(t *testing.T) {
 		if err := e.exec.Confirm(ctx, run.ID, frozen[0].ID, canceller); !errors.Is(err, store.ErrConflict) {
 			t.Fatalf("confirm a cancelled run = %v, want ErrConflict", err)
 		}
-		if _, err := e.exec.Resume(ctx, run.ID, canceller); !errors.Is(err, store.ErrConflict) {
+		if _, _, err := e.exec.Resume(ctx, run.ID, canceller, ResumeNone); !errors.Is(err, store.ErrConflict) {
 			t.Fatalf("resume a cancelled run = %v, want ErrConflict", err)
 		}
 		e.settle()

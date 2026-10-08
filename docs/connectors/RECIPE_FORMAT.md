@@ -62,6 +62,79 @@ ends in `/` (for example `https://host/prefix/`) and relative endpoint paths
 (`api/items`). Redirects are refused, loopback and link-local
 blocking still applies, and responses use the shared body size limit.
 
+## Actions
+
+Recipes may declare up to 10 actions at the root for the service and up to 10
+under `endpoints[].entity.actions` for the mapped entity kind. An entity kind
+may declare actions on one endpoint only. Names are 1–32 characters, start
+with a lowercase letter and contain only lowercase letters, digits, `_` and
+`-`. `restart`, `start` and `stop` are lifecycle actions; other names are
+named actions.
+
+Each action is a fixed request with a `method` of `POST`, `PUT`, `PATCH` or
+`DELETE`, a relative `path`, and optional static `query`, `headers` and JSON
+`body`. Action requests use the connector's configured authentication and the
+same-origin and redirect protections as recipe endpoints. The operator does
+not provide request values when triggering an action. Labels may contain at
+most 60 characters, descriptions at most 300, and `downtime_seconds` must be
+between 0 and 3600. If omitted, downtime defaults to 30 seconds for `restart`
+and 0 for every other action. Labels and descriptions are plain text.
+
+Entity actions may substitute `{external_id}` and `{attr.name}` in the path,
+static query values and string values in the body. Attribute placeholders must
+name an attribute mapped by that endpoint. Values come from the latest stored
+snapshot. Path values must pass the connector's path-segment validation:
+whitespace, non-ASCII characters, separators and other path-changing
+characters are rejected before a request is sent. Map such a value to a
+URL-safe attribute when it cannot be used as one path segment. Query values
+are URL-encoded and body substitutions remain JSON strings. Write `{{` and
+`}}` for literal braces. Service actions do not support placeholders.
+
+Creating or changing a non-empty action set through the API requires an
+instance admin and step-up authentication. Reformatting YAML, comments and
+key order do not count as action changes, and removing all actions does not
+require step-up. Actions in trusted configuration files are reconciled and
+audited. Backup imports validate every custom recipe before writing it.
+
+This recipe declares an entity action and a service action. The automated
+custom connector test parses the example below.
+
+<!-- recipe-actions-example-start -->
+
+```yaml
+version: 1
+category: containers_paas
+auth: {mode: none}
+endpoints:
+  - name: containers
+    path: /api/containers
+    method: GET
+    items: items
+    entity:
+      kind: container
+      name: name
+      external_id: id
+      attributes:
+        node: {path: node}
+      actions:
+        rescan:
+          method: POST
+          path: /api/nodes/{attr.node}/containers/{external_id}/rescan
+          query: {source: operator}
+          body: {reason: "Rescan {attr.node}"}
+          label: Rescan
+          description: Re-reads this container's volumes.
+          downtime_seconds: 0
+actions:
+  restart:
+    method: POST
+    path: /api/system/restart
+    label: Restart service
+    downtime_seconds: 30
+```
+
+<!-- recipe-actions-example-end -->
+
 ## Pagination
 
 An endpoint without `pagination` makes exactly one request. With pagination,

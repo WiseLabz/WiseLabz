@@ -193,7 +193,7 @@ function RunbookStepRow({ runbookId, step }: { runbookId: string; step: RunbookS
         </div>
         <button
           type="button"
-          onClick={op.open}
+          onClick={() => op.open()}
           disabled={!step.canExecute || op.preview.isPending}
           aria-describedby={blockedReason ? `runbook-step-${step.id}-reason` : undefined}
           className="inline-flex shrink-0 items-center gap-1.5 rounded-sm border border-line-strong px-2 py-1 font-mono text-2xs text-ink transition-colors hover:border-accent-primary-soft disabled:cursor-not-allowed disabled:opacity-40"

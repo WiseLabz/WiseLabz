@@ -43,7 +43,9 @@ type TimelineFilter struct {
 var timelineLabActions = []string{
 	"connector.create", "connector.update", "connector.delete", "connector.toggle_enabled",
 	"connector.sync", "connector.sync_all", "connector.restart", "connector.start", "connector.stop",
-	"connector.configPush", "connector.maintenanceWindow.open", "connector.maintenanceWindow.close",
+	"connector.configPush", "connector.action", "backup.import",
+	"runbook.run.step_resent", "runbook.run.step_marked_done",
+	"connector.maintenanceWindow.open", "connector.maintenanceWindow.close",
 	"connector.bulk_sync", "connector.bulk_reauth", "connector.bulk_restart",
 	"change.ack", "change.dismiss", "change.bulk_ack", "change.bulk_dismiss",
 	"alert.resolve", "alert.dismiss", "alert.snooze",

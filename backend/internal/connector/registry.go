@@ -47,6 +47,9 @@ type TypeSchema struct {
 	// ConfigCheck is an optional cross-field rule (e.g. "exactly one of url
 	// or config_json") applied by ValidateConfig after the per-field checks.
 	ConfigCheck func(config map[string]any) error `json:"-"`
+	// ImportConfigCheck optionally validates type-specific data in a backup
+	// bundle before any imported records are written.
+	ImportConfigCheck func(config map[string]any) error `json:"-"`
 	// CategoryForConfig optionally derives the category from the configuration.
 	CategoryForConfig func(config map[string]any) (string, error) `json:"-"`
 	// Capabilities is computed from the connector's optional interfaces.
@@ -265,6 +268,19 @@ func ValidateConfig(schema TypeSchema, config map[string]any) error {
 	return nil
 }
 
+// ValidateImportConfig applies a connector type's optional backup-import
+// validation rule. Types without a rule keep their existing import behavior.
+func ValidateImportConfig(typ string, config map[string]any) error {
+	schema, err := GetTypeSchema(typ)
+	if err != nil {
+		return err
+	}
+	if schema.ImportConfigCheck == nil {
+		return nil
+	}
+	return schema.ImportConfigCheck(config)
+}
+
 // URLRequired reports whether the connector type's schema requires the
 // top-level url. Unknown types and types without a url field keep the
 // historical behaviour (required) unless the type sets NoURL.
@@ -378,11 +394,11 @@ func IsCredentialRefresherType(typ string) bool {
 	return ok
 }
 
-// SupportsLifecycleVerb reports whether typ's connector implementation
-// supports the lifecycle verb (restart/start/stop). Same cheap,
-// side-effect-free factory probe as IsCredentialRefresherType.
-func SupportsLifecycleVerb(typ, verb string) bool {
-	inst, err := Get(typ, map[string]any{})
+// SupportsLifecycleVerb reports whether the connector instance created from
+// config supports the lifecycle verb (restart/start/stop). The factory probe
+// is cheap and side-effect-free, matching IsCredentialRefresherType.
+func SupportsLifecycleVerb(typ, verb string, config map[string]any) bool {
+	inst, err := Get(typ, config)
 	if err != nil {
 		return false
 	}
