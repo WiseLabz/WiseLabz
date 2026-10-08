@@ -7,10 +7,10 @@
 
 ## 2. Discovery hints
 
-- [ ] 2.1 Add `DiscoveryHint`, `DiscoveryProbe`, `DiscoveryResponse` and `DiscoveryHints()` to `internal/connector/registry.go`, with URL template rendering; verify registry tests for hint listing, template rendering and that a type without a hint is absent.
-- [ ] 2.2 Declare hints with fixture-tested matchers for the distinct-port types: Proxmox VE, PBS, Home Assistant, Portainer, UniFi, AdGuard Home, Traefik, Docker, Caddy, Nginx Proxy Manager; verify each package has a test with a matching fixture and a non-matching response on the same port.
-- [ ] 2.3 Declare hints with fixture-tested matchers for pfSense, OPNsense, TrueNAS and Pi-hole on 80/443; verify each rejects the other three products' fixtures and a generic web server page.
-- [ ] 2.4 Add a registry-level test asserting the set of discoverable types and the derived port list equal the spec's "Discoverable products" list, and that hosted, custom, DNS resolver and TLS probe types have no hint; verify it passes (or update the spec if a type was dropped per the design's open question).
+- [x] 2.1 Add `DiscoveryHint`, `DiscoveryProbe`, `DiscoveryResponse` and `DiscoveryHints()` to `internal/connector/registry.go`, with URL template rendering; verify registry tests for hint listing, template rendering and that a type without a hint is absent.
+- [x] 2.2 Declare hints with fixture-tested matchers for the distinct-port types: Proxmox VE, PBS, Home Assistant, Portainer, UniFi, AdGuard Home, Traefik, Docker, Caddy, Nginx Proxy Manager; verify each package has a test with a matching fixture and a non-matching response on the same port.
+- [x] 2.3 Declare hints with fixture-tested matchers for pfSense, OPNsense, TrueNAS and Pi-hole on 80/443; verify each rejects the other three products' fixtures and a generic web server page.
+- [x] 2.4 Add a registry-level test asserting the set of discoverable types and the derived port list equal the spec's "Discoverable products" list, and that hosted, custom, DNS resolver and TLS probe types have no hint; verify it passes (or update the spec if a type was dropped per the design's open question).
 
 ## 3. Scanner and manager
 

@@ -45,9 +45,10 @@ const (
 
 func init() {
 	connector.Register(connector.TypeSchema{
-		Type:     typeName,
-		Category: "networking",
-		Name:     "Traefik",
+		Type:      typeName,
+		Category:  "networking",
+		Name:      "Traefik",
+		Discovery: discovery,
 		Fields: []connector.SchemaField{
 			{Key: "url", Label: "Traefik API URL", Type: "text", Required: true, Placeholder: "http://traefik.example.com:8080", Description: "Base URL of the Traefik API/dashboard (the host serving /api/overview)."},
 			{Key: "auth_mode", Label: "Authentication", Type: "select", Required: false, Default: authNone, Options: []string{authNone, authBasic, authToken}, Description: "How the API is protected: none (localhost), basic auth, or a bearer token / API key."},

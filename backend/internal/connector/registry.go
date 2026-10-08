@@ -1,8 +1,14 @@
 package connector
 
 import (
+	"crypto/x509"
+	"encoding/json"
 	"fmt"
+	"net/http"
 	"regexp"
+	"sort"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
@@ -45,6 +51,118 @@ type TypeSchema struct {
 	CategoryForConfig func(config map[string]any) (string, error) `json:"-"`
 	// Capabilities is computed from the connector's optional interfaces.
 	Capabilities CapabilityDescriptor `json:"capabilities"`
+	// Discovery, when set, makes the type findable by a network scan (see
+	// DiscoveryHint). Types without one are never reported by a scan.
+	Discovery *DiscoveryHint `json:"-"`
+}
+
+// DiscoveryHint tells the network discovery scan how to recognise a product on
+// the network and which connector URL to prefill for it.
+type DiscoveryHint struct {
+	// Probes are tried in order; the scan sends at most one request per
+	// probe, and only to a port that accepted a TCP connection.
+	Probes []DiscoveryProbe
+	// URLTemplate is the connector URL to prefill, with {scheme}, {host} and
+	// {port} placeholders taken from the matching probe, for example
+	// "{scheme}://{host}:{port}/api2/json".
+	URLTemplate string
+	// URLField names the config field the URL prefills. Empty means the
+	// top-level url; a type whose endpoint lives in another field (Docker's
+	// host) sets it.
+	URLField string
+}
+
+// DiscoveryProbe is one unauthenticated GET that can identify a product.
+type DiscoveryProbe struct {
+	Port   int
+	Scheme string // "http" or "https"
+	Path   string
+	// Match reports whether the response identifies the product. It is a pure
+	// function of the captured response and must be specific enough not to
+	// match another product or a generic web server on the same port.
+	Match func(DiscoveryResponse) bool
+}
+
+// DiscoveryResponse is what a probe captured, handed to DiscoveryProbe.Match.
+type DiscoveryResponse struct {
+	Status int
+	Header http.Header
+	// Body is capped by the scanner; a longer body arrives truncated.
+	Body []byte
+	// TLSLeaf is the server's leaf certificate for an https probe, nil
+	// otherwise. It is untrusted: the scan does not verify certificates.
+	TLSLeaf *x509.Certificate
+}
+
+// JSONObject decodes the body as a JSON object, or returns nil when it is not
+// one, so matchers can test keys without handling decode errors.
+func (r DiscoveryResponse) JSONObject() map[string]any {
+	var obj map[string]any
+	if err := json.Unmarshal(r.Body, &obj); err != nil {
+		return nil
+	}
+	return obj
+}
+
+var titleRE = regexp.MustCompile(`(?is)<title[^>]*>(.*?)</title>`)
+
+// Title returns the trimmed text of the first <title> element of an HTML body,
+// or "" when there is none.
+func (r DiscoveryResponse) Title() string {
+	m := titleRE.FindSubmatch(r.Body)
+	if m == nil {
+		return ""
+	}
+	return strings.TrimSpace(string(m[1]))
+}
+
+// URL renders the connector URL to prefill for a probe match.
+func (h DiscoveryHint) URL(scheme, host string, port int) string {
+	return strings.NewReplacer(
+		"{scheme}", scheme,
+		"{host}", host,
+		"{port}", strconv.Itoa(port),
+	).Replace(h.URLTemplate)
+}
+
+// TypeDiscovery pairs a connector type with its discovery hint.
+type TypeDiscovery struct {
+	Type string
+	Name string
+	DiscoveryHint
+}
+
+// DiscoveryHints returns the discovery hint of every registered type that
+// declares one, ordered by connector type so scans are deterministic.
+func DiscoveryHints() []TypeDiscovery {
+	mu.RLock()
+	defer mu.RUnlock()
+	var out []TypeDiscovery
+	for _, s := range typeSchema {
+		if s.Discovery != nil {
+			out = append(out, TypeDiscovery{Type: s.Type, Name: s.Name, DiscoveryHint: *s.Discovery})
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Type < out[j].Type })
+	return out
+}
+
+// DiscoveryPorts returns every port a discovery hint probes, ascending and
+// without duplicates. The scan derives its port list from the hints, so there
+// is no second list to keep in step.
+func DiscoveryPorts() []int {
+	seen := map[int]bool{}
+	var ports []int
+	for _, d := range DiscoveryHints() {
+		for _, p := range d.Probes {
+			if !seen[p.Port] {
+				seen[p.Port] = true
+				ports = append(ports, p.Port)
+			}
+		}
+	}
+	sort.Ints(ports)
+	return ports
 }
 
 // DegradedLatencyThreshold returns this type's configured health-check

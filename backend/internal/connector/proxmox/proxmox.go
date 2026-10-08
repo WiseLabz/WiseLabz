@@ -13,9 +13,10 @@ const typeName = "proxmox"
 
 func init() {
 	connector.Register(connector.TypeSchema{
-		Type:     typeName,
-		Category: "virtualization",
-		Name:     "Proxmox VE",
+		Type:      typeName,
+		Category:  "virtualization",
+		Name:      "Proxmox VE",
+		Discovery: discovery,
 		Fields: []connector.SchemaField{
 			{Key: "url", Label: "API URL", Type: "text", Required: true, Placeholder: "https://pve.example.com:8006/api2/json"},
 			{Key: "token_id", Label: "API Token ID", Type: "text", Required: true, Placeholder: "root@pam!monitoring"},
