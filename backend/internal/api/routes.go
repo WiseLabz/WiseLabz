@@ -14,6 +14,7 @@ import (
 	compliancehandler "github.com/WiseLabz/wiselabz/internal/api/compliance"
 	connhandler "github.com/WiseLabz/wiselabz/internal/api/connectors"
 	dashhandler "github.com/WiseLabz/wiselabz/internal/api/dashboard"
+	discoveryhandler "github.com/WiseLabz/wiselabz/internal/api/discovery"
 	dochandler "github.com/WiseLabz/wiselabz/internal/api/docs"
 	entityhandler "github.com/WiseLabz/wiselabz/internal/api/entities"
 	findinghandler "github.com/WiseLabz/wiselabz/internal/api/findings"
@@ -52,6 +53,7 @@ type routerDeps struct {
 	notifH      *notifhandler.Handler
 	runbookH    *runbookhandler.Handler
 	dashH       *dashhandler.Handler
+	discoveryH  *discoveryhandler.Handler
 	docH        *dochandler.Handler
 	savedViewH  *savedviewhandler.Handler
 	chatH       *chathandler.Handler
@@ -106,6 +108,7 @@ func mountAPIRoutes(r chi.Router, d routerDeps) {
 			mountSettingsRoutes(r, d)
 			mountSystemRoutes(r, d)
 			mountComplianceRoutes(r, d)
+			mountDiscoveryRoutes(r, d)
 			mountUserRoutes(r, d)
 
 			r.Post("/sync", d.connH.SyncAll)

@@ -1821,7 +1821,7 @@ export function useGetReadyz<
 }
 
 /**
- * Redeem it as `?ticket=` on GET /ws (see docs/WS_CONTRACT.md). Read-only and connector-restricted API keys may mint one; the socket then receives only the connector events the key's owner can read, narrowed to the key's connectors. Run transitions use runbook.run.updated; its payload is RunbookRunUpdatedEvent and contains identifiers and states only.
+ * Redeem it as `?ticket=` on GET /ws (see docs/WS_CONTRACT.md). Read-only and connector-restricted API keys may mint one; the socket then receives only the connector events the key's owner can read, narrowed to the key's connectors. Run transitions use runbook.run.updated; its payload is RunbookRunUpdatedEvent and contains identifiers and states only. Network discovery events (discovery.progress, discovery.candidate, discovery.complete) reach only the admin who started the scan.
  * @summary Mint a one-time WebSocket ticket for the authenticated caller
  */
 export const postWsTicket = (

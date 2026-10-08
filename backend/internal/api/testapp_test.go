@@ -58,8 +58,8 @@ func newTestAppWithBackupDir(t *testing.T, backupDir string) *testApp {
 }
 
 // newTestAppWithOptions is the shared constructor; tweak, if non-nil, edits the config before the
-// router is built.
-func newTestAppWithOptions(t *testing.T, backupDir string, tweak func(*config.Config)) *testApp {
+// router is built, and routerOpts edit the router's own Config (fakes for scanners and the like).
+func newTestAppWithOptions(t *testing.T, backupDir string, tweak func(*config.Config), routerOpts ...func(*api.Config)) *testApp {
 	t.Helper()
 
 	dsn := "file:" + storetest.MigratedSQLite(t) + "?cache=shared"
@@ -128,7 +128,7 @@ func newTestAppWithOptions(t *testing.T, backupDir string, tweak func(*config.Co
 		tweak(cfg)
 	}
 
-	router := api.NewRouter(api.Config{
+	routerCfg := api.Config{
 		WSHub:         wsHub,
 		Store:         s,
 		JWT:           jwtSvc,
@@ -139,7 +139,11 @@ func newTestAppWithOptions(t *testing.T, backupDir string, tweak func(*config.Co
 		BackupDir:     backupDir,
 		AIRegistry:    aiRegistry,
 		EmbedRegistry: embedRegistry,
-	})
+	}
+	for _, opt := range routerOpts {
+		opt(&routerCfg)
+	}
+	router := api.NewRouter(routerCfg)
 
 	return &testApp{Router: router, Store: s, JWT: jwtSvc, Config: cfg, Scheduler: jobRunner, BackupDir: backupDir, WSHub: wsHub}
 }

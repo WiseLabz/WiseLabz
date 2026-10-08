@@ -7,6 +7,7 @@ export * from './chat/chat';
 export * from './compliance/compliance';
 export * from './connectors/connectors';
 export * from './dashboard/dashboard';
+export * from './discovery/discovery';
 export * from './docs/docs';
 export * from './findings/findings';
 export * from './journal/journal';

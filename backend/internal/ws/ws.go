@@ -41,6 +41,12 @@ const (
 	// changes state. A step event carries the step and goes only to readers of
 	// the step's connector; a run-level event carries no step and is global.
 	EventRunbookRunUpdated = "runbook.run.updated"
+	// Network discovery events go to the admin who started the scan only
+	// (BroadcastToUser): progress while it runs, each candidate as it is
+	// confirmed, and one completion event.
+	EventDiscoveryProgress  = "discovery.progress"
+	EventDiscoveryCandidate = "discovery.candidate"
+	EventDiscoveryComplete  = "discovery.complete"
 	// EventSystemResync tells clients to refetch volatile state. The relay emits
 	// it after its listener reconnects following a gap (ADR 0005).
 	EventSystemResync = "system.resync"
