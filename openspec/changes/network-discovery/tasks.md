@@ -42,5 +42,5 @@
 
 ## 7. Integration
 
-- [ ] 7.1 Run backend tests, web tests, lint and typecheck with the low-memory settings, `openspec validate network-discovery --strict`, then `graphify update .`; verify all pass in CI on the PR.
+- [x] 7.1 Run backend tests, web tests, lint and typecheck with the low-memory settings, `openspec validate network-discovery --strict`, then `graphify update .`; verify all pass in CI on the PR.
 - [ ] 7.2 Manually scan a real /24 from onboarding and from the add-connector page, connect two candidates through the queue, cancel a scan mid-run, and trigger the conflict and hourly limit; verify the behaviour and the audit entries match the spec scenarios.
