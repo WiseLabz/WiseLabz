@@ -180,6 +180,125 @@ func TestAnalyzeObsidianVault(t *testing.T) {
 	}
 }
 
+func TestImageEmbedSizeAlias(t *testing.T) {
+	tests := []struct {
+		name string
+		link string
+		want string
+	}{
+		{
+			name: "width",
+			link: "![[img.png|alt text|100]]",
+			want: "![alt text](attachment:img.png)",
+		},
+		{
+			name: "width and height",
+			link: "![[img.png|alt text|100x50]]",
+			want: "![alt text](attachment:img.png)",
+		},
+		{
+			name: "size only",
+			link: "![[img.png|100]]",
+			want: "![img.png](attachment:img.png)",
+		},
+		{
+			name: "numeric alias before size",
+			link: "![[img.png|123|100]]",
+			want: "![123](attachment:img.png)",
+		},
+		{
+			name: "size only width and height",
+			link: "![[img.png|100x50]]",
+			want: "![img.png](attachment:img.png)",
+		},
+		{
+			name: "no alias",
+			link: "![[img.png]]",
+			want: "![img.png](attachment:img.png)",
+		},
+		{
+			name: "nonnumeric final pipe",
+			link: "![[img.png|alt|caption]]",
+			want: "![alt|caption](attachment:img.png)",
+		},
+		{
+			name: "only final numeric pipe stripped",
+			link: "![[img.png|alt|caption|100]]",
+			want: "![alt|caption](attachment:img.png)",
+		},
+		{
+			name: "invalid dimension",
+			link: "![[img.png|alt|100x]]",
+			want: "![alt|100x](attachment:img.png)",
+		},
+		{
+			name: "whitespace around suffix",
+			link: "![[img.png| alt text | 100 ]]",
+			want: "![alt text](attachment:img.png)",
+		},
+		{
+			name: "ordinary wiki image link",
+			link: "[[img.png|linked image|100]]",
+			want: "[linked image|100](attachment:img.png)",
+		},
+		{
+			name: "markdown image link",
+			link: "![Markdown image](img.png)",
+			want: "![Markdown image](attachment:img.png)",
+		},
+		{
+			name: "PDF link",
+			link: "[[manual.pdf|download|100]]",
+			want: "[download|100](attachment:manual.pdf)",
+		},
+		{
+			name: "PDF embed",
+			link: "![[manual.pdf|preview|100]]",
+			want: "[preview|100](attachment:manual.pdf)",
+		},
+		{
+			name: "note alias",
+			link: "[[Target|note alias]]",
+			want: "[note alias](/docs/Target.md)",
+		},
+		{
+			name: "note alias with numeric pipe",
+			link: "[[Target|note alias|100]]",
+			want: "[note alias|100](/docs/Target.md)",
+		},
+	}
+	lines := make([]string, 0, len(tests))
+	for _, tt := range tests {
+		lines = append(lines, tt.link)
+	}
+	plan := analyze(t, buildZip(t,
+		entry{"Use.md", md(strings.Join(lines, "\n"))},
+		entry{"Target.md", md("target")},
+		entry{"img.png", pngBytes},
+		entry{"manual.pdf", md("%PDF-1.7\n%test\n")},
+	), DefaultLimits())
+	docs := byPath(plan)
+	gotLines := strings.Split(docs["Use.md"].Content, "\n")
+	for _, a := range docs["Use.md"].Attachments {
+		for i := range gotLines {
+			gotLines[i] = strings.ReplaceAll(gotLines[i], "attachment:"+a.ID, "attachment:"+a.Path)
+		}
+	}
+	for i := range gotLines {
+		gotLines[i] = strings.ReplaceAll(gotLines[i], "/docs/"+docs["Target.md"].ID, "/docs/Target.md")
+	}
+	if len(gotLines) != len(tests) {
+		t.Fatalf("got %d rewritten lines, want %d: %q", len(gotLines), len(tests), docs["Use.md"].Content)
+	}
+	for i, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if gotLines[i] != tt.want {
+				t.Fatalf("got %q, want %q", gotLines[i], tt.want)
+			}
+		})
+	}
+}
+
 func TestResolutionPrefersLocalThenShortest(t *testing.T) {
 	plan := analyze(t, buildZip(t,
 		entry{"Setup.md", md("root")},
