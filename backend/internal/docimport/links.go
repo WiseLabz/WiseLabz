@@ -256,8 +256,16 @@ func (r *rewriter) wikiLink(m string) string {
 			r.unresolved(m, candidates)
 			return m
 		}
+		if imageSize.MatchString(alias) {
+			alias = ""
+		}
+		if embed && isImage(ap) {
+			if i := strings.LastIndexByte(alias, '|'); i >= 0 && imageSize.MatchString(strings.TrimSpace(alias[i+1:])) {
+				alias = strings.TrimSpace(alias[:i])
+			}
+		}
 		text := path.Base(ap)
-		if alias != "" && !imageSize.MatchString(alias) {
+		if alias != "" {
 			text = alias
 		}
 		return r.attachmentLink(m, ap, text, embed)
