@@ -159,6 +159,15 @@ func auditActions(t *testing.T, s *store.Store, connectorID string) []string {
 	return actions
 }
 
+func auditCount(t *testing.T, s *store.Store) int {
+	t.Helper()
+	var n int
+	if err := s.DB().QueryRowContext(context.Background(), `SELECT COUNT(*) FROM audit_log`).Scan(&n); err != nil {
+		t.Fatalf("count audit: %v", err)
+	}
+	return n
+}
+
 func TestRunCreatesDeclaredConnector(t *testing.T) {
 	s := newStore(t)
 	ctx := context.Background()
@@ -680,17 +689,100 @@ func TestReconcileTLSProbeStableSecondRunNoAudit(t *testing.T) {
 	if res1[0].Action != reconcile.Created || res1[1].Action != reconcile.Created {
 		t.Fatalf("first run actions = %s, %s", res1[0].Action, res1[1].Action)
 	}
-	probeID := res1[0].ConnectorID
-	auditBefore := auditActions(t, s, probeID)
+	probeID, traefikID := res1[0].ConnectorID, res1[1].ConnectorID
+	probeBefore, traefikBefore := auditActions(t, s, probeID), auditActions(t, s, traefikID)
+	totalBefore := auditCount(t, s)
 
 	// Second run with unchanged config
 	res2 := run(t, s, nil, probe, traefik)
 	if res2[0].Action != reconcile.Unchanged || res2[1].Action != reconcile.Unchanged {
 		t.Fatalf("second run actions = %s, %s, want unchanged, unchanged", res2[0].Action, res2[1].Action)
 	}
-	auditAfter := auditActions(t, s, probeID)
-	if len(auditAfter) != len(auditBefore) {
-		t.Fatalf("second run wrote audit rows: before=%v, after=%v", auditBefore, auditAfter)
+	if got := auditActions(t, s, probeID); !slices.Equal(got, probeBefore) {
+		t.Fatalf("second run wrote probe audit rows: before=%v, after=%v", probeBefore, got)
+	}
+	if got := auditActions(t, s, traefikID); !slices.Equal(got, traefikBefore) {
+		t.Fatalf("second run wrote traefik audit rows: before=%v, after=%v", traefikBefore, got)
+	}
+	if got := auditCount(t, s); got != totalBefore {
+		t.Fatalf("second run changed total audit rows: before=%d, after=%d", totalBefore, got)
+	}
+}
+
+func TestReconcileTLSProbeBlankImportConnectorWithRawIDNotStored(t *testing.T) {
+	s := newStore(t)
+	traefikRec := &store.ConnectorRecord{
+		Name: "ui-traefik", Type: "traefik", Category: "networking", URL: "http://traefik.lan:8080",
+		Enabled: true, ManagedBy: store.ManagedByUI, ConfigData: "{}",
+	}
+	if err := s.CreateConnector(context.Background(), traefikRec); err != nil {
+		t.Fatal(err)
+	}
+
+	probe := probeEntry("probe", map[string]any{"import_connector": "  ", "import_connector_id": traefikRec.ID})
+	res := run(t, s, nil, probe)
+	if res[0].Action != reconcile.Created || res[0].Err != nil {
+		t.Fatalf("result = %+v, want created", res[0])
+	}
+	cfg := storedConfig(t, only(t, s, "probe"))
+	if _, ok := cfg["import_connector"]; ok {
+		t.Errorf("import_connector must never be stored: %v", cfg)
+	}
+	if cfg["import_connector_id"] != traefikRec.ID {
+		t.Errorf("import_connector_id = %v, want %s", cfg["import_connector_id"], traefikRec.ID)
+	}
+	if _, ok := probe.Config["import_connector"]; !ok {
+		t.Error("caller's config map was mutated")
+	}
+}
+
+func TestReconcileTLSProbeUnknownRawIDRejected(t *testing.T) {
+	s := newStore(t)
+	probe := probeEntry("probe", map[string]any{"import_connector_id": "00000000-0000-0000-0000-000000000000"})
+	res := run(t, s, nil, probe)
+	if res[0].Action != reconcile.Skipped {
+		t.Fatalf("action = %s, want skipped", res[0].Action)
+	}
+	if res[0].Err == nil || !strings.Contains(res[0].Err.Error(), "not found") {
+		t.Fatalf("err = %v, want 'not found'", res[0].Err)
+	}
+}
+
+func TestReconcileTLSProbeWithoutImportKeepsFileOrder(t *testing.T) {
+	s := newStore(t)
+	probe := probeEntry("probe", map[string]any{"targets": "example.com:443"})
+	pve := entry("pve")
+
+	res := run(t, s, nil, probe, pve)
+	if len(res) != 2 || res[0].Name != "probe" || res[1].Name != "pve" {
+		t.Fatalf("results = %+v, want probe then pve in input order", res)
+	}
+	if res[0].Action != reconcile.Created || res[1].Action != reconcile.Created {
+		t.Fatalf("actions = %s, %s, want created, created", res[0].Action, res[1].Action)
+	}
+}
+
+func TestReconcileTLSProbeImportAdoptsUIManagedTraefik(t *testing.T) {
+	s := newStore(t)
+	ui := &store.ConnectorRecord{
+		Name: "traefik", Type: "traefik", Category: "networking", URL: "http://old.lan:8080",
+		Enabled: true, ManagedBy: store.ManagedByUI, ConfigData: "{}",
+	}
+	if err := s.CreateConnector(context.Background(), ui); err != nil {
+		t.Fatal(err)
+	}
+
+	probe := probeEntry("probe", map[string]any{"import_connector": "traefik"})
+	res := run(t, s, nil, probe, traefikEntry("traefik"))
+	if res[1].Action != reconcile.Adopted || res[1].ConnectorID != ui.ID {
+		t.Fatalf("traefik result = %+v, want adoption of %s", res[1], ui.ID)
+	}
+	if res[0].Action != reconcile.Created {
+		t.Fatalf("probe action = %s, want created (err=%v)", res[0].Action, res[0].Err)
+	}
+	cfg := storedConfig(t, only(t, s, "probe"))
+	if cfg["import_connector_id"] != ui.ID {
+		t.Errorf("import_connector_id = %v, want adopted row %s", cfg["import_connector_id"], ui.ID)
 	}
 }
 

@@ -219,6 +219,14 @@ reference in one of two mutually exclusive forms:
 Entries configuring both keys simultaneously are rejected. Targets are given
 as one `host:port` per line under `targets`.
 
+The Traefik entry named by `import_connector` is reconciled first, regardless of
+where it appears in the file. An unknown name, a self-reference, a target that
+is not a Traefik connector, or a target that failed to reconcile skips only that
+probe entry; other entries are unaffected, and the admin is notified like for
+any skipped entry. `import_connector` is resolved at startup and only
+`import_connector_id` is stored. An unchanged file writes no update or audit row
+on restart.
+
 <!-- tls-probe-example -->
 ```yaml
 connectors:
@@ -238,4 +246,3 @@ connectors:
         switch.lan:8443
 ```
 <!-- /tls-probe-example -->
-

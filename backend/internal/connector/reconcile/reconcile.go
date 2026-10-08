@@ -87,15 +87,16 @@ func Run(ctx context.Context, s *store.Store, encKey string, entries []config.Re
 		}
 	}
 
-	// Two passes: referenced Traefik entries must reconcile before a probe
-	// that names them, even on an empty database.
+	// Two passes: only probes that name another entry via import_connector are
+	// deferred, so the referenced Traefik entry reconciles first even on an
+	// empty database. Every other entry keeps its file order in the first pass.
 	for i, e := range entries {
-		if e.Type != "tlsprobe" {
+		if !namesImport(e) {
 			reconcileEntry(i)
 		}
 	}
 	for i, e := range entries {
-		if e.Type == "tlsprobe" {
+		if namesImport(e) {
 			reconcileEntry(i)
 		}
 	}
@@ -168,6 +169,19 @@ func apply(ctx context.Context, s *store.Store, encKey string, e config.Resolved
 	return syncGrants(ctx, s, e, res)
 }
 
+// namesImport reports whether e is a TLS probe whose config references another
+// declared entry by name (a non-blank string import_connector).
+func namesImport(e config.ResolvedConnector) bool {
+	if e.Type != "tlsprobe" {
+		return false
+	}
+	name, ok := e.Config["import_connector"].(string)
+	return ok && strings.TrimSpace(name) != ""
+}
+
+// resolveProbeImport resolves a probe's import_connector reference to an
+// import_connector_id. import_connector is never stored: on success the key is
+// removed from a cloned config.
 func resolveProbeImport(ctx context.Context, s *store.Store, e *config.ResolvedConnector, entries []config.ResolvedConnector, results []Result) error {
 	if e.Config == nil {
 		return nil
@@ -237,6 +251,11 @@ func resolveProbeImport(ctx context.Context, s *store.Store, e *config.ResolvedC
 		}
 	}
 
+	if hasNameKey {
+		cfg := cloneMap(e.Config)
+		delete(cfg, "import_connector")
+		e.Config = cfg
+	}
 	return nil
 }
 

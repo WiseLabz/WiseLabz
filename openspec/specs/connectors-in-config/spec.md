@@ -178,3 +178,11 @@ At startup reconciliation, the server SHALL reconcile any referenced Traefik con
 #### Scenario: Self-referencing probe rejected
 - **WHEN** a probe sets `import_connector` to its own name
 - **THEN** the probe is skipped with an error and other connectors reconcile normally
+
+#### Scenario: Referenced entry failed to reconcile
+- **WHEN** the Traefik entry named by a probe's `import_connector` is skipped
+- **THEN** only the probe entry is skipped with an error and other entries reconcile normally
+
+#### Scenario: Referenced entry removed from the file
+- **WHEN** a probe still names a Traefik entry by `import_connector` that was deleted from the configuration file
+- **THEN** the probe is skipped with a not-found error and no dangling `import_connector_id` is written
