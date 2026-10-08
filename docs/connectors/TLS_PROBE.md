@@ -159,7 +159,33 @@ corrected.
 | Concurrent handshakes | 8 |
 | Certificate fields stored | 256 bytes each, 50 DNS names |
 
-Entries in `config.yaml` require a `url`, which this connector does not have, so
-declaring a TLS probe there is not supported yet (see
-[CONNECTORS_IN_CONFIG.md](../CONNECTORS_IN_CONFIG.md)); create it in the web UI
-or through the API.
+## Connectors in config.yaml
+
+TLS probe connectors can be declared in `config.yaml` (see
+[CONNECTORS_IN_CONFIG.md](../CONNECTORS_IN_CONFIG.md)). Because the probe dials
+targets directly rather than communicating with an API endpoint, a `url` is not
+accepted.
+
+To import hosts from a Traefik connector declared in the same file, specify its
+`name` using `import_connector`:
+
+```yaml
+connectors:
+  - name: traefik
+    type: traefik
+    url: http://traefik.lan:8080
+  - name: probe-traefik
+    type: tlsprobe
+    config:
+      import_connector: traefik
+      import_port: 443
+  - name: probe-manual
+    type: tlsprobe
+    config:
+      targets: |
+        router.lan:443
+        switch.lan:8443
+```
+
+To reference a Traefik connector created in the web UI instead, use its UUID via
+`import_connector_id: <uuid>`. The two settings are mutually exclusive.

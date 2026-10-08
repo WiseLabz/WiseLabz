@@ -212,3 +212,16 @@ func TestSnapshotInputsAskForAtMostOneConnector(t *testing.T) {
 		t.Errorf("ids %v previous %v", ids, previous)
 	}
 }
+
+func TestCheckConfigImportConnector(t *testing.T) {
+	c := &Connector{}
+	if err := c.Validate(context.Background(), map[string]any{"import_connector": "traefik-lab"}); err != nil {
+		t.Fatalf("Validate(import_connector) = %v, want nil", err)
+	}
+	if err := c.Validate(context.Background(), map[string]any{"import_connector": 123}); err == nil || !strings.Contains(err.Error(), "must be a connector name") {
+		t.Fatalf("Validate(import_connector non-string) = %v, want 'must be a connector name'", err)
+	}
+	if err := c.Validate(context.Background(), map[string]any{"import_connector": "traefik-lab", "import_connector_id": "abc-123"}); err == nil || !strings.Contains(err.Error(), "mutually exclusive") {
+		t.Fatalf("Validate(both) = %v, want mutually exclusive error", err)
+	}
+}

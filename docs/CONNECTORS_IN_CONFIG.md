@@ -24,7 +24,7 @@ connectors:
 |---|---|---|
 | `name` | yes | Connector name. This is how an entry is matched to a connector, so it must be unique in the list. |
 | `type` | yes | Connector type, e.g. `proxmox`. `GET /api/connectors/schema` lists the types and their fields. |
-| `url` | yes | Base URL. Use `url_file` instead to read it from a file. |
+| `url` | depends on type | Base URL. Required for types that dial a base URL; types with no top-level URL (like `tlsprobe`) do not accept it. Use `url_file` instead to read it from a file. |
 | `verify_tls` | no | Defaults to `true`. |
 | `enabled` | no | Defaults to `true`. |
 | `schedule_seconds` | no | Auto-sync interval. Omitted or `0` means manual sync only. |
@@ -203,3 +203,46 @@ connectors retain their last applied state. Changing the recipe's category
 changes the stored category at the next reconciliation. Recipe-less custom
 connectors keep their existing request method, legacy headers and raw response
 section behavior.
+
+## TLS probe connectors
+
+The TLS probe connector does not require a base URL; it dials targets directly.
+A declared `tlsprobe` entry accepts `targets`, `import_port` and an import
+reference in one of two mutually exclusive forms:
+
+- `import_connector: <name>`: names another connector declared in the same
+  `config.yaml`. WiseLabz reconciles the referenced Traefik connector first and
+  resolves its ID automatically.
+- `import_connector_id: <uuid>`: names an existing Traefik connector created in
+  the web app.
+
+Entries configuring both keys simultaneously are rejected. Targets are given
+as one `host:port` per line under `targets`.
+
+The Traefik entry named by `import_connector` is reconciled first, regardless of
+where it appears in the file. An unknown name, a self-reference, a target that
+is not a Traefik connector, or a target that failed to reconcile skips only that
+probe entry; other entries are unaffected, and the admin is notified like for
+any skipped entry. `import_connector` is resolved at startup and only
+`import_connector_id` is stored. An unchanged file writes no update or audit row
+on restart.
+
+<!-- tls-probe-example -->
+```yaml
+connectors:
+  - name: traefik
+    type: traefik
+    url: http://traefik.lan:8080
+  - name: probe-traefik
+    type: tlsprobe
+    config:
+      import_connector: traefik
+      import_port: 443
+  - name: probe-manual
+    type: tlsprobe
+    config:
+      targets: |
+        router.lan:443
+        switch.lan:8443
+```
+<!-- /tls-probe-example -->

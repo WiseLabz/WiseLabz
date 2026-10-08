@@ -280,3 +280,81 @@ connectors:
 		}
 	}
 }
+
+func TestResolveConnectorsTLSProbeURL(t *testing.T) {
+	dir := t.TempDir()
+	secretFile := filepath.Join(dir, "secret")
+	if err := os.WriteFile(secretFile, []byte("https://example.com"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := &Config{Connectors: []ConnectorEntry{
+		{Name: "probe_valid", Type: "tlsprobe", Config: map[string]any{"targets": "example.com:443"}},
+		{Name: "proxmox_missing_url", Type: "proxmox"},
+		{Name: "probe_with_url", Type: "tlsprobe", URL: "https://example.com"},
+		{Name: "probe_with_url_file", Type: "tlsprobe", URLFile: secretFile},
+	}}
+	got := cfg.ResolveConnectors()
+
+	// a tlsprobe entry without url loads
+	if got[0].Err != nil {
+		t.Errorf("probe_valid: unexpected error: %v", got[0].Err)
+	}
+	if got[0].URL != "" {
+		t.Errorf("probe_valid: URL = %q, want empty", got[0].URL)
+	}
+
+	// a typed entry that requires a url and has none still fails
+	if got[1].Err == nil || !strings.Contains(got[1].Err.Error(), "url is required") {
+		t.Errorf("proxmox_missing_url: err = %v, want 'url is required'", got[1].Err)
+	}
+
+	// tlsprobe with url fails
+	if got[2].Err == nil || !strings.Contains(got[2].Err.Error(), "tlsprobe does not accept a url") {
+		t.Errorf("probe_with_url: err = %v, want 'tlsprobe does not accept a url'", got[2].Err)
+	}
+
+	// tlsprobe with url_file fails
+	if got[3].Err == nil || !strings.Contains(got[3].Err.Error(), "tlsprobe does not accept a url") {
+		t.Errorf("probe_with_url_file: err = %v, want 'tlsprobe does not accept a url'", got[3].Err)
+	}
+}
+
+func TestDocumentedTLSProbeExample(t *testing.T) {
+	doc, err := os.ReadFile("../../../docs/CONNECTORS_IN_CONFIG.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, after, ok := strings.Cut(string(doc), "<!-- tls-probe-example -->")
+	if !ok {
+		t.Fatal("missing example marker <!-- tls-probe-example -->")
+	}
+	_, after, ok = strings.Cut(after, "```yaml\n")
+	if !ok {
+		t.Fatal("missing opening yaml fence")
+	}
+	snippet, _, ok := strings.Cut(after, "```")
+	if !ok {
+		t.Fatal("missing closing yaml fence")
+	}
+
+	cfg := loadYAML(t, snippet)
+	if len(cfg.Connectors) != 3 {
+		t.Fatalf("len(connectors) = %d, want 3", len(cfg.Connectors))
+	}
+	resolved := cfg.ResolveConnectors()
+	for i, r := range resolved {
+		if r.Err != nil {
+			t.Errorf("connector %d (%s) failed to resolve: %v", i, r.Name, r.Err)
+		}
+	}
+	if resolved[0].Name != "traefik" || resolved[0].URL != "http://traefik.lan:8080" {
+		t.Errorf("traefik entry = %+v", resolved[0])
+	}
+	if resolved[1].Name != "probe-traefik" || resolved[1].URL != "" || resolved[1].Config["import_connector"] != "traefik" {
+		t.Errorf("probe-traefik entry = %+v", resolved[1])
+	}
+	if resolved[2].Name != "probe-manual" || resolved[2].URL != "" || resolved[2].Config["targets"] == nil {
+		t.Errorf("probe-manual entry = %+v", resolved[2])
+	}
+}

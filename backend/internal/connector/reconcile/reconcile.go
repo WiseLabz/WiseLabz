@@ -62,14 +62,19 @@ const maxAdmins = 10000
 // notify may be nil. It is called once, summarising skipped entries and
 // orphaned connectors, when there are any.
 func Run(ctx context.Context, s *store.Store, encKey string, entries []config.ResolvedConnector, logger *slog.Logger, notify Notifier) []Result {
-	results := make([]Result, 0, len(entries))
+	results := make([]Result, len(entries))
 	declared := make(map[string]bool, len(entries))
-	for _, e := range entries {
+	for i, e := range entries {
 		// An invalid entry still declares its name: its connector keeps its
 		// last reconciled state rather than being orphaned.
 		declared[e.Name] = true
-		res := Result{Name: e.Name}
-		if err := apply(ctx, s, encKey, e, &res); err != nil {
+		results[i] = Result{Name: e.Name}
+	}
+
+	reconcileEntry := func(i int) {
+		e := entries[i]
+		res := &results[i]
+		if err := apply(ctx, s, encKey, e, res, entries, results); err != nil {
 			res.Action, res.Err = Skipped, err
 			logger.Error("Declared connector skipped", "connector", e.Name, "error", err)
 		} else {
@@ -80,7 +85,20 @@ func Run(ctx context.Context, s *store.Store, encKey string, entries []config.Re
 				logger.Warn("Declared connector warning", "connector", e.Name, "warning", w)
 			}
 		}
-		results = append(results, res)
+	}
+
+	// Two passes: only probes that name another entry via import_connector are
+	// deferred, so the referenced Traefik entry reconciles first even on an
+	// empty database. Every other entry keeps its file order in the first pass.
+	for i, e := range entries {
+		if !namesImport(e) {
+			reconcileEntry(i)
+		}
+	}
+	for i, e := range entries {
+		if namesImport(e) {
+			reconcileEntry(i)
+		}
 	}
 
 	orphaned, err := orphan(ctx, s, declared)
@@ -102,12 +120,17 @@ func Run(ctx context.Context, s *store.Store, encKey string, entries []config.Re
 
 // apply reconciles one entry. A returned error means the entry was skipped and
 // nothing was written for it.
-func apply(ctx context.Context, s *store.Store, encKey string, e config.ResolvedConnector, res *Result) error {
+func apply(ctx context.Context, s *store.Store, encKey string, e config.ResolvedConnector, res *Result, entries []config.ResolvedConnector, results []Result) error {
 	if e.Err != nil {
 		return e.Err
 	}
 	if err := connector.ValidateDeclared(e.Type, e.Config); err != nil {
 		return err
+	}
+	if e.Type == "tlsprobe" {
+		if err := resolveProbeImport(ctx, s, &e, entries, results); err != nil {
+			return err
+		}
 	}
 	schema, err := connector.GetTypeSchema(e.Type)
 	if err != nil {
@@ -144,6 +167,112 @@ func apply(ctx context.Context, s *store.Store, encKey string, e config.Resolved
 		return err
 	}
 	return syncGrants(ctx, s, e, res)
+}
+
+// namesImport reports whether e is a TLS probe whose config references another
+// declared entry by name (a non-blank string import_connector).
+func namesImport(e config.ResolvedConnector) bool {
+	if e.Type != "tlsprobe" {
+		return false
+	}
+	name, ok := e.Config["import_connector"].(string)
+	return ok && strings.TrimSpace(name) != ""
+}
+
+// resolveProbeImport resolves a probe's import_connector reference to an
+// import_connector_id. import_connector is never stored: on success the key is
+// removed from a cloned config.
+func resolveProbeImport(ctx context.Context, s *store.Store, e *config.ResolvedConnector, entries []config.ResolvedConnector, results []Result) error {
+	if e.Config == nil {
+		return nil
+	}
+	rawName, hasNameKey := e.Config["import_connector"]
+	rawID, hasIDKey := e.Config["import_connector_id"]
+
+	name, _ := rawName.(string)
+	name = strings.TrimSpace(name)
+	id, _ := rawID.(string)
+	id = strings.TrimSpace(id)
+
+	if hasNameKey && rawName != nil && !isString(rawName) {
+		return errors.New("import_connector must be a connector name")
+	}
+	if hasIDKey && rawID != nil && !isString(rawID) {
+		return errors.New("import_connector_id must be a connector ID")
+	}
+
+	if name != "" && id != "" {
+		return errors.New("import_connector and import_connector_id are mutually exclusive")
+	}
+
+	if name != "" {
+		if name == e.Name {
+			return fmt.Errorf("probe %q cannot import from itself", e.Name)
+		}
+		var targetEntry *config.ResolvedConnector
+		var targetResult *Result
+		for i := range entries {
+			if entries[i].Name == name {
+				targetEntry = &entries[i]
+				targetResult = &results[i]
+				break
+			}
+		}
+		if targetEntry == nil {
+			return fmt.Errorf("referenced connector %q not found", name)
+		}
+		if targetResult.Action == Skipped || targetResult.Err != nil {
+			return fmt.Errorf("referenced connector %q failed to reconcile", name)
+		}
+		if targetEntry.Type != "traefik" {
+			return fmt.Errorf("referenced connector %q must be a Traefik connector", name)
+		}
+		if targetResult.ConnectorID == "" {
+			return fmt.Errorf("referenced connector %q has no connector ID", name)
+		}
+
+		cfg := cloneMap(e.Config)
+		delete(cfg, "import_connector")
+		cfg["import_connector_id"] = targetResult.ConnectorID
+		e.Config = cfg
+		return nil
+	}
+
+	if id != "" {
+		rec, err := s.GetConnector(ctx, id)
+		if err != nil {
+			if errors.Is(err, store.ErrNotFound) {
+				return fmt.Errorf("referenced connector %q not found", id)
+			}
+			return fmt.Errorf("lookup referenced connector %q: %w", id, err)
+		}
+		if rec.Type != "traefik" {
+			return fmt.Errorf("referenced connector %q must be a Traefik connector", id)
+		}
+	}
+
+	if hasNameKey {
+		cfg := cloneMap(e.Config)
+		delete(cfg, "import_connector")
+		e.Config = cfg
+	}
+	return nil
+}
+
+func isString(v any) bool {
+	_, ok := v.(string)
+	return ok
+}
+
+func cloneMap(m map[string]any) map[string]any {
+	if m == nil {
+		return nil
+	}
+	out := make(map[string]any, len(m))
+	for k, v := range m {
+		out[k] = v
+	}
+	return out
 }
 
 // match finds the connector an entry named name applies to: the one already
