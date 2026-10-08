@@ -15,6 +15,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"time"
 )
 
 // DefaultMaxBytes limits each attachment to 25 MiB.
@@ -107,7 +108,7 @@ func (s *Store) Put(r io.Reader) (Blob, error) {
 }
 
 // Stage streams, hashes, validates and syncs an upload without publishing it.
-// It needs no PublicationMu: Sweep ignores the temporary upload filename.
+// It needs no PublicationMu: Sweep retains recent temporary uploads.
 func (s *Store) Stage(r io.Reader) (*StagedBlob, error) {
 	if err := os.MkdirAll(s.Dir, 0o700); err != nil {
 		return nil, fmt.Errorf("create blob directory: %w", err)
@@ -212,14 +213,39 @@ func (s *Store) Delete(hash string) error {
 	return err
 }
 
-// Sweep calls referenced for each published blob, retaining all referenced bytes.
-// The caller must hold PublicationMu through its database snapshot and sweep.
+// Sweep removes root-level .upload-* files older than one hour and calls
+// referenced for each published blob, retaining all referenced bytes. The
+// caller must hold PublicationMu through its database snapshot and sweep.
 func (s *Store) Sweep(referenced func(string) (bool, error)) error {
+	cutoff := time.Now().Add(-time.Hour)
 	err := filepath.WalkDir(s.Dir, func(path string, d fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
 		}
-		if d.IsDir() || !ValidHash(d.Name()) {
+		if d.IsDir() {
+			return nil
+		}
+		if filepath.Clean(filepath.Dir(path)) == filepath.Clean(s.Dir) && strings.HasPrefix(d.Name(), ".upload-") {
+			info, err := d.Info()
+			if errors.Is(err, os.ErrNotExist) {
+				return nil
+			}
+			if err != nil {
+				return fmt.Errorf("inspect upload temp: %w", err)
+			}
+			if !info.Mode().IsRegular() || !info.ModTime().Before(cutoff) {
+				return nil
+			}
+			err = os.Remove(path)
+			if errors.Is(err, os.ErrNotExist) {
+				return nil
+			}
+			if err != nil {
+				return fmt.Errorf("remove stale upload temp: %w", err)
+			}
+			return nil
+		}
+		if !ValidHash(d.Name()) {
 			return nil
 		}
 		expected, _ := s.path(d.Name())

@@ -116,6 +116,57 @@ func TestSweepRetainsReferences(t *testing.T) {
 	}
 }
 
+func TestSweepRemovesStaleUploadTemps(t *testing.T) {
+	s := New(t.TempDir(), 0)
+	stale := filepath.Join(s.Dir, ".upload-stale")
+	fresh := filepath.Join(s.Dir, ".upload-active")
+	unknown := filepath.Join(s.Dir, "unknown-entry")
+	uploadDir := filepath.Join(s.Dir, ".upload-directory")
+	nested := filepath.Join(uploadDir, ".upload-nested")
+	for _, path := range []string{stale, fresh, unknown} {
+		if err := os.WriteFile(path, []byte("data"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.Mkdir(uploadDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(nested, []byte("data"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now()
+	staleTime := now.Add(-61 * time.Minute)
+	freshTime := now.Add(-59 * time.Minute)
+	unknownTime := now.Add(-2 * time.Hour)
+	if err := os.Chtimes(stale, staleTime, staleTime); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(fresh, freshTime, freshTime); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(unknown, unknownTime, unknownTime); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(nested, unknownTime, unknownTime); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := s.Sweep(func(string) (bool, error) {
+		t.Fatal("sweep treated an upload temp as a published blob")
+		return false, nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(stale); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("stale upload temp remains: %v", err)
+	}
+	for _, path := range []string{fresh, unknown, uploadDir, nested} {
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("sweep removed an entry it should preserve (%s): %v", path, err)
+		}
+	}
+}
+
 func TestSignedURLExpiryTamperAndKeySeparation(t *testing.T) {
 	now := time.Unix(1700000000, 0)
 	s := NewSigner("secret")
