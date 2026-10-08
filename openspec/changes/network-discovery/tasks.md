@@ -2,8 +2,8 @@
 
 ## 1. Range and scoped dialer
 
-- [ ] 1.1 Add `GuardedDialerForRange(timeout, *net.IPNet)` beside `GuardedDialer` in `internal/connector/connector.go`, reusing `IsDangerousIP`, `BlockedAddressError` and the loopback test allowance; verify unit tests for an in-range address, an out-of-range private address, and loopback and link-local addresses inside a (hypothetical) allowed range.
-- [ ] 1.2 Create `internal/discovery` with `ParseRange` and host enumeration (design D2); verify a table test covering every scenario under "Accepted range" plus /30, /31 and /32 host counts.
+- [x] 1.1 Add `GuardedDialerForRange(timeout, *net.IPNet)` beside `GuardedDialer` in `internal/connector/connector.go`, reusing `IsDangerousIP`, `BlockedAddressError` and the loopback test allowance; verify unit tests for an in-range address, an out-of-range private address, and loopback and link-local addresses inside a (hypothetical) allowed range.
+- [x] 1.2 Create `internal/discovery` with `ParseRange` and host enumeration (design D2); verify a table test covering every scenario under "Accepted range" plus /30, /31 and /32 host counts.
 
 ## 2. Discovery hints
 

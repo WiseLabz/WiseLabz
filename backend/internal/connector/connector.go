@@ -311,20 +311,48 @@ func GuardedDialer(timeout time.Duration) *net.Dialer {
 	return &net.Dialer{
 		Timeout: timeout,
 		Control: func(_, address string, _ syscall.RawConn) error {
-			host, _, err := net.SplitHostPort(address)
+			_, err := guardedAddress(address)
+			return err
+		},
+	}
+}
+
+// GuardedDialerForRange is GuardedDialer narrowed to an allowlist: on top of
+// the loopback/link-local/unspecified/multicast block, Control returns
+// BlockedAddressError for any address outside the given range. The network
+// discovery scan dials through it so a probe cannot leave the range the admin
+// submitted, whatever the caller does with host names or redirects.
+func GuardedDialerForRange(timeout time.Duration, allowed *net.IPNet) *net.Dialer {
+	return &net.Dialer{
+		Timeout: timeout,
+		Control: func(_, address string, _ syscall.RawConn) error {
+			ip, err := guardedAddress(address)
 			if err != nil {
-				return fmt.Errorf("split address %q: %w", address, err)
+				return err
 			}
-			ip := net.ParseIP(host)
-			if ip == nil {
-				return fmt.Errorf("unresolvable address %q", host)
-			}
-			if IsDangerousIP(ip) && (allowLoopbackForTest.Load() == 0 || !ip.IsLoopback()) {
+			if allowed == nil || !allowed.Contains(ip) {
 				return &BlockedAddressError{IP: ip}
 			}
 			return nil
 		},
 	}
+}
+
+// guardedAddress parses the dialed host:port and applies the blocked-address
+// rules shared by GuardedDialer and GuardedDialerForRange, returning the IP.
+func guardedAddress(address string) (net.IP, error) {
+	host, _, err := net.SplitHostPort(address)
+	if err != nil {
+		return nil, fmt.Errorf("split address %q: %w", address, err)
+	}
+	ip := net.ParseIP(host)
+	if ip == nil {
+		return nil, fmt.Errorf("unresolvable address %q", host)
+	}
+	if IsDangerousIP(ip) && (allowLoopbackForTest.Load() == 0 || !ip.IsLoopback()) {
+		return nil, &BlockedAddressError{IP: ip}
+	}
+	return ip, nil
 }
 
 // allowLoopbackForTest counts tests currently holding AllowLoopbackForTest; a
