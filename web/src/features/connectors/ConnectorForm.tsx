@@ -8,7 +8,8 @@
  * Owns no page chrome — the caller supplies surrounding layout and decides what
  * happens on success via `onCreated`.
  */
-import { createElement, useEffect, useMemo, useState } from 'react';
+import { createElement, lazy, Suspense, useEffect, useMemo, useState } from 'react';
+import { ErrorBoundary } from 'react-error-boundary';
 import { useTranslation } from 'react-i18next';
 import { useQueryClient } from '@tanstack/react-query';
 import {
@@ -33,9 +34,14 @@ import {
   errorsForField,
   focusFirstLocatedError,
   locatedErrorsFrom,
-  readRecipeCategory,
+  mergeRecipeFeedback,
   recipePreviewConfig,
+  type RecipeFeedback,
 } from './recipeForm';
+import { useRecipeFeedback } from './useRecipeFeedback';
+
+const LazyRecipeEditor = lazy(() => import('./RecipeEditor'));
+const LazyRecipeCategory = lazy(() => import('./RecipeCategoryDisplay'));
 
 type FormValues = Record<string, string | boolean>;
 
@@ -71,6 +77,7 @@ export function ConnectorForm({
     delete fields.owner;
     return fields;
   });
+  const { feedback: recipeFeedback, recordSaveStart, recordSaveError, recordPreview } = useRecipeFeedback();
   const [createdTlsProbe, setCreatedTlsProbe] = useState<Connector | null>(null);
 
   const schema = useMemo(
@@ -107,6 +114,7 @@ export function ConnectorForm({
   const create = useStepUpMutation<ConnectorCreate, Connector>({
     action: 'connector.recipeActions',
     mutationFn: (body, token) => token ? postConnectors(body, elevationOptions(token)) : postConnectors(body),
+    onError: recordSaveError,
     onSuccess: (created) => {
       queryClient.invalidateQueries({ queryKey: getGetConnectorsQueryKey() });
       if (schema?.type === 'tlsprobe') setCreatedTlsProbe(created as Connector);
@@ -193,6 +201,7 @@ export function ConnectorForm({
                   field={probeTranslations ? { ...f, label: t(probeTranslations.label) } : f}
                   value={values[f.name] ?? fieldDefault(f)}
                   error={errorsForField(createErrors, f.name)}
+                  recipeFeedback={f.name === 'recipe' ? recipeFeedback : undefined}
                   disabled={disabled}
                   helperText={disabled ? t('connectors.tlsProbe.adminOnlyHint') : probeTranslations ? t(probeTranslations.hint) : undefined}
                   selectOptions={schema.type === 'tlsprobe' && f.name === 'import_connector_id'
@@ -227,6 +236,7 @@ export function ConnectorForm({
                 url={String(values.url ?? '')}
                 verifyTls={previewVerifyTls}
                 config={recipePreviewConfig(schema, values)}
+                onFeedback={recordPreview}
               />
             </div>
           )}
@@ -241,7 +251,11 @@ export function ConnectorForm({
               variant="primary"
               size="md"
               disabled={!requiredFilled || create.isPending || createdTlsProbe !== null}
-              onClick={() => create.mutate(createBody())}
+              onClick={() => {
+                const body = createBody();
+                recordSaveStart(String(body.config?.recipe ?? ''));
+                create.mutate(body);
+              }}
             >
               <CheckIcon size={15} />
               {create.isPending ? t('connectors.submitPending') : t('connectors.submitIdle')}
@@ -304,6 +318,7 @@ export function Field({
   disabled = false,
   helperText,
   selectOptions,
+  recipeFeedback,
 }: {
   field: SchemaField;
   value: string | boolean;
@@ -311,12 +326,23 @@ export function Field({
   error?: string;
   disabled?: boolean;
   helperText?: string;
+  recipeFeedback?: RecipeFeedback;
   selectOptions?: { value: string; label: string; disabled?: boolean }[];
 }) {
   const fieldId = `connector-field-${field.name}`;
   const errorId = error ? `${fieldId}-error` : undefined;
   const helperId = helperText ? `${fieldId}-hint` : undefined;
   const describedBy = [helperId, errorId].filter(Boolean).join(' ') || undefined;
+  if (field.name === 'recipe' && field.kind === 'textarea') {
+    const merged = mergeRecipeFeedback(recipeFeedback, String(value));
+    const fallback = <label className="block text-xs text-ink-muted">{field.label}<textarea id={fieldId} aria-label={field.label} value={String(value)} disabled={disabled} onChange={(event) => onChange(event.target.value)} rows={12} className="mt-1 w-full font-mono" /></label>;
+    return (
+      <div>
+        <ErrorBoundary fallback={fallback}><Suspense fallback={fallback}><LazyRecipeEditor label={field.label} value={String(value)} onChange={onChange} disabled={disabled} errors={merged.errors} errorRecipe={merged.errorRecipe} endpointResults={merged.endpoints} /></Suspense></ErrorBoundary>
+        {error && <p id={errorId} className="mt-1 text-2xs text-err" aria-live="polite">{error}</p>}
+      </div>
+    );
+  }
   if (isToggleField(field)) {
     return (
       <label className="flex items-center justify-between gap-3">
@@ -433,14 +459,5 @@ export function Field({
 }
 
 export function RecipeCategoryDisplay({ recipe }: { recipe: string }) {
-  const { t } = useTranslation();
-  const category = readRecipeCategory(recipe);
-  return (
-    <dl className="mt-2 flex items-baseline gap-2 text-xs">
-      <dt className="text-ink-muted">{t('connectors.recipePreview.categoryLabel')}</dt>
-      <dd className="text-ink" aria-live="polite">
-        {category ? t(`services.category.${category}`) : t('connectors.recipePreview.categoryUnset')}
-      </dd>
-    </dl>
-  );
+  return <Suspense fallback={null}><LazyRecipeCategory recipe={recipe} /></Suspense>;
 }

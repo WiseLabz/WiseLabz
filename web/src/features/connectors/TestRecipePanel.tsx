@@ -6,7 +6,9 @@ import { Button } from '../../components/ui/Button';
 import { Panel } from '../../components/ui/Panel';
 import { useIsInstanceAdmin } from '../../hooks/useRole';
 import { LocatedErrors } from './LocatedErrors';
-import { focusFirstLocatedError, locatedErrorsFrom } from './recipeForm';
+import { focusFirstLocatedError, locatedErrorsFrom, type RecipeFeedbackEntry } from './recipeForm';
+
+type PreviewFeedback = Omit<RecipeFeedbackEntry, 'seq'>;
 
 // Non-reversible 32-bit FNV-1a fingerprint, so panel state never holds typed credentials.
 function fingerprint(value: string): string {
@@ -18,12 +20,12 @@ function fingerprint(value: string): string {
   return (hash >>> 0).toString(16);
 }
 
-export function TestRecipePanel(input: RecipePreviewInput) {
+export function TestRecipePanel({ onFeedback, ...input }: RecipePreviewInput & { onFeedback?: (feedback: PreviewFeedback) => void }) {
   const isAdmin = useIsInstanceAdmin();
-  return isAdmin ? <AdminTestRecipePanel input={input} /> : null;
+  return isAdmin ? <AdminTestRecipePanel input={input} onFeedback={onFeedback} /> : null;
 }
 
-function AdminTestRecipePanel({ input }: { input: RecipePreviewInput }) {
+function AdminTestRecipePanel({ input, onFeedback }: { input: RecipePreviewInput; onFeedback?: (feedback: PreviewFeedback) => void }) {
   const { t } = useTranslation();
   const preview = usePreviewConnectorRecipe({ mutation: { gcTime: 0 } });
   const recipe = String(input.config.recipe ?? '').trim();
@@ -63,8 +65,14 @@ function AdminTestRecipePanel({ input }: { input: RecipePreviewInput }) {
               preview.mutate(
                 { data: input },
                 {
-                  onSuccess: () => setCompletedKey(inputKey),
-                  onError: () => setCompletedKey(inputKey),
+                  onSuccess: (result) => {
+                    setCompletedKey(inputKey);
+                    onFeedback?.({ recipe: String(input.config.recipe ?? ''), errors: [], endpoints: result.endpoints });
+                  },
+                  onError: (error) => {
+                    setCompletedKey(inputKey);
+                    onFeedback?.({ recipe: String(input.config.recipe ?? ''), errors: locatedErrorsFrom(error) });
+                  },
                 },
               );
             }}
