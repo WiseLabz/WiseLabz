@@ -2,7 +2,7 @@ import { Component, Suspense, lazy, useCallback, useEffect, useMemo, useRef, use
 import type { ComponentType, ErrorInfo, KeyboardEvent, ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { FieldError, RecipePreview } from '../../api/model';
-import { resolveRecipeError } from './recipeErrors';
+import { recipeFieldId, resolveRecipeError } from './recipeErrors';
 import { parseRecipeDocument } from './recipeDocument';
 
 type RecipeTab = 'form' | 'yaml';
@@ -91,6 +91,15 @@ function parserDiagnostic(value: string, issue: RecipeDocumentIssue | undefined)
   return [{ from, to: Math.max(from, to), severity: 'error', message: issue.message, source: 'YAML' }];
 }
 
+/** The element for a located path, or the nearest ancestor field that is drawn. */
+function nearestFormElement(path: (string | number)[]): HTMLElement | null {
+  for (let length = path.length; length > 0; length -= 1) {
+    const element = document.getElementById(recipeFieldId(path.slice(0, length)));
+    if (element) return element;
+  }
+  return null;
+}
+
 export type RecipeEditorProps = {
   value: string;
   onChange: (value: string) => void;
@@ -126,6 +135,7 @@ export function RecipeEditor({
   const [focusLine, setFocusLine] = useState<number>();
   const [focusRequest, setFocusRequest] = useState(0);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const focusedRequest = useRef(0);
 
   const parseResult = parsed.value === value ? parsed.result : undefined;
   const issue = value.trim() ? parseResult?.error ?? parseResult?.unsupported : undefined;
@@ -182,13 +192,28 @@ export function RecipeEditor({
   useEffect(() => {
     const handleFocus = (rawEvent: Event) => {
       const event = rawEvent as CustomEvent<{ field?: string }>;
-      if (!event.detail?.field) return;
-      const resolved = resolveRecipeError(value, event.detail.field);
-      if (!resolved) return;
+      const requested = event.detail?.field;
+      if (!requested) return;
+      // The event names the first server error; later ones are fallbacks when it has nowhere to land.
+      const fields = errorsAreStale ? [requested] : [requested, ...errors.map((error) => error.field).filter((field) => field !== requested)];
+      const located = fields.flatMap((field) => resolveRecipeError(value, field) ?? []);
+      if (!located.length) return;
 
       const nextTab = visibleTab;
-      const formTarget = nextTab === 'form' ? document.getElementById(resolved.id) : null;
-      if (nextTab === 'form' && !formTarget) return;
+      let resolved = located[0];
+      let formTarget: HTMLElement | null = null;
+      if (nextTab === 'form') {
+        for (const candidate of located) {
+          formTarget = nearestFormElement(candidate.path);
+          if (formTarget) {
+            resolved = candidate;
+            break;
+          }
+        }
+        // Nothing located is drawn in the Form: land on the panel rather than lose the request.
+        formTarget ??= document.getElementById('recipe-panel-form');
+        if (!formTarget) return;
+      }
       event.preventDefault();
       setFocusLine(resolved.line);
       setFocusRequest((current) => current + 1);
@@ -213,16 +238,30 @@ export function RecipeEditor({
     };
     window.addEventListener('connector-recipe-focus', handleFocus);
     return () => window.removeEventListener('connector-recipe-focus', handleFocus);
-  }, [tab, visibleTab, value]);
+  }, [errors, errorsAreStale, tab, visibleTab, value]);
 
+  // Each request is handled once: the YAML editor acts on it as it commits, then it is cleared so
+  // later edits or re-renders do not pull focus back.
   useEffect(() => {
-    if (visibleTab !== 'yaml' || !focusRequest || yamlEditor) return;
-    const textarea = textareaRef.current;
-    if (!textarea || !focusLine) return;
-    const offset = lineStart(value, focusLine);
-    textarea.focus();
-    textarea.setSelectionRange(offset, offset);
-  }, [focusLine, focusRequest, value, visibleTab, yamlEditor]);
+    if (!focusRequest) {
+      focusedRequest.current = 0;
+      return;
+    }
+    if (visibleTab === 'yaml' && !yamlEditor) {
+      const textarea = textareaRef.current;
+      if (textarea && focusLine && focusedRequest.current !== focusRequest) {
+        focusedRequest.current = focusRequest;
+        const offset = lineStart(value, focusLine);
+        textarea.focus();
+        textarea.setSelectionRange(offset, offset);
+      }
+      // Keep the request while the lazy editor is still loading so it can take focus when it mounts.
+      if (!yamlLoadFailed) return;
+    }
+    // Clear after the commit so the YAML editor has already seen this request.
+    const timer = window.setTimeout(() => setFocusRequest(0), 0);
+    return () => window.clearTimeout(timer);
+  }, [focusLine, focusRequest, value, visibleTab, yamlEditor, yamlLoadFailed]);
 
   const tabKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
     const tabs: RecipeTab[] = formAvailable ? ['form', 'yaml'] : ['yaml'];

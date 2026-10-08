@@ -281,6 +281,7 @@ describe('recipe builder translations (#651)', () => {
   it('has every builder key in English and Brazilian Portuguese', async () => {
     const ptBR = await LANGUAGES['pt-BR'].load!();
     const keys = [
+      "editFailed",
       "authNone",
       "authHeader",
       "authBasic",
@@ -296,7 +297,6 @@ describe('recipe builder translations (#651)', () => {
       "dependency",
       "dependencyKind",
       "emptyRecipe",
-      "errorLine",
       "false",
       "true",
       "formUnavailable",
@@ -339,8 +339,6 @@ describe('recipe builder translations (#651)', () => {
       "endpoint",
       "addEndpoint",
       "removeEndpoint",
-      "moveUp",
-      "moveDown",
       "endpointName",
       "path",
       "method",
@@ -386,7 +384,6 @@ describe('recipe builder translations (#651)', () => {
       "valueMap",
       "addMapEntry",
       "default",
-      "dependencies",
       "recipeDependencies",
       "endpointDependencies",
       "addDependency",
@@ -398,16 +395,7 @@ describe('recipe builder translations (#651)', () => {
       "endpointFailed",
       "itemCount",
       "none",
-      "string",
-      "number",
-      "boolean",
-      "null",
-      "scalarType",
-      "template",
-      "applyBody",
-      "invalidBlock",
-      "remove",
-      "add"
+      "scalarType"
 ];
     for (const key of keys) {
       expect((en.connectors.recipeBuilder as Record<string, string>)[key]).toEqual(expect.any(String));

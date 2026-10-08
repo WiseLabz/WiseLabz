@@ -134,6 +134,42 @@ describe('recipe document parsing', () => {
     expect(editRecipeDocument('a: 1\nname:\nb: 2\n', { type: 'delete', path: ['name'] })).toBe('a: 1\nb: 2\n');
   });
 
+  it('indents a key added to a mapping whose last key sits on a list-item line', () => {
+    const source = 'items:\n  - name: x\nafter: 1\n';
+    expect(editRecipeDocument(source, { type: 'set', path: ['items', 0, 'path'], value: '/x' })).toBe('items:\n  - name: x\n    path: /x\nafter: 1\n');
+  });
+
+  it('keeps a missing final newline missing when removing or moving the last sequence item', () => {
+    const source = 'a: 1\nitems:\n  - name: x\n  - name: y';
+    expect(editRecipeDocument(source, { type: 'remove', path: ['items'], index: 1 })).toBe('a: 1\nitems:\n  - name: x');
+    expect(editRecipeDocument(source, { type: 'remove', path: ['items'], index: 0 })).toBe('a: 1\nitems:\n  - name: y');
+    expect(editRecipeDocument(source, { type: 'move', path: ['items'], index: 0, to: 1 })).toBe('a: 1\nitems:\n  - name: y\n  - name: x');
+  });
+
+  it('keeps a header comment on the key line when the last sequence item is removed', () => {
+    const source = 'items: # list\n  - name: x\nafter: 1\n';
+    expect(editRecipeDocument(source, { type: 'remove', path: ['items'], index: 0 })).toBe('items: [] # list\nafter: 1\n');
+  });
+
+  it('replaces a null parent when setting below it or appending to it', () => {
+    expect(editRecipeDocument('auth:\nversion: 1\n', { type: 'set', path: ['auth', 'mode'], value: 'none' })).toBe('auth:\n  mode: none\nversion: 1\n');
+    expect(editRecipeDocument('auth: # note\nversion: 1\n', { type: 'set', path: ['auth', 'mode'], value: 'none' })).toBe('auth: # note\n  mode: none\nversion: 1\n');
+    expect(editRecipeDocument('auth:\nversion: 1\n', { type: 'append', path: ['auth'], value: 'x' })).toBe('auth:\n  - x\nversion: 1\n');
+  });
+
+  it('inserts into multi-line flow collections before the closing bracket line', () => {
+    expect(editRecipeDocument('values: [\n  one,\n  two\n]\nafter: 1\n', { type: 'append', path: ['values'], value: 'three' })).toBe(
+      'values: [\n  one,\n  two, three\n]\nafter: 1\n',
+    );
+    expect(editRecipeDocument('auth: {\n  mode: none,\n  name: x\n}\nafter: 1\n', { type: 'set', path: ['auth', 'prefix'], value: 'Bearer' })).toBe(
+      'auth: {\n  mode: none,\n  name: x, prefix: Bearer\n}\nafter: 1\n',
+    );
+  });
+
+  it('deletes the last key of a document with no final newline without leaving one', () => {
+    expect(editRecipeDocument('a: 1\nb: 2', { type: 'delete', path: ['b'] })).toBe('a: 1');
+  });
+
   it('returns the exact source for a no-op edit', () => {
     const source = '# preserved\ncategory: media  \n';
     expect(editRecipeDocument(source, { type: 'set', path: ['category'], value: 'media' })).toBe(source);

@@ -44,6 +44,7 @@ export function RecipeBuilder({
   endpointResults = [],
 }: RecipeBuilderProps) {
   const { t } = useTranslation();
+  const [editFailed, setEditFailed] = useState(false);
   const parsed = useMemo(() => parseRecipeDocument(value), [value]);
   const document = parsed.document;
   const recipeValue = useMemo(() => document?.toJS(), [document]);
@@ -58,21 +59,27 @@ export function RecipeBuilder({
 
   const read = (path: RecipePath): unknown => valueAtPath(recipeValue, path);
   const editMany = (operations: RecipeEdit[]) => {
-    let text = value;
-    for (const operation of operations) {
-      if (operation.type === 'append') {
-        const current = parseRecipeDocument(text).document?.toJS();
-        if (valueAtPath(current, operation.path) === undefined) {
-          text = editRecipeDocument(text, { type: 'set', path: operation.path, value: [] });
+    try {
+      let text = value;
+      for (const operation of operations) {
+        if (operation.type === 'append') {
+          const current = parseRecipeDocument(text).document?.toJS();
+          if (valueAtPath(current, operation.path) === undefined) {
+            text = editRecipeDocument(text, { type: 'set', path: operation.path, value: [] });
+          }
         }
+        if (operation.type === 'delete') {
+          const current = parseRecipeDocument(text).document?.toJS();
+          if (valueAtPath(current, operation.path) === undefined) continue;
+        }
+        text = editRecipeDocument(text, operation);
       }
-      if (operation.type === 'delete') {
-        const current = parseRecipeDocument(text).document?.toJS();
-        if (valueAtPath(current, operation.path) === undefined) continue;
-      }
-      text = editRecipeDocument(text, operation);
+      setEditFailed(false);
+      if (text !== value) onChange(text);
+    } catch {
+      // The engine refuses an edit it cannot make without touching other text; leave the recipe as it is.
+      setEditFailed(true);
     }
-    if (text !== value) onChange(text);
   };
   const edit = (operation: RecipeEdit) => editMany([operation]);
   const issue = (path: RecipePath) => {
@@ -143,6 +150,11 @@ export function RecipeBuilder({
 
   return (
     <div className="space-y-4">
+      {editFailed && (
+        <p className="rounded-sm border border-warn/30 bg-warn/5 p-3 text-xs text-warn" role="alert">
+          {t('connectors.recipeBuilder.editFailed')}
+        </p>
+      )}
       {rootUnknown && <UnknownMarker keys={rootUnknown.keys} />}
 
       <section className="rounded-sm border border-line-soft p-4">
@@ -167,9 +179,12 @@ export function RecipeBuilder({
               t('services.category.' + option),
             ]),
           )}
+          includeEmpty={!category}
           disabled={disabled}
           issue={issue(['category'])}
-          onChange={(next) => edit({ type: 'set', path: ['category'], value: next })}
+          onChange={(next) => {
+            if (next) edit({ type: 'set', path: ['category'], value: next });
+          }}
         />
 
         <div className="mt-4 border-t border-line-soft pt-4">

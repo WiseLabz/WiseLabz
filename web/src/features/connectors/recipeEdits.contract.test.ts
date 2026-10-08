@@ -15,9 +15,10 @@ const recipesDirectory = `${repositoryRoot}/docs/connectors/recipes`;
 const recipeFormat = readFileSync(`${repositoryRoot}/docs/connectors/RECIPE_FORMAT.md`, 'utf8');
 const BOM = '﻿';
 const NEW = 'zz-new';
+const ADDED = 'zz-added';
 
 type Path = (string | number)[];
-type Kind = 'set' | 'set-typed' | 'delete' | 'remove' | 'move' | 'append';
+type Kind = 'set' | 'set-typed' | 'add-key' | 'delete' | 'remove' | 'move' | 'append';
 type Planned = { label: string; kind: Kind; operation: RecipeEditOperation; expected: unknown };
 
 const fixtures: Array<[string, string]> = [
@@ -34,6 +35,13 @@ const fixtures: Array<[string, string]> = [
   ['fixture: null values', 'version: 1\nname:\ncategory: media\nbody: ~\nextra:\n'],
   ['fixture: multi-entry map', 'auth:\n  mode: header\n  name: Authorization\n  prefix: "Bearer "\ncategory: media\n'],
   ['fixture: comments in sequences', 'items:\n  # first\n  - name: first # trailing\n  # second\n  - name: second\n  # end\nafter: 1\n'],
+  ['fixture: no final newline', 'a: 1\nitems:\n  - name: x\n  - name: y'],
+  ['fixture: header comment on a sequence key', 'items: # list\n  - name: x\nafter: 1\n'],
+  ['fixture: single-key items with a sibling', 'items:\n  - name: x\n  - name: y\nafter: 1\n'],
+  ['fixture: single-key item with a sibling', 'items:\n  - name: x\nafter: 1\n'],
+  ['fixture: null-valued parents', 'auth:\nversion: 1\nextra: # none\nlast: ~\n'],
+  ['fixture: multi-line flow sequence', 'values: [\n  one,\n  two\n]\nafter: 1\n'],
+  ['fixture: multi-line flow map', 'auth: {\n  mode: none,\n  name: x\n}\nafter: 1\n'],
 ];
 
 function lines(text: string): string[] {
@@ -137,6 +145,14 @@ function expectedAfter(js: unknown, operation: RecipeEditOperation): unknown {
   } else if (operation.type === 'append') at(copy, operation.path).push(operation.value);
   return copy;
 }
+
+/** The parsed value with `value` stored at `path`, whatever was there before. */
+function withValue(js: unknown, path: Path, value: unknown): unknown {
+  if (!path.length) return value;
+  const copy: any = structuredClone(js);
+  at(copy, path.slice(0, -1))[path[path.length - 1]] = value;
+  return copy;
+}
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
 /** Plans every edit for a parsed source; `expected` is the JS value the edit must produce. */
@@ -162,6 +178,38 @@ function planOperations(js: unknown): Planned[] {
     }
   };
   visit(js, []);
+  return planned;
+}
+
+/** Plans a new key for every block mapping, and a new child key or item for every null value inside one. */
+function planAddedKeys(source: string): Planned[] {
+  const js = parsedJS(source);
+  const planned: Planned[] = [];
+  const add = (label: string, kind: Kind, operation: RecipeEditOperation, expected: unknown): void => {
+    planned.push({ label, kind, operation, expected });
+  };
+  const visit = (node: unknown, path: Path): void => {
+    if (isSeq(node)) {
+      node.items.forEach((item, index) => visit(item, [...path, index]));
+    } else if (isMap(node)) {
+      if (!node.flow) {
+        const added = [...path, ADDED];
+        add(`add key ${JSON.stringify(added)}`, 'add-key', { type: 'set', path: added, value: NEW }, withValue(js, added, NEW));
+      }
+      for (const pair of node.items) {
+        if (!isScalar(pair.key)) continue;
+        const childPath = [...path, String(pair.key.value)];
+        if (!node.flow && isScalar(pair.value) && pair.value.value === null) {
+          // A null value (`auth:`) has no children yet: adding one replaces it with a mapping or a sequence.
+          const child = [...childPath, ADDED];
+          add(`add key ${JSON.stringify(child)}`, 'add-key', { type: 'set', path: child, value: NEW }, withValue(js, childPath, { [ADDED]: NEW }));
+          add(`append ${JSON.stringify(childPath)}`, 'append', { type: 'append', path: childPath, value: NEW }, withValue(js, childPath, [NEW]));
+        }
+        visit(pair.value, childPath);
+      }
+    }
+  };
+  visit(parseRecipeDocument(source).document?.contents, []);
   return planned;
 }
 
@@ -240,6 +288,14 @@ function checkEdit(source: string, planned: Planned): string | undefined {
       return undefined;
     }
   }
+  if (planned.kind === 'add-key') {
+    // Every original line stays in order; the only new text is the new key on a line of its own.
+    const kept = matchedInOrder(before, after);
+    if (!kept) return `original lines not kept in order ${snippet}`;
+    if (commentsLost !== 0) return `comment count changed ${snippet}`;
+    const added = after.filter((_, index) => !kept[index]).filter((line) => line.trim() !== '');
+    return added.length === 1 && added[0].trim() === `${ADDED}: ${NEW}` ? undefined : `added lines are not only the new key ${snippet}`;
+  }
   if (planned.kind === 'set' || planned.kind === 'set-typed') {
     if (commentsLost !== 0) return `comment count changed ${snippet}`;
     if (before.length !== after.length) return `line count ${before.length} -> ${after.length} ${snippet}`;
@@ -269,7 +325,7 @@ function checkEdit(source: string, planned: Planned): string | undefined {
 
 function auditSource(source: string): string[] {
   const failures: string[] = [];
-  for (const planned of planOperations(parsedJS(source))) {
+  for (const planned of [...planOperations(parsedJS(source)), ...planAddedKeys(source)]) {
     const reason = checkEdit(source, planned);
     if (reason) failures.push(`${planned.label} :: ${reason}`);
   }

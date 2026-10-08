@@ -67,7 +67,7 @@ export function parseRecipeDocument(source: string): RecipeDocumentResult {
       source,
       error: {
         kind: 'syntax',
-        message: issue.message,
+        message: withoutPosition(issue.message),
         ...(position ? { line: position.line, column: position.col } : {}),
       },
     };
@@ -99,7 +99,7 @@ export function serializeRecipeDocument(parsed: RecipeDocumentResult): string {
 }
 
 /** Applies one Document API mutation and patches only its source node or block. */
-export function editRecipeDocument(source: string, operation: RecipeEditOperation): string {
+export function editRecipeDocument(source: string, requested: RecipeEditOperation): string {
   const parsed = parseRecipeDocument(source);
   if (parsed.error) throw new Error(parsed.error.message);
   if (parsed.unsupported && !(parsed.unsupported.kind === 'root' && isBlankSource(source))) {
@@ -108,9 +108,13 @@ export function editRecipeDocument(source: string, operation: RecipeEditOperatio
 
   const document = parsed.document ?? new Document();
   if (!document.contents) document.contents = document.createNode({}) as YAMLMap;
-  const path = pathSegments(operation.path);
-  const value = operation.type === 'block' ? parseBlock(operation.text) : operation.type === 'set' || operation.type === 'append' ? operation.value : undefined;
   const before = document.clone();
+  const { operation, path, value } = liftNullAncestor(
+    before.contents,
+    requested,
+    pathSegments(requested.path),
+    requested.type === 'block' ? parseBlock(requested.text) : requested.type === 'set' || requested.type === 'append' ? requested.value : undefined,
+  );
   const beforeNode = getNode(before.contents, path);
   if (operation.type === 'delete' && !beforeNode) return source;
   if ((operation.type === 'set' || operation.type === 'block') && beforeNode && sameValue(beforeNode.toJSON(), value)) return source;
@@ -136,8 +140,8 @@ export function editRecipeDocument(source: string, operation: RecipeEditOperatio
     }
     case 'append': {
       const sequence = getNode(document.contents, path);
-      if (!isSeq(sequence)) document.setIn(path, []);
-      document.addIn(path, value);
+      if (isSeq(sequence)) document.addIn(path, value);
+      else document.setIn(path, [value]);
       break;
     }
     case 'remove': {
@@ -157,8 +161,64 @@ export function editRecipeDocument(source: string, operation: RecipeEditOperatio
   }
 
   const patch = sourcePatch(source, before.contents, operation, value, path);
-  if (!patch) throw new Error('The requested recipe edit cannot be applied as a targeted source change.');
-  return source.slice(0, patch.start) + patch.text + source.slice(patch.end);
+  if (!patch) throw new Error(unpatchable);
+  const patched = source.slice(0, patch.start) + patch.text + source.slice(patch.end);
+  // Safety net: never hand back text that does not read as the mutation the Document API applied.
+  if (!readsAs(patched, document)) throw new Error(unpatchable);
+  return patched;
+}
+
+const unpatchable = 'The requested recipe edit cannot be applied as a targeted source change.';
+
+/** True when the text parses and holds the same value as the mutated document. */
+function readsAs(text: string, expected: Document): boolean {
+  try {
+    const parsed = parseRecipeDocument(text);
+    if (parsed.error) return false;
+    return sameValue(emptyAsNull(parsed.document?.toJS() ?? null), emptyAsNull(expected.toJS()));
+  } catch {
+    return false;
+  }
+}
+
+/** An emptied block mapping reads back as null, so an empty collection and null count as equal. */
+function emptyAsNull(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(emptyAsNull);
+  if (value && typeof value === 'object') {
+    const entries = Object.entries(value);
+    return entries.length ? Object.fromEntries(entries.map(([key, child]) => [key, emptyAsNull(child)])) : null;
+  }
+  return value;
+}
+
+/**
+ * A null value (`auth:`, `auth: ~`) has no children to edit, so an edit below it, or an append to it,
+ * becomes a set that replaces the null with the collection the edit needs.
+ */
+function liftNullAncestor(
+  root: Node | null | undefined,
+  operation: RecipeEditOperation,
+  path: unknown[],
+  value: unknown,
+): { operation: RecipeEditOperation; path: unknown[]; value: unknown } {
+  const unchanged = { operation, path, value };
+  if (operation.type !== 'set' && operation.type !== 'block' && operation.type !== 'append') return unchanged;
+  const leaf = operation.type === 'append' ? [value] : value;
+  for (let depth = 1; depth <= path.length; depth += 1) {
+    const node = getNode(root, path.slice(0, depth));
+    if (!node) break;
+    if (isScalar(node) && node.value === null && (depth < path.length || operation.type === 'append')) {
+      let nested = leaf;
+      for (const segment of path.slice(depth).reverse()) {
+        if (typeof segment !== 'string') return unchanged;
+        nested = { [segment]: nested };
+      }
+      const target = path.slice(0, depth);
+      return { operation: { type: 'set', path: target, value: nested }, path: target, value: nested };
+    }
+    if (!isMap(node) && !isSeq(node)) break;
+  }
+  return unchanged;
 }
 
 function parseBlock(text: string): unknown {
@@ -200,10 +260,14 @@ function sourcePatch(
         const lineBreaks = source.slice(oldNode.range[0], oldNode.range[1]).match(/(?:\r?\n)*$/)?.[0].length ?? 0;
         return { start: oldNode.range[0], end: oldNode.range[1] - lineBreaks, text: bare ? ` ${encoded}` : encoded };
       }
+      if (composite && isScalar(oldNode) && oldNode.value === null && pair?.key?.range && isMap(parent) && !parent.flow) {
+        const patch = nullValuePatch(source, pair.key.range, encoded, lineEnding);
+        if (patch) return patch;
+      }
       if (pair && pair.key && pair.value && isMap(parent) && !parent.flow) {
         const colon = source.indexOf(':', pair.key.range?.[1] ?? -1);
         if (colon >= 0 && colon < oldNode.range[0]) {
-          const indent = `${' '.repeat(lineIndent(source, pair.key.range?.[0] ?? oldNode.range[0]) + 2)}`;
+          const indent = `${' '.repeat(keyColumn(source, pair.key.range?.[0] ?? oldNode.range[0]) + 2)}`;
           return {
             start: colon + 1,
             end: oldNode.range[2],
@@ -245,7 +309,7 @@ function sourcePatch(
         if (pair?.key?.range && pair.value?.range && isMap(parent) && !parent.flow) {
           const colon = source.indexOf(':', pair.key.range[1]);
           if (colon >= 0) {
-            const indentation = ' '.repeat(lineIndent(source, pair.key.range[0]) + 2);
+            const indentation = ' '.repeat(keyColumn(source, pair.key.range[0]) + 2);
             const rendered = renderYaml([value]).replace(/\n$/, '');
             return {
               start: colon + 1,
@@ -258,9 +322,11 @@ function sourcePatch(
       const range = sequence.range;
       const close = range ? source.lastIndexOf(']', range[1] - 1) : -1;
       if (close < 0) return undefined;
+      // Insert right after the last item: the bracket may sit alone on its own line.
+      const insertion = (sequence.items[sequence.items.length - 1] as Node | undefined)?.range?.[1] ?? close;
       return {
-        start: close,
-        end: close,
+        start: insertion,
+        end: insertion,
         text: `${sequence.items.length ? ', ' : ' '}${renderYaml(value, true).trim()}${sequence.items.length ? '' : ' '}`,
       };
     }
@@ -283,7 +349,7 @@ function sourcePatch(
     if (operation.type === 'remove') {
       const span = spans[operation.index];
       if (sequence.items.length === 1) return emptySequencePatch(source, beforeRoot, path, sequence, spans[0], lineEndingFor(source));
-      return span ? { start: span.start, end: span.end, text: '' } : undefined;
+      return span ? dropPrecedingBreak(source, { start: span.start, end: span.end, text: '' }) : undefined;
     }
     const reordered = [...spans];
     const [span] = reordered.splice(operation.index, 1);
@@ -291,10 +357,33 @@ function sourcePatch(
     reordered.splice(operation.to, 0, span);
     const start = Math.min(...spans.map((item) => item.start));
     const end = Math.max(...spans.map((item) => item.end));
-    return { start, end, text: reordered.map((item) => item.text).join('') };
+    // The last span has no line break when the text has none; give every span one while joining,
+    // then drop the final one again so a file without a final newline stays that way.
+    const joined = reordered.map((item) => (item.text.endsWith('\n') ? item.text : item.text + lineEnding)).join('');
+    return { start, end, text: source.slice(start, end).endsWith('\n') ? joined : joined.slice(0, -lineEnding.length) };
   }
 
   return undefined;
+}
+
+/** A removal that reaches the end of a text with no final line break also takes the break before it, so none appears. */
+function dropPrecedingBreak(source: string, patch: SourcePatch): SourcePatch {
+  if (patch.end < source.length || source.endsWith('\n')) return patch;
+  const lead = source.slice(0, patch.start).match(/\r?\n$/)?.[0].length ?? 0;
+  return { ...patch, start: patch.start - lead };
+}
+
+/** Replaces a null value (`key:` or `key: ~`) with a block collection below the key, keeping a comment on the key line. */
+function nullValuePatch(source: string, keyRange: readonly number[], encoded: string, lineEnding: string): SourcePatch | undefined {
+  const colon = source.indexOf(':', keyRange[1]);
+  if (colon < 0) return undefined;
+  const newline = source.indexOf('\n', colon);
+  const lineBreak = newline < 0 ? source.length : newline;
+  const lineEnd = source[lineBreak - 1] === '\r' ? lineBreak - 1 : lineBreak;
+  const rest = source.slice(colon + 1, lineEnd).match(/^[ \t]*(?:(?:~|null|Null|NULL)[ \t]*)?(#.*)?$/);
+  if (!rest) return undefined;
+  const indent = ' '.repeat(keyColumn(source, keyRange[0]) + 2);
+  return { start: colon + 1, end: lineEnd, text: `${rest[1] ? ` ${rest[1]}` : ''}${lineEnding}${indentBlock(encoded, indent, lineEnding)}` };
 }
 
 function lineEndingFor(source: string): string {
@@ -317,9 +406,10 @@ function emptySequencePatch(
   const rowStart = item?.start ?? lineStart(source, sequence.range[0]);
   const header = source.slice(colon + 1, rowStart);
   if (header.includes('#')) {
+    // Put `[]` ahead of the comment on the key line and drop the item below it.
     const last = sequence.items[sequence.items.length - 1] as Node;
     const end = last.range?.[2] ?? item?.end ?? source.length;
-    return { start: rowStart, end, text: `${' '.repeat(sequenceIndent(source, sequence))}[]${source.slice(item?.end ?? end, end).endsWith(lineEnding) ? lineEnding : ''}` };
+    return { start: colon + 1, end, text: ` []${source.slice(rowStart, end).endsWith('\n') ? header : header.replace(/\r?\n$/, '')}` };
   }
   const end = sequence.range[2];
   const endsWithLineEnding = source.slice(0, end).endsWith(lineEnding);
@@ -361,7 +451,10 @@ function insertMapPair(source: string, map: YAMLMap, key: string, value: unknown
     const range = map.range;
     if (!range) return { start: source.length, end: source.length, text: `${lineEnding}${pairText}` };
     const close = source.lastIndexOf('}', range[1] - 1);
-    const insertion = close >= 0 ? close : range[1];
+    // Insert right after the last pair: the brace may sit alone on its own line.
+    const lastPair = map.items[map.items.length - 1] as Pair<Node, Node> | undefined;
+    const lastEnd = Math.max(lastPair?.key?.range?.[1] ?? -1, lastPair?.value?.range?.[1] ?? -1);
+    const insertion = lastEnd >= 0 ? lastEnd : close >= 0 ? close : range[1];
     const contents = map.items.length ? `, ${flowPair(key, value)}` : ` ${flowPair(key, value)} `;
     return { start: insertion, end: insertion, text: contents };
   }
@@ -375,7 +468,7 @@ function insertMapPair(source: string, map: YAMLMap, key: string, value: unknown
   const insertion = last.value && typeof last.value === 'object' && 'range' in last.value
     ? ((last.value as Node).range?.[2] ?? source.length)
     : source.length;
-  const indent = lineIndent(source, (last.key as Node).range?.[0] ?? 0);
+  const indent = keyColumn(source, (last.key as Node).range?.[0] ?? 0);
   const prefix = insertion > 0 && !source.slice(0, insertion).endsWith('\n') ? lineEnding : '';
   return {
     start: insertion,
@@ -416,7 +509,7 @@ function deletePairPatch(source: string, map: YAMLMap, pair: Pair<Node, Node>): 
     const lineEnd = source.indexOf('\n', end);
     if (!source.slice(end, lineEnd < 0 ? source.length : lineEnd).trim()) end = lineEnd < 0 ? source.length : lineEnd + 1;
   }
-  return { start, end, text: '' };
+  return dropPrecedingBreak(source, { start, end, text: '' });
 }
 
 function flowSequencePatch(source: string, sequence: YAMLSeq, operation: Extract<RecipeEditOperation, { type: 'remove' | 'move' }>): SourcePatch | undefined {
@@ -523,6 +616,12 @@ function lineIndent(source: string, offset: number): number {
   return prefix.match(/^ */)?.[0].length ?? 0;
 }
 
+/** The column a mapping key starts at, counting the dashes in front of a key written on a sequence item's line. */
+function keyColumn(source: string, offset: number): number {
+  const prefix = source.slice(lineStart(source, offset), offset);
+  return /^ *(?:- +)+$/.test(prefix) ? prefix.length : lineIndent(source, offset);
+}
+
 function indentBlock(value: string, indent: string, lineEnding: string): string {
   return value.replace(/\r?\n/g, lineEnding).split(lineEnding).map((line) => `${indent}${line}`).join(lineEnding);
 }
@@ -543,12 +642,17 @@ function issueAt(source: string, kind: RecipeDocumentIssue['kind'], message: str
   return { kind, message, line, column };
 }
 
+/** The parser appends `at line N, column M:` and a source snippet; the issue carries the line separately. */
+function withoutPosition(message: string | undefined): string | undefined {
+  return message?.replace(/\s+at line \d+, column \d+:[\s\S]*$/, '');
+}
+
 function syntaxIssue(error: unknown): RecipeDocumentIssue {
   const candidate = error as { message?: string; linePos?: Array<{ line: number; col: number }> };
   const position = candidate.linePos?.[0];
   return {
     kind: 'syntax',
-    message: candidate.message ?? 'Invalid YAML.',
+    message: withoutPosition(candidate.message) || 'Invalid YAML.',
     ...(position ? { line: position.line, column: position.col } : {}),
   };
 }
