@@ -43,9 +43,10 @@ const (
 
 func init() {
 	connector.Register(connector.TypeSchema{
-		Type:     typeName,
-		Category: "dns",
-		Name:     "AdGuard Home",
+		Type:      typeName,
+		Category:  "dns",
+		Name:      "AdGuard Home",
+		Discovery: discovery,
 		Fields: []connector.SchemaField{
 			{Key: "url", Label: "AdGuard Home URL", Type: "text", Required: true, Placeholder: "http://adguard.example.com:3000", Description: "Base URL of the AdGuard Home web interface (the host serving /control/status)."},
 			{Key: "auth_mode", Label: "Authentication", Type: "select", Required: false, Default: authBasic, Options: []string{authNone, authBasic}, Description: "How the API is protected: basic auth with the web-UI user, or none when no user is configured."},

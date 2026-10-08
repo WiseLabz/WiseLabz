@@ -65,7 +65,8 @@ Each event has an audience, resolved on the server when the event is emitted:
 - **Global events** (`system.*`, `doc.lock.*` for a lab-wide doc with no
   connector, and `runbook.run.updated` for a run-level change or a manual step)
   reach every connection.
-- **Per-user events** reach only that user's connections.
+- **Per-user events** reach only that user's connections. Network discovery events
+  (`discovery.*`, sections 17–19) are per-user: only the admin who started the scan gets them.
 
 The server fails closed: if the audience cannot be resolved, a connector event is
 dropped rather than broadcast. Clients recover dropped events by refetching over
@@ -74,9 +75,9 @@ REST, as they do after a reconnect.
 ## Naming convention
 
 `domain.action`, lowercase, dot-separated. Domains: `service`, `sync`, `change`,
-`alert`, `quality`, `doc`, `system`, `runbook`. Actions are past-tense/state nouns (`status`, `progress`,
+`alert`, `quality`, `doc`, `system`, `runbook`, `discovery`. Actions are past-tense/state nouns (`status`, `progress`,
 `complete`, `detected`, `created`, `resolved`, `generated`, `ai_suggestion`,
-`health`, `notice`, `resync`).
+`health`, `notice`, `resync`, `candidate`).
 
 ## Client dispatch model
 
@@ -436,6 +437,73 @@ the step event first, then the run-level event.
 
 - **Consumers:** none yet; the live run view subscribes to it.
 - **Reaction:** refetch the run.
+
+### 17. `discovery.progress`
+Progress of the network scan this admin started. Throttled to a few events per
+second on the server; the last address always sends one.
+
+```ts
+interface DiscoveryProgressPayload {
+  scanId: string;
+  done: number;      // addresses finished
+  total: number;     // addresses in the scanned range
+  answered: number;  // addresses where a listed port accepted a connection
+}
+```
+
+Audience: per-user. Only the admin who started the scan receives it.
+
+- **Consumers:** the discovery panel.
+- **Reaction:** update the discovery store. Ignore the event when `scanId` differs
+  from the current scan.
+
+### 18. `discovery.candidate`
+A product was confirmed on the scanned network. Sent once per candidate, as it is
+found. Nothing is sent after a scan has been cancelled.
+
+```ts
+interface DiscoveryCandidatePayload {
+  scanId: string;
+  candidate: {
+    type: string;          // connector type
+    name: string;          // display name
+    address: string;       // IPv4
+    port: number;
+    url: string;           // connector URL to prefill
+    urlField: string;      // config field the url goes in: 'url', or 'host' for Docker
+    connectorId?: string;  // set when a connector of the same type already points at this address and port
+  };
+}
+```
+
+Audience: per-user. Only the admin who started the scan receives it.
+
+- **Consumers:** the discovery panel.
+- **Reaction:** append the candidate to the store's list for `scanId`. Ignore the event
+  when `scanId` differs from the current scan.
+
+### 19. `discovery.complete`
+Terminal event of a scan, sent once when it ends. It carries no candidates; those
+arrived as `discovery.candidate` events.
+
+```ts
+interface DiscoveryCompletePayload {
+  scanId: string;
+  state: 'completed' | 'cancelled' | 'failed';
+  partial: boolean;  // true when the 60 s deadline cut the scan short
+}
+```
+
+Audience: per-user. Only the admin who started the scan receives it.
+
+- **Consumers:** the discovery panel.
+- **Reaction:** set the store's scan to the terminal `state` and `partial`, keeping
+  the candidates already listed. Ignore the event when `scanId` differs from the
+  current scan.
+
+Discovery events are not replayed and are not connector events. The discovery
+panel reads `GET /api/discovery/scan` once on mount and again after a socket
+reconnect, so a missed event does not leave it stale.
 
 ---
 

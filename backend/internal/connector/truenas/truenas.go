@@ -51,9 +51,10 @@ const (
 
 func init() {
 	connector.Register(connector.TypeSchema{
-		Type:     typeName,
-		Category: category,
-		Name:     "TrueNAS",
+		Type:      typeName,
+		Category:  category,
+		Name:      "TrueNAS",
+		Discovery: discovery,
 		Fields: []connector.SchemaField{
 			{Key: "url", Label: "TrueNAS URL", Type: "text", Required: true, Placeholder: "https://truenas.example.com", Description: "Base URL of the TrueNAS web UI (the host serving /api/v2.0)."},
 			{Key: "api_key", Label: "API Key", Type: "password", Required: true, Description: "API key from Credentials → Local Users → API Keys, sent as \"Authorization: Bearer <key>\"."},

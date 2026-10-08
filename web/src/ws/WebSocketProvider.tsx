@@ -10,6 +10,7 @@ import { getGetDashboardOverviewQueryKey } from '../api/generated/dashboard/dash
 import { getGetChangesQueryKey } from '../api/generated/changes/changes';
 import { getAlerts, getGetAlertsQueryKey } from '../api/generated/alerts/alerts';
 import { getGetConnectorsQueryKey } from '../api/generated/connectors/connectors';
+import { getGetDiscoveryScanQueryKey } from '../api/generated/discovery/discovery';
 import { getGetFindingsQueryKey } from '../api/generated/findings/findings';
 import { getGetNotificationsQueryKey } from '../api/generated/notifications/notifications';
 import { getGetSearchQueryKey } from '../api/generated/search/search';
@@ -18,6 +19,7 @@ import {
   getGetRunbookRunQueryKey,
   getListRunbookRunsQueryKey,
 } from '../api/generated/runbooks/runbooks';
+import { useDiscovery } from '../store/discovery';
 import { useLive } from '../store/live';
 import { toast } from '../lib/toast';
 import { navigateTo } from '../lib/navigation';
@@ -337,6 +339,20 @@ function handle(frame: WsEvent, qc: ReturnType<typeof useQueryClient>) {
           queryKey: getListRunbookRunsQueryKey(frame.payload.runbookId),
         });
       }
+      break;
+    }
+    case 'discovery.progress': {
+      useDiscovery.getState().applyProgress(frame.payload);
+      break;
+    }
+    case 'discovery.candidate': {
+      useDiscovery.getState().applyCandidate(frame.payload);
+      break;
+    }
+    case 'discovery.complete': {
+      useDiscovery.getState().applyComplete(frame.payload);
+      // The final counts and any candidate frame lost on the way come from REST.
+      void qc.invalidateQueries({ queryKey: getGetDiscoveryScanQueryKey() });
       break;
     }
     case 'doc.generated': {

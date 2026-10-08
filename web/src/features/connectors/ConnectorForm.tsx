@@ -41,10 +41,19 @@ type FormValues = Record<string, string | boolean>;
 export function ConnectorForm({
   onCreated,
   onCancel,
+  initialType,
+  initialValues,
 }: {
   /** Called with the created connector after the list cache is invalidated. */
   onCreated: (created: Connector) => void;
   onCancel?: () => void;
+  /** Connector type to open with already chosen; read once, so remount (key) to change it. */
+  initialType?: string;
+  /**
+   * Field values to open with, keyed by schema field name (e.g. `url`); read once.
+   * `name` and `owner` prefill the form's own name and owner inputs.
+   */
+  initialValues?: Record<string, string | boolean>;
 }) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
@@ -52,10 +61,15 @@ export function ConnectorForm({
   const { data: connectors } = useGetConnectors();
   const isInstanceAdmin = useIsInstanceAdmin();
 
-  const [typeKey, setTypeKey] = useState<string | null>(null);
-  const [name, setName] = useState('');
-  const [owner, setOwner] = useState('');
-  const [values, setValues] = useState<FormValues>({});
+  const [typeKey, setTypeKey] = useState<string | null>(initialType ?? null);
+  const [name, setName] = useState(() => String(initialValues?.name ?? ''));
+  const [owner, setOwner] = useState(() => String(initialValues?.owner ?? ''));
+  const [values, setValues] = useState<FormValues>(() => {
+    const fields: FormValues = { ...initialValues };
+    delete fields.name;
+    delete fields.owner;
+    return fields;
+  });
   const [createdTlsProbe, setCreatedTlsProbe] = useState<Connector | null>(null);
 
   const schema = useMemo(

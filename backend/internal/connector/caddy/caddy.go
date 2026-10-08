@@ -22,6 +22,7 @@ const (
 func init() {
 	connector.Register(connector.TypeSchema{
 		Type: typeName, Category: "networking", Name: "Caddy",
+		Discovery: discovery,
 		Fields: []connector.SchemaField{
 			{Key: "url", Label: "Caddy Admin API URL", Type: "text", Placeholder: "http://caddy.example.com:2019", Description: "Use either this URL or config_json. Only GET /config/ is requested."},
 			{Key: "config_json", Label: "Caddy JSON config", Type: "secret", MaxLength: maxConfigBytes, Description: "Paste caddy adapt output or a saved /config/ response (maximum 1 MiB). Use either this field or url."},

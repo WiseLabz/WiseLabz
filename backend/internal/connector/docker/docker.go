@@ -16,6 +16,7 @@ func init() {
 		EndpointConfigKeys: []string{"host", "verify_tls"},
 		Category:           "containers_paas",
 		Name:               "Docker",
+		Discovery:          discovery,
 		Fields: []connector.SchemaField{
 			{Key: "host", Label: "Docker Host", Type: "text", Required: true, Placeholder: "unix:///var/run/docker.sock, tcp://host:2375, or ssh://user@host"},
 			{Key: "tls_cert", Label: "TLS Client Certificate (PEM)", Type: "secret", Description: "For tcp:// hosts using mutual TLS"},

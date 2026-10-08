@@ -22,6 +22,11 @@ type lifecycleScheduler interface {
 	Stop()
 }
 
+// lifecycleScanner stops a running network scan at shutdown.
+type lifecycleScanner interface {
+	Shutdown(context.Context)
+}
+
 // lifecycleDeps holds everything the lifecycle manager needs to start and
 // stop the server's long-running goroutines.
 type lifecycleDeps struct {
@@ -41,6 +46,11 @@ type lifecycleDeps struct {
 	TopologyBackfill    func(context.Context) (int, error)
 	EntityIndexBackfill func(context.Context) (int, error)
 	ShutdownTimeout     time.Duration
+	// Discovery, when set, is asked to cancel a running network scan once the
+	// HTTP server has drained, so the scan's end-of-scan audit entry is written
+	// before the database closes. Optional. The server builds the scan manager
+	// itself, outside the router, so that it can hand it to this hook.
+	Discovery lifecycleScanner
 }
 
 // lifecycleManager starts every long-running server goroutine (HTTP server,
@@ -50,14 +60,15 @@ type lifecycleDeps struct {
 //
 //  1. mark readiness as not-ready (so a load balancer stops routing here)
 //  2. stop accepting new HTTP/WebSocket work and drain in-flight requests
-//  3. stop the scheduler (blocks until any in-flight cron job finishes)
-//  4. cancel the work context and wait for every remaining goroutine to exit
-//  5. wait for in-flight notification dispatch goroutines
-//  6. close the DB last
+//  3. cancel a running network scan and wait for it to end and be audited
+//  4. stop the scheduler (blocks until any in-flight cron job finishes)
+//  5. cancel the work context and wait for every remaining goroutine to exit
+//  6. wait for in-flight notification dispatch goroutines
+//  7. close the DB last
 //
 // The work context is deliberately separate from the process's signal
 // context: goroutines must keep running while Shutdown works through steps
-// 2-3 in order, not all cancel out simultaneously the instant a signal
+// 2-4 in order, not all cancel out simultaneously the instant a signal
 // arrives.
 type lifecycleManager struct {
 	deps lifecycleDeps
@@ -204,11 +215,17 @@ func (m *lifecycleManager) Shutdown() error {
 		logger.Error("HTTP server shutdown error", "error", err)
 	}
 
-	// 3. Stop the scheduler; blocks until any in-flight job (backup,
+	// 3. No request can start a scan any more; cancel the running one, if any,
+	// and wait for its audit entry while the database is still open.
+	if m.deps.Discovery != nil {
+		m.deps.Discovery.Shutdown(shutdownCtx)
+	}
+
+	// 4. Stop the scheduler; blocks until any in-flight job (backup,
 	// retention, quality, sync, digest, alert expiry) finishes.
 	m.deps.Scheduler.Stop()
 
-	// 4. Cancel the work context so the WS hub, delivery retrier, and doc
+	// 5. Cancel the work context so the WS hub, delivery retrier, and doc
 	// lock sweep goroutines return, then wait for every goroutine started by
 	// Start (including the two above) to actually exit.
 	m.workCancel()
@@ -216,7 +233,7 @@ func (m *lifecycleManager) Shutdown() error {
 		logger.Error("lifecycle group error", "error", err)
 	}
 
-	// 5. Wait for in-flight notification dispatch goroutines (e.g. an alert
+	// 6. Wait for in-flight notification dispatch goroutines (e.g. an alert
 	// created just before shutdown) so they don't touch a closed DB.
 	if m.deps.SyncEngine != nil {
 		if err := m.deps.SyncEngine.Wait(shutdownCtx); err != nil {
@@ -232,6 +249,6 @@ func (m *lifecycleManager) Shutdown() error {
 		}
 	}
 
-	// 6. Close the DB last, now that nothing above can still be using it.
+	// 7. Close the DB last, now that nothing above can still be using it.
 	return m.deps.Store.Close()
 }

@@ -31,6 +31,7 @@ import {
 import { setAccessToken } from '../api/axios-instance';
 import { queryClient } from '../app/queryClient';
 import { useAuth } from './auth';
+import { useDiscovery } from './discovery';
 
 const mockRefresh = vi.mocked(postAuthRefresh);
 const mockLogin = vi.mocked(postAuthLogin);
@@ -234,6 +235,23 @@ describe('useAuth', () => {
       expect(useAuth.getState().status).toBe('anonymous');
       expect(useAuth.getState().user).toBeNull();
       expect(mockClearQueryClient).toHaveBeenCalled();
+    });
+
+    it('drops the network scan so its host addresses do not outlive the session', async () => {
+      useDiscovery.getState().setScan({
+        id: 'scan-1',
+        cidr: '10.0.0.0/24',
+        state: 'completed',
+        startedAt: '2026-10-07T12:00:00Z',
+        done: 254,
+        total: 254,
+        answered: 0,
+        partial: false,
+        candidates: [],
+      });
+      mockLogout.mockResolvedValue(undefined);
+      await useAuth.getState().logout();
+      expect(useDiscovery.getState().scan).toBeNull();
     });
 
     it('clears access token', async () => {

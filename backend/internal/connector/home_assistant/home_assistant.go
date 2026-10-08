@@ -55,9 +55,10 @@ const (
 
 func init() {
 	connector.Register(connector.TypeSchema{
-		Type:     typeName,
-		Category: category,
-		Name:     "Home Assistant",
+		Type:      typeName,
+		Category:  category,
+		Name:      "Home Assistant",
+		Discovery: discovery,
 		Fields: []connector.SchemaField{
 			{Key: "url", Label: "Home Assistant URL", Type: "text", Required: true, Placeholder: "http://homeassistant.local:8123", Description: "Base URL of the Home Assistant instance (the host serving /api/config)."},
 			{Key: "access_token", Label: "Long-Lived Access Token", Type: "password", Required: true, Description: "Long-lived access token created from a Home Assistant user profile; sent as \"Authorization: Bearer <token>\"."},

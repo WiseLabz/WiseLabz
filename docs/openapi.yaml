@@ -38,6 +38,7 @@ tags:
   - name: saved-views
   - name: settings
   - name: system
+  - name: discovery
   - name: reports
 
 security:
@@ -3960,6 +3961,122 @@ paths:
                 items: { $ref: '#/components/schemas/JobInfo' }
         '403': { $ref: '#/components/responses/Forbidden' }
 
+  # ───────────────────────── network discovery ─────────────────────────
+  /discovery/suggestions:
+    get:
+      tags: [discovery]
+      operationId: getDiscoverySuggestions
+      summary: Ranges the caller may scan (instance admin)
+      description: >
+        The /24 around the caller's address, then the /24 around each private
+        IPv4 address of the server, without duplicates. Empty when neither is
+        private.
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DiscoverySuggestions' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /discovery/scan:
+    get:
+      tags: [discovery]
+      operationId: getDiscoveryScan
+      summary: The running or most recent network scan (instance admin)
+      description: >
+        Readable until 15 minutes after the scan ended or until the next scan
+        starts. Results live in memory only and are lost on restart.
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DiscoveryScanResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [discovery]
+      operationId: startDiscoveryScan
+      summary: Start a network scan of one private range (instance admin)
+      description: >
+        Scans an IPv4 range in RFC 1918 space, from /24 to /32 (host bits are
+        masked), for known products. At most one scan runs at a time; a start
+        while one runs is refused with 409 `scan_in_progress`. At most six
+        starts are allowed per rolling hour per instance; a start over that
+        limit is refused with 429 `rate_limited`. A refused start does not
+        count towards the limit. A scan stops after 60 seconds, reporting
+        `partial` when the deadline cut it short. Progress and candidates are
+        sent as WebSocket events to the admin who started the scan only (see
+        docs/WS_CONTRACT.md). When `stepUpForDestructive` is enabled, requires
+        an `X-Elevation-Token` for action `discovery.scan`.
+      parameters:
+        - name: X-Elevation-Token
+          in: header
+          required: false
+          schema: { type: string }
+          description: Single-use elevation token from POST /auth/elevate for action `discovery.scan` (when step-up is on)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DiscoveryScanRequest' }
+      responses:
+        '202':
+          description: Accepted; the scan runs in the background
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DiscoveryScanResponse' }
+        '400':
+          description: >
+            Invalid range (code `invalid_request`, with `details` naming field
+            `cidr`), or step-up is on and no `X-Elevation-Token` was sent (code
+            `elevation_required`)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401':
+          description: >
+            Not signed in, or the `X-Elevation-Token` is invalid or expired
+            (code `unauthorized`); call POST /auth/elevate for `discovery.scan`
+            and retry
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409':
+          description: Another scan is running; `scan` is that scan
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DiscoveryScanConflict' }
+        '429':
+          description: Hourly start limit reached (code `rate_limited`, with `retryAfterSeconds`)
+          headers:
+            Retry-After:
+              description: Seconds until another scan may start
+              required: true
+              schema: { type: integer }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DiscoveryRateLimited' }
+    delete:
+      tags: [discovery]
+      operationId: cancelDiscoveryScan
+      summary: Cancel the running network scan (instance admin)
+      description: >
+        Stops the running scan and returns it as `cancelled`. Candidates found
+        so far are kept. Needs no elevation.
+      responses:
+        '200':
+          description: OK; the scan as it stands once its probes stopped
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DiscoveryScanResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
   # ───────────────────────── scheduled reports (#280) ─────────────────────────
   /reports/definitions:
     get:
@@ -4302,6 +4419,8 @@ paths:
         receives only the connector events the key's owner can read, narrowed to
         the key's connectors. Run transitions use runbook.run.updated; its
         payload is RunbookRunUpdatedEvent and contains identifiers and states only.
+        Network discovery events (discovery.progress, discovery.candidate,
+        discovery.complete) reach only the admin who started the scan.
       responses:
         '200':
           description: OK
@@ -7014,6 +7133,117 @@ components:
             Cursor for the next keyset page. Present only when the request sent
             `cursor` and more rows follow; absent for offset requests and on the
             last page.
+
+    # ── network discovery ──
+    DiscoveryScan:
+      type: object
+      description: The running or most recent network scan (in memory only, see GET /discovery/scan).
+      required: [id, cidr, state, startedAt, done, total, answered, partial, candidates]
+      properties:
+        id: { type: string }
+        cidr: { type: string, description: The scanned IPv4 range with host bits masked }
+        state: { type: string, enum: [running, completed, cancelled, failed] }
+        startedAt: { type: string, format: date-time }
+        endedAt: { type: string, format: date-time, description: Absent while the scan is running }
+        done: { type: integer, description: Addresses finished }
+        total: { type: integer, description: Addresses in the range }
+        answered: { type: integer, description: Addresses where any listed port accepted a connection }
+        partial: { type: boolean, description: True when the 60 s deadline cut the scan short }
+        candidates:
+          type: array
+          items: { $ref: '#/components/schemas/DiscoveryCandidate' }
+    DiscoveryCandidate:
+      type: object
+      description: A product confirmed on the scanned network.
+      required: [type, name, address, port, url, urlField]
+      properties:
+        type: { type: string, description: Connector type }
+        name: { type: string, description: Display name }
+        address: { type: string, description: IPv4 address }
+        port: { type: integer }
+        url: { type: string, description: Connector URL to prefill }
+        urlField: { type: string, description: 'Config field the url goes in: url, or host for Docker' }
+        connectorId:
+          type: string
+          description: Set when a connector of the same type already points at this address and port
+    DiscoverySuggestion:
+      type: object
+      required: [cidr, source]
+      properties:
+        cidr: { type: string }
+        source: { type: string, enum: [client, server], description: 'client: the caller''s address; server: a private address of the server' }
+    DiscoverySuggestions:
+      type: object
+      required: [suggestions]
+      properties:
+        suggestions:
+          type: array
+          description: Always an array; empty when no range is suggested
+          items: { $ref: '#/components/schemas/DiscoverySuggestion' }
+    DiscoveryScanRequest:
+      type: object
+      required: [cidr]
+      properties:
+        cidr:
+          type: string
+          description: IPv4 range in CIDR notation, RFC 1918 space, /24 to /32
+          example: 192.168.1.0/24
+    DiscoveryScanResponse:
+      type: object
+      required: [scan]
+      properties:
+        scan: { $ref: '#/components/schemas/DiscoveryScan' }
+    DiscoveryScanConflict:
+      type: object
+      description: >
+        Body of 409 scan_in_progress: the Error envelope's code and message,
+        plus the running scan at the top level (there is no `details`).
+      required: [code, message, scan]
+      properties:
+        code: { type: string, enum: [scan_in_progress] }
+        message: { type: string }
+        scan: { $ref: '#/components/schemas/DiscoveryScan' }
+    DiscoveryRateLimited:
+      type: object
+      description: >
+        Body of 429 rate_limited: the Error envelope's code and message, plus
+        the delay at the top level (there is no `details`). The Retry-After
+        header carries the same delay.
+      required: [code, message, retryAfterSeconds]
+      properties:
+        code: { type: string, enum: [rate_limited] }
+        message: { type: string }
+        retryAfterSeconds: { type: integer }
+    DiscoveryProgressEvent:
+      type: object
+      description: >
+        Payload of WebSocket event discovery.progress. Sent a few times per second at most, and once
+        when the last address finishes. Per-user: only the admin who started the scan receives it.
+      required: [scanId, done, total, answered]
+      properties:
+        scanId: { type: string }
+        done: { type: integer }
+        total: { type: integer }
+        answered: { type: integer }
+    DiscoveryCandidateEvent:
+      type: object
+      description: >
+        Payload of WebSocket event discovery.candidate, sent once per candidate as it is found. Per-user:
+        only the admin who started the scan receives it.
+      required: [scanId, candidate]
+      properties:
+        scanId: { type: string }
+        candidate: { $ref: '#/components/schemas/DiscoveryCandidate' }
+    DiscoveryCompleteEvent:
+      type: object
+      description: >
+        Payload of WebSocket event discovery.complete, sent once when a scan ends. Per-user: only the
+        admin who started the scan receives it.
+      required: [scanId, state, partial]
+      properties:
+        scanId: { type: string }
+        state: { type: string, enum: [completed, cancelled, failed] }
+        partial: { type: boolean, description: True when the 60 s deadline cut the scan short }
 
     # ── backup ──
     BackupBundle:

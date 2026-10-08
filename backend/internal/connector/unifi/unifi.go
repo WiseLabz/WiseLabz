@@ -73,9 +73,10 @@ type session struct {
 
 func init() {
 	connector.Register(connector.TypeSchema{
-		Type:     typeName,
-		Category: "networking",
-		Name:     "UniFi",
+		Type:      typeName,
+		Category:  "networking",
+		Name:      "UniFi",
+		Discovery: discovery,
 		Fields: []connector.SchemaField{
 			{Key: "url", Label: "Controller URL", Type: "text", Required: true, Placeholder: "https://unifi.example.com:8443", Description: "Base URL of the UniFi Network Application or UniFi OS console."},
 			{Key: "auth_mode", Label: "Authentication", Type: "select", Required: false, Default: authPassword, Options: []string{authPassword, authAPIKey}, Description: "Local controller account (username/password) or a UniFi OS API key."},

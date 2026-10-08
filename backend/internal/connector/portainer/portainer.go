@@ -49,9 +49,10 @@ const (
 
 func init() {
 	connector.Register(connector.TypeSchema{
-		Type:     typeName,
-		Category: "containers_paas",
-		Name:     "Portainer",
+		Type:      typeName,
+		Category:  "containers_paas",
+		Name:      "Portainer",
+		Discovery: discovery,
 		Fields: []connector.SchemaField{
 			{Key: "url", Label: "Portainer URL", Type: "text", Required: true, Placeholder: "https://portainer.example.com:9443", Description: "Base URL of the Portainer instance (the host serving /api)."},
 			{Key: "api_key", Label: "API Access Token", Type: "password", Required: true, Description: "Portainer access token, sent as \"X-API-Key\". Create one under My account → Access tokens."},

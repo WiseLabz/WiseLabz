@@ -32,6 +32,7 @@ var resources = []struct {
 func init() {
 	connector.Register(connector.TypeSchema{
 		Type: typeName, Category: "networking", Name: "Nginx Proxy Manager",
+		Discovery: discovery,
 		Fields: []connector.SchemaField{
 			{Key: "url", Label: "Nginx Proxy Manager URL", Type: "text", Required: true, Placeholder: "https://npm.example.com", Description: "Base URL of the Nginx Proxy Manager instance."},
 			{Key: "email", Label: "Email", Type: "text", Required: true, Description: "Account email with view permission on proxy hosts, redirection hosts, streams, 404 hosts, certificates, and access lists. An admin account is simplest. Two-factor authentication must be disabled."},

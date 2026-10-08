@@ -2,6 +2,8 @@ package connector
 
 import (
 	"context"
+	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 )
@@ -106,4 +108,87 @@ func TestApplyRecordConfig(t *testing.T) {
 			t.Fatalf("cfg = %v", cfg)
 		}
 	})
+}
+
+func TestDiscoveryHintsListsOnlyTypesWithAHint(t *testing.T) {
+	match := func(DiscoveryResponse) bool { return true }
+	Register(TypeSchema{Type: "registry_test_disc_a", Category: "test", Name: "Disc A", Discovery: &DiscoveryHint{
+		Probes:      []DiscoveryProbe{{Port: 9101, Scheme: "http", Path: "/", Match: match}, {Port: 9100, Scheme: "https", Path: "/", Match: match}},
+		URLTemplate: "{scheme}://{host}:{port}/api",
+	}}, func(_ map[string]any) (Connector, error) { return nil, nil })
+	Register(TypeSchema{Type: "registry_test_disc_none", Category: "test", Name: "No hint"},
+		func(_ map[string]any) (Connector, error) { return nil, nil })
+
+	var found *TypeDiscovery
+	for _, d := range DiscoveryHints() {
+		d := d
+		if d.Type == "registry_test_disc_none" {
+			t.Fatalf("type without a hint listed: %+v", d)
+		}
+		if d.Type == "registry_test_disc_a" {
+			found = &d
+		}
+	}
+	if found == nil {
+		t.Fatal("type with a hint missing from DiscoveryHints")
+	}
+	if found.Name != "Disc A" || len(found.Probes) != 2 {
+		t.Errorf("hint = %+v", found)
+	}
+
+	ports := DiscoveryPorts()
+	var have []int
+	for _, p := range ports {
+		if p == 9100 || p == 9101 {
+			have = append(have, p)
+		}
+	}
+	if len(have) != 2 || have[0] != 9100 || have[1] != 9101 {
+		t.Errorf("DiscoveryPorts() = %v, want 9100 and 9101 present and ascending", ports)
+	}
+	for i := 1; i < len(ports); i++ {
+		if ports[i] <= ports[i-1] {
+			t.Fatalf("DiscoveryPorts() not strictly ascending: %v", ports)
+		}
+	}
+}
+
+func TestDiscoveryHintURLTemplate(t *testing.T) {
+	h := DiscoveryHint{URLTemplate: "{scheme}://{host}:{port}/api2/json"}
+	if got, want := h.URL("https", "10.0.0.5", 8006), "https://10.0.0.5:8006/api2/json"; got != want {
+		t.Errorf("URL() = %q, want %q", got, want)
+	}
+	if got, want := (DiscoveryHint{URLTemplate: "http://{host}:{port}"}).URL("https", "10.0.0.5", 80), "http://10.0.0.5:80"; got != want {
+		t.Errorf("fixed-scheme template = %q, want %q", got, want)
+	}
+}
+
+func TestListSchemasStillOmitsDiscovery(t *testing.T) {
+	// Discovery hints are server-side only: the schema JSON must not carry them.
+	b, err := json.Marshal(TypeSchema{Type: "x", Discovery: &DiscoveryHint{URLTemplate: "u"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(b), "iscovery") || strings.Contains(string(b), "URLTemplate") {
+		t.Errorf("schema JSON leaks discovery: %s", b)
+	}
+}
+
+func TestDiscoveryResponseHelpers(t *testing.T) {
+	obj := DiscoveryResponse{Body: []byte(`{"a":1}`)}.JSONObject()
+	if obj["a"] != float64(1) {
+		t.Errorf("JSONObject = %v", obj)
+	}
+	for _, body := range []string{`[1]`, `nope`, ``, `null`} {
+		if got := (DiscoveryResponse{Body: []byte(body)}).JSONObject(); got != nil {
+			t.Errorf("JSONObject(%q) = %v, want nil", body, got)
+		}
+	}
+	html := DiscoveryResponse{Body: []byte("<html><head><TITLE>\n pve1 - Proxmox </TITLE></head>")}
+	if got := html.Title(); got != "pve1 - Proxmox" {
+		t.Errorf("Title = %q", got)
+	}
+	if got := (DiscoveryResponse{Body: []byte("<html></html>")}).Title(); got != "" {
+		t.Errorf("Title without element = %q", got)
+	}
 }

@@ -5,7 +5,14 @@
  * both import from here, so the contract stays in one place. Enums are reused from
  * the orval-generated models where they already exist (Severity, ServiceStatus).
  */
-import type { RunbookRunUpdatedEvent, ServiceStatus, Severity } from '../api/model';
+import type {
+  DiscoveryCandidateEvent,
+  DiscoveryCompleteEvent,
+  DiscoveryProgressEvent,
+  RunbookRunUpdatedEvent,
+  ServiceStatus,
+  Severity,
+} from '../api/model';
 
 /** `domain.action`, see WS_CONTRACT.md §naming. */
 export type WsEventType =
@@ -29,7 +36,10 @@ export type WsEventType =
   | 'doc.lock.expired'
   | 'system.health'
   | 'system.notice'
-  | 'system.resync';
+  | 'system.resync'
+  | 'discovery.progress'
+  | 'discovery.candidate'
+  | 'discovery.complete';
 
 /** Uniform envelope wrapping every frame. */
 export interface WsEnvelope<T = unknown> {
@@ -192,6 +202,9 @@ export interface WsEventMap {
   'system.health': SystemHealthPayload;
   'system.notice': SystemNoticePayload;
   'system.resync': SystemResyncPayload;
+  'discovery.progress': DiscoveryProgressEvent;
+  'discovery.candidate': DiscoveryCandidateEvent;
+  'discovery.complete': DiscoveryCompleteEvent;
 }
 
 /** Discriminated union of all possible frames. */

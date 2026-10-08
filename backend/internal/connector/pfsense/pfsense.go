@@ -21,9 +21,10 @@ const typeName = "pfsense"
 
 func init() {
 	connector.Register(connector.TypeSchema{
-		Type:     typeName,
-		Category: "networking",
-		Name:     "pfSense",
+		Type:      typeName,
+		Category:  "networking",
+		Name:      "pfSense",
+		Discovery: discovery,
 		Fields: []connector.SchemaField{
 			{Key: "url", Label: "pfSense URL", Type: "text", Required: true, Placeholder: "https://pfsense.example.com"},
 			{Key: "api_key", Label: "API Key", Type: "password", Required: true},

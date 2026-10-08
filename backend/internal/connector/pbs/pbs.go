@@ -16,6 +16,7 @@ const typeName = "pbs"
 func init() {
 	connector.Register(connector.TypeSchema{
 		Type: typeName, Category: "virtualization", Name: "Proxmox Backup Server",
+		Discovery: discovery,
 		Fields: []connector.SchemaField{
 			{Key: "url", Label: "Proxmox Backup Server URL", Type: "text", Required: true, Placeholder: "https://pbs.example.com:8007", Description: "Base URL of the Proxmox Backup Server instance."},
 			{Key: "token_id", Label: "API Token ID", Type: "text", Required: true, Placeholder: "root@pam!monitoring", Description: "Token ID with Datastore.Audit privilege. Format: user@realm!name."},

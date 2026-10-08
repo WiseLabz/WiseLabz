@@ -24,7 +24,8 @@ import {
   syncRunsFor,
   user,
 } from '../data/fixtures';
-import type { QualityCheckType, QualityFindingStatus } from '../api/model';
+import type { DiscoveryCandidate, DiscoveryScan, QualityCheckType, QualityFindingStatus } from '../api/model';
+import { MockWebSocket } from './ws/MockWebSocket';
 
 // Small artificial latency so loading skeletons are actually exercised on first paint.
 const LATENCY = 280;
@@ -67,6 +68,54 @@ const newSession = () => ({
   expiresIn: authConfig.accessTokenTtl,
   user,
 });
+
+// Network discovery: one canned scan at a time that "finds" three products over a
+// few seconds and pushes progress/candidate/complete frames over the mock socket,
+// the way the real backend does. Types match connectorSchemas so the connect
+// queue's form opens for real.
+const MOCK_SCAN_MS = 3000;
+const mockFinds: DiscoveryCandidate[] = [
+  { type: 'opnsense', name: 'OPNsense', address: '192.168.1.1', port: 443, url: 'https://192.168.1.1:443', urlField: 'url' },
+  { type: 'proxmox', name: 'Proxmox VE', address: '192.168.1.10', port: 8006, url: 'https://192.168.1.10:8006/api2/json', urlField: 'url' },
+  { type: 'portainer', name: 'Portainer', address: '192.168.1.20', port: 9443, url: 'https://192.168.1.20:9443', urlField: 'url' },
+];
+let mockScan: DiscoveryScan | null = null;
+let mockScanTimers: ReturnType<typeof setTimeout>[] = [];
+
+function endMockScan(state: 'completed' | 'cancelled') {
+  if (!mockScan) return;
+  mockScanTimers.forEach(clearTimeout);
+  mockScanTimers = [];
+  mockScan = { ...mockScan, state, endedAt: new Date().toISOString(), done: state === 'completed' ? mockScan.total : mockScan.done };
+  MockWebSocket.emitEvent('discovery.complete', { scanId: mockScan.id, state, partial: false });
+}
+
+function startMockScan(cidr: string): DiscoveryScan {
+  const scan: DiscoveryScan = {
+    id: `scan-${Date.now().toString(36)}`,
+    cidr,
+    state: 'running',
+    startedAt: new Date().toISOString(),
+    done: 0,
+    total: 254,
+    answered: 0,
+    partial: false,
+    candidates: [],
+  };
+  mockScan = scan;
+  [0.25, 0.5, 0.75].forEach((fraction, i) => {
+    mockScanTimers.push(
+      setTimeout(() => {
+        if (!mockScan || mockScan.id !== scan.id) return;
+        mockScan = { ...mockScan, done: Math.round(254 * fraction), answered: i + 1, candidates: [...mockScan.candidates, mockFinds[i]] };
+        MockWebSocket.emitEvent('discovery.candidate', { scanId: scan.id, candidate: mockFinds[i] });
+        MockWebSocket.emitEvent('discovery.progress', { scanId: scan.id, done: mockScan.done, total: 254, answered: i + 1 });
+      }, MOCK_SCAN_MS * fraction),
+    );
+  });
+  mockScanTimers.push(setTimeout(() => endMockScan('completed'), MOCK_SCAN_MS));
+  return scan;
+}
 
 export const curatedHandlers = [
   http.get('*/docs/:docId/attachments', () => HttpResponse.json([])),
@@ -227,6 +276,55 @@ export const curatedHandlers = [
     const idx = connectors.findIndex((x) => x.id === params.connectorId);
     if (idx >= 0) connectors.splice(idx, 1);
     return new HttpResponse(null, { status: 204 });
+  }),
+
+  http.get('*/discovery/suggestions', async () => {
+    await delay(LATENCY);
+    return HttpResponse.json({
+      suggestions: [
+        { cidr: '192.168.1.0/24', source: 'client' },
+        { cidr: '172.18.0.0/24', source: 'server' },
+      ],
+    });
+  }),
+
+  // Starting honours step-up like the real endpoint: bare request first, then a
+  // retry with the token from the (mocked) /auth/elevate.
+  http.post('*/discovery/scan', async ({ request }) => {
+    await delay(LATENCY);
+    if (authConfig.stepUpForDestructive && !request.headers.get('X-Elevation-Token')) {
+      return HttpResponse.json({ code: 'elevation_required', message: 'Step-up required' }, { status: 400 });
+    }
+    const body = (await request.json().catch(() => ({}))) as { cidr?: string };
+    const cidr = String(body.cidr ?? '');
+    if (!/^(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.)[\d.]+\/(2[4-9]|3[0-2])$/.test(cidr)) {
+      return HttpResponse.json(
+        { code: 'invalid_request', message: 'only private ranges are accepted', details: [{ field: 'cidr', msg: 'only private ranges are accepted (at most a /24)' }] },
+        { status: 400 },
+      );
+    }
+    if (mockScan?.state === 'running') {
+      return HttpResponse.json(
+        { code: 'scan_in_progress', message: 'A network scan is already running', scan: mockScan },
+        { status: 409 },
+      );
+    }
+    return HttpResponse.json({ scan: startMockScan(cidr) }, { status: 202 });
+  }),
+
+  http.get('*/discovery/scan', async () => {
+    await delay(LATENCY);
+    if (!mockScan) return HttpResponse.json({ code: 'not_found', message: 'No network scan' }, { status: 404 });
+    return HttpResponse.json({ scan: mockScan });
+  }),
+
+  http.delete('*/discovery/scan', async () => {
+    await delay(LATENCY);
+    if (mockScan?.state !== 'running') {
+      return HttpResponse.json({ code: 'not_found', message: 'No network scan is running' }, { status: 404 });
+    }
+    endMockScan('cancelled');
+    return HttpResponse.json({ scan: mockScan });
   }),
 
   http.get('*/me', async () => {

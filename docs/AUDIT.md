@@ -99,6 +99,10 @@ object, action-specific), and `createdAt`.
 | `compliance_rule.delete` | `DELETE /api/compliance/rules/{id}` | compliance_rule / id |
 | `compliance_rule.enable` | `PUT /api/compliance/rules/{id}` (enabled true) | compliance_rule / id |
 | `compliance_rule.disable` | `PUT /api/compliance/rules/{id}` (enabled false) | compliance_rule / id |
+| `discovery.scan.start` | `POST /api/discovery/scan` (a scan was accepted) | discovery_scan / scan ID; detail `range` (the masked CIDR) |
+| `discovery.scan.complete` | A network scan ends on its own, as `completed` or `failed` (written by the scan, attributed to the admin who started it) | discovery_scan / scan ID; detail `range`, `state`, `probed`, `answered`, `candidates`, `durationMs`, `partial` |
+| `discovery.scan.cancel` | `DELETE /api/discovery/scan` stops a running scan, or the server shuts down while one runs (written by the scan, attributed to the admin who started it; same detail as complete, `state` `cancelled`, plus `cancelledBy` or `cancelReason`) | discovery_scan / scan ID; detail also `cancelledBy` (user ID of the admin who cancelled, which may differ from the actor) or `cancelReason` `shutdown` (no `cancelledBy`) |
+| `discovery.scan.reject` | `POST /api/discovery/scan` refused, for an invalid range or while a scan runs, or over the hourly limit | discovery_scan / (none); detail `range` (as submitted, at most 64 characters) and `reason` |
 
 `detail` never carries secret values. `connector.update` and
 `auth.config.update` record which *fields* changed (a name list), not
@@ -128,6 +132,17 @@ valid elevation token for `connector.<verb>`. `runbook.create`/
 records `changedFields`, the list of top-level keys present in the request
 body. `runbook.delete` records the deleted runbook's `title`.
 
+`discovery.scan.*` detail carries the scanned range, the scan outcome and counts
+only: `probed` is how many addresses were probed, `answered` how many accepted a
+connection on a listed port, and `candidates` the number of products found per
+connector type. It never contains the address of a scanned or found host. A range
+of `/32` is the one address the admin chose to scan, and it appears as that
+range. A cancel entry names who cancelled in `cancelledBy` (the actor is always
+the admin who started the scan), or carries `cancelReason` `shutdown` when the
+server stopped the scan while shutting down. `discovery.scan.reject` `range` is
+the admin's own input exactly as submitted, cut to 64 characters, and `reason` is one of `invalid_cidr`, `not_ipv4`, `not_private`,
+`too_wide`, `scan_in_progress` or `rate_limited`.
+
 `entity.override.create`/`entity.override.delete` record the override's
 `action` (`detach` or `merge`), `note` and `members` (each `connectorId`,
 `kind`, `ref`; one for a detach, two for a merge). Identity IDs are not
@@ -135,13 +150,14 @@ recorded: they change on merge and split.
 
 ## What's not recorded
 
-- **Failed attempts, except elevation denials and recipe previews.** An audit entry is written
+- **Failed attempts, except elevation denials, recipe previews and refused network scans.** An audit entry is written
   only after the action itself succeeds. Recipe previews are also audited when
-  validation or an endpoint fails. A failed create/update/delete never
+  validation or an endpoint fails. Refused network scan starts are audited as
+  `discovery.scan.reject`. A failed create/update/delete never
   reaches the audit log — this is a deliberate scope cut: this endpoint
   answers "what happened," not "what was attempted." Elevation-token denials
   are the exception because they are security-relevant attempts.
-- **Reads.** Listing or viewing a resource is not an audited action. Downloading
+- **Reads.** Listing or viewing a resource is not an audited action, including the network discovery results. Downloading
   a snapshot diff with `format` is the exception; viewing the same diff as JSON
   without `format` is not audited.
 - A write to the audit log failing is logged (`slog.Error`) but never

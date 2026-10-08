@@ -19,6 +19,7 @@ import (
 	compliancehandler "github.com/WiseLabz/wiselabz/internal/api/compliance"
 	connhandler "github.com/WiseLabz/wiselabz/internal/api/connectors"
 	dashhandler "github.com/WiseLabz/wiselabz/internal/api/dashboard"
+	discoveryhandler "github.com/WiseLabz/wiselabz/internal/api/discovery"
 	dochandler "github.com/WiseLabz/wiselabz/internal/api/docs"
 	entityhandler "github.com/WiseLabz/wiselabz/internal/api/entities"
 	findinghandler "github.com/WiseLabz/wiselabz/internal/api/findings"
@@ -71,6 +72,9 @@ type Config struct {
 	Ready *syshandler.ReadyState
 	// SPAFiles serves the embedded frontend build. Only used when Config.Server.Embed is true.
 	SPAFiles fs.FS
+	// Discovery overrides the network scanner and interface lookup; the zero
+	// value is production (tests inject fakes).
+	Discovery discoveryhandler.Options
 }
 
 // NewRouter constructs the full chi router with all middleware and route groups.
@@ -198,6 +202,7 @@ func newRouterDeps(cfg Config) routerDeps {
 		notifH:      notifhandler.NewHandler(cfg.Store),
 		runbookH:    runbookH,
 		dashH:       dashhandler.NewHandler(cfg.Store),
+		discoveryH:  discoveryhandler.NewHandler(cfg.Store, cfg.WSHub, cfg.Config.Server.TrustedProxies, cfg.Discovery),
 		docH:        docH,
 		savedViewH:  savedviewhandler.NewHandler(cfg.Store),
 		chatH:       chathandler.NewHandler(cfg.Store, settingH.AIConfig, cfg.AIRegistry, cfg.EmbedRegistry),

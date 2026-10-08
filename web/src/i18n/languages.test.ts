@@ -72,6 +72,53 @@ describe('locale catalogs', () => {
       expect(paths.filter((path) => !translatedKeys.has(path))).toEqual([]);
     }
   });
+  it('keeps the network discovery keys present in both catalogs', () => {
+    const paths = [
+      'discovery.title',
+      'discovery.lead',
+      'discovery.note',
+      'discovery.rangeLabel',
+      'discovery.suggestions',
+      'discovery.source.client',
+      'discovery.source.server',
+      'discovery.start',
+      'discovery.scanAgain',
+      'discovery.cancel',
+      'discovery.running',
+      'discovery.progress',
+      'discovery.summary',
+      'discovery.partial',
+      'discovery.state.running',
+      'discovery.state.completed',
+      'discovery.state.cancelled',
+      'discovery.state.failed',
+      'discovery.noResults',
+      'discovery.noResultsDetail',
+      'discovery.alreadyConnected',
+      'discovery.viewConnector',
+      'discovery.connectSelected_one',
+      'discovery.connectSelected_other',
+      'discovery.errors.invalidRange',
+      'discovery.errors.conflict',
+      'discovery.errors.rateLimited',
+      'discovery.errors.rateLimitedSoon',
+      'discovery.errors.generic',
+      'discovery.queue.heading',
+      'discovery.queue.position',
+      'discovery.queue.skip',
+      'discovery.queue.stop',
+      'onboarding.connect.manualTitle',
+      'onboarding.connect.continueWithConnected_one',
+      'onboarding.connect.continueWithConnected_other',
+      'onboarding.sync.titleMany',
+      'connectors.scanNetwork',
+      'connectors.backToForm',
+    ];
+    for (const catalog of [en, ptBR]) {
+      const translatedKeys = new Set(keys(catalog));
+      expect(paths.filter((path) => !translatedKeys.has(path))).toEqual([]);
+    }
+  });
   it.each(Object.entries(LANGUAGES).filter(([, l]) => l.load))(
     '%s only uses keys that exist in English',
     async (_code, lang) => {

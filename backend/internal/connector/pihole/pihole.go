@@ -45,9 +45,10 @@ type session struct {
 
 func init() {
 	connector.Register(connector.TypeSchema{
-		Type:     typeName,
-		Category: "dns",
-		Name:     "Pi-hole",
+		Type:      typeName,
+		Category:  "dns",
+		Name:      "Pi-hole",
+		Discovery: discovery,
 		Fields: []connector.SchemaField{
 			{Key: "url", Label: "Pi-hole URL", Type: "text", Required: true, Placeholder: "https://pihole.example.com"},
 			{Key: "password", Label: "Password / App Password (v6) or API Token (v5)", Type: "password", Required: true},
