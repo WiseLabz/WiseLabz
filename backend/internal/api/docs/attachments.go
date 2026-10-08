@@ -94,9 +94,7 @@ func (h *Handler) UploadAttachment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer func() { _ = part.Close() }()
-	blobstore.PublicationMu.Lock()
-	defer blobstore.PublicationMu.Unlock()
-	blob, err := blobs.Put(part)
+	staged, err := blobs.Stage(part)
 	if err != nil {
 		var maxErr *http.MaxBytesError
 		switch {
@@ -109,15 +107,26 @@ func (h *Handler) UploadAttachment(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	a := store.DocAttachment{DocID: d.ID, SHA256: blob.SHA256, Filename: filepath.Base(strings.ReplaceAll(part.FileName(), "\\", "/")),
-		ContentType: blob.ContentType, Size: blob.Size, CreatedBy: auth.UserIDFromContext(r.Context())}
-	// Recheck active doc inside the transaction after streaming an upload.
-	err = h.Store.WithinTransaction(r.Context(), func(tx *store.Store) error {
-		if _, err := tx.GetDoc(r.Context(), d.ID); err != nil {
+	defer func() { _ = staged.Close() }()
+	var a store.DocAttachment
+	err = func() error {
+		// Only publication and metadata commit need protection from orphan GC.
+		blobstore.PublicationMu.Lock()
+		defer blobstore.PublicationMu.Unlock()
+		blob, err := staged.Publish()
+		if err != nil {
 			return err
 		}
-		return tx.CreateDocAttachment(r.Context(), &a)
-	})
+		a = store.DocAttachment{DocID: d.ID, SHA256: blob.SHA256, Filename: filepath.Base(strings.ReplaceAll(part.FileName(), "\\", "/")),
+			ContentType: blob.ContentType, Size: blob.Size, CreatedBy: auth.UserIDFromContext(r.Context())}
+		// Recheck active doc inside the transaction after streaming an upload.
+		return h.Store.WithinTransaction(r.Context(), func(tx *store.Store) error {
+			if _, err := tx.GetDoc(r.Context(), d.ID); err != nil {
+				return err
+			}
+			return tx.CreateDocAttachment(r.Context(), &a)
+		})
+	}()
 	if err != nil {
 		httputil.HandleStoreError(w, err)
 		return
