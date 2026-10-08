@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '../../i18n';
@@ -7,7 +7,7 @@ import type { DiscoveryCandidate, DiscoveryScan } from '../../api/model';
 import { useDiscovery } from '../../store/discovery';
 import { AddConnectorPage } from './AddConnectorPage';
 
-const mocks = vi.hoisted(() => ({ isAdmin: { current: true }, postConnectors: vi.fn() }));
+const mocks = vi.hoisted(() => ({ isAdmin: { current: true }, postConnectors: vi.fn(), getScan: vi.fn() }));
 
 const schemas = [
   {
@@ -30,7 +30,10 @@ vi.mock('../../api/generated/connectors/connectors', () => ({
 }));
 vi.mock('../../api/generated/discovery/discovery', () => ({
   useGetDiscoverySuggestions: () => ({ data: { suggestions: [] } }),
-  useGetDiscoveryScan: () => ({ data: undefined, isError: false, isFetching: false, refetch: vi.fn() }),
+  // The real query over an endpoint that never answers.
+  useGetDiscoveryScan: (options?: { query?: object }) =>
+    useQuery({ queryKey: ['/discovery/scan'], queryFn: () => mocks.getScan(), ...options?.query }),
+  getGetDiscoveryScanQueryKey: () => ['/discovery/scan'],
   startDiscoveryScan: vi.fn(),
   cancelDiscoveryScan: vi.fn(),
 }));
@@ -74,6 +77,7 @@ function renderPage() {
 beforeEach(() => {
   mocks.isAdmin.current = true;
   useDiscovery.setState({ scan: null });
+  mocks.getScan.mockImplementation(() => new Promise(() => {}));
   mocks.postConnectors.mockResolvedValue({ id: 'c1', name: 'pve', type: 'proxmox' });
 });
 afterEach(() => vi.clearAllMocks());
