@@ -8,7 +8,7 @@
  *
  * Per the contract the client sends nothing, so `send()` is a no-op.
  */
-import type { WsEnvelope } from '../../types/ws';
+import type { WsEnvelope, WsEventMap, WsEventType } from '../../types/ws';
 import { startTimeline } from './timeline';
 
 type Listenerish = ((ev: Event) => void) | null;
@@ -78,6 +78,16 @@ export class MockWebSocket extends EventTarget {
     const ev = new CloseEvent('close', { code, reason, wasClean: true });
     this.onclose?.(ev);
     this.dispatchEvent(ev);
+  }
+
+  /** Wrap a payload in an envelope and push it to every open mock socket. */
+  static emitEvent<K extends WsEventType>(type: K, payload: WsEventMap[K]): void {
+    MockWebSocket.broadcast({
+      type,
+      id: `mock-${type}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+      ts: new Date().toISOString(),
+      payload,
+    });
   }
 
   /** Push an envelope to every open mock socket — handy from the devtools console. */

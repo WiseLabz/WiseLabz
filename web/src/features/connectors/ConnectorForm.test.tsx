@@ -368,3 +368,55 @@ describe('ConnectorForm derived category', () => {
     roleState.isAdmin = false;
   });
 });
+
+describe('ConnectorForm initial type and values', () => {
+  it('opens with the type chosen and the address prefilled, and saves it', async () => {
+    postConnectors.mockClear();
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <ConnectorForm
+          onCreated={vi.fn()}
+          initialType="proxmox"
+          initialValues={{ url: 'https://10.0.0.5:8006/api2/json', name: 'Proxmox VE (10.0.0.5)' }}
+        />
+      </QueryClientProvider>,
+    );
+    expect(screen.getByRole('button', { name: /proxmox ve/i })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByLabelText(/api url/i)).toHaveValue('https://10.0.0.5:8006/api2/json');
+    expect(screen.getByLabelText(/display name/i)).toHaveValue('Proxmox VE (10.0.0.5)');
+    // The type's own defaults still apply to fields that were not prefilled.
+    expect(screen.getByRole('switch', { name: /verify tls/i })).toHaveAttribute('aria-checked', 'true');
+
+    fireEvent.change(screen.getByLabelText(/api token secret/i), { target: { value: 's3cret' } });
+    fireEvent.click(screen.getByRole('button', { name: /test & add/i }));
+    await waitFor(() => expect(postConnectors).toHaveBeenCalled());
+    const body = postConnectors.mock.calls[postConnectors.mock.calls.length - 1][0] as Record<string, unknown>;
+    expect(body).toMatchObject({
+      name: 'Proxmox VE (10.0.0.5)',
+      type: 'proxmox',
+      url: 'https://10.0.0.5:8006/api2/json',
+      verifyTls: true,
+    });
+    expect(body.config).toEqual({ token_secret: 's3cret' });
+  });
+
+  it('opens on the type picker with nothing chosen when no initial type is given', () => {
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <ConnectorForm onCreated={vi.fn()} />
+      </QueryClientProvider>,
+    );
+    expect(screen.getByRole('button', { name: /proxmox ve/i })).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.queryByLabelText(/api url/i)).toBeNull();
+  });
+
+  it('lets the user change the type after opening with one, dropping the prefilled values', () => {
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <ConnectorForm onCreated={vi.fn()} initialType="proxmox" initialValues={{ url: 'https://10.0.0.5:8006/api2/json' }} />
+      </QueryClientProvider>,
+    );
+    fireEvent.click(screen.getByText('Custom HTTP'));
+    expect(screen.getByLabelText(/endpoint url/i)).toHaveValue('');
+  });
+});

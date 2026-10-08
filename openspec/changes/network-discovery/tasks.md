@@ -32,13 +32,13 @@
 - [x] 5.2 Add the discovery store and WebSocket handling, plus mocks in `mocks/curated.ts` and `mocks/ws/MockWebSocket.ts`; verify store tests for applying events, ignoring events from another scan id, and hydrating from the read endpoint.
 - [x] 5.3 Build `DiscoveryPanel`: suggestion chips with prefill, start through `useStepUpMutation`, progress, cancel, result list with selection and the already-connected badge, the nothing-found state with the answered count, and conflict and rate-limit messages; verify component tests for each of those states.
 - [x] 5.4 Build `ConnectQueue` with save, skip, stop and stay-on-failure; verify component tests for the three "Connect queue" scenarios.
-- [ ] 5.5 Add the panel to onboarding's connect step for instance admins and make `SyncStep` handle a list of connectors; verify tests for admin and non-admin connect steps, two connectors syncing, and the everything-skipped case, and that the manual single-connector path still reaches the sync step.
-- [ ] 5.6 Add the "Scan network" action to `AddConnectorPage`, hidden for non-admins; verify a component test for visibility and for returning to `/services` after the queue.
-- [ ] 5.7 Add en and pt-BR strings for the panel, queue and onboarding changes; verify the i18n key parity test and web lint.
+- [x] 5.5 Add the panel to onboarding's connect step for instance admins and make `SyncStep` handle a list of connectors; verify tests for admin and non-admin connect steps, two connectors syncing, and the everything-skipped case, and that the manual single-connector path still reaches the sync step.
+- [x] 5.6 Add the "Scan network" action to `AddConnectorPage`, hidden for non-admins; verify a component test for visibility and for returning to `/services` after the queue.
+- [x] 5.7 Add en and pt-BR strings for the panel, queue and onboarding changes; verify the i18n key parity test and web lint.
 
 ## 6. Documentation
 
-- [ ] 6.1 Add a user guide page under `docs/` covering what a scan sends, the accepted ranges and limits, elevation, what is audited, which products are discoverable, and the Docker bridge note on suggestions, and add an `## Unreleased` entry to `CHANGELOG.md`; verify the docs link check and that every limit stated matches the spec.
+- [x] 6.1 Add a user guide page under `docs/` covering what a scan sends, the accepted ranges and limits, elevation, what is audited, which products are discoverable, and the Docker bridge note on suggestions, and add an `## Unreleased` entry to `CHANGELOG.md`; verify the docs link check and that every limit stated matches the spec.
 
 ## 7. Integration
 

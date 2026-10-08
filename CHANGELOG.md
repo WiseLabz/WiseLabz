@@ -12,6 +12,10 @@
   `{ field, msg }` objects instead of a free-form object. Nothing had ever
   populated it, so no client can have depended on the previous shape.
 
+### Features
+
+* **discovery:** instance admins can scan a private /24 for Proxmox VE, Proxmox Backup Server, Home Assistant, Portainer, UniFi, AdGuard Home, Traefik, Docker, Caddy, Nginx Proxy Manager, pfSense, OPNsense, TrueNAS and Pi-hole during onboarding and from the add-connector page, and connect what is found. See [docs/NETWORK_DISCOVERY.md](docs/NETWORK_DISCOVERY.md).
+
 ## 1.0.0 (2026-10-01)
 
 ## What's Changed

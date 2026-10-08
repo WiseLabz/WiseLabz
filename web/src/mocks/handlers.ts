@@ -13,6 +13,7 @@ import { getAuthMock } from '../api/generated/auth/auth.msw';
 import { getChangesMock } from '../api/generated/changes/changes.msw';
 import { getConnectorsMock } from '../api/generated/connectors/connectors.msw';
 import { getDashboardMock } from '../api/generated/dashboard/dashboard.msw';
+import { getDiscoveryMock } from '../api/generated/discovery/discovery.msw';
 import { getDocsMock } from '../api/generated/docs/docs.msw';
 import { getFindingsMock } from '../api/generated/findings/findings.msw';
 import { getMeMock } from '../api/generated/me/me.msw';
@@ -33,6 +34,7 @@ export const handlers = [
   ...getUsersMock(),
   ...getDashboardMock(),
   ...getConnectorsMock(),
+  ...getDiscoveryMock(),
   ...getDocsMock(),
   ...getTemplatesMock(),
   ...getChangesMock(),

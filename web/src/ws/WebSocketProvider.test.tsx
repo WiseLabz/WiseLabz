@@ -11,8 +11,10 @@ import {
   getGetRunbookRunQueryKey,
   getListRunbookRunsQueryKey,
 } from '../api/generated/runbooks/runbooks';
+import { getGetDiscoveryScanQueryKey } from '../api/generated/discovery/discovery';
 import i18n from '../i18n';
 import { useAuth } from '../store/auth';
+import { useDiscovery } from '../store/discovery';
 import { useLive } from '../store/live';
 import { WebSocketProvider } from './WebSocketProvider';
 
@@ -598,5 +600,44 @@ describe('WebSocketProvider', () => {
     expect(client.getQueryData(['doc-ai-suggestion', 'doc-1', 'req-1'])).toEqual(payload);
     expect(client.getQueryData(['doc-ai-suggestion', 'doc-2', 'req-1'])).toBeUndefined();
     expect(client.getQueryData(['doc-ai-suggestion', 'doc-1', 'req-2'])).toBeUndefined();
+  });
+
+  it('feeds network discovery frames into the discovery store and refetches the scan when it completes', async () => {
+    const client = new QueryClient();
+    const invalidateQueries = vi.spyOn(client, 'invalidateQueries');
+    await renderProvider(client);
+    useDiscovery.setState({
+      scan: {
+        id: 'scan-1',
+        cidr: '10.0.0.0/24',
+        state: 'running',
+        startedAt: '2026-10-07T12:00:00Z',
+        done: 0,
+        total: 254,
+        answered: 0,
+        partial: false,
+        candidates: [],
+      },
+    });
+    const candidate = {
+      type: 'proxmox',
+      name: 'Proxmox VE',
+      address: '10.0.0.5',
+      port: 8006,
+      url: 'https://10.0.0.5:8006/api2/json',
+      urlField: 'url',
+    };
+
+    send({ type: 'discovery.progress', id: 'd-1', payload: { scanId: 'scan-1', done: 80, total: 254, answered: 1 } });
+    send({ type: 'discovery.candidate', id: 'd-2', payload: { scanId: 'scan-1', candidate } });
+    // A frame of an earlier scan is dropped.
+    send({ type: 'discovery.candidate', id: 'd-3', payload: { scanId: 'old', candidate: { ...candidate, port: 1 } } });
+    expect(useDiscovery.getState().scan).toMatchObject({ done: 80, answered: 1, candidates: [candidate] });
+    expect(invalidateQueries).not.toHaveBeenCalledWith({ queryKey: getGetDiscoveryScanQueryKey() });
+
+    send({ type: 'discovery.complete', id: 'd-4', payload: { scanId: 'scan-1', state: 'completed', partial: false } });
+    expect(useDiscovery.getState().scan?.state).toBe('completed');
+    expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: getGetDiscoveryScanQueryKey() });
+    useDiscovery.setState({ scan: null });
   });
 });

@@ -620,6 +620,62 @@ export const ptBR: Catalog = {
       categoryLabel: 'Categoria da receita',
       categoryUnset: 'Adicione uma categoria válida no nível principal da receita.',
     },
+    scanNetwork: 'Escanear rede',
+    backToForm: 'Adicionar manualmente',
+  },
+  discovery: {
+    title: 'Escanear sua rede',
+    lead: 'Procure produtos suportados pelo WiseLabz em uma faixa privada e conecte os que forem encontrados.',
+    note: 'A varredura abre uma conexão TCP com um conjunto fixo de portas conhecidas em cada endereço da faixa e envia uma requisição sem credenciais para cada porta aberta. Nada é armazenado. Escaneie apenas redes pelas quais você é responsável.',
+    rangeLabel: 'Faixa a escanear',
+    suggestions: 'Faixas sugeridas',
+    source: {
+      client: 'sua rede',
+      server: 'rede do servidor',
+    },
+    start: 'Escanear',
+    scanAgain: 'Escanear novamente',
+    cancel: 'Cancelar varredura',
+    running: 'Escaneando {{range}}',
+    progress: '{{done}} de {{total}} endereços verificados',
+    summary: '{{range}}: {{done}} de {{total}} endereços verificados, {{answered}} responderam',
+    partial: 'A varredura parou no limite de 60 segundos, então a lista pode estar incompleta.',
+    state: {
+      running: 'Em execução',
+      completed: 'Concluída',
+      cancelled: 'Cancelada',
+      failed: 'Falhou',
+    },
+    noResults: 'Nenhum produto conhecido encontrado',
+    noResultsDetail:
+      '{{answered}} de {{total}} endereços responderam em uma porta conhecida, mas nenhum foi identificado como produto suportado. Você ainda pode adicionar um conector manualmente.',
+    alreadyConnected: 'Já conectado',
+    viewConnector: 'Ver conector',
+    connectSelected_one: 'Conectar {{count}} selecionado',
+    connectSelected_other: 'Conectar {{count}} selecionados',
+    errors: {
+      invalidRange: 'Informe uma faixa privada, como 192.168.1.0/24.',
+      conflict: 'Uma varredura já está em execução. Exibindo abaixo.',
+      rateLimited: 'Muitas varreduras nesta hora. Tente novamente em {{minutes}} min.',
+      rateLimitedSoon: 'Muitas varreduras nesta hora. Tente novamente mais tarde.',
+      generic: 'Não foi possível iniciar a varredura.',
+    },
+    queue: {
+      heading: 'Conectar {{name}} em {{address}}',
+      position: 'Candidato {{index}} de {{total}}',
+      skip: 'Pular',
+      stop: 'Parar',
+    },
+  },
+  onboarding: {
+    connect: {
+      manualTitle: 'Adicionar manualmente',
+      continueWithConnected_one: 'Continuar com {{count}} serviço conectado',
+      continueWithConnected_other: 'Continuar com {{count}} serviços conectados',
+    },
+    sync: {
+      titleMany: 'Executando a primeira sincronização de {{count}} serviços',
+    },
   },
   services: {
     category: {
