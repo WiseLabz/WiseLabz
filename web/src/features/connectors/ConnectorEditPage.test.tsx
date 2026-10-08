@@ -1,9 +1,12 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, configure, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import '../../i18n';
 import { ConnectorEditPage } from './ConnectorEditPage';
+
+// The recipe editor and its YAML editor load lazily; CI with coverage is slower than the 1s default.
+configure({ asyncUtilTimeout: 5000 });
 
 const { putConnectorsConnectorId, previewRecipe, roleState, testMock, toastError } = vi.hoisted(() => ({
   toastError: vi.fn(),

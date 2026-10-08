@@ -1,8 +1,11 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { configure, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { useState } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import '../../i18n';
 import { RecipeEditor } from './RecipeEditor';
+
+// The recipe editor and its YAML editor load lazily; CI with coverage is slower than the 1s default.
+configure({ asyncUtilTimeout: 5000 });
 
 if (!Range.prototype.getClientRects) {
   Object.defineProperty(Range.prototype, 'getClientRects', { value: () => [] as unknown as DOMRectList });
