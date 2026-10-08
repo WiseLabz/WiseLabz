@@ -11,6 +11,12 @@ import (
 // level.
 var columnFields = map[string]bool{"url": true, "verify_tls": true}
 
+// declaredFields are extra config keys permitted only for declared entries of
+// specific connector types.
+var declaredFields = map[string]map[string]bool{
+	"tlsprobe": {"import_connector": true},
+}
+
 // ValidateDeclared strictly checks the type-specific config of a connector
 // declared in config.yaml (#500): the type must be registered, every required
 // field must be present, and no key may be unknown to the type. It then applies
@@ -33,6 +39,9 @@ func ValidateDeclared(typ string, config map[string]any) error {
 		if v, ok := config[f.Key]; !ok || v == nil || v == "" {
 			errs = append(errs, &ConfigValidationError{Field: f.Key, Message: "is required"})
 		}
+	}
+	for k := range declaredFields[typ] {
+		known[k] = true
 	}
 	keys := make([]string, 0, len(config))
 	for k := range config {

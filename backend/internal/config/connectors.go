@@ -154,23 +154,29 @@ func (c *Config) ResolveConnectors() []ResolvedConnector {
 			}
 		}
 
-		var urlErr error
-		switch {
-		case e.URL != "" && e.URLFile != "":
-			urlErr = errors.New("url and url_file are mutually exclusive")
-		case e.URLFile != "":
-			e.URL, urlErr = readSecretFile(e.URLFile)
-			e.URLFile = ""
-		default:
-			var v any
-			v, urlErr = expandEnv(e.URL)
-			e.URL = v.(string)
-		}
-		switch {
-		case urlErr != nil:
-			errs = append(errs, fmt.Errorf("url: %w", urlErr))
-		case e.URL == "":
-			errs = append(errs, errors.New("url is required"))
+		if e.Type == "tlsprobe" {
+			if e.URL != "" || e.URLFile != "" {
+				errs = append(errs, errors.New("tlsprobe does not accept a url"))
+			}
+		} else {
+			var urlErr error
+			switch {
+			case e.URL != "" && e.URLFile != "":
+				urlErr = errors.New("url and url_file are mutually exclusive")
+			case e.URLFile != "":
+				e.URL, urlErr = readSecretFile(e.URLFile)
+				e.URLFile = ""
+			default:
+				var v any
+				v, urlErr = expandEnv(e.URL)
+				e.URL = v.(string)
+			}
+			switch {
+			case urlErr != nil:
+				errs = append(errs, fmt.Errorf("url: %w", urlErr))
+			case e.URL == "" && connector.URLRequired(e.Type):
+				errs = append(errs, errors.New("url is required"))
+			}
 		}
 
 		resolved, cfgErrs := resolveConnectorConfig(e.Type, e.Config)
