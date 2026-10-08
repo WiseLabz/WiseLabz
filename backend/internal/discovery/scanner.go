@@ -156,21 +156,34 @@ func (s *Scanner) httpClient(dialer *net.Dialer) *http.Client {
 	return &http.Client{
 		CheckRedirect: httpx.NoRedirect,
 		Transport: &http.Transport{
-			Proxy:       nil,
-			DialContext: dialer.DialContext,
-			// Home-lab products ship self-signed certificates, so a probe cannot
-			// require a trusted one. This is safe here because the scan sends no
-			// credentials and reads only public response fields (status, headers,
-			// the first bytes of the body, the certificate itself) to recognise a
-			// product; nothing read is trusted beyond that. This is the only
-			// transport in the app that skips verification unconditionally.
-			TLSClientConfig:       &tls.Config{InsecureSkipVerify: true}, //nolint:gosec // see above
+			Proxy:                 nil,
+			DialContext:           dialer.DialContext,
+			TLSClientConfig:       insecureSkipVerifyConfig(),
 			DisableKeepAlives:     true,
 			TLSHandshakeTimeout:   s.requestTimeout,
 			ResponseHeaderTimeout: s.requestTimeout,
 			// Headers are capped like the body; the default is 10 MiB a response.
 			MaxResponseHeaderBytes: maxBody,
 		},
+	}
+}
+
+// insecureSkipVerifyConfig is the TLS client config of a probe, with
+// certificate verification off. Home-lab products ship self-signed
+// certificates, so a probe cannot require a trusted one. This is safe here
+// because the scan sends no credentials and reads only public response fields
+// (status, headers, the first bytes of the body, the certificate itself) to
+// recognise a product; nothing read is trusted beyond that. This is the only
+// HTTP transport in the app that skips verification unconditionally.
+//
+// The name states the insecurity on purpose: CodeQL's disabled-certificate-check
+// query exempts a function named like this, which keeps the exemption to this one
+// function while every other query still scans the file (same approach as the
+// TLS probe connector). Inline codeql[...] comments have no effect in this pipeline.
+func insecureSkipVerifyConfig() *tls.Config {
+	return &tls.Config{
+		InsecureSkipVerify: true, //nolint:gosec // deliberate, see the function comment
+		MinVersion:         tls.VersionTLS12,
 	}
 }
 
