@@ -213,7 +213,7 @@ function liftNullAncestor(
         if (typeof segment !== 'string') return unchanged;
         nested = { [segment]: nested };
       }
-      const target = path.slice(0, depth);
+      const target = path.slice(0, depth) as (string | number)[];
       return { operation: { type: 'set', path: target, value: nested }, path: target, value: nested };
     }
     if (!isMap(node) && !isSeq(node)) break;
@@ -258,7 +258,9 @@ function sourcePatch(
         const bare = oldNode.range[0] === oldNode.range[1] && !/\s/.test(source[oldNode.range[0] - 1] ?? ' ');
         // A block scalar's range ends with its line break; keep it so the next line is not joined.
         const lineBreaks = source.slice(oldNode.range[0], oldNode.range[1]).match(/(?:\r?\n)*$/)?.[0].length ?? 0;
-        return { start: oldNode.range[0], end: oldNode.range[1] - lineBreaks, text: bare ? ` ${encoded}` : encoded };
+        // A comment right after the colon (`key: # note`) starts where the empty value does; keep a space before it.
+        const beforeComment = oldNode.range[0] === oldNode.range[1] && source[oldNode.range[0]] === '#' ? ' ' : '';
+        return { start: oldNode.range[0], end: oldNode.range[1] - lineBreaks, text: `${bare ? ' ' : ''}${encoded}${beforeComment}` };
       }
       if (composite && isScalar(oldNode) && oldNode.value === null && pair?.key?.range && isMap(parent) && !parent.flow) {
         const patch = nullValuePatch(source, pair.key.range, encoded, lineEnding);
@@ -643,8 +645,8 @@ function issueAt(source: string, kind: RecipeDocumentIssue['kind'], message: str
 }
 
 /** The parser appends `at line N, column M:` and a source snippet; the issue carries the line separately. */
-function withoutPosition(message: string | undefined): string | undefined {
-  return message?.replace(/\s+at line \d+, column \d+:[\s\S]*$/, '');
+function withoutPosition(message = ''): string {
+  return message.replace(/\s+at line \d+, column \d+:[\s\S]*$/, '');
 }
 
 function syntaxIssue(error: unknown): RecipeDocumentIssue {

@@ -71,6 +71,27 @@ function hasBareLf(text: string): boolean {
   return /(^|[^\r])\n/.test(text);
 }
 
+/** `key: ~` and `key: null` lose their explicit null token when children are added below the key. */
+function withoutNullToken(line: string): string {
+  return line.replace(/^([^#]*?:)[ \t]*(?:~|null|Null|NULL)[ \t]*(#.*)?$/, (_match, head: string, comment?: string) =>
+    comment ? `${head} ${comment}` : head,
+  );
+}
+
+/**
+ * The original lines an add-key or append must keep. When the edit adds children to a null value, the key
+ * line may lose its explicit null token; that one line is compared without it, everything else stays strict.
+ */
+function keptLines(source: string, planned: Planned): string[] {
+  const original = lines(source);
+  if (planned.kind !== 'add-key' && planned.kind !== 'append') return original;
+  const path = planned.operation.path as Path;
+  const { node, keyOffset } = locate(source, planned.kind === 'add-key' ? path.slice(0, -1) : path);
+  if (!isScalar(node) || node.value !== null || keyOffset === undefined) return original;
+  const keyLine = source.slice(0, keyOffset).split('\n').length - 1;
+  return original.map((line, index) => (index === keyLine ? withoutNullToken(line) : line));
+}
+
 /** Greedy in-order match of `sub` inside `big`; returns which `big` lines matched, or undefined if not a subsequence. */
 function matchedInOrder(sub: string[], big: string[]): boolean[] | undefined {
   const matched = big.map(() => false);
@@ -247,7 +268,9 @@ function checkEdit(source: string, planned: Planned): string | undefined {
     return `value mismatch: got ${JSON.stringify(actual)?.slice(0, 160)} want ${JSON.stringify(planned.expected)?.slice(0, 160)} ${snippet}`;
   }
   if (result.startsWith(BOM) !== source.startsWith(BOM)) return `BOM changed ${snippet}`;
-  if (hasCrlf(result) !== hasCrlf(source) || hasBareLf(result) !== hasBareLf(source)) {
+  // Deleting the last line of a text with no final newline also drops the break before it, so none is left.
+  const droppedLastBreak = planned.kind === 'delete' && !source.endsWith('\n') && !hasCrlf(result) && !hasBareLf(result);
+  if (!droppedLastBreak && (hasCrlf(result) !== hasCrlf(source) || hasBareLf(result) !== hasBareLf(source))) {
     return `line ending style changed ${snippet}`;
   }
 
@@ -290,7 +313,7 @@ function checkEdit(source: string, planned: Planned): string | undefined {
   }
   if (planned.kind === 'add-key') {
     // Every original line stays in order; the only new text is the new key on a line of its own.
-    const kept = matchedInOrder(before, after);
+    const kept = matchedInOrder(keptLines(source, planned), after);
     if (!kept) return `original lines not kept in order ${snippet}`;
     if (commentsLost !== 0) return `comment count changed ${snippet}`;
     const added = after.filter((_, index) => !kept[index]).filter((line) => line.trim() !== '');
@@ -304,7 +327,7 @@ function checkEdit(source: string, planned: Planned): string | undefined {
   }
 
   if (planned.kind === 'append') {
-    if (!matchedInOrder(before, after)) return `original lines not kept in order ${snippet}`;
+    if (!matchedInOrder(keptLines(source, planned), after)) return `original lines not kept in order ${snippet}`;
     return commentsLost !== 0 ? `comment count changed ${snippet}` : undefined;
   }
 

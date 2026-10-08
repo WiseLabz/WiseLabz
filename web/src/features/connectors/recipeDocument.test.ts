@@ -157,6 +157,15 @@ describe('recipe document parsing', () => {
     expect(editRecipeDocument('auth:\nversion: 1\n', { type: 'append', path: ['auth'], value: 'x' })).toBe('auth:\n  - x\nversion: 1\n');
   });
 
+  it('replaces a null value with a scalar and keeps the comment and the rest of the line', () => {
+    const set = (source: string): string => editRecipeDocument(source, { type: 'set', path: ['extra'], value: 'zz-new' });
+    expect(set('auth:\nversion: 1\nextra: # none\nlast: ~\n')).toBe('auth:\nversion: 1\nextra: zz-new # none\nlast: ~\n');
+    expect(set('extra:\nlast: 1\n')).toBe('extra: zz-new\nlast: 1\n');
+    expect(set('extra: ~\n')).toBe('extra: zz-new\n');
+    expect(set('extra: null # c\nz: 1\n')).toBe('extra: zz-new # c\nz: 1\n');
+    expect(set('extra: # none\r\nlast: 1\r\n')).toBe('extra: zz-new # none\r\nlast: 1\r\n');
+  });
+
   it('inserts into multi-line flow collections before the closing bracket line', () => {
     expect(editRecipeDocument('values: [\n  one,\n  two\n]\nafter: 1\n', { type: 'append', path: ['values'], value: 'three' })).toBe(
       'values: [\n  one,\n  two, three\n]\nafter: 1\n',
