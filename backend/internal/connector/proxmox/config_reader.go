@@ -8,9 +8,11 @@ import (
 
 // ConfigRead returns configured memory or configured cores from a fresh snapshot.
 // Both are read from the guest's /config endpoint, which shows pending
-// configuration changes before the restart. If /config cannot be read, or its
-// memory cannot be decoded, memory is an error rather than the running guest's
-// maxmem, which would hide a pending change.
+// configuration changes before the restart. If /config cannot be read, memory
+// is an error rather than the running guest's maxmem, which would hide a
+// pending change. If /config was read but holds no usable value (no key, or one
+// that cannot be decoded), memory and cores are both nil with no error: the
+// value is unknown.
 func (p *Connector) ConfigRead(ctx context.Context, config map[string]any, entityRef, fieldKey string) (any, error) {
 	if fieldKey != "memory" && fieldKey != "cores" {
 		return nil, fmt.Errorf("unsupported field %q", fieldKey)
@@ -38,21 +40,17 @@ func (p *Connector) ConfigRead(ctx context.Context, config map[string]any, entit
 			continue
 		}
 		value, ok := entity.Attributes[fieldKey]
-		if !ok && fieldKey == "cores" {
-			// onboot is set whenever the guest's /config call succeeded, so
-			// onboot without cores means the config holds no explicit core
-			// count (QEMU default, or an LXC with no limit): there is no
-			// numeric value a revert could restore.
-			if _, configRead := entity.Attributes["onboot"]; configRead {
-				return nil, nil
-			}
+		// onboot is set whenever the guest's /config call succeeded. Without
+		// it the memory attribute is only the running maxmem, so it must not
+		// be reported.
+		_, configRead := entity.Attributes["onboot"]
+		if fieldKey == "memory" && !configRead {
+			ok = false
 		}
-		if fieldKey == "memory" {
-			// Without the onboot marker /config was not read and the memory
-			// attribute is only the running maxmem.
-			if _, configRead := entity.Attributes["onboot"]; !configRead {
-				ok = false
-			}
+		if !ok && configRead {
+			// The config holds no usable value (for cores: QEMU default, or an
+			// LXC with no limit): there is no number a revert could restore.
+			return nil, nil
 		}
 		if !ok {
 			return nil, fmt.Errorf("proxmox %s is unavailable for VMID %q", fieldKey, entityRef)

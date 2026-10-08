@@ -10,8 +10,11 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"maps"
 	"net/http"
+	"net/url"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -38,6 +41,9 @@ var revisionPattern = regexp.MustCompile(`^[0-9]+(\.[0-9]+)?$`)
 
 // errRuleNotSaved marks a setRule answer that saved nothing.
 var errRuleNotSaved = errors.New("rule not saved")
+
+// errRuleNotFound marks a rule UUID the firewall does not know.
+var errRuleNotFound = errors.New("not found")
 
 func init() {
 	connector.Register(connector.TypeSchema{
@@ -281,8 +287,13 @@ func (c *Connector) WritableFields() []connector.ConfigField {
 // entityRef (the rule UUID) and applies it. On OPNsense 24.1 to 26.1 it uses
 // the savepoint flow (savepoint, setRule, apply/<revision>, cancelRollback)
 // and reverts explicitly when anything fails. On 26.7 and later, where the
-// savepoint API is gone (404), it reads the previous value, calls setRule and
-// apply, and writes the previous value back if the apply fails.
+// savepoint API is gone (404), it calls setRule and apply and writes the
+// previous value back if the apply fails.
+//
+// Before anything else the push waits out a rollback timer that an earlier
+// failed push may have left running, and writes rules left in an uncertain
+// state back to their pre-push value, so a value that was never applied cannot
+// become live. Both are tracked in filterState.
 func (c *Connector) ConfigPush(ctx context.Context, _ map[string]any, entityRef, fieldKey string, value any) error {
 	if entityRef == "" {
 		return fmt.Errorf("opnsense config-push requires a target rule UUID")
@@ -304,72 +315,238 @@ func (c *Connector) ConfigPush(ctx context.Context, _ map[string]any, entityRef,
 	// Savepoint, revert and the rollback timer act on the whole filter
 	// section, so two interleaved pushes could undo each other. This only
 	// covers pushes made by this WiseLabz process.
-	unlock, err := lockFilter(ctx, c.url)
+	st := filterStateFor(c.url)
+	unlock, err := st.acquire(ctx)
 	if err != nil {
 		return err
 	}
 	defer unlock()
+
+	if err := st.waitRollback(ctx); err != nil {
+		return err
+	}
+	if err := c.cleanUncertain(ctx, st); err != nil {
+		return err
+	}
+	previous, err := c.ruleEnabled(ctx, entityRef)
+	if err != nil {
+		return err
+	}
 
 	revision, err := c.filterSavepoint(ctx)
 	if err != nil {
 		return err
 	}
 	if revision == "" {
-		return c.pushWithUndo(ctx, entityRef, enabled)
+		return c.pushWithUndo(ctx, st, entityRef, previous, enabled)
 	}
-	return c.pushWithSavepoint(ctx, entityRef, enabled, revision)
+	return c.pushWithSavepoint(ctx, st, entityRef, previous, enabled, revision)
 }
 
 // pushWithSavepoint is the OPNsense 24.1 to 26.1 flow. Once apply/<revision>
 // ran, OPNsense rolls the filter back after 60 seconds unless cancelRollback
-// arrives, so every failure after the savepoint ends in revertSavepoint.
-func (c *Connector) pushWithSavepoint(ctx context.Context, ruleUUID, enabled, revision string) error {
+// arrives, so every failure after the savepoint ends in revertSavepoint. A
+// cancelRollback that finds no timer after a successful apply counts as a
+// failure: the timer already fired or never started, so the change is not safe.
+func (c *Connector) pushWithSavepoint(ctx context.Context, st *filterState, ruleUUID, previous, enabled, revision string) error {
 	if err := c.setRuleEnabled(ctx, ruleUUID, enabled); err != nil {
 		if errors.Is(err, errRuleNotSaved) {
 			return err
 		}
-		return c.revertSavepoint(ctx, revision, err)
+		return c.revertSavepoint(ctx, st, ruleUUID, previous, revision, false, err)
 	}
 	if err := c.applyFilter(ctx, filterAPI+"apply/"+revision); err != nil {
-		return c.revertSavepoint(ctx, revision, err)
+		return c.revertSavepoint(ctx, st, ruleUUID, previous, revision, true, err)
 	}
-	if err := c.cancelRollback(ctx, revision); err != nil {
-		return c.revertSavepoint(ctx, revision, fmt.Errorf("opnsense apply succeeded but the rollback could not be cancelled: %w", err))
+	cancelled, err := c.cancelRollback(ctx, revision)
+	if err != nil {
+		return c.revertSavepoint(ctx, st, ruleUUID, previous, revision, true, fmt.Errorf("opnsense apply succeeded but the rollback could not be cancelled: %w", err))
 	}
+	if !cancelled {
+		return c.revertSavepoint(ctx, st, ruleUUID, previous, revision, true, errors.New("opnsense apply succeeded but its rollback timer was not found: it already fired or another rollback is pending on the firewall"))
+	}
+	// An apply known to have worked with no timer left: nothing is uncertain.
+	st.clearMarks()
 	return nil
 }
 
 // pushWithUndo is the OPNsense 26.7+ flow, which has no server-side rollback.
-func (c *Connector) pushWithUndo(ctx context.Context, ruleUUID, enabled string) error {
-	previous, err := c.ruleEnabled(ctx, ruleUUID)
-	if err != nil {
-		return err
-	}
+func (c *Connector) pushWithUndo(ctx context.Context, st *filterState, ruleUUID, previous, enabled string) error {
 	if err := c.setRuleEnabled(ctx, ruleUUID, enabled); err != nil {
 		if errors.Is(err, errRuleNotSaved) {
 			return err
 		}
-		return c.undoRule(ctx, ruleUUID, previous, err)
+		return c.undoRule(ctx, st, ruleUUID, previous, err)
 	}
 	if err := c.applyFilter(ctx, filterAPI+"apply"); err != nil {
-		return c.undoRule(ctx, ruleUUID, previous, err)
+		return c.undoRule(ctx, st, ruleUUID, previous, err)
+	}
+	st.clearMarks()
+	return nil
+}
+
+// cleanUncertain writes every rule marked uncertain back to its pre-push value
+// before a new push starts. A later apply or revert then cannot make a value
+// live that was never applied. A rule that no longer exists upstream is
+// forgotten.
+func (c *Connector) cleanUncertain(ctx context.Context, st *filterState) error {
+	marks := st.snapshotMarks()
+	uuids := make([]string, 0, len(marks))
+	for uuid := range marks {
+		uuids = append(uuids, uuid)
+	}
+	sort.Strings(uuids)
+	for _, uuid := range uuids {
+		err := c.setRuleEnabled(ctx, uuid, marks[uuid])
+		if err == nil {
+			continue
+		}
+		if errors.Is(err, errRuleNotSaved) {
+			if _, rerr := c.ruleEnabled(ctx, uuid); errors.Is(rerr, errRuleNotFound) {
+				st.unmark(uuid)
+				continue
+			}
+		}
+		return fmt.Errorf("opnsense config-push: rule %q: an earlier failed push could not be cleaned up: %w", uuid, err)
 	}
 	return nil
 }
 
-// filterLocks maps a firewall URL to a capacity-1 channel used as its push lock.
-var filterLocks sync.Map
+// rollbackWindow is how long a push waits after a rollback timer may have been
+// left running: OPNsense's 60 second timer plus a margin. A variable so tests
+// can shorten it.
+var rollbackWindow = 70 * time.Second
 
-// lockFilter takes the push lock of the firewall at url, giving up when ctx ends.
-func lockFilter(ctx context.Context, url string) (unlock func(), err error) {
-	v, _ := filterLocks.LoadOrStore(url, make(chan struct{}, 1))
-	lock := v.(chan struct{})
+// filterState is what this process knows about config pushes to one firewall.
+// It lives in this process only: it is lost on restart and not shared between
+// backend replicas.
+type filterState struct {
+	lock chan struct{} // capacity 1: the push lock
+
+	mu        sync.Mutex
+	notBefore time.Time         // a rollback timer may fire until then
+	uncertain map[string]string // rule UUID -> enabled value ("0"/"1") it had before a push whose outcome is unknown
+}
+
+// filterStates maps filterKey(url) to the *filterState of that firewall.
+var filterStates sync.Map
+
+// filterStateFor returns the state of the firewall at rawURL.
+func filterStateFor(rawURL string) *filterState {
+	key := filterKey(rawURL)
+	if v, ok := filterStates.Load(key); ok {
+		return v.(*filterState)
+	}
+	v, _ := filterStates.LoadOrStore(key, &filterState{
+		lock:      make(chan struct{}, 1),
+		uncertain: map[string]string{},
+	})
+	return v.(*filterState)
+}
+
+// filterKey normalises a firewall URL so spellings that reach the same host
+// share one state: scheme and host case, the default port and trailing slashes
+// do not matter.
+func filterKey(rawURL string) string {
+	raw := strings.TrimSpace(rawURL)
+	u, err := url.Parse(raw)
+	if err != nil || u.Host == "" {
+		return strings.TrimRight(strings.ToLower(raw), "/")
+	}
+	scheme := strings.ToLower(u.Scheme)
+	host := strings.ToLower(u.Hostname())
+	if strings.Contains(host, ":") {
+		host = "[" + host + "]"
+	}
+	port := u.Port()
+	if (scheme == "http" && port == "80") || (scheme == "https" && port == "443") {
+		port = ""
+	}
+	if port != "" {
+		host += ":" + port
+	}
+	return scheme + "://" + host + strings.TrimRight(u.EscapedPath(), "/")
+}
+
+// acquire takes the push lock, giving up when ctx ends.
+func (s *filterState) acquire(ctx context.Context) (unlock func(), err error) {
 	select {
-	case lock <- struct{}{}:
-		return func() { <-lock }, nil
+	case s.lock <- struct{}{}:
+		return func() { <-s.lock }, nil
 	case <-ctx.Done():
 		return nil, fmt.Errorf("opnsense config-push: waiting for another push: %w", ctx.Err())
 	}
+}
+
+// holdRollback records that a rollback timer may be running.
+func (s *filterState) holdRollback() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.notBefore = time.Now().Add(rollbackWindow)
+}
+
+// waitRollback blocks until a rollback timer left by an earlier failed push can
+// no longer fire. It returns at once when ctx has a deadline before that, and
+// when ctx ends during the wait.
+func (s *filterState) waitRollback(ctx context.Context) error {
+	s.mu.Lock()
+	until := s.notBefore
+	s.mu.Unlock()
+	remaining := time.Until(until)
+	if remaining > 0 {
+		if deadline, ok := ctx.Deadline(); ok && deadline.Before(until) {
+			return rollbackPending(remaining, context.DeadlineExceeded)
+		}
+		timer := time.NewTimer(remaining)
+		defer timer.Stop()
+		select {
+		case <-timer.C:
+		case <-ctx.Done():
+			return rollbackPending(time.Until(until), ctx.Err())
+		}
+	}
+	s.mu.Lock()
+	s.notBefore = time.Time{}
+	s.mu.Unlock()
+	return nil
+}
+
+func rollbackPending(remaining time.Duration, cause error) error {
+	seconds := int((remaining + time.Second - 1) / time.Second)
+	return fmt.Errorf("opnsense config-push: a rollback timer from an earlier failed push may still fire, %d seconds remain: %w", seconds, cause)
+}
+
+// mark records that the rule may be saved with a value that is not live, and
+// what it was before the push.
+func (s *filterState) mark(ruleUUID, previous string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.uncertain[ruleUUID] = previous
+}
+
+func (s *filterState) marked(ruleUUID string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	_, ok := s.uncertain[ruleUUID]
+	return ok
+}
+
+func (s *filterState) snapshotMarks() map[string]string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return maps.Clone(s.uncertain)
+}
+
+func (s *filterState) unmark(ruleUUID string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.uncertain, ruleUUID)
+}
+
+func (s *filterState) clearMarks() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	clear(s.uncertain)
 }
 
 // filterSavepoint creates a filter savepoint and returns its revision. It
@@ -386,15 +563,21 @@ func (c *Connector) filterSavepoint(ctx context.Context) (string, error) {
 		return "", fmt.Errorf("opnsense savepoint: %w", err)
 	}
 	var resp struct {
-		Revision string `json:"revision"`
+		Revision json.RawMessage `json:"revision"`
 	}
 	if err := json.Unmarshal(raw, &resp); err != nil {
 		return "", connector.NewMalformedResponseError(fmt.Errorf("decode savepoint response: %w", err))
 	}
-	if !revisionPattern.MatchString(resp.Revision) {
-		return "", fmt.Errorf("opnsense savepoint: missing or malformed revision %q", resp.Revision)
+	// OPNsense sends a string; a bare number is taken as it was written.
+	revision := string(resp.Revision)
+	var text string
+	if json.Unmarshal(resp.Revision, &text) == nil {
+		revision = text
 	}
-	return resp.Revision, nil
+	if !revisionPattern.MatchString(revision) {
+		return "", fmt.Errorf("opnsense savepoint: missing or malformed revision %q", revision)
+	}
+	return revision, nil
 }
 
 // setRuleEnabled saves the enabled state of a rule without applying it. It
@@ -428,7 +611,7 @@ func (c *Connector) ruleEnabled(ctx context.Context, ruleUUID string) (string, e
 		return "", fmt.Errorf("opnsense getRule: %w", err)
 	}
 	if bytes.Equal(bytes.TrimSpace(raw), []byte("[]")) {
-		return "", fmt.Errorf("opnsense firewall rule %q not found", ruleUUID)
+		return "", fmt.Errorf("opnsense firewall rule %q %w", ruleUUID, errRuleNotFound)
 	}
 	var resp struct {
 		Rule *struct {
@@ -439,7 +622,7 @@ func (c *Connector) ruleEnabled(ctx context.Context, ruleUUID string) (string, e
 		return "", connector.NewMalformedResponseError(fmt.Errorf("decode getRule response: %w", err))
 	}
 	if resp.Rule == nil {
-		return "", fmt.Errorf("opnsense firewall rule %q not found", ruleUUID)
+		return "", fmt.Errorf("opnsense firewall rule %q %w", ruleUUID, errRuleNotFound)
 	}
 	if resp.Rule.Enabled != "0" && resp.Rule.Enabled != "1" {
 		return "", fmt.Errorf("opnsense getRule: unexpected enabled value %q", resp.Rule.Enabled)
@@ -476,49 +659,95 @@ func (c *Connector) postExpectOK(ctx context.Context, path string) error {
 }
 
 // cancelRollback stops the rollback timer started by apply/<revision>, with a
-// context that survives cancellation of ctx. The status string carries no
-// information, so only a transport or HTTP error is a failure.
-func (c *Connector) cancelRollback(ctx context.Context, revision string) error {
-	return detached(ctx, func(ctx context.Context) error {
-		_, err := c.doRequest(ctx, "POST", filterAPI+"cancelRollback/"+revision)
-		return err
+// context that survives cancellation of ctx. rollback_cancel.php prints nothing
+// and exits non-zero when no timer for the revision exists, which the API
+// reports as an empty status; a cancelled timer comes back as whitespace only.
+// So an empty status means no such timer (it already fired, never started
+// because another timer was pending, or the apply never arrived), and any
+// other text is unexpected.
+func (c *Connector) cancelRollback(ctx context.Context, revision string) (cancelled bool, err error) {
+	err = detached(ctx, func(ctx context.Context) error {
+		raw, err := c.doRequest(ctx, "POST", filterAPI+"cancelRollback/"+revision)
+		if err != nil {
+			return err
+		}
+		var resp struct {
+			Status string `json:"status"`
+		}
+		if err := json.Unmarshal(raw, &resp); err != nil {
+			return connector.NewMalformedResponseError(fmt.Errorf("decode cancelRollback response: %w", err))
+		}
+		switch {
+		case resp.Status == "":
+		case strings.TrimSpace(resp.Status) == "":
+			cancelled = true
+		default:
+			return fmt.Errorf("opnsense cancelRollback: unexpected status %q", resp.Status)
+		}
+		return nil
 	})
+	return cancelled, err
 }
 
 // revertSavepoint restores the filter section from the savepoint after cause
-// and returns cause annotated with the outcome. It uses a context that
-// survives cancellation of ctx.
-func (c *Connector) revertSavepoint(ctx context.Context, revision string, cause error) error {
+// and returns cause annotated with the outcome. applySent says whether
+// apply/<revision> may have reached OPNsense, which starts a rollback timer. It
+// uses a context that survives cancellation of ctx.
+//
+// When the revert fails, the rule is marked uncertain and, after an apply, the
+// firewall is marked as having a timer pending; the timer is left alone so
+// OPNsense can roll back by itself. When the revert worked but the timer cannot
+// be cancelled, the firewall is marked the same way. Marks are not cleared
+// after a revert, which does not report whether its reload worked.
+func (c *Connector) revertSavepoint(ctx context.Context, st *filterState, ruleUUID, previous, revision string, applySent bool, cause error) error {
 	err := detached(ctx, func(ctx context.Context) error {
 		return c.postExpectOK(ctx, filterAPI+"revert/"+revision)
 	})
 	if err != nil {
-		// The rollback timer is left alone so OPNsense can roll back by itself.
-		return fmt.Errorf("%w; revert failed: %w; OPNsense rolls the change back by itself within about 60 seconds if the apply reached it, otherwise the rule stays saved but not applied", cause, err)
+		st.mark(ruleUUID, previous)
+		if applySent {
+			st.holdRollback()
+			return fmt.Errorf("%w; revert failed: %w; the rule may be saved without being live; OPNsense rolls the change back by itself within about 60 seconds if the apply reached it, and the next push to this firewall waits for that, then writes and applies again", cause, err)
+		}
+		return fmt.Errorf("%w; revert failed: %w; the rule may be saved with the new value without being applied; the next push writes and applies again", cause, err)
+	}
+	if !applySent {
+		return fmt.Errorf("%w; change rolled back", cause)
 	}
 	// The timer started by apply/<revision> would otherwise roll the filter
 	// back a second time and undo a later push.
-	if err := c.cancelRollback(ctx, revision); err != nil {
-		slog.Warn("opnsense cancelRollback after revert failed", "url", logsafe.Sanitize(c.url), "revision", revision, "error", logsafe.Err(err))
-		return fmt.Errorf("%w; change rolled back, but the rollback timer may still fire within about a minute, so a retry should wait (cancelRollback: %v)", cause, err)
+	cancelled, err := c.cancelRollback(ctx, revision)
+	if cancelled {
+		return fmt.Errorf("%w; change rolled back", cause)
 	}
-	return fmt.Errorf("%w; change rolled back", cause)
+	st.holdRollback()
+	if err == nil {
+		err = errors.New("timer not found")
+	}
+	slog.Warn("opnsense cancelRollback after revert failed", "url", connector.RedactURL(c.url), "revision", revision, "error", logsafe.Err(err))
+	return fmt.Errorf("%w; change rolled back, but its rollback timer could not be cancelled and may still fire within about a minute, so the next push to this firewall waits for it (cancelRollback: %v)", cause, err)
 }
 
 // undoRule writes the previous enabled state back and applies it again after
-// cause, with a context that survives cancellation of ctx.
-func (c *Connector) undoRule(ctx context.Context, ruleUUID, previous string, cause error) error {
+// cause, with a context that survives cancellation of ctx. If either step
+// fails the rule is marked uncertain, because the saved and live values may
+// differ.
+func (c *Connector) undoRule(ctx context.Context, st *filterState, ruleUUID, previous string, cause error) error {
 	err := detached(ctx, func(ctx context.Context) error {
 		return c.setRuleEnabled(ctx, ruleUUID, previous)
 	})
-	if err == nil {
-		err = detached(ctx, func(ctx context.Context) error {
-			return c.applyFilter(ctx, filterAPI+"apply")
-		})
-	}
 	if err != nil {
-		return fmt.Errorf("%w; undo failed: %w; the rule may be saved with the new value without being applied", cause, err)
+		st.mark(ruleUUID, previous)
+		return fmt.Errorf("%w; undo failed: %w; the rule may be saved with the new value without being applied; the next push writes and applies again", cause, err)
 	}
+	err = detached(ctx, func(ctx context.Context) error {
+		return c.applyFilter(ctx, filterAPI+"apply")
+	})
+	if err != nil {
+		st.mark(ruleUUID, previous)
+		return fmt.Errorf("%w; the previous value was saved again but could not be applied (%w); the next push applies again", cause, err)
+	}
+	st.clearMarks()
 	return fmt.Errorf("%w; previous value restored", cause)
 }
 

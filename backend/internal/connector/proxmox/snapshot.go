@@ -252,18 +252,17 @@ func (p *Connector) fetchContainers(ctx context.Context, node string, wantEntiti
 }
 
 // applyConfigMemory sets the memory attribute from a guest's /config, which
-// shows a pending change before the restart. Without a memory key the guest
-// runs with the default and nothing is pending, so the guest-list maxmem value
-// stays. A key that could not be decoded is dropped: an unknown form must not
-// be passed off as the configured value. When /config cannot be read at all the
+// shows a pending change before the restart. The attribute is the decoded
+// config value or absent: with no memory key, or one that could not be
+// decoded, the guest-list maxmem is the running value and would pass for the
+// configured one, so it is dropped. When /config cannot be read at all the
 // caller never gets here and the maxmem value stays as the fallback.
 func applyConfigMemory(attrs map[string]any, memory *int, memoryErr error) {
-	switch {
-	case memoryErr != nil:
+	if memoryErr != nil || memory == nil {
 		delete(attrs, "memory")
-	case memory != nil:
-		attrs["memory"] = int64(*memory)
+		return
 	}
+	attrs["memory"] = int64(*memory)
 }
 
 func (p *Connector) fetchStorage(ctx context.Context, node string, nr *nodeResult) {

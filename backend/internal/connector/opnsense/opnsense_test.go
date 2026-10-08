@@ -453,6 +453,7 @@ type fakeFilter struct {
 	srv     *httptest.Server
 	legacy  bool
 	pushEnd string
+	numRev  bool // answer savepoint revisions as JSON numbers
 
 	mu         sync.Mutex
 	saved      map[string]string
@@ -570,6 +571,9 @@ func (f *fakeFilter) handle(r *http.Request, name, arg string, effect bool) (int
 		if effect {
 			f.savepoints[rev] = maps.Clone(f.saved)
 		}
+		if f.numRev {
+			return http.StatusOK, fmt.Sprintf(`{"status":"ok","retention":"10","revision":%s}`, rev)
+		}
 		return http.StatusOK, fmt.Sprintf(`{"status":"ok","retention":"10","revision":%q}`, rev)
 	case "setRule":
 		var req struct {
@@ -590,11 +594,11 @@ func (f *fakeFilter) handle(r *http.Request, name, arg string, effect bool) (int
 		if f.legacy != (arg != "") {
 			return notFound()
 		}
-		// The rollback timer starts before the reload, and only one can run.
-		if f.legacy && len(f.pending) == 0 {
-			f.pending[arg] = true
-		}
 		if effect {
+			// The rollback timer starts before the reload, and only one can run.
+			if f.legacy && len(f.pending) == 0 {
+				f.pending[arg] = true
+			}
 			f.live = maps.Clone(f.saved)
 		}
 		return http.StatusOK, `{"status":"OK\n\n"}`
@@ -614,10 +618,15 @@ func (f *fakeFilter) handle(r *http.Request, name, arg string, effect bool) (int
 		if !f.legacy {
 			return notFound()
 		}
+		// rollback_cancel.php prints nothing and exits non-zero when no timer
+		// exists, which the API turns into an empty status.
+		if !f.pending[arg] {
+			return http.StatusOK, `{"status":""}`
+		}
 		if effect {
 			delete(f.pending, arg)
 		}
-		return http.StatusOK, `{"status":""}`
+		return http.StatusOK, `{"status":"\n\n"}`
 	case "getRule":
 		v, ok := f.saved[arg]
 		if !ok {
@@ -778,13 +787,13 @@ func runPushCases(t *testing.T, legacy bool, tests []pushCase) {
 }
 
 func TestConfigPush_SavepointGeneration(t *testing.T) {
-	okFlow := []string{callSavepoint, callSetRule, callApplyR1, callCancelR1}
-	failedApply := []string{callSavepoint, callSetRule, callApplyR1, callRevertR1, callCancelR1}
+	okFlow := []string{callGetRule, callSavepoint, callSetRule, callApplyR1, callCancelR1}
+	failedApply := []string{callGetRule, callSavepoint, callSetRule, callApplyR1, callRevertR1, callCancelR1}
 	badRevision := func(body string) pushCase {
 		return pushCase{
 			name:      "savepoint revision " + body,
 			faults:    map[string]func(int) *fault{"savepoint": always(fault{body: body})},
-			wantSeq:   []string{callSavepoint},
+			wantSeq:   []string{callGetRule, callSavepoint},
 			wantErr:   []string{"opnsense savepoint"},
 			wantSaved: "0", wantLive: "0",
 		}
@@ -798,25 +807,25 @@ func TestConfigPush_SavepointGeneration(t *testing.T) {
 		},
 		{
 			name:    "apply HTTP 500 is reverted",
-			faults:  map[string]func(int) *fault{"apply": always(fault{code: 500})},
+			faults:  map[string]func(int) *fault{"apply": always(fault{code: 500, effect: true})},
 			wantSeq: failedApply, wantErr: []string{"API returned 500", "change rolled back"},
 			wantSaved: "0", wantLive: "0",
 		},
 		{
 			name:    "apply status Error (1) is reverted",
-			faults:  map[string]func(int) *fault{"apply": always(fault{body: `{"status":"Error (1)\n\n"}`})},
+			faults:  map[string]func(int) *fault{"apply": always(fault{body: `{"status":"Error (1)\n\n"}`, effect: true})},
 			wantSeq: failedApply, wantErr: []string{"Error (1)", "change rolled back"},
 			wantSaved: "0", wantLive: "0",
 		},
 		{
 			name:    "apply empty status (configd timeout) is reverted",
-			faults:  map[string]func(int) *fault{"apply": always(fault{body: `{"status":""}`})},
+			faults:  map[string]func(int) *fault{"apply": always(fault{body: `{"status":""}`, effect: true})},
 			wantSeq: failedApply, wantErr: []string{`status ""`, "change rolled back"},
 			wantSaved: "0", wantLive: "0",
 		},
 		{
 			name:    "apply undecodable body is reverted",
-			faults:  map[string]func(int) *fault{"apply": always(fault{body: `not json`})},
+			faults:  map[string]func(int) *fault{"apply": always(fault{body: `not json`, effect: true})},
 			wantSeq: failedApply, wantErr: []string{"change rolled back"},
 			wantSaved: "0", wantLive: "0",
 		},
@@ -826,7 +835,7 @@ func TestConfigPush_SavepointGeneration(t *testing.T) {
 				"apply":  always(fault{code: 500}),
 				"revert": always(fault{code: 500}),
 			},
-			wantSeq: []string{callSavepoint, callSetRule, callApplyR1, callRevertR1},
+			wantSeq: []string{callGetRule, callSavepoint, callSetRule, callApplyR1, callRevertR1},
 			wantErr: []string{"API returned 500", "revert failed", "within about 60 seconds"},
 			// The apply never reloaded, the rule stays saved but not live.
 			wantSaved: "1", wantLive: "0",
@@ -837,21 +846,21 @@ func TestConfigPush_SavepointGeneration(t *testing.T) {
 				"apply":  always(fault{code: 500}),
 				"revert": always(fault{body: `{"status":"unknown (or removed) savepoint"}`}),
 			},
-			wantSeq:   []string{callSavepoint, callSetRule, callApplyR1, callRevertR1},
+			wantSeq:   []string{callGetRule, callSavepoint, callSetRule, callApplyR1, callRevertR1},
 			wantErr:   []string{"API returned 500", "revert failed", "unknown (or removed) savepoint"},
 			wantSaved: "1", wantLive: "0",
 		},
 		{
 			name:      "cancelRollback failure after a successful apply is an error and is reverted",
 			faults:    map[string]func(int) *fault{"cancelRollback": always(fault{code: 500})},
-			wantSeq:   []string{callSavepoint, callSetRule, callApplyR1, callCancelR1, callRevertR1, callCancelR1},
+			wantSeq:   []string{callGetRule, callSavepoint, callSetRule, callApplyR1, callCancelR1, callRevertR1, callCancelR1},
 			wantErr:   []string{"rollback could not be cancelled", "change rolled back"},
 			wantSaved: "0", wantLive: "0",
 		},
 		{
 			name:    "savepoint HTTP 500",
 			faults:  map[string]func(int) *fault{"savepoint": always(fault{code: 500})},
-			wantSeq: []string{callSavepoint}, wantErr: []string{"opnsense savepoint: ", "API returned 500"},
+			wantSeq: []string{callGetRule, callSavepoint}, wantErr: []string{"opnsense savepoint: ", "API returned 500"},
 			wantSaved: "0", wantLive: "0",
 		},
 		badRevision(`{"status":"ok","revision":""}`),
@@ -862,13 +871,13 @@ func TestConfigPush_SavepointGeneration(t *testing.T) {
 		{
 			name:    "setRule result failed is not reverted",
 			faults:  map[string]func(int) *fault{"setRule": always(fault{body: `{"result":"failed"}`})},
-			wantSeq: []string{callSavepoint, callSetRule}, wantErr: []string{"rule not saved", `"failed"`},
+			wantSeq: []string{callGetRule, callSavepoint, callSetRule}, wantErr: []string{"rule not saved", `"failed"`},
 			wantSaved: "0", wantLive: "0",
 		},
 		{
 			name:      "setRule HTTP 500 is reverted",
 			faults:    map[string]func(int) *fault{"setRule": always(fault{code: 500, effect: true})},
-			wantSeq:   []string{callSavepoint, callSetRule, callRevertR1, callCancelR1},
+			wantSeq:   []string{callGetRule, callSavepoint, callSetRule, callRevertR1},
 			wantErr:   []string{"API returned 500", "change rolled back"},
 			wantSaved: "0", wantLive: "0",
 		},
@@ -876,11 +885,11 @@ func TestConfigPush_SavepointGeneration(t *testing.T) {
 }
 
 func TestConfigPush_FallbackGeneration(t *testing.T) {
-	undone := []string{callSavepoint, callGetRule, callSetRule, callApply, callSetRule, callApply}
+	undone := []string{callGetRule, callSavepoint, callSetRule, callApply, callSetRule, callApply}
 	runPushCases(t, false, []pushCase{
 		{
 			name:    "success",
-			wantSeq: []string{callSavepoint, callGetRule, callSetRule, callApply}, wantSaved: "1", wantLive: "1",
+			wantSeq: []string{callGetRule, callSavepoint, callSetRule, callApply}, wantSaved: "1", wantLive: "1",
 		},
 		{
 			name:    "apply HTTP 500 restores the previous value",
@@ -900,7 +909,7 @@ func TestConfigPush_FallbackGeneration(t *testing.T) {
 				"apply":   onCall(1, fault{body: `{"status":"Error (1)\n\n"}`}),
 				"setRule": onCall(2, fault{code: 500}),
 			},
-			wantSeq: []string{callSavepoint, callGetRule, callSetRule, callApply, callSetRule},
+			wantSeq: []string{callGetRule, callSavepoint, callSetRule, callApply, callSetRule},
 			wantErr: []string{"Error (1)", "undo failed", "API returned 500", "saved with the new value"},
 			// The new value stays saved but was never applied.
 			wantSaved: "1", wantLive: "0",
@@ -908,37 +917,37 @@ func TestConfigPush_FallbackGeneration(t *testing.T) {
 		{
 			name:    "apply fails and the undo apply fails",
 			faults:  map[string]func(int) *fault{"apply": always(fault{body: `{"status":"Error (1)\n\n"}`})},
-			wantSeq: undone, wantErr: []string{"Error (1)", "undo failed"},
+			wantSeq: undone, wantErr: []string{"Error (1)", "saved again but could not be applied"},
 			wantSaved: "0", wantLive: "0",
 		},
 		{
 			name:    "getRule for an unknown rule",
 			ref:     "missing-uuid",
-			wantSeq: []string{callSavepoint, "GET getRule/missing-uuid"}, wantErr: []string{"not found"},
+			wantSeq: []string{"GET getRule/missing-uuid"}, wantErr: []string{"not found"},
 			wantSaved: "0", wantLive: "0",
 		},
 		{
 			name:    "getRule without a rule object",
 			faults:  map[string]func(int) *fault{"getRule": always(fault{body: `{}`})},
-			wantSeq: []string{callSavepoint, callGetRule}, wantErr: []string{"not found"},
+			wantSeq: []string{callGetRule}, wantErr: []string{"not found"},
 			wantSaved: "0", wantLive: "0",
 		},
 		{
 			name:    "getRule with an unexpected enabled value",
 			faults:  map[string]func(int) *fault{"getRule": always(fault{body: `{"rule":{"enabled":"2"}}`})},
-			wantSeq: []string{callSavepoint, callGetRule}, wantErr: []string{"unexpected enabled value"},
+			wantSeq: []string{callGetRule}, wantErr: []string{"unexpected enabled value"},
 			wantSaved: "0", wantLive: "0",
 		},
 		{
 			name:    "setRule result failed is not undone",
 			faults:  map[string]func(int) *fault{"setRule": always(fault{body: `{"result":"failed"}`})},
-			wantSeq: []string{callSavepoint, callGetRule, callSetRule}, wantErr: []string{"rule not saved"},
+			wantSeq: []string{callGetRule, callSavepoint, callSetRule}, wantErr: []string{"rule not saved"},
 			wantSaved: "0", wantLive: "0",
 		},
 		{
 			name:      "setRule HTTP 500 is undone",
 			faults:    map[string]func(int) *fault{"setRule": onCall(1, fault{code: 500, effect: true})},
-			wantSeq:   []string{callSavepoint, callGetRule, callSetRule, callSetRule, callApply},
+			wantSeq:   []string{callGetRule, callSavepoint, callSetRule, callSetRule, callApply},
 			wantErr:   []string{"API returned 500", "previous value restored"},
 			wantSaved: "0", wantLive: "0",
 		},
@@ -951,8 +960,8 @@ func TestConfigPush_ContextCancelledMidFlow(t *testing.T) {
 		legacy  bool
 		wantSeq []string
 	}{
-		{"savepoint generation", true, []string{callSavepoint, callSetRule, callRevertR1, callCancelR1}},
-		{"fallback generation", false, []string{callSavepoint, callGetRule, callSetRule, callSetRule, callApply}},
+		{"savepoint generation", true, []string{callGetRule, callSavepoint, callSetRule, callRevertR1}},
+		{"fallback generation", false, []string{callGetRule, callSavepoint, callSetRule, callSetRule, callApply}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -981,7 +990,7 @@ func TestConfigPush_RetryAfterFailedApply(t *testing.T) {
 	for _, legacy := range []bool{true, false} {
 		t.Run(fmt.Sprintf("legacy=%v", legacy), func(t *testing.T) {
 			f := newFakeFilter(t, legacy)
-			f.faults["apply"] = onCall(1, fault{code: 500})
+			f.faults["apply"] = onCall(1, fault{code: 500, effect: legacy})
 			c := f.conn()
 
 			if err := c.ConfigPush(context.Background(), nil, testRule, "enabled", true); err == nil {
@@ -1030,11 +1039,11 @@ func TestConfigPush_RollbackTimers(t *testing.T) {
 
 	t.Run("a retry after a reverted push is not undone by the stale timer", func(t *testing.T) {
 		f := newFakeFilter(t, true)
-		f.faults["apply"] = onCall(1, fault{code: 500})
+		f.faults["apply"] = onCall(1, fault{code: 500, effect: true})
 		if err := push(f); err == nil {
 			t.Fatal("first ConfigPush() error = nil, want error")
 		}
-		f.expectSeq(t, callSavepoint, callSetRule, callApplyR1, callRevertR1, callCancelR1)
+		f.expectSeq(t, callGetRule, callSavepoint, callSetRule, callApplyR1, callRevertR1, callCancelR1)
 		if err := push(f); err != nil {
 			t.Fatalf("retry ConfigPush() error = %v", err)
 		}
@@ -1044,22 +1053,22 @@ func TestConfigPush_RollbackTimers(t *testing.T) {
 
 	t.Run("failed cancelRollback after a revert is reported", func(t *testing.T) {
 		f := newFakeFilter(t, true)
-		f.faults["apply"] = always(fault{code: 500})
+		f.faults["apply"] = always(fault{code: 500, effect: true})
 		f.faults["cancelRollback"] = always(fault{code: 500})
 		err := push(f)
-		expectErrContains(t, err, "API returned 500", "change rolled back", "rollback timer may still fire within about a minute")
-		f.expectSeq(t, callSavepoint, callSetRule, callApplyR1, callRevertR1, callCancelR1)
+		expectErrContains(t, err, "API returned 500", "change rolled back", "could not be cancelled and may still fire within about a minute")
+		f.expectSeq(t, callGetRule, callSavepoint, callSetRule, callApplyR1, callRevertR1, callCancelR1)
 		f.expectState(t, "0", "0")
 	})
 
 	t.Run("failed revert leaves the timer to roll back", func(t *testing.T) {
 		f := newFakeFilter(t, true)
-		f.faults["apply"] = always(fault{code: 500})
+		f.faults["apply"] = always(fault{code: 500, effect: true})
 		f.faults["revert"] = always(fault{code: 500})
 		if err := push(f); err == nil {
 			t.Fatal("ConfigPush() error = nil, want error")
 		}
-		f.expectSeq(t, callSavepoint, callSetRule, callApplyR1, callRevertR1)
+		f.expectSeq(t, callGetRule, callSavepoint, callSetRule, callApplyR1, callRevertR1)
 		if got := f.pendingTimers(); got != 1 {
 			t.Fatalf("pending timers = %d, want 1", got)
 		}
@@ -1070,7 +1079,7 @@ func TestConfigPush_RollbackTimers(t *testing.T) {
 
 func TestConfigPush_LockHonoursContext(t *testing.T) {
 	f := newFakeFilter(t, true)
-	unlock, err := lockFilter(context.Background(), f.srv.URL)
+	unlock, err := filterStateFor(f.srv.URL).acquire(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}

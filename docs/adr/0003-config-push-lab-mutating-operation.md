@@ -52,6 +52,7 @@ would need a fixed field→section mapping maintained per connector on top
 of the whitelist; the diff-based check is the smaller, sufficient version
 for this connector set (see `configPushLanded` in
 `backend/internal/api/connectors/handlers.go`).
+ADR 0007 section 7 adds a read-back of the field when the snapshot shows no change.
 
 ### Auto-revert-then-alert on mismatch
 

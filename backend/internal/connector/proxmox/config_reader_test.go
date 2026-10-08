@@ -3,6 +3,7 @@ package proxmox
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -15,6 +16,7 @@ func TestConfigRead(t *testing.T) {
 	failQemuConfig := false
 	failLxcConfig := false
 	lxcCoresNull := false
+	lxcNoMemory := false
 	qemuMemory := `2048`
 	lxcMemory := `2048`
 
@@ -53,6 +55,10 @@ func TestConfigRead(t *testing.T) {
 			}
 			if lxcCoresNull {
 				_, _ = w.Write([]byte(`{"data":{"cores":null,"cpulimit":0}}`))
+				return
+			}
+			if lxcNoMemory {
+				_, _ = w.Write([]byte(`{"data":{"cores":3,"cpulimit":0}}`))
 				return
 			}
 			_, _ = fmt.Fprintf(w, `{"data":{"cores":3,"cpulimit":0,"memory":%s}}`, lxcMemory)
@@ -111,25 +117,30 @@ func TestConfigRead(t *testing.T) {
 	if _, err := c.ConfigRead(context.Background(), nil, "999", "memory"); err == nil {
 		t.Error("ConfigRead() error = nil for missing VMID")
 	}
-	if _, err := c.ConfigRead(context.Background(), nil, "101", "memory"); err == nil {
-		t.Error("ConfigRead() memory error = nil when memory is absent")
+	if value, err := c.ConfigRead(context.Background(), nil, "101", "memory"); err != nil || value != nil {
+		t.Errorf("ConfigRead() memory for a config without memory = (%#v, %v), want (nil, nil)", value, err)
 	}
 	if value, err := c.ConfigRead(context.Background(), nil, "101", "cores"); err != nil || value != nil {
 		t.Errorf("ConfigRead() cores for null config cores = (%#v, %v), want (nil, nil)", value, err)
 	}
 
-	// /config succeeds without a memory key: the guest-list value is the
-	// configured one (default memory, nothing pending).
-	if value, err := c.ConfigRead(context.Background(), nil, "102", "memory"); err != nil || value != float64(4096) {
-		t.Errorf("ConfigRead() memory without a config memory key = (%#v, %v), want (4096, nil)", value, err)
+	// /config succeeds without a memory key: the guest-list maxmem is the
+	// running value, so the configured one is unknown, not 4096.
+	if value, err := c.ConfigRead(context.Background(), nil, "102", "memory"); err != nil || value != nil {
+		t.Errorf("ConfigRead() memory without a config memory key = (%#v, %v), want (nil, nil)", value, err)
 	}
+	lxcNoMemory = true
+	if value, err := c.ConfigRead(context.Background(), nil, "200", "memory"); err != nil || value != nil {
+		t.Errorf("ConfigRead() LXC memory without a config memory key = (%#v, %v), want (nil, nil)", value, err)
+	}
+	lxcNoMemory = false
 
 	// /config succeeds but its memory cannot be decoded: never fall back to
 	// the running maxmem or pass the unknown form off as a value.
 	qemuMemory, lxcMemory = `"max=4096"`, `"max=4096"`
 	for _, ref := range []string{"100", "200"} {
-		if value, err := c.ConfigRead(context.Background(), nil, ref, "memory"); err == nil {
-			t.Errorf("ConfigRead(%s, memory) with undecodable config memory = (%#v, nil), want error", ref, value)
+		if value, err := c.ConfigRead(context.Background(), nil, ref, "memory"); err != nil || value != nil {
+			t.Errorf("ConfigRead(%s, memory) with undecodable config memory = (%#v, %v), want (nil, nil)", ref, value, err)
 		}
 	}
 	qemuMemory, lxcMemory = `2048`, `2048`
@@ -232,6 +243,28 @@ func TestDecodeProxmoxMemory(t *testing.T) {
 			}
 			if (got == nil) != (tc.want == nil) || (got != nil && *got != *tc.want) {
 				t.Errorf("decodeProxmoxMemory(%q) = %v, want %v", tc.raw, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestApplyConfigMemory(t *testing.T) {
+	memory := 2048
+	for _, tc := range []struct {
+		name   string
+		memory *int
+		err    error
+		want   map[string]any
+	}{
+		{name: "config value wins", memory: &memory, want: map[string]any{"memory": int64(2048)}},
+		{name: "no key drops the running value", want: map[string]any{}},
+		{name: "undecodable drops the running value", err: errors.New("bad memory"), want: map[string]any{}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			attrs := map[string]any{"memory": int64(4096)}
+			applyConfigMemory(attrs, tc.memory, tc.err)
+			if !reflect.DeepEqual(attrs, tc.want) {
+				t.Errorf("attrs = %v, want %v", attrs, tc.want)
 			}
 		})
 	}
