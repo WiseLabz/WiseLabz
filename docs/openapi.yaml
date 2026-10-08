@@ -703,7 +703,8 @@ paths:
                   recoveryCodes:
                     type: array
                     items: { type: string }
-        '403': { $ref: '#/components/responses/ElevationRequired' }
+        '400': { $ref: '#/components/responses/ElevationRequired' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
   /me/mfa/factors/{factorId}:
     delete:
       tags: [me]
@@ -720,7 +721,8 @@ paths:
           schema: { type: string }
       responses:
         '204': { description: No Content }
-        '403': { $ref: '#/components/responses/ElevationRequired' }
+        '400': { $ref: '#/components/responses/ElevationRequired' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { description: 'Last factor, still required by policy' }
 
@@ -794,8 +796,9 @@ paths:
       summary: Delete a user (operator)
       description: >
         Destructive. When `stepUpForDestructive` is enabled, requires a valid
-        `X-Elevation-Token` from POST /auth/elevate; absent or expired tokens
-        get a 403 `elevation-required`.
+        `X-Elevation-Token` from POST /auth/elevate; missing tokens get a 400
+        `elevation_required`, and invalid or expired tokens get a 401
+        `unauthorized`.
       parameters:
         - name: X-Elevation-Token
           in: header
@@ -804,15 +807,18 @@ paths:
           description: Elevation token from POST /auth/elevate (when step-up is on)
       responses:
         '204': { description: No Content }
-        '403': { $ref: '#/components/responses/ElevationRequired' }
+        '400': { $ref: '#/components/responses/ElevationRequired' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
   /users/{userId}/reset-password:
     post:
       tags: [users]
       summary: Operator-triggered password reset
       description: >
         Destructive. When `stepUpForDestructive` is enabled, requires a valid
-        `X-Elevation-Token` from POST /auth/elevate; absent or expired tokens
-        get a 403 `elevation-required`.
+        `X-Elevation-Token` from POST /auth/elevate; missing tokens get a 400
+        `elevation_required`, and invalid or expired tokens get a 401
+        `unauthorized`.
       parameters:
         - { $ref: '#/components/parameters/UserId' }
         - name: X-Elevation-Token
@@ -822,7 +828,9 @@ paths:
           description: Elevation token from POST /auth/elevate (when step-up is on)
       responses:
         '204': { description: No Content }
-        '403': { $ref: '#/components/responses/ElevationRequired' }
+        '400': { $ref: '#/components/responses/ElevationRequired' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
   /users/{userId}/reset-mfa:
     post:
       tags: [users]
@@ -831,7 +839,8 @@ paths:
         Destructive. Deletes every factor and recovery code, revokes every
         session, and is audited (#279). When `stepUpForDestructive` is
         enabled, requires a valid `X-Elevation-Token` from POST
-        /auth/elevate; absent or expired tokens get a 403 `elevation-required`.
+        /auth/elevate; missing tokens get a 400 `elevation_required`, and
+        invalid or expired tokens get a 401 `unauthorized`.
       parameters:
         - { $ref: '#/components/parameters/UserId' }
         - name: X-Elevation-Token
@@ -841,7 +850,9 @@ paths:
           description: Elevation token from POST /auth/elevate (when step-up is on)
       responses:
         '204': { description: No Content }
-        '403': { $ref: '#/components/responses/ElevationRequired' }
+        '400': { $ref: '#/components/responses/ElevationRequired' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
 
   # ───────────────────────── dashboard ─────────────────────────
@@ -1117,8 +1128,8 @@ paths:
         Destructive: cascades to the connector's snapshots and generated doc
         sections (see GET /removal-impact for the blast radius). When
         `stepUpForDestructive` is enabled, requires a valid `X-Elevation-Token`
-        from POST /auth/elevate; absent or expired tokens get a 403
-        `elevation-required`.
+        from POST /auth/elevate; missing tokens get a 400 `elevation_required`,
+        and invalid or expired tokens get a 401 `unauthorized`.
       parameters:
         - name: X-Elevation-Token
           in: header
@@ -1127,7 +1138,10 @@ paths:
           description: Elevation token from POST /auth/elevate (when step-up is on)
       responses:
         '204': { description: No Content }
-        '403': { $ref: '#/components/responses/ElevationRequired' }
+        '400': { $ref: '#/components/responses/ElevationRequired' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
         '409': { description: 'The connector is managed by config.yaml (`connector_managed`); remove its entry there instead' }
   /connectors/{connectorId}/release:
     post:
@@ -1215,12 +1229,19 @@ paths:
               schema: { $ref: '#/components/schemas/RestartPreview' }
         '400':
           description: >
-            Bad request, missing elevation token, or the connector type
-            doesn't support restart (`unsupported_operation`).
+            Bad request, missing elevation token (code `elevation_required`),
+            or the connector type doesn't support restart (`unsupported_operation`).
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
-        '401': { $ref: '#/components/responses/ElevationRequired' }
+        '401':
+          description: >
+            Not signed in, or the `X-Elevation-Token` is invalid or expired
+            (code `unauthorized`); call POST /auth/elevate for `connector.restart`
+            and retry
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
         '502':
@@ -1278,12 +1299,19 @@ paths:
               schema: { $ref: '#/components/schemas/RestartPreview' }
         '400':
           description: >
-            Bad request, missing elevation token, or the connector type
-            doesn't support start (`unsupported_operation`).
+            Bad request, missing elevation token (code `elevation_required`),
+            or the connector type doesn't support start (`unsupported_operation`).
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
-        '401': { $ref: '#/components/responses/ElevationRequired' }
+        '401':
+          description: >
+            Not signed in, or the `X-Elevation-Token` is invalid or expired
+            (code `unauthorized`); call POST /auth/elevate for `connector.start`
+            and retry
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
         '502':
@@ -1343,12 +1371,19 @@ paths:
               schema: { $ref: '#/components/schemas/RestartPreview' }
         '400':
           description: >
-            Bad request, missing elevation token, or the connector type
-            doesn't support stop (`unsupported_operation`).
+            Bad request, missing elevation token (code `elevation_required`),
+            or the connector type doesn't support stop (`unsupported_operation`).
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
-        '401': { $ref: '#/components/responses/ElevationRequired' }
+        '401':
+          description: >
+            Not signed in, or the `X-Elevation-Token` is invalid or expired
+            (code `unauthorized`); call POST /auth/elevate for `connector.stop`
+            and retry
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
         '502':
@@ -1424,12 +1459,19 @@ paths:
               schema: { $ref: '#/components/schemas/ServiceSnapshot' }
         '400':
           description: >
-            Bad request, missing elevation token, unsupported_operation, or
-            unsupported_field.
+            Bad request, missing elevation token (code `elevation_required`),
+            unsupported_operation, or unsupported_field.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
-        '401': { $ref: '#/components/responses/ElevationRequired' }
+        '401':
+          description: >
+            Not signed in, or the `X-Elevation-Token` is invalid or expired
+            (code `unauthorized`); call POST /auth/elevate for `connector.configPush`
+            and retry
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409':
@@ -2548,8 +2590,9 @@ paths:
       summary: Delete a template (editor+)
       description: >
         Destructive. When `stepUpForDestructive` is enabled, requires a valid
-        `X-Elevation-Token` from POST /auth/elevate; absent or expired tokens
-        get a 403 `elevation-required`.
+        `X-Elevation-Token` from POST /auth/elevate; missing tokens get a 400
+        `elevation_required`, and invalid or expired tokens get a 401
+        `unauthorized`.
       parameters:
         - name: X-Elevation-Token
           in: header
@@ -2558,7 +2601,10 @@ paths:
           description: Elevation token from POST /auth/elevate (when step-up is on)
       responses:
         '204': { description: No Content }
-        '403': { $ref: '#/components/responses/ElevationRequired' }
+        '400': { $ref: '#/components/responses/ElevationRequired' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
   /templates/{templateId}/preview:
     post:
       tags: [templates]
@@ -3134,17 +3180,23 @@ paths:
               schema: { $ref: '#/components/schemas/RestartPreview' }
         '400':
           description: >
-            Missing elevation token, the connector type doesn't support the
-            step's verb (`unsupported_operation`), or, once the operator
-            grant on the step's connector is confirmed, the step is not a
-            lifecycle step (`unsupported_step_kind`) or has no verb
-            (`invalid_step`). A step with no connector is rejected with
-            `unsupported_step_kind` (a manual step) or `invalid_step`
-            before any grant check.
+            Missing elevation token (code `elevation_required`), the connector
+            type doesn't support the step's verb (`unsupported_operation`), or,
+            once the operator grant on the step's connector is confirmed, the
+            step is not a lifecycle step (`unsupported_step_kind`) or has no
+            verb (`invalid_step`). A step with no connector is rejected with
+            `unsupported_step_kind` (a manual step) or `invalid_step` before
+            any grant check.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
-        '401': { $ref: '#/components/responses/ElevationRequired' }
+        '401':
+          description: >
+            Not signed in, or the `X-Elevation-Token` is invalid or expired
+            (code `unauthorized`).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
         '502':
@@ -3184,8 +3236,21 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/RunbookRun' }
-        '400': { $ref: '#/components/responses/BadRequest' }
-        '401': { $ref: '#/components/responses/ElevationRequired' }
+        '400':
+          description: >
+            Bad request, or step-up is on and no `X-Elevation-Token` was sent
+            (code `elevation_required`).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401':
+          description: >
+            Not signed in, or the `X-Elevation-Token` is invalid or expired
+            (code `unauthorized`); call POST /auth/elevate for `runbook.run`
+            and retry
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409':
@@ -3280,8 +3345,21 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/RunbookRunRecord' }
-        '400': { $ref: '#/components/responses/BadRequest' }
-        '401': { $ref: '#/components/responses/ElevationRequired' }
+        '400':
+          description: >
+            Bad request, or step-up is on and no `X-Elevation-Token` was sent
+            (code `elevation_required`).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401':
+          description: >
+            Not signed in, or the `X-Elevation-Token` is invalid or expired
+            (code `unauthorized`); call POST /auth/elevate for `runbook.run`
+            and retry
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409':
@@ -4500,8 +4578,9 @@ components:
     ElevationRequired:
       description: >
         Elevation required — step-up is enabled and the X-Elevation-Token was
-        missing or expired. Client should call POST /auth/elevate and retry.
-        Error.code = `elevation-required`.
+        missing. Client should call POST /auth/elevate and retry.
+        Error.code = `elevation_required`. (An invalid or expired token
+        returns 401 `unauthorized`.)
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }

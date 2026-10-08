@@ -6,9 +6,10 @@ import (
 	"strconv"
 )
 
-// ConfigRead returns current memory or configured cores from a fresh snapshot.
-// Memory comes from the guest list's maxmem, so it is the effective value of a
-// running guest and a pending config change is not visible.
+// ConfigRead returns configured memory or configured cores from a fresh snapshot.
+// Memory and cores are read from the guest's /config endpoint when available,
+// allowing pending configuration changes to be read before restart. If /config
+// is unavailable, memory degrades to the running guest's maxmem.
 func (p *Connector) ConfigRead(ctx context.Context, config map[string]any, entityRef, fieldKey string) (any, error) {
 	if fieldKey != "memory" && fieldKey != "cores" {
 		return nil, fmt.Errorf("unsupported field %q", fieldKey)

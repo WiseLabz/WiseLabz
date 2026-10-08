@@ -1028,7 +1028,7 @@ export const postMeMfaRecoveryCodes = (
 export const getPostMeMfaRecoveryCodesMutationKey = () => ['postMeMfaRecoveryCodes'] as const;
 
 export const getPostMeMfaRecoveryCodesMutationOptions = <
-  TError = ErrorType<ElevationRequiredResponse>,
+  TError = ErrorType<ElevationRequiredResponse | UnauthorizedResponse>,
   TContext = unknown,
 >(options?: {
   mutation?: UseMutationOptions<
@@ -1065,13 +1065,15 @@ export type PostMeMfaRecoveryCodesMutationResult = NonNullable<
   Awaited<ReturnType<typeof postMeMfaRecoveryCodes>>
 >;
 
-export type PostMeMfaRecoveryCodesMutationError = ErrorType<ElevationRequiredResponse>;
+export type PostMeMfaRecoveryCodesMutationError = ErrorType<
+  ElevationRequiredResponse | UnauthorizedResponse
+>;
 
 /**
  * @summary Regenerate recovery codes
  */
 export const usePostMeMfaRecoveryCodes = <
-  TError = ErrorType<ElevationRequiredResponse>,
+  TError = ErrorType<ElevationRequiredResponse | UnauthorizedResponse>,
   TContext = unknown,
 >(
   options?: {
@@ -1111,7 +1113,7 @@ export const getDeleteMeMfaFactorsFactorIdMutationKey = () =>
   ['deleteMeMfaFactorsFactorId'] as const;
 
 export const getDeleteMeMfaFactorsFactorIdMutationOptions = <
-  TError = ErrorType<ElevationRequiredResponse | NotFoundResponse | void>,
+  TError = ErrorType<ElevationRequiredResponse | UnauthorizedResponse | NotFoundResponse | void>,
   TContext = unknown,
 >(options?: {
   mutation?: UseMutationOptions<
@@ -1151,7 +1153,7 @@ export type DeleteMeMfaFactorsFactorIdMutationResult = NonNullable<
 >;
 
 export type DeleteMeMfaFactorsFactorIdMutationError = ErrorType<
-  ElevationRequiredResponse | NotFoundResponse | void
+  ElevationRequiredResponse | UnauthorizedResponse | NotFoundResponse | void
 >;
 export type DeleteMeMfaFactorsFactorIdMutationVariables = { factorId: string };
 
@@ -1159,7 +1161,7 @@ export type DeleteMeMfaFactorsFactorIdMutationVariables = { factorId: string };
  * @summary Remove one of own MFA factors
  */
 export const useDeleteMeMfaFactorsFactorId = <
-  TError = ErrorType<ElevationRequiredResponse | NotFoundResponse | void>,
+  TError = ErrorType<ElevationRequiredResponse | UnauthorizedResponse | NotFoundResponse | void>,
   TContext = unknown,
 >(
   options?: {

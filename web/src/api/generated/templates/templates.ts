@@ -25,6 +25,7 @@ import type {
 import type {
   BadRequestResponse,
   ElevationRequiredResponse,
+  ForbiddenResponse,
   NotFoundResponse,
   PostTemplatesTemplateIdPreviewBody,
   Template,
@@ -32,6 +33,7 @@ import type {
   TemplatePreviewResult,
   TemplateVersion,
   TemplateVersionMeta,
+  UnauthorizedResponse,
 } from '../../model';
 
 import { customInstance } from '../../axios-instance';
@@ -471,7 +473,7 @@ export const usePutTemplatesTemplateId = <TError = ErrorType<unknown>, TContext 
   return useMutation(getPutTemplatesTemplateIdMutationOptions(options), queryClient);
 };
 /**
- * Destructive. When `stepUpForDestructive` is enabled, requires a valid `X-Elevation-Token` from POST /auth/elevate; absent or expired tokens get a 403 `elevation-required`.
+ * Destructive. When `stepUpForDestructive` is enabled, requires a valid `X-Elevation-Token` from POST /auth/elevate; missing tokens get a 400 `elevation_required`, and invalid or expired tokens get a 401 `unauthorized`.
  * @summary Delete a template (editor+)
  */
 export const deleteTemplatesTemplateId = (
@@ -488,7 +490,9 @@ export const deleteTemplatesTemplateId = (
 export const getDeleteTemplatesTemplateIdMutationKey = () => ['deleteTemplatesTemplateId'] as const;
 
 export const getDeleteTemplatesTemplateIdMutationOptions = <
-  TError = ErrorType<ElevationRequiredResponse>,
+  TError = ErrorType<
+    ElevationRequiredResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
+  >,
   TContext = unknown,
 >(options?: {
   mutation?: UseMutationOptions<
@@ -527,14 +531,18 @@ export type DeleteTemplatesTemplateIdMutationResult = NonNullable<
   Awaited<ReturnType<typeof deleteTemplatesTemplateId>>
 >;
 
-export type DeleteTemplatesTemplateIdMutationError = ErrorType<ElevationRequiredResponse>;
+export type DeleteTemplatesTemplateIdMutationError = ErrorType<
+  ElevationRequiredResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
+>;
 export type DeleteTemplatesTemplateIdMutationVariables = { templateId: string };
 
 /**
  * @summary Delete a template (editor+)
  */
 export const useDeleteTemplatesTemplateId = <
-  TError = ErrorType<ElevationRequiredResponse>,
+  TError = ErrorType<
+    ElevationRequiredResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
+  >,
   TContext = unknown,
 >(
   options?: {

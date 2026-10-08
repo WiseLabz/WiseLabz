@@ -9,6 +9,6 @@
 import type { Error } from './error';
 
 /**
- * Elevation required — step-up is enabled and the X-Elevation-Token was missing or expired. Client should call POST /auth/elevate and retry. Error.code = `elevation-required`.
+ * Elevation required — step-up is enabled and the X-Elevation-Token was missing. Client should call POST /auth/elevate and retry. Error.code = `elevation_required`. (An invalid or expired token returns 401 `unauthorized`.)
  */
 export type ElevationRequiredResponse = Error;

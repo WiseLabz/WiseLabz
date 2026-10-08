@@ -740,7 +740,7 @@ export const usePutConnectorsConnectorId = <
   return useMutation(getPutConnectorsConnectorIdMutationOptions(options), queryClient);
 };
 /**
- * Destructive: cascades to the connector's snapshots and generated doc sections (see GET /removal-impact for the blast radius). When `stepUpForDestructive` is enabled, requires a valid `X-Elevation-Token` from POST /auth/elevate; absent or expired tokens get a 403 `elevation-required`.
+ * Destructive: cascades to the connector's snapshots and generated doc sections (see GET /removal-impact for the blast radius). When `stepUpForDestructive` is enabled, requires a valid `X-Elevation-Token` from POST /auth/elevate; missing tokens get a 400 `elevation_required`, and invalid or expired tokens get a 401 `unauthorized`.
  * @summary Remove a connector (operator, destructive)
  */
 export const deleteConnectorsConnectorId = (
@@ -758,7 +758,9 @@ export const getDeleteConnectorsConnectorIdMutationKey = () =>
   ['deleteConnectorsConnectorId'] as const;
 
 export const getDeleteConnectorsConnectorIdMutationOptions = <
-  TError = ErrorType<ElevationRequiredResponse | void>,
+  TError = ErrorType<
+    ElevationRequiredResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | void
+  >,
   TContext = unknown,
 >(options?: {
   mutation?: UseMutationOptions<
@@ -797,14 +799,18 @@ export type DeleteConnectorsConnectorIdMutationResult = NonNullable<
   Awaited<ReturnType<typeof deleteConnectorsConnectorId>>
 >;
 
-export type DeleteConnectorsConnectorIdMutationError = ErrorType<ElevationRequiredResponse | void>;
+export type DeleteConnectorsConnectorIdMutationError = ErrorType<
+  ElevationRequiredResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | void
+>;
 export type DeleteConnectorsConnectorIdMutationVariables = { connectorId: string };
 
 /**
  * @summary Remove a connector (operator, destructive)
  */
 export const useDeleteConnectorsConnectorId = <
-  TError = ErrorType<ElevationRequiredResponse | void>,
+  TError = ErrorType<
+    ElevationRequiredResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | void
+  >,
   TContext = unknown,
 >(
   options?: {
@@ -1099,7 +1105,7 @@ export const getPostConnectorsConnectorIdRestartMutationKey = () =>
   ['postConnectorsConnectorIdRestart'] as const;
 
 export const getPostConnectorsConnectorIdRestartMutationOptions = <
-  TError = ErrorType<Error | ElevationRequiredResponse | ForbiddenResponse | NotFoundResponse>,
+  TError = ErrorType<Error | ForbiddenResponse | NotFoundResponse>,
   TContext = unknown,
 >(options?: {
   mutation?: UseMutationOptions<
@@ -1140,7 +1146,7 @@ export type PostConnectorsConnectorIdRestartMutationResult = NonNullable<
 export type PostConnectorsConnectorIdRestartMutationBody =
   BodyType<PostConnectorsConnectorIdRestartBody> | undefined;
 export type PostConnectorsConnectorIdRestartMutationError = ErrorType<
-  Error | ElevationRequiredResponse | ForbiddenResponse | NotFoundResponse
+  Error | ForbiddenResponse | NotFoundResponse
 >;
 export type PostConnectorsConnectorIdRestartMutationVariables = {
   connectorId: string;
@@ -1152,7 +1158,7 @@ export type PostConnectorsConnectorIdRestartMutationVariables = {
  * @summary Preview or perform a service restart (operator, elevation-gated)
  */
 export const usePostConnectorsConnectorIdRestart = <
-  TError = ErrorType<Error | ElevationRequiredResponse | ForbiddenResponse | NotFoundResponse>,
+  TError = ErrorType<Error | ForbiddenResponse | NotFoundResponse>,
   TContext = unknown,
 >(
   options?: {
@@ -1201,7 +1207,7 @@ export const getPostConnectorsConnectorIdStartMutationKey = () =>
   ['postConnectorsConnectorIdStart'] as const;
 
 export const getPostConnectorsConnectorIdStartMutationOptions = <
-  TError = ErrorType<Error | ElevationRequiredResponse | ForbiddenResponse | NotFoundResponse>,
+  TError = ErrorType<Error | ForbiddenResponse | NotFoundResponse>,
   TContext = unknown,
 >(options?: {
   mutation?: UseMutationOptions<
@@ -1242,7 +1248,7 @@ export type PostConnectorsConnectorIdStartMutationResult = NonNullable<
 export type PostConnectorsConnectorIdStartMutationBody =
   BodyType<PostConnectorsConnectorIdStartBody> | undefined;
 export type PostConnectorsConnectorIdStartMutationError = ErrorType<
-  Error | ElevationRequiredResponse | ForbiddenResponse | NotFoundResponse
+  Error | ForbiddenResponse | NotFoundResponse
 >;
 export type PostConnectorsConnectorIdStartMutationVariables = {
   connectorId: string;
@@ -1254,7 +1260,7 @@ export type PostConnectorsConnectorIdStartMutationVariables = {
  * @summary Preview or perform a service start (operator, elevation-gated)
  */
 export const usePostConnectorsConnectorIdStart = <
-  TError = ErrorType<Error | ElevationRequiredResponse | ForbiddenResponse | NotFoundResponse>,
+  TError = ErrorType<Error | ForbiddenResponse | NotFoundResponse>,
   TContext = unknown,
 >(
   options?: {
@@ -1303,7 +1309,7 @@ export const getPostConnectorsConnectorIdStopMutationKey = () =>
   ['postConnectorsConnectorIdStop'] as const;
 
 export const getPostConnectorsConnectorIdStopMutationOptions = <
-  TError = ErrorType<Error | ElevationRequiredResponse | ForbiddenResponse | NotFoundResponse>,
+  TError = ErrorType<Error | ForbiddenResponse | NotFoundResponse>,
   TContext = unknown,
 >(options?: {
   mutation?: UseMutationOptions<
@@ -1344,7 +1350,7 @@ export type PostConnectorsConnectorIdStopMutationResult = NonNullable<
 export type PostConnectorsConnectorIdStopMutationBody =
   BodyType<PostConnectorsConnectorIdStopBody> | undefined;
 export type PostConnectorsConnectorIdStopMutationError = ErrorType<
-  Error | ElevationRequiredResponse | ForbiddenResponse | NotFoundResponse
+  Error | ForbiddenResponse | NotFoundResponse
 >;
 export type PostConnectorsConnectorIdStopMutationVariables = {
   connectorId: string;
@@ -1356,7 +1362,7 @@ export type PostConnectorsConnectorIdStopMutationVariables = {
  * @summary Preview or perform a service stop (operator, elevation-gated)
  */
 export const usePostConnectorsConnectorIdStop = <
-  TError = ErrorType<Error | ElevationRequiredResponse | ForbiddenResponse | NotFoundResponse>,
+  TError = ErrorType<Error | ForbiddenResponse | NotFoundResponse>,
   TContext = unknown,
 >(
   options?: {
@@ -1561,7 +1567,7 @@ export const getPostConnectorsConnectorIdConfigPushMutationKey = () =>
   ['postConnectorsConnectorIdConfigPush'] as const;
 
 export const getPostConnectorsConnectorIdConfigPushMutationOptions = <
-  TError = ErrorType<Error | ElevationRequiredResponse | ForbiddenResponse | NotFoundResponse>,
+  TError = ErrorType<Error | ForbiddenResponse | NotFoundResponse>,
   TContext = unknown,
 >(options?: {
   mutation?: UseMutationOptions<
@@ -1602,7 +1608,7 @@ export type PostConnectorsConnectorIdConfigPushMutationResult = NonNullable<
 export type PostConnectorsConnectorIdConfigPushMutationBody =
   BodyType<PostConnectorsConnectorIdConfigPushBody>;
 export type PostConnectorsConnectorIdConfigPushMutationError = ErrorType<
-  Error | ElevationRequiredResponse | ForbiddenResponse | NotFoundResponse
+  Error | ForbiddenResponse | NotFoundResponse
 >;
 export type PostConnectorsConnectorIdConfigPushMutationVariables = {
   connectorId: string;
@@ -1613,7 +1619,7 @@ export type PostConnectorsConnectorIdConfigPushMutationVariables = {
  * @summary Push one whitelisted config field (operator, elevation-gated)
  */
 export const usePostConnectorsConnectorIdConfigPush = <
-  TError = ErrorType<Error | ElevationRequiredResponse | ForbiddenResponse | NotFoundResponse>,
+  TError = ErrorType<Error | ForbiddenResponse | NotFoundResponse>,
   TContext = unknown,
 >(
   options?: {

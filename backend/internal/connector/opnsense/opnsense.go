@@ -259,7 +259,8 @@ func (c *Connector) WritableFields() []connector.ConfigField {
 }
 
 // ConfigPush toggles the "enabled" state of the firewall rule identified by
-// entityRef (the rule UUID) and applies the change.
+// entityRef (the rule UUID) and applies the change using OPNsense's savepoint
+// flow (savepoint, setRule, apply/<revision>, cancelRollback/<revision>).
 func (c *Connector) ConfigPush(ctx context.Context, _ map[string]any, entityRef, fieldKey string, value any) error {
 	if entityRef == "" {
 		return fmt.Errorf("opnsense config-push requires a target rule UUID")
@@ -281,11 +282,53 @@ func (c *Connector) ConfigPush(ctx context.Context, _ map[string]any, entityRef,
 	if err != nil {
 		return err
 	}
+
+	savepointRaw, err := c.doRequest(ctx, "POST", "/api/firewall/filter/savepoint")
+	if err != nil {
+		return fmt.Errorf("opnsense savepoint: %w", err)
+	}
+	var savepointResp struct {
+		Status   string `json:"status"`
+		Revision string `json:"revision"`
+	}
+	if err := json.Unmarshal(savepointRaw, &savepointResp); err != nil {
+		return connector.NewMalformedResponseError(fmt.Errorf("decode savepoint response: %w", err))
+	}
+	if savepointResp.Revision == "" {
+		return fmt.Errorf("opnsense savepoint: missing revision in response")
+	}
+	revision := savepointResp.Revision
+
 	if _, err := c.doRequestBody(ctx, "POST", "/api/firewall/filter/setRule/"+entityRef, body); err != nil {
+		_, _ = c.doRequest(ctx, "POST", "/api/firewall/filter/revert/"+revision)
 		return err
 	}
-	_, err = c.doRequest(ctx, "POST", "/api/firewall/filter/apply")
-	return err
+
+	applyRaw, err := c.doRequest(ctx, "POST", "/api/firewall/filter/apply/"+revision)
+	if err != nil {
+		_, _ = c.doRequest(ctx, "POST", "/api/firewall/filter/revert/"+revision)
+		return err
+	}
+	var applyResp struct {
+		Status string `json:"status"`
+	}
+	if err := json.Unmarshal(applyRaw, &applyResp); err == nil && applyResp.Status != "" && applyResp.Status != "ok" {
+		_, _ = c.doRequest(ctx, "POST", "/api/firewall/filter/revert/"+revision)
+		return fmt.Errorf("opnsense apply failed: status %q", applyResp.Status)
+	}
+
+	cancelRaw, err := c.doRequest(ctx, "POST", "/api/firewall/filter/cancelRollback/"+revision)
+	if err != nil {
+		return err
+	}
+	var cancelResp struct {
+		Status string `json:"status"`
+	}
+	if err := json.Unmarshal(cancelRaw, &cancelResp); err == nil && cancelResp.Status != "" && cancelResp.Status != "ok" {
+		return fmt.Errorf("opnsense cancelRollback failed: status %q", cancelResp.Status)
+	}
+
+	return nil
 }
 
 func (c *Connector) doRequest(ctx context.Context, method, path string) (data []byte, err error) {

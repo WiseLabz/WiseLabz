@@ -118,22 +118,26 @@ cancels the step before the bounded core completes:
 - If the 2-minute bound (`configPushTimeout`) cuts the core short, the step fails with a
   message that the field may or may not have been written; the outcome is unknown.
 
-### 7. Known limitations (#677)
+### 7. Connector-specific config-push behaviors (#677)
 
-Two known connector-specific limitations are tracked in GitHub issue #677 and validated
-during manual verification (task 7.2):
+Two connector-specific behaviors resolved in #677 provide robust idempotency and accurate current-value reading:
 
-1. **OPNsense:** `ConfigPush` saves the rule (`setRule`) and then calls `filter/apply`, while
-   the reader returns the saved state. If the save succeeds and the apply fails or is cut off,
-   the push errors; on retry, or on resume of a step left `unknown`, the reader sees the saved
-   value equal to the target, so the core skips the write and reports success. The rule is saved
-   but not applied (not live), so a rule the operator disabled may still be enforced.
-   Direction: use OPNsense's savepoint flow (`savepoint`, `setRule`, `apply/<revision>`,
-   `cancelRollback/<revision>`) so a failed apply rolls the save back, or undo the save when
-   apply fails.
-2. **Proxmox:** The reader takes `memory` from the running guest (`maxmem` in the node's guest
-   list), while `ConfigPush` writes the config key `memory` (`cores` is already read from
-   `/config`). A running VM with 4096 MB live and a pending change to 2048 reads as 4096, so a
-   push targeting the running value is treated as already at target, and a failed verification
-   would revert to the live value and overwrite the pending one.
-   Direction: read `memory` from the guest `/config` already fetched for `cores`.
+1. **OPNsense savepoint flow:** To prevent a failed apply from leaving saved rules unapplied (which
+   would cause a subsequent push retry or resume to observe the target value in the reader and falsely
+   report success), `ConfigPush` utilizes OPNsense's savepoint mechanism:
+   - Initiates an atomic change window with `POST /api/firewall/filter/savepoint` to record a revision ID.
+   - Updates the rule configuration with `POST /api/firewall/filter/setRule/<entityRef>`.
+   - Applies the configuration with `POST /api/firewall/filter/apply/<revision>`, starting the rollback timer.
+   - On success, finalizes the change with `POST /api/firewall/filter/cancelRollback/<revision>`.
+   - On any failure during `setRule` or `apply`, immediately calls `POST /api/firewall/filter/revert/<revision>`
+     to discard unapplied changes, ensuring failed mutations do not linger in saved state.
+
+2. **Proxmox configured memory reading:** Rather than reading `maxmem` from the host's guest list
+   (which reflects effective running allocation and hides pending config changes), `ConfigReader`
+   reads `memory` directly from the guest's `/config` endpoint (for both VMs and LXC containers),
+   matching the key written by `ConfigPush`:
+   - Decodes memory represented as a JSON number, numeric string, or property string containing
+     `current=<n>` (such as `current=2048` or `current=2048,max=4096`).
+   - If guest `/config` cannot be fetched, `memory` is treated as unavailable (returning an error
+     rather than falling back to running `maxmem`), preventing false "already-at-target" skips or
+     erroneous auto-reverts against running state.

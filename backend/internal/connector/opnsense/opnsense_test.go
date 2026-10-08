@@ -2,9 +2,12 @@ package opnsense
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -422,11 +425,15 @@ func TestConfigPush(t *testing.T) {
 			var setRuleCalled, applyCalled bool
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				switch {
+				case r.URL.Path == "/api/firewall/filter/savepoint":
+					_, _ = w.Write([]byte(`{"status":"ok","revision":"1712345678"}`))
 				case strings.HasPrefix(r.URL.Path, "/api/firewall/filter/setRule/"):
 					setRuleCalled = true
 					_, _ = w.Write([]byte(`{"result":"saved"}`))
-				case r.URL.Path == "/api/firewall/filter/apply":
+				case strings.HasPrefix(r.URL.Path, "/api/firewall/filter/apply/"):
 					applyCalled = true
+					_, _ = w.Write([]byte(`{"status":"ok"}`))
+				case strings.HasPrefix(r.URL.Path, "/api/firewall/filter/cancelRollback/"):
 					_, _ = w.Write([]byte(`{"status":"ok"}`))
 				default:
 					t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
@@ -453,6 +460,187 @@ func TestConfigPush(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestConfigPush_SavepointFlow(t *testing.T) {
+	t.Run("successful push calls savepoint, setRule, apply, cancelRollback in order", func(t *testing.T) {
+		var calls []string
+		revision := "1712345678.99"
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			switch r.URL.Path {
+			case "/api/firewall/filter/savepoint":
+				calls = append(calls, "savepoint")
+				_ = json.NewEncoder(w).Encode(map[string]any{"status": "ok", "revision": revision})
+			case "/api/firewall/filter/setRule/rule-uuid":
+				calls = append(calls, "setRule")
+				_ = json.NewEncoder(w).Encode(map[string]any{"result": "saved"})
+			case "/api/firewall/filter/apply/" + revision:
+				calls = append(calls, "apply")
+				_ = json.NewEncoder(w).Encode(map[string]any{"status": "ok"})
+			case "/api/firewall/filter/cancelRollback/" + revision:
+				calls = append(calls, "cancelRollback")
+				_ = json.NewEncoder(w).Encode(map[string]any{"status": "ok"})
+			default:
+				t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
+			}
+		}))
+		defer server.Close()
+
+		c := &Connector{url: server.URL, apiKey: "key", apiSecret: "secret", client: server.Client()}
+		if err := c.ConfigPush(context.Background(), nil, "rule-uuid", "enabled", true); err != nil {
+			t.Fatalf("ConfigPush() error = %v", err)
+		}
+
+		wantCalls := []string{"savepoint", "setRule", "apply", "cancelRollback"}
+		if !reflect.DeepEqual(calls, wantCalls) {
+			t.Errorf("call sequence = %v, want %v", calls, wantCalls)
+		}
+	})
+
+	t.Run("failed apply returns error, calls revert, and does not call cancelRollback", func(t *testing.T) {
+		var calls []string
+		revision := "1712345678.99"
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			switch r.URL.Path {
+			case "/api/firewall/filter/savepoint":
+				calls = append(calls, "savepoint")
+				_ = json.NewEncoder(w).Encode(map[string]any{"status": "ok", "revision": revision})
+			case "/api/firewall/filter/setRule/rule-uuid":
+				calls = append(calls, "setRule")
+				_ = json.NewEncoder(w).Encode(map[string]any{"result": "saved"})
+			case "/api/firewall/filter/apply/" + revision:
+				calls = append(calls, "apply")
+				http.Error(w, `{"status":"error"}`, http.StatusInternalServerError)
+			case "/api/firewall/filter/revert/" + revision:
+				calls = append(calls, "revert")
+				_ = json.NewEncoder(w).Encode(map[string]any{"status": "ok"})
+			case "/api/firewall/filter/cancelRollback/" + revision:
+				calls = append(calls, "cancelRollback")
+				_ = json.NewEncoder(w).Encode(map[string]any{"status": "ok"})
+			default:
+				t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
+			}
+		}))
+		defer server.Close()
+
+		c := &Connector{url: server.URL, apiKey: "key", apiSecret: "secret", client: server.Client()}
+		err := c.ConfigPush(context.Background(), nil, "rule-uuid", "enabled", true)
+		if err == nil {
+			t.Fatal("ConfigPush() error = nil, want error on failed apply")
+		}
+
+		for _, call := range calls {
+			if call == "cancelRollback" {
+				t.Errorf("cancelRollback was called on failed apply")
+			}
+		}
+
+		wantCalls := []string{"savepoint", "setRule", "apply", "revert"}
+		if !reflect.DeepEqual(calls, wantCalls) {
+			t.Errorf("call sequence = %v, want %v", calls, wantCalls)
+		}
+	})
+
+	t.Run("retry after failed apply writes and applies again instead of reporting success", func(t *testing.T) {
+		var (
+			liveRuleEnabled  = false
+			savedRuleEnabled = false
+			revisionCount    = 0
+			applyAttempts    = 0
+			writes           = 0
+		)
+
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			switch {
+			case r.URL.Path == "/api/firewall/filter/searchRule":
+				// Reader fetches current rules from OPNsense.
+				enabledStr := "0"
+				if savedRuleEnabled {
+					enabledStr = "1"
+				}
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"rows": []map[string]any{
+						{
+							"uuid":        "rule-uuid",
+							"description": "Test Rule",
+							"enabled":     enabledStr,
+							"action":      "pass",
+							"protocol":    "TCP",
+							"source":      "any",
+							"destination": "any",
+						},
+					},
+				})
+			case r.URL.Path == "/api/firewall/filter/savepoint":
+				revisionCount++
+				rev := fmt.Sprintf("rev-%d", revisionCount)
+				_ = json.NewEncoder(w).Encode(map[string]any{"status": "ok", "revision": rev})
+			case r.URL.Path == "/api/firewall/filter/setRule/rule-uuid":
+				writes++
+				var req struct {
+					Rule struct {
+						Enabled string `json:"enabled"`
+					} `json:"rule"`
+				}
+				_ = json.NewDecoder(r.Body).Decode(&req)
+				savedRuleEnabled = req.Rule.Enabled == "1"
+				_ = json.NewEncoder(w).Encode(map[string]any{"result": "saved"})
+			case strings.HasPrefix(r.URL.Path, "/api/firewall/filter/apply/"):
+				applyAttempts++
+				if applyAttempts == 1 {
+					// First apply fails
+					http.Error(w, `{"status":"error"}`, http.StatusInternalServerError)
+					return
+				}
+				// Second apply succeeds
+				liveRuleEnabled = savedRuleEnabled
+				_ = json.NewEncoder(w).Encode(map[string]any{"status": "ok"})
+			case strings.HasPrefix(r.URL.Path, "/api/firewall/filter/revert/"):
+				// OPNsense rolls back to the savepoint: saved state reverts to pre-push value (false)
+				savedRuleEnabled = liveRuleEnabled
+				_ = json.NewEncoder(w).Encode(map[string]any{"status": "ok"})
+			case strings.HasPrefix(r.URL.Path, "/api/firewall/filter/cancelRollback/"):
+				_ = json.NewEncoder(w).Encode(map[string]any{"status": "ok"})
+			default:
+				http.NotFound(w, r)
+			}
+		}))
+		defer server.Close()
+
+		c := &Connector{url: server.URL, apiKey: "key", apiSecret: "secret", client: server.Client()}
+
+		// First push: attempt to enable rule, but apply fails.
+		err := c.ConfigPush(context.Background(), nil, "rule-uuid", "enabled", true)
+		if err == nil {
+			t.Fatal("first ConfigPush() error = nil, want error")
+		}
+		if writes != 1 || applyAttempts != 1 {
+			t.Fatalf("first attempt: writes=%d applyAttempts=%d, want 1, 1", writes, applyAttempts)
+		}
+
+		// A retry inspects current state via ConfigRead.
+		// Because revert restored saved state, ConfigRead sees enabled=false (not true).
+		currentVal, err := c.ConfigRead(context.Background(), nil, "rule-uuid", "enabled")
+		if err != nil {
+			t.Fatalf("ConfigRead() error = %v", err)
+		}
+		if currentVal != false {
+			t.Fatalf("ConfigRead() = %v, want false (state should be reverted, not lingering as target)", currentVal)
+		}
+
+		// Because currentVal (false) != target (true), the retry performs ConfigPush again.
+		err = c.ConfigPush(context.Background(), nil, "rule-uuid", "enabled", true)
+		if err != nil {
+			t.Fatalf("second ConfigPush() error = %v", err)
+		}
+
+		if writes != 2 || applyAttempts != 2 {
+			t.Errorf("after retry: writes=%d applyAttempts=%d, want 2, 2 (must write and apply again)", writes, applyAttempts)
+		}
+		if !liveRuleEnabled {
+			t.Errorf("liveRuleEnabled = false, want true")
+		}
+	})
 }
 
 func TestOpnsenseWritableFields(t *testing.T) {

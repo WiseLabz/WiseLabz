@@ -5,8 +5,53 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"strconv"
 	"strings"
 )
+
+// decodeProxmoxMemory decodes the "memory" field from a Proxmox QEMU or LXC
+// /config response. Proxmox formats memory in several ways:
+// - a JSON number (e.g. 2048 or 2048.0)
+// - a numeric string (e.g. "2048")
+// - a property string containing "current=<n>" (e.g. "current=2048" or "current=2048,max=4096")
+// Returns (nil, nil) if raw is empty or null.
+func decodeProxmoxMemory(raw json.RawMessage) (*int, error) {
+	if len(raw) == 0 || strings.TrimSpace(string(raw)) == "null" {
+		return nil, nil
+	}
+
+	// Try JSON number first
+	var num float64
+	if err := json.Unmarshal(raw, &num); err == nil {
+		val := int(num)
+		return &val, nil
+	}
+
+	// Try string formats
+	var str string
+	if err := json.Unmarshal(raw, &str); err == nil {
+		str = strings.TrimSpace(str)
+		// Check comma-separated options for current=<n>
+		for _, part := range strings.Split(str, ",") {
+			part = strings.TrimSpace(part)
+			if strings.HasPrefix(part, "current=") {
+				valStr := strings.TrimSpace(strings.TrimPrefix(part, "current="))
+				if f, err := strconv.ParseFloat(valStr, 64); err == nil {
+					val := int(f)
+					return &val, nil
+				}
+			}
+		}
+		// Bare numeric string
+		if f, err := strconv.ParseFloat(str, 64); err == nil {
+			val := int(f)
+			return &val, nil
+		}
+		return nil, fmt.Errorf("invalid memory format %q", str)
+	}
+
+	return nil, fmt.Errorf("invalid memory JSON: %s", string(raw))
+}
 
 // fetchQemuIP returns the first non-loopback IPv4 address reported by the
 // QEMU guest agent, or "" if the agent isn't installed/running (most labs
@@ -78,13 +123,16 @@ func (p *Connector) fetchLxcIP(ctx context.Context, node string, vmid int) strin
 // qemuConfig holds the subset of VM /config fields we surface as
 // Attributes. Missing flag values decode to their zero value; Cores stays nil
 // when Proxmox does not report a configured value so ConfigRead can fail soft.
+// Memory is decoded via decodeProxmoxMemory from RawMemory.
 type qemuConfig struct {
-	Onboot     int    `json:"onboot"`
-	Protection int    `json:"protection"`
-	Agent      string `json:"agent"`
-	Template   int    `json:"template"`
-	OSType     string `json:"ostype"`
-	Cores      *int   `json:"cores"`
+	Onboot     int             `json:"onboot"`
+	Protection int             `json:"protection"`
+	Agent      string          `json:"agent"`
+	Template   int             `json:"template"`
+	OSType     string          `json:"ostype"`
+	Cores      *int            `json:"cores"`
+	RawMemory  json.RawMessage `json:"memory"`
+	Memory     *int            `json:"-"`
 }
 
 // fetchQemuConfig fetches a VM's /config and returns the fields relevant to
@@ -101,19 +149,27 @@ func (p *Connector) fetchQemuConfig(ctx context.Context, node string, vmid int) 
 	if err := json.Unmarshal(raw, &resp); err != nil {
 		return qemuConfig{}, false
 	}
+	if len(resp.Data.RawMemory) > 0 {
+		mem, err := decodeProxmoxMemory(resp.Data.RawMemory)
+		if err == nil {
+			resp.Data.Memory = mem
+		}
+	}
 	return resp.Data, true
 }
 
 // lxcConfig holds the subset of container /config fields we surface as
 // Attributes.
 type lxcConfig struct {
-	Onboot       int    `json:"onboot"`
-	Protection   int    `json:"protection"`
-	Template     int    `json:"template"`
-	Agent        string `json:"agent"`
-	Unprivileged int    `json:"unprivileged"`
-	OSType       string `json:"ostype"`
-	Cores        *int   `json:"cores"`
+	Onboot       int             `json:"onboot"`
+	Protection   int             `json:"protection"`
+	Template     int             `json:"template"`
+	Agent        string          `json:"agent"`
+	Unprivileged int             `json:"unprivileged"`
+	OSType       string          `json:"ostype"`
+	Cores        *int            `json:"cores"`
+	RawMemory    json.RawMessage `json:"memory"`
+	Memory       *int            `json:"-"`
 }
 
 // fetchLxcConfig fetches a container's /config and returns the fields
@@ -128,6 +184,12 @@ func (p *Connector) fetchLxcConfig(ctx context.Context, node string, vmid int) (
 	}
 	if err := json.Unmarshal(raw, &resp); err != nil {
 		return lxcConfig{}, false
+	}
+	if len(resp.Data.RawMemory) > 0 {
+		mem, err := decodeProxmoxMemory(resp.Data.RawMemory)
+		if err == nil {
+			resp.Data.Memory = mem
+		}
 	}
 	return resp.Data, true
 }

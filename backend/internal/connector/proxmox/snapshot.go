@@ -173,6 +173,9 @@ func (p *Connector) fetchVMs(ctx context.Context, node string, wantEntities bool
 				ent.IP = p.fetchQemuIP(ctx, node, vm.VMID)
 			}
 			if cfg, ok := p.fetchQemuConfig(ctx, node, vm.VMID); ok {
+				if cfg.Memory != nil {
+					attrs["memory"] = int64(*cfg.Memory)
+				}
 				if cfg.Cores != nil {
 					attrs["cores"] = *cfg.Cores
 				}
@@ -226,6 +229,9 @@ func (p *Connector) fetchContainers(ctx context.Context, node string, wantEntiti
 				ent.IP = p.fetchLxcIP(ctx, node, ct.VMID)
 			}
 			if cfg, ok := p.fetchLxcConfig(ctx, node, ct.VMID); ok {
+				if cfg.Memory != nil {
+					attrs["memory"] = int64(*cfg.Memory)
+				}
 				if cfg.Cores != nil {
 					attrs["cores"] = *cfg.Cores
 				}
