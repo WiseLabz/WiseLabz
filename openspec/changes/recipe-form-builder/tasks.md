@@ -45,5 +45,5 @@
 
 ## 8. Integration
 
-- [ ] 8.1 Run the web typecheck, lint and full vitest suite and the bundle build, and record in the PR the size change of the connectors chunk; verify all pass in CI.
+- [x] 8.1 Run the web typecheck, lint and full vitest suite and the bundle build, and record in the PR the size change of the connectors chunk; verify all pass in CI.
 - [ ] 8.2 Manual check, left to the maintainer and never ticked by a worker: open an existing hand-written recipe with comments, edit one field in the form, confirm only that line changed, break the YAML and confirm the form says where, and save a recipe with an invalid mapping to see the error on its row.
