@@ -462,6 +462,7 @@ type fakeFilter struct {
 	pending    map[string]bool
 	revSeq     int
 	calls      []string
+	times      []time.Time // arrival time of each entry in calls
 	counts     map[string]int
 	setRules   []string
 	faults     map[string]func(int) *fault
@@ -500,6 +501,7 @@ func (f *fakeFilter) serve(w http.ResponseWriter, r *http.Request) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.calls = append(f.calls, r.Method+" "+r.URL.Path)
+	f.times = append(f.times, time.Now())
 
 	code, body := http.StatusOK, ""
 	if !strings.HasPrefix(r.URL.Path, filterPrefix) {

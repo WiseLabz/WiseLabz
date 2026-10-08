@@ -60,18 +60,48 @@ func (f *fakeFilter) deleteRule(uuid string) {
 	delete(f.live, uuid)
 }
 
-// fireAfter fires the pending rollback timers after d, like OPNsense's own
-// timer, and reports how many push requests had reached the firewall by then.
-func (f *fakeFilter) fireAfter(d time.Duration) <-chan int {
-	reached := make(chan int, 1)
-	time.AfterFunc(d, func() {
-		reached <- len(f.seq())
-		f.fireRollbackTimers()
-	})
-	return reached
+// callCount is the number of requests the fake has received so far.
+func (f *fakeFilter) callCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return len(f.calls)
+}
+
+// expectNothingBefore fails if no request arrived after the first `from`
+// requests, or if one of them arrived before until.
+func (f *fakeFilter) expectNothingBefore(t *testing.T, from int, until time.Time) {
+	t.Helper()
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if len(f.times) <= from {
+		t.Error("no request arrived after the mark")
+	}
+	for i := from; i < len(f.times); i++ {
+		if f.times[i].Before(until) {
+			t.Errorf("%s arrived %v before the rollback window ended", f.calls[i], until.Sub(f.times[i]))
+		}
+	}
 }
 
 func (f *fakeFilter) filterState() *filterState { return filterStateFor(f.srv.URL) }
+
+// waitUntil returns the time before which a rollback timer may still fire.
+func (s *filterState) waitUntil() time.Time {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.notBefore
+}
+
+// expectWaitAhead returns the firewall's wait time and fails the test when it
+// has already passed, since the scenario then no longer tests a wait.
+func expectWaitAhead(t *testing.T, f *fakeFilter) time.Time {
+	t.Helper()
+	until := f.filterState().waitUntil()
+	if !until.After(time.Now()) {
+		t.Fatalf("the rollback window ended %v ago, before the retry; increase the window", time.Since(until))
+	}
+	return until
+}
 
 func (s *filterState) waiting() bool {
 	s.mu.Lock()
@@ -103,13 +133,6 @@ func expectPush(t *testing.T, c *Connector, ref string, value bool) {
 	}
 }
 
-func expectPushReachedAfter(t *testing.T, reached <-chan int, want int) {
-	t.Helper()
-	if got := <-reached; got != want {
-		t.Errorf("requests that reached the firewall before the rollback window ended = %d, want %d", got, want)
-	}
-}
-
 func concat(parts ...[]string) []string {
 	var out []string
 	for _, p := range parts {
@@ -137,16 +160,20 @@ var firstFailedSeq = []string{callGetRule, callSavepoint, callSetRule, callApply
 
 func TestConfigPush_DoubleFaultWithTimerWaitsForIt(t *testing.T) {
 	t.Run("same value", func(t *testing.T) {
-		shortRollbackWindow(t, 300*time.Millisecond)
+		shortRollbackWindow(t, time.Second)
 		f := newFakeFilter(t, true)
 		c := failedSavepointPush(t, f, true)
 		f.expectSeq(t, firstFailedSeq...)
 		f.expectState(t, "1", "1")
 		expectRead(t, c, testRule, nil)
 
-		reached := f.fireAfter(100 * time.Millisecond)
+		// The old timer fires inside the window. The push sends nothing before
+		// the window ends, so firing it first is the same for the firewall.
+		until := expectWaitAhead(t, f)
+		f.fireRollbackTimers()
+		mark := f.callCount()
 		expectPush(t, c, testRule, true)
-		expectPushReachedAfter(t, reached, len(firstFailedSeq))
+		f.expectNothingBefore(t, mark, until)
 		f.expectSeq(t, concat(firstFailedSeq, []string{callSetRule, callGetRule, callSavepoint, callSetRule, callApplyR2, callCancelR2})...)
 		f.expectState(t, "1", "1")
 		f.fireRollbackTimers()
@@ -155,15 +182,17 @@ func TestConfigPush_DoubleFaultWithTimerWaitsForIt(t *testing.T) {
 	})
 
 	t.Run("other value inside the window", func(t *testing.T) {
-		shortRollbackWindow(t, 300*time.Millisecond)
+		shortRollbackWindow(t, time.Second)
 		f := newFakeFilter(t, true)
 		f.addRule(testRule, "1")
 		c := failedSavepointPush(t, f, false)
 		f.expectState(t, "0", "0")
 
-		reached := f.fireAfter(100 * time.Millisecond)
+		until := expectWaitAhead(t, f)
+		f.fireRollbackTimers()
+		mark := f.callCount()
 		expectPush(t, c, testRule, true)
-		expectPushReachedAfter(t, reached, len(firstFailedSeq))
+		f.expectNothingBefore(t, mark, until)
 		f.expectState(t, "1", "1")
 		f.fireRollbackTimers()
 		f.expectState(t, "1", "1")
@@ -172,7 +201,7 @@ func TestConfigPush_DoubleFaultWithTimerWaitsForIt(t *testing.T) {
 }
 
 func TestConfigPush_ApplyNeverReachedAndRevertFails(t *testing.T) {
-	shortRollbackWindow(t, 100*time.Millisecond)
+	shortRollbackWindow(t, time.Second)
 	f := newFakeFilter(t, true)
 	f.faults["apply"] = onCall(1, fault{code: 500})
 	f.faults["revert"] = onCall(1, fault{code: 500})
@@ -185,11 +214,10 @@ func TestConfigPush_ApplyNeverReachedAndRevertFails(t *testing.T) {
 	f.expectState(t, "1", "0")
 	expectRead(t, c, testRule, nil)
 
-	start := time.Now()
+	until := expectWaitAhead(t, f)
+	mark := f.callCount()
 	expectPush(t, c, testRule, true)
-	if time.Since(start) < 100*time.Millisecond {
-		t.Error("the retry did not wait for the rollback window")
-	}
+	f.expectNothingBefore(t, mark, until)
 	f.expectSeq(t, concat(firstFailedSeq, []string{callSetRule, callGetRule, callSavepoint, callSetRule, callApplyR2, callCancelR2})...)
 	if want := []string{"1", "0", "1"}; strings.Join(f.setRules, ",") != strings.Join(want, ",") {
 		t.Errorf("setRule values = %v, want %v", f.setRules, want)
@@ -208,7 +236,7 @@ func TestConfigPush_RevertWorksButTimerNotCancelled(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			shortRollbackWindow(t, 300*time.Millisecond)
+			shortRollbackWindow(t, time.Second)
 			f := newFakeFilter(t, true)
 			f.faults["apply"] = onCall(1, fault{code: 500, effect: true})
 			f.faults["cancelRollback"] = onCall(1, tt.fault)
@@ -223,9 +251,11 @@ func TestConfigPush_RevertWorksButTimerNotCancelled(t *testing.T) {
 			// The saved value is the previous one, so no mark is needed.
 			expectRead(t, c, testRule, false)
 
-			reached := f.fireAfter(100 * time.Millisecond)
+			until := expectWaitAhead(t, f)
+			f.fireRollbackTimers()
+			mark := f.callCount()
 			expectPush(t, c, testRule, true)
-			expectPushReachedAfter(t, reached, 6)
+			f.expectNothingBefore(t, mark, until)
 			f.fireRollbackTimers()
 			f.expectState(t, "1", "1")
 		})
@@ -296,49 +326,49 @@ func TestConfigPush_StateLostAfterRestart(t *testing.T) {
 
 func TestConfigPush_RollbackWindowAndContext(t *testing.T) {
 	t.Run("a deadline before the end of the window returns at once", func(t *testing.T) {
-		shortRollbackWindow(t, 5*time.Second)
+		shortRollbackWindow(t, time.Minute)
 		f := newFakeFilter(t, true)
 		f.filterState().holdRollback()
 
-		ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 		defer cancel()
 		start := time.Now()
 		err := f.conn().ConfigPush(ctx, nil, testRule, "enabled", true)
 		if !errors.Is(err, context.DeadlineExceeded) {
 			t.Fatalf("ConfigPush() error = %v, want context.DeadlineExceeded", err)
 		}
-		expectErrContains(t, err, "rollback timer from an earlier failed push", "5 seconds remain")
-		if time.Since(start) > time.Second {
+		expectErrContains(t, err, "rollback timer from an earlier failed push", "seconds remain")
+		if time.Since(start) > 10*time.Second {
 			t.Errorf("ConfigPush() waited %v, want an immediate return", time.Since(start))
 		}
 		f.expectSeq(t)
 	})
 
 	t.Run("a context cancelled during the wait", func(t *testing.T) {
-		shortRollbackWindow(t, 5*time.Second)
+		shortRollbackWindow(t, time.Minute)
 		f := newFakeFilter(t, true)
 		f.filterState().holdRollback()
 
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
-		time.AfterFunc(30*time.Millisecond, cancel)
+		time.AfterFunc(500*time.Millisecond, cancel)
 		start := time.Now()
 		err := f.conn().ConfigPush(ctx, nil, testRule, "enabled", true)
 		if !errors.Is(err, context.Canceled) {
 			t.Fatalf("ConfigPush() error = %v, want context.Canceled", err)
 		}
 		expectErrContains(t, err, "rollback timer from an earlier failed push", "seconds remain")
-		if time.Since(start) > time.Second {
+		if time.Since(start) > 10*time.Second {
 			t.Errorf("ConfigPush() waited %v after the cancel", time.Since(start))
 		}
 		f.expectSeq(t)
 	})
 
 	t.Run("other pushes queue behind the lock", func(t *testing.T) {
-		shortRollbackWindow(t, 300*time.Millisecond)
+		shortRollbackWindow(t, time.Second)
 		f := newFakeFilter(t, true)
-		start := time.Now()
 		f.filterState().holdRollback()
+		until := expectWaitAhead(t, f)
 
 		var wg sync.WaitGroup
 		errs := make([]error, 2)
@@ -355,9 +385,11 @@ func TestConfigPush_RollbackWindowAndContext(t *testing.T) {
 				t.Errorf("ConfigPush() error = %v", err)
 			}
 		}
-		if time.Since(start) < 300*time.Millisecond {
-			t.Error("a push did not wait for the rollback window")
-		}
+		f.expectNothingBefore(t, 0, until)
+		// One push finishes before the other starts.
+		f.expectSeq(t,
+			callGetRule, callSavepoint, callSetRule, callApplyR1, callCancelR1,
+			callGetRule, callSavepoint, callSetRule, callApplyR2, callCancelR2)
 		f.mu.Lock()
 		overlaps := f.overlaps
 		f.mu.Unlock()
