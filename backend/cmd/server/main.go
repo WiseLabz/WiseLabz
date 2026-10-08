@@ -148,11 +148,7 @@ func main() {
 
 	// Build HTTP router
 	readyState := &syshandler.ReadyState{}
-	var elector leader.Election = leader.Noop{}
-	if cfg.HA.LeaderElection {
-		elector = leader.New(s.RawDB(), cfg.HA.LockPollInterval)
-	}
-	// Built here, not inside the router, so shutdown can stop a running scan.
+	elector := newElector(cfg, s)
 	discoveryManager := discoveryhandler.NewManager(s, wsHub, nil)
 	routerCfg := api.Config{
 		Store:                  s,
@@ -530,4 +526,13 @@ func authSettingsSource(s *store.Store) func() (auth.RuntimeSettings, bool) {
 			StepUpForDestructive: as.StepUpForDestructive,
 		}, true
 	}
+}
+
+// newElector returns the leader election for HA deployments, or a no-op one
+// when leader election is off.
+func newElector(cfg *config.Config, s *store.Store) leader.Election {
+	if cfg.HA.LeaderElection {
+		return leader.New(s.RawDB(), cfg.HA.LockPollInterval)
+	}
+	return leader.Noop{}
 }

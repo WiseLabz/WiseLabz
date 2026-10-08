@@ -48,7 +48,8 @@ type lifecycleDeps struct {
 	ShutdownTimeout     time.Duration
 	// Discovery, when set, is asked to cancel a running network scan once the
 	// HTTP server has drained, so the scan's end-of-scan audit entry is written
-	// before the database closes. Optional.
+	// before the database closes. Optional. The server builds the scan manager
+	// itself, outside the router, so that it can hand it to this hook.
 	Discovery lifecycleScanner
 }
 

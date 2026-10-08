@@ -164,10 +164,11 @@ func (s *Scanner) httpClient(dialer *net.Dialer) *http.Client {
 			// the first bytes of the body, the certificate itself) to recognise a
 			// product; nothing read is trusted beyond that. This is the only
 			// transport in the app that skips verification unconditionally.
-			TLSClientConfig:        &tls.Config{InsecureSkipVerify: true}, //nolint:gosec // see above
-			DisableKeepAlives:      true,
-			TLSHandshakeTimeout:    s.requestTimeout,
-			ResponseHeaderTimeout:  s.requestTimeout,
+			TLSClientConfig:       &tls.Config{InsecureSkipVerify: true}, //nolint:gosec // see above
+			DisableKeepAlives:     true,
+			TLSHandshakeTimeout:   s.requestTimeout,
+			ResponseHeaderTimeout: s.requestTimeout,
+			// Headers are capped like the body; the default is 10 MiB a response.
 			MaxResponseHeaderBytes: maxBody,
 		},
 	}
