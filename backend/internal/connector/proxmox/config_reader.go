@@ -7,9 +7,10 @@ import (
 )
 
 // ConfigRead returns configured memory or configured cores from a fresh snapshot.
-// Memory and cores are read from the guest's /config endpoint when available,
-// allowing pending configuration changes to be read before restart. If /config
-// is unavailable, memory degrades to the running guest's maxmem.
+// Both are read from the guest's /config endpoint, which shows pending
+// configuration changes before the restart. If /config cannot be read, or its
+// memory cannot be decoded, memory is an error rather than the running guest's
+// maxmem, which would hide a pending change.
 func (p *Connector) ConfigRead(ctx context.Context, config map[string]any, entityRef, fieldKey string) (any, error) {
 	if fieldKey != "memory" && fieldKey != "cores" {
 		return nil, fmt.Errorf("unsupported field %q", fieldKey)
@@ -44,6 +45,13 @@ func (p *Connector) ConfigRead(ctx context.Context, config map[string]any, entit
 			// numeric value a revert could restore.
 			if _, configRead := entity.Attributes["onboot"]; configRead {
 				return nil, nil
+			}
+		}
+		if fieldKey == "memory" {
+			// Without the onboot marker /config was not read and the memory
+			// attribute is only the running maxmem.
+			if _, configRead := entity.Attributes["onboot"]; !configRead {
+				ok = false
 			}
 		}
 		if !ok {

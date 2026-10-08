@@ -173,9 +173,7 @@ func (p *Connector) fetchVMs(ctx context.Context, node string, wantEntities bool
 				ent.IP = p.fetchQemuIP(ctx, node, vm.VMID)
 			}
 			if cfg, ok := p.fetchQemuConfig(ctx, node, vm.VMID); ok {
-				if cfg.Memory != nil {
-					attrs["memory"] = int64(*cfg.Memory)
-				}
+				applyConfigMemory(attrs, cfg.Memory, cfg.MemoryErr)
 				if cfg.Cores != nil {
 					attrs["cores"] = *cfg.Cores
 				}
@@ -229,9 +227,7 @@ func (p *Connector) fetchContainers(ctx context.Context, node string, wantEntiti
 				ent.IP = p.fetchLxcIP(ctx, node, ct.VMID)
 			}
 			if cfg, ok := p.fetchLxcConfig(ctx, node, ct.VMID); ok {
-				if cfg.Memory != nil {
-					attrs["memory"] = int64(*cfg.Memory)
-				}
+				applyConfigMemory(attrs, cfg.Memory, cfg.MemoryErr)
 				if cfg.Cores != nil {
 					attrs["cores"] = *cfg.Cores
 				}
@@ -253,6 +249,21 @@ func (p *Connector) fetchContainers(ctx context.Context, node string, wantEntiti
 	}
 	nr.section += "\n"
 	nr.cts += len(list.Data)
+}
+
+// applyConfigMemory sets the memory attribute from a guest's /config, which
+// shows a pending change before the restart. Without a memory key the guest
+// runs with the default and nothing is pending, so the guest-list maxmem value
+// stays. A key that could not be decoded is dropped: an unknown form must not
+// be passed off as the configured value. When /config cannot be read at all the
+// caller never gets here and the maxmem value stays as the fallback.
+func applyConfigMemory(attrs map[string]any, memory *int, memoryErr error) {
+	switch {
+	case memoryErr != nil:
+		delete(attrs, "memory")
+	case memory != nil:
+		attrs["memory"] = int64(*memory)
+	}
 }
 
 func (p *Connector) fetchStorage(ctx context.Context, node string, nr *nodeResult) {

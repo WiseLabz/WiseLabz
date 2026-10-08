@@ -118,26 +118,77 @@ cancels the step before the bounded core completes:
 - If the 2-minute bound (`configPushTimeout`) cuts the core short, the step fails with a
   message that the field may or may not have been written; the outcome is unknown.
 
-### 7. Connector-specific config-push behaviors (#677)
+### 7. Connector-specific behaviour (#677)
 
-Two connector-specific behaviors resolved in #677 provide robust idempotency and accurate current-value reading:
+These two cases were first accepted as limitations. They are not any more: both connectors now
+keep the saved state and the live state consistent after a failed push, so the already-at-target
+rule (D4) cannot report success for a write that was never applied.
 
-1. **OPNsense savepoint flow:** To prevent a failed apply from leaving saved rules unapplied (which
-   would cause a subsequent push retry or resume to observe the target value in the reader and falsely
-   report success), `ConfigPush` utilizes OPNsense's savepoint mechanism:
-   - Initiates an atomic change window with `POST /api/firewall/filter/savepoint` to record a revision ID.
-   - Updates the rule configuration with `POST /api/firewall/filter/setRule/<entityRef>`.
-   - Applies the configuration with `POST /api/firewall/filter/apply/<revision>`, starting the rollback timer.
-   - On success, finalizes the change with `POST /api/firewall/filter/cancelRollback/<revision>`.
-   - On any failure during `setRule` or `apply`, immediately calls `POST /api/firewall/filter/revert/<revision>`
-     to discard unapplied changes, ensuring failed mutations do not linger in saved state.
+**OPNsense.** `setRule` only saves a rule; `apply` makes it live. Before #677 a failed `apply`
+left the new value saved. A retry, or a resumed step, then read the target through `ConfigRead`,
+skipped the write and reported success although the rule was not live. After any failed push the
+saved value is now the previous one again whenever the firewall can still be reached.
 
-2. **Proxmox configured memory reading:** Rather than reading `maxmem` from the host's guest list
-   (which reflects effective running allocation and hides pending config changes), `ConfigReader`
-   reads `memory` directly from the guest's `/config` endpoint (for both VMs and LXC containers),
-   matching the key written by `ConfigPush`:
-   - Decodes memory represented as a JSON number, numeric string, or property string containing
-     `current=<n>` (such as `current=2048` or `current=2048,max=4096`).
-   - If guest `/config` cannot be fetched, `memory` is treated as unavailable (returning an error
-     rather than falling back to running `maxmem`), preventing false "already-at-target" skips or
-     erroneous auto-reverts against running state.
+Savepoint path (OPNsense 24.1 to 26.1):
+
+- `ConfigPush` calls `POST /api/firewall/filter/savepoint`, then `setRule/<uuid>`, then
+  `apply/<revision>`, then `cancelRollback/<revision>`. The revision must look like a unix time
+  (`123.456`) before it is put into a URL path.
+- `apply/<revision>` starts a 60 second rollback timer and answers with the raw configd output:
+  `OK` plus newlines on success, an error text or an empty string otherwise. The status is compared
+  trimmed and case-insensitively with `ok`; anything else, an empty status and an HTTP error are a
+  failed apply.
+- A failed or timed-out apply, and a `setRule` that may or may not have saved, are reverted
+  explicitly with `revert/<revision>`. The revert runs with a context detached from the caller's
+  cancellation and bounded to 30 seconds, so it still happens when the run was cancelled.
+- After a successful revert `ConfigPush` sends `cancelRollback/<revision>` (best effort), so the
+  pending 60 second timer cannot roll the filter back a second time and undo a later push. If that
+  call fails the error says the timer may still fire within about a minute and the failure is logged.
+- When the revert itself cannot be delivered, `cancelRollback` is not sent. The timer is left alone
+  so OPNsense rolls the change back by itself.
+- A `cancelRollback` that fails after a successful apply is a failed push, never a success: OPNsense
+  would roll the rule back about a minute later. The change is reverted and the error says that the
+  apply succeeded but the rollback could not be cancelled. Its status string is not interpreted,
+  only a transport or HTTP error counts.
+
+Fallback path (OPNsense 26.7 and later):
+
+- Upstream removed savepoint, revert and cancelRollback (commit `17b84612eb`, 2026-06-18).
+  `ConfigPush` detects this per call: `savepoint` answering 404 selects the fallback, any other
+  error stops the push before anything is written.
+- The push reads the previous value with `GET /api/firewall/filter/getRule/<uuid>`, calls
+  `setRule`, then `apply` (without a revision). If the apply fails, it writes the previous value
+  back with `setRule` and applies again, with the same detached bounded context. The original
+  error is returned, saying the previous value was restored, or that the undo failed too and the
+  rule may be saved with the new value without being applied.
+
+What a retry or resumed step sees: after a failed push the saved value is the previous one again,
+so `ConfigRead` does not report the target and the core writes and applies again.
+
+Pushes to one firewall are serialised, keyed on the connector URL, because savepoint, revert and
+the rollback timer act on the whole filter section and interleaved pushes could undo each other.
+The lock covers the whole flow and honours the caller's context while waiting. It is per process:
+it covers one WiseLabz process only.
+
+Remaining limitations:
+
+1. On 26.7 and later, a push cut off after `setRule` and before the undo can be sent (process
+   crash, lost network) leaves the rule saved but not applied, because OPNsense offers no
+   server-side rollback there. A retry then reads the target and reports success.
+2. On 24.1 to 26.1 the same holds if neither the apply nor the revert reaches the firewall. If the
+   apply did reach it, OPNsense rolls back within about 60 seconds; during that time a retry can
+   still read the target value.
+3. Pushes are serialised per firewall only inside one WiseLabz process (replacing this for
+   active/active is tracked in #419).
+
+**Proxmox.** `ConfigRead` for `memory` reads the value from the guest `/config` that is already
+fetched for `cores`, for VMs and containers, so it makes no extra request. This matches the key
+`ConfigPush` writes, and `/config` returns pending values, so a pending change is what the reader
+sees; the running `maxmem` of the guest list does not show it.
+
+- `memory` is decoded from a JSON number, a numeric string or a property string with
+  `current=<n>` (such as `current=2048,max=4096`). It must be a positive whole number of MiB.
+- When `/config` cannot be read, or its `memory` cannot be decoded, the reader returns an error
+  instead of the running `maxmem`. A pre-push read failure therefore stops the push, and a failed
+  verification can no longer write the live value over a pending change. A config without a
+  `memory` key keeps the guest-list value, because nothing is pending then.

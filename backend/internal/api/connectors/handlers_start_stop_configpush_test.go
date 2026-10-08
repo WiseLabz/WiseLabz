@@ -343,7 +343,7 @@ func TestConfigPushHandler(t *testing.T) {
 			case r.URL.Path == "/nodes/pve1/qemu/100/agent/network-get-interfaces":
 				w.WriteHeader(http.StatusInternalServerError) // fetchQemuIP soft-fails on error
 			case r.URL.Path == "/nodes/pve1/qemu/100/config" && r.Method == "GET":
-				w.WriteHeader(http.StatusInternalServerError) // fetchQemuConfig soft-fails on error
+				_, _ = w.Write([]byte(`{"data":{"memory":` + itoa(int(memory.Load())) + `}}`)) // ConfigRead takes memory from /config
 			case r.URL.Path == "/nodes/pve1/qemu/100/firewall/options":
 				w.WriteHeader(http.StatusInternalServerError) // fetchFirewallEnabled soft-fails on error
 			case r.URL.Path == "/nodes/pve1/qemu/100/config" && r.Method == "PUT":
@@ -391,7 +391,7 @@ func TestConfigPushHandler(t *testing.T) {
 			case r.URL.Path == "/nodes/pve1/qemu/100/agent/network-get-interfaces":
 				w.WriteHeader(http.StatusInternalServerError) // fetchQemuIP soft-fails on error
 			case r.URL.Path == "/nodes/pve1/qemu/100/config" && r.Method == "GET":
-				w.WriteHeader(http.StatusInternalServerError) // fetchQemuConfig soft-fails on error
+				_, _ = w.Write([]byte(`{"data":{"memory":2048}}`)) // ConfigRead takes memory from /config; never changes
 			case r.URL.Path == "/nodes/pve1/qemu/100/firewall/options":
 				w.WriteHeader(http.StatusInternalServerError) // fetchFirewallEnabled soft-fails on error
 			case r.URL.Path == "/nodes/pve1/qemu/100/config" && r.Method == "PUT":
@@ -452,7 +452,7 @@ func TestConfigPushHandler(t *testing.T) {
 			case r.URL.Path == "/nodes/pve1/qemu/100/agent/network-get-interfaces":
 				w.WriteHeader(http.StatusInternalServerError) // fetchQemuIP soft-fails on error
 			case r.URL.Path == "/nodes/pve1/qemu/100/config" && r.Method == "GET":
-				w.WriteHeader(http.StatusInternalServerError) // fetchQemuConfig soft-fails on error
+				_, _ = w.Write([]byte(`{"data":{"memory":2048}}`)) // ConfigRead takes memory from /config; never changes
 			case r.URL.Path == "/nodes/pve1/qemu/100/firewall/options":
 				w.WriteHeader(http.StatusInternalServerError) // fetchFirewallEnabled soft-fails on error
 			case r.URL.Path == "/nodes/pve1/qemu/100/config" && r.Method == "PUT":
