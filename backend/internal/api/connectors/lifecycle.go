@@ -13,6 +13,7 @@ import (
 	"github.com/WiseLabz/wiselabz/internal/connector"
 	"github.com/WiseLabz/wiselabz/internal/connector/custom"
 	"github.com/WiseLabz/wiselabz/internal/httputil"
+	"github.com/WiseLabz/wiselabz/internal/logsafe"
 	"github.com/WiseLabz/wiselabz/internal/store"
 	"github.com/WiseLabz/wiselabz/internal/ws"
 )
@@ -442,10 +443,10 @@ func (h *Handler) mutateLifecycleOp(
 			cause:   err,
 		}
 		if suppressAbandonedAlert && abandonedByCaller(ctx, err) {
-			slog.Info("connector "+verb+" abandoned by caller", "connector", connectorID, "error", err)
+			slog.Info("connector "+logsafe.Sanitize(verb)+" abandoned by caller", "connector", logsafe.Sanitize(connectorID), "error", logsafe.Err(err))
 			return result, failure
 		}
-		slog.Error("connector "+verb+" failed", "connector", connectorID, "error", err)
+		slog.Error("connector "+logsafe.Sanitize(verb)+" failed", "connector", logsafe.Sanitize(connectorID), "error", logsafe.Err(err))
 		alert := &store.AlertRecord{
 			ServiceID:   connectorID,
 			Severity:    "critical",
@@ -586,7 +587,7 @@ func (h *Handler) BulkRestart(w http.ResponseWriter, r *http.Request) {
 		if len(detail) != 0 {
 			data, marshalErr := json.Marshal(detail)
 			if marshalErr != nil {
-				slog.Error("failed to marshal bulk restart audit detail", "connector", id, "error", marshalErr)
+				slog.Error("failed to marshal bulk restart audit detail", "connector", logsafe.Sanitize(id), "error", logsafe.Err(marshalErr))
 			} else {
 				auditRecord.Detail = string(data)
 			}
@@ -653,7 +654,7 @@ func (h *Handler) restartConnector(ctx context.Context, rec *store.ConnectorReco
 		operationErr = restart(ctx, cfg, "")
 	}
 	if operationErr != nil {
-		slog.Error("connector restart failed", "connector", rec.ID, "error", operationErr)
+		slog.Error("connector restart failed", "connector", logsafe.Sanitize(rec.ID), "error", logsafe.Err(operationErr))
 		alert := &store.AlertRecord{
 			ServiceID:   rec.ID,
 			Severity:    "critical",

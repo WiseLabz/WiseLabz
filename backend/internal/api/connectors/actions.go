@@ -13,6 +13,7 @@ import (
 	"github.com/WiseLabz/wiselabz/internal/connector"
 	"github.com/WiseLabz/wiselabz/internal/connector/custom"
 	"github.com/WiseLabz/wiselabz/internal/httputil"
+	"github.com/WiseLabz/wiselabz/internal/logsafe"
 	"github.com/WiseLabz/wiselabz/internal/store"
 	"github.com/WiseLabz/wiselabz/internal/ws"
 )
@@ -313,7 +314,7 @@ func (h *Handler) mutateAction(
 			cause:   err,
 		}
 		if suppressAbandonedAlert && abandonedByCaller(ctx, err) {
-			slog.Info("connector action abandoned by caller", "connector", prepared.record.ID, "action", name, "error", err)
+			slog.Info("connector action abandoned by caller", "connector", logsafe.Sanitize(prepared.record.ID), "action", logsafe.Sanitize(name), "error", logsafe.Err(err))
 			return result, failure
 		}
 		h.recordActionFailure(ctx, prepared.record, name, err)
@@ -337,7 +338,7 @@ func (h *Handler) mutateAction(
 }
 
 func (h *Handler) recordActionFailure(ctx context.Context, record *store.ConnectorRecord, name string, err error) {
-	slog.Error("connector action failed", "connector", record.ID, "action", name, "error", err)
+	slog.Error("connector action failed", "connector", logsafe.Sanitize(record.ID), "action", logsafe.Sanitize(name), "error", logsafe.Err(err))
 	alert := &store.AlertRecord{
 		ServiceID:   record.ID,
 		Severity:    "critical",
