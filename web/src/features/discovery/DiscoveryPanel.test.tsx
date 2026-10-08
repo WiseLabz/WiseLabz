@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '../../i18n';
@@ -10,20 +10,17 @@ import { DiscoveryPanel } from './DiscoveryPanel';
 
 const api = vi.hoisted(() => ({
   suggestions: { current: [] as { cidr: string; source: string }[] },
-  read: { data: undefined as unknown, isError: false, isFetching: false },
+  // The read endpoint; never answers unless a test says so.
+  getScan: vi.fn(),
   startDiscoveryScan: vi.fn(),
   cancelDiscoveryScan: vi.fn(),
-  refetch: vi.fn(),
 }));
 
 vi.mock('../../api/generated/discovery/discovery', () => ({
   useGetDiscoverySuggestions: () => ({ data: { suggestions: api.suggestions.current } }),
-  useGetDiscoveryScan: () => ({
-    data: api.read.data,
-    isError: api.read.isError,
-    isFetching: api.read.isFetching,
-    refetch: api.refetch,
-  }),
+  // The real query behaviour (cache, refetch, polling) over a controllable endpoint.
+  useGetDiscoveryScan: (options?: { query?: object }) =>
+    useQuery({ queryKey: ['/discovery/scan'], queryFn: () => api.getScan(), ...options?.query }),
   startDiscoveryScan: (...args: unknown[]) => api.startDiscoveryScan(...args),
   cancelDiscoveryScan: (...args: unknown[]) => api.cancelDiscoveryScan(...args),
 }));
@@ -79,25 +76,33 @@ const axiosError = (status: number, data: unknown, headers: Record<string, strin
   Object.assign(new Error(`status ${status}`), { isAxiosError: true, response: { status, data, headers } });
 
 function renderPanel(onConnect = vi.fn()) {
+  const client = new QueryClient();
   render(
-    <QueryClientProvider client={new QueryClient()}>
+    <QueryClientProvider client={client}>
       <MemoryRouter>
         <DiscoveryPanel onConnect={onConnect} />
       </MemoryRouter>
     </QueryClientProvider>,
   );
-  return onConnect;
+  return Object.assign(onConnect, { client });
 }
+
+// Refetch and let react-query's batched notification reach the component.
+const refetch = (client: QueryClient) =>
+  act(async () => {
+    await client.refetchQueries({ queryKey: ['/discovery/scan'] });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
 
 beforeEach(() => {
   useDiscovery.setState({ scan: null });
   api.suggestions.current = [];
-  api.read.data = undefined;
-  api.read.isError = false;
-  api.read.isFetching = false;
+  api.getScan.mockReset();
+  api.getScan.mockImplementation(() => new Promise(() => {}));
 });
 afterEach(() => {
   vi.clearAllMocks();
+  vi.useRealTimers();
 });
 
 describe('DiscoveryPanel', () => {
@@ -202,38 +207,126 @@ describe('DiscoveryPanel', () => {
     expect(screen.getByText(/60 second limit/)).toBeInTheDocument();
   });
 
-  it('treats a 404 from the read endpoint as no scan', () => {
+  it('treats a 404 from the read endpoint as no scan', async () => {
     useDiscovery.getState().setScan(scan({ candidates: [pve] }));
-    api.read.isError = true;
+    api.getScan.mockRejectedValue(axiosError(404, { code: 'not_found' }));
     renderPanel();
+    await waitFor(() => expect(useDiscovery.getState().scan).toBeNull());
+    expect(screen.queryByText('Proxmox VE')).toBeNull();
+  });
+
+  it('keeps the scan and its candidates when a refetch fails with a 5xx or a network error', async () => {
+    useLive.setState({ ws: 'closed' });
+    api.getScan.mockResolvedValueOnce({ scan: scan({ candidates: [pve] }) });
+    const { client } = renderPanel();
+    expect(await screen.findByText('Proxmox VE')).toBeInTheDocument();
+
+    for (const failure of [axiosError(500, {}), new Error('Network Error')]) {
+      api.getScan.mockRejectedValueOnce(failure);
+      await refetch(client);
+      expect(client.getQueryState(['/discovery/scan'])?.status).toBe('error');
+      expect(useDiscovery.getState().scan).toMatchObject({ id: 'scan-1', candidates: [pve] });
+      expect(screen.getByText('Proxmox VE')).toBeInTheDocument();
+    }
+
+    // A 404 on a later refetch does clear it.
+    api.getScan.mockRejectedValueOnce(axiosError(404, { code: 'not_found' }));
+    await refetch(client);
     expect(useDiscovery.getState().scan).toBeNull();
     expect(screen.queryByText('Proxmox VE')).toBeNull();
   });
 
-  it('keeps a scan it just started while a stale 404 is being refetched', () => {
-    useDiscovery.getState().setScan(scan({ state: 'running', endedAt: undefined }));
-    api.read.isError = true;
-    api.read.isFetching = true;
-    renderPanel();
+  it('keeps a scan it just started while a stale 404 is being refetched', async () => {
+    api.suggestions.current = [{ cidr: '192.168.1.0/24', source: 'client' }];
+    api.getScan.mockRejectedValueOnce(axiosError(404, { code: 'not_found' }));
+    api.startDiscoveryScan.mockResolvedValue({ scan: scan({ state: 'running', endedAt: undefined }) });
+    const { client } = renderPanel();
+    await waitFor(() => expect(client.getQueryState(['/discovery/scan'])?.status).toBe('error'));
+
+    fireEvent.click(screen.getByRole('button', { name: /^scan$/i }));
+    expect(await screen.findByRole('progressbar')).toBeInTheDocument();
+    // The refetch started by a frame is still in flight (it never answers here).
+    act(() => {
+      void client.invalidateQueries({ queryKey: ['/discovery/scan'] });
+    });
     expect(screen.getByRole('progressbar')).toBeInTheDocument();
   });
 
-  it('reads the scan again when the socket reconnects', () => {
+  it('reads the scan again when the socket reconnects', async () => {
     useLive.setState({ ws: 'closed' });
+    api.getScan.mockResolvedValue({ scan: scan() });
     renderPanel();
-    expect(api.refetch).not.toHaveBeenCalled();
+    await waitFor(() => expect(api.getScan).toHaveBeenCalledTimes(1));
+    await screen.findByText('Completed');
     act(() => useLive.getState().setWs('open'));
-    expect(api.refetch).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(api.getScan).toHaveBeenCalledTimes(2));
     // Staying open does not read again.
     act(() => useLive.getState().setWs('open'));
-    expect(api.refetch).toHaveBeenCalledTimes(1);
+    expect(api.getScan).toHaveBeenCalledTimes(2);
   });
 
-  it('reads the held scan on mount (reload while running)', () => {
-    api.read.data = { scan: scan({ state: 'running', done: 90, endedAt: undefined, candidates: [pve] }) };
+  it('reads the held scan on mount (reload while running)', async () => {
+    api.getScan.mockResolvedValue({ scan: scan({ state: 'running', done: 90, endedAt: undefined, candidates: [pve] }) });
     renderPanel();
-    expect(screen.getByText(/90 of 254 addresses checked/)).toBeInTheDocument();
+    expect(await screen.findByText(/90 of 254 addresses checked/)).toBeInTheDocument();
     expect(screen.getByText('Proxmox VE')).toBeInTheDocument();
+  });
+
+  it('polls a running scan and shows it completed without any WebSocket frame', async () => {
+    vi.useFakeTimers();
+    useDiscovery.getState().setScan(scan({ state: 'running', done: 90, endedAt: undefined }));
+    api.getScan.mockResolvedValueOnce({ scan: scan({ state: 'running', done: 90, endedAt: undefined }) });
+    renderPanel();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(screen.getByRole('progressbar')).toBeInTheDocument();
+    expect(screen.getByLabelText(/range to scan/i)).toBeDisabled();
+    expect(api.getScan).toHaveBeenCalledTimes(1);
+
+    api.getScan.mockResolvedValue({ scan: scan({ candidates: [pve] }) });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3000);
+      await vi.advanceTimersByTimeAsync(1);
+    });
+    expect(api.getScan).toHaveBeenCalledTimes(2);
+    expect(screen.getByText('Completed')).toBeInTheDocument();
+    expect(screen.queryByRole('progressbar')).toBeNull();
+    expect(screen.getByText('Proxmox VE')).toBeInTheDocument();
+    expect(screen.getByLabelText(/range to scan/i)).toBeEnabled();
+
+    // Polling stops once the scan is over.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10_000);
+    });
+    expect(api.getScan).toHaveBeenCalledTimes(2);
+  });
+
+  it('announces only the final outcome, never the running progress or the candidate list', async () => {
+    useDiscovery.getState().setScan(scan({ state: 'running', done: 40, endedAt: undefined, candidates: [pve] }));
+    renderPanel();
+    const container = document.body;
+    expect(container.querySelector('[aria-live]')).toBeNull();
+    expect(screen.getByRole('status')).toBeEmptyDOMElement();
+
+    act(() => useDiscovery.getState().applyComplete({ scanId: 'scan-1', state: 'completed', partial: true }));
+    const status = screen.getByRole('status');
+    expect(within(status).getByText('Completed')).toBeInTheDocument();
+    expect(within(status).getByText(/60 second limit/)).toBeInTheDocument();
+    expect(within(status).queryByText('Proxmox VE')).toBeNull();
+    expect(container.querySelector('[aria-live]')).toBeNull();
+  });
+
+  it('announces the nothing-found outcome in the status region', () => {
+    useDiscovery.getState().setScan(scan({ answered: 7 }));
+    renderPanel();
+    expect(within(screen.getByRole('status')).getByText('No known products found')).toBeInTheDocument();
+  });
+
+  it('groups the suggested ranges', () => {
+    api.suggestions.current = [{ cidr: '192.168.1.0/24', source: 'client' }];
+    renderPanel();
+    expect(screen.getByRole('group', { name: /suggested ranges/i })).toBeInTheDocument();
   });
 
   it('shows the field error for a rejected range', async () => {
@@ -249,21 +342,30 @@ describe('DiscoveryPanel', () => {
 
   it('explains a conflict by showing the running scan', async () => {
     api.suggestions.current = [{ cidr: '192.168.1.0/24', source: 'client' }];
-    api.startDiscoveryScan.mockRejectedValue(axiosError(409, { code: 'scan_in_progress', details: { scan: scan({ state: 'running' }) } }));
+    api.getScan.mockResolvedValue({ scan: scan({ state: 'running' }) });
+    api.startDiscoveryScan.mockRejectedValue(axiosError(409, { code: 'scan_in_progress', message: 'x', scan: scan({ state: 'running' }) }));
     renderPanel();
     fireEvent.click(screen.getByRole('button', { name: /^scan$/i }));
     expect(await screen.findByText(/a scan is already running/i)).toBeInTheDocument();
-    await waitFor(() => expect(api.refetch).toHaveBeenCalled());
+    await waitFor(() => expect(api.getScan).toHaveBeenCalledTimes(2));
   });
 
   it('tells the admin how long to wait when the hourly limit is reached', async () => {
     api.suggestions.current = [{ cidr: '192.168.1.0/24', source: 'client' }];
     api.startDiscoveryScan.mockRejectedValue(
-      axiosError(429, { code: 'rate_limited', details: { retryAfterSeconds: 1500 } }, { 'retry-after': '1500' }),
+      axiosError(429, { code: 'rate_limited', message: 'x', retryAfterSeconds: 1500 }, { 'retry-after': '1500' }),
     );
     renderPanel();
     fireEvent.click(screen.getByRole('button', { name: /^scan$/i }));
     expect(await screen.findByText(/try again in 25 min/i)).toBeInTheDocument();
+  });
+
+  it('falls back to the Retry-After header when the body has no retryAfterSeconds', async () => {
+    api.suggestions.current = [{ cidr: '192.168.1.0/24', source: 'client' }];
+    api.startDiscoveryScan.mockRejectedValue(axiosError(429, { code: 'rate_limited', message: 'x' }, { 'retry-after': '600' }));
+    renderPanel();
+    fireEvent.click(screen.getByRole('button', { name: /^scan$/i }));
+    expect(await screen.findByText(/try again in 10 min/i)).toBeInTheDocument();
   });
 
   it('shows a generic message for an unexpected failure', async () => {

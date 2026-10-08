@@ -27,6 +27,7 @@ import {
 } from '../api/generated/auth/auth';
 import { setAccessToken, setRefreshHandler } from '../api/axios-instance';
 import { queryClient } from '../app/queryClient';
+import { useDiscovery } from './discovery';
 
 type Status = 'unknown' | 'authenticated' | 'anonymous';
 
@@ -110,6 +111,8 @@ export const useAuth = create<AuthState>((set, get) => ({
       // best-effort; clear the client session regardless
     }
     queryClient.clear();
+    // Scan results carry host addresses; they must not outlive the session in this tab.
+    useDiscovery.getState().setScan(null);
     set(clear());
   },
 }));

@@ -305,7 +305,7 @@ export const curatedHandlers = [
     }
     if (mockScan?.state === 'running') {
       return HttpResponse.json(
-        { code: 'scan_in_progress', message: 'A network scan is already running', details: { scan: mockScan } },
+        { code: 'scan_in_progress', message: 'A network scan is already running', scan: mockScan },
         { status: 409 },
       );
     }

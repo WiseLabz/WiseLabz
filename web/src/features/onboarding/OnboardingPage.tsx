@@ -32,6 +32,8 @@ export function OnboardingPage() {
   // Every connector created on the way to the sync step: one when added by hand,
   // any number when connected from a network scan.
   const [connectors, setConnectors] = useState<Connector[]>([]);
+  // While the queue's own form is open the manual one is hidden: both would use the same field ids.
+  const [queueOpen, setQueueOpen] = useState(false);
   // The queue reports a save and its end in one event, before state has flushed.
   const createdRef = useRef<Connector[]>([]);
   const addConnector = (c: Connector) => {
@@ -63,26 +65,31 @@ export function OnboardingPage() {
               <div className="mb-6 space-y-3">
                 <DiscoveryFlow
                   onConnectorCreated={addConnector}
+                  onQueueActiveChange={setQueueOpen}
                   onQueueFinished={() => {
                     // Nothing created (everything skipped): stay on this step.
                     if (createdRef.current.length > 0) setStep('sync');
                   }}
                 />
-                {connectors.length > 0 && (
+                {connectors.length > 0 && !queueOpen && (
                   <Button variant="primary" size="md" onClick={() => setStep('sync')}>
                     {t('onboarding.connect.continueWithConnected', { count: connectors.length })}
                     <ArrowRightIcon size={14} />
                   </Button>
                 )}
-                <h2 className="pt-2 text-sm font-semibold text-ink">{t('onboarding.connect.manualTitle')}</h2>
+                {!queueOpen && (
+                  <h2 className="pt-2 text-sm font-semibold text-ink">{t('onboarding.connect.manualTitle')}</h2>
+                )}
               </div>
             )}
-            <ConnectorForm
-              onCreated={(c) => {
-                addConnector(c);
-                setStep('sync');
-              }}
-            />
+            {!queueOpen && (
+              <ConnectorForm
+                onCreated={(c) => {
+                  addConnector(c);
+                  setStep('sync');
+                }}
+              />
+            )}
           </section>
         )}
 
@@ -188,6 +195,10 @@ function SyncStep({
 
   const done = connectors.every((c) => jobOf(c)?.phase === 'done');
   const failed = connectors.some((c) => jobOf(c)?.phase === 'error');
+  // One failed sync must not trap the admin when others finished: continue once
+  // every sync has settled and at least one succeeded.
+  const settled = connectors.every((c) => ['done', 'error'].includes(jobOf(c)?.phase ?? ''));
+  const canContinue = settled && connectors.some((c) => jobOf(c)?.phase === 'done');
 
   return (
     <section aria-labelledby="ob-sync-title" className="rounded-lg border border-line bg-surface p-6">
@@ -213,7 +224,7 @@ function SyncStep({
       </ul>
 
       <div className="mt-6 flex items-center gap-2">
-        <Button variant="primary" size="md" disabled={!done} onClick={onContinue}>
+        <Button variant="primary" size="md" disabled={!canContinue} onClick={onContinue}>
           {t('onboarding.sync.continue')}
           <ArrowRightIcon size={14} />
         </Button>

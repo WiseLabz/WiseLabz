@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '../../i18n';
@@ -8,7 +8,8 @@ import { useDiscovery } from '../../store/discovery';
 import { ConnectQueue } from './ConnectQueue';
 import { DiscoveryFlow } from './DiscoveryFlow';
 
-const { postConnectors } = vi.hoisted(() => ({ postConnectors: vi.fn() }));
+const mocks = vi.hoisted(() => ({ postConnectors: vi.fn(), getScan: vi.fn() }));
+const postConnectors = mocks.postConnectors;
 
 // Field names and kinds as the backend emits them for these two types.
 const schemas = [
@@ -50,7 +51,10 @@ vi.mock('../../api/generated/connectors/connectors', () => ({
 }));
 vi.mock('../../api/generated/discovery/discovery', () => ({
   useGetDiscoverySuggestions: () => ({ data: { suggestions: [] } }),
-  useGetDiscoveryScan: () => ({ data: undefined, isError: false, isFetching: false, refetch: vi.fn() }),
+  // The real query over an endpoint that never answers; tests that need it override `getScan`.
+  useGetDiscoveryScan: (options?: { query?: object }) =>
+    useQuery({ queryKey: ['/discovery/scan'], queryFn: () => mocks.getScan(), ...options?.query }),
+  getGetDiscoveryScanQueryKey: () => ['/discovery/scan'],
   startDiscoveryScan: vi.fn(),
   cancelDiscoveryScan: vi.fn(),
 }));
@@ -95,9 +99,9 @@ const completedScan = (candidates: DiscoveryCandidate[]): DiscoveryScan => ({
   candidates,
 });
 
-function wrap(ui: React.ReactNode) {
+function wrap(ui: React.ReactNode, client = new QueryClient()) {
   return (
-    <QueryClientProvider client={new QueryClient()}>
+    <QueryClientProvider client={client}>
       <MemoryRouter>{ui}</MemoryRouter>
     </QueryClientProvider>
   );
@@ -108,6 +112,8 @@ const type = (label: RegExp, value: string) => fireEvent.change(screen.getByLabe
 
 beforeEach(() => {
   useDiscovery.setState({ scan: null });
+  mocks.getScan.mockReset();
+  mocks.getScan.mockImplementation(() => new Promise(() => {}));
   let n = 0;
   postConnectors.mockImplementation(async (body: { name: string; type: string }) => ({ id: `c${++n}`, name: body.name, type: body.type }));
 });
@@ -259,5 +265,32 @@ describe('DiscoveryFlow (panel and queue together)', () => {
     expect(await screen.findByText('Already connected')).toBeInTheDocument();
     expect(onConnectorCreated).toHaveBeenCalledTimes(1);
     expect(onQueueFinished).not.toHaveBeenCalled();
+  });
+
+  it('returning within the query staleTime still shows the candidate just connected as connected', async () => {
+    // The app keeps reads fresh for 30 s, so the panel remounting after the queue
+    // would otherwise hydrate the store from the cached scan taken before the save.
+    const client = new QueryClient({ defaultOptions: { queries: { staleTime: 30_000 } } });
+    const server = completedScan([pve, ha]);
+    mocks.getScan.mockResolvedValueOnce({ scan: server });
+    useDiscovery.getState().setScan(server);
+    render(wrap(<DiscoveryFlow />, client));
+    await waitFor(() => expect(client.getQueryState(['/discovery/scan'])?.status).toBe('success'));
+
+    rows().forEach((r) => fireEvent.click(within(r).getByRole('checkbox')));
+    fireEvent.click(screen.getByRole('button', { name: /connect 2 selected/i }));
+    type(/api token secret/i, 's3cret');
+    save();
+    await screen.findByText('Candidate 2 of 2');
+    fireEvent.click(screen.getByRole('button', { name: /^stop$/i }));
+
+    // The refetch of the server's view has not landed (the mock never answers it).
+    const [first, second] = await screen.findAllByRole('listitem');
+    expect(within(first).getByText('Already connected')).toBeInTheDocument();
+    expect(within(first).getByRole('checkbox')).toBeDisabled();
+    expect(within(second).queryByText('Already connected')).toBeNull();
+    expect(within(second).getByRole('checkbox')).toBeEnabled();
+    // The cache was invalidated, so the remount asked the server again.
+    await waitFor(() => expect(mocks.getScan).toHaveBeenCalledTimes(2));
   });
 });

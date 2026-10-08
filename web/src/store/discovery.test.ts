@@ -93,6 +93,16 @@ describe('discovery store', () => {
     expect(scan()).toMatchObject({ state: 'cancelled', done: 120 });
   });
 
+  it('ignores a late or duplicate complete once the scan is no longer running', () => {
+    const s = useDiscovery.getState();
+    s.setScan(running({ candidates: [pve] }));
+    s.applyComplete({ scanId: 'scan-1', state: 'cancelled', partial: false });
+    const before = scan();
+    s.applyComplete({ scanId: 'scan-1', state: 'completed', partial: true });
+    expect(scan()).toBe(before);
+    expect(scan()).toMatchObject({ state: 'cancelled', partial: false });
+  });
+
   it('marks candidates connected, matching type, address and port', () => {
     const s = useDiscovery.getState();
     s.setScan(running({ state: 'completed', candidates: [pve, ha] }));

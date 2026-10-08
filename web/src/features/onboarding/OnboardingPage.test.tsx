@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '../../i18n';
@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   isAdmin: { current: true },
   postConnectors: vi.fn(),
   sync: vi.fn(),
+  getScan: vi.fn(),
 }));
 
 const schemas = [
@@ -35,6 +36,13 @@ const schemas = [
       { name: 'access_token', label: 'Long-Lived Access Token', kind: 'password', required: true },
     ],
   },
+  {
+    type: 'docker',
+    category: 'containers_paas',
+    displayName: 'Docker',
+    isCredentialRefresher: false,
+    fields: [{ name: 'host', label: 'Docker Host', kind: 'text', required: true }],
+  },
 ];
 
 vi.mock('../../api/generated/connectors/connectors', () => ({
@@ -46,7 +54,10 @@ vi.mock('../../api/generated/connectors/connectors', () => ({
 }));
 vi.mock('../../api/generated/discovery/discovery', () => ({
   useGetDiscoverySuggestions: () => ({ data: { suggestions: [] } }),
-  useGetDiscoveryScan: () => ({ data: undefined, isError: false, isFetching: false, refetch: vi.fn() }),
+  // The real query over an endpoint that never answers; tests that need it override `getScan`.
+  useGetDiscoveryScan: (options?: { query?: object }) =>
+    useQuery({ queryKey: ['/discovery/scan'], queryFn: () => mocks.getScan(), ...options?.query }),
+  getGetDiscoveryScanQueryKey: () => ['/discovery/scan'],
   startDiscoveryScan: vi.fn(),
   cancelDiscoveryScan: vi.fn(),
 }));
@@ -68,6 +79,15 @@ const ha: DiscoveryCandidate = {
   port: 8123,
   url: 'http://10.0.0.7:8123',
   urlField: 'url',
+};
+
+const docker: DiscoveryCandidate = {
+  type: 'docker',
+  name: 'Docker',
+  address: '10.0.0.9',
+  port: 2375,
+  url: 'tcp://10.0.0.9:2375',
+  urlField: 'host',
 };
 
 const scanOf = (candidates: DiscoveryCandidate[]): DiscoveryScan => ({
@@ -99,10 +119,14 @@ const save = () => fireEvent.click(screen.getByRole('button', { name: /test & ad
 const finishSync = (id: string) =>
   act(() => useLive.getState().upsertJob({ jobId: `job-${id}`, serviceId: id, phase: 'done', percent: 100, startedAt: Date.now() }));
 
+const failSync = (id: string) =>
+  act(() => useLive.getState().upsertJob({ jobId: `job-${id}`, serviceId: id, phase: 'error', percent: 40, message: 'boom', startedAt: Date.now() }));
+
 beforeEach(() => {
   mocks.isAdmin.current = true;
   useDiscovery.setState({ scan: null });
   useLive.setState({ jobs: {} });
+  mocks.getScan.mockImplementation(() => new Promise(() => {}));
   let n = 0;
   mocks.postConnectors.mockImplementation(async (body: { name: string; type: string }) => ({ id: `c${++n}`, name: body.name, type: body.type }));
   mocks.sync.mockResolvedValue(undefined);
@@ -207,5 +231,86 @@ describe('OnboardingPage with a network scan', () => {
     await waitFor(() => expect(mocks.sync).toHaveBeenCalledWith('c1'));
     expect(screen.getAllByRole('progressbar')).toHaveLength(1);
     expect(mocks.sync).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows only the queue’s connector form while the queue is open, and the manual one again after Stop', async () => {
+    useDiscovery.getState().setScan(scanOf([pve, ha]));
+    renderOnboarding();
+    // Before the queue: the manual form and its heading.
+    expect(screen.getByText(/add one by hand/i)).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: 'Home Assistant' })).toHaveLength(1);
+
+    screen.getAllByRole('checkbox').forEach((box) => fireEvent.click(box));
+    fireEvent.click(screen.getByRole('button', { name: /connect 2 selected/i }));
+    await screen.findByText('Candidate 1 of 2');
+    expect(screen.queryByText(/add one by hand/i)).toBeNull();
+    // One form: the type picker (and the field ids) exist once.
+    expect(screen.getAllByRole('button', { name: 'Home Assistant' })).toHaveLength(1);
+    expect(screen.getAllByLabelText(/api url/i)).toHaveLength(1);
+    const ids = Array.from(document.querySelectorAll('[id^="connector-field-"]')).map((el) => el.id);
+    expect(new Set(ids).size).toBe(ids.length);
+
+    fireEvent.click(screen.getByRole('button', { name: /^stop$/i }));
+    expect(await screen.findByText(/add one by hand/i)).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: 'Home Assistant' })).toHaveLength(1);
+    expect(screen.queryByText('Candidate 1 of 2')).toBeNull();
+  });
+
+  it('lets Continue through when one of three syncs fails and the others finished', async () => {
+    useDiscovery.getState().setScan(scanOf([pve, ha, docker]));
+    renderOnboarding();
+    screen.getAllByRole('checkbox').forEach((box) => fireEvent.click(box));
+    fireEvent.click(screen.getByRole('button', { name: /connect 3 selected/i }));
+    // Rows are ordered by address: pve, ha, docker (10.0.0.9).
+    type(/api token secret/i, 's3cret');
+    save();
+    await screen.findByText('Candidate 2 of 3');
+    type(/long-lived access token/i, 'tok');
+    save();
+    await screen.findByText('Candidate 3 of 3');
+    save();
+    await screen.findByRole('heading', { name: /first sync for 3 services/i });
+
+    const cont = () => screen.getByRole('button', { name: /^continue$/i });
+    finishSync('c1');
+    failSync('c2');
+    // One still running: not settled yet.
+    expect(cont()).toBeDisabled();
+    finishSync('c3');
+    expect(cont()).toBeEnabled();
+    expect(screen.getByRole('heading', { name: /sync failed/i })).toBeInTheDocument();
+    fireEvent.click(cont());
+    expect(await screen.findByRole('heading', { name: /you.re set up/i })).toBeInTheDocument();
+  });
+
+  it('keeps Continue disabled when every sync failed', async () => {
+    useDiscovery.getState().setScan(scanOf([pve, ha]));
+    renderOnboarding();
+    screen.getAllByRole('checkbox').forEach((box) => fireEvent.click(box));
+    fireEvent.click(screen.getByRole('button', { name: /connect 2 selected/i }));
+    type(/api token secret/i, 's3cret');
+    save();
+    await screen.findByText('Candidate 2 of 2');
+    type(/long-lived access token/i, 'tok');
+    save();
+    await screen.findByRole('heading', { name: /first sync for 2 services/i });
+    failSync('c1');
+    failSync('c2');
+    expect(screen.getByRole('button', { name: /^continue$/i })).toBeDisabled();
+  });
+});
+
+describe('OnboardingPage sync step with a single connector', () => {
+  it('keeps Continue disabled when the lone sync fails', async () => {
+    renderOnboarding();
+    fireEvent.click(screen.getByRole('button', { name: 'Proxmox VE' }));
+    type(/display name/i, 'pve1');
+    type(/api url/i, 'https://pve:8006');
+    type(/api token secret/i, 's3cret');
+    save();
+    await screen.findByRole('heading', { name: /running the first sync/i });
+    failSync('c1');
+    expect(screen.getByRole('heading', { name: /sync failed/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^continue$/i })).toBeDisabled();
   });
 });

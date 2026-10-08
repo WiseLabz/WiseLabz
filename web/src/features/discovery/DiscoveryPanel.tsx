@@ -32,7 +32,7 @@ type StartError = { kind: 'field' | 'conflict' | 'rateLimited' | 'other'; messag
 function startErrorFrom(err: unknown): StartError {
   if (!isAxiosError(err)) return { kind: 'other' };
   const data = err.response?.data as
-    | { code?: string; message?: string; details?: unknown }
+    | { code?: string; message?: string; details?: unknown; retryAfterSeconds?: number }
     | undefined;
   switch (err.response?.status) {
     case 400: {
@@ -42,13 +42,15 @@ function startErrorFrom(err: unknown): StartError {
     case 409:
       return { kind: 'conflict' };
     case 429: {
-      const secs = Number((data?.details as { retryAfterSeconds?: number } | undefined)?.retryAfterSeconds ?? err.response?.headers?.['retry-after']);
+      const secs = Number(data?.retryAfterSeconds ?? err.response?.headers?.['retry-after']);
       return { kind: 'rateLimited', retryMinutes: Number.isFinite(secs) && secs > 0 ? Math.ceil(secs / 60) : undefined };
     }
     default:
       return { kind: 'other' };
   }
 }
+
+const POLL_MS = 3000;
 
 export function DiscoveryPanel({
   onConnect,
@@ -62,12 +64,21 @@ export function DiscoveryPanel({
 
   // Hydrate from the server on mount and whenever the WebSocket layer invalidates
   // the query (reconnect, completion). No scan is a 404, which means "none".
-  const read = useGetDiscoveryScan({ query: { retry: false, refetchOnWindowFocus: false } });
+  // While a scan runs the read is polled: live frames only reach the admin who started
+  // it, and a frame can be missed (socket down, or a tiny scan ending before the start
+  // response lands), which would leave the panel "running" for good.
+  const running = scan?.state === 'running';
+  const read = useGetDiscoveryScan({
+    query: { retry: false, refetchOnWindowFocus: false, refetchInterval: running ? POLL_MS : false },
+  });
+  const notFound = isAxiosError(read.error) && read.error.response?.status === 404;
   useEffect(() => {
-    if (read.data) setScan(read.data.scan);
+    // Only a 404 means "no scan"; a 5xx or network error keeps what is on screen.
     // A stale 404 from before the scan started must not wipe the scan just started.
-    else if (read.isError && !read.isFetching) setScan(null);
-  }, [read.data, read.isError, read.isFetching, setScan]);
+    if (read.isError) {
+      if (notFound && !read.isFetching) setScan(null);
+    } else if (read.data) setScan(read.data.scan);
+  }, [read.data, read.isError, read.isFetching, notFound, setScan]);
 
   // Frames sent while the socket was down are gone for good: read the scan again
   // whenever the socket comes back.
@@ -115,7 +126,6 @@ export function DiscoveryPanel({
     }
   };
 
-  const running = scan?.state === 'running';
   const candidates = useMemo(() => [...(scan?.candidates ?? [])].sort(byAddress), [scan?.candidates]);
   const selectable = candidates.filter((c) => !c.connectorId);
 
@@ -185,7 +195,7 @@ export function DiscoveryPanel({
           </p>
         )}
         {suggested.length > 0 && !running && (
-          <div className="mt-2 flex flex-wrap items-center gap-1.5" aria-label={t('discovery.suggestions')}>
+          <div className="mt-2 flex flex-wrap items-center gap-1.5" role="group" aria-label={t('discovery.suggestions')}>
             {suggested.map((s) => (
               <button
                 key={s.cidr}
@@ -218,8 +228,13 @@ export function DiscoveryPanel({
       )}
 
       {scan && (
-        <div className="mt-4 border-t border-line-soft pt-4" aria-live="polite">
-          <ScanStatus scan={scan} cancelling={cancelling} onCancel={() => void cancel()} />
+        <div className="mt-4 border-t border-line-soft pt-4">
+          <ScanStatus
+            scan={scan}
+            empty={candidates.length === 0}
+            cancelling={cancelling}
+            onCancel={() => void cancel()}
+          />
 
           {candidates.length > 0 && (
             <ul className="mt-3 space-y-1.5">
@@ -233,15 +248,6 @@ export function DiscoveryPanel({
                 </li>
               ))}
             </ul>
-          )}
-
-          {!running && candidates.length === 0 && scan.state !== 'failed' && (
-            <div className="mt-3 rounded-sm border border-line-soft p-3">
-              <p className="text-sm font-medium text-ink">{t('discovery.noResults')}</p>
-              <p className="mt-1 text-2xs text-ink-faint">
-                {t('discovery.noResultsDetail', { answered: scan.answered, total: scan.total })}
-              </p>
-            </div>
           )}
 
           {candidates.length > 0 && (
@@ -258,56 +264,77 @@ export function DiscoveryPanel({
   );
 }
 
+/**
+ * Progress while running (the progressbar carries it; the changing counts are not
+ * announced), and the final outcome in a status region that stays mounted so a
+ * screen reader announces it when it appears.
+ */
 function ScanStatus({
   scan,
+  empty,
   cancelling,
   onCancel,
 }: {
   scan: DiscoveryScan;
+  /** No candidates were found (or have arrived yet). */
+  empty: boolean;
   cancelling: boolean;
   onCancel: () => void;
 }) {
   const { t } = useTranslation();
   const percent = scan.total > 0 ? Math.min(100, Math.round((scan.done / scan.total) * 100)) : 0;
-  if (scan.state === 'running') {
-    return (
-      <div>
-        <div className="flex items-center justify-between gap-3">
-          <p className="text-sm text-ink">
-            {t('discovery.running', { range: scan.cidr })}
-            <span className="ml-2 text-2xs text-ink-faint">
-              {t('discovery.progress', { done: scan.done, total: scan.total })}
-            </span>
-          </p>
-          <Button variant="ghost" size="sm" onClick={onCancel} disabled={cancelling}>
-            <XIcon size={12} />
-            {t('discovery.cancel')}
-          </Button>
-        </div>
-        <div
-          className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-canvas-sunken"
-          role="progressbar"
-          aria-label={t('discovery.title')}
-          aria-valuenow={percent}
-          aria-valuemin={0}
-          aria-valuemax={100}
-        >
-          <div className="h-full rounded-full bg-accent-primary transition-[width] duration-300" style={{ width: `${percent}%` }} />
-        </div>
-      </div>
-    );
-  }
+  const running = scan.state === 'running';
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <ToneTag
-        tone={scan.state === 'failed' ? 'err' : scan.state === 'cancelled' ? 'warn' : 'ok'}
-        label={t(`discovery.state.${scan.state}`)}
-      />
-      <span className="text-2xs text-ink-faint">
-        {t('discovery.summary', { range: scan.cidr, done: scan.done, total: scan.total, answered: scan.answered })}
-      </span>
-      {scan.partial && <span className="text-2xs text-warn">{t('discovery.partial')}</span>}
-    </div>
+    <>
+      {running && (
+        <div>
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-sm text-ink">
+              {t('discovery.running', { range: scan.cidr })}
+              <span className="ml-2 text-2xs text-ink-faint">
+                {t('discovery.progress', { done: scan.done, total: scan.total })}
+              </span>
+            </p>
+            <Button variant="ghost" size="sm" onClick={onCancel} disabled={cancelling}>
+              <XIcon size={12} />
+              {t('discovery.cancel')}
+            </Button>
+          </div>
+          <div
+            className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-canvas-sunken"
+            role="progressbar"
+            aria-label={t('discovery.title')}
+            aria-valuenow={percent}
+            aria-valuemin={0}
+            aria-valuemax={100}
+          >
+            <div className="h-full rounded-full bg-accent-primary transition-[width] duration-300" style={{ width: `${percent}%` }} />
+          </div>
+        </div>
+      )}
+      <div role="status">
+        {!running && (
+          <div className="flex flex-wrap items-center gap-2">
+            <ToneTag
+              tone={scan.state === 'failed' ? 'err' : scan.state === 'cancelled' ? 'warn' : 'ok'}
+              label={t(`discovery.state.${scan.state}`)}
+            />
+            <span className="text-2xs text-ink-faint">
+              {t('discovery.summary', { range: scan.cidr, done: scan.done, total: scan.total, answered: scan.answered })}
+            </span>
+            {scan.partial && <span className="text-2xs text-warn">{t('discovery.partial')}</span>}
+          </div>
+        )}
+        {!running && empty && scan.state !== 'failed' && (
+          <div className="mt-3 rounded-sm border border-line-soft p-3">
+            <p className="text-sm font-medium text-ink">{t('discovery.noResults')}</p>
+            <p className="mt-1 text-2xs text-ink-faint">
+              {t('discovery.noResultsDetail', { answered: scan.answered, total: scan.total })}
+            </p>
+          </div>
+        )}
+      </div>
+    </>
   );
 }
 

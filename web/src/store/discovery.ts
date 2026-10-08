@@ -53,7 +53,8 @@ export const useDiscovery = create<DiscoveryState>((set) => ({
     }),
   applyComplete: (e) =>
     set((s) => {
-      if (!s.scan || s.scan.id !== e.scanId) return s;
+      // A late or duplicate frame must not overwrite a terminal state (e.g. cancelled).
+      if (!s.scan || s.scan.id !== e.scanId || s.scan.state !== 'running') return s;
       return {
         scan: {
           ...s.scan,
