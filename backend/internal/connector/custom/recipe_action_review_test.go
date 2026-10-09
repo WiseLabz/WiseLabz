@@ -44,7 +44,7 @@ func TestActionPreviewRedactsConfiguredSecretHeaderNames(t *testing.T) {
 	}
 }
 
-func TestActionResponseReadFailuresKeepTypedErrorsAndStatus(t *testing.T) {
+func TestActionResponseReadFailuresDoNotChangeTheOutcome(t *testing.T) {
 	for _, oversized := range []bool{false, true} {
 		t.Run(map[bool]string{false: "truncated body", true: "oversized body"}[oversized], func(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -64,9 +64,8 @@ func TestActionResponseReadFailuresKeepTypedErrorsAndStatus(t *testing.T) {
 				t.Fatal(err)
 			}
 			result, err := conn.SendAction(context.Background(), config, action)
-			var malformed *connector.MalformedResponseError
-			if !errors.As(err, &malformed) || result.Status != http.StatusOK || !result.Written {
-				t.Fatalf("read result=%+v error=%v; want malformed response with known 200", result, err)
+			if err != nil || result.Status != http.StatusOK || !result.Written {
+				t.Fatalf("read result=%+v error=%v; want success with known 200", result, err)
 			}
 		})
 	}
@@ -88,9 +87,8 @@ func TestActionResponseReadFailuresKeepTypedErrorsAndStatus(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
 		result, err := conn.SendAction(ctx, config, action)
-		var timeout *connector.TimeoutError
-		if !errors.As(err, &timeout) || result.Status != http.StatusOK || !result.Written {
-			t.Fatalf("read result=%+v error=%v; want timeout with known 200", result, err)
+		if err != nil || result.Status != http.StatusOK || !result.Written {
+			t.Fatalf("read result=%+v error=%v; want success with known 200", result, err)
 		}
 	})
 }

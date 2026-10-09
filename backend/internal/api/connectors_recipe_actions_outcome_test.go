@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -122,4 +123,63 @@ func TestRunbookActionStepOutcomes(t *testing.T) {
 			t.Fatalf("audits for an unanswered action = %+v, %v; want none", audits, err)
 		}
 	})
+
+	for _, tc := range []struct {
+		name  string
+		reset bool
+	}{
+		{"200 then a stalled body", false},
+		{"200 then a connection reset mid body", true},
+	} {
+		t.Run(tc.name+" still succeeds exactly once", func(t *testing.T) {
+			var calls atomic.Int32
+			done := make(chan struct{})
+			body := strings.Repeat("a", 600)
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				calls.Add(1)
+				if tc.reset {
+					conn, _, err := w.(http.Hijacker).Hijack()
+					if err != nil {
+						t.Errorf("Hijack() error = %v", err)
+						return
+					}
+					_, _ = io.WriteString(conn, "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 5000\r\n\r\n"+body)
+					_ = conn.Close()
+					return
+				}
+				w.Header().Set("Content-Type", "text/plain")
+				w.WriteHeader(http.StatusOK)
+				_, _ = io.WriteString(w, body)
+				w.(http.Flusher).Flush()
+				select {
+				case <-done:
+				case <-r.Context().Done():
+				}
+			}))
+			defer server.Close()
+			defer close(done)
+			app, run, step := runActionStepAgainst(t, server)
+			if step.State != "succeeded" || run.State != "succeeded" || step.Error != "" {
+				t.Fatalf("run=%+v step=%+v, want both succeeded with no error", run, step)
+			}
+			if calls.Load() != 1 {
+				t.Errorf("upstream requests = %d, want 1", calls.Load())
+			}
+			alerts, _, err := app.Store.ListAlerts(context.Background(), "", "", "", "", 0, 10)
+			if err != nil || len(alerts) != 0 {
+				t.Errorf("alerts = %+v, %v; want none", alerts, err)
+			}
+			audits, _, err := app.Store.ListAuditRecords(context.Background(), "connector.action", "connector", "", "", 0, 10)
+			if err != nil || len(audits) != 1 {
+				t.Fatalf("audits = %+v, %v; want exactly one", audits, err)
+			}
+			var detail map[string]any
+			if err := json.Unmarshal([]byte(audits[0].Detail), &detail); err != nil {
+				t.Fatal(err)
+			}
+			if detail["runId"] != run.ID || detail["stepId"] != step.ID {
+				t.Errorf("audit detail = %v, want run %s and step %s", detail, run.ID, step.ID)
+			}
+		})
+	}
 }

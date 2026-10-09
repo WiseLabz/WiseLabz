@@ -316,8 +316,8 @@ func TestSendActionOversizeAndDroppedConnection(t *testing.T) {
 		t.Fatal(err)
 	}
 	result, err := conn.SendAction(context.Background(), config, action)
-	if err == nil || result.Status != http.StatusOK || len(result.Excerpt) != 512 || !result.Written {
-		t.Errorf("oversized result/error = %+v / %v", result, err)
+	if err != nil || result.Status != http.StatusOK || len(result.Excerpt) != 512 || !result.Written {
+		t.Errorf("oversized result/error = %+v / %v, want success with a 512 byte excerpt", result, err)
 	}
 
 	dropped := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {

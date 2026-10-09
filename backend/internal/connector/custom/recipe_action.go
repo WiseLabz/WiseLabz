@@ -526,7 +526,10 @@ func safeActionError(config map[string]any, err error) error {
 }
 
 // SendAction sends one resolved request and returns only a bounded plain-text
-// excerpt. The error never includes any response-body bytes.
+// excerpt. Once the status line has arrived the status alone decides the
+// outcome: a 2xx is success and any other status is a failure, whatever happens
+// to the body afterwards. The body is read only for the excerpt, from a bounded
+// prefix, and is not drained. The error never includes any response-body bytes.
 func (c *Connector) SendAction(ctx context.Context, config map[string]any, action *connector.ResolvedAction) (connector.ActionResult, error) {
 	if action == nil {
 		return connector.ActionResult{}, fmt.Errorf("action is required")
@@ -583,26 +586,16 @@ func (c *Connector) SendAction(ctx context.Context, config map[string]any, actio
 	}
 	defer resp.Body.Close() //nolint:errcheck
 	result.Status = resp.StatusCode
-	var captured actionExcerptCapture
-	bodyBytes, readErr := connector.ReadBody(io.TeeReader(resp.Body, &captured))
-	if readErr != nil {
-		bodyBytes = captured.bytes()
-	}
-	result.Excerpt = actionTextExcerpt(resp.Header.Get("Content-Type"), bodyBytes)
+	// The status line alone decides the outcome. The body is read only for the
+	// operator's excerpt, from a small prefix: whatever was read is kept when the
+	// read fails, and the rest of the body is never consumed.
+	prefix, _ := io.ReadAll(io.LimitReader(resp.Body, actionExcerptBytes+utf8.UTFMax))
+	result.Excerpt = actionTextExcerpt(resp.Header.Get("Content-Type"), prefix)
 	if statusErr := connector.CheckStatus(resp.StatusCode, nil); statusErr != nil {
 		return result, safeActionError(config, statusErr)
 	}
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
 		return result, safeActionError(config, fmt.Errorf("API returned %d (expected a 2xx status)", resp.StatusCode))
-	}
-	if readErr != nil {
-		if ctx.Err() != nil {
-			return result, safeActionError(config, connector.MapTransportError(ctx.Err()))
-		}
-		if connector.IsTimeout(readErr) {
-			return result, safeActionError(config, connector.MapTransportError(readErr))
-		}
-		return result, safeActionError(config, connector.NewMalformedResponseError(readErr))
 	}
 	return result, nil
 }
@@ -647,22 +640,6 @@ func dropControlCharacters(text string) string {
 		return r
 	}, text)
 }
-
-type actionExcerptCapture struct{ data []byte }
-
-func (w *actionExcerptCapture) Write(data []byte) (int, error) {
-	originalLength := len(data)
-	remaining := actionExcerptBytes - len(w.data)
-	if remaining > 0 {
-		if len(data) > remaining {
-			data = data[:remaining]
-		}
-		w.data = append(w.data, data...)
-	}
-	return originalLength, nil
-}
-
-func (w *actionExcerptCapture) bytes() []byte { return w.data }
 
 func (c *Connector) runLifecycleAction(ctx context.Context, config map[string]any, verb, entityRef string) error {
 	resolved, err := c.ResolveAction(config, verb, entityRef, connector.PreviousSnapshot(config))
