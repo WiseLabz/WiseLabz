@@ -523,8 +523,8 @@ function deletePairPatch(source: string, map: YAMLMap, pair: Pair<Node, Node>): 
       return { start, end: comma >= 0 && comma < (next.key?.range?.[0] ?? source.length) ? comma + 1 : end, text: '' };
     }
     const previous = map.items[pairIndex - 1] as Pair<Node, Node> | undefined;
-    const comma = previous ? source.lastIndexOf(',', start) : -1;
-    return { start: comma >= 0 ? comma : start, end, text: '' };
+    const previousEnd = previous?.value?.range?.[1] ?? previous?.key?.range?.[1];
+    return { start: previousEnd === undefined ? start : separatorStart(source, previousEnd, start), end, text: '' };
   }
   const keyStart = pair.key?.range?.[0] ?? 0;
   // A key written on the dash line of a sequence item (`- name: x`): keep the dash.
@@ -544,6 +544,16 @@ function deletePairPatch(source: string, map: YAMLMap, pair: Pair<Node, Node>): 
   return dropPrecedingBreak(source, { start, end, text: '' });
 }
 
+/**
+ * Where removing the last entry of a flow collection starts: at the comma after the previous entry, so none is left
+ * dangling. A comment between that comma and the entry stays, and so does the comma (a trailing one is valid YAML).
+ */
+function separatorStart(source: string, previousEnd: number, nodeStart: number): number {
+  const comma = source.indexOf(',', previousEnd);
+  if (comma < 0 || comma >= nodeStart) return nodeStart;
+  return source.slice(comma, nodeStart).includes('#') ? nodeStart : comma;
+}
+
 function flowSequencePatch(source: string, sequence: YAMLSeq, operation: Extract<RecipeEditOperation, { type: 'remove' | 'move' }>): SourcePatch | undefined {
   const nodes = sequence.items as Node[];
   const selected = nodes[operation.index];
@@ -556,8 +566,7 @@ function flowSequencePatch(source: string, sequence: YAMLSeq, operation: Extract
       return { start: selected.range[0], end: comma >= 0 && comma < (next.range?.[0] ?? source.length) ? comma + 1 : selected.range[1], text: '' };
     }
     const previous = nodes[operation.index - 1];
-    const comma = previous?.range ? source.lastIndexOf(',', selected.range[0]) : -1;
-    return { start: comma >= 0 ? comma : selected.range[0], end: selected.range[1], text: '' };
+    return { start: previous?.range ? separatorStart(source, previous.range[1], selected.range[0]) : selected.range[0], end: selected.range[1], text: '' };
   }
 
   const first = nodes[0]?.range?.[0];

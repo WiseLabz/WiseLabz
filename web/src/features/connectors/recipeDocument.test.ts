@@ -175,6 +175,21 @@ describe('recipe document parsing', () => {
     );
   });
 
+  it('keeps a comment between the previous entry and the last pair or item of a flow collection that is removed', () => {
+    const map = editRecipeDocument('actions: {\n  restart: {method: POST, path: /r},  # first\n  stop: {method: DELETE, path: /s}\n}\nv: 1\n', {
+      type: 'delete',
+      path: ['actions', 'stop'],
+    });
+    expect(map).toContain('# first');
+    expect(parseRecipeDocument(map).error).toBeUndefined();
+    expect(parseRecipeDocument(map).document?.toJS()).toEqual({ actions: { restart: { method: 'POST', path: '/r' } }, v: 1 });
+
+    const sequence = editRecipeDocument('v: [\n  a,  # first\n  b\n]\n', { type: 'remove', path: ['v'], index: 1 });
+    expect(sequence).toContain('# first');
+    expect(parseRecipeDocument(sequence).error).toBeUndefined();
+    expect(parseRecipeDocument(sequence).document?.toJS()).toEqual({ v: ['a'] });
+  });
+
   it('deletes the last key of a document with no final newline without leaving one', () => {
     expect(editRecipeDocument('a: 1\nb: 2', { type: 'delete', path: ['b'] })).toBe('a: 1');
   });
