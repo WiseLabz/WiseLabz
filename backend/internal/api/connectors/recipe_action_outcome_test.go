@@ -11,6 +11,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/WiseLabz/wiselabz/internal/httputil"
 )
 
 const outcomeSentinel = "LATE-BODY-SENTINEL"
@@ -116,3 +118,67 @@ func TestNamedActionOutcomeIgnoresBodyFailureAfterStatus(t *testing.T) {
 		})
 	}
 }
+
+func TestOversizedRequestBodyIsRefusedBeforeAnythingIsSent(t *testing.T) {
+	pad := strings.Repeat("x", httputil.MaxJSONBodyBytes+1)
+	bodies := map[string]string{
+		"entityRef after the limit":  `{"pad":"` + pad + `","entityRef":"db|1"}`,
+		"entityRef before the limit": `{"entityRef":"db|1","pad":"` + pad + `"}`,
+	}
+	routes := []struct {
+		name   string
+		action string
+		target string
+		serve  func(h *Handler, w http.ResponseWriter, r *http.Request)
+	}{
+		{"named action", "connector.action", ":rescan", func(h *Handler, w http.ResponseWriter, r *http.Request) { h.Action(w, r) }},
+		{"restart", "connector.restart", "", func(h *Handler, w http.ResponseWriter, r *http.Request) { h.RestartPreview(w, r) }},
+	}
+	for bodyName, body := range bodies {
+		for _, route := range routes {
+			t.Run(route.name+"/"+bodyName, func(t *testing.T) {
+				h := newTestHandler(t)
+				var calls atomic.Int32
+				server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+					calls.Add(1)
+					w.WriteHeader(http.StatusNoContent)
+				}))
+				defer server.Close()
+				record := seedRecipeActionConnectorWithRecipe(t, h, server.URL, restartRecipe)
+				seedRecipeActionSnapshot(t, h, record.ID)
+
+				request := actionHandlerRequest(record.ID, "rescan", "/", body, "operator", false)
+				request.Header.Set("X-Elevation-Token", issueTestElevation(t, h, "operator", route.action, record.ID+route.target))
+				response := httptest.NewRecorder()
+				route.serve(h, response, request)
+
+				if response.Code != http.StatusRequestEntityTooLarge || !strings.Contains(response.Body.String(), "request_too_large") {
+					t.Fatalf("status=%d body=%s, want 413 request_too_large", response.Code, response.Body.String())
+				}
+				if calls.Load() != 0 {
+					t.Errorf("upstream requests = %d, want 0", calls.Load())
+				}
+				for _, action := range []string{"connector.action", "connector.restart"} {
+					audits, _, err := h.Store.ListAuditRecords(context.Background(), action, "connector", "", "", 0, 10)
+					if err != nil || len(audits) != 0 {
+						t.Errorf("%s audits = %+v, %v; want none", action, audits, err)
+					}
+				}
+			})
+		}
+	}
+}
+
+const restartRecipe = `version: 1
+category: other
+auth: {mode: query, name: api_token}
+endpoints:
+  - name: items
+    path: /items
+    method: GET
+    items: '@this'
+    entity: {kind: item, name: title, external_id: id}
+actions:
+  restart: {method: POST, path: /restart}
+  rescan: {method: POST, path: /rescan}
+`

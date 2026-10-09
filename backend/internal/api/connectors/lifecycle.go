@@ -53,7 +53,15 @@ func (h *Handler) serveLifecycleFromRequest(w http.ResponseWriter, r *http.Reque
 		EntityRef string `json:"entityRef"`
 	}
 	if r.Body != nil {
-		_ = json.NewDecoder(r.Body).Decode(&body) // ponytail: absent/empty body means entityRef == "", matches default
+		// An absent or malformed body means entityRef == "" (existing behaviour),
+		// but a body cut off by the size limit must not fall through to a
+		// whole-service operation.
+		err := json.NewDecoder(http.MaxBytesReader(w, r.Body, httputil.MaxJSONBodyBytes)).Decode(&body)
+		var tooLarge *http.MaxBytesError
+		if errors.As(err, &tooLarge) {
+			httputil.Error(w, http.StatusRequestEntityTooLarge, "request_too_large", "Request body too large")
+			return
+		}
 	}
 	h.ServeLifecycleOp(w, r, id, verb, body.EntityRef, nil)
 }

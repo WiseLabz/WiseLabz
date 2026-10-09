@@ -35,7 +35,12 @@ type preparedAction struct {
 func (h *Handler) Action(w http.ResponseWriter, r *http.Request) {
 	var body actionRequestBody
 	if r.Body != nil {
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil && !errors.Is(err, io.EOF) {
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, httputil.MaxJSONBodyBytes)).Decode(&body); err != nil && !errors.Is(err, io.EOF) {
+			var tooLarge *http.MaxBytesError
+			if errors.As(err, &tooLarge) {
+				httputil.Error(w, http.StatusRequestEntityTooLarge, "request_too_large", "Request body too large")
+				return
+			}
 			httputil.Error(w, http.StatusBadRequest, "invalid_request", "invalid request body")
 			return
 		}
