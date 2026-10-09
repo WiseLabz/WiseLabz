@@ -22,7 +22,13 @@ type configPushCoreConnector struct {
 	land      bool
 	withdrawn bool
 	fetches   int
+	reads     int
 	readErr   error
+	// hidden keeps the documented content constant, so a write never shows
+	// in the snapshot diff.
+	hidden bool
+	// afterPush, when set, answers reads made once a write has happened.
+	afterPush func() (any, error)
 	pushErr   error
 	revertErr error
 }
@@ -36,7 +42,11 @@ func (c *configPushCoreConnector) WritableFields() []connector.ConfigField {
 
 func (c *configPushCoreConnector) Fetch(context.Context, map[string]any) (*connector.ServiceSnapshot, error) {
 	c.fetches++
-	value, err := json.Marshal(c.current)
+	current := c.current
+	if c.hidden {
+		current = "unchanged"
+	}
+	value, err := json.Marshal(current)
 	if err != nil {
 		return nil, err
 	}
@@ -63,6 +73,10 @@ func (c *configPushCoreConnector) ConfigPush(_ context.Context, _ map[string]any
 type configPushCoreReader struct{ *configPushCoreConnector }
 
 func (c *configPushCoreReader) ConfigRead(context.Context, map[string]any, string, string) (any, error) {
+	c.reads++
+	if len(c.values) > 0 && c.afterPush != nil {
+		return c.afterPush()
+	}
 	return c.current, c.readErr
 }
 
@@ -190,6 +204,73 @@ func TestMutateRunbookConfigPushMismatch(t *testing.T) {
 				t.Fatalf("missing revert error=%v", err)
 			}
 			assertConfigPushRecords(t, h, id, 1, tt.revertErr != nil)
+		})
+	}
+}
+
+func TestMutateRunbookConfigPushReadBack(t *testing.T) {
+	t.Parallel()
+	readErr := errors.New("read failed")
+	for _, tt := range []struct {
+		name      string
+		reader    bool
+		hidden    bool
+		previous  any
+		afterPush func() (any, error)
+		landed    bool
+		revert    bool
+		reads     int
+	}{
+		{name: "target read back", reader: true, hidden: true, previous: 2048,
+			afterPush: func() (any, error) { return float64(4096), nil }, landed: true, reads: 2},
+		{name: "other value", reader: true, hidden: true, previous: 2048,
+			afterPush: func() (any, error) { return 3000, nil }, revert: true, reads: 2},
+		{name: "nil after push, previous known", reader: true, hidden: true, previous: 2048,
+			afterPush: func() (any, error) { return nil, nil }, revert: true, reads: 2},
+		{name: "nil after push, previous unknown", reader: true, hidden: true,
+			afterPush: func() (any, error) { return nil, nil }, reads: 2},
+		{name: "read error after push", reader: true, hidden: true, previous: 2048,
+			afterPush: func() (any, error) { return nil, readErr }, revert: true, reads: 2},
+		{name: "no reader", hidden: true, previous: 2048},
+		{name: "snapshot changed", reader: true, previous: 2048, landed: true, reads: 1},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			h := newTestHandler(t)
+			fake := &configPushCoreConnector{current: tt.previous, land: tt.landed || tt.revert, hidden: tt.hidden, afterPush: tt.afterPush}
+			id := seedConfigPushCore(t, h, fake, tt.reader)
+			err := h.MutateRunbookConfigPush(context.Background(), id, "100", "memory", float64(4096), LifecycleActor{}, nil)
+			if fake.reads != tt.reads {
+				t.Fatalf("reads=%d want=%d", fake.reads, tt.reads)
+			}
+			if tt.landed {
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !reflect.DeepEqual(fake.values, []any{float64(4096)}) {
+					t.Fatalf("writes=%v, want a single write and no revert", fake.values)
+				}
+				rows, _, err := h.Store.ListAuditRecords(context.Background(), "connector.configPush", "connector", "", "", 0, 10)
+				if err != nil || len(rows) != 1 {
+					t.Fatalf("audit=%v err=%v", rows, err)
+				}
+				alerts, _, err := h.Store.ListAlerts(context.Background(), id, "", "", "", 0, 10)
+				if err != nil || len(alerts) != 0 {
+					t.Fatalf("alerts=%v err=%v", alerts, err)
+				}
+				return
+			}
+			var mismatch *ConfigPushMismatchError
+			if !errors.As(err, &mismatch) || mismatch.RevertAttempted != tt.revert {
+				t.Fatalf("mismatch=%+v err=%v", mismatch, err)
+			}
+			want := []any{float64(4096)}
+			if tt.revert {
+				want = append(want, tt.previous)
+			}
+			if !reflect.DeepEqual(fake.values, want) {
+				t.Fatalf("writes=%v want=%v", fake.values, want)
+			}
+			assertConfigPushRecords(t, h, id, 1, false)
 		})
 	}
 }

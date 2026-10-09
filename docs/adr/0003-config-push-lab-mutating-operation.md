@@ -51,7 +51,8 @@ verification ADR 0001 asked for. A stricter per-field-key value check
 would need a fixed field→section mapping maintained per connector on top
 of the whitelist; the diff-based check is the smaller, sufficient version
 for this connector set (see `configPushLanded` in
-`backend/internal/api/connectors/handlers.go`).
+`backend/internal/api/connectors/config_push.go`).
+ADR 0007 section 7 adds a read-back of the field when the snapshot shows no change.
 
 ### Auto-revert-then-alert on mismatch
 

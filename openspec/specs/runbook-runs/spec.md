@@ -301,11 +301,15 @@ A `config_push` step SHALL name a connector, a field key and a target value. Sav
 - **THEN** the save SHALL succeed.
 
 ### Requirement: Config-push step execution
-A `config_push` step SHALL write the target value that was recorded when the run started, to the field and entity recorded when the run started. Before writing, the system SHALL verify the field is still writable on the connector and SHALL fail the step without writing if it is not. When the connector reports that the field already holds the target value, the step SHALL succeed without writing. After writing, the system SHALL verify the write took effect. When it did not and the value held before the write is known, the system SHALL write that previous value back, raise the same alert a direct config push raises for a mismatch, and fail the step. When it did not and the previous value is not known, the system SHALL raise the alert and fail the step without writing again.
+A `config_push` step SHALL write the target value that was recorded when the run started, to the field and entity recorded when the run started. Before writing, the system SHALL verify the field is still writable on the connector and SHALL fail the step without writing if it is not. When the connector reports that the field already holds the target value, the step SHALL succeed without writing. After writing, the system SHALL verify the write took effect: it took effect when the connector's documented state changed, or, when that state did not change, when the connector can report the field's value and reports the target value. When it did not and the value held before the write is known, the system SHALL write that previous value back, raise the same alert a direct config push raises for a mismatch, and fail the step. When it did not and the previous value is not known, the system SHALL raise the alert and fail the step without writing again.
 
 #### Scenario: Push succeeds
 - **WHEN** a `config_push` step runs and the write is verified
 - **THEN** the step SHALL be `succeeded` and the run SHALL continue with the next step.
+
+#### Scenario: No visible change but the connector confirms the target
+- **WHEN** a `config_push` step's write changes nothing in the connector's documented state and the connector then reports the target value for the field
+- **THEN** the step SHALL be `succeeded`, no alert SHALL be raised and no further write SHALL be made.
 
 #### Scenario: Value frozen at start
 - **WHEN** a runbook's `config_push` step is edited to a different target value while a run started earlier is waiting on a manual step before it

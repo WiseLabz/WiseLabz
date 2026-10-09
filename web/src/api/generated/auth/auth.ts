@@ -1254,7 +1254,7 @@ export function useGetAuthApiKeys<
 }
 
 /**
- * The opaque token is returned once and cannot be retrieved again. When `stepUpForDestructive` is enabled, requires an `X-Elevation-Token` for action `apiKey.create`.
+ * The opaque token is returned once and cannot be retrieved again. When `stepUpForDestructive` is enabled, requires an `X-Elevation-Token` for action `apiKey.create`: a missing token gets 400 `elevation_required`, an invalid, expired, already used or mismatched token gets 401 `unauthorized`. Scoped (restricted) API keys are refused with 403 before the elevation check.
  * @summary Create an API key for the current user
  */
 export const postAuthApiKeys = (
@@ -1277,7 +1277,7 @@ export const postAuthApiKeys = (
 export const getPostAuthApiKeysMutationKey = () => ['postAuthApiKeys'] as const;
 
 export const getPostAuthApiKeysMutationOptions = <
-  TError = ErrorType<BadRequestResponse | ForbiddenResponse>,
+  TError = ErrorType<Error | ForbiddenResponse>,
   TContext = unknown,
 >(options?: {
   mutation?: UseMutationOptions<
@@ -1316,14 +1316,14 @@ export type PostAuthApiKeysMutationResult = NonNullable<
   Awaited<ReturnType<typeof postAuthApiKeys>>
 >;
 export type PostAuthApiKeysMutationBody = BodyType<ApiKeyCreate>;
-export type PostAuthApiKeysMutationError = ErrorType<BadRequestResponse | ForbiddenResponse>;
+export type PostAuthApiKeysMutationError = ErrorType<Error | ForbiddenResponse>;
 export type PostAuthApiKeysMutationVariables = { data: BodyType<ApiKeyCreate> };
 
 /**
  * @summary Create an API key for the current user
  */
 export const usePostAuthApiKeys = <
-  TError = ErrorType<BadRequestResponse | ForbiddenResponse>,
+  TError = ErrorType<Error | ForbiddenResponse>,
   TContext = unknown,
 >(
   options?: {

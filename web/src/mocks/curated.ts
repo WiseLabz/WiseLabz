@@ -232,7 +232,7 @@ export const curatedHandlers = [
     await delay(LATENCY);
     if (authConfig.stepUpForDestructive && !request.headers.get('X-Elevation-Token')) {
       return HttpResponse.json(
-        { code: 'elevation-required', message: 'Step-up required' },
+        { code: 'elevation_required', message: 'Step-up required' },
         { status: 400 },
       );
     }
@@ -269,8 +269,8 @@ export const curatedHandlers = [
     await delay(LATENCY);
     if (authConfig.stepUpForDestructive && !request.headers.get('X-Elevation-Token')) {
       return HttpResponse.json(
-        { code: 'elevation-required', message: 'Step-up required' },
-        { status: 403 },
+        { code: 'elevation_required', message: 'Step-up required' },
+        { status: 400 },
       );
     }
     const idx = connectors.findIndex((x) => x.id === params.connectorId);

@@ -8,7 +8,10 @@ import (
 )
 
 // ConfigRead returns a firewall rule's current enabled state from a fresh
-// firewall-rule fetch.
+// firewall-rule fetch. The fetch shows the saved value, which after a failed
+// push may differ from what is live. For a rule left in that state it returns
+// nil with no error (value unknown), so the caller pushes again instead of
+// concluding "already at target".
 func (c *Connector) ConfigRead(ctx context.Context, config map[string]any, entityRef, fieldKey string) (any, error) {
 	if fieldKey != "enabled" {
 		return nil, fmt.Errorf("unsupported field %q", fieldKey)
@@ -30,6 +33,9 @@ func (c *Connector) ConfigRead(ctx context.Context, config map[string]any, entit
 	for _, entity := range snapshot.Entities {
 		if entity.Kind != "rule" || entity.ExternalID != entityRef {
 			continue
+		}
+		if filterStateFor(c.url).marked(entityRef) {
+			return nil, nil
 		}
 		value, ok := entity.Attributes["enabled"].(bool)
 		if !ok {

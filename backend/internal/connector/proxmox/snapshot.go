@@ -173,6 +173,7 @@ func (p *Connector) fetchVMs(ctx context.Context, node string, wantEntities bool
 				ent.IP = p.fetchQemuIP(ctx, node, vm.VMID)
 			}
 			if cfg, ok := p.fetchQemuConfig(ctx, node, vm.VMID); ok {
+				applyConfigMemory(attrs, cfg.Memory, cfg.MemoryErr)
 				if cfg.Cores != nil {
 					attrs["cores"] = *cfg.Cores
 				}
@@ -226,6 +227,7 @@ func (p *Connector) fetchContainers(ctx context.Context, node string, wantEntiti
 				ent.IP = p.fetchLxcIP(ctx, node, ct.VMID)
 			}
 			if cfg, ok := p.fetchLxcConfig(ctx, node, ct.VMID); ok {
+				applyConfigMemory(attrs, cfg.Memory, cfg.MemoryErr)
 				if cfg.Cores != nil {
 					attrs["cores"] = *cfg.Cores
 				}
@@ -247,6 +249,20 @@ func (p *Connector) fetchContainers(ctx context.Context, node string, wantEntiti
 	}
 	nr.section += "\n"
 	nr.cts += len(list.Data)
+}
+
+// applyConfigMemory sets the memory attribute from a guest's /config, which
+// shows a pending change before the restart. The attribute is the decoded
+// config value or absent: with no memory key, or one that could not be
+// decoded, the guest-list maxmem is the running value and would pass for the
+// configured one, so it is dropped. When /config cannot be read at all the
+// caller never gets here and the maxmem value stays as the fallback.
+func applyConfigMemory(attrs map[string]any, memory *int, memoryErr error) {
+	if memoryErr != nil || memory == nil {
+		delete(attrs, "memory")
+		return
+	}
+	attrs["memory"] = int64(*memory)
 }
 
 func (p *Connector) fetchStorage(ctx context.Context, node string, nr *nodeResult) {

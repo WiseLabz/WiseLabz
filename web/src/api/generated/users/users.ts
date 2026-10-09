@@ -23,10 +23,11 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
-  BadRequestResponse,
   ElevationRequiredResponse,
+  Error,
   ForbiddenResponse,
   NotFoundResponse,
+  UnauthorizedResponse,
   User,
   UserCreate,
   UserUpdate,
@@ -160,7 +161,7 @@ export function useGetUsers<
 }
 
 /**
- * When `stepUpForDestructive` is enabled, requires an `X-Elevation-Token` for action `user.create`.
+ * When `stepUpForDestructive` is enabled, requires an `X-Elevation-Token` for action `user.create`: a missing token gets 400 `elevation_required`, an invalid, expired, already used or mismatched token gets 401 `unauthorized`.
  * @summary Create / invite a user (operator)
  */
 export const postUsers = (
@@ -183,7 +184,7 @@ export const postUsers = (
 export const getPostUsersMutationKey = () => ['postUsers'] as const;
 
 export const getPostUsersMutationOptions = <
-  TError = ErrorType<BadRequestResponse | ForbiddenResponse>,
+  TError = ErrorType<Error | ForbiddenResponse>,
   TContext = unknown,
 >(options?: {
   mutation?: UseMutationOptions<
@@ -220,16 +221,13 @@ export const getPostUsersMutationOptions = <
 
 export type PostUsersMutationResult = NonNullable<Awaited<ReturnType<typeof postUsers>>>;
 export type PostUsersMutationBody = BodyType<UserCreate>;
-export type PostUsersMutationError = ErrorType<BadRequestResponse | ForbiddenResponse>;
+export type PostUsersMutationError = ErrorType<Error | ForbiddenResponse>;
 export type PostUsersMutationVariables = { data: BodyType<UserCreate> };
 
 /**
  * @summary Create / invite a user (operator)
  */
-export const usePostUsers = <
-  TError = ErrorType<BadRequestResponse | ForbiddenResponse>,
-  TContext = unknown,
->(
+export const usePostUsers = <TError = ErrorType<Error | ForbiddenResponse>, TContext = unknown>(
   options?: {
     mutation?: UseMutationOptions<
       Awaited<ReturnType<typeof postUsers>>,
@@ -249,7 +247,7 @@ export const usePostUsers = <
   return useMutation(getPostUsersMutationOptions(options), queryClient);
 };
 /**
- * When `stepUpForDestructive` is enabled, requires an `X-Elevation-Token` for action `user.update`, issued with this user's ID as `target`.
+ * When `stepUpForDestructive` is enabled, requires an `X-Elevation-Token` for action `user.update`, issued with this user's ID as `target`: a missing token gets 400 `elevation_required`, an invalid, expired, already used or mismatched token gets 401 `unauthorized`.
  * @summary Update a user's role or status (operator)
  */
 export const patchUsersUserId = (
@@ -273,7 +271,7 @@ export const patchUsersUserId = (
 export const getPatchUsersUserIdMutationKey = () => ['patchUsersUserId'] as const;
 
 export const getPatchUsersUserIdMutationOptions = <
-  TError = ErrorType<ForbiddenResponse>,
+  TError = ErrorType<Error | ForbiddenResponse>,
   TContext = unknown,
 >(options?: {
   mutation?: UseMutationOptions<
@@ -312,13 +310,16 @@ export type PatchUsersUserIdMutationResult = NonNullable<
   Awaited<ReturnType<typeof patchUsersUserId>>
 >;
 export type PatchUsersUserIdMutationBody = BodyType<UserUpdate>;
-export type PatchUsersUserIdMutationError = ErrorType<ForbiddenResponse>;
+export type PatchUsersUserIdMutationError = ErrorType<Error | ForbiddenResponse>;
 export type PatchUsersUserIdMutationVariables = { userId: string; data: BodyType<UserUpdate> };
 
 /**
  * @summary Update a user's role or status (operator)
  */
-export const usePatchUsersUserId = <TError = ErrorType<ForbiddenResponse>, TContext = unknown>(
+export const usePatchUsersUserId = <
+  TError = ErrorType<Error | ForbiddenResponse>,
+  TContext = unknown,
+>(
   options?: {
     mutation?: UseMutationOptions<
       Awaited<ReturnType<typeof patchUsersUserId>>,
@@ -338,7 +339,7 @@ export const usePatchUsersUserId = <TError = ErrorType<ForbiddenResponse>, TCont
   return useMutation(getPatchUsersUserIdMutationOptions(options), queryClient);
 };
 /**
- * Destructive. When `stepUpForDestructive` is enabled, requires a valid `X-Elevation-Token` from POST /auth/elevate; absent or expired tokens get a 403 `elevation-required`.
+ * Destructive. When `stepUpForDestructive` is enabled, requires a valid `X-Elevation-Token` from POST /auth/elevate; missing tokens get a 400 `elevation_required`, and invalid or expired tokens get a 401 `unauthorized`.
  * @summary Delete a user (operator)
  */
 export const deleteUsersUserId = (
@@ -352,7 +353,7 @@ export const deleteUsersUserId = (
 export const getDeleteUsersUserIdMutationKey = () => ['deleteUsersUserId'] as const;
 
 export const getDeleteUsersUserIdMutationOptions = <
-  TError = ErrorType<ElevationRequiredResponse>,
+  TError = ErrorType<ElevationRequiredResponse | UnauthorizedResponse | ForbiddenResponse>,
   TContext = unknown,
 >(options?: {
   mutation?: UseMutationOptions<
@@ -391,14 +392,16 @@ export type DeleteUsersUserIdMutationResult = NonNullable<
   Awaited<ReturnType<typeof deleteUsersUserId>>
 >;
 
-export type DeleteUsersUserIdMutationError = ErrorType<ElevationRequiredResponse>;
+export type DeleteUsersUserIdMutationError = ErrorType<
+  ElevationRequiredResponse | UnauthorizedResponse | ForbiddenResponse
+>;
 export type DeleteUsersUserIdMutationVariables = { userId: string };
 
 /**
  * @summary Delete a user (operator)
  */
 export const useDeleteUsersUserId = <
-  TError = ErrorType<ElevationRequiredResponse>,
+  TError = ErrorType<ElevationRequiredResponse | UnauthorizedResponse | ForbiddenResponse>,
   TContext = unknown,
 >(
   options?: {
@@ -420,7 +423,7 @@ export const useDeleteUsersUserId = <
   return useMutation(getDeleteUsersUserIdMutationOptions(options), queryClient);
 };
 /**
- * Destructive. When `stepUpForDestructive` is enabled, requires a valid `X-Elevation-Token` from POST /auth/elevate; absent or expired tokens get a 403 `elevation-required`.
+ * Destructive. When `stepUpForDestructive` is enabled, requires a valid `X-Elevation-Token` from POST /auth/elevate; missing tokens get a 400 `elevation_required`, and invalid or expired tokens get a 401 `unauthorized`.
  * @summary Operator-triggered password reset
  */
 export const postUsersUserIdResetPassword = (
@@ -438,7 +441,7 @@ export const getPostUsersUserIdResetPasswordMutationKey = () =>
   ['postUsersUserIdResetPassword'] as const;
 
 export const getPostUsersUserIdResetPasswordMutationOptions = <
-  TError = ErrorType<ElevationRequiredResponse>,
+  TError = ErrorType<ElevationRequiredResponse | UnauthorizedResponse | ForbiddenResponse>,
   TContext = unknown,
 >(options?: {
   mutation?: UseMutationOptions<
@@ -477,14 +480,16 @@ export type PostUsersUserIdResetPasswordMutationResult = NonNullable<
   Awaited<ReturnType<typeof postUsersUserIdResetPassword>>
 >;
 
-export type PostUsersUserIdResetPasswordMutationError = ErrorType<ElevationRequiredResponse>;
+export type PostUsersUserIdResetPasswordMutationError = ErrorType<
+  ElevationRequiredResponse | UnauthorizedResponse | ForbiddenResponse
+>;
 export type PostUsersUserIdResetPasswordMutationVariables = { userId: string };
 
 /**
  * @summary Operator-triggered password reset
  */
 export const usePostUsersUserIdResetPassword = <
-  TError = ErrorType<ElevationRequiredResponse>,
+  TError = ErrorType<ElevationRequiredResponse | UnauthorizedResponse | ForbiddenResponse>,
   TContext = unknown,
 >(
   options?: {
@@ -506,7 +511,7 @@ export const usePostUsersUserIdResetPassword = <
   return useMutation(getPostUsersUserIdResetPasswordMutationOptions(options), queryClient);
 };
 /**
- * Destructive. Deletes every factor and recovery code, revokes every session, and is audited (#279). When `stepUpForDestructive` is enabled, requires a valid `X-Elevation-Token` from POST /auth/elevate; absent or expired tokens get a 403 `elevation-required`.
+ * Destructive. Deletes every factor and recovery code, revokes every session, and is audited (#279). When `stepUpForDestructive` is enabled, requires a valid `X-Elevation-Token` from POST /auth/elevate; missing tokens get a 400 `elevation_required`, and invalid or expired tokens get a 401 `unauthorized`.
  * @summary Reset a user's two-factor authentication (operator)
  */
 export const postUsersUserIdResetMfa = (
@@ -523,7 +528,9 @@ export const postUsersUserIdResetMfa = (
 export const getPostUsersUserIdResetMfaMutationKey = () => ['postUsersUserIdResetMfa'] as const;
 
 export const getPostUsersUserIdResetMfaMutationOptions = <
-  TError = ErrorType<ElevationRequiredResponse | NotFoundResponse>,
+  TError = ErrorType<
+    ElevationRequiredResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
+  >,
   TContext = unknown,
 >(options?: {
   mutation?: UseMutationOptions<
@@ -563,7 +570,7 @@ export type PostUsersUserIdResetMfaMutationResult = NonNullable<
 >;
 
 export type PostUsersUserIdResetMfaMutationError = ErrorType<
-  ElevationRequiredResponse | NotFoundResponse
+  ElevationRequiredResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
 >;
 export type PostUsersUserIdResetMfaMutationVariables = { userId: string };
 
@@ -571,7 +578,9 @@ export type PostUsersUserIdResetMfaMutationVariables = { userId: string };
  * @summary Reset a user's two-factor authentication (operator)
  */
 export const usePostUsersUserIdResetMfa = <
-  TError = ErrorType<ElevationRequiredResponse | NotFoundResponse>,
+  TError = ErrorType<
+    ElevationRequiredResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
+  >,
   TContext = unknown,
 >(
   options?: {

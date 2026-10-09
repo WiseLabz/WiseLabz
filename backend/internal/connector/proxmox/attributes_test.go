@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/WiseLabz/wiselabz/internal/connector"
@@ -33,13 +34,13 @@ func TestFetchEntityAttributes(t *testing.T) {
 				{"vmid":202,"name":"ct-notags","status":"running","cpus":1,"mem":256000,"maxmem":268435456,"uptime":0}
 			]}`))
 		case "/nodes/pve1/qemu/100/config":
-			_, _ = w.Write([]byte(`{"data":{"onboot":1,"protection":0,"agent":"enabled=1,fstrim_cloned_disks=1","template":0,"ostype":"l26"}}`))
+			_, _ = w.Write([]byte(`{"data":{"memory":1024,"onboot":1,"protection":0,"agent":"enabled=1,fstrim_cloned_disks=1","template":0,"ostype":"l26"}}`))
 		case "/nodes/pve1/qemu/100/agent/network-get-interfaces":
 			_, _ = w.Write([]byte(`{"data":{"result":[]}}`))
 		case "/nodes/pve1/qemu/100/firewall/options":
 			_, _ = w.Write([]byte(`{"data":{"enable":1}}`))
 		case "/nodes/pve1/qemu/101/config":
-			_, _ = w.Write([]byte(`{"data":{"onboot":0,"protection":1,"template":1,"ostype":"win10"}}`))
+			_, _ = w.Write([]byte(`{"data":{"memory":512,"onboot":0,"protection":1,"template":1,"ostype":"win10"}}`))
 		case "/nodes/pve1/qemu/101/firewall/options":
 			_, _ = w.Write([]byte(`{"data":{"enable":0}}`))
 		case "/nodes/pve1/qemu/102/config":
@@ -49,17 +50,17 @@ func TestFetchEntityAttributes(t *testing.T) {
 		case "/nodes/pve1/qemu/102/firewall/options":
 			_, _ = w.Write([]byte(`{"data":{"enable":1}}`))
 		case "/nodes/pve1/lxc/200/config":
-			_, _ = w.Write([]byte(`{"data":{"onboot":1,"protection":0,"unprivileged":1,"ostype":"debian"}}`))
+			_, _ = w.Write([]byte(`{"data":{"memory":256,"onboot":1,"protection":0,"unprivileged":1,"ostype":"debian"}}`))
 		case "/nodes/pve1/lxc/200/interfaces":
 			_, _ = w.Write([]byte(`{"data":[]}`))
 		case "/nodes/pve1/lxc/200/firewall/options":
 			_, _ = w.Write([]byte(`{"data":{"enable":1}}`))
 		case "/nodes/pve1/lxc/201/config":
-			_, _ = w.Write([]byte(`{"data":{"onboot":0,"protection":0,"unprivileged":0,"ostype":"alpine"}}`))
+			_, _ = w.Write([]byte(`{"data":{"memory":256,"onboot":0,"protection":0,"unprivileged":0,"ostype":"alpine"}}`))
 		case "/nodes/pve1/lxc/201/firewall/options":
 			_, _ = w.Write([]byte(`{"data":{"enable":0}}`))
 		case "/nodes/pve1/lxc/202/config":
-			_, _ = w.Write([]byte(`{"data":{"onboot":1,"protection":0,"unprivileged":1,"ostype":"debian"}}`))
+			_, _ = w.Write([]byte(`{"data":{"memory":256,"onboot":1,"protection":0,"unprivileged":1,"ostype":"debian"}}`))
 		case "/nodes/pve1/lxc/202/interfaces":
 			_, _ = w.Write([]byte(`{"data":[]}`))
 		case "/nodes/pve1/lxc/202/firewall/options":
@@ -113,9 +114,10 @@ func TestFetchEntityAttributes(t *testing.T) {
 		t.Errorf("vm/101 (template) Attributes = %+v, want %+v", got, wantTmpl1)
 	}
 
+	// vm/102's /config has no memory key, so the running maxmem must not
+	// stand in for it; the VM table still lists that maxmem.
 	wantVM102 := map[string]any{
 		"status":           "running",
-		"memory":           int64(512),
 		"node":             "pve1",
 		"onboot":           true,
 		"protection":       false,
@@ -127,6 +129,13 @@ func TestFetchEntityAttributes(t *testing.T) {
 	}
 	if got := byRef["vm/102"].Attributes; !reflect.DeepEqual(got, wantVM102) {
 		t.Errorf("vm/102 (no tags) Attributes = %+v, want %+v", got, wantVM102)
+	}
+	var tables strings.Builder
+	for _, section := range snap.Sections {
+		tables.WriteString(section.Content)
+	}
+	if want := "| 102 | vm-notags | running | 1 | 512 |"; !strings.Contains(tables.String(), want) {
+		t.Errorf("VM table lacks row %q:\n%s", want, tables.String())
 	}
 
 	wantCt1 := map[string]any{
