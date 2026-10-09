@@ -74,7 +74,7 @@ A `failed` run SHALL be resumable. Resuming SHALL require a fresh `runbook.run` 
 ## ADDED Requirements
 
 ### Requirement: Connector-action step authoring
-A `connector_action` step SHALL name a connector, an action name and optionally one entity of that connector. Saving SHALL be rejected when the connector's recipe does not declare a named action with that name for the service (when no entity is given) or for some entity kind (when an entity is given). The lifecycle verbs SHALL NOT be accepted as the action of a `connector_action` step; they remain `lifecycle` steps. A `lifecycle` step SHALL be accepted for a custom connector only when that connector's recipe declares the verb.
+A `connector_action` step SHALL name a connector, a named action and optionally one entity of that connector. Saving SHALL reject a name not declared for the service when no entity is given, or for some entity kind when one is given. Lifecycle verbs SHALL NOT be accepted as named actions; they remain `lifecycle` steps. A custom connector's lifecycle step SHALL be accepted only when its recipe declares the verb.
 
 #### Scenario: Declared action
 - **WHEN** a runbook is saved with a `connector_action` step naming `rescan` on a connector whose recipe declares a service action `rescan`
@@ -93,7 +93,7 @@ A `connector_action` step SHALL name a connector, an action name and optionally 
 - **THEN** the save SHALL be rejected with a field error naming that step's verb.
 
 ### Requirement: Connector-action step execution
-A `connector_action` step SHALL send the request its action declared when the run started, to the connector and entity recorded when the run started, with the same result rules, failure alert and audit detail as a directly triggered named action, and with the run and step identifiers added to the audit entry. If the action's definition in the connector's recipe has changed or been removed since the run started, the step SHALL fail without sending anything. The run preview SHALL show, for each `connector_action` step, the request that would be sent and the action's label, description and downtime estimate. When the request was sent and no response status was received, the step SHALL become `unknown` and the run `failed`; a non-2xx response or an error raised before the request was sent SHALL make the step `failed`. A `connector_action` step SHALL NOT be executable through the single-step endpoint.
+A `connector_action` step SHALL send the definition declared at run start to the frozen connector and entity, using direct named-action result rules, failure alert and audit detail plus run and step IDs. A changed or removed definition SHALL fail without sending. The single-step endpoint SHALL NOT execute a `connector_action` step.
 
 #### Scenario: Step succeeds
 - **WHEN** a run reaches a `connector_action` step and the service answers 204
@@ -103,6 +103,9 @@ A `connector_action` step SHALL send the request its action declared when the ru
 - **WHEN** the recipe's definition of the action is changed while the run waits on an earlier manual step
 - **THEN** the `connector_action` step SHALL fail with a reason stating that the action changed, and nothing SHALL be sent.
 
+### Requirement: Connector-action step outcome
+If the request was sent but no response status received, the step SHALL become `unknown` and the run `failed`. A non-2xx response or error before sending SHALL make the step `failed`.
+
 #### Scenario: Connection lost after sending
 - **WHEN** the request is sent and the connection is lost before a status arrives
 - **THEN** the step SHALL become `unknown` and the run `failed`.
@@ -110,6 +113,9 @@ A `connector_action` step SHALL send the request its action declared when the ru
 #### Scenario: Service refuses
 - **WHEN** the service answers 500
 - **THEN** the step SHALL become `failed` with the status in its reason, and the run SHALL become `failed`.
+
+### Requirement: Connector-action step preview
+The run preview SHALL show each `connector_action` step's method, URL, static headers and body, plus its label, description and downtime estimate, without sending to the service.
 
 #### Scenario: Preview shows the request
 - **WHEN** the dry-run preview of a runbook with a `connector_action` step is requested

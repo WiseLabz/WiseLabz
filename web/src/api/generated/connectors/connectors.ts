@@ -236,7 +236,7 @@ export const postConnectors = (
 export const getPostConnectorsMutationKey = () => ['postConnectors'] as const;
 
 export const getPostConnectorsMutationOptions = <
-  TError = ErrorType<Error | ElevationRequiredResponse | ForbiddenResponse>,
+  TError = ErrorType<Error | ForbiddenResponse>,
   TContext = unknown,
 >(options?: {
   mutation?: UseMutationOptions<
@@ -273,16 +273,14 @@ export const getPostConnectorsMutationOptions = <
 
 export type PostConnectorsMutationResult = NonNullable<Awaited<ReturnType<typeof postConnectors>>>;
 export type PostConnectorsMutationBody = BodyType<ConnectorCreate>;
-export type PostConnectorsMutationError = ErrorType<
-  Error | ElevationRequiredResponse | ForbiddenResponse
->;
+export type PostConnectorsMutationError = ErrorType<Error | ForbiddenResponse>;
 export type PostConnectorsMutationVariables = { data: BodyType<ConnectorCreate> };
 
 /**
  * @summary Create a connector (operator)
  */
 export const usePostConnectors = <
-  TError = ErrorType<Error | ElevationRequiredResponse | ForbiddenResponse>,
+  TError = ErrorType<Error | ForbiddenResponse>,
   TContext = unknown,
 >(
   options?: {
@@ -675,9 +673,7 @@ export const putConnectorsConnectorId = (
 export const getPutConnectorsConnectorIdMutationKey = () => ['putConnectorsConnectorId'] as const;
 
 export const getPutConnectorsConnectorIdMutationOptions = <
-  TError = ErrorType<
-    Error | ElevationRequiredResponse | ForbiddenResponse | NotFoundResponse | void
-  >,
+  TError = ErrorType<Error | ForbiddenResponse | NotFoundResponse | void>,
   TContext = unknown,
 >(options?: {
   mutation?: UseMutationOptions<
@@ -717,7 +713,7 @@ export type PutConnectorsConnectorIdMutationResult = NonNullable<
 >;
 export type PutConnectorsConnectorIdMutationBody = BodyType<ConnectorUpdate>;
 export type PutConnectorsConnectorIdMutationError = ErrorType<
-  Error | ElevationRequiredResponse | ForbiddenResponse | NotFoundResponse | void
+  Error | ForbiddenResponse | NotFoundResponse | void
 >;
 export type PutConnectorsConnectorIdMutationVariables = {
   connectorId: string;
@@ -728,9 +724,7 @@ export type PutConnectorsConnectorIdMutationVariables = {
  * @summary Update a connector (operator)
  */
 export const usePutConnectorsConnectorId = <
-  TError = ErrorType<
-    Error | ElevationRequiredResponse | ForbiddenResponse | NotFoundResponse | void
-  >,
+  TError = ErrorType<Error | ForbiddenResponse | NotFoundResponse | void>,
   TContext = unknown,
 >(
   options?: {
@@ -1424,9 +1418,7 @@ export const getPostConnectorsConnectorIdActionsNameMutationKey = () =>
   ['postConnectorsConnectorIdActionsName'] as const;
 
 export const getPostConnectorsConnectorIdActionsNameMutationOptions = <
-  TError = ErrorType<
-    Error | ElevationRequiredResponse | ForbiddenResponse | NotFoundResponse | ActionError
-  >,
+  TError = ErrorType<Error | ForbiddenResponse | NotFoundResponse | ActionError>,
   TContext = unknown,
 >(options?: {
   mutation?: UseMutationOptions<
@@ -1467,7 +1459,7 @@ export type PostConnectorsConnectorIdActionsNameMutationResult = NonNullable<
 export type PostConnectorsConnectorIdActionsNameMutationBody =
   BodyType<PostConnectorsConnectorIdActionsNameBody> | undefined;
 export type PostConnectorsConnectorIdActionsNameMutationError = ErrorType<
-  Error | ElevationRequiredResponse | ForbiddenResponse | NotFoundResponse | ActionError
+  Error | ForbiddenResponse | NotFoundResponse | ActionError
 >;
 export type PostConnectorsConnectorIdActionsNameMutationVariables = {
   connectorId: string;
@@ -1480,9 +1472,7 @@ export type PostConnectorsConnectorIdActionsNameMutationVariables = {
  * @summary Preview or perform a recipe-defined named action (operator)
  */
 export const usePostConnectorsConnectorIdActionsName = <
-  TError = ErrorType<
-    Error | ElevationRequiredResponse | ForbiddenResponse | NotFoundResponse | ActionError
-  >,
+  TError = ErrorType<Error | ForbiddenResponse | NotFoundResponse | ActionError>,
   TContext = unknown,
 >(
   options?: {

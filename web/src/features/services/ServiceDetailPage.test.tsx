@@ -483,6 +483,8 @@ describe('ServiceDetailPage recipe actions', () => {
     expect(within(previewDialog).getByText('POST')).toBeInTheDocument();
     expect(within(previewDialog).getByText('https://svc.example/api/rescan')).toBeInTheDocument();
     expect(previewDialog).toHaveTextContent('"force": false');
+    expect(previewDialog).toHaveTextContent('No downtime declared');
+    expect(previewDialog).not.toHaveTextContent('Indefinite');
 
     expect(screen.queryByRole('button', { name: 'confirm-elevation-token' })).not.toBeInTheDocument();
     expect(screen.queryByRole('dialog', { name: 'Run Rescan library' })).not.toBeInTheDocument();

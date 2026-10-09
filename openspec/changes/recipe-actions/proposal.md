@@ -32,7 +32,7 @@ No existing recipe, connector or runbook changes behaviour. Recipes stay at form
 
 ## Impact
 
-- Backend: `internal/connector` (per-instance capability check), `internal/connector/custom` (recipe parsing, action requests), `internal/api/connectors` (lifecycle preview and mutate, new action endpoint, save path), `internal/api/auth` and `internal/auth` (elevation action allowlist in three places), `internal/connector/reconcile`, `internal/backup`, `internal/runbookrun`, `internal/api/runbooks`, `internal/store` (migration `000066`, both drivers), `internal/mcp` (step kind listing).
+- Backend: `internal/connector` (per-instance capability check), `internal/connector/custom` (recipe parsing, action requests), `internal/api/connectors` (lifecycle preview and mutate, new action endpoint, save path), `internal/api/auth` and `internal/auth` (one shared elevation action allowlist, exercised through password/session, WebAuthn and OIDC), `internal/connector/reconcile`, `internal/backup`, `internal/runbookrun`, `internal/api/runbooks`, `internal/store` (migration `000066`, both drivers), `internal/mcp` (step kind listing).
 - API: new `POST /api/connectors/{id}/actions/{name}`; connector responses gain capabilities and actions; lifecycle previews gain an optional request block; the run resume request gains a decision for an unknown action step; `docs/openapi.yaml` and the generated web client.
 - Web: service detail page (buttons, dry-run and result dialogs), connector form (elevation on save), runbook step editor, en and pt-BR strings.
 - Docs: `docs/adr/0008-recipe-defined-actions.md`, `docs/ARCHITECTURE.md`, `docs/connectors/RECIPE_FORMAT.md`, `docs/CONNECTORS_IN_CONFIG.md`.

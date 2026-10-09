@@ -422,6 +422,21 @@ export function RunbooksPage() {
   const keepAction = (connectorId: string, entityRef: string, action: string) =>
     actionOptions(connectorId, entityRef).some((option) => option.name === action) ? action : '';
 
+  const lifecycleVerbs = (connectorId: string, entityRef: string): RunbookStepVerb[] => {
+    const selected = connectors.data?.find((c) => c.id === connectorId);
+    if (selected?.type === 'custom') {
+      return LIFECYCLE_VERBS.filter((verb) =>
+        selected.actions?.some(
+          (action) => action.name === verb && action.entityScope === !!entityRef
+        )
+      ) as RunbookStepVerb[];
+    }
+    return (
+      schemas.data?.find((s) => s.type === selected?.type)?.lifecycleVerbs ??
+      (['restart', 'start', 'stop'] as RunbookStepVerb[])
+    );
+  };
+
   return (
     <div>
       <SubHeader
@@ -803,15 +818,10 @@ export function RunbooksPage() {
                                     });
                                   } else {
                                     // lifecycle
-                                    const type = connectors.data?.find(
-                                      (c) => c.id === step.connectorId
-                                    )?.type;
-                                    const verbs =
-                                      schemas.data?.find((s) => s.type === type)?.lifecycleVerbs ??
-                                      [];
+                                    const verbs = lifecycleVerbs(step.connectorId, step.entityRef);
                                     updateStep(step.key, {
                                       kind: nextKind,
-                                      verb: (verbs[0] ?? 'restart') as RunbookStepVerb,
+                                      verb: verbs[0] ?? '',
                                       action: '',
                                       entityKind: '',
                                       timeoutSeconds: '',
@@ -855,19 +865,12 @@ export function RunbooksPage() {
                                   onChange={(e) => {
                                     const connectorId = e.target.value;
                                     if (kind === 'lifecycle') {
-                                      const type = connectors.data?.find(
-                                        (c) => c.id === connectorId
-                                      )?.type;
-                                      const verbs =
-                                        schemas.data?.find((s) => s.type === type)
-                                          ?.lifecycleVerbs ?? [];
+                                      const verbs = lifecycleVerbs(connectorId, '');
                                       updateStep(step.key, {
                                         connectorId,
                                         entityRef: '',
                                         entityKind: '',
-                                        verb: (verbs[0] ??
-                                          step.verb ??
-                                          'restart') as RunbookStepVerb,
+                                        verb: verbs[0] ?? '',
                                       });
                                     } else {
                                       updateStep(step.key, {
@@ -912,12 +915,7 @@ export function RunbooksPage() {
                                   }
                                 >
                                   {(() => {
-                                    const type = connectors.data?.find(
-                                      (c) => c.id === step.connectorId
-                                    )?.type;
-                                    const verbs =
-                                      schemas.data?.find((s) => s.type === type)?.lifecycleVerbs ??
-                                      (['restart', 'start', 'stop'] as RunbookStepVerb[]);
+                                    const verbs = lifecycleVerbs(step.connectorId, step.entityRef);
                                     return verbs.map((v) => (
                                       <option key={v} value={v}>
                                         {v}
@@ -956,7 +954,15 @@ export function RunbooksPage() {
                                 connectorId={step.connectorId}
                                 value={step.entityRef}
                                 disabled={stepsLocked}
-                                onChange={(entityRef) => updateStep(step.key, { entityRef })}
+                                onChange={(entityRef) => {
+                                  const verbs = lifecycleVerbs(step.connectorId, entityRef);
+                                  updateStep(step.key, {
+                                    entityRef,
+                                    verb: verbs.includes(step.verb as RunbookStepVerb)
+                                      ? step.verb
+                                      : (verbs[0] ?? ''),
+                                  });
+                                }}
                               />
                             )}
 

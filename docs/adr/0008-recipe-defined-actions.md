@@ -48,6 +48,10 @@ action is allowed without that additional step-up, while the existing
 instance-admin requirement still applies. The same elevation action is
 accepted by the password/session, WebAuthn and OIDC elevation mechanisms.
 
+When instance step-up is disabled, saving and running actions pass the
+elevation check as other elevated operations do. Saving still requires an
+instance admin, and running still requires an operator grant on the connector.
+
 ### 3. Audit changes without recording request data
 
 When a saved recipe action set changes, the system records

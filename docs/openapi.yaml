@@ -1050,7 +1050,14 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
-        '401': { $ref: '#/components/responses/ElevationRequired' }
+        '401':
+          description: >
+            Not signed in, or the `X-Elevation-Token` is invalid, expired or
+            bound to another target (code `unauthorized`); call POST /auth/elevate
+            for `connector.recipeActions` with the matching target and retry.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
         '403': { $ref: '#/components/responses/Forbidden' }
   /connectors/recipe-preview:
     post:
@@ -1219,7 +1226,14 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
-        '401': { $ref: '#/components/responses/ElevationRequired' }
+        '401':
+          description: >
+            Not signed in, or the `X-Elevation-Token` is invalid, expired or
+            bound to another target (code `unauthorized`); call POST /auth/elevate
+            for `connector.recipeActions` with the matching target and retry.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { description: 'The connector is managed by config.yaml (`connector_managed`) or orphaned (`connector_orphaned`)' }
@@ -1554,7 +1568,14 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
-        '401': { $ref: '#/components/responses/ElevationRequired' }
+        '401':
+          description: >
+            Not signed in, or the `X-Elevation-Token` is invalid, expired or
+            bound to another target (code `unauthorized`); call POST /auth/elevate
+            for `connector.action` with the matching target and retry.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
         '502':

@@ -46,6 +46,7 @@ export interface MutatingOpExtraMessages {
   status: string;
   excerpt: string;
   resultClose: string;
+  noDowntime: string;
 }
 
 export function MutatingOpDialogs({
@@ -135,7 +136,9 @@ export function MutatingOpDialogs({
                   <dd className="mt-0.5 font-medium text-ink">
                     {op.preview.data.estimatedDowntimeSeconds > 0
                       ? messages.downtimeSeconds(op.preview.data.estimatedDowntimeSeconds)
-                      : messages.downtimeIndefinite}
+                      : op.preview.data.userDefined
+                        ? extraMessages?.noDowntime
+                        : messages.downtimeIndefinite}
                   </dd>
                 </div>
               </dl>
@@ -168,7 +171,7 @@ export function MutatingOpDialogs({
               </div>
               {op.mutate.isError && (
                 <ActionFailure
-                  error={op.mutate.error}
+                  error={{ response: { data: op.failureData } }}
                   failed={messages.failed}
                   messages={extraMessages}
                 />

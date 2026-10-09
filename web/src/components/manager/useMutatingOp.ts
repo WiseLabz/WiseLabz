@@ -25,13 +25,32 @@ export function useMutatingOp({
   const [previewOpen, setPreviewOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [resultData, setResultData] = useState<unknown>();
+  const [failureData, setFailureData] = useState<unknown>();
 
   const preview = useMutation({ mutationFn: previewFn });
 
   const mutate = useMutation({
-    mutationFn: (token: string | null) => executeFn(token),
-    onSuccess: (result) => {
-      setResultData(result);
+    mutationFn: async (token: string | null) => {
+      setFailureData(undefined);
+      try {
+        const result = await executeFn(token);
+        setResultData(result);
+        return withoutExcerpt(result);
+      } catch (error) {
+        const response = (error as { response?: { data?: unknown; status?: number } } | null)
+          ?.response;
+        setFailureData(response?.data);
+        // Axios errors also retain the raw response on request.responseText.
+        // Cache only a new error and the safe response data, never the transport.
+        if (response?.data && typeof response.data === 'object' && 'excerpt' in response.data) {
+          throw Object.assign(new Error('Action request failed'), {
+            response: { status: response.status, data: withoutExcerpt(response.data) },
+          });
+        }
+        throw error;
+      }
+    },
+    onSuccess: () => {
       setConfirmOpen(false);
       setPreviewOpen(false);
       onSuccess?.();
@@ -40,7 +59,9 @@ export function useMutatingOp({
 
   const open = (options?: { skipPreview?: boolean }) => {
     preview.reset();
+    mutate.reset();
     setResultData(undefined);
+    setFailureData(undefined);
     setPreviewOpen(true);
     if (!options?.skipPreview) preview.mutate();
   };
@@ -53,16 +74,27 @@ export function useMutatingOp({
 
   return {
     previewOpen,
-    setPreviewOpen,
+    setPreviewOpen: (open: boolean) => {
+      setPreviewOpen(open);
+      if (!open) setFailureData(undefined);
+    },
     confirmOpen,
     setConfirmOpen,
     preview,
     mutate,
     resultData,
+    failureData,
     clearResult,
     open,
     rerunPreview,
   };
+}
+
+function withoutExcerpt(value: unknown): unknown {
+  if (!value || typeof value !== 'object' || !('excerpt' in value)) return value;
+  const copy: Record<string, unknown> = { ...value };
+  delete copy.excerpt;
+  return copy;
 }
 
 export type MutatingOp = ReturnType<typeof useMutatingOp>;

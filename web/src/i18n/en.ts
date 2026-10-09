@@ -663,6 +663,7 @@ export const en = {
       actionStatus: 'Response status',
       actionExcerpt: 'Response text',
       actionResultClose: 'Close',
+      actionNoDowntime: 'No downtime declared',
       healthCheck: 'Health check',
       healthCheckLoading: 'Checking…',
       healthCheckError: "Couldn't run the health check. Try again.",

@@ -665,6 +665,7 @@ function mutatingOpExtraMessages(t: (key: string) => string): MutatingOpExtraMes
     status: t('services.detail.actionStatus'),
     excerpt: t('services.detail.actionExcerpt'),
     resultClose: t('services.detail.actionResultClose'),
+    noDowntime: t('services.detail.actionNoDowntime'),
   };
 }
 

@@ -57,6 +57,7 @@ describe('locale catalogs', () => {
       'services.detail.actionStatus',
       'services.detail.actionExcerpt',
       'services.detail.actionResultClose',
+      'services.detail.actionNoDowntime',
     ];
     for (const catalog of [en, ptBR]) {
       const translatedKeys = new Set(keys(catalog));

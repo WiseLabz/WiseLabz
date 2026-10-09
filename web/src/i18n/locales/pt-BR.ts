@@ -735,6 +735,7 @@ export const ptBR: Catalog = {
       actionStatus: 'Status da resposta',
       actionExcerpt: 'Texto da resposta',
       actionResultClose: 'Fechar',
+      actionNoDowntime: 'Nenhuma indisponibilidade declarada',
     },
     category: {
       virtualization: 'Virtualização',
