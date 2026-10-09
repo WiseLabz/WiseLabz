@@ -253,6 +253,45 @@ func itoa(n int) string {
 	return strconv.Itoa(n)
 }
 
+// runningGuestServer fakes a Proxmox VE with one running VM. The guest list
+// always shows the same maxmem, as a running guest does until its restart,
+// while /config holds 2048 MB. The first config PUT stores 4096 in /config only
+// when putLands is true. It returns the server and the number of config PUTs.
+func runningGuestServer(t *testing.T, putLands bool) (*httptest.Server, *atomic.Int32) {
+	t.Helper()
+	var configMemory, putCount atomic.Int32
+	configMemory.Store(2048)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.URL.Path == "/nodes":
+			_, _ = w.Write([]byte(`{"data":[{"node":"pve1","status":"online","uptime":100,"cpu":0.1,"mem":1,"maxmem":2}]}`))
+		case r.URL.Path == "/nodes/pve1/qemu":
+			_, _ = w.Write([]byte(`{"data":[{"vmid":100,"name":"vm1","status":"running","cpus":2,"maxmem":2147483648,"uptime":10}]}`)) // never changes
+		case r.URL.Path == "/nodes/pve1/lxc" || r.URL.Path == "/nodes/pve1/storage":
+			_, _ = w.Write([]byte(`{"data":[]}`))
+		case r.URL.Path == "/cluster/resources":
+			_, _ = w.Write([]byte(`{"data":[{"vmid":100,"node":"pve1","type":"qemu"}]}`))
+		case r.URL.Path == "/nodes/pve1/qemu/100/agent/network-get-interfaces":
+			w.WriteHeader(http.StatusInternalServerError) // fetchQemuIP soft-fails on error
+		case r.URL.Path == "/nodes/pve1/qemu/100/config" && r.Method == "GET":
+			_, _ = w.Write([]byte(`{"data":{"memory":` + itoa(int(configMemory.Load())) + `}}`))
+		case r.URL.Path == "/nodes/pve1/qemu/100/firewall/options":
+			w.WriteHeader(http.StatusInternalServerError) // fetchFirewallEnabled soft-fails on error
+		case r.URL.Path == "/nodes/pve1/qemu/100/config" && r.Method == "PUT":
+			if putCount.Add(1) == 1 && putLands {
+				configMemory.Store(4096)
+			}
+			_, _ = w.Write([]byte(`{"data":null}`))
+		default:
+			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	t.Cleanup(server.Close)
+	return server, &putCount
+}
+
 func TestConfigPushHandler(t *testing.T) {
 	t.Parallel()
 	pushReq := func(id, entityRef, fieldKey string, value, previousValue any, token string) *http.Request {
@@ -378,36 +417,7 @@ func TestConfigPushHandler(t *testing.T) {
 	t.Run("running guest: unchanged table but /config holds the target verifies", func(t *testing.T) {
 		// A running guest: the VM table shows the running maxmem, which a
 		// memory change does not touch until restart, while /config holds it.
-		var configMemory atomic.Int32
-		configMemory.Store(2048)
-		var putCount atomic.Int32
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Content-Type", "application/json")
-			switch {
-			case r.URL.Path == "/nodes":
-				_, _ = w.Write([]byte(`{"data":[{"node":"pve1","status":"online","uptime":100,"cpu":0.1,"mem":1,"maxmem":2}]}`))
-			case r.URL.Path == "/nodes/pve1/qemu":
-				_, _ = w.Write([]byte(`{"data":[{"vmid":100,"name":"vm1","status":"running","cpus":2,"maxmem":2147483648,"uptime":10}]}`)) // never changes
-			case r.URL.Path == "/nodes/pve1/lxc" || r.URL.Path == "/nodes/pve1/storage":
-				_, _ = w.Write([]byte(`{"data":[]}`))
-			case r.URL.Path == "/cluster/resources":
-				_, _ = w.Write([]byte(`{"data":[{"vmid":100,"node":"pve1","type":"qemu"}]}`))
-			case r.URL.Path == "/nodes/pve1/qemu/100/agent/network-get-interfaces":
-				w.WriteHeader(http.StatusInternalServerError) // fetchQemuIP soft-fails on error
-			case r.URL.Path == "/nodes/pve1/qemu/100/config" && r.Method == "GET":
-				_, _ = w.Write([]byte(`{"data":{"memory":` + itoa(int(configMemory.Load())) + `}}`))
-			case r.URL.Path == "/nodes/pve1/qemu/100/firewall/options":
-				w.WriteHeader(http.StatusInternalServerError) // fetchFirewallEnabled soft-fails on error
-			case r.URL.Path == "/nodes/pve1/qemu/100/config" && r.Method == "PUT":
-				if putCount.Add(1) == 1 && true {
-					configMemory.Store(4096)
-				}
-				_, _ = w.Write([]byte(`{"data":null}`))
-			default:
-				t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
-			}
-		}))
-		defer server.Close()
+		server, putCount := runningGuestServer(t, true)
 		h := newTestHandler(t)
 		id := createProxmoxConnector(t, h, server.URL)
 		token, err := h.JWT.IssueElevation("", "connector.configPush")
@@ -440,38 +450,9 @@ func TestConfigPushHandler(t *testing.T) {
 	})
 
 	t.Run("running guest: unchanged table and unchanged /config is a mismatch", func(t *testing.T) {
-		// A running guest: the VM table shows the running maxmem, which a
-		// memory change does not touch until restart, while /config holds it.
-		var configMemory atomic.Int32
-		configMemory.Store(2048)
-		var putCount atomic.Int32
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Content-Type", "application/json")
-			switch {
-			case r.URL.Path == "/nodes":
-				_, _ = w.Write([]byte(`{"data":[{"node":"pve1","status":"online","uptime":100,"cpu":0.1,"mem":1,"maxmem":2}]}`))
-			case r.URL.Path == "/nodes/pve1/qemu":
-				_, _ = w.Write([]byte(`{"data":[{"vmid":100,"name":"vm1","status":"running","cpus":2,"maxmem":2147483648,"uptime":10}]}`)) // never changes
-			case r.URL.Path == "/nodes/pve1/lxc" || r.URL.Path == "/nodes/pve1/storage":
-				_, _ = w.Write([]byte(`{"data":[]}`))
-			case r.URL.Path == "/cluster/resources":
-				_, _ = w.Write([]byte(`{"data":[{"vmid":100,"node":"pve1","type":"qemu"}]}`))
-			case r.URL.Path == "/nodes/pve1/qemu/100/agent/network-get-interfaces":
-				w.WriteHeader(http.StatusInternalServerError) // fetchQemuIP soft-fails on error
-			case r.URL.Path == "/nodes/pve1/qemu/100/config" && r.Method == "GET":
-				_, _ = w.Write([]byte(`{"data":{"memory":` + itoa(int(configMemory.Load())) + `}}`))
-			case r.URL.Path == "/nodes/pve1/qemu/100/firewall/options":
-				w.WriteHeader(http.StatusInternalServerError) // fetchFirewallEnabled soft-fails on error
-			case r.URL.Path == "/nodes/pve1/qemu/100/config" && r.Method == "PUT":
-				if putCount.Add(1) == 1 && false {
-					configMemory.Store(4096)
-				}
-				_, _ = w.Write([]byte(`{"data":null}`))
-			default:
-				t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
-			}
-		}))
-		defer server.Close()
+		// A running guest whose /config never takes the new value: the read-back
+		// finds the old one, so the push is a mismatch and is reverted.
+		server, putCount := runningGuestServer(t, false)
 		h := newTestHandler(t)
 		id := createProxmoxConnector(t, h, server.URL)
 		token, err := h.JWT.IssueElevation("", "connector.configPush")

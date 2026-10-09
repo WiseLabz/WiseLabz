@@ -50,7 +50,7 @@ func init() {
 var attributeCatalog = map[string][]connector.AttributeSpec{
 	"vm": {
 		{Name: "status", Type: "string", Description: "Guest power state (running, stopped, ...)"},
-		{Name: "memory", Type: "number", Description: "Configured memory in MB from the guest config (pending changes show before restart); the running maximum when the config cannot be read"},
+		{Name: "memory", Type: "number", Description: "Configured memory in MB from the guest config (pending changes show before restart); running maximum if the config cannot be read. Absent if config memory is missing or undecodable; appears once explicitly set"},
 		{Name: "cores", Type: "number", Description: "Configured cores per socket"},
 		{Name: "firewall_enabled", Type: "boolean", Description: "Whether the per-guest firewall is enabled"},
 		{Name: "onboot", Type: "boolean", Description: "Whether the guest starts automatically on host boot"},
@@ -62,7 +62,7 @@ var attributeCatalog = map[string][]connector.AttributeSpec{
 	},
 	"container": {
 		{Name: "status", Type: "string", Description: "Guest power state (running, stopped, ...)"},
-		{Name: "memory", Type: "number", Description: "Configured memory in MB from the guest config (pending changes show before restart); the running maximum when the config cannot be read"},
+		{Name: "memory", Type: "number", Description: "Configured memory in MB from the guest config (pending changes show before restart); running maximum if the config cannot be read. Absent if config memory is missing or undecodable; appears once explicitly set"},
 		{Name: "cores", Type: "number", Description: "Configured CPU cores"},
 		{Name: "firewall_enabled", Type: "boolean", Description: "Whether the per-guest firewall is enabled"},
 		{Name: "onboot", Type: "boolean", Description: "Whether the guest starts automatically on host boot"},

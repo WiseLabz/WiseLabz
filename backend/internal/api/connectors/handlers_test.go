@@ -244,20 +244,11 @@ func TestDelete(t *testing.T) {
 	t.Parallel()
 	h := newTestHandler(t)
 
-	t.Run("missing elevation token", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodDelete, "/api/connectors/x", nil)
-		req.SetPathValue("id", "x")
-		rr := httptest.NewRecorder()
-		h.Delete(rr, req)
-		if rr.Code != http.StatusBadRequest {
-			t.Fatalf("status = %d, want %d", rr.Code, http.StatusBadRequest)
-		}
-	})
-
-	t.Run("not found with elevation token present", func(t *testing.T) {
+	// Step-up is enforced by the route middleware (see the router tests), so
+	// the handler itself needs no token.
+	t.Run("not found", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodDelete, "/api/connectors/missing", nil)
 		req.SetPathValue("id", "missing")
-		req.Header.Set("X-Elevation-Token", "placeholder")
 		rr := httptest.NewRecorder()
 		h.Delete(rr, req)
 		if rr.Code != http.StatusNotFound {

@@ -740,7 +740,7 @@ export const usePutConnectorsConnectorId = <
   return useMutation(getPutConnectorsConnectorIdMutationOptions(options), queryClient);
 };
 /**
- * Destructive: cascades to the connector's snapshots and generated doc sections (see GET /removal-impact for the blast radius). When `stepUpForDestructive` is enabled, requires a valid single-use `X-Elevation-Token` for action `connector.delete` from POST /auth/elevate: a missing token gets 400 `elevation_required`, and an invalid, expired, already used or mismatched token (including an empty one) gets 401 `unauthorized`. The handler also refuses a request whose `X-Elevation-Token` header is absent or empty with 400 `elevation_required` even when step-up is disabled; with step-up off any non-empty value is accepted without being validated.
+ * Destructive: cascades to the connector's snapshots and generated doc sections (see GET /removal-impact for the blast radius). When `stepUpForDestructive` is enabled, requires a valid single-use `X-Elevation-Token` for action `connector.delete` from POST /auth/elevate: a missing token gets 400 `elevation_required`, and an invalid, expired, already used or mismatched token (including an empty one) gets 401 `unauthorized`. With step-up disabled no token is needed and the header is ignored.
  * @summary Remove a connector (operator, destructive)
  */
 export const deleteConnectorsConnectorId = (

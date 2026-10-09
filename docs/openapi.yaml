@@ -1206,19 +1206,17 @@ paths:
         `X-Elevation-Token` for action `connector.delete` from
         POST /auth/elevate: a missing token gets 400 `elevation_required`, and
         an invalid, expired, already used or mismatched token (including an
-        empty one) gets 401 `unauthorized`. The handler also refuses a request
-        whose `X-Elevation-Token` header is absent or empty with 400
-        `elevation_required` even when step-up is disabled; with step-up off
-        any non-empty value is accepted without being validated.
+        empty one) gets 401 `unauthorized`. With step-up disabled no token is
+        needed and the header is ignored.
       parameters:
         - name: X-Elevation-Token
           in: header
-          required: true
+          required: false
           schema: { type: string }
           description: >
-            Must be present and non-empty. With step-up on it must be a valid
-            single-use elevation token for action `connector.delete` from
-            POST /auth/elevate; with step-up off its value is not validated.
+            Single-use elevation token from POST /auth/elevate for action
+            `connector.delete`. Required when step-up is on; ignored when it
+            is off.
       responses:
         '204': { description: No Content }
         '400': { $ref: '#/components/responses/ElevationRequired' }

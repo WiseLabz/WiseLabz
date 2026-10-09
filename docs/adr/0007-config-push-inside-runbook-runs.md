@@ -71,12 +71,16 @@ type ConfigReader interface {
 }
 ```
 
-- When a connector implements `ConfigReader`, the executor reads the live field value
-  immediately before writing.
+- When a connector implements `ConfigReader`, the executor reads the value the connector reports
+  for the field immediately before writing.
 - If the current value already matches the target value, the push succeeds immediately
   without issuing a write and without recording an audit log entry.
 - If a connector lacks a `ConfigReader`, this case cannot be distinguished from a failed write;
   the step fails with a verification error without auto-revert, as specified below.
+- The same reader confirms a write after the fact. After a push, when the documented snapshot
+  shows no change and the connector can read the field, the field is read again and the push is
+  accepted only if the value read equals the target. An unknown or different value is a mismatch
+  and is handled as specified below. No second write is made for this.
 
 ### 4. Auto-revert only when the previous value is known
 
@@ -146,12 +150,29 @@ Savepoint path (OPNsense 24.1 to 26.1):
 - A failed or timed-out apply, and a `setRule` that may or may not have saved, are reverted
   explicitly with `revert/<revision>`. The revert runs with a context detached from the caller's
   cancellation and bounded to 30 seconds, so it still happens when the run was cancelled.
-- `cancelRollback/<revision>` answers with the output of the rollback script. The script prints
-  nothing and exits 0 only when the timer of that revision existed and was removed. So a cancelled
-  timer comes back as a non-empty status that is only whitespace, and a missing timer (it already
-  fired, it never started because another timer was pending, or the apply never arrived) as an
-  empty status. The connector tells the two apart before trimming. Any other text is unexpected
-  and counts as a failure.
+- `cancelRollback/<revision>` answers with the output of the rollback script. This was checked in
+  opnsense/core on [stable/24.1](https://github.com/opnsense/core/tree/stable/24.1),
+  [24.7](https://github.com/opnsense/core/tree/stable/24.7),
+  [25.1](https://github.com/opnsense/core/tree/stable/25.1),
+  [25.7](https://github.com/opnsense/core/tree/stable/25.7) and
+  [26.1](https://github.com/opnsense/core/tree/stable/26.1):
+  - `cancel_rollback` is a `script_output` action (`src/opnsense/service/conf/actions.d/actions_filter.conf`).
+  - `src/opnsense/scripts/filter/rollback_cancel.php` prints nothing and exits 0 after removing the
+    timer's lock file, or exits 1 when there is none.
+  - configd appends `"\n\n"` to the output of an action (`src/opnsense/service/modules/processhandler.py`),
+    so a cancelled timer comes back as `"\n\n"`: a non-empty status that is only whitespace.
+  - A non-zero exit raises inside the `script_output` action type
+    (`src/opnsense/service/modules/actions/script_output.py`): `check_call` up to 24.7, then
+    `subprocess.run(check=not disable_errors)`, with error checking enabled for this action.
+    The exception becomes the text `Execute error`, which
+    `Backend::configdRun` (`src/opnsense/mvc/app/library/OPNsense/Core/Backend.php`) turns into an
+    empty string. Older versions may return null there; the connector reads null like an empty
+    string.
+
+  So a missing timer (it already fired, it never started because another timer was pending, or the
+  apply never arrived) comes back as an empty status and a cancelled one as whitespace only. The
+  connector tells the two apart before trimming. Any other text is unexpected and counts as a
+  failure.
 - After a successful apply, a `cancelRollback` that fails or finds no timer is a failed push, never
   a success: the rule is not safe, because a timer may roll it back, or none was running for this
   apply. The change is reverted and the error says why.
@@ -195,15 +216,14 @@ State kept per firewall in the backend process:
   the whole filter section and interleaved pushes could undo each other. The lock covers the whole
   flow and honours the caller's context while waiting. The lock, the wait time and the marks are
   keyed by the normalised connector URL: scheme and host case, the default port and trailing slashes
-  do not matter.
+  do not matter. The key is normalised syntactically only, so the same firewall reached by a
+  hostname and by an IP address, or through two different names, gets separate locks, wait times
+  and marks.
 
-Verification. After a push the core compares the documented snapshots taken before and after. When
-that shows no change and the connector can read the field, it reads the field again and accepts the
-push only if the value read equals the target. An unknown or different value is a mismatch and is
-handled as before: alert, and auto-revert only when the previous value is known. No second write is
-made for this. Two cases need it. An OPNsense retry after an uncertain state: the rule was already
-saved with the target, so the rule table does not change. A Proxmox memory change on a running
-guest: the table shows the running `maxmem`, while `/config` holds the new value.
+Verification. The read-back rule of section 3 applies to both connectors. Two cases need it. An
+OPNsense retry after an uncertain state: the rule was already saved with the target, so the rule
+table does not change. A Proxmox memory change on a running guest: the table shows the running
+`maxmem`, while `/config` holds the new value.
 
 Remaining limitations:
 
@@ -228,6 +248,9 @@ sees; the running `maxmem` of the guest list does not show it.
   `current=<n>` (such as `current=2048,max=4096`). It must be a positive whole number of MiB.
 - When `/config` was read but has no `memory` key, or the value cannot be decoded, the reader
   reports the value as unknown (nil) instead of falling back to the running `maxmem`, so a pending
-  change cannot be mistaken for the running value. When `/config` cannot be read, the reader returns
+  change cannot be mistaken for the running value. The `memory` attribute of the catalog follows the
+  same rule: for such a guest it is absent, where it used to show `maxmem`, and it appears once
+  memory is set explicitly in the guest config. It still falls back to `maxmem` when `/config`
+  cannot be read. When `/config` cannot be read, the reader returns
   an error. A pre-push read failure therefore stops the push, and a failed verification can no
   longer write the live value over a pending change.

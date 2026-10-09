@@ -388,7 +388,7 @@ func (c *Connector) pushWithUndo(ctx context.Context, st *filterState, ruleUUID,
 // cleanUncertain writes every rule marked uncertain back to its pre-push value
 // before a new push starts. A later apply or revert then cannot make a value
 // live that was never applied. A rule that no longer exists upstream is
-// forgotten.
+// forgotten, whatever the write-back answered: there is nothing left to restore.
 func (c *Connector) cleanUncertain(ctx context.Context, st *filterState) error {
 	marks := st.snapshotMarks()
 	uuids := make([]string, 0, len(marks))
@@ -401,11 +401,9 @@ func (c *Connector) cleanUncertain(ctx context.Context, st *filterState) error {
 		if err == nil {
 			continue
 		}
-		if errors.Is(err, errRuleNotSaved) {
-			if _, rerr := c.ruleEnabled(ctx, uuid); errors.Is(rerr, errRuleNotFound) {
-				st.unmark(uuid)
-				continue
-			}
+		if _, rerr := c.ruleEnabled(ctx, uuid); errors.Is(rerr, errRuleNotFound) {
+			st.unmark(uuid)
+			continue
 		}
 		return fmt.Errorf("opnsense config-push: rule %q: an earlier failed push could not be cleaned up: %w", uuid, err)
 	}
@@ -423,6 +421,10 @@ var rollbackWindow = 70 * time.Second
 type filterState struct {
 	lock chan struct{} // capacity 1: the push lock
 
+	// now and newTimer are the clock; tests replace them to drive the wait.
+	now      func() time.Time
+	newTimer func(d time.Duration) (c <-chan time.Time, stop func())
+
 	mu        sync.Mutex
 	notBefore time.Time         // a rollback timer may fire until then
 	uncertain map[string]string // rule UUID -> enabled value ("0"/"1") it had before a push whose outcome is unknown
@@ -439,9 +441,16 @@ func filterStateFor(rawURL string) *filterState {
 	}
 	v, _ := filterStates.LoadOrStore(key, &filterState{
 		lock:      make(chan struct{}, 1),
+		now:       time.Now,
+		newTimer:  realTimer,
 		uncertain: map[string]string{},
 	})
 	return v.(*filterState)
+}
+
+func realTimer(d time.Duration) (<-chan time.Time, func()) {
+	t := time.NewTimer(d)
+	return t.C, func() { t.Stop() }
 }
 
 // filterKey normalises a firewall URL so spellings that reach the same host
@@ -482,7 +491,7 @@ func (s *filterState) acquire(ctx context.Context) (unlock func(), err error) {
 func (s *filterState) holdRollback() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.notBefore = time.Now().Add(rollbackWindow)
+	s.notBefore = s.now().Add(rollbackWindow)
 }
 
 // waitRollback blocks until a rollback timer left by an earlier failed push can
@@ -492,17 +501,17 @@ func (s *filterState) waitRollback(ctx context.Context) error {
 	s.mu.Lock()
 	until := s.notBefore
 	s.mu.Unlock()
-	remaining := time.Until(until)
+	remaining := until.Sub(s.now())
 	if remaining > 0 {
 		if deadline, ok := ctx.Deadline(); ok && deadline.Before(until) {
 			return rollbackPending(remaining, context.DeadlineExceeded)
 		}
-		timer := time.NewTimer(remaining)
-		defer timer.Stop()
+		fired, stop := s.newTimer(remaining)
+		defer stop()
 		select {
-		case <-timer.C:
+		case <-fired:
 		case <-ctx.Done():
-			return rollbackPending(time.Until(until), ctx.Err())
+			return rollbackPending(until.Sub(s.now()), ctx.Err())
 		}
 	}
 	s.mu.Lock()
@@ -658,13 +667,11 @@ func (c *Connector) postExpectOK(ctx context.Context, path string) error {
 	return nil
 }
 
-// cancelRollback stops the rollback timer started by apply/<revision>, with a
-// context that survives cancellation of ctx. rollback_cancel.php prints nothing
-// and exits non-zero when no timer for the revision exists, which the API
-// reports as an empty status; a cancelled timer comes back as whitespace only.
-// So an empty status means no such timer (it already fired, never started
-// because another timer was pending, or the apply never arrived), and any
-// other text is unexpected.
+// cancelRollback stops the timer from apply/<revision>, with a context that
+// survives cancellation of ctx. actions_filter.conf uses script_output for
+// rollback_cancel.php: it removes the lock and exits 0 silently, or exits 1 if absent.
+// processhandler.py appends "\n\n" on success; Backend.php maps "Execute error"
+// to empty/null, so whitespace means cancelled and empty/null means no timer.
 func (c *Connector) cancelRollback(ctx context.Context, revision string) (cancelled bool, err error) {
 	err = detached(ctx, func(ctx context.Context) error {
 		raw, err := c.doRequest(ctx, "POST", filterAPI+"cancelRollback/"+revision)
