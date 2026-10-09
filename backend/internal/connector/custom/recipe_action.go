@@ -12,6 +12,7 @@ import (
 	"net/http/httptrace"
 	"net/url"
 	"sort"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"unicode"
@@ -207,9 +208,22 @@ func resolveRecipeAction(action RecipeAction, entity *connector.SnapshotEntity) 
 		values["external_id"] = entity.ExternalID
 	}
 	var err error
-	resolved.Path, err = resolveActionTemplate(action.Path, values, entity, true)
+	pathTemplate, queryTemplate, hasQuery := strings.Cut(action.Path, "?")
+	resolved.Path, err = resolveActionTemplate(pathTemplate, values, entity, true)
 	if err != nil {
 		return RecipeAction{}, fmt.Errorf("action path placeholder: %w", err)
+	}
+	if hasQuery {
+		// Path-segment escaping leaves & = + alone, so a placeholder value could
+		// add query parameters: only a static query string is allowed here.
+		if placeholders, _ := parseActionPlaceholders(queryTemplate); len(placeholders) != 0 {
+			return RecipeAction{}, fmt.Errorf("action path placeholder: placeholders are not allowed in the query string of path; declare them under query")
+		}
+		queryString, err := resolveActionTemplate(queryTemplate, values, entity, false)
+		if err != nil {
+			return RecipeAction{}, fmt.Errorf("action path placeholder: %w", err)
+		}
+		resolved.Path += "?" + queryString
 	}
 	if len(action.Query) != 0 {
 		resolved.Query = make(map[string]string, len(action.Query))
@@ -333,9 +347,13 @@ func actionPlaceholderValue(name string, values map[string]string, entity *conne
 	if !ok || value == nil {
 		return "", fmt.Errorf("entity is missing mapped attribute %q", attribute)
 	}
-	switch value.(type) {
+	switch value := value.(type) {
+	case float32:
+		return strconv.FormatFloat(float64(value), 'f', -1, 32), nil
+	case float64:
+		return strconv.FormatFloat(value, 'f', -1, 64), nil
 	case string, bool, int, int8, int16, int32, int64,
-		uint, uint8, uint16, uint32, uint64, float32, float64, json.Number:
+		uint, uint8, uint16, uint32, uint64, json.Number:
 		return fmt.Sprint(value), nil
 	default:
 		return "", fmt.Errorf("mapped attribute %q must be a scalar value", attribute)
@@ -545,12 +563,18 @@ func (c *Connector) SendAction(ctx context.Context, config map[string]any, actio
 	if err != nil {
 		return connector.ActionResult{}, safeActionError(config, err)
 	}
+	// written means request bytes may have reached the service: the headers were
+	// flushed, or the whole request was written. A request that fails part-way
+	// through a large body still reports it.
 	var written atomic.Bool
-	trace := &httptrace.ClientTrace{WroteRequest: func(info httptrace.WroteRequestInfo) {
-		if info.Err == nil {
-			written.Store(true)
-		}
-	}}
+	trace := &httptrace.ClientTrace{
+		WroteHeaders: func() { written.Store(true) },
+		WroteRequest: func(info httptrace.WroteRequestInfo) {
+			if info.Err == nil {
+				written.Store(true)
+			}
+		},
+	}
 	req = req.WithContext(httptrace.WithClientTrace(req.Context(), trace))
 	resp, err := c.recipeHTTPClient(config).Do(req) // codeql[go/request-forgery]
 	result := connector.ActionResult{Written: written.Load()}
@@ -584,22 +608,24 @@ func (c *Connector) SendAction(ctx context.Context, config map[string]any, actio
 }
 
 func actionTextExcerpt(contentType string, body []byte) string {
-	if len(body) == 0 || !isActionText(contentType, body) {
+	if len(body) == 0 || !isActionText(contentType) {
 		return ""
 	}
-	if len(body) > actionExcerptBytes {
+	// Only the first actionExcerptBytes bytes are judged. When the body was cut
+	// there, drop an incomplete trailing rune before requiring valid UTF-8.
+	if len(body) >= actionExcerptBytes {
 		body = body[:actionExcerptBytes]
-		for !utf8.Valid(body) {
+		for drop := 0; drop < utf8.UTFMax-1 && !utf8.Valid(body); drop++ {
 			body = body[:len(body)-1]
 		}
+	}
+	if !utf8.Valid(body) {
+		return ""
 	}
 	return dropControlCharacters(string(body))
 }
 
-func isActionText(contentType string, body []byte) bool {
-	if !utf8.Valid(body) {
-		return false
-	}
+func isActionText(contentType string) bool {
 	mediaType, _, err := mime.ParseMediaType(contentType)
 	if err != nil {
 		return true

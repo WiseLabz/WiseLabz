@@ -94,6 +94,11 @@ func validateActionSet(actions map[string]RecipeAction, entity *RecipeEntity, ba
 			issues = append(issues, RecipeIssue{Location: location + ".downtime_seconds", Message: "must be between 0 and 3600 seconds"})
 		}
 		issues = append(issues, validateActionTemplate(action.Path, location+".path", entity)...)
+		if _, query, hasQuery := strings.Cut(action.Path, "?"); hasQuery {
+			if placeholders, _ := parseActionPlaceholders(query); len(placeholders) != 0 {
+				issues = append(issues, RecipeIssue{Location: location + ".path", Message: "placeholders are not allowed in the query string of path; declare them under query"})
+			}
+		}
 	}
 	return issues
 }

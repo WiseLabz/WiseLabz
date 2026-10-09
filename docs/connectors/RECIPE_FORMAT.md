@@ -87,8 +87,17 @@ snapshot. Path values must pass the connector's path-segment validation:
 whitespace, non-ASCII characters, separators and other path-changing
 characters are rejected before a request is sent. Map such a value to a
 URL-safe attribute when it cannot be used as one path segment. Query values
-are URL-encoded and body substitutions remain JSON strings. Write `{{` and
-`}}` for literal braces. Service actions do not support placeholders.
+are URL-encoded and body substitutions remain JSON strings. Placeholders may
+not be used in a query string written inside `path`; declare them under
+`query` instead. Numeric attribute values are written in plain decimal
+notation, for example `1234567` rather than `1.234567e+06`. For `restart`,
+`start` and `stop` on an entity, the entity's external ID itself must be a
+valid entity reference (segments separated by `/`, with no whitespace,
+non-ASCII characters, `..`, `\`, `?`, `#`, `%` or `;`), because lifecycle
+operations validate the reference for every connector type. Named actions only
+need the placeholder values they use to be valid. A `path` containing `{...}`
+must be quoted when the action is written as a YAML flow mapping. Write `{{`
+and `}}` for literal braces. Service actions do not support placeholders.
 
 Creating or changing a non-empty action set through the API requires an
 instance admin and step-up authentication. Reformatting YAML, comments and
