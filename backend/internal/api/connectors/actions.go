@@ -66,8 +66,8 @@ func (h *Handler) actionPreview(w http.ResponseWriter, r *http.Request, connecto
 }
 
 // PreviewNamedAction resolves one named action's request for a dry run. It
-// contacts the service only to read the snapshot an entity-scoped action needs,
-// and sends nothing.
+// never contacts the service: an entity-scoped action reads the latest stored
+// snapshot, and nothing is sent.
 func (h *Handler) PreviewNamedAction(ctx context.Context, connectorID, name, entityRef string) (*LifecyclePreview, error) {
 	prepared, snapshot, err := h.prepareNamedAction(ctx, connectorID, name, entityRef, true)
 	if err != nil {

@@ -213,7 +213,7 @@ export function useGetConnectors<
 }
 
 /**
- * When `stepUpForDestructive` is enabled and the recipe declares actions, requires an `X-Elevation-Token` for action `connector.recipeActions`.
+ * Declaring recipe actions requires an instance admin (403 otherwise). When `stepUpForDestructive` is enabled and the recipe declares actions, also requires an `X-Elevation-Token` for action `connector.recipeActions`.
  * @summary Create a connector (operator)
  */
 export const postConnectors = (
@@ -649,7 +649,7 @@ export function useGetConnectorsConnectorId<
 }
 
 /**
- * Changing url, type, verifyTls, category or endpoint config requires an instance admin (403 otherwise); operators may resend the unchanged values. When `stepUpForDestructive` is enabled and the save changes the recipe's actions to a non-empty set, requires an `X-Elevation-Token` for action `connector.recipeActions` bound to the connector id.
+ * Changing url, type, verifyTls, category or endpoint config requires an instance admin (403 otherwise); operators may resend the unchanged values. Adding, changing or removing recipe actions also requires an instance admin (403 otherwise), including a save that removes every action. When `stepUpForDestructive` is enabled and the save changes the recipe's actions to a non-empty set, it additionally requires an `X-Elevation-Token` for action `connector.recipeActions` bound to the connector id; removing all actions needs no token.
  * @summary Update a connector (operator)
  */
 export const putConnectorsConnectorId = (

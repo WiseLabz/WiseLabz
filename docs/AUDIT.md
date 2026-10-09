@@ -55,7 +55,7 @@ object, action-specific), and `createdAt`.
 | `connector.stop` | `POST /api/connectors/{id}/stop` (dryRun omitted/false), or `POST /api/runbooks/{id}/steps/{stepId}/execute` for a `stop` step | connector / id |
 | `connector.action` | `POST /api/connectors/{id}/actions/{name}`, or a named-action step in a run | connector / id; action, entity reference, method, URL without query or credentials, and status only |
 | `connector.recipe_actions_changed` | Saving or reconciling changed recipe actions | connector / id; added, changed and removed qualified action names |
-| `backup.import` | Successful backup restore | backup / (none); imported counts and names of imported connectors with actions |
+| `backup.import` | Successful backup restore | backup_import / default; imported counts and names of imported connectors with actions |
 | `runbook.run.step_resent` | Resuming an unknown named-action step with `resend` | runbook_run / run id; step id and acting user |
 | `runbook.run.step_marked_done` | Resuming an unknown named-action step with `mark_done` | runbook_run / run id; step id and acting user |
 | `connector.configPush` | `POST /api/connectors/{id}/config-push` (successful, verified push only), or a `config_push` step in a runbook run started via `POST /api/runbooks/{id}/run` or resumed via `POST /api/runbook-runs/{runId}/resume` | connector / id |

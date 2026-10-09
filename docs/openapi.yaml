@@ -1026,8 +1026,9 @@ paths:
       tags: [connectors]
       summary: Create a connector (operator)
       description: >
+        Declaring recipe actions requires an instance admin (403 otherwise).
         When `stepUpForDestructive` is enabled and the recipe declares actions,
-        requires an `X-Elevation-Token` for action `connector.recipeActions`.
+        also requires an `X-Elevation-Token` for action `connector.recipeActions`.
       parameters:
         - name: X-Elevation-Token
           in: header
@@ -1201,9 +1202,12 @@ paths:
       description: >
         Changing url, type, verifyTls, category or endpoint config requires an
         instance admin (403 otherwise); operators may resend the unchanged
-        values. When `stepUpForDestructive` is enabled and the save changes the
-        recipe's actions to a non-empty set, requires an `X-Elevation-Token`
-        for action `connector.recipeActions` bound to the connector id.
+        values. Adding, changing or removing recipe actions also requires an
+        instance admin (403 otherwise), including a save that removes every
+        action. When `stepUpForDestructive` is enabled and the save changes the
+        recipe's actions to a non-empty set, it additionally requires an
+        `X-Elevation-Token` for action `connector.recipeActions` bound to the
+        connector id; removing all actions needs no token.
       parameters:
         - name: X-Elevation-Token
           in: header
@@ -5485,7 +5489,7 @@ components:
         headers:
           type: object
           additionalProperties: { type: string }
-          description: 'Only declared static headers; connector credentials and secret headers are omitted.'
+          description: 'Only declared static headers; the values of connector credentials and secret headers are replaced with `[redacted]`.'
         body: { description: 'Resolved static JSON request body.' }
     ActionError:
       allOf:
@@ -7821,6 +7825,10 @@ components:
         journalEntries: { $ref: '#/components/schemas/BackupCounts' }
         attachments: { $ref: '#/components/schemas/BackupCounts' }
         connectors: { $ref: '#/components/schemas/BackupCounts' }
+        connectorsWithActions:
+          type: array
+          items: { type: string }
+          description: Names of the imported connectors whose recipe declares actions. Always present, possibly empty.
         docs: { $ref: '#/components/schemas/BackupCounts' }
         docVersions: { $ref: '#/components/schemas/BackupCounts' }
         templates: { $ref: '#/components/schemas/BackupCounts' }

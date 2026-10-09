@@ -8,6 +8,6 @@
  */
 
 /**
- * Only declared static headers; connector credentials and secret headers are omitted.
+ * Only declared static headers; the values of connector credentials and secret headers are replaced with `[redacted]`.
  */
 export type ActionRequestHeaders = { [key: string]: string };

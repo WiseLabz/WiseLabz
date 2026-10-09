@@ -12,6 +12,8 @@ export interface BackupImportResult {
   journalEntries?: BackupCounts;
   attachments?: BackupCounts;
   connectors: BackupCounts;
+  /** Names of the imported connectors whose recipe declares actions. Always present, possibly empty. */
+  connectorsWithActions?: string[];
   docs: BackupCounts;
   docVersions: BackupCounts;
   templates: BackupCounts;

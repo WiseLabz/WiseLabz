@@ -13,7 +13,7 @@ export interface ActionRequest {
   method: ActionRequestMethod;
   /** Resolved same-origin URL with credentials redacted. */
   url: string;
-  /** Only declared static headers; connector credentials and secret headers are omitted. */
+  /** Only declared static headers; the values of connector credentials and secret headers are replaced with `[redacted]`. */
   headers?: ActionRequestHeaders;
   /** Resolved static JSON request body. */
   body?: unknown;
