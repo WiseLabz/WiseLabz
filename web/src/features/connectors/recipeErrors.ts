@@ -23,13 +23,16 @@ export function resolveRecipeError(text: string, field: string): RecipeErrorTarg
   const path: (string | number)[] = [];
   let node: Node | null = document.contents as Node;
   let remaining = location;
+  // Below a block value (an endpoint or action body) the location names data, not rows: keep walking for the
+  // line, but report the body itself as the row.
+  let insideBlock = false;
   while (remaining) {
     remaining = remaining.replace(/^\./, '');
     if (isSeq(node)) {
       const match = /^\[(\d+)\]/.exec(remaining);
       if (!match) return undefined;
       const index = Number(match[1]);
-      path.push(index);
+      if (!insideBlock) path.push(index);
       node = node.items[index] as Node | null;
       remaining = remaining.slice(match[0].length);
     } else if (isMap(node)) {
@@ -38,6 +41,7 @@ export function resolveRecipeError(text: string, field: string): RecipeErrorTarg
         .filter((candidate) => candidate && (remaining === candidate || remaining.startsWith(`${candidate}.`) || remaining.startsWith(`${candidate}[`)))
         .sort((a, b) => b.length - a.length)[0];
       if (!key) {
+        if (insideBlock) break;
         const missing = remaining.match(/^[^.[\]]+/)?.[0];
         if (!missing || !knownField(path, missing)) return undefined;
         path.push(missing);
@@ -52,8 +56,11 @@ export function resolveRecipeError(text: string, field: string): RecipeErrorTarg
         if (remaining) return undefined;
         break;
       }
-      if (!knownField(path, key)) return undefined;
-      path.push(key);
+      if (!insideBlock) {
+        if (!knownField(path, key)) return undefined;
+        path.push(key);
+        insideBlock = isBlockField(path);
+      }
       node = node.get(key, true) as Node | null;
       remaining = remaining.slice(key.length);
     } else return undefined;
@@ -64,8 +71,18 @@ export function resolveRecipeError(text: string, field: string): RecipeErrorTarg
   return { path, id: recipeFieldId(path), from, to: Math.max(from + 1, range[1]), line: text.slice(0, from).split('\n').length };
 }
 
+function isBlockField(path: (string | number)[]): boolean {
+  return fieldAt(path).field?.kind === 'block';
+}
+
 // Walk the same table that draws rows and reports unknown keys.
 function knownField(path: (string | number)[], key: string): boolean {
+  const { format, field } = fieldAt(path);
+  if (field?.kind === 'dynamic-map') return true;
+  return !!format?.fields[key];
+}
+
+function fieldAt(path: (string | number)[]): { format?: RecipeFormatNode; field?: RecipeFormatField } {
   let format: RecipeFormatNode | undefined = recipeFormat;
   let field: RecipeFormatField | undefined;
   for (const part of path) {
@@ -79,9 +96,8 @@ function knownField(path: (string | number)[], key: string): boolean {
       continue;
     }
     field = format?.fields[part];
-    if (!field) return false;
+    if (!field) return {};
     format = field.item;
   }
-  if (field?.kind === 'dynamic-map') return true;
-  return !!format?.fields[key];
+  return { format, field };
 }

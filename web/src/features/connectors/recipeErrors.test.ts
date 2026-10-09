@@ -39,4 +39,42 @@ describe('recipe server error locations', () => {
     expect(resolveRecipeError(recipe, 'url')).toBeUndefined();
     expect(resolveRecipeError('category: [', 'recipe.category')).toBeUndefined();
   });
+
+  describe('action locations', () => {
+    const withActions = `version: 1
+category: other
+auth: {mode: none}
+endpoints:
+  - name: items
+    entity:
+      kind: item
+      name: name
+      external_id: id
+      actions:
+        rescan:
+          method: GET
+          path: /items/{external_id}
+          body: {reason: "x {attr.node}"}
+actions:
+  restart-now: {method: POST, path: "/restart/{external_id}"}
+`;
+    it.each([
+      ['recipe.endpoints[0].entity.actions.rescan', ['endpoints', 0, 'entity', 'actions', 'rescan']],
+      ['recipe.endpoints[0].entity.actions.rescan.method', ['endpoints', 0, 'entity', 'actions', 'rescan', 'method']],
+      ['recipe.endpoints[0].entity.actions.rescan.path', ['endpoints', 0, 'entity', 'actions', 'rescan', 'path']],
+      ['recipe.endpoints[0].entity.actions', ['endpoints', 0, 'entity', 'actions']],
+      ['recipe.actions.restart-now.path', ['actions', 'restart-now', 'path']],
+      ['recipe.actions.restart-now', ['actions', 'restart-now']],
+    ])('resolves %s to its row', (field, path) => {
+      expect(resolveRecipeError(withActions, field)?.path).toEqual(path);
+    });
+    it('reports an error below a body as the body row but marks the nested line', () => {
+      const target = resolveRecipeError(withActions, 'recipe.endpoints[0].entity.actions.rescan.body.reason');
+      expect(target?.path).toEqual(['endpoints', 0, 'entity', 'actions', 'rescan', 'body']);
+      expect(withActions.slice(target!.from, target!.to)).toContain('x {attr.node}');
+    });
+    it('keeps a location below an unknown action key in the list', () => {
+      expect(resolveRecipeError(withActions, 'recipe.actions.restart-now.surprise')).toBeUndefined();
+    });
+  });
 });

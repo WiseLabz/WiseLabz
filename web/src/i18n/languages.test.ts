@@ -395,7 +395,20 @@ describe('recipe builder translations (#651)', () => {
       "endpointFailed",
       "itemCount",
       "none",
-      "scalarType"
+      "scalarType",
+      "addAction",
+      "removeAction",
+      "actionsLimit",
+      "noActions",
+      "entityActions",
+      "entityActionsHelp",
+      "serviceActions",
+      "actionName",
+      "actionMethod",
+      "actionPath",
+      "actionLabel",
+      "actionDescription",
+      "downtimeSeconds"
 ];
     for (const key of keys) {
       expect((en.connectors.recipeBuilder as Record<string, string>)[key]).toEqual(expect.any(String));

@@ -40,8 +40,8 @@
 
 ## 7. Action rows (only after the coordinator confirms `recipe-actions` has merged; rebase onto main first)
 
-- [ ] 7.1 Add the action keys to the format table and rows for entity actions and service actions with every field an action defines, following `docs/connectors/RECIPE_FORMAT.md` as merged; verify with component tests for the "Action rows" scenario and that a recipe with actions opens with no unknown-key markers.
-- [ ] 7.2 Verify the connector pages' step-up retry on save still works when the changed actions were edited through the form, with a component test, and add the en and pt-BR strings for the action rows to the parity lists.
+- [x] 7.1 Add the action keys to the format table and rows for entity actions and service actions with every field an action defines, following `docs/connectors/RECIPE_FORMAT.md` as merged; verify with component tests for the "Action rows" scenario and that a recipe with actions opens with no unknown-key markers.
+- [x] 7.2 Verify the connector pages' step-up retry on save still works when the changed actions were edited through the form, with a component test, and add the en and pt-BR strings for the action rows to the parity lists.
 
 ## 8. Integration
 

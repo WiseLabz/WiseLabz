@@ -26,6 +26,10 @@ const authModes = recipeFormat.fields.auth.item?.fields.mode.options ?? [];
 const paginationStyles = recipeFormat.fields.endpoints.item?.fields.pagination.item?.fields.type.options ?? [];
 const attributeTypes = recipeFormat.fields.endpoints.item?.fields.entity.item?.fields.attributes.item?.fields.type.options ?? [];
 const dependencyKinds = recipeFormat.fields.dependencies.item?.fields.kind.options ?? [];
+const actionMethods = recipeFormat.fields.actions.item?.fields.method.options ?? [];
+const actionLimit = 10;
+// Offered first when an action is added; other names are used once these are taken.
+const lifecycleActionNames = ['restart', 'start', 'stop'];
 // Keys each pagination style accepts (server validatePagination); other owned keys are dropped on style change.
 const paginationFieldsByStyle: Record<string, readonly string[]> = {
   page: ['param', 'size_param', 'size', 'start'],
@@ -285,6 +289,18 @@ export function RecipeBuilder({
         editMany={editMany}
         removeConfirm={removeConfirm}
       />
+
+      <ActionsEditor
+        label={t('connectors.recipeBuilder.serviceActions')}
+        path={['actions']}
+        entityActions={false}
+        disabled={disabled}
+        issue={issue}
+        unknownAt={unknownAt}
+        read={read}
+        edit={edit}
+        removeConfirm={removeConfirm}
+      />
     </div>
   );
 }
@@ -538,6 +554,18 @@ function EndpointEditor({
             <p className="text-xs text-ink-muted">{t('connectors.recipeBuilder.noAttributes')}</p>
           )}
         </div>
+
+        <ActionsEditor
+          label={t('connectors.recipeBuilder.entityActions')}
+          path={[...base, 'entity', 'actions']}
+          entityActions
+          disabled={disabled}
+          issue={issue}
+          unknownAt={unknownAt}
+          read={read}
+          edit={edit}
+          removeConfirm={removeConfirm}
+        />
       </section>
 
       <DependencyEditor
@@ -1075,6 +1103,222 @@ function DependencyEditor({
   );
 }
 
+function ActionsEditor({
+  label,
+  path,
+  entityActions,
+  disabled,
+  issue,
+  unknownAt,
+  read,
+  edit,
+  removeConfirm,
+}: {
+  label: string;
+  path: RecipePath;
+  entityActions: boolean;
+  disabled: boolean;
+  issue: (path: RecipePath) => { id: string; message: string };
+  unknownAt: (path: RecipePath) => { keys: string[] } | undefined;
+  read: (path: RecipePath) => unknown;
+  edit: (operation: RecipeEdit) => void;
+  removeConfirm: (path: RecipePath) => boolean;
+}) {
+  const { t } = useTranslation();
+  const actions = record(read(path));
+  const names = Object.keys(actions);
+  const containerIssue = issue(path);
+  const containerUnknown = unknownAt(path);
+  const full = names.length >= actionLimit;
+  const addAction = () => {
+    const name = lifecycleActionNames.find((candidate) => !(candidate in actions)) ?? uniqueName(actions, 'action');
+    edit({ type: 'set', path: [...path, name], value: { method: 'POST', path: '' } });
+  };
+
+  return (
+    <section
+      id={containerIssue.id}
+      tabIndex={-1}
+      aria-invalid={containerIssue.message ? true : undefined}
+      aria-describedby={containerIssue.message ? containerIssue.id + '-error' : undefined}
+      className="space-y-3 rounded-sm border border-line-soft p-3"
+    >
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <h4 className="text-xs font-semibold text-ink">{label}</h4>
+          {containerUnknown && <UnknownMarker keys={containerUnknown.keys} />}
+        </div>
+        {!disabled && (
+          <Button size="sm" disabled={full} onClick={addAction}>
+            {t('connectors.recipeBuilder.addAction')}
+          </Button>
+        )}
+      </div>
+      {entityActions && <p className="text-2xs text-ink-muted">{t('connectors.recipeBuilder.entityActionsHelp')}</p>}
+      {!disabled && full && <p className="text-2xs text-ink-muted">{t('connectors.recipeBuilder.actionsLimit')}</p>}
+      {containerIssue.message && <InlineIssue issue={containerIssue} />}
+      {names.map((name) => (
+        <ActionRow
+          key={name}
+          path={[...path, name]}
+          name={name}
+          action={record(actions[name])}
+          siblings={actions}
+          disabled={disabled}
+          issue={issue}
+          unknownAt={unknownAt}
+          edit={edit}
+          removeConfirm={removeConfirm}
+        />
+      ))}
+      {names.length === 0 && <p className="text-xs text-ink-muted">{t('connectors.recipeBuilder.noActions')}</p>}
+    </section>
+  );
+}
+
+function ActionRow({
+  path,
+  name,
+  action,
+  siblings,
+  disabled,
+  issue,
+  unknownAt,
+  edit,
+  removeConfirm,
+}: {
+  path: RecipePath;
+  name: string;
+  action: Values;
+  siblings: Values;
+  disabled: boolean;
+  issue: (path: RecipePath) => { id: string; message: string };
+  unknownAt: (path: RecipePath) => { keys: string[] } | undefined;
+  edit: (operation: RecipeEdit) => void;
+  removeConfirm: (path: RecipePath) => boolean;
+}) {
+  const { t } = useTranslation();
+  const rowIssue = issue(path);
+  const rowUnknown = unknownAt(path);
+  const rename = (next: string) => {
+    if (!next || next === name || siblings[next] !== undefined) return;
+    edit({ type: 'rename', path, to: next });
+  };
+  const optionalText = (field: 'label' | 'description', fieldLabel: string, maxLength: number, className = '') => (
+    <TextField
+      className={className}
+      label={fieldLabel}
+      path={[...path, field]}
+      value={String(action[field] ?? '')}
+      disabled={disabled}
+      maxLength={maxLength}
+      issue={issue([...path, field])}
+      onChange={(next) => {
+        if (next) edit({ type: 'set', path: [...path, field], value: next });
+        else edit({ type: 'delete', path: [...path, field] });
+      }}
+    />
+  );
+
+  return (
+    <fieldset
+      id={rowIssue.id}
+      tabIndex={-1}
+      aria-invalid={rowIssue.message ? true : undefined}
+      aria-describedby={rowIssue.message ? rowIssue.id + '-error' : undefined}
+      className="space-y-3 rounded-sm border border-line-soft p-3"
+    >
+      <legend className="px-1 text-2xs font-medium text-ink">{name}</legend>
+      <div className="flex flex-wrap items-end justify-between gap-2">
+        <KeyField
+          label={t('connectors.recipeBuilder.actionName')}
+          path={[...path, 'key']}
+          value={name}
+          disabled={disabled}
+          onCommit={rename}
+        />
+        <div className="flex items-center gap-2">
+          {rowUnknown && <UnknownMarker keys={rowUnknown.keys} />}
+          {!disabled && (
+            <Button
+              size="sm"
+              variant="danger"
+              onClick={() => {
+                if (removeConfirm(path)) edit({ type: 'delete', path });
+              }}
+            >
+              {t('connectors.recipeBuilder.removeAction')}
+            </Button>
+          )}
+        </div>
+      </div>
+      {rowIssue.message && <InlineIssue issue={rowIssue} />}
+      <div className="grid gap-3 sm:grid-cols-2">
+        <SelectField
+          label={t('connectors.recipeBuilder.actionMethod')}
+          path={[...path, 'method']}
+          value={String(action.method ?? '')}
+          options={actionMethods}
+          includeEmpty={action.method === undefined || action.method === null}
+          disabled={disabled}
+          issue={issue([...path, 'method'])}
+          onChange={(next) => {
+            if (next) edit({ type: 'set', path: [...path, 'method'], value: next });
+          }}
+        />
+        <TextField
+          label={t('connectors.recipeBuilder.actionPath')}
+          path={[...path, 'path']}
+          value={String(action.path ?? '')}
+          disabled={disabled}
+          issue={issue([...path, 'path'])}
+          onChange={(next) => edit({ type: 'set', path: [...path, 'path'], value: next })}
+        />
+        {optionalText('label', t('connectors.recipeBuilder.actionLabel'), 60)}
+        {optionalText('description', t('connectors.recipeBuilder.actionDescription'), 300, 'sm:col-span-2')}
+        <TextField
+          type="number"
+          label={t('connectors.recipeBuilder.downtimeSeconds')}
+          path={[...path, 'downtime_seconds']}
+          value={action.downtime_seconds === undefined ? '' : String(action.downtime_seconds)}
+          disabled={disabled}
+          issue={issue([...path, 'downtime_seconds'])}
+          onChange={(next) => {
+            if (next === '') edit({ type: 'delete', path: [...path, 'downtime_seconds'] });
+            else if (Number.isFinite(Number(next))) edit({ type: 'set', path: [...path, 'downtime_seconds'], value: Number(next) });
+          }}
+        />
+      </div>
+      <StringMapEditor
+        label={t('connectors.recipeBuilder.query')}
+        path={[...path, 'query']}
+        values={record(action.query)}
+        disabled={disabled}
+        issue={issue}
+        edit={edit}
+        onConfirmRemove={removeConfirm}
+      />
+      <StringMapEditor
+        label={t('connectors.recipeBuilder.headers')}
+        path={[...path, 'headers']}
+        values={record(action.headers)}
+        disabled={disabled}
+        issue={issue}
+        edit={edit}
+        onConfirmRemove={removeConfirm}
+      />
+      <BodyEditor
+        key={formatBlock(action.body)}
+        path={[...path, 'body']}
+        value={action.body}
+        disabled={disabled}
+        issue={issue([...path, 'body'])}
+        edit={edit}
+      />
+    </fieldset>
+  );
+}
+
 function StringMapEditor({
   label,
   path,
@@ -1286,6 +1530,7 @@ function TextField({
   onChange,
   className = '',
   type = 'text',
+  maxLength,
 }: {
   label: string;
   path: RecipePath;
@@ -1295,6 +1540,7 @@ function TextField({
   onChange: (value: string) => void;
   className?: string;
   type?: 'text' | 'number';
+  maxLength?: number;
 }) {
   if (disabled) return <ReadOnlyOrField label={label} value={value} className={className} />;
   const id = issue?.id ?? recipeFieldId([...path]);
@@ -1304,6 +1550,7 @@ function TextField({
       <input
         id={id}
         type={type}
+        maxLength={maxLength}
         className={controlClass}
         value={value}
         aria-invalid={issue?.message ? true : undefined}

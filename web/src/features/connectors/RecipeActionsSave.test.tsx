@@ -148,7 +148,7 @@ describe('recipe action save retry', () => {
       expect(api).toHaveBeenCalledTimes(1);
       const before = api.mock.calls[0];
       // Edits made while confirming must not change the request being approved.
-      fireEvent.change(screen.getByLabelText(/name/i), { target: { value: 'Another name' } });
+      fireEvent.change(screen.getByLabelText(/^display name/i), { target: { value: 'Another name' } });
       fireEvent.click(complete);
       await waitFor(() => expect(api).toHaveBeenCalledTimes(2));
       expect(elevated).toHaveBeenCalledWith('connector.recipeActions', edit ? 'c1' : undefined);
@@ -167,7 +167,7 @@ describe('recipe action save retry', () => {
     async (edit) => {
       const onCreated = vi.fn();
       renderFlow(edit, onCreated);
-      fireEvent.change(screen.getByLabelText(/name/i), { target: { value: 'Unsaved name' } });
+      fireEvent.change(screen.getByLabelText(/^display name/i), { target: { value: 'Unsaved name' } });
       fireEvent.change(await openYaml(), {
         target: { value: recipe + '\n# keep edits' },
       });
@@ -176,7 +176,7 @@ describe('recipe action save retry', () => {
       fireEvent.click(save);
       fireEvent.click(await screen.findByRole('button', { name: 'Cancel step-up' }));
       expect(save).not.toBeDisabled();
-      expect(screen.getByLabelText(/name/i)).toHaveValue('Unsaved name');
+      expect(screen.getByLabelText(/^display name/i)).toHaveValue('Unsaved name');
       expect(await screen.findByLabelText('Recipe (YAML)')).toHaveValue(recipe + '\n# keep edits');
       expect(screen.getByLabelText('API token')).toHaveValue('typed-secret');
       expect(edit ? put : post).toHaveBeenCalledTimes(1);
@@ -208,4 +208,51 @@ describe('recipe action save retry', () => {
       expect(onCreated).not.toHaveBeenCalled();
     }
   );
+
+  describe('an action edited in the Form tab', () => {
+    const editedPath = '/items/{external_id}/rescan';
+    const editedRecipe = recipe.replace('path: /rescan', `path: "${editedPath}"`);
+    const bodyOf = (call: unknown[], edit: boolean) =>
+      (edit ? call[1] : call[0]) as { config: { recipe: string } };
+
+    it.each([false, true])('sends the Form edit as YAML and keeps it in both tabs when step-up is cancelled (%s)', async (edit) => {
+      renderFlow(edit);
+      fireEvent.change(await screen.findByLabelText('Action path'), { target: { value: editedPath } });
+      const save = screen.getByRole('button', { name: edit ? /^save$/i : /test & add connector/i });
+      fireEvent.click(save);
+      fireEvent.click(await screen.findByRole('button', { name: 'Cancel step-up' }));
+
+      const api = edit ? put : post;
+      expect(api).toHaveBeenCalledTimes(1);
+      expect(bodyOf(api.mock.calls[0], edit).config.recipe).toBe(editedRecipe);
+      expect(save).not.toBeDisabled();
+      expect(screen.getByLabelText('Action path')).toHaveValue(editedPath);
+      expect(await openYaml()).toHaveValue(editedRecipe);
+      fireEvent.click(screen.getByRole('tab', { name: 'Form' }));
+      expect(await screen.findByLabelText('Action path')).toHaveValue(editedPath);
+    });
+
+    it.each([false, true])('keeps the Form edit in both tabs when the elevated save fails (%s)', async (edit) => {
+      const api = edit ? put : post;
+      api.mockReset();
+      const required = { isAxiosError: true, response: { status: 400, data: { code: 'elevation_required' } } };
+      api.mockRejectedValueOnce(required).mockRejectedValueOnce({
+        isAxiosError: true,
+        response: { status: 400, data: { details: [{ field: 'config.recipe.actions.rescan.path', msg: 'must be a relative path' }] } },
+      });
+      renderFlow(edit);
+      fireEvent.change(await screen.findByLabelText('Action path'), { target: { value: editedPath } });
+      const save = screen.getByRole('button', { name: edit ? /^save$/i : /test & add connector/i });
+      fireEvent.click(save);
+      fireEvent.click(await screen.findByRole('button', { name: 'Complete step-up' }));
+      await waitFor(() => expect(api).toHaveBeenCalledTimes(2));
+      await waitFor(() => expect(save).not.toBeDisabled());
+
+      expect(bodyOf(api.mock.calls[1], edit).config.recipe).toBe(editedRecipe);
+      const field = await screen.findByLabelText('Action path');
+      expect(field).toHaveValue(editedPath);
+      expect(field).toHaveAttribute('aria-invalid', 'true');
+      expect(await openYaml()).toHaveValue(editedRecipe);
+    });
+  });
 });

@@ -17,7 +17,7 @@ const scalar = (): RecipeFormatField => ({ kind: 'scalar' });
 const sequence = (item: RecipeFormatNode): RecipeFormatField => ({ kind: 'sequence', item });
 const mapping = (item: RecipeFormatNode): RecipeFormatField => ({ kind: 'mapping', item });
 
-// Keep this table aligned with backend/internal/connector/custom/recipe.go; it describes rows, not validation rules.
+// Keep this table aligned with backend/internal/connector/custom/recipe.go and recipe_action.go; it describes rows, not validation rules.
 const dependency = node({ kind: string(['host', 'network', 'storage', 'upstream_service']), path: string(), const: scalar() });
 const attribute = node({
   path: string(),
@@ -37,6 +37,17 @@ const pagination = node({
   next_path: string(),
   link_header: scalar(),
 });
+const action = node({
+  method: string(['POST', 'PUT', 'PATCH', 'DELETE']),
+  path: string(),
+  query: { kind: 'dynamic-map', itemKind: 'string' },
+  headers: { kind: 'dynamic-map', itemKind: 'string' },
+  body: { kind: 'block' },
+  label: string(),
+  description: string(),
+  downtime_seconds: scalar(),
+});
+const actions: RecipeFormatField = { kind: 'dynamic-map', item: action };
 const entity = node({
   kind: string(),
   name: string(),
@@ -46,6 +57,7 @@ const entity = node({
   mac: string(),
   aliases: string(),
   attributes: { kind: 'dynamic-map', item: attribute },
+  actions,
 });
 const endpoint = node({
   name: string(),
@@ -66,6 +78,7 @@ export const recipeFormat = node({
   auth: mapping(node({ mode: string(['none', 'header', 'basic', 'query']), name: string(), prefix: string() })),
   endpoints: sequence(endpoint),
   dependencies: sequence(dependency),
+  actions,
 });
 
 export type RecipeUnknownNode = { node: YAMLMap; path: RecipePathSegments; keys: string[] };

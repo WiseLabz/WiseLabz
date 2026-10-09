@@ -237,7 +237,7 @@ describe('RecipeBuilder', () => {
 
   it('keeps unknown endpoint and entity keys during edits and confirms before removing their row', () => {
     const initial = baseRecipe.replace('      external_id: id\n', '      external_id: id\n      entity_extra:\n        keep: true\n') + [
-      '    actions:',
+      '    jobs:',
       '      - name: restart',
       '        method: POST',
       '        path: /restart',
@@ -246,16 +246,16 @@ describe('RecipeBuilder', () => {
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
     renderBuilder(initial);
 
-    expect(screen.getAllByText(/actions/)[0]).toBeInTheDocument();
+    expect(screen.getByTitle('jobs')).toBeInTheDocument();
     expect(screen.getByTitle('entity_extra')).toBeInTheDocument();
     change('Path', '/api/changed');
-    expect(recipeText()).toContain('actions:');
+    expect(recipeText()).toContain('jobs:');
     expect(recipeText()).toContain('entity_extra:');
     expect(recipeText()).toContain('path: /restart');
 
     fireEvent.click(screen.getByRole('button', { name: 'Remove endpoint' }));
     expect(confirm).toHaveBeenCalledTimes(1);
-    expect(recipeText()).toContain('actions:');
+    expect(recipeText()).toContain('jobs:');
 
     confirm.mockReturnValue(true);
     fireEvent.click(screen.getByRole('button', { name: 'Remove endpoint' }));
@@ -412,7 +412,7 @@ describe('RecipeBuilder', () => {
       '          path: custom.path',
       '          custom_attr: { quoted: "keep me" } # keep comment',
       '      entity_extra: true',
-      '    actions:',
+      '    jobs:',
       '      - name: restart',
       '        method: POST',
       '        path: /restart',
@@ -421,13 +421,13 @@ describe('RecipeBuilder', () => {
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
     renderBuilder(initial);
 
-    for (const key of ['root_extra', 'actions', 'entity_extra', 'custom_attr']) {
+    for (const key of ['root_extra', 'jobs', 'entity_extra', 'custom_attr']) {
       expect(screen.getByTitle(key)).toBeInTheDocument();
     }
     change('Path', '/api/changed');
     expect(recipeText()).toContain('root_extra: {keep: true}');
     expect(recipeText()).toContain('custom_attr: { quoted: "keep me" } # keep comment');
-    expect(recipeText()).toContain('actions:');
+    expect(recipeText()).toContain('jobs:');
 
     rename('Attribute name', 'renamed');
     expect(recipeText()).toContain('renamed:\n          path: custom.path\n          custom_attr: { quoted: "keep me" } # keep comment');
@@ -438,7 +438,7 @@ describe('RecipeBuilder', () => {
     confirm.mockReturnValue(true);
     fireEvent.click(screen.getByRole('button', { name: 'Remove attribute' }));
     expect(recipeText()).not.toContain('custom_attr:');
-    expect(recipeText()).toContain('actions:');
+    expect(recipeText()).toContain('jobs:');
     confirm.mockRestore();
   });
 
@@ -489,6 +489,254 @@ describe('RecipeBuilder', () => {
       const after = recipeText().split('\r\n');
       expect(after).toHaveLength(before.length);
       expect(after.filter((line, index) => line !== before[index])).toEqual(["    path: /api/new"]);
+    });
+  });
+
+  describe('action rows', () => {
+    const entitySection = () => screen.getByText('Entity mapping', { selector: 'h4' }).closest('section') as HTMLElement;
+    const serviceSection = () => screen.getByText('Service actions', { selector: 'h4' }).closest('section') as HTMLElement;
+    const sectionOf = (container: HTMLElement, label: string) =>
+      within(container).getByText(label, { selector: 'h4' }).closest('section') as HTMLElement;
+    const withServiceActions = (actions: string[]) => baseRecipe + ['actions:', ...actions, ''].join('\n');
+
+    it('adds an entity action through the form and keeps block style, quoting and the rest of the text', () => {
+      renderBuilder(baseRecipe);
+      fireEvent.click(within(entitySection()).getByRole('button', { name: 'Add action' }));
+      expect(recipeValue().endpoints).toMatchObject([{ entity: { actions: { restart: { method: 'POST', path: '' } } } }]);
+
+      changeWithin(rowByLegend('restart'), 'Action path', '/api/containers/{external_id}/restart');
+      expect(recipeText()).toContain('      actions:\n        restart:\n          method: POST\n          path: /api/containers/{external_id}/restart\n');
+      expect(recipeText().startsWith(baseRecipe)).toBe(true);
+      expect(recipeValue().endpoints).toMatchObject([{
+        entity: { kind: 'media_item', external_id: 'id', actions: { restart: { method: 'POST', path: '/api/containers/{external_id}/restart' } } },
+      }]);
+    });
+
+    it('adds a service action at the root of a recipe without actions', () => {
+      renderBuilder(baseRecipe);
+      fireEvent.click(within(serviceSection()).getByRole('button', { name: 'Add action' }));
+      changeWithin(rowByLegend('restart'), 'Action path', '/api/system/restart');
+      changeWithin(rowByLegend('restart'), 'Action label', 'Restart service');
+      changeWithin(rowByLegend('restart'), 'Downtime seconds', '30');
+
+      expect(recipeText()).toContain('\nactions:\n  restart:\n    method: POST\n    path: /api/system/restart\n    label: Restart service\n    downtime_seconds: 30\n');
+      expect(recipeText().startsWith(baseRecipe)).toBe(true);
+      expect(recipeValue()).toMatchObject({
+        actions: { restart: { method: 'POST', path: '/api/system/restart', label: 'Restart service', downtime_seconds: 30 } },
+      });
+    });
+
+    it('names new actions restart, start and stop before a generated name', () => {
+      renderBuilder(baseRecipe);
+      for (let added = 0; added < 4; added += 1) {
+        fireEvent.click(within(serviceSection()).getByRole('button', { name: 'Add action' }));
+      }
+      expect(Object.keys(recipeValue().actions as object)).toEqual(['restart', 'start', 'stop', 'action']);
+    });
+
+    it('keeps flow style when a root action path with braces is written, quoting it and parsing back to the same value', () => {
+      renderBuilder(baseRecipe + 'actions: {rescan: {method: POST, path: /a}}\n');
+      changeWithin(rowByLegend('rescan'), 'Action path', '/items/{external_id}/rescan');
+      expect(recipeText()).toContain('path: "/items/{external_id}/rescan"');
+      expect(recipeText().startsWith(baseRecipe)).toBe(true);
+      expect(recipeValue()).toEqual({
+        ...parseRecipeDocument(baseRecipe).document?.toJS() as object,
+        actions: { rescan: { method: 'POST', path: '/items/{external_id}/rescan' } },
+      });
+    });
+
+    it('keeps flow style when an entity action path with braces is written inside a flow entity', () => {
+      const initial = [
+        'version: 1',
+        'category: media',
+        'auth: {mode: none}',
+        'endpoints:',
+        '  - name: items',
+        '    path: /api/items',
+        '    method: GET',
+        '    items: items',
+        '    entity: {kind: media_item, name: name, external_id: id, actions: {rescan: {method: POST, path: /a}}}',
+        '',
+      ].join('\n');
+      renderBuilder(initial);
+      changeWithin(rowByLegend('rescan'), 'Action path', '/items/{external_id}/rescan');
+      expect(recipeText()).toContain('path: "/items/{external_id}/rescan"');
+      expect(recipeValue().endpoints).toEqual([{
+        name: 'items',
+        path: '/api/items',
+        method: 'GET',
+        items: 'items',
+        entity: { kind: 'media_item', name: 'name', external_id: 'id', actions: { rescan: { method: 'POST', path: '/items/{external_id}/rescan' } } },
+      }]);
+    });
+
+    it('edits method, label, description, downtime, query, headers and body of an action', () => {
+      renderBuilder(withServiceActions(['  restart:', '    method: POST', '    path: /api/system/restart']));
+      const row = rowByLegend('restart');
+
+      changeWithin(row, 'Action method', 'PUT');
+      changeWithin(row, 'Action label', 'Restart now');
+      changeWithin(row, 'Action description', 'Restarts the service.');
+      changeWithin(row, 'Downtime seconds', '45');
+      expect(recipeValue().actions).toEqual({
+        restart: { method: 'PUT', path: '/api/system/restart', label: 'Restart now', description: 'Restarts the service.', downtime_seconds: 45 },
+      });
+
+      changeWithin(row, 'Downtime seconds', '');
+      changeWithin(row, 'Action label', '');
+      expect(recipeValue().actions).toEqual({
+        restart: { method: 'PUT', path: '/api/system/restart', description: 'Restarts the service.' },
+      });
+
+      const query = sectionOf(row, 'Query parameters');
+      fireEvent.click(within(query).getByRole('button', { name: 'Add entry' }));
+      renameWithin(query, 'Key', 'source');
+      changeWithin(query, 'Value', 'operator');
+      const headers = sectionOf(row, 'Headers');
+      fireEvent.click(within(headers).getByRole('button', { name: 'Add entry' }));
+      renameWithin(headers, 'Key', 'X-Mode');
+      changeWithin(headers, 'Value', 'full');
+      expect(recipeValue().actions).toMatchObject({ restart: { query: { source: 'operator' }, headers: { 'X-Mode': 'full' } } });
+
+      const body = within(row).getByLabelText('Request body');
+      fireEvent.change(body, { target: { value: '{"reason":"ops"}' } });
+      fireEvent.blur(body);
+      expect(recipeValue().actions).toMatchObject({ restart: { body: { reason: 'ops' } } });
+
+      fireEvent.click(within(query).getByRole('button', { name: 'Remove entry' }));
+      expect((recipeValue().actions as { restart: Record<string, unknown> }).restart.query).toBeUndefined();
+    });
+
+    it('renames an action, ignores a duplicate name and removes an action', () => {
+      renderBuilder(withServiceActions([
+        '  restart:', '    method: POST', '    path: /restart',
+        '  start:', '    method: POST', '    path: /start',
+      ]));
+      renameWithin(rowByLegend('restart'), 'Action name', 'stop');
+      expect(recipeValue().actions).toEqual({
+        stop: { method: 'POST', path: '/restart' },
+        start: { method: 'POST', path: '/start' },
+      });
+
+      renameWithin(rowByLegend('stop'), 'Action name', 'start');
+      expect(recipeValue().actions).toHaveProperty('stop');
+
+      fireEvent.click(within(rowByLegend('start')).getByRole('button', { name: 'Remove action' }));
+      expect(recipeValue().actions).toEqual({ stop: { method: 'POST', path: '/restart' } });
+    });
+
+    it('disables adding at ten actions and shows the limit hint', () => {
+      const names = Array.from({ length: 10 }, (_, index) => `action${index + 1}`);
+      renderBuilder(withServiceActions(names.flatMap((name) => [`  ${name}:`, '    method: POST', `    path: /${name}`])));
+      expect(within(serviceSection()).getByRole('button', { name: 'Add action' })).toBeDisabled();
+      expect(screen.getByText('An action list can hold at most 10 actions.')).toBeInTheDocument();
+    });
+
+    it('marks an unknown key inside an action, keeps it through edits and confirms before removing the row', () => {
+      const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+      renderBuilder(withServiceActions(['  restart:', '    method: POST', '    path: /restart', '    retry: 3']));
+      expect(screen.getByTitle('retry')).toBeInTheDocument();
+      expect(screen.getByText(/editable in YAML only: retry/)).toBeInTheDocument();
+      expect(screen.queryByTitle('actions')).not.toBeInTheDocument();
+
+      changeWithin(rowByLegend('restart'), 'Action path', '/api/restart');
+      expect(recipeText()).toContain('    retry: 3');
+
+      fireEvent.click(within(rowByLegend('restart')).getByRole('button', { name: 'Remove action' }));
+      expect(confirm).toHaveBeenCalledTimes(1);
+      expect(recipeText()).toContain('retry: 3');
+      confirm.mockRestore();
+    });
+
+    it('shows no unknown-key marker for known root and entity action containers', () => {
+      const initial = baseRecipe.replace('      external_id: id\n', '      external_id: id\n      actions:\n        rescan:\n          method: POST\n          path: /rescan\n')
+        + ['actions:', '  restart:', '    method: POST', '    path: /restart', '    retry: 3', ''].join('\n');
+      renderBuilder(initial);
+      expect(screen.getAllByText(/editable in YAML only/)).toHaveLength(1);
+      expect(screen.queryByTitle('actions')).not.toBeInTheDocument();
+    });
+
+    it('shows values without controls when read-only', () => {
+      renderBuilder(baseRecipe.replace('      external_id: id\n', '      external_id: id\n      actions:\n        rescan:\n          method: POST\n          path: /rescan\n')
+        + ['actions:', '  restart:', '    method: POST', '    path: /restart', ''].join('\n'), true);
+      expect(screen.getByText('Entity actions')).toBeInTheDocument();
+      expect(screen.getByText('Service actions')).toBeInTheDocument();
+      expect(screen.getByText('/restart')).toBeInTheDocument();
+      expect(screen.getByText('/rescan')).toBeInTheDocument();
+      expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
+      expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
+      expect(screen.queryByRole('spinbutton')).not.toBeInTheDocument();
+      expect(screen.queryByRole('button')).not.toBeInTheDocument();
+    });
+
+    it('marks located server errors on the matching action fields, rows and containers', () => {
+      const initial = withServiceActions(['  restart:', '    method: POST', '    path: /restart'])
+        .replace('      external_id: id\n', [
+          '      external_id: id',
+          '      actions:',
+          '        rescan:',
+          '          method: POST',
+          '          path: /a',
+          '          label: Rescan',
+          '          downtime_seconds: 0',
+          '          query: {source: operator}',
+          '          headers: {X-Mode: full}',
+          '          body: {reason: ok}',
+          '',
+        ].join('\n'));
+      const errors = [
+        { field: 'config.recipe.endpoints[0].entity.actions.rescan.method', msg: 'Entity method rejected' },
+        { field: 'config.recipe.endpoints[0].entity.actions.rescan.path', msg: 'Entity path rejected' },
+        { field: 'config.recipe.endpoints[0].entity.actions.rescan.label', msg: 'Entity label rejected' },
+        { field: 'config.recipe.endpoints[0].entity.actions.rescan.downtime_seconds', msg: 'Entity downtime rejected' },
+        { field: 'config.recipe.endpoints[0].entity.actions.rescan.query.source', msg: 'Entity query rejected' },
+        { field: 'config.recipe.endpoints[0].entity.actions.rescan.headers.X-Mode', msg: 'Entity header rejected' },
+        { field: 'config.recipe.endpoints[0].entity.actions.rescan.body.reason', msg: 'Entity body rejected' },
+        { field: 'config.recipe.endpoints[0].entity.actions.rescan', msg: 'Entity action rejected' },
+        { field: 'config.recipe.endpoints[0].entity.actions', msg: 'Entity actions rejected' },
+        { field: 'config.recipe.actions.restart.method', msg: 'Service method rejected' },
+        { field: 'config.recipe.actions', msg: 'Service actions rejected' },
+      ];
+      render(<RecipeBuilder value={initial} onChange={vi.fn()} errors={errors} errorRecipe={initial} />);
+
+      const rescan = rowByLegend('rescan');
+      const entityActions = sectionOf(entitySection(), 'Entity actions');
+      const queryField = within(sectionOf(rescan, 'Query parameters')).getByLabelText('Value');
+      const headerField = within(sectionOf(rescan, 'Headers')).getByLabelText('Value');
+      const invalid: Array<[string, HTMLElement, string]> = [
+        ['method', within(rescan).getByLabelText('Action method'), 'Entity method rejected'],
+        ['path', within(rescan).getByLabelText('Action path'), 'Entity path rejected'],
+        ['label', within(rescan).getByLabelText('Action label'), 'Entity label rejected'],
+        ['downtime', within(rescan).getByLabelText('Downtime seconds'), 'Entity downtime rejected'],
+        ['query key', queryField, 'Entity query rejected'],
+        ['header', headerField, 'Entity header rejected'],
+        ['body', within(rescan).getByLabelText('Request body'), 'Entity body rejected'],
+        ['action row', rescan, 'Entity action rejected'],
+        ['entity actions', entityActions, 'Entity actions rejected'],
+        ['service method', within(rowByLegend('restart')).getByLabelText('Action method'), 'Service method rejected'],
+        ['service actions', serviceSection(), 'Service actions rejected'],
+      ];
+      for (const [name, element, message] of invalid) {
+        expect(element, name).toHaveAttribute('aria-invalid', 'true');
+        expect(screen.getByText(message), name).toBeInTheDocument();
+      }
+    });
+
+    it('opens the recipe-actions example from the format docs with no markers and writes nothing on focus and blur', () => {
+      const docs = readFileSync(`${repositoryRoot}/docs/connectors/RECIPE_FORMAT.md`, 'utf8');
+      const example = /<!-- recipe-actions-example-start -->\s*```yaml\n([\s\S]*?)```\s*<!-- recipe-actions-example-end -->/.exec(docs)?.[1];
+      expect(example).toBeDefined();
+      const onChange = vi.fn();
+      render(<RecipeBuilder value={example ?? ''} onChange={onChange} />);
+
+      expect(screen.queryByText(/editable in YAML only/)).not.toBeInTheDocument();
+      expect(screen.getByText('Service actions')).toBeInTheDocument();
+      expect(screen.getAllByLabelText('Action path')).toHaveLength(2);
+      for (const control of [...screen.getAllByRole('textbox'), ...screen.getAllByRole('spinbutton')]) {
+        fireEvent.focus(control);
+        fireEvent.blur(control);
+      }
+      expect(onChange).not.toHaveBeenCalled();
     });
   });
 });

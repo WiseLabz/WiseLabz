@@ -18,6 +18,8 @@ const NEW = 'zz-new';
 const ADDED = 'zz-added';
 // `{` and `}` are flow indicators: a path like this must be quoted inside a flow mapping and stay plain in a block one.
 const PLACEHOLDER = '/items/{external_id}/rescan';
+// Strings a plain scalar cannot always hold, in either context: flow indicators, `: `, ` #`, indicators at the start.
+const AWKWARD = ['a, b', '[x]', '{x}', 'x: y', 'a #b', '', '- x', '"q"', "it's", '*star', '? key', '@at', 'null', 'true', '42'];
 
 type Path = (string | number)[];
 type Kind = 'set' | 'set-typed' | 'add-key' | 'delete' | 'remove' | 'move' | 'append';
@@ -272,6 +274,9 @@ function planOperations(js: unknown): Planned[] {
       add(`set ${JSON.stringify(path)} = 42`, 'set-typed', { type: 'set', path, value: 42 });
       add(`set ${JSON.stringify(path)} = true`, 'set-typed', { type: 'set', path, value: true });
       add(`set ${JSON.stringify(path)} = a path with a placeholder`, 'set', { type: 'set', path, value: PLACEHOLDER });
+      for (const awkward of AWKWARD) {
+        add(`set ${JSON.stringify(path)} = ${JSON.stringify(awkward)}`, 'set-typed', { type: 'set', path, value: awkward });
+      }
     }
   };
   visit(js, []);
