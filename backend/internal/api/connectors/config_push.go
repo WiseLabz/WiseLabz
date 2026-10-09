@@ -158,7 +158,7 @@ func (h *Handler) mutateConfigPush(
 	if err != nil {
 		return nil, fmt.Errorf("post-push fetch: %w", err)
 	}
-	if !configPushLanded(pre, post) {
+	if !configPushLanded(pre, post) && !configPushConfirmed(ctx, prepared, req) {
 		return nil, h.revertConfigPush(ctx, prepared, req.EntityRef, req.FieldKey, previous, known)
 	}
 
@@ -240,16 +240,36 @@ func isWritableField(pusher connector.ConfigPusher, key string) bool {
 	return false
 }
 
-// configPushLanded reports whether pre→post shows any change at all.
-// sync.Compare's diff results, non-empty, are treated as "the write landed
-// as some change" — the field-scoped check ADR 0003 calls for; a
-// per-field-key section filter would need a fixed field→section mapping
-// per connector, which the curated whitelist doesn't carry today.
+// configPushLanded reports whether pre→post shows any change in the
+// documented content. sync.Compare's diff results, non-empty, are treated as
+// "the write landed as some change" — the field-scoped check ADR 0003 calls
+// for; a per-field-key section filter would need a fixed field→section
+// mapping per connector, which the curated whitelist doesn't carry today.
+// An empty diff is not proof of a failed write; configPushConfirmed settles it.
 // ponytail: any detected change counts as "landed" rather than verifying
 // the new value matches exactly — tighten if a connector's diff proves too
 // coarse to catch a landed-but-wrong-value push.
 func configPushLanded(pre, post *connector.ServiceSnapshot) bool {
 	return len(sync.Compare(pre, post)) > 0
+}
+
+// configPushConfirmed reads the field back after a write that changed nothing
+// in the documented content. Some writes land without showing there, for
+// example a memory change on a running guest that only appears after a restart.
+// It is true only when the connector reports exactly the target value; a nil
+// answer, another value or a read error all count as not confirmed.
+func configPushConfirmed(ctx context.Context, prepared *preparedConfigPush, req configPushRequest) bool {
+	reader, ok := prepared.conn.(connector.ConfigReader)
+	if !ok {
+		return false
+	}
+	got, err := reader.ConfigRead(ctx, prepared.config, req.EntityRef, req.FieldKey)
+	if err != nil {
+		slog.Warn("config-push read-back failed", "connector", logsafe.Sanitize(prepared.record.ID),
+			"field", logsafe.Sanitize(req.FieldKey), "error", logsafe.Err(err))
+		return false
+	}
+	return got != nil && configValuesEqual(got, req.Value)
 }
 
 // revertConfigPush restores a known previous value and raises the mismatch alert.

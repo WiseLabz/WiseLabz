@@ -573,6 +573,80 @@ func TestConnectorsDeleteElevationBoundary(t *testing.T) {
 	})
 }
 
+// TestConnectorsDeleteStepUpToggle checks that the route middleware, not the
+// handler, decides whether a delete needs an elevation token.
+func TestConnectorsDeleteStepUpToggle(t *testing.T) {
+	t.Parallel()
+	seed := func(t *testing.T, app *testApp, opID string) *store.ConnectorRecord {
+		t.Helper()
+		conn := &store.ConnectorRecord{Name: "svc", Category: "virtualization", Type: "proxmox", URL: "https://example.com"}
+		if err := app.Store.CreateConnector(context.Background(), conn); err != nil {
+			t.Fatalf("seed connector: %v", err)
+		}
+		app.connectorGrant(t, opID, conn.ID, "operator")
+		return conn
+	}
+	exists := func(app *testApp, id string) bool {
+		_, err := app.Store.GetConnector(context.Background(), id)
+		return err == nil
+	}
+
+	t.Run("step-up off, no token", func(t *testing.T) {
+		t.Parallel()
+		app := newTestApp(t)
+		stepUp(app, false)
+		opID, opToken := app.user(t, "operator")
+		conn := seed(t, app, opID)
+
+		rec := app.req(t, http.MethodDelete, "/api/connectors/"+conn.ID, nil, opToken)
+		if rec.Code != http.StatusNoContent {
+			t.Fatalf("status = %d, want 204; body = %s", rec.Code, rec.Body)
+		}
+		if exists(app, conn.ID) {
+			t.Fatal("connector still exists after delete")
+		}
+		records, _, err := app.Store.ListAuditRecords(context.Background(), "connector.delete", "connector", "", "", 0, 10)
+		if err != nil {
+			t.Fatalf("ListAuditRecords() error: %v", err)
+		}
+		if len(records) != 1 || records[0].TargetID != conn.ID {
+			t.Fatalf("audit records = %+v, want one connector.delete row for %s", records, conn.ID)
+		}
+	})
+
+	t.Run("step-up on, no token", func(t *testing.T) {
+		t.Parallel()
+		app := newTestApp(t)
+		stepUp(app, true)
+		opID, opToken := app.user(t, "operator")
+		conn := seed(t, app, opID)
+
+		rec := app.req(t, http.MethodDelete, "/api/connectors/"+conn.ID, nil, opToken)
+		if rec.Code != http.StatusBadRequest || errorCode(t, rec.Body.Bytes()) != "elevation_required" {
+			t.Fatalf("status = %d, body = %s; want 400 elevation_required", rec.Code, rec.Body)
+		}
+		if !exists(app, conn.ID) {
+			t.Fatal("connector was deleted without a token")
+		}
+	})
+
+	t.Run("step-up on, valid token", func(t *testing.T) {
+		t.Parallel()
+		app := newTestApp(t)
+		stepUp(app, true)
+		opID, opToken := app.user(t, "operator")
+		conn := seed(t, app, opID)
+
+		rec := app.reqElevated(t, http.MethodDelete, "/api/connectors/"+conn.ID, nil, opToken, "connector.delete")
+		if rec.Code != http.StatusNoContent {
+			t.Fatalf("status = %d, want 204; body = %s", rec.Code, rec.Body)
+		}
+		if exists(app, conn.ID) {
+			t.Fatal("connector still exists after delete")
+		}
+	})
+}
+
 // TestConnectorsBulkSyncAndReauthRoleBoundary verifies a caller without an
 // operator grant on the connector gets a per-item "forbidden" outcome, not a
 // blanket 403 — see the matching TestAlertsBulkSnoozeRoleBoundary comment.

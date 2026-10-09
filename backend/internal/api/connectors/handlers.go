@@ -668,16 +668,10 @@ func (h *Handler) recordConnectorUpdateAudit(r *http.Request, id string, updates
 }
 
 // Delete handles DELETE /api/connectors/{id}.
-// If auth config requires step-up, X-Elevation-Token must be validated.
+// Step-up is enforced by the route's RequireElevation middleware, so a request
+// that reaches the handler is already authorized.
 func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-
-	// Check for elevation token (step-up auth)
-	elevationToken := r.Header.Get("X-Elevation-Token")
-	if elevationToken == "" {
-		httputil.Error(w, http.StatusBadRequest, "elevation_required", "X-Elevation-Token header required for destructive action")
-		return
-	}
 
 	if err := h.Store.DeleteConnector(r.Context(), id); err != nil {
 		if errors.Is(err, store.ErrNotFound) {

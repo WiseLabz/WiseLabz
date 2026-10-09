@@ -24,7 +24,6 @@ import type {
 
 import type {
   BadRequestResponse,
-  ElevationRequiredResponse,
   Error,
   ExecuteRunbookStepParams,
   ForbiddenResponse,
@@ -605,7 +604,7 @@ export const executeRunbookStep = (
 export const getExecuteRunbookStepMutationKey = () => ['executeRunbookStep'] as const;
 
 export const getExecuteRunbookStepMutationOptions = <
-  TError = ErrorType<Error | ElevationRequiredResponse | ForbiddenResponse | NotFoundResponse>,
+  TError = ErrorType<Error | ForbiddenResponse | NotFoundResponse>,
   TContext = unknown,
 >(options?: {
   mutation?: UseMutationOptions<
@@ -645,7 +644,7 @@ export type ExecuteRunbookStepMutationResult = NonNullable<
 >;
 
 export type ExecuteRunbookStepMutationError = ErrorType<
-  Error | ElevationRequiredResponse | ForbiddenResponse | NotFoundResponse
+  Error | ForbiddenResponse | NotFoundResponse
 >;
 export type ExecuteRunbookStepMutationVariables = {
   runbookId: string;
@@ -657,7 +656,7 @@ export type ExecuteRunbookStepMutationVariables = {
  * @summary Execute (or preview) one runbook step's lifecycle operation
  */
 export const useExecuteRunbookStep = <
-  TError = ErrorType<Error | ElevationRequiredResponse | ForbiddenResponse | NotFoundResponse>,
+  TError = ErrorType<Error | ForbiddenResponse | NotFoundResponse>,
   TContext = unknown,
 >(
   options?: {
@@ -697,14 +696,7 @@ export const startRunbookRun = (
 export const getStartRunbookRunMutationKey = () => ['startRunbookRun'] as const;
 
 export const getStartRunbookRunMutationOptions = <
-  TError = ErrorType<
-    | BadRequestResponse
-    | ElevationRequiredResponse
-    | ForbiddenResponse
-    | NotFoundResponse
-    | RunbookRunConflict
-    | Error
-  >,
+  TError = ErrorType<Error | ForbiddenResponse | NotFoundResponse | RunbookRunConflict>,
   TContext = unknown,
 >(options?: {
   mutation?: UseMutationOptions<
@@ -744,12 +736,7 @@ export type StartRunbookRunMutationResult = NonNullable<
 >;
 
 export type StartRunbookRunMutationError = ErrorType<
-  | BadRequestResponse
-  | ElevationRequiredResponse
-  | ForbiddenResponse
-  | NotFoundResponse
-  | RunbookRunConflict
-  | Error
+  Error | ForbiddenResponse | NotFoundResponse | RunbookRunConflict
 >;
 export type StartRunbookRunMutationVariables = {
   runbookId: string;
@@ -760,14 +747,7 @@ export type StartRunbookRunMutationVariables = {
  * @summary Preview or start a whole-runbook run
  */
 export const useStartRunbookRun = <
-  TError = ErrorType<
-    | BadRequestResponse
-    | ElevationRequiredResponse
-    | ForbiddenResponse
-    | NotFoundResponse
-    | RunbookRunConflict
-    | Error
-  >,
+  TError = ErrorType<Error | ForbiddenResponse | NotFoundResponse | RunbookRunConflict>,
   TContext = unknown,
 >(
   options?: {
@@ -1149,7 +1129,7 @@ export const resumeRunbookRun = (
 export const getResumeRunbookRunMutationKey = () => ['resumeRunbookRun'] as const;
 
 export const getResumeRunbookRunMutationOptions = <
-  TError = ErrorType<Error | ElevationRequiredResponse | ForbiddenResponse | NotFoundResponse>,
+  TError = ErrorType<Error | ForbiddenResponse | NotFoundResponse>,
   TContext = unknown,
 >(options?: {
   mutation?: UseMutationOptions<
@@ -1188,9 +1168,7 @@ export type ResumeRunbookRunMutationResult = NonNullable<
   Awaited<ReturnType<typeof resumeRunbookRun>>
 >;
 export type ResumeRunbookRunMutationBody = BodyType<ResumeRunbookRunBody> | undefined;
-export type ResumeRunbookRunMutationError = ErrorType<
-  Error | ElevationRequiredResponse | ForbiddenResponse | NotFoundResponse
->;
+export type ResumeRunbookRunMutationError = ErrorType<Error | ForbiddenResponse | NotFoundResponse>;
 export type ResumeRunbookRunMutationVariables = {
   runId: string;
   data?: BodyType<ResumeRunbookRunBody>;
@@ -1200,7 +1178,7 @@ export type ResumeRunbookRunMutationVariables = {
  * @summary Resume a failed run with fresh elevation
  */
 export const useResumeRunbookRun = <
-  TError = ErrorType<Error | ElevationRequiredResponse | ForbiddenResponse | NotFoundResponse>,
+  TError = ErrorType<Error | ForbiddenResponse | NotFoundResponse>,
   TContext = unknown,
 >(
   options?: {
