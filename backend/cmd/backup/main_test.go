@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"os"
 	"testing"
@@ -10,10 +11,9 @@ import (
 	_ "modernc.org/sqlite"
 
 	"github.com/WiseLabz/wiselabz/internal/backup"
+	"github.com/WiseLabz/wiselabz/internal/connector"
 	"github.com/WiseLabz/wiselabz/internal/store"
 	"github.com/WiseLabz/wiselabz/internal/store/storetest"
-
-	_ "github.com/WiseLabz/wiselabz/internal/connector/all"
 )
 
 func newSeededStore(t *testing.T) *store.Store {
@@ -256,5 +256,70 @@ func TestConfirmCaseInsensitive(t *testing.T) {
 
 	if !confirm("Continue?") {
 		t.Errorf("confirm with 'Y' input should return true (case insensitive)")
+	}
+}
+
+func TestRestoreValidatesCustomConnectorRecipes(t *testing.T) {
+	ctx := context.Background()
+
+	// The backup binary must register connector types itself: without them the
+	// import skips recipe validation.
+	schema, err := connector.GetTypeSchema("custom")
+	if err != nil {
+		t.Fatalf("GetTypeSchema(custom) = %v; cmd/backup must import connector/all", err)
+	}
+	if schema.ImportConfigCheck == nil {
+		t.Fatal("custom ImportConfigCheck = nil, want recipe validation on import")
+	}
+
+	srcDir := t.TempDir()
+	s := newSeededStore(t)
+	recipe := `version: 1
+category: monitoring
+auth: {mode: none}
+endpoints:
+  - name: items
+    path: /items
+    method: GET
+    items: '@this'
+    entity: {kind: item, name: title, external_id: id}
+actions:
+  purge:
+    method: GET
+    path: /purge
+`
+	configData, err := json.Marshal(map[string]any{"recipe": recipe})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.CreateConnector(ctx, &store.ConnectorRecord{
+		ID: "bad-custom", Name: "Invalid Recipe", Category: "monitoring", Type: "custom",
+		URL: "https://api.example.com", ConfigData: string(configData),
+	}); err != nil {
+		t.Fatalf("seed connector: %v", err)
+	}
+	run, err := backup.ExportToFile(ctx, s, srcDir)
+	if err != nil {
+		t.Fatalf("ExportToFile: %v", err)
+	}
+
+	dsn := "file:" + storetest.MigratedSQLite(t) + "?cache=shared"
+	t.Setenv("WISELABZ_DB_DRIVER", "sqlite")
+	t.Setenv("WISELABZ_DB_DSN", dsn)
+	if code := runRestore([]string{"-file", run.FilePath, "-yes"}); code != 1 {
+		t.Fatalf("runRestore(invalid custom recipe) = %d, want 1", code)
+	}
+
+	db, err := sql.Open("sqlite", dsn)
+	if err != nil {
+		t.Fatalf("open target db: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+	connectors, err := store.New(db, "sqlite").ListAllConnectors(ctx)
+	if err != nil {
+		t.Fatalf("ListAllConnectors: %v", err)
+	}
+	if len(connectors) != 0 {
+		t.Fatalf("connectors after rejected restore = %d, want 0", len(connectors))
 	}
 }

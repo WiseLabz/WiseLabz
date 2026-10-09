@@ -15,6 +15,9 @@ import (
 	"github.com/WiseLabz/wiselabz/internal/backup"
 	"github.com/WiseLabz/wiselabz/internal/config"
 	"github.com/WiseLabz/wiselabz/internal/store"
+
+	// Import validation needs the registered connector types.
+	_ "github.com/WiseLabz/wiselabz/internal/connector/all"
 )
 
 func main() {
