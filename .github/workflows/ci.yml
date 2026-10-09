@@ -158,7 +158,12 @@ jobs:
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
-          version: v2.13.2
+          version: v2.14.0
+          # The release binary is built with an older Go than go.mod requires and
+          # cannot read the new stdlib export data (#702). Compile it with the
+          # CI Go instead; back to the binary once a release is built with
+          # go1.27.2 or newer.
+          install-mode: goinstall
           working-directory: backend
           args: --timeout=3m
 
@@ -197,8 +202,17 @@ jobs:
         run: go vet ./...
         working-directory: backend
 
+      # Temporary (#702): staticcheck v0.8.1 pins an x/tools that cannot read
+      # go1.27.2 export data. Build it from an isolated module that raises only
+      # x/tools; the tools module is not in go.work, so backend/go.mod is
+      # untouched. Back to the plain `go run honnef.co/go/tools/cmd/staticcheck@<tag>`
+      # form once staticcheck tags a release that supports go1.27.2.
+      - name: Build staticcheck
+        run: GOWORK=off go build -o "$RUNNER_TEMP/staticcheck" honnef.co/go/tools/cmd/staticcheck
+        working-directory: backend/tools/staticcheck
+
       - name: Run staticcheck
-        run: go run honnef.co/go/tools/cmd/staticcheck@v0.8.1 ./...
+        run: '"$RUNNER_TEMP/staticcheck" ./...'
         working-directory: backend
 
       - name: Save Go cache
