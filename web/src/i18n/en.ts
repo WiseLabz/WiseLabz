@@ -645,6 +645,7 @@ export const en = {
       actionEntityPicker: 'Target {{kind}}',
       actionEntityRequired: 'Choose an entity to preview this action.',
       actionPreviewTitle: 'Preview {{name}}',
+      actionTarget: 'Target',
       actionPreviewNotice: 'Review the resolved request below before the step-up prompt.',
       actionPreviewError: "Couldn't load this action preview. Try again.",
       actionFailed: 'The action failed.',

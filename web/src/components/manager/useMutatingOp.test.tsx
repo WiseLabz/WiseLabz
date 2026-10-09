@@ -72,3 +72,22 @@ describe('action response privacy', () => {
     }
   );
 });
+
+describe('failed action', () => {
+  it('closes the spent elevation confirm but keeps the preview and failure visible', async () => {
+    const { result, client, unmount } = renderOp(true);
+    act(() => {
+      result.current.open({ skipPreview: true });
+      result.current.setConfirmOpen(true);
+    });
+    expect(result.current.confirmOpen).toBe(true);
+    await act(async () => {
+      await result.current.mutate.mutateAsync('token').catch(() => undefined);
+    });
+    expect(result.current.confirmOpen).toBe(false);
+    expect(result.current.previewOpen).toBe(true);
+    expect(JSON.stringify(result.current.failureData)).toContain(excerpt);
+    unmount();
+    client.clear();
+  });
+});

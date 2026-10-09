@@ -39,6 +39,7 @@ describe('locale catalogs', () => {
       'services.detail.actionEntityPicker',
       'services.detail.actionEntityRequired',
       'services.detail.actionPreviewTitle',
+      'services.detail.actionTarget',
       'services.detail.actionPreviewNotice',
       'services.detail.actionPreviewError',
       'services.detail.actionFailed',

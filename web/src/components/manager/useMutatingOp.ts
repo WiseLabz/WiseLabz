@@ -55,6 +55,9 @@ export function useMutatingOp({
       setPreviewOpen(false);
       onSuccess?.();
     },
+    // The elevation token is single-use: close the confirm so the failure block
+    // in the preview dialog is visible and the next confirm mints a fresh token.
+    onError: () => setConfirmOpen(false),
   });
 
   const open = (options?: { skipPreview?: boolean }) => {

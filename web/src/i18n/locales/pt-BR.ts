@@ -717,6 +717,7 @@ export const ptBR: Catalog = {
       actionEntityPicker: 'Alvo: {{kind}}',
       actionEntityRequired: 'Selecione uma entidade para visualizar a prévia desta ação.',
       actionPreviewTitle: 'Prévia de {{name}}',
+      actionTarget: 'Alvo',
       actionPreviewNotice: 'Confira a requisição resolvida abaixo antes da confirmação adicional.',
       actionPreviewError: 'Não foi possível carregar a prévia desta ação. Tente novamente.',
       actionFailed: 'A ação falhou.',

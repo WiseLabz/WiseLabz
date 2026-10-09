@@ -13,6 +13,7 @@ const {
   health,
   release,
   managedBy,
+  connectorRole,
   connectorRecord,
   snapshotEntities,
   configPush,
@@ -21,6 +22,7 @@ const {
   snapshotRows,
 } = vi.hoisted(() => ({
   release: vi.fn(),
+  connectorRole: { value: 'operator' as 'operator' | 'viewer' },
   // Overrides the mocked connector's managedBy for the config-managed tests (#500).
   managedBy: { value: undefined as string | undefined },
   restart: vi.fn(),
@@ -104,7 +106,7 @@ vi.mock('../../api/generated/templates/templates', () => ({
   useGetTemplates: () => ({ data: [] }),
 }));
 vi.mock('./UptimePanel', () => ({ UptimePanel: () => null }));
-vi.mock('../../hooks/useRole', () => ({ useConnectorRole: () => 'operator' }));
+vi.mock('../../hooks/useRole', () => ({ useConnectorRole: () => connectorRole.value }));
 vi.mock('../../store/live', () => ({
   useLive: (selector: (state: object) => unknown) =>
     selector({ statusOverrides: {}, activity: [] }),
@@ -175,6 +177,7 @@ function renderPage() {
 beforeEach(() => {
   connectorRecord.value = originalConnectorRecord;
   managedBy.value = undefined;
+  connectorRole.value = 'operator';
   syncRows.mockReturnValue({ data: [] });
   snapshotRows.mockReturnValue({ data: [] });
 });
@@ -539,5 +542,60 @@ describe('ServiceDetailPage recipe actions', () => {
     );
     expect(actionRun).toHaveBeenCalledTimes(1);
     expect(await screen.findByRole('button', { name: 'Run action' })).toBeInTheDocument();
+  });
+
+  it('closes the elevation prompt and shows the upstream status and excerpt when the action fails', async () => {
+    connectorRecord.value = {
+      ...originalConnectorRecord,
+      type: 'custom',
+      actions: [{ name: 'rescan', entityScope: false, label: 'Rescan library', downtimeSeconds: 0 }],
+    };
+    actionRun.mockImplementation((_id: string, _name: string, _body: unknown, params: { dryRun?: boolean }) =>
+      params.dryRun
+        ? Promise.resolve(rescanPreview)
+        : Promise.reject({
+            response: {
+              status: 502,
+              data: {
+                code: 'action_failed',
+                message: 'API returned 409 (expected a 2xx status)',
+                statusCode: 409,
+                excerpt: 'conflict: busy',
+              },
+            },
+          })
+    );
+
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Rescan library' }));
+    const previewDialog = await screen.findByRole('dialog', { name: 'Preview Rescan library' });
+    fireEvent.click(within(previewDialog).getByRole('button', { name: 'Run action' }));
+    const elevation = await screen.findByRole('dialog', { name: 'Run Rescan library' });
+    fireEvent.click(within(elevation).getByRole('button', { name: 'confirm-elevation-token' }));
+
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: 'Run Rescan library' })).not.toBeInTheDocument()
+    );
+    const failure = await within(screen.getByRole('dialog', { name: 'Preview Rescan library' })).findByRole('alert');
+    expect(failure).toHaveTextContent('409');
+    expect(failure).toHaveTextContent('conflict: busy');
+  });
+
+  it('hides the lifecycle and named-action buttons from a viewer', async () => {
+    connectorRole.value = 'viewer';
+    connectorRecord.value = {
+      ...originalConnectorRecord,
+      type: 'custom',
+      actions: [
+        { name: 'restart', entityScope: false, downtimeSeconds: 0 },
+        { name: 'rescan', entityScope: false, label: 'Rescan library', downtimeSeconds: 0 },
+      ],
+    };
+
+    renderPage();
+
+    expect(await screen.findByRole('link', { name: 'History' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Restart' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Rescan library' })).not.toBeInTheDocument();
   });
 });

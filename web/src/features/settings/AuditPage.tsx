@@ -172,7 +172,7 @@ export function AuditPage() {
                 <tbody className="divide-y divide-line-soft">
                   {data.items.map((r) => (
                     <tr key={r.id}>
-                      <td className="px-4 py-2 font-mono text-ink">
+                      <td className="px-4 py-2 font-mono text-ink" title={r.action}>
                         {auditActionLabel(r.action, t)}
                       </td>
                       <td className="px-4 py-2 font-mono text-ink-muted">
