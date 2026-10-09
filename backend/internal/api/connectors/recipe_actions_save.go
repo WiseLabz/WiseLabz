@@ -25,8 +25,9 @@ func (h *Handler) authorizeRecipeActions(
 ) (custom.ActionDiff, bool) {
 	previous, err := recipeActionsFor(oldType, oldConfig)
 	if err != nil {
-		httputil.Errorf(w, err)
-		return custom.ActionDiff{}, false
+		// A stored recipe that no longer parses declares no usable actions, and
+		// must not block the save that repairs it.
+		previous = map[string]custom.RecipeAction{}
 	}
 	next, err := recipeActionsFor(newType, newConfig)
 	if err != nil {
@@ -59,6 +60,11 @@ func (h *Handler) authorizeUpdatedRecipeActions(w http.ResponseWriter, r *http.R
 	if err != nil {
 		httputil.Errorf(w, err)
 		return custom.ActionDiff{}, false
+	}
+	_, configUpdated := updates["config_data"]
+	_, typeUpdated := updates["type"]
+	if !configUpdated && !typeUpdated {
+		return custom.ActionDiff{}, true
 	}
 	typ := rec.Type
 	if value, ok := updates["type"].(string); ok {

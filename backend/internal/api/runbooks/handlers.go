@@ -272,7 +272,12 @@ func (h *Handler) validateStepTarget(ctx context.Context, prefix, kind string, i
 			errs = append(errs, httputil.FieldError{Field: prefix + ".verb", Msg: "must be restart, start, or stop"})
 		} else if connRec != nil {
 			cfg, err := store.ParseConnectorConfig(connRec.Type, connRec.ConfigData, h.ConnH.Config.Encryption.Key)
-			if err != nil || !connector.SupportsLifecycleVerb(connRec.Type, in.Verb, cfg) || !h.lifecycleScopeDeclared(connRec, in) {
+			if err != nil {
+				// An unreadable config must not hide a built-in connector's verbs;
+				// a custom connector has no recipe to declare any without it.
+				cfg = map[string]any{}
+			}
+			if !connector.SupportsLifecycleVerb(connRec.Type, in.Verb, cfg) || !h.lifecycleScopeDeclared(connRec, in) {
 				errs = append(errs, httputil.FieldError{Field: prefix + ".verb", Msg: "connector does not support this verb"})
 			}
 		}

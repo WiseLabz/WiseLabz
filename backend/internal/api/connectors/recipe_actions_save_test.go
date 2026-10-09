@@ -10,6 +10,7 @@ import (
 
 	"github.com/WiseLabz/wiselabz/internal/auth"
 	"github.com/WiseLabz/wiselabz/internal/connector"
+	"github.com/WiseLabz/wiselabz/internal/store"
 )
 
 func saveActionRecipe(path string) string {
@@ -113,5 +114,72 @@ func TestRecipeActionsSaveElevation(t *testing.T) {
 	rr = update(saveActionRecipe("/disabled"), "", false, true)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("disabled step-up: %d %s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestRecipeActionsSaveWithUnparseableStoredRecipe(t *testing.T) {
+	h := newTestHandler(t)
+	stored, err := json.Marshal(map[string]any{"recipe": "version: 99\nnot a recipe"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	record := &store.ConnectorRecord{Name: "Broken recipe", Type: "custom", Category: "other", URL: "https://api.example", ConfigData: string(stored)}
+	if err := h.Store.CreateConnector(context.Background(), record); err != nil {
+		t.Fatal(err)
+	}
+	put := func(body map[string]any, token string) *httptest.ResponseRecorder {
+		req := recipeRequest(t, http.MethodPut, record.ID, body)
+		if token != "" {
+			req.Header.Set("X-Elevation-Token", token)
+		}
+		rr := httptest.NewRecorder()
+		h.Update(rr, req)
+		return rr
+	}
+	storedConfig := func() string {
+		current, err := h.Store.GetConnector(context.Background(), record.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return current.ConfigData
+	}
+	repair := map[string]any{"config": map[string]any{"recipe": saveActionRecipe("/rescan")}}
+
+	if rr := put(map[string]any{"name": "Renamed"}, ""); rr.Code != http.StatusOK {
+		t.Fatalf("rename: %d %s", rr.Code, rr.Body.String())
+	}
+	if storedConfig() != string(stored) {
+		t.Fatal("rename changed the stored config")
+	}
+
+	rr := put(repair, "")
+	if rr.Code != http.StatusBadRequest || !strings.Contains(rr.Body.String(), "elevation_required") {
+		t.Fatalf("repair without elevation: %d %s", rr.Code, rr.Body.String())
+	}
+	if storedConfig() != string(stored) {
+		t.Fatal("rejected repair changed the stored config")
+	}
+
+	token, err := h.JWT.IssueElevationBound("recipe-admin", "connector.recipeActions", auth.ElevationBinding{Target: record.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rr := put(repair, token.Token); rr.Code != http.StatusOK {
+		t.Fatalf("repair with elevation: %d %s", rr.Code, rr.Body.String())
+	}
+	audits, _, err := h.Store.ListAuditRecords(context.Background(), "connector.recipe_actions_changed", "connector", "", "", 0, 10)
+	if err != nil || len(audits) != 1 {
+		t.Fatalf("action audits = %+v, %v; want one", audits, err)
+	}
+	var detail struct {
+		Added   []string `json:"added"`
+		Changed []string `json:"changed"`
+		Removed []string `json:"removed"`
+	}
+	if err := json.Unmarshal([]byte(audits[0].Detail), &detail); err != nil {
+		t.Fatal(err)
+	}
+	if len(detail.Added) != 1 || detail.Added[0] != "service.rescan" || len(detail.Changed)+len(detail.Removed) != 0 {
+		t.Fatalf("audit detail = %+v, want service.rescan added", detail)
 	}
 }

@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/WiseLabz/wiselabz/internal/api/apitest"
+	"github.com/WiseLabz/wiselabz/internal/store"
 )
 
 func TestMutateRunbookActionChecksFingerprintBeforeSending(t *testing.T) {
@@ -65,7 +66,7 @@ func TestMutateRunbookActionChecksFingerprintBeforeSending(t *testing.T) {
 	}
 }
 
-func TestMutateRunbookActionWithoutFingerprintSends(t *testing.T) {
+func TestMutateRunbookActionWithoutFingerprintSendsNothing(t *testing.T) {
 	h := newTestHandler(t)
 	var hits atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -75,7 +76,44 @@ func TestMutateRunbookActionWithoutFingerprintSends(t *testing.T) {
 	defer server.Close()
 	record := seedRecipeActionConnector(t, h, server.URL)
 	user := apitest.NewUser(t, h.Store, "operator")
-	if _, err := h.MutateRunbookAction(context.Background(), record.ID, "rescan", "", "", LifecycleActor{UserID: user}, nil); err != nil || hits.Load() != 1 {
-		t.Fatalf("MutateRunbookAction() without an expected fingerprint = %v with %d requests; want one request", err, hits.Load())
+	if _, err := h.MutateRunbookAction(context.Background(), record.ID, "rescan", "", "", LifecycleActor{UserID: user}, nil); !errors.Is(err, ErrActionChanged) || hits.Load() != 0 {
+		t.Fatalf("MutateRunbookAction() without an expected fingerprint = %v with %d requests; want ErrActionChanged and none", err, hits.Load())
+	}
+	if audits, _, err := h.Store.ListAuditRecords(context.Background(), "connector.action", "connector", "", "", 0, 10); err != nil || len(audits) != 0 {
+		t.Fatalf("audit records for a refused action = %+v, %v; want none", audits, err)
+	}
+}
+
+func TestMutateRunbookActionRefusesOrphanedConnector(t *testing.T) {
+	h := newTestHandler(t)
+	var hits atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hits.Add(1)
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+	record := seedRecipeActionConnector(t, h, server.URL)
+	ctx := context.Background()
+	user := apitest.NewUser(t, h.Store, "operator")
+	fingerprint, err := h.ActionFingerprint(ctx, record.ID, "rescan", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := h.Store.UpdateConnector(ctx, record.ID, map[string]any{"managed_by": store.ManagedByConfigOrphaned}); err != nil {
+		t.Fatal(err)
+	}
+	_, err = h.MutateRunbookAction(ctx, record.ID, "rescan", "", fingerprint, LifecycleActor{UserID: user}, nil)
+	var refusal *lifecycleError
+	if !errors.As(err, &refusal) || refusal.status != http.StatusConflict || refusal.code != "connector_orphaned" {
+		t.Fatalf("MutateRunbookAction() on an orphaned connector = %v, want a 409 connector_orphaned lifecycleError", err)
+	}
+	if hits.Load() != 0 {
+		t.Fatalf("service received %d requests for an orphaned connector, want none", hits.Load())
+	}
+	if audits, _, err := h.Store.ListAuditRecords(ctx, "connector.action", "connector", "", "", 0, 10); err != nil || len(audits) != 0 {
+		t.Fatalf("audit records for a refused action = %+v, %v; want none", audits, err)
+	}
+	if alerts, _, err := h.Store.ListAlerts(ctx, record.ID, "", "", "", 0, 10); err != nil || len(alerts) != 0 {
+		t.Fatalf("alerts for a refused action = %+v, %v; want none", alerts, err)
 	}
 }

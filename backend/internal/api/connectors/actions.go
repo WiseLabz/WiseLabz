@@ -276,10 +276,11 @@ func isLifecycleVerb(name string) bool {
 var ErrActionChanged = errors.New("the action changed since the run started")
 
 // MutateRunbookAction executes one recipe-declared named action for an
-// already-authorized runbook step. When expectedFingerprint is not empty and
-// the action's current fingerprint differs, it returns an error wrapping
-// ErrActionChanged and sends nothing, with no alert and no audit entry. The
-// returned result carries the upstream status, excerpt, and internal Written
+// already-authorized runbook step. When expectedFingerprint is empty or the
+// action's current fingerprint differs, it returns an error wrapping
+// ErrActionChanged and sends nothing, with no alert and no audit entry. A
+// connector that is not managed by the UI or config.yaml is refused the same
+// way, with a 409 lifecycleError. The returned result carries the upstream status, excerpt, and internal Written
 // marker; callers must not persist or log the excerpt.
 func (h *Handler) MutateRunbookAction(
 	ctx context.Context,
@@ -291,7 +292,10 @@ func (h *Handler) MutateRunbookAction(
 	if err != nil {
 		return connector.ActionResult{}, err
 	}
-	if expectedFingerprint != "" && prepared.resolved.Fingerprint != expectedFingerprint {
+	if prepared.record.ManagedBy != store.ManagedByUI && prepared.record.ManagedBy != store.ManagedByConfig {
+		return connector.ActionResult{}, managedConflictError(prepared.record.ManagedBy)
+	}
+	if expectedFingerprint == "" || prepared.resolved.Fingerprint != expectedFingerprint {
 		return connector.ActionResult{}, fmt.Errorf("action %q: %w", name, ErrActionChanged)
 	}
 	return h.mutateAction(ctx, prepared, name, entityRef, actor, extraAudit, true)

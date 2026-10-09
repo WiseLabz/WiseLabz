@@ -235,9 +235,9 @@ type ConnectorActions interface {
 	// ActionFingerprint returns the fingerprint of the action's definition as
 	// the recipe declares it now. It sends nothing.
 	ActionFingerprint(ctx context.Context, connectorID, name, entityRef string) (string, error)
-	// MutateRunbookAction sends the action unless expectedFingerprint is not
-	// empty and differs from the action's current fingerprint. In that case it
-	// returns an error wrapping connectors.ErrActionChanged and sends nothing.
+	// MutateRunbookAction sends the action only when expectedFingerprint is not
+	// empty and equals the action's current fingerprint. Otherwise it returns an
+	// error wrapping connectors.ErrActionChanged and sends nothing.
 	MutateRunbookAction(ctx context.Context, connectorID, name, entityRef, expectedFingerprint string, actor connectors.LifecycleActor, extraAudit map[string]any) (connector.ActionResult, error)
 }
 
