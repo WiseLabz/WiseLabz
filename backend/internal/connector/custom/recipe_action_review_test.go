@@ -3,9 +3,11 @@ package custom
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -137,5 +139,77 @@ func TestActionExcerptTruncatesAtUTF8Boundary(t *testing.T) {
 	got := actionTextExcerpt("text/plain", body)
 	if got != strings.Repeat("x", 511) || !utf8.ValidString(got) {
 		t.Fatalf("excerpt is not the complete UTF8 prefix: %q", got)
+	}
+}
+
+func TestSendActionNon2xxKeepsBodyInResultAndOutOfError(t *testing.T) {
+	const sentinel = "UPSTREAM-BODY-SENTINEL"
+	bodies := []struct {
+		name        string
+		contentType string
+		body        string
+	}{
+		{"text body", "text/plain; charset=utf-8", "upstream said " + sentinel},
+		{"json body", "application/json", `{"error":"` + sentinel + `"}`},
+	}
+	statuses := []int{
+		http.StatusUnauthorized, http.StatusForbidden, http.StatusNotFound, http.StatusConflict,
+		http.StatusInternalServerError, http.StatusBadGateway, http.StatusServiceUnavailable,
+	}
+	for _, status := range statuses {
+		for _, tc := range bodies {
+			t.Run(fmt.Sprintf("%d/%s", status, tc.name), func(t *testing.T) {
+				server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+					w.Header().Set("Content-Type", tc.contentType)
+					w.WriteHeader(status)
+					_, _ = io.WriteString(w, tc.body)
+				}))
+				defer server.Close()
+				config := map[string]any{"url": server.URL, "recipe": serviceActionRecipe(http.MethodPost)}
+				conn := &Connector{client: server.Client()}
+				action, err := conn.ResolveAction(config, "operation", "", nil)
+				if err != nil {
+					t.Fatal(err)
+				}
+				result, err := conn.SendAction(context.Background(), config, action)
+				if err == nil {
+					t.Fatalf("SendAction() succeeded for status %d", status)
+				}
+				if result.Status != status {
+					t.Errorf("result.Status = %d, want %d", result.Status, status)
+				}
+				if !strings.Contains(result.Excerpt, sentinel) {
+					t.Errorf("result.Excerpt = %q, want it to contain %q", result.Excerpt, sentinel)
+				}
+				if !strings.Contains(err.Error(), strconv.Itoa(status)) {
+					t.Errorf("error %q does not name status %d", err, status)
+				}
+				if strings.Contains(err.Error(), sentinel) {
+					t.Errorf("error leaks the response body: %v", err)
+				}
+
+				// The class must match what connector.CheckStatus gives the
+				// same status, so callers branch on it identically.
+				want := connector.CheckStatus(status, nil)
+				var gotAuth, wantAuth *connector.AuthError
+				var gotUnavailable, wantUnavailable *connector.ServiceUnavailableError
+				if errors.As(err, &gotAuth) != errors.As(want, &wantAuth) {
+					t.Errorf("auth error class = %v, want %v (err %v)", errors.As(err, &gotAuth), errors.As(want, &wantAuth), err)
+				}
+				if errors.As(err, &gotUnavailable) != errors.As(want, &wantUnavailable) {
+					t.Errorf("service-unavailable class = %v, want %v (err %v)", errors.As(err, &gotUnavailable), errors.As(want, &wantUnavailable), err)
+				}
+				switch status {
+				case http.StatusUnauthorized, http.StatusForbidden:
+					if gotAuth == nil {
+						t.Errorf("status %d: error %v is not an AuthError", status, err)
+					}
+				case http.StatusBadGateway, http.StatusServiceUnavailable:
+					if gotUnavailable == nil {
+						t.Errorf("status %d: error %v is not a ServiceUnavailableError", status, err)
+					}
+				}
+			})
+		}
 	}
 }
