@@ -32,6 +32,7 @@ import { fieldDefault, isSecretField, isTlsProbeEndpointField, isToggleField, is
 import { LocatedErrors } from './LocatedErrors';
 import { TestRecipePanel } from './TestRecipePanel';
 import { errorsForField, focusFirstLocatedError, locatedErrorsFrom, recipePreviewConfig } from './recipeForm';
+import { useRecipeFeedback } from './useRecipeFeedback';
 
 type FormValues = Record<string, string | boolean>;
 
@@ -70,6 +71,7 @@ export function ConnectorEditPage() {
     [schemas, connector.data?.type],
   );
 
+  const { feedback: recipeFeedback, recordSaveStart, recordSaveError, recordPreview } = useRecipeFeedback();
   const [name, setName] = useState<string | null>(null);
   const [owner, setOwner] = useState<string | null>(null);
   const [values, setValues] = useState<FormValues>({});
@@ -141,6 +143,7 @@ export function ConnectorEditPage() {
       navigate(`/services/${id}`);
     },
     onError: (error) => {
+      recordSaveError(error);
       const details = isAxiosError(error)
         ? (error.response?.data as { details?: { field: string; msg: string }[] } | undefined)?.details
         : undefined;
@@ -245,7 +248,7 @@ export function ConnectorEditPage() {
           />
           {schema?.fields.map((f) => {
             const probeTranslations = c.type === 'tlsprobe' ? tlsProbeFieldTranslations[f.name] : undefined;
-            const disabled = !isInstanceAdmin && isTlsProbeEndpointField(c.type, f.name);
+            const disabled = !isInstanceAdmin && (isTlsProbeEndpointField(c.type, f.name) || (c.type === 'custom' && f.name === 'recipe'));
             const selectedImportId = String(c.config?.import_connector_id ?? '');
             const visibleTraefik = (connectors ?? []).filter((item) => item.type === 'traefik');
             const selectedImportAvailable = visibleTraefik.some((item) => item.id === selectedImportId);
@@ -256,8 +259,9 @@ export function ConnectorEditPage() {
                   : isSecretField(f) ? { ...f, placeholder: t('connectors.edit.secretPlaceholder') } : f}
                 value={editFieldValue(f, c, values)}
                 error={errorsForField(saveErrors, f.name)}
+                recipeFeedback={f.name === 'recipe' ? recipeFeedback : undefined}
                 disabled={disabled}
-                helperText={disabled ? t('connectors.tlsProbe.adminOnlyHint') : probeTranslations ? t(probeTranslations.hint) : undefined}
+                helperText={disabled && f.name !== 'recipe' ? t('connectors.tlsProbe.adminOnlyHint') : probeTranslations ? t(probeTranslations.hint) : undefined}
                 selectOptions={isInstanceAdmin && c.type === 'tlsprobe' && f.name === 'import_connector_id'
                   ? [
                       { value: '', label: t('connectors.tlsProbe.noTraefikImport') },
@@ -327,7 +331,11 @@ export function ConnectorEditPage() {
             <Button variant="ghost" size="md" onClick={() => navigate(`/services/${id}`)}>
               {t('common.cancel')}
             </Button>
-            <Button variant="primary" size="md" onClick={() => save.mutate(saveBody())} disabled={!nameValue || save.isPending}>
+            <Button variant="primary" size="md" onClick={() => {
+                const body = saveBody();
+                recordSaveStart(String(body.config?.recipe ?? ''));
+                save.mutate(body);
+              }} disabled={!nameValue || save.isPending}>
               <CheckIcon size={15} />
               {save.isPending ? t('connectors.edit.saving') : t('common.save')}
             </Button>
@@ -342,6 +350,7 @@ export function ConnectorEditPage() {
             url={String(values.url ?? c.url ?? '')}
             verifyTls={Boolean(values[schema.fields.find(isVerifyTlsField)?.name ?? 'verify_tls'] ?? c.verifyTls ?? true)}
             config={recipePreviewConfig(schema, values, c.config ?? {})}
+            onFeedback={recordPreview}
           />
         </div>
       )}

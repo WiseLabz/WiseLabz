@@ -352,6 +352,28 @@ paths are evaluated against that endpoint's complete response. Multi-value paths
 produce one dependency per distinct name. Duplicate kind/name pairs are
 removed and dependencies are stored with the snapshot.
 
+## Editing recipes in the form
+
+The custom connector recipe field has **Form** and **YAML** tabs over the same
+text. Form rows cover authentication, requests, pagination, entity mappings,
+attributes, dependencies and actions (entity actions under each endpoint's
+entity, and service actions); the YAML tab is a code editor. **Test recipe** below
+the tabs tests the current text before saving. Validation remains on the server,
+and located errors appear on their form field and YAML line.
+
+Opening or switching tabs does not change the text. A form edit changes only the
+field or block it touches, preserving comments, key order, quoting and formatting
+elsewhere. A value written inside a YAML flow mapping is quoted when it needs
+it, so an action `path` such as `/items/{external_id}/rescan` stays valid there
+and stays plain in block style. Keys without a form row remain untouched and are
+marked as editable in YAML only; removing a row containing them requires
+confirmation. Saving a recipe that changes its actions still asks for step-up
+authentication, and cancelling it keeps every edit in both tabs.
+
+The form is unavailable when YAML has a syntax error, contains multiple documents,
+has a root other than a mapping, or uses anchors, aliases or merge keys. Its
+message gives the line and reason, and the YAML editor stays usable.
+
 ## Testing recipes
 
 Instance administrators can use **Test recipe** in the custom connector form

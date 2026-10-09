@@ -1,8 +1,11 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, configure, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import '../../i18n';
 import { ConnectorForm } from './ConnectorForm';
+
+// The recipe editor and its YAML editor load lazily; CI with coverage is slower than the 1s default.
+configure({ asyncUtilTimeout: 5000 });
 
 const { postConnectors, previewRecipe, roleState } = vi.hoisted(() => ({
   postConnectors: vi.fn().mockResolvedValue({ id: 'c1' }),
@@ -75,6 +78,10 @@ const schemas = [
   },
 ];
 
+vi.mock('./RecipeYamlEditor', () => ({
+  RecipeYamlEditor: ({ value, onChange, label, readOnly, focusRequest }: { value: string; onChange: (value: string) => void; label: string; readOnly: boolean; focusRequest: number }) => <textarea data-testid="recipe-yaml-editor" ref={(node) => { if (focusRequest) node?.focus(); }} id="connector-field-recipe" className="font-mono" aria-label={label} value={value} readOnly={readOnly} onChange={(event) => onChange(event.target.value)} />,
+}));
+
 vi.mock('../../api/generated/connectors/connectors', () => ({
   useGetConnectorsSchema: () => ({ data: schemas, isLoading: false, isError: false, refetch: vi.fn() }),
   useGetConnectors: () => ({ data: [{ id: 'traefik-visible', name: 'Visible Traefik', type: 'traefik' }, { id: 'npm', name: 'NPM', type: 'npm' }] }),
@@ -96,6 +103,7 @@ vi.mock('../compliance/CertificateExpiryPackOffer', () => ({
 vi.mock('../../hooks/useRole', () => ({ useIsInstanceAdmin: () => roleState.isAdmin }));
 
 afterEach(() => {
+  localStorage.clear();
   roleState.isAdmin = false;
   previewRecipe.mockClear();
 });
@@ -287,7 +295,8 @@ describe('ConnectorForm derived category', () => {
     fireEvent.click(screen.getByText('Custom HTTP'));
     fireEvent.change(screen.getByLabelText(/display name/i), { target: { value: 'library' } });
     fireEvent.change(screen.getByLabelText(/endpoint url/i), { target: { value: 'https://library.example' } });
-    if (recipe) fireEvent.change(screen.getByLabelText(/recipe/i), { target: { value: recipe } });
+    await openYaml();
+    if (recipe) fireEvent.change(screen.getByRole('textbox', { name: 'Recipe (YAML)' }), { target: { value: recipe } });
     postConnectors.mockClear();
     fireEvent.click(screen.getByRole('button', { name: /test & add/i }));
     await waitFor(() => expect(postConnectors).toHaveBeenCalled());
@@ -305,17 +314,18 @@ describe('ConnectorForm derived category', () => {
     expect(body.category).toBe('virtualization');
   });
 
-  it('shows the category from the recipe as read-only and follows edits', () => {
+  it('shows the category from the recipe as read-only and follows edits', async () => {
     render(
       <QueryClientProvider client={new QueryClient()}>
         <ConnectorForm onCreated={vi.fn()} />
       </QueryClientProvider>,
     );
     fireEvent.click(screen.getByText('Custom HTTP'));
-    const recipe = screen.getByLabelText(/recipe/i);
+    await openYaml();
+    const recipe = await screen.findByRole('textbox', { name: 'Recipe (YAML)' });
     expect(recipe).toHaveClass('font-mono');
     fireEvent.change(recipe, { target: { value: '---\nversion: 1\n"category": \'media\' # from recipe\n' } });
-    expect(screen.getByText('Media')).toBeInTheDocument();
+    expect(await screen.findByText('Media')).toBeInTheDocument();
     expect(screen.queryByRole('textbox', { name: /category/i })).not.toBeInTheDocument();
     fireEvent.change(recipe, { target: { value: '{version: 1, category: monitoring, auth: {mode: none}}' } });
     expect(screen.getByText('Monitoring')).toBeInTheDocument();
@@ -339,14 +349,15 @@ describe('ConnectorForm derived category', () => {
     fireEvent.click(screen.getByText('Custom HTTP'));
     fireEvent.change(screen.getByLabelText(/display name/i), { target: { value: 'library' } });
     fireEvent.change(screen.getByLabelText(/endpoint url/i), { target: { value: 'https://library.example' } });
-    fireEvent.change(screen.getByLabelText(/recipe/i), { target: { value: 'version: 1\ncategory: media\n' } });
+    await openYaml();
+    fireEvent.change(screen.getByRole('textbox', { name: 'Recipe (YAML)' }), { target: { value: 'version: 1\ncategory: media\n' } });
     fireEvent.click(screen.getByRole('button', { name: /test & add/i }));
     await waitFor(() => expect(screen.getByText('config.recipe.endpoints[0].entity.name')).toBeInTheDocument());
-    expect(screen.getByText('is required')).toBeInTheDocument();
-    expect(screen.getByLabelText(/recipe/i)).toHaveFocus();
+    expect(screen.getAllByText(/is required/).length).toBeGreaterThan(0);
+    await waitFor(() => expect(screen.getByRole('textbox', { name: 'Recipe (YAML)' })).toHaveFocus());
   });
 
-  it('previews the current unsaved form values', () => {
+  it('previews the current unsaved form values', async () => {
     roleState.isAdmin = true;
     render(
       <QueryClientProvider client={new QueryClient()}>
@@ -355,6 +366,7 @@ describe('ConnectorForm derived category', () => {
     );
     fireEvent.click(screen.getByText('Custom HTTP'));
     fireEvent.change(screen.getByLabelText(/endpoint url/i), { target: { value: 'https://media.example' } });
+    await openYaml();
     fireEvent.change(screen.getByRole('textbox', { name: /recipe/i }), { target: { value: 'version: 1\ncategory: media' } });
     fireEvent.change(screen.getByLabelText(/token/i), { target: { value: 'current-token' } });
     fireEvent.click(screen.getByRole('button', { name: /test recipe/i }));
@@ -420,3 +432,84 @@ describe('ConnectorForm initial type and values', () => {
     expect(screen.getByLabelText(/endpoint url/i)).toHaveValue('');
   });
 });
+
+describe('recipe builder integration', () => {
+  const recipe = 'version: 1\ncategory: media\nauth: {mode: none}\nendpoints:\n  - name: items\n    path: /api/items\n    method: GET\n    items: items\n    entity: {kind: media_item, name: name, external_id: id}\n';
+
+  it('previews and saves the text edited in the Form view', async () => {
+    roleState.isAdmin = true;
+    postConnectors.mockClear();
+    render(<QueryClientProvider client={new QueryClient()}><ConnectorForm onCreated={vi.fn()} initialType="custom" initialValues={{ name: 'library', url: 'https://media.example', recipe }} /></QueryClientProvider>);
+    const path = await screen.findByLabelText('Path');
+    fireEvent.change(path, { target: { value: '/api/new-items' } });
+    const expected = recipe.replace('/api/items', '/api/new-items');
+    previewRecipe.mockImplementationOnce((_variables, callbacks) => callbacks.onSuccess({ endpoints: [{ name: 'items', items: 0, count: 0, skipped: 0, samples: [], dependencies: [], error: 'request failed' }], dependencies: [], errors: [] }));
+    fireEvent.click(screen.getByRole('button', { name: /test recipe/i }));
+    expect(previewRecipe.mock.calls[0][0].data.config.recipe).toBe(expected);
+    expect(screen.getByText('Failed')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /test & add/i }));
+    await waitFor(() => expect(postConnectors).toHaveBeenCalled());
+    expect(postConnectors.mock.calls[0][0].config.recipe).toBe(expected);
+  });
+
+  it('shows and focuses a failed save on its nested Form field, then marks errors stale on edit', async () => {
+    roleState.isAdmin = true;
+    postConnectors.mockRejectedValueOnce(Object.assign(new Error('invalid mapping'), { response: { data: { details: [{ field: 'config.recipe.endpoints[0].entity.external_id', msg: 'mapping must select an ID' }] } } }));
+    render(<QueryClientProvider client={new QueryClient()}><ConnectorForm onCreated={vi.fn()} initialType="custom" initialValues={{ name: 'library', url: 'https://media.example', recipe }} /></QueryClientProvider>);
+    const externalId = await screen.findByLabelText('External ID');
+    fireEvent.click(screen.getByRole('button', { name: /test & add/i }));
+    await waitFor(() => expect(externalId).toHaveAttribute('aria-invalid', 'true'));
+    expect(externalId).toHaveAccessibleDescription('mapping must select an ID');
+    await waitFor(() => expect(externalId).toHaveFocus());
+    fireEvent.change(externalId, { target: { value: 'identifier' } });
+    expect(externalId).not.toHaveAttribute('aria-invalid', 'true');
+    expect(screen.getByText(/these errors refer to an earlier recipe/i)).toBeInTheDocument();
+  });
+
+  function renderMappingRecipe() {
+    render(<QueryClientProvider client={new QueryClient()}><ConnectorForm onCreated={vi.fn()} initialType="custom" initialValues={{ name: 'library', url: 'https://media.example', recipe }} /></QueryClientProvider>);
+  }
+
+  function failSaveOnExternalId() {
+    postConnectors.mockRejectedValueOnce(Object.assign(new Error('invalid mapping'), { response: { data: { details: [{ field: 'config.recipe.endpoints[0].entity.external_id', msg: 'mapping must select an ID' }] } } }));
+  }
+
+  it('keeps a failed save error when a preview of the same recipe finishes after the save', async () => {
+    roleState.isAdmin = true;
+    let finishPreview: ((result: unknown) => void) | undefined;
+    previewRecipe.mockImplementationOnce((_variables, callbacks) => {
+      finishPreview = (result) => callbacks.onSuccess(result);
+    });
+    failSaveOnExternalId();
+    renderMappingRecipe();
+    await screen.findByLabelText('External ID');
+    fireEvent.click(screen.getByRole('button', { name: /test recipe/i }));
+    fireEvent.click(screen.getByRole('button', { name: /test & add/i }));
+    await waitFor(() => expect(screen.getByLabelText('External ID')).toHaveAttribute('aria-invalid', 'true'));
+
+    act(() => finishPreview?.({ endpoints: [], dependencies: [], errors: [] }));
+
+    expect(screen.getByLabelText('External ID')).toHaveAttribute('aria-invalid', 'true');
+    expect(screen.getByLabelText('External ID')).toHaveAccessibleDescription('mapping must select an ID');
+  });
+
+  it('keeps a failed save error when a preview of the same recipe succeeds after the save failed', async () => {
+    roleState.isAdmin = true;
+    previewRecipe.mockImplementationOnce((_variables, callbacks) => callbacks.onSuccess({ endpoints: [], dependencies: [], errors: [] }));
+    failSaveOnExternalId();
+    renderMappingRecipe();
+    await screen.findByLabelText('External ID');
+    fireEvent.click(screen.getByRole('button', { name: /test & add/i }));
+    await waitFor(() => expect(screen.getByLabelText('External ID')).toHaveAttribute('aria-invalid', 'true'));
+
+    fireEvent.click(screen.getByRole('button', { name: /test recipe/i }));
+
+    expect(screen.getByLabelText('External ID')).toHaveAttribute('aria-invalid', 'true');
+    expect(screen.getByLabelText('External ID')).toHaveAccessibleDescription('mapping must select an ID');
+  });
+});
+
+async function openYaml() {
+  fireEvent.click(await screen.findByRole('tab', { name: 'YAML' }));
+  return screen.findByTestId('recipe-yaml-editor');
+}

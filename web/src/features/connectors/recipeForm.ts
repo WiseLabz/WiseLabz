@@ -1,109 +1,11 @@
-import { ConnectorCategory } from '../../api/model';
-import type { Connector, ConnectorTypeSchema, FieldError } from '../../api/model';
+import type { ConnectorTypeSchema, FieldError, RecipePreview } from '../../api/model';
 import { fieldDefault, isTopLevelField } from './schemaFields';
 
-const categories = Object.values(ConnectorCategory);
+/** One save or preview outcome, tagged with the recipe text it was produced from. */
+export type RecipeFeedbackEntry = { recipe: string; errors: FieldError[]; endpoints?: RecipePreview['endpoints']; seq: number };
 
-/** Reads the recipe's root category scalar without trying to parse all of YAML. */
-export function readRecipeCategory(recipe: string): Connector['category'] | undefined {
-  const source = recipe.replace(/^\uFEFF/, '').trim();
-  const lines = source.split(/\r?\n/);
-  const firstContent = lines.findIndex((line) =>
-    line.trim() && !line.trimStart().startsWith('#') && !['---', '...'].includes(line.trim()),
-  );
-  const flowSource = firstContent < 0 ? '' : lines.slice(firstContent).join('\n').trimStart();
-  if (flowSource.startsWith('{')) {
-    const flowValue = rootFlowValue(flowSource, 'category');
-    if (flowValue !== undefined) return categoryValue(flowValue);
-  }
-
-  const rootIndent = lines
-    .filter((line) => line.trim() && !line.trimStart().startsWith('#') && !['---', '...'].includes(line.trim()))
-    .reduce<number | undefined>((indent, line) => {
-      const current = line.length - line.trimStart().length;
-      return indent === undefined || current < indent ? current : indent;
-    }, undefined);
-
-  for (const line of lines) {
-    if (!line.trim() || line.trimStart().startsWith('#')) continue;
-    if (line.trim() === '---' || line.trim() === '...') continue;
-    const indent = line.length - line.trimStart().length;
-    if (indent !== rootIndent) continue;
-    const match = /^\s*(?:category|'category'|"category")\s*:\s*(.*?)\s*$/.exec(line);
-    if (!match) continue;
-    return categoryValue(stripComment(match[1]));
-  }
-  return undefined;
-}
-
-function rootFlowValue(source: string, wantedKey: string): string | undefined {
-  let depth = 0;
-  let quote: "'" | '"' | undefined;
-  let escaped = false;
-  let segmentStart = 1;
-  for (let index = 1; index < source.length; index += 1) {
-    const character = source[index];
-    if (quote === '"' && character === '\\' && !escaped) {
-      escaped = true;
-      continue;
-    }
-    if (quote === "'" && character === "'" && source[index + 1] === "'") {
-      index += 1;
-      continue;
-    }
-    if (quote && character === quote && !escaped) quote = undefined;
-    else if (!quote && (character === "'" || character === '"')) quote = character;
-    else if (!quote && (character === '{' || character === '[')) depth += 1;
-    else if (!quote && (character === '}' || character === ']')) {
-      if (character === '}' && depth === 0) {
-        const found = flowSegmentValue(source.slice(segmentStart, index), wantedKey);
-        if (found !== undefined) return found;
-        break;
-      }
-      depth -= 1;
-    } else if (!quote && character === ',' && depth === 0) {
-      const found = flowSegmentValue(source.slice(segmentStart, index), wantedKey);
-      if (found !== undefined) return found;
-      segmentStart = index + 1;
-    }
-    escaped = false;
-  }
-  return undefined;
-}
-
-function flowSegmentValue(segment: string, wantedKey: string): string | undefined {
-  const key = wantedKey.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const match = new RegExp(`^\\s*(?:${key}|'${key}'|"${key}")\\s*:\\s*([\\s\\S]*?)\\s*$`).exec(segment);
-  return match?.[1];
-}
-
-function categoryValue(raw: string): Connector['category'] | undefined {
-  let value = stripComment(raw).trim();
-  if (value.startsWith("'") && value.endsWith("'")) value = value.slice(1, -1).replace(/''/g, "'");
-  else if (value.startsWith('"') && value.endsWith('"')) value = value.slice(1, -1);
-  return categories.find((category) => category === value);
-}
-
-function stripComment(value: string): string {
-  let quote: "'" | '"' | undefined;
-  let escaped = false;
-  for (let index = 0; index < value.length; index += 1) {
-    const character = value[index];
-    if (quote === '"' && character === '\\' && !escaped) {
-      escaped = true;
-      continue;
-    }
-    if (quote === "'" && character === "'" && value[index + 1] === "'") {
-      index += 1;
-      continue;
-    }
-    if (quote && character === quote && !escaped) quote = undefined;
-    else if (!quote && (character === "'" || character === '"')) quote = character;
-    else if (!quote && character === '#' && (index === 0 || /\s/.test(value[index - 1]))) return value.slice(0, index);
-    escaped = false;
-  }
-  return value;
-}
+/** Latest save and latest preview outcome; each slot is written independently. */
+export type RecipeFeedback = { save?: RecipeFeedbackEntry; preview?: RecipeFeedbackEntry };
 
 /** Keeps field locations supplied by the API intact for inline form errors. */
 export function locatedErrorsFrom(error: unknown): FieldError[] {
@@ -118,6 +20,36 @@ export function locatedErrorsFrom(error: unknown): FieldError[] {
   );
 }
 
+/**
+ * Picks the feedback to show for the recipe currently in the editor. Entries for that
+ * exact text combine (save first, then preview); when none match, the newest entry is
+ * returned with its own recipe so the editor can mark it stale.
+ */
+export function mergeRecipeFeedback(
+  feedback: RecipeFeedback | undefined,
+  recipe: string,
+): { errors: FieldError[]; errorRecipe?: string; endpoints?: RecipePreview['endpoints'] } {
+  const entries = [feedback?.save, feedback?.preview].filter((entry): entry is RecipeFeedbackEntry => !!entry);
+  if (entries.length === 0) return { errors: [] };
+  const current = entries.filter((entry) => entry.recipe === recipe);
+  if (current.length === 0) {
+    const newest = entries.reduce((latest, entry) => (entry.seq > latest.seq ? entry : latest));
+    return { errors: newest.errors, errorRecipe: newest.recipe };
+  }
+  const seen = new Set<string>();
+  const errors: FieldError[] = [];
+  for (const entry of current) {
+    for (const error of entry.errors) {
+      const key = JSON.stringify([error.field, error.msg]);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      errors.push(error);
+    }
+  }
+  const preview = feedback?.preview?.recipe === recipe ? feedback.preview : undefined;
+  return { errors, errorRecipe: recipe, endpoints: preview?.endpoints };
+}
+
 export function errorsForField(errors: FieldError[], fieldName: string): string | undefined {
   const messages = errors
     .filter((error) => {
@@ -129,6 +61,10 @@ export function errorsForField(errors: FieldError[], fieldName: string): string 
 }
 
 export function focusFirstLocatedError(errors: FieldError[], fallbackField?: string): void {
+  if (/^(config\.)?recipe(?:[.[]|$)/.test(errors[0]?.field ?? '')) {
+    const event = new CustomEvent('connector-recipe-focus', { detail: { field: errors[0].field }, cancelable: true });
+    if (!window.dispatchEvent(event)) return;
+  }
   const location = errors[0]?.field.replace(/^config\./, '');
   const fieldName = location?.match(/^[^.[\]]+/)?.[0] ?? fallbackField;
   const target = fieldName ? document.getElementById(`connector-field-${fieldName}`) : null;

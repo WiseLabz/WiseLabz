@@ -1,9 +1,12 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, configure, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import '../../i18n';
 import { ConnectorEditPage } from './ConnectorEditPage';
+
+// The recipe editor and its YAML editor load lazily; CI with coverage is slower than the 1s default.
+configure({ asyncUtilTimeout: 5000 });
 
 const { putConnectorsConnectorId, previewRecipe, roleState, testMock, toastError } = vi.hoisted(() => ({
   toastError: vi.fn(),
@@ -30,6 +33,10 @@ let schemas: Array<Record<string, unknown>> = [
   { type: 'proxmox', category: 'virtualization', displayName: 'Proxmox', fields: [], isCredentialRefresher: false },
 ];
 
+vi.mock('./RecipeYamlEditor', () => ({
+  RecipeYamlEditor: ({ value, onChange, label, readOnly, focusRequest }: { value: string; onChange: (value: string) => void; label: string; readOnly: boolean; focusRequest: number }) => <textarea data-testid="recipe-yaml-editor" ref={(node) => { if (focusRequest) node?.focus(); }} id="connector-field-recipe" className="font-mono" aria-label={label} value={value} readOnly={readOnly} onChange={(event) => onChange(event.target.value)} />,
+}));
+
 vi.mock('../../api/generated/connectors/connectors', () => ({
   useGetConnectorsConnectorId: () => ({ data: connectorData, isLoading: false, isError: false, refetch: vi.fn() }),
   useGetConnectors: () => ({ data: [{ id: 'visible-traefik', name: 'Visible Traefik', type: 'traefik' }] }),
@@ -37,7 +44,7 @@ vi.mock('../../api/generated/connectors/connectors', () => ({
   putConnectorsConnectorId: (...args: unknown[]) => putConnectorsConnectorId(...args),
   postConnectorsConnectorIdTest: (...args: unknown[]) => testMock(...args),
   usePreviewConnectorRecipe: () => ({
-    mutate: (...args: unknown[]) => previewRecipe(args[0]),
+    mutate: (...args: unknown[]) => previewRecipe(...args),
     isPending: false,
     isError: false,
   }),
@@ -51,6 +58,7 @@ vi.mock('../../hooks/useRole', () => ({ useConnectorRole: () => 'operator', useI
 vi.mock('./ConnectorPermissionsTab', () => ({ ConnectorPermissionsTab: () => null }));
 
 afterEach(() => {
+  localStorage.clear();
   roleState.isAdmin = false;
   previewRecipe.mockClear();
 });
@@ -336,9 +344,11 @@ describe('ConnectorEditPage recipe editing', () => {
     };
     putConnectorsConnectorId.mockClear();
     try {
+      roleState.isAdmin = true;
       renderPage();
-      expect(screen.getByLabelText(/recipe/i)).toHaveValue(recipe);
-      expect(screen.getByText('Media')).toBeInTheDocument();
+      await openYaml();
+      expect(screen.getByRole('textbox', { name: 'Recipe (YAML)' })).toHaveValue(recipe);
+      expect(await screen.findByText('Media')).toBeInTheDocument();
       fireEvent.click(screen.getByRole('button', { name: /save/i }));
       await waitFor(() => expect(putConnectorsConnectorId).toHaveBeenCalled());
       const body = putConnectorsConnectorId.mock.calls[0][1] as { category?: string; config: Record<string, unknown> };
@@ -362,12 +372,14 @@ describe('ConnectorEditPage recipe editing', () => {
       }),
     );
     try {
+      roleState.isAdmin = true;
       renderPage();
-      fireEvent.change(screen.getByLabelText(/recipe/i), { target: { value: recipe.replace('category: media', 'category: monitoring') } });
+      await openYaml();
+      fireEvent.change(screen.getByRole('textbox', { name: 'Recipe (YAML)' }), { target: { value: recipe.replace('category: media', 'category: monitoring') } });
       expect(screen.getByText('Monitoring')).toBeInTheDocument();
       fireEvent.click(screen.getByRole('button', { name: /save/i }));
       await waitFor(() => expect(screen.getByText('config.recipe.endpoints[0].entity.external_id')).toBeInTheDocument());
-      expect(screen.getByLabelText(/recipe/i)).toHaveFocus();
+      await waitFor(() => expect(screen.getByRole('textbox', { name: 'Recipe (YAML)' })).toHaveFocus());
       const body = putConnectorsConnectorId.mock.calls[0][1] as { category?: string; config: Record<string, unknown> };
       expect(body.config.recipe).toContain('category: monitoring');
       expect(body).not.toHaveProperty('category');
@@ -377,7 +389,7 @@ describe('ConnectorEditPage recipe editing', () => {
     }
   });
 
-  it('previews the current edited recipe with the connector id and stored URL', () => {
+  it('previews the current edited recipe with the connector id and stored URL', async () => {
     const originalSchemas = schemas;
     const originalConnector = connectorData;
     schemas = [customSchema];
@@ -390,7 +402,9 @@ describe('ConnectorEditPage recipe editing', () => {
     };
     roleState.isAdmin = true;
     try {
+      roleState.isAdmin = true;
       renderPage();
+      await openYaml();
       fireEvent.change(screen.getByRole('textbox', { name: /recipe/i }), {
         target: { value: recipe.replace('name: shows', 'name: movies') },
       });
@@ -406,7 +420,7 @@ describe('ConnectorEditPage recipe editing', () => {
             auth_token: 'new-token',
           },
         },
-      });
+      }, expect.anything());
     } finally {
       roleState.isAdmin = false;
       schemas = originalSchemas;
@@ -414,3 +428,99 @@ describe('ConnectorEditPage recipe editing', () => {
     }
   });
 });
+
+describe('ConnectorEditPage save and preview feedback race', () => {
+  const recipe = 'version: 1\ncategory: media\nauth: {mode: none}\nendpoints:\n  - name: items\n    path: /api/items\n    method: GET\n    items: items\n    entity: {kind: media_item, name: name, external_id: id}\n';
+  const customSchema = {
+    type: 'custom',
+    category: 'virtualization',
+    displayName: 'Custom HTTP',
+    isCredentialRefresher: false,
+    fields: [
+      { name: 'url', label: 'Target URL', kind: 'text', required: true },
+      { name: 'recipe', label: 'Recipe (YAML)', kind: 'textarea', required: false },
+      { name: 'auth_token', label: 'Token', kind: 'password', required: false },
+    ],
+  };
+
+  it('keeps a failed save error when a preview of the same recipe finishes after the save', async () => {
+    const originalSchemas = schemas;
+    const originalConnector = connectorData;
+    schemas = [customSchema];
+    connectorData = { ...connectorData, type: 'custom', url: 'https://media.example', config: { recipe } };
+    let finishPreview: ((result: unknown) => void) | undefined;
+    previewRecipe.mockImplementationOnce((_data, callbacks: { onSuccess: (result: unknown) => void }) => {
+      finishPreview = (result) => callbacks.onSuccess(result);
+    });
+    putConnectorsConnectorId.mockRejectedValueOnce(
+      Object.assign(new Error('invalid mapping'), {
+        isAxiosError: true,
+        response: { status: 400, data: { details: [{ field: 'config.recipe.endpoints[0].entity.external_id', msg: 'mapping must select an ID' }] } },
+      }),
+    );
+    try {
+      roleState.isAdmin = true;
+      renderPage();
+      await screen.findByLabelText('External ID');
+      fireEvent.click(screen.getByRole('button', { name: /test recipe/i }));
+      fireEvent.click(screen.getByRole('button', { name: /save/i }));
+      await waitFor(() => expect(screen.getByLabelText('External ID')).toHaveAttribute('aria-invalid', 'true'));
+
+      act(() => finishPreview?.({ endpoints: [], dependencies: [], errors: [] }));
+
+      expect(screen.getByLabelText('External ID')).toHaveAttribute('aria-invalid', 'true');
+      expect(screen.getByLabelText('External ID')).toHaveAccessibleDescription('mapping must select an ID');
+    } finally {
+      roleState.isAdmin = false;
+      schemas = originalSchemas;
+      connectorData = originalConnector;
+    }
+  });
+});
+
+describe('recipe editor dirty guard and rights', () => {
+  const recipe = 'version: 1\ncategory: media\nauth: {mode: none}\nendpoints:\n  - name: items\n    path: /api/items\n    method: GET\n    items: items\n    entity: {kind: media_item, name: name, external_id: id}\n';
+  it.each(['Form', 'YAML'])('warns before leaving after an edit in %s', async (tab) => {
+    const originalSchemas = schemas;
+    const originalConnector = connectorData;
+    schemas = [{ type: 'custom', fields: [{ name: 'recipe', label: 'Recipe (YAML)', kind: 'textarea' }] }];
+    connectorData = { ...connectorData, type: 'custom', config: { recipe } };
+    roleState.isAdmin = true;
+    try {
+      renderPage();
+      fireEvent.click(await screen.findByRole('tab', { name: tab }));
+      if (tab === 'YAML') await screen.findByTestId('recipe-yaml-editor');
+      if (tab === 'Form') fireEvent.change(await screen.findByLabelText('Path'), { target: { value: '/new' } });
+      else fireEvent.change(await screen.findByLabelText('Recipe (YAML)'), { target: { value: recipe + '# edit\n' } });
+      await waitFor(() => {
+        const event = new Event('beforeunload', { cancelable: true });
+        window.dispatchEvent(event);
+        expect(event.defaultPrevented).toBe(true);
+      });
+    } finally {
+      schemas = originalSchemas;
+      connectorData = originalConnector;
+    }
+  });
+  it('shows recipe values without controls to a non-admin operator', async () => {
+    const originalSchemas = schemas;
+    const originalConnector = connectorData;
+    schemas = [{ type: 'custom', fields: [{ name: 'recipe', label: 'Recipe (YAML)', kind: 'textarea' }] }];
+    connectorData = { ...connectorData, type: 'custom', config: { recipe } };
+    try {
+      renderPage();
+      expect(await screen.findByText('/api/items')).toBeInTheDocument();
+      expect(screen.queryByLabelText('Path')).not.toBeInTheDocument();
+      fireEvent.click(screen.getByRole('tab', { name: 'YAML' }));
+      expect(await screen.findByLabelText('Recipe (YAML)')).toHaveAttribute('readonly');
+    } finally {
+      schemas = originalSchemas;
+      connectorData = originalConnector;
+    }
+  });
+});
+
+async function openYaml() {
+  fireEvent.click(await screen.findByRole('tab', { name: 'YAML' }));
+  return screen.findByTestId('recipe-yaml-editor');
+}
