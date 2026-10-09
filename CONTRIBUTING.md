@@ -7,7 +7,7 @@ follow our conventions, and get your changes merged.
 
 ## Prerequisites
 
-- **Go 1.23+** — backend and CLI tooling
+- **Go 1.27.2+** — backend and CLI tooling
 - **[Bun](https://bun.sh) 1.3+** — frontend (React + Vite)
 - **Docker and Docker Compose** — running the full stack and testing connectors
 - **[lefthook](https://github.com/evilmartians/lefthook)** — commit hooks (install with
