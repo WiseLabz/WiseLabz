@@ -13,6 +13,7 @@ import (
 	"github.com/WiseLabz/wiselabz/internal/api/apitest"
 	"github.com/WiseLabz/wiselabz/internal/auth"
 	"github.com/WiseLabz/wiselabz/internal/connector"
+	"github.com/WiseLabz/wiselabz/internal/store"
 )
 
 type configPushCoreConnector struct {
@@ -413,4 +414,31 @@ func TestConfigValuesEqual(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestMutateRunbookConfigPushRefusesOrphanedConnector(t *testing.T) {
+	t.Parallel()
+	h := newTestHandler(t)
+	fake := &configPushCoreConnector{current: 2048, land: true}
+	id := seedConfigPushCore(t, h, fake, true)
+	ctx := context.Background()
+	user := apitest.NewUser(t, h.Store, "operator")
+	if err := h.Store.UpdateConnector(ctx, id, map[string]any{"managed_by": store.ManagedByConfigOrphaned}); err != nil {
+		t.Fatal(err)
+	}
+	err := h.MutateRunbookConfigPush(ctx, id, "100", "memory", float64(4096), LifecycleActor{UserID: user}, nil)
+	var refusal *lifecycleError
+	if !errors.As(err, &refusal) || refusal.status != http.StatusConflict || refusal.code != "connector_orphaned" {
+		t.Fatalf("MutateRunbookConfigPush() on an orphaned connector = %v, want a 409 connector_orphaned lifecycleError", err)
+	}
+	if refusal.Error() != "This connector was removed from config.yaml. Delete it or release it to the UI first." {
+		t.Fatalf("MutateRunbookConfigPush() message = %q, want expected", refusal.Error())
+	}
+	if len(fake.values) != 0 {
+		t.Fatalf("writes/reverts performed = %v, want none", fake.values)
+	}
+	if fake.fetches != 0 {
+		t.Fatalf("fetches performed = %d, want none", fake.fetches)
+	}
+	assertConfigPushRecords(t, h, id, 0, false)
 }

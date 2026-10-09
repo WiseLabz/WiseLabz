@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"reflect"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/WiseLabz/wiselabz/internal/api/apitest"
@@ -280,5 +281,89 @@ func TestLifecycleWrapperChecksElevationBeforeEntityRef(t *testing.T) {
 	}
 	if strings.Contains(rr.Body.String(), "invalid entityRef") {
 		t.Errorf("response exposed entityRef validation before elevation: %s", rr.Body.String())
+	}
+}
+
+func TestLifecycleOperationsRefuseOrphanedConnector(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		call func(t *testing.T, h *Handler, record *store.ConnectorRecord, actor LifecycleActor)
+	}{
+		{
+			name: "MutateRunbookLifecycleOp",
+			call: func(t *testing.T, h *Handler, record *store.ConnectorRecord, actor LifecycleActor) {
+				err := h.MutateRunbookLifecycleOp(context.Background(), record.ID, "restart", "", actor, nil)
+				var refusal *lifecycleError
+				if !errors.As(err, &refusal) || refusal.status != http.StatusConflict || refusal.code != "connector_orphaned" {
+					t.Fatalf("MutateRunbookLifecycleOp() on an orphaned connector = %v, want a 409 connector_orphaned lifecycleError", err)
+				}
+				if refusal.Error() != "This connector was removed from config.yaml. Delete it or release it to the UI first." {
+					t.Fatalf("MutateRunbookLifecycleOp() message = %q, want expected", refusal.Error())
+				}
+			},
+		},
+		{
+			name: "MutateLifecycleOp",
+			call: func(t *testing.T, h *Handler, record *store.ConnectorRecord, actor LifecycleActor) {
+				err := h.MutateLifecycleOp(context.Background(), record.ID, "restart", "", actor, nil)
+				var refusal *lifecycleError
+				if !errors.As(err, &refusal) || refusal.status != http.StatusConflict || refusal.code != "connector_orphaned" {
+					t.Fatalf("MutateLifecycleOp() on an orphaned connector = %v, want a 409 connector_orphaned lifecycleError", err)
+				}
+				if refusal.Error() != "This connector was removed from config.yaml. Delete it or release it to the UI first." {
+					t.Fatalf("MutateLifecycleOp() message = %q, want expected", refusal.Error())
+				}
+			},
+		},
+		{
+			name: "ServeLifecycleOp",
+			call: func(t *testing.T, h *Handler, record *store.ConnectorRecord, _ LifecycleActor) {
+				req := httptest.NewRequest(http.MethodPost, "/api/connectors/"+record.ID+"/restart", nil)
+				rr := httptest.NewRecorder()
+				h.ServeLifecycleOp(rr, req, record.ID, "restart", "", nil)
+				if rr.Code != http.StatusConflict {
+					t.Fatalf("ServeLifecycleOp() status = %d, want 409", rr.Code)
+				}
+				var body struct {
+					Code    string `json:"code"`
+					Message string `json:"message"`
+				}
+				if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
+					t.Fatalf("unmarshal error body: %v", err)
+				}
+				if body.Code != "connector_orphaned" {
+					t.Fatalf("ServeLifecycleOp() code = %q, want connector_orphaned", body.Code)
+				}
+				if body.Message != "This connector was removed from config.yaml. Delete it or release it to the UI first." {
+					t.Fatalf("ServeLifecycleOp() message = %q, want expected", body.Message)
+				}
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h := newTestHandler(t)
+			var hits atomic.Int32
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				hits.Add(1)
+				w.WriteHeader(http.StatusNoContent)
+			}))
+			defer server.Close()
+			record := seedRecipeActionConnectorWithRecipe(t, h, server.URL, restartRecipe)
+			ctx := context.Background()
+			user := apitest.NewUser(t, h.Store, "operator")
+			if err := h.Store.UpdateConnector(ctx, record.ID, map[string]any{"managed_by": store.ManagedByConfigOrphaned}); err != nil {
+				t.Fatal(err)
+			}
+			tc.call(t, h, record, LifecycleActor{UserID: user})
+			if hits.Load() != 0 {
+				t.Fatalf("service received %d requests for an orphaned connector, want none", hits.Load())
+			}
+			if audits, _, err := h.Store.ListAuditRecords(ctx, "connector.restart", "connector", "", "", 0, 10); err != nil || len(audits) != 0 {
+				t.Fatalf("audit records for a refused action = %+v, %v; want none", audits, err)
+			}
+			if alerts, _, err := h.Store.ListAlerts(ctx, record.ID, "", "", "", 0, 10); err != nil || len(alerts) != 0 {
+				t.Fatalf("alerts for a refused action = %+v, %v; want none", alerts, err)
+			}
+		})
 	}
 }

@@ -119,6 +119,9 @@ func (h *Handler) MutateRunbookConfigPush(
 	if err != nil {
 		return err
 	}
+	if prepared.record.ManagedBy != store.ManagedByUI && prepared.record.ManagedBy != store.ManagedByConfig {
+		return managedConflictError(prepared.record.ManagedBy)
+	}
 	_, err = h.mutateConfigPush(ctx, prepared, configPushRequest{
 		EntityRef: entityRef, FieldKey: fieldKey, Value: value,
 	}, actor, extraAudit)
