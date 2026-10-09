@@ -1204,14 +1204,13 @@ function ActionRow({
     if (!next || next === name || siblings[next] !== undefined) return;
     edit({ type: 'rename', path, to: next });
   };
-  const optionalText = (field: 'label' | 'description', fieldLabel: string, maxLength: number, className = '') => (
+  const optionalText = (field: 'label' | 'description', fieldLabel: string, className = '') => (
     <TextField
       className={className}
       label={fieldLabel}
       path={[...path, field]}
       value={String(action[field] ?? '')}
       disabled={disabled}
-      maxLength={maxLength}
       issue={issue([...path, field])}
       onChange={(next) => {
         if (next) edit({ type: 'set', path: [...path, field], value: next });
@@ -1274,8 +1273,8 @@ function ActionRow({
           issue={issue([...path, 'path'])}
           onChange={(next) => edit({ type: 'set', path: [...path, 'path'], value: next })}
         />
-        {optionalText('label', t('connectors.recipeBuilder.actionLabel'), 60)}
-        {optionalText('description', t('connectors.recipeBuilder.actionDescription'), 300, 'sm:col-span-2')}
+        {optionalText('label', t('connectors.recipeBuilder.actionLabel'))}
+        {optionalText('description', t('connectors.recipeBuilder.actionDescription'), 'sm:col-span-2')}
         <TextField
           type="number"
           label={t('connectors.recipeBuilder.downtimeSeconds')}
@@ -1530,7 +1529,6 @@ function TextField({
   onChange,
   className = '',
   type = 'text',
-  maxLength,
 }: {
   label: string;
   path: RecipePath;
@@ -1540,7 +1538,6 @@ function TextField({
   onChange: (value: string) => void;
   className?: string;
   type?: 'text' | 'number';
-  maxLength?: number;
 }) {
   if (disabled) return <ReadOnlyOrField label={label} value={value} className={className} />;
   const id = issue?.id ?? recipeFieldId([...path]);
@@ -1550,7 +1547,6 @@ function TextField({
       <input
         id={id}
         type={type}
-        maxLength={maxLength}
         className={controlClass}
         value={value}
         aria-invalid={issue?.message ? true : undefined}

@@ -240,9 +240,33 @@ describe('recipe document parsing', () => {
     });
 
     it('takes the first line ending for an insertion at the very start and LF for text without line breaks', () => {
-      expect(editRecipeDocument('\r\n', { type: 'set', path: ['a'], value: 1 })).toContain('a: 1');
-      expect(editRecipeDocument('a: 1', { type: 'set', path: ['b'], value: 2 })).toBe('a: 1\nb: 2\n');
+      expect(editRecipeDocument('\r\n', { type: 'set', path: ['a'], value: 1 })).toBe('\r\na: 1\r\n');
+      expect(editRecipeDocument('a: 1', { type: 'set', path: ['b'], value: 2 })).toBe('a: 1\nb: 2');
       expect(editRecipeDocument('a: 1\r\nb: 2\r\n', { type: 'set', path: ['c'], value: 3 })).toBe('a: 1\r\nb: 2\r\nc: 3\r\n');
+    });
+
+    it('keeps a missing final newline missing when a key or item is added', () => {
+      const valueOf = (text: string) => parseRecipeDocument(text).document?.toJS();
+
+      const key = editRecipeDocument('a: 1\nb: 2', { type: 'set', path: ['c'], value: 3 });
+      expect(key).toBe('a: 1\nb: 2\nc: 3');
+      expect(valueOf(key)).toEqual({ a: 1, b: 2, c: 3 });
+
+      const crlf = editRecipeDocument('a: 1\r\nb: 2', { type: 'set', path: ['c'], value: 3 });
+      expect(crlf).toBe('a: 1\r\nb: 2\r\nc: 3');
+      expect(valueOf(crlf)).toEqual({ a: 1, b: 2, c: 3 });
+
+      const item = editRecipeDocument('items:\n  - x', { type: 'append', path: ['items'], value: 'y' });
+      expect(item).toBe('items:\n  - x\n  - y');
+      expect(valueOf(item)).toEqual({ items: ['x', 'y'] });
+
+      const composite = editRecipeDocument('a: 1\nauth: none', { type: 'set', path: ['auth'], value: { mode: 'none' } });
+      expect(composite).toBe('a: 1\nauth:\n  mode: none');
+      expect(valueOf(composite)).toEqual({ a: 1, auth: { mode: 'none' } });
+
+      // A value that itself ends with a line break cannot drop the newline: it falls back to the terminated text.
+      const multiline = editRecipeDocument('a: 1\nbody: x', { type: 'set', path: ['body'], value: 'l1\nl2\n' });
+      expect(valueOf(multiline)).toEqual({ a: 1, body: 'l1\nl2\n' });
     });
   });
 

@@ -163,6 +163,11 @@ export function editRecipeDocument(source: string, requested: RecipeEditOperatio
   const patch = sourcePatch(source, before.contents, operation, value, path);
   if (!patch) throw new Error(unpatchable);
   const patched = source.slice(0, patch.start) + patch.text + source.slice(patch.end);
+  // A text with no final line break stays that way: text inserted at its very end does not add one.
+  if (patch.end >= source.length && !source.endsWith('\n') && !isBlankSource(source)) {
+    const unterminated = source.slice(0, patch.start) + patch.text.replace(/\r?\n$/, '');
+    if (unterminated !== patched && readsAs(unterminated, document)) return unterminated;
+  }
   // Safety net: never hand back text that does not read as the mutation the Document API applied.
   if (!readsAs(patched, document)) throw new Error(unpatchable);
   return patched;

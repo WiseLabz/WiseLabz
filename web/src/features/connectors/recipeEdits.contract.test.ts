@@ -47,6 +47,12 @@ const fixtures: Array<[string, string]> = [
   ['fixture: multi-line flow sequence', 'values: [\n  one,\n  two\n]\nafter: 1\n'],
   ['fixture: multi-line flow map', 'auth: {\n  mode: none,\n  name: x\n}\nafter: 1\n'],
   ['fixture: mixed line endings', 'version: 1\ncategory: media\r\nauth:\r\n  mode: none\r\nendpoints:\n  - name: one\r\n    path: /one\n'],
+  ['fixture: single item with a comment above it', 'endpoints:\n  # the main list\n  - name: one\n    path: /one # inline\nafter: 1\n'],
+  ['fixture: crlf, no final newline', 'version: 1\r\ncategory: media\r\nauth:\r\n  mode: none'],
+  [
+    'fixture: flow mappings in a block sequence, tab in a comment, non-ASCII',
+    'items:\n  - {name: "é", path: /a} \t# tab \tcomment ü\n  - {name: b, path: /b}\nafter: 1\n',
+  ],
   [
     'fixture: actions, block style with comments between them',
     [
@@ -103,6 +109,24 @@ const fixtures: Array<[string, string]> = [
   [
     'fixture: actions, multi-line flow mapping',
     'actions: {\n  restart: {method: POST, path: /api/restart},\n  rescan: {method: POST, path: "/a/{b}"}\n}\nversion: 1\n',
+  ],
+  [
+    'fixture: actions, quoted keys and a flow mapping spread over lines in a block entity',
+    [
+      'version: 1',
+      'endpoints:',
+      '  - name: items',
+      '    path: /api/items',
+      '    entity:',
+      '      kind: item',
+      '      name: name',
+      '      external_id: id',
+      '      actions: {',
+      '        "rescan": {method: POST, path: "/a/{external_id}"},  # first',
+      '        stop: {method: DELETE, path: /s}',
+      '      }',
+      '',
+    ].join('\n'),
   ],
 ];
 
@@ -356,6 +380,9 @@ function checkEdit(source: string, planned: Planned): string | undefined {
     return `value mismatch: got ${JSON.stringify(actual)?.slice(0, 160)} want ${JSON.stringify(planned.expected)?.slice(0, 160)} ${snippet}`;
   }
   if (result.startsWith(BOM) !== source.startsWith(BOM)) return `BOM changed ${snippet}`;
+  if ((planned.kind === 'add-key' || planned.kind === 'append') && !source.endsWith('\n') && result.endsWith('\n')) {
+    return `gained a final newline ${snippet}`;
+  }
   // Deleting the last line of a text with no final newline also drops the break before it, so none is left.
   const droppedLastBreak = planned.kind === 'delete' && !source.endsWith('\n') && !hasCrlf(result) && !hasBareLf(result);
   if (!droppedLastBreak && (hasCrlf(result) !== hasCrlf(source) || hasBareLf(result) !== hasBareLf(source))) {
@@ -376,7 +403,10 @@ function checkEdit(source: string, planned: Planned): string | undefined {
     // Emptying a block sequence must put `[]` on the key line (a bare `key:` reads back as null), so the
     // key line and the removed item are the only text allowed to change.
     if (!confined(source, result, located.keyOffset, container.range?.[2] ?? source.length)) return `text outside the sequence changed ${snippet}`;
-    return undefined;
+    // Comments above the first item are user text and stay; only those inside the removed item may go.
+    const item = container.items[0] as Node;
+    const insideItem = item.range ? commentCount(source.slice(item.range[0], container.range?.[2] ?? source.length)) : 0;
+    return commentsLost > insideItem ? `a comment above the only item was dropped ${snippet}` : undefined;
   }
 
   const before = lines(source);
