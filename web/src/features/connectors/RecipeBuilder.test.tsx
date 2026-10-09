@@ -738,5 +738,58 @@ describe('RecipeBuilder', () => {
       }
       expect(onChange).not.toHaveBeenCalled();
     });
+
+    it('avoids DOM id and aria-describedby collisions for hyphenated actions and headers', () => {
+      const initial = withServiceActions([
+        '  restart:',
+        '    method: POST',
+        '    path: /restart',
+        '  restart-path:',
+        '    method: POST',
+        '    path: /restart-path',
+      ]).replace('    method: GET\n', [
+        '    method: GET',
+        '    headers:',
+        '      x-y: val1',
+        '      x: val2',
+        '',
+      ].join('\n'));
+
+      const errors = [
+        { field: 'config.recipe.actions.restart.path', msg: 'Restart path rejected' },
+        { field: 'config.recipe.actions.restart-path', msg: 'Restart-path action rejected' },
+        { field: 'config.recipe.endpoints[0].headers.x-y', msg: 'Header x-y rejected' },
+      ];
+
+      render(<RecipeBuilder value={initial} onChange={vi.fn()} errors={errors} errorRecipe={initial} />);
+
+      const restartRow = rowByLegend('restart');
+      const restartPathRow = rowByLegend('restart-path');
+      const restartPathInput = within(restartRow).getByLabelText('Action path');
+
+      // The path field of action restart and the fieldset row of action restart-path must have distinct IDs
+      expect(restartPathInput.id).toBe('recipe-field-actions-restart-path');
+      expect(restartPathRow.id).toBe('recipe-field-actions-restart--path');
+      expect(restartPathInput.id).not.toBe(restartPathRow.id);
+
+      // Their aria-describedby must target distinct error message IDs
+      expect(restartPathInput).toHaveAttribute('aria-describedby', 'recipe-field-actions-restart-path-error');
+      expect(restartPathRow).toHaveAttribute('aria-describedby', 'recipe-field-actions-restart--path-error');
+      expect(screen.getByText('Restart path rejected')).toHaveAttribute('id', 'recipe-field-actions-restart-path-error');
+      expect(screen.getByText('Restart-path action rejected')).toHaveAttribute('id', 'recipe-field-actions-restart--path-error');
+
+      // Header x-y value input must have escaped id and distinct aria-describedby
+      const endpoint1 = screen.getByText('Endpoint 1', { selector: 'legend' }).closest('fieldset') as HTMLElement;
+      const headers = within(endpoint1).getByText('Headers', { selector: 'h4' }).closest('section') as HTMLElement;
+      const headerXYInput = within(headers).getAllByLabelText('Value')[0];
+      expect(headerXYInput.id).toBe('recipe-field-endpoints-0-headers-x--y');
+      expect(headerXYInput).toHaveAttribute('aria-describedby', 'recipe-field-endpoints-0-headers-x--y-error');
+      expect(screen.getByText('Header x-y rejected')).toHaveAttribute('id', 'recipe-field-endpoints-0-headers-x--y-error');
+
+      // Verify no duplicate IDs anywhere in the document
+      const allIds = Array.from(document.querySelectorAll('[id]')).map((el) => el.id);
+      const uniqueIds = new Set(allIds);
+      expect(allIds.length).toBe(uniqueIds.size);
+    });
   });
 });
