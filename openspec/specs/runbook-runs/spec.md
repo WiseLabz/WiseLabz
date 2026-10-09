@@ -126,6 +126,21 @@ Before executing each step that references a connector, the system SHALL verify 
 - **WHEN** the initiating user's operator grant on a later step's connector is revoked while an earlier step is running
 - **THEN** that later step SHALL become `failed` with a permission reason, the connector SHALL NOT be mutated and the run SHALL become `failed`.
 
+### Requirement: Orphaned connectors
+A step that targets an orphaned connector is refused when the step executes, not when the run starts or during authoring. When executed, it fails with status 409 and message "This connector was removed from config.yaml. Delete it or release it to the UI first.", sends nothing to the connector, and writes no audit entry or failure alert.
+
+#### Scenario: Lifecycle step on an orphaned connector fails at execution
+- **WHEN** a run executes a `lifecycle` step targeting an orphaned connector
+- **THEN** the step SHALL fail with status 409 and message "This connector was removed from config.yaml. Delete it or release it to the UI first.", the run SHALL fail, nothing SHALL be sent to the connector, and no audit entry or failure alert SHALL be written.
+
+#### Scenario: Config-push step on an orphaned connector fails at execution
+- **WHEN** a run executes a `config_push` step targeting an orphaned connector
+- **THEN** the step SHALL fail with status 409 and message "This connector was removed from config.yaml. Delete it or release it to the UI first.", the run SHALL fail, nothing SHALL be sent to the connector, and no audit entry or failure alert SHALL be written.
+
+#### Scenario: Run start with an orphaned connector is accepted
+- **WHEN** a user starts a run for a runbook whose steps reference an orphaned connector
+- **THEN** starting the run SHALL be accepted and create a run in state `running`.
+
 ### Requirement: Failure halts the run
 When a step fails or exceeds its timeout, the run SHALL stop, the step SHALL be `failed` with a human-readable reason, the remaining steps SHALL stay `pending`, and the run SHALL become `failed`. No later step SHALL execute until the run is resumed.
 

@@ -292,6 +292,10 @@ func (h *Handler) lifecycleOpMutate(w http.ResponseWriter, r *http.Request, conn
 		writeLifecycleError(w, err)
 		return
 	}
+	if prepared.record.ManagedBy != store.ManagedByUI && prepared.record.ManagedBy != store.ManagedByConfig {
+		writeLifecycleError(w, managedConflictError(prepared.record.ManagedBy))
+		return
+	}
 	if err := auth.ValidateElevationHeader(h.JWT, h.Store, "connector."+verb, r); err != nil {
 		auth.WriteElevationError(w, err)
 		return
@@ -388,6 +392,9 @@ func (h *Handler) mutateLifecycleOpCore(
 	prepared, err := h.prepareLifecycleOp(ctx, connectorID, verb)
 	if err != nil {
 		return connector.ActionResult{}, err
+	}
+	if prepared.record.ManagedBy != store.ManagedByUI && prepared.record.ManagedBy != store.ManagedByConfig {
+		return connector.ActionResult{}, managedConflictError(prepared.record.ManagedBy)
 	}
 	if err := connector.ValidateCompositeRef(entityRef); err != nil {
 		return connector.ActionResult{}, invalidEntityRef(err)
