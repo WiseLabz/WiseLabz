@@ -9,7 +9,7 @@
 
 export interface ActionResult {
   /** Upstream response status. */
-  status: number;
+  statusCode: number;
   /** At most 512 bytes of plain text, shown once and never persisted. */
   excerpt?: string;
 }

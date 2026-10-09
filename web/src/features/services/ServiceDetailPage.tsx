@@ -170,7 +170,7 @@ export function ServiceDetailPage() {
   }
 
   const c = connector.data;
-  const recipeActions = customConnector ? c.actions ?? [] : [];
+  const recipeActions = customConnector ? c.actions : [];
   const rootLifecycleVerbs = new Set(
     recipeActions.filter((action) => !action.entityScope && isLifecycleVerb(action.name)).map((action) => action.name)
   );

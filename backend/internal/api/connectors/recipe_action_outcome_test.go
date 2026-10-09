@@ -101,7 +101,7 @@ func TestNamedActionOutcomeIgnoresBodyFailureAfterStatus(t *testing.T) {
 				if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil {
 					t.Fatal(err)
 				}
-				if response.Code != http.StatusOK || result["status"] != float64(http.StatusOK) {
+				if response.Code != http.StatusOK || result["statusCode"] != float64(http.StatusOK) {
 					t.Fatalf("status=%d body=%s, want 200 with status 200", response.Code, response.Body.String())
 				}
 				if len(audits) != 1 || len(alerts) != 0 {

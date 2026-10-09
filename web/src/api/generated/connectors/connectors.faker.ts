@@ -60,19 +60,16 @@ export const getGetConnectorsResponseMock = (): Connector[] =>
       },
       undefined,
     ]),
-    capabilities: faker.helpers.arrayElement([
-      {
-        restart: faker.datatype.boolean(),
-        start: faker.datatype.boolean(),
-        stop: faker.datatype.boolean(),
-        configPush: faker.datatype.boolean(),
-        configRead: faker.datatype.boolean(),
-        credentialRefresh: faker.datatype.boolean(),
-      },
-      undefined,
-    ]),
-    actions: faker.helpers.arrayElement([
-      Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() => ({
+    capabilities: {
+      restart: faker.datatype.boolean(),
+      start: faker.datatype.boolean(),
+      stop: faker.datatype.boolean(),
+      configPush: faker.datatype.boolean(),
+      configRead: faker.datatype.boolean(),
+      credentialRefresh: faker.datatype.boolean(),
+    },
+    actions: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(
+      () => ({
         name: faker.string.alpha({ length: { min: 10, max: 20 } }),
         entityScope: faker.datatype.boolean(),
         entityKind: faker.helpers.arrayElement([
@@ -88,9 +85,8 @@ export const getGetConnectorsResponseMock = (): Connector[] =>
           undefined,
         ]),
         downtimeSeconds: faker.number.int({ min: 0, max: 3600 }),
-      })),
-      undefined,
-    ]),
+      })
+    ),
     lastSyncAt: faker.helpers.arrayElement([
       faker.helpers.fromRegExp('^$|^[0-9]{4}-[0-9]{2}-[0-9]{2}T'),
       undefined,
@@ -150,19 +146,16 @@ export const getPostConnectorsResponseMock = (
     },
     undefined,
   ]),
-  capabilities: faker.helpers.arrayElement([
-    {
-      restart: faker.datatype.boolean(),
-      start: faker.datatype.boolean(),
-      stop: faker.datatype.boolean(),
-      configPush: faker.datatype.boolean(),
-      configRead: faker.datatype.boolean(),
-      credentialRefresh: faker.datatype.boolean(),
-    },
-    undefined,
-  ]),
-  actions: faker.helpers.arrayElement([
-    Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() => ({
+  capabilities: {
+    restart: faker.datatype.boolean(),
+    start: faker.datatype.boolean(),
+    stop: faker.datatype.boolean(),
+    configPush: faker.datatype.boolean(),
+    configRead: faker.datatype.boolean(),
+    credentialRefresh: faker.datatype.boolean(),
+  },
+  actions: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(
+    () => ({
       name: faker.string.alpha({ length: { min: 10, max: 20 } }),
       entityScope: faker.datatype.boolean(),
       entityKind: faker.helpers.arrayElement([
@@ -178,9 +171,8 @@ export const getPostConnectorsResponseMock = (
         undefined,
       ]),
       downtimeSeconds: faker.number.int({ min: 0, max: 3600 }),
-    })),
-    undefined,
-  ]),
+    })
+  ),
   lastSyncAt: faker.helpers.arrayElement([
     faker.helpers.fromRegExp('^$|^[0-9]{4}-[0-9]{2}-[0-9]{2}T'),
     undefined,
@@ -361,19 +353,16 @@ export const getGetConnectorsConnectorIdResponseMock = (
     },
     undefined,
   ]),
-  capabilities: faker.helpers.arrayElement([
-    {
-      restart: faker.datatype.boolean(),
-      start: faker.datatype.boolean(),
-      stop: faker.datatype.boolean(),
-      configPush: faker.datatype.boolean(),
-      configRead: faker.datatype.boolean(),
-      credentialRefresh: faker.datatype.boolean(),
-    },
-    undefined,
-  ]),
-  actions: faker.helpers.arrayElement([
-    Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() => ({
+  capabilities: {
+    restart: faker.datatype.boolean(),
+    start: faker.datatype.boolean(),
+    stop: faker.datatype.boolean(),
+    configPush: faker.datatype.boolean(),
+    configRead: faker.datatype.boolean(),
+    credentialRefresh: faker.datatype.boolean(),
+  },
+  actions: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(
+    () => ({
       name: faker.string.alpha({ length: { min: 10, max: 20 } }),
       entityScope: faker.datatype.boolean(),
       entityKind: faker.helpers.arrayElement([
@@ -389,9 +378,8 @@ export const getGetConnectorsConnectorIdResponseMock = (
         undefined,
       ]),
       downtimeSeconds: faker.number.int({ min: 0, max: 3600 }),
-    })),
-    undefined,
-  ]),
+    })
+  ),
   lastSyncAt: faker.helpers.arrayElement([
     faker.helpers.fromRegExp('^$|^[0-9]{4}-[0-9]{2}-[0-9]{2}T'),
     undefined,
@@ -452,19 +440,16 @@ export const getPutConnectorsConnectorIdResponseMock = (
     },
     undefined,
   ]),
-  capabilities: faker.helpers.arrayElement([
-    {
-      restart: faker.datatype.boolean(),
-      start: faker.datatype.boolean(),
-      stop: faker.datatype.boolean(),
-      configPush: faker.datatype.boolean(),
-      configRead: faker.datatype.boolean(),
-      credentialRefresh: faker.datatype.boolean(),
-    },
-    undefined,
-  ]),
-  actions: faker.helpers.arrayElement([
-    Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() => ({
+  capabilities: {
+    restart: faker.datatype.boolean(),
+    start: faker.datatype.boolean(),
+    stop: faker.datatype.boolean(),
+    configPush: faker.datatype.boolean(),
+    configRead: faker.datatype.boolean(),
+    credentialRefresh: faker.datatype.boolean(),
+  },
+  actions: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(
+    () => ({
       name: faker.string.alpha({ length: { min: 10, max: 20 } }),
       entityScope: faker.datatype.boolean(),
       entityKind: faker.helpers.arrayElement([
@@ -480,9 +465,8 @@ export const getPutConnectorsConnectorIdResponseMock = (
         undefined,
       ]),
       downtimeSeconds: faker.number.int({ min: 0, max: 3600 }),
-    })),
-    undefined,
-  ]),
+    })
+  ),
   lastSyncAt: faker.helpers.arrayElement([
     faker.helpers.fromRegExp('^$|^[0-9]{4}-[0-9]{2}-[0-9]{2}T'),
     undefined,
@@ -543,19 +527,16 @@ export const getPostConnectorsConnectorIdReleaseResponseMock = (
     },
     undefined,
   ]),
-  capabilities: faker.helpers.arrayElement([
-    {
-      restart: faker.datatype.boolean(),
-      start: faker.datatype.boolean(),
-      stop: faker.datatype.boolean(),
-      configPush: faker.datatype.boolean(),
-      configRead: faker.datatype.boolean(),
-      credentialRefresh: faker.datatype.boolean(),
-    },
-    undefined,
-  ]),
-  actions: faker.helpers.arrayElement([
-    Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() => ({
+  capabilities: {
+    restart: faker.datatype.boolean(),
+    start: faker.datatype.boolean(),
+    stop: faker.datatype.boolean(),
+    configPush: faker.datatype.boolean(),
+    configRead: faker.datatype.boolean(),
+    credentialRefresh: faker.datatype.boolean(),
+  },
+  actions: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(
+    () => ({
       name: faker.string.alpha({ length: { min: 10, max: 20 } }),
       entityScope: faker.datatype.boolean(),
       entityKind: faker.helpers.arrayElement([
@@ -571,9 +552,8 @@ export const getPostConnectorsConnectorIdReleaseResponseMock = (
         undefined,
       ]),
       downtimeSeconds: faker.number.int({ min: 0, max: 3600 }),
-    })),
-    undefined,
-  ]),
+    })
+  ),
   lastSyncAt: faker.helpers.arrayElement([
     faker.helpers.fromRegExp('^$|^[0-9]{4}-[0-9]{2}-[0-9]{2}T'),
     undefined,
@@ -891,7 +871,7 @@ export const getPostConnectorsConnectorIdActionsNameResponseActionResultMock = (
   overrideResponse: Partial<ActionResult> = {}
 ): ActionResult => ({
   ...{
-    status: faker.number.int(),
+    statusCode: faker.number.int(),
     excerpt: faker.helpers.arrayElement([
       faker.string.alpha({ length: { min: 10, max: 20 } }),
       undefined,
@@ -1294,19 +1274,16 @@ export const getPutConnectorsConnectorIdEnabledResponseMock = (
     },
     undefined,
   ]),
-  capabilities: faker.helpers.arrayElement([
-    {
-      restart: faker.datatype.boolean(),
-      start: faker.datatype.boolean(),
-      stop: faker.datatype.boolean(),
-      configPush: faker.datatype.boolean(),
-      configRead: faker.datatype.boolean(),
-      credentialRefresh: faker.datatype.boolean(),
-    },
-    undefined,
-  ]),
-  actions: faker.helpers.arrayElement([
-    Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() => ({
+  capabilities: {
+    restart: faker.datatype.boolean(),
+    start: faker.datatype.boolean(),
+    stop: faker.datatype.boolean(),
+    configPush: faker.datatype.boolean(),
+    configRead: faker.datatype.boolean(),
+    credentialRefresh: faker.datatype.boolean(),
+  },
+  actions: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(
+    () => ({
       name: faker.string.alpha({ length: { min: 10, max: 20 } }),
       entityScope: faker.datatype.boolean(),
       entityKind: faker.helpers.arrayElement([
@@ -1322,9 +1299,8 @@ export const getPutConnectorsConnectorIdEnabledResponseMock = (
         undefined,
       ]),
       downtimeSeconds: faker.number.int({ min: 0, max: 3600 }),
-    })),
-    undefined,
-  ]),
+    })
+  ),
   lastSyncAt: faker.helpers.arrayElement([
     faker.helpers.fromRegExp('^$|^[0-9]{4}-[0-9]{2}-[0-9]{2}T'),
     undefined,

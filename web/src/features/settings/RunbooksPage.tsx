@@ -426,7 +426,7 @@ export function RunbooksPage() {
     const selected = connectors.data?.find((c) => c.id === connectorId);
     if (selected?.type === 'custom') {
       return LIFECYCLE_VERBS.filter((verb) =>
-        selected.actions?.some(
+        selected.actions.some(
           (action) => action.name === verb && action.entityScope === !!entityRef
         )
       ) as RunbookStepVerb[];

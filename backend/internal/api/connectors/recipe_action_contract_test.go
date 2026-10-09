@@ -78,7 +78,7 @@ func TestNamedActionResponsesMatchSpec(t *testing.T) {
 			t.Fatalf("status = %d, want 200; body = %s", rr.Code, rr.Body.String())
 		}
 		got := decodeContractBody(t, rr)
-		if got["status"] != float64(http.StatusOK) || got["excerpt"] != "OK" {
+		if got["statusCode"] != float64(http.StatusOK) || got["excerpt"] != "OK" {
 			t.Errorf("result = %v, want status 200 and excerpt OK", got)
 		}
 		apitest.AssertMatchesSpec(t, req, rr.Result())

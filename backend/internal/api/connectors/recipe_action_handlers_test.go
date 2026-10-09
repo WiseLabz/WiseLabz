@@ -324,7 +324,7 @@ func TestNamedRecipeActionElevationResultAndAudit(t *testing.T) {
 	if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil {
 		t.Fatal(err)
 	}
-	if result["status"] != float64(http.StatusOK) || result["excerpt"] != "rescan complete" {
+	if result["statusCode"] != float64(http.StatusOK) || result["excerpt"] != "rescan complete" {
 		t.Fatalf("action result=%v", result)
 	}
 	audits, _, err := h.Store.ListAuditRecords(context.Background(), "connector.action", "connector", "", "", 0, 10)

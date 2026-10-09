@@ -6,15 +6,24 @@ import { setLanguagePreference } from '../../i18n';
 import { ServicesPage } from './ServicesPage';
 import type { Connector } from '../../api/model';
 
+const noCapabilities: Connector['capabilities'] = {
+  restart: false,
+  start: false,
+  stop: false,
+  configPush: false,
+  configRead: false,
+  credentialRefresh: false,
+};
+
 let connectorsList: Connector[] = [
-  { id: 'c1', name: 'PVE Cluster', category: 'virtualization', type: 'proxmox', url: 'https://pve.local', enabled: true, status: 'online' },
-  { id: 'c2', name: 'Docker Host', category: 'containers_paas', type: 'docker', url: 'https://docker.local', enabled: true, status: 'online' },
-  { id: 'c3', name: 'Core Switch', category: 'networking', type: 'opnsense', url: 'https://switch.local', enabled: true, status: 'online' },
-  { id: 'c4', name: 'AdGuard Home', category: 'dns', type: 'adguardhome', url: 'https://dns.local', enabled: true, status: 'online' },
-  { id: 'c5', name: 'TrueNAS Core', category: 'storage', type: 'custom', url: 'https://nas.local', enabled: true, status: 'online' },
-  { id: 'c6', name: 'Prometheus', category: 'monitoring', type: 'custom', url: 'https://prom.local', enabled: true, status: 'online' },
-  { id: 'c7', name: 'Jellyfin Media', category: 'media', type: 'custom', url: 'https://jellyfin.local', enabled: true, status: 'online' },
-  { id: 'c8', name: 'Home Assistant', category: 'other', type: 'custom', url: 'https://hass.local', enabled: true, status: 'online' },
+  { id: 'c1', name: 'PVE Cluster', category: 'virtualization', type: 'proxmox', url: 'https://pve.local', enabled: true, status: 'online', capabilities: noCapabilities, actions: [] },
+  { id: 'c2', name: 'Docker Host', category: 'containers_paas', type: 'docker', url: 'https://docker.local', enabled: true, status: 'online', capabilities: noCapabilities, actions: [] },
+  { id: 'c3', name: 'Core Switch', category: 'networking', type: 'opnsense', url: 'https://switch.local', enabled: true, status: 'online', capabilities: noCapabilities, actions: [] },
+  { id: 'c4', name: 'AdGuard Home', category: 'dns', type: 'adguardhome', url: 'https://dns.local', enabled: true, status: 'online', capabilities: noCapabilities, actions: [] },
+  { id: 'c5', name: 'TrueNAS Core', category: 'storage', type: 'custom', url: 'https://nas.local', enabled: true, status: 'online', capabilities: noCapabilities, actions: [] },
+  { id: 'c6', name: 'Prometheus', category: 'monitoring', type: 'custom', url: 'https://prom.local', enabled: true, status: 'online', capabilities: noCapabilities, actions: [] },
+  { id: 'c7', name: 'Jellyfin Media', category: 'media', type: 'custom', url: 'https://jellyfin.local', enabled: true, status: 'online', capabilities: noCapabilities, actions: [] },
+  { id: 'c8', name: 'Home Assistant', category: 'other', type: 'custom', url: 'https://hass.local', enabled: true, status: 'online', capabilities: noCapabilities, actions: [] },
 ];
 
 vi.mock('../../api/generated/connectors/connectors', async (importOriginal) => {
@@ -106,6 +115,8 @@ describe('ServicesPage category presentation (#513)', () => {
         url: 'https://arcade.local',
         enabled: true,
         status: 'online',
+        capabilities: noCapabilities,
+        actions: [],
       },
     ];
     try {

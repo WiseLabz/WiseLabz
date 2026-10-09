@@ -329,14 +329,9 @@ function errorFromResponse(error: unknown): unknown {
 
 function responseDetails(value: unknown): { status?: number; excerpt?: string } {
   if (!value || typeof value !== 'object') return {};
-  const result = value as { status?: unknown; statusCode?: unknown; excerpt?: unknown };
-  const status = typeof result.statusCode === 'number'
-    ? result.statusCode
-    : typeof result.status === 'number'
-      ? result.status
-      : undefined;
+  const result = value as { statusCode?: unknown; excerpt?: unknown };
   return {
-    status,
+    status: typeof result.statusCode === 'number' ? result.statusCode : undefined,
     excerpt: typeof result.excerpt === 'string' ? result.excerpt : undefined,
   };
 }

@@ -5432,7 +5432,7 @@ components:
     # ── connectors ──
     Connector:
       type: object
-      required: [id, name, category, type, enabled, status]
+      required: [id, name, category, type, enabled, status, capabilities, actions]
       properties:
         id: { type: string }
         name: { type: string, description: matches ServiceSnapshot.ServiceName }
@@ -5534,9 +5534,9 @@ components:
         excerpt: { type: string }
     ActionResult:
       type: object
-      required: [status]
+      required: [statusCode]
       properties:
-        status: { type: integer, description: Upstream response status. }
+        statusCode: { type: integer, description: Upstream response status. }
         excerpt: { type: string, description: 'At most 512 bytes of plain text, shown once and never persisted.' }
     ConnectorCreate:
       type: object

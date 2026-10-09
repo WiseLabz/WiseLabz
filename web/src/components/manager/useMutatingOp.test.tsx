@@ -15,7 +15,7 @@ function renderOp(fails: boolean) {
         request: { responseText: excerpt },
       };
     }
-    return { status: 200, excerpt };
+    return { statusCode: 200, excerpt };
   };
   const hook = renderHook(
     () =>

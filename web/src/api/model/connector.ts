@@ -28,8 +28,8 @@ export interface Connector {
   verifyTls?: boolean;
   /** Shareable textarea configuration such as recipes; credentials are omitted. A TLS probe connector also returns its `targets`, `import_connector_id` and `import_port`, all as strings. */
   readonly config?: ConnectorConfig;
-  capabilities?: ConnectorCapabilities;
-  actions?: ConnectorAction[];
+  capabilities: ConnectorCapabilities;
+  actions: ConnectorAction[];
   /**
    * RFC 3339 timestamp of the last completed sync, or the empty string when the connector has never synced.
    * @pattern ^$|^[0-9]{4}-[0-9]{2}-[0-9]{2}T

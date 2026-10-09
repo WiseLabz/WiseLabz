@@ -468,7 +468,7 @@ describe('ServiceDetailPage recipe actions', () => {
       ],
     };
     actionRun.mockImplementation((_id: string, _name: string, _body: unknown, params: { dryRun?: boolean }) =>
-      Promise.resolve(params.dryRun ? rescanPreview : { status: 200, excerpt: 'OK' })
+      Promise.resolve(params.dryRun ? rescanPreview : { statusCode: 200, excerpt: 'OK' })
     );
 
     renderPage();

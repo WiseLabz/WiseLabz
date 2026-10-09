@@ -87,7 +87,7 @@ type ActionRequest struct {
 // ActionResult contains the safe portion of an upstream action response.
 // Written is internal execution state and is never serialized.
 type ActionResult struct {
-	Status  int    `json:"status"`
+	Status  int    `json:"statusCode"`
 	Excerpt string `json:"excerpt,omitempty"`
 	Written bool   `json:"-"`
 }

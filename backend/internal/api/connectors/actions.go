@@ -119,7 +119,7 @@ func (h *Handler) actionMutate(w http.ResponseWriter, r *http.Request, connector
 		writeLifecycleActionError(w, err, result)
 		return
 	}
-	response := map[string]any{"status": result.Status}
+	response := map[string]any{"statusCode": result.Status}
 	if result.Excerpt != "" {
 		response["excerpt"] = result.Excerpt
 	}

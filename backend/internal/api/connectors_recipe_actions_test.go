@@ -164,7 +164,7 @@ actions:
 		t.Fatalf("named preview status=%d body=%s", namedPreview.Code, namedPreview.Body.String())
 	}
 	named := app.reqElevated(t, http.MethodPost, "/api/connectors/"+created.ID+"/actions/rescan", map[string]any{"unexpected": "ignored"}, operatorToken, "connector.action", created.ID+":rescan")
-	if named.Code != http.StatusOK || !strings.Contains(named.Body.String(), `"status":200`) || !strings.Contains(named.Body.String(), "rescan complete") {
+	if named.Code != http.StatusOK || !strings.Contains(named.Body.String(), `"statusCode":200`) || !strings.Contains(named.Body.String(), "rescan complete") {
 		t.Fatalf("named action status=%d body=%s", named.Code, named.Body.String())
 	}
 	viewer := app.req(t, http.MethodPost, "/api/connectors/"+created.ID+"/actions/rescan", nil, viewerToken)
@@ -172,7 +172,7 @@ actions:
 		t.Fatalf("viewer action status=%d, want 403 body=%s", viewer.Code, viewer.Body.String())
 	}
 	scopedOperator := app.reqElevated(t, http.MethodPost, "/api/connectors/"+created.ID+"/actions/rescan", map[string]any{}, connectorOperatorToken, "connector.action", created.ID+":rescan")
-	if scopedOperator.Code != http.StatusOK || !strings.Contains(scopedOperator.Body.String(), `"status":200`) {
+	if scopedOperator.Code != http.StatusOK || !strings.Contains(scopedOperator.Body.String(), `"statusCode":200`) {
 		t.Fatalf("connector operator action status=%d body=%s", scopedOperator.Code, scopedOperator.Body.String())
 	}
 

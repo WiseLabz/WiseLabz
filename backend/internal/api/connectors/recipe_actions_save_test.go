@@ -83,6 +83,7 @@ func TestRecipeActionsSaveElevation(t *testing.T) {
 		{"comments", saveActionRecipe("/rescan") + "# unchanged\n", "", false, true, 200},
 		{"mapping", strings.Replace(saveActionRecipe("/rescan"), "name: title", "name: other_title", 1), "", false, true, 200},
 		{"matching", saveActionRecipe("/new"), created.ID, true, true, 200},
+		{"remove all, not admin", apiRecipe("other"), "", false, false, 403},
 		{"remove all", apiRecipe("other"), "", false, true, 200},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

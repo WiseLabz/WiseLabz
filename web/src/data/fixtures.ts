@@ -62,6 +62,8 @@ const connectorsBase: Connector[] = [
     scheduleSeconds: 900,
     nextRunAt: minsFromNow(11),
     lastSyncDurationMs: 1240,
+    capabilities: { restart: true, start: true, stop: true, configPush: true, configRead: true, credentialRefresh: false },
+    actions: [],
     retryCount: 0,
   },
   {
@@ -77,6 +79,8 @@ const connectorsBase: Connector[] = [
     scheduleSeconds: null,
     nextRunAt: '',
     lastSyncDurationMs: 980,
+    capabilities: { restart: true, start: true, stop: true, configPush: true, configRead: true, credentialRefresh: false },
+    actions: [],
     retryCount: 0,
   },
   {
@@ -92,6 +96,8 @@ const connectorsBase: Connector[] = [
     scheduleSeconds: 3600,
     nextRunAt: minsFromNow(56),
     lastSyncDurationMs: 610,
+    capabilities: { restart: true, start: true, stop: true, configPush: true, configRead: true, credentialRefresh: false },
+    actions: [],
     retryCount: 0,
   },
   {
@@ -109,6 +115,8 @@ const connectorsBase: Connector[] = [
     nextRunAt: minsFromNow(19),
     lastSyncDurationMs: 5230,
     lastSyncError: 'stack health check timed out after 5s',
+    capabilities: { restart: false, start: false, stop: false, configPush: false, configRead: false, credentialRefresh: false },
+    actions: [],
     retryCount: 2,
   },
   {
@@ -124,6 +132,8 @@ const connectorsBase: Connector[] = [
     scheduleSeconds: 86400,
     nextRunAt: minsFromNow(1380),
     lastSyncDurationMs: 2100,
+    capabilities: { restart: false, start: false, stop: false, configPush: false, configRead: false, credentialRefresh: false },
+    actions: [],
     retryCount: 0,
   },
   {
@@ -141,6 +151,8 @@ const connectorsBase: Connector[] = [
     nextRunAt: minsFromNow(3),
     lastSyncDurationMs: null,
     lastSyncError: 'connection refused — host unreachable',
+    capabilities: { restart: false, start: false, stop: false, configPush: false, configRead: false, credentialRefresh: false },
+    actions: [],
     retryCount: 4,
   },
 ];
