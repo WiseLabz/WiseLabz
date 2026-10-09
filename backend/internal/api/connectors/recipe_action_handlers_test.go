@@ -681,3 +681,74 @@ func TestBulkRestartFailureKeepsServiceResponseOutOfResultAlertAndAudit(t *testi
 		}
 	}
 }
+
+func TestNamedEntityActionKeepsIntegerPrecisionInPlaceholders(t *testing.T) {
+	const serial = "9007199254740993" // 2^53 + 1: not representable as a float64
+	recipe := `version: 1
+category: other
+auth: {mode: query, name: api_token}
+endpoints:
+  - name: items
+    path: /items
+    method: GET
+    items: '@this'
+    entity:
+      kind: item
+      name: title
+      external_id: id
+      attributes:
+        serial: {path: serial}
+      actions:
+        check:
+          method: POST
+          path: /items/{external_id}/serial/{attr.serial}
+          query: {serial: "{attr.serial}"}
+          body: {text: "serial={attr.serial}"}
+`
+	h := newTestHandler(t)
+	var calls atomic.Int32
+	var gotPath, gotSerial, gotBody string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		data, _ := io.ReadAll(r.Body)
+		gotPath, gotSerial, gotBody = r.URL.Path, r.URL.Query().Get("serial"), string(data)
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+	record := seedRecipeActionConnectorWithRecipe(t, h, server.URL, recipe)
+	if err := h.Store.CreateSnapshot(context.Background(), &store.SnapshotRecord{
+		ConnectorID: record.ID,
+		Data:        `{"serviceName":"library","entities":[{"kind":"item","name":"Serial item","externalId":"item-1","attributes":{"serial":` + serial + `}}]}`,
+		FetchedAt:   "2026-10-08T00:00:00Z",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	preview := httptest.NewRecorder()
+	h.Action(preview, actionHandlerRequest(record.ID, "check", "/?dryRun=true", `{"entityRef":"item-1"}`, "operator", false))
+	if preview.Code != http.StatusOK {
+		t.Fatalf("preview status=%d body=%s", preview.Code, preview.Body.String())
+	}
+	var shown LifecyclePreview
+	if err := json.Unmarshal(preview.Body.Bytes(), &shown); err != nil || shown.Request == nil {
+		t.Fatalf("preview=%s err=%v", preview.Body.String(), err)
+	}
+	shownBody, _ := json.Marshal(shown.Request.Body)
+	if !strings.Contains(shown.Request.URL, "/serial/"+serial) || !strings.Contains(shown.Request.URL, "serial="+serial) || !strings.Contains(string(shownBody), "serial="+serial) {
+		t.Fatalf("preview lost precision: url=%q body=%s", shown.Request.URL, shownBody)
+	}
+	if calls.Load() != 0 {
+		t.Fatalf("preview sent %d requests", calls.Load())
+	}
+
+	request := actionHandlerRequest(record.ID, "check", "/", `{"entityRef":"item-1"}`, "operator", false)
+	request.Header.Set("X-Elevation-Token", issueTestElevation(t, h, "operator", "connector.action", record.ID+":check"))
+	response := httptest.NewRecorder()
+	h.Action(response, request)
+	if response.Code != http.StatusOK || calls.Load() != 1 {
+		t.Fatalf("action status=%d calls=%d body=%s", response.Code, calls.Load(), response.Body.String())
+	}
+	if gotPath != "/items/item-1/serial/"+serial || gotSerial != serial || !strings.Contains(gotBody, "serial="+serial) {
+		t.Fatalf("upstream received path=%q serial=%q body=%q, want %s everywhere", gotPath, gotSerial, gotBody, serial)
+	}
+}

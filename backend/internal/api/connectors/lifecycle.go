@@ -1,6 +1,7 @@
 package connectors
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -212,8 +213,18 @@ func (h *Handler) latestLifecycleSnapshot(ctx context.Context, connectorID strin
 	if err != nil {
 		return connector.ServiceSnapshot{}, err
 	}
+	// Numbers decode as json.Number so an integer attribute keeps its exact
+	// digits in an action placeholder (float64 would round 2^53+1). Unmarshal
+	// into a RawMessage first so malformed input and trailing data fail with
+	// the same errors as a plain Unmarshal.
+	var raw json.RawMessage
+	if err := json.Unmarshal([]byte(record.Data), &raw); err != nil {
+		return connector.ServiceSnapshot{}, fmt.Errorf("decode service snapshot: %w", err)
+	}
 	var snapshot connector.ServiceSnapshot
-	if err := json.Unmarshal([]byte(record.Data), &snapshot); err != nil {
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.UseNumber()
+	if err := decoder.Decode(&snapshot); err != nil {
 		return connector.ServiceSnapshot{}, fmt.Errorf("decode service snapshot: %w", err)
 	}
 	return snapshot, nil
