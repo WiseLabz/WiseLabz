@@ -29,14 +29,14 @@ type hookStore struct {
 	pause    func(runID string) error
 	finish   func(runID string) error
 	failStep func(runID string) error
-	// after is told when a resume (UpdateRunbookRun to running) or a confirm
+	// after is told when a resume (ResumeRunbookRun) or a confirm
 	// (ConfirmRunbookRunStep) has returned from the store.
 	after func(op string)
 }
 
-func (h *hookStore) UpdateRunbookRun(ctx context.Context, id, expectedState string, updates map[string]any) (*store.RunbookRunRecord, error) {
-	run, err := h.Store.UpdateRunbookRun(ctx, id, expectedState, updates)
-	if h.after != nil && updates["state"] == RunRunning {
+func (h *hookStore) ResumeRunbookRun(ctx context.Context, id, expectedUpdatedAt, userID string) (*store.RunbookRunRecord, error) {
+	run, err := h.Store.ResumeRunbookRun(ctx, id, expectedUpdatedAt, userID)
+	if h.after != nil && err == nil {
 		h.after("resume")
 	}
 	return run, err

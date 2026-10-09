@@ -367,6 +367,10 @@ func ValidateBundle(b *Bundle) error {
 }
 
 func validateRunbooks(b *Bundle, docIDs, connectorIDs map[string]bool) error {
+	connectorsByID := make(map[string]store.ConnectorRecord, len(b.Connectors))
+	for _, c := range b.Connectors {
+		connectorsByID[c.ID] = c
+	}
 	runbookIDs := make(map[string]bool, len(b.Runbooks))
 	targets := make(map[string]bool, len(b.Runbooks))
 	for _, runbook := range b.Runbooks {
@@ -421,6 +425,11 @@ func validateRunbooks(b *Bundle, docIDs, connectorIDs map[string]bool) error {
 			if step.ConnectorID == "" || step.Verb == "" {
 				return fmt.Errorf("lifecycle step %q requires a connector and verb", step.ID)
 			}
+			if c := connectorsByID[step.ConnectorID]; c.Type == "custom" {
+				if err := validateRecipeActionScope(step, c, step.Verb); err != nil {
+					return err
+				}
+			}
 		case "sync_and_wait", "wait_until_healthy":
 			if step.ConnectorID == "" {
 				return fmt.Errorf("runbook step %q requires a connector", step.ID)
@@ -442,8 +451,8 @@ func validateRunbooks(b *Bundle, docIDs, connectorIDs map[string]bool) error {
 				return err
 			}
 		case "connector_action":
-			if step.ConnectorID == "" || strings.TrimSpace(step.Action) == "" {
-				return fmt.Errorf("connector-action step %q requires a connector and an action name", step.ID)
+			if err := validateConnectorActionStep(step, connectorsByID[step.ConnectorID]); err != nil {
+				return err
 			}
 		default:
 			return fmt.Errorf("runbook step %q has invalid kind %q", step.ID, step.Kind)
@@ -451,6 +460,40 @@ func validateRunbooks(b *Bundle, docIDs, connectorIDs map[string]bool) error {
 		stepIDs[step.ID] = true
 	}
 	return nil
+}
+
+// validateConnectorActionStep applies the REST authoring declaration rules to
+// the bundled connector, without depending on any concrete connector package.
+func validateConnectorActionStep(step store.RunbookStepRecord, c store.ConnectorRecord) error {
+	if step.ConnectorID == "" || strings.TrimSpace(step.Action) == "" {
+		return fmt.Errorf("connector-action step %q requires a connector and an action name", step.ID)
+	}
+	if validLifecycleVerb(step.Action) || step.Verb != "" {
+		return fmt.Errorf("connector-action step %q must name a non-lifecycle action and have no verb", step.ID)
+	}
+	if c.Type != "custom" {
+		return fmt.Errorf("connector-action step %q requires a custom connector", step.ID)
+	}
+	return validateRecipeActionScope(step, c, step.Action)
+}
+
+func validateRecipeActionScope(step store.RunbookStepRecord, c store.ConnectorRecord, name string) error {
+	cfg, err := connectorConfigForImport(c)
+	if err != nil {
+		return fmt.Errorf("recipe action step %q: %w", step.ID, err)
+	}
+	instance, err := connector.Get(c.Type, cfg)
+	if err != nil {
+		return fmt.Errorf("recipe action step %q: %w", step.ID, err)
+	}
+	if caps, ok := instance.(connector.InstanceCapabilities); ok {
+		for _, action := range caps.DeclaredActions() {
+			if action.Name == name && action.EntityScope == (step.EntityRef != "") {
+				return nil
+			}
+		}
+	}
+	return fmt.Errorf("recipe action step %q names an action not declared for its target scope", step.ID)
 }
 
 func validateConnectorImport(c store.ConnectorRecord) error {

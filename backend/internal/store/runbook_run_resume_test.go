@@ -31,7 +31,7 @@ func TestResumeRunbookRunMarkingStepDone(t *testing.T) {
 
 	t.Run("marks the first unknown step succeeded and resumes the run as the user", func(t *testing.T) {
 		failed, steps := failedRunWithStepState(t, s, "unknown")
-		resumed, err := s.ResumeRunbookRunMarkingStepDone(ctx, failed.ID, steps[0].ID, "operator")
+		resumed, err := s.ResumeRunbookRunMarkingStepDone(ctx, failed.ID, failed.UpdatedAt, steps[0].ID, "operator")
 		if err != nil {
 			t.Fatalf("ResumeRunbookRunMarkingStepDone() error: %v", err)
 		}
@@ -58,7 +58,7 @@ func TestResumeRunbookRunMarkingStepDone(t *testing.T) {
 
 	t.Run("a run that is not failed is a conflict and nothing changes", func(t *testing.T) {
 		run, steps := createOpenManualRunbookRun(t, s, "only")
-		if _, err := s.ResumeRunbookRunMarkingStepDone(ctx, run.ID, steps[0].ID, "operator"); !errors.Is(err, ErrConflict) {
+		if _, err := s.ResumeRunbookRunMarkingStepDone(ctx, run.ID, run.UpdatedAt, steps[0].ID, "operator"); !errors.Is(err, ErrConflict) {
 			t.Fatalf("ResumeRunbookRunMarkingStepDone() on a running run = %v, want ErrConflict", err)
 		}
 		got, after, err := s.GetRunbookRun(ctx, run.ID)
@@ -72,7 +72,7 @@ func TestResumeRunbookRunMarkingStepDone(t *testing.T) {
 
 	t.Run("a step that is not unknown is a conflict and nothing changes", func(t *testing.T) {
 		failed, steps := failedRunWithStepState(t, s, "failed")
-		if _, err := s.ResumeRunbookRunMarkingStepDone(ctx, failed.ID, steps[0].ID, "operator"); !errors.Is(err, ErrConflict) {
+		if _, err := s.ResumeRunbookRunMarkingStepDone(ctx, failed.ID, failed.UpdatedAt, steps[0].ID, "operator"); !errors.Is(err, ErrConflict) {
 			t.Fatalf("ResumeRunbookRunMarkingStepDone() on a failed step = %v, want ErrConflict", err)
 		}
 		got, after, err := s.GetRunbookRun(ctx, failed.ID)
@@ -93,8 +93,12 @@ func TestResumeRunbookRunMarkingStepDone(t *testing.T) {
 		if _, _, err := s.FailRunbookRunStep(ctx, run.ID, steps[1].ID, "unknown", "lost", "internal_error"); err != nil {
 			t.Fatal(err)
 		}
+		failed, _, err := s.GetRunbookRun(ctx, run.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
 		for _, stepID := range []string{steps[1].ID, "missing-step"} {
-			if _, err := s.ResumeRunbookRunMarkingStepDone(ctx, run.ID, stepID, "operator"); !errors.Is(err, ErrConflict) {
+			if _, err := s.ResumeRunbookRunMarkingStepDone(ctx, run.ID, failed.UpdatedAt, stepID, "operator"); !errors.Is(err, ErrConflict) {
 				t.Fatalf("ResumeRunbookRunMarkingStepDone(%s) = %v, want ErrConflict", stepID, err)
 			}
 		}

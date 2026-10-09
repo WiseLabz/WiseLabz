@@ -568,6 +568,9 @@ func (h *Handler) ResumeRun(w http.ResponseWriter, r *http.Request) {
 	resumed, applied, err := h.Executor.Resume(r.Context(), run.ID, auth.UserIDFromContext(r.Context()), decision)
 	if err != nil {
 		h.auditShutdownTransition(r, "runbook.run.resume", err, "")
+		if resumed != nil && applied != nil {
+			h.auditStepDecision(r, resumed, applied)
+		}
 		writeRunError(w, err)
 		return
 	}

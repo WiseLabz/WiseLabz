@@ -162,9 +162,10 @@ type Store interface {
 	FailRunbookRunStep(ctx context.Context, runID, stepID, stepState, stepError, reason string) (*store.RunbookRunRecord, *store.RunbookRunStepRecord, error)
 	FinishRunbookRun(ctx context.Context, runID, stepID string) (*store.RunbookRunRecord, *store.RunbookRunStepRecord, error)
 	ConfirmRunbookRunStep(ctx context.Context, runID, stepID, confirmedBy string) error
+	ResumeRunbookRun(ctx context.Context, runID, expectedUpdatedAt, userID string) (*store.RunbookRunRecord, error)
 	// ResumeRunbookRunMarkingStepDone resumes a failed run and marks its first
 	// unfinished unknown step succeeded, in one transaction.
-	ResumeRunbookRunMarkingStepDone(ctx context.Context, runID, stepID, userID string) (*store.RunbookRunRecord, error)
+	ResumeRunbookRunMarkingStepDone(ctx context.Context, runID, expectedUpdatedAt, stepID, userID string) (*store.RunbookRunRecord, error)
 	CancelRunbookRun(ctx context.Context, id, cancelledBy string) error
 }
 
@@ -463,7 +464,8 @@ func (e *Executor) Confirm(ctx context.Context, runID, stepID, userID string) er
 // ResumeMarkDone marks the step succeeded without sending anything and
 // continues with the next step. The returned StepDecision reports the decision
 // applied to that step and is nil otherwise; a decision is ignored for any
-// other first step.
+// other first step. A durable decision is returned even when shutdown prevents
+// execution, so the caller can still audit the choice.
 func (e *Executor) Resume(ctx context.Context, runID, userID string, decision ResumeDecision) (*store.RunbookRunRecord, *StepDecision, error) {
 	if userID == "" {
 		return nil, nil, ErrNoActor
@@ -482,29 +484,33 @@ func (e *Executor) Resume(ctx context.Context, runID, userID string, decision Re
 	}
 	step := firstUnfinished(steps)
 	if step == nil || step.Kind != KindConnectorAction || step.State != StepUnknown {
-		return e.resumeFailed(ctx, runID, userID, nil)
+		return e.resumeFailed(ctx, run, userID, nil)
 	}
 	if decision == ResumeNone {
 		return nil, nil, ErrDecisionRequired
 	}
 	applied := &StepDecision{StepID: step.ID, Decision: decision}
 	if decision == ResumeMarkDone {
-		return e.resumeMarkingDone(ctx, runID, step.ID, userID, applied)
+		return e.resumeMarkingDone(ctx, run, step.ID, userID, applied)
 	}
-	return e.resumeFailed(ctx, runID, userID, applied)
+	return e.resumeFailed(ctx, run, userID, applied)
 }
 
 // resumeFailed moves a failed run to running as userID and starts its
 // goroutine. applied is returned unchanged.
-func (e *Executor) resumeFailed(ctx context.Context, runID, userID string, applied *StepDecision) (*store.RunbookRunRecord, *StepDecision, error) {
-	run, err := e.store.UpdateRunbookRun(ctx, runID, RunFailed, map[string]any{"state": RunRunning, "resumed_by": userID})
+func (e *Executor) resumeFailed(ctx context.Context, observed *store.RunbookRunRecord, userID string, applied *StepDecision) (*store.RunbookRunRecord, *StepDecision, error) {
+	run, err := e.store.ResumeRunbookRun(ctx, observed.ID, observed.UpdatedAt, userID)
 	if err != nil {
 		return nil, nil, err
 	}
 	e.awaitStopped(ctx, run.ID)
 	e.publishRun(run)
 	if !e.spawn(run.ID) {
-		return nil, nil, e.failShutdown(ctx, run.ID)
+		shutdown := e.failShutdown(ctx, run.ID)
+		if applied == nil {
+			return nil, nil, shutdown
+		}
+		return run, applied, shutdown
 	}
 	return run, applied, nil
 }
@@ -512,8 +518,8 @@ func (e *Executor) resumeFailed(ctx context.Context, runID, userID string, appli
 // resumeMarkingDone marks the unknown step stepID succeeded and resumes the
 // run as userID in one store transaction, then publishes both and starts the
 // goroutine, which continues with the next step.
-func (e *Executor) resumeMarkingDone(ctx context.Context, runID, stepID, userID string, applied *StepDecision) (*store.RunbookRunRecord, *StepDecision, error) {
-	run, err := e.store.ResumeRunbookRunMarkingStepDone(ctx, runID, stepID, userID)
+func (e *Executor) resumeMarkingDone(ctx context.Context, observed *store.RunbookRunRecord, stepID, userID string, applied *StepDecision) (*store.RunbookRunRecord, *StepDecision, error) {
+	run, err := e.store.ResumeRunbookRunMarkingStepDone(ctx, observed.ID, observed.UpdatedAt, stepID, userID)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -527,7 +533,7 @@ func (e *Executor) resumeMarkingDone(ctx context.Context, runID, stepID, userID 
 	}
 	e.publishRun(run)
 	if !e.spawn(run.ID) {
-		return nil, nil, e.failShutdown(ctx, run.ID)
+		return run, applied, e.failShutdown(ctx, run.ID)
 	}
 	return run, applied, nil
 }
