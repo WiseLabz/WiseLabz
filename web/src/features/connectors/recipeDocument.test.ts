@@ -195,4 +195,67 @@ describe('recipe document parsing', () => {
 
     expect(editRecipeDocument('\uFEFF', { type: 'set', path: ['version'], value: 1 })).toBe('\uFEFFversion: 1\n');
   });
+
+  describe('values with flow indicators', () => {
+    const placeholder = '/items/{external_id}/rescan';
+
+    it('quotes a path with a placeholder when it is set, edited or added inside a flow mapping', () => {
+      const source = 'actions: {rescan: {method: POST, path: /old}}\n';
+      const set = editRecipeDocument(source, { type: 'set', path: ['actions', 'rescan', 'path'], value: placeholder });
+      expect(set).toBe('actions: {rescan: {method: POST, path: "/items/{external_id}/rescan"}}\n');
+      const edited = editRecipeDocument(set, { type: 'set', path: ['actions', 'rescan', 'path'], value: `${placeholder}?x=1` });
+      expect(edited).toBe('actions: {rescan: {method: POST, path: "/items/{external_id}/rescan?x=1"}}\n');
+      const added = editRecipeDocument('actions: {rescan: {method: POST}}\n', { type: 'set', path: ['actions', 'rescan', 'path'], value: placeholder });
+      expect(added).toBe('actions: {rescan: {method: POST, path: "/items/{external_id}/rescan"}}\n');
+      const key = editRecipeDocument(source, { type: 'set', path: ['actions', 'rescan', 'label'], value: 'Rescan, now [all]' });
+      expect(parseRecipeDocument(key).document?.toJS()).toEqual({ actions: { rescan: { method: 'POST', path: '/old', label: 'Rescan, now [all]' } } });
+      const sequence = editRecipeDocument('values: [a, b]\n', { type: 'append', path: ['values'], value: '{x}' });
+      expect(parseRecipeDocument(sequence).document?.toJS()).toEqual({ values: ['a', 'b', '{x}'] });
+    });
+
+    it('keeps a path with a placeholder plain in a block mapping', () => {
+      const source = 'actions:\n  rescan:\n    method: POST\n    path: /old\n';
+      const set = editRecipeDocument(source, { type: 'set', path: ['actions', 'rescan', 'path'], value: placeholder });
+      expect(set).toBe('actions:\n  rescan:\n    method: POST\n    path: /items/{external_id}/rescan\n');
+      const added = editRecipeDocument('actions:\n  rescan:\n    method: POST\n', { type: 'set', path: ['actions', 'rescan', 'path'], value: placeholder });
+      expect(added).toBe('actions:\n  rescan:\n    method: POST\n    path: /items/{external_id}/rescan\n');
+      expect(parseRecipeDocument(added).document?.toJS()).toEqual({ actions: { rescan: { method: 'POST', path: placeholder } } });
+    });
+
+    it('renames a key inside a flow mapping to a name that needs quoting', () => {
+      const renamed = editRecipeDocument('x: {a: 1}\n', { type: 'rename', path: ['x', 'a'], to: 'b,c' });
+      expect(parseRecipeDocument(renamed).document?.toJS()).toEqual({ x: { 'b,c': 1 } });
+    });
+  });
+
+  describe('line endings of inserted lines', () => {
+    it('uses the ending of the line the new line follows, not the majority of the file', () => {
+      const source = 'version: 1\r\nauth:\r\n  mode: none\r\nendpoints:\n  - name: one\n    path: /one\n';
+      expect(editRecipeDocument(source, { type: 'set', path: ['auth', 'name'], value: 'X' })).toBe(
+        'version: 1\r\nauth:\r\n  mode: none\r\n  name: X\r\nendpoints:\n  - name: one\n    path: /one\n',
+      );
+      expect(editRecipeDocument(source, { type: 'set', path: ['endpoints', 0, 'method'], value: 'GET' })).toBe(
+        'version: 1\r\nauth:\r\n  mode: none\r\nendpoints:\n  - name: one\n    path: /one\n    method: GET\n',
+      );
+    });
+
+    it('takes the first line ending for an insertion at the very start and LF for text without line breaks', () => {
+      expect(editRecipeDocument('\r\n', { type: 'set', path: ['a'], value: 1 })).toContain('a: 1');
+      expect(editRecipeDocument('a: 1', { type: 'set', path: ['b'], value: 2 })).toBe('a: 1\nb: 2\n');
+      expect(editRecipeDocument('a: 1\r\nb: 2\r\n', { type: 'set', path: ['c'], value: 3 })).toBe('a: 1\r\nb: 2\r\nc: 3\r\n');
+    });
+  });
+
+  it.each([
+    ['indented like the item', 'endpoints:\n  # the main list\n  - name: one\n    path: /one\nafter: 1\n', 'endpoints: []\n  # the main list\nafter: 1\n'],
+    ['at the key column', 'endpoints:\n# the main list\n  - name: one\nafter: 1\n', 'endpoints: []\n# the main list\nafter: 1\n'],
+    ['with a note on the key line too', 'endpoints: # list\n  # the main list\n  - name: one\nafter: 1\n', 'endpoints: [] # list\n  # the main list\nafter: 1\n'],
+    ['with CRLF', 'endpoints:\r\n  # the main list\r\n  - name: one\r\nafter: 1\r\n', 'endpoints: []\r\n  # the main list\r\nafter: 1\r\n'],
+    ['without a final newline', 'endpoints:\n  # the main list\n  - name: one', 'endpoints: []\n  # the main list'],
+  ])('keeps a comment above the only item, unchanged and still indented, when that item is removed (%s)', (_name, source, expected) => {
+    const result = editRecipeDocument(source, { type: 'remove', path: ['endpoints'], index: 0 });
+    expect(result).toBe(expected);
+    expect(parseRecipeDocument(result).error).toBeUndefined();
+    expect(parseRecipeDocument(result).document?.toJS()).toMatchObject({ endpoints: [] });
+  });
 });

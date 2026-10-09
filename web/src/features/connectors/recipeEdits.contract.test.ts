@@ -16,10 +16,12 @@ const recipeFormat = readFileSync(`${repositoryRoot}/docs/connectors/RECIPE_FORM
 const BOM = '﻿';
 const NEW = 'zz-new';
 const ADDED = 'zz-added';
+// `{` and `}` are flow indicators: a path like this must be quoted inside a flow mapping and stay plain in a block one.
+const PLACEHOLDER = '/items/{external_id}/rescan';
 
 type Path = (string | number)[];
 type Kind = 'set' | 'set-typed' | 'add-key' | 'delete' | 'remove' | 'move' | 'append';
-type Planned = { label: string; kind: Kind; operation: RecipeEditOperation; expected: unknown };
+type Planned = { label: string; kind: Kind; operation: RecipeEditOperation; expected: unknown; newValue?: string };
 
 const fixtures: Array<[string, string]> = [
   ['fixture: comments', '# leading\nversion: 1 # inline\n# between\ncategory: media\n# trailing\n'],
@@ -42,6 +44,64 @@ const fixtures: Array<[string, string]> = [
   ['fixture: null-valued parents', 'auth:\nversion: 1\nextra: # none\nlast: ~\n'],
   ['fixture: multi-line flow sequence', 'values: [\n  one,\n  two\n]\nafter: 1\n'],
   ['fixture: multi-line flow map', 'auth: {\n  mode: none,\n  name: x\n}\nafter: 1\n'],
+  ['fixture: mixed line endings', 'version: 1\ncategory: media\r\nauth:\r\n  mode: none\r\nendpoints:\n  - name: one\r\n    path: /one\n'],
+  [
+    'fixture: actions, block style with comments between them',
+    [
+      'version: 1',
+      'category: containers_paas',
+      'auth: {mode: none}',
+      'endpoints:',
+      '  - name: containers',
+      '    path: /api/containers',
+      '    items: items',
+      '    entity:',
+      '      kind: container',
+      '      name: name',
+      '      external_id: id',
+      '      attributes:',
+      '        node: {path: node}',
+      '      actions:',
+      '        # restart the container',
+      '        restart:',
+      '          method: POST',
+      '          path: /api/containers/{external_id}/restart',
+      '          label: Restart',
+      '',
+      '        # rescan its volumes',
+      '        rescan:',
+      '          method: POST',
+      '          path: /api/nodes/{attr.node}/containers/{external_id}/rescan',
+      '          query: {source: operator}',
+      '          body: {reason: "Rescan {attr.node}"}',
+      '          downtime_seconds: 0',
+      '# service level',
+      'actions:',
+      '  restart:',
+      '    method: POST',
+      '    path: /api/system/restart',
+      '',
+    ].join('\n'),
+  ],
+  [
+    'fixture: actions, flow style',
+    [
+      'version: 1',
+      'category: other',
+      'auth: {mode: none}',
+      'endpoints:',
+      '  - name: items',
+      '    path: /api/items',
+      '    items: items',
+      '    entity: {kind: item, name: name, external_id: id, actions: {rescan: {method: POST, path: "/items/{external_id}/rescan"}, stop: {method: DELETE, path: \'/items/{external_id}\'}}}',
+      'actions: {restart: {method: POST, path: /api/restart, label: "Restart, now"}}',
+      '',
+    ].join('\n'),
+  ],
+  [
+    'fixture: actions, multi-line flow mapping',
+    'actions: {\n  restart: {method: POST, path: /api/restart},\n  rescan: {method: POST, path: "/a/{b}"}\n}\nversion: 1\n',
+  ],
 ];
 
 function lines(text: string): string[] {
@@ -90,6 +150,21 @@ function keptLines(source: string, planned: Planned): string[] {
   if (!isScalar(node) || node.value !== null || keyOffset === undefined) return original;
   const keyLine = source.slice(0, keyOffset).split('\n').length - 1;
   return original.map((line, index) => (index === keyLine ? withoutNullToken(line) : line));
+}
+
+/** Each inserted line takes the line ending of the line above it (the first line's ending at the very top, LF without breaks). */
+function addedLineEndings(result: string, kept: boolean[]): string | undefined {
+  const raw = result.replace(/^\uFEFF/, '').split(/(?<=\n)/);
+  const endingOf = (line: string | undefined) => (line?.endsWith('\r\n') ? '\r\n' : line?.endsWith('\n') ? '\n' : undefined);
+  const firstEnding = endingOf(raw[0]) ?? '\n';
+  for (let index = 0; index < raw.length; index += 1) {
+    if (kept[index] || raw[index].trim() === '') continue;
+    const own = endingOf(raw[index]);
+    if (own === undefined) continue; // the last line of a text without a final break has none
+    const expected = index === 0 ? firstEnding : endingOf(raw[index - 1]) ?? '\n';
+    if (own !== expected) return `inserted line has ${JSON.stringify(own)} but the line above uses ${JSON.stringify(expected)}`;
+  }
+  return undefined;
 }
 
 /** Greedy in-order match of `sub` inside `big`; returns which `big` lines matched, or undefined if not a subsequence. */
@@ -196,6 +271,7 @@ function planOperations(js: unknown): Planned[] {
       add(`set ${JSON.stringify(path)} = ${JSON.stringify(NEW)}`, 'set', { type: 'set', path, value: NEW });
       add(`set ${JSON.stringify(path)} = 42`, 'set-typed', { type: 'set', path, value: 42 });
       add(`set ${JSON.stringify(path)} = true`, 'set-typed', { type: 'set', path, value: true });
+      add(`set ${JSON.stringify(path)} = a path with a placeholder`, 'set', { type: 'set', path, value: PLACEHOLDER });
     }
   };
   visit(js, []);
@@ -206,17 +282,24 @@ function planOperations(js: unknown): Planned[] {
 function planAddedKeys(source: string): Planned[] {
   const js = parsedJS(source);
   const planned: Planned[] = [];
-  const add = (label: string, kind: Kind, operation: RecipeEditOperation, expected: unknown): void => {
-    planned.push({ label, kind, operation, expected });
+  const add = (label: string, kind: Kind, operation: RecipeEditOperation, expected: unknown, newValue = NEW): void => {
+    planned.push({ label, kind, operation, expected, newValue });
   };
   const visit = (node: unknown, path: Path): void => {
     if (isSeq(node)) {
       node.items.forEach((item, index) => visit(item, [...path, index]));
     } else if (isMap(node)) {
+      const added = [...path, ADDED];
       if (!node.flow) {
-        const added = [...path, ADDED];
         add(`add key ${JSON.stringify(added)}`, 'add-key', { type: 'set', path: added, value: NEW }, withValue(js, added, NEW));
       }
+      add(
+        `add key ${JSON.stringify(added)} = a path with a placeholder`,
+        'add-key',
+        { type: 'set', path: added, value: PLACEHOLDER },
+        withValue(js, added, PLACEHOLDER),
+        PLACEHOLDER,
+      );
       for (const pair of node.items) {
         if (!isScalar(pair.key)) continue;
         const childPath = [...path, String(pair.key.value)];
@@ -317,7 +400,8 @@ function checkEdit(source: string, planned: Planned): string | undefined {
     if (!kept) return `original lines not kept in order ${snippet}`;
     if (commentsLost !== 0) return `comment count changed ${snippet}`;
     const added = after.filter((_, index) => !kept[index]).filter((line) => line.trim() !== '');
-    return added.length === 1 && added[0].trim() === `${ADDED}: ${NEW}` ? undefined : `added lines are not only the new key ${snippet}`;
+    if (added.length !== 1 || added[0].trim() !== `${ADDED}: ${planned.newValue ?? NEW}`) return `added lines are not only the new key ${snippet}`;
+    return addedLineEndings(result, kept);
   }
   if (planned.kind === 'set' || planned.kind === 'set-typed') {
     if (commentsLost !== 0) return `comment count changed ${snippet}`;

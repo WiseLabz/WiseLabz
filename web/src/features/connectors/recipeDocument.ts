@@ -242,16 +242,17 @@ function sourcePatch(
   value: unknown,
   path: unknown[],
 ): SourcePatch | undefined {
-  const lineEnding = source.includes('\r\n') ? '\r\n' : '\n';
   const oldNode = getNode(beforeRoot, path);
+  // Scalars written inside a flow collection must be quoted when they hold flow indicators such as `{` or `,`.
+  const inFlow = inFlowContext(beforeRoot, path);
   if (operation.type === 'set' || operation.type === 'block') {
     if (oldNode?.range) {
       const parent = getNode(beforeRoot, path.slice(0, -1));
       const pair = isMap(parent) ? findPair(parent, path[path.length - 1]) : undefined;
-      const encoded = renderYaml(value).replace(/\n$/, '');
+      const encoded = renderYaml(value, inFlow).replace(/\n$/, '');
       const composite = value !== null && typeof value === 'object';
-      if (composite && ((isMap(parent) || isSeq(parent)) && parent.flow)) {
-        return { start: oldNode.range[0], end: oldNode.range[2], text: renderYaml(value, true).replace(/\n$/, '') };
+      if (composite && inFlow) {
+        return { start: oldNode.range[0], end: oldNode.range[2], text: encoded };
       }
       if (!composite && !encoded.includes('\n')) {
         // A key with no value (`name:`) has an empty range right after the colon.
@@ -263,13 +264,14 @@ function sourcePatch(
         return { start: oldNode.range[0], end: oldNode.range[1] - lineBreaks, text: `${bare ? ' ' : ''}${encoded}${beforeComment}` };
       }
       if (composite && isScalar(oldNode) && oldNode.value === null && pair?.key?.range && isMap(parent) && !parent.flow) {
-        const patch = nullValuePatch(source, pair.key.range, encoded, lineEnding);
+        const patch = nullValuePatch(source, pair.key.range, encoded);
         if (patch) return patch;
       }
       if (pair && pair.key && pair.value && isMap(parent) && !parent.flow) {
         const colon = source.indexOf(':', pair.key.range?.[1] ?? -1);
         if (colon >= 0 && colon < oldNode.range[0]) {
           const indent = `${' '.repeat(keyColumn(source, pair.key.range?.[0] ?? oldNode.range[0]) + 2)}`;
+          const lineEnding = eolAt(source, colon + 1);
           return {
             start: colon + 1,
             end: oldNode.range[2],
@@ -280,10 +282,10 @@ function sourcePatch(
       return {
         start: oldNode.range[0],
         end: oldNode.range[2],
-        text: indentBlock(encoded, ' '.repeat(lineIndent(source, oldNode.range[0])), lineEnding),
+        text: indentBlock(encoded, ' '.repeat(lineIndent(source, oldNode.range[0])), eolAt(source, oldNode.range[0])),
       };
     }
-    return appendMissingPath(source, beforeRoot, path, value, lineEnding);
+    return appendMissingPath(source, beforeRoot, path, value);
   }
 
   if (operation.type === 'delete') {
@@ -298,12 +300,12 @@ function sourcePatch(
     const pair = isMap(parent) ? findPair(parent, path[path.length - 1]) : undefined;
     const newKey = operation.to;
     if (!pair?.key?.range || !newKey) return undefined;
-    return { start: pair.key.range[0], end: pair.key.range[1], text: renderYaml(newKey).replace(/\n$/, '') };
+    return { start: pair.key.range[0], end: pair.key.range[1], text: renderYaml(newKey, inFlow).replace(/\n$/, '') };
   }
 
   if (operation.type === 'append') {
     const sequence = getNode(beforeRoot, path);
-    if (!isSeq(sequence)) return appendMissingPath(source, beforeRoot, path, [value], lineEnding);
+    if (!isSeq(sequence)) return appendMissingPath(source, beforeRoot, path, [value]);
     if (sequence.flow) {
       if (sequence.items.length === 0) {
         const parent = getNode(beforeRoot, path.slice(0, -1));
@@ -313,6 +315,7 @@ function sourcePatch(
           if (colon >= 0) {
             const indentation = ' '.repeat(keyColumn(source, pair.key.range[0]) + 2);
             const rendered = renderYaml([value]).replace(/\n$/, '');
+            const lineEnding = eolAt(source, colon + 1);
             return {
               start: colon + 1,
               end: pair.value.range[2],
@@ -337,6 +340,7 @@ function sourcePatch(
       : sequence.range?.[0] ?? source.length;
     const indent = sequenceIndent(source, sequence);
     const rendered = renderYaml([value]).replace(/\n$/, '');
+    const lineEnding = eolAt(source, insertion);
     const prefix = insertion > 0 && !source.slice(0, insertion).endsWith('\n') ? lineEnding : '';
     return { start: insertion, end: insertion, text: `${prefix}${indentBlock(rendered, ' '.repeat(indent), lineEnding)}${lineEnding}` };
   }
@@ -350,7 +354,7 @@ function sourcePatch(
     const spans = sequenceSpans(source, sequence);
     if (operation.type === 'remove') {
       const span = spans[operation.index];
-      if (sequence.items.length === 1) return emptySequencePatch(source, beforeRoot, path, sequence, spans[0], lineEndingFor(source));
+      if (sequence.items.length === 1) return emptySequencePatch(source, beforeRoot, path, sequence, spans[0]);
       return span ? dropPrecedingBreak(source, { start: span.start, end: span.end, text: '' }) : undefined;
     }
     const reordered = [...spans];
@@ -361,6 +365,7 @@ function sourcePatch(
     const end = Math.max(...spans.map((item) => item.end));
     // The last span has no line break when the text has none; give every span one while joining,
     // then drop the final one again so a file without a final newline stays that way.
+    const lineEnding = eolAt(source, end);
     const joined = reordered.map((item) => (item.text.endsWith('\n') ? item.text : item.text + lineEnding)).join('');
     return { start, end, text: source.slice(start, end).endsWith('\n') ? joined : joined.slice(0, -lineEnding.length) };
   }
@@ -376,9 +381,10 @@ function dropPrecedingBreak(source: string, patch: SourcePatch): SourcePatch {
 }
 
 /** Replaces a null value (`key:` or `key: ~`) with a block collection below the key, keeping a comment on the key line. */
-function nullValuePatch(source: string, keyRange: readonly number[], encoded: string, lineEnding: string): SourcePatch | undefined {
+function nullValuePatch(source: string, keyRange: readonly number[], encoded: string): SourcePatch | undefined {
   const colon = source.indexOf(':', keyRange[1]);
   if (colon < 0) return undefined;
+  const lineEnding = eolAt(source, colon);
   const newline = source.indexOf('\n', colon);
   const lineBreak = newline < 0 ? source.length : newline;
   const lineEnd = source[lineBreak - 1] === '\r' ? lineBreak - 1 : lineBreak;
@@ -388,8 +394,26 @@ function nullValuePatch(source: string, keyRange: readonly number[], encoded: st
   return { start: colon + 1, end: lineEnd, text: `${rest[1] ? ` ${rest[1]}` : ''}${lineEnding}${indentBlock(encoded, indent, lineEnding)}` };
 }
 
-function lineEndingFor(source: string): string {
-  return source.includes('\r\n') ? '\r\n' : '\n';
+/**
+ * The line ending for text inserted at `offset`: that of the line the insertion follows, or splits when it
+ * lands inside a line. A text with no line break uses LF.
+ */
+function eolAt(source: string, offset: number): string {
+  const endingOf = (breakIndex: number) => (source[breakIndex - 1] === '\r' ? '\r\n' : '\n');
+  const before = offset > 0 ? source.lastIndexOf('\n', offset - 1) : -1;
+  if (before >= 0 && before === offset - 1) return endingOf(before);
+  const after = source.indexOf('\n', offset);
+  if (after >= 0) return endingOf(after);
+  return before >= 0 ? endingOf(before) : '\n';
+}
+
+/** True when the node at `path`, or any collection above it, is written in flow style (`{...}` or `[...]`). */
+function inFlowContext(root: Node | null | undefined, path: readonly unknown[]): boolean {
+  for (let depth = 0; depth < path.length; depth += 1) {
+    const container = getNode(root, path.slice(0, depth));
+    if ((isMap(container) || isSeq(container)) && container.flow) return true;
+  }
+  return false;
 }
 
 function emptySequencePatch(
@@ -398,7 +422,6 @@ function emptySequencePatch(
   path: unknown[],
   sequence: YAMLSeq,
   item: { start: number; end: number; text: string } | undefined,
-  lineEnding: string,
 ): SourcePatch | undefined {
   const parent = getNode(root, path.slice(0, -1));
   const pair = isMap(parent) ? findPair(parent, path[path.length - 1]) : undefined;
@@ -407,18 +430,18 @@ function emptySequencePatch(
   if (colon < 0) return undefined;
   const rowStart = item?.start ?? lineStart(source, sequence.range[0]);
   const header = source.slice(colon + 1, rowStart);
-  if (header.includes('#')) {
-    // Put `[]` ahead of the comment on the key line and drop the item below it.
-    const last = sequence.items[sequence.items.length - 1] as Node;
-    const end = last.range?.[2] ?? item?.end ?? source.length;
-    return { start: colon + 1, end, text: ` []${source.slice(rowStart, end).endsWith('\n') ? header : header.replace(/\r?\n$/, '')}` };
-  }
-  const end = sequence.range[2];
-  const endsWithLineEnding = source.slice(0, end).endsWith(lineEnding);
-  return { start: colon + 1, end, text: ` []${endsWithLineEnding ? lineEnding : ''}` };
+  // Comment lines written above the only item stay where they are: the form does not delete user text.
+  const firstItem = sequence.items[0] as Node | undefined;
+  const kept = firstItem?.range ? source.slice(rowStart, lineStart(source, firstItem.range[0])) : '';
+  const last = sequence.items[sequence.items.length - 1] as Node;
+  const end = header.includes('#') ? last.range?.[2] ?? item?.end ?? source.length : sequence.range[2];
+  // `[]` goes on the key line ahead of any comment there; a text without a final break keeps none.
+  let stay = header + kept;
+  if (!source.slice(rowStart, end).endsWith('\n')) stay = stay.replace(/\r?\n$/, '');
+  return { start: colon + 1, end, text: ` []${stay}` };
 }
 
-function appendMissingPath(source: string, root: Node | null | undefined, path: unknown[], value: unknown, lineEnding: string): SourcePatch | undefined {
+function appendMissingPath(source: string, root: Node | null | undefined, path: unknown[], value: unknown): SourcePatch | undefined {
   if (!path.length) return { start: 0, end: source.length, text: renderYaml(value) };
   let parentPath: unknown[] = [];
   let missingAt = 0;
@@ -444,14 +467,14 @@ function appendMissingPath(source: string, root: Node | null | undefined, path: 
   }
   const key = relative[0];
   if (key === undefined || typeof key === 'number') return undefined;
-  return insertMapPair(source, parent, String(key), nested, lineEnding);
+  return insertMapPair(source, parent, String(key), nested);
 }
 
-function insertMapPair(source: string, map: YAMLMap, key: string, value: unknown, lineEnding: string): SourcePatch {
+function insertMapPair(source: string, map: YAMLMap, key: string, value: unknown): SourcePatch {
   const pairText = renderYaml({ [key]: value }).replace(/\n$/, '');
   if (map.flow) {
     const range = map.range;
-    if (!range) return { start: source.length, end: source.length, text: `${lineEnding}${pairText}` };
+    if (!range) return { start: source.length, end: source.length, text: `${eolAt(source, source.length)}${pairText}` };
     const close = source.lastIndexOf('}', range[1] - 1);
     // Insert right after the last pair: the brace may sit alone on its own line.
     const lastPair = map.items[map.items.length - 1] as Pair<Node, Node> | undefined;
@@ -464,6 +487,7 @@ function insertMapPair(source: string, map: YAMLMap, key: string, value: unknown
     const range = map.range;
     const insertion = range?.[0] ?? source.length;
     const indent = range ? lineIndent(source, range[0]) : 0;
+    const lineEnding = eolAt(source, insertion);
     return { start: insertion, end: insertion, text: `${indentBlock(pairText, ' '.repeat(indent), lineEnding)}${lineEnding}` };
   }
   const last = map.items[map.items.length - 1] as Pair<Node, Node>;
@@ -471,6 +495,7 @@ function insertMapPair(source: string, map: YAMLMap, key: string, value: unknown
     ? ((last.value as Node).range?.[2] ?? source.length)
     : source.length;
   const indent = keyColumn(source, (last.key as Node).range?.[0] ?? 0);
+  const lineEnding = eolAt(source, insertion);
   const prefix = insertion > 0 && !source.slice(0, insertion).endsWith('\n') ? lineEnding : '';
   return {
     start: insertion,
@@ -596,12 +621,16 @@ function findPair(map: YAMLMap, key: unknown): Pair<Node, Node> | undefined {
 }
 
 function flowPair(key: string, value: unknown): string {
-  const keyText = renderYaml(key).trim();
+  const keyText = renderYaml(key, true).trim();
   const valueText = renderYaml(value, true).trim();
   return `${keyText}: ${valueText}`;
 }
 
 function renderYaml(value: unknown, flow = false): string {
+  if (flow && (value === null || typeof value !== 'object')) {
+    // Render the scalar as the only item of a flow sequence so the library quotes flow indicators, then unwrap it.
+    return renderYaml([value], true).replace(/^\[ ?/, '').replace(/ ?\]\n?$/, '');
+  }
   const document = new Document(value);
   if (flow && isMap(document.contents)) document.contents.flow = true;
   if (flow && isSeq(document.contents)) document.contents.flow = true;

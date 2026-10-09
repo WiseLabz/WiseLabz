@@ -47,6 +47,11 @@ vi.mock('../../hooks/useRole', () => ({
   useIsInstanceAdmin: () => true,
   useConnectorRole: () => 'operator',
 }));
+vi.mock('./RecipeYamlEditor', () => ({
+  RecipeYamlEditor: ({ value, onChange, label, readOnly }: { value: string; onChange: (value: string) => void; label: string; readOnly: boolean }) => (
+    <textarea data-testid="recipe-yaml-editor" aria-label={label} value={value} readOnly={readOnly} onChange={(event) => onChange(event.target.value)} />
+  ),
+}));
 vi.mock('./TestRecipePanel', () => ({ TestRecipePanel: () => null }));
 vi.mock('./ConnectorPermissionsTab', () => ({ ConnectorPermissionsTab: () => null }));
 vi.mock('../../lib/toast', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
@@ -111,7 +116,13 @@ function renderFlow(edit: boolean, onCreated = vi.fn()) {
   );
 }
 
+async function openYaml() {
+  fireEvent.click(await screen.findByRole('tab', { name: 'YAML' }));
+  return screen.findByTestId('recipe-yaml-editor');
+}
+
 beforeEach(() => {
+  window.localStorage.clear();
   vi.clearAllMocks();
   post.mockReset();
   put.mockReset();
@@ -157,7 +168,7 @@ describe('recipe action save retry', () => {
       const onCreated = vi.fn();
       renderFlow(edit, onCreated);
       fireEvent.change(screen.getByLabelText(/name/i), { target: { value: 'Unsaved name' } });
-      fireEvent.change(screen.getByLabelText('Recipe (YAML)'), {
+      fireEvent.change(await openYaml(), {
         target: { value: recipe + '\n# keep edits' },
       });
       fireEvent.change(screen.getByLabelText('API token'), { target: { value: 'typed-secret' } });
@@ -166,7 +177,7 @@ describe('recipe action save retry', () => {
       fireEvent.click(await screen.findByRole('button', { name: 'Cancel step-up' }));
       expect(save).not.toBeDisabled();
       expect(screen.getByLabelText(/name/i)).toHaveValue('Unsaved name');
-      expect(screen.getByLabelText('Recipe (YAML)')).toHaveValue(recipe + '\n# keep edits');
+      expect(await screen.findByLabelText('Recipe (YAML)')).toHaveValue(recipe + '\n# keep edits');
       expect(screen.getByLabelText('API token')).toHaveValue('typed-secret');
       expect(edit ? put : post).toHaveBeenCalledTimes(1);
       expect(onCreated).not.toHaveBeenCalled();
@@ -192,7 +203,7 @@ describe('recipe action save retry', () => {
       await waitFor(() => expect(api).toHaveBeenCalledTimes(2));
       await waitFor(() => expect(save).not.toBeDisabled());
       expect(screen.queryByRole('button', { name: 'Complete step-up' })).not.toBeInTheDocument();
-      expect(screen.getByLabelText('Recipe (YAML)')).toHaveValue(recipe);
+      expect(await openYaml()).toHaveValue(recipe);
       expect(screen.getByLabelText('API token')).toHaveValue('typed-secret');
       expect(onCreated).not.toHaveBeenCalled();
     }
