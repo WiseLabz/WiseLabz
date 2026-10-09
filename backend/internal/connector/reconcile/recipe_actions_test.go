@@ -131,3 +131,38 @@ func TestReconcileAuditsDeclaredRecipeActionChanges(t *testing.T) {
 		t.Fatal("stored connector still supports restart after its action was removed")
 	}
 }
+
+func TestReconcileAppliesCorrectedRecipeOverUnparseableStoredOne(t *testing.T) {
+	s := newStore(t)
+	e := config.ResolvedConnector{ConnectorEntry: config.ConnectorEntry{
+		Name: "broken-recipe", Type: "custom", URL: "https://api.example.com", Enabled: true, VerifyTLS: true,
+		Config: map[string]any{"recipe": actionRecipe("", false)},
+	}}
+	created := run(t, s, nil, e)
+	if len(created) != 1 || created[0].Err != nil || created[0].Action != reconcile.Created {
+		t.Fatalf("create result = %+v", created)
+	}
+	connectorID := created[0].ConnectorID
+
+	// Replace the stored recipe with one that no longer parses.
+	broken, err := store.MarshalConnectorConfig("custom", map[string]any{"recipe": "version: [unclosed"}, encKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.UpdateConnector(context.Background(), connectorID, map[string]any{"config_data": broken}); err != nil {
+		t.Fatal(err)
+	}
+
+	e.Config = map[string]any{"recipe": actionRecipe("/restart", true)}
+	updated := run(t, s, nil, e)
+	if len(updated) != 1 || updated[0].Err != nil || updated[0].Action != reconcile.Updated {
+		t.Fatalf("corrected declaration result = %+v, want an update", updated)
+	}
+	if got := storedConfig(t, only(t, s, e.Name))["recipe"]; got != actionRecipe("/restart", true) {
+		t.Fatalf("stored recipe = %v, want the declared one", got)
+	}
+	rows := actionAuditRows(t, s, connectorID)
+	if len(rows) != 1 || !hasActionAuditDiff(rows, []string{"service.restart"}, []string{}, []string{}) {
+		t.Fatalf("action audit = %+v, want one system row adding service.restart", rows)
+	}
+}

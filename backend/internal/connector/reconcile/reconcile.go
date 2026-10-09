@@ -438,7 +438,13 @@ func storedRecipeActions(rec *store.ConnectorRecord, encKey string) (map[string]
 	if err != nil {
 		return nil, fmt.Errorf("parse previous custom connector config for action audit: %w", err)
 	}
-	return recipeActions(rec.Type, config)
+	actions, err := recipeActions(rec.Type, config)
+	if err != nil {
+		// A stored recipe that no longer parses declares no usable actions, and
+		// must not keep a corrected declaration from applying.
+		return map[string]custom.RecipeAction{}, nil
+	}
+	return actions, nil
 }
 
 func auditRecipeActionDiff(ctx context.Context, tx *store.Store, connectorID, name string, diff custom.ActionDiff) error {
