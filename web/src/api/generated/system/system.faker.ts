@@ -144,6 +144,12 @@ export const getPostSystemBackupImportResponseMock = (
     undefined,
   ]),
   connectors: { imported: faker.number.int(), skipped: faker.number.int() },
+  connectorsWithActions: faker.helpers.arrayElement([
+    Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() =>
+      faker.string.alpha({ length: { min: 10, max: 20 } })
+    ),
+    undefined,
+  ]),
   docs: { imported: faker.number.int(), skipped: faker.number.int() },
   docVersions: { imported: faker.number.int(), skipped: faker.number.int() },
   templates: { imported: faker.number.int(), skipped: faker.number.int() },

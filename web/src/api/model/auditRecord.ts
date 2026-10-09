@@ -15,7 +15,7 @@ export interface AuditRecord {
   id: string;
   actorUserId: string;
   actorRole: Role;
-  /** e.g. connector.create, doc.restore */
+  /** e.g. connector.create, connector.action, connector.recipe_actions_changed, backup.import, runbook.run.step_resent, runbook.run.step_marked_done, doc.restore */
   action: string;
   /** e.g. connector, doc; empty when the action has no single target */
   targetType: string;

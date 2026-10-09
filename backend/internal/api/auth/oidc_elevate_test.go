@@ -138,7 +138,13 @@ func elevateOIDCTestSetup(t *testing.T) (*testHandler, *mockElevateOIDCServer, *
 // replay on ElevateOIDCComplete.
 func beginElevate(t *testing.T, th *testHandler, userID, action string) (state, nonce string, cookie *http.Cookie) {
 	t.Helper()
-	req := doJSON(t, http.MethodPost, "/api/auth/elevate/oidc/begin", map[string]string{"action": action})
+	return beginElevateTarget(t, th, userID, action, "")
+}
+
+// beginElevateTarget is beginElevate for an action whose token is bound to target.
+func beginElevateTarget(t *testing.T, th *testHandler, userID, action, target string) (state, nonce string, cookie *http.Cookie) {
+	t.Helper()
+	req := doJSON(t, http.MethodPost, "/api/auth/elevate/oidc/begin", map[string]string{"action": action, "target": target})
 	rr := th.authedRequest(t, req, userID, "user", th.H.ElevateOIDCBegin)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("ElevateOIDCBegin() status = %d, want 200; body=%s", rr.Code, rr.Body.String())

@@ -62,6 +62,9 @@ func (h *Handler) ImportBackup(w http.ResponseWriter, r *http.Request) {
 		httputil.Error(w, 400, "invalid_backup", "Invalid backup archive or bundle")
 		return
 	}
+	if err := h.Store.RecordAuditFromContext(r.Context(), "backup.import", "backup_import", "default", result); err != nil {
+		slog.Error("audit backup import", "error", err)
+	}
 	httputil.JSON(w, http.StatusOK, result)
 }
 

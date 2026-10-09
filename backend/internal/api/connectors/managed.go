@@ -37,13 +37,22 @@ func (h *Handler) RequireManagedBy(allowed ...string) func(http.Handler) http.Ha
 }
 
 func writeManagedConflict(w http.ResponseWriter, managedBy string) {
+	code, message := managedConflict(managedBy)
+	httputil.Error(w, http.StatusConflict, code, message)
+}
+
+// managedConflictError is the 409 writeManagedConflict answers, as an error for
+// in-process callers that bypass RequireManagedBy.
+func managedConflictError(managedBy string) error {
+	code, message := managedConflict(managedBy)
+	return &lifecycleError{status: http.StatusConflict, code: code, message: message}
+}
+
+func managedConflict(managedBy string) (code, message string) {
 	if managedBy == store.ManagedByConfigOrphaned {
-		httputil.Error(w, http.StatusConflict, "connector_orphaned",
-			"This connector was removed from config.yaml. Delete it or release it to the UI first.")
-		return
+		return "connector_orphaned", "This connector was removed from config.yaml. Delete it or release it to the UI first."
 	}
-	httputil.Error(w, http.StatusConflict, "connector_managed",
-		"This connector is managed by config.yaml. Change it there and restart the server.")
+	return "connector_managed", "This connector is managed by config.yaml. Change it there and restart the server."
 }
 
 // Release handles POST /api/connectors/{id}/release: it returns an orphaned

@@ -56,6 +56,57 @@ type Stopper interface {
 	Stop(ctx context.Context, config map[string]any, entityRef string) error
 }
 
+// InstanceCapabilities lets a connector report operations that depend on its
+// configuration. Most connector types expose a fixed set of lifecycle verbs;
+// recipe-backed connectors can vary that set per instance.
+type InstanceCapabilities interface {
+	SupportsLifecycleVerb(verb string) bool
+	DeclaredActions() []ActionDescriptor
+}
+
+// ActionDescriptor describes a recipe-declared operation without exposing
+// connector credentials.
+type ActionDescriptor struct {
+	Name            string `json:"name"`
+	EntityKind      string `json:"entityKind,omitempty"`
+	Label           string `json:"label"`
+	Description     string `json:"description"`
+	EntityScope     bool   `json:"entityScope"`
+	DowntimeSeconds int    `json:"downtimeSeconds"`
+}
+
+// ActionRequest is the resolved request description for an action. URL may
+// include authentication and must be redacted before it is shown to a user.
+type ActionRequest struct {
+	Method  string            `json:"method"`
+	URL     string            `json:"url"`
+	Headers map[string]string `json:"headers"`
+	Body    any               `json:"body,omitempty"`
+}
+
+// ActionResult contains the safe portion of an upstream action response.
+// Written is internal execution state and is never serialized.
+type ActionResult struct {
+	Status  int    `json:"statusCode"`
+	Excerpt string `json:"excerpt,omitempty"`
+	Written bool   `json:"-"`
+}
+
+// ResolvedAction freezes the declared operation and its concrete request for
+// preview, execution, or later fingerprint comparison.
+type ResolvedAction struct {
+	Request     ActionRequest    `json:"request"`
+	Descriptor  ActionDescriptor `json:"descriptor"`
+	Fingerprint string           `json:"fingerprint"`
+}
+
+// ActionExecutor resolves and sends recipe-declared actions. Resolution is
+// side-effect-free; SendAction performs exactly one upstream request.
+type ActionExecutor interface {
+	ResolveAction(config map[string]any, name, entityRef string, snapshot *ServiceSnapshot) (*ResolvedAction, error)
+	SendAction(ctx context.Context, config map[string]any, action *ResolvedAction) (ActionResult, error)
+}
+
 // LifecycleVerbs lists the lab-mutating lifecycle verbs (ADR 0001/0002), in
 // display order.
 var LifecycleVerbs = []string{"restart", "start", "stop"}
@@ -64,6 +115,9 @@ var LifecycleVerbs = []string{"restart", "start", "stop"}
 // "start", "stop"), or ok=false if conn doesn't implement that verb's
 // interface or the verb is unknown.
 func LifecycleOp(conn Connector, verb string) (fn func(ctx context.Context, config map[string]any, entityRef string) error, ok bool) {
+	if caps, ok := conn.(InstanceCapabilities); ok && !caps.SupportsLifecycleVerb(verb) {
+		return nil, false
+	}
 	switch verb {
 	case "restart":
 		if c, ok := conn.(Restarter); ok {
@@ -134,9 +188,9 @@ type CapabilityDescriptor struct {
 
 // Capabilities reports the optional operations supported by conn.
 func Capabilities(conn Connector) CapabilityDescriptor {
-	_, restart := conn.(Restarter)
-	_, start := conn.(Starter)
-	_, stop := conn.(Stopper)
+	_, restart := LifecycleOp(conn, "restart")
+	_, start := LifecycleOp(conn, "start")
+	_, stop := LifecycleOp(conn, "stop")
 	_, configPush := conn.(ConfigPusher)
 	_, configRead := conn.(ConfigReader)
 	_, credentialRefresh := conn.(CredentialRefresher)

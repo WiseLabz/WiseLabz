@@ -35,25 +35,29 @@ type RunbookRunRecord struct {
 // RunbookRunStepRecord is one frozen authored step and its execution state.
 // ConnectorID and Verb are empty for manual steps and are stored as SQL NULL.
 type RunbookRunStepRecord struct {
-	ID             string `json:"id"`
-	RunID          string `json:"runId"`
-	Position       int    `json:"position"`
-	Kind           string `json:"kind"`
-	Title          string `json:"title"`
-	ConnectorID    string `json:"connectorId,omitempty"`
-	Verb           string `json:"verb,omitempty"`
-	EntityRef      string `json:"entityRef,omitempty"`
-	FieldKey       string `json:"fieldKey"`
-	TargetValue    string `json:"targetValue"`
-	Attribute      string `json:"attribute"`
-	Operator       string `json:"operator"`
-	ExpectedValue  string `json:"expectedValue"`
-	TimeoutSeconds int    `json:"timeoutSeconds"`
-	State          string `json:"state"`
-	StartedAt      string `json:"startedAt,omitempty"`
-	FinishedAt     string `json:"finishedAt,omitempty"`
-	Error          string `json:"error,omitempty"`
-	ConfirmedBy    string `json:"confirmedBy,omitempty"`
+	ID            string `json:"id"`
+	RunID         string `json:"runId"`
+	Position      int    `json:"position"`
+	Kind          string `json:"kind"`
+	Title         string `json:"title"`
+	ConnectorID   string `json:"connectorId,omitempty"`
+	Verb          string `json:"verb,omitempty"`
+	EntityRef     string `json:"entityRef,omitempty"`
+	FieldKey      string `json:"fieldKey"`
+	TargetValue   string `json:"targetValue"`
+	Attribute     string `json:"attribute"`
+	Operator      string `json:"operator"`
+	ExpectedValue string `json:"expectedValue"`
+	Action        string `json:"action"`
+	// ActionFingerprint is internal bookkeeping for connector_action steps and
+	// is never serialised; the store persists it alongside the frozen action.
+	ActionFingerprint string `json:"-"`
+	TimeoutSeconds    int    `json:"timeoutSeconds"`
+	State             string `json:"state"`
+	StartedAt         string `json:"startedAt,omitempty"`
+	FinishedAt        string `json:"finishedAt,omitempty"`
+	Error             string `json:"error,omitempty"`
+	ConfirmedBy       string `json:"confirmedBy,omitempty"`
 }
 
 // RunbookRunConflictError identifies the active run that prevented a second
@@ -95,7 +99,7 @@ func isActiveRunbookRunViolation(err error) bool {
 const runbookRunColumns = `id, runbook_id, runbook_title, state, reason, started_by, resumed_by, cancelled_by, started_at, updated_at, finished_at`
 
 const runbookRunStepColumns = `id, run_id, position, kind, title, connector_id, verb, entity_ref,
-	field_key, target_value, attribute, operator, expected_value, timeout_seconds, state,
+	field_key, target_value, attribute, operator, expected_value, action, action_fingerprint, timeout_seconds, state,
 	started_at, finished_at, error, confirmed_by`
 
 // CreateRunbookRun atomically stores a new active run and its frozen steps.
@@ -119,21 +123,23 @@ func (s *Store) CreateRunbookRun(ctx context.Context, runbookID, startedBy strin
 			return nil, nil, fmt.Errorf("create runbook run: frozen step %d is nil: %w", position, ErrRunbookRunStepCount)
 		}
 		savedSteps = append(savedSteps, &RunbookRunStepRecord{
-			ID:             uuid.New().String(),
-			RunID:          run.ID,
-			Position:       position,
-			Kind:           step.Kind,
-			Title:          step.Title,
-			ConnectorID:    step.ConnectorID,
-			Verb:           step.Verb,
-			EntityRef:      step.EntityRef,
-			FieldKey:       step.FieldKey,
-			TargetValue:    step.TargetValue,
-			Attribute:      step.Attribute,
-			Operator:       step.Operator,
-			ExpectedValue:  step.ExpectedValue,
-			TimeoutSeconds: step.TimeoutSeconds,
-			State:          "pending",
+			ID:                uuid.New().String(),
+			RunID:             run.ID,
+			Position:          position,
+			Kind:              step.Kind,
+			Title:             step.Title,
+			ConnectorID:       step.ConnectorID,
+			Verb:              step.Verb,
+			EntityRef:         step.EntityRef,
+			FieldKey:          step.FieldKey,
+			TargetValue:       step.TargetValue,
+			Attribute:         step.Attribute,
+			Operator:          step.Operator,
+			ExpectedValue:     step.ExpectedValue,
+			Action:            step.Action,
+			ActionFingerprint: step.ActionFingerprint,
+			TimeoutSeconds:    step.TimeoutSeconds,
+			State:             "pending",
 		})
 	}
 
@@ -157,11 +163,11 @@ func (s *Store) CreateRunbookRun(ctx context.Context, runbookID, startedBy strin
 		for _, step := range savedSteps {
 			if _, err := tx.db.ExecContext(ctx, `
 				INSERT INTO runbook_run_steps (id, run_id, position, kind, title, connector_id, verb, entity_ref,
-					field_key, target_value, attribute, operator, expected_value, timeout_seconds, state,
+					field_key, target_value, attribute, operator, expected_value, action, action_fingerprint, timeout_seconds, state,
 					started_at, finished_at, error, confirmed_by)
-				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 			`, step.ID, step.RunID, step.Position, step.Kind, step.Title, nilToStr(step.ConnectorID), nilToStr(step.Verb), step.EntityRef,
-				step.FieldKey, step.TargetValue, step.Attribute, step.Operator, step.ExpectedValue, step.TimeoutSeconds,
+				step.FieldKey, step.TargetValue, step.Attribute, step.Operator, step.ExpectedValue, step.Action, step.ActionFingerprint, step.TimeoutSeconds,
 				step.State, nilToStr(step.StartedAt), nilToStr(step.FinishedAt), step.Error, nilToStr(step.ConfirmedBy)); err != nil {
 				return fmt.Errorf("insert frozen runbook step: %w", err)
 			}
@@ -686,7 +692,7 @@ func scanRunbookRunStep(row rowScanner) (*RunbookRunStepRecord, error) {
 	var step RunbookRunStepRecord
 	var connectorID, verb, startedAt, finishedAt, confirmedBy sql.NullString
 	err := row.Scan(&step.ID, &step.RunID, &step.Position, &step.Kind, &step.Title, &connectorID, &verb, &step.EntityRef,
-		&step.FieldKey, &step.TargetValue, &step.Attribute, &step.Operator, &step.ExpectedValue,
+		&step.FieldKey, &step.TargetValue, &step.Attribute, &step.Operator, &step.ExpectedValue, &step.Action, &step.ActionFingerprint,
 		&step.TimeoutSeconds, &step.State, &startedAt, &finishedAt, &step.Error, &confirmedBy)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound

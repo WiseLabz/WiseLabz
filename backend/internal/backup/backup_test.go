@@ -249,6 +249,123 @@ func TestImportConnectorWithMonitoringCategory(t *testing.T) {
 	}
 }
 
+func TestImportCustomRecipeWithActions(t *testing.T) {
+	ctx := context.Background()
+	s := newTestStore(t)
+	recipe := `version: 1
+category: monitoring
+auth: {mode: header, name: X-Api-Key}
+endpoints:
+  - name: items
+    path: /items
+    method: GET
+    items: '@this'
+    entity: {kind: item, name: title, external_id: id}
+actions:
+  purge:
+    method: POST
+    path: /purge
+`
+	configData, err := json.Marshal(map[string]any{"recipe": recipe})
+	if err != nil {
+		t.Fatal(err)
+	}
+	bundle := &backup.Bundle{
+		Version: backup.BundleVersion,
+		Connectors: []store.ConnectorRecord{{
+			ID: "custom-with-actions", Name: "Recipe API", Category: "monitoring", Type: "custom",
+			URL: "https://api.example.com", ConfigData: string(configData),
+		}},
+	}
+	result, err := backup.Import(ctx, s, bundle)
+	if err != nil {
+		t.Fatalf("Import() error = %v", err)
+	}
+	if result.Connectors.Imported != 1 || !reflect.DeepEqual(result.ConnectorsWithActions, []string{"Recipe API"}) {
+		t.Fatalf("result = %+v; want imported connector named Recipe API", result)
+	}
+	imported, err := s.GetConnector(ctx, "custom-with-actions")
+	if err != nil {
+		t.Fatalf("GetConnector() error = %v", err)
+	}
+	if !strings.Contains(imported.ConfigData, "purge") {
+		t.Fatalf("imported connector lost recipe action: %s", imported.ConfigData)
+	}
+	if result.ConnectorsWithActions == nil {
+		t.Fatal("ConnectorsWithActions is nil; want a stable empty-list-compatible result field")
+	}
+}
+
+func TestImportRejectsInvalidCustomRecipeBeforeWriting(t *testing.T) {
+	ctx := context.Background()
+	s := newTestStore(t)
+	recipe := `version: 1
+category: monitoring
+auth: {mode: none}
+endpoints:
+  - name: items
+    path: /items
+    method: GET
+    items: '@this'
+    entity: {kind: item, name: title, external_id: id}
+actions:
+  purge:
+    method: GET
+    path: /purge
+`
+	configData, err := json.Marshal(map[string]any{"recipe": recipe})
+	if err != nil {
+		t.Fatal(err)
+	}
+	bundle := &backup.Bundle{
+		Version: backup.BundleVersion,
+		Connectors: []store.ConnectorRecord{
+			{ID: "valid-first", Name: "Valid predecessor", Category: "virtualization", Type: "proxmox", URL: "https://lab.example.com"},
+			{
+				ID: "bad-custom", Name: "Invalid Recipe", Category: "monitoring", Type: "custom",
+				URL: "https://api.example.com", ConfigData: string(configData),
+			}},
+		Runbooks: []store.RunbookRecord{{ID: "valid-book", Title: "Valid book", TargetType: "change_type", TargetValue: "test",
+			CreatedAt: "2024-01-02T03:04:05Z", UpdatedAt: "2024-01-02T03:04:05Z"}},
+		RunbookSteps: []store.RunbookStepRecord{{ID: "manual-step", RunbookID: "valid-book", Kind: "manual", Title: "Verify",
+			CreatedAt: "2024-01-02T03:04:05Z", UpdatedAt: "2024-01-02T03:04:05Z"}},
+	}
+	if _, err := backup.Import(ctx, s, bundle); err == nil {
+		t.Fatal("Import() error = nil; want invalid action recipe rejection")
+	}
+	connectors, err := s.ListAllConnectors(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(connectors) != 0 {
+		t.Fatalf("connectors after rejected custom recipe import = %d, want 0", len(connectors))
+	}
+	for _, table := range []string{"runbooks", "runbook_steps"} {
+		if count := backupRowCount(t, s, table); count != 0 {
+			t.Fatalf("%s after rejected import = %d, want 0", table, count)
+		}
+	}
+}
+
+func TestImportKeepsLegacyBehaviorForOtherConnectorConfig(t *testing.T) {
+	ctx := context.Background()
+	s := newTestStore(t)
+	bundle := &backup.Bundle{
+		Version: backup.BundleVersion,
+		Connectors: []store.ConnectorRecord{{
+			ID: "legacy-proxmox", Name: "Legacy Proxmox", Category: "virtualization", Type: "proxmox",
+			URL: "https://pve.example.com", ConfigData: "not-json",
+		}},
+	}
+	result, err := backup.Import(ctx, s, bundle)
+	if err != nil {
+		t.Fatalf("Import() error = %v; type without import hook must keep historical behavior", err)
+	}
+	if result.Connectors.Imported != 1 {
+		t.Fatalf("Imported = %d, want 1", result.Connectors.Imported)
+	}
+}
+
 func TestValidateBundleRejectsInvalidConnectorCategory(t *testing.T) {
 	b := &backup.Bundle{
 		Version: backup.BundleVersion,
@@ -814,8 +931,41 @@ func TestValidateBundleRejectsMalformedOverrides(t *testing.T) {
 	}
 }
 
+const runbookActionBackupRecipe = `version: 1
+category: virtualization
+auth: {mode: none}
+endpoints:
+  - name: items
+    path: /items
+    method: GET
+    items: '@this'
+    entity:
+      kind: vm
+      name: name
+      external_id: id
+      actions:
+        rescan: {method: POST, path: "/items/{external_id}/rescan"}
+actions:
+  refresh: {method: POST, path: /refresh}
+  restart: {method: POST, path: /restart}
+`
+
+func actionBackupConnector(t *testing.T) store.ConnectorRecord {
+	t.Helper()
+	data, err := json.Marshal(map[string]any{"recipe": runbookActionBackupRecipe})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return store.ConnectorRecord{ID: "recipe-action", Name: "Recipe action", Category: "virtualization",
+		Type: "custom", URL: "https://api.example.com", ConfigData: string(data)}
+}
+
 func TestRunbookBackupJSONAndZIPRoundTrip(t *testing.T) {
 	ctx, src, runbook, authored := runbookBackupFixture(t)
+	actionConnector := actionBackupConnector(t)
+	if err := src.CreateConnector(ctx, &actionConnector); err != nil {
+		t.Fatal(err)
+	}
 	steps := make([]*store.RunbookStepRecord, 0, len(authored)+2)
 	for i := range authored {
 		steps = append(steps, &authored[i])
@@ -825,6 +975,8 @@ func TestRunbookBackupJSONAndZIPRoundTrip(t *testing.T) {
 			EntityRef: "100", FieldKey: "enabled", TargetValue: `false`},
 		&store.RunbookStepRecord{Kind: "wait_for_entity", Title: "Wait for VM", ConnectorID: authored[0].ConnectorID,
 			EntityRef: "100", TimeoutSeconds: 180, Attribute: "status", Operator: "eq", ExpectedValue: `"running"`},
+		&store.RunbookStepRecord{Kind: "connector_action", Title: "Rescan VM", ConnectorID: actionConnector.ID,
+			EntityRef: "100", Action: "rescan"},
 	)
 	if _, err := src.ReplaceRunbookSteps(ctx, runbook.ID, steps); err != nil {
 		t.Fatalf("add new step kinds: %v", err)
@@ -833,8 +985,8 @@ func TestRunbookBackupJSONAndZIPRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Export(): %v", err)
 	}
-	if len(bundle.Runbooks) != 1 || len(bundle.RunbookSteps) != 6 {
-		t.Fatalf("exported runbooks/steps = %d/%d, want 1/6", len(bundle.Runbooks), len(bundle.RunbookSteps))
+	if len(bundle.Runbooks) != 1 || len(bundle.RunbookSteps) != 7 {
+		t.Fatalf("exported runbooks/steps = %d/%d, want 1/7", len(bundle.Runbooks), len(bundle.RunbookSteps))
 	}
 	if bundle.Runbooks[0].SnapshotID != nil {
 		t.Fatalf("exported snapshotId = %v, want nil", bundle.Runbooks[0].SnapshotID)
@@ -842,7 +994,7 @@ func TestRunbookBackupJSONAndZIPRoundTrip(t *testing.T) {
 	if bundle.Runbooks[0].DocID == nil || *bundle.Runbooks[0].DocID != *runbook.DocID {
 		t.Fatalf("exported docId = %v, want %q", bundle.Runbooks[0].DocID, *runbook.DocID)
 	}
-	wantKinds := map[string]bool{"lifecycle": false, "sync_and_wait": false, "wait_until_healthy": false, "manual": false, "config_push": false, "wait_for_entity": false}
+	wantKinds := map[string]bool{"lifecycle": false, "sync_and_wait": false, "wait_until_healthy": false, "manual": false, "config_push": false, "wait_for_entity": false, "connector_action": false}
 	for _, step := range bundle.RunbookSteps {
 		wantKinds[step.Kind] = true
 	}
@@ -853,6 +1005,10 @@ func TestRunbookBackupJSONAndZIPRoundTrip(t *testing.T) {
 	}
 	if bundle.RunbookSteps[1].TimeoutSeconds != 75 || bundle.RunbookSteps[2].TimeoutSeconds != 120 {
 		t.Fatalf("exported wait timeouts = %d/%d, want 75/120", bundle.RunbookSteps[1].TimeoutSeconds, bundle.RunbookSteps[2].TimeoutSeconds)
+	}
+	if bundle.RunbookSteps[6].Kind != "connector_action" || bundle.RunbookSteps[6].Action != "rescan" ||
+		bundle.RunbookSteps[6].ConnectorID != actionConnector.ID || bundle.RunbookSteps[6].EntityRef != "100" {
+		t.Fatalf("exported connector_action step = %+v, want action rescan on the authored connector", bundle.RunbookSteps[6])
 	}
 	if bundle.RunbookSteps[4].FieldKey != "enabled" || bundle.RunbookSteps[4].TargetValue != `false` ||
 		bundle.RunbookSteps[5].Attribute != "status" || bundle.RunbookSteps[5].Operator != "eq" ||
@@ -879,12 +1035,12 @@ func TestRunbookBackupJSONAndZIPRoundTrip(t *testing.T) {
 		t.Fatalf("write JSON manifest: %v", err)
 	}
 	manifest, err = backup.ReadManifest(backup.ManifestPath(jsonPath))
-	if err != nil || manifest.Counts["runbooks"] != 1 || manifest.Counts["runbookSteps"] != 6 {
-		t.Fatalf("runbook manifest counts = %+v, %v; want 1/6", manifest.Counts, err)
+	if err != nil || manifest.Counts["runbooks"] != 1 || manifest.Counts["runbookSteps"] != 7 {
+		t.Fatalf("runbook manifest counts = %+v, %v; want 1/7", manifest.Counts, err)
 	}
 	verified := backup.VerifyBundleFile(ctx, jsonPath)
-	if verified.Status != "pass" || verified.ActualCounts["runbooks"] != 1 || verified.ActualCounts["runbookSteps"] != 6 {
-		t.Fatalf("runbook backup verification = %+v; want pass with 1/6 rows", verified)
+	if verified.Status != "pass" || verified.ActualCounts["runbooks"] != 1 || verified.ActualCounts["runbookSteps"] != 7 {
+		t.Fatalf("runbook backup verification = %+v; want pass with 1/7 rows", verified)
 	}
 	var jsonFields map[string]json.RawMessage
 	if err := json.Unmarshal(jsonData, &jsonFields); err != nil {
@@ -905,8 +1061,8 @@ func TestRunbookBackupJSONAndZIPRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ImportFromFile(JSON): %v", err)
 	}
-	if jsonResult.Runbooks.Imported != 1 || jsonResult.RunbookSteps.Imported != 6 {
-		t.Fatalf("JSON import counts = %+v/%+v, want 1/6 imported", jsonResult.Runbooks, jsonResult.RunbookSteps)
+	if jsonResult.Runbooks.Imported != 1 || jsonResult.RunbookSteps.Imported != 7 {
+		t.Fatalf("JSON import counts = %+v/%+v, want 1/7 imported", jsonResult.Runbooks, jsonResult.RunbookSteps)
 	}
 	assertRunbookBackupEqual(ctx, t, jsonDst, bundle.Runbooks[0], bundle.RunbookSteps)
 	assertNoRunbookHistory(t, jsonDst)
@@ -927,7 +1083,7 @@ func TestRunbookBackupJSONAndZIPRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("repeat JSON import: %v", err)
 	}
-	if second.Runbooks.Imported != 0 || second.Runbooks.Skipped != 1 || second.RunbookSteps.Imported != 0 || second.RunbookSteps.Skipped != 6 {
+	if second.Runbooks.Imported != 0 || second.Runbooks.Skipped != 1 || second.RunbookSteps.Imported != 0 || second.RunbookSteps.Skipped != 7 {
 		t.Fatalf("repeat import counts = %+v/%+v", second.Runbooks, second.RunbookSteps)
 	}
 	stepsAfterRepeat, err := jsonDst.ListRunbookStepsFor(ctx, runbook.ID)
@@ -945,8 +1101,8 @@ func TestRunbookBackupJSONAndZIPRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ImportStream(ZIP): %v", err)
 	}
-	if zipResult.Runbooks.Imported != 1 || zipResult.RunbookSteps.Imported != 6 {
-		t.Fatalf("ZIP import counts = %+v/%+v, want 1/6 imported", zipResult.Runbooks, zipResult.RunbookSteps)
+	if zipResult.Runbooks.Imported != 1 || zipResult.RunbookSteps.Imported != 7 {
+		t.Fatalf("ZIP import counts = %+v/%+v, want 1/7 imported", zipResult.Runbooks, zipResult.RunbookSteps)
 	}
 	assertRunbookBackupEqual(ctx, t, zipDst, bundle.Runbooks[0], bundle.RunbookSteps)
 	assertNoRunbookHistory(t, zipDst)
@@ -1342,6 +1498,76 @@ func TestRegisteredConnectorTypesHaveValidCategory(t *testing.T) {
 	for _, s := range schemas {
 		if !connector.ValidCategory(s.Category) {
 			t.Errorf("connector type %q has invalid category %q", s.Type, s.Category)
+		}
+	}
+}
+
+func TestValidateBundleConnectorActionStep(t *testing.T) {
+	base := store.RunbookStepRecord{
+		ID: "step", RunbookID: "book", Kind: "connector_action", Title: "Rescan", ConnectorID: "recipe-action",
+		EntityRef: "100", Action: "rescan", TimeoutSeconds: 300,
+		CreatedAt: "2024-01-02T03:04:05Z", UpdatedAt: "2024-01-02T03:04:05Z",
+	}
+	validate := func(step store.RunbookStepRecord) error {
+		return backup.ValidateBundle(&backup.Bundle{
+			Version:    backup.BundleVersion,
+			Connectors: []store.ConnectorRecord{actionBackupConnector(t)},
+			Runbooks: []store.RunbookRecord{{ID: "book", Title: "Connector action", TargetType: "change_type", TargetValue: "changed",
+				CreatedAt: base.CreatedAt, UpdatedAt: base.UpdatedAt}},
+			RunbookSteps: []store.RunbookStepRecord{step},
+		})
+	}
+	if err := validate(base); err != nil {
+		t.Fatalf("valid connector_action step rejected: %v", err)
+	}
+	service := base
+	service.EntityRef, service.Action = "", "refresh"
+	if err := validate(service); err != nil {
+		t.Fatalf("valid service action rejected: %v", err)
+	}
+	lifecycle := base
+	lifecycle.Kind, lifecycle.Action, lifecycle.Verb, lifecycle.EntityRef = "lifecycle", "", "restart", ""
+	if err := validate(lifecycle); err != nil {
+		t.Fatalf("valid custom lifecycle step rejected: %v", err)
+	}
+	lifecycle.Verb = "stop"
+	if err := validate(lifecycle); err == nil {
+		t.Fatal("custom lifecycle accepted an undeclared verb")
+	}
+	lifecycle.Verb, lifecycle.EntityRef = "restart", "100"
+	if err := validate(lifecycle); err == nil {
+		t.Fatal("custom lifecycle accepted a service-only verb on an entity")
+	}
+	cases := map[string]func(*store.RunbookStepRecord){
+		"missing connector":    func(s *store.RunbookStepRecord) { s.ConnectorID = "" },
+		"blank action":         func(s *store.RunbookStepRecord) { s.Action = " " },
+		"undeclared action":    func(s *store.RunbookStepRecord) { s.Action = "missing" },
+		"lifecycle action":     func(s *store.RunbookStepRecord) { s.Action = "restart" },
+		"wrong service scope":  func(s *store.RunbookStepRecord) { s.EntityRef = "" },
+		"wrong entity scope":   func(s *store.RunbookStepRecord) { s.Action = "refresh" },
+		"verb on named action": func(s *store.RunbookStepRecord) { s.Verb = "stop" },
+	}
+	for name, mutate := range cases {
+		step := base
+		mutate(&step)
+		if err := validate(step); err == nil {
+			t.Errorf("%s: ValidateBundle accepted the step", name)
+		}
+	}
+}
+
+func TestValidateBundleConnectorActionRequiresCustomConnector(t *testing.T) {
+	for _, connectorType := range []string{"proxmox", ""} {
+		c := actionBackupConnector(t)
+		c.Type = connectorType
+		b := &backup.Bundle{Version: backup.BundleVersion, Connectors: []store.ConnectorRecord{c},
+			Runbooks: []store.RunbookRecord{{ID: "book", Title: "Actions", TargetType: "change_type", TargetValue: "changed",
+				CreatedAt: "2024-01-02T03:04:05Z", UpdatedAt: "2024-01-02T03:04:05Z"}},
+			RunbookSteps: []store.RunbookStepRecord{{ID: "step", RunbookID: "book", Kind: "connector_action", Title: "Rescan",
+				ConnectorID: c.ID, Action: "rescan", EntityRef: "100",
+				CreatedAt: "2024-01-02T03:04:05Z", UpdatedAt: "2024-01-02T03:04:05Z"}}}
+		if err := backup.ValidateBundle(b); err == nil {
+			t.Fatalf("connector type %q accepted for named action", connectorType)
 		}
 	}
 }

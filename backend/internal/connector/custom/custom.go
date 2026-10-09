@@ -24,6 +24,7 @@ func init() {
 		CategoryForConfig:  CategoryForConfig,
 		EndpointConfigKeys: []string{"url", "recipe"},
 		ConfigCheck:        validateCustomConfig,
+		ImportConfigCheck:  ValidateRecipeImportConfig,
 		Name:               "Custom HTTP",
 		Fields: []connector.SchemaField{
 			{Key: "url", Label: "Endpoint URL", Type: "text", Required: true, Placeholder: "https://api.example.com/status"},
@@ -39,7 +40,7 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
-		return &Connector{client: newGuardedClient(), category: category}, nil
+		return &Connector{client: newGuardedClient(), category: category, capabilityConfig: actionCapabilityConfig(config)}, nil
 	})
 	// Custom connectors pass through whatever attributes the source payload provides.
 	// No fixed catalog — the point is operator-defined data passthrough.
@@ -50,8 +51,9 @@ func init() {
 
 // Connector is a configurable HTTP connector for custom APIs.
 type Connector struct {
-	client   *http.Client
-	category string
+	client           *http.Client
+	category         string
+	capabilityConfig map[string]any
 }
 
 // Name returns the connector display name.

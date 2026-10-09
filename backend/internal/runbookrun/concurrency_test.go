@@ -162,7 +162,7 @@ func TestSimultaneousResumeHasExactlyOneWinner(t *testing.T) {
 		fns := make([]func(), resumers)
 		for i := range fns {
 			users[i] = e.operator(a)
-			fns[i] = func() { _, errs[i] = e.exec.Resume(context.Background(), run.ID, users[i]) }
+			fns[i] = func() { _, _, errs[i] = e.exec.Resume(context.Background(), run.ID, users[i], ResumeNone) }
 		}
 		race(fns...)
 

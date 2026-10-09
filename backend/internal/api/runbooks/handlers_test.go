@@ -477,6 +477,21 @@ func TestStepKindsOperatorCanExecute(t *testing.T) {
 	}
 }
 
+func TestLifecycleStepAcceptedForBuiltInConnectorWithUnparseableConfig(t *testing.T) {
+	h := newTestHandler(t)
+	c := &store.ConnectorRecord{Name: "Proxmox", Category: "virtualization", Type: "proxmox", URL: "https://example.com", ConfigData: "not-json{"}
+	if err := h.Store.CreateConnector(context.Background(), c); err != nil {
+		t.Fatalf("CreateConnector() error: %v", err)
+	}
+	if _, err := store.ParseConnectorConfig(c.Type, c.ConfigData, h.ConnH.Config.Encryption.Key); err == nil {
+		t.Fatal("stored config parsed; the test needs an unparseable one")
+	}
+	rr := createWithSteps(t, h, "", "unparseable", `{"title":"Restart","connectorId":"`+c.ID+`","verb":"restart"}`)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want 201; body=%s", rr.Code, rr.Body.String())
+	}
+}
+
 func TestCreateStepKindsValidation(t *testing.T) {
 	h := newTestHandler(t)
 	connID := seedProxmoxConnector(t, h)

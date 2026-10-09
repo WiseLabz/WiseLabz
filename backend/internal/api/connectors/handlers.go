@@ -48,9 +48,25 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// The list query blanks config_data, but capabilities and actions depend on
+	// it: fetch it for the page in one query and use it for that computation only.
+	ids := make([]string, len(rows))
+	for i, c := range rows {
+		ids[i] = c.ID
+	}
+	configs, err := h.Store.ListConnectorConfigData(r.Context(), ids)
+	if err != nil {
+		httputil.Errorf(w, err)
+		return
+	}
+
 	out := make([]connectorWithRole, 0, len(rows))
 	for _, c := range rows {
-		out = append(out, connectorWithRole{ConnectorRecord: c.ConnectorRecord, MyRole: c.Role, Config: safeConnectorConfig(&c.ConnectorRecord)})
+		row := withRole(&c.ConnectorRecord, c.Role)
+		withConfig := c.ConnectorRecord
+		withConfig.ConfigData = configs[c.ID]
+		row.Capabilities, row.Actions = instanceOperations(&withConfig)
+		out = append(out, row)
 	}
 
 	// Spec: GET /connectors returns a bare Connector[] (see openapi.yaml).
@@ -66,16 +82,20 @@ type connectorWithRole struct {
 	// ConfigData shadows the embedded record's field so it is never serialized:
 	// it holds non-secret credentials and secret ciphertexts (or legacy
 	// plaintext) that no viewer should receive.
-	ConfigData string            `json:"configData,omitempty"`
-	Config     map[string]string `json:"config,omitempty"`
+	ConfigData   string                         `json:"configData,omitempty"`
+	Config       map[string]string              `json:"config,omitempty"`
+	Capabilities connector.CapabilityDescriptor `json:"capabilities"`
+	Actions      []connector.ActionDescriptor   `json:"actions"`
 }
 
 // connectorView exposes only shareable textarea configuration, for responses
 // that carry no role.
 type connectorView struct {
 	store.ConnectorRecord
-	ConfigData string            `json:"configData,omitempty"`
-	Config     map[string]string `json:"config,omitempty"`
+	ConfigData   string                         `json:"configData,omitempty"`
+	Config       map[string]string              `json:"config,omitempty"`
+	Capabilities connector.CapabilityDescriptor `json:"capabilities"`
+	Actions      []connector.ActionDescriptor   `json:"actions"`
 }
 
 // viewOf wraps a possibly-nil record without exposing stored credentials.
@@ -83,7 +103,31 @@ func viewOf(c *store.ConnectorRecord) any {
 	if c == nil {
 		return nil
 	}
-	return connectorView{ConnectorRecord: *c, Config: safeConnectorConfig(c)}
+	caps, actions := instanceOperations(c)
+	return connectorView{ConnectorRecord: *c, Config: safeConnectorConfig(c), Capabilities: caps, Actions: actions}
+}
+
+func withRole(c *store.ConnectorRecord, role string) connectorWithRole {
+	caps, actions := instanceOperations(c)
+	return connectorWithRole{ConnectorRecord: *c, MyRole: role, Config: safeConnectorConfig(c), Capabilities: caps, Actions: actions}
+}
+
+func instanceOperations(c *store.ConnectorRecord) (connector.CapabilityDescriptor, []connector.ActionDescriptor) {
+	// Capability discovery needs configuration, but never decrypted credentials.
+	cfg := map[string]any{}
+	if err := json.Unmarshal([]byte(c.ConfigData), &cfg); err != nil {
+		return connector.CapabilityDescriptor{}, []connector.ActionDescriptor{}
+	}
+	connector.ApplyRecordConfig(cfg, c.URL, c.VerifyTLS)
+	conn, err := connector.Get(c.Type, cfg)
+	if err != nil {
+		return connector.CapabilityDescriptor{}, []connector.ActionDescriptor{}
+	}
+	actions := []connector.ActionDescriptor{}
+	if inst, ok := conn.(connector.InstanceCapabilities); ok {
+		actions = inst.DeclaredActions()
+	}
+	return connector.Capabilities(conn), actions
 }
 
 // safeConnectorConfig exposes only explicitly shareable config, never stored credentials.
@@ -205,6 +249,11 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	actionDiff, allowed := h.authorizeRecipeActions(w, r, "", "", nil, req.Type, req.Config)
+	if !allowed {
+		return
+	}
+
 	c := &store.ConnectorRecord{
 		Name:               req.Name,
 		Category:           req.Category,
@@ -237,7 +286,8 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		slog.Error("failed to record audit", "action", "connector.create", "error", err)
 	}
 
-	httputil.JSON(w, http.StatusCreated, connectorWithRole{ConnectorRecord: *c, MyRole: "operator", Config: safeConnectorConfig(c)})
+	h.recordRecipeActionsAudit(r, c.ID, actionDiff)
+	httputil.JSON(w, http.StatusCreated, withRole(c, "operator"))
 }
 
 // Get handles GET /api/connectors/{id}. Default deny: 404s (not 403, to
@@ -262,7 +312,7 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 		httputil.Error(w, http.StatusNotFound, "not_found", "Connector not found")
 		return
 	}
-	httputil.JSON(w, http.StatusOK, connectorWithRole{ConnectorRecord: *c, MyRole: role, Config: safeConnectorConfig(c)})
+	httputil.JSON(w, http.StatusOK, withRole(c, role))
 }
 
 // updateConnectorRequest is the PUT /api/connectors/{id} request body.
@@ -321,6 +371,10 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	actionDiff, allowed := h.authorizeUpdatedRecipeActions(w, r, id, updates)
+	if !allowed {
+		return
+	}
 	if err := h.Store.UpdateConnector(r.Context(), id, updates); err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			httputil.Error(w, http.StatusNotFound, "not_found", "Connector not found")
@@ -331,6 +385,7 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.recordConnectorUpdateAudit(r, id, updates)
+	h.recordRecipeActionsAudit(r, id, actionDiff)
 
 	c, _ := h.Store.GetConnector(r.Context(), id)
 	httputil.JSON(w, http.StatusOK, viewOf(c))

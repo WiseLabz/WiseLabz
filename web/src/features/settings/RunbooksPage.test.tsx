@@ -58,7 +58,35 @@ vi.mock('../../components/runbook/RunDetail', () => ({
 
 vi.mock('../../api/generated/connectors/connectors', () => ({
   useGetConnectors: () => ({
-    data: [{ id: 'conn-1', name: 'pve1', type: 'proxmox' }],
+    data: [
+      {
+        id: 'conn-1',
+        name: 'pve1',
+        type: 'proxmox',
+        actions: [
+          { name: 'rescan', entityScope: false, label: 'Rescan', downtimeSeconds: 0 },
+          { name: 'restart', entityScope: false, downtimeSeconds: 0 },
+          {
+            name: 'reindex',
+            entityScope: true,
+            entityKind: 'virtual_machine',
+            label: 'Reindex',
+            downtimeSeconds: 0,
+          },
+        ],
+      },
+      {
+        id: 'custom-1',
+        name: 'Custom API',
+        type: 'custom',
+        actions: [
+          { name: 'start', entityScope: false, downtimeSeconds: 0 },
+          { name: 'stop', entityScope: false, downtimeSeconds: 0 },
+          { name: 'stop', entityScope: true, entityKind: 'virtual_machine', downtimeSeconds: 0 },
+        ],
+      },
+      { id: 'custom-empty', name: 'Read-only API', type: 'custom', actions: [] },
+    ],
   }),
   useGetConnectorsSchema: () => ({
     data: [
@@ -69,6 +97,7 @@ vi.mock('../../api/generated/connectors/connectors', () => ({
         fields: [],
         lifecycleVerbs: ['restart', 'stop'],
       },
+      { type: 'custom', category: 'other', displayName: 'Custom', fields: [], lifecycleVerbs: [] },
     ],
   }),
   useGetConnectorsConnectorIdConfigFields: () => ({
@@ -478,7 +507,9 @@ describe('RunbooksPage steps editor', () => {
     fireEvent.change(screen.getByLabelText('Connector'), { target: { value: 'conn-1' } });
     fireEvent.change(screen.getByLabelText('Writable field'), { target: { value: 'name' } });
     expect(screen.queryByLabelText('Entity')).not.toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText('Writable field'), { target: { value: 'restartPolicy' } });
+    fireEvent.change(screen.getByLabelText('Writable field'), {
+      target: { value: 'restartPolicy' },
+    });
     expect(screen.getByLabelText('Entity')).toBeInTheDocument();
   });
 
@@ -500,7 +531,9 @@ describe('RunbooksPage steps editor', () => {
     fireEvent.change(screen.getByLabelText('Kind'), { target: { value: 'wait_for_entity' } });
     fireEvent.change(screen.getByLabelText('Connector'), { target: { value: 'conn-1' } });
     const suggestions = () =>
-      Array.from(document.querySelectorAll('datalist option')).map((option) => option.getAttribute('value'));
+      Array.from(document.querySelectorAll('datalist option')).map((option) =>
+        option.getAttribute('value')
+      );
     expect(suggestions()).toContain('pool_name');
     fireEvent.change(screen.getByLabelText('Entity'), { target: { value: '100' } });
     expect(suggestions()).toContain('status');
@@ -652,6 +685,146 @@ describe('RunbooksPage steps editor', () => {
       expect(postRunbooks.mock.calls[0][0].steps).toStrictEqual([
         { kind: 'lifecycle', title: 'Switch me', connectorId: 'conn-1', verb: 'restart' },
       ]);
+    });
+  });
+
+  describe('custom lifecycle steps', () => {
+    function startStep(connectorId: string) {
+      renderPage();
+      fireEvent.click(screen.getAllByRole('button', { name: 'New runbook' })[0]);
+      fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Custom lifecycle' } });
+      fireEvent.change(screen.getByLabelText('Target', { exact: false }), {
+        target: { value: 'vm.created' },
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'Add step' }));
+      fireEvent.change(screen.getByPlaceholderText('e.g. Restart the sync worker'), {
+        target: { value: 'Operate API' },
+      });
+      fireEvent.change(screen.getByLabelText('Connector'), { target: { value: connectorId } });
+    }
+
+    it.each(['start', 'stop'])(
+      'saves declared custom service %s despite empty type-level verbs',
+      async (verb) => {
+        startStep('custom-1');
+        const select = screen.getByLabelText('Action') as HTMLSelectElement;
+        expect(Array.from(select.options, (option) => option.value)).toEqual(['start', 'stop']);
+        fireEvent.change(select, { target: { value: verb } });
+        fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+        await waitFor(() => expect(postRunbooks).toHaveBeenCalledTimes(1));
+        expect(postRunbooks.mock.calls[0][0].steps).toStrictEqual([
+          { kind: 'lifecycle', title: 'Operate API', connectorId: 'custom-1', verb },
+        ]);
+      }
+    );
+
+    it('uses only declared entity lifecycle verbs and switches an unsupported selection', async () => {
+      startStep('custom-1');
+      expect(screen.getByLabelText('Action')).toHaveValue('start');
+      fireEvent.change(screen.getByLabelText('Entity'), { target: { value: '100' } });
+      const select = screen.getByLabelText('Action') as HTMLSelectElement;
+      expect(Array.from(select.options, (option) => option.value)).toEqual(['stop']);
+      expect(select).toHaveValue('stop');
+      fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+      await waitFor(() => expect(postRunbooks).toHaveBeenCalledTimes(1));
+      expect(postRunbooks.mock.calls[0][0].steps).toStrictEqual([
+        {
+          kind: 'lifecycle',
+          title: 'Operate API',
+          connectorId: 'custom-1',
+          verb: 'stop',
+          entityRef: '100',
+        },
+      ]);
+    });
+
+    it('advertises no lifecycle verb for a custom connector without actions', () => {
+      startStep('custom-empty');
+      expect((screen.getByLabelText('Action') as HTMLSelectElement).options).toHaveLength(0);
+    });
+  });
+
+  describe('connector_action steps', () => {
+    const STEP_TITLE_PLACEHOLDER = 'e.g. Restart the sync worker';
+
+    function startConnectorActionStep() {
+      renderPage();
+      fireEvent.click(screen.getAllByRole('button', { name: 'New runbook' })[0]);
+      fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Rescan runbook' } });
+      fireEvent.change(screen.getByLabelText('Target', { exact: false }), {
+        target: { value: 'vm.created' },
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'Add step' }));
+      fireEvent.change(screen.getByPlaceholderText(STEP_TITLE_PLACEHOLDER), {
+        target: { value: 'Rescan the index' },
+      });
+      fireEvent.change(screen.getByLabelText('Kind'), { target: { value: 'connector_action' } });
+      fireEvent.change(screen.getByLabelText('Connector'), { target: { value: 'conn-1' } });
+    }
+
+    const optionValues = (select: HTMLElement) =>
+      Array.from((select as HTMLSelectElement).options, (option) => option.value).filter(
+        (value) => value !== ''
+      );
+
+    it('saves the connector and named action without a verb or timeout', async () => {
+      startConnectorActionStep();
+      fireEvent.change(screen.getByLabelText('Action name'), { target: { value: 'rescan' } });
+
+      fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+      await waitFor(() => expect(postRunbooks).toHaveBeenCalledTimes(1));
+      expect(postRunbooks.mock.calls[0][0].steps).toStrictEqual([
+        {
+          kind: 'connector_action',
+          title: 'Rescan the index',
+          connectorId: 'conn-1',
+          action: 'rescan',
+        },
+      ]);
+    });
+
+    it('lists only named actions for the chosen entity scope and saves the entity', async () => {
+      startConnectorActionStep();
+      expect(optionValues(screen.getByLabelText('Action name'))).toEqual(['rescan']);
+
+      fireEvent.change(screen.getByLabelText('Entity'), { target: { value: '100' } });
+      expect(optionValues(screen.getByLabelText('Action name'))).toEqual(['reindex']);
+      fireEvent.change(screen.getByLabelText('Action name'), { target: { value: 'reindex' } });
+
+      fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+      await waitFor(() => expect(postRunbooks).toHaveBeenCalledTimes(1));
+      expect(postRunbooks.mock.calls[0][0].steps).toStrictEqual([
+        {
+          kind: 'connector_action',
+          title: 'Rescan the index',
+          connectorId: 'conn-1',
+          action: 'reindex',
+          entityRef: '100',
+        },
+      ]);
+    });
+
+    it('shows a server field error on the action of the step', async () => {
+      postRunbooks.mockRejectedValueOnce({
+        isAxiosError: true,
+        response: {
+          status: 400,
+          data: {
+            code: 'invalid_request',
+            message: 'bad',
+            details: [{ field: 'steps[0].action', msg: 'unknown action' }],
+          },
+        },
+      });
+      startConnectorActionStep();
+      fireEvent.change(screen.getByLabelText('Action name'), { target: { value: 'rescan' } });
+
+      fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+      expect(await screen.findByText('unknown action')).toBeInTheDocument();
+      expect(screen.getByText('Action name:')).toBeInTheDocument();
     });
   });
 

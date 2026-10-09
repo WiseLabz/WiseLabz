@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/WiseLabz/wiselabz/internal/api/apitest"
+	"github.com/WiseLabz/wiselabz/internal/auth"
 	"github.com/WiseLabz/wiselabz/internal/backup"
 	"github.com/WiseLabz/wiselabz/internal/config"
 	"github.com/WiseLabz/wiselabz/internal/store"
@@ -524,5 +525,117 @@ func TestExportImportRoundTrip(t *testing.T) {
 	}
 	if importedDoc.Content != "test content" {
 		t.Errorf("imported doc content = %q, want 'test content'", importedDoc.Content)
+	}
+}
+
+func TestImportBackupAuditsCountsAndImportedActionConnectorNames(t *testing.T) {
+	ctx := context.Background()
+	s := apitest.NewStore(t)
+	users, _, err := s.ListUsers(ctx, 0, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	adminID := ""
+	for _, user := range users {
+		if user.InstanceAdminRole == "admin" {
+			adminID = user.ID
+			break
+		}
+	}
+	if adminID == "" {
+		t.Fatal("seeded admin not found")
+	}
+
+	recipe := `version: 1
+category: monitoring
+auth: {mode: none}
+endpoints:
+  - name: items
+    path: /items
+    method: GET
+    items: '@this'
+    entity: {kind: item, name: title, external_id: id}
+actions:
+  purge:
+    method: POST
+    path: /purge
+    body: {confirmation: secret-audit-sentinel}
+`
+	configData, err := json.Marshal(map[string]any{"recipe": recipe})
+	if err != nil {
+		t.Fatal(err)
+	}
+	bundle := backup.Bundle{
+		Version: backup.BundleVersion,
+		Connectors: []store.ConnectorRecord{{
+			ID: "recipe-action-connector", Name: "Recipe API", Type: "custom", Category: "monitoring",
+			URL: "https://api.example.com", ConfigData: string(configData),
+		}},
+	}
+	body, err := json.Marshal(bundle)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := NewHandler(s.DB(), &config.Config{}, s, nil, t.TempDir(), nil)
+	importOnce := func() *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodPost, "/api/system/backup/import", bytes.NewReader(body))
+		req = req.WithContext(auth.ContextWithUser(req.Context(), adminID, true))
+		rr := httptest.NewRecorder()
+		h.ImportBackup(rr, req)
+		return rr
+	}
+
+	first := importOnce()
+	if first.Code != http.StatusOK {
+		t.Fatalf("first import status=%d body=%s", first.Code, first.Body.String())
+	}
+	var firstResult backup.Result
+	if err := json.Unmarshal(first.Body.Bytes(), &firstResult); err != nil {
+		t.Fatal(err)
+	}
+	if firstResult.Connectors.Imported != 1 || len(firstResult.ConnectorsWithActions) != 1 || firstResult.ConnectorsWithActions[0] != "Recipe API" {
+		t.Fatalf("first import result = %+v; want one imported action connector named Recipe API", firstResult)
+	}
+	if strings.Contains(first.Body.String(), "secret-audit-sentinel") {
+		t.Fatal("import response contains action body")
+	}
+
+	second := importOnce()
+	if second.Code != http.StatusOK {
+		t.Fatalf("second import status=%d body=%s", second.Code, second.Body.String())
+	}
+	var secondResult backup.Result
+	if err := json.Unmarshal(second.Body.Bytes(), &secondResult); err != nil {
+		t.Fatal(err)
+	}
+	if secondResult.Connectors.Skipped != 1 || secondResult.ConnectorsWithActions == nil || len(secondResult.ConnectorsWithActions) != 0 {
+		t.Fatalf("second import result = %+v; want skipped connector and empty action names", secondResult)
+	}
+
+	rows, _, err := s.ListAuditRecords(ctx, "backup.import", "backup_import", "", "", 0, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 2 {
+		t.Fatalf("backup.import audit rows = %d, want one per successful import", len(rows))
+	}
+	namedActionImports := 0
+	for _, row := range rows {
+		if row.ActorUserID != adminID {
+			t.Errorf("audit actor = %q, want %q", row.ActorUserID, adminID)
+		}
+		if strings.Contains(row.Detail, "secret-audit-sentinel") {
+			t.Errorf("audit detail contains action body: %s", row.Detail)
+		}
+		var audited backup.Result
+		if err := json.Unmarshal([]byte(row.Detail), &audited); err != nil {
+			t.Fatalf("unmarshal audit detail: %v", err)
+		}
+		if len(audited.ConnectorsWithActions) == 1 && audited.ConnectorsWithActions[0] == "Recipe API" {
+			namedActionImports++
+		}
+	}
+	if namedActionImports != 1 {
+		t.Fatalf("audit details named the action connector %d times, want once: %+v", namedActionImports, rows)
 	}
 }

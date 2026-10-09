@@ -124,6 +124,7 @@ func TestRunbookStepKindsMigrationUpDown(t *testing.T) {
 	logger := slog.New(slog.DiscardHandler)
 	run := func(t *testing.T, s *Store) {
 		ctx := context.Background()
+		rollbackRunbookConnectorAction(t, s.rawDB, s.driver, logger)
 		rollbackRunbookStepKinds(t, s.rawDB, s.driver, logger)
 		runbookStepKindsHaveFields(t, s.rawDB, s.driver, false)
 
@@ -197,6 +198,8 @@ func TestRunbookStepKindsMigrationUpDown(t *testing.T) {
 			t.Fatalf("insert additional push-run frozen step: %v", err)
 		}
 
+		// The apply above also brought up 000066, so roll that back first.
+		rollbackRunbookConnectorAction(t, s.rawDB, s.driver, logger)
 		if err := RunMigrationsDown(s.rawDB, s.driver, logger); err != nil {
 			t.Fatalf("rollback 000065: %v", err)
 		}

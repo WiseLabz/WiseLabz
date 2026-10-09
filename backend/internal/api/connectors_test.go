@@ -314,7 +314,7 @@ func TestConnectorRestartPreview(t *testing.T) {
 	_, viewerToken := app.user(t, "viewer")
 
 	conn := &store.ConnectorRecord{
-		Name: "svc", Category: "virtualization", Type: "unregistered", URL: "https://example.com",
+		Name: "svc", Category: "virtualization", Type: "proxmox", URL: "https://example.com",
 	}
 	if err := app.Store.CreateConnector(context.Background(), conn); err != nil {
 		t.Fatalf("seed connector: %v", err)

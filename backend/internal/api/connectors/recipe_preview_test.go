@@ -327,6 +327,46 @@ func TestPreviewRedactionScalarCredentialAttributesPreservesCounts(t *testing.T)
 	}
 }
 
+func TestRecipePreviewValidatesActionsAndNeverSendsThem(t *testing.T) {
+	h := newTestHandler(t)
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		if r.Method != http.MethodGet || r.URL.Path != "/items" {
+			t.Errorf("recipe preview sent non-endpoint request: %s %s", r.Method, r.URL.Path)
+			http.Error(w, "action request is forbidden in preview", http.StatusTeapot)
+			return
+		}
+		_, _ = fmt.Fprint(w, `[{"id":"db-1","title":"Database","node":"node-1"}]`)
+	}))
+	defer server.Close()
+
+	validRecipe := handlerActionRecipe()
+	valid := previewRequest(t, h, "recipe-admin", map[string]any{
+		"url": server.URL,
+		"config": map[string]any{
+			"recipe":     validRecipe,
+			"auth_token": "preview-query-secret",
+		},
+	})
+	if valid.Code != http.StatusOK || requests.Load() != 1 {
+		t.Fatalf("valid action recipe preview=%d requests=%d body=%s", valid.Code, requests.Load(), valid.Body.String())
+	}
+
+	requests.Store(0)
+	invalidRecipe := strings.Replace(validRecipe, "method: PATCH", "method: GET", 1)
+	invalid := previewRequest(t, h, "recipe-admin", map[string]any{
+		"url": server.URL,
+		"config": map[string]any{
+			"recipe":     invalidRecipe,
+			"auth_token": "preview-query-secret",
+		},
+	})
+	if invalid.Code != http.StatusBadRequest || !strings.Contains(invalid.Body.String(), "actions.restart.method") || requests.Load() != 0 {
+		t.Fatalf("invalid action preview=%d requests=%d body=%s", invalid.Code, requests.Load(), invalid.Body.String())
+	}
+}
+
 // tokenServer counts requests and records the X-Api-Key header it receives.
 func tokenServer(t *testing.T) (*httptest.Server, *atomic.Int32, *atomic.Value) {
 	t.Helper()

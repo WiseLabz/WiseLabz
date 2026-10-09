@@ -379,3 +379,31 @@ func TestConnectorManagedByAndListByName(t *testing.T) {
 		t.Error("managed_by accepted a value outside its CHECK constraint")
 	}
 }
+
+func TestListConnectorConfigData(t *testing.T) {
+	s := newDocTestStore(t)
+	ctx := context.Background()
+
+	a := &ConnectorRecord{Name: "a", Category: "other", Type: "custom", URL: "https://a", ConfigData: `{"k":"a"}`}
+	b := &ConnectorRecord{Name: "b", Category: "other", Type: "custom", URL: "https://b", ConfigData: `{"k":"b"}`}
+	for _, c := range []*ConnectorRecord{a, b} {
+		if err := s.CreateConnector(ctx, c); err != nil {
+			t.Fatalf("CreateConnector() error: %v", err)
+		}
+	}
+
+	got, err := s.ListConnectorConfigData(ctx, []string{a.ID, "missing", b.ID})
+	if err != nil {
+		t.Fatalf("ListConnectorConfigData() error: %v", err)
+	}
+	if len(got) != 2 || got[a.ID] != a.ConfigData || got[b.ID] != b.ConfigData {
+		t.Errorf("ListConnectorConfigData() = %v, want the stored config of a and b only", got)
+	}
+
+	for _, ids := range [][]string{nil, {}, {"missing"}} {
+		got, err := s.ListConnectorConfigData(ctx, ids)
+		if err != nil || got == nil || len(got) != 0 {
+			t.Errorf("ListConnectorConfigData(%v) = %v, %v, want empty non-nil map", ids, got, err)
+		}
+	}
+}

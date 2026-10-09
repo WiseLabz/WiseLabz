@@ -18,9 +18,10 @@ import {
   postConnectorsConnectorIdTest,
   getGetConnectorsQueryKey,
 } from '../../api/generated/connectors/connectors';
-import type { Connector, SchemaField } from '../../api/model';
+import type { Connector, ConnectorUpdate, SchemaField } from '../../api/model';
 import { Field, RecipeCategoryDisplay } from './ConnectorForm';
 import { ConnectorPermissionsTab } from './ConnectorPermissionsTab';
+import { useStepUpMutation, elevationOptions } from '../../components/manager/useStepUpMutation';
 import { Button } from '../../components/ui/Button';
 import { Panel } from '../../components/ui/Panel';
 import { SkeletonRows, ErrorState } from '../../components/ui/states';
@@ -87,48 +88,53 @@ export function ConnectorEditPage() {
     onError: () => toast.error(t('connectors.edit.testFail')),
   });
 
-  const save = useMutation({
-    mutationFn: () => {
-      const config: Record<string, unknown> = {};
-      const tlsField = schema?.fields.find(isVerifyTlsField);
+  const saveBody = (): ConnectorUpdate => {
+    const config: Record<string, unknown> = {};
+    const tlsField = schema?.fields.find(isVerifyTlsField);
+    for (const f of schema?.fields ?? []) {
+      if (isTopLevelField(f)) continue;
+      if (isTlsProbeEndpointField(connector.data?.type ?? '', f.name)) {
+        if (isInstanceAdmin && values[f.name] !== undefined) config[f.name] = values[f.name];
+        continue;
+      }
+      if (f.kind === 'textarea') {
+        const value = values[f.name] ?? connector.data?.config?.[f.name];
+        if (value !== undefined) config[f.name] = value;
+        continue;
+      }
+      // Only send secret/config fields the user actually re-entered.
+      if (values[f.name] !== undefined && String(values[f.name]).length > 0) config[f.name] = values[f.name];
+    }
+    // Moving an optional-url type (Caddy) from pasted-JSON mode to url mode:
+    // the stored pasted blob is write-only and omitted fields are kept
+    // server-side, so clear it explicitly or both inputs would be set.
+    const urlField = schema?.fields.find((f) => f.name === 'url');
+    const newUrl = values.url !== undefined ? String(values.url) : (connector.data?.url ?? '');
+    if (urlField && !urlField.required && !connector.data?.url && newUrl) {
       for (const f of schema?.fields ?? []) {
-        if (isTopLevelField(f)) continue;
-        if (isTlsProbeEndpointField(connector.data?.type ?? '', f.name)) {
-          if (isInstanceAdmin && values[f.name] !== undefined) config[f.name] = values[f.name];
-          continue;
-        }
-        if (f.kind === 'textarea') {
-          const value = values[f.name] ?? connector.data?.config?.[f.name];
-          if (value !== undefined) config[f.name] = value;
-          continue;
-        }
-        // Only send secret/config fields the user actually re-entered.
-        if (values[f.name] !== undefined && String(values[f.name]).length > 0) config[f.name] = values[f.name];
+        if (f.kind === 'secret' && config[f.name] === undefined) config[f.name] = '';
       }
-      // Moving an optional-url type (Caddy) from pasted-JSON mode to url mode:
-      // the stored pasted blob is write-only and omitted fields are kept
-      // server-side, so clear it explicitly or both inputs would be set.
-      const urlField = schema?.fields.find((f) => f.name === 'url');
-      const newUrl = values.url !== undefined ? String(values.url) : (connector.data?.url ?? '');
-      if (urlField && !urlField.required && !connector.data?.url && newUrl) {
-        for (const f of schema?.fields ?? []) {
-          if (f.kind === 'secret' && config[f.name] === undefined) config[f.name] = '';
-        }
-      }
-      return putConnectorsConnectorId(id, {
-        name: nameValue,
-        owner: ownerValue,
-        url: values.url !== undefined ? String(values.url) : connector.data?.url,
-        verifyTls: tlsField && values[tlsField.name] !== undefined ? Boolean(values[tlsField.name]) : connector.data?.verifyTls,
-        config,
-        ...(userExpiresAt !== null && {
-          userExpiresAt: userExpiresAt ? `${userExpiresAt}T00:00:00Z` : null,
-        }),
-        ...(rotationMaxAgeDays !== null && {
-          rotationMaxAgeDays: rotationMaxAgeDays ? Number(rotationMaxAgeDays) : null,
-        }),
-      });
-    },
+    }
+    return {
+      name: nameValue,
+      owner: ownerValue,
+      url: values.url !== undefined ? String(values.url) : connector.data?.url,
+      verifyTls: tlsField && values[tlsField.name] !== undefined ? Boolean(values[tlsField.name]) : connector.data?.verifyTls,
+      config,
+      ...(userExpiresAt !== null && {
+        userExpiresAt: userExpiresAt ? `${userExpiresAt}T00:00:00Z` : null,
+      }),
+      ...(rotationMaxAgeDays !== null && {
+        rotationMaxAgeDays: rotationMaxAgeDays ? Number(rotationMaxAgeDays) : null,
+      }),
+    };
+  };
+  const save = useStepUpMutation<ConnectorUpdate, Connector>({
+    action: 'connector.recipeActions',
+    target: () => id,
+    mutationFn: (body, token) => token
+      ? putConnectorsConnectorId(id, body, elevationOptions(token))
+      : putConnectorsConnectorId(id, body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: getGetConnectorsQueryKey() });
       toast.success(t('connectors.edit.saved'));
@@ -321,7 +327,7 @@ export function ConnectorEditPage() {
             <Button variant="ghost" size="md" onClick={() => navigate(`/services/${id}`)}>
               {t('common.cancel')}
             </Button>
-            <Button variant="primary" size="md" onClick={() => save.mutate()} disabled={!nameValue || save.isPending}>
+            <Button variant="primary" size="md" onClick={() => save.mutate(saveBody())} disabled={!nameValue || save.isPending}>
               <CheckIcon size={15} />
               {save.isPending ? t('connectors.edit.saving') : t('common.save')}
             </Button>
@@ -340,6 +346,7 @@ export function ConnectorEditPage() {
         </div>
       )}
 
+      {save.dialog}
       <ConnectorPermissionsTab connectorId={id} />
     </div>
   );

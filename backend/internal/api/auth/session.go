@@ -293,7 +293,7 @@ func (h *Handler) DeleteSession(w http.ResponseWriter, r *http.Request) {
 func validElevationAction(action string) bool {
 	switch action {
 	case "connector.delete", "connector.restart", "connector.start", "connector.stop",
-		"connector.bulkRestart", "connector.configPush", "template.delete", "user.delete",
+		"connector.bulkRestart", "connector.configPush", "connector.action", "connector.recipeActions", "template.delete", "user.delete",
 		"user.resetPassword", "user.resetMfa", "user.create", "user.update", "apiKey.create",
 		"authConfig.update", "authProvider.toggle", "mfa.manage", "runbook.run":
 		return true

@@ -25,7 +25,8 @@ type runbookSummary struct {
 // the caller cannot view are redacted down to position and a generic title:
 // no connector, verb, entity reference, kind or timeout leaks. A step with no
 // connector (a manual step) has nothing to hide and is never redacted.
-// TimeoutSeconds is set only for sync_and_wait and wait_until_healthy steps.
+// TimeoutSeconds is set only for the wait kinds. Action is the named action of a
+// connector_action step (never its frozen fingerprint).
 type runbookStepView struct {
 	Position       int    `json:"position"`
 	Kind           string `json:"kind,omitempty"`
@@ -34,6 +35,7 @@ type runbookStepView struct {
 	ConnectorName  string `json:"connectorName,omitempty"`
 	Verb           string `json:"verb,omitempty"`
 	EntityRef      string `json:"entityRef,omitempty"`
+	Action         string `json:"action,omitempty"`
 	FieldKey       string `json:"fieldKey,omitempty"`
 	TargetValue    string `json:"targetValue,omitempty"`
 	Attribute      string `json:"attribute,omitempty"`
@@ -165,7 +167,7 @@ func registerGetRunbook(s *mcpserver.MCPServer, d Deps) {
 			}
 			views = append(views, runbookStepView{
 				Position: st.Position, Kind: kind, Title: st.Title, ConnectorID: st.ConnectorID,
-				ConnectorName: name, Verb: st.Verb, EntityRef: st.EntityRef, TimeoutSeconds: timeout,
+				ConnectorName: name, Verb: st.Verb, EntityRef: st.EntityRef, Action: st.Action, TimeoutSeconds: timeout,
 				FieldKey: st.FieldKey, TargetValue: st.TargetValue,
 				Attribute: st.Attribute, Operator: st.Operator, ExpectedValue: st.ExpectedValue,
 			})

@@ -29,14 +29,14 @@ type hookStore struct {
 	pause    func(runID string) error
 	finish   func(runID string) error
 	failStep func(runID string) error
-	// after is told when a resume (UpdateRunbookRun to running) or a confirm
+	// after is told when a resume (ResumeRunbookRun) or a confirm
 	// (ConfirmRunbookRunStep) has returned from the store.
 	after func(op string)
 }
 
-func (h *hookStore) UpdateRunbookRun(ctx context.Context, id, expectedState string, updates map[string]any) (*store.RunbookRunRecord, error) {
-	run, err := h.Store.UpdateRunbookRun(ctx, id, expectedState, updates)
-	if h.after != nil && updates["state"] == RunRunning {
+func (h *hookStore) ResumeRunbookRun(ctx context.Context, id, expectedUpdatedAt, expectedStepID, userID string, audit *store.AuditRecord) (*store.RunbookRunRecord, error) {
+	run, err := h.Store.ResumeRunbookRun(ctx, id, expectedUpdatedAt, expectedStepID, userID, audit)
+	if h.after != nil && err == nil {
 		h.after("resume")
 	}
 	return run, err
@@ -242,7 +242,7 @@ func TestNoPathLeavesARunRunningWithNothingDrivingIt(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if _, err := e.exec.Resume(ctx, run.ID, e.starter); err != nil {
+		if _, _, err := e.exec.Resume(ctx, run.ID, e.starter, ResumeNone); err != nil {
 			t.Fatalf("Resume() error: %v", err)
 		}
 		e.settle()
@@ -258,7 +258,7 @@ func TestNoPathLeavesARunRunningWithNothingDrivingIt(t *testing.T) {
 			t.Fatalf("notifications = %+v, want one failure saying the outcome is unknown", notes)
 		}
 
-		if _, err := e.exec.Resume(ctx, run.ID, e.starter); err != nil {
+		if _, _, err := e.exec.Resume(ctx, run.ID, e.starter, ResumeNone); err != nil {
 			t.Fatalf("second Resume() error: %v", err)
 		}
 		e.settle()
@@ -389,7 +389,7 @@ func TestShutdownRefusesStartResumeAndConfirm(t *testing.T) {
 		}
 
 		e.spawner.accept()
-		if _, err := e.exec.Resume(ctx, runID, e.starter); err != nil {
+		if _, _, err := e.exec.Resume(ctx, runID, e.starter, ResumeNone); err != nil {
 			t.Fatalf("Resume() error: %v", err)
 		}
 		e.settle()
@@ -412,7 +412,7 @@ func TestShutdownRefusesStartResumeAndConfirm(t *testing.T) {
 		before := len(e.notes.snapshot())
 
 		e.spawner.refuse()
-		if resumed, err := e.exec.Resume(ctx, run.ID, e.starter); !errors.Is(err, ErrShuttingDown) || resumed != nil {
+		if resumed, _, err := e.exec.Resume(ctx, run.ID, e.starter, ResumeNone); !errors.Is(err, ErrShuttingDown) || resumed != nil {
 			t.Fatalf("Resume() = %v, %v; want ErrShuttingDown and no run", resumed, err)
 		}
 		assertInterrupted(t, e, run.ID, before)
@@ -421,7 +421,7 @@ func TestShutdownRefusesStartResumeAndConfirm(t *testing.T) {
 		}
 
 		e.spawner.accept()
-		if _, err := e.exec.Resume(ctx, run.ID, e.starter); err != nil {
+		if _, _, err := e.exec.Resume(ctx, run.ID, e.starter, ResumeNone); err != nil {
 			t.Fatalf("second Resume() error: %v", err)
 		}
 		e.settle()
@@ -448,7 +448,7 @@ func TestShutdownRefusesStartResumeAndConfirm(t *testing.T) {
 		}
 
 		e.spawner.accept()
-		if _, err := e.exec.Resume(ctx, run.ID, e.starter); err != nil {
+		if _, _, err := e.exec.Resume(ctx, run.ID, e.starter, ResumeNone); err != nil {
 			t.Fatalf("Resume() error: %v", err)
 		}
 		e.settle()
@@ -521,7 +521,7 @@ func TestPermissionDeniedNotifiesTheActingUser(t *testing.T) {
 		run, _ := e.start(lifecycleStep(a, "restart"))
 		e.settle()
 		resumer := e.operator(a)
-		if _, err := e.exec.Resume(ctx, run.ID, resumer); err != nil {
+		if _, _, err := e.exec.Resume(ctx, run.ID, resumer, ResumeNone); err != nil {
 			t.Fatal(err)
 		}
 		e.settle()
@@ -712,7 +712,7 @@ func TestResumeAndConfirmPublishAfterThePreviousGoroutineStopped(t *testing.T) {
 				return run, steps, a
 			},
 			follow: func(e *env, run *store.RunbookRunRecord, _ []*store.RunbookRunStepRecord) error {
-				_, err := e.exec.Resume(ctx, run.ID, e.starter)
+				_, _, err := e.exec.Resume(ctx, run.ID, e.starter, ResumeNone)
 				return err
 			},
 			held: 4,

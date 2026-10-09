@@ -13,6 +13,7 @@ import { Panel } from '../../components/ui/Panel';
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
 import { EmptyState, ErrorState, SkeletonRows } from '../../components/ui/states';
 import { toast } from '../../lib/toast';
+import { auditActionLabel } from '../../lib/auditActionLabel';
 import { JournalEntryDialog } from './JournalEntryDialog';
 
 const kinds = ['change', 'sync', 'alert', 'doc', 'journal', 'audit'] as const;
@@ -182,7 +183,11 @@ export function JournalPage() {
                   </div>
                   {row.title && (
                     <p className="mt-1 text-sm text-ink">
-                      {row.kind === 'sync' ? t(`journal.syncStatus.${row.status}`) : row.title}
+                      {row.kind === 'sync'
+                        ? t(`journal.syncStatus.${row.status}`)
+                        : row.kind === 'audit'
+                          ? auditActionLabel(row.title, t)
+                          : row.title}
                     </p>
                   )}
                   {row.body && <Markdown source={row.body} />}

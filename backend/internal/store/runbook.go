@@ -262,12 +262,13 @@ type RunbookStepRecord struct {
 	Attribute      string `json:"attribute"`
 	Operator       string `json:"operator"`
 	ExpectedValue  string `json:"expectedValue"`
+	Action         string `json:"action"`
 	CreatedAt      string `json:"createdAt"`
 	UpdatedAt      string `json:"updatedAt"`
 }
 
 const runbookStepColumns = `id, runbook_id, position, kind, timeout_seconds, title,
-	connector_id, verb, entity_ref, field_key, target_value, attribute, operator, expected_value, created_at, updated_at`
+	connector_id, verb, entity_ref, field_key, target_value, attribute, operator, expected_value, action, created_at, updated_at`
 
 // ListRunbookSteps returns the steps belonging to any of runbookIDs,
 // grouped by runbook ID and ordered by position within each group. Missing
@@ -379,16 +380,17 @@ func (s *Store) ReplaceRunbookSteps(ctx context.Context, runbookID string, steps
 			Attribute:      st.Attribute,
 			Operator:       st.Operator,
 			ExpectedValue:  st.ExpectedValue,
+			Action:         st.Action,
 			CreatedAt:      now,
 			UpdatedAt:      now,
 		}
 		if _, err := s.db.ExecContext(ctx, `
 			INSERT INTO runbook_steps (id, runbook_id, position, kind, timeout_seconds, title,
-				connector_id, verb, entity_ref, field_key, target_value, attribute, operator, expected_value, created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+				connector_id, verb, entity_ref, field_key, target_value, attribute, operator, expected_value, action, created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		`, rec.ID, rec.RunbookID, rec.Position, rec.Kind, rec.TimeoutSeconds, rec.Title,
 			nilToStr(rec.ConnectorID), nilToStr(rec.Verb), rec.EntityRef, rec.FieldKey, rec.TargetValue,
-			rec.Attribute, rec.Operator, rec.ExpectedValue, rec.CreatedAt, rec.UpdatedAt); err != nil {
+			rec.Attribute, rec.Operator, rec.ExpectedValue, rec.Action, rec.CreatedAt, rec.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("insert runbook step: %w", err)
 		}
 		saved = append(saved, rec)
@@ -400,7 +402,7 @@ func scanRunbookStep(row rowScanner) (*RunbookStepRecord, error) {
 	var st RunbookStepRecord
 	var connectorID, verb sql.NullString
 	err := row.Scan(&st.ID, &st.RunbookID, &st.Position, &st.Kind, &st.TimeoutSeconds, &st.Title,
-		&connectorID, &verb, &st.EntityRef, &st.FieldKey, &st.TargetValue, &st.Attribute, &st.Operator, &st.ExpectedValue,
+		&connectorID, &verb, &st.EntityRef, &st.FieldKey, &st.TargetValue, &st.Attribute, &st.Operator, &st.ExpectedValue, &st.Action,
 		&st.CreatedAt, &st.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound

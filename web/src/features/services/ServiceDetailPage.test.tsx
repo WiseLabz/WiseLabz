@@ -1,27 +1,36 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import '../../i18n';
 import { ServiceDetailPage } from './ServiceDetailPage';
 
-const { restart, start, stop, health, release, managedBy, configPush, configFields, syncRows, snapshotRows } = vi.hoisted(() => ({
+const {
+  restart,
+  start,
+  stop,
+  actionRun,
+  health,
+  release,
+  managedBy,
+  connectorRole,
+  connectorRecord,
+  snapshotEntities,
+  configPush,
+  configFields,
+  syncRows,
+  snapshotRows,
+} = vi.hoisted(() => ({
   release: vi.fn(),
+  connectorRole: { value: 'operator' as 'operator' | 'viewer' },
   // Overrides the mocked connector's managedBy for the config-managed tests (#500).
   managedBy: { value: undefined as string | undefined },
   restart: vi.fn(),
   start: vi.fn(),
   stop: vi.fn(),
-  health: vi.fn(),
-  configPush: vi.fn(),
-  configFields: vi.fn().mockReturnValue({ data: [] }),
-  syncRows: vi.fn().mockReturnValue({ data: [] }),
-  snapshotRows: vi.fn().mockReturnValue({ data: [] }),
-}));
-
-vi.mock('../../api/generated/connectors/connectors', () => ({
-  useGetConnectorsConnectorId: () => ({
-    data: {
+  actionRun: vi.fn(),
+  connectorRecord: {
+    value: {
       id: 'svc-pve1',
       name: 'pve1',
       type: 'proxmox',
@@ -31,8 +40,34 @@ vi.mock('../../api/generated/connectors/connectors', () => ({
       scheduleSeconds: null,
       nextRunAt: '',
       lastSyncAt: '',
-      managedBy: managedBy.value,
+      managedBy: undefined as string | undefined,
+      capabilities: { restart: true, start: true, stop: true, configPush: false, configRead: false, credentialRefresh: false },
+      actions: [] as Array<{
+        name: string;
+        entityScope: boolean;
+        entityKind?: string;
+        label?: string;
+        description?: string;
+        downtimeSeconds: number;
+      }>,
     },
+  },
+  snapshotEntities: {
+    value: [
+      { name: 'vm-100', kind: 'vm', externalId: '100' },
+      { name: 'web-container', kind: 'container', externalId: 'container-1' },
+    ],
+  },
+  health: vi.fn(),
+  configPush: vi.fn(),
+  configFields: vi.fn().mockReturnValue({ data: [] }),
+  syncRows: vi.fn().mockReturnValue({ data: [] }),
+  snapshotRows: vi.fn().mockReturnValue({ data: [] }),
+}));
+
+vi.mock('../../api/generated/connectors/connectors', () => ({
+  useGetConnectorsConnectorId: () => ({
+    data: { ...connectorRecord.value, managedBy: managedBy.value },
     isLoading: false,
     isError: false,
     refetch: vi.fn(),
@@ -43,13 +78,14 @@ vi.mock('../../api/generated/connectors/connectors', () => ({
   useGetConnectorsConnectorIdSyncs: syncRows,
   useGetConnectorsConnectorIdSnapshots: snapshotRows,
   useGetConnectorsConnectorIdSnapshotsSnapshotId: () => ({
-    data: { entities: [{ name: 'vm-100', externalId: '100' }] },
+    data: { entities: snapshotEntities.value },
   }),
   useGetConnectorsConnectorIdConfigFields: configFields,
   useGetConnectorsSchema: () => ({ data: [] }),
   postConnectorsConnectorIdRestart: restart,
   postConnectorsConnectorIdStart: start,
   postConnectorsConnectorIdStop: stop,
+  postConnectorsConnectorIdActionsName: actionRun,
   postConnectorsConnectorIdConfigPush: configPush,
   postConnectorsConnectorIdHealth: health,
   postConnectorsConnectorIdRelease: release,
@@ -70,7 +106,7 @@ vi.mock('../../api/generated/templates/templates', () => ({
   useGetTemplates: () => ({ data: [] }),
 }));
 vi.mock('./UptimePanel', () => ({ UptimePanel: () => null }));
-vi.mock('../../hooks/useRole', () => ({ useConnectorRole: () => 'operator' }));
+vi.mock('../../hooks/useRole', () => ({ useConnectorRole: () => connectorRole.value }));
 vi.mock('../../store/live', () => ({
   useLive: (selector: (state: object) => unknown) =>
     selector({ statusOverrides: {}, activity: [] }),
@@ -88,15 +124,20 @@ vi.mock('../../components/manager/ElevationConfirm', () => ({
   ElevationConfirm: ({
     open,
     title,
+    action,
+    target,
     onConfirm,
   }: {
     open: boolean;
     title: string;
+    action: string;
+    target?: string;
     onConfirm: (token: string | null) => void;
   }) =>
     open ? (
-      <div role="dialog" aria-label={title}>
+      <div role="dialog" aria-label={title} data-action={action} data-target={target}>
         <button onClick={() => onConfirm(null)}>confirm-elevation</button>
+        <button onClick={() => onConfirm('step-up-token')}>confirm-elevation-token</button>
       </div>
     ) : null,
 }));
@@ -117,6 +158,8 @@ vi.mock('../../components/ui/Dialog', () => ({
     ) : null,
 }));
 
+const originalConnectorRecord = connectorRecord.value;
+
 function renderPage() {
   render(
     <QueryClientProvider
@@ -132,7 +175,9 @@ function renderPage() {
 }
 
 beforeEach(() => {
+  connectorRecord.value = originalConnectorRecord;
   managedBy.value = undefined;
+  connectorRole.value = 'operator';
   syncRows.mockReturnValue({ data: [] });
   snapshotRows.mockReturnValue({ data: [] });
 });
@@ -350,5 +395,207 @@ describe('ServiceDetailPage config-managed connectors (#500)', () => {
     expect(screen.getByRole('button', { name: 'Remove' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Release to UI' }));
     await waitFor(() => expect(release).toHaveBeenCalledWith('svc-pve1'));
+  });
+});
+
+describe('ServiceDetailPage recipe actions', () => {
+  const rescanPreview = {
+    userDefined: true,
+    label: 'Rescan library',
+    description: 'Rebuild the library index',
+    request: {
+      method: 'POST',
+      url: 'https://svc.example/api/rescan',
+      headers: {},
+      body: { force: false },
+    },
+    targetService: 'pve1',
+    estimatedDowntimeSeconds: 0,
+    dependentServices: [],
+    affectedEntities: [],
+  };
+
+  beforeEach(() => {
+    actionRun.mockReset();
+  });
+
+  it('shows the restart and rescan controls for a custom connector, but no Start or Stop', async () => {
+    connectorRecord.value = {
+      ...originalConnectorRecord,
+      type: 'custom',
+      actions: [
+        { name: 'restart', entityScope: false, downtimeSeconds: 0 },
+        { name: 'rescan', entityScope: false, label: 'Rescan library', downtimeSeconds: 0 },
+      ],
+    };
+
+    renderPage();
+
+    expect(await screen.findByRole('button', { name: 'Restart' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Rescan library' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Start' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Stop' })).not.toBeInTheDocument();
+  });
+
+  it('keeps Start, Stop and Restart for a built-in proxmox connector', async () => {
+    connectorRecord.value = {
+      ...originalConnectorRecord,
+      type: 'proxmox',
+      capabilities: {
+        restart: true,
+        start: true,
+        stop: true,
+        configPush: true,
+        configRead: true,
+        credentialRefresh: true,
+      },
+      actions: [],
+    };
+
+    renderPage();
+
+    expect(await screen.findByRole('button', { name: 'Start' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Stop' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Restart' })).toBeInTheDocument();
+  });
+
+  it('runs the dry-run preview, then the elevated action, and shows the result', async () => {
+    connectorRecord.value = {
+      ...originalConnectorRecord,
+      type: 'custom',
+      actions: [
+        { name: 'rescan', entityScope: false, label: 'Rescan library', description: 'Rebuild the library index', downtimeSeconds: 0 },
+      ],
+    };
+    actionRun.mockImplementation((_id: string, _name: string, _body: unknown, params: { dryRun?: boolean }) =>
+      Promise.resolve(params.dryRun ? rescanPreview : { statusCode: 200, excerpt: 'OK' })
+    );
+
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Rescan library' }));
+
+    await waitFor(() =>
+      expect(actionRun).toHaveBeenCalledWith('svc-pve1', 'rescan', { entityRef: undefined }, { dryRun: true }, undefined)
+    );
+    expect(actionRun).toHaveBeenCalledTimes(1);
+
+    const previewDialog = await screen.findByRole('dialog', { name: 'Preview Rescan library' });
+    expect(previewDialog).toHaveTextContent('Recipe-defined action');
+    expect(previewDialog).toHaveTextContent('Action: Rescan library');
+    expect(previewDialog).toHaveTextContent('Description: Rebuild the library index');
+    expect(within(previewDialog).getByText('POST')).toBeInTheDocument();
+    expect(within(previewDialog).getByText('https://svc.example/api/rescan')).toBeInTheDocument();
+    expect(previewDialog).toHaveTextContent('"force": false');
+    expect(previewDialog).toHaveTextContent('No downtime declared');
+    expect(previewDialog).not.toHaveTextContent('Indefinite');
+
+    expect(screen.queryByRole('button', { name: 'confirm-elevation-token' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'Run Rescan library' })).not.toBeInTheDocument();
+
+    fireEvent.click(within(previewDialog).getByRole('button', { name: 'Run action' }));
+
+    const elevation = await screen.findByRole('dialog', { name: 'Run Rescan library' });
+    expect(elevation).toHaveAttribute('data-action', 'connector.action');
+    expect(elevation).toHaveAttribute('data-target', 'svc-pve1:rescan');
+    expect(actionRun).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(within(elevation).getByRole('button', { name: 'confirm-elevation-token' }));
+
+    await waitFor(() =>
+      expect(actionRun).toHaveBeenLastCalledWith(
+        'svc-pve1',
+        'rescan',
+        { entityRef: undefined },
+        { dryRun: false },
+        { headers: { 'X-Elevation-Token': 'step-up-token' } }
+      )
+    );
+
+    const resultDialog = await screen.findByRole('dialog', { name: 'Action result' });
+    expect(resultDialog).toHaveTextContent('Response status: 200');
+    expect(within(resultDialog).getByText('OK')).toBeInTheDocument();
+  });
+
+  it('requests the dry-run for an entity-scoped action only after an entity is picked', async () => {
+    connectorRecord.value = {
+      ...originalConnectorRecord,
+      type: 'custom',
+      actions: [
+        { name: 'rescan', entityScope: true, entityKind: 'container', label: 'Rescan container', downtimeSeconds: 0 },
+      ],
+    };
+    actionRun.mockResolvedValue({ ...rescanPreview, targetService: 'web-container' });
+
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Rescan container (container)' }));
+
+    const previewDialog = await screen.findByRole('dialog', { name: 'Preview Rescan container' });
+    expect(within(previewDialog).getByText('Choose an entity to preview this action.')).toBeInTheDocument();
+    expect(actionRun).not.toHaveBeenCalled();
+
+    fireEvent.change(within(previewDialog).getByRole('combobox', { name: 'Target container' }), {
+      target: { value: 'container-1' },
+    });
+
+    await waitFor(() =>
+      expect(actionRun).toHaveBeenCalledWith('svc-pve1', 'rescan', { entityRef: 'container-1' }, { dryRun: true }, undefined)
+    );
+    expect(actionRun).toHaveBeenCalledTimes(1);
+    expect(await screen.findByRole('button', { name: 'Run action' })).toBeInTheDocument();
+  });
+
+  it('closes the elevation prompt and shows the upstream status and excerpt when the action fails', async () => {
+    connectorRecord.value = {
+      ...originalConnectorRecord,
+      type: 'custom',
+      actions: [{ name: 'rescan', entityScope: false, label: 'Rescan library', downtimeSeconds: 0 }],
+    };
+    actionRun.mockImplementation((_id: string, _name: string, _body: unknown, params: { dryRun?: boolean }) =>
+      params.dryRun
+        ? Promise.resolve(rescanPreview)
+        : Promise.reject({
+            response: {
+              status: 502,
+              data: {
+                code: 'action_failed',
+                message: 'API returned 409 (expected a 2xx status)',
+                statusCode: 409,
+                excerpt: 'conflict: busy',
+              },
+            },
+          })
+    );
+
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Rescan library' }));
+    const previewDialog = await screen.findByRole('dialog', { name: 'Preview Rescan library' });
+    fireEvent.click(within(previewDialog).getByRole('button', { name: 'Run action' }));
+    const elevation = await screen.findByRole('dialog', { name: 'Run Rescan library' });
+    fireEvent.click(within(elevation).getByRole('button', { name: 'confirm-elevation-token' }));
+
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: 'Run Rescan library' })).not.toBeInTheDocument()
+    );
+    const failure = await within(screen.getByRole('dialog', { name: 'Preview Rescan library' })).findByRole('alert');
+    expect(failure).toHaveTextContent('409');
+    expect(failure).toHaveTextContent('conflict: busy');
+  });
+
+  it('hides the lifecycle and named-action buttons from a viewer', async () => {
+    connectorRole.value = 'viewer';
+    connectorRecord.value = {
+      ...originalConnectorRecord,
+      type: 'custom',
+      actions: [
+        { name: 'restart', entityScope: false, downtimeSeconds: 0 },
+        { name: 'rescan', entityScope: false, label: 'Rescan library', downtimeSeconds: 0 },
+      ],
+    };
+
+    renderPage();
+
+    expect(await screen.findByRole('link', { name: 'History' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Restart' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Rescan library' })).not.toBeInTheDocument();
   });
 });

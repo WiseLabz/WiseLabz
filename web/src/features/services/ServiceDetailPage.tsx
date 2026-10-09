@@ -20,6 +20,7 @@ import {
   postConnectorsConnectorIdRestart,
   postConnectorsConnectorIdStart,
   postConnectorsConnectorIdStop,
+  postConnectorsConnectorIdActionsName,
   postConnectorsConnectorIdConfigPush,
   postConnectorsConnectorIdHealth,
   postConnectorsConnectorIdRelease,
@@ -27,7 +28,13 @@ import {
   putConnectorsConnectorId,
   getGetConnectorsQueryKey,
 } from '../../api/generated/connectors/connectors';
-import type { RestartPreview, ConfigField } from '../../api/model';
+import type {
+  ActionResult,
+  ConnectorAction,
+  ConfigField,
+  LifecycleResult,
+  RestartPreview,
+} from '../../api/model';
 import { isAxiosError } from 'axios';
 import { toast } from '../../lib/toast';
 import { useGetChanges } from '../../api/generated/changes/changes';
@@ -53,7 +60,11 @@ import { Markdown } from '../../components/docs/Markdown';
 import { ConfirmDestructive } from '../../components/manager/ConfirmDestructive';
 import { ElevationConfirm } from '../../components/manager/ElevationConfirm';
 import { useMutatingOp } from '../../components/manager/useMutatingOp';
-import { MutatingOpDialogs, type MutatingOpMessages } from '../../components/manager/LifecycleOp';
+import {
+  MutatingOpDialogs,
+  type MutatingOpExtraMessages,
+  type MutatingOpMessages,
+} from '../../components/manager/LifecycleOp';
 import { EntityPicker } from '../../components/manager/EntityPicker';
 import {
   ArrowRightIcon,
@@ -86,6 +97,7 @@ export function ServiceDetailPage() {
 
   const connector = useGetConnectorsConnectorId(id);
   const { data: schemas } = useGetConnectorsSchema();
+  const customConnector = connector.data?.type === 'custom';
   const schema = useMemo(
     () => schemas?.find((s) => s.type === connector.data?.type) ?? null,
     [schemas, connector.data?.type],
@@ -158,6 +170,13 @@ export function ServiceDetailPage() {
   }
 
   const c = connector.data;
+  const recipeActions = customConnector ? c.actions : [];
+  const rootLifecycleVerbs = new Set(
+    recipeActions.filter((action) => !action.entityScope && isLifecycleVerb(action.name)).map((action) => action.name)
+  );
+  const actionControls = recipeActions.filter(
+    (action) => action.entityScope || !isLifecycleVerb(action.name)
+  );
   const status = (overrides[c.id] ?? c.status) as ServiceStatus;
   // A connector declared in config.yaml takes its settings from that file, and
   // one orphaned from it can only be released or removed (#500).
@@ -256,26 +275,41 @@ export function ServiceDetailPage() {
             >
               <SyncIcon size={14} /> {t('common.sync')}
             </Button>
-            <Button size="sm" variant="ghost" onClick={startOp.open} disabled={startOp.preview.isPending}>
-              {startOp.preview.isPending
-                ? t('services.detail.startPreviewLoading')
-                : t('services.detail.startPreview')}
-            </Button>
-            <Button size="sm" variant="ghost" onClick={stopOp.open} disabled={stopOp.preview.isPending}>
-              {stopOp.preview.isPending
-                ? t('services.detail.stopPreviewLoading')
-                : t('services.detail.stopPreview')}
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={restartOp.open}
-              disabled={restartOp.preview.isPending}
-            >
-              {restartOp.preview.isPending
-                ? t('services.detail.restartPreviewLoading')
-                : t('services.detail.restartPreview')}
-            </Button>
+            {(!customConnector || rootLifecycleVerbs.has('start')) && (
+              <Button size="sm" variant="ghost" onClick={startOp.open} disabled={startOp.preview.isPending}>
+                {startOp.preview.isPending
+                  ? t('services.detail.startPreviewLoading')
+                  : t('services.detail.startPreview')}
+              </Button>
+            )}
+            {(!customConnector || rootLifecycleVerbs.has('stop')) && (
+              <Button size="sm" variant="ghost" onClick={stopOp.open} disabled={stopOp.preview.isPending}>
+                {stopOp.preview.isPending
+                  ? t('services.detail.stopPreviewLoading')
+                  : t('services.detail.stopPreview')}
+              </Button>
+            )}
+            {(!customConnector || rootLifecycleVerbs.has('restart')) && (
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={restartOp.open}
+                disabled={restartOp.preview.isPending}
+              >
+                {restartOp.preview.isPending
+                  ? t('services.detail.restartPreviewLoading')
+                  : t('services.detail.restartPreview')}
+              </Button>
+            )}
+            {actionControls.map((action) => (
+              <RecipeActionControl
+                key={`${action.entityScope ? action.entityKind : 'service'}:${action.name}`}
+                connectorId={c.id}
+                connectorName={c.name}
+                action={action}
+                onSuccess={onOpSuccess}
+              />
+            ))}
             <Button
               size="sm"
               variant="ghost"
@@ -357,9 +391,27 @@ export function ServiceDetailPage() {
         }}
       />
 
-      <ServiceMutatingOpDialogs op={restartOp} verb="restart" connectorId={c.id} connectorName={c.name} />
-      <ServiceMutatingOpDialogs op={startOp} verb="start" connectorId={c.id} connectorName={c.name} />
-      <ServiceMutatingOpDialogs op={stopOp} verb="stop" connectorId={c.id} connectorName={c.name} />
+      <ServiceMutatingOpDialogs
+        op={restartOp}
+        verb="restart"
+        connectorId={c.id}
+        connectorName={c.name}
+        allowEntityPicker={!customConnector}
+      />
+      <ServiceMutatingOpDialogs
+        op={startOp}
+        verb="start"
+        connectorId={c.id}
+        connectorName={c.name}
+        allowEntityPicker={!customConnector}
+      />
+      <ServiceMutatingOpDialogs
+        op={stopOp}
+        verb="stop"
+        connectorId={c.id}
+        connectorName={c.name}
+        allowEntityPicker={!customConnector}
+      />
     </div>
   );
 }
@@ -369,7 +421,7 @@ type LifecyclePostFn = (
   body?: { entityRef?: string },
   params?: { dryRun?: boolean },
   options?: { headers?: Record<string, string> },
-) => Promise<RestartPreview | { status: string }>;
+) => Promise<RestartPreview | LifecycleResult>;
 
 /** Wires the shared {@link useMutatingOp} state machine to one connector +
  * verb, adding the entity selection (fixes #282's `{}`-body bug — Docker and
@@ -377,7 +429,11 @@ type LifecyclePostFn = (
  * entityRef state so the in-flight preview/execute closures always read the
  * latest selection, even when a re-run is triggered synchronously after
  * `setEntityRef`. */
-function useLifecycleOp(id: string, postFn: LifecyclePostFn, onSuccess: () => void) {
+function useLifecycleOp(
+  id: string,
+  postFn: LifecyclePostFn,
+  onSuccess: () => void,
+) {
   const [entityRef, setEntityRefState] = useState('');
   const entityRefRef = useRef('');
 
@@ -416,11 +472,13 @@ function ServiceMutatingOpDialogs({
   verb,
   connectorId,
   connectorName,
+  allowEntityPicker = true,
 }: {
   op: LifecycleOp;
   verb: 'restart' | 'start' | 'stop';
   connectorId: string;
   connectorName: string;
+  allowEntityPicker?: boolean;
 }) {
   const { t } = useTranslation();
   const k = (suffix: string) => `services.detail.${verb}${suffix}`;
@@ -448,11 +506,167 @@ function ServiceMutatingOpDialogs({
       action={`connector.${verb}`}
       resourceName={connectorName}
       messages={messages}
-      entityPicker={
+      entityPicker={allowEntityPicker ? (
         <EntityPicker connectorId={connectorId} value={op.entityRef} onChange={op.selectEntity} />
-      }
+      ) : undefined}
+      extraMessages={mutatingOpExtraMessages(t)}
     />
   );
+}
+
+type RecipeActionPostFn = (
+  body: { entityRef?: string },
+  params: { dryRun?: boolean },
+  options?: { headers?: Record<string, string> },
+) => Promise<RestartPreview | ActionResult | LifecycleResult>;
+
+function useRecipeActionOp(
+  connectorId: string,
+  action: ConnectorAction,
+  onSuccess: () => void,
+) {
+  const [entityRef, setEntityRefState] = useState('');
+  const entityRefRef = useRef('');
+  const lifecycle = isLifecycleVerb(action.name);
+  const post: RecipeActionPostFn = (body, params, options) => {
+    if (lifecycle) {
+      return lifecyclePostFn(action.name)(connectorId, body, params, options);
+    }
+    return postConnectorsConnectorIdActionsName(connectorId, action.name, body, params, options);
+  };
+  const op = useMutatingOp({
+    previewFn: () =>
+      post({ entityRef: entityRefRef.current || undefined }, { dryRun: true }) as Promise<RestartPreview>,
+    executeFn: (token) =>
+      post(
+        { entityRef: entityRefRef.current || undefined },
+        { dryRun: false },
+        token ? { headers: { 'X-Elevation-Token': token } } : undefined,
+      ),
+    onSuccess,
+  });
+
+  const open = () => {
+    entityRefRef.current = '';
+    setEntityRefState('');
+    op.open({ skipPreview: action.entityScope });
+  };
+  const selectEntity = (ref: string) => {
+    entityRefRef.current = ref;
+    setEntityRefState(ref);
+    if (ref) op.rerunPreview();
+    else op.preview.reset();
+  };
+  return { ...op, open, entityRef, selectEntity, lifecycle };
+}
+
+function lifecyclePostFn(verb: string): LifecyclePostFn {
+  switch (verb) {
+    case 'restart':
+      return postConnectorsConnectorIdRestart;
+    case 'start':
+      return postConnectorsConnectorIdStart;
+    case 'stop':
+      return postConnectorsConnectorIdStop;
+    default:
+      throw new Error(`unknown lifecycle verb: ${verb}`);
+  }
+}
+
+function isLifecycleVerb(name: string): boolean {
+  return name === 'restart' || name === 'start' || name === 'stop';
+}
+
+function RecipeActionControl({
+  connectorId,
+  connectorName,
+  action,
+  onSuccess,
+}: {
+  connectorId: string;
+  connectorName: string;
+  action: ConnectorAction;
+  onSuccess: () => void;
+}) {
+  const { t } = useTranslation();
+  const op = useRecipeActionOp(connectorId, action, onSuccess);
+  const label = action.label || action.name;
+  const actionTarget = op.lifecycle ? `connector.${action.name}` : 'connector.action';
+  const target = op.lifecycle ? undefined : `${connectorId}:${action.name}`;
+  const messages: MutatingOpMessages = {
+    previewTitle: t('services.detail.actionPreviewTitle', { name: label }),
+    previewNotice: t('services.detail.actionPreviewNotice'),
+    previewError: t('services.detail.actionPreviewError'),
+    targetLabel: t('services.detail.actionTarget'),
+    downtimeLabel: t('services.detail.opDowntime'),
+    downtimeSeconds: (count) => t('services.detail.opSeconds', { count }),
+    downtimeIndefinite: t('services.detail.opIndefinite'),
+    dependenciesLabel: t('services.detail.opDependencies'),
+    noDependencies: t('services.detail.opNoDependencies'),
+    failed: t('services.detail.actionFailed'),
+    retry: t('common.retry'),
+    confirmTitle: t('services.detail.actionConfirmTitle', { name: label }),
+    confirmDescription: t('services.detail.actionConfirmDescription', { name: label }),
+    confirmLabel: t('services.detail.actionConfirm'),
+  };
+
+  return (
+    <>
+      <Button
+        size="sm"
+        variant="ghost"
+        onClick={op.open}
+        disabled={op.preview.isPending || op.mutate.isPending}
+        title={action.description || undefined}
+      >
+        {action.entityScope
+          ? t('services.detail.actionEntityButton', { label, kind: action.entityKind || '' })
+          : label}
+      </Button>
+      <MutatingOpDialogs
+        op={op}
+        action={actionTarget}
+        target={target}
+        resourceName={connectorName}
+        messages={messages}
+        extraMessages={mutatingOpExtraMessages(t)}
+        actionMetadata={action}
+        requireEntity={action.entityScope}
+        selectedEntityRef={op.entityRef}
+        entityPicker={
+          action.entityScope ? (
+            <EntityPicker
+              connectorId={connectorId}
+              value={op.entityRef}
+              onChange={op.selectEntity}
+              kind={action.entityKind}
+              hideWholeService
+              label={t('services.detail.actionEntityPicker', { kind: action.entityKind || '' })}
+            />
+          ) : undefined
+        }
+      />
+    </>
+  );
+}
+
+function mutatingOpExtraMessages(t: (key: string) => string): MutatingOpExtraMessages {
+  return {
+    userDefined: t('services.detail.actionUserDefined'),
+    actionLabel: t('services.detail.actionLabel'),
+    actionDescription: t('services.detail.actionDescription'),
+    request: t('services.detail.actionRequest'),
+    method: t('services.detail.actionMethod'),
+    url: t('services.detail.actionUrl'),
+    headers: t('services.detail.actionHeaders'),
+    body: t('services.detail.actionBody'),
+    entityRequired: t('services.detail.actionEntityRequired'),
+    resultTitle: t('services.detail.actionResultTitle'),
+    status: t('services.detail.actionStatus'),
+    excerpt: t('services.detail.actionExcerpt'),
+    resultClose: t('services.detail.actionResultClose'),
+    noDowntime: t('services.detail.actionNoDowntime'),
+  };
 }
 
 /** Field-level config-push form (ADR 0003): pick a whitelisted field, edit its

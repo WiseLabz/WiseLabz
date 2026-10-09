@@ -10,6 +10,7 @@ import { faker } from '@faker-js/faker';
 
 import { ConnectorCategory, ServiceStatus } from '../../model';
 import type {
+  ActionResult,
   ConfigField,
   Connector,
   ConnectorBulkReauthResponse,
@@ -22,6 +23,7 @@ import type {
   GetConnectorsConnectorIdPermissions200Item,
   GoldenSnapshot,
   HealthCheckResult,
+  LifecycleResult,
   MaintenanceWindow,
   PutConnectorsConnectorIdPermissionsUserId200,
   RecipePreview,
@@ -58,6 +60,33 @@ export const getGetConnectorsResponseMock = (): Connector[] =>
       },
       undefined,
     ]),
+    capabilities: {
+      restart: faker.datatype.boolean(),
+      start: faker.datatype.boolean(),
+      stop: faker.datatype.boolean(),
+      configPush: faker.datatype.boolean(),
+      configRead: faker.datatype.boolean(),
+      credentialRefresh: faker.datatype.boolean(),
+    },
+    actions: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(
+      () => ({
+        name: faker.string.alpha({ length: { min: 10, max: 20 } }),
+        entityScope: faker.datatype.boolean(),
+        entityKind: faker.helpers.arrayElement([
+          faker.string.alpha({ length: { min: 10, max: 20 } }),
+          undefined,
+        ]),
+        label: faker.helpers.arrayElement([
+          faker.string.alpha({ length: { min: 10, max: 20 } }),
+          undefined,
+        ]),
+        description: faker.helpers.arrayElement([
+          faker.string.alpha({ length: { min: 10, max: 20 } }),
+          undefined,
+        ]),
+        downtimeSeconds: faker.number.int({ min: 0, max: 3600 }),
+      })
+    ),
     lastSyncAt: faker.helpers.arrayElement([
       faker.helpers.fromRegExp('^$|^[0-9]{4}-[0-9]{2}-[0-9]{2}T'),
       undefined,
@@ -117,6 +146,33 @@ export const getPostConnectorsResponseMock = (
     },
     undefined,
   ]),
+  capabilities: {
+    restart: faker.datatype.boolean(),
+    start: faker.datatype.boolean(),
+    stop: faker.datatype.boolean(),
+    configPush: faker.datatype.boolean(),
+    configRead: faker.datatype.boolean(),
+    credentialRefresh: faker.datatype.boolean(),
+  },
+  actions: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(
+    () => ({
+      name: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      entityScope: faker.datatype.boolean(),
+      entityKind: faker.helpers.arrayElement([
+        faker.string.alpha({ length: { min: 10, max: 20 } }),
+        undefined,
+      ]),
+      label: faker.helpers.arrayElement([
+        faker.string.alpha({ length: { min: 10, max: 20 } }),
+        undefined,
+      ]),
+      description: faker.helpers.arrayElement([
+        faker.string.alpha({ length: { min: 10, max: 20 } }),
+        undefined,
+      ]),
+      downtimeSeconds: faker.number.int({ min: 0, max: 3600 }),
+    })
+  ),
   lastSyncAt: faker.helpers.arrayElement([
     faker.helpers.fromRegExp('^$|^[0-9]{4}-[0-9]{2}-[0-9]{2}T'),
     undefined,
@@ -297,6 +353,33 @@ export const getGetConnectorsConnectorIdResponseMock = (
     },
     undefined,
   ]),
+  capabilities: {
+    restart: faker.datatype.boolean(),
+    start: faker.datatype.boolean(),
+    stop: faker.datatype.boolean(),
+    configPush: faker.datatype.boolean(),
+    configRead: faker.datatype.boolean(),
+    credentialRefresh: faker.datatype.boolean(),
+  },
+  actions: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(
+    () => ({
+      name: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      entityScope: faker.datatype.boolean(),
+      entityKind: faker.helpers.arrayElement([
+        faker.string.alpha({ length: { min: 10, max: 20 } }),
+        undefined,
+      ]),
+      label: faker.helpers.arrayElement([
+        faker.string.alpha({ length: { min: 10, max: 20 } }),
+        undefined,
+      ]),
+      description: faker.helpers.arrayElement([
+        faker.string.alpha({ length: { min: 10, max: 20 } }),
+        undefined,
+      ]),
+      downtimeSeconds: faker.number.int({ min: 0, max: 3600 }),
+    })
+  ),
   lastSyncAt: faker.helpers.arrayElement([
     faker.helpers.fromRegExp('^$|^[0-9]{4}-[0-9]{2}-[0-9]{2}T'),
     undefined,
@@ -357,6 +440,33 @@ export const getPutConnectorsConnectorIdResponseMock = (
     },
     undefined,
   ]),
+  capabilities: {
+    restart: faker.datatype.boolean(),
+    start: faker.datatype.boolean(),
+    stop: faker.datatype.boolean(),
+    configPush: faker.datatype.boolean(),
+    configRead: faker.datatype.boolean(),
+    credentialRefresh: faker.datatype.boolean(),
+  },
+  actions: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(
+    () => ({
+      name: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      entityScope: faker.datatype.boolean(),
+      entityKind: faker.helpers.arrayElement([
+        faker.string.alpha({ length: { min: 10, max: 20 } }),
+        undefined,
+      ]),
+      label: faker.helpers.arrayElement([
+        faker.string.alpha({ length: { min: 10, max: 20 } }),
+        undefined,
+      ]),
+      description: faker.helpers.arrayElement([
+        faker.string.alpha({ length: { min: 10, max: 20 } }),
+        undefined,
+      ]),
+      downtimeSeconds: faker.number.int({ min: 0, max: 3600 }),
+    })
+  ),
   lastSyncAt: faker.helpers.arrayElement([
     faker.helpers.fromRegExp('^$|^[0-9]{4}-[0-9]{2}-[0-9]{2}T'),
     undefined,
@@ -417,6 +527,33 @@ export const getPostConnectorsConnectorIdReleaseResponseMock = (
     },
     undefined,
   ]),
+  capabilities: {
+    restart: faker.datatype.boolean(),
+    start: faker.datatype.boolean(),
+    stop: faker.datatype.boolean(),
+    configPush: faker.datatype.boolean(),
+    configRead: faker.datatype.boolean(),
+    credentialRefresh: faker.datatype.boolean(),
+  },
+  actions: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(
+    () => ({
+      name: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      entityScope: faker.datatype.boolean(),
+      entityKind: faker.helpers.arrayElement([
+        faker.string.alpha({ length: { min: 10, max: 20 } }),
+        undefined,
+      ]),
+      label: faker.helpers.arrayElement([
+        faker.string.alpha({ length: { min: 10, max: 20 } }),
+        undefined,
+      ]),
+      description: faker.helpers.arrayElement([
+        faker.string.alpha({ length: { min: 10, max: 20 } }),
+        undefined,
+      ]),
+      downtimeSeconds: faker.number.int({ min: 0, max: 3600 }),
+    })
+  ),
   lastSyncAt: faker.helpers.arrayElement([
     faker.helpers.fromRegExp('^$|^[0-9]{4}-[0-9]{2}-[0-9]{2}T'),
     undefined,
@@ -469,80 +606,286 @@ export const getGetConnectorsConnectorIdRemovalImpactResponseMock = (
   ...overrideResponse,
 });
 
-export const getPostConnectorsConnectorIdRestartResponseMock = (
-  overrideResponse: Partial<Extract<RestartPreview, object>> = {}
+export const getPostConnectorsConnectorIdRestartResponseRestartPreviewMock = (
+  overrideResponse: Partial<RestartPreview> = {}
 ): RestartPreview => ({
-  targetService: faker.string.alpha({ length: { min: 10, max: 20 } }),
-  estimatedDowntimeSeconds: faker.number.int({ min: 0 }),
-  affectedEntities: faker.helpers.arrayElement([
-    Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() =>
-      faker.string.alpha({ length: { min: 10, max: 20 } })
-    ),
-    undefined,
-  ]),
-  dependentServices: Array.from(
-    { length: faker.number.int({ min: 1, max: 4 }) },
-    (_, i) => i + 1
-  ).map(() => ({
-    kind: faker.string.alpha({ length: { min: 10, max: 20 } }),
-    name: faker.string.alpha({ length: { min: 10, max: 20 } }),
-    ref: faker.helpers.arrayElement([
+  ...{
+    userDefined: faker.helpers.arrayElement([faker.datatype.boolean(), undefined]),
+    label: faker.helpers.arrayElement([
       faker.string.alpha({ length: { min: 10, max: 20 } }),
       undefined,
     ]),
-  })),
+    description: faker.helpers.arrayElement([
+      faker.string.alpha({ length: { min: 10, max: 20 } }),
+      undefined,
+    ]),
+    request: faker.helpers.arrayElement([
+      {
+        method: faker.helpers.arrayElement(['POST', 'PUT', 'PATCH', 'DELETE'] as const),
+        url: faker.string.alpha({ length: { min: 10, max: 20 } }),
+        headers: faker.helpers.arrayElement([
+          {
+            [faker.string.alphanumeric(5)]: faker.string.alpha({ length: { min: 10, max: 20 } }),
+          },
+          undefined,
+        ]),
+        body: faker.helpers.arrayElement([{}, undefined]),
+      },
+      undefined,
+    ]),
+    targetService: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    estimatedDowntimeSeconds: faker.number.int({ min: 0 }),
+    affectedEntities: faker.helpers.arrayElement([
+      Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() =>
+        faker.string.alpha({ length: { min: 10, max: 20 } })
+      ),
+      undefined,
+    ]),
+    dependentServices: Array.from(
+      { length: faker.number.int({ min: 1, max: 4 }) },
+      (_, i) => i + 1
+    ).map(() => ({
+      kind: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      name: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      ref: faker.helpers.arrayElement([
+        faker.string.alpha({ length: { min: 10, max: 20 } }),
+        undefined,
+      ]),
+    })),
+  },
   ...overrideResponse,
 });
 
-export const getPostConnectorsConnectorIdStartResponseMock = (
-  overrideResponse: Partial<Extract<RestartPreview, object>> = {}
-): RestartPreview => ({
-  targetService: faker.string.alpha({ length: { min: 10, max: 20 } }),
-  estimatedDowntimeSeconds: faker.number.int({ min: 0 }),
-  affectedEntities: faker.helpers.arrayElement([
-    Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() =>
-      faker.string.alpha({ length: { min: 10, max: 20 } })
-    ),
-    undefined,
-  ]),
-  dependentServices: Array.from(
-    { length: faker.number.int({ min: 1, max: 4 }) },
-    (_, i) => i + 1
-  ).map(() => ({
-    kind: faker.string.alpha({ length: { min: 10, max: 20 } }),
-    name: faker.string.alpha({ length: { min: 10, max: 20 } }),
-    ref: faker.helpers.arrayElement([
+export const getPostConnectorsConnectorIdRestartResponseLifecycleResultMock = (
+  overrideResponse: Partial<LifecycleResult> = {}
+): LifecycleResult => ({
+  ...{
+    status: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    statusCode: faker.helpers.arrayElement([faker.number.int(), undefined]),
+    excerpt: faker.helpers.arrayElement([
       faker.string.alpha({ length: { min: 10, max: 20 } }),
       undefined,
     ]),
-  })),
+  },
   ...overrideResponse,
 });
 
-export const getPostConnectorsConnectorIdStopResponseMock = (
-  overrideResponse: Partial<Extract<RestartPreview, object>> = {}
+export const getPostConnectorsConnectorIdRestartResponseMock = ():
+  RestartPreview | LifecycleResult =>
+  faker.helpers.arrayElement([
+    { ...getPostConnectorsConnectorIdRestartResponseRestartPreviewMock() },
+    { ...getPostConnectorsConnectorIdRestartResponseLifecycleResultMock() },
+  ]);
+
+export const getPostConnectorsConnectorIdStartResponseRestartPreviewMock = (
+  overrideResponse: Partial<RestartPreview> = {}
 ): RestartPreview => ({
-  targetService: faker.string.alpha({ length: { min: 10, max: 20 } }),
-  estimatedDowntimeSeconds: faker.number.int({ min: 0 }),
-  affectedEntities: faker.helpers.arrayElement([
-    Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() =>
-      faker.string.alpha({ length: { min: 10, max: 20 } })
-    ),
-    undefined,
-  ]),
-  dependentServices: Array.from(
-    { length: faker.number.int({ min: 1, max: 4 }) },
-    (_, i) => i + 1
-  ).map(() => ({
-    kind: faker.string.alpha({ length: { min: 10, max: 20 } }),
-    name: faker.string.alpha({ length: { min: 10, max: 20 } }),
-    ref: faker.helpers.arrayElement([
+  ...{
+    userDefined: faker.helpers.arrayElement([faker.datatype.boolean(), undefined]),
+    label: faker.helpers.arrayElement([
       faker.string.alpha({ length: { min: 10, max: 20 } }),
       undefined,
     ]),
-  })),
+    description: faker.helpers.arrayElement([
+      faker.string.alpha({ length: { min: 10, max: 20 } }),
+      undefined,
+    ]),
+    request: faker.helpers.arrayElement([
+      {
+        method: faker.helpers.arrayElement(['POST', 'PUT', 'PATCH', 'DELETE'] as const),
+        url: faker.string.alpha({ length: { min: 10, max: 20 } }),
+        headers: faker.helpers.arrayElement([
+          {
+            [faker.string.alphanumeric(5)]: faker.string.alpha({ length: { min: 10, max: 20 } }),
+          },
+          undefined,
+        ]),
+        body: faker.helpers.arrayElement([{}, undefined]),
+      },
+      undefined,
+    ]),
+    targetService: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    estimatedDowntimeSeconds: faker.number.int({ min: 0 }),
+    affectedEntities: faker.helpers.arrayElement([
+      Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() =>
+        faker.string.alpha({ length: { min: 10, max: 20 } })
+      ),
+      undefined,
+    ]),
+    dependentServices: Array.from(
+      { length: faker.number.int({ min: 1, max: 4 }) },
+      (_, i) => i + 1
+    ).map(() => ({
+      kind: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      name: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      ref: faker.helpers.arrayElement([
+        faker.string.alpha({ length: { min: 10, max: 20 } }),
+        undefined,
+      ]),
+    })),
+  },
   ...overrideResponse,
 });
+
+export const getPostConnectorsConnectorIdStartResponseLifecycleResultMock = (
+  overrideResponse: Partial<LifecycleResult> = {}
+): LifecycleResult => ({
+  ...{
+    status: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    statusCode: faker.helpers.arrayElement([faker.number.int(), undefined]),
+    excerpt: faker.helpers.arrayElement([
+      faker.string.alpha({ length: { min: 10, max: 20 } }),
+      undefined,
+    ]),
+  },
+  ...overrideResponse,
+});
+
+export const getPostConnectorsConnectorIdStartResponseMock = (): RestartPreview | LifecycleResult =>
+  faker.helpers.arrayElement([
+    { ...getPostConnectorsConnectorIdStartResponseRestartPreviewMock() },
+    { ...getPostConnectorsConnectorIdStartResponseLifecycleResultMock() },
+  ]);
+
+export const getPostConnectorsConnectorIdStopResponseRestartPreviewMock = (
+  overrideResponse: Partial<RestartPreview> = {}
+): RestartPreview => ({
+  ...{
+    userDefined: faker.helpers.arrayElement([faker.datatype.boolean(), undefined]),
+    label: faker.helpers.arrayElement([
+      faker.string.alpha({ length: { min: 10, max: 20 } }),
+      undefined,
+    ]),
+    description: faker.helpers.arrayElement([
+      faker.string.alpha({ length: { min: 10, max: 20 } }),
+      undefined,
+    ]),
+    request: faker.helpers.arrayElement([
+      {
+        method: faker.helpers.arrayElement(['POST', 'PUT', 'PATCH', 'DELETE'] as const),
+        url: faker.string.alpha({ length: { min: 10, max: 20 } }),
+        headers: faker.helpers.arrayElement([
+          {
+            [faker.string.alphanumeric(5)]: faker.string.alpha({ length: { min: 10, max: 20 } }),
+          },
+          undefined,
+        ]),
+        body: faker.helpers.arrayElement([{}, undefined]),
+      },
+      undefined,
+    ]),
+    targetService: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    estimatedDowntimeSeconds: faker.number.int({ min: 0 }),
+    affectedEntities: faker.helpers.arrayElement([
+      Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() =>
+        faker.string.alpha({ length: { min: 10, max: 20 } })
+      ),
+      undefined,
+    ]),
+    dependentServices: Array.from(
+      { length: faker.number.int({ min: 1, max: 4 }) },
+      (_, i) => i + 1
+    ).map(() => ({
+      kind: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      name: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      ref: faker.helpers.arrayElement([
+        faker.string.alpha({ length: { min: 10, max: 20 } }),
+        undefined,
+      ]),
+    })),
+  },
+  ...overrideResponse,
+});
+
+export const getPostConnectorsConnectorIdStopResponseLifecycleResultMock = (
+  overrideResponse: Partial<LifecycleResult> = {}
+): LifecycleResult => ({
+  ...{
+    status: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    statusCode: faker.helpers.arrayElement([faker.number.int(), undefined]),
+    excerpt: faker.helpers.arrayElement([
+      faker.string.alpha({ length: { min: 10, max: 20 } }),
+      undefined,
+    ]),
+  },
+  ...overrideResponse,
+});
+
+export const getPostConnectorsConnectorIdStopResponseMock = (): RestartPreview | LifecycleResult =>
+  faker.helpers.arrayElement([
+    { ...getPostConnectorsConnectorIdStopResponseRestartPreviewMock() },
+    { ...getPostConnectorsConnectorIdStopResponseLifecycleResultMock() },
+  ]);
+
+export const getPostConnectorsConnectorIdActionsNameResponseRestartPreviewMock = (
+  overrideResponse: Partial<RestartPreview> = {}
+): RestartPreview => ({
+  ...{
+    userDefined: faker.helpers.arrayElement([faker.datatype.boolean(), undefined]),
+    label: faker.helpers.arrayElement([
+      faker.string.alpha({ length: { min: 10, max: 20 } }),
+      undefined,
+    ]),
+    description: faker.helpers.arrayElement([
+      faker.string.alpha({ length: { min: 10, max: 20 } }),
+      undefined,
+    ]),
+    request: faker.helpers.arrayElement([
+      {
+        method: faker.helpers.arrayElement(['POST', 'PUT', 'PATCH', 'DELETE'] as const),
+        url: faker.string.alpha({ length: { min: 10, max: 20 } }),
+        headers: faker.helpers.arrayElement([
+          {
+            [faker.string.alphanumeric(5)]: faker.string.alpha({ length: { min: 10, max: 20 } }),
+          },
+          undefined,
+        ]),
+        body: faker.helpers.arrayElement([{}, undefined]),
+      },
+      undefined,
+    ]),
+    targetService: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    estimatedDowntimeSeconds: faker.number.int({ min: 0 }),
+    affectedEntities: faker.helpers.arrayElement([
+      Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() =>
+        faker.string.alpha({ length: { min: 10, max: 20 } })
+      ),
+      undefined,
+    ]),
+    dependentServices: Array.from(
+      { length: faker.number.int({ min: 1, max: 4 }) },
+      (_, i) => i + 1
+    ).map(() => ({
+      kind: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      name: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      ref: faker.helpers.arrayElement([
+        faker.string.alpha({ length: { min: 10, max: 20 } }),
+        undefined,
+      ]),
+    })),
+  },
+  ...overrideResponse,
+});
+
+export const getPostConnectorsConnectorIdActionsNameResponseActionResultMock = (
+  overrideResponse: Partial<ActionResult> = {}
+): ActionResult => ({
+  ...{
+    statusCode: faker.number.int(),
+    excerpt: faker.helpers.arrayElement([
+      faker.string.alpha({ length: { min: 10, max: 20 } }),
+      undefined,
+    ]),
+  },
+  ...overrideResponse,
+});
+
+export const getPostConnectorsConnectorIdActionsNameResponseMock = ():
+  RestartPreview | ActionResult =>
+  faker.helpers.arrayElement([
+    { ...getPostConnectorsConnectorIdActionsNameResponseRestartPreviewMock() },
+    { ...getPostConnectorsConnectorIdActionsNameResponseActionResultMock() },
+  ]);
 
 export const getGetConnectorsConnectorIdConfigFieldsResponseMock = (): ConfigField[] =>
   Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() => ({
@@ -931,6 +1274,33 @@ export const getPutConnectorsConnectorIdEnabledResponseMock = (
     },
     undefined,
   ]),
+  capabilities: {
+    restart: faker.datatype.boolean(),
+    start: faker.datatype.boolean(),
+    stop: faker.datatype.boolean(),
+    configPush: faker.datatype.boolean(),
+    configRead: faker.datatype.boolean(),
+    credentialRefresh: faker.datatype.boolean(),
+  },
+  actions: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(
+    () => ({
+      name: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      entityScope: faker.datatype.boolean(),
+      entityKind: faker.helpers.arrayElement([
+        faker.string.alpha({ length: { min: 10, max: 20 } }),
+        undefined,
+      ]),
+      label: faker.helpers.arrayElement([
+        faker.string.alpha({ length: { min: 10, max: 20 } }),
+        undefined,
+      ]),
+      description: faker.helpers.arrayElement([
+        faker.string.alpha({ length: { min: 10, max: 20 } }),
+        undefined,
+      ]),
+      downtimeSeconds: faker.number.int({ min: 0, max: 3600 }),
+    })
+  ),
   lastSyncAt: faker.helpers.arrayElement([
     faker.helpers.fromRegExp('^$|^[0-9]{4}-[0-9]{2}-[0-9]{2}T'),
     undefined,
