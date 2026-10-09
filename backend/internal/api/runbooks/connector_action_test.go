@@ -353,6 +353,10 @@ func seedUnknownActionRun(t *testing.T, h *Handler, runbookID, user, fingerprint
 	if _, _, err := h.Store.FailRunbookRunStep(ctx, run.ID, steps[0].ID, "unknown", "request written, no status received", "step_unknown"); err != nil {
 		t.Fatal(err)
 	}
+	run, steps, err = h.Store.GetRunbookRun(ctx, run.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
 	return run, steps
 }
 

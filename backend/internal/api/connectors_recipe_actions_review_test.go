@@ -42,6 +42,7 @@ auth: {mode: header, name: x-client-id}
 endpoints:
   - name: items
     path: /items
+    method: GET
     items: '@this'
     entity:
       kind: item

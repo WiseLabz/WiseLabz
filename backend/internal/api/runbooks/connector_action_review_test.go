@@ -120,7 +120,7 @@ func TestCancelConnectorActionDuringHTTPNeverResends(t *testing.T) {
 	received := make(chan struct{})
 	release := make(chan struct{})
 	var hits atomic.Int32
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		if hits.Add(1) == 1 {
 			close(received)
 		}

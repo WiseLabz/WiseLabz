@@ -944,7 +944,7 @@ endpoints:
       name: name
       external_id: id
       actions:
-        rescan: {method: POST, path: /items/{external_id}/rescan}
+        rescan: {method: POST, path: "/items/{external_id}/rescan"}
 actions:
   refresh: {method: POST, path: /refresh}
   restart: {method: POST, path: /restart}
