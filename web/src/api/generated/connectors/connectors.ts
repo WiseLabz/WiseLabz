@@ -1390,7 +1390,7 @@ export const usePostConnectorsConnectorIdStop = <
   return useMutation(getPostConnectorsConnectorIdStopMutationOptions(options), queryClient);
 };
 /**
- * With dryRun=true, returns the exact resolved same-origin request without contacting the service or requiring elevation. Execution requires connector.action elevation bound to <connector id>:<action name>. Lifecycle verbs use their existing endpoints. Only the fixed recipe request is sent; extra operator input has no effect. Success is 2xx, audited without a response body; failures raise a critical alert.
+ * With dryRun=true, returns the exact resolved same-origin request without contacting the service or requiring elevation. Execution requires connector.action elevation bound to <connector id>:<action name>. Lifecycle verbs use their existing endpoints. Only the fixed recipe request is sent; extra operator input has no effect. Success is 2xx, audited without a response body; failures raise a critical alert. The upstream status alone decides the result: any 2xx is success, any other status is a 502 here; the body is only sampled for the excerpt.
  * @summary Preview or perform a recipe-defined named action (operator)
  */
 export const postConnectorsConnectorIdActionsName = (

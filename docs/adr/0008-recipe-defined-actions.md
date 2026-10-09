@@ -27,8 +27,9 @@ There are no caller-supplied parameters. The action preview resolves the
 concrete method, redacted URL, headers, body and metadata from the stored
 recipe and snapshot without making a request. Execution sends that same
 resolved request once, so the approved request cannot diverge from the sent
-request. Any 2xx response is success; the response body is discarded apart
-from the bounded text excerpt returned to the caller. The excerpt is not
+request. Once a status line has arrived, the status alone decides: any 2xx is
+success and any other status is a failure, whatever happens to the body. Only a
+bounded prefix of the body is read, for the text excerpt returned to the caller. The excerpt is not
 written to audit, alerts, logs or run history.
 
 ### 2. Keep the ADR 0001/0002 authorization boundary

@@ -7,7 +7,7 @@ Lets an administrator declare, in a custom connector's recipe, the requests that
 ## ADDED Requirements
 
 ### Requirement: Action declaration
-Format SHALL remain version 1. Actions MAY be declared under an endpoint's entity mapping (for its kind) or at the root (for the service). Names SHALL be 1–32 characters, start with a lowercase letter and contain only lowercase letters, digits, `_` or `-`. `restart`, `start` and `stop` SHALL be lifecycle verbs; other names SHALL be named actions. Each place SHALL hold at most 10 actions; one kind SHALL declare actions on at most one endpoint. Recipes without actions SHALL behave as before.
+Format SHALL remain version 1. Actions MAY be declared under an endpoint's entity mapping (for its kind) or at the root (for the service). Names SHALL be 1–32 characters, start with a lowercase letter and contain only lowercase letters, digits, `_` or `-`. `restart`, `start` and `stop` SHALL be lifecycle verbs; other names SHALL be named actions. Each place SHALL hold at most 10 actions; one kind SHALL declare actions on at most one endpoint. Recipes without actions SHALL behave exactly as before.
 
 #### Scenario: Recipe without actions
 - **WHEN** a recipe that declares no actions is saved and synced
@@ -45,7 +45,7 @@ An action SHALL define a method of POST, PUT, PATCH or DELETE and a path relativ
 - **THEN** those fields SHALL have no effect on the request sent to the service.
 
 ### Requirement: Target placeholders
-Entity actions MAY use `{external_id}` and `{attr.<name>}` in paths, query values and body string values. Values SHALL resolve from the target entity in the latest stored snapshot. Attributes SHALL be mapped by that endpoint; an unmapped attribute placeholder SHALL be a validation error. Service actions SHALL NOT use placeholders.
+Entity actions MAY use `{external_id}` and `{attr.<name>}` in the path part of `path` (before any `?`), in `query` values and in body string values. A placeholder SHALL NOT appear in a query string written inside `path`; that SHALL be a validation error, and such values SHALL be declared under `query`. Values SHALL resolve from the target entity in the latest stored snapshot. Attributes SHALL be mapped by that endpoint; an unmapped attribute placeholder SHALL be a validation error, and so SHALL a placeholder naming an attribute whose name contains `?`, `{` or `}`. Service actions SHALL NOT use placeholders.
 
 #### Scenario: Unknown entity
 - **WHEN** an entity action is triggered with an entity reference that matches no entity in the latest snapshot
@@ -54,6 +54,10 @@ Entity actions MAY use `{external_id}` and `{attr.<name>}` in paths, query value
 #### Scenario: Attribute missing on the entity
 - **WHEN** an action uses `{attr.node}` and the target entity has no `node` attribute
 - **THEN** the action SHALL fail before any request is sent, naming the missing attribute.
+
+#### Scenario: Placeholder in a query string inside the path
+- **WHEN** an entity action's path is `/api/restart?id={external_id}`
+- **THEN** validation SHALL fail with an error located at that action's path.
 
 #### Scenario: Placeholder in a service action
 - **WHEN** a root-level action's path contains `{external_id}`
@@ -101,7 +105,7 @@ A custom connector SHALL support only lifecycle verbs and named actions its reci
 - **THEN** they SHALL be the same as before this change.
 
 ### Requirement: Enabling actions on save
-API creation with actions, or saving changed actions to a non-empty set, SHALL require an instance admin and valid recipe-action-change elevation (bound to the existing connector). Comparison SHALL be semantic: comments, whitespace and key order SHALL NOT require elevation. Removing all actions SHALL NOT require elevation. Missing elevation SHALL reject the save without changing the stored recipe. With instance step-up disabled the elevation check SHALL pass as for other elevated actions.
+API creation with actions, or any save that changes the actions, SHALL require an instance admin. When the resulting set is not empty it SHALL also require valid recipe-action-change elevation (bound to the existing connector). Comparison SHALL be semantic: comments, whitespace and key order SHALL NOT count as a change. Removing all actions SHALL NOT require elevation but SHALL still require an instance admin. A save that is refused SHALL leave the stored recipe unchanged. With instance step-up disabled the elevation check SHALL pass as for other elevated actions.
 
 #### Scenario: Adding an action without elevation
 - **WHEN** an instance admin saves a recipe that adds an action and sends no elevation token
@@ -118,6 +122,10 @@ API creation with actions, or saving changed actions to a non-empty set, SHALL r
 #### Scenario: Reformatting the actions
 - **WHEN** an instance admin reorders keys and adds comments inside the actions without changing any value
 - **THEN** the save SHALL NOT require elevation.
+
+#### Scenario: Non-admin removes every action
+- **WHEN** a user who is not an instance admin saves a recipe that removes every action
+- **THEN** the save SHALL be rejected as forbidden and the stored recipe SHALL be unchanged.
 
 #### Scenario: Token for another connector
 - **WHEN** the elevation token was issued for a different connector
@@ -192,7 +200,7 @@ The system SHALL let a user with an operator grant on the connector run a named 
 - **THEN** the request SHALL be rejected as an unsupported operation.
 
 ### Requirement: Action result
-Any 2xx response SHALL succeed regardless of body or JSON format. Other statuses, transport errors and oversized responses SHALL fail with the usual connector error classes and lifecycle failure alert. Success and non-2xx operator responses SHALL include status and at most 512 bytes of plain-text body; non-text bodies SHALL be omitted. Excerpts SHALL NOT be stored in audit, alerts, logs or run records.
+Once a response status has been received, the status alone SHALL decide the outcome: any 2xx status SHALL succeed and any other status SHALL fail, whatever the body's format or size and whatever happens while it is read. A request for which no status is received SHALL fail with the usual connector error classes. A failure SHALL raise the lifecycle failure alert. The body SHALL be read only for the excerpt, and no more than a small bounded prefix of it SHALL be read; a body that is larger, slow, cut off or unreadable SHALL NOT change the outcome. Success and non-2xx operator responses SHALL include the status and at most 512 bytes of plain-text body, with control and formatting characters removed; non-text bodies SHALL be omitted. Excerpts SHALL NOT be stored in audit, alerts, logs or run records.
 
 #### Scenario: Success with a non-JSON body
 - **WHEN** the service answers 200 with the text `OK`
@@ -203,8 +211,20 @@ Any 2xx response SHALL succeed regardless of body or JSON format. Other statuses
 - **THEN** the action SHALL fail and the operator SHALL be shown status 409 and the start of that message.
 
 #### Scenario: Long body
-- **WHEN** the service answers with a 5 KiB body
-- **THEN** at most 512 bytes of it SHALL be shown.
+- **WHEN** the service answers 200 with a 5 KiB body
+- **THEN** the action SHALL succeed and at most 512 bytes of it SHALL be shown.
+
+#### Scenario: Body larger than any limit
+- **WHEN** the service answers 200 and then sends a body of many megabytes
+- **THEN** the action SHALL succeed without the whole body being read.
+
+#### Scenario: Body cut off after a success status
+- **WHEN** the service answers 200 and the connection is lost or stalls while the body is read
+- **THEN** the action SHALL succeed and the excerpt SHALL contain only what was read.
+
+#### Scenario: Failure status with an unreadable body
+- **WHEN** the service answers 500 and the body cannot be read
+- **THEN** the action SHALL fail with status 500.
 
 ### Requirement: Action audit
 Each action that was sent and answered with a 2xx status SHALL be recorded in the audit log with the acting user, the connector, the action name, the entity reference when there is one, the method, the request URL with credentials and query string removed, and the response status. A named action SHALL use one audit action distinct from the lifecycle audit actions; a recipe-declared lifecycle verb SHALL keep the existing lifecycle audit action with the method, URL and status added.

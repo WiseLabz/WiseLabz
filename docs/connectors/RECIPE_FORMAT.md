@@ -75,7 +75,11 @@ Each action is a fixed request with a `method` of `POST`, `PUT`, `PATCH` or
 `DELETE`, a relative `path`, and optional static `query`, `headers` and JSON
 `body`. Action requests use the connector's configured authentication and the
 same-origin and redirect protections as recipe endpoints. The operator does
-not provide request values when triggering an action. Labels may contain at
+not provide request values when triggering an action. The response status alone
+decides the result: 2xx succeeds and anything else fails. The body is not
+checked; only its first bytes are read to show the operator a short text
+excerpt. A redirect, or a 502, 503 or 504 answered by a reverse proxy in front
+of the service, is therefore a failure. Labels may contain at
 most 60 characters, descriptions at most 300, and `downtime_seconds` must be
 between 0 and 3600. If omitted, downtime defaults to 30 seconds for `restart`
 and 0 for every other action. Labels and descriptions are plain text.
@@ -99,10 +103,10 @@ need the placeholder values they use to be valid. A `path` containing `{...}`
 must be quoted when the action is written as a YAML flow mapping. Write `{{`
 and `}}` for literal braces. Service actions do not support placeholders.
 
-Creating or changing a non-empty action set through the API requires an
-instance admin and step-up authentication. Reformatting YAML, comments and
-key order do not count as action changes, and removing all actions does not
-require step-up. Actions in trusted configuration files are reconciled and
+Creating actions or changing them through the API requires an instance admin,
+and step-up authentication when the resulting set is not empty. Reformatting
+YAML, comments and key order do not count as action changes, and removing all
+actions does not require step-up. Actions in trusted configuration files are reconciled and
 audited. Backup imports validate every custom recipe before writing it.
 
 This recipe declares an entity action and a service action. The automated

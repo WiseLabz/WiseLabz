@@ -41,7 +41,7 @@ A `lifecycle`, `sync_and_wait`, `wait_until_healthy`, `config_push`, `wait_for_e
 - **THEN** the save SHALL be rejected with a field error naming that step's connector.
 
 ### Requirement: Resuming a failed run
-A `failed` run SHALL be resumable. Resuming SHALL require a fresh `runbook.run` elevation token for that runbook and an operator grant on every connector referenced by the run's steps; if no connector is referenced, it SHALL require an instance admin or operator access on at least one connector. Resume SHALL execute again from the first step that is not `succeeded`, including a step in state `failed` or `unknown`, and SHALL record the resuming user. When that first step is a `connector_action` step in state `unknown`, the resume request SHALL carry an explicit decision for it, either to send the action again or to mark the step as done; without a decision the resume SHALL be rejected and the run SHALL stay `failed`. A step marked as done SHALL become `succeeded` without any request being sent, and the run SHALL continue with the next step. The decision SHALL be recorded in the audit log with the resuming user. Runs in any other state SHALL NOT be resumable.
+A `failed` run SHALL be resumable. Resuming SHALL require a fresh `runbook.run` elevation token for that runbook and an operator grant on every connector referenced by the run's steps; if no connector is referenced, it SHALL require an instance admin or operator access on at least one connector. Resume SHALL execute again from the first step that is not `succeeded`, including a step in state `failed` or `unknown`, and SHALL record the resuming user. When that first step is a `connector_action` step in state `unknown`, the resume request SHALL carry an explicit decision for it, either to send the action again or to mark the step as done; without a decision the resume SHALL be rejected and the run SHALL stay `failed`. The decision SHALL name the step it is for and carry the run revision the user saw; when the run has changed since, or that step is no longer the first step that has not succeeded, the resume SHALL be rejected with status 409, stating the run's current state, and nothing SHALL change. A step marked as done SHALL become `succeeded` without any request being sent, and the run SHALL continue with the next step. The decision SHALL be recorded in the audit log with the resuming user. Runs in any other state SHALL NOT be resumable.
 
 #### Scenario: Resume after failure
 - **WHEN** an elevated, authorized user resumes a run whose third step failed
@@ -66,6 +66,10 @@ A `failed` run SHALL be resumable. Resuming SHALL require a fresh `runbook.run` 
 #### Scenario: Mark as done
 - **WHEN** the same run is resumed with the decision to mark the step as done
 - **THEN** the step SHALL become `succeeded` without a request to the service, the next step SHALL execute, and an audit entry SHALL record that the user marked it done.
+
+#### Scenario: Decision made on an earlier attempt
+- **WHEN** one user chooses to mark an unknown action step as done, and before that request arrives another user resumes the run with send again and the step becomes `unknown` again
+- **THEN** the first request SHALL be rejected with status 409, the step SHALL stay `unknown`, and no audit entry for marking it done SHALL be written.
 
 #### Scenario: Unknown lifecycle step is unaffected
 - **WHEN** a run whose `lifecycle` step is `unknown` is resumed without any decision
@@ -104,7 +108,7 @@ A `connector_action` step SHALL send the definition declared at run start to the
 - **THEN** the `connector_action` step SHALL fail with a reason stating that the action changed, and nothing SHALL be sent.
 
 ### Requirement: Connector-action step outcome
-If the request was sent but no response status received, the step SHALL become `unknown` and the run `failed`. A non-2xx response or error before sending SHALL make the step `failed`.
+If the request may have been sent and no response status was received, the step SHALL become `unknown` and the run `failed`. A 2xx status SHALL make the step `succeeded`, whatever happens to the body afterwards. Any other status, or an error before the request is sent, SHALL make the step `failed`.
 
 #### Scenario: Connection lost after sending
 - **WHEN** the request is sent and the connection is lost before a status arrives
@@ -113,6 +117,10 @@ If the request was sent but no response status received, the step SHALL become `
 #### Scenario: Service refuses
 - **WHEN** the service answers 500
 - **THEN** the step SHALL become `failed` with the status in its reason, and the run SHALL become `failed`.
+
+#### Scenario: Body lost after a success status
+- **WHEN** the service answers 200 and the connection is lost while the body is read
+- **THEN** the step SHALL become `succeeded`, the run SHALL continue, and the request SHALL NOT be sent again.
 
 ### Requirement: Connector-action step preview
 The run preview SHALL show each `connector_action` step's method, URL, static headers and body, plus its label, description and downtime estimate, without sending to the service.
