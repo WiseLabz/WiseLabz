@@ -176,6 +176,7 @@ describe('locale catalogs', () => {
       'runbooks.runs.resumeDecision.markDone',
       'runbooks.runs.resumeDecision.markDoneHint',
       'runbooks.runs.resumeDecisionRequired',
+      'runbooks.runs.resumeRunChanged',
       'runbooks.runs.actionName',
       'runbooks.runs.actionUserDefined',
       'runbooks.runs.actionRequest',

@@ -16,14 +16,14 @@ type resumeInterleavingStore struct {
 	before func()
 }
 
-func (s *resumeInterleavingStore) ResumeRunbookRun(ctx context.Context, id, revision, actor string) (*store.RunbookRunRecord, error) {
+func (s *resumeInterleavingStore) ResumeRunbookRun(ctx context.Context, id, revision, stepID, actor string, audit *store.AuditRecord) (*store.RunbookRunRecord, error) {
 	s.before()
-	return s.Store.ResumeRunbookRun(ctx, id, revision, actor)
+	return s.Store.ResumeRunbookRun(ctx, id, revision, stepID, actor, audit)
 }
 
-func (s *resumeInterleavingStore) ResumeRunbookRunMarkingStepDone(ctx context.Context, id, revision, stepID, actor string) (*store.RunbookRunRecord, error) {
+func (s *resumeInterleavingStore) ResumeRunbookRunMarkingStepDone(ctx context.Context, id, revision, stepID, actor string, audit *store.AuditRecord) (*store.RunbookRunRecord, error) {
 	s.before()
-	return s.Store.ResumeRunbookRunMarkingStepDone(ctx, id, revision, stepID, actor)
+	return s.Store.ResumeRunbookRunMarkingStepDone(ctx, id, revision, stepID, actor, audit)
 }
 
 func TestConnectorActionResumeRejectsStaleDecision(t *testing.T) {
@@ -36,7 +36,7 @@ func TestConnectorActionResumeRejectsStaleDecision(t *testing.T) {
 			e.exec.store = &resumeInterleavingStore{Store: e.s, before: func() {
 				// The competing user marks the original action done. The next
 				// action then loses its response and requires its own decision.
-				if _, err := e.s.ResumeRunbookRunMarkingStepDone(ctx, failed.ID, failed.UpdatedAt, steps[0].ID, e.starter); err != nil {
+				if _, err := e.s.ResumeRunbookRunMarkingStepDone(ctx, failed.ID, failed.UpdatedAt, steps[0].ID, e.starter, nil); err != nil {
 					t.Fatal(err)
 				}
 				if _, err := e.s.UpdateRunbookRunStep(ctx, failed.ID, steps[1].ID, StepPending, map[string]any{"state": StepRunning}); err != nil {
@@ -64,7 +64,7 @@ func TestConnectorActionResumeRejectsStaleDecisionAfterSameStepFailsAgain(t *tes
 		return []*store.RunbookStepRecord{actionStep(id, "rescan", "")}
 	})
 	e.exec.store = &resumeInterleavingStore{Store: e.s, before: func() {
-		if _, err := e.s.ResumeRunbookRun(ctx, failed.ID, failed.UpdatedAt, e.starter); err != nil {
+		if _, err := e.s.ResumeRunbookRun(ctx, failed.ID, failed.UpdatedAt, "", e.starter, nil); err != nil {
 			t.Fatal(err)
 		}
 		if _, err := e.s.UpdateRunbookRunStep(ctx, failed.ID, steps[0].ID, StepUnknown, map[string]any{"state": StepRunning}); err != nil {

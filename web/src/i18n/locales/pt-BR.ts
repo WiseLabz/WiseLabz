@@ -149,6 +149,8 @@ export const ptBR: Catalog = {
       },
       resumeDecisionRequired:
         'Esta etapa precisa de uma decisão antes que a execução possa ser retomada. Escolha uma opção e tente novamente.',
+      resumeRunChanged:
+        'A execução mudou desde que você a abriu. Revise o estado atual e decida novamente.',
       actionName: 'Ação nomeada',
       actionUserDefined: 'Definida pelo usuário',
       actionRequest: 'Requisição',

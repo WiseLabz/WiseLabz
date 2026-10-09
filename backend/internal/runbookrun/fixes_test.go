@@ -34,8 +34,8 @@ type hookStore struct {
 	after func(op string)
 }
 
-func (h *hookStore) ResumeRunbookRun(ctx context.Context, id, expectedUpdatedAt, userID string) (*store.RunbookRunRecord, error) {
-	run, err := h.Store.ResumeRunbookRun(ctx, id, expectedUpdatedAt, userID)
+func (h *hookStore) ResumeRunbookRun(ctx context.Context, id, expectedUpdatedAt, expectedStepID, userID string, audit *store.AuditRecord) (*store.RunbookRunRecord, error) {
+	run, err := h.Store.ResumeRunbookRun(ctx, id, expectedUpdatedAt, expectedStepID, userID, audit)
 	if h.after != nil && err == nil {
 		h.after("resume")
 	}

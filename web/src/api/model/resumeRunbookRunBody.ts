@@ -11,4 +11,8 @@ import type { ResumeRunbookRunBodyDecision } from './resumeRunbookRunBodyDecisio
 export type ResumeRunbookRunBody = {
   /** Decision for the unknown connector_action step that a resume would start with. */
   decision?: ResumeRunbookRunBodyDecision;
+  /** The step the decision is for. Required with a decision on an unknown connector_action step; must be the run's first non-succeeded step. */
+  stepId?: string;
+  /** The run's updatedAt exactly as the client received it. Required with a decision on an unknown connector_action step; must equal the run's current updatedAt. */
+  updatedAt?: string;
 };

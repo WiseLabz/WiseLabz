@@ -62,7 +62,7 @@ func TestUnknownActionResumeWithoutElevationKeepsStateAndSendsNothing(t *testing
 	assertNoRunAudit(t, f.h, "runbook.run.step_marked_done")
 	assertNoRunAudit(t, f.h, "runbook.run.resume")
 	// The same authorized request succeeds with the correct fresh token.
-	rr = resumeWithBody(t, f.h, f.user, f.runbookID, run.ID, `{"decision":"mark_done"}`)
+	rr = resumeWithBody(t, f.h, f.user, f.runbookID, run.ID, decisionBody("mark_done", frozen[0].ID, run))
 	assertRunStatus(t, rr, http.StatusAccepted)
 	waitRunState(t, f.h, run.ID, "waiting_manual")
 	if f.hits.Load() != 0 {
@@ -79,7 +79,7 @@ func TestUnknownActionResumeShutdownAuditsAppliedDecision(t *testing.T) {
 			run, frozen := seedUnknownActionRun(t, f.h, f.runbookID, f.user, f.fingerprint)
 			connID := frozen[0].ConnectorID
 			resumer := operatorOn(t, f.h, connID)
-			rr := resumeWithBody(t, f.h, resumer, f.runbookID, run.ID, `{"decision":"`+decision+`"}`)
+			rr := resumeWithBody(t, f.h, resumer, f.runbookID, run.ID, decisionBody(decision, frozen[0].ID, run))
 			assertRunStatus(t, rr, http.StatusServiceUnavailable)
 			got, after, err := f.h.Store.GetRunbookRun(context.Background(), run.ID)
 			if err != nil {

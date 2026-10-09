@@ -407,7 +407,11 @@ describe('RunDetail', () => {
       const elevation = await screen.findByRole('dialog', { name: 'Resume run' });
       fireEvent.click(within(elevation).getByRole('button', { name: 'Resume run' }));
       await waitFor(() => expect(elevationToken).toBe('fresh-elevation-token'));
-      expect(body).toEqual({ decision });
+      expect(body).toEqual({
+        decision,
+        stepId: unknownActionStep.id,
+        updatedAt: baseRun.updatedAt,
+      });
     }
   );
 
@@ -433,6 +437,41 @@ describe('RunDetail', () => {
     expect(
       await screen.findByText(i18n.t('runbooks.runs.resumeDecisionRequired'))
     ).toBeInTheDocument();
+  });
+
+  it('closes the decision flow, refetches the run and explains when the run changed', async () => {
+    currentRun = { ...baseRun, steps: [unknownActionStep] };
+    let runReads = 0;
+    server.use(
+      http.get('/api/runbook-runs/:runId', () => {
+        runReads += 1;
+        return HttpResponse.json(currentRun);
+      }),
+      http.post('/api/runbook-runs/:runId/resume', () =>
+        HttpResponse.json(
+          {
+            code: 'run_changed',
+            message: 'changed',
+            state: 'failed',
+            updatedAt: '2026-10-01T10:20:00Z',
+          },
+          { status: 409 }
+        )
+      )
+    );
+    renderDetail();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Resume run' }));
+    const decisionDialog = await screen.findByRole('dialog', { name: 'Resume run' });
+    fireEvent.click(within(decisionDialog).getByRole('radio', { name: /^Mark the step as done/ }));
+    fireEvent.click(within(decisionDialog).getByRole('button', { name: 'Continue to approval' }));
+    const elevation = await screen.findByRole('dialog', { name: 'Resume run' });
+    const readsBefore = runReads;
+    fireEvent.click(within(elevation).getByRole('button', { name: 'Resume run' }));
+
+    expect(await screen.findByText(i18n.t('runbooks.runs.resumeRunChanged'))).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'Resume run' })).not.toBeInTheDocument();
+    await waitFor(() => expect(runReads).toBeGreaterThan(readsBefore));
   });
 
   it('shows no decision choice and sends no body for an unknown lifecycle step', async () => {

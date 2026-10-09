@@ -45,6 +45,10 @@ export function RunDetail({
   const [unknownWarningOpen, setUnknownWarningOpen] = useState(false);
   const [decisionOpen, setDecisionOpen] = useState(false);
   const [decision, setDecision] = useState<ResumeRunbookRunBodyDecision | null>(null);
+  // The step and run revision the operator saw when the decision dialog opened.
+  const [decisionBasis, setDecisionBasis] = useState<{ stepId: string; updatedAt: string } | null>(
+    null
+  );
   const [elevationOpen, setElevationOpen] = useState(false);
   const [runbookDeleted, setRunbookDeleted] = useState(false);
   const [resumeError, setResumeError] = useState<string | null>(null);
@@ -72,13 +76,15 @@ export function RunDetail({
     mutationFn: ({
       token,
       decision,
+      basis,
     }: {
       token: string | null;
       decision: ResumeRunbookRunBodyDecision | null;
+      basis: { stepId: string; updatedAt: string } | null;
     }) =>
       resumeRunbookRun(
         runId,
-        decision ? { decision } : undefined,
+        decision ? { decision, ...basis } : undefined,
         token ? { headers: { 'X-Elevation-Token': token } } : undefined
       ),
     onSuccess: () => {
@@ -96,6 +102,14 @@ export function RunDetail({
         setRunbookDeleted(true);
         refresh();
         setResumeError(t('runbooks.runs.resumeDeleted'));
+        return;
+      }
+      if (response?.code === 'run_changed') {
+        setDecisionOpen(false);
+        setDecision(null);
+        setDecisionBasis(null);
+        refresh();
+        setResumeError(t('runbooks.runs.resumeRunChanged'));
         return;
       }
       if (response?.code === 'unknown_step_decision_required') {
@@ -143,6 +157,11 @@ export function RunDetail({
   const openResume = () => {
     setResumeError(null);
     setDecision(null);
+    setDecisionBasis(
+      decisionRequired && firstUnfinishedStep && run
+        ? { stepId: firstUnfinishedStep.id, updatedAt: run.updatedAt }
+        : null
+    );
     if (decisionRequired) setDecisionOpen(true);
     else if (firstUnfinishedStep?.state === 'unknown') setUnknownWarningOpen(true);
     else setElevationOpen(true);
@@ -336,7 +355,7 @@ export function RunDetail({
           description={t('runbooks.runs.resumeDescription')}
           confirmLabel={t('runbooks.runs.resume')}
           onClose={() => setElevationOpen(false)}
-          onConfirm={(token) => resume.mutate({ token, decision })}
+          onConfirm={(token) => resume.mutate({ token, decision, basis: decisionBasis })}
           isPending={resume.isPending}
         />
       )}

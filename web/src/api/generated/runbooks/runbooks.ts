@@ -32,6 +32,7 @@ import type {
   NotFoundResponse,
   RestartPreview,
   ResumeRunbookRunBody,
+  RunChanged,
   Runbook,
   RunbookCreate,
   RunbookPage,
@@ -1105,7 +1106,7 @@ export const useConfirmRunbookRunStep = <
   return useMutation(getConfirmRunbookRunStepMutationOptions(options), queryClient);
 };
 /**
- * Requires operator on every frozen connector before state or elevation validation, and a fresh single-use runbook.run elevation targeted at the runbook id. When the run has no connector to check (manual steps only), the caller must be an instance admin or hold operator on at least one connector. Continues from the first non-succeeded step, including unknown outcomes. When that first step is a connector_action step in state unknown, the body must carry a decision: resend sends the action again (audited as runbook.run.step_resent), mark_done marks the step succeeded without sending anything (audited as runbook.run.step_marked_done). Without a decision the request is rejected with 409 unknown_step_decision_required and the run stays failed. The decision is ignored for every other first step, and an unknown lifecycle step repeats without one. A deleted runbook cannot be resumed because its elevation target no longer exists: returns 409 runbook_deleted; history, cancellation and manual confirmation remain available.
+ * Requires operator on every frozen connector before state or elevation validation, and a fresh single-use runbook.run elevation targeted at the runbook id. When the run has no connector to check (manual steps only), the caller must be an instance admin or hold operator on at least one connector. Continues from the first non-succeeded step, including unknown outcomes. When that first step is a connector_action step in state unknown, the body must carry a decision: resend sends the action again (audited as runbook.run.step_resent), mark_done marks the step succeeded without sending anything (audited as runbook.run.step_marked_done). Without a decision the request is rejected with 409 unknown_step_decision_required and the run stays failed. The decision is ignored for every other first step, and an unknown lifecycle step repeats without one. A deleted runbook cannot be resumed because its elevation target no longer exists: returns 409 runbook_deleted; history, cancellation and manual confirmation remain available. The decision is tied to what the operator saw: stepId is the step it is for and updatedAt is the run's updatedAt exactly as the client received it. When either is present and the run no longer matches (updatedAt differs, or stepId is not the first non-succeeded step), the request is rejected with 409 run_changed carrying the run's current state and updatedAt, and nothing changes, is sent or is audited. The comparison is made in the same transaction as the state change. A decision on an unknown connector_action step requires both fields (400 otherwise); elsewhere they are optional but still checked when present.
  * @summary Resume a failed run with fresh elevation
  */
 export const resumeRunbookRun = (
@@ -1129,7 +1130,7 @@ export const resumeRunbookRun = (
 export const getResumeRunbookRunMutationKey = () => ['resumeRunbookRun'] as const;
 
 export const getResumeRunbookRunMutationOptions = <
-  TError = ErrorType<Error | ForbiddenResponse | NotFoundResponse>,
+  TError = ErrorType<Error | ForbiddenResponse | NotFoundResponse | RunChanged>,
   TContext = unknown,
 >(options?: {
   mutation?: UseMutationOptions<
@@ -1168,7 +1169,9 @@ export type ResumeRunbookRunMutationResult = NonNullable<
   Awaited<ReturnType<typeof resumeRunbookRun>>
 >;
 export type ResumeRunbookRunMutationBody = BodyType<ResumeRunbookRunBody> | undefined;
-export type ResumeRunbookRunMutationError = ErrorType<Error | ForbiddenResponse | NotFoundResponse>;
+export type ResumeRunbookRunMutationError = ErrorType<
+  Error | ForbiddenResponse | NotFoundResponse | RunChanged
+>;
 export type ResumeRunbookRunMutationVariables = {
   runId: string;
   data?: BodyType<ResumeRunbookRunBody>;
@@ -1178,7 +1181,7 @@ export type ResumeRunbookRunMutationVariables = {
  * @summary Resume a failed run with fresh elevation
  */
 export const useResumeRunbookRun = <
-  TError = ErrorType<Error | ForbiddenResponse | NotFoundResponse>,
+  TError = ErrorType<Error | ForbiddenResponse | NotFoundResponse | RunChanged>,
   TContext = unknown,
 >(
   options?: {

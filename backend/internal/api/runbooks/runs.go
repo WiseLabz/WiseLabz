@@ -516,22 +516,31 @@ func (h *Handler) ConfirmRunStep(w http.ResponseWriter, r *http.Request) {
 // resumeRequest is the optional body of ResumeRun. Decision answers the
 // unknown connector_action step a resume would start with: "resend" sends it
 // again, "mark_done" marks it succeeded without sending. Empty means no
-// decision.
+// decision. StepID is the step the decision is for and UpdatedAt the run's
+// updatedAt exactly as the client received it; both are required with a
+// decision on such a step and checked whenever present.
 type resumeRequest struct {
-	Decision string `json:"decision"`
+	Decision  string `json:"decision"`
+	StepID    string `json:"stepId"`
+	UpdatedAt string `json:"updatedAt"`
 }
 
-// decodeResumeDecision reads the optional resume body. An empty body means no
-// decision. Any other value that is not resend or mark_done is a 400 with a
-// field error on decision.
-func decodeResumeDecision(w http.ResponseWriter, r *http.Request) (runbookrun.ResumeDecision, bool) {
+// decodeResumeBody reads the optional resume body. An empty body is the zero
+// request.
+func decodeResumeBody(w http.ResponseWriter, r *http.Request) (resumeRequest, bool) {
 	var body resumeRequest
 	if r.Body != nil {
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, httputil.MaxJSONBodyBytes)).Decode(&body); err != nil && !errors.Is(err, io.EOF) {
 			httputil.Error(w, http.StatusBadRequest, "invalid_request", "Invalid JSON body")
-			return "", false
+			return body, false
 		}
 	}
+	return body, true
+}
+
+// resumeDecision validates the decision of body: a value that is not
+// resend or mark_done is a 400 with a field error on decision.
+func resumeDecision(w http.ResponseWriter, body resumeRequest) (runbookrun.ResumeDecision, bool) {
 	decision := runbookrun.ResumeDecision(body.Decision)
 	switch decision {
 	case runbookrun.ResumeNone, runbookrun.ResumeResend, runbookrun.ResumeMarkDone:
@@ -542,14 +551,54 @@ func decodeResumeDecision(w http.ResponseWriter, r *http.Request) (runbookrun.Re
 	}
 }
 
+// writeRunChanged answers 409 run_changed with the run's current state and
+// updatedAt so the client can show them and decide again.
+func (h *Handler) writeRunChanged(w http.ResponseWriter, r *http.Request, run *store.RunbookRunRecord) {
+	if current, _, err := h.Store.GetRunbookRun(r.Context(), run.ID); err == nil {
+		run = current
+	}
+	httputil.JSON(w, http.StatusConflict, map[string]string{
+		"code":      "run_changed",
+		"message":   "The run changed since the decision was made; review its current state and decide again",
+		"state":     run.State,
+		"updatedAt": run.UpdatedAt,
+	})
+}
+
+// resumeAudit builds the audit row of a resume decision, written in the resume
+// transaction. It is nil without a decision. The executor writes it only when
+// the decision is applied to an unknown connector_action step.
+func resumeAudit(r *http.Request, run *store.RunbookRunRecord, body resumeRequest, decision runbookrun.ResumeDecision) (*store.AuditRecord, error) {
+	var action string
+	switch decision {
+	case runbookrun.ResumeResend:
+		action = "runbook.run.step_resent"
+	case runbookrun.ResumeMarkDone:
+		action = "runbook.run.step_marked_done"
+	default:
+		return nil, nil
+	}
+	detail := map[string]any{"runId": run.ID, "runbookId": run.RunbookID, "stepId": body.StepID, "decision": string(decision)}
+	return store.NewAuditRecord(auth.UserIDFromContext(r.Context()), auth.InstanceAdminFromContext(r.Context()), action, "runbook_run", run.ID, detail)
+}
+
 // ResumeRun delegates a failed run continuation after fresh targeted elevation.
-// The optional body carries the decision for an unknown connector_action step.
+// The optional body carries the decision for an unknown connector_action step
+// and the step and run revision the operator saw it on.
 func (h *Handler) ResumeRun(w http.ResponseWriter, r *http.Request) {
 	run, ok := h.authorizedRun(w, r)
 	if !ok {
 		return
 	}
+	body, ok := decodeResumeBody(w, r)
+	if !ok {
+		return
+	}
 	if run.State != runbookrun.RunFailed {
+		if body.UpdatedAt != "" && body.UpdatedAt != run.UpdatedAt {
+			h.writeRunChanged(w, r, run)
+			return
+		}
 		writeRunError(w, store.ErrConflict)
 		return
 	}
@@ -561,23 +610,37 @@ func (h *Handler) ResumeRun(w http.ResponseWriter, r *http.Request) {
 		auth.WriteElevationError(w, err)
 		return
 	}
-	decision, ok := decodeResumeDecision(w, r)
+	decision, ok := resumeDecision(w, body)
 	if !ok {
 		return
 	}
-	resumed, applied, err := h.Executor.Resume(r.Context(), run.ID, auth.UserIDFromContext(r.Context()), decision)
+	audit, err := resumeAudit(r, run, body, decision)
+	if err != nil {
+		httputil.Errorf(w, err)
+		return
+	}
+	expect := runbookrun.ResumeExpectation{StepID: body.StepID, UpdatedAt: body.UpdatedAt, Audit: audit}
+	resumed, _, err := h.Executor.ResumeExpecting(r.Context(), run.ID, auth.UserIDFromContext(r.Context()), decision, expect)
 	if err != nil {
 		h.auditShutdownTransition(r, "runbook.run.resume", err, "")
-		if resumed != nil && applied != nil {
-			h.auditStepDecision(r, resumed, applied)
+		switch {
+		case errors.Is(err, runbookrun.ErrRunChanged):
+			h.writeRunChanged(w, r, run)
+		case errors.Is(err, runbookrun.ErrDecisionFieldsRequired):
+			var fields []httputil.FieldError
+			if body.StepID == "" {
+				fields = append(fields, httputil.FieldError{Field: "stepId", Msg: "is required with a decision"})
+			}
+			if body.UpdatedAt == "" {
+				fields = append(fields, httputil.FieldError{Field: "updatedAt", Msg: "is required with a decision"})
+			}
+			httputil.ErrorWithDetails(w, http.StatusBadRequest, "invalid_request", "stepId and updatedAt are required with a decision on an unknown connector action step", fields)
+		default:
+			writeRunError(w, err)
 		}
-		writeRunError(w, err)
 		return
 	}
 	h.auditRun(r, "runbook.run.resume", resumed, "")
-	if applied != nil {
-		h.auditStepDecision(r, resumed, applied)
-	}
 	httputil.JSON(w, http.StatusAccepted, resumed)
 }
 
@@ -634,24 +697,6 @@ func (h *Handler) auditRun(r *http.Request, action string, run *store.RunbookRun
 	if stepID != "" {
 		detail["stepId"] = stepID
 	}
-	if err := h.Store.RecordAuditFromContext(r.Context(), action, "runbook_run", run.ID, detail); err != nil {
-		slog.Error("failed to record audit", "action", action, "error", err)
-	}
-}
-
-// auditStepDecision records the decision a resume applied to an unknown
-// connector_action step, with the run and step identifiers.
-func (h *Handler) auditStepDecision(r *http.Request, run *store.RunbookRunRecord, applied *runbookrun.StepDecision) {
-	var action string
-	switch applied.Decision {
-	case runbookrun.ResumeResend:
-		action = "runbook.run.step_resent"
-	case runbookrun.ResumeMarkDone:
-		action = "runbook.run.step_marked_done"
-	default:
-		return
-	}
-	detail := map[string]any{"runId": run.ID, "runbookId": run.RunbookID, "stepId": applied.StepID, "decision": string(applied.Decision)}
 	if err := h.Store.RecordAuditFromContext(r.Context(), action, "runbook_run", run.ID, detail); err != nil {
 		slog.Error("failed to record audit", "action", action, "error", err)
 	}

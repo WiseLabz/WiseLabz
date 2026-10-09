@@ -955,6 +955,8 @@ export const en = {
       },
       resumeDecisionRequired:
         'This step needs a decision before the run can resume. Choose an option and try again.',
+      resumeRunChanged:
+        'The run changed since you opened it. Review its current state and decide again.',
       actionName: 'Named action',
       actionUserDefined: 'User-defined',
       actionRequest: 'Request',

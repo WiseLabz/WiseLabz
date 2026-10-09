@@ -126,23 +126,32 @@ func (s *Store) RecordAuditAs(
 	targetID string,
 	detail any,
 ) error {
+	record, err := NewAuditRecord(actorUserID, instanceAdmin, action, targetType, targetID, detail)
+	if err != nil {
+		return err
+	}
+	return s.CreateAuditRecord(ctx, record)
+}
+
+// NewAuditRecord builds the row RecordAuditAs would insert, for callers that
+// write it inside their own transaction through CreateAuditRecord.
+func NewAuditRecord(actorUserID string, instanceAdmin bool, action, targetType, targetID string, detail any) (*AuditRecord, error) {
 	detailJSON := ""
 	if detail != nil {
 		data, err := json.Marshal(detail)
 		if err != nil {
-			return fmt.Errorf("marshal audit detail: %w", err)
+			return nil, fmt.Errorf("marshal audit detail: %w", err)
 		}
 		detailJSON = string(data)
 	}
-
-	return s.CreateAuditRecord(ctx, &AuditRecord{
+	return &AuditRecord{
 		ActorUserID: actorUserID,
 		ActorRole:   actorRoleLabel(actorUserID, instanceAdmin),
 		Action:      action,
 		TargetType:  targetType,
 		TargetID:    targetID,
 		Detail:      detailJSON,
-	})
+	}, nil
 }
 
 // actorRoleLabel records the actor's flat instance-admin role for the audit

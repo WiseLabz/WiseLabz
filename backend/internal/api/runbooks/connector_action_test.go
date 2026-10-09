@@ -374,6 +374,12 @@ func resumeWithBody(t *testing.T, h *Handler, userID, runbookID, runID, body str
 	return rr
 }
 
+// decisionBody is the resume body an operator sends after loading run: the
+// decision with the step it is for and the run's updatedAt as received.
+func decisionBody(decision, stepID string, run *store.RunbookRunRecord) string {
+	return fmt.Sprintf(`{"decision":%q,"stepId":%q,"updatedAt":%q}`, decision, stepID, run.UpdatedAt)
+}
+
 func waitRunState(t *testing.T, h *Handler, runID, want string) {
 	t.Helper()
 	deadline := time.Now().Add(10 * time.Second)
@@ -428,8 +434,13 @@ type unknownActionFixture struct {
 
 func newUnknownActionFixture(t *testing.T) unknownActionFixture {
 	t.Helper()
-	h := newTestHandler(t)
 	server, hits := countingServer(t)
+	return newUnknownActionFixtureOn(t, server, hits)
+}
+
+func newUnknownActionFixtureOn(t *testing.T, server *httptest.Server, hits *atomic.Int32) unknownActionFixture {
+	t.Helper()
+	h := newTestHandler(t)
 	conn := seedActionConnector(t, h, server.URL, serviceRescanRecipe)
 	user := operatorOn(t, h, conn)
 	steps := connectorActionStep(conn, "rescan", "", "") + `,{"kind":"manual","title":"Verify"}`
@@ -488,7 +499,7 @@ func TestResumeUnknownActionSendAgain(t *testing.T) {
 	f.h.Executor = runbookrun.New(runbookrun.Deps{Store: f.h.Store, Actions: f.h.ConnH, Grants: runbookrun.StoreGrants{Store: f.h.Store}, Spawner: goSpawner{}})
 	run, steps := seedUnknownActionRun(t, f.h, f.runbookID, f.user, f.fingerprint)
 
-	rr := resumeWithBody(t, f.h, f.user, f.runbookID, run.ID, `{"decision":"resend"}`)
+	rr := resumeWithBody(t, f.h, f.user, f.runbookID, run.ID, decisionBody("resend", steps[0].ID, run))
 	assertRunStatus(t, rr, http.StatusAccepted)
 	// The run sends the action, records success and then pauses on the manual step.
 	waitRunState(t, f.h, run.ID, "waiting_manual")
@@ -505,7 +516,7 @@ func TestResumeUnknownActionMarkDone(t *testing.T) {
 	f.h.Executor = runbookrun.New(runbookrun.Deps{Store: f.h.Store, Actions: f.h.ConnH, Grants: runbookrun.StoreGrants{Store: f.h.Store}, Spawner: goSpawner{}})
 	run, steps := seedUnknownActionRun(t, f.h, f.runbookID, f.user, f.fingerprint)
 
-	rr := resumeWithBody(t, f.h, f.user, f.runbookID, run.ID, `{"decision":"mark_done"}`)
+	rr := resumeWithBody(t, f.h, f.user, f.runbookID, run.ID, decisionBody("mark_done", steps[0].ID, run))
 	assertRunStatus(t, rr, http.StatusAccepted)
 	// The step is marked succeeded without a request, and the manual step after it runs.
 	waitRunState(t, f.h, run.ID, "waiting_manual")
@@ -549,4 +560,103 @@ func TestResumeUnknownLifecycleStepNeedsNoDecision(t *testing.T) {
 	}
 	assertNoRunAudit(t, h, "runbook.run.step_resent")
 	assertNoRunAudit(t, h, "runbook.run.step_marked_done")
+}
+
+func TestResumeUnknownActionDecisionNeedsStepAndRevision(t *testing.T) {
+	f := newUnknownActionFixture(t)
+	f.h.Executor = runbookrun.New(runbookrun.Deps{Store: f.h.Store, Actions: f.h.ConnH, Grants: runbookrun.StoreGrants{Store: f.h.Store}, Spawner: goSpawner{}})
+	run, steps := seedUnknownActionRun(t, f.h, f.runbookID, f.user, f.fingerprint)
+
+	for _, tt := range []struct {
+		name, body string
+		want       []string
+	}{
+		{"neither", `{"decision":"mark_done"}`, []string{"stepId", "updatedAt"}},
+		{"no step", fmt.Sprintf(`{"decision":"resend","updatedAt":%q}`, run.UpdatedAt), []string{"stepId"}},
+		{"no revision", fmt.Sprintf(`{"decision":"resend","stepId":%q}`, steps[0].ID), []string{"updatedAt"}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			rr := resumeWithBody(t, f.h, f.user, f.runbookID, run.ID, tt.body)
+			assertRunStatus(t, rr, http.StatusBadRequest)
+			if got := fieldErrorFields(t, rr); !reflect.DeepEqual(got, tt.want) {
+				t.Fatalf("field errors = %v, want %v; body=%s", got, tt.want, rr.Body.String())
+			}
+		})
+	}
+	assertRunState(t, f.h, run.ID, "failed")
+	if n := f.hits.Load(); n != 0 {
+		t.Fatalf("rejected resumes sent %d requests", n)
+	}
+	assertNoRunAudit(t, f.h, "runbook.run.step_resent")
+	assertNoRunAudit(t, f.h, "runbook.run.step_marked_done")
+	assertNoRunAudit(t, f.h, "runbook.run.resume")
+}
+
+func TestResumeUnknownActionRejectsDecisionMadeOnAnEarlierAttempt(t *testing.T) {
+	connector.AllowLoopbackForTest(t)
+	var hits atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		// The first request loses its response; any later one succeeds.
+		if hits.Add(1) == 1 {
+			conn, _, err := w.(http.Hijacker).Hijack()
+			if err == nil {
+				_ = conn.Close()
+			}
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	t.Cleanup(server.Close)
+	f := newUnknownActionFixtureOn(t, server, &hits)
+	f.h.Executor = runbookrun.New(runbookrun.Deps{Store: f.h.Store, Actions: f.h.ConnH, Grants: runbookrun.StoreGrants{Store: f.h.Store}, Spawner: goSpawner{}})
+	// A loads the run and sees the step unknown.
+	loaded, steps := seedUnknownActionRun(t, f.h, f.runbookID, f.user, f.fingerprint)
+	stepID := steps[0].ID
+	other := operatorOn(t, f.h, steps[0].ConnectorID)
+
+	// B resends with the same, still fresh, values; the new attempt is unknown again.
+	rr := resumeWithBody(t, f.h, other, f.runbookID, loaded.ID, decisionBody("resend", stepID, loaded))
+	assertRunStatus(t, rr, http.StatusAccepted)
+	waitRunState(t, f.h, loaded.ID, "failed")
+	current, after, err := f.h.Store.GetRunbookRun(context.Background(), loaded.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after[0].ID != stepID || after[0].State != "unknown" || current.UpdatedAt == loaded.UpdatedAt || hits.Load() != 1 {
+		t.Fatalf("after B: step=%+v run=%+v sends=%d; want the same step unknown again on a newer revision", after[0], current, hits.Load())
+	}
+
+	// A decides with what A saw: refused, nothing changes.
+	rr = resumeWithBody(t, f.h, f.user, f.runbookID, loaded.ID, decisionBody("mark_done", stepID, loaded))
+	assertRunStatus(t, rr, http.StatusConflict)
+	var changed struct {
+		Code      string `json:"code"`
+		Message   string `json:"message"`
+		State     string `json:"state"`
+		UpdatedAt string `json:"updatedAt"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &changed); err != nil {
+		t.Fatal(err)
+	}
+	if changed.Code != "run_changed" || changed.Message == "" || changed.State != "failed" || changed.UpdatedAt != current.UpdatedAt {
+		t.Fatalf("body = %+v, want run_changed with state failed and updatedAt %s", changed, current.UpdatedAt)
+	}
+	again, after, err := f.h.Store.GetRunbookRun(context.Background(), loaded.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again.State != "failed" || again.UpdatedAt != current.UpdatedAt || after[0].State != "unknown" || hits.Load() != 1 {
+		t.Fatalf("stale decision changed the run: %+v, %+v, sends=%d", again, after[0], hits.Load())
+	}
+	assertNoRunAudit(t, f.h, "runbook.run.step_marked_done")
+
+	// A retries with the current values and succeeds, with exactly one audit row.
+	rr = resumeWithBody(t, f.h, f.user, f.runbookID, loaded.ID, decisionBody("mark_done", stepID, current))
+	assertRunStatus(t, rr, http.StatusAccepted)
+	waitRunState(t, f.h, loaded.ID, "waiting_manual")
+	if hits.Load() != 1 {
+		t.Fatalf("mark_done sent %d requests in total, want 1", hits.Load())
+	}
+	assertStepDecisionAudit(t, f.h, "runbook.run.step_marked_done", loaded.ID, stepID, "mark_done")
+	assertStepDecisionAudit(t, f.h, "runbook.run.step_resent", loaded.ID, stepID, "resend")
 }

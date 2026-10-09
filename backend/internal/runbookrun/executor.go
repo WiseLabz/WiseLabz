@@ -120,6 +120,27 @@ var ErrDecisionRequired = errors.New("runbook run: the unknown connector action 
 // constant.
 var ErrInvalidDecision = errors.New("runbook run: unknown resume decision")
 
+// ErrDecisionFieldsRequired rejects a resume that gives a decision for an
+// unknown connector_action step without the step id and the run revision the
+// operator saw. Nothing changes.
+var ErrDecisionFieldsRequired = errors.New("runbook run: a resume decision needs the step id and the run revision it was made on")
+
+// ErrRunChanged rejects a resume whose expected run revision or first
+// unfinished step no longer matches the run. Nothing changes. It matches
+// store.ErrConflict too.
+var ErrRunChanged = fmt.Errorf("runbook run: the run changed since the decision was made: %w", store.ErrConflict)
+
+// ResumeExpectation ties a resume to what the caller saw. An empty field is not
+// checked. UpdatedAt is the run's updatedAt as the caller received it and is
+// compared inside the store transaction; StepID must be the run's first step
+// that has not succeeded. Audit is written in the resume transaction when, and
+// only when, a decision is applied to an unknown connector_action step.
+type ResumeExpectation struct {
+	StepID    string
+	UpdatedAt string
+	Audit     *store.AuditRecord
+}
+
 // ResumeDecision is the caller's choice for the first unfinished step of a
 // failed run when that step is an unknown connector_action step.
 type ResumeDecision string
@@ -162,10 +183,10 @@ type Store interface {
 	FailRunbookRunStep(ctx context.Context, runID, stepID, stepState, stepError, reason string) (*store.RunbookRunRecord, *store.RunbookRunStepRecord, error)
 	FinishRunbookRun(ctx context.Context, runID, stepID string) (*store.RunbookRunRecord, *store.RunbookRunStepRecord, error)
 	ConfirmRunbookRunStep(ctx context.Context, runID, stepID, confirmedBy string) error
-	ResumeRunbookRun(ctx context.Context, runID, expectedUpdatedAt, userID string) (*store.RunbookRunRecord, error)
+	ResumeRunbookRun(ctx context.Context, runID, expectedUpdatedAt, expectedStepID, userID string, audit *store.AuditRecord) (*store.RunbookRunRecord, error)
 	// ResumeRunbookRunMarkingStepDone resumes a failed run and marks its first
 	// unfinished unknown step succeeded, in one transaction.
-	ResumeRunbookRunMarkingStepDone(ctx context.Context, runID, expectedUpdatedAt, stepID, userID string) (*store.RunbookRunRecord, error)
+	ResumeRunbookRunMarkingStepDone(ctx context.Context, runID, expectedUpdatedAt, stepID, userID string, audit *store.AuditRecord) (*store.RunbookRunRecord, error)
 	CancelRunbookRun(ctx context.Context, id, cancelledBy string) error
 }
 
@@ -467,6 +488,19 @@ func (e *Executor) Confirm(ctx context.Context, runID, stepID, userID string) er
 // other first step. A durable decision is returned even when shutdown prevents
 // execution, so the caller can still audit the choice.
 func (e *Executor) Resume(ctx context.Context, runID, userID string, decision ResumeDecision) (*store.RunbookRunRecord, *StepDecision, error) {
+	return e.resume(ctx, runID, userID, decision, ResumeExpectation{}, false)
+}
+
+// ResumeExpecting is Resume tied to expect. ErrRunChanged means the run's
+// updatedAt or first unfinished step differs from the expectation; it changes
+// nothing. Unlike Resume, applying a decision to an unknown connector_action
+// step requires both expect.StepID and expect.UpdatedAt
+// (ErrDecisionFieldsRequired): the HTTP handler uses this one.
+func (e *Executor) ResumeExpecting(ctx context.Context, runID, userID string, decision ResumeDecision, expect ResumeExpectation) (*store.RunbookRunRecord, *StepDecision, error) {
+	return e.resume(ctx, runID, userID, decision, expect, true)
+}
+
+func (e *Executor) resume(ctx context.Context, runID, userID string, decision ResumeDecision, expect ResumeExpectation, requireFields bool) (*store.RunbookRunRecord, *StepDecision, error) {
 	if userID == "" {
 		return nil, nil, ErrNoActor
 	}
@@ -479,29 +513,60 @@ func (e *Executor) Resume(ctx context.Context, runID, userID string, decision Re
 	if err != nil {
 		return nil, nil, err
 	}
+	if expect.UpdatedAt != "" && run.UpdatedAt != expect.UpdatedAt {
+		return nil, nil, ErrRunChanged
+	}
 	if run.State != RunFailed {
 		return nil, nil, store.ErrConflict
 	}
 	step := firstUnfinished(steps)
+	if expect.StepID != "" && (step == nil || step.ID != expect.StepID) {
+		return nil, nil, ErrRunChanged
+	}
 	if step == nil || step.Kind != KindConnectorAction || step.State != StepUnknown {
-		return e.resumeFailed(ctx, run, userID, nil)
+		return e.resumeFailed(ctx, run, userID, nil, expect)
 	}
 	if decision == ResumeNone {
 		return nil, nil, ErrDecisionRequired
 	}
+	if requireFields && (expect.StepID == "" || expect.UpdatedAt == "") {
+		return nil, nil, ErrDecisionFieldsRequired
+	}
 	applied := &StepDecision{StepID: step.ID, Decision: decision}
 	if decision == ResumeMarkDone {
-		return e.resumeMarkingDone(ctx, run, step.ID, userID, applied)
+		return e.resumeMarkingDone(ctx, run, step.ID, userID, applied, expect)
 	}
-	return e.resumeFailed(ctx, run, userID, applied)
+	return e.resumeFailed(ctx, run, userID, applied, expect)
+}
+
+// expectedUpdatedAt is the revision the store transaction compares: the one
+// the caller saw when it gave one, else the one the executor just read.
+func expectedUpdatedAt(observed *store.RunbookRunRecord, expect ResumeExpectation) string {
+	if expect.UpdatedAt != "" {
+		return expect.UpdatedAt
+	}
+	return observed.UpdatedAt
+}
+
+// resumeConflict reports a store conflict as ErrRunChanged when the caller gave
+// an expectation, since the run then no longer matches what the caller saw.
+func resumeConflict(err error, expect ResumeExpectation) error {
+	if errors.Is(err, store.ErrConflict) && (expect.UpdatedAt != "" || expect.StepID != "") {
+		return ErrRunChanged
+	}
+	return err
 }
 
 // resumeFailed moves a failed run to running as userID and starts its
 // goroutine. applied is returned unchanged.
-func (e *Executor) resumeFailed(ctx context.Context, observed *store.RunbookRunRecord, userID string, applied *StepDecision) (*store.RunbookRunRecord, *StepDecision, error) {
-	run, err := e.store.ResumeRunbookRun(ctx, observed.ID, observed.UpdatedAt, userID)
+func (e *Executor) resumeFailed(ctx context.Context, observed *store.RunbookRunRecord, userID string, applied *StepDecision, expect ResumeExpectation) (*store.RunbookRunRecord, *StepDecision, error) {
+	var audit *store.AuditRecord
+	if applied != nil {
+		audit = expect.Audit
+	}
+	run, err := e.store.ResumeRunbookRun(ctx, observed.ID, expectedUpdatedAt(observed, expect), expect.StepID, userID, audit)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, resumeConflict(err, expect)
 	}
 	e.awaitStopped(ctx, run.ID)
 	e.publishRun(run)
@@ -518,10 +583,10 @@ func (e *Executor) resumeFailed(ctx context.Context, observed *store.RunbookRunR
 // resumeMarkingDone marks the unknown step stepID succeeded and resumes the
 // run as userID in one store transaction, then publishes both and starts the
 // goroutine, which continues with the next step.
-func (e *Executor) resumeMarkingDone(ctx context.Context, observed *store.RunbookRunRecord, stepID, userID string, applied *StepDecision) (*store.RunbookRunRecord, *StepDecision, error) {
-	run, err := e.store.ResumeRunbookRunMarkingStepDone(ctx, observed.ID, observed.UpdatedAt, stepID, userID)
+func (e *Executor) resumeMarkingDone(ctx context.Context, observed *store.RunbookRunRecord, stepID, userID string, applied *StepDecision, expect ResumeExpectation) (*store.RunbookRunRecord, *StepDecision, error) {
+	run, err := e.store.ResumeRunbookRunMarkingStepDone(ctx, observed.ID, expectedUpdatedAt(observed, expect), stepID, userID, expect.Audit)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, resumeConflict(err, expect)
 	}
 	e.awaitStopped(ctx, run.ID)
 	if _, steps, err := e.store.GetRunbookRun(ctx, run.ID); err == nil {
