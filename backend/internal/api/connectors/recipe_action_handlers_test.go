@@ -8,10 +8,12 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"sync/atomic"
 	"testing"
 
+	"github.com/WiseLabz/wiselabz/internal/api/apitest"
 	"github.com/WiseLabz/wiselabz/internal/auth"
 	"github.com/WiseLabz/wiselabz/internal/store"
 )
@@ -443,5 +445,69 @@ func TestBulkRestartUsesOnlyCustomServiceRestartAndAuditsRequest(t *testing.T) {
 	alerts, _, err := h.Store.ListAlerts(context.Background(), entityOnly.ID, "", "", "", 0, 10)
 	if err != nil || len(alerts) != 0 {
 		t.Fatalf("entity-only bulk alerts=%+v err=%v", alerts, err)
+	}
+}
+
+func TestListReportsSameCapabilitiesAndActionsAsGet(t *testing.T) {
+	h := newTestHandler(t)
+	user := apitest.NewUser(t, h.Store, "list-viewer")
+	recipe := strings.Replace(handlerActionRecipe(), "actions:\n  rescan:", "actions:\n  restart: {method: POST, path: /service-restart}\n  rescan:", 1)
+	custom := seedRecipeActionConnectorWithRecipe(t, h, "https://custom.example.com", recipe)
+	builtIn := seedLifecyclePreviewConnector(t, h, "proxmox")
+	for _, record := range []*store.ConnectorRecord{custom, builtIn} {
+		apitest.GrantConnectorRole(t, h.Store, user, record.ID, "viewer")
+	}
+	withUser := func(r *http.Request) *http.Request {
+		return r.WithContext(auth.ContextWithUser(r.Context(), user, false))
+	}
+
+	listRecorder := httptest.NewRecorder()
+	h.List(listRecorder, withUser(httptest.NewRequest(http.MethodGet, "/api/connectors", nil)))
+	if listRecorder.Code != http.StatusOK {
+		t.Fatalf("list status=%d body=%s", listRecorder.Code, listRecorder.Body.String())
+	}
+	for _, leaked := range []string{"configData", "query-secret", "header-secret", "preview-secret"} {
+		if strings.Contains(listRecorder.Body.String(), leaked) {
+			t.Fatalf("list response leaks %q: %s", leaked, listRecorder.Body.String())
+		}
+	}
+	var rows []connectorWithRole
+	if err := json.Unmarshal(listRecorder.Body.Bytes(), &rows); err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 2 {
+		t.Fatalf("list rows=%d body=%s", len(rows), listRecorder.Body.String())
+	}
+	for _, row := range rows {
+		request := httptest.NewRequest(http.MethodGet, "/api/connectors/"+row.ID, nil)
+		request.SetPathValue("id", row.ID)
+		getRecorder := httptest.NewRecorder()
+		h.Get(getRecorder, withUser(request))
+		if getRecorder.Code != http.StatusOK {
+			t.Fatalf("get %s status=%d body=%s", row.ID, getRecorder.Code, getRecorder.Body.String())
+		}
+		var byID connectorWithRole
+		if err := json.Unmarshal(getRecorder.Body.Bytes(), &byID); err != nil {
+			t.Fatal(err)
+		}
+		if !reflect.DeepEqual(row.Capabilities, byID.Capabilities) || !reflect.DeepEqual(row.Actions, byID.Actions) {
+			t.Errorf("%s: list caps=%+v actions=%+v, get caps=%+v actions=%+v", row.Name, row.Capabilities, row.Actions, byID.Capabilities, byID.Actions)
+		}
+		switch row.ID {
+		case custom.ID:
+			names := map[string]bool{}
+			for _, action := range row.Actions {
+				if !action.EntityScope {
+					names[action.Name] = true
+				}
+			}
+			if len(names) != 2 || !names["restart"] || !names["rescan"] || !row.Capabilities.Restart {
+				t.Errorf("custom row caps=%+v actions=%+v, want restart and rescan", row.Capabilities, row.Actions)
+			}
+		case builtIn.ID:
+			if !row.Capabilities.Restart {
+				t.Errorf("built-in row caps=%+v, want restart", row.Capabilities)
+			}
+		}
 	}
 }

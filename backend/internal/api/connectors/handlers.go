@@ -48,9 +48,25 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// The list query blanks config_data, but capabilities and actions depend on
+	// it: fetch it for the page in one query and use it for that computation only.
+	ids := make([]string, len(rows))
+	for i, c := range rows {
+		ids[i] = c.ID
+	}
+	configs, err := h.Store.ListConnectorConfigData(r.Context(), ids)
+	if err != nil {
+		httputil.Errorf(w, err)
+		return
+	}
+
 	out := make([]connectorWithRole, 0, len(rows))
 	for _, c := range rows {
-		out = append(out, withRole(&c.ConnectorRecord, c.Role))
+		row := withRole(&c.ConnectorRecord, c.Role)
+		withConfig := c.ConnectorRecord
+		withConfig.ConfigData = configs[c.ID]
+		row.Capabilities, row.Actions = instanceOperations(&withConfig)
+		out = append(out, row)
 	}
 
 	// Spec: GET /connectors returns a bare Connector[] (see openapi.yaml).

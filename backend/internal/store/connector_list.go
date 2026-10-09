@@ -39,6 +39,39 @@ func (s *Store) ListConnectorsByID(ctx context.Context, ids []string) (map[strin
 	return connectors, nil
 }
 
+// ListConnectorConfigData returns the stored config_data of the requested
+// connectors keyed by ID, in one query. Ids that do not exist are absent from
+// the result. It exists for list views that blank config_data in the row query
+// but still need the stored configuration to derive instance capabilities.
+func (s *Store) ListConnectorConfigData(ctx context.Context, ids []string) (map[string]string, error) {
+	configs := make(map[string]string, len(ids))
+	if len(ids) == 0 {
+		return configs, nil
+	}
+
+	args := make([]any, len(ids))
+	for i, id := range ids {
+		args[i] = id
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT id, config_data FROM connectors WHERE id IN (`+placeholders(len(ids))+`)`, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list connector config data: %w", err)
+	}
+	defer rows.Close() //nolint:errcheck
+
+	for rows.Next() {
+		var id, configData string
+		if err := rows.Scan(&id, &configData); err != nil {
+			return nil, fmt.Errorf("scan: %w", err)
+		}
+		configs[id] = configData
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate connector config data: %w", err)
+	}
+	return configs, nil
+}
+
 // ListConnectors returns a paginated list of connectors.
 func (s *Store) ListConnectors(ctx context.Context, offset, limit int) ([]ConnectorRecord, int, error) {
 	return paginatedQuery(ctx, s.db, "connectors", connectorColumns, "", nil, "created_at DESC", limit, offset, scanConnector)
