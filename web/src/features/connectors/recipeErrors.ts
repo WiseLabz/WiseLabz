@@ -11,7 +11,7 @@ export type RecipeErrorTarget = {
 };
 
 export function recipeFieldId(path: (string | number)[]): string {
-  return `recipe-field-${path.join('-')}`;
+  return `recipe-field-${path.map((part) => String(part).replace(/-/g, '--')).join('-')}`;
 }
 
 // Locations name recipe nodes, not validation rules. Map names can themselves contain dots.
