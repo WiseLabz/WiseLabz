@@ -177,6 +177,8 @@ func validateActionTemplate(value, location string, entity *RecipeEntity) []Reci
 		name := strings.TrimPrefix(placeholder.name, "attr.")
 		if _, ok := entity.Attributes[name]; !ok {
 			issues = append(issues, RecipeIssue{Location: location, Message: fmt.Sprintf("placeholder {attr.%s} does not name an attribute mapped by this endpoint", name)})
+		} else if strings.ContainsAny(name, "?{}") {
+			issues = append(issues, RecipeIssue{Location: location, Message: fmt.Sprintf("placeholder {attr.%s} names an attribute that cannot be used in a placeholder; map it under a name without ?, { or }", name)})
 		}
 	}
 	return issues

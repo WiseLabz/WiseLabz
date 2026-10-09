@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"mime"
@@ -634,35 +635,33 @@ func isActionText(contentType string) bool {
 
 func dropControlCharacters(text string) string {
 	return strings.Map(func(r rune) rune {
-		if unicode.IsControl(r) {
+		if unicode.IsControl(r) || unicode.Is(unicode.Cf, r) {
 			return -1
 		}
 		return r
 	}, text)
 }
 
-func (c *Connector) runLifecycleAction(ctx context.Context, config map[string]any, verb, entityRef string) error {
-	resolved, err := c.ResolveAction(config, verb, entityRef, connector.PreviousSnapshot(config))
-	if err != nil {
-		return err
-	}
-	_, err = c.SendAction(ctx, config, resolved)
-	return err
+// Restart, Start and Stop exist only to satisfy the connector lifecycle
+// interfaces, which is how the registry advertises the verbs a recipe declares.
+// They never send anything: a custom connector's operations go through the
+// handler path (ResolveAction, then SendAction), which resolves the request
+// against the stored snapshot, checks the fingerprint for runs and audits.
+var errLifecycleViaOperations = errors.New("custom connector lifecycle actions run through the connector operations path")
+
+// Restart fails closed; see errLifecycleViaOperations.
+func (c *Connector) Restart(context.Context, map[string]any, string) error {
+	return errLifecycleViaOperations
 }
 
-// Restart sends the recipe-declared restart request.
-func (c *Connector) Restart(ctx context.Context, config map[string]any, entityRef string) error {
-	return c.runLifecycleAction(ctx, config, "restart", entityRef)
+// Start fails closed; see errLifecycleViaOperations.
+func (c *Connector) Start(context.Context, map[string]any, string) error {
+	return errLifecycleViaOperations
 }
 
-// Start sends the recipe-declared start request.
-func (c *Connector) Start(ctx context.Context, config map[string]any, entityRef string) error {
-	return c.runLifecycleAction(ctx, config, "start", entityRef)
-}
-
-// Stop sends the recipe-declared stop request.
-func (c *Connector) Stop(ctx context.Context, config map[string]any, entityRef string) error {
-	return c.runLifecycleAction(ctx, config, "stop", entityRef)
+// Stop fails closed; see errLifecycleViaOperations.
+func (c *Connector) Stop(context.Context, map[string]any, string) error {
+	return errLifecycleViaOperations
 }
 
 var _ connector.InstanceCapabilities = (*Connector)(nil)

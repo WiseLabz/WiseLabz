@@ -363,31 +363,27 @@ func TestCustomCapabilitiesArePerInstance(t *testing.T) {
 	}
 }
 
-func TestCustomLifecycleVerbsSendDeclaredRequestOnce(t *testing.T) {
-	for _, verb := range []string{"restart", "start", "stop"} {
-		t.Run(verb, func(t *testing.T) {
-			var calls atomic.Int32
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				calls.Add(1)
-				if r.Method != http.MethodPost || r.URL.Path != "/api/"+verb {
-					t.Errorf("request = %s %s", r.Method, r.URL.Path)
-				}
-				w.WriteHeader(http.StatusNoContent)
-			}))
-			defer server.Close()
-			actions := fmt.Sprintf("actions:\n  %s: {method: POST, path: /api/%s}\n", verb, verb)
-			config := map[string]any{"url": server.URL, "recipe": recipeForActionExecution("  mode: none", actions)}
-			conn := &Connector{client: server.Client(), capabilityConfig: actionCapabilityConfig(config)}
-			operation, ok := connector.LifecycleOp(conn, verb)
-			if !ok {
-				t.Fatalf("LifecycleOp(%q) unsupported", verb)
-			}
-			if err := operation(context.Background(), config, ""); err != nil {
-				t.Fatalf("lifecycle operation error = %v", err)
-			}
-			if calls.Load() != 1 {
-				t.Errorf("request count = %d, want 1", calls.Load())
-			}
-		})
+func TestCustomLifecycleMethodsFailClosedAndSendNothing(t *testing.T) {
+	var calls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		calls.Add(1)
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+	actions := "actions:\n  restart: {method: POST, path: /api/restart}\n  start: {method: POST, path: /api/start}\n  stop: {method: POST, path: /api/stop}\n"
+	config := map[string]any{"url": server.URL, "recipe": recipeForActionExecution("  mode: none", actions)}
+	conn := &Connector{client: server.Client(), capabilityConfig: actionCapabilityConfig(config)}
+	for verb, call := range map[string]func(context.Context, map[string]any, string) error{
+		"restart": conn.Restart, "start": conn.Start, "stop": conn.Stop,
+	} {
+		if err := call(context.Background(), config, ""); err == nil {
+			t.Errorf("%s returned no error, want one", verb)
+		}
+		if _, ok := connector.LifecycleOp(conn, verb); !ok {
+			t.Errorf("LifecycleOp(%q) unsupported, the verb must still be advertised", verb)
+		}
+	}
+	if calls.Load() != 0 {
+		t.Errorf("request count = %d, want 0", calls.Load())
 	}
 }

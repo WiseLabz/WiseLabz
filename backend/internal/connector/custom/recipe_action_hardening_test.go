@@ -234,3 +234,50 @@ func TestActionTextExcerptJudgesOnlyTheFirstBytes(t *testing.T) {
 		t.Errorf("short invalid body excerpt = %q, want empty", got)
 	}
 }
+
+func TestActionTextExcerptDropsFormatCharacters(t *testing.T) {
+	got := actionTextExcerpt("text/plain", []byte("before\u202eevil\u2066x\u200bafter"))
+	if got != "beforeevilxafter" {
+		t.Errorf("excerpt = %q, want the text without bidirectional or zero-width characters", got)
+	}
+}
+
+func TestParseRecipeRejectsUnusableAttributeNamesInPlaceholders(t *testing.T) {
+	recipe := func(attribute, action string) string {
+		return `version: 1
+category: media
+auth: {mode: none}
+endpoints:
+  - name: items
+    path: /api/items
+    method: GET
+    items: items
+    entity:
+      kind: item
+      name: name
+      external_id: id
+      attributes:
+        "` + attribute + `": {path: size}
+      actions:
+        act:
+          method: POST
+` + action
+	}
+	for _, tt := range []struct{ name, attribute, action, location string }{
+		{"path", "a?b", "          path: \"/items/{attr.a?b}/x\"\n", "endpoints[0].entity.actions.act.path"},
+		{"query value", "a?b", "          path: /items/x\n          query: {k: \"{attr.a?b}\"}\n", "endpoints[0].entity.actions.act.query.k"},
+		{"body string", "a{b", "          path: /items/x\n          body: {k: \"{attr.a{b}\"}\n", "endpoints[0].entity.actions.act.body.k"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := ParseRecipe(recipe(tt.attribute, tt.action))
+			want := "placeholder {attr." + tt.attribute + "} names an attribute that cannot be used in a placeholder"
+			if err == nil || !strings.Contains(err.Error(), tt.location) || !strings.Contains(err.Error(), want) {
+				t.Fatalf("ParseRecipe() error = %v, want %q at %s", err, want, tt.location)
+			}
+		})
+	}
+	mapped := recipe("a?b", "          path: /items/x\n")
+	if _, err := ParseRecipe(mapped); err != nil {
+		t.Fatalf("mapping an attribute named a?b without referencing it was rejected: %v", err)
+	}
+}
