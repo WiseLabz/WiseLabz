@@ -511,3 +511,173 @@ func TestListReportsSameCapabilitiesAndActionsAsGet(t *testing.T) {
 		}
 	}
 }
+
+const noSendRecipe = `version: 1
+category: other
+auth: {mode: query, name: api_token}
+endpoints:
+  - name: items
+    path: /items
+    method: GET
+    items: '@this'
+    entity:
+      kind: item
+      name: title
+      external_id: id
+      attributes:
+        rack: {path: rack}
+      actions:
+        restart:
+          method: PATCH
+          path: /items/{external_id}/restart
+          query: {slot: "{attr.rack}"}
+        rescan:
+          method: POST
+          path: /items/{external_id}/rescan
+          query: {slot: "{attr.rack}"}
+`
+
+func TestInvalidEntityTargetsSendNothingOnTheMutatingPath(t *testing.T) {
+	h := newTestHandler(t)
+	var calls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		calls.Add(1)
+	}))
+	defer server.Close()
+	record := seedRecipeActionConnectorWithRecipe(t, h, server.URL, noSendRecipe)
+	data := `{"serviceName":"library","entities":[` +
+		`{"kind":"item","name":"Spaced","externalId":"web 1","attributes":{"rack":"r1"}},` +
+		`{"kind":"item","name":"Traversal","externalId":"../admin","attributes":{"rack":"r1"}},` +
+		`{"kind":"item","name":"No rack","externalId":"no-rack","attributes":{}}]}`
+	if err := h.Store.CreateSnapshot(context.Background(), &store.SnapshotRecord{ConnectorID: record.ID, Data: data, FetchedAt: "2026-10-08T00:00:00Z"}); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name, entityRef string
+		// namedMessage and restartMessage are substrings the 400 body must contain.
+		namedMessage, restartMessage string
+	}{
+		{"not in the snapshot", "ghost", "ghost", ""},
+		{"whitespace in the external id", "web 1", "web 1", ""},
+		{"parent traversal in the external id", "../admin", "", ""},
+		{"missing attribute", "no-rack", "rack", "rack"},
+	} {
+		for _, named := range []bool{true, false} {
+			kind := "restart"
+			message := tc.restartMessage
+			if named {
+				kind, message = "named", tc.namedMessage
+			}
+			t.Run(tc.name+"/"+kind, func(t *testing.T) {
+				var request *http.Request
+				response := httptest.NewRecorder()
+				if named {
+					request = actionHandlerRequest(record.ID, "rescan", "/", `{"entityRef":"`+tc.entityRef+`"}`, "operator", false)
+					request.Header.Set("X-Elevation-Token", issueTestElevation(t, h, "operator", "connector.action", record.ID+":rescan"))
+					h.Action(response, request)
+				} else {
+					request = actionHandlerRequest(record.ID, "", "/", `{"entityRef":"`+tc.entityRef+`"}`, "operator", false)
+					request.Header.Set("X-Elevation-Token", issueTestElevation(t, h, "operator", "connector.restart", ""))
+					h.RestartPreview(response, request)
+				}
+				if response.Code != http.StatusBadRequest || (message != "" && !strings.Contains(response.Body.String(), message)) {
+					t.Fatalf("status=%d body=%s, want 400 naming %q", response.Code, response.Body.String(), message)
+				}
+				if calls.Load() != 0 {
+					t.Fatalf("service received %d requests", calls.Load())
+				}
+				for _, action := range []string{"connector.action", "connector.restart"} {
+					if audits, _, err := h.Store.ListAuditRecords(context.Background(), action, "connector", "", "", 0, 10); err != nil || len(audits) != 0 {
+						t.Fatalf("%s audits=%+v err=%v, want none", action, audits, err)
+					}
+				}
+				if alerts, _, err := h.Store.ListAlerts(context.Background(), record.ID, "", "", "", 0, 10); err != nil || len(alerts) != 0 {
+					t.Fatalf("alerts=%+v err=%v, want none", alerts, err)
+				}
+			})
+		}
+	}
+}
+
+func TestNamedEntityActionIgnoresExtraRequestFields(t *testing.T) {
+	h := newTestHandler(t)
+	var seen struct {
+		method, escapedPath, rawQuery, body, evil string
+		calls                                     int
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		seen.calls++
+		seen.method, seen.escapedPath, seen.rawQuery, seen.body = r.Method, r.URL.EscapedPath(), r.URL.RawQuery, string(body)
+		seen.evil = r.Header.Get("X-Evil")
+		_, _ = io.WriteString(w, "done")
+	}))
+	defer server.Close()
+	recipe := strings.Replace(handlerActionRecipe(),
+		"          path: /items/{external_id}/rescan\n          query: {node: \"{attr.node}\"}\n",
+		"          path: /items/{external_id}/rescan\n          query: {node: \"{attr.node}\"}\n          body: {scope: \"{external_id}\"}\n", 1)
+	record := seedRecipeActionConnectorWithRecipe(t, h, server.URL, recipe)
+	seedRecipeActionSnapshot(t, h, record.ID)
+	payload := `{"entityRef":"db|1","path":"/evil","method":"DELETE","query":{"x":"1"},"body":{"y":2},"headers":{"X-Evil":"1"}}`
+	request := actionHandlerRequest(record.ID, "rescan", "/", payload, "operator", false)
+	request.Header.Set("X-Elevation-Token", issueTestElevation(t, h, "operator", "connector.action", record.ID+":rescan"))
+	response := httptest.NewRecorder()
+	h.Action(response, request)
+	if response.Code != http.StatusOK || seen.calls != 1 {
+		t.Fatalf("status=%d calls=%d body=%s", response.Code, seen.calls, response.Body.String())
+	}
+	if seen.method != http.MethodPost || seen.escapedPath != "/items/db%7C1/rescan" ||
+		seen.rawQuery != "api_token=query-secret&node=node-1" || seen.body != `{"scope":"db|1"}` || seen.evil != "" {
+		t.Fatalf("upstream request = %s %s ?%s body=%q X-Evil=%q; want only what the recipe declares", seen.method, seen.escapedPath, seen.rawQuery, seen.body, seen.evil)
+	}
+}
+
+func TestBulkRestartFailureKeepsServiceResponseOutOfResultAlertAndAudit(t *testing.T) {
+	const sentinel = "BULK-SENTINEL-TEXT"
+	h := newTestHandler(t)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/plain")
+		w.WriteHeader(http.StatusConflict)
+		_, _ = io.WriteString(w, sentinel)
+	}))
+	defer server.Close()
+	serviceRecipe := strings.Replace(handlerActionRecipe(), "actions:\n  rescan:", "actions:\n  restart: {method: POST, path: /service-restart}\n  rescan:", 1)
+	service := seedRecipeActionConnectorWithRecipe(t, h, server.URL, serviceRecipe)
+	user := "bulk-operator"
+	if _, err := h.Store.UpsertConnectorGrant(context.Background(), user, service.ID, "operator"); err != nil {
+		t.Fatal(err)
+	}
+	request := httptest.NewRequest(http.MethodPost, "/api/connectors/bulk-restart", strings.NewReader(`{"ids":["`+service.ID+`"]}`))
+	request = request.WithContext(auth.ContextWithUser(request.Context(), user, false))
+	response := httptest.NewRecorder()
+	h.BulkRestart(response, request)
+	var body struct {
+		Results []bulkItemResult `json:"results"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+		t.Fatalf("bulk body=%s: %v", response.Body.String(), err)
+	}
+	if len(body.Results) != 1 || body.Results[0].ID != service.ID || body.Results[0].Status != "error" {
+		t.Fatalf("bulk results=%+v, want an error for %s", body.Results, service.ID)
+	}
+	if strings.Contains(response.Body.String(), sentinel) {
+		t.Fatalf("bulk response carries the service response text: %s", response.Body.String())
+	}
+	alerts, _, err := h.Store.ListAlerts(context.Background(), service.ID, "", "", "", 0, 10)
+	if err != nil || len(alerts) != 1 {
+		t.Fatalf("alerts=%+v err=%v, want one", alerts, err)
+	}
+	audits, _, err := h.Store.ListAuditRecords(context.Background(), "", "", "", "", 0, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, stored := range []any{alerts[0].Title, alerts[0].Description, audits} {
+		encoded, err := json.Marshal(stored)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(string(encoded), sentinel) {
+			t.Fatalf("service response text was persisted: %s", encoded)
+		}
+	}
+}

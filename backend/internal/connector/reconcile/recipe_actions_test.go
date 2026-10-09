@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/WiseLabz/wiselabz/internal/config"
+	"github.com/WiseLabz/wiselabz/internal/connector"
 	_ "github.com/WiseLabz/wiselabz/internal/connector/custom"
 	"github.com/WiseLabz/wiselabz/internal/connector/reconcile"
 	"github.com/WiseLabz/wiselabz/internal/store"
@@ -95,6 +96,10 @@ func TestReconcileAuditsDeclaredRecipeActionChanges(t *testing.T) {
 		t.Fatalf("create action audit = %+v", rows)
 	}
 
+	if cfg := storedConfig(t, only(t, s, e.Name)); !connector.SupportsLifecycleVerb("custom", "restart", cfg) {
+		t.Fatalf("stored connector does not support restart; config keys: %v", cfg)
+	}
+
 	unchanged := run(t, s, nil, e)
 	if unchanged[0].Action != reconcile.Unchanged {
 		t.Fatalf("same declaration result = %+v, want unchanged", unchanged)
@@ -121,5 +126,8 @@ func TestReconcileAuditsDeclaredRecipeActionChanges(t *testing.T) {
 	rows = actionAuditRows(t, s, connectorID)
 	if len(rows) != 3 || !hasActionAuditDiff(rows, []string{}, []string{}, []string{"service.restart"}) {
 		t.Fatalf("removed action audit = %+v", rows)
+	}
+	if cfg := storedConfig(t, only(t, s, e.Name)); connector.SupportsLifecycleVerb("custom", "restart", cfg) {
+		t.Fatal("stored connector still supports restart after its action was removed")
 	}
 }
