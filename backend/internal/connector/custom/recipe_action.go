@@ -447,8 +447,15 @@ func RedactedActionRequest(config map[string]any, action *connector.ResolvedActi
 	}
 	request := action.Request
 	request.Headers = cloneActionHeaders(request.Headers)
+	secretHeaders := &http.Request{Header: make(http.Header)}
+	setHeaders(secretHeaders, config)
+	recipe, recipeErr := recipeFromConfig(config)
+	if recipeErr == nil && recipe.Auth.Mode == "header" {
+		secretHeaders.Header.Set(recipe.Auth.Name, "")
+	}
 	for name, value := range request.Headers {
-		if isSensitiveActionHeader(name) || isSensitiveActionHeaderValue(value) {
+		_, configuredSecret := secretHeaders.Header[http.CanonicalHeaderKey(name)]
+		if configuredSecret || isSensitiveActionHeader(name) || isSensitiveActionHeaderValue(value) {
 			request.Headers[name] = "[redacted]"
 		}
 	}
@@ -458,7 +465,7 @@ func RedactedActionRequest(config map[string]any, action *connector.ResolvedActi
 		return request
 	}
 	parsed.User = nil
-	if recipe, err := recipeFromConfig(config); err == nil && recipe.Auth.Mode == "query" && recipe.Auth.Name != "" {
+	if recipeErr == nil && recipe.Auth.Mode == "query" && recipe.Auth.Name != "" {
 		query := parsed.Query()
 		query.Del(recipe.Auth.Name)
 		parsed.RawQuery = query.Encode()
@@ -565,7 +572,13 @@ func (c *Connector) SendAction(ctx context.Context, config map[string]any, actio
 		return result, safeActionError(config, fmt.Errorf("API returned %d (expected a 2xx status)", resp.StatusCode))
 	}
 	if readErr != nil {
-		return result, safeActionError(config, fmt.Errorf("read response: %w", readErr))
+		if ctx.Err() != nil {
+			return result, safeActionError(config, connector.MapTransportError(ctx.Err()))
+		}
+		if connector.IsTimeout(readErr) {
+			return result, safeActionError(config, connector.MapTransportError(readErr))
+		}
+		return result, safeActionError(config, connector.NewMalformedResponseError(readErr))
 	}
 	return result, nil
 }
