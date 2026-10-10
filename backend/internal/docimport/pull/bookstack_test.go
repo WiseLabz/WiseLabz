@@ -423,3 +423,22 @@ func TestLinkAttachmentSchemeAllowlistAndInjection(t *testing.T) {
 		t.Fatalf("extra Markdown in %s", got)
 	}
 }
+
+func TestLinkAttachmentBracketsAreEncoded(t *testing.T) {
+	base, err := url.Parse("https://wiki.example")
+	if err != nil {
+		t.Fatal(err)
+	}
+	mapper := &bookMapper{base: base, limits: docimport.DefaultLimits(), targets: map[string]string{}, linkRefs: map[string]bool{}, siteLinks: map[string]string{}, files: map[string][]byte{}}
+	page := portableNode{ID: 1, Name: "Page", Markdown: "body", Attachments: []portableFile{
+		{ID: 2, Name: "L", Link: "https://h/?q=[[bsexport:page:7]]\\`x`"}}}
+	if err := mapper.node(page, "page-1", "page", 1); err != nil {
+		t.Fatal(err)
+	}
+	mapper.targets["page:7"] = "other.md"
+	got := mapper.rewrite(mapper.notes[0])
+	if strings.Contains(got, "other.md") || strings.ContainsAny(mapper.targets["attachment:2"], "[]\\`") ||
+		!strings.Contains(got, "%5B%5Bbsexport:page:7%5D%5D%5C%60x%60") {
+		t.Fatalf("placeholder survived in link: %s (target %q)", got, mapper.targets["attachment:2"])
+	}
+}

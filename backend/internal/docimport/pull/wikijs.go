@@ -41,7 +41,8 @@ func NewWikiJS(rawURL, apiKey string, skipTLS bool, limits docimport.Limits) (*W
 		authorization: "Bearer " + apiKey}, limits: limits}, nil
 }
 
-const wikiGraphQLLimit = 10 << 20
+// wikiGraphQLLimit is a variable so tests can shrink it.
+var wikiGraphQLLimit int64 = 10 << 20
 
 type wikiListItem struct {
 	ID          int    `json:"id"`
@@ -169,7 +170,7 @@ func (w *WikiJS) listAssets(ctx context.Context) ([]wikiAsset, error) {
 			return nil, err
 		}
 		for _, f := range subfolders.Assets.Folders {
-			if seen[f.ID] {
+			if seen[f.ID] || !safeSegment(f.Slug) {
 				continue
 			}
 			seen[f.ID] = true
@@ -183,6 +184,12 @@ func (w *WikiJS) listAssets(ctx context.Context) ([]wikiAsset, error) {
 		}
 	}
 	return assets, nil
+}
+
+// safeSegment accepts a single path component: remote folder slugs and file
+// names must not collapse into, or climb out of, their parent when joined.
+func safeSegment(s string) bool {
+	return s != "" && s != "." && s != ".." && !strings.ContainsAny(s, "/\\")
 }
 
 // safeSitePath cleans a remote-provided relative path and rejects traversal.
@@ -271,8 +278,19 @@ func (w *WikiJS) Fetch(ctx context.Context, destination string, progress func(Pr
 	}
 	defer func() { _ = f.Close() }()
 	zw := zip.NewWriter(f)
+	warnings := []docimport.Issue{}
+	warn := func(p, msg string) { warnings = append(warnings, docimport.Issue{Path: p, Message: msg}) }
 	var written int64
+	names := map[string]bool{}
+	// add skips a repeated name (compared case-insensitively): OpenArchive
+	// rejects archives with duplicate entries.
 	add := func(name string, data []byte) error {
+		key := strings.ToLower(name)
+		if names[key] {
+			warn(name, "duplicate path skipped")
+			return nil
+		}
+		names[key] = true
 		written += int64(len(data))
 		if written > w.limits.MaxBytes {
 			return docimport.ErrTooLarge
@@ -285,8 +303,6 @@ func (w *WikiJS) Fetch(ctx context.Context, destination string, progress func(Pr
 		return err
 	}
 
-	warnings := []docimport.Issue{}
-	warn := func(p, msg string) { warnings = append(warnings, docimport.Issue{Path: p, Message: msg}) }
 	sort.SliceStable(pages, func(i, j int) bool { return pages[i].ID < pages[j].ID })
 	def, done := defaultLocale(pages), 0
 	for _, item := range pages {
@@ -303,6 +319,11 @@ func (w *WikiJS) Fetch(ctx context.Context, destination string, progress func(Pr
 			continue
 		}
 		page, err := w.page(ctx, item.ID)
+		if errors.Is(err, errResponseTooLarge) {
+			warn(sitePath, "page exceeds note size limit; skipped")
+			progress(Progress{Done: done, Total: total})
+			continue
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -329,9 +350,12 @@ func (w *WikiJS) Fetch(ctx context.Context, destination string, progress func(Pr
 			return nil, err
 		}
 		done++
-		rel, ok := safeSitePath(path.Join(asset.folder, asset.Filename))
+		rel, ok := "", safeSegment(asset.Filename)
+		if ok {
+			rel, ok = safeSitePath(path.Join(asset.folder, asset.Filename))
+		}
 		switch {
-		case !ok || strings.Contains(asset.Filename, "/"):
+		case !ok:
 			warn(asset.Filename, "asset skipped: unsupported file name")
 		case asset.FileSize > w.limits.MaxAttachmentBytes:
 			warn(rel, fmt.Sprintf("asset is larger than %d MiB; skipped", w.limits.MaxAttachmentBytes>>20))
@@ -339,6 +363,8 @@ func (w *WikiJS) Fetch(ctx context.Context, destination string, progress func(Pr
 			data, err := w.client.get(ctx, "/"+escapePath(rel), w.limits.MaxAttachmentBytes)
 			if errors.Is(err, errNotFound) {
 				warn(rel, "asset could not be downloaded; skipped")
+			} else if errors.Is(err, errResponseTooLarge) {
+				warn(rel, fmt.Sprintf("asset is larger than %d MiB; skipped", w.limits.MaxAttachmentBytes>>20))
 			} else if err != nil {
 				return nil, err
 			} else if err := add(rel, data); err != nil {

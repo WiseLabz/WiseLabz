@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -288,5 +289,159 @@ func TestLastRetryAfterIsNotSlept(t *testing.T) {
 	}
 	if calls.Load() != maxAttempts || time.Since(start) > 5*time.Second {
 		t.Errorf("calls = %d, elapsed %s", calls.Load(), time.Since(start))
+	}
+}
+
+// customWikiJS serves fixed page and asset listings; every single(id) returns
+// the page JSON registered for that id and folder walks are recorded.
+func customWikiJS(t *testing.T, list string, pages map[int]string, folders string, assets map[int]string, walked map[int]bool) *httptest.Server {
+	t.Helper()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			if r.URL.Path == "/ok.png" {
+				_, _ = w.Write([]byte(wikiPNG))
+				return
+			}
+			http.NotFound(w, r)
+			return
+		}
+		var body struct {
+			Query     string         `json:"query"`
+			Variables map[string]any `json:"variables"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		id, _ := body.Variables["id"].(float64)
+		switch {
+		case strings.Contains(body.Query, "list(orderBy"):
+			_, _ = w.Write([]byte(`{"data":{"pages":{"list":` + list + `}}}`))
+		case strings.Contains(body.Query, "single(id"):
+			_, _ = w.Write([]byte(`{"data":{"pages":{"single":` + pages[int(id)] + `}}}`))
+		case strings.Contains(body.Query, "folders("):
+			if id == 0 {
+				_, _ = w.Write([]byte(`{"data":{"assets":{"folders":` + folders + `}}}`))
+				return
+			}
+			_, _ = w.Write([]byte(`{"data":{"assets":{"folders":[]}}}`))
+		default:
+			if walked != nil {
+				walked[int(id)] = true
+			}
+			files := assets[int(id)]
+			if files == "" {
+				files = "[]"
+			}
+			_, _ = w.Write([]byte(`{"data":{"assets":{"list":` + files + `}}}`))
+		}
+	}))
+	t.Cleanup(server.Close)
+	return server
+}
+
+func wikiPageJSON(path, locale, content string) string {
+	return `{"path":` + strconv.Quote(path) + `,"locale":"` + locale + `","title":"T","description":"","content":` + strconv.Quote(content) +
+		`,"contentType":"markdown","createdAt":"","updatedAt":"","tags":[]}`
+}
+
+func fetchWikiWarnings(t *testing.T, server *httptest.Server) (string, string) {
+	t.Helper()
+	dir := t.TempDir()
+	if err := os.WriteFile(dir+"/source", []byte("wikijs"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	warnings, err := newWikiSource(t, server.URL).Fetch(context.Background(), docimport.UploadPath(dir), func(Progress) {})
+	if err != nil {
+		t.Fatal(err)
+	}
+	msgs := ""
+	for _, w := range warnings {
+		msgs += w.Path + ": " + w.Message + "\n"
+	}
+	return dir, msgs
+}
+
+func TestWikiJSHostileAssetNamesAndFoldersAreSkipped(t *testing.T) {
+	connector.AllowLoopbackForTest(t)
+	walked := map[int]bool{}
+	server := customWikiJS(t, `[]`, nil,
+		`[{"id":7,"slug":".."},{"id":8,"slug":"a/b"},{"id":9,"slug":"docs"},{"id":10,"slug":""},{"id":11,"slug":"x\\y"}]`,
+		map[int]string{0: `[{"filename":"..","fileSize":1},{"filename":".","fileSize":1},{"filename":"","fileSize":1},` +
+			`{"filename":"a\\b","fileSize":1},{"filename":"ok.png","fileSize":40}]`, 7: `[{"filename":"x.png","fileSize":1}]`},
+		walked)
+	dir, msgs := fetchWikiWarnings(t, server)
+	if got := strings.Count(msgs, "asset skipped: unsupported file name"); got != 4 {
+		t.Errorf("unsupported-name warnings = %d in %s", got, msgs)
+	}
+	for _, id := range []int{7, 8, 10, 11} {
+		if walked[id] {
+			t.Errorf("folder %d with an unsafe slug was walked", id)
+		}
+	}
+	if !walked[9] {
+		t.Error("safe folder not walked")
+	}
+	if _, err := Analyze(context.Background(), dir, 0); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestWikiJSDuplicatePathIsWarnedAndPlanBuilds(t *testing.T) {
+	connector.AllowLoopbackForTest(t)
+	server := customWikiJS(t,
+		`[{"id":1,"path":"de/foo","locale":"en","contentType":"markdown","isPublished":true},`+
+			`{"id":2,"path":"Foo","locale":"de","contentType":"markdown","isPublished":true},`+
+			`{"id":3,"path":"bar","locale":"en","contentType":"markdown","isPublished":true}]`,
+		map[int]string{1: wikiPageJSON("de/foo", "en", "one"), 2: wikiPageJSON("Foo", "de", "two"), 3: wikiPageJSON("bar", "en", "three")},
+		`[]`, nil, nil)
+	dir, msgs := fetchWikiWarnings(t, server)
+	if got := strings.Count(msgs, "duplicate path skipped"); got != 1 {
+		t.Errorf("duplicate warnings = %d in %s", got, msgs)
+	}
+	plan, err := Analyze(context.Background(), dir, 0)
+	if err != nil {
+		t.Fatalf("plan with duplicate path: %v", err)
+	}
+	foo := 0
+	for _, d := range plan.Docs {
+		if strings.EqualFold(d.Path, "de/foo.md") {
+			foo++
+		}
+	}
+	if foo != 1 {
+		t.Errorf("foo docs = %d in %#v", foo, plan.Docs)
+	}
+}
+
+func TestWikiJSOversizeResponsesAreSkippedNotFatal(t *testing.T) {
+	connector.AllowLoopbackForTest(t)
+	previous := wikiGraphQLLimit
+	wikiGraphQLLimit = 4096
+	t.Cleanup(func() { wikiGraphQLLimit = previous })
+	server := customWikiJS(t,
+		`[{"id":1,"path":"big","locale":"en","contentType":"markdown","isPublished":true},`+
+			`{"id":2,"path":"small","locale":"en","contentType":"markdown","isPublished":true}]`,
+		map[int]string{1: wikiPageJSON("big", "en", strings.Repeat("x", 8192)), 2: wikiPageJSON("small", "en", "ok")},
+		`[]`, nil, nil)
+	dir, msgs := fetchWikiWarnings(t, server)
+	if !strings.Contains(msgs, "big: page exceeds note size limit; skipped") || strings.Contains(msgs, "small:") {
+		t.Errorf("warnings = %s", msgs)
+	}
+	plan, err := Analyze(context.Background(), dir, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(plan.Docs) != 1 || plan.Docs[0].Path != "small.md" {
+		t.Errorf("docs = %#v", plan.Docs)
+	}
+}
+
+func TestWikiJSOversizeAssetDownloadIsSkippedNotFatal(t *testing.T) {
+	connector.AllowLoopbackForTest(t)
+	// The listing claims a small file, but the download exceeds the limit.
+	server := customWikiJS(t, `[]`, nil, `[]`, map[int]string{0: `[{"filename":"ok.png","fileSize":1}]`}, nil)
+	source := newWikiSource(t, server.URL)
+	source.limits.MaxAttachmentBytes = 10
+	warnings, err := source.Fetch(context.Background(), t.TempDir()+"/upload.zip", func(Progress) {})
+	if err != nil || len(warnings) != 1 || !strings.Contains(warnings[0].Message, "asset is larger than") {
+		t.Fatalf("warnings = %#v, err = %v", warnings, err)
 	}
 }

@@ -413,7 +413,10 @@ func safeLinkScheme(scheme string) bool {
 }
 
 func markdownSafeURL(u string) string {
-	return strings.NewReplacer("(", "%28", ")", "%29", " ", "%20", "<", "%3C", ">", "%3E").Replace(u)
+	// Brackets, backslashes and backticks are encoded too, so a URL cannot carry
+	// a [[bsexport:...]] placeholder into the second rewrite pass.
+	return strings.NewReplacer("(", "%28", ")", "%29", " ", "%20", "<", "%3C", ">", "%3E",
+		"[", "%5B", "]", "%5D", "\\", "%5C", "`", "%60").Replace(u)
 }
 
 func escapeLabel(s string) string { return strings.NewReplacer("[", "\\[", "]", "\\]").Replace(s) }

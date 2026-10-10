@@ -16,7 +16,10 @@ import (
 	"github.com/WiseLabz/wiselabz/internal/httpx"
 )
 
-var errNotFound = errors.New("remote resource not found")
+var (
+	errNotFound         = errors.New("remote resource not found")
+	errResponseTooLarge = errors.New("wiki response exceeds import size limit")
+)
 
 // ValidateURL rejects userinfo and query parameters so credentials cannot reach
 // persisted metadata or HTTP errors. Installation subpaths are supported.
@@ -126,7 +129,7 @@ func (c *remoteClient) attempt(ctx context.Context, method, endpoint string, bod
 		return nil, -1, c.requestError(ctx, reqCtx, err, "could not read wiki response")
 	}
 	if int64(len(data)) > limit {
-		return nil, -1, errors.New("wiki response exceeds import size limit")
+		return nil, -1, errResponseTooLarge
 	}
 	return data, -1, nil
 }

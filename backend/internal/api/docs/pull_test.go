@@ -308,3 +308,23 @@ func TestWikiJSPullUsesWikiJSPlanAndCommit(t *testing.T) {
 		t.Errorf("empty key = %d", rec.Code)
 	}
 }
+
+func TestPullTokenIDRequiredForBookStackOnly(t *testing.T) {
+	connector.AllowLoopbackForTest(t)
+	h := newImportHandler(t)
+	user := apitest.NewUser(t, h.Store, "admin")
+	rec := pullRequest(h, "POST", user, `{"source":"bookstack","url":"https://wiki.example","tokenSecret":"secret"}`)
+	if rec.Code != 400 || pullErrorCode(t, rec) != "invalid_request" {
+		t.Fatalf("bookstack without tokenId = %d %s", rec.Code, rec.Body)
+	}
+	// Wiki.js has no token ID, so the request passes validation and starts a
+	// pull; the unreachable server only fails the background job.
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"data":{"pages":{"list":[]}}}`))
+	}))
+	defer server.Close()
+	rec = pullRequest(h, "POST", user, `{"source":"wikijs","url":"`+server.URL+`","tokenSecret":"secret"}`)
+	if rec.Code != 202 {
+		t.Fatalf("wikijs without tokenId = %d %s", rec.Code, rec.Body)
+	}
+}
