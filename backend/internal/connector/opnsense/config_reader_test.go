@@ -8,16 +8,15 @@ import (
 )
 
 func TestConfigRead(t *testing.T) {
+	var getRuleRequests int
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case "/api/core/firmware/status":
-			_, _ = w.Write([]byte(`{"product_name":"OPNsense","product_version":"24.1"}`))
-		case "/api/diagnostics/interface/getInterfaces":
-			_, _ = w.Write([]byte(`{"rows":[]}`))
-		case "/api/firewall/filter/searchRule":
-			_, _ = w.Write([]byte(`{"rows":[{"uuid":"rule-0","description":"DNS","action":"pass","protocol":"udp","source_net":"any","destination_net":"any","enabled":"0"},{"uuid":"rule-1","description":"SSH","action":"pass","protocol":"tcp","source_net":"any","destination_net":"any","enabled":"1"}]}`))
-		case "/api/routes/gateway/status":
-			_, _ = w.Write([]byte(`{"items":[]}`))
+		case "/api/firewall/filter/getRule/rule-1":
+			getRuleRequests++
+			_, _ = w.Write([]byte(`{"rule":{"enabled":"1"}}`))
+		case "/api/firewall/filter/getRule/missing":
+			getRuleRequests++
+			_, _ = w.Write([]byte(`[]`))
 		default:
 			t.Fatalf("unexpected request: %s %s", r.Method, r.URL.String())
 		}
@@ -41,5 +40,8 @@ func TestConfigRead(t *testing.T) {
 	}
 	if _, err := c.ConfigRead(context.Background(), nil, "missing", "enabled"); err == nil {
 		t.Error("ConfigRead() error = nil for missing rule")
+	}
+	if getRuleRequests != 2 {
+		t.Errorf("ConfigRead() made %d getRule requests, want 2 and no search/fetch requests", getRuleRequests)
 	}
 }

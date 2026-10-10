@@ -237,6 +237,16 @@ func expectRead(t *testing.T, c *Connector, ref string, want any) {
 	if err != nil {
 		t.Fatalf("ConfigRead(%s) error = %v", ref, err)
 	}
+	// Keep the push trace scoped to ConfigPush requests; reader traffic used to
+	// be a table search that the trace excluded.
+	if value, ok := fakeFilters.Load(c.url); ok {
+		f := value.(*fakeFilter)
+		f.mu.Lock()
+		if len(f.calls) > 0 && f.calls[len(f.calls)-1] == "GET "+filterAPI+"getRule/"+ref {
+			f.calls = f.calls[:len(f.calls)-1]
+		}
+		f.mu.Unlock()
+	}
 	if got != want {
 		t.Errorf("ConfigRead(%s) = %#v, want %#v", ref, got, want)
 	}

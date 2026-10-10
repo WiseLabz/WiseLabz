@@ -18,6 +18,8 @@ import (
 	"github.com/WiseLabz/wiselabz/internal/connector"
 )
 
+var fakeFilters sync.Map
+
 func TestValidateUsesBasicAuthAndSurfacesStatus(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		user, password, ok := r.BasicAuth()
@@ -41,8 +43,10 @@ func TestFetchSurfacesMalformedSystemResponse(t *testing.T) {
 		switch r.URL.Path {
 		case "/api/core/firmware/status":
 			_, _ = w.Write([]byte(`not json`))
-		case "/api/diagnostics/interface/getInterfaces", "/api/firewall/filter/searchRule", "/api/routes/gateway/status":
+		case "/api/diagnostics/interface/getInterfaces", "/api/routes/gateway/status":
 			_, _ = w.Write([]byte(`{}`))
+		case filterAPI + "searchRule":
+			_, _ = w.Write([]byte(`{"total":0,"rows":[]}`))
 		default:
 			t.Fatalf("unexpected request path: %s", r.URL.Path)
 		}
@@ -71,7 +75,7 @@ func TestFetchSurfacesWANAndUpstreamDependencies(t *testing.T) {
 				{"identifier":"lan","device":"igb1","ipaddr":"10.0.0.1","status":"up","media":"1000baseT"}
 			]}`))
 		case "/api/firewall/filter/searchRule":
-			_, _ = w.Write([]byte(`{"rows":[]}`))
+			_, _ = w.Write([]byte(`{"rows":[],"total":0}`))
 		case "/api/routes/gateway/status":
 			_, _ = w.Write([]byte(`{"items":[{"name":"WAN_GW","address":"203.0.113.1","status":"online","rtt":"5ms","loss":"0%"}]}`))
 		default:
@@ -118,7 +122,7 @@ func TestFetchScopesInterfaceAndFallbackRuleIDsBySource(t *testing.T) {
 			case "/api/diagnostics/interface/getInterfaces":
 				_, _ = w.Write([]byte(`{"rows":[{"device":"igb0","ipaddr":"203.0.113.5","status":"up"}]}`))
 			case "/api/firewall/filter/searchRule":
-				_, _ = w.Write([]byte(`{"rows":[
+				_, _ = w.Write([]byte(`{"total":2,"rows":[
 					{"uuid":"f4cba8a1-0c93-4cb2-9c5c-821331233db9","description":"UUID rule","action":"pass","protocol":"tcp","source_net":"any","destination_net":"any","destination_port":"22"},
 					{"description":"Fallback rule","action":"block","protocol":"udp","ipprotocol":"inet","source_net":"10.0.0.0/8","source_port":"53","destination_net":"any","interface":"lan","direction":"in"}
 				]}`))
@@ -490,8 +494,10 @@ func newFakeFilter(t *testing.T, legacy bool) *fakeFilter {
 	}
 	f.srv = httptest.NewServer(http.HandlerFunc(f.serve))
 	f.client = testClient(f.srv)
+	fakeFilters.Store(f.srv.URL, f)
 	t.Cleanup(f.srv.Close)
 	t.Cleanup(func() {
+		fakeFilters.Delete(f.srv.URL)
 		filterStates.Delete(filterKey(f.srv.URL))
 	})
 	return f
@@ -546,7 +552,7 @@ func (f *fakeFilter) serve(w http.ResponseWriter, r *http.Request) {
 
 	name, arg, _ := strings.Cut(strings.TrimPrefix(r.URL.Path, filterPrefix), "/")
 	want := http.MethodPost
-	if name == "getRule" || name == "searchRule" {
+	if name == "getRule" {
 		want = http.MethodGet
 	}
 	if r.Method != want {
@@ -659,11 +665,30 @@ func (f *fakeFilter) handle(r *http.Request, name, arg string, effect bool) (int
 		}
 		return http.StatusOK, fmt.Sprintf(`{"rule":{"enabled":%q,"action":"pass"}}`, v)
 	case "searchRule":
+		var request struct {
+			Current  int `json:"current"`
+			RowCount int `json:"rowCount"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil || request.Current < 1 || request.RowCount < 1 {
+			f.t.Errorf("invalid searchRule request: %+v, %v", request, err)
+			return http.StatusBadRequest, `{"errorMessage":"invalid request"}`
+		}
 		var rows []string
 		for uuid, v := range f.saved {
 			rows = append(rows, fmt.Sprintf(`{"uuid":%q,"enabled":%q,"action":"pass","protocol":"TCP","source":"any","destination":"any"}`, uuid, v))
 		}
-		return http.StatusOK, `{"rows":[` + strings.Join(rows, ",") + `]}`
+		total := len(rows)
+		start := (request.Current - 1) * request.RowCount
+		if start >= total {
+			rows = []string{}
+		} else {
+			end := start + request.RowCount
+			if end > total {
+				end = total
+			}
+			rows = rows[start:end]
+		}
+		return http.StatusOK, fmt.Sprintf(`{"total":%d,"rows":[%s]}`, total, strings.Join(rows, ","))
 	}
 	return notFound()
 }
