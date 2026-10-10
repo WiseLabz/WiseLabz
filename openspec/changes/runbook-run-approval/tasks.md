@@ -33,8 +33,8 @@
 
 - [x] 5.1 Run sequential locked Go store, executor/notifications/retention/backup, API/server tests and go vet ./...; record fresh results.
 - [x] 5.2 Run sequential locked API generation, runbook/settings/i18n vitest at maxWorkers=4, typecheck and lint; record results and generated reproducibility.
-- [ ] 5.3 Validate runbook-run-approval --strict, update graph without committing GRAPH_REPORT.md, commit and push implementation; verify clean scoped diff and validation.
-- [ ] 5.4 Open one assigned/labeled conventional-title PR with Closes #650, watch CI and fix until green, then mark draft and record dependency/rebase notice; verify PR metadata and green checks.
+- [x] 5.3 Validate runbook-run-approval --strict, update graph without committing GRAPH_REPORT.md, commit and push implementation; verify clean scoped diff and validation.
+- [x] 5.4 Open one assigned/labeled conventional-title PR with Closes #650, watch CI and fix until green, then mark draft and record dependency/rebase notice; verify PR metadata and green checks.
 
 ## Workflow follow-up
 
