@@ -305,31 +305,57 @@ func RequirePermission(checker PermissionChecker, permission string) func(http.H
 // RequireElevation checks for a valid elevation token scoped to the given action.
 // Destructive endpoints chain this after RequireRole("operator") for step-up auth.
 func RequireElevation(jwtSvc *Service, recorder AuditRecorder, action string) func(http.Handler) http.Handler {
-	return requireElevation(jwtSvc, recorder, action, "")
+	return requireElevation(
+		jwtSvc, recorder, action, "", "RequireElevation",
+	)
 }
 
 // RequireElevationForTarget is RequireElevation for actions on one resource:
 // the token must have been issued for the resource named by the targetParam
 // URL path parameter, so it can't be replayed against another one.
-func RequireElevationForTarget(jwtSvc *Service, recorder AuditRecorder, action, targetParam string) func(http.Handler) http.Handler {
-	return requireElevation(jwtSvc, recorder, action, targetParam)
+func RequireElevationForTarget(
+	jwtSvc *Service,
+	recorder AuditRecorder,
+	action, targetParam string,
+) func(http.Handler) http.Handler {
+	return requireElevation(
+		jwtSvc, recorder, action, targetParam, "RequireElevationForTarget",
+	)
 }
 
-func requireElevation(jwtSvc *Service, recorder AuditRecorder, action, targetParam string) func(http.Handler) http.Handler {
+func requireElevation(
+	jwtSvc *Service,
+	recorder AuditRecorder,
+	action, targetParam, source string,
+) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			target := ""
-			if targetParam != "" {
-				target = chi.URLParam(r, targetParam)
-			}
-			if err := ValidateElevationHeaderFor(jwtSvc, recorder, action, target, r); err != nil {
-				WriteElevationError(w, err)
-				return
-			}
-			next.ServeHTTP(w, r)
-		})
+		return elevationGuardHandler{
+			source: source,
+			next: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				target := ""
+				if targetParam != "" {
+					target = chi.URLParam(r, targetParam)
+				}
+				if err := ValidateElevationHeaderFor(jwtSvc, recorder, action, target, r); err != nil {
+					WriteElevationError(w, err)
+					return
+				}
+				next.ServeHTTP(w, r)
+			}),
+		}
 	}
 }
+
+type elevationGuardHandler struct {
+	source string
+	next   http.Handler
+}
+
+func (h elevationGuardHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	h.next.ServeHTTP(w, r)
+}
+
+func (h elevationGuardHandler) ElevationSource() string { return h.source }
 
 // MFAChecker reports whether a user has a confirmed MFA factor. Implemented
 // by *store.Store.
@@ -340,24 +366,32 @@ type MFAChecker interface {
 // RequireElevationUnlessEnrollOnly is RequireElevation, except a session
 // confined to forced MFA enrollment whose user has no confirmed factor passes
 // without a token (it just authenticated and can do nothing else).
-func RequireElevationUnlessEnrollOnly(jwtSvc *Service, recorder AuditRecorder, mfa MFAChecker, action string) func(http.Handler) http.Handler {
+func RequireElevationUnlessEnrollOnly(
+	jwtSvc *Service,
+	recorder AuditRecorder,
+	mfa MFAChecker,
+	action string,
+) func(http.Handler) http.Handler {
 	elevate := RequireElevation(jwtSvc, recorder, action)
 	return func(next http.Handler) http.Handler {
 		gated := elevate(next)
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if MFAEnrollOnlyFromContext(r.Context()) {
-				has, err := mfa.UserHasMFA(r.Context(), UserIDFromContext(r.Context()))
-				if err != nil {
-					httputil.Errorf(w, err)
-					return
+		return elevationGuardHandler{
+			source: "RequireElevationUnlessEnrollOnly",
+			next: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if MFAEnrollOnlyFromContext(r.Context()) {
+					has, err := mfa.UserHasMFA(r.Context(), UserIDFromContext(r.Context()))
+					if err != nil {
+						httputil.Errorf(w, err)
+						return
+					}
+					if !has {
+						next.ServeHTTP(w, r)
+						return
+					}
 				}
-				if !has {
-					next.ServeHTTP(w, r)
-					return
-				}
-			}
-			gated.ServeHTTP(w, r)
-		})
+				gated.ServeHTTP(w, r)
+			}),
+		}
 	}
 }
 
