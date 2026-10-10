@@ -14,7 +14,8 @@ vi.mock('../../hooks/useRole', async (orig) => ({
 vi.mock('../../components/docs/ImportDocsDialog', () => ({
   ImportDocsDialog: ({ open }: { open: boolean }) => (open ? <p>Import dialog open</p> : null),
 }));
-vi.mock('../../api/generated/docs/docs', () => ({
+vi.mock('../../api/generated/docs/docs', async (orig) => ({
+  ...(await orig<typeof import('../../api/generated/docs/docs')>()),
   useGetDocsTree: () => ({ data: docTree, isLoading: false, isError: false, refetch: vi.fn() }),
   useGetDocsDocId: (docID: string) => ({
     data: docs[docID],
