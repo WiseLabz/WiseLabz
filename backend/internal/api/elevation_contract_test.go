@@ -846,10 +846,27 @@ func isRouterRegistration(fn *types.Func) bool {
 		return false
 	}
 	switch fn.Name() {
-	case "Get", "Post", "Put", "Patch", "Delete", "Method", "Handle", "HandleFunc":
+	case "Connect", "Delete", "Get", "Head", "Handle", "HandleFunc", "Method", "MethodFunc", "Options", "Patch", "Post", "Put", "Trace":
 		return true
 	default:
 		return false
+	}
+}
+
+func TestElevationAnalyzerRecognizesStandardChiRegistrations(t *testing.T) {
+	chiPackage := types.NewPackage("github.com/go-chi/chi/v5", "chi")
+	signature := types.NewSignatureType(nil, nil, nil, nil, nil, false)
+	for _, name := range []string{
+		"Connect", "Delete", "Get", "Head", "Handle", "HandleFunc", "Method", "MethodFunc", "Options", "Patch", "Post", "Put", "Trace",
+	} {
+		fn := types.NewFunc(token.NoPos, chiPackage, name, signature)
+		if !isRouterRegistration(fn) {
+			t.Errorf("chi.Router.%s was not recognized as a handler registration", name)
+		}
+	}
+	mount := types.NewFunc(token.NoPos, chiPackage, "Mount", signature)
+	if isRouterRegistration(mount) {
+		t.Fatal("chi.Router.Mount was incorrectly treated as a REST handler registration")
 	}
 }
 
