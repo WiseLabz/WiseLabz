@@ -20,6 +20,7 @@ import type {
   DocLock,
   DocNode,
   DocPage,
+  DocPullJob,
   DocVersion,
   DocVersionMeta,
   GenerateResult,
@@ -30,6 +31,7 @@ import type {
 } from '../../model';
 
 import {
+  getDeleteDocsImportPullResponseMock,
   getGetAttachmentsAidRawResponseMock,
   getGetDocsDocIdAttachmentsResponseMock,
   getGetDocsDocIdLockResponseMock,
@@ -39,6 +41,7 @@ import {
   getGetDocsEditProposalsProposalIdResponseMock,
   getGetDocsEditProposalsResponseMock,
   getGetDocsExportResponseMock,
+  getGetDocsImportPullResponseMock,
   getGetDocsResponseMock,
   getGetDocsServiceConnectorIdResponseMock,
   getGetDocsShareLinksResponseMock,
@@ -57,6 +60,7 @@ import {
   getPostDocsEditProposalsProposalIdRejectResponseMock,
   getPostDocsGenerateResponseMock,
   getPostDocsImportImportIdCommitResponseMock,
+  getPostDocsImportPullResponseMock,
   getPostDocsImportResponseMock,
   getPostDocsResponseMock,
   getPostDocsShareLinksResponseMock,
@@ -70,6 +74,9 @@ export {
   getGetDocsTrashResponseMock,
   getGetDocsExportResponseMock,
   getPostDocsImportResponseMock,
+  getPostDocsImportPullResponseMock,
+  getGetDocsImportPullResponseMock,
+  getDeleteDocsImportPullResponseMock,
   getPostDocsImportImportIdCommitResponseMock,
   getPostDocsDocIdRestoreResponseMock,
   getGetDocsTreeResponseMock,
@@ -205,6 +212,74 @@ export const getPostDocsImportMockHandler = (
             : overrideResponse
           : getPostDocsImportResponseMock(),
         { status: 201 }
+      );
+    },
+    options
+  );
+};
+
+export const getPostDocsImportPullMockHandler = (
+  overrideResponse?:
+    | DocPullJob
+    | ((info: Parameters<Parameters<typeof http.post>[1]>[0]) => Promise<DocPullJob> | DocPullJob),
+  options?: RequestHandlerOptions
+) => {
+  return http.post(
+    '*/docs/import/pull',
+    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+      return HttpResponse.json(
+        overrideResponse !== undefined
+          ? typeof overrideResponse === 'function'
+            ? await overrideResponse(info)
+            : overrideResponse
+          : getPostDocsImportPullResponseMock(),
+        { status: 202 }
+      );
+    },
+    options
+  );
+};
+
+export const getGetDocsImportPullMockHandler = (
+  overrideResponse?:
+    | DocPullJob
+    | ((info: Parameters<Parameters<typeof http.get>[1]>[0]) => Promise<DocPullJob> | DocPullJob),
+  options?: RequestHandlerOptions
+) => {
+  return http.get(
+    '*/docs/import/pull',
+    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+      return HttpResponse.json(
+        overrideResponse !== undefined
+          ? typeof overrideResponse === 'function'
+            ? await overrideResponse(info)
+            : overrideResponse
+          : getGetDocsImportPullResponseMock(),
+        { status: 200 }
+      );
+    },
+    options
+  );
+};
+
+export const getDeleteDocsImportPullMockHandler = (
+  overrideResponse?:
+    | DocPullJob
+    | ((
+        info: Parameters<Parameters<typeof http.delete>[1]>[0]
+      ) => Promise<DocPullJob> | DocPullJob),
+  options?: RequestHandlerOptions
+) => {
+  return http.delete(
+    '*/docs/import/pull',
+    async (info: Parameters<Parameters<typeof http.delete>[1]>[0]) => {
+      return HttpResponse.json(
+        overrideResponse !== undefined
+          ? typeof overrideResponse === 'function'
+            ? await overrideResponse(info)
+            : overrideResponse
+          : getDeleteDocsImportPullResponseMock(),
+        { status: 202 }
       );
     },
     options
@@ -904,6 +979,9 @@ export const getDocsMock = () => [
   getGetDocsTrashMockHandler(),
   getGetDocsExportMockHandler(),
   getPostDocsImportMockHandler(),
+  getPostDocsImportPullMockHandler(),
+  getGetDocsImportPullMockHandler(),
+  getDeleteDocsImportPullMockHandler(),
   getPostDocsImportImportIdCommitMockHandler(),
   getPostDocsDocIdRestoreMockHandler(),
   getGetDocsTreeMockHandler(),

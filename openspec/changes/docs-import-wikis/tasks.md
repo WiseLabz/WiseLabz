@@ -8,10 +8,10 @@
 
 ## 2. BookStack API pull
 
-- [ ] 2.1 Job manager, `Source` interface, pull routes, `docs.import.pull` elevation, audit.
-- [ ] 2.2 Guarded outbound client (no redirects, skip-TLS opt-in, caps, 429 handling).
-- [ ] 2.3 BookStack source and mapping with an `httptest` fake; credential-leak tests.
-- [ ] 2.4 Web: BookStack option, form, step-up, progress view with cancel.
+- [x] 2.1 Job manager, `Source` interface, pull routes, `docs.import.pull` elevation, audit.
+- [x] 2.2 Guarded outbound client (no redirects, skip-TLS opt-in, caps, 429 handling).
+- [x] 2.3 BookStack source and mapping with an `httptest` fake; credential-leak tests.
+- [x] 2.4 Web: BookStack option, form, step-up, progress view with cancel.
 
 ## 3. Wiki.js API pull
 

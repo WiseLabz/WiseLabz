@@ -2273,6 +2273,58 @@ paths:
         '400': { $ref: '#/components/responses/BadRequest' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '413': { description: Upload exceeds 100 MB or the archive expands beyond 500 MB }
+  /docs/import/pull:
+    post:
+      tags: [docs]
+      summary: Start a background BookStack import (instance admin, elevated)
+      description: >-
+        Requires docs.import.pull elevation when step-up is enabled. BookStack v25.07
+        or newer is required for the ZIP export API. Imports all readable shelves,
+        books and pages within 2000 entries and 500 MB; credentials remain in memory
+        until the job ends. TLS verification is enabled unless explicitly disabled,
+        and that choice is audited. Private networks are allowed; loopback, link-local
+        and metadata addresses and redirects are blocked.
+      parameters:
+        - name: X-Elevation-Token
+          in: header
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DocPullRequest' }
+      responses:
+        '202':
+          description: Pull started
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DocPullJob' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { description: A documentation pull is already running }
+    get:
+      tags: [docs]
+      summary: Read the current pull and its preview when ready (instance admin)
+      responses:
+        '200':
+          description: Current or most recent pull
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DocPullJob' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [docs]
+      summary: Cancel a running documentation pull (instance admin)
+      responses:
+        '202':
+          description: Cancellation requested; poll until cancelled
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DocPullJob' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { description: No running documentation pull }
   /docs/import/{importId}/commit:
     post:
       tags: [docs]
@@ -6277,6 +6329,30 @@ components:
         children:
           type: array
           items: { $ref: '#/components/schemas/DocImportNode' }
+    DocPullRequest:
+      type: object
+      required: [source, url, tokenId, tokenSecret, skipTlsVerify]
+      properties:
+        source: { type: string, enum: [bookstack] }
+        url: { type: string, format: uri, description: Installation base URL without userinfo or query }
+        tokenId: { type: string, writeOnly: true }
+        tokenSecret: { type: string, writeOnly: true }
+        skipTlsVerify: { type: boolean, default: false }
+    DocPullJob:
+      type: object
+      required: [id, source, host, skipTlsVerify, state, startedAt, done, total]
+      properties:
+        id: { type: string }
+        source: { type: string, enum: [bookstack] }
+        host: { type: string }
+        skipTlsVerify: { type: boolean }
+        state: { type: string, enum: [fetching, ready, failed, cancelled] }
+        startedAt: { type: string, format: date-time }
+        endedAt: { type: string, format: date-time }
+        done: { type: integer }
+        total: { type: integer }
+        error: { type: string }
+        preview: { $ref: '#/components/schemas/DocImportPreview' }
     DocImportPreview:
       type: object
       required: [id, expiresAt, tree, docCount, attachmentCount, mappings, warnings, skipped, collisions]

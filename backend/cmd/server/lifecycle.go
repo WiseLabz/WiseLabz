@@ -51,6 +51,7 @@ type lifecycleDeps struct {
 	// before the database closes. Optional. The server builds the scan manager
 	// itself, outside the router, so that it can hand it to this hook.
 	Discovery lifecycleScanner
+	DocImport lifecycleScanner
 }
 
 // lifecycleManager starts every long-running server goroutine (HTTP server,
@@ -217,6 +218,9 @@ func (m *lifecycleManager) Shutdown() error {
 
 	// 3. No request can start a scan any more; cancel the running one, if any,
 	// and wait for its audit entry while the database is still open.
+	if m.deps.DocImport != nil {
+		m.deps.DocImport.Shutdown(shutdownCtx)
+	}
 	if m.deps.Discovery != nil {
 		m.deps.Discovery.Shutdown(shutdownCtx)
 	}

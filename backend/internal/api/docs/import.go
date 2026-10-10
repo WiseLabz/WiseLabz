@@ -195,6 +195,11 @@ func saveImportUpload(dir string, part io.Reader) error {
 	return nil
 }
 
+// analyzeStagedZip analyzes a pulled export, which the pull sources normalize to the Markdown layout.
+func (h *Handler) analyzeStagedZip(ctx context.Context, dir string) (*docimport.Plan, error) {
+	return h.analyzeUpload(ctx, dir, docimport.SourceMarkdown)
+}
+
 func (h *Handler) analyzeUpload(ctx context.Context, dir string, src docimport.Source) (*docimport.Plan, error) {
 	zr, err := zip.OpenReader(docimport.UploadPath(dir))
 	if err != nil {
@@ -300,7 +305,7 @@ func (h *Handler) CommitImport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	committed = true
-	if err := h.Store.RecordAuditFromContext(r.Context(), "docs.import", "doc_import", id, map[string]int{"docs": len(docs), "attachments": attachments}); err != nil {
+	if err := h.Store.RecordAuditFromContext(r.Context(), "docs.import", "doc_import", id, map[string]any{"docs": len(docs), "attachments": attachments, "source": importSource(dir)}); err != nil {
 		slog.Error("audit doc import", "importId", id, "error", err)
 	}
 	go func(ctx context.Context) {

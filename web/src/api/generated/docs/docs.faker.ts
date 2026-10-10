@@ -19,6 +19,7 @@ import type {
   DocLock,
   DocNode,
   DocPage,
+  DocPullJob,
   DocVersion,
   DocVersionMeta,
   GenerateResult,
@@ -259,6 +260,210 @@ export const getPostDocsImportResponseMock = (
       newTitle: faker.string.alpha({ length: { min: 10, max: 20 } }),
     })
   ),
+  ...overrideResponse,
+});
+
+export const getPostDocsImportPullResponseMock = (
+  overrideResponse: Partial<Extract<DocPullJob, object>> = {}
+): DocPullJob => ({
+  id: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  source: faker.helpers.arrayElement(['bookstack'] as const),
+  host: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  skipTlsVerify: faker.datatype.boolean(),
+  state: faker.helpers.arrayElement(['fetching', 'ready', 'failed', 'cancelled'] as const),
+  startedAt: faker.date.past().toISOString().slice(0, 19) + 'Z',
+  endedAt: faker.helpers.arrayElement([
+    faker.date.past().toISOString().slice(0, 19) + 'Z',
+    undefined,
+  ]),
+  done: faker.number.int(),
+  total: faker.number.int(),
+  error: faker.helpers.arrayElement([
+    faker.string.alpha({ length: { min: 10, max: 20 } }),
+    undefined,
+  ]),
+  preview: faker.helpers.arrayElement([
+    {
+      id: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      expiresAt: faker.date.past().toISOString().slice(0, 19) + 'Z',
+      tree: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(
+        () => ({
+          docId: faker.string.alpha({ length: { min: 10, max: 20 } }),
+          title: faker.string.alpha({ length: { min: 10, max: 20 } }),
+          path: faker.string.alpha({ length: { min: 10, max: 20 } }),
+          serviceId: faker.string.alpha({ length: { min: 10, max: 20 } }),
+          folder: faker.datatype.boolean(),
+          attachmentCount: faker.number.int(),
+          children: [],
+        })
+      ),
+      docCount: faker.number.int(),
+      attachmentCount: faker.number.int(),
+      mappings: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(
+        () => ({
+          source: faker.string.alpha({ length: { min: 10, max: 20 } }),
+          link: faker.string.alpha({ length: { min: 10, max: 20 } }),
+          target: faker.string.alpha({ length: { min: 10, max: 20 } }),
+        })
+      ),
+      warnings: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(
+        () => ({
+          path: faker.string.alpha({ length: { min: 10, max: 20 } }),
+          message: faker.string.alpha({ length: { min: 10, max: 20 } }),
+        })
+      ),
+      skipped: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(
+        () => ({
+          path: faker.string.alpha({ length: { min: 10, max: 20 } }),
+          message: faker.string.alpha({ length: { min: 10, max: 20 } }),
+        })
+      ),
+      collisions: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(
+        () => ({
+          path: faker.string.alpha({ length: { min: 10, max: 20 } }),
+          title: faker.string.alpha({ length: { min: 10, max: 20 } }),
+          newTitle: faker.string.alpha({ length: { min: 10, max: 20 } }),
+        })
+      ),
+    },
+    undefined,
+  ]),
+  ...overrideResponse,
+});
+
+export const getGetDocsImportPullResponseMock = (
+  overrideResponse: Partial<Extract<DocPullJob, object>> = {}
+): DocPullJob => ({
+  id: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  source: faker.helpers.arrayElement(['bookstack'] as const),
+  host: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  skipTlsVerify: faker.datatype.boolean(),
+  state: faker.helpers.arrayElement(['fetching', 'ready', 'failed', 'cancelled'] as const),
+  startedAt: faker.date.past().toISOString().slice(0, 19) + 'Z',
+  endedAt: faker.helpers.arrayElement([
+    faker.date.past().toISOString().slice(0, 19) + 'Z',
+    undefined,
+  ]),
+  done: faker.number.int(),
+  total: faker.number.int(),
+  error: faker.helpers.arrayElement([
+    faker.string.alpha({ length: { min: 10, max: 20 } }),
+    undefined,
+  ]),
+  preview: faker.helpers.arrayElement([
+    {
+      id: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      expiresAt: faker.date.past().toISOString().slice(0, 19) + 'Z',
+      tree: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(
+        () => ({
+          docId: faker.string.alpha({ length: { min: 10, max: 20 } }),
+          title: faker.string.alpha({ length: { min: 10, max: 20 } }),
+          path: faker.string.alpha({ length: { min: 10, max: 20 } }),
+          serviceId: faker.string.alpha({ length: { min: 10, max: 20 } }),
+          folder: faker.datatype.boolean(),
+          attachmentCount: faker.number.int(),
+          children: [],
+        })
+      ),
+      docCount: faker.number.int(),
+      attachmentCount: faker.number.int(),
+      mappings: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(
+        () => ({
+          source: faker.string.alpha({ length: { min: 10, max: 20 } }),
+          link: faker.string.alpha({ length: { min: 10, max: 20 } }),
+          target: faker.string.alpha({ length: { min: 10, max: 20 } }),
+        })
+      ),
+      warnings: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(
+        () => ({
+          path: faker.string.alpha({ length: { min: 10, max: 20 } }),
+          message: faker.string.alpha({ length: { min: 10, max: 20 } }),
+        })
+      ),
+      skipped: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(
+        () => ({
+          path: faker.string.alpha({ length: { min: 10, max: 20 } }),
+          message: faker.string.alpha({ length: { min: 10, max: 20 } }),
+        })
+      ),
+      collisions: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(
+        () => ({
+          path: faker.string.alpha({ length: { min: 10, max: 20 } }),
+          title: faker.string.alpha({ length: { min: 10, max: 20 } }),
+          newTitle: faker.string.alpha({ length: { min: 10, max: 20 } }),
+        })
+      ),
+    },
+    undefined,
+  ]),
+  ...overrideResponse,
+});
+
+export const getDeleteDocsImportPullResponseMock = (
+  overrideResponse: Partial<Extract<DocPullJob, object>> = {}
+): DocPullJob => ({
+  id: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  source: faker.helpers.arrayElement(['bookstack'] as const),
+  host: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  skipTlsVerify: faker.datatype.boolean(),
+  state: faker.helpers.arrayElement(['fetching', 'ready', 'failed', 'cancelled'] as const),
+  startedAt: faker.date.past().toISOString().slice(0, 19) + 'Z',
+  endedAt: faker.helpers.arrayElement([
+    faker.date.past().toISOString().slice(0, 19) + 'Z',
+    undefined,
+  ]),
+  done: faker.number.int(),
+  total: faker.number.int(),
+  error: faker.helpers.arrayElement([
+    faker.string.alpha({ length: { min: 10, max: 20 } }),
+    undefined,
+  ]),
+  preview: faker.helpers.arrayElement([
+    {
+      id: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      expiresAt: faker.date.past().toISOString().slice(0, 19) + 'Z',
+      tree: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(
+        () => ({
+          docId: faker.string.alpha({ length: { min: 10, max: 20 } }),
+          title: faker.string.alpha({ length: { min: 10, max: 20 } }),
+          path: faker.string.alpha({ length: { min: 10, max: 20 } }),
+          serviceId: faker.string.alpha({ length: { min: 10, max: 20 } }),
+          folder: faker.datatype.boolean(),
+          attachmentCount: faker.number.int(),
+          children: [],
+        })
+      ),
+      docCount: faker.number.int(),
+      attachmentCount: faker.number.int(),
+      mappings: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(
+        () => ({
+          source: faker.string.alpha({ length: { min: 10, max: 20 } }),
+          link: faker.string.alpha({ length: { min: 10, max: 20 } }),
+          target: faker.string.alpha({ length: { min: 10, max: 20 } }),
+        })
+      ),
+      warnings: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(
+        () => ({
+          path: faker.string.alpha({ length: { min: 10, max: 20 } }),
+          message: faker.string.alpha({ length: { min: 10, max: 20 } }),
+        })
+      ),
+      skipped: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(
+        () => ({
+          path: faker.string.alpha({ length: { min: 10, max: 20 } }),
+          message: faker.string.alpha({ length: { min: 10, max: 20 } }),
+        })
+      ),
+      collisions: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(
+        () => ({
+          path: faker.string.alpha({ length: { min: 10, max: 20 } }),
+          title: faker.string.alpha({ length: { min: 10, max: 20 } }),
+          newTitle: faker.string.alpha({ length: { min: 10, max: 20 } }),
+        })
+      ),
+    },
+    undefined,
+  ]),
   ...overrideResponse,
 });
 

@@ -37,6 +37,8 @@ import type {
   DocNode,
   DocPage,
   DocPatch,
+  DocPullJob,
+  DocPullRequest,
   DocSave,
   DocVersion,
   DocVersionMeta,
@@ -602,6 +604,283 @@ export const usePostDocsImport = <
   TContext
 > => {
   return useMutation(getPostDocsImportMutationOptions(options), queryClient);
+};
+/**
+ * Requires docs.import.pull elevation when step-up is enabled. BookStack v25.07 or newer is required for the ZIP export API. Imports all readable shelves, books and pages within 2000 entries and 500 MB; credentials remain in memory until the job ends. TLS verification is enabled unless explicitly disabled, and that choice is audited. Private networks are allowed; loopback, link-local and metadata addresses and redirects are blocked.
+ * @summary Start a background BookStack import (instance admin, elevated)
+ */
+export const postDocsImportPull = (
+  docPullRequest: BodyType<DocPullRequest>,
+  options?: SecondParameter<typeof customInstance>,
+  signal?: AbortSignal
+) => {
+  return customInstance<DocPullJob>(
+    {
+      url: `/docs/import/pull`,
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      data: docPullRequest,
+      signal,
+    },
+    options
+  );
+};
+
+export const getPostDocsImportPullMutationKey = () => ['postDocsImportPull'] as const;
+
+export const getPostDocsImportPullMutationOptions = <
+  TError = ErrorType<BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof postDocsImportPull>>,
+    TError,
+    PostDocsImportPullMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof postDocsImportPull>>,
+  TError,
+  PostDocsImportPullMutationVariables,
+  TContext
+> => {
+  const mutationKey = getPostDocsImportPullMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof postDocsImportPull>>,
+    PostDocsImportPullMutationVariables
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return postDocsImportPull(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type PostDocsImportPullMutationResult = NonNullable<
+  Awaited<ReturnType<typeof postDocsImportPull>>
+>;
+export type PostDocsImportPullMutationBody = BodyType<DocPullRequest>;
+export type PostDocsImportPullMutationError = ErrorType<
+  BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | void
+>;
+export type PostDocsImportPullMutationVariables = { data: BodyType<DocPullRequest> };
+
+/**
+ * @summary Start a background BookStack import (instance admin, elevated)
+ */
+export const usePostDocsImportPull = <
+  TError = ErrorType<BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | void>,
+  TContext = unknown,
+>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof postDocsImportPull>>,
+      TError,
+      PostDocsImportPullMutationVariables,
+      TContext
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseMutationResult<
+  Awaited<ReturnType<typeof postDocsImportPull>>,
+  TError,
+  PostDocsImportPullMutationVariables,
+  TContext
+> => {
+  return useMutation(getPostDocsImportPullMutationOptions(options), queryClient);
+};
+/**
+ * @summary Read the current pull and its preview when ready (instance admin)
+ */
+export const getDocsImportPull = (
+  options?: SecondParameter<typeof customInstance>,
+  signal?: AbortSignal
+) => {
+  return customInstance<DocPullJob>({ url: `/docs/import/pull`, method: 'GET', signal }, options);
+};
+
+export const getGetDocsImportPullQueryKey = () => {
+  return [`/docs/import/pull`] as const;
+};
+
+export const getGetDocsImportPullQueryOptions = <
+  TData = Awaited<ReturnType<typeof getDocsImportPull>>,
+  TError = ErrorType<ForbiddenResponse | NotFoundResponse>,
+>(options?: {
+  query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getDocsImportPull>>, TError, TData>>;
+  request?: SecondParameter<typeof customInstance>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetDocsImportPullQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getDocsImportPull>>> = ({ signal }) =>
+    getDocsImportPull(requestOptions, signal);
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getDocsImportPull>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type GetDocsImportPullQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getDocsImportPull>>
+>;
+export type GetDocsImportPullQueryError = ErrorType<ForbiddenResponse | NotFoundResponse>;
+
+export function useGetDocsImportPull<
+  TData = Awaited<ReturnType<typeof getDocsImportPull>>,
+  TError = ErrorType<ForbiddenResponse | NotFoundResponse>,
+>(
+  options: {
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof getDocsImportPull>>, TError, TData>> &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getDocsImportPull>>,
+          TError,
+          Awaited<ReturnType<typeof getDocsImportPull>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useGetDocsImportPull<
+  TData = Awaited<ReturnType<typeof getDocsImportPull>>,
+  TError = ErrorType<ForbiddenResponse | NotFoundResponse>,
+>(
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getDocsImportPull>>, TError, TData>> &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getDocsImportPull>>,
+          TError,
+          Awaited<ReturnType<typeof getDocsImportPull>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useGetDocsImportPull<
+  TData = Awaited<ReturnType<typeof getDocsImportPull>>,
+  TError = ErrorType<ForbiddenResponse | NotFoundResponse>,
+>(
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getDocsImportPull>>, TError, TData>>;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * @summary Read the current pull and its preview when ready (instance admin)
+ */
+
+export function useGetDocsImportPull<
+  TData = Awaited<ReturnType<typeof getDocsImportPull>>,
+  TError = ErrorType<ForbiddenResponse | NotFoundResponse>,
+>(
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getDocsImportPull>>, TError, TData>>;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getGetDocsImportPullQueryOptions(options);
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+/**
+ * @summary Cancel a running documentation pull (instance admin)
+ */
+export const deleteDocsImportPull = (
+  options?: SecondParameter<typeof customInstance>,
+  signal?: AbortSignal
+) => {
+  return customInstance<DocPullJob>(
+    { url: `/docs/import/pull`, method: 'DELETE', signal },
+    options
+  );
+};
+
+export const getDeleteDocsImportPullMutationKey = () => ['deleteDocsImportPull'] as const;
+
+export const getDeleteDocsImportPullMutationOptions = <
+  TError = ErrorType<ForbiddenResponse | void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteDocsImportPull>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteDocsImportPull>>,
+  TError,
+  void,
+  TContext
+> => {
+  const mutationKey = getDeleteDocsImportPullMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteDocsImportPull>>,
+    void
+  > = () => {
+    return deleteDocsImportPull(requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteDocsImportPullMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteDocsImportPull>>
+>;
+
+export type DeleteDocsImportPullMutationError = ErrorType<ForbiddenResponse | void>;
+
+/**
+ * @summary Cancel a running documentation pull (instance admin)
+ */
+export const useDeleteDocsImportPull = <
+  TError = ErrorType<ForbiddenResponse | void>,
+  TContext = unknown,
+>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof deleteDocsImportPull>>,
+      TError,
+      void,
+      TContext
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseMutationResult<Awaited<ReturnType<typeof deleteDocsImportPull>>, TError, void, TContext> => {
+  return useMutation(getDeleteDocsImportPullMutationOptions(options), queryClient);
 };
 /**
  * @summary Create every doc of a staged import in one transaction (instance admin)
