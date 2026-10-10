@@ -17,6 +17,12 @@ func TestConvert(t *testing.T) {
 		{"code", `<pre><code class="language-go">fmt.Println()</code></pre>`, []string{"```go", "fmt.Println()"}, nil},
 		{"table", "<table><thead><tr><th>A</th><th>B</th></tr></thead><tbody><tr><td>1</td><td>2</td></tr></tbody></table>", []string{"| A | B |", "| 1 | 2 |"}, nil},
 		{"strikethrough", "<p><del>gone</del></p>", []string{"~~gone~~"}, nil},
+		{"javascript href dropped", `<a href="javascript:alert(1)">x</a>`, []string{"x"}, []string{"javascript", "alert"}},
+		{"obfuscated javascript href dropped", "<a href=\"JaVa\tScRiPt:alert(1)\">x</a>", []string{"x"}, []string{"javascript", "alert", "ScRiPt"}},
+		{"newline and space obfuscation dropped", "<a href=\" java\nscript:alert(1)\">x</a>", []string{"x"}, []string{"script:", "alert"}},
+		{"data image dropped", `<img src="data:image/svg+xml;base64,PHN2Zz4=" alt="s">`, nil, []string{"data:", "PHN2"}},
+		{"svg script dropped", `<svg><script>alert(1)</script><text>hi</text></svg>`, nil, []string{"<svg", "alert", "<script"}},
+		{"safe links survive", `<a href="https://example.com">a</a> <a href="mailto:a@b.c">b</a> <a href="/en/page">c</a> <a href="#top">d</a> <a href="tel:+1555">e</a>`, []string{"[a](https://example.com)", "[b](mailto:a@b.c)", "[c](/en/page)", "[d](#top)", "[e](tel:+1555)"}, nil},
 		{"scripts dropped", `<p>ok</p><script>alert(1)</script><style>p{}</style><iframe src="x"></iframe>`, []string{"ok"}, []string{"alert", "<script", "<iframe", "p{}"}},
 	}
 	for _, c := range cases {

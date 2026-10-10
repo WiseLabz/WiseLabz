@@ -125,6 +125,33 @@ func TestAnalyzeWikiJSExport(t *testing.T) {
 	}
 }
 
+func TestWikiJSAssetLinksStayInsideTheArchive(t *testing.T) {
+	plan := analyzeWiki(t, buildZip(t,
+		entry{"home.md", wikiMD("Home", "", "[a](/uploads/../../etc/passwd.png)\n[b](/%2e%2e/%2e%2e/uploads/diagram.png)\n![c](/uploads/net/../net/diagram.png)\n")},
+		entry{"uploads/diagram.png", pngBytes},
+		entry{"uploads/net/diagram.png", pngBytes},
+	))
+	home := byPath(plan)["home.md"]
+	if !strings.Contains(home.Content, "[a](/uploads/../../etc/passwd.png)") {
+		t.Fatalf("escaping link must stay text: %q", home.Content)
+	}
+	if !hasIssue(plan.Warnings, "home.md", "unresolved link [a](/uploads/../../etc/passwd.png)") {
+		t.Fatalf("unresolved warning missing: %+v", plan.Warnings)
+	}
+	if len(home.Attachments) != 2 {
+		t.Fatalf("only the two existing entries may resolve: %+v", home.Attachments)
+	}
+	for _, a := range home.Attachments {
+		if a.Path != "uploads/diagram.png" && a.Path != "uploads/net/diagram.png" {
+			t.Fatalf("attachment outside the archive entries: %+v", a)
+		}
+	}
+	if strings.Contains(home.Content, "[b](/%2e") || strings.Contains(home.Content, "![c](/uploads") ||
+		!strings.Contains(home.Content, "[b](attachment:") || !strings.Contains(home.Content, "![c](attachment:") {
+		t.Fatalf("cleaned asset links not resolved: %q", home.Content)
+	}
+}
+
 func TestWikiJSDepthIsClamped(t *testing.T) {
 	plan := analyzeWiki(t, buildZip(t, entry{"a/b/c/d/e/f/g.md", wikiMD("G", "", "g\n")}))
 	if !hasIssue(plan.Warnings, "a/b/c/d/e/f/g", "nested deeper") {

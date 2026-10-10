@@ -330,6 +330,25 @@ func TestImportSourceDefaultsToMarkdown(t *testing.T) {
 	}
 }
 
+func TestImportWikiJSSourceAppliesArchiveGuards(t *testing.T) {
+	h := newImportHandler(t)
+	admin := apitest.NewUser(t, h.Store, "admin")
+	page := "---\ntitle: A\n---\n\nbody\n"
+	for name, data := range map[string][]byte{
+		"zip slip":       zipOf(t, "../evil.md", page),
+		"duplicate path": zipOf(t, "home.md", page, "home.md", page),
+	} {
+		rr := httptest.NewRecorder()
+		h.StageImport(rr, sourceRequest(t, data, admin, "wikijs", true))
+		if rr.Code != http.StatusBadRequest || !strings.Contains(rr.Body.String(), "invalid_archive") {
+			t.Fatalf("%s: %d %s", name, rr.Code, rr.Body.String())
+		}
+	}
+	if entries, _ := os.ReadDir(h.Settings.Config.Attachments.ImportDir); len(entries) != 0 {
+		t.Fatalf("rejected uploads left staged: %v", entries)
+	}
+}
+
 func TestImportRejectsUnknownSource(t *testing.T) {
 	h := newImportHandler(t)
 	admin := apitest.NewUser(t, h.Store, "admin")
