@@ -147,7 +147,7 @@ func (b *BookStack) Fetch(ctx context.Context, destination string, progress func
 		shelfPath := fmt.Sprintf("shelf-%d", s.ID)
 		body := shelf.Description
 		if shelf.DescriptionHTML != "" {
-			body, err = htmlmd.Convert(shelf.DescriptionHTML)
+			body, err = convertHTML(shelf.DescriptionHTML)
 			if err != nil {
 				return nil, errors.New("could not convert BookStack shelf HTML")
 			}
@@ -302,7 +302,7 @@ func (m *bookMapper) node(n portableNode, folder, kind string, bookID int) error
 			html = n.DescriptionHTML
 		}
 		if html != "" {
-			converted, err := htmlmd.Convert(html)
+			converted, err := convertHTML(html)
 			if err != nil {
 				return errors.New("could not convert BookStack HTML")
 			}
@@ -385,6 +385,20 @@ func (m *bookMapper) node(n portableNode, folder, kind string, bookID int) error
 
 var bsReference = regexp.MustCompile(`\[\[bsexport:(page|chapter|book|image|attachment):(\d+)\]\]`)
 var markdownDestination = regexp.MustCompile(`\]\((<?)([^\s<>()]+)(>?)([^\n)]*)\)`)
+
+var bsPlaceholder = regexp.MustCompile(`#bsexport/(page|chapter|book|image|attachment)/(\d+)`)
+
+// convertHTML shields export references from htmlmd, which drops link and image
+// URLs whose scheme is not http(s), mailto or tel. References become relative
+// fragments for the conversion and are restored afterwards.
+func convertHTML(src string) (string, error) {
+	shielded := bsReference.ReplaceAllString(src, "#bsexport/$1/$2")
+	out, err := htmlmd.Convert(shielded)
+	if err != nil {
+		return "", err
+	}
+	return bsPlaceholder.ReplaceAllString(out, "[[bsexport:$1:$2]]"), nil
+}
 
 func escapeLabel(s string) string { return strings.NewReplacer("[", "\\[", "]", "\\]").Replace(s) }
 

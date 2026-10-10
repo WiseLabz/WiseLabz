@@ -334,3 +334,38 @@ func TestBookStackHTMLPageUsesRealConverter(t *testing.T) {
 	}
 	t.Fatalf("page not found in %#v", plan.Docs)
 }
+
+func TestBookStackHTMLPageKeepsExportReferences(t *testing.T) {
+	connector.AllowLoopbackForTest(t)
+	zipData := exportZip(t, map[string]any{"book": portableNode{ID: 10, Name: "Book",
+		Pages: []portableNode{
+			{ID: 100, Name: "Html page", Priority: 1,
+				HTML:        `<p>See <a href="[[bsexport:page:101]]">the other page</a>.</p><p><img src="[[bsexport:image:5]]" alt="diagram"></p>`,
+				Images:      []portableFile{{ID: 5, File: "image.png", Name: "image"}},
+				Attachments: []portableFile{{ID: 7, File: "manual.pdf", Name: "Manual"}}},
+			{ID: 101, Name: "Other", Priority: 2, Markdown: "other body"},
+		}}}, map[string]string{"files/image.png": "\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00", "files/manual.pdf": "%PDF-1.7\nmanual"})
+	server := fakeBookStack(t, zipData)
+	dir := t.TempDir()
+	if _, err := newSource(t, server.URL, docimport.DefaultLimits()).Fetch(context.Background(), docimport.UploadPath(dir), func(Progress) {}); err != nil {
+		t.Fatal(err)
+	}
+	plan, err := Analyze(context.Background(), dir, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	byTitle := map[string]docimport.Doc{}
+	for _, doc := range plan.Docs {
+		byTitle[doc.Title] = doc
+	}
+	page := byTitle["Html page"]
+	if !strings.Contains(page.Content, "[the other page](/docs/"+byTitle["Other"].ID+")") {
+		t.Errorf("page link lost: %q", page.Content)
+	}
+	if !strings.Contains(page.Content, "attachment:") || len(page.Attachments) != 2 {
+		t.Errorf("attachments = %#v in %q", page.Attachments, page.Content)
+	}
+	if strings.Contains(page.Content, "bsexport") {
+		t.Errorf("unresolved body: %q", page.Content)
+	}
+}
