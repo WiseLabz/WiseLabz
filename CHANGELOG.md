@@ -16,6 +16,138 @@
 
 * **discovery:** instance admins can scan a private /24 for Proxmox VE, Proxmox Backup Server, Home Assistant, Portainer, UniFi, AdGuard Home, Traefik, Docker, Caddy, Nginx Proxy Manager, pfSense, OPNsense, TrueNAS and Pi-hole during onboarding and from the add-connector page, and connect what is found. See [docs/NETWORK_DISCOVERY.md](docs/NETWORK_DISCOVERY.md).
 
+## 2.0.0 (2026-10-10)
+
+## What's Changed
+* Add the make targets CONTRIBUTING.md already documents by @wufangyong973 in https://github.com/WiseLabz/WiseLabz/pull/551
+* chore(agents): track shared tooling and prune unused skills by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/554
+* fix(backup): disable age pruning when maxAgeHours <= 0 by @ChangedRuby in https://github.com/WiseLabz/WiseLabz/pull/555
+* fix(docs): require viewer access for doc history and lock reads by @ChangedRuby in https://github.com/WiseLabz/WiseLabz/pull/556
+* fix(dashboard): scope the overview to connectors the caller can view by @ChangedRuby in https://github.com/WiseLabz/WiseLabz/pull/558
+* fix(auth): require step-up to start MFA enrollment and block API keys by @ChangedRuby in https://github.com/WiseLabz/WiseLabz/pull/559
+* chore(dx): skip unaffected checks in lefthook using the CI change classifier by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/562
+* chore(ci): harden agent-only change skips and exclude tooling from build contexts by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/563
+* fix(web): surface mutation errors, single-flight token refresh, and handle WS events by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/564
+* fix(connector): Pi-hole token leak and sessions, Proxmox mem decode and drift by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/565
+* fix(backend): store, docs and scheduling correctness fixes by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/566
+* fix: real test notifications, lab docs in tree, a11y for dialogs/palette/notifications by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/567
+* fix(auth): enforce MFA lockout and auth settings, stop leaking connector config by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/568
+* fix(security): enforce connector grants in notifications, runbooks, docs and attention cache by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/569
+* fix(security): sanitize errors in test-notification logs by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/570
+* fix(web): repair HTTP copying, chat retries, and OIDC step-up by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/571
+* fix(api): close connector authorization gaps by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/572
+* fix(backend): correct notification delivery, reports and audit exports by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/573
+* fix(backend): preserve docs and correct snapshot and report persistence by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/574
+* fix(docs): restore sync and document editing workflows by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/575
+* fix(sync): preserve baselines and drain bounded sync jobs by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/576
+* test: add command-line entrypoint tests for issues #489 and #493 by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/579
+* test: comprehensive coverage for reports, compliance, and auth handlers by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/580
+* test(web): add unit tests for lib helpers and auth store by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/577
+* test: add comprehensive backup scheduling, authz and AI encryption tests by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/581
+* test: add concurrent cache tests and postgres testing for backup/retention by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/578
+* docs: fix README config section and remove dead store/sqlc by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/583
+* perf: add HTTP compression, cache headers, and optimize doc editor rendering by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/582
+* fix(security): add placeholder secret validation and PKCE to OIDC by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/586
+* chore: small backend cleanups and request-scoped logging foundation by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/585
+* chore(web): replace leftover API clients and i18n reports by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/584
+* refactor(backend): move AI config SQL into store, decouple mcp/chat, consolidate ai HTTP helpers by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/587
+* perf(backend): sync/linking snapshot reuse and SQLite read pool by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/588
+* feat(auth): step-up on admin/auth-policy actions, single-use bound elevation tokens; web deps cleanup by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/591
+* refactor(backend): share connector helpers and split oversized functions by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/589
+* perf: coalesce WS event bursts and trim hot-path queries by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/590
+* feat(compliance): Tailscale connector and recommended rule pack by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/592
+* feat: connector lifecycle actions and UI language picker by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/593
+* feat: Prometheus /metrics endpoint and more notification channels by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/594
+* fix(security): purpose-bound keys and AAD for stored secrets (#531) by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/595
+* feat(health): scheduled connector health checks and uptime reporting by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/596
+* feat(mcp): FTS search, topology path, runbook tools and doc edit proposals by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/597
+* feat(docs): section ownership — sync merges generated blocks instead of overwriting human edits (#478) by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/598
+* chore(openspec): archive doc-section-ownership and sync its spec by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/599
+* feat(docs): human-written docs — create, delete, nest and trash (#494) by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/600
+* chore(openspec): archive human-docs and sync its spec by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/604
+* feat(docs): doc attachments — upload, signed serving, backups and export (#519) by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/605
+* feat(docs): import Markdown/Obsidian vaults (#514) by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/610
+* fix(docs): attachment review follow-ups (#519) by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/609
+* feat(connectors): declare connectors in config.yaml (#500) by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/616
+* feat(journal): add unified lab timeline and manual entries (#501) by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/623
+* feat(docs): add offline Lab Book exports and report attachments (#499) by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/621
+* chore(graphify): refresh graph report and register graph.json merge driver by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/624
+* feat(search): add lab-wide search across docs and entities (#495) by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/625
+* feat(connector): add Nginx Proxy Manager support (#497) by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/626
+* feat(compliance): add cross-connector related-entity rule clauses (#627) by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/628
+* feat(connector): add Proxmox Backup Server support and backup rules (#496) by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/629
+* feat(connector): add Caddy connector by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/630
+* feat(identities): persist entity identities from sync snapshots by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/631
+* feat(topology): add typed edges and traversal APIs by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/633
+* feat(entities): add entity detail pages by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/635
+* feat(topology): add live topology graph UI by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/636
+* fix(entities): show far-end neighbours, dedupe edges, name identities from visible members by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/637
+* fix(connector): allow Caddy pasted-JSON creation and name Pi-hole DNS records by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/639
+* fix(topology): follow-ups from the topology end-to-end run by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/638
+* fix(topology): address remaining entity and graph follow-ups by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/643
+* fix(connector): give firewall entities stable external IDs by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/644
+* fix(ci): fail CI Status when detection or selected jobs do not succeed by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/645
+* feat(entities): store, reconcile and back up identity overrides by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/646
+* feat(entities): add entity override admin API, audit and OpenAPI by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/647
+* feat(entities): add admin entity identity overrides web workflow and list by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/648
+* docs(openspec): propose runbook-runs and custom-rest-recipes changes by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/654
+* refactor(connectors): extract reusable lifecycle cores by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/655
+* feat(store): add runbook runs, step kinds and retention store by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/656
+* feat(runbooks): validate step kinds and reject non-lifecycle single-step execution by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/657
+* feat(retention): expire open runs, prune history and add execution ADR by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/659
+* feat(runbooks): add step editor for new step kinds and retention settings (#510) by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/660
+* feat(runbooks): add the server-side run executor by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/658
+* feat(runbooks): expose run API and read-only MCP history by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/661
+* feat(web): add runbook run controls and history by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/662
+* test(runbooks): complete run execution integration checks by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/663
+* feat(connectors): add connector categories (#513) by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/664
+* feat(connectors): add custom REST recipes and run safeguards by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/667
+* feat(connectors): add bounded REST recipe pagination by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/668
+* feat(connectors): add recipe previews and web editor by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/669
+* test(connectors): verify custom REST recipe integration by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/670
+* docs(openspec): archive runbook-runs and custom-rest-recipes by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/671
+* docs(openspec): plan runbook-step-kinds and cert-expiry-watch by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/672
+* feat(store): persist config-push and entity-wait runbook steps by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/673
+* feat(connector): share verified config pushes with runbook runs by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/674
+* feat(compliance): add days-left operators and normalize NPM expiry by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/676
+* feat(connector): supply stored snapshot inputs during sync by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/675
+* feat(runbookrun): execute config_push and wait_for_entity steps by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/678
+* feat(connector): add TLS probe connector with Traefik host import by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/679
+* feat(runbooks): author config-push and entity-wait runbook steps by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/680
+* feat(compliance): add certificate expiry pack and pack installed state by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/682
+* feat(runbooks): add preview, history, MCP, and docs for config-push and entity-wait by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/683
+* feat: add certificate expiry views and runbook configuration steps by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/684
+* docs(openspec): complete integration task 7.1 for runbook-step-kinds and cert-expiry-watch by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/685
+* docs(openspec): archive runbook-step-kinds and cert-expiry-watch by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/686
+* fix(docs): stage attachment uploads before acquiring publication lock by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/687
+* fix(docs): sweep stale attachment upload temp files by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/688
+* fix(docimport): strip trailing image embed size from aliases by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/689
+* feat(discovery): network discovery during onboarding by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/690
+* feat(connectors): allow declaring a TLS probe connector in config.yaml by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/692
+* fix(connectors): correct elevation response contract, opnsense savepoint flow, and proxmox memory reader by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/693
+* feat(connectors): recipe-defined actions for custom REST connectors by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/698
+* feat(web): recipe form builder for custom connectors by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/694
+* fix(deps): bump Go to 1.27.2 and golang.org/x/net to v0.60.0 for govulncheck findings by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/701
+* fix(web): escape hyphens in recipe field ids to avoid collisions by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/703
+* fix(runbooks): refuse lifecycle and config-push steps on orphaned connectors by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/704
+* feat(docs): translate attachment UI strings to pt-BR (#608) by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/705
+* feat(journal): show grant-scoped lab actions to non-admin members by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/707
+* feat(journal): narrate a selected timeline window with AI by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/706
+* feat(runbooks): optional second approver for runbook runs by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/708
+* feat(docs): import a Wiki.js storage export by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/709
+* test(opnsense): bound waits and add a go test timeout in CI by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/711
+* fix(auth): always require elevation to approve runbook runs by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/712
+* feat(docs): wikilinks and backlinks between docs and entities by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/710
+* feat(docs): import from BookStack via API pull by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/713
+* feat(docs): import from Wiki.js via API pull by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/714
+* fix: handle unverified config writes and preserve API pull content by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/717
+* fix(opnsense): make every firewall rule addressable by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/718
+
+## New Contributors
+* @wufangyong973 made their first contribution in https://github.com/WiseLabz/WiseLabz/pull/551
+
+**Full Changelog**: https://github.com/WiseLabz/WiseLabz/compare/v1.0.0...v2.0.0
+
 ## 1.0.0 (2026-10-01)
 
 ## What's Changed
