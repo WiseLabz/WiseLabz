@@ -146,10 +146,7 @@ export function RunDetail({
 
   const approve = useMutation({
     mutationFn: (token: string | null) =>
-      approveRunbookRun(
-        runId,
-        token ? { headers: { 'X-Elevation-Token': token } } : undefined
-      ),
+      approveRunbookRun(runId, token ? { headers: { 'X-Elevation-Token': token } } : undefined),
     onSuccess: () => {
       refresh();
       setApprovalElevationOpen(false);
@@ -197,10 +194,11 @@ export function RunDetail({
     .sort((a, b) => a.position - b.position)
     .find((step) => step.state !== 'succeeded');
 
-  // An unknown connector_action step needs an explicit resend or mark-done choice
-  // before the resume request is sent; every other resume keeps its plain flow.
+  // Unknown action and config-push steps need an explicit decision before resume.
   const decisionRequired =
-    firstUnfinishedStep?.state === 'unknown' && firstUnfinishedStep.kind === 'connector_action';
+    firstUnfinishedStep?.state === 'unknown' &&
+    (firstUnfinishedStep.kind === 'connector_action' || firstUnfinishedStep.kind === 'config_push');
+  const configPushDecision = decisionRequired && firstUnfinishedStep?.kind === 'config_push';
 
   const openResume = () => {
     setResumeError(null);
@@ -281,7 +279,9 @@ export function RunDetail({
                 />
               )}
               <MetadataRow
-                label={t(awaitingApproval ? 'runbooks.runs.requestedAt' : 'runbooks.runs.startedAt')}
+                label={t(
+                  awaitingApproval ? 'runbooks.runs.requestedAt' : 'runbooks.runs.startedAt'
+                )}
                 value={<Timestamp value={run.startedAt} language={i18n.language} />}
               />
               {awaitingApproval && run.approvalExpiresAt && (
@@ -301,7 +301,9 @@ export function RunDetail({
                 />
               )}
               <MetadataRow
-                label={t(awaitingApproval ? 'runbooks.runs.requestedBy' : 'runbooks.runs.startedBy')}
+                label={t(
+                  awaitingApproval ? 'runbooks.runs.requestedBy' : 'runbooks.runs.startedBy'
+                )}
                 value={<code>{run.startedBy}</code>}
               />
               {run.approvedBy && (
@@ -352,12 +354,7 @@ export function RunDetail({
                   .slice()
                   .sort((a, b) => a.position - b.position)
                   .map((step) => (
-                    <RunStepRow
-                      key={step.id}
-                      step={step}
-                      language={i18n.language}
-                      t={t}
-                    />
+                    <RunStepRow key={step.id} step={step} language={i18n.language} t={t} />
                   ))}
               </ol>
             </section>
@@ -411,7 +408,9 @@ export function RunDetail({
                   disabled={!canCancel || cancel.isPending}
                   onClick={() => setConfirmCancelOpen(true)}
                 >
-                  {t(awaitingApproval ? 'runbooks.runs.cancelRequest' : 'runbooks.runs.cancelAction')}
+                  {t(
+                    awaitingApproval ? 'runbooks.runs.cancelRequest' : 'runbooks.runs.cancelAction'
+                  )}
                 </Button>
               )}
             </div>
@@ -437,6 +436,7 @@ export function RunDetail({
       {decisionOpen && (
         <ResumeDecisionDialog
           decision={decision}
+          configPush={configPushDecision}
           onDecisionChange={setDecision}
           onClose={() => setDecisionOpen(false)}
           onContinue={() => {
@@ -496,7 +496,9 @@ export function RunDetail({
           open
           onClose={() => setConfirmCancelOpen(false)}
           onConfirm={() => cancel.mutate()}
-          title={t(awaitingApproval ? 'runbooks.runs.cancelRequestTitle' : 'runbooks.runs.cancelTitle')}
+          title={t(
+            awaitingApproval ? 'runbooks.runs.cancelRequestTitle' : 'runbooks.runs.cancelTitle'
+          )}
           description={t(
             awaitingApproval
               ? 'runbooks.runs.cancelRequestDescription'
@@ -533,15 +535,7 @@ export function RunStateTag({ state, label }: { state: string; label: string }) 
   return <ToneTag tone={STATE_TONES[state] ?? 'idle'} label={label} />;
 }
 
-function RunStepRow({
-  step,
-  language,
-  t,
-}: {
-  step: RunbookRunStep;
-  language: string;
-  t: RunT;
-}) {
+function RunStepRow({ step, language, t }: { step: RunbookRunStep; language: string; t: RunT }) {
   const restricted =
     step.redacted || !step.kind || !step.title || (step.kind !== 'manual' && !step.connectorId);
   const stepNumber = step.position + 1;
@@ -699,10 +693,7 @@ function RunStepRow({
       )}
       {step.error && (
         <p className="mt-3 text-xs text-err">
-          <span className="font-medium">
-            {t('runbooks.runs.stepError')}
-            :{' '}
-          </span>
+          <span className="font-medium">{t('runbooks.runs.stepError')}: </span>
           {step.error}
         </p>
       )}
@@ -712,27 +703,44 @@ function RunStepRow({
 
 type DecisionCopy = { label: string; hint: string };
 
-const RESUME_DECISION_COPY: Record<ResumeRunbookRunBodyDecision, DecisionCopy> = {
-  [ResumeRunbookRunBodyDecision.resend]: {
-    label: 'runbooks.runs.resumeDecision.resend',
-    hint: 'runbooks.runs.resumeDecision.resendHint',
+const RESUME_DECISION_COPY: Record<
+  'action' | 'configPush',
+  Record<ResumeRunbookRunBodyDecision, DecisionCopy>
+> = {
+  action: {
+    [ResumeRunbookRunBodyDecision.resend]: {
+      label: 'runbooks.runs.resumeDecision.resend',
+      hint: 'runbooks.runs.resumeDecision.resendHint',
+    },
+    [ResumeRunbookRunBodyDecision.mark_done]: {
+      label: 'runbooks.runs.resumeDecision.markDone',
+      hint: 'runbooks.runs.resumeDecision.markDoneHint',
+    },
   },
-  [ResumeRunbookRunBodyDecision.mark_done]: {
-    label: 'runbooks.runs.resumeDecision.markDone',
-    hint: 'runbooks.runs.resumeDecision.markDoneHint',
+  configPush: {
+    [ResumeRunbookRunBodyDecision.resend]: {
+      label: 'runbooks.runs.resumeDecision.configPush.resend',
+      hint: 'runbooks.runs.resumeDecision.configPush.resendHint',
+    },
+    [ResumeRunbookRunBodyDecision.mark_done]: {
+      label: 'runbooks.runs.resumeDecision.configPush.markDone',
+      hint: 'runbooks.runs.resumeDecision.configPush.markDoneHint',
+    },
   },
 };
 
-/** Asks which way to resume past an unknown connector_action step. Nothing
+/** Asks which way to resume past an unknown action or config-push step. Nothing
  * is sent until one option is chosen; the chosen value is the resume body's
  * `decision`. */
 function ResumeDecisionDialog({
   decision,
+  configPush,
   onDecisionChange,
   onClose,
   onContinue,
 }: {
   decision: ResumeRunbookRunBodyDecision | null;
+  configPush: boolean;
   onDecisionChange: (decision: ResumeRunbookRunBodyDecision) => void;
   onClose: () => void;
   onContinue: () => void;
@@ -743,7 +751,11 @@ function ResumeDecisionDialog({
     <Dialog open onClose={onClose} title={t('runbooks.runs.resumeTitle')} size="sm">
       <div className="space-y-4">
         <p role="note" className="text-xs text-warn">
-          {t('runbooks.runs.resumeDecisionWarning')}
+          {t(
+            configPush
+              ? 'runbooks.runs.resumeDecision.configPush.warning'
+              : 'runbooks.runs.resumeDecisionWarning'
+          )}
         </p>
         <fieldset className="space-y-2">
           <legend className="mb-2 text-xs text-ink-muted">
@@ -764,10 +776,10 @@ function ResumeDecisionDialog({
               />
               <span className="min-w-0">
                 <span className="block text-sm text-ink">
-                  {t(RESUME_DECISION_COPY[option].label)}
+                  {t(RESUME_DECISION_COPY[configPush ? 'configPush' : 'action'][option].label)}
                 </span>
                 <span className="block text-2xs text-ink-muted">
-                  {t(RESUME_DECISION_COPY[option].hint)}
+                  {t(RESUME_DECISION_COPY[configPush ? 'configPush' : 'action'][option].hint)}
                 </span>
               </span>
             </label>

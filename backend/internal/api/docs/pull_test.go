@@ -21,7 +21,12 @@ func TestPullUsesExistingPreviewCommitAndSafeAudit(t *testing.T) {
 	connector.AllowLoopbackForTest(t)
 	h := newImportHandler(t)
 	user := apitest.NewUser(t, h.Store, "admin")
-	zipData := zipOf(t, "data.json", `{"book":{"id":1,"name":"Book","pages":[{"id":2,"name":"Page","markdown":"hello"}]}}`)
+	page := strings.Repeat("x", (1<<20)+1)
+	attachment := strings.Repeat("a", (1<<20)+1)
+	zipData := zipOf(t,
+		"data.json", `{"book":{"id":1,"name":"Book","pages":[{"id":2,"name":"Page","markdown":"`+page+`","attachments":[{"id":3,"name":"Manual","file":"manual.txt"}]}]}}`,
+		"files/manual.txt", attachment,
+	)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/books" {
 			_, _ = w.Write([]byte(`{"data":[{"id":1,"name":"Book"}],"total":1}`))
@@ -53,8 +58,11 @@ func TestPullUsesExistingPreviewCommitAndSafeAudit(t *testing.T) {
 		}
 		time.Sleep(time.Millisecond)
 	}
-	if response.State != "ready" || response.Preview == nil || response.Preview.DocCount != 2 {
+	if response.State != "ready" || response.Preview == nil || response.Preview.DocCount != 2 || response.Preview.AttachmentCount != 1 {
 		t.Fatalf("ready %d %s", rec.Code, rec.Body)
+	}
+	if response.Preview.Tree[0].Children[0].Title != "Page" {
+		t.Fatalf("preview did not include pulled note: %+v", response.Preview.Tree)
 	}
 	stageDir := filepath.Join(h.Settings.Config.Attachments.ImportDir, response.ID)
 	// Polling a ready job must leave the staged import in place for commit.
@@ -81,6 +89,14 @@ func TestPullUsesExistingPreviewCommitAndSafeAudit(t *testing.T) {
 	h.CommitImport(rec, commitRequest(response.ID, user, true))
 	if rec.Code != 201 {
 		t.Fatalf("commit %d %s", rec.Code, rec.Body)
+	}
+	pageDoc, err := h.Store.GetDoc(context.Background(), response.Preview.Tree[0].Children[0].DocID)
+	if err != nil || !strings.Contains(pageDoc.Content, page) {
+		t.Fatalf("committed BookStack note has wrong content: err=%v content length=%d", err, len(pageDoc.Content))
+	}
+	attachments, err := h.Store.ListDocAttachments(context.Background(), pageDoc.ID)
+	if err != nil || len(attachments) != 1 || attachments[0].Size != int64(len(attachment)) {
+		t.Fatalf("committed compressible attachment = %+v err=%v", attachments, err)
 	}
 	rows, _, err := h.Store.ListAuditRecords(context.Background(), "", "", "", "", 0, 100)
 	if err != nil {
@@ -251,6 +267,7 @@ func TestWikiJSPullUsesWikiJSPlanAndCommit(t *testing.T) {
 	connector.AllowLoopbackForTest(t)
 	h := newImportHandler(t)
 	user := apitest.NewUser(t, h.Store, "admin")
+	content := strings.Repeat("x", (1<<20)+1)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
 			Query string `json:"query"`
@@ -260,7 +277,7 @@ func TestWikiJSPullUsesWikiJSPlanAndCommit(t *testing.T) {
 		case strings.Contains(body.Query, "list(orderBy"):
 			_, _ = w.Write([]byte(`{"data":{"pages":{"list":[{"id":1,"path":"guides/setup","locale":"en","contentType":"markdown","isPublished":true}]}}}`))
 		case strings.Contains(body.Query, "single(id"):
-			_, _ = w.Write([]byte(`{"data":{"pages":{"single":{"path":"guides/setup","locale":"en","title":"Setup","description":"","content":"hello","contentType":"markdown","createdAt":"","updatedAt":"","tags":[]}}}}`))
+			_, _ = w.Write([]byte(`{"data":{"pages":{"single":{"path":"guides/setup","locale":"en","title":"Setup","description":"","content":"` + content + `","contentType":"markdown","createdAt":"","updatedAt":"","tags":[]}}}}`))
 		case strings.Contains(body.Query, "folders("):
 			_, _ = w.Write([]byte(`{"data":{"assets":{"folders":[]}}}`))
 		default:
@@ -295,6 +312,10 @@ func TestWikiJSPullUsesWikiJSPlanAndCommit(t *testing.T) {
 	h.CommitImport(rec, commitRequest(response.ID, user, true))
 	if rec.Code != 201 {
 		t.Fatalf("commit %d %s", rec.Code, rec.Body)
+	}
+	pageDoc, err := h.Store.GetDoc(context.Background(), response.Preview.Tree[0].Children[0].DocID)
+	if err != nil || !strings.Contains(pageDoc.Content, content) {
+		t.Fatalf("committed Wiki.js note has wrong content: err=%v content length=%d", err, len(pageDoc.Content))
 	}
 	rows, _, err := h.Store.ListAuditRecords(context.Background(), "", "", "", "", 0, 100)
 	if err != nil {

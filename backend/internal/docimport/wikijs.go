@@ -21,6 +21,8 @@ type Source string
 const (
 	// SourceMarkdown is a folder of Markdown files or an Obsidian vault.
 	SourceMarkdown Source = "markdown"
+	// SourceBookStack identifies server-staged BookStack pulls.
+	SourceBookStack Source = "bookstack"
 	// SourceWikiJS is a Wiki.js 2.x storage export (the disk target layout).
 	SourceWikiJS Source = "wikijs"
 )

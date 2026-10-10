@@ -194,8 +194,14 @@ func TestActionConfigPushFailures(t *testing.T) {
 			if mode == "push" {
 				status = 502
 			}
+			if mode == "post" {
+				status = http.StatusConflict
+			}
 			rr := actionResponse(t, h.ConfigPush, r, status)
 			if mode == "push" && !strings.Contains(rr.Body.String(), "config_push_failed") {
+				t.Fatalf("response=%s", rr.Body.String())
+			}
+			if mode == "post" && !strings.Contains(rr.Body.String(), "config_push_unverified") {
 				t.Fatalf("response=%s", rr.Body.String())
 			}
 			wantFetches, wantPushes := 1, 1
@@ -209,8 +215,12 @@ func TestActionConfigPushFailures(t *testing.T) {
 				t.Fatalf("fetches=%d pushes=%d", fake.fetches, fake.pushes)
 			}
 			rows, _, err := h.Store.ListAuditRecords(context.Background(), "connector.configPush", "connector", "", "", 0, 10)
-			if err != nil || len(rows) != 0 {
-				t.Fatalf("failed push audit=%+v err=%v", rows, err)
+			wantAudits := 0
+			if mode == "post" {
+				wantAudits = 1
+			}
+			if err != nil || len(rows) != wantAudits {
+				t.Fatalf("config-push audit=%+v err=%v; want %d", rows, err, wantAudits)
 			}
 		})
 	}

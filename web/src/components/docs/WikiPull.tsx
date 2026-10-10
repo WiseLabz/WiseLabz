@@ -79,6 +79,8 @@ export function WikiPull({
   });
   // A failed read (404 when no pull exists) means no current job, not stale data.
   const job = current.isError ? undefined : current.data;
+  const jobK =
+    job?.source === DocPullRequestSource.wikijs ? 'docs.import.pullWikijs' : 'docs.import.pull';
   useEffect(() => {
     if (job?.state === 'fetching') watching.current = true;
     if (job?.state === 'ready' && job.preview && watching.current) {
@@ -90,12 +92,13 @@ export function WikiPull({
   if (job?.state === 'fetching') {
     return (
       <div className="flex flex-col gap-4">
+        <p className="text-sm font-medium text-ink">{t(`${jobK}.jobSource`)}</p>
         <p role="status" aria-live="polite">
-          {t(`${k}.progress`, { done: job.done, total: job.total })}
+          {t(`${jobK}.progress`, { done: job.done, total: job.total })}
         </p>
         <progress
           className="w-full"
-          aria-label={t(`${k}.progressLabel`)}
+          aria-label={t(`${jobK}.progressLabel`)}
           value={job.total > 0 ? job.done : undefined}
           max={job.total || 1}
         />
@@ -124,19 +127,20 @@ export function WikiPull({
         }}
       >
         <p className="text-sm text-ink-muted">{t(`${k}.intro`)}</p>
+        {job && <p className="text-sm font-medium text-ink">{t(`${jobK}.jobSource`)}</p>}
         {job?.state === 'ready' && job.preview && (
           <Button type="button" variant="secondary" onClick={() => onReady(job.preview!)}>
-            {t('docs.import.pull.review')}
+            {t(`${jobK}.review`)}
           </Button>
         )}
         {job?.state === 'failed' && (
           <p role="alert" className="text-sm text-danger">
-            {job.error || t('docs.import.pull.failed')}
+            {job.error || t(`${jobK}.failed`)}
           </p>
         )}
         {job?.state === 'cancelled' && (
           <p role="status" className="text-sm text-ink-muted">
-            {t('docs.import.pull.cancelled')}
+            {t(`${jobK}.cancelled`)}
           </p>
         )}
         <label className="flex flex-col gap-1 text-sm" htmlFor={`${id}-url`}>

@@ -181,8 +181,11 @@ func TestConfigPushStep(t *testing.T) {
 		if _, steps := e.get(run.ID); steps[0].State != StepUnknown {
 			t.Fatalf("step = %s, want unknown", steps[0].State)
 		}
-		if _, _, err := e.exec.Resume(ctx, run.ID, e.starter, ResumeNone); err != nil {
-			t.Fatal(err)
+		if _, _, err := e.exec.Resume(ctx, run.ID, e.starter, ResumeNone); !errors.Is(err, ErrDecisionRequired) {
+			t.Fatalf("resume without a decision = %v, want ErrDecisionRequired", err)
+		}
+		if _, decision, err := e.exec.Resume(ctx, run.ID, e.starter, ResumeResend); err != nil || decision == nil {
+			t.Fatalf("resume with resend = %+v, %v", decision, err)
 		}
 		e.settle()
 		got, steps := e.get(run.ID)

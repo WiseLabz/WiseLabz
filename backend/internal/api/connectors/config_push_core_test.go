@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/WiseLabz/wiselabz/internal/api/apitest"
 	"github.com/WiseLabz/wiselabz/internal/auth"
@@ -18,13 +19,15 @@ import (
 
 type configPushCoreConnector struct {
 	bulkFakeConnector
-	current   any
-	values    []any
-	land      bool
-	withdrawn bool
-	fetches   int
-	reads     int
-	readErr   error
+	current      any
+	values       []any
+	land         bool
+	withdrawn    bool
+	fetches      int
+	postFetchErr error
+	onPush       func(context.Context)
+	reads        int
+	readErr      error
 	// hidden keeps the documented content constant, so a write never shows
 	// in the snapshot diff.
 	hidden bool
@@ -43,6 +46,9 @@ func (c *configPushCoreConnector) WritableFields() []connector.ConfigField {
 
 func (c *configPushCoreConnector) Fetch(context.Context, map[string]any) (*connector.ServiceSnapshot, error) {
 	c.fetches++
+	if c.fetches == 2 && c.postFetchErr != nil {
+		return nil, c.postFetchErr
+	}
 	current := c.current
 	if c.hidden {
 		current = "unchanged"
@@ -57,8 +63,128 @@ func (c *configPushCoreConnector) Fetch(context.Context, map[string]any) (*conne
 	}, nil
 }
 
-func (c *configPushCoreConnector) ConfigPush(_ context.Context, _ map[string]any, _, _ string, value any) error {
+func TestMutateRunbookConfigPushPostFetchFailureIsUnverified(t *testing.T) {
+	t.Parallel()
+	h := newTestHandler(t)
+	fetchErr := errors.New("password=do-not-expose")
+	fake := &configPushCoreConnector{current: 2048, land: true, postFetchErr: fetchErr}
+	id := seedConfigPushCore(t, h, fake, true)
+	actorID := apitest.NewUser(t, h.Store, "operator")
+	extra := map[string]any{"runId": "run-1", "stepId": "step-2", "stepIndex": 1, "runbookId": "book-3"}
+	err := h.MutateRunbookConfigPush(context.Background(), id, "100", "memory", 4096,
+		LifecycleActor{UserID: actorID}, extra)
+	var unverified *ConfigPushUnverifiedError
+	if !errors.As(err, &unverified) || !errors.Is(err, fetchErr) {
+		t.Fatalf("error=%v; want unverified wrapping fetch error", err)
+	}
+	if !reflect.DeepEqual(fake.values, []any{4096}) || fake.fetches != 2 || fake.reads != 1 {
+		t.Fatalf("writes=%v fetches=%d reads=%d; want one write, one pre-fetch and one failed post-fetch", fake.values, fake.fetches, fake.reads)
+	}
+	rows, _, err := h.Store.ListAuditRecords(context.Background(), "connector.configPush", "connector", "", "", 0, 10)
+	if err != nil || len(rows) != 1 {
+		t.Fatalf("audit=%v err=%v; want one config-push audit", rows, err)
+	}
+	var detail map[string]any
+	if err := json.Unmarshal([]byte(rows[0].Detail), &detail); err != nil {
+		t.Fatal(err)
+	}
+	for key, want := range map[string]any{
+		"fieldKey": "memory", "entityRef": "100", "verification": "unverified",
+		"runId": "run-1", "stepId": "step-2", "stepIndex": float64(1), "runbookId": "book-3",
+	} {
+		if detail[key] != want {
+			t.Fatalf("audit detail[%q]=%v, want %v (all detail: %v)", key, detail[key], want, detail)
+		}
+	}
+	alerts, _, err := h.Store.ListAlerts(context.Background(), id, "", "", "", 0, 10)
+	if err != nil || len(alerts) != 1 || alerts[0].Severity != "critical" {
+		t.Fatalf("alerts=%v err=%v; want one critical alert", alerts, err)
+	}
+	if !strings.Contains(alerts[0].Description, `field "memory"`) || !strings.Contains(alerts[0].Description, `entity "100"`) {
+		t.Fatalf("alert omitted field/entity identifiers: %+v", alerts[0])
+	}
+	if strings.Contains(alerts[0].Description, "password") || strings.Contains(alerts[0].Description, "do-not-expose") {
+		t.Fatalf("alert exposed connector error: %+v", alerts[0])
+	}
+}
+
+func TestConfigPushCanceledAfterWritePersistsUnverifiedOutcome(t *testing.T) {
+	t.Parallel()
+	h := newTestHandler(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	fake := &configPushCoreConnector{current: 2048, land: true, postFetchErr: errors.New("context canceled"), onPush: func(context.Context) { cancel() }}
+	id := seedConfigPushCore(t, h, fake, true)
+	payload := stringMustJSON(t, map[string]any{"entityRef": "100", "fieldKey": "memory", "value": 4096})
+	r := actionRequest(id, payload)
+	token, err := h.JWT.IssueElevation("", "connector.configPush")
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.Header.Set("X-Elevation-Token", token.Token)
+	actionResponse(t, h.ConfigPush, r.WithContext(ctx), http.StatusConflict)
+	if !reflect.DeepEqual(fake.values, []any{float64(4096)}) || fake.fetches != 2 {
+		t.Fatalf("writes=%v fetches=%d; want one write and one failed post-fetch", fake.values, fake.fetches)
+	}
+	rows, _, err := h.Store.ListAuditRecords(context.Background(), "connector.configPush", "connector", "", "", 0, 10)
+	if err != nil || len(rows) != 1 {
+		t.Fatalf("audit=%v err=%v; want audit persisted after request cancellation", rows, err)
+	}
+	alerts, _, err := h.Store.ListAlerts(context.Background(), id, "", "", "", 0, 10)
+	if err != nil || len(alerts) != 1 || alerts[0].Severity != "critical" {
+		t.Fatalf("alerts=%v err=%v; want critical alert persisted after request cancellation", alerts, err)
+	}
+}
+
+func TestConfigPushExpiredRequestDeadlinePersistsUnverifiedOutcome(t *testing.T) {
+	t.Parallel()
+	h := newTestHandler(t)
+	fake := &configPushCoreConnector{
+		current: 2048, land: true, postFetchErr: context.DeadlineExceeded,
+		onPush: func(ctx context.Context) { <-ctx.Done() },
+	}
+	id := seedConfigPushCore(t, h, fake, true)
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	err := h.MutateRunbookConfigPush(ctx, id, "100", "memory", float64(4096), LifecycleActor{}, nil)
+	var unverified *ConfigPushUnverifiedError
+	if !errors.As(err, &unverified) || !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("error=%v; want typed unverified result wrapping expired fetch", err)
+	}
+	rows, _, err := h.Store.ListAuditRecords(context.Background(), "connector.configPush", "connector", "", "", 0, 10)
+	if err != nil || len(rows) != 1 {
+		t.Fatalf("audit=%v err=%v; want audit persisted after deadline", rows, err)
+	}
+	alerts, _, err := h.Store.ListAlerts(context.Background(), id, "", "", "", 0, 10)
+	if err != nil || len(alerts) != 1 || alerts[0].Severity != "critical" {
+		t.Fatalf("alerts=%v err=%v; want critical alert persisted after deadline", alerts, err)
+	}
+}
+
+func TestConfigPushPersistenceFailureRetainsUnverifiedOutcome(t *testing.T) {
+	t.Parallel()
+	h := newTestHandler(t)
+	fetchErr := errors.New("post-write fetch unavailable")
+	fake := &configPushCoreConnector{
+		current: 2048, land: true, postFetchErr: fetchErr,
+		onPush: func(context.Context) {
+			if err := h.Store.RawDB().Close(); err != nil {
+				t.Errorf("close store: %v", err)
+			}
+		},
+	}
+	id := seedConfigPushCore(t, h, fake, true)
+	err := h.MutateRunbookConfigPush(context.Background(), id, "100", "memory", float64(4096), LifecycleActor{}, nil)
+	var unverified *ConfigPushUnverifiedError
+	if !errors.As(err, &unverified) || !errors.Is(err, fetchErr) {
+		t.Fatalf("error=%v; want typed unverified result despite persistence failures", err)
+	}
+}
+
+func (c *configPushCoreConnector) ConfigPush(ctx context.Context, _ map[string]any, _, _ string, value any) error {
 	c.values = append(c.values, value)
+	if c.onPush != nil {
+		c.onPush(ctx)
+	}
 	if len(c.values) == 1 && c.pushErr != nil {
 		return c.pushErr
 	}
@@ -382,6 +508,36 @@ func TestConfigPushWrapperPreviousValue(t *testing.T) {
 			}
 			assertConfigPushRecords(t, h, id, alertCount, false)
 		})
+	}
+}
+
+func TestConfigPushPostFetchFailureReturnsUnverifiedConflict(t *testing.T) {
+	t.Parallel()
+	h := newTestHandler(t)
+	fake := &configPushCoreConnector{
+		current: 2048, land: true, postFetchErr: errors.New("secret=connector-password"),
+	}
+	id := seedConfigPushCore(t, h, fake, true)
+	payload := stringMustJSON(t, map[string]any{"entityRef": "100", "fieldKey": "memory", "value": 4096})
+	r := actionRequest(id, payload)
+	token, err := h.JWT.IssueElevation("", "connector.configPush")
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.Header.Set("X-Elevation-Token", token.Token)
+	rr := actionResponse(t, h.ConfigPush, r, http.StatusConflict)
+	var response struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	if response.Code != "config_push_unverified" || response.Message != "Configuration write returned success, but verification failed; the resulting state is unknown." {
+		t.Fatalf("response=%+v", response)
+	}
+	if strings.Contains(rr.Body.String(), "connector-password") {
+		t.Fatalf("response exposed connector error: %s", rr.Body.String())
 	}
 }
 

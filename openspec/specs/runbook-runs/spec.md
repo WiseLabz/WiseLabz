@@ -176,7 +176,7 @@ When a run reaches a `manual` step, the run SHALL become `waiting_manual` and th
 - **THEN** the request SHALL be rejected with status 409.
 
 ### Requirement: Resuming a failed run
-A `failed` run SHALL be resumable. Resuming SHALL require a fresh `runbook.run` elevation token for that runbook and an operator grant on every connector referenced by the run's steps; if no connector is referenced, it SHALL require an instance admin or operator access on at least one connector. Resume SHALL execute again from the first step that is not `succeeded`, including a step in state `failed` or `unknown`, and SHALL record the resuming user. Runs in any other state SHALL NOT be resumable.
+A `failed` run SHALL be resumable. Resuming SHALL require a fresh `runbook.run` elevation token for that runbook and an operator grant on every connector referenced by the run's steps; if no connector is referenced, it SHALL require an instance admin or operator access on at least one connector. Resume SHALL execute again from the first step that is not `succeeded`, including a step in state `failed` or `unknown`, and SHALL record the resuming user. An unknown `connector_action` or `config_push` first step SHALL require an explicit `resend` or `mark_done` decision tied to its step ID and current run `updatedAt`, applied atomically; other step kinds retain their existing resume policy. Runs in any other state SHALL NOT be resumable.
 
 #### Scenario: Resume after failure
 - **WHEN** an elevated, authorized user resumes a run whose third step failed
@@ -348,7 +348,13 @@ A `config_push` step SHALL write the target value that was recorded when the run
 
 #### Scenario: Resume after interruption
 - **WHEN** a run is resumed whose `config_push` step was left `unknown` by a backend restart
-- **THEN** the step SHALL execute again, succeeding without a write if the field already holds the target value.
+- **THEN** resume SHALL require an explicit `resend` or `mark_done` decision tied to the step ID and current run `updatedAt`; missing decisions SHALL be rejected and stale or concurrent decisions SHALL change nothing.
+- **AND** `resend` SHALL execute the frozen step again, succeeding without a write if the field already holds the target value; `mark_done` SHALL mark it succeeded after manual verification without writing and continue to the next step.
+
+#### Scenario: Successful write followed by failed verification fetch
+- **WHEN** a `config_push` write returns success but the following snapshot fetch fails
+- **THEN** exactly one audit entry marked `verification: unverified` and one critical alert SHALL be attempted using separate detached contexts bounded to 15 seconds each, preserving field/entity and run/step identifiers without configuration values, credentials or raw connector errors.
+- **AND** no verification retry, fallback read or rollback SHALL be attempted; the step SHALL be `unknown`, the run SHALL be `failed`, and later steps SHALL NOT execute until an operator resumes with an explicit decision.
 
 ### Requirement: Entity wait step authoring
 A `wait_for_entity` step SHALL name a connector, one entity of that connector, an attribute name, an operator and an expected value. The operator SHALL be one of the operators compliance rules support: `eq`, `neq`, `contains`, `regex`, `gt`, `lt`. Saving SHALL be rejected when the entity, attribute or operator is missing, when the operator is not supported, when a `regex` value does not compile, or when a `gt` or `lt` value is not a number. The system SHALL expose the attribute names a connector type declares so that authoring can offer them; an attribute name outside that list SHALL still be accepted.

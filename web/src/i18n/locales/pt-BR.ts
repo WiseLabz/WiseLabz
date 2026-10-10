@@ -175,6 +175,16 @@ export const ptBR: Catalog = {
         markDone: 'Marcar a etapa como concluída',
         markDoneHint:
           'Não envia nada e continua com a próxima etapa. Escolha isto se a alteração já foi aplicada.',
+        configPush: {
+          warning:
+            'A atualização da configuração pode já ter chegado ao conector. Verifique o valor atual antes de escolher entre tentar novamente ou continuar.',
+          resend: 'Tentar a alteração de configuração novamente',
+          resendHint:
+            'Envia novamente a mesma atualização congelada. Escolha esta opção após verificar que o valor desejado não está definido.',
+          markDone: 'Continuar após verificar o valor',
+          markDoneHint:
+            'Não envia nada e continua com a próxima etapa. Escolha esta opção somente após verificar que o conector já tem o valor desejado.',
+        },
       },
       resumeDecisionRequired:
         'Esta etapa precisa de uma decisão antes que a execução possa ser retomada. Escolha uma opção e tente novamente.',
@@ -283,6 +293,7 @@ export const ptBR: Catalog = {
       bookstack: 'API do BookStack',
       wikijsApi: 'API do Wiki.js',
       pull: {
+        jobSource: 'Origem: API do BookStack',
         intro:
           'Importe tudo que este token pode ler do BookStack v25.07 ou mais recente. Até 2000 entradas e 500 MB. Revise a prévia antes de confirmar.',
         url: 'URL do BookStack',
@@ -291,24 +302,28 @@ export const ptBR: Catalog = {
         skipTls:
           'Ignorar verificação do certificado TLS. O token é enviado por uma conexão cujo certificado não é verificado (registrado na auditoria)',
         start: 'Buscar prévia',
-        review: 'Revisar prévia recebida',
+        review: 'Revisar prévia do BookStack',
         starting: 'Iniciando importação…',
         progress: 'Buscando livros: {{done}} / {{total}}',
         progressLabel: 'Progresso da busca no BookStack',
         cancel: 'Cancelar busca',
         cancelling: 'Cancelando…',
-        cancelled: 'Busca cancelada. Nada foi importado.',
-        failed: 'A busca falhou.',
+        cancelled: 'Busca do BookStack cancelada. Nada foi importado.',
+        failed: 'A busca do BookStack falhou.',
         startError: 'Não foi possível iniciar a busca de documentação.',
         cancelError: 'Não foi possível cancelar a busca de documentação.',
       },
       pullWikijs: {
+        jobSource: 'Origem: API do Wiki.js',
         intro:
           'Importe todas as páginas e arquivos que esta chave de API pode ler do Wiki.js 2.x. A chave precisa das permissões read:pages, read:source e read:assets. Até 2000 entradas e 500 MB. Revise a prévia antes de confirmar.',
         url: 'URL do Wiki.js',
         tokenSecret: 'Chave de API',
         progress: 'Buscando páginas e arquivos: {{done}} / {{total}}',
         progressLabel: 'Progresso da busca no Wiki.js',
+        review: 'Revisar prévia do Wiki.js',
+        cancelled: 'Busca do Wiki.js cancelada. Nada foi importado.',
+        failed: 'A busca do Wiki.js falhou.',
       },
     },
     referencedBy: {

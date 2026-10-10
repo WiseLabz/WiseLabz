@@ -56,9 +56,9 @@ object, action-specific), and `createdAt`.
 | `connector.action` | `POST /api/connectors/{id}/actions/{name}`, or a named-action step in a run | connector / id; action, entity reference, method, URL without query or credentials, and status only |
 | `connector.recipe_actions_changed` | Saving or reconciling changed recipe actions | connector / id; added, changed and removed qualified action names |
 | `backup.import` | Successful backup restore | backup_import / default; imported counts and names of imported connectors with actions |
-| `runbook.run.step_resent` | Resuming an unknown named-action step with `resend` | runbook_run / run id; step id and acting user |
-| `runbook.run.step_marked_done` | Resuming an unknown named-action step with `mark_done` | runbook_run / run id; step id and acting user |
-| `connector.configPush` | `POST /api/connectors/{id}/config-push` (successful, verified push only), or a `config_push` step in a runbook run started via `POST /api/runbooks/{id}/run` or resumed via `POST /api/runbook-runs/{runId}/resume` | connector / id |
+| `runbook.run.step_resent` | Resuming an unknown named-action or config-push step with `resend` | runbook_run / run id; step id and acting user |
+| `runbook.run.step_marked_done` | Resuming an unknown named-action or config-push step with `mark_done` | runbook_run / run id; step id and acting user |
+| `connector.configPush` | `POST /api/connectors/{id}/config-push` (successful writes, including unverified writes), or a `config_push` step in a runbook run started via `POST /api/runbooks/{id}/run` or resumed via `POST /api/runbook-runs/{runId}/resume` | connector / id |
 | `connector.maintenanceWindow.open` | `POST /api/connectors/{id}/maintenance-window` | connector / id |
 | `connector.maintenanceWindow.close` | `DELETE /api/connectors/{id}/maintenance-window` (only when a window was actually active) | connector / id |
 | `connector.bulk_sync` | `POST /api/connectors/bulk-sync` | connector / id — one record per resolved item |
@@ -129,9 +129,12 @@ additionally identifies the run: `runId`, `stepId`, `stepIndex` (the 0-based
 step position), and `runbookId` (when the run originated from an existing runbook).
 The audit actor is the run's acting user: the user who last resumed the run,
 otherwise the user who started it (`runbookrun.ActingUser`).
-Like direct pushes, only successful verified writes produce an audit record; a push
-step that finds the field already at target succeeds without writing and records
-no audit entry.
+If a write returns success but the post-write fetch fails, the audit additionally
+records `verification: "unverified"` and a critical alert reports that the resulting
+state is unknown. Audit and alert persistence each use a separate detached
+15-second context. Neither record contains configuration values, credentials or
+raw connector errors. A push step that finds the field already at target succeeds
+without writing and records no audit entry.
 
 `connector.restart`/`connector.start`/`connector.stop` triggered by
 `POST /api/runbooks/{id}/steps/{stepId}/execute` carry `runbookId` and

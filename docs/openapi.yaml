@@ -1640,7 +1640,12 @@ paths:
         verified match, records a connector.configPush audit row and returns
         the post-push snapshot. On mismatch, auto-reverts to previousValue
         and raises a critical AlertRecord (escalated further if the revert
-        itself fails), returning 409. 400s with unsupported_operation if the
+        itself fails), returning 409. If the write returns success but the
+        post-write fetch fails, records an audit row marked verification: unverified,
+        raises a critical alert, and returns 409 config_push_unverified with message
+        "Configuration write returned success, but verification failed; the resulting state is unknown."
+        Verification is not retried and no fallback read or rollback is attempted.
+        400s with unsupported_operation if the
         connector doesn't implement config-push, or unsupported_field if
         fieldKey isn't in WritableFields().
       parameters:
@@ -1699,7 +1704,9 @@ paths:
           description: >
             config_push_mismatch — the push didn't verify; auto-revert was
             attempted (see the new critical AlertRecord for whether it
-            succeeded).
+            succeeded), or config_push_unverified — the write returned success but
+            the post-write fetch failed; the resulting state is unknown, an unverified
+            audit entry and critical alert are attempted, and no rollback is attempted.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
@@ -3810,11 +3817,12 @@ paths:
         When the run has no connector to check (manual steps only), the caller must be an instance admin
         or hold operator on at least one connector.
         Continues from the first non-succeeded step, including unknown outcomes.
-        When that first step is a connector_action step in state unknown, the body must carry
-        a decision: resend sends the action again (audited as runbook.run.step_resent), mark_done
+        When that first step is a connector_action or config_push step in state unknown, the body must carry
+        a decision: resend retries the frozen step (config pushes retain already-at-target no-op detection) (audited as runbook.run.step_resent), mark_done
         marks the step succeeded without sending anything (audited as runbook.run.step_marked_done).
         Without a decision the request is rejected with 409 unknown_step_decision_required and the
-        run stays failed. The decision is ignored for every other first step, and an unknown lifecycle
+        run stays failed. Mark done is intended for an operator who manually verified the result.
+        The decision is ignored for every other first step, and an unknown lifecycle
         step repeats without one.
         A deleted runbook cannot be resumed because its elevation target no longer exists:
         returns 409 runbook_deleted; history, cancellation and manual confirmation remain available.
@@ -3823,7 +3831,7 @@ paths:
         longer matches (updatedAt differs, or stepId is not the first non-succeeded step), the request
         is rejected with 409 run_changed carrying the run's current state and updatedAt, and nothing
         changes, is sent or is audited. The comparison is made in the same transaction as the state
-        change. A decision on an unknown connector_action step requires both fields (400 otherwise);
+        change. A decision on an unknown connector_action or config_push step requires both fields (400 otherwise);
         elsewhere they are optional but still checked when present.
       requestBody:
         required: false
@@ -3836,18 +3844,18 @@ paths:
                 decision:
                   type: string
                   enum: [resend, mark_done]
-                  description: Decision for the unknown connector_action step that a resume would start with.
+                  description: Decision for the unknown connector_action or config_push step that a resume would start with.
                 stepId:
                   type: string
                   description: >
                     The step the decision is for. Required with a decision on an unknown
-                    connector_action step; must be the run's first non-succeeded step.
+                    connector_action or config_push step; must be the run's first non-succeeded step.
                 updatedAt:
                   type: string
                   format: date-time
                   description: >
                     The run's updatedAt exactly as the client received it. Required with a decision
-                    on an unknown connector_action step; must equal the run's current updatedAt.
+                    on an unknown connector_action or config_push step; must equal the run's current updatedAt.
       parameters:
         - name: X-Elevation-Token
           in: header
@@ -3864,7 +3872,7 @@ paths:
           description: >
             Bad request, including a decision other than resend or mark_done
             (field error on decision, code invalid_request), a decision on an unknown
-            connector_action step without stepId or updatedAt (a field error for each missing one,
+            connector_action or config_push step without stepId or updatedAt (a field error for each missing one,
             code invalid_request), or step-up is on
             and no `X-Elevation-Token` was sent (code `elevation_required`).
           content:
@@ -3883,7 +3891,7 @@ paths:
         '409':
           description: >
             Run is not failed (no code), runbook was deleted (code runbook_deleted), or the first
-            step is an unknown connector_action step and no decision was sent (code
+            step is an unknown connector_action or config_push step and no decision was sent (code
             unknown_step_decision_required; the run stays failed and nothing is sent), or the run
             changed since the client loaded it (code run_changed, with the run's current state and
             updatedAt; nothing changes).

@@ -73,8 +73,13 @@ who started, approved, rejected, resumed, confirmed, or cancelled the run.
   When the run has no connectors, the caller must be an instance admin or have
   operator access to at least one connector.
   If that step is **Unknown**, its real outcome is not known, usually because the
-  backend restarted during execution. Inspect the connector before approving:
-  resuming repeats that operation and may repeat a change that already happened.
+  backend restarted during execution or configuration verification failed after a
+  successful write. For an unknown named action or configuration push, choose
+  explicitly before approving: retry the frozen step, or mark it done after
+  manually verifying the result. Marking done performs no write; retrying a
+  configuration push still checks whether the field already holds the target.
+  Decisions are tied to the displayed step and run revision; if the run changes,
+  review it again. Other unknown step kinds retain their existing retry policy.
 - **Cancel run** asks for confirmation and prevents further steps. On a run
   awaiting approval it is shown as **Cancel request** and withdraws the request. It does not
   undo completed operations. Unfinished steps become skipped. Any user with

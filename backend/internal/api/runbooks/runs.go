@@ -672,10 +672,10 @@ func (h *Handler) ConfirmRunStep(w http.ResponseWriter, r *http.Request) {
 }
 
 // resumeRequest is the optional body of ResumeRun. Decision answers the
-// unknown connector_action step a resume would start with: "resend" sends it
-// again, "mark_done" marks it succeeded without sending. Empty means no
-// decision. StepID is the step the decision is for and UpdatedAt the run's
-// updatedAt exactly as the client received it; both are required with a
+// unknown connector_action or config_push step a resume would start with:
+// "resend" retries it, "mark_done" marks it succeeded without sending. Empty
+// means no decision. StepID is the step the decision is for and UpdatedAt the
+// run's updatedAt exactly as the client received it; both are required with a
 // decision on such a step and checked whenever present.
 type resumeRequest struct {
 	Decision  string `json:"decision"`
@@ -725,7 +725,7 @@ func (h *Handler) writeRunChanged(w http.ResponseWriter, r *http.Request, run *s
 
 // resumeAudit builds the audit row of a resume decision, written in the resume
 // transaction. It is nil without a decision. The executor writes it only when
-// the decision is applied to an unknown connector_action step.
+// the decision is applied to an unknown connector_action or config_push step.
 func resumeAudit(r *http.Request, run *store.RunbookRunRecord, body resumeRequest, decision runbookrun.ResumeDecision, connectorIDs []string) (*store.AuditRecord, error) {
 	var action string
 	switch decision {
@@ -797,7 +797,7 @@ func (h *Handler) ResumeRun(w http.ResponseWriter, r *http.Request) {
 			if body.UpdatedAt == "" {
 				fields = append(fields, httputil.FieldError{Field: "updatedAt", Msg: "is required with a decision"})
 			}
-			httputil.ErrorWithDetails(w, http.StatusBadRequest, "invalid_request", "stepId and updatedAt are required with a decision on an unknown connector action step", fields)
+			httputil.ErrorWithDetails(w, http.StatusBadRequest, "invalid_request", "stepId and updatedAt are required with a decision on an unknown connector action or config push step", fields)
 		default:
 			writeRunError(w, err)
 		}

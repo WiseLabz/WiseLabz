@@ -120,16 +120,17 @@ var ErrNoEligibleApprover = errors.New("runbook run: no eligible approver")
 var ErrActionUnavailable = errors.New("runbook run: a connector action cannot be prepared")
 
 // ErrDecisionRequired rejects a resume of a run whose first unfinished step is
-// an unknown connector_action step when no decision is given. Nothing changes.
-var ErrDecisionRequired = errors.New("runbook run: the unknown connector action step needs a decision: resend or mark_done")
+// an unknown connector_action or config_push step when no decision is given.
+// Nothing changes.
+var ErrDecisionRequired = errors.New("runbook run: the unknown step needs a decision: resend or mark_done")
 
 // ErrInvalidDecision rejects a resume decision that is not a ResumeDecision
 // constant.
 var ErrInvalidDecision = errors.New("runbook run: unknown resume decision")
 
 // ErrDecisionFieldsRequired rejects a resume that gives a decision for an
-// unknown connector_action step without the step id and the run revision the
-// operator saw. Nothing changes.
+// unknown connector_action or config_push step without the step id and the run
+// revision the operator saw. Nothing changes.
 var ErrDecisionFieldsRequired = errors.New("runbook run: a resume decision needs the step id and the run revision it was made on")
 
 // ErrRunChanged rejects a resume whose expected run revision or first
@@ -141,7 +142,8 @@ var ErrRunChanged = fmt.Errorf("runbook run: the run changed since the decision 
 // checked. UpdatedAt is the run's updatedAt as the caller received it and is
 // compared inside the store transaction; StepID must be the run's first step
 // that has not succeeded. Audit is written in the resume transaction when, and
-// only when, a decision is applied to an unknown connector_action step.
+// only when a decision is applied to an unknown connector_action or config_push
+// step.
 type ResumeExpectation struct {
 	StepID    string
 	UpdatedAt string
@@ -149,7 +151,7 @@ type ResumeExpectation struct {
 }
 
 // ResumeDecision is the caller's choice for the first unfinished step of a
-// failed run when that step is an unknown connector_action step.
+// failed run when that step is an unknown connector_action or config_push step.
 type ResumeDecision string
 
 // Resume decisions. ResumeNone is the decision of a resume that carries none.
@@ -160,7 +162,7 @@ const (
 )
 
 // StepDecision reports a decision Resume applied to an unknown connector_action
-// step. Resume returns nil when no such decision was applied.
+// or config_push step. Resume returns nil when no such decision was applied.
 type StepDecision struct {
 	StepID   string
 	Decision ResumeDecision
@@ -599,8 +601,9 @@ func (e *Executor) Confirm(ctx context.Context, runID, stepID, userID string) er
 // store.ErrConflict for a run in any other state. After shutdown began the run
 // is recorded as failed (interrupted) again and the error is ErrShuttingDown.
 //
-// When that first step is a connector_action step in state unknown, decision
-// is required: ErrDecisionRequired without a decision, which changes nothing.
+// When that first step is an unknown connector_action or config_push step,
+// decision is required: ErrDecisionRequired without a decision, which changes
+// nothing.
 // ResumeResend starts the step again as any unknown step is started.
 // ResumeMarkDone marks the step succeeded without sending anything and
 // continues with the next step. The returned StepDecision reports the decision
@@ -614,7 +617,7 @@ func (e *Executor) Resume(ctx context.Context, runID, userID string, decision Re
 // ResumeExpecting is Resume tied to expect. ErrRunChanged means the run's
 // updatedAt or first unfinished step differs from the expectation; it changes
 // nothing. Unlike Resume, applying a decision to an unknown connector_action
-// step requires both expect.StepID and expect.UpdatedAt
+// or config_push step requires both expect.StepID and expect.UpdatedAt
 // (ErrDecisionFieldsRequired): the HTTP handler uses this one.
 func (e *Executor) ResumeExpecting(ctx context.Context, runID, userID string, decision ResumeDecision, expect ResumeExpectation) (*store.RunbookRunRecord, *StepDecision, error) {
 	return e.resume(ctx, runID, userID, decision, expect, true)
@@ -643,7 +646,7 @@ func (e *Executor) resume(ctx context.Context, runID, userID string, decision Re
 	if expect.StepID != "" && (step == nil || step.ID != expect.StepID) {
 		return nil, nil, ErrRunChanged
 	}
-	if step == nil || step.Kind != KindConnectorAction || step.State != StepUnknown {
+	if step == nil || !resumeDecisionRequired(step) {
 		return e.resumeFailed(ctx, run, userID, nil, expect)
 	}
 	if decision == ResumeNone {
@@ -657,6 +660,10 @@ func (e *Executor) resume(ctx context.Context, runID, userID string, decision Re
 		return e.resumeMarkingDone(ctx, run, step.ID, userID, applied, expect)
 	}
 	return e.resumeFailed(ctx, run, userID, applied, expect)
+}
+
+func resumeDecisionRequired(step *store.RunbookRunStepRecord) bool {
+	return step.State == StepUnknown && (step.Kind == KindConnectorAction || step.Kind == KindConfigPush)
 }
 
 // expectedUpdatedAt is the revision the store transaction compares: the one

@@ -54,6 +54,13 @@ for this connector set (see `configPushLanded` in
 `backend/internal/api/connectors/config_push.go`).
 ADR 0007 section 7 adds a read-back of the field when the snapshot shows no change.
 
+A successful write followed by a failed post-write fetch leaves the resulting
+state unknown. The core attempts an audit entry marked `verification: "unverified"`
+and a critical alert, using separate detached 15-second contexts. It returns
+`409 config_push_unverified` without retrying verification, reading a fallback
+field value or rolling back. Runbook callers record the step as `unknown` and
+require an explicit operator decision before resuming (ADR 0007).
+
 ### Auto-revert-then-alert on mismatch
 
 An empty diff (mismatch) does **not** stop at a manual-revert-only flow:

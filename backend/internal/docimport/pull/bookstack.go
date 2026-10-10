@@ -223,7 +223,7 @@ func (m *bookMapper) readBook(raw []byte, folder string, bookID int) error {
 	if err != nil {
 		return errors.New("invalid BookStack ZIP export")
 	}
-	archive, err := docimport.OpenArchive(zr, m.limits)
+	archive, err := docimport.OpenPulledArchive(zr, m.limits)
 	if err != nil {
 		return errors.New("BookStack ZIP export violates import archive limits")
 	}

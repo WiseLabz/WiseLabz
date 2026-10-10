@@ -151,9 +151,13 @@ describe('RunDetail', () => {
     expect(within(detail).getByText('Requested by')).toBeInTheDocument();
     expect(within(detail).getByText('requester-1')).toBeInTheDocument();
     expect(within(detail).getByText('Approval expires')).toBeInTheDocument();
-    expect(within(detail).getByRole('button', { name: 'Approve and start run' })).toBeInTheDocument();
+    expect(
+      within(detail).getByRole('button', { name: 'Approve and start run' })
+    ).toBeInTheDocument();
     expect(within(detail).getByRole('button', { name: 'Reject request' })).toBeInTheDocument();
-    expect(within(detail).queryByRole('button', { name: 'Cancel request' })).not.toBeInTheDocument();
+    expect(
+      within(detail).queryByRole('button', { name: 'Cancel request' })
+    ).not.toBeInTheDocument();
     expect(within(detail).queryByRole('button', { name: 'Resume run' })).not.toBeInTheDocument();
     expect(within(detail).queryByRole('button', { name: 'Confirm step' })).not.toBeInTheDocument();
 
@@ -604,6 +608,55 @@ describe('RunDetail', () => {
         stepId: unknownActionStep.id,
         updatedAt: baseRun.updatedAt,
       });
+    }
+  );
+
+  it.each([
+    ['Retry the configuration push', 'resend'],
+    ['Continue after verifying the value', 'mark_done'],
+  ] as const)(
+    'requires and sends the "%s" decision for an unknown config-push step',
+    async (label, decision) => {
+      const unknownConfigPush: RunbookRun['steps'][number] = {
+        ...unknownActionStep,
+        id: 'config-step',
+        kind: 'config_push',
+        title: 'Set VM memory',
+        action: undefined,
+        fieldKey: 'memory',
+        targetValue: '512',
+      };
+      currentRun = { ...baseRun, steps: [unknownConfigPush] };
+      let body: unknown;
+      server.use(
+        http.post('/api/runbook-runs/:runId/resume', async ({ request }) => {
+          body = await request.json();
+          return HttpResponse.json({ ...currentRun, state: 'running' }, { status: 202 });
+        })
+      );
+      renderDetail();
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Resume run' }));
+      const decisionDialog = await screen.findByRole('dialog', { name: 'Resume run' });
+      expect(within(decisionDialog).getByRole('note')).toHaveTextContent(
+        i18n.t('runbooks.runs.resumeDecision.configPush.warning')
+      );
+      const continueButton = within(decisionDialog).getByRole('button', {
+        name: 'Continue to approval',
+      });
+      expect(continueButton).toBeDisabled();
+      fireEvent.click(within(decisionDialog).getByRole('radio', { name: new RegExp(`^${label}`) }));
+      fireEvent.click(continueButton);
+
+      const elevation = await screen.findByRole('dialog', { name: 'Resume run' });
+      fireEvent.click(within(elevation).getByRole('button', { name: 'Resume run' }));
+      await waitFor(() =>
+        expect(body).toEqual({
+          decision,
+          stepId: unknownConfigPush.id,
+          updatedAt: baseRun.updatedAt,
+        })
+      );
     }
   );
 

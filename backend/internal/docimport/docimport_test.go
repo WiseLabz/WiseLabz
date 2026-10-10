@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -383,6 +384,48 @@ func TestArchiveGuards(t *testing.T) {
 	plan := analyze(t, buildZip(t, entry{"big.md", md("12345")}, entry{"bin.md", []byte("a\x00b")}), limits)
 	if len(plan.Docs) != 0 || !hasIssue(plan.Skipped, "big.md", "larger than") || !hasIssue(plan.Skipped, "bin.md", "not UTF-8") {
 		t.Fatalf("note limits %+v", plan)
+	}
+}
+
+func TestPulledArchiveSkipsOnlyCompressionRatio(t *testing.T) {
+	compressed := buildZip(t, entry{"note.md", md(strings.Repeat("x", (1<<20)+1))})
+	if _, err := OpenArchive(compressed, DefaultLimits()); !errors.Is(err, ErrCompressionRatio) {
+		t.Fatalf("strict reader error = %v, want compression ratio", err)
+	}
+	archive, err := OpenPulledArchive(compressed, DefaultLimits())
+	if err != nil {
+		t.Fatalf("pull reader rejected compressible note: %v", err)
+	}
+	if _, ok, err := archive.readAll("note.md", DefaultLimits().MaxNoteBytes); err != nil || !ok {
+		t.Fatalf("read pulled note: ok=%v err=%v", ok, err)
+	}
+	archive.read = 0
+	archive.limits.MaxBytes = 1 << 20
+	rc, err := archive.Open("note.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = io.Copy(io.Discard, rc)
+	_ = rc.Close()
+	if !errors.Is(err, ErrTooLarge) {
+		t.Fatalf("actual-read size error = %v, want size limit", err)
+	}
+
+	limits := DefaultLimits()
+	limits.MaxBytes = 32
+	if _, err := OpenPulledArchive(buildZip(t, entry{"large.md", md(strings.Repeat("x", 33))}), limits); !errors.Is(err, ErrTooLarge) {
+		t.Errorf("pull reader size error = %v, want size limit", err)
+	}
+	limits = DefaultLimits()
+	limits.MaxEntries = 1
+	if _, err := OpenPulledArchive(buildZip(t, entry{"a.md", nil}, entry{"b.md", nil}), limits); !errors.Is(err, ErrTooManyEntries) {
+		t.Errorf("pull reader entry error = %v, want entry limit", err)
+	}
+	if _, err := OpenPulledArchive(buildZip(t, entry{"../unsafe.md", nil}), DefaultLimits()); !errors.Is(err, ErrUnsafePath) {
+		t.Errorf("pull reader path error = %v, want unsafe path", err)
+	}
+	if _, err := OpenPulledArchive(buildZip(t, entry{"same.md", nil}, entry{"same.md", nil}), DefaultLimits()); !errors.Is(err, ErrDuplicatePath) {
+		t.Errorf("pull reader duplicate error = %v, want duplicate path", err)
 	}
 }
 
