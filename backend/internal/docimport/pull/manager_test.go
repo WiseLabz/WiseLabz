@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -99,7 +100,7 @@ func TestManagerReadySingleJobAndAudit(t *testing.T) {
 }
 
 func TestManagerCancelShutdownAndFailureCleanup(t *testing.T) {
-	for _, mode := range []string{"cancel", "shutdown", "fail", "panic"} {
+	for _, mode := range []string{"cancel", "shutdown", "fail", "panic", "timeout"} {
 		t.Run(mode, func(t *testing.T) {
 			stage := docimport.NewStage(t.TempDir())
 			audit := &auditLog{}
@@ -120,6 +121,11 @@ func TestManagerCancelShutdownAndFailureCleanup(t *testing.T) {
 				<-ctx.Done()
 				return nil, ctx.Err()
 			})
+			if mode == "timeout" {
+				previous := jobTimeout
+				jobTimeout = 20 * time.Millisecond
+				t.Cleanup(func() { jobTimeout = previous })
+			}
 			job, err := m.Start(src, Job{Source: "bookstack", Host: "wiki.example"}, Actor{})
 			if err != nil {
 				t.Fatal(err)
@@ -137,7 +143,7 @@ func TestManagerCancelShutdownAndFailureCleanup(t *testing.T) {
 			job = waitTerminal(t, m)
 			expected := "cancelled"
 			action := "cancel"
-			if mode == "fail" || mode == "panic" {
+			if mode == "fail" || mode == "panic" || mode == "timeout" {
 				expected = "failed"
 				action = "fail"
 			}
@@ -146,6 +152,9 @@ func TestManagerCancelShutdownAndFailureCleanup(t *testing.T) {
 			}
 			if job.State != expected {
 				t.Fatalf("state = %s", job.State)
+			}
+			if mode == "timeout" && job.Error != "documentation pull timed out" {
+				t.Fatalf("timeout error = %q", job.Error)
 			}
 			if _, err := os.Stat(filepath.Join(stage.Dir, job.ID)); !os.IsNotExist(err) {
 				t.Fatalf("partial staging remains: %v", err)
@@ -159,5 +168,43 @@ func TestManagerCancelShutdownAndFailureCleanup(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestManagerConcurrentStartAllowsOneJob(t *testing.T) {
+	m := NewManager(Config{Stage: docimport.NewStage(t.TempDir()), Analyze: func(context.Context, string) (*docimport.Plan, error) {
+		return &docimport.Plan{Docs: []docimport.Doc{}, Warnings: []docimport.Issue{}}, nil
+	}})
+	release := make(chan struct{})
+	src := sourceFunc(func(ctx context.Context, p string, _ func(Progress)) ([]docimport.Issue, error) {
+		select {
+		case <-release:
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+		return nil, os.WriteFile(p, []byte("zip"), 0o600)
+	})
+	const workers = 8
+	var wg sync.WaitGroup
+	var started, rejected atomic.Int32
+	for range workers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			switch _, err := m.Start(src, Job{Source: "bookstack"}, Actor{}); {
+			case err == nil:
+				started.Add(1)
+			case errors.Is(err, ErrRunning):
+				rejected.Add(1)
+			default:
+				t.Errorf("start = %v", err)
+			}
+		}()
+	}
+	wg.Wait()
+	close(release)
+	waitTerminal(t, m)
+	if started.Load() != 1 || rejected.Load() != workers-1 {
+		t.Fatalf("started %d rejected %d", started.Load(), rejected.Load())
 	}
 }

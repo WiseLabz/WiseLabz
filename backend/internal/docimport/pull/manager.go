@@ -63,6 +63,9 @@ type Config struct {
 	Audit   Auditor
 }
 
+// jobTimeout bounds a whole pull; it is a variable so tests can shorten it.
+var jobTimeout = time.Hour
+
 // Manager owns one background pull and keeps its status in memory.
 type Manager struct {
 	cfg     Config
@@ -92,7 +95,7 @@ func (m *Manager) Start(src Source, info Job, actor Actor) (Job, error) {
 	if err != nil {
 		return Job{}, err
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), time.Hour)
+	ctx, cancel := context.WithTimeout(context.Background(), jobTimeout)
 	m.job, m.cancel, m.done = &info, cancel, make(chan struct{})
 	m.audit(actor, info, "start")
 	go m.run(ctx, src, dir, actor, m.done)
@@ -185,6 +188,8 @@ func (m *Manager) finish(ctx context.Context, dir string, actor Actor, err error
 	end := time.Now().UTC()
 	m.job.EndedAt = &end
 	switch {
+	case errors.Is(ctx.Err(), context.DeadlineExceeded):
+		m.job.State, m.job.Error = "failed", "documentation pull timed out"
 	case ctx.Err() != nil:
 		m.job.State = "cancelled"
 	case err != nil:
