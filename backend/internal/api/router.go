@@ -193,7 +193,7 @@ func newRouterDeps(cfg Config) routerDeps {
 		connH:       connH,
 		tmplH:       tmplhandler.NewHandler(cfg.Store, cfg.DocEngine),
 		changeH:     changeH,
-		timelineH:   &timelinehandler.Handler{Store: cfg.Store},
+		timelineH:   &timelinehandler.Handler{Store: cfg.Store, Settings: settingH, AI: cfg.AIRegistry},
 		searchH:     &searchhandler.Handler{Store: cfg.Store},
 		alertH:      alerthandler.NewHandler(cfg.Store),
 		attentionH:  attentionhandler.NewHandler(cfg.Store),

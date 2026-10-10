@@ -66,6 +66,9 @@ func TestReadOnlyAPIKey(t *testing.T) {
 	if rec := app.req(t, http.MethodPost, "/api/connectors/"+connID+"/test", nil, raw); rec.Code != http.StatusForbidden {
 		t.Errorf("read key POST connector test = %d, want 403: %s", rec.Code, rec.Body)
 	}
+	if rec := app.req(t, http.MethodPost, "/api/timeline/narrate", nil, raw); rec.Code != http.StatusForbidden {
+		t.Errorf("read key narrating the journal = %d, want 403: %s", rec.Code, rec.Body)
+	}
 	if rec := app.req(t, http.MethodPost, "/api/auth/api-keys", map[string]any{"name": "x"}, raw); rec.Code != http.StatusForbidden {
 		t.Errorf("read key minting a key = %d, want 403: %s", rec.Code, rec.Body)
 	}

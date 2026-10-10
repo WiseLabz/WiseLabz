@@ -753,3 +753,11 @@ links must share scope and be visible. Connector/document deletion clears links
 with SET NULL; the body, author and entity text survive. Backup bundles export and
 restore notes additively, including original timestamps; operational retention
 never prunes manual entries. Journal mutations record `journal.*` audit actions.
+
+`POST /api/timeline/narrate` narrates a Journal window with the AI module. It
+parses the same filter as `GET /api/timeline` and makes one `ListTimeline` call
+for the 100 newest events, so visibility is enforced in SQL exactly as for the
+list. Events are numbered oldest first inside a `<journal_events>` block with
+capped fields, the delimiter tag stripped and an untrusted-data notice, then sent
+through the fallback chain. Nothing is cached or persisted, and provider errors
+are logged but never returned.

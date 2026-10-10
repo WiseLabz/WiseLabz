@@ -8,9 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"strings"
 	"time"
-	"unicode/utf8"
 
 	"github.com/google/uuid"
 
@@ -631,25 +629,13 @@ const (
 	maxPromptDiffBytes    = 32 * 1024
 )
 
-// truncateUTF8 caps s at limit bytes without splitting a rune.
-func truncateUTF8(s string, limit int) string {
-	if len(s) <= limit {
-		return s
-	}
-	s = s[:limit]
-	for len(s) > 0 && !utf8.ValidString(s) {
-		s = s[:len(s)-1]
-	}
-	return s + "\n[truncated]"
-}
-
 // stripPromptTags removes delimiter tags so untrusted content can't close its own block.
 func stripPromptTags(s string) string {
-	return strings.NewReplacer("<change_summary>", "", "</change_summary>", "", "<change_diff>", "", "</change_diff>", "").Replace(s)
+	return ai.StripPromptTags(s, "change_summary", "change_diff")
 }
 
 // changePromptData wraps the untrusted summary and diff in delimiters, length-capped.
 func changePromptData(summary, diff string) string {
-	return "<change_summary>\n" + stripPromptTags(truncateUTF8(summary, maxPromptSummaryBytes)) + "\n</change_summary>\n\n" +
-		"<change_diff>\n" + stripPromptTags(truncateUTF8(diff, maxPromptDiffBytes)) + "\n</change_diff>"
+	return "<change_summary>\n" + stripPromptTags(ai.TruncateUTF8(summary, maxPromptSummaryBytes)) + "\n</change_summary>\n\n" +
+		"<change_diff>\n" + stripPromptTags(ai.TruncateUTF8(diff, maxPromptDiffBytes)) + "\n</change_diff>"
 }
