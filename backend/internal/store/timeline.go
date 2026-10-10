@@ -114,9 +114,17 @@ func (s *Store) timelineUnion(ctx context.Context, f TimelineFilter) (string, []
 		args = append(args, f.ConnectorID)
 	}
 	args = append(args, actions...)
+	admin := f.Admin && auth.InstanceAdminFromContext(ctx)
+	docID := `CASE WHEN a.target_type = 'doc' THEN a.target_id ELSE '' END`
+	if !admin {
+		// Members get the doc link only while the doc is live and still in the row's scope.
+		docID = `CASE WHEN a.target_type = 'doc' AND EXISTS (SELECT 1 FROM docs d
+ JOIN audit_log_connectors dsc ON dsc.audit_id = a.id AND dsc.connector_id = d.service_id
+ WHERE d.id = a.target_id AND d.deleted_at IS NULL) THEN a.target_id ELSE '' END`
+	}
 	scope, scopeArgs := timelineAuditScope(ctx, f)
 	branches = append(branches, `SELECT a.id, 'audit', `+timelineTimestamp("a.created_at")+`, a.action, '',
- `+connector+`, CASE WHEN a.target_type = 'doc' THEN a.target_id ELSE '' END,
+ `+connector+`, `+docID+`,
  a.actor_user_id, '', '', '', a.target_type FROM audit_log a
  WHERE a.action IN (`+placeholders(len(actions))+`)`+scope)
 	args = append(args, scopeArgs...)

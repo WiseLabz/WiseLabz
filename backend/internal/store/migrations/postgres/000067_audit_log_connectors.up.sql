@@ -26,12 +26,23 @@ INSERT INTO audit_log_connectors (audit_id, connector_id)
 SELECT DISTINCT a.id, s.connector_id FROM audit_log a JOIN runbook_run_steps s ON s.run_id = a.target_id
 WHERE a.target_type = 'runbook_run' AND s.connector_id IS NOT NULL AND s.connector_id <> '';
 
+-- A legacy detail that jsonb rejects must not abort the migration.
+CREATE FUNCTION pg_temp.audit_detail_jsonb(raw TEXT) RETURNS jsonb AS $$
+BEGIN
+    RETURN raw::jsonb;
+EXCEPTION WHEN others THEN
+    RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+
 -- Materialize the target filter before casting legacy detail text to JSON.
 WITH runbook_audits AS MATERIALIZED (
-    SELECT id, detail::jsonb AS detail FROM audit_log WHERE target_type = 'runbook'
+    SELECT id, pg_temp.audit_detail_jsonb(detail) AS detail FROM audit_log WHERE target_type = 'runbook'
 )
 INSERT INTO audit_log_connectors (audit_id, connector_id)
 SELECT DISTINCT a.id, step->>'connectorId'
 FROM runbook_audits a, jsonb_array_elements(CASE WHEN jsonb_typeof(a.detail->'steps') = 'array'
     THEN a.detail->'steps' ELSE '[]'::jsonb END) step
 WHERE jsonb_typeof(step->'connectorId') = 'string' AND step->>'connectorId' <> '';
+
+DROP FUNCTION pg_temp.audit_detail_jsonb(TEXT);

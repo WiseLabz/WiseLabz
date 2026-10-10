@@ -299,6 +299,10 @@ func TestTimelineAuditAllConnectorGrantsAndPaging(t *testing.T) {
 	f.Admin = true
 	assertPage(ctx, f, []string{"a2", "a1"})
 	f.Admin = false
+	// Filtering by the one granted connector must not reveal a row also scoped to b.
+	f.ConnectorID = a
+	assertPage(ctx, f, []string{"a2", "a1"})
+	f.ConnectorID = ""
 	if _, err := s.UpsertConnectorGrant(ctx, "reader", b, "viewer"); err != nil {
 		t.Fatal(err)
 	}
@@ -315,6 +319,9 @@ func TestTimelineAuditAllConnectorGrantsAndPaging(t *testing.T) {
 	}
 	f.ConnectorID = ""
 	restricted := auth.ContextWithAPIKeyRestriction(ctx, auth.APIKeyRestriction{ConnectorIDs: []string{a}})
+	assertPage(restricted, f, []string{"a2", "a1"})
+	// A row partly outside the key stays hidden when filtering by an allowed connector.
+	f.ConnectorID = a
 	assertPage(restricted, f, []string{"a2", "a1"})
 	f.ConnectorID = b
 	assertPage(restricted, f, nil)
@@ -415,6 +422,166 @@ func TestAuditScopeDefaultsFailureAndRetention(t *testing.T) {
 	var count int
 	if err := s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM audit_log_connectors").Scan(&count); err != nil || count != 0 {
 		t.Fatalf("orphan scopes retained: %d, %v", count, err)
+	}
+}
+
+func TestTimelineAuditMemberDocLinkOnlyWhileLive(t *testing.T) {
+	s := newDocTestStore(t)
+	ctx := auth.ContextWithUser(context.Background(), "reader", false)
+	mustCreateUser(t, s, "reader")
+	a := createTestConnector(ctx, t, s)
+	if _, err := s.UpsertConnectorGrant(ctx, "reader", a, "viewer"); err != nil {
+		t.Fatal(err)
+	}
+	d := DocRecord{ID: "doc", Title: "Doc", Kind: "service", ServiceID: a, Origin: DocOriginHuman}
+	if err := s.CreateDoc(ctx, &d); err != nil {
+		t.Fatal(err)
+	}
+	record := AuditRecord{ID: "restore", Action: "doc.restore", TargetType: "doc", TargetID: d.ID, ConnectorIDs: []string{a}}
+	if err := s.CreateAuditRecord(ctx, &record); err != nil {
+		t.Fatal(err)
+	}
+	f := TimelineFilter{UserID: "reader", Kinds: []string{"audit"}}
+	rows, total, _, err := s.ListTimeline(ctx, f, 100)
+	if err != nil || total != 1 || rows[0].DocID != d.ID || rows[0].ConnectorID != a {
+		t.Fatalf("live doc member row: %+v, %d, %v", rows, total, err)
+	}
+	if _, err := s.db.ExecContext(ctx, "UPDATE docs SET deleted_at = ? WHERE id = ?", "2026-10-09T12:00:00Z", d.ID); err != nil {
+		t.Fatal(err)
+	}
+	rows, total, _, err = s.ListTimeline(ctx, f, 100)
+	if err != nil || total != 1 || rows[0].DocID != "" || rows[0].ConnectorID != a {
+		t.Fatalf("deleted doc member row: %+v, %d, %v", rows, total, err)
+	}
+	adminCtx := auth.ContextWithUser(ctx, "reader", true)
+	f.Admin = true
+	rows, total, _, err = s.ListTimeline(adminCtx, f, 100)
+	if err != nil || total != 1 || rows[0].DocID != d.ID {
+		t.Fatalf("deleted doc admin row: %+v, %d, %v", rows, total, err)
+	}
+}
+
+func TestTimelineAuditInstanceAdminPartialScopes(t *testing.T) {
+	s := newDocTestStore(t)
+	ctx := auth.ContextWithUser(context.Background(), "root", true)
+	mustCreateUser(t, s, "root")
+	a := createTestConnector(ctx, t, s)
+	b := createTestConnector(ctx, t, s)
+	if _, err := s.UpsertConnectorGrant(ctx, "root", a, "viewer"); err != nil {
+		t.Fatal(err)
+	}
+	scopes := map[string][]string{
+		"a": {a}, "b": {b}, "a-b": {a, b}, "a-gone": {a, "gone"}, "b-gone": {b, "gone"}, "gone": {"gone"}, "none": nil,
+	}
+	for id, ids := range scopes {
+		record := AuditRecord{ID: id, Action: "runbook.update", TargetType: "runbook", TargetID: "deleted-runbook", ConnectorIDs: ids}
+		if err := s.CreateAuditRecord(ctx, &record); err != nil {
+			t.Fatal(err)
+		}
+	}
+	f := TimelineFilter{UserID: "root", Admin: true, Kinds: []string{"audit"}}
+	assertVisible := func(ctx context.Context, want ...string) {
+		t.Helper()
+		rows, total, _, err := s.ListTimeline(ctx, f, 100)
+		if err != nil || total != len(want) {
+			t.Fatalf("total = %d, want %d: %v", total, len(want), err)
+		}
+		var got []string
+		for _, row := range rows {
+			got = append(got, row.ID)
+		}
+		slices.Sort(got)
+		slices.Sort(want)
+		if !slices.Equal(got, want) {
+			t.Fatalf("visible ids = %v, want %v", got, want)
+		}
+	}
+	assertVisible(ctx, "a", "a-gone", "gone", "none")
+	assertVisible(auth.ContextWithAPIKeyRestriction(ctx, auth.APIKeyRestriction{ConnectorIDs: []string{a}}), "a")
+	assertVisible(auth.ContextWithAPIKeyRestriction(ctx, auth.APIKeyRestriction{ConnectorIDs: []string{"gone"}}))
+}
+
+func TestAuditScopeRetentionKeepsRetainedRows(t *testing.T) {
+	s := newDocTestStore(t)
+	ctx := context.Background()
+	a := createTestConnector(ctx, t, s)
+	records := []AuditRecord{
+		{ID: "old", Action: "runbook.update", ConnectorIDs: []string{a}, CreatedAt: "2020-01-01T00:00:00Z"},
+		{ID: "new", Action: "runbook.update", ConnectorIDs: []string{a}, CreatedAt: "2030-01-01T00:00:00Z"},
+	}
+	if err := s.CreateAuditRecords(ctx, records); err != nil {
+		t.Fatal(err)
+	}
+	if n, err := s.DeleteOldAuditRecords(ctx, "2025-01-01T00:00:00Z"); err != nil || n != 1 {
+		t.Fatalf("prune audit = %d, %v", n, err)
+	}
+	for id, want := range map[string]int{"old": 0, "new": 1} {
+		var count int
+		if err := s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM audit_log_connectors WHERE audit_id = ?", id).Scan(&count); err != nil || count != want {
+			t.Fatalf("scope %s = %d, want %d: %v", id, count, want, err)
+		}
+	}
+}
+
+func TestAuditWriterScopeShapes(t *testing.T) {
+	s := newDocTestStore(t)
+	adminCtx := auth.ContextWithUser(context.Background(), "root", true)
+	memberCtx := auth.ContextWithUser(context.Background(), "reader", false)
+	mustCreateUser(t, s, "root")
+	mustCreateUser(t, s, "reader")
+	a := createTestConnector(adminCtx, t, s)
+	b := createTestConnector(adminCtx, t, s)
+	for _, cid := range []string{a, b} {
+		if _, err := s.UpsertConnectorGrant(adminCtx, "reader", cid, "viewer"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := s.RecordAuditFromContext(adminCtx, "connector.sync_all", "connector", "", nil); err != nil {
+		t.Fatal(err)
+	}
+	batch := []AuditRecord{{TargetID: a}, {TargetID: b}}
+	if err := s.RecordAuditBatchFromContext(adminCtx, "connector.bulk_sync", "connector", batch); err != nil {
+		t.Fatal(err)
+	}
+	var total int
+	if err := s.db.QueryRowContext(adminCtx, "SELECT COUNT(*) FROM audit_log_connectors").Scan(&total); err != nil || total != 2 {
+		t.Fatalf("scope rows = %d, want 2: %v", total, err)
+	}
+	for _, r := range batch {
+		var ids []string
+		rows, err := s.db.QueryContext(adminCtx, "SELECT connector_id FROM audit_log_connectors WHERE audit_id = ?", r.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for rows.Next() {
+			var id string
+			if err := rows.Scan(&id); err != nil {
+				t.Fatal(err)
+			}
+			ids = append(ids, id)
+		}
+		if err := rows.Close(); err != nil || !slices.Equal(ids, []string{r.TargetID}) {
+			t.Fatalf("scope of %s = %v, want [%s]: %v", r.ID, ids, r.TargetID, err)
+		}
+	}
+	titles := func(ctx context.Context, f TimelineFilter) []string {
+		t.Helper()
+		rows, _, _, err := s.ListTimeline(ctx, f, 100)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var got []string
+		for _, row := range rows {
+			got = append(got, row.Title)
+		}
+		slices.Sort(got)
+		return got
+	}
+	if got := titles(memberCtx, TimelineFilter{UserID: "reader", Kinds: []string{"audit"}}); !slices.Equal(got, []string{"connector.bulk_sync", "connector.bulk_sync"}) {
+		t.Fatalf("member rows = %v", got)
+	}
+	if got := titles(adminCtx, TimelineFilter{UserID: "root", Admin: true, Kinds: []string{"audit"}}); !slices.Contains(got, "connector.sync_all") {
+		t.Fatalf("admin rows = %v, want connector.sync_all", got)
 	}
 }
 

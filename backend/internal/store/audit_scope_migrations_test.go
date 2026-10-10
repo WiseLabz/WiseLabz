@@ -50,10 +50,10 @@ func TestAuditScopeMigrationsBackfillUpDownUp(t *testing.T) {
  VALUES ('run', 'Frozen', 'succeeded', 'actor', 'now', 'now')`); err != nil {
 			t.Fatal(err)
 		}
-		for i, cid := range []string{a, a, b, ""} {
+		for i, cid := range []any{a, a, b, "", nil} {
 			if _, err := s.db.ExecContext(ctx, `INSERT INTO runbook_run_steps
  (id, run_id, position, kind, title, connector_id, state) VALUES (?, 'run', ?, 'manual', 'step', ?, 'succeeded')`,
-				[]string{"step-a", "step-a2", "step-b", "step-empty"}[i], i, cid); err != nil {
+				[]string{"step-a", "step-a2", "step-b", "step-empty", "step-null"}[i], i, cid); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -75,9 +75,10 @@ func TestAuditScopeMigrationsBackfillUpDownUp(t *testing.T) {
 			{ID: "no-steps", TargetType: "runbook", Detail: `{"title":"old update"}`},
 			{ID: "wrong-steps", TargetType: "runbook", Detail: `{"steps":{}}`},
 			{ID: "other", TargetType: "user", TargetID: a, Detail: "invalid JSON outside runbook filter"},
-		}
-		if s.driver == "sqlite" {
-			records = append(records, AuditRecord{ID: "invalid-runbook", TargetType: "runbook", Detail: "invalid JSON"})
+			{ID: "invalid-runbook", TargetType: "runbook", Detail: "invalid JSON"},
+			{ID: "array-root", TargetType: "runbook", Detail: "[]"},
+			{ID: "string-root", TargetType: "runbook", Detail: `"text"`},
+			{ID: "null-root", TargetType: "runbook", Detail: "null"},
 		}
 		for _, record := range records {
 			if record.Detail == "" {

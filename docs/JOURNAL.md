@@ -33,5 +33,6 @@ unscoped rows. Instance admins can see unscoped rows and rows scoped to connecto
 that have since been deleted; live connector scopes still require the matching
 grant. Security actions remain on the Audit page and are not included in Journal.
 Journal shows the audit actor but not audit detail. Member source links point to
-the related document or connector when the row fields identify one; otherwise no
+the related document or connector when the row fields identify one; a deleted
+document is not linked, so the row links to its connector instead. Otherwise no
 source link is shown.

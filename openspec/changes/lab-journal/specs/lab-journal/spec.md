@@ -44,9 +44,13 @@ The system SHALL limit connector-linked sources to viewer grants and API-key con
 - **WHEN** a scoped connector is deleted after an audit row is written
 - **THEN** the row remains hidden from members and is visible to an instance admin
 
+#### Scenario: Restricted API key owned by an instance admin
+- **WHEN** an instance admin uses an API key restricted to connector A
+- **THEN** unscoped rows and rows scoped to deleted connectors are absent, and only rows whose entire scope is allowed by the key and granted to the owner are returned
+
 #### Scenario: Audit source links and fields
 - **WHEN** a member views an audit row in Journal
-- **THEN** the row links to its document or connector when identified by the row fields, otherwise has no source link, exposes the actor, and omits detail
+- **THEN** the row links to its document or connector when identified by the row fields, never links a deleted document, otherwise has no source link, exposes the actor, and omits detail
 - **WHEN** an instance admin views an audit row
 - **THEN** its source link opens the admin Audit page
 
