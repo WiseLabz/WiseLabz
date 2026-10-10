@@ -124,11 +124,7 @@ func main() {
 	aiRegistry, embedRegistry := newAIRegistries()
 
 	// Determine backup directory: use configured value, or compute from DB DSN
-	backupDir := cfg.Backup.Dir
-	if backupDir == "" {
-		// Default: ./data/backups, or extract from SQLite path if configured
-		backupDir = "./data/backups"
-	}
+	backupDir := backupDirOrDefault(cfg)
 
 	syncEngine.SetBaseContext(ctx)
 
@@ -578,4 +574,12 @@ func newDocImportManager(cfg *config.Config, s *store.Store) *pull.Manager {
 		Analyze: func(ctx context.Context, dir string) (*docimport.Plan, error) {
 			return pull.Analyze(ctx, dir, cfg.Attachments.MaxBytes)
 		}})
+}
+
+// backupDirOrDefault returns the configured backup directory, or ./data/backups.
+func backupDirOrDefault(cfg *config.Config) string {
+	if cfg.Backup.Dir == "" {
+		return "./data/backups"
+	}
+	return cfg.Backup.Dir
 }
