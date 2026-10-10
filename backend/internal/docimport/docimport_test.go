@@ -434,6 +434,41 @@ func TestStageClaimAndSweep(t *testing.T) {
 	}
 }
 
+func TestStageReadPlanDoesNotClaim(t *testing.T) {
+	stage := NewStage(t.TempDir())
+	id := "0b8f2a5e-6a3c-4f1e-9d2b-5c7e8f9a0b1c"
+	dir, err := stage.Create(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now()
+	if err := SavePlan(dir, &Plan{ID: id, CreatedAt: now}); err != nil {
+		t.Fatal(err)
+	}
+	for range 2 {
+		if plan, err := stage.ReadPlan(id, now); err != nil || plan.ID != id {
+			t.Fatalf("read = %v %v", plan, err)
+		}
+	}
+	if _, err := os.Stat(dir); err != nil {
+		t.Fatal("read removed or moved the staged import")
+	}
+	if _, _, release, _, err := stage.Claim(id, now); err != nil {
+		t.Fatalf("claim after reads = %v", err)
+	} else {
+		release()
+	}
+	if _, err := stage.ReadPlan(id, now.Add(TTL+time.Second)); !errors.Is(err, ErrNotStaged) {
+		t.Fatal("expired plan read")
+	}
+	if _, err := stage.ReadPlan("../escape", now); !errors.Is(err, ErrNotStaged) {
+		t.Fatal("unsafe id read")
+	}
+	if _, err := stage.ReadPlan("1b8f2a5e-6a3c-4f1e-9d2b-5c7e8f9a0b1c", now); !errors.Is(err, ErrNotStaged) {
+		t.Fatal("missing plan read")
+	}
+}
+
 func TestSymlinkEntriesAreSkipped(t *testing.T) {
 	var buf bytes.Buffer
 	w := zip.NewWriter(&buf)

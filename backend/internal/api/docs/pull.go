@@ -99,12 +99,12 @@ func (h *Handler) GetPull(w http.ResponseWriter, r *http.Request) {
 	}
 	response := PullResponse{Job: job}
 	if job.State == "ready" {
-		plan, _, release, _, err := h.importStage().Claim(job.ID, time.Now())
+		// Read without claiming: a poll must not race a concurrent commit.
+		plan, err := h.importStage().ReadPlan(job.ID, time.Now())
 		if err != nil {
 			httputil.Error(w, 404, "not_found", "Import not found or expired")
 			return
 		}
-		defer release()
 		response.Preview, err = h.importPreview(r.Context(), plan)
 		if err != nil {
 			httputil.Errorf(w, err)
