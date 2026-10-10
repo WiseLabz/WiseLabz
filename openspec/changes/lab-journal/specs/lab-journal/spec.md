@@ -85,3 +85,31 @@ The Changes and Alerts lists SHALL return the connector serviceName and Changes/
 #### Scenario: Critical page
 - **WHEN** a member selects critical severity
 - **THEN** the first page contains matching critical rows and totals reflect the server filter
+
+### Requirement: Window narration
+The system SHALL let a signed-in user, on demand, request an AI narration of the Journal window selected by the same connector, date range, source and all-sync-run filters as the timeline. Only events returned by the caller's own visibility-scoped timeline query SHALL enter the prompt, at most the 100 newest events and 48 KB of prompt with the oldest dropped first, and event content SHALL be treated as untrusted data. The response SHALL cite events by number, list the numbered source events, and state when events were left out. An empty window SHALL return an empty narration without calling the provider, a read-only API key SHALL be refused with 403, a disabled AI module SHALL return 409 ai_disabled, and a provider failure SHALL return 502 without the provider's error text. Narrations SHALL NOT be cached, persisted or audited, and SHALL be shown as plain text. Disabled or failing AI SHALL leave the ordinary Journal unaffected.
+
+#### Scenario: Member with mixed grants
+- **WHEN** a member with a grant on one of two connectors requests a narration of the whole window
+- **THEN** only events from the granted connector and lab-wide entries enter the prompt and the sources
+
+#### Scenario: Large window
+- **WHEN** the window holds more than 100 visible events
+- **THEN** only the newest events are narrated and the response and interface say that older events were left out
+
+#### Scenario: Provider failure
+- **WHEN** the AI provider fails or AI is disabled
+- **THEN** the interface shows a message for that case and the timeline stays usable
+
+#### Scenario: Disabled AI
+- **WHEN** an administrator has not enabled AI and a user requests a narration
+- **THEN** the response is 409 ai_disabled and no provider is called
+
+#### Scenario: Empty window
+- **WHEN** no visible event falls in the selected window
+- **THEN** the response has an empty narration and no sources, and no provider is called
+
+#### Scenario: Read-only API key
+- **WHEN** a read-only API key requests a narration
+- **THEN** the request is refused with 403
+

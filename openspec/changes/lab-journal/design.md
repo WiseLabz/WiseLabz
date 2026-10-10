@@ -6,7 +6,7 @@ The store already models each activity source and connector grants. MergedAttent
 
 ## Goals / Non-Goals
 
-Goals: preserve notes independently of source lifecycles, enforce permissions before pagination and make chronological paging stable. Non-goals: AI narration and security audit events in the journal.
+Goals: preserve notes independently of source lifecycles, enforce permissions before pagination and make chronological paging stable. Non-goals: security audit events in the journal.
 
 ## Decisions
 
@@ -18,8 +18,9 @@ Goals: preserve notes independently of source lifecycles, enforce permissions be
 - JournalPage uses useInfiniteQuery, URL filters and rail-and-dot activity rows linking to source pages. The entry dialog uses a native datetime input, scope select, EntityPicker, optional doc and Markdown preview, with edit/delete affordances for authors/admins.
 
 - Owner follow-up decision: include serviceName in the Changes/Alerts list responses and send Changes/Alerts severity (and pending alert status) to server filters before pagination, with page reset on changes.
+- POST /api/timeline/narrate (#617) takes the timeline filter parameters and no body. It builds the filter exactly as GET /api/timeline does and makes one `ListTimeline` call for the 100 newest events, so grants, API-key restrictions and the admin gate apply in SQL; the narration is never built from an unscoped query. Events are numbered oldest first into a `<journal_events>` block (title 200 bytes, body 400, 48 KB total, oldest dropped first, createdBy omitted, delimiter tag stripped, untrusted-data notice in the system prompt). It reuses the AI gate and fallback chain of change Explain, caches and persists nothing, logs provider errors and returns a fixed 502 message. It is a POST that is not marked safe, so read-only API keys cannot spend provider tokens. The web page shows the narration as plain text with `[n]` citations and a numbered source list.
 
-- AI window narration remains a separate follow-up.
+- AI window narration (#617) ships with the narrate decision above and reads only the rows the caller's own timeline returns, so audit rows enter the prompt only within the caller's grants and API-key restrictions.
 
 ## Risks / Trade-offs
 

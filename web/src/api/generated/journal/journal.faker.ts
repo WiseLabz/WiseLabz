@@ -8,7 +8,7 @@
  */
 import { faker } from '@faker-js/faker';
 
-import type { JournalEntry, TimelinePage } from '../../model';
+import type { JournalEntry, TimelineNarration, TimelinePage } from '../../model';
 
 export const getGetTimelineResponseMock = (
   overrideResponse: Partial<Extract<TimelinePage, object>> = {}
@@ -41,6 +41,38 @@ export const getGetTimelineResponseMock = (
     faker.string.alpha({ length: { min: 10, max: 20 } }),
     undefined,
   ]),
+  ...overrideResponse,
+});
+
+export const getPostTimelineNarrateResponseMock = (
+  overrideResponse: Partial<Extract<TimelineNarration, object>> = {}
+): TimelineNarration => ({
+  narration: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  sources: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(
+    () => ({
+      n: faker.number.int(),
+      kind: faker.helpers.arrayElement([
+        'change',
+        'sync',
+        'alert',
+        'doc',
+        'journal',
+        'audit',
+      ] as const),
+      id: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      docId: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      connectorId: faker.string.alpha({ length: { min: 10, max: 20 } }),
+      timestamp: faker.date.past().toISOString().slice(0, 19) + 'Z',
+      title: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    })
+  ),
+  after: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  before: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  eventCount: faker.number.int(),
+  totalEvents: faker.number.int(),
+  truncated: faker.datatype.boolean(),
+  provider: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  fallbackUsed: faker.datatype.boolean(),
   ...overrideResponse,
 });
 

@@ -1,11 +1,16 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { getTimeline, deleteJournalId } from '../../api/generated/journal/journal';
+import { isAxiosError } from 'axios';
+import {
+  getTimeline,
+  deleteJournalId,
+  usePostTimelineNarrate,
+} from '../../api/generated/journal/journal';
 import { useGetConnectors } from '../../api/generated/connectors/connectors';
 import { useGetMe } from '../../api/generated/me/me';
-import type { TimelineItem } from '../../api/model';
+import type { TimelineItem, TimelineNarration, TimelineNarrationSource } from '../../api/model';
 import { useCanMutate, useIsInstanceAdmin } from '../../hooks/useRole';
 import { Markdown } from '../../components/docs/Markdown';
 import { Button } from '../../components/ui/Button';
@@ -45,6 +50,43 @@ function sourceLink(row: TimelineItem, admin: boolean) {
   }
 }
 
+// Narration sources are trimmed rows; give them the row shape sourceLink reads.
+function sourceRow(source: TimelineNarrationSource): TimelineItem {
+  return {
+    ...source,
+    body: '',
+    createdBy: '',
+    entityKind: '',
+    entityName: '',
+    entityRef: '',
+    status: '',
+  };
+}
+
+// Splits plain narration text around [n] citations that match a source; the
+// text itself is never interpreted as Markdown or HTML.
+function NarrationText({ text, sources }: { text: string; sources: TimelineNarrationSource[] }) {
+  const known = new Set(sources.map((source) => source.n));
+  return (
+    <p className="whitespace-pre-wrap text-sm text-ink">
+      {text.split(/(\[\d+\])/).map((part, i) => {
+        const n = Number(/^\[(\d+)\]$/.exec(part)?.[1]);
+        return known.has(n) ? (
+          <a
+            key={i}
+            className="text-accent-primary hover:underline"
+            href={`#narration-source-${n}`}
+          >
+            {part}
+          </a>
+        ) : (
+          part
+        );
+      })}
+    </p>
+  );
+}
+
 export function JournalPage() {
   const { t, i18n } = useTranslation();
   const [search, setSearch] = useSearchParams();
@@ -70,6 +112,11 @@ export function JournalPage() {
     getNextPageParam: (page) => page.nextCursor || undefined,
   });
   const rows = timeline.data?.pages.flatMap((page) => page.items) ?? [];
+  const narrate = usePostTimelineNarrate();
+  const resetNarration = narrate.reset;
+  const filterKey = JSON.stringify(filters);
+  // A narration describes one window; drop it as soon as the filters move on.
+  useEffect(() => resetNarration(), [filterKey, resetNarration]);
   const remove = useMutation({
     mutationFn: (id: string) => deleteJournalId(id),
     onSuccess: () => {
@@ -84,6 +131,29 @@ export function JournalPage() {
     else next.delete(key);
     setSearch(next);
   };
+  const windowLabel = (n: TimelineNarration) =>
+    n.after && n.before
+      ? t('journal.narration.windowBetween', { after: day(n.after), before: day(n.before) })
+      : n.after
+        ? t('journal.narration.windowFrom', { after: day(n.after) })
+        : n.before
+          ? t('journal.narration.windowUntil', { before: day(n.before) })
+          : t('journal.narration.windowAll');
+  const day = (iso: string) => new Date(iso).toLocaleDateString(i18n.language, { timeZone: 'UTC' });
+  const filterWords = [
+    filters.connectorId &&
+      t('journal.narration.filterScope', {
+        name: connectors.find((c) => c.id === filters.connectorId)?.name ?? filters.connectorId,
+      }),
+    filters.kinds &&
+      t('journal.narration.filterSource', {
+        name: filters.kinds
+          .split(',')
+          .map((kind) => t(`journal.kinds.${kind}`, { defaultValue: kind }))
+          .join(', '),
+      }),
+    filters.allSyncRuns && t('journal.narration.filterAllSyncRuns'),
+  ].filter(Boolean);
   return (
     <div className="space-y-5">
       <div className="flex items-start justify-between gap-3">
@@ -154,7 +224,74 @@ export function JournalPage() {
           />
           {t('journal.allSyncRuns')}
         </label>
+        <Button
+          variant="secondary"
+          disabled={narrate.isPending}
+          onClick={() => narrate.mutate({ params: filters })}
+        >
+          {narrate.isPending ? t('journal.narration.loading') : t('journal.narration.button')}
+        </Button>
       </div>
+      {narrate.isError && (
+        <p role="alert" className="text-sm text-err">
+          {isAxiosError(narrate.error) && narrate.error.response?.status === 409
+            ? t('journal.narration.disabled')
+            : t('journal.narration.error')}
+        </p>
+      )}
+      {narrate.data &&
+        (narrate.data.totalEvents === 0 ? (
+          <p className="text-sm text-ink-muted">{t('journal.narration.empty')}</p>
+        ) : (
+          <Panel>
+            <section aria-label={t('journal.narration.title')} className="space-y-3 p-5">
+              <h2 className="text-sm font-semibold text-ink">{t('journal.narration.title')}</h2>
+              <p className="text-xs text-ink-muted">
+                {[windowLabel(narrate.data), ...filterWords].join(' · ')} ·{' '}
+                {t('journal.narration.eventCount', { count: narrate.data.eventCount })}
+              </p>
+              <NarrationText text={narrate.data.narration} sources={narrate.data.sources} />
+              {narrate.data.truncated && (
+                <p className="text-xs text-warn">
+                  {t('journal.narration.truncated', {
+                    count: narrate.data.eventCount,
+                    total: narrate.data.totalEvents,
+                  })}
+                </p>
+              )}
+              {narrate.data.fallbackUsed && (
+                <p className="text-xs text-ink-faint">
+                  {t('journal.narration.fallbackUsed', { provider: narrate.data.provider })}
+                </p>
+              )}
+              <h3 className="text-xs font-semibold text-ink-muted">
+                {t('journal.narration.sources')}
+              </h3>
+              <ol className="space-y-1 text-xs text-ink-muted">
+                {narrate.data.sources.map((source) => {
+                  const link = sourceLink(sourceRow(source), admin);
+                  const label = source.title || t('journal.narration.sourceFallback');
+                  return (
+                    <li key={source.n} id={`narration-source-${source.n}`}>
+                      [{source.n}] {t(`journal.kinds.${source.kind}`)} ·{' '}
+                      <time dateTime={source.timestamp}>
+                        {new Date(source.timestamp).toLocaleString(i18n.language)}
+                      </time>{' '}
+                      ·{' '}
+                      {link ? (
+                        <Link className="text-accent-primary hover:underline" to={link}>
+                          {label}
+                        </Link>
+                      ) : (
+                        label
+                      )}
+                    </li>
+                  );
+                })}
+              </ol>
+            </section>
+          </Panel>
+        ))}
       <Panel>
         {timeline.isPending ? (
           <SkeletonRows />

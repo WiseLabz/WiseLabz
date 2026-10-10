@@ -22,7 +22,15 @@ import type {
   UseQueryResult,
 } from '@tanstack/react-query';
 
-import type { GetTimelineParams, JournalEntry, JournalEntryInput, TimelinePage } from '../../model';
+import type {
+  Error,
+  GetTimelineParams,
+  JournalEntry,
+  JournalEntryInput,
+  PostTimelineNarrateParams,
+  TimelineNarration,
+  TimelinePage,
+} from '../../model';
 
 import { customInstance } from '../../axios-instance';
 import type { ErrorType, BodyType } from '../../axios-instance';
@@ -159,6 +167,88 @@ export function useGetTimeline<
   return withQueryKey(query, queryOptions.queryKey);
 }
 
+/**
+ * Takes the same query parameters as GET /timeline (no body, no paging) and asks the configured AI provider for a plain-text narration of the events the caller can see in that window: at most 100 events (the newest) and 48 KB of prompt, the oldest dropped first. Events are numbered oldest first and the narration cites them as [n]. Nothing is cached or persisted. An empty window returns an empty narration without calling the provider.
+ * @summary Narrate the visible events of a journal window with AI
+ */
+export const postTimelineNarrate = (
+  params?: PostTimelineNarrateParams,
+  options?: SecondParameter<typeof customInstance>,
+  signal?: AbortSignal
+) => {
+  return customInstance<TimelineNarration>(
+    { url: `/timeline/narrate`, method: 'POST', params, signal },
+    options
+  );
+};
+
+export const getPostTimelineNarrateMutationKey = () => ['postTimelineNarrate'] as const;
+
+export const getPostTimelineNarrateMutationOptions = <
+  TError = ErrorType<Error>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof postTimelineNarrate>>,
+    TError,
+    PostTimelineNarrateMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof postTimelineNarrate>>,
+  TError,
+  PostTimelineNarrateMutationVariables,
+  TContext
+> => {
+  const mutationKey = getPostTimelineNarrateMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof postTimelineNarrate>>,
+    PostTimelineNarrateMutationVariables
+  > = (props) => {
+    const { params } = props ?? {};
+
+    return postTimelineNarrate(params, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type PostTimelineNarrateMutationResult = NonNullable<
+  Awaited<ReturnType<typeof postTimelineNarrate>>
+>;
+
+export type PostTimelineNarrateMutationError = ErrorType<Error>;
+export type PostTimelineNarrateMutationVariables = { params?: PostTimelineNarrateParams };
+
+/**
+ * @summary Narrate the visible events of a journal window with AI
+ */
+export const usePostTimelineNarrate = <TError = ErrorType<Error>, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof postTimelineNarrate>>,
+      TError,
+      PostTimelineNarrateMutationVariables,
+      TContext
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseMutationResult<
+  Awaited<ReturnType<typeof postTimelineNarrate>>,
+  TError,
+  PostTimelineNarrateMutationVariables,
+  TContext
+> => {
+  return useMutation(getPostTimelineNarrateMutationOptions(options), queryClient);
+};
 /**
  * @summary Create a manual entry (connector operator or lab-wide instance admin)
  */

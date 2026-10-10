@@ -11,6 +11,8 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/WiseLabz/wiselabz/internal/ai"
+	"github.com/WiseLabz/wiselabz/internal/api/settings"
 	"github.com/WiseLabz/wiselabz/internal/auth"
 	"github.com/WiseLabz/wiselabz/internal/httputil"
 	"github.com/WiseLabz/wiselabz/internal/store"
@@ -18,7 +20,11 @@ import (
 )
 
 // Handler serves merged history and journal mutations.
-type Handler struct{ Store *store.Store }
+type Handler struct {
+	Store    *store.Store
+	Settings *settings.Handler
+	AI       *ai.Registry
+}
 
 const timestampLayout = "2006-01-02T15:04:05.000000000Z"
 
@@ -35,9 +41,10 @@ func normalizedTime(raw string) (string, bool) {
 	return t.UTC().Format(timestampLayout), true
 }
 
-// List handles GET /api/timeline with SQL-filtered keyset pagination.
-func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
-	_, size, _ := httputil.Paginate(r)
+// parseFilter builds the visibility-scoped filter shared by List and Narrate
+// from the caller's identity and the window query parameters. It writes the
+// 400 itself and reports false on an invalid parameter.
+func parseFilter(w http.ResponseWriter, r *http.Request) (store.TimelineFilter, bool) {
 	q := r.URL.Query()
 	f := store.TimelineFilter{UserID: auth.UserIDFromContext(r.Context()), Admin: auth.InstanceAdminFromContext(r.Context()),
 		ConnectorID: q.Get("connectorId"), AllSyncRuns: q.Get("allSyncRuns") == "true"}
@@ -45,22 +52,33 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	f.After, ok = normalizedTime(q.Get("after"))
 	if !ok {
 		httputil.Error(w, 400, "invalid_request", "Invalid after timestamp")
-		return
+		return f, false
 	}
 	f.Before, ok = normalizedTime(q.Get("before"))
 	if !ok || (f.After != "" && f.Before != "" && f.After > f.Before) {
 		httputil.Error(w, 400, "invalid_request", "Invalid date range")
-		return
+		return f, false
 	}
 	if raw := q.Get("kinds"); raw != "" {
 		f.Kinds = strings.Split(raw, ",")
 		for _, kind := range f.Kinds {
 			if !slices.Contains(sourceKinds, kind) {
 				httputil.Error(w, 400, "invalid_request", "Invalid source kind")
-				return
+				return f, false
 			}
 		}
 	}
+	return f, true
+}
+
+// List handles GET /api/timeline with SQL-filtered keyset pagination.
+func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
+	_, size, _ := httputil.Paginate(r)
+	f, ok := parseFilter(w, r)
+	if !ok {
+		return
+	}
+	q := r.URL.Query()
 	if raw := q.Get("cursor"); raw != "" {
 		ts, key, valid := httputil.DecodeCursor(raw)
 		kind, id, found := strings.Cut(key, ":")

@@ -91,6 +91,7 @@ func mountAPIRoutes(r chi.Router, d routerDeps) {
 		mountWorkflowRoutes(r, d)
 		r.Get("/search", d.searchH.List)
 		r.Get("/timeline", d.timelineH.List)
+		r.Post("/timeline/narrate", d.timelineH.Narrate)
 		r.Post("/journal", d.timelineH.Create)
 		r.Put("/journal/{id}", d.timelineH.Update)
 		r.Delete("/journal/{id}", d.timelineH.Delete)

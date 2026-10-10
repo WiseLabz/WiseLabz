@@ -9,16 +9,18 @@
 import { HttpResponse, http } from 'msw';
 import type { RequestHandlerOptions } from 'msw';
 
-import type { JournalEntry, TimelinePage } from '../../model';
+import type { JournalEntry, TimelineNarration, TimelinePage } from '../../model';
 
 import {
   getGetTimelineResponseMock,
   getPostJournalResponseMock,
+  getPostTimelineNarrateResponseMock,
   getPutJournalIdResponseMock,
 } from './journal.faker';
 
 export {
   getGetTimelineResponseMock,
+  getPostTimelineNarrateResponseMock,
   getPostJournalResponseMock,
   getPutJournalIdResponseMock,
 } from './journal.faker';
@@ -40,6 +42,30 @@ export const getGetTimelineMockHandler = (
             ? await overrideResponse(info)
             : overrideResponse
           : getGetTimelineResponseMock(),
+        { status: 200 }
+      );
+    },
+    options
+  );
+};
+
+export const getPostTimelineNarrateMockHandler = (
+  overrideResponse?:
+    | TimelineNarration
+    | ((
+        info: Parameters<Parameters<typeof http.post>[1]>[0]
+      ) => Promise<TimelineNarration> | TimelineNarration),
+  options?: RequestHandlerOptions
+) => {
+  return http.post(
+    '*/timeline/narrate',
+    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+      return HttpResponse.json(
+        overrideResponse !== undefined
+          ? typeof overrideResponse === 'function'
+            ? await overrideResponse(info)
+            : overrideResponse
+          : getPostTimelineNarrateResponseMock(),
         { status: 200 }
       );
     },
@@ -114,6 +140,7 @@ export const getDeleteJournalIdMockHandler = (
 };
 export const getJournalMock = () => [
   getGetTimelineMockHandler(),
+  getPostTimelineNarrateMockHandler(),
   getPostJournalMockHandler(),
   getPutJournalIdMockHandler(),
   getDeleteJournalIdMockHandler(),

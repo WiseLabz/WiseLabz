@@ -66,6 +66,34 @@ describe('locale catalogs', () => {
     }
   });
 
+  it('keeps the journal narration keys present in both catalogs', () => {
+    const paths = [
+      'journal.narration.button',
+      'journal.narration.loading',
+      'journal.narration.title',
+      'journal.narration.windowAll',
+      'journal.narration.windowBetween',
+      'journal.narration.windowFrom',
+      'journal.narration.windowUntil',
+      'journal.narration.filterScope',
+      'journal.narration.filterSource',
+      'journal.narration.filterAllSyncRuns',
+      'journal.narration.eventCount_one',
+      'journal.narration.eventCount_other',
+      'journal.narration.truncated',
+      'journal.narration.fallbackUsed',
+      'journal.narration.sources',
+      'journal.narration.sourceFallback',
+      'journal.narration.empty',
+      'journal.narration.disabled',
+      'journal.narration.error',
+    ];
+    for (const catalog of [en, ptBR]) {
+      const translatedKeys = new Set(keys(catalog));
+      expect(paths.filter((path) => !translatedKeys.has(path))).toEqual([]);
+    }
+  });
+
   it('keeps certificate expiry keys present in both catalogs', () => {
     const paths = [
       'journal.actionLabels.connectorAction',

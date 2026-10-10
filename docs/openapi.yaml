@@ -2913,6 +2913,56 @@ paths:
               schema: { $ref: '#/components/schemas/TimelinePage' }
         '400':
           description: Invalid filter or cursor
+  /timeline/narrate:
+    post:
+      tags: [journal]
+      summary: Narrate the visible events of a journal window with AI
+      description: >
+        Takes the same query parameters as GET /timeline (no body, no paging)
+        and asks the configured AI provider for a plain-text narration of the
+        events the caller can see in that window: at most 100 events (the
+        newest) and 48 KB of prompt, the oldest dropped first. Events are
+        numbered oldest first and the narration cites them as [n]. Nothing is
+        cached or persisted. An empty window returns an empty narration
+        without calling the provider.
+      parameters:
+        - name: connectorId
+          in: query
+          schema: { type: string }
+        - name: after
+          in: query
+          schema: { type: string, format: date-time }
+        - name: before
+          in: query
+          schema: { type: string, format: date-time }
+        - name: kinds
+          in: query
+          description: Comma-separated change, sync, alert, doc, journal or audit
+          schema: { type: string }
+        - name: allSyncRuns
+          in: query
+          schema: { type: boolean, default: false }
+      responses:
+        '200':
+          description: Narration of the window
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TimelineNarration' }
+        '400':
+          description: Invalid filter
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '409':
+          description: AI module disabled
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '502':
+          description: AI provider failed
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
   /journal:
     post:
       tags: [journal]
@@ -6586,6 +6636,33 @@ components:
         entityName: { type: string }
         entityRef: { type: string }
         status: { type: string }
+    TimelineNarrationSource:
+      type: object
+      required: [n, kind, id, docId, connectorId, timestamp, title]
+      properties:
+        n: { type: integer, description: 'Citation number used as [n] in the narration' }
+        kind: { type: string, enum: [change, sync, alert, doc, journal, audit] }
+        id: { type: string }
+        docId: { type: string }
+        connectorId: { type: string }
+        timestamp: { type: string, format: date-time }
+        title: { type: string }
+    TimelineNarration:
+      type: object
+      required: [narration, sources, after, before, eventCount, totalEvents, truncated, provider, fallbackUsed]
+      properties:
+        narration: { type: string, description: 'Plain text, empty when the window has no visible events' }
+        sources:
+          type: array
+          description: The events that entered the prompt, numbered oldest first
+          items: { $ref: '#/components/schemas/TimelineNarrationSource' }
+        after: { type: string, description: 'Normalized lower bound of the window, empty when unbounded' }
+        before: { type: string, description: 'Normalized upper bound of the window, empty when unbounded' }
+        eventCount: { type: integer, description: 'Events included in the prompt' }
+        totalEvents: { type: integer, description: 'Visible events matching the filter' }
+        truncated: { type: boolean, description: 'True when the oldest events were left out' }
+        provider: { type: string }
+        fallbackUsed: { type: boolean }
     TimelinePage:
       type: object
       required: [items, total, page, pageSize]

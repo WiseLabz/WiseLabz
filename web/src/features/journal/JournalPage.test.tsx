@@ -1,25 +1,32 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, useLocation } from 'react-router-dom';
+import { AxiosError } from 'axios';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import '../../i18n';
 import { JournalPage } from './JournalPage';
-import type { TimelineItem } from '../../api/model';
+import type { TimelineItem, TimelineNarration } from '../../api/model';
 
-const { get, create, update, remove, role, error } = vi.hoisted(() => ({
+const { get, narrate, create, update, remove, role, error } = vi.hoisted(() => ({
   get: vi.fn(),
+  narrate: vi.fn(),
   create: vi.fn(),
   update: vi.fn(),
   remove: vi.fn(),
   role: { admin: false, operator: true, userId: 'author' },
   error: vi.fn(),
 }));
-vi.mock('../../api/generated/journal/journal', () => ({
-  getTimeline: get,
-  postJournal: create,
-  putJournalId: update,
-  deleteJournalId: remove,
-}));
+vi.mock('../../api/generated/journal/journal', async () => {
+  const { useMutation } = await import('@tanstack/react-query');
+  return {
+    getTimeline: get,
+    postJournal: create,
+    putJournalId: update,
+    deleteJournalId: remove,
+    usePostTimelineNarrate: () =>
+      useMutation({ mutationFn: (vars: { params?: object }) => narrate(vars.params) }),
+  };
+});
 vi.mock('../../hooks/useRole', () => ({
   useIsInstanceAdmin: () => role.admin,
   useCanMutate: () => role.admin || role.operator,
@@ -74,6 +81,45 @@ const note: TimelineItem = {
   entityRef: 'vm/100',
   status: '',
 };
+const narration: TimelineNarration = {
+  narration: 'Router replaced [1] after the alert [2]. **Not bold** <b>raw</b> [9]',
+  sources: [
+    {
+      n: 1,
+      kind: 'journal',
+      id: 'j',
+      docId: '',
+      connectorId: 'c',
+      timestamp: '2020-01-01T00:00:12.123456789Z',
+      title: 'Replaced router',
+    },
+    {
+      n: 2,
+      kind: 'alert',
+      id: 'a',
+      docId: '',
+      connectorId: 'c',
+      timestamp: '2020-01-02T00:00:00.000000000Z',
+      title: 'Disk full',
+    },
+  ],
+  after: '2020-01-01T00:00:00.000000000Z',
+  before: '',
+  eventCount: 2,
+  totalEvents: 2,
+  truncated: false,
+  provider: 'mock',
+  fallbackUsed: false,
+};
+function failure(status: number) {
+  return new AxiosError('failed', 'ERR_BAD_RESPONSE', undefined, undefined, {
+    status,
+    data: {},
+    statusText: '',
+    headers: {},
+    config: {} as never,
+  });
+}
 function Location() {
   return <output data-testid="location">{useLocation().search}</output>;
 }
@@ -292,4 +338,170 @@ describe('Journal', () => {
       }
     }
   );
+
+  describe('window narration', () => {
+    const summarize = () =>
+      fireEvent.click(screen.getByRole('button', { name: 'Summarize this window' }));
+
+    it('sends the current filters and renders plain text with citation and source links', async () => {
+      narrate.mockResolvedValue(narration);
+      mount('/journal?connectorId=c&kinds=journal&after=2020-01-01T00:00:00Z');
+      await screen.findByText('Replaced', { exact: false });
+      summarize();
+      expect(await screen.findByText('AI summary of this window')).toBeInTheDocument();
+      expect(narrate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          connectorId: 'c',
+          kinds: 'journal',
+          after: '2020-01-01T00:00:00Z',
+        })
+      );
+      const summary = screen.getByRole('region', { name: 'AI summary of this window' });
+      expect(summary).toHaveTextContent('From 1/1/2020 (UTC)');
+      expect(summary).toHaveTextContent('Scope: Router');
+      expect(summary).toHaveTextContent('Source: Note');
+      expect(summary).toHaveTextContent('2 events summarized');
+      // Narration is plain text: no Markdown emphasis, no raw HTML element.
+      expect(summary).toHaveTextContent('**Not bold** <b>raw</b> [9]');
+      expect(summary.querySelector('b, strong')).toBeNull();
+      const citations = within(summary).getAllByRole('link', { name: /^\[\d\]$/ });
+      expect(citations.map((a) => a.getAttribute('href'))).toEqual([
+        '#narration-source-1',
+        '#narration-source-2',
+      ]);
+      expect(within(summary).getByRole('link', { name: 'Replaced router' })).toHaveAttribute(
+        'href',
+        '/services/c'
+      );
+      expect(within(summary).getByRole('link', { name: 'Disk full' })).toHaveAttribute(
+        'href',
+        '/alerts/a'
+      );
+      expect(screen.queryByText(/left out/)).not.toBeInTheDocument();
+    });
+
+    it.each([
+      { admin: false, docId: 'd', connectorId: 'c', href: '/docs/d' },
+      { admin: false, docId: '', connectorId: 'c', href: '/services/c' },
+      { admin: false, docId: '', connectorId: '', href: null },
+      { admin: true, docId: 'd', connectorId: 'c', href: '/settings/audit' },
+    ])(
+      'links an audit source for admin=$admin with doc "$docId" and connector "$connectorId"',
+      async ({ admin, docId, connectorId, href }) => {
+        role.admin = admin;
+        narrate.mockResolvedValue({
+          ...narration,
+          narration: 'Runbook edited [1].',
+          sources: [
+            {
+              n: 1,
+              kind: 'audit',
+              id: 'x',
+              docId,
+              connectorId,
+              timestamp: '2020-01-01T00:00:00.000000000Z',
+              title: 'runbook.update',
+            },
+          ],
+          eventCount: 1,
+          totalEvents: 1,
+        });
+        mount();
+        await screen.findByText('Replaced', { exact: false });
+        summarize();
+        const summary = await screen.findByRole('region', { name: 'AI summary of this window' });
+        expect(within(summary).getByText(/runbook\.update/)).toBeInTheDocument();
+        if (href) {
+          expect(within(summary).getByRole('link', { name: 'runbook.update' })).toHaveAttribute(
+            'href',
+            href
+          );
+        } else {
+          expect(within(summary).queryByRole('link', { name: 'runbook.update' })).toBeNull();
+        }
+        expect(summary.querySelector('a[href="/settings/audit"]') !== null).toBe(admin);
+      }
+    );
+
+    it.each([
+      [409, 'AI is not enabled. An administrator can turn it on in Settings.'],
+      [502, 'Could not summarize this window. The journal below is unaffected.'],
+    ])('keeps the journal list usable when narration fails with %i', async (status, message) => {
+      narrate.mockRejectedValue(failure(status));
+      mount();
+      await screen.findByText('Replaced', { exact: false });
+      const calls = get.mock.calls.length;
+      summarize();
+      expect(await screen.findByRole('alert')).toHaveTextContent(message);
+      expect(screen.getByText('Replaced', { exact: false })).toBeInTheDocument();
+      expect(get).toHaveBeenCalledTimes(calls);
+      expect(screen.getByRole('button', { name: 'Summarize this window' })).toBeEnabled();
+    });
+
+    it('says so when the window has no visible events', async () => {
+      narrate.mockResolvedValue({
+        ...narration,
+        narration: '',
+        sources: [],
+        eventCount: 0,
+        totalEvents: 0,
+      });
+      mount();
+      await screen.findByText('Replaced', { exact: false });
+      summarize();
+      expect(
+        await screen.findByText('There are no visible events in this window to summarize.')
+      ).toBeInTheDocument();
+      expect(screen.queryByText('AI summary of this window')).not.toBeInTheDocument();
+    });
+
+    it('notes when older events were left out', async () => {
+      narrate.mockResolvedValue({ ...narration, eventCount: 2, totalEvents: 250, truncated: true });
+      mount();
+      await screen.findByText('Replaced', { exact: false });
+      summarize();
+      expect(
+        await screen.findByText(
+          'The window holds 250 events; only the 2 most recent fit the summary, so older events are left out.'
+        )
+      ).toBeInTheDocument();
+    });
+
+    const filterChanges: [string, () => void][] = [
+      [
+        'source',
+        () => fireEvent.change(screen.getByLabelText('Source'), { target: { value: 'change' } }),
+      ],
+      ['scope', () => fireEvent.change(screen.getByLabelText('Scope'), { target: { value: 'c' } })],
+      ['all sync runs', () => fireEvent.click(screen.getByLabelText('Show all sync runs'))],
+    ];
+
+    it.each(filterChanges)('clears the narration when the %s filter changes', async (_, change) => {
+      narrate.mockResolvedValue(narration);
+      mount();
+      await screen.findByText('Replaced', { exact: false });
+      summarize();
+      expect(await screen.findByText('AI summary of this window')).toBeInTheDocument();
+      change();
+      await waitFor(() =>
+        expect(screen.queryByText('AI summary of this window')).not.toBeInTheDocument()
+      );
+    });
+
+    it('drops a narration that resolves after the filters changed', async () => {
+      let resolve!: (value: TimelineNarration) => void;
+      narrate.mockReturnValue(new Promise<TimelineNarration>((r) => (resolve = r)));
+      mount();
+      await screen.findByText('Replaced', { exact: false });
+      summarize();
+      expect(await screen.findByRole('button', { name: 'Summarizing…' })).toBeDisabled();
+      fireEvent.change(screen.getByLabelText('Scope'), { target: { value: 'c' } });
+      resolve(narration);
+      await waitFor(() =>
+        expect(screen.getByRole('button', { name: 'Summarize this window' })).toBeEnabled()
+      );
+      await act(async () => {});
+      expect(screen.queryByText('AI summary of this window')).not.toBeInTheDocument();
+    });
+  });
 });
