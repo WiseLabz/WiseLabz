@@ -12,7 +12,9 @@ export interface DocPullRequest {
   source: DocPullRequestSource;
   /** Installation base URL without userinfo or query */
   url: string;
-  tokenId: string;
+  /** BookStack token ID: required for bookstack, unused for wikijs */
+  tokenId?: string;
+  /** BookStack token secret, or the Wiki.js API key */
   tokenSecret: string;
   skipTlsVerify?: boolean;
 }

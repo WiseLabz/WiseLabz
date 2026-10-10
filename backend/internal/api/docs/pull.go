@@ -13,7 +13,7 @@ import (
 	"github.com/WiseLabz/wiselabz/internal/httputil"
 )
 
-// PullRequest carries remote credentials for one pull, never staged metadata.
+// PullRequest carries remote credentials (for Wiki.js, the API key in tokenSecret) for one pull, never staged metadata.
 type PullRequest struct {
 	Source        string `json:"source"`
 	URL           string `json:"url"`
@@ -57,17 +57,18 @@ func (h *Handler) StartPull(w http.ResponseWriter, r *http.Request) {
 		httputil.Error(w, 400, "invalid_request", "Invalid documentation pull request")
 		return
 	}
-	if request.Source != "bookstack" {
+	var source pull.Source
+	var err error
+	switch request.Source {
+	case "bookstack":
+		source, err = pull.NewBookStack(request.URL, request.TokenID, request.TokenSecret, request.SkipTLSVerify, h.importLimits())
+	case "wikijs":
+		// The Wiki.js API key travels in tokenSecret; there is no token ID.
+		source, err = pull.NewWikiJS(request.URL, request.TokenSecret, request.SkipTLSVerify, h.importLimits())
+	default:
 		httputil.Error(w, 400, "invalid_source", "Unsupported pull source")
 		return
 	}
-	source, err := pull.NewBookStack(
-		request.URL,
-		request.TokenID,
-		request.TokenSecret,
-		request.SkipTLSVerify,
-		h.importLimits(),
-	)
 	if err != nil {
 		httputil.Error(w, 400, "invalid_request", err.Error())
 		return

@@ -286,7 +286,7 @@ export const getPostDocsImportPullResponseMock = (
   overrideResponse: Partial<Extract<DocPullJob, object>> = {}
 ): DocPullJob => ({
   id: faker.string.alpha({ length: { min: 10, max: 20 } }),
-  source: faker.helpers.arrayElement(['bookstack'] as const),
+  source: faker.helpers.arrayElement(['bookstack', 'wikijs'] as const),
   host: faker.string.alpha({ length: { min: 10, max: 20 } }),
   skipTlsVerify: faker.datatype.boolean(),
   state: faker.helpers.arrayElement(['fetching', 'ready', 'failed', 'cancelled'] as const),
@@ -354,7 +354,7 @@ export const getGetDocsImportPullResponseMock = (
   overrideResponse: Partial<Extract<DocPullJob, object>> = {}
 ): DocPullJob => ({
   id: faker.string.alpha({ length: { min: 10, max: 20 } }),
-  source: faker.helpers.arrayElement(['bookstack'] as const),
+  source: faker.helpers.arrayElement(['bookstack', 'wikijs'] as const),
   host: faker.string.alpha({ length: { min: 10, max: 20 } }),
   skipTlsVerify: faker.datatype.boolean(),
   state: faker.helpers.arrayElement(['fetching', 'ready', 'failed', 'cancelled'] as const),
@@ -422,7 +422,7 @@ export const getDeleteDocsImportPullResponseMock = (
   overrideResponse: Partial<Extract<DocPullJob, object>> = {}
 ): DocPullJob => ({
   id: faker.string.alpha({ length: { min: 10, max: 20 } }),
-  source: faker.helpers.arrayElement(['bookstack'] as const),
+  source: faker.helpers.arrayElement(['bookstack', 'wikijs'] as const),
   host: faker.string.alpha({ length: { min: 10, max: 20 } }),
   skipTlsVerify: faker.datatype.boolean(),
   state: faker.helpers.arrayElement(['fetching', 'ready', 'failed', 'cancelled'] as const),

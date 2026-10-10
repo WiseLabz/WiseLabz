@@ -54,6 +54,13 @@ vi.mock('../../api/generated/connectors/connectors', () => ({
 vi.mock('../../api/generated/docs/docs', () => ({
   postDocsImport: vi.fn(),
   postDocsImportImportIdCommit: vi.fn(),
+  getDocsImportPull: vi.fn().mockRejectedValue(new Error('no pull')),
+  postDocsImportPull: vi.fn(),
+  deleteDocsImportPull: vi.fn(),
+}));
+vi.mock('../../api/generated/auth/auth', () => ({
+  useGetAuthElevateMethods: () => ({ data: { methods: ['password'] }, isLoading: false }),
+  postAuthElevate: vi.fn(),
 }));
 vi.mock('../../lib/toast', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
@@ -117,6 +124,14 @@ describe('ImportDocsDialog', () => {
     fireEvent.change(screen.getByLabelText('Wiki.js export zip'), { target: { files: [file] } });
     fireEvent.click(screen.getByRole('button', { name: 'Preview import' }));
     await waitFor(() => expect(postDocsImport).toHaveBeenCalledWith({ file, source: 'wikijs' }));
+  });
+
+  it('offers the Wiki.js API pull form beside the export zip', async () => {
+    show();
+    fireEvent.change(screen.getByLabelText('Source'), { target: { value: 'wikijs-api' } });
+    expect(await screen.findByLabelText('Wiki.js URL')).toBeInTheDocument();
+    expect(screen.getByLabelText('API key')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Wiki.js export zip')).not.toBeInTheDocument();
   });
 
   it('goes back to file selection and stays open when the upload fails', async () => {

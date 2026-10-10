@@ -2299,14 +2299,17 @@ paths:
   /docs/import/pull:
     post:
       tags: [docs]
-      summary: Start a background BookStack import (instance admin, elevated)
+      summary: Start a background BookStack or Wiki.js import (instance admin, elevated)
       description: >-
         When `stepUpForDestructive` is enabled, requires an `X-Elevation-Token` for
         action `docs.import.pull`: a missing token gets 400 `elevation_required`, an
         invalid, expired, already used or mismatched token gets 401 `unauthorized`.
         BookStack v25.07 or newer is required for the ZIP export API. Imports all
         readable shelves, books and pages into a staged zip that is previewed and
-        committed like any other import. Each downloaded book export and the final
+        committed like any other import. For `wikijs`, a Wiki.js 2.x API key with
+        `read:pages`, `read:source` and `read:assets` goes in `tokenSecret` (no
+        `tokenId`); pages and assets are pulled over GraphQL into the Wiki.js export
+        layout, then previewed and committed the same way. Each downloaded book export and the final
         staged archive are capped at 100 MiB, and the archive expands to at most 500 MB
         and 2000 entries. Credentials remain in memory until the job ends. TLS
         verification is enabled unless explicitly disabled, and that choice is audited.
@@ -6413,19 +6416,19 @@ components:
           items: { $ref: '#/components/schemas/DocImportNode' }
     DocPullRequest:
       type: object
-      required: [source, url, tokenId, tokenSecret]
+      required: [source, url, tokenSecret]
       properties:
-        source: { type: string, enum: [bookstack] }
+        source: { type: string, enum: [bookstack, wikijs] }
         url: { type: string, format: uri, description: Installation base URL without userinfo or query }
-        tokenId: { type: string, writeOnly: true }
-        tokenSecret: { type: string, format: password, writeOnly: true }
+        tokenId: { type: string, writeOnly: true, description: 'BookStack token ID: required for bookstack, unused for wikijs' }
+        tokenSecret: { type: string, format: password, writeOnly: true, description: 'BookStack token secret, or the Wiki.js API key' }
         skipTlsVerify: { type: boolean, default: false }
     DocPullJob:
       type: object
       required: [id, source, host, skipTlsVerify, state, startedAt, done, total]
       properties:
         id: { type: string }
-        source: { type: string, enum: [bookstack] }
+        source: { type: string, enum: [bookstack, wikijs] }
         host: { type: string }
         skipTlsVerify: { type: boolean }
         state: { type: string, enum: [fetching, ready, failed, cancelled] }

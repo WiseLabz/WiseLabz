@@ -4,12 +4,22 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { useGetConnectors } from '../../api/generated/connectors/connectors';
 import { postDocsImport, postDocsImportImportIdCommit } from '../../api/generated/docs/docs';
-import { PostDocsImportBodySource } from '../../api/model';
+import { DocPullRequestSource, PostDocsImportBodySource } from '../../api/model';
 import type { DocImportIssue, DocImportNode, DocImportPreview } from '../../api/model';
 import { Dialog } from '../ui/Dialog';
 import { Button } from '../ui/Button';
 import { toast } from '../../lib/toast';
-import { BookStackPull } from './BookStackPull';
+import { WikiPull } from './WikiPull';
+
+/** SourcePicker values for the pull sources; the Wiki.js export zip owns the plain `wikijs`. */
+const WIKIJS_API = 'wikijs-api';
+type SourcePick =
+  PostDocsImportBodySource | typeof DocPullRequestSource.bookstack | typeof WIKIJS_API;
+
+function pullSource(pick: SourcePick): DocPullRequestSource | undefined {
+  if (pick === DocPullRequestSource.bookstack) return DocPullRequestSource.bookstack;
+  return pick === WIKIJS_API ? DocPullRequestSource.wikijs : undefined;
+}
 
 /** Admin-only docs import: pick a source, upload, preview, confirm. */
 export function ImportDocsDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
@@ -21,16 +31,15 @@ function ImportDocsForm({ onClose }: { onClose: () => void }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const fieldId = useId();
-  const [source, setSource] = useState<PostDocsImportBodySource | 'bookstack'>(
-    PostDocsImportBodySource.markdown
-  );
+  const [source, setSource] = useState<SourcePick>(PostDocsImportBodySource.markdown);
+  const pull = pullSource(source);
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<DocImportPreview | null>(null);
   const upload = useMutation({
     mutationFn: (f: File) =>
       postDocsImport({
         file: f,
-        source: source === 'bookstack' ? PostDocsImportBodySource.markdown : source,
+        source: pull ? PostDocsImportBodySource.markdown : (source as PostDocsImportBodySource),
       }),
     onSuccess: setPreview,
     onError: () => toast.error(t('docs.import.uploadError')),
@@ -63,7 +72,7 @@ function ImportDocsForm({ onClose }: { onClose: () => void }) {
               id={`${fieldId}-source`}
               value={source}
               className="rounded-md border border-line-soft bg-canvas px-2 py-1 text-sm text-ink"
-              onChange={(e) => setSource(e.target.value as PostDocsImportBodySource | 'bookstack')}
+              onChange={(e) => setSource(e.target.value as SourcePick)}
             >
               <option value={PostDocsImportBodySource.markdown}>
                 {t('docs.import.sourceMarkdown')}
@@ -71,11 +80,13 @@ function ImportDocsForm({ onClose }: { onClose: () => void }) {
               <option value={PostDocsImportBodySource.wikijs}>
                 {t('docs.import.sourceWikijs')}
               </option>
-              <option value="bookstack">{t('docs.import.bookstack')}</option>
+              <option value={DocPullRequestSource.bookstack}>{t('docs.import.bookstack')}</option>
+              <option value={WIKIJS_API}>{t('docs.import.wikijsApi')}</option>
             </select>
           </div>
-          {source === 'bookstack' ? (
-            <BookStackPull onReady={setPreview} />
+          {pull ? (
+            // Keyed so switching sources never carries one form's credentials over.
+            <WikiPull key={source} source={pull} onReady={setPreview} />
           ) : (
             <form
               className="flex flex-col gap-4"

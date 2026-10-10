@@ -11,4 +11,5 @@ export type DocPullJobSource = (typeof DocPullJobSource)[keyof typeof DocPullJob
 
 export const DocPullJobSource = {
   bookstack: 'bookstack',
+  wikijs: 'wikijs',
 } as const;

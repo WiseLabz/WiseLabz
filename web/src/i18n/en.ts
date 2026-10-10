@@ -1423,8 +1423,10 @@ export const en = {
       action: 'Import',
       title: 'Import docs',
       bookstack: 'BookStack API',
+      wikijsApi: 'Wiki.js API',
       pull: {
-        intro: 'Import everything this token can read from BookStack v25.07 or newer. Up to 2000 entries and 500 MB. Review the preview before confirming.',
+        intro:
+          'Import everything this token can read from BookStack v25.07 or newer. Up to 2000 entries and 500 MB. Review the preview before confirming.',
         url: 'BookStack URL',
         tokenId: 'Token ID',
         tokenSecret: 'Token secret',
@@ -1441,6 +1443,14 @@ export const en = {
         failed: 'Pull failed.',
         startError: 'Could not start the documentation pull.',
         cancelError: 'Could not cancel the documentation pull.',
+      },
+      pullWikijs: {
+        intro:
+          'Import every page and asset this API key can read from Wiki.js 2.x. The key needs the read:pages, read:source and read:assets permissions. Up to 2000 entries and 500 MB. Review the preview before confirming.',
+        url: 'Wiki.js URL',
+        tokenSecret: 'API key',
+        progress: 'Fetching pages and assets: {{done}} / {{total}}',
+        progressLabel: 'Wiki.js pull progress',
       },
       intro:
         'Upload a .zip of Markdown files or an Obsidian vault. Folders become parent docs, embedded images and PDFs become attachments, and wikilinks point at the new docs. Nothing is created until you confirm.',

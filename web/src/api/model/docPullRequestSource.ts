@@ -11,4 +11,5 @@ export type DocPullRequestSource = (typeof DocPullRequestSource)[keyof typeof Do
 
 export const DocPullRequestSource = {
   bookstack: 'bookstack',
+  wikijs: 'wikijs',
 } as const;

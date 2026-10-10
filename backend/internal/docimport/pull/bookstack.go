@@ -322,15 +322,17 @@ func (m *bookMapper) node(n portableNode, folder, kind string, bookID int) error
 				if err != nil {
 					return errors.New("invalid BookStack link attachment")
 				}
-				scheme := strings.ToLower(u.Scheme)
-				if scheme == "javascript" || scheme == "data" {
-					m.warnings = append(m.warnings, docimport.Issue{Path: filename, Message: "unsafe link attachment skipped"})
-					continue
-				}
 				base := *m.base
 				base.Path = strings.TrimRight(base.Path, "/") + "/"
 				base.RawPath = ""
-				m.targets[ref] = base.ResolveReference(u).String()
+				resolved := base.ResolveReference(u)
+				if !safeLinkScheme(resolved.Scheme) {
+					m.warnings = append(m.warnings, docimport.Issue{Path: filename, Message: "unsafe link attachment skipped"})
+					continue
+				}
+				// The URL becomes a Markdown destination, so parentheses must not
+				// close it early and let the remainder inject Markdown.
+				m.targets[ref] = markdownSafeURL(resolved.String())
 				m.linkRefs[ref] = true
 				if group.kind == "attachment" {
 					body += "\n\n[" + escapeLabel(file.Name) + "]([[bsexport:" + ref + "]])"
@@ -398,6 +400,23 @@ func convertHTML(src string) (string, error) {
 		return "", err
 	}
 	return bsPlaceholder.ReplaceAllString(out, "[[bsexport:$1:$2]]"), nil
+}
+
+// safeLinkScheme is the allowlist for link attachments; relative links resolve
+// to the wiki's own http(s) scheme before this check.
+func safeLinkScheme(scheme string) bool {
+	switch strings.ToLower(scheme) {
+	case "http", "https", "mailto", "tel":
+		return true
+	}
+	return false
+}
+
+func markdownSafeURL(u string) string {
+	// Brackets, backslashes and backticks are encoded too, so a URL cannot carry
+	// a [[bsexport:...]] placeholder into the second rewrite pass.
+	return strings.NewReplacer("(", "%28", ")", "%29", " ", "%20", "<", "%3C", ">", "%3E",
+		"[", "%5B", "]", "%5D", "\\", "%5C", "`", "%60").Replace(u)
 }
 
 func escapeLabel(s string) string { return strings.NewReplacer("[", "\\[", "]", "\\]").Replace(s) }
