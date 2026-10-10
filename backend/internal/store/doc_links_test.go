@@ -242,6 +242,11 @@ func nullable(value string) any {
 func TestListDocBacklinksFiltersHiddenAndSoftDeletedSources(t *testing.T) {
 	ctx := context.Background()
 	s := newDocTestStore(t)
+	if s.driver == "sqlite" {
+		if _, err := s.db.ExecContext(ctx, `PRAGMA foreign_keys = ON`); err != nil {
+			t.Fatal(err)
+		}
+	}
 	visible := &ConnectorRecord{Name: "visible", Category: "virtualization", Type: "test", URL: "https://visible.test"}
 	hidden := &ConnectorRecord{Name: "hidden", Category: "virtualization", Type: "test", URL: "https://hidden.test"}
 	for _, c := range []*ConnectorRecord{visible, hidden} {
@@ -270,6 +275,7 @@ func TestListDocBacklinksFiltersHiddenAndSoftDeletedSources(t *testing.T) {
 	if err != nil || !reflect.DeepEqual(got, []DocBacklink{{ID: "visible-source", Title: "Visible"}}) {
 		t.Fatalf("visible backlinks = %+v, %v", got, err)
 	}
+	mustCreateUser(t, s, "admin")
 	adminCtx := auth.ContextWithUser(ctx, "admin", true)
 	for _, connectorID := range []string{visible.ID, hidden.ID} {
 		if _, err := s.UpsertConnectorGrant(ctx, "admin", connectorID, "viewer"); err != nil {

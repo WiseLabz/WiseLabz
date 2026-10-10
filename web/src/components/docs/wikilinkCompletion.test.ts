@@ -46,6 +46,9 @@ describe('wikilink completion', () => {
   it.each([
     ['fenced code', '```md\n[[pve', undefined],
     ['inline code', '`[[pve`', 6],
+    ['quoted fence', '> ~~~\n> [[pve\n> ~~~', '> ~~~\n> [[pve'.length],
+    ['list code', '- example:\n\n      [[pve', undefined],
+    ['exact code delimiters', '``example ``` lone ` [[pve trailing``', '``example ``` lone ` [[pve'.length],
     ['embed', '![[pve', undefined],
     ['escaped input', '\\[[pve', undefined],
     ['generated content', '<!-- wl:gen key="x" -->\n[[pve', undefined],
