@@ -233,8 +233,8 @@ the actor but omits audit detail; `GET /api/system/audit` and its export remain
 instance-admin only.
 
 Opted-in runbooks audit `runbook.run.approval_requested` instead of `runbook.run.start`.
-Approval requires the different operator's own `runbook.approve` elevation on the
-frozen run ID; a `runbook.run` token cannot approve, and an approval token cannot
+When step-up is enabled, approval requires the different operator's own
+`runbook.approve` elevation on the frozen run ID; a `runbook.run` token cannot approve, and an approval token cannot
 start or resume. Rejection needs no elevation. Approval retains the initiator as
 the execution actor. These three approval audit actions remain outside the
 Journal allowlist, like start, confirm, resume and cancel.
