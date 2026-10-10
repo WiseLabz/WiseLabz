@@ -20,5 +20,5 @@
 
 ## 4. Delivery
 
-- [ ] 4.1 Full checks green; strict OpenSpec validation.
+- [x] 4.1 Full checks green; strict OpenSpec validation.
 - [ ] 4.2 Manual: type `[[title]]`, `[[vm:103]]`, an ambiguous name and a completion pick; rename the target; open the panels as a non-admin member and confirm hidden docs do not appear.

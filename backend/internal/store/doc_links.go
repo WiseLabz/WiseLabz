@@ -76,36 +76,52 @@ func (s *Store) BackfillDocLinks(ctx context.Context) error {
 
 // LookupDocLink applies the save caller's visibility before resolving titles or
 // connector-local references. A doc title takes precedence over an entity name.
+// A qualified kind:ref target tries the entity first and falls back to a doc
+// whose whole title contains the colon, such as "Runbook: Restore DB".
 func (s *Store) LookupDocLink(ctx context.Context, userID, target string) ([]doclink.Target, error) {
 	kind, ref, qualified := strings.Cut(target, ":")
 	if !qualified {
-		where, args := viewableDocWhere(ctx, userID, "")
-		args = append(args, target)
-		rows, err := s.db.QueryContext(ctx, `SELECT id, title FROM docs `+where+` AND LOWER(title) = LOWER(?) ORDER BY id`, args...)
-		if err != nil {
-			return nil, fmt.Errorf("lookup link doc: %w", err)
+		out, err := s.lookupDocLinkTitle(ctx, userID, target)
+		if err != nil || len(out) > 0 {
+			return out, err
 		}
-		out := []doclink.Target{}
-		for rows.Next() {
-			t := doclink.Target{Type: "doc"}
-			if err := rows.Scan(&t.ID, &t.Label); err != nil {
-				_ = rows.Close()
-				return nil, fmt.Errorf("scan link doc: %w", err)
-			}
-			out = append(out, t)
-		}
-		err = rows.Err()
-		closeErr := rows.Close()
-		if err != nil {
-			return nil, fmt.Errorf("iterate link docs: %w", err)
-		}
-		if closeErr != nil {
-			return nil, fmt.Errorf("close link docs: %w", closeErr)
-		}
-		if len(out) > 0 {
-			return out, nil
-		}
+		return s.lookupDocLinkEntity(ctx, userID, target, "", "", false)
 	}
+	out, err := s.lookupDocLinkEntity(ctx, userID, target, kind, ref, true)
+	if err != nil || len(out) > 0 {
+		return out, err
+	}
+	return s.lookupDocLinkTitle(ctx, userID, target)
+}
+
+func (s *Store) lookupDocLinkTitle(ctx context.Context, userID, title string) ([]doclink.Target, error) {
+	where, args := viewableDocWhere(ctx, userID, "")
+	args = append(args, title)
+	rows, err := s.db.QueryContext(ctx, `SELECT id, title FROM docs `+where+` AND LOWER(title) = LOWER(?) ORDER BY id`, args...)
+	if err != nil {
+		return nil, fmt.Errorf("lookup link doc: %w", err)
+	}
+	out := []doclink.Target{}
+	for rows.Next() {
+		t := doclink.Target{Type: "doc"}
+		if err := rows.Scan(&t.ID, &t.Label); err != nil {
+			_ = rows.Close()
+			return nil, fmt.Errorf("scan link doc: %w", err)
+		}
+		out = append(out, t)
+	}
+	err = rows.Err()
+	closeErr := rows.Close()
+	if err != nil {
+		return nil, fmt.Errorf("iterate link docs: %w", err)
+	}
+	if closeErr != nil {
+		return nil, fmt.Errorf("close link docs: %w", closeErr)
+	}
+	return out, nil
+}
+
+func (s *Store) lookupDocLinkEntity(ctx context.Context, userID, target, kind, ref string, qualified bool) ([]doclink.Target, error) {
 	keyFilter, keyArgs := apiKeyConnectorFilter(ctx, "em.connector_id")
 	where := `em.gone_at IS NULL AND em.connector_id IN (SELECT connector_id FROM user_connector_roles WHERE user_id = ?` + keyFilter + `)`
 	args := []any{userID}

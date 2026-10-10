@@ -25,7 +25,7 @@ type Lookup func(string) ([]Target, error)
 
 var (
 	wikiLinkRE = regexp.MustCompile(`!?\[\[((?:\\.|[^\[\]\n]|\[[^\]\n]*\])*)\]\]`)
-	openGenRE  = regexp.MustCompile(`<!--\s*wl:gen(?:\s|--)`)
+	openGenRE  = regexp.MustCompile(`^\s*<!--\s*wl:gen(?:\s|--)`)
 )
 
 // RewriteOutsideCode applies fn outside fenced code blocks and inline code spans.
@@ -37,6 +37,18 @@ func RewriteOutsideCode(content string, fn func(string) string) string {
 func Resolve(content string, lookup Lookup) (string, []string, error) {
 	warnings := []string{}
 	var lookupErr error
+	// Equal targets in one document share a single lookup.
+	cache := map[string][]Target{}
+	find := func(name string) ([]Target, error) {
+		if matches, ok := cache[name]; ok {
+			return matches, nil
+		}
+		matches, err := lookup(name)
+		if err == nil {
+			cache[name] = matches
+		}
+		return matches, err
+	}
 	resolved := rewriteOutside(content, func(text string) string {
 		return replaceWikiLinks(text, func(link string, target string) string {
 			if lookupErr != nil {
@@ -47,13 +59,20 @@ func Resolve(content string, lookup Lookup) (string, []string, error) {
 			}
 			targetText, alias, hasAlias := strings.Cut(target, "|")
 			targetText = strings.TrimSpace(targetText)
-			targetText, _, _ = strings.Cut(targetText, "#")
-			targetText = strings.TrimSpace(targetText)
 			if targetText == "" {
 				warnings = append(warnings, fmt.Sprintf("unresolved link %s", link))
 				return link
 			}
-			matches, err := lookup(targetText)
+			matches, err := find(targetText)
+			if err == nil && len(matches) == 0 {
+				// The heading suffix is dropped, so only retry without it when the
+				// whole text, such as "Release #12", matched nothing.
+				if head, _, found := strings.Cut(targetText, "#"); found {
+					if head = strings.TrimSpace(head); head != "" {
+						matches, err = find(head)
+					}
+				}
+			}
 			if err != nil {
 				lookupErr = err
 				return link
@@ -72,7 +91,7 @@ func Resolve(content string, lookup Lookup) (string, []string, error) {
 				return link
 			}
 			label := t.Label
-			if hasAlias {
+			if hasAlias && strings.TrimSpace(alias) != "" {
 				label = strings.TrimSpace(alias)
 			}
 			route := "/docs/"
@@ -252,5 +271,5 @@ func validUUID(s string) bool {
 }
 
 func escapeLabel(s string) string {
-	return strings.NewReplacer(`\`, `\\`, `[`, `\[`, `]`, `\]`).Replace(s)
+	return strings.NewReplacer(`\`, `\\`, `[`, `\[`, `]`, `\]`, "`", "\\`").Replace(s)
 }

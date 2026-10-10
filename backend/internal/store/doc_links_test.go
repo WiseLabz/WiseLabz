@@ -232,6 +232,55 @@ func TestLookupDocLinkVisibilityAndEntityIdentity(t *testing.T) {
 	}
 }
 
+func TestLookupDocLinkQualifiedTargetFallsBackToDocTitle(t *testing.T) {
+	ctx := context.Background()
+	s := newDocTestStore(t)
+	visible := &ConnectorRecord{Name: "visible", Category: "virtualization", Type: "test", URL: "https://visible.test"}
+	hidden := &ConnectorRecord{Name: "hidden", Category: "virtualization", Type: "test", URL: "https://hidden.test"}
+	for _, c := range []*ConnectorRecord{visible, hidden} {
+		if err := s.CreateConnector(ctx, c); err != nil {
+			t.Fatal(err)
+		}
+	}
+	userID := "colon-reader"
+	mustCreateUser(t, s, userID)
+	if _, err := s.UpsertConnectorGrant(ctx, userID, visible.ID, "viewer"); err != nil {
+		t.Fatal(err)
+	}
+	for _, d := range []*DocRecord{
+		{ID: "colon-visible", Title: "Runbook: Restore DB", ServiceID: visible.ID},
+		{ID: "colon-hidden", Title: "Secret: Plan", ServiceID: hidden.ID},
+		{ID: "colon-clash", Title: "vm:103", ServiceID: visible.ID},
+	} {
+		if err := s.CreateDoc(ctx, d); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, err := s.LookupDocLink(ctx, userID, "runbook: restore db")
+	if err != nil || !reflect.DeepEqual(got, []doclink.Target{{Type: "doc", ID: "colon-visible", Label: "Runbook: Restore DB"}}) {
+		t.Fatalf("colon title lookup = %+v, %v", got, err)
+	}
+	if got, err := s.LookupDocLink(ctx, userID, "Secret: Plan"); err != nil || len(got) != 0 {
+		t.Fatalf("hidden colon title lookup = %+v, %v; must not reveal hidden docs", got, err)
+	}
+	if got, err := s.LookupDocLink(ctx, userID, "vm:999"); err != nil || len(got) != 0 {
+		t.Fatalf("unknown kind:ref lookup = %+v, %v; want no match", got, err)
+	}
+
+	// A matching entity member still wins over a doc titled like the reference.
+	entityID := "30000000-0000-4000-8000-0000000000aa"
+	if _, err := s.db.ExecContext(ctx, `INSERT INTO entities (id, kind, display_name, first_seen_at, last_seen_at) VALUES (?, 'vm', 'Web VM', '2026-01-01', '2026-01-01')`, entityID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.db.ExecContext(ctx, `INSERT INTO entity_members (entity_id, connector_id, kind, ref, name, gone_at) VALUES (?, ?, 'vm', '103', 'Web VM', NULL)`, entityID, visible.ID); err != nil {
+		t.Fatal(err)
+	}
+	got, err = s.LookupDocLink(ctx, userID, "vm:103")
+	if err != nil || !reflect.DeepEqual(got, []doclink.Target{{Type: "entity", ID: entityID, Label: "Web VM"}}) {
+		t.Fatalf("entity should win over same-titled doc = %+v, %v", got, err)
+	}
+}
+
 func nullable(value string) any {
 	if value == "" {
 		return nil

@@ -17,6 +17,8 @@ func TestResolveLinksAndExclusions(t *testing.T) {
 		"<!-- wl:gen key=\"generated\" h=\"abcdef123456\" -->\n[[Guide]]\n<!-- /wl:gen -->\n"
 	got, warnings, err := Resolve(content, func(name string) ([]Target, error) {
 		switch name {
+		case "Guide#install":
+			return nil, nil // the whole text is tried first; the suffix is dropped on a miss
 		case "Guide":
 			return []Target{{Type: "doc", ID: docID, Label: "Guide"}}, nil
 		case "node:42":
@@ -159,5 +161,82 @@ func TestResolveLargeMalformedInput(t *testing.T) {
 	got, warnings, err := Resolve(input, func(string) ([]Target, error) { t.Fatal("malformed input looked up a link"); return nil, nil })
 	if err != nil || got != input || len(warnings) != 0 {
 		t.Fatalf("malformed input changed or returned error: %v", err)
+	}
+}
+
+func TestResolveTriesFullTargetBeforeDroppingHeadingSuffix(t *testing.T) {
+	input := "[[Release #12]] [[C# Guide]] [[Guide#install]] [[Release #12]] [[#only]]"
+	var lookups []string
+	got, warnings, err := Resolve(input, func(name string) ([]Target, error) {
+		lookups = append(lookups, name)
+		switch name {
+		case "Release #12", "C# Guide":
+			return []Target{{Type: "doc", ID: docID, Label: name}}, nil
+		case "Guide":
+			return []Target{{Type: "doc", ID: entityID, Label: "Guide"}}, nil
+		}
+		return nil, nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "[Release #12](/docs/" + docID + ") [C# Guide](/docs/" + docID + ") [Guide](/docs/" + entityID + ") [Release #12](/docs/" + docID + ") [[#only]]"
+	if got != want {
+		t.Fatalf("Resolve() = %q, want %q", got, want)
+	}
+	if len(warnings) != 1 || !strings.Contains(warnings[0], "[[#only]]") {
+		t.Fatalf("warnings = %v", warnings)
+	}
+	// "Release #12" is looked up once although it appears twice.
+	wantLookups := []string{"Release #12", "C# Guide", "Guide#install", "Guide", "#only"}
+	if !reflect.DeepEqual(lookups, wantLookups) {
+		t.Fatalf("lookups = %v, want %v", lookups, wantLookups)
+	}
+}
+
+func TestResolveMemoizesRepeatedTargets(t *testing.T) {
+	calls := 0
+	_, _, err := Resolve("[[Guide]] [[Guide|a]]\n[[missing]] [[missing]]", func(name string) ([]Target, error) {
+		calls++
+		if name == "Guide" {
+			return []Target{{Type: "doc", ID: docID, Label: "Guide"}}, nil
+		}
+		return nil, nil
+	})
+	if err != nil || calls != 2 {
+		t.Fatalf("calls = %d, err = %v; want one lookup per distinct target", calls, err)
+	}
+}
+
+func TestResolveEmptyAliasUsesDefaultLabel(t *testing.T) {
+	got, _, err := Resolve("[[Guide|]] [[Guide| ]] [[Guide|Own]]", func(string) ([]Target, error) {
+		return []Target{{Type: "doc", ID: docID, Label: "Guide"}}, nil
+	})
+	link := "[Guide](/docs/" + docID + ")"
+	want := link + " " + link + " [Own](/docs/" + docID + ")"
+	if err != nil || got != want {
+		t.Fatalf("Resolve() = %q, %v; want %q", got, err, want)
+	}
+}
+
+func TestResolveMidLineGenMentionDoesNotHideLaterLinks(t *testing.T) {
+	input := "Notes about <!-- wl:gen markers --> here [[Before]]\n[[After]]\n" +
+		"  <!-- wl:gen key=\"g\" h=\"abcdef123456\" -->\n[[Hidden]]\n<!-- /wl:gen -->\n[[Later]]\n"
+	var lookups []string
+	_, _, err := Resolve(input, func(name string) ([]Target, error) {
+		lookups = append(lookups, name)
+		return []Target{{Type: "doc", ID: docID, Label: name}}, nil
+	})
+	if err != nil || !reflect.DeepEqual(lookups, []string{"Before", "After", "Later"}) {
+		t.Fatalf("lookups = %v, err = %v", lookups, err)
+	}
+}
+
+func TestResolveEscapesBackticksInLabel(t *testing.T) {
+	got, _, err := Resolve("[[Guide]]", func(string) ([]Target, error) {
+		return []Target{{Type: "doc", ID: docID, Label: "use `x`"}}, nil
+	})
+	if want := "[use \\`x\\`](/docs/" + docID + ")"; err != nil || got != want {
+		t.Fatalf("Resolve() = %q, %v; want %q", got, err, want)
 	}
 }
