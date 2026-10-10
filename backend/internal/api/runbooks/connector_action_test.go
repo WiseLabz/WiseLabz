@@ -412,6 +412,7 @@ func assertStepDecisionAudit(t *testing.T, h *Handler, action, runID, stepID, de
 	if total != 1 || records[0].TargetID != runID {
 		t.Fatalf("%s audit = %+v", action, records)
 	}
+	assertRunAuditScope(t, h, records[0].ID, runID)
 	var detail map[string]any
 	if err := json.Unmarshal([]byte(records[0].Detail), &detail); err != nil {
 		t.Fatal(err)

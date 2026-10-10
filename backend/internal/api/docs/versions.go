@@ -100,9 +100,9 @@ func (h *Handler) Restore(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.Store.RecordAuditFromContext(r.Context(), "doc.restore", "doc", docID, map[string]any{
+	if err := h.Store.RecordAuditScopedFromContext(r.Context(), "doc.restore", "doc", docID, map[string]any{
 		"rev": rev,
-	}); err != nil {
+	}, []string{existingDoc.ServiceID}); err != nil {
 		slog.Error("failed to record audit", "action", "doc.restore", "error", err)
 	}
 

@@ -734,6 +734,14 @@ func (h *Handler) toRunbookResponse(ctx context.Context, rb *store.RunbookRecord
 	return runbookResponse{RunbookRecord: *rb, Steps: stepResps}, nil
 }
 
+func stepConnectorIDs(steps []*store.RunbookStepRecord) []string {
+	ids := make([]string, 0, len(steps))
+	for _, step := range steps {
+		ids = append(ids, step.ConnectorID)
+	}
+	return ids
+}
+
 // stepAuditDetail renders steps for the runbook.create/update audit detail.
 func stepAuditDetail(steps []*store.RunbookStepRecord) []map[string]any {
 	out := make([]map[string]any, 0, len(steps))
@@ -932,10 +940,10 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.Store.RecordAuditFromContext(r.Context(), "runbook.create", "runbook", created.ID, map[string]any{
+	if err := h.Store.RecordAuditScopedFromContext(r.Context(), "runbook.create", "runbook", created.ID, map[string]any{
 		"title": created.Title,
 		"steps": stepAuditDetail(savedSteps),
-	}); err != nil {
+	}, stepConnectorIDs(savedSteps)); err != nil {
 		slog.Error("failed to record audit", "action", "runbook.create", "error", err)
 	}
 
@@ -1046,7 +1054,7 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	if replaceSteps {
 		auditDetail["steps"] = stepAuditDetail(savedSteps)
 	}
-	if err := h.Store.RecordAuditFromContext(r.Context(), "runbook.update", "runbook", id, auditDetail); err != nil {
+	if err := h.Store.RecordAuditScopedFromContext(r.Context(), "runbook.update", "runbook", id, auditDetail, stepConnectorIDs(savedSteps)); err != nil {
 		slog.Error("failed to record audit", "action", "runbook.update", "error", err)
 	}
 
@@ -1072,6 +1080,11 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	steps, err := h.Store.ListRunbookStepsFor(r.Context(), id)
+	if err != nil {
+		httputil.Errorf(w, err)
+		return
+	}
 	if err := h.Store.DeleteRunbook(r.Context(), id); err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			httputil.Error(w, http.StatusNotFound, "not_found", "Runbook not found")
@@ -1081,9 +1094,9 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.Store.RecordAuditFromContext(r.Context(), "runbook.delete", "runbook", id, map[string]any{
+	if err := h.Store.RecordAuditScopedFromContext(r.Context(), "runbook.delete", "runbook", id, map[string]any{
 		"title": rb.Title,
-	}); err != nil {
+	}, stepConnectorIDs(steps)); err != nil {
 		slog.Error("failed to record audit", "action", "runbook.delete", "error", err)
 	}
 

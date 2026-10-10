@@ -138,6 +138,14 @@ describe('locale catalogs', () => {
       expect(paths.filter((path) => !translatedKeys.has(path))).toEqual([]);
     }
   });
+  it('keeps doc attachment strings translated with the same placeholders', () => {
+    const placeholders = (value: string) => (value.match(/{{\w+}}/g) ?? []).sort();
+    const translated: Record<string, string> = (ptBR as typeof en).docs.attachments;
+    for (const [key, value] of Object.entries(en.docs.attachments)) {
+      expect(translated[key], key).toBeTruthy();
+      expect(placeholders(translated[key] ?? ''), key).toEqual(placeholders(value));
+    }
+  });
   it('keeps the network discovery keys present in both catalogs', () => {
     const paths = [
       'discovery.title',

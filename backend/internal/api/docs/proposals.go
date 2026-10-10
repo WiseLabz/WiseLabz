@@ -129,7 +129,7 @@ func (h *Handler) ApproveProposal(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.Store.RecordAuditFromContext(r.Context(), "doc.edit_approved", "doc", p.DocID, map[string]any{"proposalId": p.ID, "baseVersion": p.BaseVersion}); err != nil {
+	if err := h.Store.RecordAuditScopedFromContext(r.Context(), "doc.edit_approved", "doc", p.DocID, map[string]any{"proposalId": p.ID, "baseVersion": p.BaseVersion}, []string{p.ServiceID}); err != nil {
 		slog.Error("failed to record audit", "action", "doc.edit_approved", "error", err)
 	}
 	h.SyncEmbeddings(r.Context(), p.DocID, p.Content)
@@ -159,7 +159,7 @@ func (h *Handler) RejectProposal(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	if err := h.Store.RecordAuditFromContext(r.Context(), "doc.edit_rejected", "doc", p.DocID, map[string]any{"proposalId": p.ID}); err != nil {
+	if err := h.Store.RecordAuditScopedFromContext(r.Context(), "doc.edit_rejected", "doc", p.DocID, map[string]any{"proposalId": p.ID}, []string{p.ServiceID}); err != nil {
 		slog.Error("failed to record audit", "action", "doc.edit_rejected", "error", err)
 	}
 	updated, err := h.Store.GetDocEditProposal(r.Context(), p.ID)

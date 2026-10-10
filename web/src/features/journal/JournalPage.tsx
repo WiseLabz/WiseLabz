@@ -24,7 +24,7 @@ import { JournalEntryDialog } from './JournalEntryDialog';
 const kinds = ['change', 'sync', 'alert', 'doc', 'journal', 'audit'] as const;
 const fieldClass = 'rounded-md border border-line-soft bg-canvas px-3 py-2 text-sm text-ink';
 
-function sourceLink(row: TimelineItem) {
+function sourceLink(row: TimelineItem, admin: boolean) {
   switch (row.kind) {
     case 'change':
       return `/changes/${row.id}`;
@@ -35,7 +35,12 @@ function sourceLink(row: TimelineItem) {
     case 'sync':
       return `/services/${row.connectorId}`;
     case 'audit':
-      return '/settings/audit';
+      if (admin) return '/settings/audit';
+      return row.docId
+        ? `/docs/${row.docId}`
+        : row.connectorId
+          ? `/services/${row.connectorId}`
+          : '';
     case 'journal':
       return row.docId
         ? `/docs/${row.docId}`
@@ -182,13 +187,11 @@ export function JournalPage() {
             onChange={(e) => setFilter('kinds', e.target.value)}
           >
             <option value="">{t('journal.allSources')}</option>
-            {kinds
-              .filter((kind) => admin || kind !== 'audit')
-              .map((kind) => (
-                <option key={kind} value={kind}>
-                  {t(`journal.kinds.${kind}`)}
-                </option>
-              ))}
+            {kinds.map((kind) => (
+              <option key={kind} value={kind}>
+                {t(`journal.kinds.${kind}`)}
+              </option>
+            ))}
           </select>
         </label>
         <label className="flex flex-col gap-1 text-xs text-ink-muted">
@@ -266,7 +269,7 @@ export function JournalPage() {
               </h3>
               <ol className="space-y-1 text-xs text-ink-muted">
                 {narrate.data.sources.map((source) => {
-                  const link = sourceLink(sourceRow(source));
+                  const link = sourceLink(sourceRow(source), admin);
                   const label = source.title || t('journal.narration.sourceFallback');
                   return (
                     <li key={source.n} id={`narration-source-${source.n}`}>
@@ -299,7 +302,7 @@ export function JournalPage() {
         ) : (
           <ol className="relative m-5 ml-6 border-l border-line-soft">
             {rows.map((row) => {
-              const link = sourceLink(row);
+              const link = sourceLink(row, admin);
               const connector = connectors.find((c) => c.id === row.connectorId);
               const editable = row.kind === 'journal' && (admin || me.data?.id === row.createdBy);
               return (

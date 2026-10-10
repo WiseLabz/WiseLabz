@@ -256,7 +256,7 @@ func (h *Handler) StartRun(w http.ResponseWriter, r *http.Request) {
 		writeRunError(w, err)
 		return
 	}
-	h.auditRun(r, "runbook.run.start", run, "")
+	h.auditRun(r, "runbook.run.start", run, "", runConnectorIDs(saved))
 	resp, err := h.RunView(r.Context(), run, saved)
 	if err != nil {
 		httputil.Errorf(w, err)
@@ -488,18 +488,18 @@ func (h *Handler) GetRun(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, view)
 }
 
-func (h *Handler) authorizedRun(w http.ResponseWriter, r *http.Request) (*store.RunbookRunRecord, bool) {
+func (h *Handler) authorizedRun(w http.ResponseWriter, r *http.Request) (*store.RunbookRunRecord, []*store.RunbookRunStepRecord, bool) {
 	run, steps, err := h.Store.GetRunbookRun(r.Context(), r.PathValue("runId"))
 	if err != nil {
 		writeRunError(w, err)
-		return nil, false
+		return nil, nil, false
 	}
-	return run, h.runAuthorized(w, r, steps)
+	return run, steps, h.runAuthorized(w, r, steps)
 }
 
 // ConfirmRunStep confirms a waiting manual step without elevation.
 func (h *Handler) ConfirmRunStep(w http.ResponseWriter, r *http.Request) {
-	run, ok := h.authorizedRun(w, r)
+	run, steps, ok := h.authorizedRun(w, r)
 	if !ok {
 		return
 	}
@@ -509,7 +509,7 @@ func (h *Handler) ConfirmRunStep(w http.ResponseWriter, r *http.Request) {
 		writeRunError(w, err)
 		return
 	}
-	h.auditRun(r, "runbook.run.confirm", run, stepID)
+	h.auditRun(r, "runbook.run.confirm", run, stepID, runConnectorIDs(steps))
 	httputil.NoContent(w)
 }
 
@@ -568,7 +568,7 @@ func (h *Handler) writeRunChanged(w http.ResponseWriter, r *http.Request, run *s
 // resumeAudit builds the audit row of a resume decision, written in the resume
 // transaction. It is nil without a decision. The executor writes it only when
 // the decision is applied to an unknown connector_action step.
-func resumeAudit(r *http.Request, run *store.RunbookRunRecord, body resumeRequest, decision runbookrun.ResumeDecision) (*store.AuditRecord, error) {
+func resumeAudit(r *http.Request, run *store.RunbookRunRecord, body resumeRequest, decision runbookrun.ResumeDecision, connectorIDs []string) (*store.AuditRecord, error) {
 	var action string
 	switch decision {
 	case runbookrun.ResumeResend:
@@ -579,14 +579,19 @@ func resumeAudit(r *http.Request, run *store.RunbookRunRecord, body resumeReques
 		return nil, nil
 	}
 	detail := map[string]any{"runId": run.ID, "runbookId": run.RunbookID, "stepId": body.StepID, "decision": string(decision)}
-	return store.NewAuditRecord(auth.UserIDFromContext(r.Context()), auth.InstanceAdminFromContext(r.Context()), action, "runbook_run", run.ID, detail)
+	record, err := store.NewAuditRecord(auth.UserIDFromContext(r.Context()), auth.InstanceAdminFromContext(r.Context()), action, "runbook_run", run.ID, detail)
+	if err != nil {
+		return nil, err
+	}
+	record.ConnectorIDs = connectorIDs
+	return record, nil
 }
 
 // ResumeRun delegates a failed run continuation after fresh targeted elevation.
 // The optional body carries the decision for an unknown connector_action step
 // and the step and run revision the operator saw it on.
 func (h *Handler) ResumeRun(w http.ResponseWriter, r *http.Request) {
-	run, ok := h.authorizedRun(w, r)
+	run, steps, ok := h.authorizedRun(w, r)
 	if !ok {
 		return
 	}
@@ -614,7 +619,7 @@ func (h *Handler) ResumeRun(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	audit, err := resumeAudit(r, run, body, decision)
+	audit, err := resumeAudit(r, run, body, decision, runConnectorIDs(steps))
 	if err != nil {
 		httputil.Errorf(w, err)
 		return
@@ -640,7 +645,7 @@ func (h *Handler) ResumeRun(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	h.auditRun(r, "runbook.run.resume", resumed, "")
+	h.auditRun(r, "runbook.run.resume", resumed, "", runConnectorIDs(steps))
 	httputil.JSON(w, http.StatusAccepted, resumed)
 }
 
@@ -676,6 +681,7 @@ func (h *Handler) CancelRun(w http.ResponseWriter, r *http.Request) {
 		writeRunError(w, err)
 		return
 	}
+	connectorIDs := runConnectorIDs(steps)
 	steps, err = h.existingConnectorSteps(r.Context(), steps)
 	if err != nil {
 		httputil.Errorf(w, err)
@@ -688,16 +694,26 @@ func (h *Handler) CancelRun(w http.ResponseWriter, r *http.Request) {
 		writeRunError(w, err)
 		return
 	}
-	h.auditRun(r, "runbook.run.cancel", run, "")
+	h.auditRun(r, "runbook.run.cancel", run, "", connectorIDs)
 	httputil.NoContent(w)
 }
 
-func (h *Handler) auditRun(r *http.Request, action string, run *store.RunbookRunRecord, stepID string) {
+func runConnectorIDs(steps []*store.RunbookRunStepRecord) []string {
+	ids := make([]string, 0, len(steps))
+	for _, step := range steps {
+		ids = append(ids, step.ConnectorID)
+	}
+	return ids
+}
+
+// auditRun snapshots connectorIDs from every frozen step, including deleted
+// connectors; pass the whole run scope rather than just the acted-on step.
+func (h *Handler) auditRun(r *http.Request, action string, run *store.RunbookRunRecord, stepID string, connectorIDs []string) {
 	detail := map[string]any{"runId": run.ID, "runbookId": run.RunbookID}
 	if stepID != "" {
 		detail["stepId"] = stepID
 	}
-	if err := h.Store.RecordAuditFromContext(r.Context(), action, "runbook_run", run.ID, detail); err != nil {
+	if err := h.Store.RecordAuditScopedFromContext(r.Context(), action, "runbook_run", run.ID, detail, connectorIDs); err != nil {
 		slog.Error("failed to record audit", "action", action, "error", err)
 	}
 }
@@ -709,10 +725,10 @@ func (h *Handler) auditShutdownTransition(r *http.Request, action string, err er
 	if !errors.As(err, &shutdown) {
 		return
 	}
-	run, _, loadErr := h.Store.GetRunbookRun(r.Context(), shutdown.RunID)
+	run, steps, loadErr := h.Store.GetRunbookRun(r.Context(), shutdown.RunID)
 	if loadErr != nil {
 		slog.Error("failed to load shutdown run for audit", "error", loadErr)
 		return
 	}
-	h.auditRun(r, action, run, stepID)
+	h.auditRun(r, action, run, stepID, runConnectorIDs(steps))
 }

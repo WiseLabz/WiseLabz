@@ -1,6 +1,7 @@
 package ai
 
 import (
+	"regexp"
 	"strings"
 	"unicode/utf8"
 )
@@ -18,16 +19,20 @@ func TruncateUTF8(s string, limit int) string {
 }
 
 // StripPromptTags removes the open and close delimiter tags named in tags so
-// untrusted content can't close its own block. It repeats until stable because
+// untrusted content can't close its own block. Matching ignores case and
+// whitespace inside the angle brackets, and repeats until stable because
 // removing a tag can splice its neighbours into a new one.
 func StripPromptTags(s string, tags ...string) string {
-	pairs := make([]string, 0, len(tags)*4)
-	for _, tag := range tags {
-		pairs = append(pairs, "<"+tag+">", "", "</"+tag+">", "")
+	if len(tags) == 0 {
+		return s
 	}
-	r := strings.NewReplacer(pairs...)
+	names := make([]string, len(tags))
+	for i, tag := range tags {
+		names[i] = regexp.QuoteMeta(tag)
+	}
+	re := regexp.MustCompile(`(?i)<\s*/?\s*(?:` + strings.Join(names, "|") + `)(?:\s[^<>]*)?>`)
 	for {
-		out := r.Replace(s)
+		out := re.ReplaceAllString(s, "")
 		if out == s {
 			return s
 		}

@@ -15,14 +15,15 @@ import (
 // AuditRecord represents a row in the audit_log table: who did what to which
 // target, and when. See docs/AUDIT.md for exactly which actions are covered.
 type AuditRecord struct {
-	ID          string `json:"id"`
-	ActorUserID string `json:"actorUserId"`
-	ActorRole   string `json:"actorRole"`
-	Action      string `json:"action"`
-	TargetType  string `json:"targetType"`
-	TargetID    string `json:"targetId"`
-	Detail      string `json:"detail"`
-	CreatedAt   string `json:"createdAt"`
+	ID           string   `json:"id"`
+	ActorUserID  string   `json:"actorUserId"`
+	ActorRole    string   `json:"actorRole"`
+	Action       string   `json:"action"`
+	TargetType   string   `json:"targetType"`
+	TargetID     string   `json:"targetId"`
+	Detail       string   `json:"detail"`
+	CreatedAt    string   `json:"createdAt"`
+	ConnectorIDs []string `json:"-"`
 }
 
 // CreateAuditRecord inserts an audit_log row, filling ID/CreatedAt/Detail
@@ -77,6 +78,31 @@ func (s *Store) insertAuditRecords(ctx context.Context, records []AuditRecord) e
 	if err != nil {
 		return fmt.Errorf("create audit records: %w", err)
 	}
+	// Insert the complete scope in one statement: a failure must not expose a
+	// multi-connector record with only part of its scope recorded.
+	args = nil
+	values = nil
+	for _, a := range records {
+		ids := a.ConnectorIDs
+		if ids == nil && a.TargetType == "connector" {
+			ids = []string{a.TargetID}
+		}
+		seen := make(map[string]bool, len(ids))
+		for _, id := range ids {
+			if id == "" || seen[id] {
+				continue
+			}
+			seen[id] = true
+			values = append(values, "(?, ?)")
+			args = append(args, a.ID, id)
+		}
+	}
+	if len(values) > 0 {
+		if _, err := s.db.ExecContext(ctx, `INSERT INTO audit_log_connectors (audit_id, connector_id)
+			VALUES `+strings.Join(values, ", "), args...); err != nil {
+			return fmt.Errorf("create audit connector scope: %w", err)
+		}
+	}
 	return nil
 }
 
@@ -102,7 +128,12 @@ func (s *Store) RecordAuditBatchFromContext(ctx context.Context, action, targetT
 // exception. Call sites treat a returned error as non-fatal (slog.Error and
 // continue); see docs/AUDIT.md.
 func (s *Store) RecordAuditFromContext(ctx context.Context, action, targetType, targetID string, detail any) error {
-	return s.RecordAuditAs(
+	return s.RecordAuditScopedFromContext(ctx, action, targetType, targetID, detail, nil)
+}
+
+// RecordAuditScopedFromContext snapshots the full connector scope of an action.
+func (s *Store) RecordAuditScopedFromContext(ctx context.Context, action, targetType, targetID string, detail any, connectorIDs []string) error {
+	return s.RecordAuditScopedAs(
 		ctx,
 		auth.UserIDFromContext(ctx),
 		auth.InstanceAdminFromContext(ctx),
@@ -110,6 +141,7 @@ func (s *Store) RecordAuditFromContext(ctx context.Context, action, targetType, 
 		targetType,
 		targetID,
 		detail,
+		connectorIDs,
 	)
 }
 
@@ -126,10 +158,26 @@ func (s *Store) RecordAuditAs(
 	targetID string,
 	detail any,
 ) error {
+	return s.RecordAuditScopedAs(ctx, actorUserID, instanceAdmin, action, targetType, targetID, detail, nil)
+}
+
+// RecordAuditScopedAs records the actor and the complete connector scope resolved
+// before the core operation; nil retains the default scope for connector targets.
+func (s *Store) RecordAuditScopedAs(
+	ctx context.Context,
+	actorUserID string,
+	instanceAdmin bool,
+	action string,
+	targetType string,
+	targetID string,
+	detail any,
+	connectorIDs []string,
+) error {
 	record, err := NewAuditRecord(actorUserID, instanceAdmin, action, targetType, targetID, detail)
 	if err != nil {
 		return err
 	}
+	record.ConnectorIDs = connectorIDs
 	return s.CreateAuditRecord(ctx, record)
 }
 

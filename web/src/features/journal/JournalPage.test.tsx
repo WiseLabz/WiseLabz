@@ -254,7 +254,7 @@ describe('Journal', () => {
     expect(screen.queryByRole('button', { name: 'New entry' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('option', { name: 'Lab action' })).not.toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Lab action' })).toBeInTheDocument();
   });
 
   it('keeps the dialog open and reports mutation failure', async () => {
@@ -308,12 +308,36 @@ describe('Journal', () => {
   it('limits a non-admin operator to connector-scoped notes', async () => {
     mount();
     await screen.findByText('Replaced', { exact: false });
-    expect(screen.queryByRole('option', { name: 'Lab action' })).not.toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Lab action' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'New entry' }));
     const scope = within(screen.getByRole('dialog')).getByLabelText('Scope');
     expect(scope).toHaveValue('c');
     expect(within(scope).queryByRole('option', { name: 'Lab-wide' })).not.toBeInTheDocument();
   });
+
+  it.each([
+    { admin: false, docId: 'd', connectorId: 'c', href: '/docs/d' },
+    { admin: false, docId: '', connectorId: 'c', href: '/services/c' },
+    { admin: false, docId: '', connectorId: '', href: '' },
+    { admin: true, docId: 'd', connectorId: 'c', href: '/settings/audit' },
+    { admin: true, docId: '', connectorId: '', href: '/settings/audit' },
+  ])(
+    'links audit sources for $admin admin with doc $docId and connector $connectorId',
+    async ({ admin, docId, connectorId, href }) => {
+      role.admin = admin;
+      get.mockResolvedValue({
+        items: [{ ...note, kind: 'audit', title: 'runbook.update', body: '', docId, connectorId }],
+        total: 1,
+      });
+      mount('/journal?kinds=audit');
+      await screen.findByText('Lab action', { selector: 'span' });
+      if (href) {
+        expect(screen.getByRole('link', { name: 'View source' })).toHaveAttribute('href', href);
+      } else {
+        expect(screen.queryByRole('link', { name: 'View source' })).not.toBeInTheDocument();
+      }
+    }
+  );
 
   describe('window narration', () => {
     const summarize = () =>
@@ -355,6 +379,49 @@ describe('Journal', () => {
       );
       expect(screen.queryByText(/left out/)).not.toBeInTheDocument();
     });
+
+    it.each([
+      { admin: false, docId: 'd', connectorId: 'c', href: '/docs/d' },
+      { admin: false, docId: '', connectorId: 'c', href: '/services/c' },
+      { admin: false, docId: '', connectorId: '', href: null },
+      { admin: true, docId: 'd', connectorId: 'c', href: '/settings/audit' },
+    ])(
+      'links an audit source for admin=$admin with doc "$docId" and connector "$connectorId"',
+      async ({ admin, docId, connectorId, href }) => {
+        role.admin = admin;
+        narrate.mockResolvedValue({
+          ...narration,
+          narration: 'Runbook edited [1].',
+          sources: [
+            {
+              n: 1,
+              kind: 'audit',
+              id: 'x',
+              docId,
+              connectorId,
+              timestamp: '2020-01-01T00:00:00.000000000Z',
+              title: 'runbook.update',
+            },
+          ],
+          eventCount: 1,
+          totalEvents: 1,
+        });
+        mount();
+        await screen.findByText('Replaced', { exact: false });
+        summarize();
+        const summary = await screen.findByRole('region', { name: 'AI summary of this window' });
+        expect(within(summary).getByText(/runbook\.update/)).toBeInTheDocument();
+        if (href) {
+          expect(within(summary).getByRole('link', { name: 'runbook.update' })).toHaveAttribute(
+            'href',
+            href
+          );
+        } else {
+          expect(within(summary).queryByRole('link', { name: 'runbook.update' })).toBeNull();
+        }
+        expect(summary.querySelector('a[href="/settings/audit"]') !== null).toBe(admin);
+      }
+    );
 
     it.each([
       [409, 'AI is not enabled. An administrator can turn it on in Settings.'],

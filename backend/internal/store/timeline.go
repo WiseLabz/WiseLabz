@@ -102,24 +102,64 @@ func (s *Store) timelineUnion(ctx context.Context, f TimelineFilter) (string, []
 	add(`SELECT j.id, 'journal', `+timelineTimestamp("j.occurred_at")+`, '', j.body,
  COALESCE(j.connector_id, ''), COALESCE(j.doc_id, ''), j.created_by,
  j.entity_kind, j.entity_name, j.entity_ref, '' FROM journal_entries j WHERE 1=1`, "j.connector_id", true)
-	if f.Admin && auth.InstanceAdminFromContext(ctx) {
-		// Resolve connector scope through live source records. Deleted/unscoped lab
-		// actions remain admin-only; restricted keys cannot include those rows.
-		audit := `SELECT a.*, CASE a.target_type WHEN 'connector' THEN NULLIF(a.target_id, '')
-  WHEN 'change' THEN (SELECT service_id FROM changes WHERE id = a.target_id)
-  WHEN 'alert' THEN (SELECT service_id FROM alerts WHERE id = a.target_id)
-  WHEN 'doc' THEN (SELECT service_id FROM docs WHERE id = a.target_id) END AS connector_id FROM audit_log a`
-		actions := make([]any, len(timelineLabActions))
-		for i, action := range timelineLabActions {
-			actions[i] = action
-		}
-		args = append(args, actions...)
-		add(`SELECT a.id, 'audit', `+timelineTimestamp("a.created_at")+`, a.action, '',
-  COALESCE(a.connector_id, ''), CASE WHEN a.target_type = 'doc' THEN a.target_id ELSE '' END,
-  a.actor_user_id, '', '', '', a.target_type FROM (`+audit+`) a
-  WHERE a.action IN (`+placeholders(len(actions))+`)`, "a.connector_id", true)
+	actions := make([]any, len(timelineLabActions))
+	for i, action := range timelineLabActions {
+		actions[i] = action
 	}
+	connector := `(SELECT CASE WHEN COUNT(*) = 1 THEN MIN(sc.connector_id) ELSE '' END
+ FROM audit_log_connectors sc WHERE sc.audit_id = a.id)`
+	if f.ConnectorID != "" {
+		connector = `COALESCE((SELECT sc.connector_id FROM audit_log_connectors sc
+ WHERE sc.audit_id = a.id AND sc.connector_id = ?), '')`
+		args = append(args, f.ConnectorID)
+	}
+	args = append(args, actions...)
+	admin := f.Admin && auth.InstanceAdminFromContext(ctx)
+	docID := `CASE WHEN a.target_type = 'doc' THEN a.target_id ELSE '' END`
+	if !admin {
+		// Members get the doc link only while the doc is live and still in the row's scope.
+		docID = `CASE WHEN a.target_type = 'doc' AND EXISTS (SELECT 1 FROM docs d
+ JOIN audit_log_connectors dsc ON dsc.audit_id = a.id AND dsc.connector_id = d.service_id
+ WHERE d.id = a.target_id AND d.deleted_at IS NULL) THEN a.target_id ELSE '' END`
+	}
+	scope, scopeArgs := timelineAuditScope(ctx, f)
+	branches = append(branches, `SELECT a.id, 'audit', `+timelineTimestamp("a.created_at")+`, a.action, '',
+ `+connector+`, `+docID+`,
+ a.actor_user_id, '', '', '', a.target_type FROM audit_log a
+ WHERE a.action IN (`+placeholders(len(actions))+`)`+scope)
+	args = append(args, scopeArgs...)
+
 	return strings.Join(branches, " UNION ALL "), args
+}
+
+// timelineAuditScope requires grants on every snapshotted connector. Only
+// instance admins may read empty scopes and ignore connectors that were deleted.
+func timelineAuditScope(ctx context.Context, f TimelineFilter) (string, []any) {
+	admin := f.Admin && auth.InstanceAdminFromContext(ctx)
+	where := ""
+	if !admin {
+		where = ` AND EXISTS (SELECT 1 FROM audit_log_connectors sc WHERE sc.audit_id = a.id)`
+	}
+	denied := `NOT EXISTS (SELECT 1 FROM user_connector_roles g
+ WHERE g.connector_id = sc.connector_id AND g.user_id = ? AND g.role IN ('viewer', 'operator'))`
+	args := []any{f.UserID}
+	ids := auth.APIKeyRestrictionFromContext(ctx).ConnectorIDs
+	if len(ids) > 0 {
+		// A restricted key cannot read an empty scope, even for an admin owner.
+		if admin {
+			where += ` AND EXISTS (SELECT 1 FROM audit_log_connectors sc WHERE sc.audit_id = a.id)`
+		}
+		denied += ` OR sc.connector_id NOT IN (` + placeholders(len(ids)) + `)`
+		for _, id := range ids {
+			args = append(args, id)
+		}
+	}
+	live := ""
+	if admin && len(ids) == 0 {
+		live = ` AND EXISTS (SELECT 1 FROM connectors c WHERE c.id = sc.connector_id)`
+	}
+	return where + ` AND NOT EXISTS (SELECT 1 FROM audit_log_connectors sc
+ WHERE sc.audit_id = a.id` + live + ` AND (` + denied + `))`, args
 }
 
 // ListTimeline filters every source before counting and keyset pagination.

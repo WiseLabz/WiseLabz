@@ -204,7 +204,7 @@ func (h *Handler) Resolve(w http.ResponseWriter, r *http.Request) {
 		httputil.Errorf(w, err)
 		return
 	}
-	if err := h.Store.RecordAuditFromContext(r.Context(), "alert.resolve", "alert", id, nil); err != nil {
+	if err := h.Store.RecordAuditScopedFromContext(r.Context(), "alert.resolve", "alert", id, nil, []string{a.ServiceID}); err != nil {
 		slog.Error("failed to record audit", "action", "alert.resolve", "error", err)
 	}
 	resp, err := h.alertResponse(r.Context(), id)
@@ -238,7 +238,7 @@ func (h *Handler) Dismiss(w http.ResponseWriter, r *http.Request) {
 		httputil.Errorf(w, err)
 		return
 	}
-	if err := h.Store.RecordAuditFromContext(r.Context(), "alert.dismiss", "alert", id, nil); err != nil {
+	if err := h.Store.RecordAuditScopedFromContext(r.Context(), "alert.dismiss", "alert", id, nil, []string{a.ServiceID}); err != nil {
 		slog.Error("failed to record audit", "action", "alert.dismiss", "error", err)
 	}
 	resp, err := h.alertResponse(r.Context(), id)
@@ -291,7 +291,7 @@ func (h *Handler) Snooze(w http.ResponseWriter, r *http.Request) {
 		httputil.Errorf(w, err)
 		return
 	}
-	if err := h.Store.RecordAuditFromContext(r.Context(), "alert.snooze", "alert", id, nil); err != nil {
+	if err := h.Store.RecordAuditScopedFromContext(r.Context(), "alert.snooze", "alert", id, nil, []string{a.ServiceID}); err != nil {
 		slog.Error("failed to record audit", "action", "alert.snooze", "error", err)
 	}
 	resp, err := h.alertResponse(r.Context(), id)
@@ -349,6 +349,7 @@ func (h *Handler) BulkSnooze(w http.ResponseWriter, r *http.Request) {
 	// batch this into one query if bulk-snooze throughput becomes a hot path.
 	results := make([]bulkSnoozeItemResult, 0, len(req.IDs))
 	allowedIDs := make([]string, 0, len(req.IDs))
+	connectorIDs := make(map[string]string, len(req.IDs))
 	userID := auth.UserIDFromContext(r.Context())
 	for _, id := range req.IDs {
 		a, err := h.Store.GetAlert(r.Context(), id)
@@ -370,6 +371,7 @@ func (h *Handler) BulkSnooze(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		allowedIDs = append(allowedIDs, id)
+		connectorIDs[id] = a.ServiceID
 	}
 
 	found, err := h.Store.UpdateAlertStatuses(r.Context(), allowedIDs, "snoozed", req.Until)
@@ -386,7 +388,7 @@ func (h *Handler) BulkSnooze(w http.ResponseWriter, r *http.Request) {
 			results = append(results, bulkSnoozeItemResult{ID: id, Status: "error", Reason: "not_found"})
 			continue
 		}
-		auditRecords = append(auditRecords, store.AuditRecord{TargetID: id})
+		auditRecords = append(auditRecords, store.AuditRecord{TargetID: id, ConnectorIDs: []string{connectorIDs[id]}})
 		results = append(results, bulkSnoozeItemResult{ID: id, Status: "success"})
 	}
 	if err := h.Store.RecordAuditBatchFromContext(r.Context(), "alert.bulk_snooze", "alert", auditRecords); err != nil {

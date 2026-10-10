@@ -738,10 +738,12 @@ _Last updated: 2026-06-27_
 ## Lab journal
 
 `GET /api/timeline` merges changes, significant sync runs, alerts, live document
-versions, manual notes and instance-admin lab audit actions through a store SQL
-union. Connector grants and API-key restrictions apply before counting/paging;
-EXISTS avoids duplicate events when manual and OIDC grants overlap. UTC timestamps
-are padded to fixed nanosecond precision inside the query, then a purpose-built
+versions, manual notes and grant-scoped lab audit actions through a store SQL
+union. Allowlisted audit rows reach a member only with a grant on every connector
+in the row's snapshotted scope; unscoped rows stay instance-admin only. Connector
+grants and API-key restrictions apply before counting/paging; EXISTS avoids
+duplicate events when manual and OIDC grants overlap. UTC timestamps are padded
+to fixed nanosecond precision inside the query, then a purpose-built
 keyset cursor orders `(timestamp, kind, id)` descending. Security audit events stay
 on Audit, and the lab action branch uses an explicit action allowlist.
 
@@ -754,10 +756,4 @@ with SET NULL; the body, author and entity text survive. Backup bundles export a
 restore notes additively, including original timestamps; operational retention
 never prunes manual entries. Journal mutations record `journal.*` audit actions.
 
-`POST /api/timeline/narrate` narrates a Journal window with the AI module. It
-parses the same filter as `GET /api/timeline` and makes one `ListTimeline` call
-for the 100 newest events, so visibility is enforced in SQL exactly as for the
-list. Events are numbered oldest first inside a `<journal_events>` block with
-capped fields, the delimiter tag stripped and an untrusted-data notice, then sent
-through the fallback chain. Nothing is cached or persisted, and provider errors
-are logged but never returned.
+`POST /api/timeline/narrate` narrates a Journal window with the AI module from one visibility-scoped `ListTimeline` call, so the prompt holds only rows the caller's list would show; nothing is cached or persisted.

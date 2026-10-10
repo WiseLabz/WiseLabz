@@ -216,3 +216,15 @@ plain text once to the operator; excerpts never enter audit details, alerts, log
 or run records. The Journal includes named actions, backup imports and unknown
 step decisions as lab activity. Recipe-action enablement is a security boundary
 and remains in the admin audit log, outside the Journal lab-action list.
+
+The Journal shows an allowlist of lab audit actions. Its audit rows carry a
+connector scope captured when the action is recorded, with existing rows
+backfilled where their target identifies a connector. Members see a row only
+when they hold a viewer or operator grant on every connector in its scope, and
+connector-restricted API keys must allow every connector in a nonempty scope;
+restricted keys cannot read unscoped rows. Unscoped rows remain visible only to
+instance admins. Admins can also see rows scoped to connectors that have since
+been deleted; live scoped rows still require the matching grant. Security actions
+are not in the Journal allowlist. The Journal exposes
+the actor but omits audit detail; `GET /api/system/audit` and its export remain
+instance-admin only.
