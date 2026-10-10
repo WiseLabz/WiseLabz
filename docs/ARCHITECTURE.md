@@ -740,9 +740,10 @@ _Last updated: 2026-06-27_
 `GET /api/timeline` merges changes, significant sync runs, alerts, live document
 versions, manual notes and grant-scoped lab audit actions through a store SQL
 union. Allowlisted audit rows reach a member only with a grant on every connector
-in the row's snapshotted scope; unscoped rows stay instance-admin only. Connector grants and API-key restrictions
-apply before counting/paging; EXISTS avoids duplicate events when manual and OIDC
-grants overlap. UTC timestamps are padded to fixed nanosecond precision inside the query, then a purpose-built
+in the row's snapshotted scope; unscoped rows stay instance-admin only. Connector
+grants and API-key restrictions apply before counting/paging; EXISTS avoids
+duplicate events when manual and OIDC grants overlap. UTC timestamps are padded
+to fixed nanosecond precision inside the query, then a purpose-built
 keyset cursor orders `(timestamp, kind, id)` descending. Security audit events stay
 on Audit, and the lab action branch uses an explicit action allowlist.
 
