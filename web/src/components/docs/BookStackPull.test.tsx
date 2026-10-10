@@ -11,6 +11,7 @@ import {
 } from '../../api/generated/docs/docs';
 import { postAuthElevate } from '../../api/generated/auth/auth';
 import type { DocImportPreview, DocPullJob } from '../../api/model';
+import { toast } from '../../lib/toast';
 
 vi.mock('../../api/generated/docs/docs', () => ({
   deleteDocsImportPull: vi.fn(),
@@ -136,5 +137,56 @@ describe('BookStack pull', () => {
     await client.invalidateQueries({ queryKey: ['docs-import-pull'] });
     fireEvent.click(await screen.findByRole('button', { name: 'Review fetched preview' }));
     expect(onReady).toHaveBeenCalledWith(preview);
+  });
+
+  it('treats a failed read as no current job and stops polling', async () => {
+    vi.mocked(getDocsImportPull).mockResolvedValue(fetching);
+    const { client } = show();
+    expect(await screen.findByText('Fetching books: 0 / 2')).toBeInTheDocument();
+    expect(
+      screen.getByRole('progressbar', { name: 'BookStack pull progress' })
+    ).toBeInTheDocument();
+    vi.mocked(getDocsImportPull).mockRejectedValue(new Error('404'));
+    await client.invalidateQueries({ queryKey: ['docs-import-pull'] });
+    expect(await screen.findByRole('button', { name: 'Fetch preview' })).toBeInTheDocument();
+    expect(screen.queryByText('Fetching books: 0 / 2')).not.toBeInTheDocument();
+    const calls = vi.mocked(getDocsImportPull).mock.calls.length;
+    await new Promise((resolve) => setTimeout(resolve, 1300));
+    expect(vi.mocked(getDocsImportPull).mock.calls.length).toBe(calls);
+  });
+
+  it('switches to the running pull on 409 and clears the token fields', async () => {
+    show();
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Fetch preview' })).toBeEnabled()
+    );
+    fillForm();
+    const conflict = new AxiosError('conflict');
+    conflict.response = {
+      status: 409,
+      data: { code: 'pull_running', message: 'a documentation pull is already running' },
+    } as AxiosError['response'];
+    vi.mocked(postDocsImportPull).mockRejectedValueOnce(conflict);
+    vi.mocked(getDocsImportPull).mockResolvedValue(fetching);
+    fireEvent.click(screen.getByRole('button', { name: 'Fetch preview' }));
+    expect(await screen.findByText('Fetching books: 0 / 2')).toBeInTheDocument();
+  });
+
+  it('shows the server message on 400 and clears the token fields', async () => {
+    show();
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Fetch preview' })).toBeEnabled()
+    );
+    fillForm();
+    const invalid = new AxiosError('bad request');
+    invalid.response = {
+      status: 400,
+      data: { code: 'invalid_request', message: 'use an HTTP(S) wiki URL' },
+    } as AxiosError['response'];
+    vi.mocked(postDocsImportPull).mockRejectedValueOnce(invalid);
+    fireEvent.click(screen.getByRole('button', { name: 'Fetch preview' }));
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith('use an HTTP(S) wiki URL'));
+    expect(screen.getByLabelText('Token ID')).toHaveValue('');
+    expect(screen.getByLabelText('Token secret')).toHaveValue('');
   });
 });

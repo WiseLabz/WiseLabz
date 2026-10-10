@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { isAxiosError } from 'axios';
 import { useTranslation } from 'react-i18next';
 import {
   deleteDocsImportPull,
@@ -12,6 +13,13 @@ import { Button } from '../ui/Button';
 import { toast } from '../../lib/toast';
 
 const pullQueryKey = ['docs-import-pull'];
+
+/** The server's message for a rejected start request (400), if it sent one. */
+function startErrorMessage(err: unknown): string | undefined {
+  if (!isAxiosError(err) || err.response?.status !== 400) return undefined;
+  const message = (err.response.data as { message?: unknown } | undefined)?.message;
+  return typeof message === 'string' && message ? message : undefined;
+}
 
 /** Credentials stay in this form and the POST body, never the query key or storage. */
 export function BookStackPull({ onReady }: { onReady: (preview: DocImportPreview) => void }) {
@@ -27,7 +35,8 @@ export function BookStackPull({ onReady }: { onReady: (preview: DocImportPreview
     queryKey: pullQueryKey,
     queryFn: () => getDocsImportPull(),
     retry: false,
-    refetchInterval: (query) => (query.state.data?.state === 'fetching' ? 1000 : false),
+    refetchInterval: (query) =>
+      query.state.status !== 'error' && query.state.data?.state === 'fetching' ? 1000 : false,
     staleTime: 0,
   });
   const start = useStepUpMutation<DocPullRequest, Awaited<ReturnType<typeof postDocsImportPull>>>({
@@ -40,14 +49,23 @@ export function BookStackPull({ onReady }: { onReady: (preview: DocImportPreview
       queryClient.setQueryData(pullQueryKey, job);
       void queryClient.invalidateQueries({ queryKey: pullQueryKey });
     },
-    onError: () => toast.error(t('docs.import.pull.startError')),
+    onError: (err) => {
+      setTokenId('');
+      setTokenSecret('');
+      if (isAxiosError(err) && err.response?.status === 409) {
+        // Another pull is running: show its progress instead of the form.
+        void queryClient.invalidateQueries({ queryKey: pullQueryKey });
+      }
+      toast.error(startErrorMessage(err) ?? t('docs.import.pull.startError'));
+    },
   });
   const cancel = useMutation({
     mutationFn: () => deleteDocsImportPull(),
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: pullQueryKey }),
     onError: () => toast.error(t('docs.import.pull.cancelError')),
   });
-  const job = current.data;
+  // A failed read (404 when no pull exists) means no current job, not stale data.
+  const job = current.isError ? undefined : current.data;
   useEffect(() => {
     if (job?.state === 'fetching') watching.current = true;
     if (job?.state === 'ready' && job.preview && watching.current) {
@@ -64,6 +82,7 @@ export function BookStackPull({ onReady }: { onReady: (preview: DocImportPreview
         </p>
         <progress
           className="w-full"
+          aria-label={t('docs.import.pull.progressLabel')}
           value={job.total > 0 ? job.done : undefined}
           max={job.total || 1}
         />
