@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -20,6 +21,7 @@ type opnsenseFilterFake struct {
 	failApply     bool
 	failUndoWrite bool
 	setRules      []string // enabled values received by setRule, in order
+	searches      int
 	applies       int
 }
 
@@ -29,10 +31,40 @@ func (f *opnsenseFilterFake) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	const uuid = "11111111-2222-3333-4444-555555555555"
 	switch {
+	case r.URL.Path == "/api/core/firmware/status":
+		_, _ = w.Write([]byte(`{"product_name":"OPNsense","product_version":"26.7"}`))
+	case r.URL.Path == "/api/diagnostics/interface/getInterfaces":
+		_, _ = w.Write([]byte(`{"rows":[]}`))
+	case r.URL.Path == "/api/routes/gateway/status":
+		_, _ = w.Write([]byte(`{"items":[]}`))
 	case r.URL.Path == "/api/firewall/filter/savepoint":
 		w.WriteHeader(http.StatusNotFound)
-	case r.URL.Path == "/api/firewall/filter/searchRule":
-		_, _ = w.Write([]byte(`{"rows":[{"uuid":"` + uuid + `","description":"allow ssh","action":"pass","protocol":"TCP","enabled":"` + f.saved + `"}]}`))
+	case r.URL.Path == "/api/firewall/filter/searchRule" && r.Method == http.MethodPost:
+		f.searches++
+		var request struct {
+			Current  int `json:"current"`
+			RowCount int `json:"rowCount"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil || request.RowCount != 500 {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		var rows strings.Builder
+		switch request.Current {
+		case 1:
+			for i := range 500 {
+				if i > 0 {
+					rows.WriteByte(',')
+				}
+				rows.WriteString(`{"uuid":"rule-` + strconv.Itoa(i) + `","description":"rule"}`)
+			}
+		case 2:
+			rows.WriteString(`{"uuid":"` + uuid + `","description":"allow ssh","action":"pass","protocol":"TCP","enabled":"` + f.saved + `"}`)
+		default:
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		_, _ = w.Write([]byte(`{"total":501,"current":` + strconv.Itoa(request.Current) + `,"rowCount":500,"rows":[` + rows.String() + `]}`))
 	case r.URL.Path == "/api/firewall/filter/getRule/"+uuid:
 		_, _ = w.Write([]byte(`{"rule":{"enabled":"` + f.saved + `"}}`))
 	case r.URL.Path == "/api/firewall/filter/setRule/"+uuid && r.Method == http.MethodPost:
@@ -134,6 +166,12 @@ func TestConfigPushOPNsenseRetryAfterFailedUndo(t *testing.T) {
 	records, _, err := h.Store.ListAuditRecords(context.Background(), "connector.configPush", "connector", "", "", 0, 10)
 	if err != nil || len(records) != 1 {
 		t.Fatalf("audit records=%+v err=%v, want one", records, err)
+	}
+	fake.mu.Lock()
+	searches := fake.searches
+	fake.mu.Unlock()
+	if searches != 6 {
+		t.Errorf("config push made %d searchRule page requests, want three 501-rule snapshot fetches (two pages each) with direct getRule reads", searches)
 	}
 
 	// Now at target: the next push is skipped without any write.

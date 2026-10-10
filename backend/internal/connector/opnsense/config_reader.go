@@ -7,12 +7,10 @@ import (
 	"github.com/WiseLabz/wiselabz/internal/connector"
 )
 
-// ConfigRead returns a firewall rule's current enabled state from a fresh
-// firewall-rule fetch. The fetch shows the saved value, which after a failed
-// push may differ from what is live. For a rule left in that state it returns
-// nil with no error (value unknown), so the caller pushes again instead of
-// concluding "already at target".
-func (c *Connector) ConfigRead(ctx context.Context, config map[string]any, entityRef, fieldKey string) (any, error) {
+// ConfigRead returns a firewall rule's current saved enabled state from getRule.
+// For a rule with an uncertain previous push it returns nil with no error, so
+// the caller pushes again instead of concluding "already at target".
+func (c *Connector) ConfigRead(ctx context.Context, _ map[string]any, entityRef, fieldKey string) (any, error) {
 	if fieldKey != "enabled" {
 		return nil, fmt.Errorf("unsupported field %q", fieldKey)
 	}
@@ -26,22 +24,12 @@ func (c *Connector) ConfigRead(ctx context.Context, config map[string]any, entit
 		return nil, fmt.Errorf("invalid entityRef: %w", err)
 	}
 
-	snapshot, err := c.Fetch(ctx, config)
+	enabled, err := c.ruleEnabled(ctx, entityRef)
 	if err != nil {
-		return nil, fmt.Errorf("fetch opnsense config value: %w", err)
+		return nil, fmt.Errorf("read opnsense rule config value: %w", err)
 	}
-	for _, entity := range snapshot.Entities {
-		if entity.Kind != "rule" || entity.ExternalID != entityRef {
-			continue
-		}
-		if filterStateFor(c.url).marked(entityRef) {
-			return nil, nil
-		}
-		value, ok := entity.Attributes["enabled"].(bool)
-		if !ok {
-			return nil, fmt.Errorf("opnsense rule enabled state is unavailable for %q", entityRef)
-		}
-		return value, nil
+	if filterStateFor(c.url).marked(entityRef) {
+		return nil, nil
 	}
-	return nil, fmt.Errorf("opnsense firewall rule %q not found", entityRef)
+	return enabled == "1", nil
 }

@@ -29,7 +29,8 @@ const typeName = "opnsense"
 const fallbackEntityIDPrefix = "fallback:"
 
 const (
-	filterAPI = "/api/firewall/filter/"
+	filterAPI    = "/api/firewall/filter/"
+	rulePageSize = 500
 	// cleanupTimeout bounds each revert, cancelRollback and undo request sent
 	// after the caller's context may already be gone.
 	cleanupTimeout = 30 * time.Second
@@ -44,6 +45,21 @@ var errRuleNotSaved = errors.New("rule not saved")
 
 // errRuleNotFound marks a rule UUID the firewall does not know.
 var errRuleNotFound = errors.New("not found")
+
+type ruleTableRow struct {
+	UUID            string `json:"uuid"`
+	Description     string `json:"description"`
+	Action          string `json:"action"`
+	Protocol        string `json:"protocol"`
+	Source          string `json:"source_net"`
+	Destination     string `json:"destination_net"`
+	DestinationPort string `json:"destination_port"`
+	Interface       string `json:"interface"`
+	Direction       string `json:"direction"`
+	Enabled         string `json:"enabled"`
+	Log             string `json:"log"`
+	DisabledReason  string `json:"disabled_reason"`
+}
 
 func init() {
 	connector.Register(connector.TypeSchema{
@@ -174,7 +190,7 @@ func (c *Connector) Fetch(ctx context.Context, _ map[string]any) (snapshot *conn
 	}
 
 	// --- Firewall rules ---
-	if raw, err := c.doRequest(ctx, "GET", "/api/firewall/filter/searchRule"); err == nil {
+	if raw, err := c.searchRules(ctx); err == nil {
 		content, ruleEntities := buildRuleTable(raw)
 		for i := range ruleEntities {
 			if strings.HasPrefix(ruleEntities[i].ExternalID, fallbackEntityIDPrefix) {
@@ -769,6 +785,130 @@ func (c *Connector) doRequest(ctx context.Context, method, path string) (data []
 	return c.doRequestBody(ctx, method, path, nil)
 }
 
+// searchRules collects a complete firewall rule result before exposing it to
+// the snapshot builder. OPNsense's search endpoint uses one-based pages.
+func (c *Connector) searchRules(ctx context.Context) ([]byte, error) {
+	var rows []json.RawMessage
+	seenPages := make(map[[32]byte]struct{})
+	seenRuleUUIDs := make(map[string]struct{})
+	var total int
+	for current := 1; ; current++ {
+		body, err := json.Marshal(map[string]int{"current": current, "rowCount": rulePageSize})
+		if err != nil {
+			return nil, fmt.Errorf("encode opnsense rule search: %w", err)
+		}
+		raw, err := c.doRequestBody(ctx, http.MethodPost, filterAPI+"searchRule", body)
+		if err != nil {
+			return nil, fmt.Errorf("search opnsense firewall rules: %w", err)
+		}
+		var page struct {
+			Rows     json.RawMessage `json:"rows"`
+			Total    json.RawMessage `json:"total"`
+			Current  json.RawMessage `json:"current"`
+			RowCount json.RawMessage `json:"rowCount"`
+		}
+		if err := json.Unmarshal(raw, &page); err != nil {
+			return nil, connector.NewMalformedResponseError(fmt.Errorf("decode opnsense rule search page %d: %w", current, err))
+		}
+		pageTotal, err := decodeRuleSearchTotal(page.Total)
+		if err != nil {
+			return nil, connector.NewMalformedResponseError(fmt.Errorf("decode opnsense rule search page %d total: %w", current, err))
+		}
+		if current == 1 {
+			total = pageTotal
+		} else if pageTotal != total {
+			return nil, connector.NewMalformedResponseError(fmt.Errorf("opnsense rule search total changed from %d to %d on page %d", total, pageTotal, current))
+		}
+		if err := validateRulePageMetadata(page.Current, page.RowCount, current); err != nil {
+			return nil, connector.NewMalformedResponseError(fmt.Errorf("opnsense rule search page %d: %w", current, err))
+		}
+		var pageRows []json.RawMessage
+		if len(page.Rows) == 0 || bytes.Equal(bytes.TrimSpace(page.Rows), []byte("null")) || json.Unmarshal(page.Rows, &pageRows) != nil {
+			return nil, connector.NewMalformedResponseError(fmt.Errorf("decode opnsense rule search page %d rows: expected an array", current))
+		}
+		if len(pageRows) > rulePageSize || len(rows)+len(pageRows) > total {
+			return nil, connector.NewMalformedResponseError(fmt.Errorf("opnsense rule search page %d exceeds reported total %d", current, total))
+		}
+		canonicalRows := make([]json.RawMessage, 0, len(pageRows))
+		for _, row := range pageRows {
+			var item ruleTableRow
+			if err := json.Unmarshal(row, &item); err != nil {
+				return nil, connector.NewMalformedResponseError(fmt.Errorf("decode opnsense rule search row on page %d: %w", current, err))
+			}
+			decoder := json.NewDecoder(bytes.NewReader(row))
+			decoder.UseNumber()
+			fields := make(map[string]any)
+			if err := decoder.Decode(&fields); err != nil || fields == nil {
+				return nil, connector.NewMalformedResponseError(fmt.Errorf("decode opnsense rule search row on page %d: expected an object", current))
+			}
+			if item.UUID != "" {
+				if _, exists := seenRuleUUIDs[item.UUID]; exists {
+					return nil, connector.NewMalformedResponseError(fmt.Errorf("opnsense rule search repeated rule UUID %q", item.UUID))
+				}
+				seenRuleUUIDs[item.UUID] = struct{}{}
+			}
+			canonical, err := json.Marshal(fields)
+			if err != nil {
+				return nil, fmt.Errorf("encode opnsense rule search row: %w", err)
+			}
+			canonicalRows = append(canonicalRows, canonical)
+		}
+		pageBytes, err := json.Marshal(canonicalRows)
+		if err != nil {
+			return nil, fmt.Errorf("encode opnsense rule search page %d: %w", current, err)
+		}
+		fingerprint := sha256.Sum256(pageBytes)
+		if _, exists := seenPages[fingerprint]; exists {
+			return nil, connector.NewMalformedResponseError(fmt.Errorf("opnsense rule search repeated page %d", current))
+		}
+		seenPages[fingerprint] = struct{}{}
+		if len(pageRows) == 0 && len(rows) < total {
+			return nil, connector.NewMalformedResponseError(fmt.Errorf("opnsense rule search ended at %d of %d rows", len(rows), total))
+		}
+		rows = append(rows, pageRows...)
+		if len(rows) == total {
+			break
+		}
+		if len(pageRows) < rulePageSize {
+			return nil, connector.NewMalformedResponseError(fmt.Errorf("opnsense rule search ended at %d of %d rows", len(rows), total))
+		}
+	}
+	return json.Marshal(struct {
+		Rows []json.RawMessage `json:"rows"`
+	}{Rows: rows})
+}
+
+func validateRulePageMetadata(currentRaw, rowCountRaw json.RawMessage, expectedCurrent int) error {
+	for _, metadata := range []struct {
+		name string
+		raw  json.RawMessage
+		want int
+	}{{name: "current", raw: currentRaw, want: expectedCurrent}, {name: "rowCount", raw: rowCountRaw, want: rulePageSize}} {
+		if len(metadata.raw) == 0 {
+			continue
+		}
+		if bytes.Equal(bytes.TrimSpace(metadata.raw), []byte("null")) {
+			return fmt.Errorf("missing %s", metadata.name)
+		}
+		var got int
+		if err := json.Unmarshal(metadata.raw, &got); err != nil || got != metadata.want {
+			return fmt.Errorf("unexpected %s %s", metadata.name, metadata.raw)
+		}
+	}
+	return nil
+}
+
+func decodeRuleSearchTotal(raw json.RawMessage) (int, error) {
+	if len(raw) == 0 || bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+		return 0, fmt.Errorf("missing total")
+	}
+	var total int
+	if err := json.Unmarshal(raw, &total); err != nil || total < 0 {
+		return 0, fmt.Errorf("invalid total %s", raw)
+	}
+	return total, nil
+}
+
 func (c *Connector) doRequestBody(ctx context.Context, method, path string, body []byte) (data []byte, err error) {
 	status, data, err := c.doRequestStatus(ctx, method, path, body)
 	if err != nil {
@@ -915,20 +1055,7 @@ func primaryGatewayName(raw []byte) string {
 
 func buildRuleTable(raw []byte) (string, []connector.SnapshotEntity) {
 	var resp struct {
-		Rows []struct {
-			UUID            string `json:"uuid"`
-			Description     string `json:"description"`
-			Action          string `json:"action"`
-			Protocol        string `json:"protocol"`
-			Source          string `json:"source_net"`
-			Destination     string `json:"destination_net"`
-			DestinationPort string `json:"destination_port"`
-			Interface       string `json:"interface"`
-			Direction       string `json:"direction"`
-			Enabled         string `json:"enabled"`
-			Log             string `json:"log"`
-			DisabledReason  string `json:"disabled_reason"`
-		} `json:"rows"`
+		Rows []ruleTableRow `json:"rows"`
 	}
 	if err := json.Unmarshal(raw, &resp); err != nil || len(resp.Rows) == 0 {
 		return "_No firewall rules returned_", nil
@@ -946,21 +1073,16 @@ func buildRuleTable(raw []byte) (string, []connector.SnapshotEntity) {
 	fallbackOccurrences := make(map[string]int, len(resp.Rows))
 	count := 0
 	for i, r := range resp.Rows {
-		if count >= 50 {
-			_, err := fmt.Fprintf(&b, "\n_...and %d more rules_", len(resp.Rows)-50)
-			if err != nil {
-				return "", nil
-			}
-			break
-		}
 		enabledStr := r.Enabled
 		if enabledStr == "" {
 			enabledStr = "1"
 		}
-		_, err := fmt.Fprintf(&b, "| %s | %s | %s | %s | %s | %s |\n",
-			r.Description, r.Action, r.Protocol, r.Source, r.Destination, enabledStr)
-		if err != nil {
-			return "", nil
+		if count < 50 {
+			_, err := fmt.Fprintf(&b, "| %s | %s | %s | %s | %s | %s |\n",
+				r.Description, r.Action, r.Protocol, r.Source, r.Destination, enabledStr)
+			if err != nil {
+				return "", nil
+			}
 		}
 		attrs := map[string]any{
 			"enabled":     enabledStr == "1",
@@ -997,6 +1119,12 @@ func buildRuleTable(raw []byte) (string, []connector.SnapshotEntity) {
 			Attributes: attrs,
 		})
 		count++
+	}
+	if count > 50 {
+		_, err := fmt.Fprintf(&b, "\n_...and %d more rules_", count-50)
+		if err != nil {
+			return "", nil
+		}
 	}
 	return b.String(), entities
 }
