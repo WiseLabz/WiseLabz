@@ -57,13 +57,13 @@ func TestHTMLPortableHierarchy(t *testing.T) {
 	}
 }
 func TestHTMLUntrustedContent(t *testing.T) {
-	b := &Book{Docs: []store.DocRecord{{ID: "1", Title: "<script>evil</script>", Content: "<script>alert('doc')</script>\n\n![remote](https://example.com/photo.png)\n\n![bad](attachment:missing)\n\n[hidden](/docs/hidden)\n\n[unsafe](javascript:alert(1))"}}}
+	b := &Book{Docs: []store.DocRecord{{ID: "1", Title: "<script>evil</script>", Content: "<script>alert('doc')</script>\n\n![remote](https://example.com/photo.png)\n\n![bad](attachment:missing)\n\n[hidden](/docs/hidden)\n\n[entity](/entities/11111111-1111-4111-8111-111111111111)\n\n[unsafe](javascript:alert(1))"}}}
 	var out bytes.Buffer
 	if err := b.Write(&out, "html"); err != nil {
 		t.Fatal(err)
 	}
 	html := out.String()
-	for _, bad := range []string{"<script>alert('doc')", "src=\"https://example.com", "href=\"javascript:", "href=\"/docs/hidden", "src=\"attachment:"} {
+	for _, bad := range []string{"<script>alert('doc')", "src=\"https://example.com", "href=\"javascript:", "href=\"/docs/hidden", "href=\"/entities/", "src=\"attachment:"} {
 		if strings.Contains(html, bad) {
 			t.Errorf("unsafe HTML %q", bad)
 		}

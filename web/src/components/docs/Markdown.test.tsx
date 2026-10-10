@@ -1,5 +1,6 @@
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { Markdown } from './Markdown';
 
 describe('Markdown', () => {
@@ -27,9 +28,12 @@ describe('Markdown', () => {
 
     // Mermaid loads its renderer lazily; a cold import plus SVG layout can
     // exceed waitFor's one-second default under coverage.
-    await waitFor(() => {
-      expect(container.querySelector('svg')).toBeInTheDocument();
-    }, { timeout: 4000 });
+    await waitFor(
+      () => {
+        expect(container.querySelector('svg')).toBeInTheDocument();
+      },
+      { timeout: 4000 }
+    );
   });
 
   it('hides sync ownership markers but keeps the generated content', () => {
@@ -49,5 +53,22 @@ describe('Markdown', () => {
     expect(screen.getByText('healthy')).toBeInTheDocument();
     expect(screen.getByText('Human notes')).toBeInTheDocument();
     expect(container.textContent).not.toContain('wl:gen');
+  });
+
+  it('uses router navigation for internal doc and entity links', () => {
+    render(
+      <MemoryRouter>
+        <Markdown source={'[Doc](/docs/doc-1) [Entity](/entities/entity-1)'} />
+      </MemoryRouter>
+    );
+    expect(screen.getByRole('link', { name: 'Doc' }).getAttribute('href')).toBe('/docs/doc-1');
+    expect(screen.getByRole('link', { name: 'Entity' }).getAttribute('href')).toBe(
+      '/entities/entity-1'
+    );
+  });
+
+  it('keeps internal links as ordinary anchors in shared documentation', () => {
+    render(<Markdown source="[Doc](/docs/doc-1)" internalLinks={false} />);
+    expect(screen.getByRole('link', { name: 'Doc' }).tagName).toBe('A');
   });
 });

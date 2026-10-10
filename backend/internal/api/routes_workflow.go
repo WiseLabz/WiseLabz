@@ -11,6 +11,7 @@ import (
 // views. It must be called on an already-authenticated group.
 func mountWorkflowRoutes(r chi.Router, d routerDeps) {
 	r.Get("/entities/{id}", d.entityH.Get)
+	r.Get("/entities/{id}/backlinks", d.entityH.Backlinks)
 
 	// Overrides are returned unfiltered by the store, so every route is
 	// instance-admin only.

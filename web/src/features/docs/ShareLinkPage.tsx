@@ -99,7 +99,11 @@ export function ShareLinkPage() {
           ) : (
             <Panel className="p-6">
               <h1 className="mb-4 font-mono text-lg font-semibold text-ink">{doc.data.title}</h1>
-              <Markdown source={doc.data.content} attachments={doc.data.attachments} />
+              <Markdown
+                source={doc.data.content}
+                attachments={doc.data.attachments}
+                internalLinks={false}
+              />
             </Panel>
           )}
         </section>

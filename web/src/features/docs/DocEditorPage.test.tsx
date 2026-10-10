@@ -141,6 +141,35 @@ describe('DocEditorPage', () => {
     }
   });
 
+  it('replaces the editor buffer with server-resolved content and displays link warnings', async () => {
+    const canonical = {
+      ...docs['doc-pve1'],
+      content: '[pve1](/entities/entity-1)',
+      currentVersion: docs['doc-pve1'].currentVersion + 1,
+    };
+    server.use(
+      http.put('*/docs/:docId', () =>
+        HttpResponse.json({ ...canonical, linkWarnings: ['No match for [[missing]]'] })
+      )
+    );
+    const { client, editor } = await renderEditor();
+    await startEditing();
+    fireEvent.change(editor, { target: { value: '[[missing]]' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(editor).toHaveValue(canonical.content));
+    expect(await screen.findByText('No match for [[missing]]')).toBeInTheDocument();
+
+    act(() =>
+      client.setQueryData(getGetDocsDocIdQueryKey('doc-pve1'), {
+        ...canonical,
+        content: '# Remote after save',
+        currentVersion: canonical.currentVersion + 1,
+      })
+    );
+    expect(await screen.findByRole('button', { name: 'Load latest' })).toBeInTheDocument();
+  });
+
   it('keeps server updates clean and loads a new editing baseline only on request', async () => {
     const { client, editor } = await renderEditor();
     const original = { ...docs['doc-pve1'] };

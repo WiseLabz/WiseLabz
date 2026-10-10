@@ -2,21 +2,21 @@
 
 ## 1. Index and resolver
 
-- [ ] 1.1 Migration `000069_doc_links` for postgres and sqlite (up and down) with cascade and target index.
-- [ ] 1.2 Package `doclink` with `Extract` and `Resolve`; move the code-skipping scanner out of `docimport` and reuse it there; unit tests.
-- [ ] 1.3 Store index sync in `CreateDoc`, `UpdateDocWithVersion`, `UpdateDoc`, startup backfill, and lookups by title, display name and kind/ref; tests per writer and cascade.
+- [x] 1.1 Migration `000069_doc_links` for postgres and sqlite (up and down) with cascade and target index.
+- [x] 1.2 Package `doclink` with `Extract` and `Resolve`; move the code-skipping scanner out of `docimport` and reuse it there; unit tests.
+- [x] 1.3 Store index sync in `CreateDoc`, `UpdateDocWithVersion`, `UpdateDoc`, startup backfill, and lookups by title, display name and kind/ref; tests per writer and cascade.
 
 ## 2. API
 
-- [ ] 2.1 Resolve wikilinks in the save handler (and creation with content) under the saver's visibility; return `linkWarnings`.
-- [ ] 2.2 `GET /api/docs/{id}/backlinks` and `GET /api/entities/{id}/backlinks` with visibility tests; OpenAPI, regenerated client, `TestOpenAPIMatchesRouter` green.
-- [ ] 2.3 Lab Book HTML drops `/entities/` destinations.
+- [x] 2.1 Resolve wikilinks in the save handler (and creation with content) under the saver's visibility; return `linkWarnings`.
+- [x] 2.2 `GET /api/docs/{id}/backlinks` and `GET /api/entities/{id}/backlinks` with visibility tests; OpenAPI, regenerated client, `TestOpenAPIMatchesRouter` green.
+- [x] 2.3 Lab Book HTML drops `/entities/` destinations.
 
 ## 3. Web
 
-- [ ] 3.1 Router links for internal hrefs in `Markdown.tsx` (not on share pages).
-- [ ] 3.2 "Referenced by" panel on the doc page and entity detail page.
-- [ ] 3.3 `[[` completion in the doc editor; buffer replaced by saved content, warnings shown; en and pt-BR strings; vitest.
+- [x] 3.1 Router links for internal hrefs in `Markdown.tsx` (not on share pages).
+- [x] 3.2 "Referenced by" panel on the doc page and entity detail page.
+- [x] 3.3 `[[` completion in the doc editor; buffer replaced by saved content, warnings shown; en and pt-BR strings; vitest.
 
 ## 4. Delivery
 

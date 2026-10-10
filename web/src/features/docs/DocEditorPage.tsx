@@ -16,6 +16,7 @@ import { skipToken, useMutation, useQuery, useQueryClient } from '@tanstack/reac
 import { isAxiosError } from 'axios';
 import CodeMirror from '@uiw/react-codemirror';
 import { markdown } from '@codemirror/lang-markdown';
+import { autocompletion } from '@codemirror/autocomplete';
 import { EditorView } from '@codemirror/view';
 import {
   useGetDocsDocId,
@@ -42,6 +43,7 @@ import { Skeleton, SkeletonRows, ErrorState } from '../../components/ui/states';
 import { AttachmentsPanel } from '../../components/docs/AttachmentsPanel';
 import { attachmentUpload, attachmentQueryOptions } from '../../components/docs/attachmentUpload';
 import { Markdown } from '../../components/docs/Markdown';
+import { wikilinkCompletion } from '../../components/docs/wikilinkCompletion';
 import { genBlockHighlight } from '../../components/docs/genBlockHighlight';
 import { DocDiff } from '../../components/diff/DiffViewer';
 import { toast } from '../../lib/toast';
@@ -125,7 +127,7 @@ function DocEditor() {
   const [lockHeld, setLockHeld] = useState(false);
   // State (not refs) so `newerAvailable` can derive from them during render.
   const [baseVersion, setBaseVersion] = useState<number | null>(null);
-  const [justSaved, setJustSaved] = useState(false);
+  const [linkWarnings, setLinkWarnings] = useState<string[]>([]);
   const lockAcquiredRef = useRef(false);
   const mountedRef = useRef(true);
 
@@ -175,18 +177,25 @@ function DocEditor() {
         baseVersion: baseVersion ?? undefined,
         trigger: provenance === 'ai-draft' ? 'ai' : 'manual',
       }),
-    onSuccess: (updated) => {
-      setJustSaved(true);
+    onSuccess: (response) => {
+      const updated = response;
+      const warnings = updated.linkWarnings ?? [];
+      setDraft(updated.content);
+      setBaseContent(updated.content);
+      setLinkWarnings(warnings);
       setBaseVersion(updated.currentVersion);
-      if (lockAcquiredRef.current) {
+      if (warnings.length === 0 && lockAcquiredRef.current) {
         postDocsDocIdLockRelease(docId).catch(() => {});
         lockAcquiredRef.current = false;
       }
       queryClient.invalidateQueries({ queryKey: getGetDocsDocIdQueryKey(docId) });
       queryClient.invalidateQueries({ queryKey: getGetDocsDocIdVersionsQueryKey(docId) });
       queryClient.invalidateQueries({ queryKey: getGetDocsTreeQueryKey() });
+      queryClient.invalidateQueries({
+        predicate: (query) => String(query.queryKey[0]).endsWith('/backlinks'),
+      });
       toast.success(t('docs.editor.saved', { version: updated.currentVersion }));
-      navigate(`/docs/${docId}`);
+      if (warnings.length === 0) navigate(`/docs/${docId}`);
     },
     onError: (error) => {
       // Stale baseVersion: server rejected with 409, current doc is untouched.
@@ -208,9 +217,9 @@ function DocEditor() {
     onError: () => toast.error(t('docs.editor.aiError')),
   });
 
-  // A newer version landed (e.g. a regen) while editing and it isn't our own save.
+  // A newer version landed (e.g. a regen) while editing.
   const newerAvailable =
-    doc.data != null && baseVersion != null && doc.data.currentVersion > baseVersion && !justSaved;
+    doc.data != null && baseVersion != null && doc.data.currentVersion > baseVersion;
 
   const lockedByOther = !!docLock && docLock.userId !== userId;
   const acquireLock = useMutation({
@@ -261,6 +270,10 @@ function DocEditor() {
   const extensions = useMemo(
     () => [
       markdown(),
+      autocompletion({
+        activateOnTyping: true,
+        override: [wikilinkCompletion],
+      }),
       attachmentUpload(docId, {
         enabled: () => canEdit,
         complete: () => {
@@ -427,6 +440,20 @@ function DocEditor() {
           >
             {t('docs.editor.loadLatest')}
           </button>
+        </div>
+      )}
+
+      {linkWarnings.length > 0 && (
+        <div
+          role="status"
+          className="mb-4 rounded-md border border-warn bg-warn-tint px-3 py-2 text-xs text-warn"
+        >
+          <p className="mb-1 font-medium">{t('docs.editor.linkWarnings')}</p>
+          <ul className="list-disc space-y-1 pl-4">
+            {linkWarnings.map((warning, index) => (
+              <li key={`${warning}:${index}`}>{warning}</li>
+            ))}
+          </ul>
         </div>
       )}
 

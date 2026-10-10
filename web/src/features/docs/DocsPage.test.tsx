@@ -15,6 +15,9 @@ vi.mock('../../api/generated/docs/docs', () => ({
     refetch: vi.fn(),
   }),
 }));
+vi.mock('../../components/docs/ReferencedByPanel', () => ({
+  ReferencedByPanel: () => <div data-testid="referenced-by" />,
+}));
 
 afterEach(cleanup);
 

@@ -42,7 +42,12 @@ func TestAuditScopeMigrationsBackfillUpDownUp(t *testing.T) {
 			{ID: "doc", Title: "Scoped", Kind: "service", ServiceID: a, Origin: DocOriginHuman},
 			{ID: "lab-doc", Title: "Lab", Kind: "service", Origin: DocOriginHuman},
 		} {
-			if err := s.CreateDoc(ctx, &doc); err != nil {
+			// Seed the historical schema directly: the current writer also needs
+			// doc_links, which is deliberately rolled back in this test.
+			if err := migrationExec(t, s.rawDB, s.driver, `INSERT INTO docs
+                (id, title, kind, service_id, origin, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, '2026-01-01', '2026-01-01')`,
+				doc.ID, doc.Title, doc.Kind, nilToStr(doc.ServiceID), doc.Origin); err != nil {
 				t.Fatal(err)
 			}
 		}

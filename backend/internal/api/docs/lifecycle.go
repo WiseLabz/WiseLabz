@@ -96,9 +96,14 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	content, warnings, err := h.resolveLinks(r, req.Content)
+	if err != nil {
+		httputil.Errorf(w, err)
+		return
+	}
 	d := &store.DocRecord{
 		Title: req.Title, ServiceID: req.ServiceID, ParentID: req.ParentID,
-		Content: req.Content, CreatedBy: auth.UserIDFromContext(r.Context()),
+		Content: content, CreatedBy: auth.UserIDFromContext(r.Context()),
 		Origin: store.DocOriginHuman,
 	}
 	if err := h.Store.CreateHumanDoc(r.Context(), d); err != nil {
@@ -106,7 +111,10 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.SyncEmbeddings(r.Context(), d.ID, d.Content)
-	httputil.JSON(w, http.StatusCreated, d)
+	httputil.JSON(w, http.StatusCreated, struct {
+		*store.DocRecord
+		LinkWarnings []string `json:"linkWarnings"`
+	}{DocRecord: d, LinkWarnings: warnings})
 }
 
 // Patch handles metadata changes on an active doc.

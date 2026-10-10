@@ -8,7 +8,7 @@
  */
 import { faker } from '@faker-js/faker';
 
-import type { EntityDetail, EntityOverride, SearchResults } from '../../model';
+import type { DocBacklink, EntityDetail, EntityOverride, SearchResults } from '../../model';
 
 export const getGetSearchResponseMock = (
   overrideResponse: Partial<Extract<SearchResults, object>> = {}
@@ -223,6 +223,12 @@ export const getGetEntitiesIdResponseMock = (
   ),
   ...overrideResponse,
 });
+
+export const getGetEntitiesIdBacklinksResponseMock = (): DocBacklink[] =>
+  Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() => ({
+    id: faker.string.uuid(),
+    title: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  }));
 
 export const getGetEntityOverridesResponseMock = (): EntityOverride[] =>
   Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() => ({

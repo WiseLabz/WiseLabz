@@ -30,6 +30,8 @@ export interface Doc {
   /** Template the doc is rendered through on sync; empty for the plain snapshot render */
   templateId?: string;
   attachments?: DocAttachment[];
+  /** Unresolved or ambiguous wikilinks kept as text during creation or save; content contains resolved Markdown links. */
+  linkWarnings?: string[];
   /** RFC3339 time sync last merged this doc; empty if never */
   lastSyncedAt?: string;
 }

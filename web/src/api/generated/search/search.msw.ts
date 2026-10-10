@@ -9,10 +9,11 @@
 import { HttpResponse, http } from 'msw';
 import type { RequestHandlerOptions } from 'msw';
 
-import type { EntityDetail, EntityOverride, SearchResults } from '../../model';
+import type { DocBacklink, EntityDetail, EntityOverride, SearchResults } from '../../model';
 
 import {
   getDeleteEntityOverridesIdResponseMock,
+  getGetEntitiesIdBacklinksResponseMock,
   getGetEntitiesIdResponseMock,
   getGetEntityOverridesResponseMock,
   getGetSearchResponseMock,
@@ -22,6 +23,7 @@ import {
 export {
   getGetSearchResponseMock,
   getGetEntitiesIdResponseMock,
+  getGetEntitiesIdBacklinksResponseMock,
   getGetEntityOverridesResponseMock,
   getPostEntityOverridesResponseMock,
   getDeleteEntityOverridesIdResponseMock,
@@ -68,6 +70,30 @@ export const getGetEntitiesIdMockHandler = (
             ? await overrideResponse(info)
             : overrideResponse
           : getGetEntitiesIdResponseMock(),
+        { status: 200 }
+      );
+    },
+    options
+  );
+};
+
+export const getGetEntitiesIdBacklinksMockHandler = (
+  overrideResponse?:
+    | DocBacklink[]
+    | ((
+        info: Parameters<Parameters<typeof http.get>[1]>[0]
+      ) => Promise<DocBacklink[]> | DocBacklink[]),
+  options?: RequestHandlerOptions
+) => {
+  return http.get(
+    '*/entities/:id/backlinks',
+    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+      return HttpResponse.json(
+        overrideResponse !== undefined
+          ? typeof overrideResponse === 'function'
+            ? await overrideResponse(info)
+            : overrideResponse
+          : getGetEntitiesIdBacklinksResponseMock(),
         { status: 200 }
       );
     },
@@ -149,6 +175,7 @@ export const getDeleteEntityOverridesIdMockHandler = (
 export const getSearchMock = () => [
   getGetSearchMockHandler(),
   getGetEntitiesIdMockHandler(),
+  getGetEntitiesIdBacklinksMockHandler(),
   getGetEntityOverridesMockHandler(),
   getPostEntityOverridesMockHandler(),
   getDeleteEntityOverridesIdMockHandler(),

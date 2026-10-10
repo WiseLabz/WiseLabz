@@ -28,6 +28,7 @@ import type {
   BadRequestResponse,
   Doc,
   DocAttachment,
+  DocBacklink,
   DocCreate,
   DocEditProposal,
   DocEditProposalPage,
@@ -1393,6 +1394,140 @@ export const useDeleteDocsDocId = <
 > => {
   return useMutation(getDeleteDocsDocIdMutationOptions(options), queryClient);
 };
+/**
+ * Returns only active source docs the reader may view. Entity targets include links to identities merged into the current identity. Not available on share routes.
+ * @summary List visible docs referencing this doc
+ */
+export const getDocsDocIdBacklinks = (
+  docId: string,
+  options?: SecondParameter<typeof customInstance>,
+  signal?: AbortSignal
+) => {
+  return customInstance<DocBacklink[]>(
+    { url: `/docs/${docId}/backlinks`, method: 'GET', signal },
+    options
+  );
+};
+
+export const getGetDocsDocIdBacklinksQueryKey = (docId: string) => {
+  return [`/docs/${docId}/backlinks`] as const;
+};
+
+export const getGetDocsDocIdBacklinksQueryOptions = <
+  TData = Awaited<ReturnType<typeof getDocsDocIdBacklinks>>,
+  TError = ErrorType<Error>,
+>(
+  docId: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getDocsDocIdBacklinks>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  }
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetDocsDocIdBacklinksQueryKey(docId);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getDocsDocIdBacklinks>>> = ({ signal }) =>
+    getDocsDocIdBacklinks(docId, requestOptions, signal);
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: docId !== null && docId !== undefined,
+    ...queryOptions,
+  } as UseQueryOptions<Awaited<ReturnType<typeof getDocsDocIdBacklinks>>, TError, TData> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+};
+
+export type GetDocsDocIdBacklinksQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getDocsDocIdBacklinks>>
+>;
+export type GetDocsDocIdBacklinksQueryError = ErrorType<Error>;
+
+export function useGetDocsDocIdBacklinks<
+  TData = Awaited<ReturnType<typeof getDocsDocIdBacklinks>>,
+  TError = ErrorType<Error>,
+>(
+  docId: string,
+  options: {
+    query: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getDocsDocIdBacklinks>>, TError, TData>
+    > &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getDocsDocIdBacklinks>>,
+          TError,
+          Awaited<ReturnType<typeof getDocsDocIdBacklinks>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useGetDocsDocIdBacklinks<
+  TData = Awaited<ReturnType<typeof getDocsDocIdBacklinks>>,
+  TError = ErrorType<Error>,
+>(
+  docId: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getDocsDocIdBacklinks>>, TError, TData>
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getDocsDocIdBacklinks>>,
+          TError,
+          Awaited<ReturnType<typeof getDocsDocIdBacklinks>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useGetDocsDocIdBacklinks<
+  TData = Awaited<ReturnType<typeof getDocsDocIdBacklinks>>,
+  TError = ErrorType<Error>,
+>(
+  docId: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getDocsDocIdBacklinks>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * @summary List visible docs referencing this doc
+ */
+
+export function useGetDocsDocIdBacklinks<
+  TData = Awaited<ReturnType<typeof getDocsDocIdBacklinks>>,
+  TError = ErrorType<Error>,
+>(
+  docId: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getDocsDocIdBacklinks>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getGetDocsDocIdBacklinksQueryOptions(docId, options);
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
 /**
  * @summary List doc attachments with fifteen-minute signed URLs (viewer)
  */

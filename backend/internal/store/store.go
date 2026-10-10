@@ -134,7 +134,7 @@ func (s *Store) WithinTransaction(ctx context.Context, fn func(*Store) error) er
 	if postgres {
 		storeDB = pgTransactionDB{transactionDB{Tx: tx}}
 	}
-	if err := fn(&Store{db: storeDB}); err != nil {
+	if err := fn(&Store{db: storeDB, driver: s.driver}); err != nil {
 		return err
 	}
 	if err := tx.Commit(); err != nil {
@@ -229,5 +229,5 @@ func (s *Store) Init(ctx context.Context, adminPassword string) error {
 		}
 	}
 
-	return nil
+	return s.BackfillDocLinks(ctx)
 }

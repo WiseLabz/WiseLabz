@@ -149,6 +149,29 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
+  /entities/{id}/backlinks:
+    get:
+      tags: [search]
+      summary: List visible docs referencing this entity
+      description: Returns only active source docs the reader may view. Entity targets include links to identities merged into the current identity. Not available on share routes.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Visible source docs
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/DocBacklink' }
+        '404':
+          description: Target not found or not visible
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
   /entity-overrides:
     get:
       tags: [search]
@@ -2390,6 +2413,29 @@ paths:
         '204': { description: Subtree moved to trash }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+  /docs/{docId}/backlinks:
+    get:
+      tags: [docs]
+      summary: List visible docs referencing this doc
+      description: Returns only active source docs the reader may view. Entity targets include links to identities merged into the current identity. Not available on share routes.
+      parameters:
+        - in: path
+          name: docId
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Visible source docs
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/DocBacklink' }
+        '404':
+          description: Target not found or not visible
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
   /docs/{docId}/attachments:
     parameters: [{ $ref: '#/components/parameters/DocId' }]
     get:
@@ -6362,6 +6408,10 @@ components:
         attachments:
           type: array
           items: { $ref: '#/components/schemas/DocAttachment' }
+        linkWarnings:
+          type: array
+          items: { type: string }
+          description: Unresolved or ambiguous wikilinks kept as text during creation or save; content contains resolved Markdown links.
         lastSyncedAt: { type: string, description: 'RFC3339 time sync last merged this doc; empty if never' }
     ResolveDocChange:
       type: object
@@ -6377,6 +6427,12 @@ components:
         userName: { type: string, description: "Holder display name (username fallback)" }
         acquiredAt: { type: string, format: date-time }
         expiresAt: { type: string, format: date-time }
+    DocBacklink:
+      type: object
+      required: [id, title]
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: string }
     DocSave:
       type: object
       required: [content]
