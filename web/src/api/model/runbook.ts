@@ -10,6 +10,8 @@ import type { RunbookStep } from './runbookStep';
 import type { RunbookTargetType } from './runbookTargetType';
 
 export interface Runbook {
+  /** Require a different eligible operator before a whole run can execute */
+  requiresApproval?: boolean;
   id: string;
   title: string;
   body: string;

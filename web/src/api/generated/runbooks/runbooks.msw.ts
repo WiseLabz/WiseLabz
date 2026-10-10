@@ -242,6 +242,42 @@ export const getGetRunbookRunMockHandler = (
   );
 };
 
+export const getApproveRunbookRunMockHandler = (
+  overrideResponse?:
+    void | ((info: Parameters<Parameters<typeof http.post>[1]>[0]) => Promise<void> | void),
+  options?: RequestHandlerOptions
+) => {
+  return http.post(
+    '*/runbook-runs/:runId/approve',
+    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+      if (typeof overrideResponse === 'function') {
+        await overrideResponse(info);
+      }
+
+      return new HttpResponse(null, { status: 204 });
+    },
+    options
+  );
+};
+
+export const getRejectRunbookRunMockHandler = (
+  overrideResponse?:
+    void | ((info: Parameters<Parameters<typeof http.post>[1]>[0]) => Promise<void> | void),
+  options?: RequestHandlerOptions
+) => {
+  return http.post(
+    '*/runbook-runs/:runId/reject',
+    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+      if (typeof overrideResponse === 'function') {
+        await overrideResponse(info);
+      }
+
+      return new HttpResponse(null, { status: 204 });
+    },
+    options
+  );
+};
+
 export const getConfirmRunbookRunStepMockHandler = (
   overrideResponse?:
     void | ((info: Parameters<Parameters<typeof http.post>[1]>[0]) => Promise<void> | void),
@@ -311,6 +347,8 @@ export const getRunbooksMock = () => [
   getStartRunbookRunMockHandler(),
   getListRunbookRunsMockHandler(),
   getGetRunbookRunMockHandler(),
+  getApproveRunbookRunMockHandler(),
+  getRejectRunbookRunMockHandler(),
   getConfirmRunbookRunStepMockHandler(),
   getResumeRunbookRunMockHandler(),
   getCancelRunbookRunMockHandler(),

@@ -771,10 +771,14 @@ func importRunbooks(ctx context.Context, s *store.Store, runbooks []store.Runboo
 			res.RunbookSteps.Skipped += len(stepsByRunbook[runbook.ID])
 			continue
 		}
+		requiresApproval := 0
+		if runbook.RequiresApproval {
+			requiresApproval = 1
+		}
 		if _, err := s.DB().ExecContext(ctx, `
-			INSERT INTO runbooks (id, title, body, target_type, target_value, snapshot_id, doc_id, created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-		`, runbook.ID, runbook.Title, runbook.Body, runbook.TargetType, runbook.TargetValue, nil, runbook.DocID, runbook.CreatedAt, runbook.UpdatedAt); err != nil {
+			INSERT INTO runbooks (id, title, body, target_type, target_value, snapshot_id, doc_id, requires_approval, created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		`, runbook.ID, runbook.Title, runbook.Body, runbook.TargetType, runbook.TargetValue, nil, runbook.DocID, requiresApproval, runbook.CreatedAt, runbook.UpdatedAt); err != nil {
 			return fmt.Errorf("import runbook %q: %w", runbook.ID, err)
 		}
 		res.Runbooks.Imported++

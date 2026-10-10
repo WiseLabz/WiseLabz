@@ -4,7 +4,9 @@ package main
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -34,6 +36,7 @@ import (
 	"github.com/WiseLabz/wiselabz/internal/notifications"
 	"github.com/WiseLabz/wiselabz/internal/quality"
 	"github.com/WiseLabz/wiselabz/internal/report"
+	"github.com/WiseLabz/wiselabz/internal/runbookrun"
 	"github.com/WiseLabz/wiselabz/internal/scheduler"
 	"github.com/WiseLabz/wiselabz/internal/store"
 	"github.com/WiseLabz/wiselabz/internal/sync"
@@ -369,6 +372,13 @@ func registerJobs(
 		logger.Error("Failed to add alert expirer job", "error", err)
 		os.Exit(1)
 	}
+	approvalExpirer := runbookrun.New(runbookrun.Deps{Store: s, Events: wsHub})
+	if _, err := jobRunner.AddJob("runbookApprovalExpirer", "0 * * * * *", func(jobCtx context.Context) error {
+		return expireRunbookApprovalsOnce(jobCtx, s, approvalExpirer, logger)
+	}); err != nil {
+		logger.Error("Failed to add runbook approval expirer job", "error", err)
+		os.Exit(1)
+	}
 
 	// Unlike the backup job itself (registered by api.NewRouter via
 	// InitBackupJob, since its schedule is operator-configurable through
@@ -470,6 +480,28 @@ func expireAlertsOnce(ctx context.Context, s *store.Store, d *notifications.Disp
 	if n > 0 {
 		logger.Info("un-snoozed expired alerts", "count", n)
 		d.NotifyAlertsCreated(ctx, expired)
+	}
+	return nil
+}
+
+// expireRunbookApprovalsOnce expires requests using their separate retention
+// window and publishes run updates through the executor.
+func expireRunbookApprovalsOnce(ctx context.Context, s *store.Store, executor *runbookrun.Executor, logger *slog.Logger) error {
+	settings, err := s.GetRetentionSettings(ctx)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("read runbook approval retention: %w", err)
+	}
+	hours := store.DefaultRunbookApprovalHours
+	if err == nil && settings.RunbookApprovalHours > 0 {
+		hours = settings.RunbookApprovalHours
+	}
+	before := time.Now().UTC().Add(-time.Duration(hours) * time.Hour).Format(time.RFC3339)
+	expired, err := executor.ExpireApprovals(ctx, before)
+	if err != nil {
+		return err
+	}
+	if len(expired) > 0 {
+		logger.Info("Expired runbook approval requests", "count", len(expired))
 	}
 	return nil
 }

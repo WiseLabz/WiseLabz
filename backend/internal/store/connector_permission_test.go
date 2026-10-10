@@ -49,6 +49,100 @@ func TestUserHasConnectorRoleDefaultDeny(t *testing.T) {
 	}
 }
 
+func TestEligibleRunbookApproversRequireOperatorOnEveryDistinctConnector(t *testing.T) {
+	s := newDocTestStore(t)
+	ctx := context.Background()
+	connectorA := newTestConnector(t, s, "approval-connector-a")
+	connectorB := newTestConnector(t, s, "approval-connector-b")
+	initiator := newTestUser(t, s, "approval-initiator")
+	eligible := newTestUser(t, s, "approval-eligible")
+	partial := newTestUser(t, s, "approval-partial")
+	viewer := newTestUser(t, s, "approval-viewer")
+	disabled := newTestUser(t, s, "approval-disabled")
+
+	for _, connectorID := range []string{connectorA.ID, connectorB.ID} {
+		if _, err := s.UpsertConnectorGrant(ctx, initiator.ID, connectorID, "operator"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := s.UpsertConnectorGrant(ctx, eligible.ID, connectorA.ID, "operator"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.SyncOIDCConnectorGrants(ctx, eligible.ID, map[string]string{connectorA.ID: "operator"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.UpsertConnectorGrant(ctx, eligible.ID, connectorB.ID, "operator"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.UpsertConnectorGrant(ctx, partial.ID, connectorA.ID, "operator"); err != nil {
+		t.Fatal(err)
+	}
+	for _, connectorID := range []string{connectorA.ID, connectorB.ID} {
+		if _, err := s.UpsertConnectorGrant(ctx, viewer.ID, connectorID, "viewer"); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := s.UpsertConnectorGrant(ctx, disabled.ID, connectorID, "operator"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := s.UpdateUser(ctx, disabled.ID, map[string]any{"disabled": true}); err != nil {
+		t.Fatal(err)
+	}
+
+	ids, err := s.EligibleRunbookApprovers(ctx, []string{connectorA.ID, connectorA.ID, connectorB.ID}, initiator.ID)
+	if err != nil {
+		t.Fatalf("EligibleRunbookApprovers(): %v", err)
+	}
+	if !slices.Equal(ids, []string{eligible.ID}) {
+		t.Fatalf("eligible approvers = %v; want only full-grant user %s", ids, eligible.ID)
+	}
+}
+
+func TestEligibleRunbookApproversManualOnlyFallback(t *testing.T) {
+	s := newDocTestStore(t)
+	ctx := context.Background()
+	initiator := newTestUser(t, s, "manual-approval-initiator")
+	admin := &User{Username: "manual-approval-admin", InstanceAdminRole: "admin"}
+	if err := s.CreateUser(ctx, admin); err != nil {
+		t.Fatal(err)
+	}
+	operator := newTestUser(t, s, "manual-approval-operator")
+	viewer := newTestUser(t, s, "manual-approval-viewer")
+	orphanOperator := newTestUser(t, s, "manual-approval-orphan-operator")
+	disabledAdmin := &User{Username: "manual-approval-disabled-admin", InstanceAdminRole: "admin", Disabled: true}
+	if err := s.CreateUser(ctx, disabledAdmin); err != nil {
+		t.Fatal(err)
+	}
+	connector := newTestConnector(t, s, "manual-approval-connector")
+	if _, err := s.UpsertConnectorGrant(ctx, operator.ID, connector.ID, "operator"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.UpsertConnectorGrant(ctx, viewer.ID, connector.ID, "viewer"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.UpsertConnectorGrant(ctx, initiator.ID, connector.ID, "operator"); err != nil {
+		t.Fatal(err)
+	}
+	if s.driver == "sqlite" {
+		if _, err := s.db.ExecContext(ctx, `
+			INSERT INTO user_connector_roles (id, user_id, connector_id, role, source, created_at, updated_at)
+			VALUES ('orphan-approval-grant', ?, 'missing-connector', 'operator', 'manual', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')
+		`, orphanOperator.ID); err != nil {
+			t.Fatalf("insert orphan connector grant: %v", err)
+		}
+	}
+
+	ids, err := s.EligibleRunbookApprovers(ctx, nil, initiator.ID)
+	if err != nil {
+		t.Fatalf("EligibleRunbookApprovers(manual-only): %v", err)
+	}
+	want := []string{admin.ID, operator.ID}
+	slices.Sort(want)
+	if !slices.Equal(ids, want) {
+		t.Fatalf("manual-only eligible approvers = %v; want enabled admin/operator users %v", ids, want)
+	}
+}
+
 func TestUserHasConnectorRoleHierarchy(t *testing.T) {
 	s := newDocTestStore(t)
 	ctx := context.Background()

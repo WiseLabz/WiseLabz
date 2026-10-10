@@ -164,6 +164,9 @@ func TestGetRetentionSettingsDefault(t *testing.T) {
 	if resp["runbookRunDays"] != float64(store.DefaultRunbookRunDays) {
 		t.Errorf("runbookRunDays = %v, want %d", resp["runbookRunDays"], store.DefaultRunbookRunDays)
 	}
+	if resp["runbookApprovalHours"] != float64(store.DefaultRunbookApprovalHours) {
+		t.Errorf("runbookApprovalHours = %v, want %d", resp["runbookApprovalHours"], store.DefaultRunbookApprovalHours)
+	}
 }
 
 // assertFieldError fails unless body is an error response with the given code
@@ -243,6 +246,19 @@ func TestUpdateRetentionSettings(t *testing.T) {
 		}
 	})
 
+	t.Run("runbook approval hours bounds", func(t *testing.T) {
+		for _, hours := range []int{0, -5, 8761} {
+			body := fmt.Sprintf(`{"cronExpr":"0 0 * * *","runbookApprovalHours":%d}`, hours)
+			req := httptest.NewRequest(http.MethodPut, "/api/system/settings/retention", strings.NewReader(body))
+			rr := httptest.NewRecorder()
+			h.UpdateRetentionSettings(rr, req)
+			if rr.Code != http.StatusBadRequest {
+				t.Fatalf("hours=%d: status = %d, want 400; body=%s", hours, rr.Code, rr.Body.String())
+			}
+			assertFieldError(t, rr.Body.Bytes(), "invalid_hours", "runbookApprovalHours")
+		}
+	})
+
 	t.Run("runbook run days bounds", func(t *testing.T) {
 		for _, days := range []int{-1, 3651} {
 			body := fmt.Sprintf(`{"cronExpr":"0 0 * * *","runbookRunDays":%d}`, days)
@@ -257,7 +273,7 @@ func TestUpdateRetentionSettings(t *testing.T) {
 	})
 
 	t.Run("runbook run days zero keeps forever", func(t *testing.T) {
-		body := `{"cronExpr":"0 0 * * *","runbookRunDays":0,"runbookOpenRunHours":12}`
+		body := `{"cronExpr":"0 0 * * *","runbookRunDays":0,"runbookOpenRunHours":12,"runbookApprovalHours":6}`
 		req := httptest.NewRequest(http.MethodPut, "/api/system/settings/retention", strings.NewReader(body))
 		rr := httptest.NewRecorder()
 		h.UpdateRetentionSettings(rr, req)
@@ -273,6 +289,9 @@ func TestUpdateRetentionSettings(t *testing.T) {
 		}
 		if resp["runbookOpenRunHours"] != float64(12) {
 			t.Errorf("runbookOpenRunHours = %v, want 12", resp["runbookOpenRunHours"])
+		}
+		if resp["runbookApprovalHours"] != float64(6) {
+			t.Errorf("runbookApprovalHours = %v, want 6", resp["runbookApprovalHours"])
 		}
 	})
 
@@ -324,7 +343,7 @@ func TestUpdateRetentionSettings(t *testing.T) {
 				t.Fatalf("status = %d, want %d; body=%s", rr.Code, http.StatusOK, rr.Body.String())
 			}
 		}
-		put(`{"cronExpr":"0 0 * * *","runbookOpenRunHours":48,"runbookRunDays":180}`)
+		put(`{"cronExpr":"0 0 * * *","runbookOpenRunHours":48,"runbookRunDays":180,"runbookApprovalHours":6}`)
 		put(`{"cronExpr":"0 0 * * *","snapshotDays":45}`)
 		rs, err := h.Store.GetRetentionSettings(t.Context())
 		if err != nil {
@@ -333,8 +352,8 @@ func TestUpdateRetentionSettings(t *testing.T) {
 		if rs.SnapshotDays != 45 {
 			t.Fatalf("SnapshotDays = %d, want 45", rs.SnapshotDays)
 		}
-		if rs.RunbookOpenRunHours != 48 || rs.RunbookRunDays != 180 {
-			t.Fatalf("runbook run settings = %d hours / %d days, want 48 / 180", rs.RunbookOpenRunHours, rs.RunbookRunDays)
+		if rs.RunbookOpenRunHours != 48 || rs.RunbookRunDays != 180 || rs.RunbookApprovalHours != 6 {
+			t.Fatalf("runbook settings = %d open hours / %d days / %d approval hours, want 48 / 180 / 6", rs.RunbookOpenRunHours, rs.RunbookRunDays, rs.RunbookApprovalHours)
 		}
 	})
 }
@@ -345,7 +364,7 @@ func TestUpdateRetentionSettingsKeepsRunbookRunSettings(t *testing.T) {
 	if err := h.Store.UpsertRetentionSettings(ctx, store.RetentionSettings{
 		SnapshotDays: 90, DocVersionDays: 365, AlertDays: 180, SyncRunDays: 90, AuditDays: 180,
 		HealthCheckDays: 90, ReportDays: 90, DeletedDocsDays: 30, CronExpr: "0 0 * * *",
-		RunbookOpenRunHours: 48, RunbookRunDays: 30,
+		RunbookOpenRunHours: 48, RunbookRunDays: 30, RunbookApprovalHours: 36,
 	}); err != nil {
 		t.Fatalf("UpsertRetentionSettings() error: %v", err)
 	}
@@ -364,8 +383,8 @@ func TestUpdateRetentionSettingsKeepsRunbookRunSettings(t *testing.T) {
 	if rs.SnapshotDays != 30 || rs.CronExpr != "0 1 * * *" {
 		t.Fatalf("settings not updated: %+v", rs)
 	}
-	if rs.RunbookOpenRunHours != 48 || rs.RunbookRunDays != 30 {
-		t.Fatalf("runbook run settings = %d hours / %d days, want 48 / 30", rs.RunbookOpenRunHours, rs.RunbookRunDays)
+	if rs.RunbookOpenRunHours != 48 || rs.RunbookRunDays != 30 || rs.RunbookApprovalHours != 36 {
+		t.Fatalf("runbook settings = %d open hours / %d days / %d approval hours, want 48 / 30 / 36", rs.RunbookOpenRunHours, rs.RunbookRunDays, rs.RunbookApprovalHours)
 	}
 }
 

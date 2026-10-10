@@ -13,5 +13,8 @@ export interface RunbookRunPreview {
   id: string;
   /** False when empty or any step is blocked */
   canStart: boolean;
+  requiresApproval: boolean;
+  /** Another enabled operator can approve every frozen connector; true for ordinary runbooks */
+  approverAvailable: boolean;
   steps: RunbookRunStep[];
 }

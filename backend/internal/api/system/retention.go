@@ -28,49 +28,52 @@ func (h *Handler) GetRetentionSettings(w http.ResponseWriter, r *http.Request) {
 		// keep in sync with config.go retention defaults
 		slog.Warn("retention settings not found, returning default", "error", err)
 		rs = store.RetentionSettings{
-			SnapshotDays:        90,
-			DocVersionDays:      365,
-			AlertDays:           180,
-			SyncRunDays:         90,
-			AuditDays:           180,
-			HealthCheckDays:     90,
-			ReportDays:          90,
-			DeletedDocsDays:     30,
-			CronExpr:            "0 0 * * *",
-			RunbookOpenRunHours: store.DefaultRunbookOpenRunHours,
-			RunbookRunDays:      store.DefaultRunbookRunDays,
+			SnapshotDays:         90,
+			DocVersionDays:       365,
+			AlertDays:            180,
+			SyncRunDays:          90,
+			AuditDays:            180,
+			HealthCheckDays:      90,
+			ReportDays:           90,
+			DeletedDocsDays:      30,
+			CronExpr:             "0 0 * * *",
+			RunbookOpenRunHours:  store.DefaultRunbookOpenRunHours,
+			RunbookRunDays:       store.DefaultRunbookRunDays,
+			RunbookApprovalHours: store.DefaultRunbookApprovalHours,
 		}
 	}
 
 	httputil.JSON(w, http.StatusOK, map[string]any{
-		"snapshotDays":        rs.SnapshotDays,
-		"docVersionDays":      rs.DocVersionDays,
-		"alertDays":           rs.AlertDays,
-		"syncRunDays":         rs.SyncRunDays,
-		"auditDays":           rs.AuditDays,
-		"healthCheckDays":     rs.HealthCheckDays,
-		"reportDays":          rs.ReportDays,
-		"deletedDocsDays":     rs.DeletedDocsDays,
-		"runbookOpenRunHours": rs.RunbookOpenRunHours,
-		"runbookRunDays":      rs.RunbookRunDays,
-		"cronExpr":            rs.CronExpr,
-		"updatedAt":           rs.UpdatedAt,
+		"snapshotDays":         rs.SnapshotDays,
+		"docVersionDays":       rs.DocVersionDays,
+		"alertDays":            rs.AlertDays,
+		"syncRunDays":          rs.SyncRunDays,
+		"auditDays":            rs.AuditDays,
+		"healthCheckDays":      rs.HealthCheckDays,
+		"reportDays":           rs.ReportDays,
+		"deletedDocsDays":      rs.DeletedDocsDays,
+		"runbookOpenRunHours":  rs.RunbookOpenRunHours,
+		"runbookRunDays":       rs.RunbookRunDays,
+		"runbookApprovalHours": rs.RunbookApprovalHours,
+		"cronExpr":             rs.CronExpr,
+		"updatedAt":            rs.UpdatedAt,
 	})
 }
 
 // RetentionSettingsRequest is the request body for PUT /api/system/settings/retention.
 type RetentionSettingsRequest struct {
-	SnapshotDays        int    `json:"snapshotDays"`
-	DocVersionDays      int    `json:"docVersionDays"`
-	AlertDays           int    `json:"alertDays"`
-	SyncRunDays         int    `json:"syncRunDays"`
-	AuditDays           int    `json:"auditDays"`
-	HealthCheckDays     int    `json:"healthCheckDays"`
-	DeletedDocsDays     *int   `json:"deletedDocsDays"`
-	RunbookOpenRunHours *int   `json:"runbookOpenRunHours"`
-	RunbookRunDays      *int   `json:"runbookRunDays"`
-	ReportDays          int    `json:"reportDays"`
-	CronExpr            string `json:"cronExpr"`
+	SnapshotDays         int    `json:"snapshotDays"`
+	DocVersionDays       int    `json:"docVersionDays"`
+	AlertDays            int    `json:"alertDays"`
+	SyncRunDays          int    `json:"syncRunDays"`
+	AuditDays            int    `json:"auditDays"`
+	HealthCheckDays      int    `json:"healthCheckDays"`
+	DeletedDocsDays      *int   `json:"deletedDocsDays"`
+	RunbookOpenRunHours  *int   `json:"runbookOpenRunHours"`
+	RunbookRunDays       *int   `json:"runbookRunDays"`
+	RunbookApprovalHours *int   `json:"runbookApprovalHours"`
+	ReportDays           int    `json:"reportDays"`
+	CronExpr             string `json:"cronExpr"`
 }
 
 // UpdateRetentionSettings handles PUT /api/system/settings/retention. Operator-only.
@@ -99,10 +102,12 @@ func (h *Handler) UpdateRetentionSettings(w http.ResponseWriter, r *http.Request
 	deletedDays := 30
 	runbookOpenRunHours := store.DefaultRunbookOpenRunHours
 	runbookRunDays := store.DefaultRunbookRunDays
+	runbookApprovalHours := store.DefaultRunbookApprovalHours
 	current, currentErr := h.Store.GetRetentionSettings(r.Context())
 	if currentErr == nil {
 		runbookOpenRunHours = current.RunbookOpenRunHours
 		runbookRunDays = current.RunbookRunDays
+		runbookApprovalHours = current.RunbookApprovalHours
 	}
 	if req.DeletedDocsDays != nil {
 		deletedDays = *req.DeletedDocsDays
@@ -115,9 +120,16 @@ func (h *Handler) UpdateRetentionSettings(w http.ResponseWriter, r *http.Request
 	if req.RunbookRunDays != nil {
 		runbookRunDays = *req.RunbookRunDays
 	}
+	if req.RunbookApprovalHours != nil {
+		runbookApprovalHours = *req.RunbookApprovalHours
+	}
 
 	if runbookOpenRunHours < 1 || runbookOpenRunHours > 8760 {
 		httputil.ErrorWithDetails(w, http.StatusBadRequest, "invalid_hours", "runbookOpenRunHours must be between 1 and 8760", []httputil.FieldError{{Field: "runbookOpenRunHours", Msg: "must be between 1 and 8760"}})
+		return
+	}
+	if runbookApprovalHours < 1 || runbookApprovalHours > 8760 {
+		httputil.ErrorWithDetails(w, http.StatusBadRequest, "invalid_hours", "runbookApprovalHours must be between 1 and 8760", []httputil.FieldError{{Field: "runbookApprovalHours", Msg: "must be between 1 and 8760"}})
 		return
 	}
 
@@ -148,17 +160,18 @@ func (h *Handler) UpdateRetentionSettings(w http.ResponseWriter, r *http.Request
 	}
 
 	newSettings := store.RetentionSettings{
-		SnapshotDays:        req.SnapshotDays,
-		DocVersionDays:      req.DocVersionDays,
-		AlertDays:           req.AlertDays,
-		SyncRunDays:         req.SyncRunDays,
-		AuditDays:           req.AuditDays,
-		HealthCheckDays:     req.HealthCheckDays,
-		ReportDays:          req.ReportDays,
-		DeletedDocsDays:     deletedDays,
-		CronExpr:            req.CronExpr,
-		RunbookOpenRunHours: runbookOpenRunHours,
-		RunbookRunDays:      runbookRunDays,
+		SnapshotDays:         req.SnapshotDays,
+		DocVersionDays:       req.DocVersionDays,
+		AlertDays:            req.AlertDays,
+		SyncRunDays:          req.SyncRunDays,
+		AuditDays:            req.AuditDays,
+		HealthCheckDays:      req.HealthCheckDays,
+		ReportDays:           req.ReportDays,
+		DeletedDocsDays:      deletedDays,
+		CronExpr:             req.CronExpr,
+		RunbookOpenRunHours:  runbookOpenRunHours,
+		RunbookRunDays:       runbookRunDays,
+		RunbookApprovalHours: runbookApprovalHours,
 	}
 	if err := h.Store.UpsertRetentionSettings(r.Context(), newSettings); err != nil {
 		httputil.Errorf(w, err)
@@ -172,18 +185,19 @@ func (h *Handler) UpdateRetentionSettings(w http.ResponseWriter, r *http.Request
 	h.reregisterRetentionJob(newSettings)
 
 	httputil.JSON(w, http.StatusOK, map[string]any{
-		"snapshotDays":        newSettings.SnapshotDays,
-		"docVersionDays":      newSettings.DocVersionDays,
-		"alertDays":           newSettings.AlertDays,
-		"syncRunDays":         newSettings.SyncRunDays,
-		"auditDays":           newSettings.AuditDays,
-		"healthCheckDays":     newSettings.HealthCheckDays,
-		"reportDays":          newSettings.ReportDays,
-		"deletedDocsDays":     newSettings.DeletedDocsDays,
-		"runbookOpenRunHours": newSettings.RunbookOpenRunHours,
-		"runbookRunDays":      newSettings.RunbookRunDays,
-		"cronExpr":            newSettings.CronExpr,
-		"updatedAt":           newSettings.UpdatedAt,
+		"snapshotDays":         newSettings.SnapshotDays,
+		"docVersionDays":       newSettings.DocVersionDays,
+		"alertDays":            newSettings.AlertDays,
+		"syncRunDays":          newSettings.SyncRunDays,
+		"auditDays":            newSettings.AuditDays,
+		"healthCheckDays":      newSettings.HealthCheckDays,
+		"reportDays":           newSettings.ReportDays,
+		"deletedDocsDays":      newSettings.DeletedDocsDays,
+		"runbookOpenRunHours":  newSettings.RunbookOpenRunHours,
+		"runbookRunDays":       newSettings.RunbookRunDays,
+		"runbookApprovalHours": newSettings.RunbookApprovalHours,
+		"cronExpr":             newSettings.CronExpr,
+		"updatedAt":            newSettings.UpdatedAt,
 	})
 }
 
@@ -201,17 +215,18 @@ func (h *Handler) InitRetentionJob(ctx context.Context) {
 		}
 		slog.Info("initializing retention settings with defaults")
 		rs = store.RetentionSettings{
-			SnapshotDays:        h.Config.Retention.SnapshotDays,
-			DocVersionDays:      h.Config.Retention.DocVersionDays,
-			AlertDays:           h.Config.Retention.AlertDays,
-			SyncRunDays:         h.Config.Retention.SyncRunDays,
-			AuditDays:           h.Config.Retention.AuditDays,
-			HealthCheckDays:     h.Config.Retention.HealthCheckDays,
-			ReportDays:          h.Config.Retention.ReportDays,
-			DeletedDocsDays:     h.Config.Retention.DeletedDocsDays,
-			CronExpr:            h.Config.Retention.CronExpr,
-			RunbookOpenRunHours: store.DefaultRunbookOpenRunHours,
-			RunbookRunDays:      store.DefaultRunbookRunDays,
+			SnapshotDays:         h.Config.Retention.SnapshotDays,
+			DocVersionDays:       h.Config.Retention.DocVersionDays,
+			AlertDays:            h.Config.Retention.AlertDays,
+			SyncRunDays:          h.Config.Retention.SyncRunDays,
+			AuditDays:            h.Config.Retention.AuditDays,
+			HealthCheckDays:      h.Config.Retention.HealthCheckDays,
+			ReportDays:           h.Config.Retention.ReportDays,
+			DeletedDocsDays:      h.Config.Retention.DeletedDocsDays,
+			CronExpr:             h.Config.Retention.CronExpr,
+			RunbookOpenRunHours:  store.DefaultRunbookOpenRunHours,
+			RunbookRunDays:       store.DefaultRunbookRunDays,
+			RunbookApprovalHours: store.DefaultRunbookApprovalHours,
 		}
 		if err := h.Store.UpsertRetentionSettings(ctx, rs); err != nil {
 			slog.Error("failed to initialize retention settings", "error", err)

@@ -8,7 +8,9 @@ import {
   confirmRunbookRunStep,
   getGetRunbookRunQueryKey,
   getListRunbookRunsQueryKey,
+  approveRunbookRun,
   resumeRunbookRun,
+  rejectRunbookRun,
   useGetRunbookRun,
 } from '../../api/generated/runbooks/runbooks';
 import { ResumeRunbookRunBodyDecision } from '../../api/model';
@@ -24,6 +26,7 @@ import type { Tone } from '../ui/status';
 import { ConnectorActionRequest } from './ConnectorActionRequest';
 import { isConflict, runErrorMessage } from './runErrors';
 import { formatRunbookValue } from './runbookStepValues';
+import { useAuth } from '../../store/auth';
 
 type RunT = ReturnType<typeof useTranslation>['t'];
 
@@ -41,7 +44,9 @@ export function RunDetail({
   const headingId = useId();
   const queryClient = useQueryClient();
   const { data: run, isLoading, isError, refetch } = useGetRunbookRun(runId);
+  const currentUserId = useAuth((state) => state.user?.id);
   const [confirmCancelOpen, setConfirmCancelOpen] = useState(false);
+  const [rejectOpen, setRejectOpen] = useState(false);
   const [unknownWarningOpen, setUnknownWarningOpen] = useState(false);
   const [decisionOpen, setDecisionOpen] = useState(false);
   const [decision, setDecision] = useState<ResumeRunbookRunBodyDecision | null>(null);
@@ -50,6 +55,7 @@ export function RunDetail({
     null
   );
   const [elevationOpen, setElevationOpen] = useState(false);
+  const [approvalElevationOpen, setApprovalElevationOpen] = useState(false);
   const [runbookDeleted, setRunbookDeleted] = useState(false);
   const [resumeError, setResumeError] = useState<string | null>(null);
 
@@ -126,10 +132,44 @@ export function RunDetail({
     onSuccess: () => {
       refresh();
       setConfirmCancelOpen(false);
-      toast.success(t('runbooks.runs.cancelSuccess'));
+      toast.success(
+        run?.state === 'awaiting_approval'
+          ? t('runbooks.runs.cancelRequestSuccess')
+          : t('runbooks.runs.cancelSuccess')
+      );
     },
     onError: (error) => {
       toast.error(runErrorMessage(error, t, 'runbooks.runs.cancelError'));
+      if (isConflict(error)) refresh();
+    },
+  });
+
+  const approve = useMutation({
+    mutationFn: (token: string | null) =>
+      approveRunbookRun(
+        runId,
+        token ? { headers: { 'X-Elevation-Token': token } } : undefined
+      ),
+    onSuccess: () => {
+      refresh();
+      setApprovalElevationOpen(false);
+      toast.success(t('runbooks.runs.approveSuccess'));
+    },
+    onError: (error) => {
+      toast.error(runErrorMessage(error, t, 'runbooks.runs.approveError'));
+      if (isConflict(error)) refresh();
+    },
+  });
+
+  const reject = useMutation({
+    mutationFn: () => rejectRunbookRun(runId),
+    onSuccess: () => {
+      refresh();
+      setRejectOpen(false);
+      toast.success(t('runbooks.runs.rejectSuccess'));
+    },
+    onError: (error) => {
+      toast.error(runErrorMessage(error, t, 'runbooks.runs.rejectError'));
       if (isConflict(error)) refresh();
     },
   });
@@ -140,10 +180,18 @@ export function RunDetail({
   const resumeShown = run?.state === 'failed' && !!run.runbookId && !runbookDeleted;
   const canConfirm = confirmShown && allStepsExecutable;
   const canResume = resumeShown && allStepsExecutable;
+  const awaitingApproval = run?.state === 'awaiting_approval';
+  const isRequester = !!run && run.startedBy === currentUserId;
   // Cancel does not depend on the steps being executable: a step whose connector
   // was deleted is redacted for everyone, yet the run must stay cancellable. The
   // server enforces grants and a refusal is surfaced by cancel.onError.
-  const canCancel = !!run && ['running', 'waiting_manual', 'failed'].includes(run.state);
+  const canCancel =
+    !!run &&
+    (awaitingApproval ? isRequester : ['running', 'waiting_manual', 'failed'].includes(run.state));
+  const showCancel =
+    !!run &&
+    (['running', 'waiting_manual', 'failed'].includes(run.state) ||
+      (awaitingApproval && isRequester));
   const firstUnfinishedStep = run?.steps
     .slice()
     .sort((a, b) => a.position - b.position)
@@ -222,11 +270,26 @@ export function RunDetail({
                   value={<code>{run.runbookId}</code>}
                 />
               )}
-              {run.reason && <MetadataRow label={t('runbooks.runs.reason')} value={run.reason} />}
+              {run.reason && (
+                <MetadataRow
+                  label={t('runbooks.runs.reason')}
+                  value={
+                    run.reason === 'approval_expired'
+                      ? t('runbooks.runs.approvalExpired')
+                      : run.reason
+                  }
+                />
+              )}
               <MetadataRow
-                label={t('runbooks.runs.startedAt')}
+                label={t(awaitingApproval ? 'runbooks.runs.requestedAt' : 'runbooks.runs.startedAt')}
                 value={<Timestamp value={run.startedAt} language={i18n.language} />}
               />
+              {awaitingApproval && run.approvalExpiresAt && (
+                <MetadataRow
+                  label={t('runbooks.runs.approvalExpiresAt')}
+                  value={<Timestamp value={run.approvalExpiresAt} language={i18n.language} />}
+                />
+              )}
               <MetadataRow
                 label={t('runbooks.runs.updatedAt')}
                 value={<Timestamp value={run.updatedAt} language={i18n.language} />}
@@ -238,9 +301,27 @@ export function RunDetail({
                 />
               )}
               <MetadataRow
-                label={t('runbooks.runs.startedBy')}
+                label={t(awaitingApproval ? 'runbooks.runs.requestedBy' : 'runbooks.runs.startedBy')}
                 value={<code>{run.startedBy}</code>}
               />
+              {run.approvedBy && (
+                <MetadataRow
+                  label={t('runbooks.runs.approvedBy')}
+                  value={<code>{run.approvedBy}</code>}
+                />
+              )}
+              {run.approvedAt && (
+                <MetadataRow
+                  label={t('runbooks.runs.approvedAt')}
+                  value={<Timestamp value={run.approvedAt} language={i18n.language} />}
+                />
+              )}
+              {run.rejectedBy && (
+                <MetadataRow
+                  label={t('runbooks.runs.rejectedBy')}
+                  value={<code>{run.rejectedBy}</code>}
+                />
+              )}
               {run.resumedBy && (
                 <MetadataRow
                   label={t('runbooks.runs.resumedBy')}
@@ -288,6 +369,26 @@ export function RunDetail({
             )}
 
             <div className="flex flex-wrap justify-end gap-2 border-t border-line-soft pt-3">
+              {awaitingApproval && run.canApprove && (
+                <>
+                  <Button
+                    variant="danger"
+                    size="sm"
+                    disabled={approve.isPending || reject.isPending}
+                    onClick={() => setRejectOpen(true)}
+                  >
+                    {t('runbooks.runs.reject')}
+                  </Button>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    disabled={approve.isPending || reject.isPending}
+                    onClick={() => setApprovalElevationOpen(true)}
+                  >
+                    {t('runbooks.runs.approve')}
+                  </Button>
+                </>
+              )}
               {confirmShown && waitingStep && (
                 <Button
                   variant="primary"
@@ -303,14 +404,14 @@ export function RunDetail({
                   {t('runbooks.runs.resume')}
                 </Button>
               )}
-              {['running', 'waiting_manual', 'failed'].includes(run.state) && (
+              {showCancel && (
                 <Button
                   variant="danger"
                   size="sm"
                   disabled={!canCancel || cancel.isPending}
                   onClick={() => setConfirmCancelOpen(true)}
                 >
-                  {t('runbooks.runs.cancelAction')}
+                  {t(awaitingApproval ? 'runbooks.runs.cancelRequest' : 'runbooks.runs.cancelAction')}
                 </Button>
               )}
             </div>
@@ -360,14 +461,49 @@ export function RunDetail({
         />
       )}
 
+      {approvalElevationOpen && run?.state === 'awaiting_approval' && (
+        <ElevationConfirm
+          open
+          resourceName={run.runbookTitle}
+          action="runbook.approve"
+          target={run.id}
+          title={t('runbooks.runs.approveTitle')}
+          description={t('runbooks.runs.approveDescription')}
+          confirmLabel={t('runbooks.runs.approve')}
+          onClose={() => setApprovalElevationOpen(false)}
+          onConfirm={(token) => approve.mutate(token)}
+          isPending={approve.isPending}
+        />
+      )}
+
+      {rejectOpen && (
+        <ConfirmDialog
+          open
+          onClose={() => setRejectOpen(false)}
+          onConfirm={() => reject.mutate()}
+          title={t('runbooks.runs.rejectTitle')}
+          description={t('runbooks.runs.rejectDescription')}
+          confirmLabel={t('runbooks.runs.rejectConfirm')}
+          cancelLabel={t('runbooks.runs.close')}
+          tone="danger"
+          confirmDisabled={reject.isPending}
+        />
+      )}
+
       {confirmCancelOpen && (
         <ConfirmDialog
           open
           onClose={() => setConfirmCancelOpen(false)}
           onConfirm={() => cancel.mutate()}
-          title={t('runbooks.runs.cancelTitle')}
-          description={t('runbooks.runs.cancelDescription')}
-          confirmLabel={t('runbooks.runs.cancelConfirm')}
+          title={t(awaitingApproval ? 'runbooks.runs.cancelRequestTitle' : 'runbooks.runs.cancelTitle')}
+          description={t(
+            awaitingApproval
+              ? 'runbooks.runs.cancelRequestDescription'
+              : 'runbooks.runs.cancelDescription'
+          )}
+          confirmLabel={t(
+            awaitingApproval ? 'runbooks.runs.cancelRequestConfirm' : 'runbooks.runs.cancelConfirm'
+          )}
           cancelLabel={t('runbooks.runs.keepRun')}
           tone="danger"
           confirmDisabled={cancel.isPending}
@@ -388,6 +524,8 @@ const STATE_TONES: Record<string, Tone> = {
   unknown: 'idle',
   cancelled: 'idle',
   expired: 'idle',
+  awaiting_approval: 'warn',
+  rejected: 'err',
 };
 
 export function RunStateTag({ state, label }: { state: string; label: string }) {

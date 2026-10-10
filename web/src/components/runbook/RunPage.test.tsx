@@ -29,6 +29,7 @@ const run: RunbookRun = {
   startedAt: '2026-10-06T12:00:00Z',
   updatedAt: '2026-10-06T12:00:00Z',
   steps: [],
+  requiresApproval: false,
 };
 
 beforeAll(async () => {
@@ -71,6 +72,36 @@ describe('run detail route', () => {
     await openRun(run);
     expect(screen.getByRole('heading', { name: 'Run details', level: 1 })).toBeInTheDocument();
     expect(screen.getByText('Succeeded')).toBeInTheDocument();
+  });
+
+  it('opens an awaiting approval request with frozen pending steps and no execution controls', async () => {
+    await openRun({
+      ...run,
+      state: 'awaiting_approval',
+      requiresApproval: true,
+      canApprove: false,
+      approvalExpiresAt: '2026-10-07T12:00:00Z',
+      steps: [
+        {
+          id: 'pending-step',
+          position: 0,
+          kind: 'manual',
+          title: 'Review failover',
+          connectorId: '',
+          state: 'pending',
+          redacted: false,
+          canExecute: true,
+        },
+      ],
+    });
+
+    expect(screen.getByText('Awaiting approval')).toBeInTheDocument();
+    expect(screen.getByText('Review failover')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Cancel request' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Approve and start run' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Reject request' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Resume run' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Confirm step' })).not.toBeInTheDocument();
   });
 
   it('opens a deleted-runbook run and prevents resume', async () => {

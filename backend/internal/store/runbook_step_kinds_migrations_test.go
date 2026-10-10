@@ -132,9 +132,12 @@ func TestRunbookStepKindsMigrationUpDown(t *testing.T) {
 		if err := s.CreateConnector(ctx, connector); err != nil {
 			t.Fatal(err)
 		}
-		runbook, err := s.CreateRunbook(ctx, &RunbookRecord{Title: "Migration runbook", TargetType: "change_type", TargetValue: "migration"})
-		if err != nil {
-			t.Fatal(err)
+		runbook := &RunbookRecord{ID: "step-kinds-runbook", Title: "Migration runbook", TargetType: "change_type", TargetValue: "migration"}
+		if err := migrationExec(t, s.rawDB, s.driver, `
+			INSERT INTO runbooks (id, title, body, target_type, target_value, created_at, updated_at)
+			VALUES (?, ?, '', ?, ?, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')
+		`, runbook.ID, runbook.Title, runbook.TargetType, runbook.TargetValue); err != nil {
+			t.Fatalf("insert runbook before 000065: %v", err)
 		}
 		if err := migrationExec(t, s.rawDB, s.driver, `
 			INSERT INTO runbook_steps (id, runbook_id, position, title, connector_id, verb, entity_ref, created_at, updated_at)

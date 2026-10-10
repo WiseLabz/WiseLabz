@@ -211,6 +211,45 @@ describe('RunbooksPage steps editor', () => {
         entityRef: '100',
       },
     ]);
+    expect(postRunbooks.mock.calls[0][0].requiresApproval).toBe(false);
+  });
+
+  it('opts into second-operator approval and saves the setting', async () => {
+    renderPage();
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'New runbook' })[0]);
+    fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Sensitive runbook' } });
+    fireEvent.change(screen.getByLabelText('Target', { exact: false }), {
+      target: { value: 'vm.created' },
+    });
+    const approval = screen.getByRole('checkbox', { name: 'Require a second approver' });
+    expect(approval).not.toBeChecked();
+    fireEvent.click(approval);
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(postRunbooks).toHaveBeenCalledTimes(1));
+    expect(postRunbooks.mock.calls[0][0].requiresApproval).toBe(true);
+  });
+
+  it('preserves second-operator approval when editing a runbook', async () => {
+    runbooks = [
+      {
+        id: 'rb-approval',
+        title: 'Sensitive runbook',
+        body: '',
+        targetType: 'change_type',
+        targetValue: 'vm.created',
+        requiresApproval: true,
+        steps: [],
+      },
+    ];
+    renderPage();
+    fireEvent.click(screen.getByRole('button', { name: 'Edit runbook' }));
+
+    expect(screen.getByRole('checkbox', { name: 'Require a second approver' })).toBeChecked();
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(putRunbooksRunbookId).toHaveBeenCalledTimes(1));
+    expect(putRunbooksRunbookId.mock.calls[0][1].requiresApproval).toBe(true);
   });
 
   it('surfaces a field error for an invalid step', async () => {

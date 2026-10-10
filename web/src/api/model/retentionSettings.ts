@@ -26,6 +26,12 @@ export interface RetentionSettings {
    */
   deletedDocsDays?: number;
   /**
+   * Expire unanswered approval requests after this many hours; swept by a per-minute leader job
+   * @minimum 1
+   * @maximum 8760
+   */
+  runbookApprovalHours?: number;
+  /**
    * Expire open runbook runs after this many hours of inactivity; must be between 1 and 8760
    * @minimum 1
    * @maximum 8760

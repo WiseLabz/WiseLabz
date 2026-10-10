@@ -266,6 +266,16 @@ interface SystemJobFailedPayload {
 - **Consumers:** `NotificationCenter` (topbar bell).
 - **Reaction:** invalidate `['notifications']`. Clicking just marks it read (no navigation), same as §7b.
 
+### 7c1. `runbook.run_approval_requested`
+
+A per-user `info` notification sent through `Dispatcher.NotifyUsers` only to
+enabled operators eligible on every connector in the request's frozen steps,
+excluding the initiator. A manual-only request targets other active instance
+admins or connector operators. The payload uses the same `alertId`, `title` and
+`message` shape as the run notifications below. It is routable and included in
+digests; external channels fan out once per request. Consumers invalidate
+`['notifications']`.
+
 ### 7d. `runbook.run_failed` and `runbook.run_waiting`
 
 Per-user notifications (`Dispatcher.NotifyRunbookRun`) about a runbook run.
@@ -413,12 +423,18 @@ A runbook run, or one of its steps, changed state. Sent on every transition by
 the run executor (`internal/runbookrun`). The retention job also sends the
 run-level event (state `expired`) when it expires an open run.
 
+Approval requests publish `runbook.run.updated` when requested, approved,
+rejected, withdrawn or expired. The per-minute leader job publishes an expired
+run-level update with reason `approval_expired`. No pending step executes before
+approval, including across a restart. Existing open-run expiry does not expire
+approval requests.
+
 ```ts
 interface RunbookRunUpdatedPayload {
   runId: string;
   runbookId?: string;  // absent once the runbook has been deleted
-  state: 'running' | 'waiting_manual' | 'failed' | 'succeeded' | 'cancelled' | 'expired'; // the run, after the change
-  reason?: 'interrupted' | 'step_failed' | 'step_timeout' | 'permission_denied' | 'internal_error'; // set while failed
+  state: 'awaiting_approval' | 'running' | 'waiting_manual' | 'failed' | 'succeeded' | 'cancelled' | 'expired' | 'rejected'; // the run, after the change
+  reason?: 'interrupted' | 'step_failed' | 'step_timeout' | 'permission_denied' | 'internal_error' | 'approval_expired'; // failure or approval expiry
   step?: {             // present when the event concerns one step
     id: string;
     position: number;  // 0-based

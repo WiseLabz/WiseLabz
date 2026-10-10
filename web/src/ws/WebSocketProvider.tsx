@@ -323,7 +323,8 @@ function handle(frame: WsEvent, qc: ReturnType<typeof useQueryClient>) {
     case 'finding.created':
     case 'system.job_failed':
     case 'runbook.run_failed':
-    case 'runbook.run_waiting': {
+    case 'runbook.run_waiting':
+    case 'runbook.run_approval_requested': {
       // Per-user notification dispatch (Dispatcher.NotifyFindingCreated /
       // NotifySystemEvent), not the broadcast-to-everyone
       // 'quality.finding.created' above — refresh the notification bell the

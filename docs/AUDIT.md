@@ -92,6 +92,9 @@ object, action-specific), and `createdAt`.
 | `finding.resolve` | `POST /api/findings/{id}/resolve` | finding / id |
 | `runbook.create` | `POST /api/runbooks` | runbook / new ID |
 | `runbook.update` | `PUT /api/runbooks/{id}` | runbook / id |
+| `runbook.run.approval_requested` | `POST /api/runbooks/{id}/run` on an opted-in runbook | runbook_run / frozen run ID; initiator, runId and runbookId |
+| `runbook.run.approved` | `POST /api/runbook-runs/{runId}/approve` | runbook_run / frozen run ID; approver, runId and runbookId |
+| `runbook.run.rejected` | `POST /api/runbook-runs/{runId}/reject` | runbook_run / frozen run ID; rejecting operator, runId and runbookId |
 | `runbook.run.start` | `POST /api/runbooks/{id}/run` (non-preview) | runbook_run / run ID; detail includes runId and runbookId |
 | `runbook.run.confirm` | `POST /api/runbook-runs/{runId}/steps/{stepId}/confirm` | runbook_run / run ID; detail includes runId, runbookId and stepId |
 | `runbook.run.resume` | `POST /api/runbook-runs/{runId}/resume` | runbook_run / run ID; detail includes runId and runbookId |
@@ -228,3 +231,15 @@ been deleted; live scoped rows still require the matching grant. Security action
 are not in the Journal allowlist. The Journal exposes
 the actor but omits audit detail; `GET /api/system/audit` and its export remain
 instance-admin only.
+
+Opted-in runbooks audit `runbook.run.approval_requested` instead of `runbook.run.start`.
+When step-up is enabled, approval requires the different operator's own
+`runbook.approve` elevation on the frozen run ID; a `runbook.run` token cannot approve, and an approval token cannot
+start or resume. Rejection needs no elevation. Approval retains the initiator as
+the execution actor. These three approval audit actions remain outside the
+Journal allowlist, like start, confirm, resume and cancel.
+
+Like the other run actions, the three approval rows are written with the connector
+scope of the whole frozen run, whichever step the transition concerns: every
+distinct connector of the frozen steps, including connectors deleted since. A
+manual-only run has no connector, so its approval rows carry no scope.

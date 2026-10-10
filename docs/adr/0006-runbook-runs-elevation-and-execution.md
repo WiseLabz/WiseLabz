@@ -138,3 +138,44 @@ and resume from the failed step.
   re-check happens only before a step begins.
 - Crashes and restarts fail safely to `interrupted` / `unknown`, requiring human
   supervision and re-elevation to continue.
+
+### Optional second-operator approval (#650)
+
+A runbook may opt into `requiresApproval`. Starting it checks the initiator's
+operator grants, existence and nonempty steps, then availability of a different
+eligible enabled operator before consuming `runbook.run` elevation. The run and
+frozen steps are created in `awaiting_approval`; nothing executes yet. The
+single-step endpoint returns `409 approval_required` for these runbooks.
+
+Approve and reject use current operator grants on every frozen connector, apply
+API-key restrictions and reject read-only keys, disabled users and the initiator.
+Connectorless runs retain the instance-admin or any-connector-operator fallback.
+Approve requires the approver's own `runbook.approve` elevation targeted at the
+run ID. Reject requires none. These elevation actions are distinct: approval
+cannot use `runbook.run`, and start/resume cannot use `runbook.approve`.
+
+Approval stores `approvedBy`/`approvedAt`, publishes and starts the frozen run as
+the initiator, retaining the per-step initiator grant recheck. Rejection stores
+`rejectedBy` and `finishedAt`, skips pending steps and is terminal. The initiator
+can withdraw through cancel with its existing guards. Each transition from
+`awaiting_approval` conditionally updates that state; repeated or competing
+transitions conflict. Resume, manual confirmation and startup recovery do not
+execute awaiting runs.
+
+The separate `runbookApprovalHours` retention setting defaults to 24 hours. A
+per-minute leader job expires stale requests with reason `approval_expired`,
+skips their pending steps and publishes the update. Existing open-run expiry
+remains unchanged; terminal rejected runs follow finished-run retention.
+Eligible approvers receive `runbook.run_approval_requested` via the dispatcher,
+with external delivery once per request. Request, approval and rejection audit
+the acting user without adding those actions to the Journal allowlist. Backup
+and restore preserve the authored approval opt-in; run history stays operational.
+
+Approval follows the existing instance-wide step-up setting, like start and
+resume: when step-up is enabled, `runbook.approve` is required and the action,
+user and run ID binding is enforced; when the instance disables step-up, the
+existing elevation helper skips token validation. Disabling step-up never
+bypasses the different-operator, enabled-account, all-frozen-connector, API-key
+or conditional-transition guards. Whether second-operator approval should
+always require elevation regardless of this setting is left for explicit user
+confirmation, rather than changing the existing instance setting semantics.

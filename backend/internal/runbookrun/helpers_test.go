@@ -184,6 +184,7 @@ type testSpawner struct {
 	cancel  context.CancelFunc
 	wg      sync.WaitGroup
 	refused atomic.Bool
+	starts  atomic.Int32
 }
 
 func newTestSpawner(t *testing.T) *testSpawner {
@@ -205,6 +206,7 @@ func (sp *testSpawner) TryGo(work func(context.Context)) bool {
 	if sp.refused.Load() {
 		return false
 	}
+	sp.starts.Add(1)
 	sp.wg.Add(1)
 	go func() {
 		defer sp.wg.Done()

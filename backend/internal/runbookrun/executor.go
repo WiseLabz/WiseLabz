@@ -19,18 +19,21 @@ import (
 	"github.com/WiseLabz/wiselabz/internal/compliance"
 	"github.com/WiseLabz/wiselabz/internal/connector"
 	"github.com/WiseLabz/wiselabz/internal/logsafe"
+	"github.com/WiseLabz/wiselabz/internal/notifications"
 	"github.com/WiseLabz/wiselabz/internal/store"
 	syncengine "github.com/WiseLabz/wiselabz/internal/sync"
 )
 
 // Run states.
 const (
-	RunRunning       = "running"
-	RunWaitingManual = "waiting_manual"
-	RunFailed        = "failed"
-	RunSucceeded     = "succeeded"
-	RunCancelled     = "cancelled"
-	RunExpired       = "expired"
+	RunRunning          = "running"
+	RunWaitingManual    = "waiting_manual"
+	RunFailed           = "failed"
+	RunSucceeded        = "succeeded"
+	RunCancelled        = "cancelled"
+	RunExpired          = "expired"
+	RunAwaitingApproval = "awaiting_approval"
+	RunRejected         = "rejected"
 )
 
 // Step states.
@@ -105,6 +108,10 @@ const (
 // ErrNoActor rejects a start, resume, confirm or cancel without a user.
 var ErrNoActor = errors.New("runbook run: an acting user is required")
 
+// ErrNoEligibleApprover rejects an approval request when no other user can
+// operate every connector in the frozen steps.
+var ErrNoEligibleApprover = errors.New("runbook run: no eligible approver")
+
 // ErrActionUnavailable reports a run that cannot start because the fingerprint
 // of a connector_action step's action cannot be computed, for example because
 // the connector or the action is gone or no action service is configured.
@@ -175,7 +182,11 @@ func (e *ShutdownError) Unwrap() error { return ErrShuttingDown }
 
 // Store is the run persistence the executor needs. *store.Store satisfies it.
 type Store interface {
-	CreateRunbookRun(ctx context.Context, runbookID, startedBy string, steps []*store.RunbookRunStepRecord) (*store.RunbookRunRecord, []*store.RunbookRunStepRecord, error)
+	CreateRunbookRunWithState(ctx context.Context, runbookID, startedBy string, steps []*store.RunbookRunStepRecord, initialState string, requiresApproval bool) (*store.RunbookRunRecord, []*store.RunbookRunStepRecord, error)
+	ApproveRunbookRun(ctx context.Context, id, userID string) (*store.RunbookRunRecord, []*store.RunbookRunStepRecord, error)
+	RejectRunbookRun(ctx context.Context, id, userID string) (*store.RunbookRunRecord, []*store.RunbookRunStepRecord, error)
+	ExpireAwaitingApprovalRunbookRuns(ctx context.Context, before string) ([]string, error)
+	EligibleRunbookApprovers(ctx context.Context, connectorIDs []string, excludeUserID string) ([]string, error)
 	GetRunbookRun(ctx context.Context, id string) (*store.RunbookRunRecord, []*store.RunbookRunStepRecord, error)
 	UpdateRunbookRun(ctx context.Context, id, expectedState string, updates map[string]any) (*store.RunbookRunRecord, error)
 	UpdateRunbookRunStep(ctx context.Context, runID, stepID, expectedState string, updates map[string]any) (*store.RunbookRunStepRecord, error)
@@ -239,6 +250,12 @@ type Publisher interface {
 // without a grant on connectorID. *notifications.Dispatcher satisfies it.
 type Notifier interface {
 	NotifyRunbookRun(ctx context.Context, eventType, severity, connectorID, actorID, title, message string)
+}
+
+// ApprovalNotifier dispatches an event to exactly the listed users. It is
+// optional so existing runbook-run notifiers need not implement approvals.
+type ApprovalNotifier interface {
+	NotifyUsers(ctx context.Context, userIDs []string, eventType, severity, title, message string)
 }
 
 // Spawner starts tracked background work under a context that is cancelled on
@@ -415,7 +432,7 @@ func (e *Executor) Start(ctx context.Context, runbookID, userID string, steps []
 	if err := e.freezeActionFingerprints(ctx, frozenSteps); err != nil {
 		return nil, nil, err
 	}
-	run, frozen, err := e.store.CreateRunbookRun(ctx, runbookID, userID, frozenSteps)
+	run, frozen, err := e.store.CreateRunbookRunWithState(ctx, runbookID, userID, frozenSteps, RunRunning, false)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -424,6 +441,109 @@ func (e *Executor) Start(ctx context.Context, runbookID, userID string, steps []
 		return nil, nil, e.failShutdown(ctx, run.ID)
 	}
 	return run, frozen, nil
+}
+
+// Request freezes the authored steps and records an approval request without
+// starting execution. The caller has already checked runbook.run elevation
+// and the initiator's grants. Eligible approvers are looked up from the frozen
+// connectors so the notification matches what was actually requested.
+func (e *Executor) Request(ctx context.Context, runbookID, userID string, steps []*store.RunbookStepRecord) (*store.RunbookRunRecord, []*store.RunbookRunStepRecord, error) {
+	if userID == "" {
+		return nil, nil, ErrNoActor
+	}
+	frozenSteps := FreezeSteps(steps)
+	if err := e.freezeActionFingerprints(ctx, frozenSteps); err != nil {
+		return nil, nil, err
+	}
+	approvers, err := e.store.EligibleRunbookApprovers(ctx, frozenConnectorIDs(frozenSteps), userID)
+	if err != nil {
+		return nil, nil, err
+	}
+	if len(approvers) == 0 {
+		return nil, nil, ErrNoEligibleApprover
+	}
+	run, frozen, err := e.store.CreateRunbookRunWithState(ctx, runbookID, userID, frozenSteps, RunAwaitingApproval, true)
+	if err != nil {
+		return nil, nil, err
+	}
+	e.publishRun(run)
+	if notifier, ok := e.notifier.(ApprovalNotifier); ok {
+		notifier.NotifyUsers(ctx, approvers, notifications.EventRunbookRunApprovalRequested, "info",
+			"Runbook run approval requested: "+run.RunbookTitle,
+			"A runbook run is waiting for your approval.")
+	}
+	return run, frozen, nil
+}
+
+// Approve conditionally moves an awaiting request to running and starts it.
+// The store records the approver separately, preserving StartedBy as the
+// identity that will be rechecked before every step.
+func (e *Executor) Approve(ctx context.Context, runID, userID string) (*store.RunbookRunRecord, []*store.RunbookRunStepRecord, error) {
+	if userID == "" {
+		return nil, nil, ErrNoActor
+	}
+	run, steps, err := e.store.ApproveRunbookRun(ctx, runID, userID)
+	if err != nil {
+		return nil, nil, err
+	}
+	e.publishRun(run)
+	if !e.spawn(run.ID) {
+		return run, steps, e.failShutdown(ctx, run.ID)
+	}
+	return run, steps, nil
+}
+
+// Reject conditionally rejects an awaiting approval request and publishes the
+// run and its skipped steps. Rejection never starts execution.
+func (e *Executor) Reject(ctx context.Context, runID, userID string) (*store.RunbookRunRecord, []*store.RunbookRunStepRecord, error) {
+	if userID == "" {
+		return nil, nil, ErrNoActor
+	}
+	run, steps, err := e.store.RejectRunbookRun(ctx, runID, userID)
+	if err != nil {
+		return nil, nil, err
+	}
+	for _, step := range steps {
+		if step.State == StepSkipped {
+			e.publishStep(run, step)
+		}
+	}
+	e.publishRun(run)
+	return run, steps, nil
+}
+
+// ExpireApprovals expires requests older than before and publishes their new
+// run states. The store update is conditional on awaiting_approval.
+func (e *Executor) ExpireApprovals(ctx context.Context, before string) ([]string, error) {
+	ids, err := e.store.ExpireAwaitingApprovalRunbookRuns(ctx, before)
+	if err != nil {
+		return nil, err
+	}
+	for _, id := range ids {
+		run, _, err := e.store.GetRunbookRun(ctx, id)
+		if err != nil {
+			slog.Warn("runbook run: load expired approval for event", "run", logsafe.Sanitize(id), "error", err)
+			continue
+		}
+		e.publishRun(run)
+	}
+	return ids, nil
+}
+
+func frozenConnectorIDs(steps []*store.RunbookRunStepRecord) []string {
+	ids := make([]string, 0, len(steps))
+	seen := make(map[string]struct{}, len(steps))
+	for _, step := range steps {
+		if step == nil || step.ConnectorID == "" {
+			continue
+		}
+		if _, ok := seen[step.ConnectorID]; ok {
+			continue
+		}
+		seen[step.ConnectorID] = struct{}{}
+		ids = append(ids, step.ConnectorID)
+	}
+	return ids
 }
 
 // freezeActionFingerprints stores on every connector_action step the

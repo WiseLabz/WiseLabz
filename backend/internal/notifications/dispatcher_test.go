@@ -1590,6 +1590,51 @@ func createRunUser(t *testing.T, s *store.Store, name string) *store.User {
 	return u
 }
 
+func TestNotifyUsersTargetsRecipientsAndFansOutExternallyOnce(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	var hits int
+	var mu sync.Mutex
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		mu.Lock()
+		hits++
+		mu.Unlock()
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+	routing := `[{"eventType":"runbook.run_approval_requested","channel":"webhook","enabled":true,"minSeverity":"info"}]`
+	setChannelAndRoutingConfig(t, s, "webhook", srv.URL, routing)
+	allowed := createRunUser(t, s, "approval-recipient")
+	second := createRunUser(t, s, "approval-second")
+	other := createRunUser(t, s, "approval-other")
+	disabled := createRunUser(t, s, "approval-disabled")
+	if err := s.UpdateUser(ctx, disabled.ID, map[string]any{"disabled": true}); err != nil {
+		t.Fatal(err)
+	}
+
+	d := NewDispatcher(s, nil)
+	d.NotifyUsers(ctx, []string{allowed.ID, second.ID, allowed.ID, disabled.ID}, EventRunbookRunApprovalRequested, "info", "Approval requested", "Review the run.")
+	waitForDispatch(t, d)
+	for user, want := range map[*store.User]int{allowed: 1, second: 1, other: 0, disabled: 0} {
+		got, _, err := s.ListNotifications(ctx, user.ID, false, 0, 10)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(got) != want {
+			t.Errorf("%s notifications = %d, want %d", user.Username, len(got), want)
+			continue
+		}
+		if want == 1 && got[0].EventType != EventRunbookRunApprovalRequested {
+			t.Errorf("event type = %q, want %q", got[0].EventType, EventRunbookRunApprovalRequested)
+		}
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if hits != 1 {
+		t.Errorf("webhook hits = %d, want 1 for the whole recipient group", hits)
+	}
+}
+
 // TestNotifyRunbookRun_ActorJoinsAudienceOnce verifies the acting user is told
 // about their own run without a grant on the step's connector, alongside the
 // grant holders, and that a user who is both actor and grant holder gets one

@@ -894,13 +894,14 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 
 // createRequest is the body of POST /api/runbooks (RunbookCreate).
 type createRequest struct {
-	Title       string      `json:"title"`
-	Body        string      `json:"body"`
-	TargetType  string      `json:"targetType"`
-	TargetValue string      `json:"targetValue"`
-	SnapshotID  *string     `json:"snapshotId"`
-	DocID       *string     `json:"docId"`
-	Steps       []stepInput `json:"steps"`
+	Title            string      `json:"title"`
+	Body             string      `json:"body"`
+	TargetType       string      `json:"targetType"`
+	TargetValue      string      `json:"targetValue"`
+	SnapshotID       *string     `json:"snapshotId"`
+	DocID            *string     `json:"docId"`
+	Steps            []stepInput `json:"steps"`
+	RequiresApproval bool        `json:"requiresApproval"`
 }
 
 // Create handles POST /api/runbooks.
@@ -924,12 +925,13 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	created, savedSteps, err := h.Store.CreateRunbookWithSteps(r.Context(), &store.RunbookRecord{
-		Title:       req.Title,
-		Body:        req.Body,
-		TargetType:  req.TargetType,
-		TargetValue: req.TargetValue,
-		SnapshotID:  req.SnapshotID,
-		DocID:       req.DocID,
+		RequiresApproval: req.RequiresApproval,
+		Title:            req.Title,
+		Body:             req.Body,
+		TargetType:       req.TargetType,
+		TargetValue:      req.TargetValue,
+		SnapshotID:       req.SnapshotID,
+		DocID:            req.DocID,
 	}, steps)
 	if errors.Is(err, store.ErrConflict) {
 		httputil.Error(w, http.StatusConflict, "conflict", "A runbook already exists for this target")
@@ -986,6 +988,15 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 
 	updates := map[string]any{}
 	var changedFields []string
+	if value, present := raw["requiresApproval"]; present {
+		var required *bool
+		if err := json.Unmarshal(value, &required); err != nil || required == nil {
+			httputil.ErrorWithDetails(w, http.StatusBadRequest, "invalid_request", "requiresApproval must be a boolean", []httputil.FieldError{{Field: "requiresApproval", Msg: "must be a boolean"}})
+			return
+		}
+		updates["requires_approval"] = *required
+		changedFields = append(changedFields, "requiresApproval")
+	}
 	for jsonKey, col := range updateStringFields {
 		v, ok := raw[jsonKey]
 		if !ok {
@@ -1120,12 +1131,18 @@ func (h *Handler) ExecuteStep(w http.ResponseWriter, r *http.Request) {
 	runbookID := r.PathValue("id")
 	stepID := r.PathValue("stepId")
 
-	if _, err := h.Store.GetRunbook(r.Context(), runbookID); err != nil {
+	runbook, err := h.Store.GetRunbook(r.Context(), runbookID)
+	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			httputil.Error(w, http.StatusNotFound, "not_found", "Runbook not found")
 			return
 		}
 		httputil.Errorf(w, err)
+		return
+	}
+
+	if runbook.RequiresApproval {
+		httputil.Error(w, http.StatusConflict, "approval_required", "This runbook requires a second operator's approval")
 		return
 	}
 

@@ -62,6 +62,9 @@ func runbookConnectorActionWider(t *testing.T, db *sql.DB, driver string) bool {
 // chained migration tests can start from the 000065 schema.
 func rollbackRunbookConnectorAction(t *testing.T, db *sql.DB, driver string, logger *slog.Logger) {
 	t.Helper()
+	// Newer migration tests begin at the current schema: return to 000066's
+	// predecessors newest first, 000068 then 000067.
+	rollbackRunbookApproval(t, db, driver, logger)
 	rollbackAuditLogConnectors(t, db, driver, logger)
 	if !runbookConnectorActionWider(t, db, driver) {
 		return
@@ -127,9 +130,12 @@ func TestRunbookConnectorActionMigrationUpDown(t *testing.T) {
 		if err := s.CreateConnector(ctx, connector); err != nil {
 			t.Fatal(err)
 		}
-		runbook, err := s.CreateRunbook(ctx, &RunbookRecord{Title: "Connector action runbook", TargetType: "change_type", TargetValue: "connector-action"})
-		if err != nil {
-			t.Fatal(err)
+		runbook := &RunbookRecord{ID: "connector-action-runbook", Title: "Connector action runbook", TargetType: "change_type", TargetValue: "connector-action"}
+		if err := migrationExec(t, s.rawDB, s.driver, `
+			INSERT INTO runbooks (id, title, body, target_type, target_value, created_at, updated_at)
+			VALUES (?, ?, '', ?, ?, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')
+		`, runbook.ID, runbook.Title, runbook.TargetType, runbook.TargetValue); err != nil {
+			t.Fatalf("insert runbook before 000066: %v", err)
 		}
 		if err := migrationExec(t, s.rawDB, s.driver, `
 			INSERT INTO runbook_steps (id, runbook_id, position, title, connector_id, verb, entity_ref, created_at, updated_at)
@@ -207,10 +213,7 @@ func TestRunbookConnectorActionMigrationUpDown(t *testing.T) {
 			t.Fatalf("insert additional action-run frozen step: %v", err)
 		}
 
-		rollbackAuditLogConnectors(t, s.rawDB, s.driver, logger)
-		if err := RunMigrationsDown(s.rawDB, s.driver, logger); err != nil {
-			t.Fatalf("rollback 000066: %v", err)
-		}
+		rollbackRunbookConnectorAction(t, s.rawDB, s.driver, logger)
 		runbookConnectorActionHaveColumns(t, s.rawDB, s.driver, false)
 		requireRunbookStepIndexes(t, s.rawDB, s.driver)
 		requireCount(t, s.rawDB, s.driver, `SELECT COUNT(*) FROM runbook_steps WHERE kind = 'connector_action'`, 0)

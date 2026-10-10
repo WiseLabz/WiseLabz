@@ -2,6 +2,7 @@ package runbooks
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"io"
@@ -52,13 +53,17 @@ type RunStepResponse struct {
 // RunResponse is the history projection shared by HTTP and read-only MCP tools.
 type RunResponse struct {
 	store.RunbookRunRecord
-	Steps []RunStepResponse `json:"steps"`
+	Steps             []RunStepResponse `json:"steps"`
+	CanApprove        *bool             `json:"canApprove,omitempty"`
+	ApprovalExpiresAt string            `json:"approvalExpiresAt,omitempty"`
 }
 
 type runPreviewResponse struct {
-	ID       string            `json:"id"`
-	CanStart bool              `json:"canStart"`
-	Steps    []RunStepResponse `json:"steps"`
+	ID                string            `json:"id"`
+	CanStart          bool              `json:"canStart"`
+	Steps             []RunStepResponse `json:"steps"`
+	RequiresApproval  bool              `json:"requiresApproval"`
+	ApproverAvailable bool              `json:"approverAvailable"`
 }
 
 // runAuthorized checks all distinct frozen connectors before inspecting state
@@ -121,6 +126,8 @@ func writeRunError(w http.ResponseWriter, err error) {
 		httputil.Error(w, http.StatusNotFound, "not_found", "Run or runbook not found")
 	case errors.Is(err, runbookrun.ErrShuttingDown):
 		httputil.Error(w, http.StatusServiceUnavailable, "shutting_down", "The server is shutting down")
+	case errors.Is(err, runbookrun.ErrNoEligibleApprover):
+		httputil.Error(w, http.StatusConflict, "no_eligible_approver", "No other eligible operator is available to approve this run")
 	case errors.Is(err, store.ErrRunbookRunStepCount):
 		httputil.Error(w, http.StatusBadRequest, "invalid_steps", "A runbook run needs between 1 and 20 steps")
 	case errors.Is(err, runbookrun.ErrActionUnavailable):
@@ -141,7 +148,31 @@ func (h *Handler) RunView(ctx context.Context, run *store.RunbookRunRecord, step
 	if err != nil {
 		return RunResponse{}, err
 	}
-	return RunResponse{RunbookRunRecord: *run, Steps: views}, nil
+	response := RunResponse{RunbookRunRecord: *run, Steps: views}
+	if run.RequiresApproval {
+		canApprove := false
+		if run.State == runbookrun.RunAwaitingApproval {
+			canApprove, err = h.canApproveRun(ctx, run, steps)
+			if err != nil {
+				return RunResponse{}, err
+			}
+			settings, err := h.Store.GetRetentionSettings(ctx)
+			if err != nil && !errors.Is(err, sql.ErrNoRows) {
+				return RunResponse{}, err
+			}
+			hours := store.DefaultRunbookApprovalHours
+			if err == nil && settings.RunbookApprovalHours > 0 {
+				hours = settings.RunbookApprovalHours
+			}
+			updatedAt, err := time.Parse(time.RFC3339Nano, run.UpdatedAt)
+			if err != nil {
+				return RunResponse{}, err
+			}
+			response.ApprovalExpiresAt = updatedAt.Add(time.Duration(hours) * time.Hour).UTC().Format(time.RFC3339Nano)
+		}
+		response.CanApprove = &canApprove
+	}
+	return response, nil
 }
 
 func (h *Handler) runStepViews(ctx context.Context, steps []*store.RunbookRunStepRecord) ([]RunStepResponse, error) {
@@ -238,7 +269,8 @@ func (h *Handler) StartRun(w http.ResponseWriter, r *http.Request) {
 	if !h.runAuthorized(w, r, frozen) {
 		return
 	}
-	if _, err := h.Store.GetRunbook(r.Context(), id); err != nil {
+	runbook, err := h.Store.GetRunbook(r.Context(), id)
+	if err != nil {
 		writeRunError(w, err)
 		return
 	}
@@ -246,17 +278,34 @@ func (h *Handler) StartRun(w http.ResponseWriter, r *http.Request) {
 		writeRunError(w, store.ErrRunbookRunStepCount)
 		return
 	}
+	if runbook.RequiresApproval {
+		approvers, err := h.Store.EligibleRunbookApprovers(r.Context(), runConnectorIDs(frozen), auth.UserIDFromContext(r.Context()))
+		if err != nil {
+			httputil.Errorf(w, err)
+			return
+		}
+		if len(approvers) == 0 {
+			httputil.Error(w, http.StatusConflict, "no_eligible_approver", "No other eligible operator is available to approve this run")
+			return
+		}
+	}
 	if err := auth.ValidateElevationHeaderFor(h.ConnH.JWT, h.Store, "runbook.run", id, r); err != nil {
 		auth.WriteElevationError(w, err)
 		return
 	}
-	run, saved, err := h.Executor.Start(r.Context(), id, auth.UserIDFromContext(r.Context()), steps)
+	start := h.Executor.Start
+	action := "runbook.run.start"
+	if runbook.RequiresApproval {
+		start = h.Executor.Request
+		action = "runbook.run.approval_requested"
+	}
+	run, saved, err := start(r.Context(), id, auth.UserIDFromContext(r.Context()), steps)
 	if err != nil {
-		h.auditShutdownTransition(r, "runbook.run.start", err, "")
+		h.auditShutdownTransition(r, action, err, "")
 		writeRunError(w, err)
 		return
 	}
-	h.auditRun(r, "runbook.run.start", run, "", runConnectorIDs(saved))
+	h.auditRun(r, action, run, "", runConnectorIDs(saved))
 	resp, err := h.RunView(r.Context(), run, saved)
 	if err != nil {
 		httputil.Errorf(w, err)
@@ -357,7 +406,24 @@ func (h *Handler) previewRun(w http.ResponseWriter, r *http.Request, id string, 
 			break
 		}
 	}
-	httputil.JSON(w, http.StatusOK, runPreviewResponse{ID: id, CanStart: canStart, Steps: views})
+	runbook, err := h.Store.GetRunbook(r.Context(), id)
+	if err != nil {
+		writeRunError(w, err)
+		return
+	}
+	approverAvailable := true
+	if runbook.RequiresApproval {
+		approvers, err := h.Store.EligibleRunbookApprovers(r.Context(), runConnectorIDs(frozen), auth.UserIDFromContext(r.Context()))
+		if err != nil {
+			httputil.Errorf(w, err)
+			return
+		}
+		approverAvailable = len(approvers) > 0
+	}
+	httputil.JSON(w, http.StatusOK, runPreviewResponse{
+		ID: id, CanStart: canStart, Steps: views,
+		RequiresApproval: runbook.RequiresApproval, ApproverAvailable: approverAvailable,
+	})
 }
 
 func (h *Handler) previewConfigPushStep(ctx context.Context, view *RunStepResponse) {
@@ -495,6 +561,98 @@ func (h *Handler) authorizedRun(w http.ResponseWriter, r *http.Request) (*store.
 		return nil, nil, false
 	}
 	return run, steps, h.runAuthorized(w, r, steps)
+}
+
+func (h *Handler) canApproveRun(ctx context.Context, run *store.RunbookRunRecord, steps []*store.RunbookRunStepRecord) (bool, error) {
+	userID := auth.UserIDFromContext(ctx)
+	if userID == "" || userID == run.StartedBy || auth.APIKeyRestrictionFromContext(ctx).ReadOnly {
+		return false, nil
+	}
+	user, err := h.Store.GetUserByIDFromWriter(ctx, userID)
+	if errors.Is(err, store.ErrNotFound) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	if user.Disabled {
+		return false, nil
+	}
+	checked := map[string]bool{}
+	for _, step := range steps {
+		if step.ConnectorID == "" || checked[step.ConnectorID] {
+			continue
+		}
+		checked[step.ConnectorID] = true
+		ok, err := h.Store.UserHasConnectorRole(ctx, userID, step.ConnectorID, "operator")
+		if err != nil || !ok {
+			return false, err
+		}
+	}
+	if len(checked) == 0 {
+		return h.connectorlessRunAuthorized(ctx, userID)
+	}
+	return true, nil
+}
+
+func (h *Handler) approvalRun(w http.ResponseWriter, r *http.Request) (*store.RunbookRunRecord, bool) {
+	run, steps, err := h.Store.GetRunbookRun(r.Context(), r.PathValue("runId"))
+	if err != nil {
+		writeRunError(w, err)
+		return nil, false
+	}
+	if !h.runAuthorized(w, r, steps) {
+		return nil, false
+	}
+	eligible, err := h.canApproveRun(r.Context(), run, steps)
+	if err != nil {
+		httputil.Errorf(w, err)
+		return nil, false
+	}
+	if !eligible {
+		httputil.Error(w, http.StatusForbidden, "forbidden", "insufficient permissions")
+		return nil, false
+	}
+	if run.State != runbookrun.RunAwaitingApproval {
+		writeRunError(w, store.ErrConflict)
+		return nil, false
+	}
+	return run, true
+}
+
+// ApproveRun requires a different operator's own elevation on the frozen run.
+func (h *Handler) ApproveRun(w http.ResponseWriter, r *http.Request) {
+	run, ok := h.approvalRun(w, r)
+	if !ok {
+		return
+	}
+	if err := auth.ValidateElevationHeaderFor(h.ConnH.JWT, h.Store, "runbook.approve", run.ID, r); err != nil {
+		auth.WriteElevationError(w, err)
+		return
+	}
+	approved, steps, err := h.Executor.Approve(r.Context(), run.ID, auth.UserIDFromContext(r.Context()))
+	if err != nil {
+		h.auditShutdownTransition(r, "runbook.run.approved", err, "")
+		writeRunError(w, err)
+		return
+	}
+	h.auditRun(r, "runbook.run.approved", approved, "", runConnectorIDs(steps))
+	httputil.NoContent(w)
+}
+
+// RejectRun does not require elevation and never starts execution.
+func (h *Handler) RejectRun(w http.ResponseWriter, r *http.Request) {
+	run, ok := h.approvalRun(w, r)
+	if !ok {
+		return
+	}
+	rejected, steps, err := h.Executor.Reject(r.Context(), run.ID, auth.UserIDFromContext(r.Context()))
+	if err != nil {
+		writeRunError(w, err)
+		return
+	}
+	h.auditRun(r, "runbook.run.rejected", rejected, "", runConnectorIDs(steps))
+	httputil.NoContent(w)
 }
 
 // ConfirmRunStep confirms a waiting manual step without elevation.

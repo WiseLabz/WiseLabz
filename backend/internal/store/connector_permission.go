@@ -151,6 +151,60 @@ func (s *Store) UserHasAnyConnectorRole(ctx context.Context, userID, minRole str
 	return true, nil
 }
 
+// EligibleRunbookApprovers returns enabled users other than excludeUserID who
+// can operate every distinct connector in connectorIDs. Manual-only runbooks
+// use the same fallback as connectorlessRunAuthorized: instance admins and
+// users with an operator grant on any connector are eligible.
+func (s *Store) EligibleRunbookApprovers(ctx context.Context, connectorIDs []string, excludeUserID string) ([]string, error) {
+	uniqueConnectorIDs := make([]string, 0, len(connectorIDs))
+	seen := make(map[string]struct{}, len(connectorIDs))
+	for _, connectorID := range connectorIDs {
+		if connectorID == "" {
+			continue
+		}
+		if _, ok := seen[connectorID]; ok {
+			continue
+		}
+		seen[connectorID] = struct{}{}
+		uniqueConnectorIDs = append(uniqueConnectorIDs, connectorID)
+	}
+
+	query := `SELECT u.id FROM users u WHERE u.disabled = 0 AND u.id <> ?`
+	args := []any{excludeUserID}
+	if len(uniqueConnectorIDs) == 0 {
+		query += ` AND (u.instance_admin_role = 'admin' OR EXISTS (
+			SELECT 1 FROM user_connector_roles g JOIN connectors c ON c.id = g.connector_id
+			WHERE g.user_id = u.id AND g.role = 'operator'
+		))`
+	} else {
+		query += ` AND (SELECT COUNT(DISTINCT g.connector_id) FROM user_connector_roles g
+			WHERE g.user_id = u.id AND g.role = 'operator' AND g.connector_id IN (` + placeholders(len(uniqueConnectorIDs)) + `)) = ?`
+		for _, connectorID := range uniqueConnectorIDs {
+			args = append(args, connectorID)
+		}
+		args = append(args, len(uniqueConnectorIDs))
+	}
+	query += ` ORDER BY u.id`
+
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list eligible runbook approvers: %w", err)
+	}
+	defer rows.Close() //nolint:errcheck
+	ids := make([]string, 0)
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scan eligible runbook approver: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate eligible runbook approvers: %w", err)
+	}
+	return ids, nil
+}
+
 // ListConnectorGrants returns every user's grant on a connector (one row per
 // source), for the connector's Permissions tab.
 func (s *Store) ListConnectorGrants(ctx context.Context, connectorID string) ([]ConnectorGrant, error) {

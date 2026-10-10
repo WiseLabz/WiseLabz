@@ -11,5 +11,5 @@ export interface RunbookRunConflict {
   code: string;
   message: string;
   /** Existing active run */
-  runId: string;
+  runId?: string;
 }

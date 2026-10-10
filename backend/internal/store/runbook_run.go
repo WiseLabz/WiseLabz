@@ -19,17 +19,21 @@ const runbookRunTimestampLayout = "2006-01-02T15:04:05.000000000Z"
 // RunbookID becomes nil if the authored runbook is deleted; the frozen title
 // and step rows remain available as history.
 type RunbookRunRecord struct {
-	ID           string  `json:"id"`
-	RunbookID    *string `json:"runbookId,omitempty"`
-	RunbookTitle string  `json:"runbookTitle"`
-	State        string  `json:"state"`
-	Reason       string  `json:"reason,omitempty"`
-	StartedBy    string  `json:"startedBy"`
-	ResumedBy    *string `json:"resumedBy,omitempty"`
-	CancelledBy  *string `json:"cancelledBy,omitempty"`
-	StartedAt    string  `json:"startedAt"`
-	UpdatedAt    string  `json:"updatedAt"`
-	FinishedAt   string  `json:"finishedAt,omitempty"`
+	ID               string  `json:"id"`
+	RunbookID        *string `json:"runbookId,omitempty"`
+	RunbookTitle     string  `json:"runbookTitle"`
+	State            string  `json:"state"`
+	Reason           string  `json:"reason,omitempty"`
+	StartedBy        string  `json:"startedBy"`
+	ResumedBy        *string `json:"resumedBy,omitempty"`
+	CancelledBy      *string `json:"cancelledBy,omitempty"`
+	RequiresApproval bool    `json:"requiresApproval,omitempty"`
+	ApprovedBy       *string `json:"approvedBy,omitempty"`
+	ApprovedAt       string  `json:"approvedAt,omitempty"`
+	RejectedBy       *string `json:"rejectedBy,omitempty"`
+	StartedAt        string  `json:"startedAt"`
+	UpdatedAt        string  `json:"updatedAt"`
+	FinishedAt       string  `json:"finishedAt,omitempty"`
 }
 
 // RunbookRunStepRecord is one frozen authored step and its execution state.
@@ -96,7 +100,7 @@ func isActiveRunbookRunViolation(err error) bool {
 		strings.Contains(msg, "UNIQUE constraint failed: index '"+runbookRunActiveIndex+"'")
 }
 
-const runbookRunColumns = `id, runbook_id, runbook_title, state, reason, started_by, resumed_by, cancelled_by, started_at, updated_at, finished_at`
+const runbookRunColumns = `id, runbook_id, runbook_title, state, reason, started_by, resumed_by, cancelled_by, requires_approval, approved_by, approved_at, rejected_by, started_at, updated_at, finished_at`
 
 const runbookRunStepColumns = `id, run_id, position, kind, title, connector_id, verb, entity_ref,
 	field_key, target_value, attribute, operator, expected_value, action, action_fingerprint, timeout_seconds, state,
@@ -108,14 +112,32 @@ const runbookRunStepColumns = `id, run_id, position, kind, title, connector_id, 
 // A step count outside 1 to 20 is ErrRunbookRunStepCount; a second active run
 // for the runbook is a *RunbookRunConflictError naming the existing run.
 func (s *Store) CreateRunbookRun(ctx context.Context, runbookID, startedBy string, steps []*RunbookRunStepRecord) (*RunbookRunRecord, []*RunbookRunStepRecord, error) {
+	return s.CreateRunbookRunWithState(ctx, runbookID, startedBy, steps, "running", false)
+}
+
+// CreateRunbookRunWithState atomically stores a new active run and its frozen
+// steps. The runbook title is read inside the transaction, and the supplied
+// steps are copied in order without retaining a reference to authored step
+// rows. initialState must be running or awaiting_approval; approval requests
+// must set requiresApproval. A step count outside 1 to 20 is
+// ErrRunbookRunStepCount; a second active run for the runbook is a
+// *RunbookRunConflictError naming the existing run.
+func (s *Store) CreateRunbookRunWithState(ctx context.Context, runbookID, startedBy string, steps []*RunbookRunStepRecord, initialState string, requiresApproval bool) (*RunbookRunRecord, []*RunbookRunStepRecord, error) {
 	if len(steps) == 0 || len(steps) > 20 {
 		return nil, nil, fmt.Errorf("create runbook run: %w", ErrRunbookRunStepCount)
 	}
+	if initialState != "running" && initialState != "awaiting_approval" {
+		return nil, nil, fmt.Errorf("create runbook run: unsupported initial state %q", initialState)
+	}
+	if initialState == "awaiting_approval" && !requiresApproval {
+		return nil, nil, fmt.Errorf("create runbook run: awaiting_approval requires approval flag")
+	}
 
 	run := &RunbookRunRecord{
-		ID:        uuid.New().String(),
-		State:     "running",
-		StartedBy: startedBy,
+		ID:               uuid.New().String(),
+		State:            initialState,
+		StartedBy:        startedBy,
+		RequiresApproval: requiresApproval,
 	}
 	savedSteps := make([]*RunbookRunStepRecord, 0, len(steps))
 	for position, step := range steps {
@@ -155,9 +177,11 @@ func (s *Store) CreateRunbookRun(ctx context.Context, runbookID, startedBy strin
 		}
 		run.RunbookID = &runbookID
 		if _, err := tx.db.ExecContext(ctx, `
-			INSERT INTO runbook_runs (id, runbook_id, runbook_title, state, reason, started_by, resumed_by, cancelled_by, started_at, updated_at, finished_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-		`, run.ID, runbookID, run.RunbookTitle, run.State, run.Reason, run.StartedBy, nilToStrPtr(run.ResumedBy), nilToStrPtr(run.CancelledBy), run.StartedAt, run.UpdatedAt, nilToStr(run.FinishedAt)); err != nil {
+			INSERT INTO runbook_runs (id, runbook_id, runbook_title, state, reason, started_by, resumed_by, cancelled_by,
+				requires_approval, approved_by, approved_at, rejected_by, started_at, updated_at, finished_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		`, run.ID, runbookID, run.RunbookTitle, run.State, run.Reason, run.StartedBy, nilToStrPtr(run.ResumedBy), nilToStrPtr(run.CancelledBy),
+			boolToInt(run.RequiresApproval), nilToStrPtr(run.ApprovedBy), nilToStr(run.ApprovedAt), nilToStrPtr(run.RejectedBy), run.StartedAt, run.UpdatedAt, nilToStr(run.FinishedAt)); err != nil {
 			return fmt.Errorf("insert runbook run: %w", err)
 		}
 		for _, step := range savedSteps {
@@ -203,6 +227,85 @@ func (s *Store) GetRunbookRun(ctx context.Context, id string) (*RunbookRunRecord
 	return run, steps, nil
 }
 
+// ApproveRunbookRun conditionally moves an awaiting run to running, records
+// the approving user and timestamp, and returns the frozen snapshot.
+func (s *Store) ApproveRunbookRun(ctx context.Context, id, userID string) (*RunbookRunRecord, []*RunbookRunStepRecord, error) {
+	var run *RunbookRunRecord
+	var steps []*RunbookRunStepRecord
+	err := s.WithinTransaction(ctx, func(tx *Store) error {
+		current, err := lockRunbookRun(ctx, tx.db, s.driver == "postgres", id)
+		if err != nil {
+			return err
+		}
+		if current.State != "awaiting_approval" {
+			return ErrConflict
+		}
+		now := nextRunbookRunTimestamp(current.UpdatedAt)
+		result, err := tx.db.ExecContext(ctx, `UPDATE runbook_runs
+			SET state = 'running', approved_by = ?, approved_at = ?, updated_at = ?
+			WHERE id = ? AND state = 'awaiting_approval'`, userID, now, now, id)
+		if err != nil {
+			return fmt.Errorf("approve runbook run: %w", err)
+		}
+		if n, err := result.RowsAffected(); err != nil {
+			return fmt.Errorf("count approved runbook runs: %w", err)
+		} else if n != 1 {
+			return ErrConflict
+		}
+		run, err = scanRunbookRun(tx.db.QueryRowContext(ctx, `SELECT `+runbookRunColumns+` FROM runbook_runs WHERE id = ?`, id))
+		if err != nil {
+			return fmt.Errorf("read approved runbook run: %w", err)
+		}
+		steps, err = listRunbookRunSteps(ctx, tx.db, id)
+		return err
+	})
+	if err != nil {
+		return nil, nil, fmt.Errorf("approve runbook run: %w", err)
+	}
+	return run, steps, nil
+}
+
+// RejectRunbookRun conditionally rejects an awaiting run, records the
+// rejecting user, and skips its still-pending frozen steps.
+func (s *Store) RejectRunbookRun(ctx context.Context, id, userID string) (*RunbookRunRecord, []*RunbookRunStepRecord, error) {
+	var run *RunbookRunRecord
+	var steps []*RunbookRunStepRecord
+	err := s.WithinTransaction(ctx, func(tx *Store) error {
+		current, err := lockRunbookRun(ctx, tx.db, s.driver == "postgres", id)
+		if err != nil {
+			return err
+		}
+		if current.State != "awaiting_approval" {
+			return ErrConflict
+		}
+		now := nextRunbookRunTimestamp(current.UpdatedAt)
+		result, err := tx.db.ExecContext(ctx, `UPDATE runbook_runs
+			SET state = 'rejected', rejected_by = ?, updated_at = ?, finished_at = ?
+			WHERE id = ? AND state = 'awaiting_approval'`, userID, now, now, id)
+		if err != nil {
+			return fmt.Errorf("reject runbook run: %w", err)
+		}
+		if n, err := result.RowsAffected(); err != nil {
+			return fmt.Errorf("count rejected runbook runs: %w", err)
+		} else if n != 1 {
+			return ErrConflict
+		}
+		if err := skipAwaitingApprovalRunbookRunSteps(ctx, tx.db, id, now); err != nil {
+			return err
+		}
+		run, err = scanRunbookRun(tx.db.QueryRowContext(ctx, `SELECT `+runbookRunColumns+` FROM runbook_runs WHERE id = ?`, id))
+		if err != nil {
+			return fmt.Errorf("read rejected runbook run: %w", err)
+		}
+		steps, err = listRunbookRunSteps(ctx, tx.db, id)
+		return err
+	})
+	if err != nil {
+		return nil, nil, fmt.Errorf("reject runbook run: %w", err)
+	}
+	return run, steps, nil
+}
+
 // ListRunbookRuns returns one runbook's history newest first and its total
 // count. A limit of zero or less uses the default page size of 20; a larger
 // limit is clamped to 100.
@@ -230,7 +333,14 @@ func (s *Store) UpdateRunbookRun(ctx context.Context, id, expectedState string, 
 	if len(updates) == 0 {
 		return nil, fmt.Errorf("update runbook run: no fields to update")
 	}
+	if expectedState == "awaiting_approval" {
+		return nil, ErrConflict
+	}
 	switch updates["state"] {
+	case "awaiting_approval":
+		return nil, fmt.Errorf("update runbook run: state awaiting_approval must be set with CreateRunbookRunWithState")
+	case "rejected":
+		return nil, fmt.Errorf("update runbook run: state rejected must be set with RejectRunbookRun")
 	case "cancelled":
 		return nil, fmt.Errorf("update runbook run: state cancelled must be set with CancelRunbookRun")
 	case "expired":
@@ -451,7 +561,7 @@ func (s *Store) CancelRunbookRun(ctx context.Context, id, cancelledBy string) er
 		if err := closeUnfinishedRunbookRunSteps(ctx, tx.db, id, now); err != nil {
 			return err
 		}
-		result, err := tx.db.ExecContext(ctx, `UPDATE runbook_runs SET state = 'cancelled', cancelled_by = ?, updated_at = ?, finished_at = ? WHERE id = ? AND state IN ('running','waiting_manual','failed')`, cancelledBy, now, now, id)
+		result, err := tx.db.ExecContext(ctx, `UPDATE runbook_runs SET state = 'cancelled', cancelled_by = ?, updated_at = ?, finished_at = ? WHERE id = ? AND state = ?`, cancelledBy, now, now, id, run.State)
 		if err != nil {
 			return fmt.Errorf("cancel runbook run: %w", err)
 		}
@@ -568,6 +678,61 @@ func (s *Store) ExpireOpenRunbookRuns(ctx context.Context, before string) ([]str
 	return expired, nil
 }
 
+// ExpireAwaitingApprovalRunbookRuns expires stale approval requests and
+// skips their pending frozen steps. It returns the IDs transitioned in
+// processing order. An empty cutoff is a no-op.
+func (s *Store) ExpireAwaitingApprovalRunbookRuns(ctx context.Context, before string) ([]string, error) {
+	expired := make([]string, 0)
+	if before == "" {
+		return expired, nil
+	}
+	cutoff, err := normalizeRunbookRunCutoff(before)
+	if err != nil {
+		return nil, fmt.Errorf("expire runbook approval requests: %w", err)
+	}
+	err = s.WithinTransaction(ctx, func(tx *Store) error {
+		ids, err := runbookRunIDs(ctx, tx.db, s.driver == "postgres", `state = 'awaiting_approval' AND updated_at < ?`, cutoff)
+		if err != nil {
+			return err
+		}
+		for _, id := range ids {
+			run, err := lockRunbookRun(ctx, tx.db, s.driver == "postgres", id)
+			if err != nil {
+				if errors.Is(err, ErrNotFound) {
+					continue
+				}
+				return err
+			}
+			if run.State != "awaiting_approval" || run.UpdatedAt >= cutoff {
+				continue
+			}
+			now := nextRunbookRunTimestamp(run.UpdatedAt)
+			result, err := tx.db.ExecContext(ctx, `UPDATE runbook_runs
+				SET state = 'expired', reason = 'approval_expired', updated_at = ?, finished_at = ?
+				WHERE id = ? AND state = 'awaiting_approval' AND updated_at < ?`, now, now, id, cutoff)
+			if err != nil {
+				return fmt.Errorf("expire runbook approval request: %w", err)
+			}
+			n, err := result.RowsAffected()
+			if err != nil {
+				return fmt.Errorf("count expired approval requests: %w", err)
+			}
+			if n != 1 {
+				continue
+			}
+			if err := skipAwaitingApprovalRunbookRunSteps(ctx, tx.db, id, now); err != nil {
+				return err
+			}
+			expired = append(expired, id)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("expire runbook approval requests: %w", err)
+	}
+	return expired, nil
+}
+
 // PruneRunbookRuns removes terminal history older than before. An empty
 // cutoff is a no-op, which lets a zero-day retention setting mean keep all.
 func (s *Store) PruneRunbookRuns(ctx context.Context, before string) (int64, error) {
@@ -580,7 +745,7 @@ func (s *Store) PruneRunbookRuns(ctx context.Context, before string) (int64, err
 	}
 	var affected int64
 	err = s.WithinTransaction(ctx, func(tx *Store) error {
-		ids, err := runbookRunIDs(ctx, tx.db, s.driver == "postgres", `state IN ('succeeded','cancelled','expired') AND finished_at < ?`, cutoff)
+		ids, err := runbookRunIDs(ctx, tx.db, s.driver == "postgres", `state IN ('succeeded','cancelled','expired','rejected') AND finished_at < ?`, cutoff)
 		if err != nil {
 			return err
 		}
@@ -598,7 +763,7 @@ func (s *Store) PruneRunbookRuns(ctx context.Context, before string) (int64, err
 			if _, err := tx.db.ExecContext(ctx, `DELETE FROM runbook_run_steps WHERE run_id = ?`, id); err != nil {
 				return fmt.Errorf("delete pruned runbook steps: %w", err)
 			}
-			result, err := tx.db.ExecContext(ctx, `DELETE FROM runbook_runs WHERE id = ? AND state IN ('succeeded','cancelled','expired') AND finished_at < ?`, id, cutoff)
+			result, err := tx.db.ExecContext(ctx, `DELETE FROM runbook_runs WHERE id = ? AND state IN ('succeeded','cancelled','expired','rejected') AND finished_at < ?`, id, cutoff)
 			if err != nil {
 				return fmt.Errorf("delete pruned runbook run: %w", err)
 			}
@@ -629,9 +794,16 @@ func closeUnfinishedRunbookRunSteps(ctx context.Context, db DBTX, runID, now str
 	return nil
 }
 
+func skipAwaitingApprovalRunbookRunSteps(ctx context.Context, db DBTX, runID, now string) error {
+	if _, err := db.ExecContext(ctx, `UPDATE runbook_run_steps SET state = 'skipped', finished_at = ? WHERE run_id = ? AND state = 'pending'`, now, runID); err != nil {
+		return fmt.Errorf("skip approval-request runbook steps: %w", err)
+	}
+	return nil
+}
+
 func activeRunbookRunID(ctx context.Context, db DBTX, runbookID string) (string, error) {
 	var id string
-	err := db.QueryRowContext(ctx, `SELECT id FROM runbook_runs WHERE runbook_id = ? AND state IN ('running','waiting_manual','failed') ORDER BY started_at DESC, id DESC LIMIT 1`, runbookID).Scan(&id)
+	err := db.QueryRowContext(ctx, `SELECT id FROM runbook_runs WHERE runbook_id = ? AND state IN ('running','waiting_manual','failed','awaiting_approval') ORDER BY started_at DESC, id DESC LIMIT 1`, runbookID).Scan(&id)
 	if err != nil {
 		return "", err
 	}
@@ -644,8 +816,10 @@ func (s *Store) activeRunbookRunID(ctx context.Context, runbookID string) (strin
 
 func scanRunbookRun(row rowScanner) (*RunbookRunRecord, error) {
 	var run RunbookRunRecord
-	var runbookID, resumedBy, cancelledBy, finishedAt sql.NullString
-	err := row.Scan(&run.ID, &runbookID, &run.RunbookTitle, &run.State, &run.Reason, &run.StartedBy, &resumedBy, &cancelledBy, &run.StartedAt, &run.UpdatedAt, &finishedAt)
+	var runbookID, resumedBy, cancelledBy, approvedBy, approvedAt, rejectedBy, finishedAt sql.NullString
+	var requiresApproval int
+	err := row.Scan(&run.ID, &runbookID, &run.RunbookTitle, &run.State, &run.Reason, &run.StartedBy, &resumedBy, &cancelledBy,
+		&requiresApproval, &approvedBy, &approvedAt, &rejectedBy, &run.StartedAt, &run.UpdatedAt, &finishedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -660,6 +834,16 @@ func scanRunbookRun(row rowScanner) (*RunbookRunRecord, error) {
 	}
 	if cancelledBy.Valid {
 		run.CancelledBy = &cancelledBy.String
+	}
+	run.RequiresApproval = requiresApproval != 0
+	if approvedBy.Valid {
+		run.ApprovedBy = &approvedBy.String
+	}
+	if approvedAt.Valid {
+		run.ApprovedAt = approvedAt.String
+	}
+	if rejectedBy.Valid {
+		run.RejectedBy = &rejectedBy.String
 	}
 	if finishedAt.Valid {
 		run.FinishedAt = finishedAt.String
@@ -832,11 +1016,11 @@ func runbookRunIDs(ctx context.Context, db DBTX, postgres bool, predicate string
 }
 
 func isOpenRunbookRunState(state string) bool {
-	return state == "running" || state == "waiting_manual" || state == "failed"
+	return state == "running" || state == "waiting_manual" || state == "failed" || state == "awaiting_approval"
 }
 
 func isTerminalRunbookRunState(state string) bool {
-	return state == "succeeded" || state == "cancelled" || state == "expired"
+	return state == "succeeded" || state == "cancelled" || state == "expired" || state == "rejected"
 }
 
 func runbookRunTimestamp(t time.Time) string {

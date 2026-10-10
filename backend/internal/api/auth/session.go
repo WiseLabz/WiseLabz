@@ -295,7 +295,7 @@ func validElevationAction(action string) bool {
 	case "connector.delete", "connector.restart", "connector.start", "connector.stop",
 		"connector.bulkRestart", "connector.configPush", "connector.action", "connector.recipeActions", "template.delete", "user.delete",
 		"user.resetPassword", "user.resetMfa", "user.create", "user.update", "apiKey.create",
-		"authConfig.update", "authProvider.toggle", "mfa.manage", "runbook.run":
+		"authConfig.update", "authProvider.toggle", "mfa.manage", "runbook.run", "runbook.approve":
 		return true
 	default:
 		return false

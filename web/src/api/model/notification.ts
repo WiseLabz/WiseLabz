@@ -14,7 +14,7 @@ export interface Notification {
    * @nullable
    */
   alertId?: string | null;
-  /** e.g. alert.created, finding.created, system.job_failed, runbook.run_failed, runbook.run_waiting, digest.summary */
+  /** e.g. alert.created, finding.created, system.job_failed, runbook.run_failed, runbook.run_waiting, runbook.run_approval_requested, digest.summary */
   eventType: string;
   title: string;
   message: string;

@@ -21,6 +21,7 @@ function makeRun(number: number): RunbookRun {
     startedAt: `2026-10-0${(number % 8) + 1}T10:00:00Z`,
     updatedAt: `2026-10-0${(number % 8) + 1}T10:01:00Z`,
     finishedAt: `2026-10-0${(number % 8) + 1}T10:01:00Z`,
+    requiresApproval: false,
     steps: [],
   };
 }
@@ -59,6 +60,25 @@ function renderHistory(onSelectRun = vi.fn()) {
 }
 
 describe('RunHistory', () => {
+  it.each([
+    ['awaiting_approval', 'Awaiting approval'],
+    ['rejected', 'Rejected'],
+  ] as const)('labels %s in run history', async (state, label) => {
+    server.use(
+      http.get('/api/runbooks/:runbookId/runs', () =>
+        HttpResponse.json({
+          items: [{ ...makeRun(12), state, requiresApproval: true }],
+          total: 1,
+          page: 1,
+          pageSize: 10,
+        })
+      )
+    );
+
+    renderHistory();
+    expect(await screen.findByText(label)).toBeInTheDocument();
+  });
+
   it('renders a deep link and preserves modified-click browser behavior', async () => {
     const { onSelectRun } = renderHistory();
     await screen.findByText('Recovery 1');

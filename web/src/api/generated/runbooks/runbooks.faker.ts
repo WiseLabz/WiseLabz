@@ -29,6 +29,7 @@ export const getGetRunbooksResponseMock = (
   overrideResponse: Partial<Extract<RunbookPage, object>> = {}
 ): RunbookPage => ({
   items: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() => ({
+    requiresApproval: faker.datatype.boolean(),
     id: faker.string.alpha({ length: { min: 10, max: 20 } }),
     title: faker.string.alpha({ length: { min: 10, max: 20 } }),
     body: faker.string.alpha({ length: { min: 10, max: 20 } }),
@@ -98,6 +99,7 @@ export const getGetRunbooksResponseMock = (
 export const getPostRunbooksResponseMock = (
   overrideResponse: Partial<Extract<Runbook, object>> = {}
 ): Runbook => ({
+  requiresApproval: faker.datatype.boolean(),
   id: faker.string.alpha({ length: { min: 10, max: 20 } }),
   title: faker.string.alpha({ length: { min: 10, max: 20 } }),
   body: faker.string.alpha({ length: { min: 10, max: 20 } }),
@@ -161,6 +163,7 @@ export const getPostRunbooksResponseMock = (
 export const getGetRunbooksRunbookIdResponseMock = (
   overrideResponse: Partial<Extract<Runbook, object>> = {}
 ): Runbook => ({
+  requiresApproval: faker.datatype.boolean(),
   id: faker.string.alpha({ length: { min: 10, max: 20 } }),
   title: faker.string.alpha({ length: { min: 10, max: 20 } }),
   body: faker.string.alpha({ length: { min: 10, max: 20 } }),
@@ -224,6 +227,7 @@ export const getGetRunbooksRunbookIdResponseMock = (
 export const getPutRunbooksRunbookIdResponseMock = (
   overrideResponse: Partial<Extract<Runbook, object>> = {}
 ): Runbook => ({
+  requiresApproval: faker.datatype.boolean(),
   id: faker.string.alpha({ length: { min: 10, max: 20 } }),
   title: faker.string.alpha({ length: { min: 10, max: 20 } }),
   body: faker.string.alpha({ length: { min: 10, max: 20 } }),
@@ -339,6 +343,8 @@ export const getStartRunbookRunResponseMock = (
     {
       id: faker.string.alpha({ length: { min: 10, max: 20 } }),
       canStart: faker.datatype.boolean(),
+      requiresApproval: faker.datatype.boolean(),
+      approverAvailable: faker.datatype.boolean(),
       steps: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(
         () => ({
           id: faker.string.alpha({ length: { min: 10, max: 20 } }),
@@ -503,6 +509,19 @@ export const getStartRunbookRunResponseMock = (
           faker.string.alpha({ length: { min: 10, max: 20 } }),
           undefined,
         ]),
+        requiresApproval: faker.helpers.arrayElement([faker.datatype.boolean(), undefined]),
+        approvedBy: faker.helpers.arrayElement([
+          faker.string.alpha({ length: { min: 10, max: 20 } }),
+          undefined,
+        ]),
+        approvedAt: faker.helpers.arrayElement([
+          faker.date.past().toISOString().slice(0, 19) + 'Z',
+          undefined,
+        ]),
+        rejectedBy: faker.helpers.arrayElement([
+          faker.string.alpha({ length: { min: 10, max: 20 } }),
+          undefined,
+        ]),
         startedAt: faker.date.past().toISOString().slice(0, 19) + 'Z',
         updatedAt: faker.date.past().toISOString().slice(0, 19) + 'Z',
         finishedAt: faker.helpers.arrayElement([
@@ -511,6 +530,11 @@ export const getStartRunbookRunResponseMock = (
         ]),
       },
       ...{
+        canApprove: faker.helpers.arrayElement([faker.datatype.boolean(), undefined]),
+        approvalExpiresAt: faker.helpers.arrayElement([
+          faker.date.past().toISOString().slice(0, 19) + 'Z',
+          undefined,
+        ]),
         steps: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(
           () => ({
             id: faker.string.alpha({ length: { min: 10, max: 20 } }),
@@ -680,6 +704,19 @@ export const getListRunbookRunsResponseMock = (
         faker.string.alpha({ length: { min: 10, max: 20 } }),
         undefined,
       ]),
+      requiresApproval: faker.helpers.arrayElement([faker.datatype.boolean(), undefined]),
+      approvedBy: faker.helpers.arrayElement([
+        faker.string.alpha({ length: { min: 10, max: 20 } }),
+        undefined,
+      ]),
+      approvedAt: faker.helpers.arrayElement([
+        faker.date.past().toISOString().slice(0, 19) + 'Z',
+        undefined,
+      ]),
+      rejectedBy: faker.helpers.arrayElement([
+        faker.string.alpha({ length: { min: 10, max: 20 } }),
+        undefined,
+      ]),
       startedAt: faker.date.past().toISOString().slice(0, 19) + 'Z',
       updatedAt: faker.date.past().toISOString().slice(0, 19) + 'Z',
       finishedAt: faker.helpers.arrayElement([
@@ -688,6 +725,11 @@ export const getListRunbookRunsResponseMock = (
       ]),
     },
     ...{
+      canApprove: faker.helpers.arrayElement([faker.datatype.boolean(), undefined]),
+      approvalExpiresAt: faker.helpers.arrayElement([
+        faker.date.past().toISOString().slice(0, 19) + 'Z',
+        undefined,
+      ]),
       steps: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(
         () => ({
           id: faker.string.alpha({ length: { min: 10, max: 20 } }),
@@ -858,6 +900,19 @@ export const getGetRunbookRunResponseMock = (): RunbookRun => ({
       faker.string.alpha({ length: { min: 10, max: 20 } }),
       undefined,
     ]),
+    requiresApproval: faker.helpers.arrayElement([faker.datatype.boolean(), undefined]),
+    approvedBy: faker.helpers.arrayElement([
+      faker.string.alpha({ length: { min: 10, max: 20 } }),
+      undefined,
+    ]),
+    approvedAt: faker.helpers.arrayElement([
+      faker.date.past().toISOString().slice(0, 19) + 'Z',
+      undefined,
+    ]),
+    rejectedBy: faker.helpers.arrayElement([
+      faker.string.alpha({ length: { min: 10, max: 20 } }),
+      undefined,
+    ]),
     startedAt: faker.date.past().toISOString().slice(0, 19) + 'Z',
     updatedAt: faker.date.past().toISOString().slice(0, 19) + 'Z',
     finishedAt: faker.helpers.arrayElement([
@@ -866,6 +921,11 @@ export const getGetRunbookRunResponseMock = (): RunbookRun => ({
     ]),
   },
   ...{
+    canApprove: faker.helpers.arrayElement([faker.datatype.boolean(), undefined]),
+    approvalExpiresAt: faker.helpers.arrayElement([
+      faker.date.past().toISOString().slice(0, 19) + 'Z',
+      undefined,
+    ]),
     steps: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(
       () => ({
         id: faker.string.alpha({ length: { min: 10, max: 20 } }),
@@ -1029,6 +1089,19 @@ export const getResumeRunbookRunResponseMock = (
     undefined,
   ]),
   cancelledBy: faker.helpers.arrayElement([
+    faker.string.alpha({ length: { min: 10, max: 20 } }),
+    undefined,
+  ]),
+  requiresApproval: faker.helpers.arrayElement([faker.datatype.boolean(), undefined]),
+  approvedBy: faker.helpers.arrayElement([
+    faker.string.alpha({ length: { min: 10, max: 20 } }),
+    undefined,
+  ]),
+  approvedAt: faker.helpers.arrayElement([
+    faker.date.past().toISOString().slice(0, 19) + 'Z',
+    undefined,
+  ]),
+  rejectedBy: faker.helpers.arrayElement([
     faker.string.alpha({ length: { min: 10, max: 20 } }),
     undefined,
   ]),

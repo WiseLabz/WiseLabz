@@ -19,6 +19,12 @@ export interface RunbookRunRecord {
   startedBy: string;
   resumedBy?: string;
   cancelledBy?: string;
+  /** Frozen approval opt-in; omitted for ordinary runs */
+  requiresApproval?: boolean;
+  /** Operator who approved; never the execution actor */
+  approvedBy?: string;
+  approvedAt?: string;
+  rejectedBy?: string;
   startedAt: string;
   updatedAt: string;
   finishedAt?: string;

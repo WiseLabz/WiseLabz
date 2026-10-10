@@ -69,7 +69,7 @@ export function RunbookPanel(props: RunbookPanelProps) {
       <div className="mt-2 flex flex-wrap items-center gap-2">
         <Button size="sm" onClick={() => setStartOpen(true)} disabled={runbook.steps.length === 0}>
           <PlayIcon size={13} aria-hidden="true" />
-          {t('runbooks.runs.start')}
+          {t(runbook.requiresApproval ? 'runbooks.runs.requestApproval' : 'runbooks.runs.start')}
         </Button>
         <Button size="sm" variant="ghost" onClick={() => setHistoryOpen(true)}>
           {t('runbooks.runs.history')}
@@ -93,9 +93,19 @@ export function RunbookPanel(props: RunbookPanelProps) {
       {runbook.steps.length > 0 && (
         <div className="mt-3 border-t border-line-soft pt-3">
           <h3 className="text-2xs font-medium text-ink-faint">{t('runbooks.steps.heading')}</h3>
+          {runbook.requiresApproval && (
+            <p id="runbook-approval-explanation" className="mt-1 text-2xs text-ink-muted">
+              {t('runbooks.steps.approvalRequired')}
+            </p>
+          )}
           <ul className="mt-1.5 space-y-1.5">
             {runbook.steps.map((step) => (
-              <RunbookStepRow key={step.id} runbookId={runbook.id} step={step} />
+              <RunbookStepRow
+                key={step.id}
+                runbookId={runbook.id}
+                step={step}
+                approvalRequired={Boolean(runbook.requiresApproval)}
+              />
             ))}
           </ul>
         </div>
@@ -140,7 +150,15 @@ export function RunbookPanel(props: RunbookPanelProps) {
   );
 }
 
-function RunbookStepRow({ runbookId, step }: { runbookId: string; step: RunbookStep }) {
+function RunbookStepRow({
+  runbookId,
+  step,
+  approvalRequired,
+}: {
+  runbookId: string;
+  step: RunbookStep;
+  approvalRequired: boolean;
+}) {
   const { t } = useTranslation();
 
   const op = useMutatingOp({
@@ -194,8 +212,12 @@ function RunbookStepRow({ runbookId, step }: { runbookId: string; step: RunbookS
         <button
           type="button"
           onClick={() => op.open()}
-          disabled={!step.canExecute || op.preview.isPending}
-          aria-describedby={blockedReason ? `runbook-step-${step.id}-reason` : undefined}
+          disabled={!step.canExecute || approvalRequired || op.preview.isPending}
+          aria-describedby={
+            [blockedReason && `runbook-step-${step.id}-reason`, approvalRequired && 'runbook-approval-explanation']
+              .filter(Boolean)
+              .join(' ') || undefined
+          }
           className="inline-flex shrink-0 items-center gap-1.5 rounded-sm border border-line-strong px-2 py-1 font-mono text-2xs text-ink transition-colors hover:border-accent-primary-soft disabled:cursor-not-allowed disabled:opacity-40"
         >
           <PlayIcon size={12} />

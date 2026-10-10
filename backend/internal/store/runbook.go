@@ -22,18 +22,19 @@ import (
 // flow as a direct connector restart/start/stop. SnapshotID/DocID remain inert
 // references only.
 type RunbookRecord struct {
-	ID          string  `json:"id"`
-	Title       string  `json:"title"`
-	Body        string  `json:"body"`
-	TargetType  string  `json:"targetType"`
-	TargetValue string  `json:"targetValue"`
-	SnapshotID  *string `json:"snapshotId"`
-	DocID       *string `json:"docId"`
-	CreatedAt   string  `json:"createdAt"`
-	UpdatedAt   string  `json:"updatedAt"`
+	ID               string  `json:"id"`
+	Title            string  `json:"title"`
+	Body             string  `json:"body"`
+	TargetType       string  `json:"targetType"`
+	TargetValue      string  `json:"targetValue"`
+	SnapshotID       *string `json:"snapshotId"`
+	DocID            *string `json:"docId"`
+	RequiresApproval bool    `json:"requiresApproval,omitempty"`
+	CreatedAt        string  `json:"createdAt"`
+	UpdatedAt        string  `json:"updatedAt"`
 }
 
-const runbookColumns = `id, title, body, target_type, target_value, snapshot_id, doc_id, created_at, updated_at`
+const runbookColumns = `id, title, body, target_type, target_value, snapshot_id, doc_id, requires_approval, created_at, updated_at`
 
 // CreateRunbook inserts a new runbook.
 func (s *Store) CreateRunbook(ctx context.Context, r *RunbookRecord) (*RunbookRecord, error) {
@@ -49,9 +50,9 @@ func (s *Store) CreateRunbook(ctx context.Context, r *RunbookRecord) (*RunbookRe
 	}
 
 	_, err := s.db.ExecContext(ctx, `
-		INSERT INTO runbooks (id, title, body, target_type, target_value, snapshot_id, doc_id, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, r.ID, r.Title, r.Body, r.TargetType, r.TargetValue, r.SnapshotID, r.DocID, r.CreatedAt, r.UpdatedAt)
+		INSERT INTO runbooks (id, title, body, target_type, target_value, snapshot_id, doc_id, requires_approval, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, r.ID, r.Title, r.Body, r.TargetType, r.TargetValue, r.SnapshotID, r.DocID, boolToInt(r.RequiresApproval), r.CreatedAt, r.UpdatedAt)
 	if err != nil {
 		if isUniqueViolation(err) {
 			return nil, ErrConflict
@@ -131,6 +132,13 @@ func (s *Store) UpdateRunbook(ctx context.Context, id string, updates map[string
 		case "doc_id":
 			parts = append(parts, "doc_id = ?")
 			args = append(args, v)
+		case "requires_approval":
+			b, ok := v.(bool)
+			if !ok {
+				return nil, fmt.Errorf("update runbook: field %q must be a bool", k)
+			}
+			parts = append(parts, "requires_approval = ?")
+			args = append(args, boolToInt(b))
 		}
 	}
 
@@ -224,8 +232,9 @@ func (s *Store) UpdateRunbookWithSteps(ctx context.Context, id string, updates m
 func scanRunbook(row rowScanner) (*RunbookRecord, error) {
 	var r RunbookRecord
 	var snapshotID, docID sql.NullString
+	var requiresApproval int
 	err := row.Scan(&r.ID, &r.Title, &r.Body, &r.TargetType, &r.TargetValue,
-		&snapshotID, &docID, &r.CreatedAt, &r.UpdatedAt)
+		&snapshotID, &docID, &requiresApproval, &r.CreatedAt, &r.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -238,6 +247,7 @@ func scanRunbook(row rowScanner) (*RunbookRecord, error) {
 	if docID.Valid {
 		r.DocID = &docID.String
 	}
+	r.RequiresApproval = requiresApproval != 0
 	return &r, nil
 }
 

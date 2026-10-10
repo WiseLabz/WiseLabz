@@ -962,6 +962,11 @@ func actionBackupConnector(t *testing.T) store.ConnectorRecord {
 
 func TestRunbookBackupJSONAndZIPRoundTrip(t *testing.T) {
 	ctx, src, runbook, authored := runbookBackupFixture(t)
+	updatedRunbook, err := src.UpdateRunbook(ctx, runbook.ID, map[string]any{"requires_approval": true})
+	if err != nil {
+		t.Fatalf("enable runbook approval before backup: %v", err)
+	}
+	runbook = *updatedRunbook
 	actionConnector := actionBackupConnector(t)
 	if err := src.CreateConnector(ctx, &actionConnector); err != nil {
 		t.Fatal(err)
@@ -993,6 +998,9 @@ func TestRunbookBackupJSONAndZIPRoundTrip(t *testing.T) {
 	}
 	if bundle.Runbooks[0].DocID == nil || *bundle.Runbooks[0].DocID != *runbook.DocID {
 		t.Fatalf("exported docId = %v, want %q", bundle.Runbooks[0].DocID, *runbook.DocID)
+	}
+	if !bundle.Runbooks[0].RequiresApproval {
+		t.Fatal("exported runbook lost requiresApproval opt-in")
 	}
 	wantKinds := map[string]bool{"lifecycle": false, "sync_and_wait": false, "wait_until_healthy": false, "manual": false, "config_push": false, "wait_for_entity": false, "connector_action": false}
 	for _, step := range bundle.RunbookSteps {
@@ -1409,7 +1417,7 @@ func assertRunbookBackupEqual(ctx context.Context, t *testing.T, s *store.Store,
 	}
 	if gotRunbook.ID != wantRunbook.ID || gotRunbook.Title != wantRunbook.Title || gotRunbook.Body != wantRunbook.Body ||
 		gotRunbook.TargetType != wantRunbook.TargetType || gotRunbook.TargetValue != wantRunbook.TargetValue ||
-		gotRunbook.CreatedAt != wantRunbook.CreatedAt || gotRunbook.UpdatedAt != wantRunbook.UpdatedAt || gotRunbook.SnapshotID != nil ||
+		gotRunbook.RequiresApproval != wantRunbook.RequiresApproval || gotRunbook.CreatedAt != wantRunbook.CreatedAt || gotRunbook.UpdatedAt != wantRunbook.UpdatedAt || gotRunbook.SnapshotID != nil ||
 		!sameOptionalString(gotRunbook.DocID, wantRunbook.DocID) {
 		t.Fatalf("restored runbook = %+v, want authored record %+v with snapshot pointer cleared", gotRunbook, wantRunbook)
 	}

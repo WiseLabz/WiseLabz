@@ -128,6 +128,7 @@ function newStepDraft(): StepDraft {
 interface Draft {
   title: string;
   body: string;
+  requiresApproval: boolean;
   targetType: RunbookTargetType;
   targetValue: string;
   docId: string;
@@ -138,6 +139,7 @@ interface Draft {
 const emptyDraft: Draft = {
   title: '',
   body: '',
+  requiresApproval: false,
   targetType: 'change_type',
   targetValue: '',
   docId: '',
@@ -190,6 +192,7 @@ export function RunbooksPage() {
     setDraft({
       title: rb.title,
       body: rb.body,
+      requiresApproval: rb.requiresApproval ?? false,
       targetType: rb.targetType,
       targetValue: rb.targetValue,
       docId: rb.docId ?? '',
@@ -300,6 +303,7 @@ export function RunbooksPage() {
   const toPayload = () => ({
     title: draft.title.trim(),
     body: draft.body,
+    requiresApproval: draft.requiresApproval,
     targetType: draft.targetType,
     targetValue: draft.targetValue.trim(),
     docId: draft.docId.trim() || null,
@@ -621,6 +625,24 @@ export function RunbooksPage() {
               className="w-full rounded-md border border-line-strong bg-canvas-sunken px-3 py-2 text-sm text-ink outline-none placeholder:text-ink-faint focus-visible:border-accent-primary-soft"
             />
           </Field>
+
+          <label className="flex items-start gap-2 text-sm text-ink">
+            <input
+              type="checkbox"
+              aria-label={t('settings.runbooks.requireApproval')}
+              checked={draft.requiresApproval}
+              onChange={(e) =>
+                setDraft((d) => ({ ...d, requiresApproval: e.target.checked }))
+              }
+              className="mt-0.5 accent-accent-primary"
+            />
+            <span>
+              <span className="block font-medium">{t('settings.runbooks.requireApproval')}</span>
+              <span className="mt-0.5 block text-xs text-ink-muted">
+                {t('settings.runbooks.requireApprovalHint')}
+              </span>
+            </span>
+          </label>
 
           <div className="grid gap-4 sm:grid-cols-2">
             <Field
