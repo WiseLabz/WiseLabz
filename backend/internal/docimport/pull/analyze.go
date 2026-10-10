@@ -18,6 +18,22 @@ func StagedSource(dir string) docimport.Source {
 	return docimport.SourceMarkdown
 }
 
+// IsStagedPull reports whether the server-written origin marker names a
+// supported pull provider. Callers must not infer pull origin from ZIP content
+// or a request's parser selection.
+func IsStagedPull(dir string) bool {
+	data, err := os.ReadFile(filepath.Join(dir, "source"))
+	if err != nil {
+		return false
+	}
+	switch docimport.Source(data) {
+	case docimport.SourceBookStack, docimport.SourceWikiJS:
+		return true
+	default:
+		return false
+	}
+}
+
 // Analyze stages normalized lab-scope notes without connector inference.
 func Analyze(ctx context.Context, dir string, maxAttachmentBytes int64) (*docimport.Plan, error) {
 	if err := ctx.Err(); err != nil {
@@ -32,7 +48,12 @@ func Analyze(ctx context.Context, dir string, maxAttachmentBytes int64) (*docimp
 	if maxAttachmentBytes > 0 {
 		limits.MaxAttachmentBytes = maxAttachmentBytes
 	}
-	archive, err := docimport.OpenArchive(&zr.Reader, limits)
+	var archive *docimport.Archive
+	if IsStagedPull(dir) {
+		archive, err = docimport.OpenPulledArchive(&zr.Reader, limits)
+	} else {
+		archive, err = docimport.OpenArchive(&zr.Reader, limits)
+	}
 	if err != nil {
 		return nil, err
 	}

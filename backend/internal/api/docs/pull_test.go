@@ -21,7 +21,12 @@ func TestPullUsesExistingPreviewCommitAndSafeAudit(t *testing.T) {
 	connector.AllowLoopbackForTest(t)
 	h := newImportHandler(t)
 	user := apitest.NewUser(t, h.Store, "admin")
-	zipData := zipOf(t, "data.json", `{"book":{"id":1,"name":"Book","pages":[{"id":2,"name":"Page","markdown":"hello"}]}}`)
+	page := strings.Repeat("x", (1<<20)+1)
+	attachment := strings.Repeat("a", (1<<20)+1)
+	zipData := zipOf(t,
+		"data.json", `{"book":{"id":1,"name":"Book","pages":[{"id":2,"name":"Page","markdown":"`+page+`","attachments":[{"id":3,"name":"Manual","file":"manual.txt"}]}]}}`,
+		"files/manual.txt", attachment,
+	)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/books" {
 			_, _ = w.Write([]byte(`{"data":[{"id":1,"name":"Book"}],"total":1}`))
@@ -40,21 +45,16 @@ func TestPullUsesExistingPreviewCommitAndSafeAudit(t *testing.T) {
 	if rec.Code != 202 {
 		t.Fatalf("start %d %s", rec.Code, rec.Body)
 	}
-	var response PullResponse
-	deadline := time.Now().Add(3 * time.Second)
-	for time.Now().Before(deadline) {
-		rec = httptest.NewRecorder()
+	rec, response := waitForPullState(t, func() *httptest.ResponseRecorder {
+		rec := httptest.NewRecorder()
 		h.GetPull(rec, asUser(httptest.NewRequest("GET", "/api/docs/import/pull", nil), user, true))
-		if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
-			t.Fatal(err)
-		}
-		if response.State != "fetching" {
-			break
-		}
-		time.Sleep(time.Millisecond)
-	}
-	if response.State != "ready" || response.Preview == nil || response.Preview.DocCount != 2 {
+		return rec
+	})
+	if response.State != "ready" || response.Preview == nil || response.Preview.DocCount != 2 || response.Preview.AttachmentCount != 1 {
 		t.Fatalf("ready %d %s", rec.Code, rec.Body)
+	}
+	if response.Preview.Tree[0].Children[0].Title != "Page" {
+		t.Fatalf("preview did not include pulled note: %+v", response.Preview.Tree)
 	}
 	stageDir := filepath.Join(h.Settings.Config.Attachments.ImportDir, response.ID)
 	// Polling a ready job must leave the staged import in place for commit.
@@ -81,6 +81,14 @@ func TestPullUsesExistingPreviewCommitAndSafeAudit(t *testing.T) {
 	h.CommitImport(rec, commitRequest(response.ID, user, true))
 	if rec.Code != 201 {
 		t.Fatalf("commit %d %s", rec.Code, rec.Body)
+	}
+	pageDoc, err := h.Store.GetDoc(context.Background(), response.Preview.Tree[0].Children[0].DocID)
+	if err != nil || !strings.Contains(pageDoc.Content, page) {
+		t.Fatalf("committed BookStack note has wrong content: err=%v content length=%d", err, len(pageDoc.Content))
+	}
+	attachments, err := h.Store.ListDocAttachments(context.Background(), pageDoc.ID)
+	if err != nil || len(attachments) != 1 || attachments[0].Size != int64(len(attachment)) {
+		t.Fatalf("committed compressible attachment = %+v err=%v", attachments, err)
 	}
 	rows, _, err := h.Store.ListAuditRecords(context.Background(), "", "", "", "", 0, 100)
 	if err != nil {
@@ -124,16 +132,9 @@ func TestPullErrorsDoNotEchoCredentials(t *testing.T) {
 	body := `{"source":"bookstack","url":"` + server.URL + `","tokenId":"unique-token-id","tokenSecret":"unique-token-secret"}`
 	rec := httptest.NewRecorder()
 	h.StartPull(rec, asUser(httptest.NewRequest("POST", "/api/docs/import/pull", strings.NewReader(body)), user, true))
-	deadline := time.Now().Add(3 * time.Second)
-	for time.Now().Before(deadline) {
-		job, _ := h.pullManager().Current()
-		if job.State == "failed" {
-			break
-		}
-		time.Sleep(time.Millisecond)
-	}
-	rec = httptest.NewRecorder()
-	h.GetPull(rec, asUser(httptest.NewRequest("GET", "/api/docs/import/pull", nil), user, true))
+	rec, _ = waitForPullState(t, func() *httptest.ResponseRecorder {
+		return pullRequest(h, "GET", user, "")
+	})
 	if strings.Contains(rec.Body.String(), "unique-token") || !strings.Contains(rec.Body.String(), `"state":"failed"`) {
 		t.Fatalf("status %s", rec.Body)
 	}
@@ -176,6 +177,29 @@ func pullRequest(h *Handler, method, user, body string) *httptest.ResponseRecord
 		h.CancelPull(rec, r)
 	}
 	return rec
+}
+
+func waitForPullState(t *testing.T, poll func() *httptest.ResponseRecorder) (*httptest.ResponseRecorder, PullResponse) {
+	t.Helper()
+	// Large archive fixtures can take several seconds to analyze under -race.
+	deadline := time.Now().Add(30 * time.Second)
+	var rec *httptest.ResponseRecorder
+	var response PullResponse
+	for time.Now().Before(deadline) {
+		rec = poll()
+		if rec.Code != http.StatusOK {
+			t.Fatalf("poll pull status = %d: %s", rec.Code, rec.Body)
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+			t.Fatal(err)
+		}
+		if response.State != "fetching" {
+			return rec, response
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("timed out waiting for pull to finish: %s", rec.Body)
+	return rec, response
 }
 
 func TestPullWithoutJobAndInvalidSource(t *testing.T) {
@@ -224,18 +248,9 @@ func TestPullSecondStartAndCancel(t *testing.T) {
 	if rec = pullRequest(h, "DELETE", user, ""); rec.Code != 202 {
 		t.Fatalf("cancel = %d %s", rec.Code, rec.Body)
 	}
-	var response PullResponse
-	deadline := time.Now().Add(3 * time.Second)
-	for time.Now().Before(deadline) {
-		rec = pullRequest(h, "GET", user, "")
-		if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
-			t.Fatal(err)
-		}
-		if response.State != "fetching" {
-			break
-		}
-		time.Sleep(time.Millisecond)
-	}
+	rec, response := waitForPullState(t, func() *httptest.ResponseRecorder {
+		return pullRequest(h, "GET", user, "")
+	})
 	if response.State != "cancelled" {
 		t.Fatalf("state = %s %s", response.State, rec.Body)
 	}
@@ -251,6 +266,7 @@ func TestWikiJSPullUsesWikiJSPlanAndCommit(t *testing.T) {
 	connector.AllowLoopbackForTest(t)
 	h := newImportHandler(t)
 	user := apitest.NewUser(t, h.Store, "admin")
+	content := strings.Repeat("x", (1<<20)+1)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
 			Query string `json:"query"`
@@ -260,7 +276,7 @@ func TestWikiJSPullUsesWikiJSPlanAndCommit(t *testing.T) {
 		case strings.Contains(body.Query, "list(orderBy"):
 			_, _ = w.Write([]byte(`{"data":{"pages":{"list":[{"id":1,"path":"guides/setup","locale":"en","contentType":"markdown","isPublished":true}]}}}`))
 		case strings.Contains(body.Query, "single(id"):
-			_, _ = w.Write([]byte(`{"data":{"pages":{"single":{"path":"guides/setup","locale":"en","title":"Setup","description":"","content":"hello","contentType":"markdown","createdAt":"","updatedAt":"","tags":[]}}}}`))
+			_, _ = w.Write([]byte(`{"data":{"pages":{"single":{"path":"guides/setup","locale":"en","title":"Setup","description":"","content":"` + content + `","contentType":"markdown","createdAt":"","updatedAt":"","tags":[]}}}}`))
 		case strings.Contains(body.Query, "folders("):
 			_, _ = w.Write([]byte(`{"data":{"assets":{"folders":[]}}}`))
 		default:
@@ -272,18 +288,9 @@ func TestWikiJSPullUsesWikiJSPlanAndCommit(t *testing.T) {
 	if rec.Code != 202 {
 		t.Fatalf("start %d %s", rec.Code, rec.Body)
 	}
-	var response PullResponse
-	deadline := time.Now().Add(3 * time.Second)
-	for time.Now().Before(deadline) {
-		rec = pullRequest(h, "GET", user, "")
-		if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
-			t.Fatal(err)
-		}
-		if response.State != "fetching" {
-			break
-		}
-		time.Sleep(time.Millisecond)
-	}
+	rec, response := waitForPullState(t, func() *httptest.ResponseRecorder {
+		return pullRequest(h, "GET", user, "")
+	})
 	// The "guides" folder doc plus the page: proof the Wiki.js parser ran.
 	if response.State != "ready" || response.Preview == nil || response.Preview.DocCount != 2 {
 		t.Fatalf("ready %d %s", rec.Code, rec.Body)
@@ -295,6 +302,10 @@ func TestWikiJSPullUsesWikiJSPlanAndCommit(t *testing.T) {
 	h.CommitImport(rec, commitRequest(response.ID, user, true))
 	if rec.Code != 201 {
 		t.Fatalf("commit %d %s", rec.Code, rec.Body)
+	}
+	pageDoc, err := h.Store.GetDoc(context.Background(), response.Preview.Tree[0].Children[0].DocID)
+	if err != nil || !strings.Contains(pageDoc.Content, content) {
+		t.Fatalf("committed Wiki.js note has wrong content: err=%v content length=%d", err, len(pageDoc.Content))
 	}
 	rows, _, err := h.Store.ListAuditRecords(context.Background(), "", "", "", "", 0, 100)
 	if err != nil {

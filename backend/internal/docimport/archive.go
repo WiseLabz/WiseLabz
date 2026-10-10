@@ -58,6 +58,17 @@ type Archive struct {
 
 // OpenArchive validates every entry before any content is used.
 func OpenArchive(zr *zip.Reader, limits Limits) (*Archive, error) {
+	return openArchive(zr, limits, true)
+}
+
+// OpenPulledArchive validates a ZIP returned by a configured pull source. Pull
+// sources can produce highly compressible exports, so this skips only the
+// per-entry compression-ratio check; every other archive guard remains active.
+func OpenPulledArchive(zr *zip.Reader, limits Limits) (*Archive, error) {
+	return openArchive(zr, limits, false)
+}
+
+func openArchive(zr *zip.Reader, limits Limits, checkRatio bool) (*Archive, error) {
 	if len(zr.File) > limits.MaxEntries {
 		return nil, ErrTooManyEntries
 	}
@@ -76,7 +87,7 @@ func OpenArchive(zr *zip.Reader, limits Limits) (*Archive, error) {
 			continue
 		}
 		size := f.UncompressedSize64
-		if size > ratioFloor && size/max(f.CompressedSize64, 1) > limits.MaxRatio {
+		if checkRatio && size > ratioFloor && size/max(f.CompressedSize64, 1) > limits.MaxRatio {
 			return nil, fmt.Errorf("%w: %s", ErrCompressionRatio, name)
 		}
 		if size > uint64(limits.MaxBytes)-declared {

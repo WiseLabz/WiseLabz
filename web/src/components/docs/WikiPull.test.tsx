@@ -47,17 +47,19 @@ const preview: DocImportPreview = {
   collisions: [],
 };
 
-function show(source: DocPullRequestSource = DocPullRequestSource.bookstack) {
-  const client = new QueryClient({
+function show(
+  source: DocPullRequestSource = DocPullRequestSource.bookstack,
+  client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-  });
+  })
+) {
   const onReady = vi.fn();
-  render(
+  const rendered = render(
     <QueryClientProvider client={client}>
       <WikiPull source={source} onReady={onReady} />
     </QueryClientProvider>
   );
-  return { client, onReady };
+  return { client, onReady, unmount: rendered.unmount };
 }
 
 beforeEach(() => {
@@ -121,7 +123,9 @@ describe('BookStack pull', () => {
     });
     const { onReady } = show();
     fireEvent.click(await screen.findByRole('button', { name: 'Cancel pull' }));
-    expect(await screen.findByText('Pull cancelled. Nothing was imported.')).toBeInTheDocument();
+    expect(
+      await screen.findByText('BookStack pull cancelled. Nothing was imported.')
+    ).toBeInTheDocument();
     expect(deleteDocsImportPull).toHaveBeenCalledOnce();
     expect(onReady).not.toHaveBeenCalled();
   });
@@ -136,7 +140,7 @@ describe('BookStack pull', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('v25.07');
     vi.mocked(getDocsImportPull).mockResolvedValue({ ...fetching, state: 'ready', preview });
     await client.invalidateQueries({ queryKey: ['docs-import-pull'] });
-    fireEvent.click(await screen.findByRole('button', { name: 'Review fetched preview' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Review BookStack preview' }));
     expect(onReady).toHaveBeenCalledWith(preview);
   });
 
@@ -219,4 +223,167 @@ describe('BookStack pull', () => {
     expect(screen.getByRole('progressbar', { name: 'Wiki.js pull progress' })).toBeInTheDocument();
     expect(onReady).not.toHaveBeenCalled();
   });
+});
+
+describe('pull source tracking', () => {
+  it.each([
+    [DocPullRequestSource.bookstack, DocPullRequestSource.wikijs],
+    [DocPullRequestSource.wikijs, DocPullRequestSource.bookstack],
+  ] as const)(
+    'uses the running job source for progress while keeping %s selected for the form',
+    async (selectedSource, jobSource) => {
+      const running = { ...fetching, source: jobSource };
+      vi.mocked(getDocsImportPull).mockResolvedValue(running);
+      const cancelled: DocPullJob = { ...running, state: 'cancelled' };
+      vi.mocked(deleteDocsImportPull).mockImplementation(async () => {
+        vi.mocked(getDocsImportPull).mockResolvedValue(cancelled);
+        return running;
+      });
+      vi.mocked(postDocsImportPull).mockResolvedValue({
+        ...fetching,
+        source: selectedSource,
+      });
+      show(selectedSource);
+
+      const progressText =
+        jobSource === DocPullRequestSource.wikijs
+          ? 'Fetching pages and assets: 0 / 2'
+          : 'Fetching books: 0 / 2';
+      const progressName =
+        jobSource === DocPullRequestSource.wikijs
+          ? 'Wiki.js pull progress'
+          : 'BookStack pull progress';
+      expect(await screen.findByText(progressText)).toBeInTheDocument();
+      expect(screen.getByRole('progressbar', { name: progressName })).toBeInTheDocument();
+      expect(
+        screen.getByText(
+          jobSource === DocPullRequestSource.wikijs
+            ? 'Source: Wiki.js API'
+            : 'Source: BookStack API'
+        )
+      ).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Cancel pull' }));
+      await screen.findByText(
+        jobSource === DocPullRequestSource.wikijs
+          ? 'Wiki.js pull cancelled. Nothing was imported.'
+          : 'BookStack pull cancelled. Nothing was imported.'
+      );
+
+      const wikiJsSelected = selectedSource === DocPullRequestSource.wikijs;
+      const urlLabel = wikiJsSelected ? 'Wiki.js URL' : 'BookStack URL';
+      fireEvent.change(screen.getByLabelText(urlLabel), {
+        target: { value: 'https://selected.example' },
+      });
+      fireEvent.change(screen.getByLabelText(wikiJsSelected ? 'API key' : 'Token ID'), {
+        target: { value: wikiJsSelected ? 'selected-api-key' : 'selected-token-id' },
+      });
+      if (!wikiJsSelected) {
+        fireEvent.change(screen.getByLabelText('Token secret'), {
+          target: { value: 'selected-token-secret' },
+        });
+      }
+      fireEvent.click(screen.getByRole('button', { name: 'Fetch preview' }));
+
+      await waitFor(() =>
+        expect(postDocsImportPull).toHaveBeenCalledWith(
+          wikiJsSelected
+            ? {
+                source: DocPullRequestSource.wikijs,
+                url: 'https://selected.example',
+                tokenSecret: 'selected-api-key',
+                skipTlsVerify: false,
+              }
+            : {
+                source: DocPullRequestSource.bookstack,
+                url: 'https://selected.example',
+                tokenId: 'selected-token-id',
+                tokenSecret: 'selected-token-secret',
+                skipTlsVerify: false,
+              },
+          undefined
+        )
+      );
+    }
+  );
+
+  it.each([
+    ['ready', 'Review Wiki.js preview'],
+    ['failed', 'Wiki.js pull failed.'],
+    ['cancelled', 'Wiki.js pull cancelled. Nothing was imported.'],
+  ] as const)('identifies a %s Wiki.js job while BookStack stays selected', async (state, text) => {
+    vi.mocked(getDocsImportPull).mockResolvedValue({
+      ...fetching,
+      source: DocPullRequestSource.wikijs,
+      state,
+      preview: state === 'ready' ? preview : undefined,
+      error: '',
+    });
+    show(DocPullRequestSource.bookstack);
+
+    if (state === 'ready') {
+      expect(await screen.findByRole('button', { name: text })).toBeInTheDocument();
+    } else {
+      expect(await screen.findByText(text)).toBeInTheDocument();
+    }
+    expect(screen.getByText('Source: Wiki.js API')).toBeInTheDocument();
+    expect(screen.getByLabelText('BookStack URL')).toBeInTheDocument();
+  });
+
+  it.each([
+    ['ready', 'Review BookStack preview'],
+    ['cancelled', 'BookStack pull cancelled. Nothing was imported.'],
+  ] as const)('identifies a %s BookStack job while Wiki.js stays selected', async (state, text) => {
+    vi.mocked(getDocsImportPull).mockResolvedValue({
+      ...fetching,
+      source: DocPullRequestSource.bookstack,
+      state,
+      preview: state === 'ready' ? preview : undefined,
+      error: '',
+    });
+    show(DocPullRequestSource.wikijs);
+
+    if (state === 'ready') {
+      expect(await screen.findByRole('button', { name: text })).toBeInTheDocument();
+    } else {
+      expect(await screen.findByText(text)).toBeInTheDocument();
+    }
+    expect(screen.getByText('Source: BookStack API')).toBeInTheDocument();
+    expect(screen.getByLabelText('Wiki.js URL')).toBeInTheDocument();
+  });
+
+  it('preserves the shared running job when the form remounts with another source selected', async () => {
+    vi.mocked(getDocsImportPull).mockResolvedValue(fetching);
+    const firstMount = show(DocPullRequestSource.bookstack);
+    expect(await screen.findByText('Source: BookStack API')).toBeInTheDocument();
+    expect(screen.getByText('Fetching books: 0 / 2')).toBeInTheDocument();
+    firstMount.unmount();
+
+    show(DocPullRequestSource.wikijs, firstMount.client);
+
+    expect(await screen.findByText('Source: BookStack API')).toBeInTheDocument();
+    expect(screen.getByText('Fetching books: 0 / 2')).toBeInTheDocument();
+    expect(
+      screen.getByRole('progressbar', { name: 'BookStack pull progress' })
+    ).toBeInTheDocument();
+  });
+
+  it.each([
+    [DocPullRequestSource.bookstack, DocPullRequestSource.wikijs, 'Source: Wiki.js API'],
+    [DocPullRequestSource.wikijs, DocPullRequestSource.bookstack, 'Source: BookStack API'],
+  ] as const)(
+    'shows the job source next to its server error when %s is selected and %s failed',
+    async (selectedSource, jobSource, sourceLabel) => {
+      vi.mocked(getDocsImportPull).mockResolvedValue({
+        ...fetching,
+        source: jobSource,
+        state: 'failed',
+        error: 'Remote API rejected the export',
+      });
+      show(selectedSource);
+
+      expect(await screen.findByRole('alert')).toHaveTextContent('Remote API rejected the export');
+      expect(screen.getByText(sourceLabel)).toBeInTheDocument();
+    }
+  );
 });

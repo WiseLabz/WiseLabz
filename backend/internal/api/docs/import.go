@@ -198,16 +198,25 @@ func saveImportUpload(dir string, part io.Reader) error {
 
 // analyzeStagedZip analyzes a pulled export, which the pull sources normalize to the Markdown layout.
 func (h *Handler) analyzeStagedZip(ctx context.Context, dir string) (*docimport.Plan, error) {
-	return h.analyzeUpload(ctx, dir, pull.StagedSource(dir))
+	return h.analyzeUploadWithPolicy(ctx, dir, pull.StagedSource(dir), pull.IsStagedPull(dir))
 }
 
 func (h *Handler) analyzeUpload(ctx context.Context, dir string, src docimport.Source) (*docimport.Plan, error) {
+	return h.analyzeUploadWithPolicy(ctx, dir, src, false)
+}
+
+func (h *Handler) analyzeUploadWithPolicy(ctx context.Context, dir string, src docimport.Source, pulled bool) (*docimport.Plan, error) {
 	zr, err := zip.OpenReader(docimport.UploadPath(dir))
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = zr.Close() }()
-	archive, err := docimport.OpenArchive(&zr.Reader, h.importLimits())
+	var archive *docimport.Archive
+	if pulled {
+		archive, err = docimport.OpenPulledArchive(&zr.Reader, h.importLimits())
+	} else {
+		archive, err = docimport.OpenArchive(&zr.Reader, h.importLimits())
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -327,7 +336,12 @@ func (h *Handler) commitImport(ctx context.Context, dir string, plan *docimport.
 		return nil, 0, err
 	}
 	defer func() { _ = zr.Close() }()
-	archive, err := docimport.OpenArchive(&zr.Reader, h.importLimits())
+	var archive *docimport.Archive
+	if pull.IsStagedPull(dir) {
+		archive, err = docimport.OpenPulledArchive(&zr.Reader, h.importLimits())
+	} else {
+		archive, err = docimport.OpenArchive(&zr.Reader, h.importLimits())
+	}
 	if err != nil {
 		return nil, 0, err
 	}

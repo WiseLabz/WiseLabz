@@ -311,6 +311,11 @@ func (e *Executor) perform(ctx context.Context, run *store.RunbookRunRecord, ste
 	if err == nil {
 		return nil
 	}
+	var unverified *connectors.ConfigPushUnverifiedError
+	if errors.As(err, &unverified) {
+		return &stepFailure{reason: ReasonStepFailed, state: StepUnknown,
+			message: "The configuration write returned success, but verification failed; the resulting state is unknown."}
+	}
 	if timeout > 0 && ctx.Err() == nil && errors.Is(stepCtx.Err(), context.DeadlineExceeded) {
 		// The step's own deadline expired. A deadline error from the operation
 		// itself, such as a connector's HTTP timeout, is an ordinary failure.

@@ -362,6 +362,43 @@ func TestImportRejectsUnknownSource(t *testing.T) {
 	}
 }
 
+func TestUploadSourceAndEmbeddedMarkerDoNotBypassRatio(t *testing.T) {
+	h := newImportHandler(t)
+	admin := apitest.NewUser(t, h.Store, "admin")
+	data := zipOf(t, "source", "wikijs", "Home.md", strings.Repeat("x", (1<<20)+1))
+	rr := httptest.NewRecorder()
+	h.StageImport(rr, sourceRequest(t, data, admin, "wikijs", true))
+	if rr.Code != http.StatusBadRequest || !strings.Contains(rr.Body.String(), "invalid_archive") || !strings.Contains(rr.Body.String(), "compression ratio") {
+		t.Fatalf("client-selected pull parser bypassed archive ratio: %d %s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestStagedAnalysisAndCommitRequireValidPullOriginMarker(t *testing.T) {
+	h := newImportHandler(t)
+	data := zipOf(t, "note.md", strings.Repeat("x", (1<<20)+1))
+	for i, marker := range []string{"", "wikijs "} {
+		id := []string{"11111111-1111-4111-8111-111111111111", "22222222-2222-4222-8222-222222222222"}[i]
+		dir, err := h.importStage().Create(id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(docimport.UploadPath(dir), data, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if marker != "" {
+			if err := os.WriteFile(filepath.Join(dir, "source"), []byte(marker), 0o600); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if _, err := h.analyzeStagedZip(context.Background(), dir); !errors.Is(err, docimport.ErrCompressionRatio) {
+			t.Errorf("marker %q preview error = %v, want strict ratio rejection", marker, err)
+		}
+		if _, _, err := h.commitImport(context.Background(), dir, &docimport.Plan{}); !errors.Is(err, docimport.ErrCompressionRatio) {
+			t.Errorf("marker %q commit error = %v, want strict ratio rejection", marker, err)
+		}
+	}
+}
+
 func TestImportRequiresFile(t *testing.T) {
 	h := newImportHandler(t)
 	admin := apitest.NewUser(t, h.Store, "admin")

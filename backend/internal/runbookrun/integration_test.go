@@ -3,6 +3,7 @@ package runbookrun
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strconv"
 	"sync"
 	"testing"
@@ -20,13 +21,14 @@ import (
 // stepKindsConnector is a config-push connector with a settable memory field
 // and a VM whose status reads "running" only some fetches after a push.
 type stepKindsConnector struct {
-	mu             sync.Mutex
-	memory         int
-	pushed         bool
-	fetchesAfter   int
-	pushGate       *gate
-	pushes         []int
-	runningFetches int
+	mu               sync.Mutex
+	memory           int
+	pushed           bool
+	fetchesAfter     int
+	pushGate         *gate
+	pushes           []int
+	runningFetches   int
+	failVerification bool
 }
 
 func (c *stepKindsConnector) Name() string     { return "step-kinds" }
@@ -42,6 +44,10 @@ func (c *stepKindsConnector) Fetch(ctx context.Context, _ map[string]any) (*conn
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if c.pushed && c.failVerification {
+		c.failVerification = false
+		return nil, errors.New("verification fetch unavailable")
+	}
 	status := "stopped"
 	if c.pushed {
 		c.fetchesAfter++
@@ -58,6 +64,36 @@ func (c *stepKindsConnector) Fetch(ctx context.Context, _ map[string]any) (*conn
 			{Kind: "vm", Name: "guest", ExternalID: "100", Attributes: map[string]any{"status": status}},
 		},
 	}, nil
+}
+
+func TestUnknownConfigPushResumeRetainsCoreNoOp(t *testing.T) {
+	fake := &stepKindsConnector{memory: 2048, runningFetches: 1, failVerification: true}
+	e, connectorID := stepKindsEnv(t, fake)
+	run, frozen := e.start(configPushStep(connectorID, "memory", `4096`), waitEntityStep(connectorID, "status", "eq", `"running"`))
+	e.settle()
+	if got, steps := e.get(run.ID); got.State != RunFailed || steps[0].State != StepUnknown || steps[1].State != StepPending {
+		t.Fatalf("run=%+v steps=%v; want unknown config push and stopped run", got, stepStates(steps))
+	}
+	if details := auditDetails(t, e.s, "connector.configPush"); len(details) != 1 || details[0]["verification"] != "unverified" || details[0]["fieldKey"] != "memory" || details[0]["entityRef"] != "100" || details[0]["stepId"] != frozen[0].ID {
+		t.Fatalf("unverified audit=%v; want one entry preserving config and run metadata", details)
+	}
+	if alerts, _, err := e.s.ListAlerts(context.Background(), connectorID, "", "", "", 0, 10); err != nil || len(alerts) != 1 || alerts[0].Severity != "critical" {
+		t.Fatalf("alerts=%v err=%v; want one critical alert", alerts, err)
+	}
+	if _, decision, err := e.exec.Resume(context.Background(), run.ID, e.starter, ResumeResend); err != nil || decision == nil || decision.StepID != frozen[0].ID {
+		t.Fatalf("resume decision=%+v err=%v; want the config push retry applied", decision, err)
+	}
+	e.settle()
+	got, steps := e.get(run.ID)
+	if got.State != RunSucceeded || steps[0].State != StepSucceeded || steps[1].State != StepSucceeded {
+		t.Fatalf("run=%+v steps=%v; want retry no-op and continuation", got, stepStates(steps))
+	}
+	if memory, pushes := fake.current(); memory != 4096 || len(pushes) != 1 {
+		t.Fatalf("memory=%d pushes=%v; retry must preserve ConfigRead no-op", memory, pushes)
+	}
+	if details := auditDetails(t, e.s, "connector.configPush"); len(details) != 1 {
+		t.Fatalf("config-push audits=%v; retry no-op must not add another audit", details)
+	}
 }
 
 func (c *stepKindsConnector) WritableFields() []connector.ConfigField {

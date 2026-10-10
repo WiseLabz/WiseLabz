@@ -1652,7 +1652,7 @@ export function useGetConnectorsConnectorIdConfigFields<
 }
 
 /**
- * Field-level partial update per ADR 0003: requires a valid X-Elevation-Token for action connector.configPush. Snapshots the connector before the write, applies it, re-fetches, and diffs. On a verified match, records a connector.configPush audit row and returns the post-push snapshot. On mismatch, auto-reverts to previousValue and raises a critical AlertRecord (escalated further if the revert itself fails), returning 409. 400s with unsupported_operation if the connector doesn't implement config-push, or unsupported_field if fieldKey isn't in WritableFields().
+ * Field-level partial update per ADR 0003: requires a valid X-Elevation-Token for action connector.configPush. Snapshots the connector before the write, applies it, re-fetches, and diffs. On a verified match, records a connector.configPush audit row and returns the post-push snapshot. On mismatch, auto-reverts to previousValue and raises a critical AlertRecord (escalated further if the revert itself fails), returning 409. If the write returns success but the post-write fetch fails, records an audit row marked verification: unverified, raises a critical alert, and returns 409 config_push_unverified with message "Configuration write returned success, but verification failed; the resulting state is unknown." Verification is not retried and no fallback read or rollback is attempted. 400s with unsupported_operation if the connector doesn't implement config-push, or unsupported_field if fieldKey isn't in WritableFields().
  * @summary Push one whitelisted config field (operator, elevation-gated)
  */
 export const postConnectorsConnectorIdConfigPush = (

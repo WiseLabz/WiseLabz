@@ -220,6 +220,11 @@ describe('locale catalogs', () => {
       'runbooks.runs.resumeDecision.resendHint',
       'runbooks.runs.resumeDecision.markDone',
       'runbooks.runs.resumeDecision.markDoneHint',
+      'runbooks.runs.resumeDecision.configPush.warning',
+      'runbooks.runs.resumeDecision.configPush.resend',
+      'runbooks.runs.resumeDecision.configPush.resendHint',
+      'runbooks.runs.resumeDecision.configPush.markDone',
+      'runbooks.runs.resumeDecision.configPush.markDoneHint',
       'runbooks.runs.resumeDecisionRequired',
       'runbooks.runs.resumeRunChanged',
       'runbooks.runs.actionName',
@@ -234,6 +239,25 @@ describe('locale catalogs', () => {
       'settings.runbooks.steps.actionLabel',
       'settings.runbooks.steps.actionPlaceholder',
       'settings.runbooks.steps.noActions',
+    ];
+    for (const catalog of [en, ptBR]) {
+      const translatedKeys = new Set(keys(catalog));
+      expect(paths.filter((path) => !translatedKeys.has(path))).toEqual([]);
+    }
+  });
+
+  it('keeps Wiki.js pull status and review labels translated in both catalogs', () => {
+    const paths = [
+      'docs.import.pullWikijs.progress',
+      'docs.import.pullWikijs.progressLabel',
+      'docs.import.pullWikijs.jobSource',
+      'docs.import.pullWikijs.review',
+      'docs.import.pullWikijs.failed',
+      'docs.import.pullWikijs.cancelled',
+      'docs.import.pull.review',
+      'docs.import.pull.jobSource',
+      'docs.import.pull.failed',
+      'docs.import.pull.cancelled',
     ];
     for (const catalog of [en, ptBR]) {
       const translatedKeys = new Set(keys(catalog));

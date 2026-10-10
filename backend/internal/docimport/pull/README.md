@@ -7,7 +7,7 @@ This package fetches a BookStack instance and converts its content into the exis
 - Shelves become parent documents, books become children of their shelf, and chapters and pages follow the hierarchy in each book's ZIP export. Books not listed under a shelf are imported at the root.
 - If a book appears on multiple shelves, it is imported under the first shelf returned by the shelf listing and a warning identifies the other placement.
 - Markdown content is used when present. ZIP-exported images and supported attachments are carried into the preview; BookStack references and same-site page links are rewritten where a target can be resolved. Unsupported Markdown attachments are skipped and reported by the shared import analyzer.
-- Default import limits are 100 MiB for the downloaded/exported ZIP, 2,000 archive entries, 500 MiB expanded data, a 100:1 compression ratio, 5 MiB per note, and 25 MiB per attachment. Listing and archive entry counts are also bounded by the entry limit.
+- Default pull limits are 100 MiB for each downloaded/exported ZIP, 2,000 archive entries, 500 MiB expanded data, 5 MiB per note, and 25 MiB per attachment. Pull archives skip only the per-entry compression-ratio check because remote exports can be highly compressible; upload archives retain the 100:1 ratio limit. Listing and archive entry counts are also bounded by the entry limit.
 
 ## Pull lifecycle and security
 

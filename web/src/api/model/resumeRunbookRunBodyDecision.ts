@@ -8,7 +8,7 @@
  */
 
 /**
- * Decision for the unknown connector_action step that a resume would start with.
+ * Decision for the unknown connector_action or config_push step that a resume would start with.
  */
 export type ResumeRunbookRunBodyDecision =
   (typeof ResumeRunbookRunBodyDecision)[keyof typeof ResumeRunbookRunBodyDecision];

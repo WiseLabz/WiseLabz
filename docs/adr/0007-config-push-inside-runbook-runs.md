@@ -89,11 +89,21 @@ from the web client, which read the field before editing. Automated runs have no
 the loop:
 
 - When the connector implements `ConfigReader`, the pre-push read provides the verified
-  previous value. If the write fails verification, the executor restores this previous
+  previous value. If a completed verification reports a mismatch, the executor restores this previous
   value via `ConfigPush`, raises a critical alert, and fails the step and run.
 - When the connector lacks a `ConfigReader`, the previous value is unknown. The executor
   does **not** attempt a blind revert. It raises a critical alert stating that the pushed
   value could not be verified and the previous value was unknown, and fails the step and run.
+
+If the write returns success but the post-write snapshot fetch fails, the outcome is
+unverified rather than a confirmed mismatch. The shared core attempts one
+`connector.configPush` audit entry marked `verification: "unverified"` and one
+critical alert, with field/entity and run/step identifiers but no values, credentials
+or raw connector errors. Each persistence attempt has its own detached 15-second
+context. The core returns `ConfigPushUnverifiedError` (HTTP 409
+`config_push_unverified` for direct requests); the runbook step becomes `unknown`
+and later steps stop. Verification is not retried, a field read is not used as a
+fallback, and no rollback is attempted.
 
 ### 5. Detached bounded context for write, verify, and revert
 
@@ -113,12 +123,14 @@ cancels the step before the bounded core completes:
 
 - The step is recorded in state `unknown`.
 - The system never automatically resumes an interrupted run.
-- When an operator resumes the run with a fresh `runbook.run` elevation token, the step
-  re-executes. Because of the already-at-target rule (D4), if the interrupted write had
-  actually landed upstream, the re-execution observes the target value and succeeds cleanly
-  without writing again or triggering a false mismatch.
-- This only works when the connector implements `ConfigReader`. Without a reader, a resumed
-  step whose write had landed fails with the could-not-verify mismatch alert (D4).
+- An unknown config-push step requires an explicit operator decision and fresh
+  `runbook.run` elevation. `resend` retries the frozen step; `mark_done` continues
+  after manual verification without repeating the write. The decision is tied to
+  the displayed step ID and run `updatedAt` and applied atomically, so stale or
+  concurrent decisions cannot change a different revision.
+- A retry retains the already-at-target rule (D4): when a `ConfigReader` confirms
+  the target, the step succeeds without writing. Without a reader, an unchanged
+  retry follows the existing could-not-verify mismatch policy.
 - If the 2-minute bound (`configPushTimeout`) cuts the core short, the step fails with a
   message that the field may or may not have been written; the outcome is unknown.
 

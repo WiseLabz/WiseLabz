@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/WiseLabz/wiselabz/internal/auth"
 	"github.com/WiseLabz/wiselabz/internal/connector"
@@ -87,6 +88,18 @@ func (e *ConfigPushMismatchError) Error() string {
 
 func (e *ConfigPushMismatchError) Unwrap() error { return e.RevertErr }
 
+// ConfigPushUnverifiedError means the connector accepted a write, but the
+// follow-up fetch failed, so the resulting state cannot be established.
+type ConfigPushUnverifiedError struct{ FetchErr error }
+
+func (e *ConfigPushUnverifiedError) Error() string {
+	return "configuration write returned success, but verification failed; the resulting state is unknown"
+}
+
+func (e *ConfigPushUnverifiedError) Unwrap() error { return e.FetchErr }
+
+const configPushPersistenceTimeout = 15 * time.Second
+
 type preparedConfigPush struct {
 	conn   connector.Connector
 	pusher connector.ConfigPusher
@@ -95,6 +108,11 @@ type preparedConfigPush struct {
 }
 
 func writeConfigPushError(w http.ResponseWriter, err error) {
+	var unverified *ConfigPushUnverifiedError
+	if errors.As(err, &unverified) {
+		httputil.Error(w, http.StatusConflict, "config_push_unverified", "Configuration write returned success, but verification failed; the resulting state is unknown.")
+		return
+	}
 	var mismatch *ConfigPushMismatchError
 	if errors.As(err, &mismatch) {
 		httputil.Error(w, http.StatusConflict, "config_push_mismatch", mismatch.Error())
@@ -159,7 +177,16 @@ func (h *Handler) mutateConfigPush(
 	}
 	post, err := prepared.conn.Fetch(ctx, prepared.config)
 	if err != nil {
-		return nil, fmt.Errorf("post-push fetch: %w", err)
+		unverified := &ConfigPushUnverifiedError{FetchErr: fmt.Errorf("post-push fetch: %w", err)}
+		detail := make(map[string]any, len(extraAudit)+3)
+		for k, v := range extraAudit {
+			detail[k] = v
+		}
+		detail["fieldKey"] = req.FieldKey
+		detail["entityRef"] = req.EntityRef
+		detail["verification"] = "unverified"
+		h.recordUnverifiedConfigPush(ctx, actor, prepared.record, detail)
+		return nil, unverified
 	}
 	if !configPushLanded(pre, post) && !configPushConfirmed(ctx, prepared, req) {
 		return nil, h.revertConfigPush(ctx, prepared, req.EntityRef, req.FieldKey, previous, known)
@@ -175,6 +202,31 @@ func (h *Handler) mutateConfigPush(
 		slog.Error("failed to record audit", "action", "connector.configPush", "error", err)
 	}
 	return post, nil
+}
+
+func (h *Handler) recordUnverifiedConfigPush(ctx context.Context, actor LifecycleActor, record *store.ConnectorRecord, detail map[string]any) {
+	auditCtx, cancelAudit := context.WithTimeout(context.WithoutCancel(ctx), configPushPersistenceTimeout)
+	if err := h.recordLifecycleAudit(auditCtx, actor, "connector.configPush", record.ID, detail); err != nil {
+		slog.Error("failed to record unverified config-push audit", "connector", logsafe.Sanitize(record.ID), "error", err)
+	}
+	cancelAudit()
+
+	alert := &store.AlertRecord{
+		ServiceID: record.ID,
+		Severity:  "critical",
+		Title:     "Configuration push verification failed",
+		Description: fmt.Sprintf("Configuration write for field %q on entity %q returned success, but verification failed; the resulting state is unknown.",
+			detail["fieldKey"], detail["entityRef"]),
+	}
+	alertCtx, cancelAlert := context.WithTimeout(context.WithoutCancel(ctx), configPushPersistenceTimeout)
+	if err := h.Store.CreateAlert(alertCtx, alert); err != nil {
+		slog.Error("failed to create unverified config-push alert", "connector", logsafe.Sanitize(record.ID), "error", err)
+	} else if h.WSHub != nil {
+		h.WSHub.BroadcastConnector(record.ID, ws.EventAlertCreated, map[string]any{
+			"alertId": alert.ID, "serviceId": record.ID, "severity": alert.Severity, "title": alert.Title,
+		})
+	}
+	cancelAlert()
 }
 
 // JSON represents driver numbers and browser numbers identically (int vs float64).

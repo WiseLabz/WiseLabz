@@ -1137,6 +1137,16 @@ export const en = {
         markDone: 'Mark the step as done',
         markDoneHint:
           'Sends nothing and continues with the next step. Choose this if the change already took effect.',
+        configPush: {
+          warning:
+            'The configuration update may already have reached the connector. Check its current value before choosing whether to retry or continue.',
+          resend: 'Retry the configuration push',
+          resendHint:
+            'Sends the same frozen configuration update again. Choose this after checking that the target value is not set.',
+          markDone: 'Continue after verifying the value',
+          markDoneHint:
+            'Sends nothing and continues with the next step. Choose this only after checking that the connector already has the target value.',
+        },
       },
       resumeDecisionRequired:
         'This step needs a decision before the run can resume. Choose an option and try again.',
@@ -1425,6 +1435,7 @@ export const en = {
       bookstack: 'BookStack API',
       wikijsApi: 'Wiki.js API',
       pull: {
+        jobSource: 'Source: BookStack API',
         intro:
           'Import everything this token can read from BookStack v25.07 or newer. Up to 2000 entries and 500 MB. Review the preview before confirming.',
         url: 'BookStack URL',
@@ -1433,24 +1444,28 @@ export const en = {
         skipTls:
           'Skip TLS certificate verification. The token is sent over a connection whose certificate is not verified (recorded in audit)',
         start: 'Fetch preview',
-        review: 'Review fetched preview',
+        review: 'Review BookStack preview',
         starting: 'Starting import…',
         progress: 'Fetching books: {{done}} / {{total}}',
         progressLabel: 'BookStack pull progress',
         cancel: 'Cancel pull',
         cancelling: 'Cancelling…',
-        cancelled: 'Pull cancelled. Nothing was imported.',
-        failed: 'Pull failed.',
+        cancelled: 'BookStack pull cancelled. Nothing was imported.',
+        failed: 'BookStack pull failed.',
         startError: 'Could not start the documentation pull.',
         cancelError: 'Could not cancel the documentation pull.',
       },
       pullWikijs: {
+        jobSource: 'Source: Wiki.js API',
         intro:
           'Import every page and asset this API key can read from Wiki.js 2.x. The key needs the read:pages, read:source and read:assets permissions. Up to 2000 entries and 500 MB. Review the preview before confirming.',
         url: 'Wiki.js URL',
         tokenSecret: 'API key',
         progress: 'Fetching pages and assets: {{done}} / {{total}}',
         progressLabel: 'Wiki.js pull progress',
+        review: 'Review Wiki.js preview',
+        cancelled: 'Wiki.js pull cancelled. Nothing was imported.',
+        failed: 'Wiki.js pull failed.',
       },
       intro:
         'Upload a .zip of Markdown files or an Obsidian vault. Folders become parent docs, embedded images and PDFs become attachments, and wikilinks point at the new docs. Nothing is created until you confirm.',

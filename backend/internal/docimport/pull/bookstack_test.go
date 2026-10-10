@@ -171,6 +171,30 @@ func TestBookStackLimits(t *testing.T) {
 	}
 }
 
+func TestAnalyzePullArchiveUsesOnlyExactServerMarker(t *testing.T) {
+	dir := t.TempDir()
+	data := exportZip(t, map[string]any{"book": portableNode{ID: 1, Name: "Book", Pages: []portableNode{{ID: 2, Name: "Page", Markdown: strings.Repeat("x", (1<<20)+1)}}}}, nil)
+	if err := os.WriteFile(docimport.UploadPath(dir), data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, marker := range []string{"", "bookstack ", "client-selected"} {
+		if marker == "" {
+			_ = os.Remove(filepath.Join(dir, "source"))
+		} else if err := os.WriteFile(filepath.Join(dir, "source"), []byte(marker), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := Analyze(context.Background(), dir, 0); !errors.Is(err, docimport.ErrCompressionRatio) {
+			t.Errorf("marker %q error = %v, want strict ratio rejection", marker, err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(dir, "source"), []byte("bookstack"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Analyze(context.Background(), dir, 0); err != nil {
+		t.Fatalf("valid server pull marker did not permit compressible export: %v", err)
+	}
+}
+
 func TestBookStackOldVersion(t *testing.T) {
 	connector.AllowLoopbackForTest(t)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
