@@ -57,10 +57,14 @@ type narrationResponse struct {
 	FallbackUsed bool              `json:"fallbackUsed"`
 }
 
+// stripEvents removes the block delimiter tag from untrusted text.
+func stripEvents(s string) string { return ai.StripPromptTags(s, "journal_events") }
+
 // promptField makes untrusted journal text a single capped line with the
-// delimiter tag removed.
+// delimiter tag removed. Whitespace is normalised before and after stripping so
+// no tag hides behind Unicode spaces and none is spliced together by the strip.
 func promptField(s string, limit int) string {
-	s = strings.Join(strings.Fields(ai.StripPromptTags(s, "journal_events")), " ")
+	s = strings.Join(strings.Fields(stripEvents(strings.Join(strings.Fields(s), " "))), " ")
 	return strings.ReplaceAll(ai.TruncateUTF8(s, limit), "\n", " ")
 }
 
@@ -95,9 +99,13 @@ func narrationPrompt(items []store.TimelineItem) ([]store.TimelineItem, string) 
 	return kept, b.String()
 }
 
+// promptLine joins the fields of one event. Each field is clean on its own, but
+// a tag can still be split across neighbouring fields (a title ending in
+// "</journal_events" and a body starting with ">"), so the assembled line is
+// stripped again.
 func promptLine(it store.TimelineItem) string {
-	return strings.Join([]string{it.Timestamp, it.Kind, promptField(it.ConnectorID, 128), promptField(it.Status, 100),
-		promptField(it.Title, narrateMaxTitle), promptField(it.Body, narrateMaxBody)}, " ")
+	return stripEvents(strings.Join([]string{it.Timestamp, it.Kind, promptField(it.ConnectorID, 128), promptField(it.Status, 100),
+		promptField(it.Title, narrateMaxTitle), promptField(it.Body, narrateMaxBody)}, " "))
 }
 
 // Narrate handles POST /api/timeline/narrate: an on-demand AI narration of the
