@@ -1,0 +1,12 @@
+## Decisions
+
+- Every source ends as a zip in the staging directory handled by the existing stage, preview and commit. `Plan` and the commit do not change; limits (2000 entries, 500 MB), the attachment allowlist (no SVG) and the one-hour expiry apply to every source.
+- `htmlmd.Convert(html) (string, error)` wraps html-to-markdown v2; owned by the Wiki.js zip PR.
+- Wiki.js zip: `POST /api/docs/import` field `source` = `markdown` (default) or `wikijs`. Pages at `<path>.md|.html` (under `<locale>/` for non-default locales), metadata block `title, description, published, date, tags, editor, dateCreated` read as `key: rest-of-line`. Path segments become parents; page `a` beside folder `a/` parents `a/*`; `.adoc` skipped and listed; unpublished imported with a warning; absolute site links become `/docs/<id>`; asset paths become attachments. Wiki.js 2.x only, zip only.
+- Job manager modelled on `discovery/manager.go`: one job, in memory, states `fetching|ready|failed|cancelled`, progress counters; a `Source` writes the staging zip, then the existing analysis runs. A restart loses a running pull.
+- Routes (instance admin): `POST /api/docs/import/pull` behind `RequireElevation("docs.import.pull")` (202), `GET` job and preview, `DELETE` cancel; commit unchanged. `docs.import.pull` added to `validElevationAction`. Zip upload unchanged.
+- Outbound client: `GuardedDialer` (private ranges allowed; loopback, link-local, metadata refused), no redirects, opt-in `skipTlsVerify` (off by default, audited), response size caps, sequential requests, `Retry-After` on 429. Credentials live in memory for the job only; never stored, logged, audited or echoed in errors.
+- Audit: start (source, host, skipTlsVerify), complete, fail, cancel; commit entry `docs.import` gains the source.
+- BookStack: list shelves and books, `GET /api/books/{id}/export/zip` per book, read `data.json` and `files/`; 404 fails the job naming the minimum BookStack version. Shelf, book, chapter, page nest in that order; a book in several shelves goes under the first and the choice is listed in the preview; page body is markdown else converted HTML; `[[bsexport:...]]` become doc links or attachments; tags dropped.
+- Wiki.js API: `POST <url>/graphql` with bearer key (`read:pages`, `read:source`, `read:assets`); `pages.list`, `pages.single`, `assets.folders`, `assets.list`; writes the export layout the zip parser reads.
+- Imported docs are lab-scope human docs with no extra root doc. No real instance exists: fixtures come from upstream source and docs.

@@ -4,12 +4,13 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { useGetConnectors } from '../../api/generated/connectors/connectors';
 import { postDocsImport, postDocsImportImportIdCommit } from '../../api/generated/docs/docs';
+import { PostDocsImportBodySource } from '../../api/model';
 import type { DocImportIssue, DocImportNode, DocImportPreview } from '../../api/model';
 import { Dialog } from '../ui/Dialog';
 import { Button } from '../ui/Button';
 import { toast } from '../../lib/toast';
 
-/** Admin-only Markdown/Obsidian vault import: upload, preview, confirm. */
+/** Admin-only docs import: pick a source, upload, preview, confirm. */
 export function ImportDocsDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   return open ? <ImportDocsForm onClose={onClose} /> : null;
 }
@@ -19,10 +20,11 @@ function ImportDocsForm({ onClose }: { onClose: () => void }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const fieldId = useId();
+  const [source, setSource] = useState<PostDocsImportBodySource>(PostDocsImportBodySource.markdown);
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<DocImportPreview | null>(null);
   const upload = useMutation({
-    mutationFn: (f: File) => postDocsImport({ file: f }),
+    mutationFn: (f: File) => postDocsImport({ file: f, source }),
     onSuccess: setPreview,
     onError: () => toast.error(t('docs.import.uploadError')),
   });
@@ -54,9 +56,33 @@ function ImportDocsForm({ onClose }: { onClose: () => void }) {
             if (file) upload.mutate(file);
           }}
         >
-          <p className="text-sm text-ink-muted">{t('docs.import.intro')}</p>
           <div className="flex flex-col gap-1 text-sm">
-            <label htmlFor={`${fieldId}-file`}>{t('docs.import.file')}</label>
+            <label htmlFor={`${fieldId}-source`}>{t('docs.import.source')}</label>
+            <select
+              id={`${fieldId}-source`}
+              value={source}
+              className="rounded-md border border-line-soft bg-canvas px-2 py-1 text-sm text-ink"
+              onChange={(e) => setSource(e.target.value as PostDocsImportBodySource)}
+            >
+              <option value={PostDocsImportBodySource.markdown}>
+                {t('docs.import.sourceMarkdown')}
+              </option>
+              <option value={PostDocsImportBodySource.wikijs}>
+                {t('docs.import.sourceWikijs')}
+              </option>
+            </select>
+          </div>
+          <p className="text-sm text-ink-muted">
+            {source === PostDocsImportBodySource.wikijs
+              ? t('docs.import.introWikijs')
+              : t('docs.import.intro')}
+          </p>
+          <div className="flex flex-col gap-1 text-sm">
+            <label htmlFor={`${fieldId}-file`}>
+              {source === PostDocsImportBodySource.wikijs
+                ? t('docs.import.fileWikijs')
+                : t('docs.import.file')}
+            </label>
             <input
               id={`${fieldId}-file`}
               type="file"

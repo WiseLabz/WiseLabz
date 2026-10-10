@@ -6,9 +6,11 @@
  *
  * OpenAPI spec version: 0.1.0
  */
-import type { PostDocsImportBodySource } from './postDocsImportBodySource';
 
-export type PostDocsImportBody = {
-  file: Blob | File;
-  source?: PostDocsImportBodySource;
-};
+export type PostDocsImportBodySource =
+  (typeof PostDocsImportBodySource)[keyof typeof PostDocsImportBodySource];
+
+export const PostDocsImportBodySource = {
+  markdown: 'markdown',
+  wikijs: 'wikijs',
+} as const;

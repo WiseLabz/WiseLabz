@@ -250,3 +250,130 @@ func TestImportExpiry(t *testing.T) {
 		t.Fatal("stale import not swept")
 	}
 }
+
+func sourceRequest(t *testing.T, data []byte, user, source string, sourceFirst bool) *http.Request {
+	t.Helper()
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	writeSource := func() {
+		if source == "" {
+			return
+		}
+		if err := writer.WriteField("source", source); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if sourceFirst {
+		writeSource()
+	}
+	part, err := writer.CreateFormFile("file", "export.zip")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := part.Write(data); err != nil {
+		t.Fatal(err)
+	}
+	if !sourceFirst {
+		writeSource()
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	r := httptest.NewRequest("POST", "/api/docs/import", &body)
+	r.Header.Set("Content-Type", writer.FormDataContentType())
+	return asUser(r, user, true)
+}
+
+func TestImportWikiJSSource(t *testing.T) {
+	export := zipOf(t,
+		"home.md", "---\ntitle: Home\npublished: true\n---\n\n# Home\n![d](/uploads/d.png) [S](/servers)\n",
+		"servers.html", "<!--\ntitle: Servers\npublished: true\n-->\n\n<p>Rack</p>",
+		"servers/pve.md", "---\ntitle: PVE\n---\n\npve\n",
+		"uploads/d.png", importPNG,
+	)
+	for _, sourceFirst := range []bool{true, false} {
+		h := newImportHandler(t)
+		admin := apitest.NewUser(t, h.Store, "admin")
+		rr := httptest.NewRecorder()
+		h.StageImport(rr, sourceRequest(t, export, admin, "wikijs", sourceFirst))
+		if rr.Code != http.StatusCreated {
+			t.Fatalf("sourceFirst=%v: %d %s", sourceFirst, rr.Code, rr.Body.String())
+		}
+		var p ImportPreview
+		if err := json.Unmarshal(rr.Body.Bytes(), &p); err != nil {
+			t.Fatal(err)
+		}
+		if p.DocCount != 3 || p.AttachmentCount != 1 || len(p.Tree) != 2 {
+			t.Fatalf("preview %+v", p)
+		}
+		rr = httptest.NewRecorder()
+		h.CommitImport(rr, commitRequest(p.ID, admin, true))
+		if rr.Code != http.StatusCreated {
+			t.Fatalf("commit %d %s", rr.Code, rr.Body.String())
+		}
+		var docs []ImportedDoc
+		if err := json.Unmarshal(rr.Body.Bytes(), &docs); err != nil || len(docs) != 3 {
+			t.Fatalf("committed %v %v", docs, err)
+		}
+	}
+}
+
+func TestImportSourceDefaultsToMarkdown(t *testing.T) {
+	h := newImportHandler(t)
+	admin := apitest.NewUser(t, h.Store, "admin")
+	for _, source := range []string{"", "markdown"} {
+		rr := httptest.NewRecorder()
+		h.StageImport(rr, sourceRequest(t, zipOf(t, "a.md", "# A\n"), admin, source, true))
+		if rr.Code != http.StatusCreated {
+			t.Fatalf("%q: %d %s", source, rr.Code, rr.Body.String())
+		}
+	}
+}
+
+func TestImportWikiJSSourceAppliesArchiveGuards(t *testing.T) {
+	h := newImportHandler(t)
+	admin := apitest.NewUser(t, h.Store, "admin")
+	page := "---\ntitle: A\n---\n\nbody\n"
+	for name, data := range map[string][]byte{
+		"zip slip":       zipOf(t, "../evil.md", page),
+		"duplicate path": zipOf(t, "home.md", page, "home.md", page),
+	} {
+		rr := httptest.NewRecorder()
+		h.StageImport(rr, sourceRequest(t, data, admin, "wikijs", true))
+		if rr.Code != http.StatusBadRequest || !strings.Contains(rr.Body.String(), "invalid_archive") {
+			t.Fatalf("%s: %d %s", name, rr.Code, rr.Body.String())
+		}
+	}
+	if entries, _ := os.ReadDir(h.Settings.Config.Attachments.ImportDir); len(entries) != 0 {
+		t.Fatalf("rejected uploads left staged: %v", entries)
+	}
+}
+
+func TestImportRejectsUnknownSource(t *testing.T) {
+	h := newImportHandler(t)
+	admin := apitest.NewUser(t, h.Store, "admin")
+	rr := httptest.NewRecorder()
+	h.StageImport(rr, sourceRequest(t, zipOf(t, "a.md", "a"), admin, "confluence", true))
+	if rr.Code != http.StatusBadRequest || !strings.Contains(rr.Body.String(), "invalid_source") {
+		t.Fatalf("%d %s", rr.Code, rr.Body.String())
+	}
+	if entries, _ := os.ReadDir(h.Settings.Config.Attachments.ImportDir); len(entries) != 0 {
+		t.Fatalf("rejected upload left staged: %v", entries)
+	}
+}
+
+func TestImportRequiresFile(t *testing.T) {
+	h := newImportHandler(t)
+	admin := apitest.NewUser(t, h.Store, "admin")
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	_ = writer.WriteField("source", "wikijs")
+	_ = writer.Close()
+	r := httptest.NewRequest("POST", "/api/docs/import", &body)
+	r.Header.Set("Content-Type", writer.FormDataContentType())
+	rr := httptest.NewRecorder()
+	h.StageImport(rr, asUser(r, admin, true))
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("%d %s", rr.Code, rr.Body.String())
+	}
+}

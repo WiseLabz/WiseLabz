@@ -130,7 +130,7 @@ func (p *planner) rewriteAll() {
 			continue
 		}
 		r := rewriter{planner: p, doc: d, src: src, notes: notes, attachments: attachments}
-		d.Content = r.rewrite(d.Content)
+		d.Content = r.rewrite(d.Content, r.rewriteText)
 	}
 }
 
@@ -139,9 +139,11 @@ type rewriter struct {
 	doc                *Doc
 	src                string
 	notes, attachments pathIndex
+	site               map[string]string // Wiki.js: lower-case site path -> doc key
 }
 
-func (r *rewriter) rewrite(content string) string {
+// rewrite applies fn to every part of content outside code fences and spans.
+func (r *rewriter) rewrite(content string, fn func(string) string) string {
 	var b strings.Builder
 	fence := ""
 	for _, line := range strings.SplitAfter(content, "\n") {
@@ -159,7 +161,7 @@ func (r *rewriter) rewrite(content string) string {
 			b.WriteString(line)
 			continue
 		}
-		b.WriteString(outsideCode(line, r.rewriteText))
+		b.WriteString(outsideCode(line, fn))
 	}
 	return b.String()
 }

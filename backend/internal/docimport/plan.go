@@ -134,7 +134,12 @@ func hiddenRoot(p string) string {
 }
 
 // read classifies archive files, reading notes and sniffing attachments.
-func (p *planner) read() error {
+func (p *planner) read() error { return p.readFiles(p.readNote) }
+
+// readFiles walks the archive, skipping hidden files and symlinks and
+// sniffing attachments; page handles source-specific documents and reports
+// whether it took the file.
+func (p *planner) readFiles(page func(fp string) (bool, error)) error {
 	hiddenSeen := map[string]bool{}
 	for _, l := range p.archive.links {
 		p.skip(l, "symbolic links are not imported")
@@ -147,23 +152,12 @@ func (p *planner) read() error {
 			}
 			continue
 		}
+		handled, err := page(fp)
+		if err != nil {
+			return err
+		}
 		switch {
-		case isNote(fp):
-			data, ok, err := p.archive.readAll(fp, p.archive.limits.MaxNoteBytes)
-			if err != nil {
-				return err
-			}
-			if !ok {
-				p.skip(fp, fmt.Sprintf("note is larger than %d MiB", p.archive.limits.MaxNoteBytes>>20))
-				continue
-			}
-			if !utf8.Valid(data) || bytes.IndexByte(data, 0) >= 0 {
-				p.skip(fp, "note is not UTF-8 text")
-				continue
-			}
-			n := &note{path: fp}
-			n.body, n.title, n.connector = p.frontMatter(fp, string(data))
-			p.notes[fp] = n
+		case handled:
 		case isAttachmentPath(fp):
 			if p.archive.Size(fp) > p.archive.limits.MaxAttachmentBytes {
 				p.skip(fp, fmt.Sprintf("attachment is larger than %d MiB", p.archive.limits.MaxAttachmentBytes>>20))
@@ -183,6 +177,29 @@ func (p *planner) read() error {
 		}
 	}
 	return nil
+}
+
+// readNote reads a Markdown note, as Obsidian vaults and plain folders have them.
+func (p *planner) readNote(fp string) (bool, error) {
+	if !isNote(fp) {
+		return false, nil
+	}
+	data, ok, err := p.archive.readAll(fp, p.archive.limits.MaxNoteBytes)
+	if err != nil {
+		return true, err
+	}
+	if !ok {
+		p.skip(fp, fmt.Sprintf("note is larger than %d MiB", p.archive.limits.MaxNoteBytes>>20))
+		return true, nil
+	}
+	if !utf8.Valid(data) || bytes.IndexByte(data, 0) >= 0 {
+		p.skip(fp, "note is not UTF-8 text")
+		return true, nil
+	}
+	n := &note{path: fp}
+	n.body, n.title, n.connector = p.frontMatter(fp, string(data))
+	p.notes[fp] = n
+	return true, nil
 }
 
 // frontMatter strips a leading YAML block, returning its title and connector.
@@ -323,35 +340,48 @@ func (p *planner) layout() {
 			d.Title = name
 		}
 		d.Title = truncateRunes(d.Title, maxTitleRunes)
-		depth := 1
-		if parent := p.docs[path.Dir(e.key)]; parent != nil {
-			d.ParentID, d.ServiceID = parent.ID, parent.ServiceID
-			depth = p.depth[parent.ID] + 1
-		}
-		if own != "" && own != d.ServiceID {
-			if d.ParentID != "" {
-				p.warn(e.key, fmt.Sprintf("connector doc placed at the root of %s because its folder belongs to another scope", p.connectorName(own)))
-			}
-			d.ParentID, d.ServiceID, depth = "", own, 1
-		}
-		if depth > maxDepth {
-			anc := p.byID[d.ParentID]
-			for p.depth[anc.ID] >= maxDepth {
-				anc = p.byID[anc.ParentID]
-			}
-			p.warn(e.key, fmt.Sprintf("nested deeper than %d levels; placed under %q", maxDepth, anc.Title))
-			d.ParentID, depth = anc.ID, p.depth[anc.ID]+1
-		}
-		p.plan.Docs = append(p.plan.Docs, d)
-		stored := &p.plan.Docs[len(p.plan.Docs)-1]
-		p.docs[e.key] = stored
+		d, depth := p.nest(d, e.key, own)
+		stored := p.store(d, depth, e.key)
 		if e.n != nil && e.folder {
 			p.docs[e.n.path] = stored
 		}
-		p.byID[d.ID] = stored
-		p.depth[d.ID] = depth
 	}
 	p.notePaths = sortedKeys(p.notes)
+}
+
+// nest links d to the doc stored under its parent key, moving it to its own
+// connector's root or under the deepest allowed ancestor, and returns its depth.
+func (p *planner) nest(d Doc, key, own string) (Doc, int) {
+	depth := 1
+	if parent := p.docs[path.Dir(key)]; parent != nil {
+		d.ParentID, d.ServiceID = parent.ID, parent.ServiceID
+		depth = p.depth[parent.ID] + 1
+	}
+	if own != "" && own != d.ServiceID {
+		if d.ParentID != "" {
+			p.warn(key, fmt.Sprintf("connector doc placed at the root of %s because its folder belongs to another scope", p.connectorName(own)))
+		}
+		d.ParentID, d.ServiceID, depth = "", own, 1
+	}
+	if depth > maxDepth {
+		anc := p.byID[d.ParentID]
+		for p.depth[anc.ID] >= maxDepth {
+			anc = p.byID[anc.ParentID]
+		}
+		p.warn(key, fmt.Sprintf("nested deeper than %d levels; placed under %q", maxDepth, anc.Title))
+		d.ParentID, depth = anc.ID, p.depth[anc.ID]+1
+	}
+	return d, depth
+}
+
+// store appends d to the plan and indexes it under key.
+func (p *planner) store(d Doc, depth int, key string) *Doc {
+	p.plan.Docs = append(p.plan.Docs, d)
+	stored := &p.plan.Docs[len(p.plan.Docs)-1]
+	p.docs[key] = stored
+	p.byID[d.ID] = stored
+	p.depth[d.ID] = depth
+	return stored
 }
 
 func firstNonEmpty(values ...string) string {

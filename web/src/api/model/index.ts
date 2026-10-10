@@ -318,6 +318,7 @@ export * from './postConnectorsConnectorIdSyncBody';
 export * from './postDocsDocIdAttachmentsBody';
 export * from './postDocsGenerateBody';
 export * from './postDocsImportBody';
+export * from './postDocsImportBodySource';
 export * from './postDocsShareLinks201';
 export * from './postDocsShareLinksBody';
 export * from './postMeMfaRecoveryCodes200';
