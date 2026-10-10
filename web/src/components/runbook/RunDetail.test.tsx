@@ -16,6 +16,7 @@ type ElevationProps = {
   target?: string;
   confirmLabel?: string;
   isPending?: boolean;
+  alwaysElevate?: boolean;
   onClose: () => void;
   onConfirm: (token: string | null) => Promise<void> | void;
 };
@@ -28,6 +29,7 @@ vi.mock('../manager/ElevationConfirm', () => ({
     target,
     confirmLabel,
     isPending,
+    alwaysElevate,
     onClose,
     onConfirm,
   }: ElevationProps) =>
@@ -35,6 +37,7 @@ vi.mock('../manager/ElevationConfirm', () => ({
       <div role="dialog" aria-label={title}>
         <p>{action}</p>
         <p>{target}</p>
+        <p>{alwaysElevate ? 'always-elevate' : 'conditional-elevate'}</p>
         <button disabled={isPending} onClick={() => onConfirm('fresh-elevation-token')}>
           {confirmLabel}
         </button>
@@ -158,6 +161,7 @@ describe('RunDetail', () => {
     const elevation = await screen.findByRole('dialog', { name: 'Approve run' });
     expect(elevation).toHaveTextContent('runbook.approve');
     expect(elevation).toHaveTextContent('run-1');
+    expect(elevation).toHaveTextContent('always-elevate');
     fireEvent.click(within(elevation).getByRole('button', { name: 'Approve and start run' }));
 
     await waitFor(() => expect(approvedRun).toBe('run-1'));

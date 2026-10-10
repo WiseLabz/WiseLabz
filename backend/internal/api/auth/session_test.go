@@ -315,3 +315,61 @@ func TestElevationActionValidation(t *testing.T) {
 		}
 	}
 }
+
+func TestElevateAcceptsDiscoveryScan(t *testing.T) {
+	th := newTestHandler(t)
+	user, password := th.createUser(t, "operator", false)
+	r := doJSON(t, http.MethodPost, "/api/auth/elevate", map[string]string{"password": password, "action": "discovery.scan"})
+	rr := th.authedRequest(t, r, user.ID, user.InstanceAdminRole, th.H.Elevate)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body=%s", rr.Code, http.StatusOK, rr.Body.String())
+	}
+}
+
+// TestEveryElevationActionAcceptedByElevateEndpoint verifies that every action
+// guarded by RequireElevation, RequireElevationForTarget, RequireElevationUnlessEnrollOnly,
+// ValidateElevationHeader, or ValidateElevationHeaderFor is accepted by POST /api/auth/elevate.
+func TestEveryElevationActionAcceptedByElevateEndpoint(t *testing.T) {
+	th := newTestHandler(t)
+	user, password := th.createUser(t, "operator", false)
+
+	actions := []string{
+		"apiKey.create",
+		"authConfig.update",
+		"authProvider.toggle",
+		"connector.action",
+		"connector.bulkRestart",
+		"connector.configPush",
+		"connector.delete",
+		"connector.recipeActions",
+		"connector.restart",
+		"connector.start",
+		"connector.stop",
+		"discovery.scan",
+		"mfa.manage",
+		"runbook.approve",
+		"runbook.run",
+		"template.delete",
+		"user.create",
+		"user.delete",
+		"user.resetMfa",
+		"user.resetPassword",
+		"user.update",
+	}
+
+	for _, action := range actions {
+		t.Run(action, func(t *testing.T) {
+			if !validElevationAction(action) {
+				t.Fatalf("validElevationAction(%q) = false, want true", action)
+			}
+			r := doJSON(t, http.MethodPost, "/api/auth/elevate", map[string]string{
+				"password": password,
+				"action":   action,
+			})
+			rr := th.authedRequest(t, r, user.ID, user.InstanceAdminRole, th.H.Elevate)
+			if rr.Code != http.StatusOK {
+				t.Fatalf("action %q: status = %d, want 200; body=%s", action, rr.Code, rr.Body.String())
+			}
+		})
+	}
+}

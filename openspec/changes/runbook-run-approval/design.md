@@ -89,13 +89,10 @@ Verify: in `backend/`, `GOFLAGS=-p=4 GOMAXPROCS=4 go test ./internal/store/...`,
 
 Use paired up/down SQLite and PostgreSQL migrations numbered 000068. If the absent 000067 gap prevents migration tests, use 000067 in phase 1 and rename all four files and test literals to 000068 in the separately dispatched phase 2. Existing rows default to approval disabled. Rollback maps awaiting_approval and rejected to cancelled before restoring the old state check/index and dropping approval columns; this is deliberately lossy. Preserve frozen step rows throughout SQLite's parent-table rebuild.
 
-## Instance step-up clarification
+## Instance step-up exemption
 
-Approval uses the existing ValidateElevationHeaderFor semantics, like run start:
-the instance-wide step-up-off setting bypasses elevation, while all other
-approver guards and conditional transitions remain in force. With step-up on,
-runbook.run and runbook.approve remain distinct action/target/user-bound tokens.
-The coordinator explicitly directed this compatibility behavior during
-implementation; the PR will flag whether approval should always require
-elevation under "For the user to confirm" rather than inventing a new exception
-in shared middleware or ElevationConfirm.
+Approval always requires elevation (`runbook.approve`), regardless of the
+instance-wide step-up toggle, joining `mfa.manage` in the step-up exemption
+set in `ValidateElevationHeaderFor`. API keys can therefore never approve a
+runbook run. Start, resume, reject and cancel remain unchanged. Disabling
+instance step-up never bypasses approval elevation.

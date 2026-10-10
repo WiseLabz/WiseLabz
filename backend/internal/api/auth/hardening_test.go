@@ -140,4 +140,7 @@ func TestTokenTTLsAndStepUpComeFromSettings(t *testing.T) {
 	if err := upstreamauth.ValidateElevationHeader(th.JWT, nil, "mfa.manage", req); err == nil {
 		t.Error("mfa.manage must always require elevation")
 	}
+	if err := upstreamauth.ValidateElevationHeader(th.JWT, nil, "runbook.approve", req); err == nil {
+		t.Error("runbook.approve must always require elevation")
+	}
 }

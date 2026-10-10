@@ -403,14 +403,22 @@ func TestApprovalWithInstanceStepUpDisabled(t *testing.T) {
 	approval := runRequest(approver, id, run.ID, "")
 	approved := httptest.NewRecorder()
 	h.ApproveRun(approved, approval)
-	assertRunStatus(t, approved, http.StatusNoContent)
+	assertRunStatus(t, approved, http.StatusBadRequest)
+
+	elevateApproval(t, h, approval, approver, "runbook.approve", run.ID)
+	approvedWithToken := httptest.NewRecorder()
+	h.ApproveRun(approvedWithToken, approval)
+	assertRunStatus(t, approvedWithToken, http.StatusNoContent)
+
 	current, _, err := h.Store.GetRunbookRun(context.Background(), run.ID)
 	if err != nil || current.ApprovedBy == nil || *current.ApprovedBy != approver || current.StartedBy != initiator || spawner.calls != 1 {
 		t.Fatalf("run=%+v err=%v spawned=%d", current, err, spawner.calls)
 	}
-	again := httptest.NewRecorder()
-	h.ApproveRun(again, approval)
-	assertRunStatus(t, again, http.StatusConflict)
+	again := runRequest(approver, id, run.ID, "")
+	elevateApproval(t, h, again, approver, "runbook.approve", run.ID)
+	againRR := httptest.NewRecorder()
+	h.ApproveRun(againRR, again)
+	assertRunStatus(t, againRR, http.StatusConflict)
 	if spawner.calls != 1 {
 		t.Fatal("step-up disabled duplicated execution")
 	}
