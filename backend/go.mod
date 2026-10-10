@@ -3,6 +3,7 @@ module github.com/WiseLabz/wiselabz
 go 1.27.2
 
 require (
+	github.com/JohannesKaufmann/html-to-markdown/v2 v2.5.2
 	github.com/coreos/go-oidc/v3 v3.21.0
 	github.com/getkin/kin-openapi v0.149.0
 	github.com/go-chi/chi/v5 v5.3.2
@@ -20,7 +21,7 @@ require (
 	github.com/sergi/go-diff v1.4.0
 	github.com/spf13/viper v1.21.0
 	github.com/tidwall/gjson v1.20.0
-	github.com/yuin/goldmark v1.7.17
+	github.com/yuin/goldmark v1.8.2
 	go.yaml.in/yaml/v3 v3.0.5
 	golang.org/x/crypto v0.57.0
 	golang.org/x/net v0.60.0
@@ -32,6 +33,7 @@ require (
 
 require (
 	dario.cat/mergo v1.0.0 // indirect
+	github.com/JohannesKaufmann/dom v0.3.1 // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/ProtonMail/go-crypto v1.1.6 // indirect
 	github.com/boombuler/barcode v1.0.1-0.20190219062509-6c824513bacc // indirect

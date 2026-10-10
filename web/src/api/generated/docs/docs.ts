@@ -509,8 +509,8 @@ export function useGetDocsExport<
 }
 
 /**
- * Stages the zip (100 MB cap; at most 2000 entries, 500 MB unzipped and a 100:1 compression ratio) for one hour and returns the docs it would create. Nothing is written to the docs until the commit.
- * @summary Stage a Markdown/Obsidian vault zip and preview the import (instance admin)
+ * Stages the zip (100 MB cap; at most 2000 entries, 500 MB unzipped and a 100:1 compression ratio) for one hour and returns the docs it would create. Nothing is written to the docs until the commit. The `source` field picks the parser: `markdown` (default) for Markdown folders and Obsidian vaults, `wikijs` for a Wiki.js 2.x storage export.
+ * @summary Stage a Markdown/Obsidian vault zip or a Wiki.js export zip and preview the import (instance admin)
  */
 export const postDocsImport = (
   postDocsImportBody: BodyType<PostDocsImportBody>,
@@ -519,6 +519,9 @@ export const postDocsImport = (
 ) => {
   const formData = new FormData();
   formData.append(`file`, postDocsImportBody.file);
+  if (postDocsImportBody.source !== undefined) {
+    formData.append(`source`, postDocsImportBody.source);
+  }
 
   return customInstance<DocImportPreview>(
     {
@@ -576,7 +579,7 @@ export type PostDocsImportMutationError = ErrorType<BadRequestResponse | Forbidd
 export type PostDocsImportMutationVariables = { data: BodyType<PostDocsImportBody> };
 
 /**
- * @summary Stage a Markdown/Obsidian vault zip and preview the import (instance admin)
+ * @summary Stage a Markdown/Obsidian vault zip or a Wiki.js export zip and preview the import (instance admin)
  */
 export const usePostDocsImport = <
   TError = ErrorType<BadRequestResponse | ForbiddenResponse | void>,

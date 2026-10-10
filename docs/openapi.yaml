@@ -2244,11 +2244,13 @@ paths:
   /docs/import:
     post:
       tags: [docs]
-      summary: Stage a Markdown/Obsidian vault zip and preview the import (instance admin)
+      summary: Stage a Markdown/Obsidian vault zip or a Wiki.js export zip and preview the import (instance admin)
       description: >-
         Stages the zip (100 MB cap; at most 2000 entries, 500 MB unzipped and a
         100:1 compression ratio) for one hour and returns the docs it would
-        create. Nothing is written to the docs until the commit.
+        create. Nothing is written to the docs until the commit. The `source`
+        field picks the parser: `markdown` (default) for Markdown folders and
+        Obsidian vaults, `wikijs` for a Wiki.js 2.x storage export.
       requestBody:
         required: true
         content:
@@ -2258,6 +2260,10 @@ paths:
               required: [file]
               properties:
                 file: { type: string, format: binary }
+                source:
+                  type: string
+                  enum: [markdown, wikijs]
+                  default: markdown
       responses:
         '201':
           description: Staged; preview of the import

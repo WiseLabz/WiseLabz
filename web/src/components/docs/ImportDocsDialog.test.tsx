@@ -95,7 +95,7 @@ describe('ImportDocsDialog', () => {
     expect(
       await screen.findByText('Docs: 3 · Attachments: 1 · Links rewritten: 1')
     ).toBeInTheDocument();
-    expect(postDocsImport).toHaveBeenCalledWith({ file });
+    expect(postDocsImport).toHaveBeenCalledWith({ file, source: 'markdown' });
     expect(screen.getByText('Network (imported)')).toBeInTheDocument();
     expect(screen.getByText('pve')).toBeInTheDocument();
     expect(screen.getByText('Network → Network (imported)')).toBeInTheDocument();
@@ -108,6 +108,17 @@ describe('ImportDocsDialog', () => {
     expect(await screen.findByText('Imported doc')).toBeInTheDocument();
   });
 
+  it('sends the Wiki.js source when it is picked', async () => {
+    vi.mocked(postDocsImport).mockResolvedValue(preview);
+    show();
+    fireEvent.change(screen.getByLabelText('Source'), { target: { value: 'wikijs' } });
+    expect(screen.getByLabelText('Wiki.js export zip')).toBeInTheDocument();
+    const file = new File(['PK'], 'export.zip', { type: 'application/zip' });
+    fireEvent.change(screen.getByLabelText('Wiki.js export zip'), { target: { files: [file] } });
+    fireEvent.click(screen.getByRole('button', { name: 'Preview import' }));
+    await waitFor(() => expect(postDocsImport).toHaveBeenCalledWith({ file, source: 'wikijs' }));
+  });
+
   it('goes back to file selection and stays open when the upload fails', async () => {
     vi.mocked(postDocsImport).mockRejectedValueOnce(new Error('bad zip'));
     const onClose = show();
@@ -118,7 +129,7 @@ describe('ImportDocsDialog', () => {
     vi.mocked(postDocsImport).mockResolvedValue({ ...preview, docCount: 0, tree: [] });
     fireEvent.click(screen.getByRole('button', { name: 'Preview import' }));
     expect(
-      await screen.findByText('No Markdown notes were found in this archive.')
+      await screen.findByText('No importable pages were found in this archive.')
     ).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Import 0 docs' })).toBeDisabled();
     fireEvent.click(screen.getByRole('button', { name: 'Choose another file' }));

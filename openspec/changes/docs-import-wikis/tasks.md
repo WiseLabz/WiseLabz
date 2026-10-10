@@ -2,9 +2,9 @@
 
 ## 1. Wiki.js export zip
 
-- [ ] 1.1 `docimport/htmlmd` wrapper with tests.
-- [ ] 1.2 Wiki.js export parser and mapping; `source` field on `POST /api/docs/import`; fixtures and tests.
-- [ ] 1.3 Source picker, entry point check, pt-BR `docs.import.*` strings with parity test; OpenAPI and client.
+- [x] 1.1 `docimport/htmlmd` wrapper with tests.
+- [x] 1.2 Wiki.js export parser and mapping; `source` field on `POST /api/docs/import`; fixtures and tests.
+- [x] 1.3 Source picker, entry point check, pt-BR `docs.import.*` strings with parity test; OpenAPI and client.
 
 ## 2. BookStack API pull
 

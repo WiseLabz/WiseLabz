@@ -82,7 +82,7 @@ func importError(w http.ResponseWriter, err error) {
 }
 
 // StageImport handles POST /api/docs/import: it stages a Markdown/Obsidian
-// vault zip and returns a preview of the docs it would create.
+// vault zip or a Wiki.js export zip (multipart field source) and returns a preview of the docs it would create.
 func (h *Handler) StageImport(w http.ResponseWriter, r *http.Request) {
 	if !h.requireDocOperator(w, r, "") {
 		return
@@ -93,12 +93,6 @@ func (h *Handler) StageImport(w http.ResponseWriter, r *http.Request) {
 		httputil.Error(w, http.StatusBadRequest, "invalid_upload", "Expected multipart file upload")
 		return
 	}
-	part, err := reader.NextPart()
-	if err != nil || part.FormName() != "file" || part.FileName() == "" {
-		httputil.Error(w, http.StatusBadRequest, "invalid_upload", "Expected file field")
-		return
-	}
-	defer func() { _ = part.Close() }()
 	id := uuid.NewString()
 	dir, err := h.importStage().Create(id)
 	if err != nil {
@@ -111,14 +105,51 @@ func (h *Handler) StageImport(w http.ResponseWriter, r *http.Request) {
 			_ = os.RemoveAll(dir)
 		}
 	}()
-	plan, err := h.stageUpload(r.Context(), dir, part)
-	if err != nil {
-		var maxErr *http.MaxBytesError
-		if errors.As(err, &maxErr) || errors.Is(err, errUploadTooLarge) {
-			httputil.Error(w, http.StatusRequestEntityTooLarge, "request_too_large", "Import archives are limited to 100 MB")
+	// The file is copied to disk as it arrives, so the source field may come
+	// before or after it.
+	var source string
+	gotFile := false
+	for {
+		part, err := reader.NextPart()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			var maxErr *http.MaxBytesError
+			if errors.As(err, &maxErr) {
+				h.importUploadError(w, err)
+			} else {
+				httputil.Error(w, http.StatusBadRequest, "invalid_upload", "Expected multipart file upload")
+			}
 			return
 		}
-		importError(w, err)
+		switch {
+		case part.FormName() == "file" && part.FileName() != "" && !gotFile:
+			gotFile = true
+			err = saveImportUpload(dir, part)
+		case part.FormName() == "source":
+			var v []byte
+			v, err = io.ReadAll(io.LimitReader(part, 64))
+			source = string(v)
+		}
+		_ = part.Close()
+		if err != nil {
+			h.importUploadError(w, err)
+			return
+		}
+	}
+	if !gotFile {
+		httputil.Error(w, http.StatusBadRequest, "invalid_upload", "Expected file field")
+		return
+	}
+	src, err := docimport.ParseSource(source)
+	if err != nil {
+		httputil.Error(w, http.StatusBadRequest, "invalid_source", "Unknown import source")
+		return
+	}
+	plan, err := h.analyzeUpload(r.Context(), dir, src)
+	if err != nil {
+		h.importUploadError(w, err)
 		return
 	}
 	plan.ID, plan.CreatedAt = id, time.Now().UTC()
@@ -137,21 +168,34 @@ func (h *Handler) StageImport(w http.ResponseWriter, r *http.Request) {
 
 var errUploadTooLarge = errors.New("import upload too large")
 
-func (h *Handler) stageUpload(ctx context.Context, dir string, part io.Reader) (*docimport.Plan, error) {
+func (h *Handler) importUploadError(w http.ResponseWriter, err error) {
+	var maxErr *http.MaxBytesError
+	if errors.As(err, &maxErr) || errors.Is(err, errUploadTooLarge) {
+		httputil.Error(w, http.StatusRequestEntityTooLarge, "request_too_large", "Import archives are limited to 100 MB")
+		return
+	}
+	importError(w, err)
+}
+
+func saveImportUpload(dir string, part io.Reader) error {
 	f, err := os.Create(docimport.UploadPath(dir))
 	if err != nil {
-		return nil, err
+		return err
 	}
 	n, err := io.Copy(f, io.LimitReader(part, docimport.MaxUploadBytes+1))
 	if closeErr := f.Close(); err == nil {
 		err = closeErr
 	}
 	if err != nil {
-		return nil, err
+		return err
 	}
 	if n > docimport.MaxUploadBytes {
-		return nil, errUploadTooLarge
+		return errUploadTooLarge
 	}
+	return nil
+}
+
+func (h *Handler) analyzeUpload(ctx context.Context, dir string, src docimport.Source) (*docimport.Plan, error) {
 	zr, err := zip.OpenReader(docimport.UploadPath(dir))
 	if err != nil {
 		return nil, err
@@ -169,7 +213,7 @@ func (h *Handler) stageUpload(ctx context.Context, dir string, part io.Reader) (
 	for i, c := range names {
 		connectors[i] = docimport.Connector{ID: c.ID, Name: c.Name}
 	}
-	return docimport.Analyze(archive, connectors)
+	return docimport.AnalyzeSource(src, archive, connectors)
 }
 
 // importPreview nests the plan and predicts title collisions; the commit
