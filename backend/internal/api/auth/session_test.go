@@ -2,8 +2,15 @@ package auth
 
 import (
 	"context"
+	"go/ast"
+	"go/parser"
+	"go/token"
+	"io/fs"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
+	"sort"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -326,36 +333,129 @@ func TestElevateAcceptsDiscoveryScan(t *testing.T) {
 	}
 }
 
+// elevationCallArgIndex maps each elevation-guard function to the position of
+// its action argument.
+var elevationCallArgIndex = map[string]int{
+	"RequireElevation":                 2, // jwt, recorder, action
+	"RequireElevationForTarget":        2, // jwt, recorder, action, param
+	"RequireElevationUnlessEnrollOnly": 3, // jwt, recorder, mfa, action
+	"ValidateElevationHeader":          2, // jwt, recorder, action, r
+	"ValidateElevationHeaderFor":       2, // jwt, recorder, action, target, r
+}
+
+// lifecycleElevationVerbs are the verbs that can reach the dynamic
+// "connector."+verb site in connectors/lifecycle.go: connector.LifecycleOp
+// rejects any verb other than these before the elevation header is checked.
+var lifecycleElevationVerbs = []string{"restart", "start", "stop"}
+
+// scanElevationActions parses every non-test Go file under backendDir and
+// returns the set of action strings passed to the elevation guards. A
+// non-literal action argument (other than the known "connector."+verb site)
+// is reported as an error so a new dynamic call site forces a deliberate
+// update here. Package auth itself is skipped: its middleware forwards a
+// variable action.
+func scanElevationActions(t *testing.T, backendDir string) map[string]bool {
+	t.Helper()
+	authPkgDir := filepath.Join(backendDir, "internal", "auth")
+	actions := map[string]bool{}
+	fset := token.NewFileSet()
+
+	err := filepath.WalkDir(backendDir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			if d.Name() == "vendor" || d.Name() == "testdata" || path == authPkgDir {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+			return nil
+		}
+		file, err := parser.ParseFile(fset, path, nil, 0)
+		if err != nil {
+			return err
+		}
+		ast.Inspect(file, func(n ast.Node) bool {
+			call, ok := n.(*ast.CallExpr)
+			if !ok {
+				return true
+			}
+			var name string
+			switch fn := call.Fun.(type) {
+			case *ast.SelectorExpr:
+				name = fn.Sel.Name
+			case *ast.Ident:
+				name = fn.Name
+			}
+			idx, ok := elevationCallArgIndex[name]
+			if !ok {
+				return true
+			}
+			pos := fset.Position(call.Pos())
+			if idx >= len(call.Args) {
+				t.Errorf("%s: %s call has %d args, want action at index %d", pos, name, len(call.Args), idx)
+				return true
+			}
+			switch arg := call.Args[idx].(type) {
+			case *ast.BasicLit:
+				if arg.Kind == token.STRING {
+					if v, uerr := strconv.Unquote(arg.Value); uerr == nil {
+						actions[v] = true
+						return true
+					}
+				}
+			case *ast.BinaryExpr:
+				// "connector."+verb in connectors/lifecycle.go.
+				if lit, ok := arg.X.(*ast.BasicLit); ok && arg.Op == token.ADD && lit.Kind == token.STRING &&
+					filepath.Base(path) == "lifecycle.go" {
+					if prefix, uerr := strconv.Unquote(lit.Value); uerr == nil && prefix == "connector." {
+						for _, verb := range lifecycleElevationVerbs {
+							actions[prefix+verb] = true
+						}
+						return true
+					}
+				}
+			}
+			t.Errorf("%s: %s action argument is not a string literal; extend scanElevationActions to cover it", pos, name)
+			return true
+		})
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("scan %s: %v", backendDir, err)
+	}
+	return actions
+}
+
 // TestEveryElevationActionAcceptedByElevateEndpoint verifies that every action
 // guarded by RequireElevation, RequireElevationForTarget, RequireElevationUnlessEnrollOnly,
 // ValidateElevationHeader, or ValidateElevationHeaderFor is accepted by POST /api/auth/elevate.
+// The action list is derived from the backend source (go/parser), so a new
+// call site whose action is missing from validElevationAction fails here.
 func TestEveryElevationActionAcceptedByElevateEndpoint(t *testing.T) {
+	// This file lives in backend/internal/api/auth.
+	found := scanElevationActions(t, filepath.Join("..", "..", ".."))
+
+	// Guard against a broken walker or path making the test vacuous.
+	if len(found) < 15 {
+		t.Fatalf("scan found only %d distinct elevation actions (%v), want at least 15", len(found), found)
+	}
+	for _, want := range []string{"runbook.approve", "runbook.run", "discovery.scan", "mfa.manage"} {
+		if !found[want] {
+			t.Fatalf("scan did not find expected action %q (found %v)", want, found)
+		}
+	}
+
+	actions := make([]string, 0, len(found))
+	for action := range found {
+		actions = append(actions, action)
+	}
+	sort.Strings(actions)
+
 	th := newTestHandler(t)
 	user, password := th.createUser(t, "operator", false)
-
-	actions := []string{
-		"apiKey.create",
-		"authConfig.update",
-		"authProvider.toggle",
-		"connector.action",
-		"connector.bulkRestart",
-		"connector.configPush",
-		"connector.delete",
-		"connector.recipeActions",
-		"connector.restart",
-		"connector.start",
-		"connector.stop",
-		"discovery.scan",
-		"mfa.manage",
-		"runbook.approve",
-		"runbook.run",
-		"template.delete",
-		"user.create",
-		"user.delete",
-		"user.resetMfa",
-		"user.resetPassword",
-		"user.update",
-	}
 
 	for _, action := range actions {
 		t.Run(action, func(t *testing.T) {
