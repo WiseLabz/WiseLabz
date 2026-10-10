@@ -238,3 +238,8 @@ frozen run ID; a `runbook.run` token cannot approve, and an approval token canno
 start or resume. Rejection needs no elevation. Approval retains the initiator as
 the execution actor. These three approval audit actions remain outside the
 Journal allowlist, like start, confirm, resume and cancel.
+
+Like the other run actions, the three approval rows are written with the connector
+scope of the whole frozen run, whichever step the transition concerns: every
+distinct connector of the frozen steps, including connectors deleted since. A
+manual-only run has no connector, so its approval rows carry no scope.

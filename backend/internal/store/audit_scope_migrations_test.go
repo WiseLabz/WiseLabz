@@ -26,6 +26,7 @@ func TestAuditScopeMigrationsBackfillUpDownUp(t *testing.T) {
 	logger := slog.New(slog.DiscardHandler)
 	run := func(t *testing.T, s *Store) {
 		ctx := context.Background()
+		rollbackRunbookApproval(t, s.rawDB, s.driver, logger)
 		rollbackAuditLogConnectors(t, s.rawDB, s.driver, logger)
 		a := createTestConnector(ctx, t, s)
 		b := createTestConnector(ctx, t, s)
@@ -107,6 +108,7 @@ func TestAuditScopeMigrationsBackfillUpDownUp(t *testing.T) {
 			if err != nil || !slices.Equal(got, want) {
 				t.Fatalf("backfilled scopes = %v, want %v: %v", got, want, err)
 			}
+			rollbackRunbookApproval(t, s.rawDB, s.driver, logger)
 			rollbackAuditLogConnectors(t, s.rawDB, s.driver, logger)
 			var count int
 			if err := s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM audit_log").Scan(&count); err != nil || count != len(records) {

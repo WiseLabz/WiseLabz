@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"slices"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -433,6 +435,7 @@ func TestApproveAfterRunbookDeleted(t *testing.T) {
 	if err != nil || total != 1 || records[0].ActorUserID != approver || records[0].TargetID != run.ID {
 		t.Fatalf("audit=%+v err=%v", records, err)
 	}
+	assertRunAuditScope(t, h, records[0].ID, run.ID)
 }
 
 func TestApproveDuringShutdownFailsRunAndKeepsApproval(t *testing.T) {
@@ -501,5 +504,98 @@ func TestCancelAwaitingApprovalByAnotherOperator(t *testing.T) {
 	assertRunState(t, h, run.ID, "cancelled")
 	if spawner.calls != 0 {
 		t.Fatal("withdrawn request executed")
+	}
+}
+
+// auditScopeIDs returns the connector scope persisted for the single audit row
+// recorded for action.
+func auditScopeIDs(t *testing.T, h *Handler, action string) []string {
+	t.Helper()
+	records, total, err := h.Store.ListAuditRecords(context.Background(), action, "runbook_run", "", "", 0, 20)
+	if err != nil || total != 1 {
+		t.Fatalf("%s audit total=%d err=%v", action, total, err)
+	}
+	rows, err := h.Store.DB().QueryContext(context.Background(), `SELECT connector_id FROM audit_log_connectors WHERE audit_id = ? ORDER BY connector_id`, records[0].ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close() //nolint:errcheck
+	ids := []string{}
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			t.Fatal(err)
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	return ids
+}
+
+func TestApprovalAuditRowsCarryFrozenConnectorScope(t *testing.T) {
+	h, id, initiator, approver, _ := approvalFixture(t)
+	steps, err := h.Store.ListRunbookStepsFor(context.Background(), id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{}
+	for _, step := range steps {
+		if step.ConnectorID != "" {
+			want = append(want, step.ConnectorID)
+		}
+	}
+	sort.Strings(want)
+	if len(want) != 2 {
+		t.Fatalf("fixture connectors = %v, want two", want)
+	}
+
+	run := requestApproval(t, h, id, initiator)
+	if got := auditScopeIDs(t, h, "runbook.run.approval_requested"); !slices.Equal(got, want) {
+		t.Fatalf("approval_requested scope = %v, want %v", got, want)
+	}
+
+	r := runRequest(approver, id, run.ID, "")
+	elevateApproval(t, h, r, approver, "runbook.approve", run.ID)
+	rr := httptest.NewRecorder()
+	h.ApproveRun(rr, r)
+	assertRunStatus(t, rr, http.StatusNoContent)
+	if got := auditScopeIDs(t, h, "runbook.run.approved"); !slices.Equal(got, want) {
+		t.Fatalf("approved scope = %v, want %v", got, want)
+	}
+
+	// The approved run is still active; withdraw it so the runbook can take a second request.
+	cr := httptest.NewRecorder()
+	h.CancelRun(cr, runRequest(initiator, id, run.ID, ""))
+	assertRunStatus(t, cr, http.StatusNoContent)
+	second := requestApproval(t, h, id, initiator)
+	rej := httptest.NewRecorder()
+	h.RejectRun(rej, runRequest(approver, id, second.ID, ""))
+	assertRunStatus(t, rej, http.StatusNoContent)
+	if got := auditScopeIDs(t, h, "runbook.run.rejected"); !slices.Equal(got, want) {
+		t.Fatalf("rejected scope = %v, want %v", got, want)
+	}
+}
+
+func TestManualOnlyApprovalAuditRowsWriteNoScope(t *testing.T) {
+	h := newTestHandler(t)
+	initiator, _, _ := connectorlessActor(t, h, "operator")
+	approver, _, _ := connectorlessActor(t, h, "operator")
+	id := createManualRunbook(t, h, "approval.noscope")
+	if _, err := h.Store.UpdateRunbook(context.Background(), id, map[string]any{"requires_approval": true}); err != nil {
+		t.Fatal(err)
+	}
+	h.Executor = runbookrun.New(runbookrun.Deps{Store: h.Store, Spawner: &approvalSpawner{}})
+	run := requestApproval(t, h, id, initiator)
+	r := runRequest(approver, id, run.ID, "")
+	elevateApproval(t, h, r, approver, "runbook.approve", run.ID)
+	rr := httptest.NewRecorder()
+	h.ApproveRun(rr, r)
+	assertRunStatus(t, rr, http.StatusNoContent)
+	for _, action := range []string{"runbook.run.approval_requested", "runbook.run.approved"} {
+		if got := auditScopeIDs(t, h, action); len(got) != 0 {
+			t.Fatalf("%s scope = %v, want none", action, got)
+		}
 	}
 }
