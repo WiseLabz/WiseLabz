@@ -1018,7 +1018,7 @@ export function useGetRunbookRun<
 }
 
 /**
- * Requires an enabled user other than the initiator with operator access on every frozen connector, including API-key restrictions; read-only keys are forbidden. Connectorless runs require instance admin or operator on at least one connector. The approver must present their own fresh single-use runbook.approve elevation targeted at runId when the instance has step-up enabled; runbook.run is refused. The conditional awaiting_approval transition records the approver and starts execution as the initiator, preserving the existing per-step initiator grant rechecks.
+ * Requires an enabled user other than the initiator with operator access on every frozen connector, including API-key restrictions; read-only keys are forbidden. Connectorless runs require instance admin or operator on at least one connector. The approver must present their own fresh single-use runbook.approve elevation targeted at runId (always required regardless of the instance step-up setting; API keys can never approve); runbook.run is refused. The conditional awaiting_approval transition records the approver and starts execution as the initiator, preserving the existing per-step initiator grant rechecks.
  * @summary Approve a frozen request as a different operator
  */
 export const approveRunbookRun = (

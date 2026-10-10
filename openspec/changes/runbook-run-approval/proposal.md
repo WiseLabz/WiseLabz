@@ -8,7 +8,7 @@ Runbook elevation currently lets the initiating operator approve their own execu
 
 - Add a per-runbook `requiresApproval` opt-in, preserved by backup and restore.
 - Create opted-in runs and their frozen steps immediately in `awaiting_approval`, without executing. Require an eligible approver before consuming the initiator's elevation and notify only eligible users.
-- Add approve/reject routes with current operator access on every frozen connector, disabled-user and read-only-key checks, and a prohibition on self-approval or self-rejection. Approval requires the approver's own `runbook.approve` elevation targeted at the run ID; rejection requires none.
+- Add approve/reject routes with current operator access on every frozen connector, disabled-user and read-only-key checks, and a prohibition on self-approval or self-rejection. Approval always requires the approver's own `runbook.approve` elevation targeted at the run ID regardless of the instance step-up setting (API keys can therefore never approve); rejection requires none.
 - Execute approved runs as the initiator, retain existing per-step grant checks, support withdrawal through cancel, and expire requests using a separate default-24-hour retention setting and per-minute leader job.
 - Show request, approval, rejection and expiry state in run detail/history and settings; document and audit the three new approval actions.
 - Preserve ordinary runbooks' execution and start response shape; refuse single-step execution on opted-in runbooks.

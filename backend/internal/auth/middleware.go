@@ -384,6 +384,14 @@ type elevationError struct {
 
 func (e *elevationError) Error() string { return e.msg }
 
+// alwaysElevatedActions exempts actions from the instance-wide step-up toggle.
+// MFA management always requires a fresh second factor, and approving a runbook
+// run always requires elevation regardless of the instance step-up setting.
+var alwaysElevatedActions = map[string]struct{}{
+	"mfa.manage":      {},
+	"runbook.approve": {},
+}
+
 // ValidateElevationHeader checks the request's X-Elevation-Token header
 // against a token scoped to action, recording the same
 // auth.elevation_requested / auth.elevation_denied audit events RequireElevation
@@ -398,8 +406,8 @@ func ValidateElevationHeader(jwtSvc *Service, recorder AuditRecorder, action str
 // be bound to target. A valid token is spent: it authorizes this one request.
 func ValidateElevationHeaderFor(jwtSvc *Service, recorder AuditRecorder, action, target string, r *http.Request) error {
 	// The instance-wide step-up toggle covers destructive actions only;
-	// MFA management always requires a fresh second factor.
-	if action != "mfa.manage" && !jwtSvc.StepUpEnabled() {
+	// MFA management and runbook approvals always require elevation.
+	if _, exempt := alwaysElevatedActions[action]; !exempt && !jwtSvc.StepUpEnabled() {
 		return nil
 	}
 	values, ok := r.Header["X-Elevation-Token"]

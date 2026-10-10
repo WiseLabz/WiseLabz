@@ -464,6 +464,7 @@ export function RunDetail({
       {approvalElevationOpen && run?.state === 'awaiting_approval' && (
         <ElevationConfirm
           open
+          alwaysElevate
           resourceName={run.runbookTitle}
           action="runbook.approve"
           target={run.id}

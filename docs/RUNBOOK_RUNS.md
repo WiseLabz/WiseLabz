@@ -37,8 +37,9 @@ Eligible operators are notified through the `runbook.run_approval_requested`
 notification rule.
 
 - **Approve** is available to an eligible operator other than the person who
-  requested the run, and requires that operator’s own fresh authentication
-  approval for the run when step-up is on. The run then executes as the
+  requested the run, and always requires that operator’s own fresh authentication
+  approval (`runbook.approve` elevation) for the run, regardless of the instance
+  step-up setting (API keys can never approve). The run then executes as the
   original requester, so their access to each connector is checked again at
   every step.
 - **Reject** is available to the same operators, needs no additional

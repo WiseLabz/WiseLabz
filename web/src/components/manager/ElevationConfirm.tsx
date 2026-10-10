@@ -28,6 +28,7 @@ export function ElevationConfirm({
                                       onClose,
                                       onConfirm,
                                       isPending = false,
+                                      alwaysElevate = false,
                                   }: {
     open: boolean;
     resourceName: string;
@@ -40,13 +41,14 @@ export function ElevationConfirm({
     onClose: () => void;
     onConfirm: (elevationToken: string | null) => Promise<void> | void;
     isPending?: boolean;
+    alwaysElevate?: boolean;
 }) {
     const {t} = useTranslation();
     const [typed, setTyped] = useState('');
     const [token, setToken] = useState<string | null>(null);
 
-    const authConfig = useGetAuthConfig({query: {enabled: open}});
-    const stepUpRequired = authConfig.data?.stepUpForDestructive ?? true;
+    const authConfig = useGetAuthConfig({query: {enabled: open && !alwaysElevate}});
+    const stepUpRequired = alwaysElevate || (authConfig.data?.stepUpForDestructive ?? true);
 
     // Transient input is cleared on every close path, so each open starts fresh.
     const close = () => {

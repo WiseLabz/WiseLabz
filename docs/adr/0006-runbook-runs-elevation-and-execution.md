@@ -171,11 +171,10 @@ with external delivery once per request. Request, approval and rejection audit
 the acting user without adding those actions to the Journal allowlist. Backup
 and restore preserve the authored approval opt-in; run history stays operational.
 
-Approval follows the existing instance-wide step-up setting, like start and
-resume: when step-up is enabled, `runbook.approve` is required and the action,
-user and run ID binding is enforced; when the instance disables step-up, the
-existing elevation helper skips token validation. Disabling step-up never
-bypasses the different-operator, enabled-account, all-frozen-connector, API-key
-or conditional-transition guards. Whether second-operator approval should
-always require elevation regardless of this setting is left for explicit user
-confirmation, rather than changing the existing instance setting semantics.
+Approval always requires elevation (`runbook.approve` bound to the approver and
+run ID), regardless of whether the instance-wide step-up toggle is enabled or
+disabled. It joins `mfa.manage` as an exemption from the toggle in
+`ValidateElevationHeaderFor`. API keys can therefore never approve a runbook run.
+Start, resume, reject and cancel are unchanged. Disabling step-up never bypasses
+the different-operator, enabled-account, all-frozen-connector, API-key, elevation
+or conditional-transition guards.
