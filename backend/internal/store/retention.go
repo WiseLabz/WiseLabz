@@ -101,6 +101,11 @@ func (s *Store) DeleteOldAuditRecords(ctx context.Context, cutoff string) (int64
 	if err != nil {
 		return n, fmt.Errorf("delete old audit records: %w", err)
 	}
+	// Some stores disable foreign keys; do not retain orphaned scope snapshots.
+	if _, err := s.db.ExecContext(ctx, `DELETE FROM audit_log_connectors
+		WHERE NOT EXISTS (SELECT 1 FROM audit_log a WHERE a.id = audit_log_connectors.audit_id)`); err != nil {
+		return n, fmt.Errorf("delete orphaned audit connector scopes: %w", err)
+	}
 	return n, nil
 }
 

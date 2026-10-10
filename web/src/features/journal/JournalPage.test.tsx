@@ -208,7 +208,7 @@ describe('Journal', () => {
     expect(screen.queryByRole('button', { name: 'New entry' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('option', { name: 'Lab action' })).not.toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Lab action' })).toBeInTheDocument();
   });
 
   it('keeps the dialog open and reports mutation failure', async () => {
@@ -262,10 +262,34 @@ describe('Journal', () => {
   it('limits a non-admin operator to connector-scoped notes', async () => {
     mount();
     await screen.findByText('Replaced', { exact: false });
-    expect(screen.queryByRole('option', { name: 'Lab action' })).not.toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Lab action' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'New entry' }));
     const scope = within(screen.getByRole('dialog')).getByLabelText('Scope');
     expect(scope).toHaveValue('c');
     expect(within(scope).queryByRole('option', { name: 'Lab-wide' })).not.toBeInTheDocument();
   });
+
+  it.each([
+    { admin: false, docId: 'd', connectorId: 'c', href: '/docs/d' },
+    { admin: false, docId: '', connectorId: 'c', href: '/services/c' },
+    { admin: false, docId: '', connectorId: '', href: '' },
+    { admin: true, docId: 'd', connectorId: 'c', href: '/settings/audit' },
+    { admin: true, docId: '', connectorId: '', href: '/settings/audit' },
+  ])(
+    'links audit sources for $admin admin with doc $docId and connector $connectorId',
+    async ({ admin, docId, connectorId, href }) => {
+      role.admin = admin;
+      get.mockResolvedValue({
+        items: [{ ...note, kind: 'audit', title: 'runbook.update', body: '', docId, connectorId }],
+        total: 1,
+      });
+      mount('/journal?kinds=audit');
+      await screen.findByText('Lab action', { selector: 'span' });
+      if (href) {
+        expect(screen.getByRole('link', { name: 'View source' })).toHaveAttribute('href', href);
+      } else {
+        expect(screen.queryByRole('link', { name: 'View source' })).not.toBeInTheDocument();
+      }
+    }
+  );
 });

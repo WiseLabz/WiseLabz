@@ -18,15 +18,37 @@ The system SHALL expose changes, alerts, document edits, manual entries, signifi
 - **THEN** syncs without failures, changes or alerts are omitted until all-sync-runs is enabled
 
 ### Requirement: Source visibility
-The system SHALL limit connector-linked sources to viewer grants and API-key connector restrictions. Lab-wide manual entries SHALL be readable by signed-in users. Audit rows SHALL be instance-admin only and limited to lab connector, change, alert, doc and runbook actions; security events SHALL remain on Audit. Document edits SHALL omit soft-deleted documents.
+The system SHALL limit connector-linked sources to viewer grants and API-key connector restrictions. Lab-wide manual entries SHALL be readable by signed-in users. Journal audit rows SHALL be limited to the allowlisted lab connector, change, alert, doc and runbook actions; security events SHALL remain on Audit. Audit connector scope SHALL be snapshotted when each row is written and backfilled for existing rows where the target identifies scope. Members SHALL see a scoped row only when they hold a viewer or operator grant on every connector in that scope, and restricted API keys SHALL be limited to rows whose entire nonempty scope is allowed. Restricted API keys SHALL not see unscoped rows. Rows with no scope SHALL otherwise be visible only to instance admins. Instance admins SHALL see unscoped rows and rows scoped to deleted connectors; live scoped connectors SHALL still require a matching grant. The Journal SHALL expose the audit actor and omit audit detail. Document edits SHALL omit soft-deleted documents.
 
 #### Scenario: Restricted member
 - **WHEN** a viewer with one connector grant requests a timeline
-- **THEN** other connectors and all audit rows are absent, and lab-wide notes remain readable
+- **THEN** other connectors are absent; audit rows are visible only when every connector in their scope has a grant, while unscoped rows and rows scoped to other connectors are absent; lab-wide notes remain readable
 
 #### Scenario: Admin audit
 - **WHEN** an instance admin requests audit activity
-- **THEN** allowed lab actions are returned and authentication/security events are absent
+- **THEN** allowlisted lab actions are returned, including unscoped rows and rows scoped to deleted connectors, while security events are absent
+
+#### Scenario: Audit row requires every connector grant
+- **WHEN** a member with a viewer or operator grant on only one connector requests a row scoped to multiple connectors
+- **THEN** the row is absent; it appears only after the member has grants on every connector in its scope
+
+#### Scenario: Unscoped audit row
+- **WHEN** a non-admin member requests a row with no connector scope
+- **THEN** the row is absent, while an instance admin can see it
+
+#### Scenario: Restricted API key scope
+- **WHEN** a member holding grants on connectors A and B uses an API key restricted to connector A to request a row scoped to A and B
+- **THEN** the row is absent
+
+#### Scenario: Deleted connector in audit scope
+- **WHEN** a scoped connector is deleted after an audit row is written
+- **THEN** the row remains hidden from members and is visible to an instance admin
+
+#### Scenario: Audit source links and fields
+- **WHEN** a member views an audit row in Journal
+- **THEN** the row links to its document or connector when identified by the row fields, otherwise has no source link, exposes the actor, and omits detail
+- **WHEN** an instance admin views an audit row
+- **THEN** its source link opens the admin Audit page
 
 ### Requirement: Manual entry lifecycle
 The system SHALL allow connector operators to create notes and instance admins to create lab-wide notes. Entries SHALL support body, occurred_at defaulting to now, optional connector/doc and optional entity kind, name and external ref text. Authors and admins SHALL edit or delete entries they can view. Scope changes SHALL require destination write access and document links SHALL respect scope and read permissions.

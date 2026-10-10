@@ -62,6 +62,7 @@ func runbookConnectorActionWider(t *testing.T, db *sql.DB, driver string) bool {
 // chained migration tests can start from the 000065 schema.
 func rollbackRunbookConnectorAction(t *testing.T, db *sql.DB, driver string, logger *slog.Logger) {
 	t.Helper()
+	rollbackAuditLogConnectors(t, db, driver, logger)
 	if !runbookConnectorActionWider(t, db, driver) {
 		return
 	}
@@ -206,6 +207,7 @@ func TestRunbookConnectorActionMigrationUpDown(t *testing.T) {
 			t.Fatalf("insert additional action-run frozen step: %v", err)
 		}
 
+		rollbackAuditLogConnectors(t, s.rawDB, s.driver, logger)
 		if err := RunMigrationsDown(s.rawDB, s.driver, logger); err != nil {
 			t.Fatalf("rollback 000066: %v", err)
 		}

@@ -234,12 +234,35 @@ func assertRunAudit(t *testing.T, h *Handler, action, runID, rbID, user string) 
 	if total != 1 || records[0].ActorUserID != user || records[0].TargetID != runID {
 		t.Fatalf("audit=%+v", records)
 	}
+	assertRunAuditScope(t, h, records[0].ID, runID)
 	var detail map[string]any
 	if err := json.Unmarshal([]byte(records[0].Detail), &detail); err != nil {
 		t.Fatal(err)
 	}
 	if detail["runId"] != runID || detail["runbookId"] != rbID {
 		t.Fatalf("detail=%+v", detail)
+	}
+}
+
+func assertRunAuditScope(t *testing.T, h *Handler, auditID, runID string) {
+	t.Helper()
+	// Compare the persisted scope to the whole frozen set, independently of
+	// the helper that builds writer arguments and the step acted upon.
+	var missing, extra int
+	ctx := context.Background()
+	if err := h.Store.DB().QueryRowContext(ctx, `SELECT COUNT(*) FROM runbook_run_steps step
+ WHERE step.run_id = ? AND step.connector_id IS NOT NULL AND step.connector_id <> ''
+ AND NOT EXISTS (SELECT 1 FROM audit_log_connectors sc
+ WHERE sc.audit_id = ? AND sc.connector_id = step.connector_id)`, runID, auditID).Scan(&missing); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.Store.DB().QueryRowContext(ctx, `SELECT COUNT(*) FROM audit_log_connectors sc
+ WHERE sc.audit_id = ? AND NOT EXISTS (SELECT 1 FROM runbook_run_steps step
+ WHERE step.run_id = ? AND step.connector_id = sc.connector_id)`, auditID, runID).Scan(&extra); err != nil {
+		t.Fatal(err)
+	}
+	if missing != 0 || extra != 0 {
+		t.Fatalf("run audit scope: %d missing frozen connectors, %d extra", missing, extra)
 	}
 }
 

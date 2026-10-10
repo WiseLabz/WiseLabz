@@ -278,7 +278,7 @@ func (h *Handler) Acknowledge(w http.ResponseWriter, r *http.Request) {
 		httputil.Errorf(w, err)
 		return
 	}
-	if err := h.Store.RecordAuditFromContext(r.Context(), "change.ack", "change", id, nil); err != nil {
+	if err := h.Store.RecordAuditScopedFromContext(r.Context(), "change.ack", "change", id, nil, []string{c.ServiceID}); err != nil {
 		slog.Error("failed to record audit", "action", "change.ack", "error", err)
 	}
 	detail, err := h.changeDetail(r.Context(), id)
@@ -312,7 +312,7 @@ func (h *Handler) Dismiss(w http.ResponseWriter, r *http.Request) {
 		httputil.Errorf(w, err)
 		return
 	}
-	if err := h.Store.RecordAuditFromContext(r.Context(), "change.dismiss", "change", id, nil); err != nil {
+	if err := h.Store.RecordAuditScopedFromContext(r.Context(), "change.dismiss", "change", id, nil, []string{c.ServiceID}); err != nil {
 		slog.Error("failed to record audit", "action", "change.dismiss", "error", err)
 	}
 	detail, err := h.changeDetail(r.Context(), id)
@@ -375,8 +375,8 @@ func (h *Handler) ResolveDoc(w http.ResponseWriter, r *http.Request) {
 		httputil.Errorf(w, err)
 		return
 	}
-	if err := h.Store.RecordAuditFromContext(r.Context(), "change.resolve_doc", "change", id,
-		map[string]any{"action": req.Action, "docId": docID}); err != nil {
+	if err := h.Store.RecordAuditScopedFromContext(r.Context(), "change.resolve_doc", "change", id,
+		map[string]any{"action": req.Action, "docId": docID}, []string{c.ServiceID}); err != nil {
 		slog.Error("failed to record audit", "action", "change.resolve_doc", "error", err)
 	}
 	detail, err := h.changeDetail(r.Context(), id)
@@ -468,7 +468,7 @@ func (h *Handler) BulkResolve(w http.ResponseWriter, r *http.Request) {
 		}
 		resolvedIDs = append(resolvedIDs, id)
 		eligible[id] = true
-		auditRecords = append(auditRecords, store.AuditRecord{TargetID: id, Detail: fmt.Sprintf(`{"severity":%q}`, c.Severity)})
+		auditRecords = append(auditRecords, store.AuditRecord{TargetID: id, Detail: fmt.Sprintf(`{"severity":%q}`, c.Severity), ConnectorIDs: []string{c.ServiceID}})
 	}
 	updateErr := h.Store.UpdateChangeStatuses(r.Context(), resolvedIDs, req.Status)
 	if updateErr == nil {

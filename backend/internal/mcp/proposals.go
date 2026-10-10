@@ -89,9 +89,9 @@ func registerProposeDocEdit(s *mcpserver.MCPServer, d Deps) {
 			}
 			return mcpsdk.NewToolResultErrorFromErr("create proposal", err), nil
 		}
-		if err := d.Store.RecordAuditFromContext(ctx, "doc.edit_proposed", "doc", docID, map[string]any{
+		if err := d.Store.RecordAuditScopedFromContext(ctx, "doc.edit_proposed", "doc", docID, map[string]any{
 			"proposalId": p.ID, "baseVersion": base, "via": "mcp",
-		}); err != nil {
+		}, []string{doc.ServiceID}); err != nil {
 			// Best-effort, like every other audited write: the proposal is
 			// already stored and stays reviewable, so a failed audit row is
 			// logged rather than turned into a tool error.

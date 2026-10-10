@@ -6,11 +6,11 @@ Issue #501 needs one chronological record of lab activity and the manual context
 
 ## What Changes
 
-- Merge changes, significant sync runs, alerts, document edits, manual journal entries and admin-only lab audit actions into a filtered, cursor-paginated timeline.
+- Merge changes, significant sync runs, alerts, document edits, manual journal entries and grant-scoped lab audit actions into a filtered, cursor-paginated timeline.
 - Add backdatable, editable and deletable Markdown entries with connector, optional document and optional entity links.
 - Preserve manual entries in backups and indefinitely through retention.
 - Add a Journal page, navigation, command palette entry and English/Portuguese strings.
-- Correct Changes/Alerts list service names and server-side severity filtering on Changes/Alerts; file AI window narration and grant-scoped non-admin audit visibility as separate follow-ups.
+- Correct Changes/Alerts list service names and server-side severity filtering on Changes/Alerts; file AI window narration as a separate follow-up.
 
 ## Capabilities
 
