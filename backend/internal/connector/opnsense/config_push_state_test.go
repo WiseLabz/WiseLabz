@@ -23,6 +23,7 @@ type fakeClock struct {
 	mu     sync.Mutex
 	now    time.Time
 	timers chan *fakeTimer // every timer a push starts waiting on
+	done   chan struct{}
 }
 
 type fakeTimer struct {
@@ -32,7 +33,25 @@ type fakeTimer struct {
 
 // installFakeClock must run before the first push to this firewall.
 func installFakeClock(f *fakeFilter) *fakeClock {
-	clk := &fakeClock{now: time.Now(), timers: make(chan *fakeTimer, 8)}
+	clk := &fakeClock{
+		now:    time.Now(),
+		timers: make(chan *fakeTimer, 8),
+		done:   make(chan struct{}),
+	}
+	f.t.Cleanup(func() {
+		close(clk.done)
+		for {
+			select {
+			case ft := <-clk.timers:
+				select {
+				case ft.c <- clk.Now():
+				default:
+				}
+			default:
+				return
+			}
+		}
+	})
 	st := f.filterState()
 	st.now = clk.Now
 	st.newTimer = clk.newTimer
@@ -53,8 +72,13 @@ func (c *fakeClock) set(t time.Time) {
 
 func (c *fakeClock) newTimer(d time.Duration) (<-chan time.Time, func()) {
 	ft := &fakeTimer{d: d, c: make(chan time.Time, 1)}
-	c.timers <- ft
-	return ft.c, func() {}
+	select {
+	case c.timers <- ft:
+		return ft.c, func() {}
+	case <-c.done:
+		close(ft.c)
+		return ft.c, func() {}
+	}
 }
 
 func (c *fakeClock) awaitTimer(t *testing.T) *fakeTimer {
@@ -86,6 +110,11 @@ type waitingPush struct {
 // startPush returns when ConfigPush reaches the rollback wait.
 func startPush(ctx context.Context, t *testing.T, clk *fakeClock, c *Connector, ref string, value bool) *waitingPush {
 	t.Helper()
+	if _, ok := ctx.Deadline(); !ok {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithDeadline(ctx, clk.Now().Add(2*rollbackWindow))
+		t.Cleanup(cancel)
+	}
 	p := &waitingPush{clk: clk, done: make(chan error, 1)}
 	go func() { p.done <- c.ConfigPush(ctx, nil, ref, "enabled", value) }()
 	p.timer = clk.awaitTimer(t)
@@ -119,7 +148,9 @@ func retryAfterWait(t *testing.T, f *fakeFilter, clk *fakeClock, c *Connector, r
 		t.Fatal("no rollback window is open, so the scenario does not test a wait")
 	}
 	mark := f.callCount()
-	p := startPush(context.Background(), t, clk, c, ref, value)
+	ctx, cancel := context.WithDeadline(context.Background(), until.Add(time.Minute))
+	defer cancel()
+	p := startPush(ctx, t, clk, c, ref, value)
 	if want := until.Sub(clk.Now()); p.timer.d != want {
 		t.Errorf("the push waited for %v, want %v", p.timer.d, want)
 	}
@@ -423,7 +454,7 @@ func TestConfigPush_RollbackWindowAndContext(t *testing.T) {
 		clk := installFakeClock(f)
 		f.filterState().holdRollback()
 
-		ctx, cancel := context.WithCancel(context.Background())
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 		defer cancel()
 		p := startPush(ctx, t, clk, f.conn(), testRule, true)
 		cancel()
@@ -441,13 +472,16 @@ func TestConfigPush_RollbackWindowAndContext(t *testing.T) {
 		f.filterState().holdRollback()
 		until := f.filterState().waitUntil()
 
+		ctx, cancel := context.WithDeadline(context.Background(), until.Add(time.Minute))
+		defer cancel()
+
 		var wg sync.WaitGroup
 		errs := make([]error, 2)
 		for i := range errs {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				errs[i] = pushTo(f.conn(), testRule, true)
+				errs[i] = f.conn().ConfigPush(ctx, nil, testRule, "enabled", true)
 			}()
 		}
 		// One push holds the lock and waits; the other waits for the lock.
@@ -457,7 +491,7 @@ func TestConfigPush_RollbackWindowAndContext(t *testing.T) {
 		}
 		clk.set(until.Add(time.Second))
 		timer.c <- clk.Now()
-		wg.Wait()
+		waitWithTimeout(t, &wg, 10*time.Second)
 		for _, err := range errs {
 			if err != nil {
 				t.Errorf("ConfigPush() error = %v", err)
@@ -664,6 +698,9 @@ func TestFilterState_SharedBetweenURLSpellings(t *testing.T) {
 	c1 := f.conn()
 	c2 := f.conn()
 	c2.url = "HTTP" + strings.TrimPrefix(f.srv.URL, "http")
+	t.Cleanup(func() {
+		filterStates.Delete(filterKey(c1.url + "/other"))
+	})
 	if filterStateFor(c1.url) != filterStateFor(c2.url) {
 		t.Fatal("equivalent URLs have different filter states")
 	}

@@ -334,7 +334,7 @@ jobs:
         # not shards: after #401 the whole run takes about as long as the
         # slowest former shard and matches its merged coverage (see
         # docs/TESTING.md).
-        run: go test -coverpkg="$(../scripts/ci/coverpkg.sh)" -coverprofile=coverage.out ./...
+        run: go test -timeout 8m -coverpkg="$(../scripts/ci/coverpkg.sh)" -coverprofile=coverage.out ./...
         working-directory: backend
 
       - name: Enforce coverage baseline
@@ -384,7 +384,7 @@ jobs:
           kind: race
 
       - name: Run race-sensitive tests
-        run: scripts/ci/test-shards.sh run race "$SHARD" -race
+        run: scripts/ci/test-shards.sh run race "$SHARD" -timeout 8m -race
         env:
           SHARD: ${{ matrix.shard }}
 
@@ -436,7 +436,7 @@ jobs:
           kind: postgres
 
       - name: Run store tests and migration parity against Postgres
-        run: scripts/ci/test-shards.sh run postgres "$SHARD" -p 1
+        run: scripts/ci/test-shards.sh run postgres "$SHARD" -timeout 8m -p 1
         env:
           SHARD: ${{ matrix.shard }}
           WISELABZ_TEST_POSTGRES_DSN: postgres://wiselabz:wiselabz@localhost:5432/wiselabz?sslmode=disable

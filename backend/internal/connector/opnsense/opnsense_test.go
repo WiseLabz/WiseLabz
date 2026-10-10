@@ -28,7 +28,7 @@ func TestValidateUsesBasicAuthAndSurfacesStatus(t *testing.T) {
 		_, _ = w.Write([]byte("denied"))
 	}))
 	defer server.Close()
-	c := &Connector{url: server.URL, apiKey: "key", apiSecret: "secret", client: server.Client()}
+	c := &Connector{url: server.URL, apiKey: "key", apiSecret: "secret", client: testClient(server)}
 	err := c.Validate(context.Background(), nil)
 	var authErr *connector.AuthError
 	if !errors.As(err, &authErr) || !strings.Contains(err.Error(), "API returned 401: denied") {
@@ -49,7 +49,7 @@ func TestFetchSurfacesMalformedSystemResponse(t *testing.T) {
 	}))
 	defer server.Close()
 
-	c := &Connector{url: server.URL, apiKey: "key", apiSecret: "secret", client: server.Client()}
+	c := &Connector{url: server.URL, apiKey: "key", apiSecret: "secret", client: testClient(server)}
 	snap, err := c.Fetch(context.Background(), nil)
 	if err != nil {
 		t.Fatalf("Fetch() error = %v", err)
@@ -80,7 +80,7 @@ func TestFetchSurfacesWANAndUpstreamDependencies(t *testing.T) {
 	}))
 	defer server.Close()
 
-	c := &Connector{url: server.URL, apiKey: "key", apiSecret: "secret", client: server.Client()}
+	c := &Connector{url: server.URL, apiKey: "key", apiSecret: "secret", client: testClient(server)}
 	snap, err := c.Fetch(context.Background(), nil)
 	if err != nil {
 		t.Fatalf("Fetch() error = %v", err)
@@ -136,7 +136,7 @@ func TestFetchScopesInterfaceAndFallbackRuleIDsBySource(t *testing.T) {
 	defer secondServer.Close()
 
 	newConnector := func(server *httptest.Server) *Connector {
-		return &Connector{url: server.URL, apiKey: "key", apiSecret: "secret", client: server.Client()}
+		return &Connector{url: server.URL, apiKey: "key", apiSecret: "secret", client: testClient(server)}
 	}
 	first, err := newConnector(firstServer).Fetch(context.Background(), nil)
 	if err != nil {
@@ -226,7 +226,7 @@ func TestDoRequestErrorCases(t *testing.T) {
 			}))
 			defer server.Close()
 
-			c := &Connector{url: server.URL, apiKey: "key", apiSecret: "secret", client: server.Client()}
+			c := &Connector{url: server.URL, apiKey: "key", apiSecret: "secret", client: testClient(server)}
 			_, err := c.doRequest(context.Background(), "GET", "/api/test")
 
 			if err == nil {
@@ -258,7 +258,7 @@ func TestDoRequestContextTimeout(t *testing.T) {
 	}))
 	defer server.Close()
 
-	c := &Connector{url: server.URL, apiKey: "key", apiSecret: "secret", client: server.Client()}
+	c := &Connector{url: server.URL, apiKey: "key", apiSecret: "secret", client: testClient(server)}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
 	defer cancel()
 
@@ -343,7 +343,7 @@ func TestRestart(t *testing.T) {
 			}))
 			defer server.Close()
 
-			c := &Connector{url: server.URL, apiKey: "key", apiSecret: "secret", client: server.Client()}
+			c := &Connector{url: server.URL, apiKey: "key", apiSecret: "secret", client: testClient(server)}
 			err := c.Restart(context.Background(), nil, tt.entityRef)
 			if tt.wantErr {
 				if err == nil {
@@ -385,7 +385,7 @@ func TestStartStop(t *testing.T) {
 			}))
 			defer server.Close()
 
-			c := &Connector{url: server.URL, apiKey: "key", apiSecret: "secret", client: server.Client()}
+			c := &Connector{url: server.URL, apiKey: "key", apiSecret: "secret", client: testClient(server)}
 			var err error
 			if tt.action == "start" {
 				err = c.Start(context.Background(), nil, tt.entityRef)
@@ -468,6 +468,7 @@ type fakeFilter struct {
 	after      map[string]func(int)
 	active     bool
 	overlaps   int
+	client     *http.Client
 }
 
 func newFakeFilter(t *testing.T, legacy bool) *fakeFilter {
@@ -488,12 +489,36 @@ func newFakeFilter(t *testing.T, legacy bool) *fakeFilter {
 		f.pushEnd = "cancelRollback"
 	}
 	f.srv = httptest.NewServer(http.HandlerFunc(f.serve))
+	f.client = testClient(f.srv)
 	t.Cleanup(f.srv.Close)
+	t.Cleanup(func() {
+		filterStates.Delete(filterKey(f.srv.URL))
+	})
 	return f
 }
 
 func (f *fakeFilter) conn() *Connector {
-	return &Connector{url: f.srv.URL, apiKey: "key", apiSecret: "secret", client: f.srv.Client()}
+	return &Connector{url: f.srv.URL, apiKey: "key", apiSecret: "secret", client: f.client}
+}
+
+func testClient(s *httptest.Server) *http.Client {
+	c := s.Client()
+	c.Timeout = 10 * time.Second
+	return c
+}
+
+func waitWithTimeout(t *testing.T, wg *sync.WaitGroup, timeout time.Duration) {
+	t.Helper()
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(timeout):
+		t.Fatal("timed out waiting for WaitGroup")
+	}
 }
 
 func (f *fakeFilter) serve(w http.ResponseWriter, r *http.Request) {
@@ -1102,16 +1127,19 @@ func TestConfigPush_ConcurrentPushesDoNotInterleave(t *testing.T) {
 			f := newFakeFilter(t, legacy)
 			f.after["setRule"] = func(int) { time.Sleep(5 * time.Millisecond) }
 
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+
 			var wg sync.WaitGroup
 			errs := make([]error, 2)
 			for i := range errs {
 				wg.Add(1)
 				go func() {
 					defer wg.Done()
-					errs[i] = f.conn().ConfigPush(context.Background(), nil, testRule, "enabled", true)
+					errs[i] = f.conn().ConfigPush(ctx, nil, testRule, "enabled", true)
 				}()
 			}
-			wg.Wait()
+			waitWithTimeout(t, &wg, 10*time.Second)
 			for _, err := range errs {
 				if err != nil {
 					t.Errorf("ConfigPush() error = %v", err)

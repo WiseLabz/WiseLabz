@@ -24,7 +24,7 @@ func TestConfigRead(t *testing.T) {
 	}))
 	defer server.Close()
 
-	c := &Connector{url: server.URL, apiKey: "key", apiSecret: "secret", client: server.Client()}
+	c := &Connector{url: server.URL, apiKey: "key", apiSecret: "secret", client: testClient(server)}
 	value, err := c.ConfigRead(context.Background(), nil, "rule-1", "enabled")
 	if err != nil || value != true {
 		t.Fatalf("ConfigRead() = (%#v, %v), want (true, nil)", value, err)
