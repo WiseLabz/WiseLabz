@@ -18,11 +18,19 @@ func TruncateUTF8(s string, limit int) string {
 }
 
 // StripPromptTags removes the open and close delimiter tags named in tags so
-// untrusted content can't close its own block.
+// untrusted content can't close its own block. It repeats until stable because
+// removing a tag can splice its neighbours into a new one.
 func StripPromptTags(s string, tags ...string) string {
 	pairs := make([]string, 0, len(tags)*4)
 	for _, tag := range tags {
 		pairs = append(pairs, "<"+tag+">", "", "</"+tag+">", "")
 	}
-	return strings.NewReplacer(pairs...).Replace(s)
+	r := strings.NewReplacer(pairs...)
+	for {
+		out := r.Replace(s)
+		if out == s {
+			return s
+		}
+		s = out
+	}
 }

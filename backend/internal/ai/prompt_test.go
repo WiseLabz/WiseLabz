@@ -25,3 +25,19 @@ func TestStripPromptTags(t *testing.T) {
 		t.Fatalf("no tags must leave input untouched: %q", got)
 	}
 }
+
+func TestStripPromptTagsNested(t *testing.T) {
+	for _, tc := range []struct{ name, in, want string }{
+		{"plain", "a <x>b</x> c", "a b c"},
+		{"nested close", "a </</x>x> b", "a  b"},
+		{"nested open", "a <<x>x> b", "a  b"},
+		{"deeply nested", "<<<x>x>x>", ""},
+		{"untouched", "no tags here", "no tags here"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := StripPromptTags(tc.in, "x"); got != tc.want {
+				t.Fatalf("got %q want %q", got, tc.want)
+			}
+		})
+	}
+}

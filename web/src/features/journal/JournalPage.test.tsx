@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { AxiosError } from 'axios';
@@ -400,16 +400,41 @@ describe('Journal', () => {
       ).toBeInTheDocument();
     });
 
-    it('clears the narration when the filters change', async () => {
+    const filterChanges: [string, () => void][] = [
+      [
+        'source',
+        () => fireEvent.change(screen.getByLabelText('Source'), { target: { value: 'change' } }),
+      ],
+      ['scope', () => fireEvent.change(screen.getByLabelText('Scope'), { target: { value: 'c' } })],
+      ['all sync runs', () => fireEvent.click(screen.getByLabelText('Show all sync runs'))],
+    ];
+
+    it.each(filterChanges)('clears the narration when the %s filter changes', async (_, change) => {
       narrate.mockResolvedValue(narration);
       mount();
       await screen.findByText('Replaced', { exact: false });
       summarize();
       expect(await screen.findByText('AI summary of this window')).toBeInTheDocument();
-      fireEvent.change(screen.getByLabelText('Source'), { target: { value: 'change' } });
+      change();
       await waitFor(() =>
         expect(screen.queryByText('AI summary of this window')).not.toBeInTheDocument()
       );
+    });
+
+    it('drops a narration that resolves after the filters changed', async () => {
+      let resolve!: (value: TimelineNarration) => void;
+      narrate.mockReturnValue(new Promise<TimelineNarration>((r) => (resolve = r)));
+      mount();
+      await screen.findByText('Replaced', { exact: false });
+      summarize();
+      expect(await screen.findByRole('button', { name: 'Summarizing…' })).toBeDisabled();
+      fireEvent.change(screen.getByLabelText('Scope'), { target: { value: 'c' } });
+      resolve(narration);
+      await waitFor(() =>
+        expect(screen.getByRole('button', { name: 'Summarize this window' })).toBeEnabled()
+      );
+      await act(async () => {});
+      expect(screen.queryByText('AI summary of this window')).not.toBeInTheDocument();
     });
   });
 });
