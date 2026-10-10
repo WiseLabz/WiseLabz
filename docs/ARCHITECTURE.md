@@ -567,6 +567,23 @@ in one transaction, suffixing sibling title collisions with " (imported)".
 Embeddings sync in the background afterwards. Plans expire after an hour; the
 `docImportSweep` job removes stale staging every ten minutes.
 
+## BookStack API pull (#611)
+
+`POST /api/docs/import/pull` (instance admin, `docs.import.pull` step-up) pulls
+a BookStack instance instead of taking an upload. `internal/docimport/pull`
+holds a single in-memory job manager: one pull runs at a time, its status is
+lost on restart, and a second start is rejected with 409. The BookStack source
+writes the same staging `upload.zip` from each book's portable ZIP export, so
+analysis, preview (`GET /api/docs/import/pull`) and `POST
+/api/docs/import/{id}/commit` are the Markdown/Obsidian ones above. Credentials
+live only in the running source and never reach staging, status or audit
+(`docs.import.pull.*` records source, host, TLS opt-in and progress). The HTTP
+client is guarded against loopback, link-local and metadata addresses, follows
+no redirects and verifies TLS unless the admin opts out. BookStack v25.07 is the
+minimum, the first release with API ZIP exports. Each downloaded export and the
+staged zip are capped at 100 MiB, and the staged zip is unzipped within the
+500 MB / 2000-entry limits above.
+
 ## Data retention (decided 2026-09-05)
 
 A background job (`internal/retention`, registered with the shared cron

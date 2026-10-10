@@ -14,5 +14,5 @@ export interface DocPullRequest {
   url: string;
   tokenId: string;
   tokenSecret: string;
-  skipTlsVerify: boolean;
+  skipTlsVerify?: boolean;
 }

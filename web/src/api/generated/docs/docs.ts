@@ -606,7 +606,7 @@ export const usePostDocsImport = <
   return useMutation(getPostDocsImportMutationOptions(options), queryClient);
 };
 /**
- * Requires docs.import.pull elevation when step-up is enabled. BookStack v25.07 or newer is required for the ZIP export API. Imports all readable shelves, books and pages within 2000 entries and 500 MB; credentials remain in memory until the job ends. TLS verification is enabled unless explicitly disabled, and that choice is audited. Private networks are allowed; loopback, link-local and metadata addresses and redirects are blocked.
+ * When `stepUpForDestructive` is enabled, requires an `X-Elevation-Token` for action `docs.import.pull`: a missing token gets 400 `elevation_required`, an invalid, expired, already used or mismatched token gets 401 `unauthorized`. BookStack v25.07 or newer is required for the ZIP export API. Imports all readable shelves, books and pages into a staged zip that is previewed and committed like any other import. Each downloaded book export and the final staged archive are capped at 100 MiB, and the archive expands to at most 500 MB and 2000 entries. Credentials remain in memory until the job ends. TLS verification is enabled unless explicitly disabled, and that choice is audited. Private networks are allowed; loopback, link-local and metadata addresses and redirects are blocked. Only one pull runs at a time.
  * @summary Start a background BookStack import (instance admin, elevated)
  */
 export const postDocsImportPull = (
@@ -629,7 +629,7 @@ export const postDocsImportPull = (
 export const getPostDocsImportPullMutationKey = () => ['postDocsImportPull'] as const;
 
 export const getPostDocsImportPullMutationOptions = <
-  TError = ErrorType<BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | void>,
+  TError = ErrorType<Error | ForbiddenResponse>,
   TContext = unknown,
 >(options?: {
   mutation?: UseMutationOptions<
@@ -668,16 +668,14 @@ export type PostDocsImportPullMutationResult = NonNullable<
   Awaited<ReturnType<typeof postDocsImportPull>>
 >;
 export type PostDocsImportPullMutationBody = BodyType<DocPullRequest>;
-export type PostDocsImportPullMutationError = ErrorType<
-  BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | void
->;
+export type PostDocsImportPullMutationError = ErrorType<Error | ForbiddenResponse>;
 export type PostDocsImportPullMutationVariables = { data: BodyType<DocPullRequest> };
 
 /**
  * @summary Start a background BookStack import (instance admin, elevated)
  */
 export const usePostDocsImportPull = <
-  TError = ErrorType<BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | void>,
+  TError = ErrorType<Error | ForbiddenResponse>,
   TContext = unknown,
 >(
   options?: {
@@ -714,7 +712,7 @@ export const getGetDocsImportPullQueryKey = () => {
 
 export const getGetDocsImportPullQueryOptions = <
   TData = Awaited<ReturnType<typeof getDocsImportPull>>,
-  TError = ErrorType<ForbiddenResponse | NotFoundResponse>,
+  TError = ErrorType<UnauthorizedResponse | ForbiddenResponse | Error>,
 >(options?: {
   query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getDocsImportPull>>, TError, TData>>;
   request?: SecondParameter<typeof customInstance>;
@@ -736,11 +734,13 @@ export const getGetDocsImportPullQueryOptions = <
 export type GetDocsImportPullQueryResult = NonNullable<
   Awaited<ReturnType<typeof getDocsImportPull>>
 >;
-export type GetDocsImportPullQueryError = ErrorType<ForbiddenResponse | NotFoundResponse>;
+export type GetDocsImportPullQueryError = ErrorType<
+  UnauthorizedResponse | ForbiddenResponse | Error
+>;
 
 export function useGetDocsImportPull<
   TData = Awaited<ReturnType<typeof getDocsImportPull>>,
-  TError = ErrorType<ForbiddenResponse | NotFoundResponse>,
+  TError = ErrorType<UnauthorizedResponse | ForbiddenResponse | Error>,
 >(
   options: {
     query: Partial<UseQueryOptions<Awaited<ReturnType<typeof getDocsImportPull>>, TError, TData>> &
@@ -758,7 +758,7 @@ export function useGetDocsImportPull<
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 export function useGetDocsImportPull<
   TData = Awaited<ReturnType<typeof getDocsImportPull>>,
-  TError = ErrorType<ForbiddenResponse | NotFoundResponse>,
+  TError = ErrorType<UnauthorizedResponse | ForbiddenResponse | Error>,
 >(
   options?: {
     query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getDocsImportPull>>, TError, TData>> &
@@ -776,7 +776,7 @@ export function useGetDocsImportPull<
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 export function useGetDocsImportPull<
   TData = Awaited<ReturnType<typeof getDocsImportPull>>,
-  TError = ErrorType<ForbiddenResponse | NotFoundResponse>,
+  TError = ErrorType<UnauthorizedResponse | ForbiddenResponse | Error>,
 >(
   options?: {
     query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getDocsImportPull>>, TError, TData>>;
@@ -790,7 +790,7 @@ export function useGetDocsImportPull<
 
 export function useGetDocsImportPull<
   TData = Awaited<ReturnType<typeof getDocsImportPull>>,
-  TError = ErrorType<ForbiddenResponse | NotFoundResponse>,
+  TError = ErrorType<UnauthorizedResponse | ForbiddenResponse | Error>,
 >(
   options?: {
     query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getDocsImportPull>>, TError, TData>>;
@@ -823,7 +823,7 @@ export const deleteDocsImportPull = (
 export const getDeleteDocsImportPullMutationKey = () => ['deleteDocsImportPull'] as const;
 
 export const getDeleteDocsImportPullMutationOptions = <
-  TError = ErrorType<ForbiddenResponse | void>,
+  TError = ErrorType<UnauthorizedResponse | ForbiddenResponse | Error>,
   TContext = unknown,
 >(options?: {
   mutation?: UseMutationOptions<
@@ -860,13 +860,15 @@ export type DeleteDocsImportPullMutationResult = NonNullable<
   Awaited<ReturnType<typeof deleteDocsImportPull>>
 >;
 
-export type DeleteDocsImportPullMutationError = ErrorType<ForbiddenResponse | void>;
+export type DeleteDocsImportPullMutationError = ErrorType<
+  UnauthorizedResponse | ForbiddenResponse | Error
+>;
 
 /**
  * @summary Cancel a running documentation pull (instance admin)
  */
 export const useDeleteDocsImportPull = <
-  TError = ErrorType<ForbiddenResponse | void>,
+  TError = ErrorType<UnauthorizedResponse | ForbiddenResponse | Error>,
   TContext = unknown,
 >(
   options?: {

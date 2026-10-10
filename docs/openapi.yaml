@@ -2278,16 +2278,23 @@ paths:
       tags: [docs]
       summary: Start a background BookStack import (instance admin, elevated)
       description: >-
-        Requires docs.import.pull elevation when step-up is enabled. BookStack v25.07
-        or newer is required for the ZIP export API. Imports all readable shelves,
-        books and pages within 2000 entries and 500 MB; credentials remain in memory
-        until the job ends. TLS verification is enabled unless explicitly disabled,
-        and that choice is audited. Private networks are allowed; loopback, link-local
-        and metadata addresses and redirects are blocked.
+        When `stepUpForDestructive` is enabled, requires an `X-Elevation-Token` for
+        action `docs.import.pull`: a missing token gets 400 `elevation_required`, an
+        invalid, expired, already used or mismatched token gets 401 `unauthorized`.
+        BookStack v25.07 or newer is required for the ZIP export API. Imports all
+        readable shelves, books and pages into a staged zip that is previewed and
+        committed like any other import. Each downloaded book export and the final
+        staged archive are capped at 100 MiB, and the archive expands to at most 500 MB
+        and 2000 entries. Credentials remain in memory until the job ends. TLS
+        verification is enabled unless explicitly disabled, and that choice is audited.
+        Private networks are allowed; loopback, link-local and metadata addresses and
+        redirects are blocked. Only one pull runs at a time.
       parameters:
         - name: X-Elevation-Token
           in: header
+          required: false
           schema: { type: string }
+          description: Single-use elevation token from POST /auth/elevate for action `docs.import.pull` (when step-up is on)
       requestBody:
         required: true
         content:
@@ -2299,10 +2306,28 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/DocPullJob' }
-        '400': { $ref: '#/components/responses/BadRequest' }
-        '401': { $ref: '#/components/responses/Unauthorized' }
+        '400':
+          description: >
+            Invalid request or unsupported source (codes `invalid_request`,
+            `invalid_source`), or step-up is on and no `X-Elevation-Token` was
+            sent (code `elevation_required`)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401':
+          description: >
+            Not signed in, or the `X-Elevation-Token` is invalid or expired
+            (code `unauthorized`); call POST /auth/elevate for `docs.import.pull`
+            and retry
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
         '403': { $ref: '#/components/responses/Forbidden' }
-        '409': { description: A documentation pull is already running }
+        '409':
+          description: A documentation pull is already running (code `pull_running`)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
     get:
       tags: [docs]
       summary: Read the current pull and its preview when ready (instance admin)
@@ -2312,8 +2337,13 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/DocPullJob' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
-        '404': { $ref: '#/components/responses/NotFound' }
+        '404':
+          description: No current pull, or its staged import expired or was already committed
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
     delete:
       tags: [docs]
       summary: Cancel a running documentation pull (instance admin)
@@ -2323,8 +2353,13 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/DocPullJob' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
-        '409': { description: No running documentation pull }
+        '409':
+          description: No running documentation pull (code `no_running_pull`)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
   /docs/import/{importId}/commit:
     post:
       tags: [docs]
@@ -6331,12 +6366,12 @@ components:
           items: { $ref: '#/components/schemas/DocImportNode' }
     DocPullRequest:
       type: object
-      required: [source, url, tokenId, tokenSecret, skipTlsVerify]
+      required: [source, url, tokenId, tokenSecret]
       properties:
         source: { type: string, enum: [bookstack] }
         url: { type: string, format: uri, description: Installation base URL without userinfo or query }
         tokenId: { type: string, writeOnly: true }
-        tokenSecret: { type: string, writeOnly: true }
+        tokenSecret: { type: string, format: password, writeOnly: true }
         skipTlsVerify: { type: boolean, default: false }
     DocPullJob:
       type: object
