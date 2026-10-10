@@ -1,6 +1,8 @@
 package api
 
 import (
+	"net/http"
+
 	"github.com/go-chi/chi/v5"
 
 	"github.com/WiseLabz/wiselabz/internal/auth"
@@ -49,7 +51,11 @@ func mountConnectorRoutes(r chi.Router, d routerDeps) {
 		// Creating a connector has no existing grant to check against, so
 		// it's instance-admin only; the creator is auto-granted operator
 		// on the new connector (see connH.Create).
-		r.With(auth.RequireInstanceAdmin).Post("/", d.connH.Create)
+		r.With(auth.RequireInstanceAdmin).Method(
+			http.MethodPost,
+			"/",
+			withElevationSource("ValidateElevationHeaderFor", d.connH.Create),
+		)
 		r.With(auth.RequireInstanceAdmin).Post("/recipe-preview", d.connH.RecipePreview)
 
 		// Instance-admin-only grant management for this connector — a
@@ -73,11 +79,31 @@ func mountConnectorRoutes(r chi.Router, d routerDeps) {
 				r.Use(d.connH.RequireManagedBy(store.ManagedByUI, store.ManagedByConfig))
 				r.Post("/{id}/test", d.connH.Test)
 				r.Post("/{id}/health", d.connH.Health)
-				r.Post("/{id}/restart", d.connH.RestartPreview)
-				r.Post("/{id}/start", d.connH.StartPreview)
-				r.Post("/{id}/stop", d.connH.StopPreview)
-				r.Post("/{id}/actions/{name}", d.connH.Action)
-				r.Post("/{id}/config-push", d.connH.ConfigPush)
+				r.Method(
+					http.MethodPost,
+					"/{id}/restart",
+					withElevationSource("ValidateElevationHeader", d.connH.RestartPreview),
+				)
+				r.Method(
+					http.MethodPost,
+					"/{id}/start",
+					withElevationSource("ValidateElevationHeader", d.connH.StartPreview),
+				)
+				r.Method(
+					http.MethodPost,
+					"/{id}/stop",
+					withElevationSource("ValidateElevationHeader", d.connH.StopPreview),
+				)
+				r.Method(
+					http.MethodPost,
+					"/{id}/actions/{name}",
+					withElevationSource("ValidateElevationHeaderFor", d.connH.Action),
+				)
+				r.Method(
+					http.MethodPost,
+					"/{id}/config-push",
+					withElevationSource("ValidateElevationHeader", d.connH.ConfigPush),
+				)
 				r.Post("/{id}/sync", d.connH.Sync)
 				r.Post("/{id}/maintenance-window", d.connH.OpenMaintenanceWindow) // no elevation: reversible and time-boxed
 				r.Delete("/{id}/maintenance-window", d.connH.CloseMaintenanceWindow)
@@ -88,7 +114,11 @@ func mountConnectorRoutes(r chi.Router, d routerDeps) {
 			// Settings of a config-managed connector live in config.yaml (#500).
 			r.Group(func(r chi.Router) {
 				r.Use(d.connH.RequireManagedBy(store.ManagedByUI))
-				r.Put("/{id}", d.connH.Update)
+				r.Method(
+					http.MethodPut,
+					"/{id}",
+					withElevationSource("ValidateElevationHeaderFor", d.connH.Update),
+				)
 				r.Put("/{id}/enabled", d.connH.ToggleEnabled)
 			})
 

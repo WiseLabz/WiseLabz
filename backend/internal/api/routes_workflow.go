@@ -1,6 +1,8 @@
 package api
 
 import (
+	"net/http"
+
 	"github.com/go-chi/chi/v5"
 
 	"github.com/WiseLabz/wiselabz/internal/auth"
@@ -53,22 +55,38 @@ func mountWorkflowRoutes(r chi.Router, d routerDeps) {
 
 	r.Route("/runbook-runs", func(r chi.Router) {
 		r.Get("/{runId}", d.runbookH.GetRun)
-		r.Post("/{runId}/approve", d.runbookH.ApproveRun)
+		r.Method(
+			http.MethodPost,
+			"/{runId}/approve",
+			withElevationSource("ValidateElevationHeaderFor", d.runbookH.ApproveRun),
+		)
 		r.Post("/{runId}/reject", d.runbookH.RejectRun)
 		r.Post("/{runId}/steps/{stepId}/confirm", d.runbookH.ConfirmRunStep)
-		r.Post("/{runId}/resume", d.runbookH.ResumeRun)
+		r.Method(
+			http.MethodPost,
+			"/{runId}/resume",
+			withElevationSource("ValidateElevationHeaderFor", d.runbookH.ResumeRun),
+		)
 		r.Post("/{runId}/cancel", d.runbookH.CancelRun)
 	})
 	r.Route("/runbooks", func(r chi.Router) {
 		r.Get("/", d.runbookH.List)
 		r.Get("/{id}", d.runbookH.Get)
-		r.Post("/{id}/run", d.runbookH.StartRun)
+		r.Method(
+			http.MethodPost,
+			"/{id}/run",
+			withElevationSource("ValidateElevationHeaderFor", d.runbookH.StartRun),
+		)
 		r.Get("/{id}/runs", d.runbookH.ListRuns)
 		// Not admin-only: ExecuteStep checks store.UserHasConnectorRole
 		// itself (operator grant on the step's connector), same reasoning
 		// as changes/alerts/findings above — plus the elevation check
 		// inside ServeLifecycleOp.
-		r.Post("/{id}/steps/{stepId}/execute", d.runbookH.ExecuteStep)
+		r.Method(
+			http.MethodPost,
+			"/{id}/steps/{stepId}/execute",
+			withElevationSource("ValidateElevationHeader", d.runbookH.ExecuteStep),
+		)
 
 		r.Group(func(r chi.Router) {
 			r.Use(auth.RequireInstanceAdmin)
