@@ -21,3 +21,12 @@
 
 - [x] 4.1 Run strict OpenSpec validation, full Go tests/lint and web tests/lint/typecheck sequentially with low-memory settings; record evidence.
 - [x] 4.2 Refresh graphify, commit, file two follow-ups and open labeled/assigned PR closing #501; verify PR and CI started.
+
+## 5. Grant-scoped lab audit actions
+
+- [x] 5.1 Add paired audit-scope migrations and backfill connector scopes for existing audit targets; verify migration up and down.
+- [x] 5.2 Snapshot complete connector scopes in audit writer families and clean orphaned scope rows during retention.
+- [x] 5.3 Filter allowlisted audit rows by every connector grant and API-key restriction inside the timeline SQL; verify paging totals/cursors count only visible rows.
+- [x] 5.4 Verify mixed grants, multi-connector runbooks, deleted targets, unscoped rows and restricted API keys in store and API tests.
+- [x] 5.5 Expose the Journal audit filter to members with appropriate source links and verify member/admin link targets.
+- [x] 5.6 Update Journal and Audit documentation and verify strict OpenSpec validation.
