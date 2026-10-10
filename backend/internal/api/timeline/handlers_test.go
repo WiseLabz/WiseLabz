@@ -176,11 +176,17 @@ type capturingProvider struct {
 	// blockOnCtx makes Suggest wait for its context to end and record why.
 	blockOnCtx bool
 	ctxErr     error
+	// entered, when set, is closed as Suggest starts so a test can cancel
+	// deterministically instead of by timer.
+	entered chan struct{}
 }
 
 func (p *capturingProvider) Name() string { return "mock" }
 func (p *capturingProvider) Suggest(ctx context.Context, req *ai.SuggestRequest) (string, error) {
 	p.reqs = append(p.reqs, req)
+	if p.entered != nil {
+		close(p.entered)
+	}
 	if p.blockOnCtx {
 		<-ctx.Done()
 		p.ctxErr = ctx.Err()
@@ -370,12 +376,15 @@ func TestNarrateRejectsAndFailures(t *testing.T) {
 	})
 
 	t.Run("cancelled request context returns 502 promptly", func(t *testing.T) {
-		p := &capturingProvider{blockOnCtx: true}
+		p := &capturingProvider{blockOnCtx: true, entered: make(chan struct{})}
 		h := narrateHandler(t, true, p)
 		journal(t, h.Store, "", "note", time.Now())
 		ctx, cancel := context.WithCancel(auth.ContextWithUser(context.Background(), "u", true))
 		defer cancel()
-		time.AfterFunc(20*time.Millisecond, cancel)
+		go func() {
+			<-p.entered
+			cancel()
+		}()
 		req := httptest.NewRequest(http.MethodPost, "/api/timeline/narrate", nil).WithContext(ctx)
 		rec := httptest.NewRecorder()
 		done := make(chan struct{})
