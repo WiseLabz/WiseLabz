@@ -1422,6 +1422,26 @@ export const en = {
     import: {
       action: 'Import',
       title: 'Import docs',
+      bookstack: 'BookStack API',
+      pull: {
+        intro: 'Import everything this token can read from BookStack v25.07 or newer. Up to 2000 entries and 500 MB. Review the preview before confirming.',
+        url: 'BookStack URL',
+        tokenId: 'Token ID',
+        tokenSecret: 'Token secret',
+        skipTls:
+          'Skip TLS certificate verification. The token is sent over a connection whose certificate is not verified (recorded in audit)',
+        start: 'Fetch preview',
+        review: 'Review fetched preview',
+        starting: 'Starting import…',
+        progress: 'Fetching books: {{done}} / {{total}}',
+        progressLabel: 'BookStack pull progress',
+        cancel: 'Cancel pull',
+        cancelling: 'Cancelling…',
+        cancelled: 'Pull cancelled. Nothing was imported.',
+        failed: 'Pull failed.',
+        startError: 'Could not start the documentation pull.',
+        cancelError: 'Could not cancel the documentation pull.',
+      },
       intro:
         'Upload a .zip of Markdown files or an Obsidian vault. Folders become parent docs, embedded images and PDFs become attachments, and wikilinks point at the new docs. Nothing is created until you confirm.',
       source: 'Source',

@@ -9,6 +9,7 @@ import type { DocImportIssue, DocImportNode, DocImportPreview } from '../../api/
 import { Dialog } from '../ui/Dialog';
 import { Button } from '../ui/Button';
 import { toast } from '../../lib/toast';
+import { BookStackPull } from './BookStackPull';
 
 /** Admin-only docs import: pick a source, upload, preview, confirm. */
 export function ImportDocsDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
@@ -20,11 +21,17 @@ function ImportDocsForm({ onClose }: { onClose: () => void }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const fieldId = useId();
-  const [source, setSource] = useState<PostDocsImportBodySource>(PostDocsImportBodySource.markdown);
+  const [source, setSource] = useState<PostDocsImportBodySource | 'bookstack'>(
+    PostDocsImportBodySource.markdown
+  );
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<DocImportPreview | null>(null);
   const upload = useMutation({
-    mutationFn: (f: File) => postDocsImport({ file: f, source }),
+    mutationFn: (f: File) =>
+      postDocsImport({
+        file: f,
+        source: source === 'bookstack' ? PostDocsImportBodySource.markdown : source,
+      }),
     onSuccess: setPreview,
     onError: () => toast.error(t('docs.import.uploadError')),
   });
@@ -49,20 +56,14 @@ function ImportDocsForm({ onClose }: { onClose: () => void }) {
           onConfirm={() => commit.mutate(preview.id)}
         />
       ) : (
-        <form
-          className="flex flex-col gap-4"
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (file) upload.mutate(file);
-          }}
-        >
+        <div className="flex flex-col gap-4">
           <div className="flex flex-col gap-1 text-sm">
             <label htmlFor={`${fieldId}-source`}>{t('docs.import.source')}</label>
             <select
               id={`${fieldId}-source`}
               value={source}
               className="rounded-md border border-line-soft bg-canvas px-2 py-1 text-sm text-ink"
-              onChange={(e) => setSource(e.target.value as PostDocsImportBodySource)}
+              onChange={(e) => setSource(e.target.value as PostDocsImportBodySource | 'bookstack')}
             >
               <option value={PostDocsImportBodySource.markdown}>
                 {t('docs.import.sourceMarkdown')}
@@ -70,40 +71,53 @@ function ImportDocsForm({ onClose }: { onClose: () => void }) {
               <option value={PostDocsImportBodySource.wikijs}>
                 {t('docs.import.sourceWikijs')}
               </option>
+              <option value="bookstack">{t('docs.import.bookstack')}</option>
             </select>
           </div>
-          <p className="text-sm text-ink-muted">
-            {source === PostDocsImportBodySource.wikijs
-              ? t('docs.import.introWikijs')
-              : t('docs.import.intro')}
-          </p>
-          <div className="flex flex-col gap-1 text-sm">
-            <label htmlFor={`${fieldId}-file`}>
-              {source === PostDocsImportBodySource.wikijs
-                ? t('docs.import.fileWikijs')
-                : t('docs.import.file')}
-            </label>
-            <input
-              id={`${fieldId}-file`}
-              type="file"
-              accept=".zip,application/zip"
-              aria-describedby={`${fieldId}-limits`}
-              className="text-sm text-ink"
-              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-            />
-            <span id={`${fieldId}-limits`} className="text-2xs text-ink-faint">
-              {t('docs.import.limits')}
-            </span>
-          </div>
-          <div className="flex justify-end gap-2">
-            <Button type="button" variant="secondary" onClick={onClose}>
-              {t('common.cancel')}
-            </Button>
-            <Button type="submit" disabled={!file || upload.isPending}>
-              {upload.isPending ? t('docs.import.uploading') : t('docs.import.upload')}
-            </Button>
-          </div>
-        </form>
+          {source === 'bookstack' ? (
+            <BookStackPull onReady={setPreview} />
+          ) : (
+            <form
+              className="flex flex-col gap-4"
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (file) upload.mutate(file);
+              }}
+            >
+              <p className="text-sm text-ink-muted">
+                {source === PostDocsImportBodySource.wikijs
+                  ? t('docs.import.introWikijs')
+                  : t('docs.import.intro')}
+              </p>
+              <div className="flex flex-col gap-1 text-sm">
+                <label htmlFor={`${fieldId}-file`}>
+                  {source === PostDocsImportBodySource.wikijs
+                    ? t('docs.import.fileWikijs')
+                    : t('docs.import.file')}
+                </label>
+                <input
+                  id={`${fieldId}-file`}
+                  type="file"
+                  accept=".zip,application/zip"
+                  aria-describedby={`${fieldId}-limits`}
+                  className="text-sm text-ink"
+                  onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+                />
+                <span id={`${fieldId}-limits`} className="text-2xs text-ink-faint">
+                  {t('docs.import.limits')}
+                </span>
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button type="button" variant="secondary" onClick={onClose}>
+                  {t('common.cancel')}
+                </Button>
+                <Button type="submit" disabled={!file || upload.isPending}>
+                  {upload.isPending ? t('docs.import.uploading') : t('docs.import.upload')}
+                </Button>
+              </div>
+            </form>
+          )}
+        </div>
       )}
     </Dialog>
   );

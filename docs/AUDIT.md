@@ -82,6 +82,11 @@ object, action-specific), and `createdAt`.
 | `doc.edit_proposed` | MCP `propose_doc_edit` (full-scope key; `detail` has `proposalId`, `baseVersion`) | doc / doc id |
 | `doc.edit_approved` | `POST /api/docs/edit-proposals/{id}/approve` | doc / doc id |
 | `doc.edit_rejected` | `POST /api/docs/edit-proposals/{id}/reject` | doc / doc id |
+| `docs.import` | `POST /api/docs/import/{id}/commit` (a staged upload or pull was committed) | doc_import / import ID; detail `docs`, `attachments`, `source` |
+| `docs.import.pull.start` | `POST /api/docs/import/pull` (a pull was accepted; requires `docs.import.pull` step-up) | doc_import / job ID; detail `source`, `host`, `skipTlsVerify`, `state`, `done`, `total` |
+| `docs.import.pull.complete` | A pull finishes fetching and staging on its own (written by the job, attributed to the admin who started it) | doc_import / job ID; same detail as start, `state` `ready` |
+| `docs.import.pull.fail` | A pull fails or exceeds its one-hour limit (written by the job, attributed to the starter) | doc_import / job ID; same detail, `state` `failed`; the error text is never recorded |
+| `docs.import.pull.cancel` | `DELETE /api/docs/import/pull` stops a running pull, or the server shuts down while one runs | doc_import / job ID; same detail, `state` `cancelled` |
 | `change.ack` | `POST /api/changes/{id}/ack` | change / id |
 | `change.dismiss` | `POST /api/changes/{id}/dismiss` | change / id |
 | `change.bulk_ack` | `POST /api/changes/bulk-resolve` (`status: acknowledged`) | change / id — one record per resolved item |

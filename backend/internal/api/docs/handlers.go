@@ -4,11 +4,13 @@ package docs
 import (
 	"errors"
 	"net/http"
+	"sync"
 
 	"github.com/WiseLabz/wiselabz/internal/ai"
 	"github.com/WiseLabz/wiselabz/internal/api/settings"
 	"github.com/WiseLabz/wiselabz/internal/auth"
 	"github.com/WiseLabz/wiselabz/internal/doc"
+	"github.com/WiseLabz/wiselabz/internal/docimport/pull"
 	"github.com/WiseLabz/wiselabz/internal/httputil"
 	"github.com/WiseLabz/wiselabz/internal/store"
 	"github.com/WiseLabz/wiselabz/internal/ws"
@@ -22,6 +24,8 @@ type Handler struct {
 	AI        *ai.Registry
 	Embed     *ai.EmbedRegistry
 	WSHub     *ws.Hub
+	Pull      *pull.Manager
+	pullOnce  sync.Once
 }
 
 // NewHandler creates a new doc handler.

@@ -86,6 +86,23 @@ func (s Stage) Claim(id string, now time.Time) (plan *Plan, dir string, release,
 	return plan, claimed, release, done, nil
 }
 
+// ReadPlan loads an unexpired staged plan without claiming it, so previews can
+// be polled while a commit may still take the import.
+func (s Stage) ReadPlan(id string, now time.Time) (*Plan, error) {
+	if !idPattern.MatchString(id) {
+		return nil, ErrNotStaged
+	}
+	data, err := os.ReadFile(filepath.Join(s.Dir, id, "plan.json"))
+	if err != nil {
+		return nil, ErrNotStaged
+	}
+	plan := &Plan{}
+	if err := json.Unmarshal(data, plan); err != nil || now.Sub(plan.CreatedAt) > TTL {
+		return nil, ErrNotStaged
+	}
+	return plan, nil
+}
+
 // Sweep removes staged imports older than TTL, judged by directory mtime.
 func (s Stage) Sweep(now time.Time) error {
 	entries, err := os.ReadDir(s.Dir)

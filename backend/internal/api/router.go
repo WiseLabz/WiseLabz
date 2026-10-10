@@ -37,6 +37,7 @@ import (
 	"github.com/WiseLabz/wiselabz/internal/auth"
 	"github.com/WiseLabz/wiselabz/internal/config"
 	"github.com/WiseLabz/wiselabz/internal/doc"
+	"github.com/WiseLabz/wiselabz/internal/docimport/pull"
 	"github.com/WiseLabz/wiselabz/internal/httputil"
 	internalmcp "github.com/WiseLabz/wiselabz/internal/mcp"
 	"github.com/WiseLabz/wiselabz/internal/notifications"
@@ -75,6 +76,7 @@ type Config struct {
 	// Discovery overrides the network scanner and interface lookup; the zero
 	// value is production (tests inject fakes).
 	Discovery discoveryhandler.Options
+	DocImport *pull.Manager
 }
 
 // NewRouter constructs the full chi router with all middleware and route groups.
@@ -170,6 +172,7 @@ func newRouterDeps(cfg Config) routerDeps {
 	runbookH.Executor = runbookrun.New(deps)
 
 	docH := dochandler.NewHandler(cfg.Store, cfg.DocEngine, settingH, cfg.AIRegistry, cfg.EmbedRegistry, cfg.WSHub)
+	docH.Pull = cfg.DocImport
 	changeH := changehandler.NewHandler(cfg.Store, settingH, cfg.AIRegistry, cfg.WSHub)
 	if cfg.DocEngine != nil {
 		// Sync merges and doc-Change resolutions rewrite docs outside the

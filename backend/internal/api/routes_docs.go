@@ -32,6 +32,9 @@ func mountDocRoutes(r chi.Router, d routerDeps) {
 		r.With(auth.RequireInstanceAdmin).Get("/trash", d.docH.Trash)
 		// Markdown/Obsidian vault import: stage + preview, then commit.
 		r.With(auth.RequireInstanceAdmin).Post("/import", d.docH.StageImport)
+		r.With(auth.RequireInstanceAdmin, auth.RequireElevation(d.cfg.JWT, d.cfg.Store, "docs.import.pull")).Post("/import/pull", d.docH.StartPull)
+		r.With(auth.RequireInstanceAdmin).Get("/import/pull", d.docH.GetPull)
+		r.With(auth.RequireInstanceAdmin).Delete("/import/pull", d.docH.CancelPull)
 		r.With(auth.RequireInstanceAdmin).Post("/import/{id}/commit", d.docH.CommitImport)
 		r.Get("/export", d.docH.Export)
 		r.Get("/tree", d.docH.Tree)

@@ -439,3 +439,29 @@ func TestShutdownStopsNetworkScanAfterHTTPDrainBeforeStoreClose(t *testing.T) {
 		t.Fatal("the network scan was not stopped")
 	}
 }
+
+func TestShutdownStopsDocImportAfterHTTPDrainBeforeStoreClose(t *testing.T) {
+	lc, _ := newTestLifecycle(t)
+	url := startTestLifecycle(t, lc)
+	called := false
+	lc.deps.DocImport = scanStopper(func(ctx context.Context) {
+		called = true
+		if ctx.Err() != nil {
+			t.Error("shutdown expired before doc import stopped")
+		}
+		client := &http.Client{Timeout: time.Second}
+		if resp, err := client.Get(url + "/healthz"); err == nil {
+			_ = resp.Body.Close()
+			t.Error("HTTP still served while doc import stopped")
+		}
+		if err := lc.deps.Store.Ping(context.Background()); err != nil {
+			t.Errorf("store closed before doc import: %v", err)
+		}
+	})
+	if err := lc.Shutdown(); err != nil {
+		t.Fatal(err)
+	}
+	if !called {
+		t.Fatal("doc import was not stopped")
+	}
+}

@@ -29,6 +29,7 @@ import (
 	"github.com/WiseLabz/wiselabz/internal/doc"
 	"github.com/WiseLabz/wiselabz/internal/docexport"
 	"github.com/WiseLabz/wiselabz/internal/docimport"
+	"github.com/WiseLabz/wiselabz/internal/docimport/pull"
 	"github.com/WiseLabz/wiselabz/internal/health"
 	"github.com/WiseLabz/wiselabz/internal/labbook"
 	"github.com/WiseLabz/wiselabz/internal/leader"
@@ -123,11 +124,7 @@ func main() {
 	aiRegistry, embedRegistry := newAIRegistries()
 
 	// Determine backup directory: use configured value, or compute from DB DSN
-	backupDir := cfg.Backup.Dir
-	if backupDir == "" {
-		// Default: ./data/backups, or extract from SQLite path if configured
-		backupDir = "./data/backups"
-	}
+	backupDir := backupDirOrDefault(cfg)
 
 	syncEngine.SetBaseContext(ctx)
 
@@ -153,6 +150,7 @@ func main() {
 	readyState := &syshandler.ReadyState{}
 	elector := newElector(cfg, s)
 	discoveryManager := discoveryhandler.NewManager(s, wsHub, nil)
+	docImportManager := newDocImportManager(cfg, s)
 	routerCfg := api.Config{
 		Store:                  s,
 		JWT:                    jwtSvc,
@@ -169,6 +167,7 @@ func main() {
 		ReportManager:          reportManager,
 		Ready:                  readyState,
 		Discovery:              discoveryhandler.Options{Manager: discoveryManager},
+		DocImport:              docImportManager,
 	}
 	if cfg.Server.Embed {
 		spaFiles, err := fs.Sub(web.DistFS, "dist")
@@ -202,6 +201,7 @@ func main() {
 		Dispatcher:          notifDispatcher,
 		Store:               s,
 		Discovery:           discoveryManager,
+		DocImport:           docImportManager,
 		Ready:               readyState,
 		Elector:             elector,
 		LeaderElection:      cfg.HA.LeaderElection,
@@ -567,4 +567,19 @@ func newElector(cfg *config.Config, s *store.Store) leader.Election {
 		return leader.New(s.RawDB(), cfg.HA.LockPollInterval)
 	}
 	return leader.Noop{}
+}
+
+func newDocImportManager(cfg *config.Config, s *store.Store) *pull.Manager {
+	return pull.NewManager(pull.Config{Stage: docimport.NewStage(cfg.Attachments.ImportDir), Audit: s,
+		Analyze: func(ctx context.Context, dir string) (*docimport.Plan, error) {
+			return pull.Analyze(ctx, dir, cfg.Attachments.MaxBytes)
+		}})
+}
+
+// backupDirOrDefault returns the configured backup directory, or ./data/backups.
+func backupDirOrDefault(cfg *config.Config) string {
+	if cfg.Backup.Dir == "" {
+		return "./data/backups"
+	}
+	return cfg.Backup.Dir
 }
