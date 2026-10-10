@@ -1,4 +1,11 @@
-UPDATE runbook_runs SET state = 'cancelled' WHERE state IN ('awaiting_approval','rejected');
+-- An open approval request never started: skip its pending steps and stamp the finish time as a cancel would.
+UPDATE runbook_run_steps
+SET state = 'skipped',
+    finished_at = (SELECT updated_at FROM runbook_runs WHERE runbook_runs.id = runbook_run_steps.run_id)
+WHERE state = 'pending'
+  AND run_id IN (SELECT id FROM runbook_runs WHERE state = 'awaiting_approval');
+UPDATE runbook_runs SET state = 'cancelled', finished_at = COALESCE(finished_at, updated_at)
+WHERE state IN ('awaiting_approval','rejected');
 DROP INDEX idx_runbook_runs_one_active;
 
 CREATE TABLE runbook_runs_new (

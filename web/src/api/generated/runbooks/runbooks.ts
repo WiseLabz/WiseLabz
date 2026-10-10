@@ -1018,7 +1018,7 @@ export function useGetRunbookRun<
 }
 
 /**
- * Requires an enabled user other than the initiator with operator access on every frozen connector, including API-key restrictions; read-only keys are forbidden. Connectorless runs require instance admin or operator on at least one connector. The approver must present their own runbook.approve elevation targeted at runId; runbook.run is refused. The conditional awaiting_approval transition records the approver and starts execution as the initiator, preserving the existing per-step initiator grant rechecks.
+ * Requires an enabled user other than the initiator with operator access on every frozen connector, including API-key restrictions; read-only keys are forbidden. Connectorless runs require instance admin or operator on at least one connector. The approver must present their own fresh single-use runbook.approve elevation targeted at runId when the instance has step-up enabled; runbook.run is refused. The conditional awaiting_approval transition records the approver and starts execution as the initiator, preserving the existing per-step initiator grant rechecks.
  * @summary Approve a frozen request as a different operator
  */
 export const approveRunbookRun = (
@@ -1035,7 +1035,7 @@ export const approveRunbookRun = (
 export const getApproveRunbookRunMutationKey = () => ['approveRunbookRun'] as const;
 
 export const getApproveRunbookRunMutationOptions = <
-  TError = ErrorType<Error | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse>,
+  TError = ErrorType<Error | ForbiddenResponse | NotFoundResponse>,
   TContext = unknown,
 >(options?: {
   mutation?: UseMutationOptions<
@@ -1075,7 +1075,7 @@ export type ApproveRunbookRunMutationResult = NonNullable<
 >;
 
 export type ApproveRunbookRunMutationError = ErrorType<
-  Error | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
+  Error | ForbiddenResponse | NotFoundResponse
 >;
 export type ApproveRunbookRunMutationVariables = { runId: string };
 
@@ -1083,7 +1083,7 @@ export type ApproveRunbookRunMutationVariables = { runId: string };
  * @summary Approve a frozen request as a different operator
  */
 export const useApproveRunbookRun = <
-  TError = ErrorType<Error | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse>,
+  TError = ErrorType<Error | ForbiddenResponse | NotFoundResponse>,
   TContext = unknown,
 >(
   options?: {
@@ -1377,8 +1377,8 @@ export const useResumeRunbookRun = <
   return useMutation(getResumeRunbookRunMutationOptions(options), queryClient);
 };
 /**
- * Requires operator on every frozen connector (API-key restrictions apply), checked before state. No elevation. Stops execution before its next step and records the cancelling user. Available after runbook deletion. Connectors deleted since the run started do not count toward the grant requirement for cancellation (confirm and resume still require every frozen connector). When the run has no connector to check (manual steps only, or every connector was deleted), the caller must be an instance admin or hold operator on at least one connector.
- * @summary Cancel a running, waiting or failed run
+ * Requires operator on every frozen connector (API-key restrictions apply), checked before state. No elevation. Stops execution before its next step and records the cancelling user. The same guards withdraw an awaiting_approval request: the run becomes cancelled, its pending steps are skipped and nothing is executed. Available after runbook deletion. Connectors deleted since the run started do not count toward the grant requirement for cancellation (confirm and resume still require every frozen connector). When the run has no connector to check (manual steps only, or every connector was deleted), the caller must be an instance admin or hold operator on at least one connector.
+ * @summary Cancel a running, waiting or failed run, or withdraw an awaiting approval request
  */
 export const cancelRunbookRun = (
   runId: string,
@@ -1439,7 +1439,7 @@ export type CancelRunbookRunMutationError = ErrorType<
 export type CancelRunbookRunMutationVariables = { runId: string };
 
 /**
- * @summary Cancel a running, waiting or failed run
+ * @summary Cancel a running, waiting or failed run, or withdraw an awaiting approval request
  */
 export const useCancelRunbookRun = <
   TError = ErrorType<UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | Error>,

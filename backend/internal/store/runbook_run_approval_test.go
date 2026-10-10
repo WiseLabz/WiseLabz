@@ -75,6 +75,27 @@ func TestRunbookApprovalRequestCreationAndConditionalTransitions(t *testing.T) {
 	}
 }
 
+func TestRunbookApprovalRequestsSurviveStartupAndOpenRunExpiry(t *testing.T) {
+	ctx := context.Background()
+	s := newDocTestStore(t)
+	run, _ := createAwaitingApprovalRun(t, s, "Check service")
+	old := runbookRunTimestamp(time.Now().Add(-48 * time.Hour))
+	if _, err := s.db.ExecContext(ctx, `UPDATE runbook_runs SET updated_at = ? WHERE id = ?`, old, run.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	if ids, err := s.InterruptRunningRunbookRuns(ctx); err != nil || len(ids) != 0 {
+		t.Fatalf("InterruptRunningRunbookRuns() = %v, %v; want no transitions", ids, err)
+	}
+	if ids, err := s.ExpireOpenRunbookRuns(ctx, time.Now().UTC().Add(-24*time.Hour).Format(time.RFC3339)); err != nil || len(ids) != 0 {
+		t.Fatalf("ExpireOpenRunbookRuns() = %v, %v; want no transitions", ids, err)
+	}
+	got, steps, err := s.GetRunbookRun(ctx, run.ID)
+	if err != nil || got.State != "awaiting_approval" || got.FinishedAt != "" || len(steps) != 1 || steps[0].State != "pending" {
+		t.Fatalf("awaiting run = %+v, steps %+v, err %v; want request left open", got, steps, err)
+	}
+}
+
 func TestRunbookApprovalRejectCancelExpireAndPrune(t *testing.T) {
 	ctx := context.Background()
 	s := newDocTestStore(t)

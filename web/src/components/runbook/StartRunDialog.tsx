@@ -11,7 +11,7 @@ import type {
 import { Button } from '../ui/Button';
 import { Dialog } from '../ui/Dialog';
 import { ElevationConfirm } from '../manager/ElevationConfirm';
-import { runErrorMessage } from './runErrors';
+import { isNoEligibleApprover, runErrorMessage } from './runErrors';
 import { ConnectorActionRequest } from './ConnectorActionRequest';
 import { formatRunbookValue } from './runbookStepValues';
 
@@ -99,6 +99,8 @@ export function StartRunDialog({
       setConfirmOpen(false);
       if (activeRun) setConflict(activeRun);
       else setStartError(runErrorMessage(error, t, 'runbooks.runs.startError'));
+      // The approver the preview counted on is gone; refresh approverAvailable.
+      if (isNoEligibleApprover(error)) loadPreview();
     } finally {
       elevationToken.current = null;
     }

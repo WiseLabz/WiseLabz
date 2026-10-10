@@ -409,6 +409,40 @@ describe('StartRunDialog', () => {
     expect(onStarted).toHaveBeenCalledWith('run-existing');
   });
 
+  it('shows the missing-approver message and refreshes the preview when the approver is gone', async () => {
+    let previews = 0;
+    server.use(
+      http.post('/api/runbooks/rb-1/run', ({ request }) => {
+        if (new URL(request.url).searchParams.get('dryRun') === 'true') {
+          previews += 1;
+          return HttpResponse.json({
+            id: 'rb-1',
+            canStart: true,
+            requiresApproval: true,
+            approverAvailable: previews === 1,
+            steps: [step()],
+          });
+        }
+        return HttpResponse.json(
+          { code: 'no_eligible_approver', message: 'No other eligible operator is available.' },
+          { status: 409 }
+        );
+      })
+    );
+    renderDialog(vi.fn(), { ...runbook, requiresApproval: true });
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Request approval' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Confirm elevation' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'No other eligible operator is available to approve this runbook.'
+    );
+    await waitFor(() => expect(previews).toBe(2));
+    expect(await screen.findByRole('note')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Request approval' })).toBeDisabled();
+    expect(screen.queryByText('Run or step is no longer in the required state.')).not.toBeInTheDocument();
+  });
+
   it('renders a redacted preview step neutrally and disables start', async () => {
     server.use(
       http.post('/api/runbooks/rb-1/run', () =>

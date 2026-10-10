@@ -122,6 +122,18 @@ func TestRunbookRunApprovalMigrationUpDownPreservesFrozenSteps(t *testing.T) {
 			if err := migrationQueryRow(t, db, s.driver, `SELECT COUNT(*) FROM runbook_run_steps WHERE run_id = ?`, id).Scan(&count); err != nil || count != 1 {
 				t.Fatalf("frozen steps for %s after down = %d, %v; want 1", id, count, err)
 			}
+			var finished sql.NullString
+			if err := migrationQueryRow(t, db, s.driver, `SELECT finished_at FROM runbook_runs WHERE id = ?`, id).Scan(&finished); err != nil || !finished.Valid || finished.String == "" {
+				t.Fatalf("finished_at for %s after down = %v, %v; want set", id, finished, err)
+			}
+		}
+		var stepState string
+		var stepFinished sql.NullString
+		if err := migrationQueryRow(t, db, s.driver, `SELECT state, finished_at FROM runbook_run_steps WHERE run_id = 'approval-awaiting-run'`).Scan(&stepState, &stepFinished); err != nil || stepState != "skipped" || !stepFinished.Valid || stepFinished.String == "" {
+			t.Fatalf("awaiting run step after down = %q/%v, %v; want skipped with finished_at", stepState, stepFinished, err)
+		}
+		if err := migrationQueryRow(t, db, s.driver, `SELECT state, finished_at FROM runbook_run_steps WHERE run_id = 'approval-rejected-run'`).Scan(&stepState, &stepFinished); err != nil || stepState != "pending" || stepFinished.Valid {
+			t.Fatalf("rejected run step after down = %q/%v, %v; want untouched pending", stepState, stepFinished, err)
 		}
 		if err := migrationExec(t, db, s.driver, `
 			INSERT INTO runbook_runs (id, runbook_id, runbook_title, state, started_by, started_at, updated_at)

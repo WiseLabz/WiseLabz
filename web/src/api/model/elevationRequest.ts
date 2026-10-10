@@ -14,7 +14,7 @@ import type { WebAuthnResponse } from './webAuthnResponse';
 export interface ElevationRequest {
   /** The elevation action being requested, e.g. "connector.delete", "user.delete" */
   action: string;
-  /** ID of the resource the token is bound to, for actions on one (the user for `user.delete`, `user.resetPassword`, `user.resetMfa`, `user.update`; the provider for `authProvider.toggle`, the runbook for `runbook.run`). The token is also bound to the caller's session and is single-use. */
+  /** ID of the resource the token is bound to, for actions on one (the user for `user.delete`, `user.resetPassword`, `user.resetMfa`, `user.update`; the provider for `authProvider.toggle`, the runbook for `runbook.run`, the run for `runbook.approve`). The token is also bound to the caller's session and is single-use. */
   target?: string;
   password?: string;
   /** 6-digit TOTP code when 2FA is configured */

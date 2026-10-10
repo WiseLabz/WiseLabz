@@ -63,6 +63,36 @@ On runbooks without the approval opt-in, executing one lifecycle step directly S
 - **WHEN** the single-step execute endpoint is called for an opted-in runbook
 - **THEN** the response SHALL be 409 `approval_required` and nothing SHALL execute.
 
+### Requirement: Cancelling a run
+A run in state `awaiting_approval`, `running`, `waiting_manual` or `failed` SHALL be cancellable by any user holding an operator grant on every connector referenced by the run's steps that still exists. If no connector remains to check, cancellation SHALL require an instance admin or operator access on at least one connector. Cancelling SHALL stop the run before its next step, make the run `cancelled`, mark not-yet-finished steps `skipped`, and record the cancelling user. A cancelled run SHALL NOT be resumable.
+
+#### Scenario: Cancel while waiting
+- **WHEN** an authorized user cancels a run that is `waiting_manual`
+- **THEN** the run SHALL be `cancelled` and its waiting and pending steps SHALL be `skipped`.
+
+#### Scenario: Cancel while a step runs
+- **WHEN** a run is cancelled while a `wait_until_healthy` step is polling
+- **THEN** polling SHALL stop, no later step SHALL execute and the run SHALL be `cancelled`.
+
+#### Scenario: Withdraw an awaiting request
+- **WHEN** an authorized user cancels a run that is `awaiting_approval`
+- **THEN** the run SHALL be `cancelled`, its pending steps SHALL be `skipped` and no step SHALL execute.
+
+### Requirement: One active run per runbook
+A runbook SHALL have at most one run in state `awaiting_approval`, `running`, `waiting_manual` or `failed` at a time. Different runbooks SHALL be able to run concurrently.
+
+#### Scenario: Second start refused
+- **WHEN** a run is started for a runbook that already has a `failed` run
+- **THEN** the request SHALL be rejected with status 409 identifying the existing run.
+
+#### Scenario: Simultaneous starts
+- **WHEN** two start requests for the same runbook arrive at the same time
+- **THEN** exactly one run SHALL be created and the other request SHALL receive status 409.
+
+#### Scenario: Start while awaiting approval
+- **WHEN** a run is started for a runbook that already has an `awaiting_approval` run
+- **THEN** the request SHALL be rejected with status 409 identifying the existing run.
+
 ## ADDED Requirements
 
 ### Requirement: Second-operator approval opt-in

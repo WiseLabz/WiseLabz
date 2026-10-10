@@ -1605,6 +1605,7 @@ func TestNotifyUsersTargetsRecipientsAndFansOutExternallyOnce(t *testing.T) {
 	routing := `[{"eventType":"runbook.run_approval_requested","channel":"webhook","enabled":true,"minSeverity":"info"}]`
 	setChannelAndRoutingConfig(t, s, "webhook", srv.URL, routing)
 	allowed := createRunUser(t, s, "approval-recipient")
+	second := createRunUser(t, s, "approval-second")
 	other := createRunUser(t, s, "approval-other")
 	disabled := createRunUser(t, s, "approval-disabled")
 	if err := s.UpdateUser(ctx, disabled.ID, map[string]any{"disabled": true}); err != nil {
@@ -1612,9 +1613,9 @@ func TestNotifyUsersTargetsRecipientsAndFansOutExternallyOnce(t *testing.T) {
 	}
 
 	d := NewDispatcher(s, nil)
-	d.NotifyUsers(ctx, []string{allowed.ID, allowed.ID, disabled.ID}, EventRunbookRunApprovalRequested, "info", "Approval requested", "Review the run.")
+	d.NotifyUsers(ctx, []string{allowed.ID, second.ID, allowed.ID, disabled.ID}, EventRunbookRunApprovalRequested, "info", "Approval requested", "Review the run.")
 	waitForDispatch(t, d)
-	for user, want := range map[*store.User]int{allowed: 1, other: 0, disabled: 0} {
+	for user, want := range map[*store.User]int{allowed: 1, second: 1, other: 0, disabled: 0} {
 		got, _, err := s.ListNotifications(ctx, user.ID, false, 0, 10)
 		if err != nil {
 			t.Fatal(err)
@@ -1630,7 +1631,7 @@ func TestNotifyUsersTargetsRecipientsAndFansOutExternallyOnce(t *testing.T) {
 	mu.Lock()
 	defer mu.Unlock()
 	if hits != 1 {
-		t.Errorf("webhook hits = %d, want 1 for the recipient group", hits)
+		t.Errorf("webhook hits = %d, want 1 for the whole recipient group", hits)
 	}
 }
 

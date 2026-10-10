@@ -240,6 +240,69 @@ describe('RunDetail', () => {
     expect(screen.getByText('approver-1')).toBeInTheDocument();
   });
 
+  it('offers a bystander no control on an awaiting approval request', async () => {
+    currentRun = {
+      ...baseRun,
+      state: 'awaiting_approval',
+      requiresApproval: true,
+      canApprove: false,
+      startedBy: 'requester-1',
+      steps: [{ ...baseRun.steps[0], state: 'pending' }],
+    };
+    useAuth.setState({
+      status: 'authenticated',
+      user: {
+        id: 'bystander-1',
+        username: 'bystander',
+        role: 'user',
+        authSource: 'local',
+        createdAt: '2026-01-01T00:00:00Z',
+      },
+    });
+    renderDetail();
+
+    const detail = screen.getByRole('region', { name: 'Run details' });
+    expect(await within(detail).findByText('Restart primary')).toBeInTheDocument();
+    for (const name of [
+      'Approve and start run',
+      'Reject request',
+      'Cancel request',
+      'Resume run',
+      'Confirm step',
+    ]) {
+      expect(within(detail).queryByRole('button', { name })).not.toBeInTheDocument();
+    }
+  });
+
+  it('refetches the run and explains the conflict when approve loses the race', async () => {
+    currentRun = {
+      ...baseRun,
+      state: 'awaiting_approval',
+      requiresApproval: true,
+      canApprove: true,
+      startedBy: 'requester-1',
+      steps: [{ ...baseRun.steps[0], state: 'pending' }],
+    };
+    let runRequests = 0;
+    server.use(
+      http.get('/api/runbook-runs/:runId', () => {
+        runRequests += 1;
+        return HttpResponse.json(currentRun);
+      }),
+      http.post('/api/runbook-runs/:runId/approve', () => new HttpResponse(null, { status: 409 }))
+    );
+    renderDetail();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Approve and start run' }));
+    const elevation = await screen.findByRole('dialog', { name: 'Approve run' });
+    fireEvent.click(within(elevation).getByRole('button', { name: 'Approve and start run' }));
+
+    await waitFor(() => expect(runRequests).toBeGreaterThanOrEqual(2));
+    expect(toast.error).toHaveBeenCalledWith(
+      'This run or step is no longer in the required state. The latest state has been loaded.'
+    );
+  });
+
   it.each([
     ['awaiting_approval', 'Awaiting approval'],
     ['running', 'Running'],

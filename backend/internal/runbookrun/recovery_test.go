@@ -147,3 +147,27 @@ func TestRecoverResumesRunWhoseLastStepHadSucceeded(t *testing.T) {
 		t.Fatalf("run = %+v, lifecycle calls = %d; want succeeded without executing anything again", got, len(e.lifecycle.snapshot()))
 	}
 }
+
+func TestRecoverLeavesAwaitingApprovalRequestsOpen(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv(t)
+	connectorID := e.connector()
+	e.operator(connectorID)
+	book, authored := e.runbook(lifecycleStep(connectorID, "restart"))
+	run, _, err := e.exec.Request(ctx, book.ID, e.starter, authored)
+	if err != nil {
+		t.Fatalf("Request() error: %v", err)
+	}
+
+	if n, err := Recover(ctx, e.s, e.events, e.notes); err != nil || n != 0 {
+		t.Fatalf("Recover() = %d, %v; want no interrupted runs", n, err)
+	}
+	e.settle()
+	got, steps := e.get(run.ID)
+	if got.State != RunAwaitingApproval || !reflect.DeepEqual(stepStates(steps), []string{StepPending}) || got.FinishedAt != "" {
+		t.Fatalf("awaiting run = %+v, steps = %v; want it untouched", got, stepStates(steps))
+	}
+	if starts := e.spawner.starts.Load(); starts != 0 || len(e.lifecycle.snapshot()) != 0 {
+		t.Fatalf("recovery started %d executions, %d lifecycle calls; want none", starts, len(e.lifecycle.snapshot()))
+	}
+}

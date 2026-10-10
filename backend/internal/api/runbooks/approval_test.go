@@ -245,6 +245,8 @@ func TestApproveRunElevationAndConditionalTransition(t *testing.T) {
 			if spawner.calls != 1 {
 				t.Fatal("execution spawned twice")
 			}
+			assertRunAudit(t, h, "runbook.run.approved", run.ID, id, approver)
+			assertNoRunAudit(t, h, "runbook.run.rejected")
 		})
 	}
 }
@@ -409,5 +411,95 @@ func TestApprovalWithInstanceStepUpDisabled(t *testing.T) {
 	assertRunStatus(t, again, http.StatusConflict)
 	if spawner.calls != 1 {
 		t.Fatal("step-up disabled duplicated execution")
+	}
+}
+
+func TestApproveAfterRunbookDeleted(t *testing.T) {
+	h, id, initiator, approver, spawner := approvalFixture(t)
+	run := requestApproval(t, h, id, initiator)
+	if err := h.Store.DeleteRunbook(context.Background(), id); err != nil {
+		t.Fatal(err)
+	}
+	r := runRequest(approver, id, run.ID, "")
+	elevateApproval(t, h, r, approver, "runbook.approve", run.ID)
+	rr := httptest.NewRecorder()
+	h.ApproveRun(rr, r)
+	assertRunStatus(t, rr, http.StatusNoContent)
+	current, _, err := h.Store.GetRunbookRun(context.Background(), run.ID)
+	if err != nil || current.State != "running" || current.ApprovedBy == nil || *current.ApprovedBy != approver || spawner.calls != 1 {
+		t.Fatalf("run=%+v err=%v spawned=%d", current, err, spawner.calls)
+	}
+	records, total, err := h.Store.ListAuditRecords(context.Background(), "runbook.run.approved", "runbook_run", "", "", 0, 20)
+	if err != nil || total != 1 || records[0].ActorUserID != approver || records[0].TargetID != run.ID {
+		t.Fatalf("audit=%+v err=%v", records, err)
+	}
+}
+
+func TestApproveDuringShutdownFailsRunAndKeepsApproval(t *testing.T) {
+	h, id, initiator, approver, _ := approvalFixture(t)
+	run := requestApproval(t, h, id, initiator)
+	h.Executor = runbookrun.New(runbookrun.Deps{Store: h.Store, Spawner: runSpawner{false}})
+	r := runRequest(approver, id, run.ID, "")
+	elevateApproval(t, h, r, approver, "runbook.approve", run.ID)
+	rr := httptest.NewRecorder()
+	h.ApproveRun(rr, r)
+	assertRunStatus(t, rr, http.StatusServiceUnavailable)
+	if !strings.Contains(rr.Body.String(), "shutting_down") {
+		t.Fatal(rr.Body.String())
+	}
+	current, _, err := h.Store.GetRunbookRun(context.Background(), run.ID)
+	if err != nil || current.State != "failed" || current.Reason != "interrupted" || current.ApprovedBy == nil || *current.ApprovedBy != approver || current.StartedBy != initiator {
+		t.Fatalf("run=%+v err=%v", current, err)
+	}
+	assertRunAudit(t, h, "runbook.run.approved", run.ID, id, approver)
+}
+
+func TestConnectorlessApprovalAuthorization(t *testing.T) {
+	h := newTestHandler(t)
+	initiator, _, _ := connectorlessActor(t, h, "operator")
+	approver, _, _ := connectorlessActor(t, h, "operator")
+	id := createManualRunbook(t, h, "approval.connectorless")
+	if _, err := h.Store.UpdateRunbook(context.Background(), id, map[string]any{"requires_approval": true}); err != nil {
+		t.Fatal(err)
+	}
+	spawner := &approvalSpawner{}
+	h.Executor = runbookrun.New(runbookrun.Deps{Store: h.Store, Spawner: spawner})
+	run := requestApproval(t, h, id, initiator)
+	stranger, _, _ := connectorlessActor(t, h, "none")
+	for _, tc := range []struct {
+		name, user, action string
+		want               int
+	}{
+		{"initiator approve", initiator, "approve", 403},
+		{"initiator reject", initiator, "reject", 403},
+		{"no grant approve", stranger, "approve", 403},
+		{"no grant reject", stranger, "reject", 403},
+		{"other operator reject", approver, "reject", 204},
+	} {
+		rr := httptest.NewRecorder()
+		if tc.action == "approve" {
+			h.ApproveRun(rr, runRequest(tc.user, id, run.ID, ""))
+		} else {
+			h.RejectRun(rr, runRequest(tc.user, id, run.ID, ""))
+		}
+		if rr.Code != tc.want {
+			t.Fatalf("%s: status=%d want=%d body=%s", tc.name, rr.Code, tc.want, rr.Body.String())
+		}
+	}
+	assertRunState(t, h, run.ID, "rejected")
+	if spawner.calls != 0 {
+		t.Fatal("connectorless rejection executed")
+	}
+}
+
+func TestCancelAwaitingApprovalByAnotherOperator(t *testing.T) {
+	h, id, initiator, approver, spawner := approvalFixture(t)
+	run := requestApproval(t, h, id, initiator)
+	rr := httptest.NewRecorder()
+	h.CancelRun(rr, runRequest(approver, id, run.ID, ""))
+	assertRunStatus(t, rr, http.StatusNoContent)
+	assertRunState(t, h, run.ID, "cancelled")
+	if spawner.calls != 0 {
+		t.Fatal("withdrawn request executed")
 	}
 }
