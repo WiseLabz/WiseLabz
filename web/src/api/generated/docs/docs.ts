@@ -607,8 +607,8 @@ export const usePostDocsImport = <
   return useMutation(getPostDocsImportMutationOptions(options), queryClient);
 };
 /**
- * When `stepUpForDestructive` is enabled, requires an `X-Elevation-Token` for action `docs.import.pull`: a missing token gets 400 `elevation_required`, an invalid, expired, already used or mismatched token gets 401 `unauthorized`. BookStack v25.07 or newer is required for the ZIP export API. Imports all readable shelves, books and pages into a staged zip that is previewed and committed like any other import. Each downloaded book export and the final staged archive are capped at 100 MiB, and the archive expands to at most 500 MB and 2000 entries. Credentials remain in memory until the job ends. TLS verification is enabled unless explicitly disabled, and that choice is audited. Private networks are allowed; loopback, link-local and metadata addresses and redirects are blocked. Only one pull runs at a time.
- * @summary Start a background BookStack import (instance admin, elevated)
+ * When `stepUpForDestructive` is enabled, requires an `X-Elevation-Token` for action `docs.import.pull`: a missing token gets 400 `elevation_required`, an invalid, expired, already used or mismatched token gets 401 `unauthorized`. BookStack v25.07 or newer is required for the ZIP export API. Imports all readable shelves, books and pages into a staged zip that is previewed and committed like any other import. For `wikijs`, a Wiki.js 2.x API key with `read:pages`, `read:source` and `read:assets` goes in `tokenSecret` (no `tokenId`); pages and assets are pulled over GraphQL into the Wiki.js export layout, then previewed and committed the same way. Each downloaded book export and the final staged archive are capped at 100 MiB, and the archive expands to at most 500 MB and 2000 entries. Credentials remain in memory until the job ends. TLS verification is enabled unless explicitly disabled, and that choice is audited. Private networks are allowed; loopback, link-local and metadata addresses and redirects are blocked. Only one pull runs at a time.
+ * @summary Start a background BookStack or Wiki.js import (instance admin, elevated)
  */
 export const postDocsImportPull = (
   docPullRequest: BodyType<DocPullRequest>,
@@ -673,7 +673,7 @@ export type PostDocsImportPullMutationError = ErrorType<Error | ForbiddenRespons
 export type PostDocsImportPullMutationVariables = { data: BodyType<DocPullRequest> };
 
 /**
- * @summary Start a background BookStack import (instance admin, elevated)
+ * @summary Start a background BookStack or Wiki.js import (instance admin, elevated)
  */
 export const usePostDocsImportPull = <
   TError = ErrorType<Error | ForbiddenResponse>,

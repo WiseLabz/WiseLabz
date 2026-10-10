@@ -1,4 +1,4 @@
-# BookStack pull
+# BookStack and Wiki.js pulls
 
 This package fetches a BookStack instance and converts its content into the existing staged documentation import preview. It requires BookStack **v25.07 or newer**: v24.12 introduced the portable ZIP format, while v25.07 added the ZIP export API endpoints used here ([BookStack v25.07 release notes](https://www.bookstackapp.com/blog/bookstack-release-v25-07/)). The token user needs BookStack’s “Access System API” role permission. The API token must be allowed to read the shelf, book, and page listings and export books as ZIP files. A missing export endpoint is reported with a version and token-permission hint.
 
@@ -19,4 +19,10 @@ The submitted token ID and secret are held only by the fetch source while the pu
 
 ## Current verification limits
 
-Pages without Markdown, and shelf, book and chapter descriptions, are converted from HTML with `docimport/htmlmd`. Automated tests use mocked BookStack responses built from the upstream portable ZIP format; this behavior has not been verified against a real BookStack instance.
+BookStack pages without Markdown, and shelf, book and chapter descriptions, are converted from HTML with `docimport/htmlmd`. Automated tests use mocked BookStack responses built from the upstream portable ZIP format; this behavior has not been verified against a real BookStack instance.
+
+## Wiki.js pull
+
+`WikiJS` pulls a Wiki.js 2.x instance over GraphQL (`POST <url>/graphql`) with an API key (bearer) that has the `read:pages`, `read:source` and `read:assets` permissions. The key is sent in the request's `tokenSecret`; there is no token ID. It lists pages (`pages.list`), reads each one (`pages.single`), walks asset folders (`assets.folders`, `assets.list`) and downloads each asset by its site path, then writes the same layout a Wiki.js storage export has: `<path>.md` or `<path>.html` with the metadata block, pages of non-default locales under `<locale>/`, and assets at their site path. Analysis then runs the Wiki.js export parser (`docimport.AnalyzeWikiJS`), so HTML conversion, AsciiDoc skipping, unpublished-page warnings and link rewriting are shared with the zip import. The most common locale is treated as the default and left unprefixed.
+
+Publication state is taken from `pages.list` because `Page.isPublished` requires `write:pages` upstream. Pages with an unsupported content type or an unsafe path, assets over the attachment limit and assets that return 404 are skipped and reported as warnings. GraphQL errors are reported generically (the remote's messages are never echoed), and the same guards, limits, retry and credential rules as the BookStack pull apply. Fixtures come from the upstream v2.5 schema (`server/graph/schemas/page.graphql`, `asset.graphql`); this has not been verified against a real Wiki.js instance.

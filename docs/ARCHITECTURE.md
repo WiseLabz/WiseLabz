@@ -567,10 +567,16 @@ in one transaction, suffixing sibling title collisions with " (imported)".
 Embeddings sync in the background afterwards. Plans expire after an hour; the
 `docImportSweep` job removes stale staging every ten minutes.
 
-## BookStack API pull (#611)
+## Import sources and API pulls (#611)
+
+The importer has three sources, all ending in the same staged zip, preview and
+commit: a Markdown or Obsidian zip (the default), a Wiki.js 2.x storage-export
+zip (`source=wikijs` on `POST /api/docs/import`), and two API pulls (BookStack
+and Wiki.js) described below. The staging directory records the source name,
+and analysis picks the matching parser from it.
 
 `POST /api/docs/import/pull` (instance admin, `docs.import.pull` step-up) pulls
-a BookStack instance instead of taking an upload. `internal/docimport/pull`
+a BookStack or Wiki.js instance instead of taking an upload. `internal/docimport/pull`
 holds a single in-memory job manager: one pull runs at a time, its status is
 lost on restart, and a second start is rejected with 409. The BookStack source
 writes the same staging `upload.zip` from each book's portable ZIP export, so
@@ -583,6 +589,15 @@ no redirects and verifies TLS unless the admin opts out. BookStack v25.07 is the
 minimum, the first release with API ZIP exports. Each downloaded export and the
 staged zip are capped at 100 MiB, and the staged zip is unzipped within the
 500 MB / 2000-entry limits above.
+
+The Wiki.js source (`source=wikijs`, the API key in `tokenSecret`) posts GraphQL
+to `<url>/graphql` with a bearer key holding `read:pages`, `read:source` and
+`read:assets`: `pages.list`, `pages.single(id)` per page, then `assets.folders`
+and `assets.list` per folder, with each asset downloaded by its site path. It
+writes the Wiki.js disk-export layout (`<path>.md` or `.html` with the metadata
+block, non-default locales under `<locale>/`, assets at their path), so the
+Wiki.js zip parser does the rest. Publication state comes from the list item
+because `Page.isPublished` needs `write:pages` upstream.
 
 ## Data retention (decided 2026-09-05)
 

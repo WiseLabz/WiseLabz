@@ -1,6 +1,7 @@
 package pull
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -60,10 +61,24 @@ func newHTTPClient(skipTLS bool) *http.Client {
 // get never includes URL, authorization, response bodies or remote errors in
 // returned error text: upstream servers can echo credentials in any of them.
 func (c *remoteClient) get(ctx context.Context, endpoint string, limit int64) ([]byte, error) {
-	for attempts := 0; attempts < 6; attempts++ {
-		data, delay, err := c.attempt(ctx, endpoint, limit)
+	return c.do(ctx, http.MethodGet, endpoint, nil, limit)
+}
+
+// postJSON sends a JSON body with the same retry and error policy as get.
+func (c *remoteClient) postJSON(ctx context.Context, endpoint string, body []byte, limit int64) ([]byte, error) {
+	return c.do(ctx, http.MethodPost, endpoint, body, limit)
+}
+
+const maxAttempts = 6
+
+func (c *remoteClient) do(ctx context.Context, method, endpoint string, body []byte, limit int64) ([]byte, error) {
+	for attempts := 0; attempts < maxAttempts; attempts++ {
+		data, delay, err := c.attempt(ctx, method, endpoint, body, limit)
 		if err != nil || delay < 0 {
 			return data, err
+		}
+		if attempts == maxAttempts-1 {
+			break // no retry follows, so do not wait out the last Retry-After
 		}
 		timer := time.NewTimer(delay)
 		select {
@@ -78,12 +93,19 @@ func (c *remoteClient) get(ctx context.Context, endpoint string, limit int64) ([
 
 // attempt performs one request under its own deadline. A non-negative delay
 // means the server asked to retry after that long.
-func (c *remoteClient) attempt(ctx context.Context, endpoint string, limit int64) ([]byte, time.Duration, error) {
+func (c *remoteClient) attempt(ctx context.Context, method, endpoint string, body []byte, limit int64) ([]byte, time.Duration, error) {
 	reqCtx, cancel := context.WithTimeout(ctx, requestTimeout)
 	defer cancel()
-	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, c.base.String()+endpoint, nil)
+	var reader io.Reader
+	if body != nil {
+		reader = bytes.NewReader(body)
+	}
+	req, err := http.NewRequestWithContext(reqCtx, method, c.base.String()+endpoint, reader)
 	if err != nil {
 		return nil, -1, errors.New("could not create wiki request")
+	}
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
 	}
 	req.Header.Set("Authorization", c.authorization)
 	resp, err := c.http.Do(req)

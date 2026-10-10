@@ -15,6 +15,7 @@ import (
 	"github.com/WiseLabz/wiselabz/internal/auth"
 	"github.com/WiseLabz/wiselabz/internal/blobstore"
 	"github.com/WiseLabz/wiselabz/internal/docimport"
+	"github.com/WiseLabz/wiselabz/internal/docimport/pull"
 	"github.com/WiseLabz/wiselabz/internal/httputil"
 	"github.com/WiseLabz/wiselabz/internal/store"
 )
@@ -197,7 +198,7 @@ func saveImportUpload(dir string, part io.Reader) error {
 
 // analyzeStagedZip analyzes a pulled export, which the pull sources normalize to the Markdown layout.
 func (h *Handler) analyzeStagedZip(ctx context.Context, dir string) (*docimport.Plan, error) {
-	return h.analyzeUpload(ctx, dir, docimport.SourceMarkdown)
+	return h.analyzeUpload(ctx, dir, pull.StagedSource(dir))
 }
 
 func (h *Handler) analyzeUpload(ctx context.Context, dir string, src docimport.Source) (*docimport.Plan, error) {

@@ -3,9 +3,20 @@ package pull
 import (
 	"archive/zip"
 	"context"
+	"os"
+	"path/filepath"
 
 	"github.com/WiseLabz/wiselabz/internal/docimport"
 )
+
+// StagedSource reads the source name the manager stored before analysis.
+func StagedSource(dir string) docimport.Source {
+	data, err := os.ReadFile(filepath.Join(dir, "source"))
+	if err == nil && docimport.Source(data) == docimport.SourceWikiJS {
+		return docimport.SourceWikiJS
+	}
+	return docimport.SourceMarkdown
+}
 
 // Analyze stages normalized lab-scope notes without connector inference.
 func Analyze(ctx context.Context, dir string, maxAttachmentBytes int64) (*docimport.Plan, error) {
@@ -25,7 +36,7 @@ func Analyze(ctx context.Context, dir string, maxAttachmentBytes int64) (*docimp
 	if err != nil {
 		return nil, err
 	}
-	plan, err := docimport.Analyze(archive, nil)
+	plan, err := docimport.AnalyzeSource(StagedSource(dir), archive, nil)
 	if err != nil {
 		return nil, err
 	}

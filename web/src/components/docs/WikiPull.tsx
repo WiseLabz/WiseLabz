@@ -7,6 +7,7 @@ import {
   getDocsImportPull,
   postDocsImportPull,
 } from '../../api/generated/docs/docs';
+import { DocPullRequestSource } from '../../api/model';
 import type { DocImportPreview, DocPullRequest } from '../../api/model';
 import { elevationOptions, useStepUpMutation } from '../manager/useStepUpMutation';
 import { Button } from '../ui/Button';
@@ -21,8 +22,20 @@ function startErrorMessage(err: unknown): string | undefined {
   return typeof message === 'string' && message ? message : undefined;
 }
 
-/** Credentials stay in this form and the POST body, never the query key or storage. */
-export function BookStackPull({ onReady }: { onReady: (preview: DocImportPreview) => void }) {
+/**
+ * Pull form and progress view shared by the wiki sources. Credentials stay in
+ * this form and the POST body, never the query key or storage. Wiki.js has one
+ * API key, sent as the token secret, and no token id.
+ */
+export function WikiPull({
+  source,
+  onReady,
+}: {
+  source: DocPullRequestSource;
+  onReady: (preview: DocImportPreview) => void;
+}) {
+  const isWikiJs = source === DocPullRequestSource.wikijs;
+  const k = isWikiJs ? 'docs.import.pullWikijs' : 'docs.import.pull';
   const { t } = useTranslation();
   const id = useId();
   const watching = useRef(false);
@@ -78,11 +91,11 @@ export function BookStackPull({ onReady }: { onReady: (preview: DocImportPreview
     return (
       <div className="flex flex-col gap-4">
         <p role="status" aria-live="polite">
-          {t('docs.import.pull.progress', { done: job.done, total: job.total })}
+          {t(`${k}.progress`, { done: job.done, total: job.total })}
         </p>
         <progress
           className="w-full"
-          aria-label={t('docs.import.pull.progressLabel')}
+          aria-label={t(`${k}.progressLabel`)}
           value={job.total > 0 ? job.done : undefined}
           max={job.total || 1}
         />
@@ -103,10 +116,14 @@ export function BookStackPull({ onReady }: { onReady: (preview: DocImportPreview
         className="flex flex-col gap-4"
         onSubmit={(event) => {
           event.preventDefault();
-          start.mutate({ source: 'bookstack', url, tokenId, tokenSecret, skipTlsVerify });
+          start.mutate(
+            isWikiJs
+              ? { source, url, tokenSecret, skipTlsVerify }
+              : { source, url, tokenId, tokenSecret, skipTlsVerify }
+          );
         }}
       >
-        <p className="text-sm text-ink-muted">{t('docs.import.pull.intro')}</p>
+        <p className="text-sm text-ink-muted">{t(`${k}.intro`)}</p>
         {job?.state === 'ready' && job.preview && (
           <Button type="button" variant="secondary" onClick={() => onReady(job.preview!)}>
             {t('docs.import.pull.review')}
@@ -123,7 +140,7 @@ export function BookStackPull({ onReady }: { onReady: (preview: DocImportPreview
           </p>
         )}
         <label className="flex flex-col gap-1 text-sm" htmlFor={`${id}-url`}>
-          {t('docs.import.pull.url')}
+          {t(`${k}.url`)}
           <input
             id={`${id}-url`}
             type="url"
@@ -134,19 +151,21 @@ export function BookStackPull({ onReady }: { onReady: (preview: DocImportPreview
             autoComplete="off"
           />
         </label>
-        <label className="flex flex-col gap-1 text-sm" htmlFor={`${id}-token-id`}>
-          {t('docs.import.pull.tokenId')}
-          <input
-            id={`${id}-token-id`}
-            required
-            value={tokenId}
-            onChange={(e) => setTokenId(e.target.value)}
-            className="rounded border border-line-soft bg-canvas-sunken p-2"
-            autoComplete="off"
-          />
-        </label>
+        {!isWikiJs && (
+          <label className="flex flex-col gap-1 text-sm" htmlFor={`${id}-token-id`}>
+            {t('docs.import.pull.tokenId')}
+            <input
+              id={`${id}-token-id`}
+              required
+              value={tokenId}
+              onChange={(e) => setTokenId(e.target.value)}
+              className="rounded border border-line-soft bg-canvas-sunken p-2"
+              autoComplete="off"
+            />
+          </label>
+        )}
         <label className="flex flex-col gap-1 text-sm" htmlFor={`${id}-token-secret`}>
-          {t('docs.import.pull.tokenSecret')}
+          {t(`${k}.tokenSecret`)}
           <input
             id={`${id}-token-secret`}
             type="password"

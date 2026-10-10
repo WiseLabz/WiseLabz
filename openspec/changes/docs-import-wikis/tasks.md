@@ -15,8 +15,8 @@
 
 ## 3. Wiki.js API pull
 
-- [ ] 3.1 Wiki.js GraphQL source writing the export layout; tests with a fake.
-- [ ] 3.2 Web: Wiki.js option reusing the form and progress view.
+- [x] 3.1 Wiki.js GraphQL source writing the export layout; tests with a fake.
+- [x] 3.2 Web: Wiki.js option reusing the form and progress view.
 
 ## 4. Delivery
 

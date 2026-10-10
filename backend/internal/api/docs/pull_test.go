@@ -246,3 +246,65 @@ func TestPullSecondStartAndCancel(t *testing.T) {
 		t.Fatalf("cancel after end = %d %s", rec.Code, rec.Body)
 	}
 }
+
+func TestWikiJSPullUsesWikiJSPlanAndCommit(t *testing.T) {
+	connector.AllowLoopbackForTest(t)
+	h := newImportHandler(t)
+	user := apitest.NewUser(t, h.Store, "admin")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Query string `json:"query"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		switch {
+		case strings.Contains(body.Query, "list(orderBy"):
+			_, _ = w.Write([]byte(`{"data":{"pages":{"list":[{"id":1,"path":"guides/setup","locale":"en","contentType":"markdown","isPublished":true}]}}}`))
+		case strings.Contains(body.Query, "single(id"):
+			_, _ = w.Write([]byte(`{"data":{"pages":{"single":{"path":"guides/setup","locale":"en","title":"Setup","description":"","content":"hello","contentType":"markdown","createdAt":"","updatedAt":"","tags":[]}}}}`))
+		case strings.Contains(body.Query, "folders("):
+			_, _ = w.Write([]byte(`{"data":{"assets":{"folders":[]}}}`))
+		default:
+			_, _ = w.Write([]byte(`{"data":{"assets":{"list":[]}}}`))
+		}
+	}))
+	defer server.Close()
+	rec := pullRequest(h, "POST", user, `{"source":"wikijs","url":"`+server.URL+`","tokenSecret":"unique-api-key"}`)
+	if rec.Code != 202 {
+		t.Fatalf("start %d %s", rec.Code, rec.Body)
+	}
+	var response PullResponse
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		rec = pullRequest(h, "GET", user, "")
+		if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+			t.Fatal(err)
+		}
+		if response.State != "fetching" {
+			break
+		}
+		time.Sleep(time.Millisecond)
+	}
+	// The "guides" folder doc plus the page: proof the Wiki.js parser ran.
+	if response.State != "ready" || response.Preview == nil || response.Preview.DocCount != 2 {
+		t.Fatalf("ready %d %s", rec.Code, rec.Body)
+	}
+	if strings.Contains(rec.Body.String(), "unique-api-key") {
+		t.Fatal("credential in status")
+	}
+	rec = httptest.NewRecorder()
+	h.CommitImport(rec, commitRequest(response.ID, user, true))
+	if rec.Code != 201 {
+		t.Fatalf("commit %d %s", rec.Code, rec.Body)
+	}
+	rows, _, err := h.Store.ListAuditRecords(context.Background(), "", "", "", "", 0, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, _ := json.Marshal(rows)
+	if strings.Contains(string(data), "unique-api-key") || !strings.Contains(string(data), `\"source\":\"wikijs\"`) {
+		t.Fatalf("audit = %s", data)
+	}
+	if rec := pullRequest(h, "POST", user, `{"source":"wikijs","url":"https://wiki.example","tokenSecret":""}`); rec.Code != 400 {
+		t.Errorf("empty key = %d", rec.Code)
+	}
+}

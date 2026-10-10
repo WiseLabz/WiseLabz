@@ -281,6 +281,7 @@ export const ptBR: Catalog = {
       done_one: '{{count}} documento importado',
       done_other: '{{count}} documentos importados',
       bookstack: 'API do BookStack',
+      wikijsApi: 'API do Wiki.js',
       pull: {
         intro:
           'Importe tudo que este token pode ler do BookStack v25.07 ou mais recente. Até 2000 entradas e 500 MB. Revise a prévia antes de confirmar.',
@@ -300,6 +301,14 @@ export const ptBR: Catalog = {
         failed: 'A busca falhou.',
         startError: 'Não foi possível iniciar a busca de documentação.',
         cancelError: 'Não foi possível cancelar a busca de documentação.',
+      },
+      pullWikijs: {
+        intro:
+          'Importe todas as páginas e arquivos que esta chave de API pode ler do Wiki.js 2.x. A chave precisa das permissões read:pages, read:source e read:assets. Até 2000 entradas e 500 MB. Revise a prévia antes de confirmar.',
+        url: 'URL do Wiki.js',
+        tokenSecret: 'Chave de API',
+        progress: 'Buscando páginas e arquivos: {{done}} / {{total}}',
+        progressLabel: 'Progresso da busca no Wiki.js',
       },
     },
     referencedBy: {

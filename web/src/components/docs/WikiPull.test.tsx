@@ -3,13 +3,14 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '../../i18n';
-import { BookStackPull } from './BookStackPull';
+import { WikiPull } from './WikiPull';
 import {
   deleteDocsImportPull,
   getDocsImportPull,
   postDocsImportPull,
 } from '../../api/generated/docs/docs';
 import { postAuthElevate } from '../../api/generated/auth/auth';
+import { DocPullRequestSource } from '../../api/model';
 import type { DocImportPreview, DocPullJob } from '../../api/model';
 import { toast } from '../../lib/toast';
 
@@ -46,14 +47,14 @@ const preview: DocImportPreview = {
   collisions: [],
 };
 
-function show() {
+function show(source: DocPullRequestSource = DocPullRequestSource.bookstack) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
   const onReady = vi.fn();
   render(
     <QueryClientProvider client={client}>
-      <BookStackPull onReady={onReady} />
+      <WikiPull source={source} onReady={onReady} />
     </QueryClientProvider>
   );
   return { client, onReady };
@@ -188,5 +189,34 @@ describe('BookStack pull', () => {
     await waitFor(() => expect(toast.error).toHaveBeenCalledWith('use an HTTP(S) wiki URL'));
     expect(screen.getByLabelText('Token ID')).toHaveValue('');
     expect(screen.getByLabelText('Token secret')).toHaveValue('');
+  });
+
+  it('pulls Wiki.js with only a URL and API key, sent as the token secret', async () => {
+    const { onReady } = show(DocPullRequestSource.wikijs);
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Fetch preview' })).toBeEnabled()
+    );
+    expect(screen.queryByLabelText('Token ID')).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Wiki.js URL'), {
+      target: { value: 'https://wiki.example' },
+    });
+    fireEvent.change(screen.getByLabelText('API key'), { target: { value: 'api-key' } });
+    vi.mocked(postDocsImportPull).mockResolvedValueOnce({ ...fetching, source: 'wikijs' });
+    vi.mocked(getDocsImportPull).mockResolvedValue({ ...fetching, source: 'wikijs' });
+    fireEvent.click(screen.getByRole('button', { name: 'Fetch preview' }));
+    await waitFor(() =>
+      expect(postDocsImportPull).toHaveBeenCalledWith(
+        {
+          source: 'wikijs',
+          url: 'https://wiki.example',
+          tokenSecret: 'api-key',
+          skipTlsVerify: false,
+        },
+        undefined
+      )
+    );
+    expect(await screen.findByText('Fetching pages and assets: 0 / 2')).toBeInTheDocument();
+    expect(screen.getByRole('progressbar', { name: 'Wiki.js pull progress' })).toBeInTheDocument();
+    expect(onReady).not.toHaveBeenCalled();
   });
 });

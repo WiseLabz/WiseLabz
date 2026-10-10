@@ -26,7 +26,7 @@ type Source interface {
 	Fetch(context.Context, string, func(Progress)) ([]docimport.Issue, error)
 }
 
-// Progress counts fetched units, currently BookStack books.
+// Progress counts fetched units, BookStack books or Wiki.js pages and assets.
 type Progress struct {
 	Done  int `json:"done"`
 	Total int `json:"total"`
@@ -169,6 +169,10 @@ func (m *Manager) run(ctx context.Context, src Source, dir string, actor Actor, 
 	})
 	var plan *docimport.Plan
 	if err == nil {
+		// Analysis reads the source name to pick the matching archive parser.
+		err = os.WriteFile(filepath.Join(dir, "source"), []byte(m.job.Source), 0o600)
+	}
+	if err == nil {
 		plan, err = m.cfg.Analyze(ctx, dir)
 	}
 	if err == nil {
@@ -177,9 +181,6 @@ func (m *Manager) run(ctx context.Context, src Source, dir string, actor Actor, 
 		m.mu.Unlock()
 		plan.Warnings = append(plan.Warnings, warnings...)
 		err = docimport.SavePlan(dir, plan)
-		if err == nil {
-			err = os.WriteFile(filepath.Join(dir, "source"), []byte(m.job.Source), 0o600)
-		}
 	}
 }
 

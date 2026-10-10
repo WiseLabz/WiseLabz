@@ -390,3 +390,36 @@ func TestBookStackHTMLPageKeepsExportReferences(t *testing.T) {
 		t.Errorf("unresolved body: %q", page.Content)
 	}
 }
+
+func TestLinkAttachmentSchemeAllowlistAndInjection(t *testing.T) {
+	base, err := url.Parse("https://wiki.example")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for link, kept := range map[string]bool{
+		"https://example.com/a": true, "http://example.com/a": true, "mailto:a@example.com": true, "tel:+15551234": true,
+		"/relative": true, "javascript:alert(1)": false, "JaVaScRiPt:alert(1)": false, "data:text/html,x": false,
+		"vbscript:x": false, "file:///etc/passwd": false, "ftp://example.com/a": false, "blob:https://x/y": false,
+	} {
+		mapper := &bookMapper{base: base, limits: docimport.DefaultLimits(), targets: map[string]string{}, linkRefs: map[string]bool{}, siteLinks: map[string]string{}, files: map[string][]byte{}}
+		page := portableNode{ID: 1, Name: "Page", Markdown: "body", Attachments: []portableFile{{ID: 2, Name: "L", Link: link}}}
+		if err := mapper.node(page, "page-1", "page", 1); err != nil {
+			t.Fatal(err)
+		}
+		if got := mapper.linkRefs["attachment:2"]; got != kept {
+			t.Errorf("%q kept = %v, want %v (warnings %v)", link, got, kept, mapper.warnings)
+		}
+	}
+	mapper := &bookMapper{base: base, limits: docimport.DefaultLimits(), targets: map[string]string{}, linkRefs: map[string]bool{}, siteLinks: map[string]string{}, files: map[string][]byte{}}
+	page := portableNode{ID: 1, Name: "Page", Markdown: "body", Attachments: []portableFile{{ID: 2, Name: "L", Link: "https://h/a)![x](https://t/p.png"}}}
+	if err := mapper.node(page, "page-1", "page", 1); err != nil {
+		t.Fatal(err)
+	}
+	got := mapper.rewrite(mapper.notes[0])
+	if strings.Contains(got, "![x]") && !strings.Contains(got, "%29![x]%28") {
+		t.Fatalf("link escaped its destination: %s", got)
+	}
+	if strings.Count(got, "](") != 1 || strings.Count(got, ")") != 1 {
+		t.Fatalf("extra Markdown in %s", got)
+	}
+}
