@@ -254,6 +254,9 @@ func TestRetryAfterAndCancellation(t *testing.T) {
 	if retryAfter(date.Format(http.TimeFormat), date.Add(-time.Minute)) != time.Minute {
 		t.Error("HTTP-date Retry-After")
 	}
+	if retryAfter("3600", date) != 2*time.Minute || retryAfter("99999999999999", date) != 2*time.Minute {
+		t.Error("Retry-After not capped at two minutes")
+	}
 	server2 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.Header().Set("Retry-After", "300"); w.WriteHeader(429) }))
 	defer server2.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
@@ -261,6 +264,24 @@ func TestRetryAfterAndCancellation(t *testing.T) {
 	_, err = newSource(t, server2.URL, docimport.DefaultLimits()).client.get(ctx, "/", 100)
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("cancel = %v", err)
+	}
+}
+
+func TestRequestTimeoutCoversBodyRead(t *testing.T) {
+	connector.AllowLoopbackForTest(t)
+	previous := requestTimeout
+	requestTimeout = 100 * time.Millisecond
+	t.Cleanup(func() { requestTimeout = previous })
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Length", "100")
+		_, _ = w.Write([]byte("partial"))
+		w.(http.Flusher).Flush()
+		<-r.Context().Done()
+	}))
+	defer server.Close()
+	_, err := newSource(t, server.URL, docimport.DefaultLimits()).client.get(context.Background(), "/", 100)
+	if err == nil || err.Error() != "wiki request timed out" {
+		t.Fatalf("timeout = %v", err)
 	}
 }
 
