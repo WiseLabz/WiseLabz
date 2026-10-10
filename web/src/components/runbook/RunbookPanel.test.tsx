@@ -77,6 +77,7 @@ describe('RunbookPanel', () => {
           targetType: 'change_type',
           targetValue: 'vm.created',
           steps: [],
+          requiresApproval: true,
           createdAt: '2026-01-01T00:00:00Z',
           updatedAt: '2026-01-01T00:00:00Z',
         },
@@ -88,7 +89,7 @@ describe('RunbookPanel', () => {
 
     expect(await screen.findByText('Restart the hung agent')).toBeInTheDocument();
     expect(screen.getByText('Step 1: SSH in.', { exact: false })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Start run' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Request approval' })).toBeDisabled();
   });
 });
 
@@ -101,6 +102,7 @@ describe('RunbookPanel steps', () => {
         body: 'Step 1: SSH in.',
         targetType: 'change_type',
         targetValue: 'vm.created',
+        requiresApproval: false,
         steps: [
           {
             id: 'step-1',
@@ -160,6 +162,7 @@ describe('RunbookPanel steps', () => {
       runbookTitle: 'Saved runbook title',
       state: 'succeeded',
       startedBy: 'user-1',
+      requiresApproval: false,
       startedAt: '2026-10-06T12:00:00Z',
       updatedAt: '2026-10-06T12:00:00Z',
       steps: [

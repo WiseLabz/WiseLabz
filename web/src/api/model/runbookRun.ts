@@ -10,5 +10,9 @@ import type { RunbookRunRecord } from './runbookRunRecord';
 import type { RunbookRunStep } from './runbookRunStep';
 
 export type RunbookRun = RunbookRunRecord & {
+  /** Current caller is an enabled eligible other operator; included for approval-required runs */
+  canApprove?: boolean;
+  /** Expiry of an awaiting request under the current approval-hours setting */
+  approvalExpiresAt?: string;
   steps: RunbookRunStep[];
 };

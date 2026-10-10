@@ -274,6 +274,43 @@ describe('locale catalogs', () => {
       expect(lookup(ptBR, path), `pt-BR translation for ${path}`).toEqual(expect.any(String));
     }
   });
+
+  it('keeps runbook approval controls and retention copy translated in English and pt-BR', () => {
+    const paths = [
+      'runbooks.runs.requestedBy',
+      'runbooks.runs.requestedAt',
+      'runbooks.runs.approvalExpiresAt',
+      'runbooks.runs.approvedBy',
+      'runbooks.runs.approvedAt',
+      'runbooks.runs.rejectedBy',
+      'runbooks.runs.status.awaiting_approval',
+      'runbooks.runs.status.rejected',
+      'runbooks.runs.requestApproval',
+      'runbooks.runs.approvalPreviewNotice',
+      'runbooks.runs.noApproverAvailable',
+      'runbooks.runs.approvalExpired',
+      'runbooks.runs.approve',
+      'runbooks.runs.reject',
+      'runbooks.runs.cancelRequest',
+      'runbooks.runs.cancelRequestSuccess',
+      'settings.runbooks.requireApproval',
+      'settings.runbooks.requireApprovalHint',
+      'settings.retention.runbookApprovalHours',
+      'settings.retention.runbookApprovalHoursHint',
+    ];
+    const lookup = (catalog: object, path: string) =>
+      path
+        .split('.')
+        .reduce<unknown>(
+          (value, key) => (value as Record<string, unknown> | undefined)?.[key],
+          catalog
+        );
+
+    for (const path of paths) {
+      expect(lookup(en, path), `English translation for ${path}`).toEqual(expect.any(String));
+      expect(lookup(ptBR, path), `pt-BR translation for ${path}`).toEqual(expect.any(String));
+    }
+  });
 });
 
 describe('connector category labels (#513)', () => {

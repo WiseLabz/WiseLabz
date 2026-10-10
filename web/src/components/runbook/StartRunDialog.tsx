@@ -29,7 +29,7 @@ export function StartRunDialog({
   const { t } = useTranslation();
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
-  const [conflict, setConflict] = useState<RunbookRunConflict | null>(null);
+  const [conflict, setConflict] = useState<ActiveRunConflict | null>(null);
   const elevationToken = useRef<string | null>(null);
 
   const previewRequest = useStartRunbookRun();
@@ -67,11 +67,15 @@ export function StartRunDialog({
     onClose();
   };
 
-  const canStart = Boolean(
+  const stepsCanStart = Boolean(
     preview?.canStart &&
     preview.steps.length > 0 &&
     preview.steps.every((step) => !step.redacted && step.canExecute)
   );
+  const canStart = Boolean(
+    stepsCanStart && !(preview?.requiresApproval && !preview.approverAvailable)
+  );
+  const approvalRequired = Boolean(preview?.requiresApproval);
 
   const start = async (token: string | null) => {
     elevationToken.current = token;
@@ -110,7 +114,13 @@ export function StartRunDialog({
           size="lg"
         >
           <div className="space-y-4">
-            <p className="text-sm text-ink-muted">{t('runbooks.runs.previewNotice')}</p>
+            <p className="text-sm text-ink-muted">
+              {t(
+                approvalRequired
+                  ? 'runbooks.runs.approvalPreviewNotice'
+                  : 'runbooks.runs.previewNotice'
+              )}
+            </p>
 
             {previewError ? (
               <div className="space-y-3" role="alert">
@@ -125,11 +135,16 @@ export function StartRunDialog({
               </p>
             ) : (
               <>
-                {!canStart && (
+                {!stepsCanStart && (
                   <p className="rounded-md border border-warn/40 bg-warn-tint px-3 py-2 text-sm text-ink">
                     {preview.steps.length === 0
                       ? t('runbooks.runs.emptyRunbook')
                       : t('runbooks.runs.blockedSummary')}
+                  </p>
+                )}
+                {approvalRequired && !preview.approverAvailable && (
+                  <p role="note" className="rounded-md border border-warn/40 px-3 py-2 text-sm text-ink">
+                    {t('runbooks.runs.noApproverAvailable')}
                   </p>
                 )}
 
@@ -188,7 +203,7 @@ export function StartRunDialog({
                 }}
                 disabled={!canStart || previewRequest.isPending || startRequest.isPending}
               >
-                {t('runbooks.runs.start')}
+                {t(approvalRequired ? 'runbooks.runs.requestApproval' : 'runbooks.runs.start')}
               </Button>
             </div>
           </div>
@@ -202,8 +217,14 @@ export function StartRunDialog({
           action="runbook.run"
           target={runbook.id}
           title={t('runbooks.runs.startConfirmTitle', { title: runbook.title })}
-          description={t('runbooks.runs.startConfirmDescription')}
-          confirmLabel={t('runbooks.runs.confirmStart')}
+          description={t(
+            approvalRequired
+              ? 'runbooks.runs.approvalPreviewNotice'
+              : 'runbooks.runs.startConfirmDescription'
+          )}
+          confirmLabel={t(
+            approvalRequired ? 'runbooks.runs.requestApproval' : 'runbooks.runs.confirmStart'
+          )}
           isPending={startRequest.isPending}
           onClose={() => setConfirmOpen(false)}
           onConfirm={start}
@@ -429,7 +450,10 @@ function getBlockedReason(step: RunbookRunStep, t: Translate) {
   }
 }
 
-function getRunbookRunConflict(error: unknown): RunbookRunConflict | null {
+// An active-run conflict always names the run; no_eligible_approver does not.
+type ActiveRunConflict = RunbookRunConflict & { runId: string };
+
+function getRunbookRunConflict(error: unknown): ActiveRunConflict | null {
   if (!isAxiosError(error) || error.response?.status !== 409) return null;
   const body = error.response.data as Partial<RunbookRunConflict> | undefined;
   if (!body || typeof body.runId !== 'string' || !body.runId) return null;

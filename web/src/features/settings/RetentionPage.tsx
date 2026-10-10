@@ -28,6 +28,7 @@ interface FormState {
   reportDays: string;
   deletedDocsDays: string;
   runbookOpenRunHours: string;
+  runbookApprovalHours: string;
   runbookRunDays: string;
   cronExpr: string;
 }
@@ -42,6 +43,7 @@ function toForm(data: {
   reportDays: number;
   deletedDocsDays?: number;
   runbookOpenRunHours?: number;
+  runbookApprovalHours?: number;
   runbookRunDays?: number;
   cronExpr: string;
 }): FormState {
@@ -55,6 +57,7 @@ function toForm(data: {
     reportDays: String(data.reportDays),
     deletedDocsDays: String(data.deletedDocsDays ?? 30),
     runbookOpenRunHours: String(data.runbookOpenRunHours ?? 24),
+    runbookApprovalHours: String(data.runbookApprovalHours ?? 24),
     runbookRunDays: String(data.runbookRunDays ?? 90),
     cronExpr: data.cronExpr,
   };
@@ -106,6 +109,7 @@ export function RetentionPage() {
     form.reportDays !== String(data.reportDays) ||
     form.deletedDocsDays !== String(data.deletedDocsDays ?? 30) ||
     form.runbookOpenRunHours !== String(data.runbookOpenRunHours ?? 24) ||
+    form.runbookApprovalHours !== String(data.runbookApprovalHours ?? 24) ||
     form.runbookRunDays !== String(data.runbookRunDays ?? 90) ||
     form.cronExpr !== data.cronExpr;
 
@@ -127,6 +131,7 @@ export function RetentionPage() {
     isValidDays(form.reportDays) &&
     isValidDays(form.deletedDocsDays) &&
     isValidHours(form.runbookOpenRunHours) &&
+    isValidHours(form.runbookApprovalHours) &&
     isValidRunDays(form.runbookRunDays);
 
   const set = (field: keyof FormState) => (e: React.ChangeEvent<HTMLInputElement>) =>
@@ -233,6 +238,20 @@ export function RetentionPage() {
             />
           </Field>
           <Field
+            label={t('settings.retention.runbookApprovalHours')}
+            htmlFor="ret-runbook-approval-hours"
+            hint={t('settings.retention.runbookApprovalHoursHint')}
+          >
+            <TextInput
+              id="ret-runbook-approval-hours"
+              type="number"
+              min={1}
+              max={8760}
+              value={form.runbookApprovalHours}
+              onChange={set('runbookApprovalHours')}
+            />
+          </Field>
+          <Field
             label={t('settings.retention.runbookRunDays')}
             htmlFor="ret-runbook-run-days"
             hint={t('settings.retention.runbookRunDaysHint')}
@@ -275,6 +294,7 @@ export function RetentionPage() {
                 reportDays: Number(form.reportDays),
                 deletedDocsDays: Number(form.deletedDocsDays),
                 runbookOpenRunHours: Number(form.runbookOpenRunHours),
+                runbookApprovalHours: Number(form.runbookApprovalHours),
                 runbookRunDays: Number(form.runbookRunDays),
                 cronExpr: form.cronExpr,
               })

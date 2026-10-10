@@ -256,7 +256,7 @@ describe('WebSocketProvider', () => {
     unsubscribe.forEach((stop) => stop());
   });
 
-  it.each(['runbook.run_failed', 'runbook.run_waiting'])(
+  it.each(['runbook.run_failed', 'runbook.run_waiting', 'runbook.run_approval_requested'])(
     'refreshes the notification bell on %s',
     async (type) => {
       const queryClient = new QueryClient();

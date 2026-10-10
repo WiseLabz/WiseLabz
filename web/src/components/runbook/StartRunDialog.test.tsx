@@ -56,6 +56,7 @@ const runbook: Runbook = {
   targetType: 'change_type',
   targetValue: 'search.unavailable',
   steps: [],
+  requiresApproval: false,
   createdAt: '2026-01-01T00:00:00Z',
   updatedAt: '2026-01-01T00:00:00Z',
 };
@@ -78,17 +79,66 @@ function step(overrides: Partial<RunbookRunStep> = {}): RunbookRunStep {
   };
 }
 
-function renderDialog(onStarted = vi.fn()) {
+function renderDialog(onStarted = vi.fn(), selectedRunbook: Runbook = runbook) {
   return render(
     <QueryClientProvider
       client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
     >
-      <StartRunDialog runbook={runbook} open onClose={vi.fn()} onStarted={onStarted} />
+      <StartRunDialog runbook={selectedRunbook} open onClose={vi.fn()} onStarted={onStarted} />
     </QueryClientProvider>
   );
 }
 
 describe('StartRunDialog', () => {
+  it('requests approval for an opted-in runbook and keeps runbook.run elevation', async () => {
+    let receivedToken: string | null = null;
+    server.use(
+      http.post('/api/runbooks/rb-1/run', ({ request }) => {
+        const url = new URL(request.url);
+        if (url.searchParams.get('dryRun') === 'true') {
+          return HttpResponse.json({
+            id: 'rb-1',
+            canStart: true,
+            requiresApproval: true,
+            approverAvailable: true,
+            steps: [step()],
+          });
+        }
+        receivedToken = request.headers.get('X-Elevation-Token');
+        return HttpResponse.json({ id: 'run-awaiting' }, { status: 202 });
+      })
+    );
+    const onStarted = vi.fn();
+    renderDialog(onStarted, { ...runbook, requiresApproval: true });
+
+    expect(await screen.findByText('Review the frozen steps. Nothing runs until another operator approves this request.')).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole('button', { name: 'Request approval' }));
+    expect(await screen.findByTestId('elevation-binding')).toHaveTextContent('runbook.run|rb-1');
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm elevation' }));
+
+    await waitFor(() => expect(onStarted).toHaveBeenCalledWith('run-awaiting'));
+    expect(receivedToken).toBe('elevation-token');
+  });
+
+  it('disables approval requests when no eligible approver is available', async () => {
+    server.use(
+      http.post('/api/runbooks/rb-1/run', () =>
+        HttpResponse.json({
+          id: 'rb-1',
+          canStart: true,
+          requiresApproval: true,
+          approverAvailable: false,
+          steps: [step()],
+        })
+      )
+    );
+    renderDialog(vi.fn(), { ...runbook, requiresApproval: true });
+
+    expect(await screen.findByText('No other eligible operator is available to approve this runbook.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Request approval' })).toBeDisabled();
+    expect(screen.queryByRole('dialog', { name: 'Start “Restart the search stack”' })).toBeInTheDocument();
+  });
+
   it('renders ordered lifecycle impact from the dry-run preview', async () => {
     let dryRun = false;
     server.use(

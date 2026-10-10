@@ -42,6 +42,7 @@ const KNOWN_EVENT_TYPES = [
   'system.job_failed',
   'runbook.run_failed',
   'runbook.run_waiting',
+  'runbook.run_approval_requested',
 ] as const;
 
 function eventLabel(eventType: string): string {

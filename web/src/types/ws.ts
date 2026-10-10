@@ -29,6 +29,7 @@ export type WsEventType =
   | 'runbook.run.updated'
   | 'runbook.run_failed'
   | 'runbook.run_waiting'
+  | 'runbook.run_approval_requested'
   | 'doc.generated'
   | 'doc.ai_suggestion'
   | 'doc.lock.acquired'
@@ -194,6 +195,7 @@ export interface WsEventMap {
   'runbook.run.updated': RunbookRunUpdatedEvent;
   'runbook.run_failed': FindingNotificationPayload;
   'runbook.run_waiting': FindingNotificationPayload;
+  'runbook.run_approval_requested': FindingNotificationPayload;
   'doc.generated': DocGeneratedPayload;
   'doc.ai_suggestion': DocAiSuggestionPayload;
   'doc.lock.acquired': DocLockAcquiredPayload;

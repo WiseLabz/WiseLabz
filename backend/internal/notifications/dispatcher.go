@@ -221,7 +221,52 @@ const (
 	// EventRunbookRunWaiting is sent when a runbook run pauses on a manual
 	// step and waits for a user to confirm it.
 	EventRunbookRunWaiting = "runbook.run_waiting"
+	// EventRunbookRunApprovalRequested is sent to eligible approvers when a
+	// runbook run is waiting for a second operator's approval.
+	EventRunbookRunApprovalRequested = "runbook.run_approval_requested"
 )
+
+// NotifyUsers dispatches a notification only to the listed active users.
+// fanOut still sends configured external channels once for the recipient set.
+func (d *Dispatcher) NotifyUsers(ctx context.Context, userIDs []string, eventType, severity, title, message string) {
+	if len(userIDs) == 0 {
+		return
+	}
+	wanted := make(map[string]struct{}, len(userIDs))
+	for _, id := range userIDs {
+		wanted[id] = struct{}{}
+	}
+	users := make([]store.User, 0, len(wanted))
+	for offset := 0; len(wanted) > 0; {
+		page, total, err := d.store.ListUsers(ctx, offset, maxNotifyUsers)
+		if err != nil {
+			slog.Error("failed to list users for targeted notification", "error", err, "eventType", eventType)
+			return
+		}
+		for _, user := range page {
+			if _, ok := wanted[user.ID]; ok {
+				users = append(users, user)
+				delete(wanted, user.ID)
+			}
+		}
+		if len(page) == 0 || offset+len(page) >= total {
+			break
+		}
+		// Continue from the end of the page so targeted recipients beyond the
+		// first user page are still reached.
+		offset += len(page)
+	}
+	if len(users) == 0 {
+		return
+	}
+	channels := d.loadChannels(ctx)
+	routes := d.loadRouting(ctx)
+	d.inflight.Add(1)
+	go func() {
+		defer d.inflight.Done()
+		d.fanOut(users, channels, routes, "", eventType, severity, "", title, message)
+	}()
+}
 
 // NotifyRunbookRun dispatches a runbook run event, honouring per-event routing
 // like NotifySystemEvent. connectorID is the connector of the step the event

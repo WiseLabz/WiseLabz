@@ -29,6 +29,7 @@ describe('EventRoutingTable', () => {
     expect(screen.getByText('system job failed')).toBeInTheDocument();
     expect(screen.getByText('runbook run failed')).toBeInTheDocument();
     expect(screen.getByText('runbook run waiting')).toBeInTheDocument();
+    expect(screen.getByText('runbook run approval requested')).toBeInTheDocument();
 
     const cell = screen.getByRole('switch', { name: 'system job failed → Webhook' });
     expect(cell).not.toBeDisabled();
@@ -42,6 +43,27 @@ describe('EventRoutingTable', () => {
     };
     render(<EventRoutingTable config={config} onChange={vi.fn()} />);
     expect(screen.getByText('sync failed')).toBeInTheDocument();
+  });
+
+  it('creates a route for approval-request notifications', () => {
+    const onChange = vi.fn();
+    render(
+      <EventRoutingTable
+        config={{ channels, routing: [{ eventType: 'alert.created', channel: 'webhook', enabled: true }] }}
+        onChange={onChange}
+      />
+    );
+
+    fireEvent.click(
+      screen.getByRole('switch', { name: 'runbook run approval requested → Webhook' })
+    );
+    expect(onChange.mock.calls[0][0].routing).toContainEqual(
+      expect.objectContaining({
+        eventType: 'runbook.run_approval_requested',
+        channel: 'webhook',
+        enabled: true,
+      })
+    );
   });
 
   it('creates routes when enabling an unrouted event', () => {

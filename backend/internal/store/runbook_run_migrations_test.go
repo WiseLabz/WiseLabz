@@ -42,9 +42,12 @@ func TestRunbookRunsMigrationsUpDownUp(t *testing.T) {
 		if err := s.CreateConnector(ctx, conn); err != nil {
 			t.Fatal(err)
 		}
-		r, err := s.CreateRunbook(ctx, &RunbookRecord{Title: "Original title", TargetType: "change_type", TargetValue: "migrations"})
-		if err != nil {
-			t.Fatal(err)
+		r := &RunbookRecord{ID: "runbook-runs-migrations", Title: "Original title", TargetType: "change_type", TargetValue: "migrations"}
+		if err := migrationExec(t, s.rawDB, s.driver, `
+			INSERT INTO runbooks (id, title, body, target_type, target_value, created_at, updated_at)
+			VALUES (?, ?, '', ?, ?, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')
+		`, r.ID, r.Title, r.TargetType, r.TargetValue); err != nil {
+			t.Fatalf("insert runbook before 000062: %v", err)
 		}
 		if _, err := s.db.ExecContext(ctx, `
 			INSERT INTO runbook_steps (id, runbook_id, position, title, connector_id, verb, entity_ref, created_at, updated_at)
@@ -66,7 +69,7 @@ func TestRunbookRunsMigrationsUpDownUp(t *testing.T) {
 			t.Fatalf("legacy step after upgrade = %+v, %v", step, err)
 		}
 		rs, err := s.GetRetentionSettings(ctx)
-		if err != nil || rs.RunbookOpenRunHours != 24 || rs.RunbookRunDays != 90 || rs.SnapshotDays != 31 {
+		if err != nil || rs.RunbookOpenRunHours != 24 || rs.RunbookRunDays != 90 || rs.RunbookApprovalHours != DefaultRunbookApprovalHours || rs.SnapshotDays != 31 {
 			t.Fatalf("retention after upgrade = %+v, %v", rs, err)
 		}
 		for i, kind := range []string{"manual", "sync_and_wait", "wait_until_healthy"} {
@@ -115,8 +118,9 @@ func TestRunbookRunsMigrationsUpDownUp(t *testing.T) {
 			title != "Original step" || verb != "restart" || entityRef != "100" {
 			t.Fatalf("original step after down = %q, %q, %q, %v", title, verb, entityRef, err)
 		}
-		if _, err := s.GetRunbook(ctx, r.ID); err != nil {
-			t.Fatal("rollback removed original runbook:", err)
+		var preservedRunbookID string
+		if err := s.db.QueryRowContext(ctx, `SELECT id FROM runbooks WHERE id = ?`, r.ID).Scan(&preservedRunbookID); err != nil || preservedRunbookID != r.ID {
+			t.Fatalf("rollback runbook lookup = %q, %v; want preserved runbook %s", preservedRunbookID, err, r.ID)
 		}
 		_, err = s.db.ExecContext(ctx, `
 			INSERT INTO runbook_steps (id, runbook_id, position, title, created_at, updated_at)
@@ -133,7 +137,7 @@ func TestRunbookRunsMigrationsUpDownUp(t *testing.T) {
 			t.Fatalf("legacy step after reapply = %+v, %v", step, err)
 		}
 		rs, err = s.GetRetentionSettings(ctx)
-		if err != nil || rs.RunbookOpenRunHours != 24 || rs.RunbookRunDays != 90 || rs.SnapshotDays != 31 {
+		if err != nil || rs.RunbookOpenRunHours != 24 || rs.RunbookRunDays != 90 || rs.RunbookApprovalHours != DefaultRunbookApprovalHours || rs.SnapshotDays != 31 {
 			t.Fatalf("retention after reapply = %+v, %v", rs, err)
 		}
 	}

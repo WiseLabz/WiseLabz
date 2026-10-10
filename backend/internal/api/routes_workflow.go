@@ -52,6 +52,8 @@ func mountWorkflowRoutes(r chi.Router, d routerDeps) {
 
 	r.Route("/runbook-runs", func(r chi.Router) {
 		r.Get("/{runId}", d.runbookH.GetRun)
+		r.Post("/{runId}/approve", d.runbookH.ApproveRun)
+		r.Post("/{runId}/reject", d.runbookH.RejectRun)
 		r.Post("/{runId}/steps/{stepId}/confirm", d.runbookH.ConfirmRunStep)
 		r.Post("/{runId}/resume", d.runbookH.ResumeRun)
 		r.Post("/{runId}/cancel", d.runbookH.CancelRun)

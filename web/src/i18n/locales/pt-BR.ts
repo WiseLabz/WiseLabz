@@ -63,6 +63,12 @@ export const ptBR: Catalog = {
       updatedAt: 'Última atualização',
       finishedAt: 'Concluída em',
       startedBy: 'Iniciada por',
+      requestedBy: 'Solicitada por',
+      requestedAt: 'Solicitada em',
+      approvalExpiresAt: 'A aprovação expira em',
+      approvedBy: 'Aprovada por',
+      approvedAt: 'Aprovada em',
+      rejectedBy: 'Rejeitada por',
       resumedBy: 'Retomada por último por',
       cancelledBy: 'Cancelada por',
       confirmedBy: 'Confirmada por',
@@ -96,13 +102,35 @@ export const ptBR: Catalog = {
       blockedAction:
         'Você precisa de acesso de operador a todos os conectores desta execução ou a pelo menos um conector quando ela não tiver nenhum.',
       start: 'Iniciar execução',
+      requestApproval: 'Solicitar aprovação',
+      approvalPreviewNotice: 'Revise as etapas registradas. Nada será executado até que outro operador aprove a solicitação.',
+      noApproverAvailable: 'Não há outro operador elegível disponível para aprovar este runbook.',
+      approvalExpired: 'A solicitação de aprovação expirou.',
+      approve: 'Aprovar e iniciar execução',
+      approveTitle: 'Aprovar execução',
+      approveDescription: 'Aprove exatamente estas etapas registradas e inicie a execução.',
+      approveSuccess: 'Execução aprovada e iniciada.',
+      approveError: 'Não foi possível aprovar esta execução. Tente novamente.',
+      reject: 'Rejeitar solicitação',
+      rejectTitle: 'Rejeitar solicitação de aprovação',
+      rejectDescription: 'Rejeite esta solicitação. As etapas pendentes serão ignoradas.',
+      rejectConfirm: 'Rejeitar solicitação',
+      rejectSuccess: 'Solicitação de aprovação rejeitada.',
+      rejectError: 'Não foi possível rejeitar esta solicitação. Tente novamente.',
+      cancelRequest: 'Cancelar solicitação',
+      cancelRequestTitle: 'Cancelar solicitação de aprovação',
+      cancelRequestDescription: 'Cancele sua solicitação. As etapas pendentes serão ignoradas.',
+      cancelRequestConfirm: 'Cancelar solicitação',
+      cancelRequestSuccess: 'Solicitação de aprovação cancelada.',
       status: {
+        awaiting_approval: 'Aguardando aprovação',
         running: 'Em execução',
         waiting_manual: 'Aguardando confirmação manual',
         failed: 'Falhou',
         succeeded: 'Concluída com sucesso',
         cancelled: 'Cancelada',
         expired: 'Expirada',
+        rejected: 'Rejeitada',
       },
       stepState: {
         pending: 'Pendente',
@@ -210,6 +238,10 @@ export const ptBR: Catalog = {
           'Esta execução ou etapa não está mais no estado necessário. O estado mais recente foi carregado.',
         unavailable: 'O servidor está sendo desligado. Tente novamente em instantes.',
       },
+    },
+    steps: {
+      approvalRequired:
+        'As etapas individuais estão desativadas neste runbook. Solicite aprovação para executar as etapas registradas.',
     },
   },
   docs: {
@@ -565,6 +597,8 @@ export const ptBR: Catalog = {
   },
   settings: {
     runbooks: {
+      requireApproval: 'Exigir uma segunda aprovação',
+      requireApprovalHint: 'Outro operador deve aprovar as etapas registradas antes que este runbook seja executado.',
       steps: {
         kindLabel: 'Tipo',
         kinds: {
@@ -649,6 +683,8 @@ export const ptBR: Catalog = {
       healthCheckDays: 'Histórico de verificações de integridade (dias)',
       reportDays: 'Relatórios gerados (dias)',
       runbookOpenRunHours: 'Execuções abertas de runbook (horas)',
+      runbookApprovalHours: 'Solicitações de aprovação de runbook (horas)',
+      runbookApprovalHoursHint: 'As solicitações expiram após esse período se nenhum outro operador as aprovar.',
       runbookRunDays: 'Histórico de execuções de runbook (dias)',
       runbookRunDaysHint: '0 dias mantém o histórico para sempre.',
       cronExpr: 'Agendamento de limpeza (cron)',

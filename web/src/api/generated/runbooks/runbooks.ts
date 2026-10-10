@@ -679,7 +679,7 @@ export const useExecuteRunbookStep = <
   return useMutation(getExecuteRunbookStepMutationOptions(options), queryClient);
 };
 /**
- * dryRun=true returns the ordered, redacted preview without elevation or mutation. Starting requires operator on every referenced connector (including API-key restrictions) before any other rejection, and one fresh runbook.run elevation targeted at runbookId. Steps are frozen at start. An empty runbook cannot start. Existing single-step execution is unchanged. When the runbook has no connector to check (manual steps only), the caller must be an instance admin or hold operator on at least one connector.
+ * dryRun=true returns the ordered, redacted preview without elevation or mutation. Starting requires operator on every referenced connector (including API-key restrictions) before any other rejection, and one fresh runbook.run elevation targeted at runbookId. Steps are frozen when requested or started. An empty runbook cannot start. Opted-in runbooks require an eligible other operator before elevation is consumed and create awaiting_approval runs with no step execution. Ordinary runbooks keep their existing start response. Single-step execution of an opted-in runbook returns 409 approval_required. When the runbook has no connector to check (manual steps only), the caller must be an instance admin or hold operator on at least one connector.
  * @summary Preview or start a whole-runbook run
  */
 export const startRunbookRun = (
@@ -1017,6 +1017,180 @@ export function useGetRunbookRun<
   return withQueryKey(query, queryOptions.queryKey);
 }
 
+/**
+ * Requires an enabled user other than the initiator with operator access on every frozen connector, including API-key restrictions; read-only keys are forbidden. Connectorless runs require instance admin or operator on at least one connector. The approver must present their own runbook.approve elevation targeted at runId; runbook.run is refused. The conditional awaiting_approval transition records the approver and starts execution as the initiator, preserving the existing per-step initiator grant rechecks.
+ * @summary Approve a frozen request as a different operator
+ */
+export const approveRunbookRun = (
+  runId: string,
+  options?: SecondParameter<typeof customInstance>,
+  signal?: AbortSignal
+) => {
+  return customInstance<void>(
+    { url: `/runbook-runs/${runId}/approve`, method: 'POST', signal },
+    options
+  );
+};
+
+export const getApproveRunbookRunMutationKey = () => ['approveRunbookRun'] as const;
+
+export const getApproveRunbookRunMutationOptions = <
+  TError = ErrorType<Error | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof approveRunbookRun>>,
+    TError,
+    ApproveRunbookRunMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof approveRunbookRun>>,
+  TError,
+  ApproveRunbookRunMutationVariables,
+  TContext
+> => {
+  const mutationKey = getApproveRunbookRunMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof approveRunbookRun>>,
+    ApproveRunbookRunMutationVariables
+  > = (props) => {
+    const { runId } = props ?? {};
+
+    return approveRunbookRun(runId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ApproveRunbookRunMutationResult = NonNullable<
+  Awaited<ReturnType<typeof approveRunbookRun>>
+>;
+
+export type ApproveRunbookRunMutationError = ErrorType<
+  Error | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
+>;
+export type ApproveRunbookRunMutationVariables = { runId: string };
+
+/**
+ * @summary Approve a frozen request as a different operator
+ */
+export const useApproveRunbookRun = <
+  TError = ErrorType<Error | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse>,
+  TContext = unknown,
+>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof approveRunbookRun>>,
+      TError,
+      ApproveRunbookRunMutationVariables,
+      TContext
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseMutationResult<
+  Awaited<ReturnType<typeof approveRunbookRun>>,
+  TError,
+  ApproveRunbookRunMutationVariables,
+  TContext
+> => {
+  return useMutation(getApproveRunbookRunMutationOptions(options), queryClient);
+};
+/**
+ * Uses the same current enabled-user, all-frozen-connector operator and API-key checks as approve, prohibits the initiator, and requires no elevation. Conditionally moves awaiting_approval to rejected, records rejectedBy and finishedAt, and skips pending steps.
+ * @summary Reject a frozen request as a different operator
+ */
+export const rejectRunbookRun = (
+  runId: string,
+  options?: SecondParameter<typeof customInstance>,
+  signal?: AbortSignal
+) => {
+  return customInstance<void>(
+    { url: `/runbook-runs/${runId}/reject`, method: 'POST', signal },
+    options
+  );
+};
+
+export const getRejectRunbookRunMutationKey = () => ['rejectRunbookRun'] as const;
+
+export const getRejectRunbookRunMutationOptions = <
+  TError = ErrorType<UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | Error>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof rejectRunbookRun>>,
+    TError,
+    RejectRunbookRunMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customInstance>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof rejectRunbookRun>>,
+  TError,
+  RejectRunbookRunMutationVariables,
+  TContext
+> => {
+  const mutationKey = getRejectRunbookRunMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof rejectRunbookRun>>,
+    RejectRunbookRunMutationVariables
+  > = (props) => {
+    const { runId } = props ?? {};
+
+    return rejectRunbookRun(runId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RejectRunbookRunMutationResult = NonNullable<
+  Awaited<ReturnType<typeof rejectRunbookRun>>
+>;
+
+export type RejectRunbookRunMutationError = ErrorType<
+  UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | Error
+>;
+export type RejectRunbookRunMutationVariables = { runId: string };
+
+/**
+ * @summary Reject a frozen request as a different operator
+ */
+export const useRejectRunbookRun = <
+  TError = ErrorType<UnauthorizedResponse | ForbiddenResponse | NotFoundResponse | Error>,
+  TContext = unknown,
+>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof rejectRunbookRun>>,
+      TError,
+      RejectRunbookRunMutationVariables,
+      TContext
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseMutationResult<
+  Awaited<ReturnType<typeof rejectRunbookRun>>,
+  TError,
+  RejectRunbookRunMutationVariables,
+  TContext
+> => {
+  return useMutation(getRejectRunbookRunMutationOptions(options), queryClient);
+};
 /**
  * Requires operator on every connector of the frozen run (API-key restrictions apply), checked before state or step validation. No elevation. Available after runbook deletion. When the run has no connector to check (manual steps only), the caller must be an instance admin or hold operator on at least one connector.
  * @summary Confirm a waiting manual step and continue

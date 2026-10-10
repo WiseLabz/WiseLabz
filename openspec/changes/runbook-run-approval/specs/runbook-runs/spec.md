@@ -34,7 +34,7 @@ Starting a run SHALL require a valid elevation token for the action `runbook.run
 - **THEN** the request SHALL be rejected with status 403 before elevation is checked.
 
 #### Scenario: Approval token cannot start a run
-- **WHEN** a caller starts or resumes a run using a `runbook.approve` elevation token
+- **WHEN** instance step-up is enabled and a caller starts or resumes a run using a `runbook.approve` elevation token
 - **THEN** the request SHALL be refused and no execution SHALL start.
 
 ### Requirement: Frozen steps
@@ -92,14 +92,14 @@ Starting an opted-in runbook SHALL require current operator authorization, an ex
 - **THEN** a second start SHALL return 409 conflict.
 
 ### Requirement: Approver authorization
-Approval and rejection SHALL require an enabled user other than the initiator with operator access to every frozen connector, applying API-key scope and refusing read-only keys. For connectorless runs, instance admin or operator on any connector SHALL be required. Approval SHALL require the approver's own `runbook.approve` elevation on the run ID; rejection SHALL require no elevation.
+Approval and rejection SHALL require an enabled user other than the initiator with operator access to every frozen connector, applying API-key scope and refusing read-only keys. For connectorless runs, instance admin or operator on any connector SHALL be required. When instance step-up is enabled, approval SHALL require the approver's own `runbook.approve` elevation on the run ID. With step-up disabled, approval SHALL follow the existing elevation bypass; rejection SHALL require no elevation.
 
 #### Scenario: Forbidden approver
 - **WHEN** the initiator, a disabled user, a partial-grant operator, or a read-only API key attempts approval or rejection
 - **THEN** the response SHALL be 403 and the request SHALL remain awaiting approval.
 
 #### Scenario: Approval elevation boundary
-- **WHEN** an eligible approver presents no elevation, a `runbook.run` token, another user's token, or a token for another run ID
+- **WHEN** instance step-up is enabled and an eligible approver presents no elevation, a `runbook.run` token, another user's token, or a token for another run ID
 - **THEN** approval SHALL be refused and no step SHALL execute.
 
 #### Scenario: Reject without elevation
@@ -164,3 +164,14 @@ Run detail SHALL expose `canApprove` and `approvalExpiresAt` and show frozen pen
 #### Scenario: Initiator detail
 - **WHEN** the initiator opens their awaiting run
 - **THEN** cancel request SHALL be available and approve/reject SHALL be absent.
+
+### Requirement: Instance step-up setting compatibility
+Approval SHALL use the same instance step-up setting as run start. Disabling step-up SHALL bypass elevation only; enabled-user, different-operator, every-frozen-connector, API-key and conditional-state guards SHALL remain enforced. With step-up enabled, the two elevation actions SHALL remain distinct.
+
+#### Scenario: Approval with step-up disabled
+- **WHEN** instance step-up is disabled and an eligible different operator approves without an elevation token
+- **THEN** the awaiting run SHALL transition once and execute as the initiator, and a repeated approval SHALL conflict.
+
+#### Scenario: Ineligible operator with step-up disabled
+- **WHEN** instance step-up is disabled and the initiator, a disabled or partial-grant user, or a restricted or read-only key attempts approval or rejection
+- **THEN** the request SHALL be refused with 403 and no execution SHALL start.

@@ -18,6 +18,7 @@ let retentionData = {
   reportDays: 90,
   deletedDocsDays: 30,
   runbookOpenRunHours: 24,
+  runbookApprovalHours: 24,
   runbookRunDays: 90,
   cronExpr: '0 0 * * *',
 };
@@ -46,13 +47,28 @@ describe('RetentionPage', () => {
     vi.clearAllMocks();
   });
 
-  it('renders retention settings with runbook open run hours and runbook run days', () => {
+  it('renders retention settings with runbook approval and run-history retention', () => {
     renderPage();
 
     expect(screen.getByLabelText('Open runbook runs (hours)')).toHaveValue(24);
+    expect(screen.getByLabelText('Runbook approval requests (hours)', { exact: false })).toHaveValue(24);
     expect(screen.getByLabelText('Runbook run history (days)', { exact: false })).toHaveValue(90);
     expect(screen.getByText('0 days keeps history forever.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
+  });
+
+  it('saves the runbook approval expiry separately from open-run retention', async () => {
+    renderPage();
+    fireEvent.change(screen.getByLabelText('Runbook approval requests (hours)', { exact: false }), {
+      target: { value: '48' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() =>
+      expect(putSystemSettingsRetention).toHaveBeenCalledWith(
+        expect.objectContaining({ runbookApprovalHours: 48, runbookOpenRunHours: 24 })
+      )
+    );
   });
 
   it('allows updating runbookOpenRunHours and runbookRunDays and saving', async () => {

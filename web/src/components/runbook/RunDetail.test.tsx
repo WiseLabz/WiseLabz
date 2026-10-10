@@ -6,6 +6,7 @@ import { setupServer } from 'msw/node';
 import type { RunbookRun } from '../../api/model';
 import i18n from '../../i18n';
 import { toast } from '../../lib/toast';
+import { useAuth } from '../../store/auth';
 import { RunDetail } from './RunDetail';
 
 type ElevationProps = {
@@ -53,6 +54,7 @@ const baseRun: RunbookRun = {
   state: 'failed',
   reason: 'interrupted',
   startedBy: 'user-started',
+  requiresApproval: false,
   resumedBy: 'user-resumed',
   cancelledBy: 'user-cancelled',
   startedAt: '2026-10-01T10:00:00Z',
@@ -99,6 +101,8 @@ let currentRun = structuredClone(baseRun);
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
 beforeEach(() => {
   vi.mocked(toast.error).mockClear();
+  vi.mocked(toast.success).mockClear();
+  useAuth.setState({ status: 'unknown', user: null });
   currentRun = structuredClone(baseRun);
   server.use(http.get('/api/runbook-runs/:runId', () => HttpResponse.json(currentRun)));
 });
@@ -117,13 +121,134 @@ function renderDetail(runId = 'run-1') {
 }
 
 describe('RunDetail', () => {
+  it('shows a frozen approval request and requires runbook.approve elevation', async () => {
+    currentRun = {
+      ...baseRun,
+      state: 'awaiting_approval',
+      requiresApproval: true,
+      canApprove: true,
+      startedBy: 'requester-1',
+      approvalExpiresAt: '2026-10-02T10:00:00Z',
+      steps: [{ ...baseRun.steps[0], state: 'pending' }],
+    };
+    let approvalToken: string | null = null;
+    let approvedRun = '';
+    server.use(
+      http.post('/api/runbook-runs/:runId/approve', ({ params, request }) => {
+        approvedRun = String(params.runId);
+        approvalToken = request.headers.get('X-Elevation-Token');
+        return new HttpResponse(null, { status: 204 });
+      })
+    );
+    renderDetail();
+
+    const detail = screen.getByRole('region', { name: 'Run details' });
+    expect(await within(detail).findByText('Restart primary')).toBeInTheDocument();
+    expect(within(detail).getByText('Pending')).toBeInTheDocument();
+    expect(within(detail).getByText('Requested by')).toBeInTheDocument();
+    expect(within(detail).getByText('requester-1')).toBeInTheDocument();
+    expect(within(detail).getByText('Approval expires')).toBeInTheDocument();
+    expect(within(detail).getByRole('button', { name: 'Approve and start run' })).toBeInTheDocument();
+    expect(within(detail).getByRole('button', { name: 'Reject request' })).toBeInTheDocument();
+    expect(within(detail).queryByRole('button', { name: 'Cancel request' })).not.toBeInTheDocument();
+    expect(within(detail).queryByRole('button', { name: 'Resume run' })).not.toBeInTheDocument();
+    expect(within(detail).queryByRole('button', { name: 'Confirm step' })).not.toBeInTheDocument();
+
+    fireEvent.click(within(detail).getByRole('button', { name: 'Approve and start run' }));
+    const elevation = await screen.findByRole('dialog', { name: 'Approve run' });
+    expect(elevation).toHaveTextContent('runbook.approve');
+    expect(elevation).toHaveTextContent('run-1');
+    fireEvent.click(within(elevation).getByRole('button', { name: 'Approve and start run' }));
+
+    await waitFor(() => expect(approvedRun).toBe('run-1'));
+    expect(approvalToken).toBe('fresh-elevation-token');
+    expect(toast.success).toHaveBeenCalledWith('Run approved and started.');
+  });
+
+  it('rejects an approval request without sending an elevation token', async () => {
+    currentRun = {
+      ...baseRun,
+      state: 'awaiting_approval',
+      requiresApproval: true,
+      canApprove: true,
+      startedBy: 'requester-1',
+      steps: [{ ...baseRun.steps[0], state: 'pending' }],
+    };
+    let rejectedRun = '';
+    server.use(
+      http.post('/api/runbook-runs/:runId/reject', ({ params, request }) => {
+        rejectedRun = String(params.runId);
+        expect(request.headers.get('X-Elevation-Token')).toBeNull();
+        return new HttpResponse(null, { status: 204 });
+      })
+    );
+    renderDetail();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Reject request' }));
+    const confirmation = await screen.findByRole('dialog', { name: 'Reject approval request' });
+    fireEvent.click(within(confirmation).getByRole('button', { name: 'Reject request' }));
+
+    await waitFor(() => expect(rejectedRun).toBe('run-1'));
+    expect(toast.success).toHaveBeenCalledWith('Approval request rejected.');
+  });
+
+  it('lets the initiator cancel a request and shows approval expiry and approver identity', async () => {
+    currentRun = {
+      ...baseRun,
+      state: 'awaiting_approval',
+      requiresApproval: true,
+      canApprove: false,
+      startedBy: 'requester-1',
+      steps: [{ ...baseRun.steps[0], state: 'pending' }],
+    };
+    useAuth.setState({
+      status: 'authenticated',
+      user: {
+        id: 'requester-1',
+        username: 'requester',
+        role: 'user',
+        authSource: 'local',
+        createdAt: '2026-01-01T00:00:00Z',
+      },
+    });
+    let cancelledRun = '';
+    server.use(
+      http.post('/api/runbook-runs/:runId/cancel', ({ params }) => {
+        cancelledRun = String(params.runId);
+        return new HttpResponse(null, { status: 204 });
+      })
+    );
+    const rendered = renderDetail();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Cancel request' }));
+    const confirmation = await screen.findByRole('dialog', { name: 'Cancel approval request' });
+    fireEvent.click(within(confirmation).getByRole('button', { name: 'Cancel request' }));
+    await waitFor(() => expect(cancelledRun).toBe('run-1'));
+    rendered.unmount();
+
+    currentRun = {
+      ...baseRun,
+      state: 'expired',
+      requiresApproval: true,
+      reason: 'approval_expired',
+      approvedBy: 'approver-1',
+      approvedAt: '2026-10-01T10:05:00Z',
+    };
+    renderDetail();
+    expect(await screen.findByText('Approval request expired.')).toBeInTheDocument();
+    expect(screen.getByText('Approved by')).toBeInTheDocument();
+    expect(screen.getByText('approver-1')).toBeInTheDocument();
+  });
+
   it.each([
+    ['awaiting_approval', 'Awaiting approval'],
     ['running', 'Running'],
     ['waiting_manual', 'Waiting for manual confirmation'],
     ['failed', 'Failed'],
     ['succeeded', 'Succeeded'],
     ['cancelled', 'Cancelled'],
     ['expired', 'Expired'],
+    ['rejected', 'Rejected'],
   ] as const)('labels the %s run state', async (state, label) => {
     currentRun = { ...baseRun, state };
     renderDetail();

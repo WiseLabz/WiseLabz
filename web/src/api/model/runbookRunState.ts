@@ -10,10 +10,12 @@
 export type RunbookRunState = (typeof RunbookRunState)[keyof typeof RunbookRunState];
 
 export const RunbookRunState = {
+  awaiting_approval: 'awaiting_approval',
   running: 'running',
   waiting_manual: 'waiting_manual',
   failed: 'failed',
   succeeded: 'succeeded',
   cancelled: 'cancelled',
   expired: 'expired',
+  rejected: 'rejected',
 } as const;

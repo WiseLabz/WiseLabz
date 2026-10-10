@@ -3463,6 +3463,9 @@ paths:
               schema: { $ref: '#/components/schemas/Error' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Opted-in runbooks require whole-run approval (approval_required), even for a single-step dry run
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
         '502':
           description: The operation failed upstream; an AlertRecord was created.
           content:
@@ -3480,7 +3483,10 @@ paths:
         dryRun=true returns the ordered, redacted preview without elevation or mutation.
         Starting requires operator on every referenced connector (including API-key restrictions)
         before any other rejection, and one fresh runbook.run elevation targeted at runbookId.
-        Steps are frozen at start. An empty runbook cannot start. Existing single-step execution is unchanged.
+        Steps are frozen when requested or started. An empty runbook cannot start.
+        Opted-in runbooks require an eligible other operator before elevation is consumed and create
+        awaiting_approval runs with no step execution. Ordinary runbooks keep their existing start response.
+        Single-step execution of an opted-in runbook returns 409 approval_required.
         When the runbook has no connector to check (manual steps only), the caller must be an instance admin
         or hold operator on at least one connector.
       parameters:
@@ -3496,7 +3502,7 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/RunbookRunPreview' }
         '202':
-          description: Run accepted and executing asynchronously
+          description: Run accepted; awaiting a second operator when requiresApproval is enabled, otherwise executing asynchronously
           content:
             application/json:
               schema: { $ref: '#/components/schemas/RunbookRun' }
@@ -3519,7 +3525,8 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
         '409':
           description: >
-            An active run exists (code conflict, runId identifies it). Code action_unavailable
+            No eligible other approver (code no_eligible_approver) before elevation is consumed, or
+            an active run exists (code conflict, runId identifies it). Code action_unavailable
             when a connector_action step's action cannot be prepared (the recipe no longer
             declares it, or its connector is gone); nothing is started.
           content:
@@ -3561,6 +3568,58 @@ paths:
               schema: { $ref: '#/components/schemas/RunbookRun' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
+  /runbook-runs/{runId}/approve:
+    parameters:
+      - { $ref: '#/components/parameters/RunbookRunId' }
+    post:
+      tags: [runbooks]
+      operationId: approveRunbookRun
+      summary: Approve a frozen request as a different operator
+      description: >
+        Requires an enabled user other than the initiator with operator access on every frozen
+        connector, including API-key restrictions; read-only keys are forbidden. Connectorless
+        runs require instance admin or operator on at least one connector. The approver must
+        present their own runbook.approve elevation targeted at runId; runbook.run is refused.
+        The conditional awaiting_approval transition records the approver and starts execution
+        as the initiator, preserving the existing per-step initiator grant rechecks.
+      parameters:
+        - name: X-Elevation-Token
+          in: header
+          schema: { type: string }
+          description: Fresh single-use runbook.approve elevation bound to this approver and run ID.
+      responses:
+        '204': { description: Approval recorded and asynchronous execution started }
+        '400':
+          description: Missing elevation token (elevation_required)
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Run is no longer awaiting approval (conflict)
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+        '503':
+          description: Continuation refused during shutdown; approval remains recorded and the run is interrupted
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+  /runbook-runs/{runId}/reject:
+    parameters:
+      - { $ref: '#/components/parameters/RunbookRunId' }
+    post:
+      tags: [runbooks]
+      operationId: rejectRunbookRun
+      summary: Reject a frozen request as a different operator
+      description: >
+        Uses the same current enabled-user, all-frozen-connector operator and API-key checks
+        as approve, prohibits the initiator, and requires no elevation. Conditionally moves
+        awaiting_approval to rejected, records rejectedBy and finishedAt, and skips pending steps.
+      responses:
+        '204': { description: Request rejected; no execution started }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Run is no longer awaiting approval (conflict)
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
   /runbook-runs/{runId}/steps/{stepId}/confirm:
     parameters:
       - { $ref: '#/components/parameters/RunbookRunId' }
@@ -6914,7 +6973,7 @@ components:
 
     RunbookRunState:
       type: string
-      enum: [running, waiting_manual, failed, succeeded, cancelled, expired]
+      enum: [awaiting_approval, running, waiting_manual, failed, succeeded, cancelled, expired, rejected]
     RunbookRunStepState:
       type: string
       enum: [pending, running, waiting, succeeded, failed, skipped, unknown]
@@ -6940,6 +6999,10 @@ components:
         startedBy: { type: string }
         resumedBy: { type: string }
         cancelledBy: { type: string }
+        requiresApproval: { type: boolean, description: Frozen approval opt-in; omitted for ordinary runs }
+        approvedBy: { type: string, description: Operator who approved; never the execution actor }
+        approvedAt: { type: string, format: date-time }
+        rejectedBy: { type: string }
         startedAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
         finishedAt: { type: string, format: date-time }
@@ -7005,6 +7068,8 @@ components:
         - type: object
           required: [steps]
           properties:
+            canApprove: { type: boolean, description: Current caller is an enabled eligible other operator; included for approval-required runs }
+            approvalExpiresAt: { type: string, format: date-time, description: Expiry of an awaiting request under the current approval-hours setting }
             steps:
               type: array
               items: { $ref: '#/components/schemas/RunbookRunStep' }
@@ -7020,16 +7085,18 @@ components:
         pageSize: { type: integer }
     RunbookRunPreview:
       type: object
-      required: [id, canStart, steps]
+      required: [id, canStart, steps, requiresApproval, approverAvailable]
       properties:
         id: { type: string, description: Runbook ID }
         canStart: { type: boolean, description: False when empty or any step is blocked }
+        requiresApproval: { type: boolean }
+        approverAvailable: { type: boolean, description: Another enabled operator can approve every frozen connector; true for ordinary runbooks }
         steps:
           type: array
           items: { $ref: '#/components/schemas/RunbookRunStep' }
     RunbookRunConflict:
       type: object
-      required: [code, message, runId]
+      required: [code, message]
       properties:
         code: { type: string }
         message: { type: string }
@@ -7202,6 +7269,7 @@ components:
       type: object
       required: [id, title, body, targetType, targetValue, steps, createdAt, updatedAt]
       properties:
+        requiresApproval: { type: boolean, default: false, description: Require a different eligible operator before a whole run can execute }
         id: { type: string }
         title: { type: string }
         body: { type: string }
@@ -7237,6 +7305,7 @@ components:
       type: object
       required: [title, targetType, targetValue]
       properties:
+        requiresApproval: { type: boolean, default: false, description: Require a different eligible operator before a whole run can execute }
         title: { type: string }
         body: { type: string, default: '' }
         targetType: { $ref: '#/components/schemas/RunbookTargetType' }
@@ -7250,6 +7319,7 @@ components:
     RunbookUpdate:
       type: object
       properties:
+        requiresApproval: { type: boolean, default: false, description: Require a different eligible operator before a whole run can execute }
         title: { type: string }
         body: { type: string }
         targetType: { $ref: '#/components/schemas/RunbookTargetType' }
@@ -7305,7 +7375,7 @@ components:
       properties:
         id: { type: string }
         alertId: { type: string, nullable: true, description: 'Deep-link target when set — the affected alert.' }
-        eventType: { type: string, description: 'e.g. alert.created, finding.created, system.job_failed, runbook.run_failed, runbook.run_waiting, digest.summary' }
+        eventType: { type: string, description: 'e.g. alert.created, finding.created, system.job_failed, runbook.run_failed, runbook.run_waiting, runbook.run_approval_requested, digest.summary' }
         title: { type: string }
         message: { type: string }
         read: { type: boolean }
@@ -7579,7 +7649,7 @@ components:
       type: object
       required: [eventType, channel, enabled]
       properties:
-        eventType: { type: string, description: 'Event type the route applies to. Emitted today: alert.created, finding.created, system.job_failed (scheduled job failing/recovered), runbook.run_failed (failed run), runbook.run_waiting (manual confirmation).' }
+        eventType: { type: string, description: 'Event type the route applies to. Emitted today: alert.created, finding.created, system.job_failed (scheduled job failing/recovered), runbook.run_failed (failed run), runbook.run_waiting (manual confirmation), runbook.run_approval_requested (eligible second operators).' }
         channel: { $ref: '#/components/schemas/NotificationChannelType' }
         enabled: { type: boolean }
         minSeverity: { $ref: '#/components/schemas/Severity' }
@@ -7963,6 +8033,7 @@ components:
         auditDays: { type: integer, description: Delete audit log records older than this many days; 0 disables cleanup for this category }
         healthCheckDays: { type: integer, description: Delete health-check time-series rows older than this many days; 0 disables cleanup for this category }
         deletedDocsDays: { type: integer, minimum: 0, default: 30, description: Permanently purge trash older than this many days; 0 disables cleanup }
+        runbookApprovalHours: { type: integer, minimum: 1, maximum: 8760, default: 24, description: Expire unanswered approval requests after this many hours; swept by a per-minute leader job }
         runbookOpenRunHours: { type: integer, minimum: 1, maximum: 8760, default: 24, description: Expire open runbook runs after this many hours of inactivity; must be between 1 and 8760 }
         runbookRunDays: { type: integer, minimum: 0, maximum: 3650, default: 90, description: Delete finished runbook runs older than this many days; 0 keeps run history forever; must be between 0 and 3650 }
         reportDays: { type: integer, description: Delete generated reports older than this many days; 0 disables cleanup for this category }

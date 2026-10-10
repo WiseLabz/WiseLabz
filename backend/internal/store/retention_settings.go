@@ -9,25 +9,27 @@ import (
 // Defaults for the runbook run retention columns. They mirror the column
 // defaults of migration 000063; 0 run days means keep run history forever.
 const (
-	DefaultRunbookOpenRunHours = 24
-	DefaultRunbookRunDays      = 90
+	DefaultRunbookOpenRunHours  = 24
+	DefaultRunbookRunDays       = 90
+	DefaultRunbookApprovalHours = 24
 )
 
 // RetentionSettings represents the data-retention cleanup configuration
 // (single-row table with id='default'). Mirrors BackupSchedule's pattern.
 type RetentionSettings struct {
-	SnapshotDays        int
-	DocVersionDays      int
-	AlertDays           int
-	SyncRunDays         int
-	AuditDays           int
-	HealthCheckDays     int
-	DeletedDocsDays     int
-	RunbookOpenRunHours int
-	RunbookRunDays      int
-	ReportDays          int
-	CronExpr            string
-	UpdatedAt           string
+	SnapshotDays         int
+	DocVersionDays       int
+	AlertDays            int
+	SyncRunDays          int
+	AuditDays            int
+	HealthCheckDays      int
+	DeletedDocsDays      int
+	RunbookOpenRunHours  int
+	RunbookRunDays       int
+	RunbookApprovalHours int
+	ReportDays           int
+	CronExpr             string
+	UpdatedAt            string
 }
 
 // GetRetentionSettings retrieves the retention settings from the database.
@@ -35,12 +37,12 @@ func (s *Store) GetRetentionSettings(ctx context.Context) (RetentionSettings, er
 	var rs RetentionSettings
 	err := s.db.QueryRowContext(ctx, `
 		SELECT snapshot_days, doc_version_days, alert_days, sync_run_days, audit_days, health_check_days,
-			report_days, deleted_docs_days, runbook_open_run_hours, runbook_run_days, cron_expr, updated_at
+			report_days, deleted_docs_days, runbook_open_run_hours, runbook_run_days, runbook_approval_hours, cron_expr, updated_at
 		FROM retention_settings WHERE id = 'default'
 	`).Scan(
 		&rs.SnapshotDays, &rs.DocVersionDays, &rs.AlertDays, &rs.SyncRunDays,
 		&rs.AuditDays, &rs.HealthCheckDays, &rs.ReportDays, &rs.DeletedDocsDays,
-		&rs.RunbookOpenRunHours, &rs.RunbookRunDays, &rs.CronExpr, &rs.UpdatedAt,
+		&rs.RunbookOpenRunHours, &rs.RunbookRunDays, &rs.RunbookApprovalHours, &rs.CronExpr, &rs.UpdatedAt,
 	)
 	if err != nil {
 		return rs, fmt.Errorf("get retention settings: %w", err)
@@ -55,10 +57,13 @@ func (s *Store) UpsertRetentionSettings(ctx context.Context, rs RetentionSetting
 	if rs.UpdatedAt == "" {
 		rs.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
 	}
+	if rs.RunbookApprovalHours <= 0 {
+		rs.RunbookApprovalHours = DefaultRunbookApprovalHours
+	}
 	_, err := s.db.ExecContext(ctx, `
 		INSERT INTO retention_settings (id, snapshot_days, doc_version_days, alert_days, sync_run_days, audit_days, health_check_days,
-			report_days, deleted_docs_days, runbook_open_run_hours, runbook_run_days, cron_expr, updated_at)
-		VALUES ('default', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			report_days, deleted_docs_days, runbook_open_run_hours, runbook_run_days, runbook_approval_hours, cron_expr, updated_at)
+		VALUES ('default', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			snapshot_days = excluded.snapshot_days,
 			doc_version_days = excluded.doc_version_days,
@@ -70,11 +75,12 @@ func (s *Store) UpsertRetentionSettings(ctx context.Context, rs RetentionSetting
 			deleted_docs_days = excluded.deleted_docs_days,
 			runbook_open_run_hours = excluded.runbook_open_run_hours,
 			runbook_run_days = excluded.runbook_run_days,
+			runbook_approval_hours = excluded.runbook_approval_hours,
 			cron_expr = excluded.cron_expr,
 			updated_at = excluded.updated_at
 	`, rs.SnapshotDays, rs.DocVersionDays, rs.AlertDays, rs.SyncRunDays,
 		rs.AuditDays, rs.HealthCheckDays, rs.ReportDays, rs.DeletedDocsDays,
-		rs.RunbookOpenRunHours, rs.RunbookRunDays, rs.CronExpr, rs.UpdatedAt)
+		rs.RunbookOpenRunHours, rs.RunbookRunDays, rs.RunbookApprovalHours, rs.CronExpr, rs.UpdatedAt)
 	if err != nil {
 		return fmt.Errorf("upsert retention settings: %w", err)
 	}
