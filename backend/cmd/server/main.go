@@ -154,10 +154,7 @@ func main() {
 	readyState := &syshandler.ReadyState{}
 	elector := newElector(cfg, s)
 	discoveryManager := discoveryhandler.NewManager(s, wsHub, nil)
-	docImportManager := pull.NewManager(pull.Config{Stage: docimport.NewStage(cfg.Attachments.ImportDir), Audit: s,
-		Analyze: func(ctx context.Context, dir string) (*docimport.Plan, error) {
-			return pull.Analyze(ctx, dir, cfg.Attachments.MaxBytes)
-		}})
+	docImportManager := newDocImportManager(cfg, s)
 	routerCfg := api.Config{
 		Store:                  s,
 		JWT:                    jwtSvc,
@@ -574,4 +571,11 @@ func newElector(cfg *config.Config, s *store.Store) leader.Election {
 		return leader.New(s.RawDB(), cfg.HA.LockPollInterval)
 	}
 	return leader.Noop{}
+}
+
+func newDocImportManager(cfg *config.Config, s *store.Store) *pull.Manager {
+	return pull.NewManager(pull.Config{Stage: docimport.NewStage(cfg.Attachments.ImportDir), Audit: s,
+		Analyze: func(ctx context.Context, dir string) (*docimport.Plan, error) {
+			return pull.Analyze(ctx, dir, cfg.Attachments.MaxBytes)
+		}})
 }
