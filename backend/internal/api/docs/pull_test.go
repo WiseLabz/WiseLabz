@@ -45,19 +45,11 @@ func TestPullUsesExistingPreviewCommitAndSafeAudit(t *testing.T) {
 	if rec.Code != 202 {
 		t.Fatalf("start %d %s", rec.Code, rec.Body)
 	}
-	var response PullResponse
-	deadline := time.Now().Add(3 * time.Second)
-	for time.Now().Before(deadline) {
-		rec = httptest.NewRecorder()
+	rec, response := waitForPullState(t, func() *httptest.ResponseRecorder {
+		rec := httptest.NewRecorder()
 		h.GetPull(rec, asUser(httptest.NewRequest("GET", "/api/docs/import/pull", nil), user, true))
-		if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
-			t.Fatal(err)
-		}
-		if response.State != "fetching" {
-			break
-		}
-		time.Sleep(time.Millisecond)
-	}
+		return rec
+	})
 	if response.State != "ready" || response.Preview == nil || response.Preview.DocCount != 2 || response.Preview.AttachmentCount != 1 {
 		t.Fatalf("ready %d %s", rec.Code, rec.Body)
 	}
@@ -140,16 +132,9 @@ func TestPullErrorsDoNotEchoCredentials(t *testing.T) {
 	body := `{"source":"bookstack","url":"` + server.URL + `","tokenId":"unique-token-id","tokenSecret":"unique-token-secret"}`
 	rec := httptest.NewRecorder()
 	h.StartPull(rec, asUser(httptest.NewRequest("POST", "/api/docs/import/pull", strings.NewReader(body)), user, true))
-	deadline := time.Now().Add(3 * time.Second)
-	for time.Now().Before(deadline) {
-		job, _ := h.pullManager().Current()
-		if job.State == "failed" {
-			break
-		}
-		time.Sleep(time.Millisecond)
-	}
-	rec = httptest.NewRecorder()
-	h.GetPull(rec, asUser(httptest.NewRequest("GET", "/api/docs/import/pull", nil), user, true))
+	rec, _ = waitForPullState(t, func() *httptest.ResponseRecorder {
+		return pullRequest(h, "GET", user, "")
+	})
 	if strings.Contains(rec.Body.String(), "unique-token") || !strings.Contains(rec.Body.String(), `"state":"failed"`) {
 		t.Fatalf("status %s", rec.Body)
 	}
@@ -192,6 +177,29 @@ func pullRequest(h *Handler, method, user, body string) *httptest.ResponseRecord
 		h.CancelPull(rec, r)
 	}
 	return rec
+}
+
+func waitForPullState(t *testing.T, poll func() *httptest.ResponseRecorder) (*httptest.ResponseRecorder, PullResponse) {
+	t.Helper()
+	// Large archive fixtures can take several seconds to analyze under -race.
+	deadline := time.Now().Add(30 * time.Second)
+	var rec *httptest.ResponseRecorder
+	var response PullResponse
+	for time.Now().Before(deadline) {
+		rec = poll()
+		if rec.Code != http.StatusOK {
+			t.Fatalf("poll pull status = %d: %s", rec.Code, rec.Body)
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+			t.Fatal(err)
+		}
+		if response.State != "fetching" {
+			return rec, response
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("timed out waiting for pull to finish: %s", rec.Body)
+	return rec, response
 }
 
 func TestPullWithoutJobAndInvalidSource(t *testing.T) {
@@ -240,18 +248,9 @@ func TestPullSecondStartAndCancel(t *testing.T) {
 	if rec = pullRequest(h, "DELETE", user, ""); rec.Code != 202 {
 		t.Fatalf("cancel = %d %s", rec.Code, rec.Body)
 	}
-	var response PullResponse
-	deadline := time.Now().Add(3 * time.Second)
-	for time.Now().Before(deadline) {
-		rec = pullRequest(h, "GET", user, "")
-		if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
-			t.Fatal(err)
-		}
-		if response.State != "fetching" {
-			break
-		}
-		time.Sleep(time.Millisecond)
-	}
+	rec, response := waitForPullState(t, func() *httptest.ResponseRecorder {
+		return pullRequest(h, "GET", user, "")
+	})
 	if response.State != "cancelled" {
 		t.Fatalf("state = %s %s", response.State, rec.Body)
 	}
@@ -289,18 +288,9 @@ func TestWikiJSPullUsesWikiJSPlanAndCommit(t *testing.T) {
 	if rec.Code != 202 {
 		t.Fatalf("start %d %s", rec.Code, rec.Body)
 	}
-	var response PullResponse
-	deadline := time.Now().Add(3 * time.Second)
-	for time.Now().Before(deadline) {
-		rec = pullRequest(h, "GET", user, "")
-		if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
-			t.Fatal(err)
-		}
-		if response.State != "fetching" {
-			break
-		}
-		time.Sleep(time.Millisecond)
-	}
+	rec, response := waitForPullState(t, func() *httptest.ResponseRecorder {
+		return pullRequest(h, "GET", user, "")
+	})
 	// The "guides" folder doc plus the page: proof the Wiki.js parser ran.
 	if response.State != "ready" || response.Preview == nil || response.Preview.DocCount != 2 {
 		t.Fatalf("ready %d %s", rec.Code, rec.Body)
