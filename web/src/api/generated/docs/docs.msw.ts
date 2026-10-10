@@ -13,6 +13,7 @@ import type {
   AiSuggestRef,
   Doc,
   DocAttachment,
+  DocBacklink,
   DocEditProposal,
   DocEditProposalPage,
   DocImportCreated,
@@ -32,6 +33,7 @@ import type {
 import {
   getGetAttachmentsAidRawResponseMock,
   getGetDocsDocIdAttachmentsResponseMock,
+  getGetDocsDocIdBacklinksResponseMock,
   getGetDocsDocIdLockResponseMock,
   getGetDocsDocIdResponseMock,
   getGetDocsDocIdVersionsResponseMock,
@@ -77,6 +79,7 @@ export {
   getGetDocsDocIdResponseMock,
   getPutDocsDocIdResponseMock,
   getPatchDocsDocIdResponseMock,
+  getGetDocsDocIdBacklinksResponseMock,
   getGetDocsDocIdAttachmentsResponseMock,
   getPostDocsDocIdAttachmentsResponseMock,
   getGetAttachmentsAidRawResponseMock,
@@ -374,6 +377,30 @@ export const getDeleteDocsDocIdMockHandler = (
       }
 
       return new HttpResponse(null, { status: 204 });
+    },
+    options
+  );
+};
+
+export const getGetDocsDocIdBacklinksMockHandler = (
+  overrideResponse?:
+    | DocBacklink[]
+    | ((
+        info: Parameters<Parameters<typeof http.get>[1]>[0]
+      ) => Promise<DocBacklink[]> | DocBacklink[]),
+  options?: RequestHandlerOptions
+) => {
+  return http.get(
+    '*/docs/:docId/backlinks',
+    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+      return HttpResponse.json(
+        overrideResponse !== undefined
+          ? typeof overrideResponse === 'function'
+            ? await overrideResponse(info)
+            : overrideResponse
+          : getGetDocsDocIdBacklinksResponseMock(),
+        { status: 200 }
+      );
     },
     options
   );
@@ -912,6 +939,7 @@ export const getDocsMock = () => [
   getPutDocsDocIdMockHandler(),
   getPatchDocsDocIdMockHandler(),
   getDeleteDocsDocIdMockHandler(),
+  getGetDocsDocIdBacklinksMockHandler(),
   getGetDocsDocIdAttachmentsMockHandler(),
   getPostDocsDocIdAttachmentsMockHandler(),
   getDeleteDocsDocIdAttachmentsAidMockHandler(),

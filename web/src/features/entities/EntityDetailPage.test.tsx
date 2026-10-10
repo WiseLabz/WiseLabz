@@ -70,6 +70,9 @@ vi.mock('../../api/generated/connectors/connectors', async (importOriginal) => (
 vi.mock('../../lib/toast', () => ({
   toast: toastMock,
 }));
+vi.mock('../../components/docs/ReferencedByPanel', () => ({
+  ReferencedByPanel: () => <div data-testid="referenced-by" />,
+}));
 
 function mount(queryClient = new QueryClient()) {
   return render(

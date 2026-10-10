@@ -10,6 +10,7 @@ import (
 
 func rollbackRunbookApproval(t *testing.T, db *sql.DB, driver string, logger *slog.Logger) {
 	t.Helper()
+	rollbackDocLinks(t, db, driver, logger)
 	if !hasColumn(t, db, driver, "runbook_runs", "requires_approval") {
 		return
 	}
@@ -113,6 +114,7 @@ func TestRunbookRunApprovalMigrationUpDownPreservesFrozenSteps(t *testing.T) {
 				t.Fatalf("insert %s frozen step: %v", row.state, err)
 			}
 		}
+		rollbackDocLinks(t, db, s.driver, logger)
 		if err := RunMigrationsDown(db, s.driver, logger); err != nil {
 			t.Fatalf("rollback 000068 with approval states: %v", err)
 		}

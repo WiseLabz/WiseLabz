@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/WiseLabz/wiselabz/internal/doclink"
 	"github.com/google/uuid"
 )
 
@@ -144,52 +145,7 @@ type rewriter struct {
 
 // rewrite applies fn to every part of content outside code fences and spans.
 func (r *rewriter) rewrite(content string, fn func(string) string) string {
-	var b strings.Builder
-	fence := ""
-	for _, line := range strings.SplitAfter(content, "\n") {
-		trimmed := strings.TrimSpace(line)
-		if f := fenceMarker(trimmed); f != "" {
-			if fence == "" {
-				fence = f
-			} else if strings.HasPrefix(trimmed, fence) {
-				fence = ""
-			}
-			b.WriteString(line)
-			continue
-		}
-		if fence != "" {
-			b.WriteString(line)
-			continue
-		}
-		b.WriteString(outsideCode(line, fn))
-	}
-	return b.String()
-}
-
-// outsideCode applies fn to the parts of line that are not inline code spans.
-func outsideCode(line string, fn func(string) string) string {
-	var b strings.Builder
-	for {
-		i := strings.IndexByte(line, '`')
-		if i < 0 {
-			b.WriteString(fn(line))
-			return b.String()
-		}
-		b.WriteString(fn(line[:i]))
-		n := i
-		for n < len(line) && line[n] == '`' {
-			n++
-		}
-		ticks := line[i:n]
-		j := strings.Index(line[n:], ticks)
-		if j < 0 {
-			b.WriteString(ticks)
-			line = line[n:]
-			continue
-		}
-		b.WriteString(line[i : n+j+len(ticks)])
-		line = line[n+j+len(ticks):]
-	}
+	return doclink.RewriteOutsideCode(content, fn)
 }
 
 func (r *rewriter) rewriteText(s string) string {

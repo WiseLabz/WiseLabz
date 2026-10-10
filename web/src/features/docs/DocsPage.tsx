@@ -22,6 +22,7 @@ import { RoleGate } from '../../components/ui/RoleGate';
 import { Skeleton, SkeletonRows, ErrorState, EmptyState } from '../../components/ui/states';
 import { attachmentQueryOptions } from '../../components/docs/attachmentUpload';
 import { Markdown } from '../../components/docs/Markdown';
+import { ReferencedByPanel } from '../../components/docs/ReferencedByPanel';
 import { DocTree } from '../../components/docs/DocTree';
 import { DocHistory } from './DocHistory';
 import { ShareDialog } from './ShareDialog';
@@ -346,6 +347,9 @@ function DocReader({ docId }: { docId: string }) {
                 </div>
               )}
               <Markdown source={data.content} attachments={data.attachments} />
+              {data.currentVersion > 0 && data.docId !== 'root' && data.docId !== 'lab' && (
+                <ReferencedByPanel type="docs" id={data.docId} />
+              )}
               <p className="mt-8 border-t border-line-soft pt-3 text-2xs text-ink-faint">
                 {data.origin === 'human'
                   ? t('docs.human.updatedFooter', {

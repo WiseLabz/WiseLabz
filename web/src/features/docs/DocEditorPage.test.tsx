@@ -141,6 +141,84 @@ describe('DocEditorPage', () => {
     }
   });
 
+  it('replaces the editor buffer with server-resolved content and displays link warnings', async () => {
+    const canonical = {
+      ...docs['doc-pve1'],
+      content: '[pve1](/entities/entity-1)',
+      currentVersion: docs['doc-pve1'].currentVersion + 1,
+    };
+    server.use(
+      http.put('*/docs/:docId', () =>
+        HttpResponse.json({ ...canonical, linkWarnings: ['No match for [[missing]]'] })
+      )
+    );
+    const { client, editor } = await renderEditor();
+    await startEditing();
+    fireEvent.change(editor, { target: { value: '[[missing]]' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(editor).toHaveValue(canonical.content));
+    expect(await screen.findByText('No match for [[missing]]')).toBeInTheDocument();
+
+    act(() =>
+      client.setQueryData(getGetDocsDocIdQueryKey('doc-pve1'), {
+        ...canonical,
+        content: '# Remote after save',
+        currentVersion: canonical.currentVersion + 1,
+      })
+    );
+    expect(await screen.findByRole('button', { name: 'Load latest' })).toBeInTheDocument();
+  });
+
+  it('keeps edits typed while a save is in flight and leaves them unsaved', async () => {
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    server.use(
+      http.put('*/docs/:docId', async ({ request }) => {
+        const body = (await request.json()) as { content: string };
+        await gate;
+        return HttpResponse.json({
+          ...docs['doc-pve1'],
+          content: `${body.content}\n`,
+          currentVersion: docs['doc-pve1'].currentVersion + 1,
+        });
+      })
+    );
+    const { editor } = await renderEditor();
+    await startEditing();
+    fireEvent.change(editor, { target: { value: '# Sent' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await screen.findByRole('button', { name: 'Saving…' });
+    fireEvent.change(editor, { target: { value: '# Sent plus more' } });
+    release();
+
+    await waitFor(() => expect(toast.success).toHaveBeenCalled());
+    expect(editor).toHaveValue('# Sent plus more');
+    expect(screen.getByText('Unsaved')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled();
+  });
+
+  it('renders preview links as plain anchors so the unload guard still applies', async () => {
+    const { editor } = await renderEditor();
+    await startEditing();
+    fireEvent.change(editor, { target: { value: '[Other](/docs/doc-1)' } });
+    const link = await screen.findByRole('link', { name: 'Other' });
+    let prevented: boolean | null = null;
+    const swallow = (event: MouseEvent) => {
+      prevented = event.defaultPrevented; // a router Link prevents the default itself
+      event.preventDefault(); // jsdom cannot navigate
+    };
+    document.addEventListener('click', swallow);
+    try {
+      fireEvent.click(link);
+    } finally {
+      document.removeEventListener('click', swallow);
+    }
+    expect(prevented).toBe(false);
+  });
+
   it('keeps server updates clean and loads a new editing baseline only on request', async () => {
     const { client, editor } = await renderEditor();
     const original = { ...docs['doc-pve1'] };

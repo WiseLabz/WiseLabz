@@ -12,6 +12,7 @@ import type {
   AiSuggestRef,
   Doc,
   DocAttachment,
+  DocBacklink,
   DocEditProposal,
   DocEditProposalPage,
   DocImportCreated,
@@ -83,6 +84,12 @@ export const getGetDocsResponseMock = (
       })),
       undefined,
     ]),
+    linkWarnings: faker.helpers.arrayElement([
+      Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() =>
+        faker.string.alpha({ length: { min: 10, max: 20 } })
+      ),
+      undefined,
+    ]),
     lastSyncedAt: faker.helpers.arrayElement([
       faker.string.alpha({ length: { min: 10, max: 20 } }),
       undefined,
@@ -148,6 +155,12 @@ export const getPostDocsResponseMock = (
     })),
     undefined,
   ]),
+  linkWarnings: faker.helpers.arrayElement([
+    Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() =>
+      faker.string.alpha({ length: { min: 10, max: 20 } })
+    ),
+    undefined,
+  ]),
   lastSyncedAt: faker.helpers.arrayElement([
     faker.string.alpha({ length: { min: 10, max: 20 } }),
     undefined,
@@ -206,6 +219,12 @@ export const getGetDocsTrashResponseMock = (): Doc[] =>
           undefined,
         ]),
       })),
+      undefined,
+    ]),
+    linkWarnings: faker.helpers.arrayElement([
+      Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() =>
+        faker.string.alpha({ length: { min: 10, max: 20 } })
+      ),
       undefined,
     ]),
     lastSyncedAt: faker.helpers.arrayElement([
@@ -324,6 +343,12 @@ export const getPostDocsDocIdRestoreResponseMock = (
     })),
     undefined,
   ]),
+  linkWarnings: faker.helpers.arrayElement([
+    Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() =>
+      faker.string.alpha({ length: { min: 10, max: 20 } })
+    ),
+    undefined,
+  ]),
   lastSyncedAt: faker.helpers.arrayElement([
     faker.string.alpha({ length: { min: 10, max: 20 } }),
     undefined,
@@ -429,6 +454,12 @@ export const getGetDocsServiceConnectorIdResponseMock = (
     })),
     undefined,
   ]),
+  linkWarnings: faker.helpers.arrayElement([
+    Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() =>
+      faker.string.alpha({ length: { min: 10, max: 20 } })
+    ),
+    undefined,
+  ]),
   lastSyncedAt: faker.helpers.arrayElement([
     faker.string.alpha({ length: { min: 10, max: 20 } }),
     undefined,
@@ -488,6 +519,12 @@ export const getGetDocsDocIdResponseMock = (
         undefined,
       ]),
     })),
+    undefined,
+  ]),
+  linkWarnings: faker.helpers.arrayElement([
+    Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() =>
+      faker.string.alpha({ length: { min: 10, max: 20 } })
+    ),
     undefined,
   ]),
   lastSyncedAt: faker.helpers.arrayElement([
@@ -551,6 +588,12 @@ export const getPutDocsDocIdResponseMock = (
     })),
     undefined,
   ]),
+  linkWarnings: faker.helpers.arrayElement([
+    Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() =>
+      faker.string.alpha({ length: { min: 10, max: 20 } })
+    ),
+    undefined,
+  ]),
   lastSyncedAt: faker.helpers.arrayElement([
     faker.string.alpha({ length: { min: 10, max: 20 } }),
     undefined,
@@ -612,12 +655,24 @@ export const getPatchDocsDocIdResponseMock = (
     })),
     undefined,
   ]),
+  linkWarnings: faker.helpers.arrayElement([
+    Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() =>
+      faker.string.alpha({ length: { min: 10, max: 20 } })
+    ),
+    undefined,
+  ]),
   lastSyncedAt: faker.helpers.arrayElement([
     faker.string.alpha({ length: { min: 10, max: 20 } }),
     undefined,
   ]),
   ...overrideResponse,
 });
+
+export const getGetDocsDocIdBacklinksResponseMock = (): DocBacklink[] =>
+  Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() => ({
+    id: faker.string.uuid(),
+    title: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  }));
 
 export const getGetDocsDocIdAttachmentsResponseMock = (): DocAttachment[] =>
   Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() => ({
@@ -731,6 +786,12 @@ export const getPostDocsDocIdVersionsRevRestoreResponseMock = (
         undefined,
       ]),
     })),
+    undefined,
+  ]),
+  linkWarnings: faker.helpers.arrayElement([
+    Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() =>
+      faker.string.alpha({ length: { min: 10, max: 20 } })
+    ),
     undefined,
   ]),
   lastSyncedAt: faker.helpers.arrayElement([
@@ -1021,6 +1082,12 @@ export const getGetShareTokenDocsDocIdResponseMock = (
         undefined,
       ]),
     })),
+    undefined,
+  ]),
+  linkWarnings: faker.helpers.arrayElement([
+    Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() =>
+      faker.string.alpha({ length: { min: 10, max: 20 } })
+    ),
     undefined,
   ]),
   lastSyncedAt: faker.helpers.arrayElement([

@@ -10,6 +10,7 @@
 import { memo, isValidElement, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import ReactMarkdown, { defaultUrlTransform, type Components } from 'react-markdown';
+import { Link as RouterLink } from 'react-router-dom';
 import remarkGfm from 'remark-gfm';
 import { remarkStripGenMarkers } from '../../lib/genMarkers';
 import { Mermaid } from './Mermaid';
@@ -128,9 +129,11 @@ function AttachmentPDF({
 export const Markdown = memo(function Markdown({
   source,
   attachments = [],
+  internalLinks = true,
 }: {
   source: string;
   attachments?: DocAttachment[];
+  internalLinks?: boolean;
 }) {
   const { t } = useTranslation();
   const [image, setImage] = useState<{ url: string; alt: string } | null>(null);
@@ -178,6 +181,13 @@ export const Markdown = memo(function Markdown({
             const attachment = byURL.get(href);
             if (attachment?.contentType === 'application/pdf')
               return <AttachmentPDF attachment={attachment}>{children}</AttachmentPDF>;
+            if (internalLinks && href && /^\/(?:docs|entities)\/[^/?#]+(?:[?#].*)?$/.test(href)) {
+              return (
+                <RouterLink to={href} className="text-accent-primary underline">
+                  {children}
+                </RouterLink>
+              );
+            }
             return (
               <a href={href} className="text-accent-primary underline">
                 {children}

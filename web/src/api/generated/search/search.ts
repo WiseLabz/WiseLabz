@@ -24,6 +24,7 @@ import type {
 
 import type {
   BadRequestResponse,
+  DocBacklink,
   EntityDetail,
   EntityOverride,
   EntityOverrideCreate,
@@ -285,6 +286,140 @@ export function useGetEntitiesId<
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
   const queryOptions = getGetEntitiesIdQueryOptions(id, options);
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+/**
+ * Returns only active source docs the reader may view. Entity targets include links to identities merged into the current identity. Not available on share routes.
+ * @summary List visible docs referencing this entity
+ */
+export const getEntitiesIdBacklinks = (
+  id: string,
+  options?: SecondParameter<typeof customInstance>,
+  signal?: AbortSignal
+) => {
+  return customInstance<DocBacklink[]>(
+    { url: `/entities/${id}/backlinks`, method: 'GET', signal },
+    options
+  );
+};
+
+export const getGetEntitiesIdBacklinksQueryKey = (id: string) => {
+  return [`/entities/${id}/backlinks`] as const;
+};
+
+export const getGetEntitiesIdBacklinksQueryOptions = <
+  TData = Awaited<ReturnType<typeof getEntitiesIdBacklinks>>,
+  TError = ErrorType<Error>,
+>(
+  id: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getEntitiesIdBacklinks>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  }
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetEntitiesIdBacklinksQueryKey(id);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getEntitiesIdBacklinks>>> = ({ signal }) =>
+    getEntitiesIdBacklinks(id, requestOptions, signal);
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: id !== null && id !== undefined,
+    ...queryOptions,
+  } as UseQueryOptions<Awaited<ReturnType<typeof getEntitiesIdBacklinks>>, TError, TData> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+};
+
+export type GetEntitiesIdBacklinksQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getEntitiesIdBacklinks>>
+>;
+export type GetEntitiesIdBacklinksQueryError = ErrorType<Error>;
+
+export function useGetEntitiesIdBacklinks<
+  TData = Awaited<ReturnType<typeof getEntitiesIdBacklinks>>,
+  TError = ErrorType<Error>,
+>(
+  id: string,
+  options: {
+    query: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getEntitiesIdBacklinks>>, TError, TData>
+    > &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getEntitiesIdBacklinks>>,
+          TError,
+          Awaited<ReturnType<typeof getEntitiesIdBacklinks>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useGetEntitiesIdBacklinks<
+  TData = Awaited<ReturnType<typeof getEntitiesIdBacklinks>>,
+  TError = ErrorType<Error>,
+>(
+  id: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getEntitiesIdBacklinks>>, TError, TData>
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getEntitiesIdBacklinks>>,
+          TError,
+          Awaited<ReturnType<typeof getEntitiesIdBacklinks>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useGetEntitiesIdBacklinks<
+  TData = Awaited<ReturnType<typeof getEntitiesIdBacklinks>>,
+  TError = ErrorType<Error>,
+>(
+  id: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getEntitiesIdBacklinks>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * @summary List visible docs referencing this entity
+ */
+
+export function useGetEntitiesIdBacklinks<
+  TData = Awaited<ReturnType<typeof getEntitiesIdBacklinks>>,
+  TError = ErrorType<Error>,
+>(
+  id: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getEntitiesIdBacklinks>>, TError, TData>
+    >;
+    request?: SecondParameter<typeof customInstance>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getGetEntitiesIdBacklinksQueryOptions(id, options);
 
   const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
     queryKey: DataTag<QueryKey, TData, TError>;

@@ -46,6 +46,10 @@ type DocRecord struct {
 
 // CreateDoc inserts a new documentation record.
 func (s *Store) CreateDoc(ctx context.Context, d *DocRecord) error {
+	return s.docTransaction(ctx, func(tx *Store) error { return tx.createDoc(ctx, d) })
+}
+
+func (s *Store) createDoc(ctx context.Context, d *DocRecord) error {
 	if d.ID == "" {
 		d.ID = uuid.New().String()
 	}
@@ -75,7 +79,7 @@ func (s *Store) CreateDoc(ctx context.Context, d *DocRecord) error {
 	if err != nil {
 		return fmt.Errorf("create doc: %w", err)
 	}
-	return nil
+	return s.syncDocLinks(ctx, d.ID, d.Content)
 }
 
 // ExistingDocIDs returns the subset of ids that already exist as docs, in
@@ -108,6 +112,16 @@ func (s *Store) UpdateDoc(ctx context.Context, id, content string, expectedVersi
 // updateDocRev performs the UPDATE and returns the revision it produced, read
 // atomically via RETURNING so concurrent writers cannot change it in between.
 func (s *Store) updateDocRev(ctx context.Context, id, content string, expectedVersion *int) (int, error) {
+	var rev int
+	err := s.docTransaction(ctx, func(tx *Store) error {
+		var err error
+		rev, err = tx.updateDocContent(ctx, id, content, expectedVersion)
+		return err
+	})
+	return rev, err
+}
+
+func (s *Store) updateDocContent(ctx context.Context, id, content string, expectedVersion *int) (int, error) {
 	now := time.Now().UTC().Format(time.RFC3339)
 	query := `UPDATE docs SET content = ?, updated_at = ?, current_version = current_version + 1 WHERE id = ? AND deleted_at IS NULL`
 	args := []any{content, now, id}
@@ -129,6 +143,9 @@ func (s *Store) updateDocRev(ctx context.Context, id, content string, expectedVe
 	}
 	if err != nil {
 		return 0, fmt.Errorf("update doc: %w", err)
+	}
+	if err := s.syncDocLinks(ctx, id, content); err != nil {
+		return 0, err
 	}
 	return rev, nil
 }

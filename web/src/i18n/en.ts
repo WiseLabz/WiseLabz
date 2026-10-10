@@ -1292,6 +1292,11 @@ export const en = {
     delete: 'Delete "{{name}}"',
   },
   docs: {
+    referencedBy: {
+      title: 'Referenced by',
+      empty: 'No docs reference this item.',
+      loadError: 'Could not load references.',
+    },
     export: {
       action: 'Export Lab Book',
       pending: 'Exporting…',
@@ -1383,6 +1388,7 @@ export const en = {
       startEditing: 'Start editing',
       acquiringLock: 'Acquiring lock…',
       aiTimeout: 'AI suggestion timed out. Try again.',
+      linkWarnings: 'Some wikilinks could not be resolved. Their saved text is unchanged:',
     },
     restore: {
       action: 'Restore v{{version}}',

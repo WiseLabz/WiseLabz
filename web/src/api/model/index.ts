@@ -160,6 +160,7 @@ export * from './discoverySuggestions';
 export * from './discoverySuggestionSource';
 export * from './doc';
 export * from './docAttachment';
+export * from './docBacklink';
 export * from './docCreate';
 export * from './docEditProposal';
 export * from './docEditProposalPage';

@@ -45,6 +45,7 @@ func mountDocRoutes(r chi.Router, d routerDeps) {
 		r.Post("/edit-proposals/{id}/approve", d.docH.ApproveProposal)
 		r.Post("/edit-proposals/{id}/reject", d.docH.RejectProposal)
 		r.Get("/{id}", d.docH.Get)
+		r.Get("/{id}/backlinks", d.docH.Backlinks)
 		r.Get("/{id}/attachments", d.docH.ListAttachments)
 		r.Post("/{id}/attachments", d.docH.UploadAttachment)
 		r.Delete("/{id}/attachments/{aid}", d.docH.DeleteAttachment)

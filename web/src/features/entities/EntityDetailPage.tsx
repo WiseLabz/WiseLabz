@@ -9,6 +9,7 @@ import { useGetEntitiesId, usePostEntityOverrides } from '../../api/generated/se
 import { useGetConnectors } from '../../api/generated/connectors/connectors';
 import type { EntityEndpoint, EntityFinding, EntityMember, EntityOverride } from '../../api/model';
 import { Markdown } from '../../components/docs/Markdown';
+import { ReferencedByPanel } from '../../components/docs/ReferencedByPanel';
 import { Panel, PanelHeader } from '../../components/ui/Panel';
 import { Button } from '../../components/ui/Button';
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
@@ -460,6 +461,8 @@ export function EntityDetailPage() {
           )
         )}
       </div>
+
+      <ReferencedByPanel type="entities" id={id} />
 
       <ConfirmDialog
         open={isDetachOpen}

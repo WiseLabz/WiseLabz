@@ -197,11 +197,16 @@ func (h *Handler) Save(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	content, warnings, err := h.resolveLinks(r, req.Content)
+	if err != nil {
+		httputil.Errorf(w, err)
+		return
+	}
 	trigger := req.Trigger
 	if trigger == "" {
 		trigger = "manual"
 	}
-	if _, err := h.Store.UpdateDocWithVersion(r.Context(), id, req.Content, req.BaseVersion, auth.UserIDFromContext(r.Context()), trigger); err != nil {
+	if _, err := h.Store.UpdateDocWithVersion(r.Context(), id, content, req.BaseVersion, auth.UserIDFromContext(r.Context()), trigger); err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			httputil.Error(w, http.StatusNotFound, "not_found", "Doc not found")
 			return
@@ -219,9 +224,13 @@ func (h *Handler) Save(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	d, _ := h.Store.GetDoc(r.Context(), id)
+	d, err := h.Store.GetDoc(r.Context(), id)
+	if err != nil {
+		httputil.Errorf(w, err)
+		return
+	}
 	if d != nil {
 		h.SyncEmbeddings(r.Context(), d.ID, d.Content)
 	}
-	h.writeDoc(w, r, d)
+	h.writeDocWithWarnings(w, r, d, warnings)
 }

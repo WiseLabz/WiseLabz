@@ -247,6 +247,10 @@ func (b *Book) writeHTML(w io.Writer) error {
 						current.Parent().ReplaceChild(current.Parent(), current, ast.NewString([]byte(label)))
 						return ast.WalkSkipChildren, nil
 					}
+					if strings.HasPrefix(dest, "/entities/") {
+						v.Destination = nil
+						return ast.WalkContinue, nil
+					}
 					if strings.HasPrefix(dest, "/docs/") {
 						id, _, _ := strings.Cut(strings.TrimPrefix(dest, "/docs/"), "#")
 						if ids[id] {

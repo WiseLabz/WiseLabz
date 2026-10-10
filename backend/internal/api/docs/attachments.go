@@ -37,17 +37,25 @@ func (h *Handler) signedAttachments(r *http.Request, id string) ([]store.DocAtta
 	return attachments, nil
 }
 func (h *Handler) writeDoc(w http.ResponseWriter, r *http.Request, d *store.DocRecord) {
+	h.writeDocWithWarnings(w, r, d, nil)
+}
+
+func (h *Handler) writeDocWithWarnings(w http.ResponseWriter, r *http.Request, d *store.DocRecord, warnings []string) {
 	attachments, err := h.signedAttachments(r, d.ID)
 	if err != nil {
 		httputil.Errorf(w, err)
 		return
 	}
+	if warnings == nil {
+		warnings = []string{}
+	}
 	shown := *d
 	shown.Content = doc.StripTopologyMarker(d.Content)
 	httputil.JSON(w, http.StatusOK, struct {
 		*store.DocRecord
-		Attachments []store.DocAttachment `json:"attachments"`
-	}{DocRecord: &shown, Attachments: attachments})
+		Attachments  []store.DocAttachment `json:"attachments"`
+		LinkWarnings []string              `json:"linkWarnings"`
+	}{DocRecord: &shown, Attachments: attachments, LinkWarnings: warnings})
 }
 
 // ListAttachments returns doc-owned signed metadata after viewer authorization.

@@ -138,6 +138,12 @@ func (s *Store) GetLatestChangeByPattern(ctx context.Context, patternID string) 
 // a new version, only while the doc is still at expectedVersion (so a
 // concurrent edit is never overwritten); a lost race returns ErrVersionConflict.
 func (s *Store) SetDocTopologyFingerprint(ctx context.Context, id, fingerprint string, content *string, expectedVersion int) error {
+	return s.docTransaction(ctx, func(tx *Store) error {
+		return tx.setDocTopologyFingerprint(ctx, id, fingerprint, content, expectedVersion)
+	})
+}
+
+func (s *Store) setDocTopologyFingerprint(ctx context.Context, id, fingerprint string, content *string, expectedVersion int) error {
 	query := `UPDATE docs SET topology_fingerprint = ?`
 	args := []any{fingerprint}
 	if content != nil {
@@ -159,6 +165,9 @@ func (s *Store) SetDocTopologyFingerprint(ctx context.Context, id, fingerprint s
 			return ErrVersionConflict
 		}
 		return ErrNotFound
+	}
+	if content != nil {
+		return s.syncDocLinks(ctx, id, *content)
 	}
 	return nil
 }

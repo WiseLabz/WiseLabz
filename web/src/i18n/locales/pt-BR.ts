@@ -281,6 +281,14 @@ export const ptBR: Catalog = {
       done_one: '{{count}} documento importado',
       done_other: '{{count}} documentos importados',
     },
+    referencedBy: {
+      title: 'Referenciado por',
+      empty: 'Nenhum documento referencia este item.',
+      loadError: 'Não foi possível carregar as referências.',
+    },
+    editor: {
+      linkWarnings: 'Alguns wikilinks não puderam ser resolvidos. O texto deles não foi alterado:',
+    },
     topology: {
       title: 'Topologia ao vivo',
       loadError: 'Não foi possível carregar a topologia do laboratório.',
