@@ -148,6 +148,11 @@ function DocEditor() {
   useEffect(() => {
     dirtyRef.current = dirty;
   }, [dirty]);
+  // Lets the save callback see edits typed while the request was in flight.
+  const draftRef = useRef(draft);
+  useEffect(() => {
+    draftRef.current = draft;
+  }, [draft]);
 
   // Warn on tab close with unsaved edits; release lock on unload.
   useEffect(() => {
@@ -171,20 +176,22 @@ function DocEditor() {
   }, [docId]);
 
   const save = useMutation({
-    mutationFn: () =>
+    mutationFn: (content: string) =>
       putDocsDocId(docId, {
-        content: draft ?? '',
+        content,
         baseVersion: baseVersion ?? undefined,
         trigger: provenance === 'ai-draft' ? 'ai' : 'manual',
       }),
-    onSuccess: (response) => {
+    onSuccess: (response, sent) => {
       const updated = response;
       const warnings = updated.linkWarnings ?? [];
-      setDraft(updated.content);
+      // Keep edits typed during the request; they stay dirty against the new base.
+      const editedMeanwhile = draftRef.current !== sent;
+      if (!editedMeanwhile) setDraft(updated.content);
       setBaseContent(updated.content);
       setLinkWarnings(warnings);
       setBaseVersion(updated.currentVersion);
-      if (warnings.length === 0 && lockAcquiredRef.current) {
+      if (warnings.length === 0 && !editedMeanwhile && lockAcquiredRef.current) {
         postDocsDocIdLockRelease(docId).catch(() => {});
         lockAcquiredRef.current = false;
       }
@@ -195,7 +202,7 @@ function DocEditor() {
         predicate: (query) => String(query.queryKey[0]).endsWith('/backlinks'),
       });
       toast.success(t('docs.editor.saved', { version: updated.currentVersion }));
-      if (warnings.length === 0) navigate(`/docs/${docId}`);
+      if (warnings.length === 0 && !editedMeanwhile) navigate(`/docs/${docId}`);
     },
     onError: (error) => {
       // Stale baseVersion: server rejected with 409, current doc is untouched.
@@ -395,7 +402,7 @@ function DocEditor() {
           <Button
             variant="primary"
             size="sm"
-            onClick={() => save.mutate()}
+            onClick={() => save.mutate(draft ?? '')}
             disabled={!dirty || save.isPending || !canEdit}
           >
             <CheckIcon size={14} />
@@ -546,6 +553,7 @@ function DocEditor() {
             <Markdown
               source={deferredDraft}
               attachments={attachments.data ?? doc.data.attachments}
+              internalLinks={false}
             />
           </div>
         </Panel>

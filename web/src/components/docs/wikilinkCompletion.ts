@@ -6,7 +6,8 @@ import {
 import { syntaxTree } from '@codemirror/language';
 import { getSearch } from '../../api/generated/search/search';
 
-const escapeLabel = (label: string) => label.replace(/[\\[\]]/g, '\\$&');
+// Escapes brackets and the punctuation that would change how the label renders.
+const escapeLabel = (label: string) => label.replace(/[\\[\]`*_<|]/g, '\\$&');
 
 function isInCode(context: CompletionContext) {
   type SyntaxNodeLike = { name: string; parent: SyntaxNodeLike | null };
@@ -66,7 +67,9 @@ export async function wikilinkCompletion(
           });
         },
       })),
-      validFor: /^[^\]\n]*$/,
+      // `from` includes the leading `[[`, which the default fuzzy filter would
+      // match against the labels and drop everything; re-query per keystroke.
+      filter: false,
     };
   } catch {
     return null;
