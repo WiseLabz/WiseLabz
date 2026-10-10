@@ -73,6 +73,12 @@ func (c *fakeClock) set(t time.Time) {
 func (c *fakeClock) newTimer(d time.Duration) (<-chan time.Time, func()) {
 	ft := &fakeTimer{d: d, c: make(chan time.Time, 1)}
 	select {
+	case <-c.done:
+		close(ft.c)
+		return ft.c, func() {}
+	default:
+	}
+	select {
 	case c.timers <- ft:
 		return ft.c, func() {}
 	case <-c.done:
