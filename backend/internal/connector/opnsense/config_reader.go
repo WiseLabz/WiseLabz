@@ -10,7 +10,7 @@ import (
 // ConfigRead returns a firewall rule's current saved enabled state from getRule.
 // For a rule with an uncertain previous push it returns nil with no error, so
 // the caller pushes again instead of concluding "already at target".
-func (c *Connector) ConfigRead(ctx context.Context, config map[string]any, entityRef, fieldKey string) (any, error) {
+func (c *Connector) ConfigRead(ctx context.Context, _ map[string]any, entityRef, fieldKey string) (any, error) {
 	if fieldKey != "enabled" {
 		return nil, fmt.Errorf("unsupported field %q", fieldKey)
 	}
