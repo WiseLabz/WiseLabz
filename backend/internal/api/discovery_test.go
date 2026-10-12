@@ -324,6 +324,9 @@ func TestDiscoveryConflictWhileRunning(t *testing.T) {
 	if got := decodeScan(t, app.req(t, http.MethodGet, "/api/discovery/scan", nil, token)); got.ID != first.ID || got.State != disc.StateRunning {
 		t.Errorf("running scan affected: %+v", got)
 	}
+	// The scan runs on its own goroutine, which may not have reached the
+	// scanner yet.
+	waitUntil(t, "the first scan to reach the scanner", func() bool { return scanner.calls.Load() > 0 })
 	if scanner.calls.Load() != 1 {
 		t.Errorf("scanner calls = %d, want 1", scanner.calls.Load())
 	}
