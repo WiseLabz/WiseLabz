@@ -1,7 +1,8 @@
 # NOTE: .git is intentionally NOT excluded. The backend builder stage needs
-# it for Go's automatic VCS build-info stamping (surfaced via GET
-# /api/version). It is only ever copied into the intermediate "backend"
-# build stage and is never present in the final distroless image.
+# it for Go's automatic VCS build-info stamping (surfaced in the diagnostics
+# bundle, GET /api/system/diagnostics, as versions.commit). It is only ever
+# copied into the intermediate "backend" build stage and is never present in
+# the final distroless image.
 
 # Dependencies — reinstalled fresh inside the image via `npm ci`.
 **/node_modules
