@@ -7,6 +7,7 @@ import (
 )
 
 func TestNotificationCreateAndList(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	mustCreateUser(t, s, "user-1")
@@ -31,6 +32,7 @@ func TestNotificationCreateAndList(t *testing.T) {
 }
 
 func TestNotificationUnreadOnlyFilter(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	mustCreateUser(t, s, "user-1")
@@ -68,6 +70,7 @@ func TestNotificationUnreadOnlyFilter(t *testing.T) {
 }
 
 func TestMarkNotificationReadIdempotentAndScoped(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	mustCreateUser(t, s, "user-1")
@@ -105,6 +108,7 @@ func TestMarkNotificationReadIdempotentAndScoped(t *testing.T) {
 }
 
 func TestMarkAllNotificationsRead(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	mustCreateUser(t, s, "user-1")

@@ -13,6 +13,7 @@ import (
 )
 
 func TestEntityIndexSearch(t *testing.T) {
+	t.Parallel()
 	s := newDocTestStore(t)
 	ctx := context.Background()
 	if s.driver != "postgres" {
@@ -174,6 +175,7 @@ func TestEntityIndexSearch(t *testing.T) {
 }
 
 func TestEntityIndexBackfill(t *testing.T) {
+	t.Parallel()
 	s := newDocTestStore(t)
 	ctx := context.Background()
 	c := ConnectorRecord{Name: "Legacy", Type: "unifi", Category: "networking", URL: "https://legacy.test"}

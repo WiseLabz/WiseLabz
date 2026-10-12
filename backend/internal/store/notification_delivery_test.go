@@ -22,6 +22,7 @@ func createTestNotification(ctx context.Context, t *testing.T, s *Store) string 
 }
 
 func TestDeliveryCreateAndList(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	notificationID := createTestNotification(ctx, t, s)
@@ -49,6 +50,7 @@ func TestDeliveryCreateAndList(t *testing.T) {
 }
 
 func TestUpdateDeliveryResultTransitionsAndClearsNextAttempt(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	notificationID := createTestNotification(ctx, t, s)
@@ -87,6 +89,7 @@ func TestUpdateDeliveryResultTransitionsAndClearsNextAttempt(t *testing.T) {
 }
 
 func TestUpdateDeliveryResultNotFound(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 
@@ -97,6 +100,7 @@ func TestUpdateDeliveryResultNotFound(t *testing.T) {
 }
 
 func TestListDueDeliveries(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	notificationID := createTestNotification(ctx, t, s)
@@ -142,6 +146,7 @@ func TestListDueDeliveries(t *testing.T) {
 }
 
 func TestListDeliveriesStatusFilterAndPagination(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	notificationID := createTestNotification(ctx, t, s)

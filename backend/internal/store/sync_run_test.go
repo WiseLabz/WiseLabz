@@ -16,6 +16,7 @@ func createTestConnector(ctx context.Context, t *testing.T, s *Store) string {
 }
 
 func TestSyncRunCreateAndList(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	connectorID := createTestConnector(ctx, t, s)
@@ -74,6 +75,7 @@ func TestSyncRunCreateAndList(t *testing.T) {
 }
 
 func TestSyncRunDefaultsIDAndAttempt(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	connectorID := createTestConnector(ctx, t, s)
@@ -102,6 +104,7 @@ func TestSyncRunDefaultsIDAndAttempt(t *testing.T) {
 }
 
 func TestSyncRunListOrderedNewestFirstAndLimited(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	connectorID := createTestConnector(ctx, t, s)
@@ -131,6 +134,7 @@ func TestSyncRunListOrderedNewestFirstAndLimited(t *testing.T) {
 }
 
 func TestSyncRunListByConnectorNeverReturnsNil(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	connectorID := createTestConnector(ctx, t, s)

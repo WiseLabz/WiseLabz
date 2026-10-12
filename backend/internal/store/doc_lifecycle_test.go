@@ -19,6 +19,7 @@ func humanNote(t *testing.T, s *Store, parent string) *DocRecord {
 }
 
 func TestHumanDocHierarchy(t *testing.T) {
+	t.Parallel()
 	s := newDocTestStore(t)
 	ctx := context.Background()
 	root := humanNote(t, s, "")
@@ -56,6 +57,7 @@ func TestHumanDocHierarchy(t *testing.T) {
 }
 
 func TestSoftDeleteVisibilityAndBatchRestore(t *testing.T) {
+	t.Parallel()
 	s := newDocTestStore(t)
 	ctx := auth.ContextWithUser(context.Background(), "reader", false)
 	root := humanNote(t, s, "")
@@ -134,6 +136,7 @@ func TestSoftDeleteVisibilityAndBatchRestore(t *testing.T) {
 }
 
 func TestPurgeDeletedDocsCascades(t *testing.T) {
+	t.Parallel()
 	s := newDocTestStore(t)
 	if s.driver != "postgres" {
 		if _, err := s.DB().ExecContext(context.Background(), `PRAGMA foreign_keys = ON`); err != nil {
@@ -182,6 +185,7 @@ func TestPurgeDeletedDocsCascades(t *testing.T) {
 }
 
 func TestDeletedServiceDocLists(t *testing.T) {
+	t.Parallel()
 	s := newDocTestStore(t)
 	ctx := context.Background()
 	conn := &ConnectorRecord{Name: "svc", Category: "virtualization", Type: "proxmox", URL: "http://example.com"}
@@ -208,6 +212,7 @@ func TestDeletedServiceDocLists(t *testing.T) {
 }
 
 func TestHumanLabDiscoveryACL(t *testing.T) {
+	t.Parallel()
 	s := newDocTestStore(t)
 	ctx := auth.ContextWithUser(context.Background(), "reader", false)
 	human := humanNote(t, s, "")

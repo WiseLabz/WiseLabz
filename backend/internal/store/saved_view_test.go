@@ -7,6 +7,7 @@ import (
 )
 
 func TestCreateAndListSavedViews(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 
@@ -61,6 +62,7 @@ func TestCreateAndListSavedViews(t *testing.T) {
 }
 
 func TestDeleteSavedView(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 

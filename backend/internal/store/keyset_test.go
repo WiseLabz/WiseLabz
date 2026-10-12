@@ -58,6 +58,7 @@ func assertSameSet(t *testing.T, what string, keyset, offset []string) {
 }
 
 func TestListAuditRecordsKeysetTraversal(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 
@@ -99,6 +100,7 @@ func TestListAuditRecordsKeysetTraversal(t *testing.T) {
 }
 
 func TestListAuditRecordsKeysetHonoursFilters(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 
@@ -126,6 +128,7 @@ func TestListAuditRecordsKeysetHonoursFilters(t *testing.T) {
 }
 
 func TestListChangesKeysetTraversal(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	serviceID := seedConnectorForChanges(t, s)
@@ -163,6 +166,7 @@ func TestListChangesKeysetTraversal(t *testing.T) {
 }
 
 func TestListSyncRunsByConnectorKeysetTraversal(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	connectorID := createTestConnector(ctx, t, s)
@@ -209,6 +213,7 @@ func TestListSyncRunsByConnectorKeysetTraversal(t *testing.T) {
 // SQLite-only: EXPLAIN QUERY PLAN has no PostgreSQL equivalent, and the
 // indexes are identical in both dialects (see the 000033 migration pair).
 func TestKeysetQueriesUseCoveringIndexes(t *testing.T) {
+	t.Parallel()
 	if os.Getenv("WISELABZ_TEST_POSTGRES_DSN") != "" {
 		t.Skip("EXPLAIN QUERY PLAN is SQLite-only")
 	}

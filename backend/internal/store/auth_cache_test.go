@@ -38,6 +38,7 @@ func (db *countingAuthDB) ExecContext(ctx context.Context, query string, args ..
 }
 
 func TestUserStatusCache(t *testing.T) {
+	t.Parallel()
 	s := newDocTestStore(t)
 	ctx := context.Background()
 	u := &User{Username: "cached", InstanceAdminRole: "admin"}
@@ -94,6 +95,7 @@ func TestUserStatusCache(t *testing.T) {
 }
 
 func TestUserStatusCacheTransaction(t *testing.T) {
+	t.Parallel()
 	s := newDocTestStore(t)
 	ctx := context.Background()
 	u := &User{Username: "transaction", InstanceAdminRole: "admin"}
@@ -125,6 +127,7 @@ func TestUserStatusCacheTransaction(t *testing.T) {
 }
 
 func TestUserStatusCacheConcurrentMutation(t *testing.T) {
+	t.Parallel()
 	s := newDocTestStore(t)
 	ctx := context.Background()
 	u := &User{Username: "concurrent"}
@@ -152,6 +155,7 @@ func TestUserStatusCacheConcurrentMutation(t *testing.T) {
 }
 
 func TestAPIKeyLastUsedThrottle(t *testing.T) {
+	t.Parallel()
 	s := newDocTestStore(t)
 	ctx := context.Background()
 	u := &User{Username: "throttle"}
@@ -193,6 +197,7 @@ func TestAPIKeyLastUsedThrottle(t *testing.T) {
 }
 
 func TestCachedUserStatusRejectsRevokedAccess(t *testing.T) {
+	t.Parallel()
 	for _, mutation := range []string{"demote", "disable", "delete"} {
 		t.Run(mutation, func(t *testing.T) {
 			s := newDocTestStore(t)
@@ -238,6 +243,7 @@ func TestCachedUserStatusRejectsRevokedAccess(t *testing.T) {
 }
 
 func TestUserStatusCacheConcurrentGetAfterLoad(t *testing.T) {
+	t.Parallel()
 	s := newDocTestStore(t)
 	ctx := context.Background()
 	u := &User{Username: "concurrent-get", InstanceAdminRole: "admin"}

@@ -6,6 +6,7 @@ import (
 )
 
 func TestDashboardAggregatesScopedToConnectors(t *testing.T) {
+	t.Parallel()
 	s := newDocTestStore(t)
 	ctx := context.Background()
 	a := newTestConnector(t, s, "conn-a")

@@ -37,6 +37,7 @@ func seedQualityConnector(t *testing.T, s *Store, name string) *ConnectorRecord 
 }
 
 func TestUpsertQualityFindingDedup(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	c := seedQualityConnector(t, s, "dedup")
@@ -71,6 +72,7 @@ func TestUpsertQualityFindingDedup(t *testing.T) {
 }
 
 func TestResolveThenReopenCreatesFreshRow(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	c := seedQualityConnector(t, s, "reopen")
@@ -107,6 +109,7 @@ func TestResolveThenReopenCreatesFreshRow(t *testing.T) {
 }
 
 func TestResolveQualityFindingsForRuleExceptEntitiesBatchesAndResolvesLegacy(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	c := seedQualityConnector(t, s, "entity-resolution")
@@ -144,6 +147,7 @@ func TestResolveQualityFindingsForRuleExceptEntitiesBatchesAndResolvesLegacy(t *
 }
 
 func TestListQualityFindingsFilters(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	one := seedQualityConnector(t, s, "one")
@@ -184,6 +188,7 @@ func TestListQualityFindingsFilters(t *testing.T) {
 }
 
 func TestUpsertQualityFindingConcurrentDedup(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newConcurrentQualityTestStore(t)
 	c := seedQualityConnector(t, s, "concurrent")
@@ -227,6 +232,7 @@ func TestUpsertQualityFindingConcurrentDedup(t *testing.T) {
 	}
 }
 
+// Not parallel: it uses the shared default Postgres schema.
 func TestUpsertQualityFindingPostgresDedup(t *testing.T) {
 	dsn := os.Getenv("WISELABZ_TEST_POSTGRES_DSN")
 	if dsn == "" {
@@ -269,6 +275,7 @@ func TestUpsertQualityFindingPostgresDedup(t *testing.T) {
 }
 
 func TestQualityFindingStatusIndexPlan(t *testing.T) {
+	t.Parallel()
 	skipOnPostgres(t, "EXPLAIN QUERY PLAN is SQLite-only")
 	s := newDocTestStore(t)
 	rows, err := s.DB().QueryContext(context.Background(), `EXPLAIN QUERY PLAN

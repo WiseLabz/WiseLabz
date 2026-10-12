@@ -34,6 +34,7 @@ func newBackupTestStore(t *testing.T) *store.Store {
 
 // TestGetBackupScheduleWhenNotExists returns an error when the schedule row doesn't exist yet.
 func TestGetBackupScheduleWhenNotExists(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newBackupTestStore(t)
 
@@ -45,6 +46,7 @@ func TestGetBackupScheduleWhenNotExists(t *testing.T) {
 
 // TestUpsertBackupScheduleCreatesRow inserts a new schedule.
 func TestUpsertBackupScheduleCreatesRow(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newBackupTestStore(t)
 
@@ -81,6 +83,7 @@ func TestUpsertBackupScheduleCreatesRow(t *testing.T) {
 
 // TestUpsertBackupScheduleUpdatesRow calls upsert twice and verifies the second updates.
 func TestUpsertBackupScheduleUpdatesRow(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newBackupTestStore(t)
 
@@ -122,6 +125,7 @@ func TestUpsertBackupScheduleUpdatesRow(t *testing.T) {
 
 // TestCreateBackupRun inserts a backup run.
 func TestCreateBackupRun(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newBackupTestStore(t)
 
@@ -156,6 +160,7 @@ func TestCreateBackupRun(t *testing.T) {
 
 // TestListBackupRunsPaginated tests pagination.
 func TestListBackupRunsPaginated(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newBackupTestStore(t)
 
@@ -204,6 +209,7 @@ func TestListBackupRunsPaginated(t *testing.T) {
 
 // TestPruneBackupRunsByCount tests pruning by max backup count.
 func TestPruneBackupRunsByCount(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newBackupTestStore(t)
 
@@ -248,6 +254,7 @@ func TestPruneBackupRunsByCount(t *testing.T) {
 
 // TestPruneBackupRunsByAge tests pruning by age cutoff.
 func TestPruneBackupRunsByAge(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newBackupTestStore(t)
 
@@ -311,6 +318,7 @@ func TestPruneBackupRunsByAge(t *testing.T) {
 
 // TestPruneBackupRunsNoLimits returns empty list when no limits are set.
 func TestPruneBackupRunsNoLimits(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newBackupTestStore(t)
 
@@ -353,6 +361,7 @@ func TestPruneBackupRunsNoLimits(t *testing.T) {
 // treated the same as 0 — "no limit by count" — rather than deleting
 // everything or panicking on a negative SQL LIMIT.
 func TestPruneBackupRunsNegativeMaxBackups(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newBackupTestStore(t)
 
@@ -390,6 +399,7 @@ func TestPruneBackupRunsNegativeMaxBackups(t *testing.T) {
 // round trip as TestUpsertBackupScheduleUpdatesRow against a real Postgres
 // database, so the ON CONFLICT upsert (rewritten from `?` to `$1..$n` for
 // postgres, see pgdb.go) is verified on both drivers rather than sqlite only.
+// Not parallel: it uses the shared default Postgres schema.
 func TestUpsertBackupSchedulePostgresParity(t *testing.T) {
 	dsn := os.Getenv("WISELABZ_TEST_POSTGRES_DSN")
 	if dsn == "" {
@@ -426,6 +436,7 @@ func TestUpsertBackupSchedulePostgresParity(t *testing.T) {
 
 // TestPruneBackupRunsCombinedLimits prunes using both count and age limits.
 func TestPruneBackupRunsCombinedLimits(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newBackupTestStore(t)
 

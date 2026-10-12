@@ -8,6 +8,7 @@ import (
 )
 
 func TestJobHealthGetMissingReturnsNoRows(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 
@@ -17,6 +18,7 @@ func TestJobHealthGetMissingReturnsNoRows(t *testing.T) {
 }
 
 func TestJobHealthUpsertInsertsThenUpdates(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 
@@ -74,6 +76,7 @@ func TestJobHealthUpsertInsertsThenUpdates(t *testing.T) {
 }
 
 func TestJobHealthListOrderedByName(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 
@@ -99,6 +102,7 @@ func TestJobHealthListOrderedByName(t *testing.T) {
 }
 
 func TestJobHealthDelete(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 

@@ -9,6 +9,7 @@ import (
 // TestRecordHealthCheckDefaults verifies RecordHealthCheck fills in a UUID
 // and CheckedAt when left unset, and persists the row.
 func TestRecordHealthCheckDefaults(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	connectorID := createTestConnector(ctx, t, s)
@@ -51,6 +52,7 @@ func TestRecordHealthCheckDefaults(t *testing.T) {
 // availability = 4/6 * 100 = 66.666...%. The one outage ran from t0+2h to
 // t0+4h, a 2h recovery time, so MTTR = 2h = 7200s.
 func TestGetConnectorUptimeDeterministicOutage(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	connectorID := createTestConnector(ctx, t, s)
@@ -101,6 +103,7 @@ func TestGetConnectorUptimeDeterministicOutage(t *testing.T) {
 // still ongoing at the window end lowers availability but is excluded from
 // the MTTR mean (it has no recovery time yet).
 func TestGetConnectorUptimeUnresolvedOutageExcludedFromMTTR(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	connectorID := createTestConnector(ctx, t, s)
@@ -138,6 +141,7 @@ func TestGetConnectorUptimeUnresolvedOutageExcludedFromMTTR(t *testing.T) {
 // TestGetConnectorUptimeNoData verifies an empty window returns zero values
 // without error, rather than dividing by zero.
 func TestGetConnectorUptimeNoData(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	connectorID := createTestConnector(ctx, t, s)
@@ -155,6 +159,7 @@ func TestGetConnectorUptimeNoData(t *testing.T) {
 // "keep latest" guard (unlike snapshots): every row older than cutoff goes,
 // including the connector's most recent check if it's old enough.
 func TestDeleteOldHealthChecks(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	connectorID := createTestConnector(ctx, t, s)
@@ -199,6 +204,7 @@ func TestDeleteOldHealthChecks(t *testing.T) {
 // TestGetConnectorUptimeWindowsMatchesSingleWindow verifies the one-scan
 // multi-window query returns exactly what separate per-window queries do.
 func TestGetConnectorUptimeWindowsMatchesSingleWindow(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	connectorID := createTestConnector(ctx, t, s)

@@ -6,6 +6,7 @@ import (
 )
 
 func TestComplianceRuleCRUD(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	rule := &ComplianceRuleRecord{
@@ -42,6 +43,7 @@ func TestComplianceRuleCRUD(t *testing.T) {
 }
 
 func TestComplianceRuleRelatedRoundTrip(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	relatedJSON := `[{"mode":"requires","connectorType":"pbs","entityKind":"vm","join":{"sourceField":"external_id","relatedField":"external_id"},"conditions":[{"attribute":"last_backup_age_days","op":"lt","value":7}]}]`
@@ -85,6 +87,7 @@ func TestComplianceRuleRelatedRoundTrip(t *testing.T) {
 }
 
 func TestComplianceRuleRelatedUpdateChanges(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	rule := &ComplianceRuleRecord{
@@ -115,6 +118,7 @@ func TestComplianceRuleRelatedUpdateChanges(t *testing.T) {
 }
 
 func TestComplianceRuleRelatedEmptyNormalizesToArray(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	rule := &ComplianceRuleRecord{
@@ -140,6 +144,7 @@ func TestComplianceRuleRelatedEmptyNormalizesToArray(t *testing.T) {
 }
 
 func TestComplianceRuleRelatedSeededRuleHasDefault(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	got, err := s.GetComplianceRule(ctx, "seed-pfsense-any-any")
@@ -152,6 +157,7 @@ func TestComplianceRuleRelatedSeededRuleHasDefault(t *testing.T) {
 }
 
 func TestComplianceFindingRuleDedupAndResolve(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	c := seedQualityConnector(t, s, "rule findings")

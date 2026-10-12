@@ -8,6 +8,7 @@ import (
 )
 
 func TestSnapshotTimeOrderingAndRetention(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	c := ConnectorRecord{Name: "time", Category: "virtualization", Type: "proxmox", URL: "https://example.test"}
@@ -57,6 +58,7 @@ func TestSnapshotTimeOrderingAndRetention(t *testing.T) {
 }
 
 func TestSnapshotUTCDataMigration(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))

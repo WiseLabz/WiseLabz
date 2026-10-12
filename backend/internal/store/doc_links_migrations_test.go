@@ -20,6 +20,7 @@ func rollbackDocLinks(t *testing.T, db *sql.DB, driver string, logger *slog.Logg
 }
 
 func TestDocLinksMigrationUpDownUp(t *testing.T) {
+	t.Parallel()
 	s := newDocTestStore(t)
 	logger := slog.New(slog.DiscardHandler)
 	if !hasDocLinksTable(t, s.rawDB, s.driver) {

@@ -147,6 +147,7 @@ func (f *overrideFixture) identity(ref string) string {
 }
 
 func TestEntityIdentityOverrideValidation(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	f := newOverrideFixture(t, 2, "")
 	other := EntityMemberRecord{ConnectorID: f.conns[0], Kind: "network", Ref: "net", Name: "net"}
@@ -197,6 +198,7 @@ func TestEntityIdentityOverrideValidation(t *testing.T) {
 }
 
 func TestEntityIdentityOverrideMergeStoredInSortedOrder(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	f := newOverrideFixture(t, 2, "")
 	forward, err := f.merge("m0", "m1")
@@ -217,6 +219,7 @@ func TestEntityIdentityOverrideMergeStoredInSortedOrder(t *testing.T) {
 }
 
 func TestEntityIdentityOverrideListDeleteAndConnectorCascade(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	f := newOverrideFixture(t, 3, "")
 	merge, err := f.merge("m0", "m1")
@@ -265,6 +268,7 @@ func TestEntityIdentityOverrideListDeleteAndConnectorCascade(t *testing.T) {
 }
 
 func TestEntityOverrideManualMergeLeavesRedirect(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	f := newOverrideFixture(t, 2, "")
 	first, second := f.identity("m0"), f.identity("m1")
@@ -292,6 +296,7 @@ func TestEntityOverrideManualMergeLeavesRedirect(t *testing.T) {
 }
 
 func TestEntityOverrideDetachAndRemoval(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	f := newOverrideFixture(t, 3, "shared.example")
 	shared := f.identity("m0")
@@ -320,6 +325,7 @@ func TestEntityOverrideDetachAndRemoval(t *testing.T) {
 }
 
 func TestEntityOverrideDormantAppliesWhenMemberReturns(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	f := newOverrideFixture(t, 3, "shared.example")
 	override := f.detach("m1")
@@ -348,6 +354,7 @@ func TestEntityOverrideDormantAppliesWhenMemberReturns(t *testing.T) {
 }
 
 func TestDeleteExpiredEntityIdentitiesPurgesOrphanedOverrides(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	f := newOverrideFixture(t, 3, "")
 	orphan := f.detach("m0")
@@ -388,6 +395,7 @@ func TestDeleteExpiredEntityIdentitiesPurgesOrphanedOverrides(t *testing.T) {
 }
 
 func TestDeleteExpiredEntityIdentitiesKeepsOverridesOfUnobservedMembers(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	f := newOverrideFixture(t, 2, "")
 	// A restored override: its members have no entity_members rows yet.
@@ -406,6 +414,7 @@ func TestDeleteExpiredEntityIdentitiesKeepsOverridesOfUnobservedMembers(t *testi
 }
 
 func TestEntityIdentityOverrideMergeDormantWhileOneMemberIsGone(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	f := newOverrideFixture(t, 2, "")
 	merge, err := f.merge("m0", "m1")
@@ -430,6 +439,7 @@ func TestEntityIdentityOverrideMergeDormantWhileOneMemberIsGone(t *testing.T) {
 }
 
 func TestCreateEntityIdentityOverrideWaitsForReconcileLock(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	f := newOverrideFixture(t, 1, "")
 	created := make(chan error, 1)

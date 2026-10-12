@@ -6,6 +6,7 @@ import (
 )
 
 func TestRunbookRunRetentionSettings(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	if _, err := s.DB().ExecContext(ctx, `

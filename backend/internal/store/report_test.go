@@ -7,6 +7,7 @@ import (
 
 // newDocTestStore runs this same lifecycle against PostgreSQL when its test DSN is set.
 func TestReportBooleanRoundTrip(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	def := ReportDefinitionRecord{Slug: "daily", Name: "Daily", Enabled: true, CronExpr: "0 0 * * *", Timezone: "UTC", Sections: "[]", ConnectorIDs: "[]", Channels: "[]", CreatedBy: "test"}

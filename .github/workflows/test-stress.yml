@@ -12,12 +12,12 @@ jobs:
   stress:
     name: Stress (${{ matrix.package }})
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
         # Maintained allowlist: add future rollout packages here in their PR.
-        package: [./internal/api, ./internal/api/connectors]
+        package: [./internal/api, ./internal/api/connectors, ./internal/store]
     env:
       PACKAGE: ${{ matrix.package }}
 
@@ -31,7 +31,7 @@ jobs:
           {
             echo "commit=$(git rev-parse HEAD)"
             echo "package=$PACKAGE"
-            echo 'flags=-race -count=20 -shuffle=on -timeout=10m -v'
+            echo 'flags=-race -count=20 -shuffle=on -timeout=20m -v'
             echo "run=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
           } | tee stress/metadata.txt
           cat stress/metadata.txt >> "$GITHUB_STEP_SUMMARY"
@@ -46,7 +46,7 @@ jobs:
         shell: bash
         run: |
           go version | tee -a ../stress/metadata.txt
-          go test -race -count=20 -shuffle=on -timeout=10m -v "$PACKAGE" 2>&1 | tee ../stress/tests.log
+          go test -race -count=20 -shuffle=on -timeout=20m -v "$PACKAGE" 2>&1 | tee ../stress/tests.log
 
       - name: Upload stress evidence
         if: always()

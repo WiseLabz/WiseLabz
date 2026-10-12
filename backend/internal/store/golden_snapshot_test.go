@@ -17,6 +17,7 @@ func mustCreateGoldenSnapshotConnector(t *testing.T, s *Store) string {
 }
 
 func TestPinGoldenSnapshotRoundTrip(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	connID := mustCreateGoldenSnapshotConnector(t, s)
@@ -73,6 +74,7 @@ func TestPinGoldenSnapshotRoundTrip(t *testing.T) {
 }
 
 func TestGetSnapshotByID(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	connID := mustCreateGoldenSnapshotConnector(t, s)

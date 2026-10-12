@@ -33,6 +33,7 @@ func seedScopeFixture(t *testing.T) (*Store, string, string, string) {
 }
 
 func TestMergedAttentionItemsFiltersByGrant(t *testing.T) {
+	t.Parallel()
 	s, userID, grantedID, _ := seedScopeFixture(t)
 
 	items, total, err := s.MergedAttentionItems(context.Background(), userID, "", 0, 50)
@@ -53,6 +54,7 @@ func TestMergedAttentionItemsFiltersByGrant(t *testing.T) {
 }
 
 func TestListDocSectionEmbeddingsFiltersByGrant(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s, userID, grantedID, deniedID := seedScopeFixture(t)
 

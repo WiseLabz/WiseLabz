@@ -61,6 +61,7 @@ func enableRunbookRunForeignKeys(t *testing.T, s *Store) {
 }
 
 func TestRunbookRunCreateGetFreezeAndDeleteRunbook(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	enableRunbookRunForeignKeys(t, s)
@@ -112,6 +113,7 @@ func TestRunbookRunCreateGetFreezeAndDeleteRunbook(t *testing.T) {
 }
 
 func TestRunbookRunActiveConflictAndConcurrentCreate(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	runbook, connectorID := createRunbookRunFixture(t, s)
@@ -200,6 +202,7 @@ func TestRunbookRunActiveConflictAndConcurrentCreate(t *testing.T) {
 }
 
 func TestRunbookRunTransitionsConfirmCancelAndTerminalGuard(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	runbook, connectorID := createRunbookRunFixture(t, s)
@@ -285,6 +288,7 @@ func TestRunbookRunTransitionsConfirmCancelAndTerminalGuard(t *testing.T) {
 }
 
 func TestRunbookRunListPaginationAndFrozenTimeouts(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	runbook, connectorID := createRunbookRunFixture(t, s)
@@ -324,6 +328,7 @@ func TestRunbookRunListPaginationAndFrozenTimeouts(t *testing.T) {
 }
 
 func TestRunbookRunInterruptExpireAndPrune(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	activeBook, connectorID := createRunbookRunFixture(t, s)
@@ -497,6 +502,7 @@ func runbookRunStepCount(t *testing.T, s *Store, runID string) int {
 }
 
 func TestRunbookRunUpdateRejectsUnsupportedInput(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	run, steps := createOpenManualRunbookRun(t, s, "Check")
@@ -529,6 +535,7 @@ func TestRunbookRunUpdateRejectsUnsupportedInput(t *testing.T) {
 }
 
 func TestRunbookRunCancelWhileWaitingAndFailed(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	run, steps := createOpenManualRunbookRun(t, s, "Check", "Later")
@@ -562,6 +569,7 @@ func TestRunbookRunCancelWhileWaitingAndFailed(t *testing.T) {
 }
 
 func TestRunbookRunResumeGuardAndExpireSkipsRunning(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	waiting, waitingSteps := createOpenManualRunbookRun(t, s, "Check")
@@ -594,6 +602,7 @@ func TestRunbookRunResumeGuardAndExpireSkipsRunning(t *testing.T) {
 }
 
 func TestRunbookRunPruneKeepsOpenAndDeletesTerminalHistory(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	old := runbookRunTimestamp(time.Now().Add(-48 * time.Hour))
@@ -643,6 +652,7 @@ func TestRunbookRunPruneKeepsOpenAndDeletesTerminalHistory(t *testing.T) {
 }
 
 func TestRunbookRunOrphanedActiveRunsCoexist(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	enableRunbookRunForeignKeys(t, s)
@@ -670,6 +680,7 @@ func hasNineFractionalDigits(value string) bool {
 }
 
 func TestRunbookRunCreateTypedErrors(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	runbook, connectorID := createRunbookRunFixture(t, s)
@@ -713,6 +724,7 @@ func TestRunbookRunCreateTypedErrors(t *testing.T) {
 }
 
 func TestRunbookRunCombinedTransitions(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	runbook, connectorID := createRunbookRunFixture(t, s)
@@ -792,6 +804,7 @@ func TestRunbookRunCombinedTransitions(t *testing.T) {
 }
 
 func TestRunbookRunFinishRequiresEveryStepSucceeded(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	run, steps := createOpenManualRunbookRun(t, s, "First", "Second")
@@ -808,6 +821,7 @@ func TestRunbookRunFinishRequiresEveryStepSucceeded(t *testing.T) {
 }
 
 func TestRunbookRunCancelAndExpireKeepUnknownOutcomes(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 
@@ -868,6 +882,7 @@ func TestRunbookRunCancelAndExpireKeepUnknownOutcomes(t *testing.T) {
 }
 
 func TestRunbookRunInterruptResetsOrphanedWaitingStep(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	// A pause written as two separate updates could stop after the first one,

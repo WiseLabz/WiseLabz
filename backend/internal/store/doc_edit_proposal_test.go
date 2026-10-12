@@ -8,6 +8,7 @@ import (
 )
 
 func TestDocEditProposalLifecycle(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 
@@ -114,6 +115,7 @@ func TestDocEditProposalLifecycle(t *testing.T) {
 }
 
 func TestDocEditProposalSupersedeAndCap(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	mkUser := func(name string) string {

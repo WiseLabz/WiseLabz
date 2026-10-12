@@ -295,6 +295,7 @@ func requireSQLiteForeignKeysOn(t *testing.T, db *sql.DB, driver, stage string) 
 }
 
 func TestConnectorCategoriesMigrationUpDownUp(t *testing.T) {
+	t.Parallel()
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 
 	run := func(t *testing.T, db *sql.DB, driver string) {

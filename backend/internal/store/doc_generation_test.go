@@ -7,6 +7,7 @@ import (
 )
 
 func TestDocGenerationDefaultsAndRoundTrip(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 
@@ -39,6 +40,7 @@ func TestDocGenerationDefaultsAndRoundTrip(t *testing.T) {
 }
 
 func TestApplyGeneratedRender(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 
@@ -76,6 +78,7 @@ func TestApplyGeneratedRender(t *testing.T) {
 }
 
 func TestTouchDocSyncedKeepsUpdatedAt(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	d := &DocRecord{Title: "Doc", Content: "v1", UpdatedAt: "2020-01-01T00:00:00Z"}
@@ -92,6 +95,7 @@ func TestTouchDocSyncedKeepsUpdatedAt(t *testing.T) {
 }
 
 func TestGetLatestChangeByPattern(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	conn := &ConnectorRecord{Name: "n", Category: "virtualization", Type: "proxmox", URL: "https://example.test"}

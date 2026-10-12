@@ -16,6 +16,7 @@ func seedConnectorForChanges(t *testing.T, s *Store) string {
 }
 
 func TestChangeRelatedServiceIDsAndPatternIDRoundTrip(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	serviceID := seedConnectorForChanges(t, s)
@@ -45,6 +46,7 @@ func TestChangeRelatedServiceIDsAndPatternIDRoundTrip(t *testing.T) {
 }
 
 func TestChangeRelatedServiceIDsDefaultsToEmptyArray(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	serviceID := seedConnectorForChanges(t, s)
@@ -66,6 +68,7 @@ func TestChangeRelatedServiceIDsDefaultsToEmptyArray(t *testing.T) {
 }
 
 func TestCountRecentChangesByPattern(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	serviceID := seedConnectorForChanges(t, s)
@@ -115,6 +118,7 @@ func TestCountRecentChangesByPattern(t *testing.T) {
 }
 
 func TestCountRecentChangePatterns(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	serviceID := seedConnectorForChanges(t, s)

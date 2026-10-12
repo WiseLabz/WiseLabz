@@ -26,6 +26,7 @@ func failedRunWithStepState(t *testing.T, s *Store, stepState string) (*RunbookR
 }
 
 func TestResumeRunbookRunMarkingStepDone(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 
@@ -113,6 +114,7 @@ func TestResumeRunbookRunMarkingStepDone(t *testing.T) {
 }
 
 func TestResumeRunbookRunExpectations(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	audit := func() *AuditRecord {

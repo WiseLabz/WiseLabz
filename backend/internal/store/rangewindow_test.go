@@ -6,6 +6,7 @@ import (
 )
 
 func TestSinceFromDays(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name        string
 		v           string

@@ -9,6 +9,7 @@ import (
 )
 
 func TestReconcileEntityIdentitiesMergeSplitAndGone(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	c1 := ConnectorRecord{Name: "one", Type: "test", Category: "virtualization", URL: "https://one.test"}
@@ -86,6 +87,7 @@ func TestReconcileEntityIdentitiesMergeSplitAndGone(t *testing.T) {
 }
 
 func TestReconcileEntityIdentitiesIsIdempotent(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	c := ConnectorRecord{Name: "stable", Type: "test", Category: "virtualization", URL: "https://stable.test"}
@@ -124,6 +126,7 @@ func TestReconcileEntityIdentitiesIsIdempotent(t *testing.T) {
 }
 
 func TestReconcileEntityIdentitiesFlattensMergeRedirects(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	connectors := make([]ConnectorRecord, 3)
@@ -187,6 +190,7 @@ func TestReconcileEntityIdentitiesFlattensMergeRedirects(t *testing.T) {
 }
 
 func TestReconcileEntityIdentitiesConcurrent(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	connectors := make([]ConnectorRecord, 4)
@@ -221,6 +225,7 @@ func TestReconcileEntityIdentitiesConcurrent(t *testing.T) {
 }
 
 func TestReconcileEntityIdentitiesSplitMemberDoesNotJoinMergeLoser(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	for i := 0; i < 5; i++ {
 		s := newDocTestStore(t)
@@ -258,6 +263,7 @@ func TestReconcileEntityIdentitiesSplitMemberDoesNotJoinMergeLoser(t *testing.T)
 // With L older than A, the cluster {a, m1} must always claim L whatever the
 // connector UUID order, so m2 is the member that gets a fresh ID.
 func TestReconcileEntityIdentitiesOlderIdentityWinsRegardlessOfConnectorOrder(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	for i := 0; i < 30; i++ {
 		s := newDocTestStore(t)

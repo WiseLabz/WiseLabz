@@ -22,6 +22,7 @@ func createAwaitingApprovalRun(t *testing.T, s *Store, titles ...string) (*Runbo
 }
 
 func TestRunbookApprovalRequestCreationAndConditionalTransitions(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	book, _ := createRunbookRunFixture(t, s)
@@ -76,6 +77,7 @@ func TestRunbookApprovalRequestCreationAndConditionalTransitions(t *testing.T) {
 }
 
 func TestRunbookApprovalRequestsSurviveStartupAndOpenRunExpiry(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	run, _ := createAwaitingApprovalRun(t, s, "Check service")
@@ -97,6 +99,7 @@ func TestRunbookApprovalRequestsSurviveStartupAndOpenRunExpiry(t *testing.T) {
 }
 
 func TestRunbookApprovalRejectCancelExpireAndPrune(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 

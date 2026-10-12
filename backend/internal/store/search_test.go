@@ -9,6 +9,7 @@ import (
 )
 
 func TestSearchContent(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 
@@ -118,6 +119,7 @@ func TestSearchContent(t *testing.T) {
 }
 
 func TestSearchContentQueryHandling(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	u := &User{Username: "admin", DisplayName: "A", InstanceAdminRole: "admin", AuthSource: "local", PasswordHash: "x"}
@@ -195,6 +197,7 @@ func TestSearchContentQueryHandling(t *testing.T) {
 }
 
 func TestInterleaveHits(t *testing.T) {
+	t.Parallel()
 	d := []SearchHit{{ID: "d1"}, {ID: "d2"}, {ID: "d3"}}
 	r := []SearchHit{{ID: "r1"}}
 	var got []string
