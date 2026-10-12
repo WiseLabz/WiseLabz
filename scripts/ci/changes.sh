@@ -189,7 +189,8 @@ go_package_dirs() {
 	# walked without any dependency. With the proxy on, go list fetches every
 	# module they import that the restored cache lacks; a stalled download once
 	# ran the job into its timeout. So the proxy is off, and -e carries on past
-	# the modules that are missing.
+	# the modules that are missing. go list still logs "go: downloading" for
+	# those; nothing is fetched.
 	GOPROXY=off go list -find -f 'pkg {{.Dir}}' ./...
 	closure=$(GOPROXY=off go list -e -deps -test \
 		-f '{{if not .Standard}}closure {{.Dir}}{{end}}{{if .Error}}{{with .Module}}{{if .Main}}{{"\n"}}broken {{$.ImportPath}}{{end}}{{end}}{{end}}' \
