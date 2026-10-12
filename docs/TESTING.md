@@ -192,6 +192,14 @@ default schema, and one holds the topology advisory lock. A new test that
 needs either does the same. The Postgres shards still run one package at a
 time (`-p 1`).
 
+**Migration replays** (`internal/store`): a test that replays the migration
+chain up or down calls `skipMigrationReplayUnderRace(t)` right after
+`t.Parallel()`. These tests are single-goroutine SQL, so the race detector
+has nothing to find in them, and they still run without `-race` in the
+coverage job and in the Postgres shards. Use it only for tests of that
+kind; a test that starts goroutines or shares a store must keep running
+under `-race`.
+
 **Serial by choice:** every other package. They are fast now, so
 `t.Parallel()` would not meet the adoption bar. Some also have real
 blockers:
@@ -464,6 +472,12 @@ What changed:
   [Rules for new tests](#rules-for-new-tests)). The package ran its 328
   tests one after another and took 124s locally with `-race` on 4 procs.
   With `t.Parallel()` in 322 of them it takes 48–57s.
+- **Migration replays are skipped under `-race`** (see
+  [Rules for new tests](#rules-for-new-tests)). In a CI stress run the 14
+  replay tests took 206 of the package's 293 test-seconds (70%), with
+  `TestRunMigrationsDown` alone averaging 40s; a run of the package took
+  about 80s on a CI runner and 141s inside the `data` shard. With the skip
+  the package takes 26s locally.
 - **Three race shards**, defined in `scripts/ci/test-shards.json`:
   - `data`: `internal/store` and the packages built on it (`backup`, `doc`,
     `sync`, `notifications`, ...).
@@ -489,7 +503,7 @@ What changed:
 - **`Postgres closure` is its own job** (see [What CI runs](#what-ci-runs)).
 
 Rejected: a fourth race shard. One package sets each shard's wall clock
-(`internal/api/runbooks` at 69s in `api`, `internal/store` at 57s in
+(`internal/api/runbooks` at 69s in `api`, `internal/store` at 26s in
 `data`), so another runner would not shorten the slowest shard.
 
 ## Fixture reuse and lifecycle tests (#405–#407)
