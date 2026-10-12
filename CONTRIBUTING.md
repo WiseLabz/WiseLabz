@@ -160,7 +160,8 @@ up over time:
   not just the total.
 - **Frontend** (`bun run test:coverage`, v8 provider): floor is set in
   `web/vitest.config.ts` (`test.coverage.thresholds`) — currently 40%
-  statements/lines, 25% functions/branches.
+  statements/lines, 25% functions/branches. CI runs the suite in three
+  shards and enforces the floor on their merged report.
 
 For profiling test time and the rules that keep backend tests fast and
 deterministic (parallel tests, no fixed sleeps, no public network), see

@@ -571,3 +571,6 @@ prototypes/
 !backend/internal/web/dist/
 backend/internal/web/dist/*
 !backend/internal/web/dist/index.html
+
+# Vitest shard blob reports (bun run test:shard), merged by test:merge.
+web/.vitest/

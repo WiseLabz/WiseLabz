@@ -24,8 +24,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      # Restores the cache the matching CI job saves on main (normal mode has
-      # no CI counterpart, so it builds cold). Nothing is saved from here.
+      # Restores the cache the matching CI job saves on main: for race, the
+      # newest shard's (normal mode has no CI counterpart, so it builds cold).
+      # Nothing is saved from here.
       - name: Setup Go
         uses: ./.github/actions/go-cache-restore
         with:

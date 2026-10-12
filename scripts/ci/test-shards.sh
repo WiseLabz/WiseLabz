@@ -112,6 +112,16 @@ cmd_check() {
 				fi
 			done < <(jq -r '.tests[]' <<<"$g")
 		done <<<"$groups"
+		# Shards without a test filter run whole packages, so a package in two
+		# of them would run twice.
+		local name overlap
+		overlap="$(for name in $(jq -r --arg s "$suite" '.[$s] | to_entries[] | select(.value | (has("tests") or has("pattern") or .rest == true) | not) | .key' "$defs"); do
+			shard_packages "$(shard_json "$suite" "$name")"
+		done | sort | uniq -d)"
+		if [[ -n "$overlap" ]]; then
+			echo "$suite: packages run by more than one shard: ${overlap//$'\n'/ }" >&2
+			status=1
+		fi
 		# Every excluded package must be run by a sibling shard.
 		local covered
 		covered="$(jq -r --arg s "$suite" '[.[$s][] | select(has("exclude") | not) | .packages[]] | .[]' "$defs" | xargs -r go list)"
