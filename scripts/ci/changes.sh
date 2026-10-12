@@ -185,7 +185,9 @@ go_package_dirs() {
 	local roots
 	mapfile -t roots < <(jq -r '[.postgres[].packages[]] | unique | .[]' "$shards")
 	cd "$repo_root/backend"
-	go list -f 'pkg {{.Dir}}' ./...
+	# -find: list the packages without resolving imports, so this needs no
+	# module outside the restored postgres cache.
+	go list -find -f 'pkg {{.Dir}}' ./...
 	go list -deps -test -f '{{if not .Standard}}closure {{.Dir}}{{end}}' "${roots[@]}" ./cmd/migrate
 }
 
