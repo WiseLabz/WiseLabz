@@ -506,6 +506,23 @@ Rejected: a fourth race shard. One package sets each shard's wall clock
 (`internal/api/runbooks` at 69s in `api`, `internal/store` at 26s in
 `data`), so another runner would not shorten the slowest shard.
 
+Measured on #725, a backend-only PR that changes `internal/store`, with a
+warm cache (run 38294677312, three attempts, median):
+
+| | Before | After |
+|---|---|---|
+| Whole run | 275s | 144s (133s, 169s, 144s) |
+| Slowest race job | 262s | 77s, `data` (77s, 85s, 76s) |
+| `Detect changes` | 30s | 9s |
+
+`api` took 61s and `other` 34s. Compose smoke (112s) and the Postgres `rest`
+shard (86s) are now the slowest jobs. On #723 the three frontend shards took
+60–70s and the coverage merge 19s, against 143s for the single job. With a
+cold cache the race shards take 185–267s, which is what a run sees right
+after a `go.sum` or Go version change. The Test stress run on #725 passed
+for all three packages (38294681027: `internal/store` 540s, `internal/api`
+662s, `internal/api/connectors` 289s).
+
 ## Fixture reuse and lifecycle tests (#405–#407)
 
 These changes are adopted **regardless of the 5% / 10s threshold**. This is
