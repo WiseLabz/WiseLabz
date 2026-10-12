@@ -1,7 +1,14 @@
 {
   "race": {
-    "all": {
-      "packages": ["./internal/auth", "./internal/config", "./internal/connector/...", "./internal/crypto", "./internal/httputil", "./internal/httpx", "./internal/ai", "./internal/report", "./internal/ttlcache", "./internal/compliance", "./internal/ws/...", "./internal/notifications/...", "./internal/sync/...", "./internal/api/...", "./internal/topology", "./internal/store", "./internal/quality", "./internal/backup", "./internal/doc", "./internal/docexport", "./internal/scheduler", "./internal/health", "./internal/chat", "./internal/mcp", "./internal/retention", "./internal/diagnostics", "./cmd/backup", "./cmd/server"]
+    "data": {
+      "packages": ["./internal/store", "./internal/backup", "./cmd/backup", "./internal/doc", "./internal/docexport", "./internal/quality", "./internal/sync/...", "./internal/notifications/...", "./internal/retention", "./internal/mcp"]
+    },
+    "api": {
+      "packages": ["./internal/api", "./internal/api/runbooks", "./internal/api/docs", "./internal/api/connectors", "./internal/api/topology", "./internal/api/auth"]
+    },
+    "other": {
+      "packages": ["./internal/auth", "./internal/config", "./internal/connector/...", "./internal/crypto", "./internal/httputil", "./internal/httpx", "./internal/ai", "./internal/report", "./internal/ttlcache", "./internal/compliance", "./internal/ws/...", "./internal/api/...", "./internal/topology", "./internal/scheduler", "./internal/health", "./internal/chat", "./internal/diagnostics", "./cmd/server"],
+      "exclude": ["./internal/api", "./internal/api/runbooks", "./internal/api/docs", "./internal/api/connectors", "./internal/api/topology", "./internal/api/auth"]
     }
   },
   "postgres": {

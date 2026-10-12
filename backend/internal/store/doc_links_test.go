@@ -31,6 +31,7 @@ func linkRows(t *testing.T, s *Store, source string) [][2]string {
 }
 
 func TestDocLinkIndexTracksEveryDocWriter(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	content1 := "[doc](/docs/10000000-0000-4000-8000-000000000001) [entity](/entities/20000000-0000-4000-8000-000000000001)"
@@ -66,6 +67,7 @@ func TestDocLinkIndexTracksEveryDocWriter(t *testing.T) {
 }
 
 func TestDocLinkIndexTracksImportAndVersionRestore(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	imported := DocRecord{ID: "imported", Title: "Imported", Content: "[target](/docs/10000000-0000-4000-8000-000000000003)"}
@@ -96,6 +98,7 @@ func TestDocLinkIndexTracksImportAndVersionRestore(t *testing.T) {
 }
 
 func TestDocLinkIndexSyncFailureRollsBackContent(t *testing.T) {
+	t.Parallel()
 	skipOnPostgres(t, "SQLite trigger syntax is used to deterministically reject a doc link insert")
 	ctx := context.Background()
 	s := newDocTestStore(t)
@@ -122,6 +125,7 @@ func TestDocLinkIndexSyncFailureRollsBackContent(t *testing.T) {
 }
 
 func TestDocLinkBackfillIsIdempotentAndDoesNotRewriteBodies(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	d := &DocRecord{ID: "source", Title: "Source", Content: "original"}
@@ -154,6 +158,7 @@ func TestDocLinkBackfillIsIdempotentAndDoesNotRewriteBodies(t *testing.T) {
 }
 
 func TestDeleteDocCascadesDocLinks(t *testing.T) {
+	t.Parallel()
 	s := newDocTestStore(t)
 	if s.driver == "sqlite" {
 		if _, err := s.db.ExecContext(context.Background(), `PRAGMA foreign_keys = ON`); err != nil {
@@ -173,6 +178,7 @@ func TestDeleteDocCascadesDocLinks(t *testing.T) {
 }
 
 func TestLookupDocLinkVisibilityAndEntityIdentity(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	visible := &ConnectorRecord{Name: "visible", Category: "virtualization", Type: "test", URL: "https://visible.test"}
@@ -233,6 +239,7 @@ func TestLookupDocLinkVisibilityAndEntityIdentity(t *testing.T) {
 }
 
 func TestLookupDocLinkQualifiedTargetFallsBackToDocTitle(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	visible := &ConnectorRecord{Name: "visible", Category: "virtualization", Type: "test", URL: "https://visible.test"}
@@ -289,6 +296,7 @@ func nullable(value string) any {
 }
 
 func TestListDocBacklinksFiltersHiddenAndSoftDeletedSources(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	if s.driver == "sqlite" {

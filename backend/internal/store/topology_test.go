@@ -7,6 +7,7 @@ import (
 )
 
 func TestTopologyEdgesReplaceAndFilter(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	var ids []string
@@ -56,6 +57,7 @@ func TestTopologyEdgesReplaceAndFilter(t *testing.T) {
 }
 
 func TestTopologyEdgesResolvesToOwnershipAndDetail(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	var ids []string
@@ -100,6 +102,7 @@ func TestTopologyEdgesResolvesToOwnershipAndDetail(t *testing.T) {
 }
 
 func TestTopologyEdgesFingerprint(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	var ids []string
@@ -167,6 +170,7 @@ func TestTopologyEdgesFingerprint(t *testing.T) {
 }
 
 func TestTopologyReplacementKeepsOneLogicalEdgeAcrossOwners(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	ids := createTopologyTestConnectors(t, s, "a", "b")
@@ -218,6 +222,7 @@ func TestTopologyReplacementKeepsOneLogicalEdgeAcrossOwners(t *testing.T) {
 }
 
 func TestTopologyPreservedOwnersDoNotDuplicateRefreshedSharedEdges(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	ids := createTopologyTestConnectors(t, s, "dns", "target", "matcher")
@@ -265,6 +270,7 @@ func TestTopologyPreservedOwnersDoNotDuplicateRefreshedSharedEdges(t *testing.T)
 }
 
 func TestTopologySameAsHasCanonicalDirectionAndOwner(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	ids := createTopologyTestConnectors(t, s, "a", "b")
@@ -314,6 +320,7 @@ func TestTopologySameAsHasCanonicalDirectionAndOwner(t *testing.T) {
 }
 
 func TestTopologyReplacementConcurrentRebuildsDoNotDuplicateSharedEdges(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	s := newDocTestStore(t)
@@ -372,6 +379,7 @@ func TestTopologyReplacementConcurrentRebuildsDoNotDuplicateSharedEdges(t *testi
 	}
 }
 
+// Not parallel: it holds the database-wide topology advisory lock.
 func TestTopologyReplacementWaitsForPostgresAdvisoryLock(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()

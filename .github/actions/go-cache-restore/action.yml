@@ -9,6 +9,12 @@ inputs:
   kind:
     description: Cache kind, e.g. race, cover, lint.
     required: true
+  shard:
+    description: >
+      Shard name, for a kind whose matrix jobs each save a cache (race). A
+      shard restores its own cache first, then any cache of the kind.
+    required: false
+    default: ""
 
 outputs:
   prefix:
@@ -30,18 +36,24 @@ runs:
     - name: Compute cache key
       id: key
       shell: bash
+      env:
+        SHARD: ${{ inputs.shard }}
       run: |
+        base="go-${{ inputs.kind }}-${RUNNER_OS}-$(go env GOVERSION)-"
+        hashed="$base${{ hashFiles('backend/go.sum') }}-"
         {
-          echo "prefix=go-${{ inputs.kind }}-${RUNNER_OS}-$(go env GOVERSION)-${{ hashFiles('backend/go.sum') }}-"
-          echo "base=go-${{ inputs.kind }}-${RUNNER_OS}-$(go env GOVERSION)-"
+          echo "prefix=$hashed${SHARD:+$SHARD-}"
+          echo "hashed=$hashed"
+          echo "base=$base"
           echo "paths<<EOF"
           go env GOMODCACHE GOCACHE
           echo "EOF"
         } >> "$GITHUB_OUTPUT"
 
     # Keys end in the run id: main saves a fresh cache each run and PRs restore
-    # the newest one by prefix. Falls back to other go.sum hashes, since most of
-    # the build cache survives a dependency bump.
+    # the newest one by prefix. A shard falls back to its siblings' caches,
+    # which share the compiled dependencies. Then to other go.sum hashes, since
+    # most of the build cache survives a dependency bump.
     - name: Restore Go cache
       uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
@@ -49,4 +61,5 @@ runs:
         key: ${{ steps.key.outputs.prefix }}${{ github.run_id }}
         restore-keys: |
           ${{ steps.key.outputs.prefix }}
+          ${{ steps.key.outputs.hashed }}
           ${{ steps.key.outputs.base }}

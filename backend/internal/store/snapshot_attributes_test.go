@@ -34,6 +34,7 @@ func testSnapshotWithAttributes() *connector.ServiceSnapshot {
 }
 
 func TestSnapshotAttributesRoundTripSQLite(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	c := &ConnectorRecord{Name: "pve1", Category: "virtualization", Type: "proxmox", URL: "https://example.com"}
@@ -68,6 +69,7 @@ func TestSnapshotAttributesRoundTripSQLite(t *testing.T) {
 	}
 }
 
+// Not parallel: it uses the shared default Postgres schema.
 func TestSnapshotAttributesRoundTripPostgres(t *testing.T) {
 	dsn := os.Getenv("WISELABZ_TEST_POSTGRES_DSN")
 	if dsn == "" {
@@ -118,6 +120,7 @@ func TestSnapshotAttributesRoundTripPostgres(t *testing.T) {
 // regression test: snapshots stored before this field existed must still
 // unmarshal cleanly, with Attributes left nil rather than failing to decode.
 func TestUnmarshalOldSnapshotWithoutAttributes(t *testing.T) {
+	t.Parallel()
 	old := `{
 		"serviceName": "pve1",
 		"type": "proxmox",

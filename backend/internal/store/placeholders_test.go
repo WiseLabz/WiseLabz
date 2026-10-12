@@ -3,6 +3,7 @@ package store
 import "testing"
 
 func TestRewritePlaceholders(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name string
 		in   string
@@ -51,6 +52,7 @@ func TestRewritePlaceholders(t *testing.T) {
 }
 
 func TestRewritePlaceholdersCached(t *testing.T) {
+	t.Parallel()
 	q := "SELECT * FROM cache_probe WHERE a = ? AND b = ?"
 	want := "SELECT * FROM cache_probe WHERE a = $1 AND b = $2"
 	for i := 0; i < 2; i++ {

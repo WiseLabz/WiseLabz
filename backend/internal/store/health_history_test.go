@@ -31,6 +31,7 @@ func addMaintenance(ctx context.Context, t *testing.T, s *Store, connectorID str
 
 // Outage entirely inside maintenance: availability unaffected, no outage.
 func TestUptimeOutageInsideMaintenance(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	id := createTestConnector(ctx, t, s)
@@ -57,6 +58,7 @@ func TestUptimeOutageInsideMaintenance(t *testing.T) {
 
 // Outage straddling the start of maintenance: only the part outside counts.
 func TestUptimeOutageStraddlingMaintenance(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	id := createTestConnector(ctx, t, s)
@@ -84,6 +86,7 @@ func TestUptimeOutageStraddlingMaintenance(t *testing.T) {
 
 // Maintenance elsewhere in the window leaves an unrelated outage untouched.
 func TestUptimeOutageOutsideMaintenance(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	id := createTestConnector(ctx, t, s)
@@ -110,6 +113,7 @@ func TestUptimeOutageOutsideMaintenance(t *testing.T) {
 }
 
 func TestListHealthCheckConnectors(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	now := time.Now().UTC()
@@ -142,6 +146,7 @@ func TestListHealthCheckConnectors(t *testing.T) {
 }
 
 func TestGetHealthHistoryBuckets(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	id := createTestConnector(ctx, t, s)
@@ -179,6 +184,7 @@ func TestGetHealthHistoryBuckets(t *testing.T) {
 }
 
 func TestGetFleetUptime(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	a := createTestConnector(ctx, t, s)
@@ -212,6 +218,7 @@ type chk = struct {
 // Only checks inside maintenance: nothing measured, so "no data" (count 0),
 // not 0% availability.
 func TestUptimeAllChecksInMaintenanceIsNoData(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	id := createTestConnector(ctx, t, s)
@@ -231,6 +238,7 @@ func TestUptimeAllChecksInMaintenanceIsNoData(t *testing.T) {
 
 // A check at exactly `until` is outside the window: no data.
 func TestUptimeCheckAtWindowEndIsNoData(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	id := createTestConnector(ctx, t, s)
@@ -250,6 +258,7 @@ func TestUptimeCheckAtWindowEndIsNoData(t *testing.T) {
 // The last status is not extrapolated to the window end: after the extension
 // cap the time is unknown and counts as neither up nor down.
 func TestUptimeStaleLastStatusIsCapped(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	id := createTestConnector(ctx, t, s)
@@ -280,6 +289,7 @@ func TestUptimeStaleLastStatusIsCapped(t *testing.T) {
 
 // A long gap between checks (connector disabled, server down) is bounded too.
 func TestUptimeGapBetweenChecksIsCapped(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	id := createTestConnector(ctx, t, s)

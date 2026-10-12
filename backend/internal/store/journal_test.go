@@ -11,6 +11,7 @@ import (
 )
 
 func TestJournalCRUDAndLinkSurvival(t *testing.T) {
+	t.Parallel()
 	s := newDocTestStore(t)
 	ctx := context.Background()
 	if s.driver == "sqlite" {
@@ -56,6 +57,7 @@ func TestJournalCRUDAndLinkSurvival(t *testing.T) {
 }
 
 func TestTimelineMergePagingAndPermissions(t *testing.T) {
+	t.Parallel()
 	s := newDocTestStore(t)
 	ctx := auth.ContextWithUser(context.Background(), "reader", true)
 	if err := s.CreateUser(ctx, &User{ID: "reader", Username: "reader"}); err != nil {
@@ -196,6 +198,7 @@ func TestTimelineMergePagingAndPermissions(t *testing.T) {
 }
 
 func TestJournalSurvivesOperationalRetention(t *testing.T) {
+	t.Parallel()
 	s := newDocTestStore(t)
 	ctx := context.Background()
 	e := JournalEntry{Body: "Irreplaceable old context", OccurredAt: "2000-01-01T00:00:00Z", CreatedAt: "2000-01-01T00:00:00Z"}
@@ -214,6 +217,7 @@ func TestJournalSurvivesOperationalRetention(t *testing.T) {
 }
 
 func TestRecipeActionJournalAuditBoundary(t *testing.T) {
+	t.Parallel()
 	s := newDocTestStore(t)
 	ctx := auth.ContextWithUser(context.Background(), "reader", true)
 	cid := createTestConnector(ctx, t, s)
@@ -243,6 +247,7 @@ func TestRecipeActionJournalAuditBoundary(t *testing.T) {
 }
 
 func TestTimelineAuditAllConnectorGrantsAndPaging(t *testing.T) {
+	t.Parallel()
 	s := newDocTestStore(t)
 	ctx := auth.ContextWithUser(context.Background(), "reader", false)
 	mustCreateUser(t, s, "reader")
@@ -328,6 +333,7 @@ func TestTimelineAuditAllConnectorGrantsAndPaging(t *testing.T) {
 }
 
 func TestTimelineAuditSnapshotSurvivesDeletedTargets(t *testing.T) {
+	t.Parallel()
 	s := newDocTestStore(t)
 	ctx := auth.ContextWithUser(context.Background(), "reader", false)
 	mustCreateUser(t, s, "reader")
@@ -381,6 +387,7 @@ func TestTimelineAuditSnapshotSurvivesDeletedTargets(t *testing.T) {
 }
 
 func TestAuditScopeDefaultsFailureAndRetention(t *testing.T) {
+	t.Parallel()
 	s := newDocTestStore(t)
 	ctx := context.Background()
 	cid := createTestConnector(ctx, t, s)
@@ -426,6 +433,7 @@ func TestAuditScopeDefaultsFailureAndRetention(t *testing.T) {
 }
 
 func TestTimelineAuditMemberDocLinkOnlyWhileLive(t *testing.T) {
+	t.Parallel()
 	s := newDocTestStore(t)
 	ctx := auth.ContextWithUser(context.Background(), "reader", false)
 	mustCreateUser(t, s, "reader")
@@ -462,6 +470,7 @@ func TestTimelineAuditMemberDocLinkOnlyWhileLive(t *testing.T) {
 }
 
 func TestTimelineAuditInstanceAdminPartialScopes(t *testing.T) {
+	t.Parallel()
 	s := newDocTestStore(t)
 	ctx := auth.ContextWithUser(context.Background(), "root", true)
 	mustCreateUser(t, s, "root")
@@ -502,6 +511,7 @@ func TestTimelineAuditInstanceAdminPartialScopes(t *testing.T) {
 }
 
 func TestAuditScopeRetentionKeepsRetainedRows(t *testing.T) {
+	t.Parallel()
 	s := newDocTestStore(t)
 	ctx := context.Background()
 	a := createTestConnector(ctx, t, s)
@@ -524,6 +534,7 @@ func TestAuditScopeRetentionKeepsRetainedRows(t *testing.T) {
 }
 
 func TestAuditWriterScopeShapes(t *testing.T) {
+	t.Parallel()
 	s := newDocTestStore(t)
 	adminCtx := auth.ContextWithUser(context.Background(), "root", true)
 	memberCtx := auth.ContextWithUser(context.Background(), "reader", false)
@@ -586,6 +597,7 @@ func TestAuditWriterScopeShapes(t *testing.T) {
 }
 
 func TestTimelineAuditQueryPlan(t *testing.T) {
+	t.Parallel()
 	s := newDocTestStore(t)
 	ctx := auth.ContextWithUser(context.Background(), "reader", false)
 	mustCreateUser(t, s, "reader")

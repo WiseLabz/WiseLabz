@@ -7,6 +7,7 @@ import (
 )
 
 func TestTextareaIsPlaintextAndRoundTrips(t *testing.T) {
+	t.Parallel()
 	if IsSecretFieldType("textarea") {
 		t.Fatal("textarea must not be encrypted")
 	}

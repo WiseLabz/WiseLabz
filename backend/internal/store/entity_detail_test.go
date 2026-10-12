@@ -46,6 +46,7 @@ func (f entityDetailFixture) member(t *testing.T, entityID, connectorID, ref, na
 }
 
 func TestEntityDetailResolveIdentity(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	f := newEntityDetailFixture(t)
 	f.entity(t, "head", "")
@@ -69,6 +70,7 @@ func TestEntityDetailResolveIdentity(t *testing.T) {
 }
 
 func TestEntityDetailMembersActiveFirstWithConnectorName(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	f := newEntityDetailFixture(t)
 	f.entity(t, "e1", "")
@@ -103,6 +105,7 @@ func TestEntityDetailMembersActiveFirstWithConnectorName(t *testing.T) {
 }
 
 func TestEntityDetailEdgesPredicateAndEndpointEntities(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	f := newEntityDetailFixture(t)
 	f.entity(t, "e1", "")
@@ -151,6 +154,7 @@ func TestEntityDetailEdgesPredicateAndEndpointEntities(t *testing.T) {
 }
 
 func TestEntityDetailEdgesOmitMergedIdentityIDsAtBothEndpoints(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	f := newEntityDetailFixture(t)
 	f.entity(t, "near", "")
@@ -204,6 +208,7 @@ func TestEntityDetailEdgesOmitMergedIdentityIDsAtBothEndpoints(t *testing.T) {
 }
 
 func TestEntityDetailFindingsOpenOnlyAndConnectorLevel(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	f := newEntityDetailFixture(t)
 	for _, fi := range []QualityFindingRecord{
@@ -237,6 +242,7 @@ func TestEntityDetailFindingsOpenOnlyAndConnectorLevel(t *testing.T) {
 }
 
 func TestEntityDetailRunbookStepsOrderedWithoutDistinct(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	f := newEntityDetailFixture(t)
 	mk := func(title, value string, steps ...*RunbookStepRecord) {

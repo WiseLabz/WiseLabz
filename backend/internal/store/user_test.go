@@ -12,6 +12,7 @@ import (
 )
 
 func TestOIDCIdentityUsesIssuerAndSubject(t *testing.T) {
+	t.Parallel()
 	s := newDocTestStore(t)
 	ctx := context.Background()
 	first := &User{Username: "oidc-first", Email: "same@example.com"}
@@ -41,6 +42,7 @@ func TestOIDCIdentityUsesIssuerAndSubject(t *testing.T) {
 }
 
 func TestRotateSessionTokenRequiresCurrentHash(t *testing.T) {
+	t.Parallel()
 	s := newDocTestStore(t)
 	ctx := context.Background()
 	u := &User{Username: "session-user"}
@@ -63,6 +65,7 @@ func TestRotateSessionTokenRequiresCurrentHash(t *testing.T) {
 }
 
 func TestRevokeSessionsByAuthSource(t *testing.T) {
+	t.Parallel()
 	s := newDocTestStore(t)
 	ctx := context.Background()
 	u := &User{Username: "session-source-user"}
@@ -100,6 +103,7 @@ func TestRevokeSessionsByAuthSource(t *testing.T) {
 }
 
 func TestRevokeSessionsByAuthSourceEmptyDoesNothing(t *testing.T) {
+	t.Parallel()
 	s := newDocTestStore(t)
 	ctx := context.Background()
 	u := &User{Username: "local-session-user"}
@@ -131,6 +135,7 @@ func TestRevokeSessionsByAuthSourceEmptyDoesNothing(t *testing.T) {
 }
 
 func TestRevokeSessionsByAuthSourceReturnsError(t *testing.T) {
+	t.Parallel()
 	s := newDocTestStore(t)
 	if err := s.Close(); err != nil {
 		t.Fatalf("Close() error: %v", err)
@@ -142,6 +147,7 @@ func TestRevokeSessionsByAuthSourceReturnsError(t *testing.T) {
 }
 
 func TestIsUniqueViolation(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name string
 		err  error
@@ -189,6 +195,7 @@ func TestIsUniqueViolation(t *testing.T) {
 }
 
 func TestRegisterFailedLoginLocksAfterMaxAttempts(t *testing.T) {
+	t.Parallel()
 	s := newDocTestStore(t)
 	ctx := context.Background()
 	u := &User{Username: "lockout-user"}
@@ -238,6 +245,7 @@ func TestRegisterFailedLoginLocksAfterMaxAttempts(t *testing.T) {
 }
 
 func TestGetUserRoleStatus(t *testing.T) {
+	t.Parallel()
 	s := newDocTestStore(t)
 	ctx := context.Background()
 	u := &User{Username: "role-status-user", InstanceAdminRole: "admin"}
@@ -264,6 +272,7 @@ func TestGetUserRoleStatus(t *testing.T) {
 }
 
 func TestUserHasPermission(t *testing.T) {
+	t.Parallel()
 	s := newDocTestStore(t)
 	ctx := context.Background()
 	u := &User{Username: "perm-user", CanManageDashboardDefaults: true}
@@ -305,6 +314,7 @@ func TestUserHasPermission(t *testing.T) {
 }
 
 func TestDeleteSession(t *testing.T) {
+	t.Parallel()
 	s := newDocTestStore(t)
 	ctx := context.Background()
 	u := &User{Username: "delete-session-user"}
@@ -335,6 +345,7 @@ func TestDeleteSession(t *testing.T) {
 }
 
 func TestUpdateUserErrors(t *testing.T) {
+	t.Parallel()
 	s := newDocTestStore(t)
 	ctx := context.Background()
 	u := &User{Username: "update-user"}
@@ -376,6 +387,7 @@ func TestUpdateUserErrors(t *testing.T) {
 }
 
 func TestDeleteUserErrors(t *testing.T) {
+	t.Parallel()
 	s := newDocTestStore(t)
 	ctx := context.Background()
 	u := &User{Username: "delete-user"}
@@ -401,6 +413,7 @@ func TestDeleteUserErrors(t *testing.T) {
 }
 
 func TestRotateSessionTokenErrors(t *testing.T) {
+	t.Parallel()
 	s := newDocTestStore(t)
 	ctx := context.Background()
 	u := &User{Username: "rotate-user"}
@@ -435,6 +448,7 @@ func TestRotateSessionTokenErrors(t *testing.T) {
 }
 
 func TestDisableUserRevokesShareLinksAtomically(t *testing.T) {
+	t.Parallel()
 	s := newDocTestStore(t)
 	ctx := t.Context()
 	u := &User{Username: "share-creator"}
@@ -499,6 +513,7 @@ func TestDisableUserRevokesShareLinksAtomically(t *testing.T) {
 // holds the user enabled (a lagging replica) and checks the writer-only read
 // sees the committed disable and delete while GetUserByID reads the replica.
 func TestGetUserByIDFromWriterIgnoresReadPool(t *testing.T) {
+	t.Parallel()
 	s := newDocTestStore(t)
 	if s.driver == "postgres" {
 		t.Skip("read pools are SQLite-only (OpenReadDB returns nil for postgres)")

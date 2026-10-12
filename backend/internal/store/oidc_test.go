@@ -6,6 +6,7 @@ import (
 )
 
 func TestOIDCProviderFlags(t *testing.T) {
+	t.Parallel()
 	s := newDocTestStore(t)
 	ctx := context.Background()
 	if err := s.SetOIDCProviderEnabled(ctx, "authentik", false); err != nil {
@@ -25,6 +26,7 @@ func TestOIDCProviderFlags(t *testing.T) {
 }
 
 func TestSetOIDCProviderEnabledErrorHandling(t *testing.T) {
+	t.Parallel()
 	s := newDocTestStore(t)
 	ctx := context.Background()
 
@@ -53,6 +55,7 @@ func TestSetOIDCProviderEnabledErrorHandling(t *testing.T) {
 }
 
 func TestGetOIDCProviderFlagsErrorHandling(t *testing.T) {
+	t.Parallel()
 	s := newDocTestStore(t)
 	ctx := context.Background()
 

@@ -9,6 +9,7 @@ import (
 )
 
 func TestOpenDBEnablesSQLiteForeignKeys(t *testing.T) {
+	t.Parallel()
 	db, err := OpenDB("sqlite", "file:"+filepath.Join(t.TempDir(), "test.db")+"?cache=shared")
 	if err != nil {
 		t.Fatalf("OpenDB() error: %v", err)
@@ -25,6 +26,7 @@ func TestOpenDBEnablesSQLiteForeignKeys(t *testing.T) {
 }
 
 func TestWithinTransactionRollsBack(t *testing.T) {
+	t.Parallel()
 	s := newDocTestStore(t)
 	ctx := context.Background()
 	template := &TemplateRecord{Name: "before"}
@@ -51,6 +53,7 @@ func TestWithinTransactionRollsBack(t *testing.T) {
 }
 
 func TestOpenDBSetsSQLiteDurabilityPragmas(t *testing.T) {
+	t.Parallel()
 	db, err := OpenDB("sqlite", "file:"+filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
 		t.Fatalf("OpenDB() error: %v", err)
@@ -71,6 +74,7 @@ func TestOpenDBSetsSQLiteDurabilityPragmas(t *testing.T) {
 }
 
 func TestPoolConfigWithDefaults(t *testing.T) {
+	t.Parallel()
 	got := PoolConfig{}.withDefaults()
 	if got.MaxOpenConns != 20 || got.MaxIdleConns != 5 ||
 		got.ConnMaxLifetime != 30*time.Minute || got.ConnMaxIdleTime != 5*time.Minute {
@@ -83,6 +87,7 @@ func TestPoolConfigWithDefaults(t *testing.T) {
 }
 
 func TestReadOnlyDSN(t *testing.T) {
+	t.Parallel()
 	for dsn, want := range map[string]string{
 		"file:/data/w.db?cache=shared":   "file:/data/w.db?mode=ro&_pragma=busy_timeout(5000)",
 		"/data/w.db":                     "file:/data/w.db?mode=ro&_pragma=busy_timeout(5000)",
@@ -98,6 +103,7 @@ func TestReadOnlyDSN(t *testing.T) {
 }
 
 func TestOpenReadDBIsReadOnlyAndSeesWrites(t *testing.T) {
+	t.Parallel()
 	dsn := "file:" + filepath.Join(t.TempDir(), "test.db") + "?cache=shared"
 	writer, err := OpenDB("sqlite", dsn)
 	if err != nil {

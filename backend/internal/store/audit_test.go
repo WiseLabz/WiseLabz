@@ -7,6 +7,7 @@ import (
 )
 
 func TestCreateAuditRecordAndListFiltering(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 
@@ -60,6 +61,7 @@ func TestCreateAuditRecordAndListFiltering(t *testing.T) {
 }
 
 func TestRecordAuditFromContextMarshalsDetail(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 
@@ -87,6 +89,7 @@ func TestRecordAuditFromContextMarshalsDetail(t *testing.T) {
 }
 
 func TestListAuditRecordsDateRange(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 
@@ -138,6 +141,7 @@ func TestListAuditRecordsDateRange(t *testing.T) {
 }
 
 func TestEachAuditRecord(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 
@@ -189,6 +193,7 @@ func TestEachAuditRecord(t *testing.T) {
 // created_at values, so the (created_at, id) tiebreak must neither drop nor
 // repeat rows at page boundaries.
 func TestEachAuditRecordPaging(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 

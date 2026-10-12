@@ -24,7 +24,8 @@ jobs:
   changes:
     name: Detect changes
     runs-on: ubuntu-latest
-    # Go is set up only when backend changed, to compute the Postgres closure.
+    # No Go here: every other job waits for this one. The Postgres closure,
+    # which needs Go, is its own job (postgres-closure).
     timeout-minutes: 5
     outputs:
       backend: ${{ steps.classify.outputs.backend }}
@@ -32,7 +33,7 @@ jobs:
       compose: ${{ steps.classify.outputs.compose }}
       workflows: ${{ steps.classify.outputs.workflows }}
       gomod: ${{ steps.classify.outputs.gomod }}
-      postgres: ${{ steps.closure.outputs.postgres || 'false' }}
+      files: ${{ steps.filter.outputs.all_files }}
       draft: ${{ github.event.pull_request.draft == true }}
       race_shards: ${{ steps.shards.outputs.race }}
       postgres_shards: ${{ steps.shards.outputs.postgres }}
@@ -80,23 +81,6 @@ jobs:
             echo "**Draft: heavy jobs deferred** until the PR is marked ready for review." >> "$GITHUB_STEP_SUMMARY"
           fi
 
-      # Restore-only: nothing is saved from this job.
-      - name: Setup Go
-        if: steps.classify.outputs.backend == 'true' && github.event.pull_request.draft != true
-        uses: ./.github/actions/go-cache-restore
-        with:
-          kind: lint
-
-      - name: Postgres test closure
-        id: closure
-        if: steps.classify.outputs.backend == 'true' && github.event.pull_request.draft != true
-        env:
-          FILES: ${{ steps.filter.outputs.all_files }}
-        run: |
-          scripts/ci/changes.sh check --go
-          jq -r '.[]' <<<"$FILES" |
-            CHANGES_SUMMARY="$GITHUB_STEP_SUMMARY" scripts/ci/changes.sh go-closure >> "$GITHUB_OUTPUT"
-
       # Shard names come from scripts/ci/test-shards.json, the single place
       # shards are defined; see scripts/ci/test-shards.sh.
       - name: Load test shard matrices
@@ -105,6 +89,41 @@ jobs:
           for suite in race postgres; do
             echo "$suite=$(scripts/ci/test-shards.sh matrix "$suite")" >> "$GITHUB_OUTPUT"
           done
+
+  postgres-closure:
+    name: Postgres closure
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.backend == 'true' && needs.changes.outputs.draft != 'true'
+    timeout-minutes: 5
+    outputs:
+      postgres: ${{ steps.closure.outputs.postgres }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Restore-only: nothing is saved from this job. The Postgres cache holds
+      # the modules `go list -deps` needs for the closure.
+      - name: Setup Go
+        uses: ./.github/actions/go-cache-restore
+        with:
+          kind: postgres
+
+      - name: Postgres test closure
+        id: closure
+        env:
+          FILES: ${{ needs.changes.outputs.files }}
+        run: |
+          scripts/ci/changes.sh check --go
+          # A job output over 1 MB is dropped. Without the list, run the shards.
+          if [[ -z $FILES ]]; then
+            echo "::warning::changed-file list unavailable; running the Postgres shards"
+            echo "postgres=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          jq -r '.[]' <<<"$FILES" |
+            CHANGES_SUMMARY="$GITHUB_STEP_SUMMARY" scripts/ci/changes.sh go-closure >> "$GITHUB_OUTPUT"
 
   actionlint:
     name: Lint (Workflows)
@@ -281,9 +300,47 @@ jobs:
         working-directory: web
 
   test-frontend:
-    name: Test (Frontend)
+    name: Test (Frontend, ${{ matrix.shard }}/3)
     runs-on: ubuntu-latest
     needs: changes
+    if: needs.changes.outputs.frontend == 'true' && needs.changes.outputs.draft != 'true'
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        # The count also appears in the job name, in --shard below and in the
+        # number of reports test-frontend-coverage expects.
+        shard: [1, 2, 3]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Bun
+        uses: ./.github/actions/bun-setup
+
+      # A shard sees a third of the suite, so it records coverage in a blob
+      # report and checks no threshold; test-frontend-coverage does.
+      - name: Run tests
+        run: bun run test:shard --shard="$SHARD/3"
+        working-directory: web
+        env:
+          SHARD: ${{ matrix.shard }}
+
+      # .vitest is a hidden directory, which upload-artifact skips by default.
+      - name: Upload blob report
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: vitest-blob-${{ matrix.shard }}
+          path: web/.vitest/blob
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 1
+
+  test-frontend-coverage:
+    name: Test (Frontend, coverage)
+    runs-on: ubuntu-latest
+    needs: [changes, test-frontend]
     if: needs.changes.outputs.frontend == 'true' && needs.changes.outputs.draft != 'true'
     timeout-minutes: 5
 
@@ -294,8 +351,23 @@ jobs:
       - name: Setup Bun
         uses: ./.github/actions/bun-setup
 
-      - name: Run tests with coverage
-        run: bun run test:coverage
+      - name: Download blob reports
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: vitest-blob-*
+          path: web/.vitest/blob
+          merge-multiple: true
+
+      # Runs no test: merges the shard reports and enforces the coverage
+      # thresholds in web/vitest.config.ts on the whole suite.
+      - name: Merge reports and enforce coverage thresholds
+        run: |
+          blobs=(.vitest/blob/blob-*.json)
+          if ((${#blobs[@]} != 3)); then
+            echo "::error::expected 3 shard reports, found ${#blobs[@]}"
+            exit 1
+          fi
+          bun run test:merge
         working-directory: web
 
       - name: Upload coverage
@@ -375,13 +447,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      # One shard since #401 (see docs/TESTING.md); the matrix stays so the
-      # suite can be re-split in scripts/ci/test-shards.json alone.
+      # Every shard saves its own cache: the build cache also holds the test
+      # results that let an unchanged package report (cached).
       - name: Setup Go
         id: go
         uses: ./.github/actions/go-cache-restore
         with:
           kind: race
+          shard: ${{ matrix.shard }}
 
       - name: Run race-sensitive tests
         run: scripts/ci/test-shards.sh run race "$SHARD" -timeout 8m -race
@@ -397,10 +470,10 @@ jobs:
   test-backend-postgres:
     name: Test (Backend, Postgres, ${{ matrix.shard }})
     runs-on: ubuntu-latest
-    needs: changes
+    needs: [changes, postgres-closure]
     # Only when the change touches the Go dependency closure of the Postgres
     # test packages (scripts/ci/changes.sh go-closure).
-    if: needs.changes.outputs.postgres == 'true' && needs.changes.outputs.draft != 'true'
+    if: needs.postgres-closure.outputs.postgres == 'true'
     timeout-minutes: 10
     permissions:
       contents: read
@@ -539,12 +612,14 @@ jobs:
     runs-on: ubuntu-latest
     needs:
       - changes
+      - postgres-closure
       - actionlint
       - lint-backend
       - staticcheck
       - govulncheck
       - lint-frontend
       - test-frontend
+      - test-frontend-coverage
       - test-backend
       - test-backend-race
       - test-backend-postgres
@@ -568,11 +643,16 @@ jobs:
                 (if $outputs.workflows == "true" then "actionlint" else empty end),
                 (if $outputs.draft != "true" then
                   (if $outputs.backend == "true" then
-                    "lint-backend", "staticcheck", "test-backend", "test-backend-race"
+                    "lint-backend", "staticcheck", "test-backend", "test-backend-race", "postgres-closure",
+                    # Anything but an explicit "false" from the closure selects the shards.
+                    (if $needs["postgres-closure"].outputs.postgres != "false" then
+                      "test-backend-postgres"
+                    else empty end)
                   else empty end),
-                  (if $outputs.frontend == "true" then "lint-frontend", "test-frontend" else empty end),
+                  (if $outputs.frontend == "true" then
+                    "lint-frontend", "test-frontend", "test-frontend-coverage"
+                  else empty end),
                   (if $outputs.gomod == "true" then "govulncheck" else empty end),
-                  (if $outputs.postgres == "true" then "test-backend-postgres" else empty end),
                   (if $outputs.backend == "true" or $outputs.frontend == "true" then "build" else empty end),
                   (if $outputs.compose == "true" then "compose-smoke" else empty end)
                 else empty end)

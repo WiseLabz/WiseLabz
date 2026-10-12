@@ -6,6 +6,7 @@ import (
 )
 
 func TestRunbookNewStepKindsCRUD(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	book, connectorID := createRunbookRunFixture(t, s)
@@ -65,6 +66,7 @@ func TestRunbookNewStepKindsCRUD(t *testing.T) {
 }
 
 func TestRunbookRunNewStepFieldsRemainFrozen(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	book, connectorID := createRunbookRunFixture(t, s)
@@ -98,6 +100,7 @@ func TestRunbookRunNewStepFieldsRemainFrozen(t *testing.T) {
 }
 
 func TestListEntityRunbookStepsReturnsNewKinds(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	book, connectorID := createRunbookRunFixture(t, s)

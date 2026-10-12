@@ -8,6 +8,7 @@ import (
 )
 
 func TestRunbookConnectorActionFieldsRoundTrip(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	book, connectorID := createRunbookRunFixture(t, s)

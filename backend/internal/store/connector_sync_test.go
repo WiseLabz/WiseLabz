@@ -7,6 +7,7 @@ import (
 )
 
 func TestSnapshotKeysetSummaryAndConnectorOwnership(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	connectorID := createTestConnector(ctx, t, s)

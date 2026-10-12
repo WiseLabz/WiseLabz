@@ -9,6 +9,7 @@ import (
 )
 
 func TestDeleteOldSnapshotsProtectsLatest(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	connectorID := createTestConnector(ctx, t, s)
@@ -66,6 +67,7 @@ func TestDeleteOldSnapshotsProtectsLatest(t *testing.T) {
 }
 
 func TestDeleteOldSnapshotsProtectsGolden(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	connectorID := createTestConnector(ctx, t, s)
@@ -91,6 +93,7 @@ func TestDeleteOldSnapshotsProtectsGolden(t *testing.T) {
 }
 
 func TestDeleteOldDocVersionsProtectsCurrent(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 
@@ -138,6 +141,7 @@ func TestDeleteOldDocVersionsProtectsCurrent(t *testing.T) {
 }
 
 func TestDeleteOldAlertsSkipsActiveStatuses(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	connectorID := createTestConnector(ctx, t, s)
@@ -190,6 +194,7 @@ func TestDeleteOldAlertsSkipsActiveStatuses(t *testing.T) {
 }
 
 func TestDeleteOldSyncRuns(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	connectorID := createTestConnector(ctx, t, s)
@@ -232,6 +237,7 @@ func TestDeleteOldSyncRuns(t *testing.T) {
 }
 
 func TestDeleteOldAuditRecords(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 
@@ -273,6 +279,7 @@ func TestDeleteOldAuditRecords(t *testing.T) {
 }
 
 func TestDeleteOldSnapshotsBatches(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	connectorID := createTestConnector(ctx, t, s)
@@ -297,6 +304,7 @@ func TestDeleteOldSnapshotsBatches(t *testing.T) {
 }
 
 func TestDeleteOldSnapshotsStopsOnCancelledContext(t *testing.T) {
+	t.Parallel()
 	s := newDocTestStore(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -306,6 +314,7 @@ func TestDeleteOldSnapshotsStopsOnCancelledContext(t *testing.T) {
 }
 
 func TestUnsnoozeExpiredAlerts(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	if n, err := s.UnsnoozeExpiredAlerts(ctx); err != nil || n != 0 {
@@ -347,6 +356,7 @@ func assertQueryPlanUsesIndex(t *testing.T, s *Store, index, query string, args 
 // TestDeleteStaleSessionsUsesIndex proves 000032's idx_sessions_last_seen
 // covers the retention sweep instead of leaving it to scan sessions (#299).
 func TestDeleteStaleSessionsUsesIndex(t *testing.T) {
+	t.Parallel()
 	skipOnPostgres(t, "EXPLAIN QUERY PLAN is SQLite-only")
 	s := newDocTestStore(t)
 	assertQueryPlanUsesIndex(t, s, "idx_sessions_last_seen", fmt.Sprintf(

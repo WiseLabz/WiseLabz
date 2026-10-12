@@ -26,6 +26,7 @@ func init() {
 }
 
 func TestCreateConnectorDefaultsSecretRotatedAtToCreatedAt(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 
@@ -53,6 +54,7 @@ func TestCreateConnectorDefaultsSecretRotatedAtToCreatedAt(t *testing.T) {
 }
 
 func TestConnectorRotationFieldsRoundTrip(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 
@@ -113,6 +115,7 @@ func TestConnectorRotationFieldsRoundTrip(t *testing.T) {
 }
 
 func TestSecretFieldsChangedOnActualSecretChange(t *testing.T) {
+	t.Parallel()
 	old, err := MarshalConnectorConfig(rotationTestConnType, map[string]any{
 		"url": "https://example.com", "api_key": "old-key", "api_secret": "old-secret",
 	}, testEncKey)
@@ -132,6 +135,7 @@ func TestSecretFieldsChangedOnActualSecretChange(t *testing.T) {
 }
 
 func TestSecretFieldsChangedFalseOnRenameOnly(t *testing.T) {
+	t.Parallel()
 	old, err := MarshalConnectorConfig(rotationTestConnType, map[string]any{
 		"url": "https://example.com", "api_key": "same-key", "api_secret": "same-secret",
 	}, testEncKey)
@@ -152,6 +156,7 @@ func TestSecretFieldsChangedFalseOnRenameOnly(t *testing.T) {
 }
 
 func TestSecretFieldsChangedFalseOnResubmittedUnchangedSecret(t *testing.T) {
+	t.Parallel()
 	old, err := MarshalConnectorConfig(rotationTestConnType, map[string]any{
 		"url": "https://example.com", "api_key": "same-key", "api_secret": "same-secret",
 	}, testEncKey)
@@ -171,6 +176,7 @@ func TestSecretFieldsChangedFalseOnResubmittedUnchangedSecret(t *testing.T) {
 }
 
 func TestSecretFieldsChangedMultipleSecretFields(t *testing.T) {
+	t.Parallel()
 	old, err := MarshalConnectorConfig(rotationTestConnType, map[string]any{
 		"url": "https://example.com", "api_key": "key-1", "api_secret": "secret-1",
 	}, testEncKey)
@@ -192,6 +198,7 @@ func TestSecretFieldsChangedMultipleSecretFields(t *testing.T) {
 }
 
 func TestSecretFieldsChangedLegacyPlaintext(t *testing.T) {
+	t.Parallel()
 	// Simulates a row saved before encryption was added: api_key stored as
 	// plain JSON text rather than ciphertext.
 	legacyJSON := `{"url":"https://example.com","api_key":"legacy-plain","api_secret":"legacy-plain-2"}`

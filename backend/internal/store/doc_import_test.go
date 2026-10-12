@@ -8,6 +8,7 @@ import (
 )
 
 func TestImportDocsSuffixesCollisionsAtomically(t *testing.T) {
+	t.Parallel()
 	s := newDocTestStore(t)
 	ctx := context.Background()
 	existing := &DocRecord{Title: "Network", CreatedBy: "writer"}

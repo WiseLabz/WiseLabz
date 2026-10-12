@@ -9,6 +9,7 @@ import (
 )
 
 func TestNew(t *testing.T) {
+	t.Parallel()
 	db, err := sql.Open("sqlite", ":memory:")
 	if err != nil {
 		t.Fatalf("open db: %v", err)
@@ -25,6 +26,7 @@ func TestNew(t *testing.T) {
 }
 
 func TestPing(t *testing.T) {
+	t.Parallel()
 	db, err := sql.Open("sqlite", ":memory:")
 	if err != nil {
 		t.Fatalf("open db: %v", err)

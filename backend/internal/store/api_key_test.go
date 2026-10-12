@@ -7,6 +7,7 @@ import (
 )
 
 func TestAPIKeyLifecycle(t *testing.T) {
+	t.Parallel()
 	s := newDocTestStore(t)
 	ctx := context.Background()
 	user := &User{Username: "api-key-user"}
@@ -56,6 +57,7 @@ func TestAPIKeyLifecycle(t *testing.T) {
 // users table, so a still-valid API key kept working after its owner was
 // disabled or demoted. It must now reflect live user state.
 func TestLookupAPIKeyRejectsDisabledUser(t *testing.T) {
+	t.Parallel()
 	s := newDocTestStore(t)
 	ctx := context.Background()
 
@@ -89,6 +91,7 @@ func TestLookupAPIKeyRejectsDisabledUser(t *testing.T) {
 // role demotion after the key was issued must take effect immediately,
 // instead of the key continuing to carry its original stored role.
 func TestLookupAPIKeyReflectsLiveRole(t *testing.T) {
+	t.Parallel()
 	s := newDocTestStore(t)
 	ctx := context.Background()
 
@@ -112,6 +115,7 @@ func TestLookupAPIKeyReflectsLiveRole(t *testing.T) {
 }
 
 func TestAPIKeyNotFound(t *testing.T) {
+	t.Parallel()
 	s := newDocTestStore(t)
 	ctx := context.Background()
 	if _, err := s.GetAPIKeyByHash(ctx, "missing"); !errors.Is(err, ErrNotFound) {
@@ -126,6 +130,7 @@ func TestAPIKeyNotFound(t *testing.T) {
 }
 
 func TestRevokeAllAPIKeysForUser(t *testing.T) {
+	t.Parallel()
 	s := newDocTestStore(t)
 	ctx := context.Background()
 	u := &User{Username: "revoke-all-user"}
@@ -214,6 +219,7 @@ func TestRevokeAllAPIKeysForUser(t *testing.T) {
 }
 
 func TestTouchAPIKeyLastUsed(t *testing.T) {
+	t.Parallel()
 	s := newDocTestStore(t)
 	ctx := context.Background()
 	u := &User{Username: "touch-user"}

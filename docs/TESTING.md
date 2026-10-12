@@ -1,6 +1,6 @@
 # Backend test performance
 
-This file records where backend Go test time went, what #401 and #405–#408 changed, what they
+This file records where backend Go test time went, what #401, #405–#408 and #720 changed, what they
 rejected and why, and the rules that keep the suite fast without weakening
 determinism, race detection or coverage. Read it before adding a slow test,
 a `time.Sleep`, a `t.Parallel()` or a new CI shard. [What CI runs](#what-ci-runs)
@@ -31,8 +31,8 @@ or coverage (see the parity check below).
 Before extending `t.Parallel()` to any new package, add its explicit package
 path to the maintained allowlist in `.github/workflows/test-stress.yml` and
 require a passing **Test stress** run on the rollout commit. The allowlist
-currently contains `./internal/api` and `./internal/api/connectors`; it takes
-no user-supplied package expressions. Keep fixtures isolated per test and
+currently contains `./internal/api`, `./internal/api/connectors` and
+`./internal/store`; it takes no user-supplied package expressions. Keep fixtures isolated per test and
 use local servers; the gate needs no public test services or shared fixtures.
 
 After the workflow is available on the default branch, run it from Actions
@@ -42,8 +42,8 @@ After the workflow is available on the default branch, run it from Actions
 gh workflow run test-stress.yml --ref <rollout-branch>
 ```
 
-Each package runs `go test -race -count=20 -shuffle=on -timeout=10m -v` in
-its own job, with a 20-minute job timeout. This manual gate stays out of
+Each package runs `go test -race -count=20 -shuffle=on -timeout=20m -v` in
+its own job, with a 30-minute job timeout. This manual gate stays out of
 routine PR CI. Failed tests fail the job; other package jobs still finish.
 The `stress-*` artifacts are retained for 14 days, including on failure:
 `metadata.txt` records the checked-out commit, package, flags, run URL and Go
@@ -51,9 +51,9 @@ version, and `tests.log` contains stdout/stderr and the `-test.shuffle` seed.
 To reproduce, check out that commit and run from `backend/` with the recorded
 package and Go version, replacing `-shuffle=on` with `-shuffle=<seed>`.
 
-PR #404 already passed the temporary shuffled race stress runs for the two
-current parallel packages (288s for `internal/api`, 155s for
-`internal/api/connectors`). This retained gate supports future rollouts.
+PR #404 already passed the temporary shuffled race stress runs for the
+first two parallel packages (288s for `internal/api`, 155s for
+`internal/api/connectors`). `internal/store` joined the allowlist in #720.
 
 ## Where the time went
 
@@ -100,7 +100,8 @@ The race-suite cost broke down as follows:
   an import cycle. Tests stay fully isolated:
   each gets its own file.
 - **Parallel tests.** Every top-level test in `internal/api` and
-  `internal/api/connectors` calls `t.Parallel()` (see the rules below).
+  `internal/api/connectors` calls `t.Parallel()`, and since #720 so does
+  `internal/store` (see the rules below).
 - **Deterministic time.**
   - Scheduler tests run inside `testing/synctest` bubbles, so cron ticks use a
     fake clock.
@@ -118,8 +119,9 @@ The race-suite cost broke down as follows:
     closed local port.
 - **CI layout.**
   - Coverage is one unsharded job.
-  - The race suite is one shard covering `internal/api/...` and all eleven
-    #405–#407 packages listed below.
+  - The race suite was one shard covering `internal/api/...` and all eleven
+    #405–#407 packages listed below. #720 split it into three; see
+    [CI critical path](#ci-critical-path-720).
   - The Postgres shards are unchanged: they need a Postgres service, so they
     are measured in CI only.
 
@@ -182,6 +184,14 @@ merge step.
     fake type's `TypeSchema` instead of mutating a package variable.
 - Goroutines a test starts must stop with the test: use `t.Context()`.
 
+**Parallel store tests** (`internal/store`): every top-level test calls
+`t.Parallel()` and takes its own database from `newDocTestStore` (a SQLite
+file copy, or one Postgres schema per test). Six Postgres-only tests stay
+serial and say why in a comment above the function: five work in the shared
+default schema, and one holds the topology advisory lock. A new test that
+needs either does the same. The Postgres shards still run one package at a
+time (`-p 1`).
+
 **Serial by choice:** every other package. They are fast now, so
 `t.Parallel()` would not meet the adoption bar. Some also have real
 blockers:
@@ -190,9 +200,6 @@ blockers:
   loopback is blocked.
 - The connector packages mix `AllowLoopbackForTest` with blocked-loopback
   tests.
-- The `store` Postgres job runs with `-p 1` and one schema per test. It runs
-  only when a change reaches the store's Go dependency closure (see
-  [What CI runs](#what-ci-runs)).
 
 **Time:**
 
@@ -239,8 +246,8 @@ top of `scripts/ci/changes.sh`. The first match wins.
 
 | Output | Selected by | Jobs |
 |---|---|---|
-| `backend` | `backend/**`, `go.work*`, `.golangci.yml`, `scripts/ci/**`, the Go cache actions | lint, staticcheck, unit, race, build |
-| `frontend` | `web/**`, `docs/openapi.yaml`, the Bun setup action | lint, test, build |
+| `backend` | `backend/**`, `go.work*`, `.golangci.yml`, `scripts/ci/**`, the Go cache actions | lint, staticcheck, unit, race (3 shards), build, `Postgres closure` |
+| `frontend` | `web/**`, `docs/openapi.yaml`, the Bun setup action | lint, test (3 shards, then `Test (Frontend, coverage)`), build |
 | `compose` | backend or frontend, plus `Dockerfile`, `.dockerignore`, `docker-compose*.yml`, `.env.example`, `scripts/compose-smoke.*` | compose-smoke |
 | `workflows` | `.github/workflows/**`, `.github/actions/**`, `.github/codeql/**` | `Lint (Workflows)` (actionlint + shellcheck) |
 | `gomod` | `backend/go.mod`, `backend/go.sum`, `go.work*` | govulncheck |
@@ -288,14 +295,17 @@ classifies the changes of every PR in the entry from the queue's base to its
 head. The version-only rule above does not apply there, so a release PR runs
 the frontend jobs once in the queue.
 
-**Postgres closure.** When backend changed, `changes` sets up Go and runs
-`changes.sh go-closure`. It lists the dependencies of the Postgres test
+**Postgres closure.** When backend changed, the `Postgres closure` job sets
+up Go and runs `changes.sh go-closure`. It is a separate job so that only the
+Postgres shards wait for Go; every other job starts as soon as `Detect changes`
+has classified the paths. It lists the dependencies of the Postgres test
 packages (from `test-shards.json`) and `./cmd/migrate` with
 `go list -deps -test`. It then maps each changed file to its nearest enclosing
 Go package, so migrations, `testdata/` and deleted files count too. The shards
 run when that package is in the closure. They also run for Go module files,
 `scripts/ci/**`, the Go cache actions, `ci.yml`, unclassified paths, a path
-with no enclosing package, or a `go list` failure.
+with no enclosing package, a `go list` failure, or a missing changed-file
+list. `CI Status` requires the shards unless the job answered `false`.
 
 **govulncheck.** PR CI runs it only when `gomod` is selected. The
 `Govulncheck nightly` workflow scans `main` every day at 06:17 UTC (it can
@@ -316,8 +326,8 @@ path-filtered: its settings (`gh api repos/WiseLabz/WiseLabz/code-quality/setup`
 cover only on/off, languages, runner and AI findings.
 
 **Reading a run.** The `Detect changes` job summary lists the selected areas.
-It has a collapsible table of every changed path with the rule it matched,
-followed by the Postgres decision and its reason.
+It has a collapsible table of every changed path with the rule it matched.
+The `Postgres closure` job summary has the Postgres decision and its reason.
 
 **Adding or changing a rule.** Edit the table in `scripts/ci/changes.sh`
 (order matters), then add a row to `scripts/ci/changes-fixtures.txt` for the
@@ -437,6 +447,50 @@ Results after #401 (PR #404, median of 3 CI runs):
   Expect the job to get faster once `main` has saved the cache.
 - **Postgres:** these shards did not change; their 137s → 178s is runner
   variance.
+
+## CI critical path (#720)
+
+Over 96 full runs (Oct 7–10 2026) a PR took 275s at the median and 421s at
+p90. The single race job set that time: 262s at the median, 373s at p90,
+445s at worst. It took about 90–120s when Go's test cache answered for
+`internal/store`, and 300–445s when a change reached that package, which
+most others import. `Test (Frontend)` was next at 143s, and every job waited
+about 30s for `Detect changes`, 19s of it installing Go for the Postgres
+closure.
+
+What changed:
+
+- **`internal/store` tests run in parallel** (see
+  [Rules for new tests](#rules-for-new-tests)). The package ran its 328
+  tests one after another and took 124s locally with `-race` on 4 procs.
+  With `t.Parallel()` in 322 of them it takes 48–57s.
+- **Three race shards**, defined in `scripts/ci/test-shards.json`:
+  - `data`: `internal/store` and the packages built on it (`backup`, `doc`,
+    `sync`, `notifications`, ...).
+  - `api`: `internal/api` and its five slowest subpackages.
+  - `other`: everything else in the suite.
+
+  Uncached, a shard takes 60–70s locally against 231s for the whole suite.
+  Measure package time with `test-shards.sh profile out.json -race` before
+  moving a package between shards.
+  The suite lists its packages explicitly, so a new package joins one shard
+  by hand; `test-shards.sh check` fails when a package is in two.
+- **Per-shard race caches.** Each shard saves its own cache, because the
+  build cache also holds the test results that let an unchanged package
+  report `(cached)`. A shard restores its own cache first and falls back to
+  a sibling's, which shares the compiled dependencies.
+- **Three frontend shards.** `bun run test:shard --shard=i/3` writes a blob
+  report with coverage and checks no threshold, since a shard sees a third
+  of the suite. `Test (Frontend, coverage)` runs `bun run test:merge` on the
+  three reports and enforces the thresholds in `web/vitest.config.ts`.
+  Locally the merged report matched an unsharded run for every file (same
+  covered and total lines and branches), and a shard took 16–19s against
+  50s unsharded.
+- **`Postgres closure` is its own job** (see [What CI runs](#what-ci-runs)).
+
+Rejected: a fourth race shard. One package sets each shard's wall clock
+(`internal/api/runbooks` at 69s in `api`, `internal/store` at 57s in
+`data`), so another runner would not shorten the slowest shard.
 
 ## Fixture reuse and lifecycle tests (#405–#407)
 

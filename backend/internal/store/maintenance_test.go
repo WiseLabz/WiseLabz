@@ -17,6 +17,7 @@ func mustCreateMaintenanceConnector(t *testing.T, s *Store) string {
 }
 
 func TestCreateAndGetActiveMaintenanceWindow(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	connID := mustCreateMaintenanceConnector(t, s)
@@ -56,6 +57,7 @@ func TestCreateAndGetActiveMaintenanceWindow(t *testing.T) {
 }
 
 func TestGetActiveMaintenanceWindowExpired(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	connID := mustCreateMaintenanceConnector(t, s)
@@ -81,6 +83,7 @@ func TestGetActiveMaintenanceWindowExpired(t *testing.T) {
 }
 
 func TestGetActiveMaintenanceWindowOverlapping(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	connID := mustCreateMaintenanceConnector(t, s)
@@ -115,6 +118,7 @@ func TestGetActiveMaintenanceWindowOverlapping(t *testing.T) {
 }
 
 func TestCloseMaintenanceWindow(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	connID := mustCreateMaintenanceConnector(t, s)
@@ -144,6 +148,7 @@ func TestCloseMaintenanceWindow(t *testing.T) {
 }
 
 func TestCloseMaintenanceWindowAlreadyClosed(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	connID := mustCreateMaintenanceConnector(t, s)
@@ -171,6 +176,7 @@ func TestCloseMaintenanceWindowAlreadyClosed(t *testing.T) {
 }
 
 func TestCloseMaintenanceWindowNotFound(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 
@@ -180,6 +186,7 @@ func TestCloseMaintenanceWindowNotFound(t *testing.T) {
 }
 
 func TestListActiveMaintenanceWindows(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	connA := mustCreateMaintenanceConnector(t, s)
@@ -211,6 +218,7 @@ func TestListActiveMaintenanceWindows(t *testing.T) {
 }
 
 func TestListActiveMaintenanceWindowsEmpty(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 

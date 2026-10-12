@@ -12,6 +12,8 @@
     "test": "vitest run",
     "typecheck": "tsc -b",
     "test:coverage": "vitest run --coverage",
+    "test:shard": "vitest run --coverage --coverage.reporter=json-summary --coverage.thresholds.lines=0 --coverage.thresholds.statements=0 --coverage.thresholds.functions=0 --coverage.thresholds.branches=0 --reporter=default --reporter=blob",
+    "test:merge": "vitest run --merge-reports --coverage",
     "preview": "vite preview",
     "gen:api": "orval --config ./orval.config.ts",
     "gen:api:watch": "orval --config ./orval.config.ts --watch",

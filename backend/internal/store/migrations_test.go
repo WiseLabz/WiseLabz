@@ -26,6 +26,7 @@ var tablesCreatedByMigrations = []string{
 }
 
 func TestRunMigrations(t *testing.T) {
+	t.Parallel()
 	// Use file-based SQLite so golang-migrate can track schema version.
 	// :memory: won't work because golang-migrate uses a separate connection
 	// for the schema_migrations table.
@@ -137,6 +138,7 @@ func TestRunMigrations(t *testing.T) {
 // "postgres://wiselabz:wiselabz@localhost:5432/wiselabz?sslmode=disable")
 // to a database that RunMigrations is allowed to create tables in. Skipped
 // otherwise, so `go test ./...` needs no Postgres instance by default.
+// Not parallel: it uses the shared default Postgres schema.
 func TestRunMigrationsPostgres(t *testing.T) {
 	dsn := os.Getenv("WISELABZ_TEST_POSTGRES_DSN")
 	if dsn == "" {
@@ -189,6 +191,7 @@ func TestRunMigrationsPostgres(t *testing.T) {
 }
 
 func TestRunMigrationsDown(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	dsn := "file:" + dir + "/test.db?cache=shared"
 
@@ -896,6 +899,7 @@ func TestRunMigrationsDown(t *testing.T) {
 
 // TestRunMigrationsDownPostgres mirrors TestRunMigrationsPostgres but for the
 // down path. Opt-in via WISELABZ_TEST_POSTGRES_DSN; skipped otherwise.
+// Not parallel: it uses the shared default Postgres schema.
 func TestRunMigrationsDownPostgres(t *testing.T) {
 	dsn := os.Getenv("WISELABZ_TEST_POSTGRES_DSN")
 	if dsn == "" {
@@ -1222,6 +1226,7 @@ func TestRunMigrationsDownPostgres(t *testing.T) {
 }
 
 func TestSessionAuthProviderMigration(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	dsn := "file:" + dir + "/test.db?cache=shared"
 
@@ -1278,6 +1283,7 @@ func hasColumn(t *testing.T, db *sql.DB, driver, table, column string) bool {
 }
 
 func TestRunMigrationsDownUnsupportedDriver(t *testing.T) {
+	t.Parallel()
 	db, err := sql.Open("sqlite", ":memory:")
 	if err != nil {
 		t.Fatalf("open db: %v", err)
@@ -1293,6 +1299,7 @@ func TestRunMigrationsDownUnsupportedDriver(t *testing.T) {
 }
 
 func TestRunMigrationsUnsupportedDriver(t *testing.T) {
+	t.Parallel()
 	db, err := sql.Open("sqlite", ":memory:")
 	if err != nil {
 		t.Fatalf("open db: %v", err)
@@ -1312,6 +1319,7 @@ func TestRunMigrationsUnsupportedDriver(t *testing.T) {
 // DROP TABLE rebuild migrations and checks that no ON DELETE CASCADE / SET NULL
 // action wiped or nulled child rows (#302).
 func TestRunMigrationsPreservesRowsWithForeignKeys(t *testing.T) {
+	t.Parallel()
 	db, err := OpenDB("sqlite", "file:"+t.TempDir()+"/upgrade.db")
 	if err != nil {
 		t.Fatalf("OpenDB: %v", err)
@@ -1379,6 +1387,7 @@ func TestRunMigrationsPreservesRowsWithForeignKeys(t *testing.T) {
 // back across the DROP TABLE rebuild migrations (000022, 000024) with
 // foreign_keys=ON and checks no cascade wiped child rows, then re-applies them.
 func TestRunMigrationsDownPreservesRowsWithForeignKeys(t *testing.T) {
+	t.Parallel()
 	db, err := OpenDB("sqlite", "file:"+t.TempDir()+"/down.db")
 	if err != nil {
 		t.Fatalf("OpenDB: %v", err)
@@ -1444,6 +1453,7 @@ func TestRunMigrationsDownPreservesRowsWithForeignKeys(t *testing.T) {
 }
 
 func TestGetMigrationStatus(t *testing.T) {
+	t.Parallel()
 	db, err := sql.Open("sqlite", "file:"+t.TempDir()+"/status.db?cache=shared")
 	if err != nil {
 		t.Fatalf("open db: %v", err)
@@ -1648,6 +1658,7 @@ func rollbackEntityIdentityOverrides(t *testing.T, db *sql.DB, driver string, lo
 }
 
 func TestEntityIdentityOverridesMigrationUpDownUp(t *testing.T) {
+	t.Parallel()
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 	run := func(t *testing.T, db *sql.DB, driver string) {
 		if err := RunMigrations(db, driver, logger); err != nil {

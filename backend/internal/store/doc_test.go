@@ -100,6 +100,7 @@ func mustCreateUser(t *testing.T, s *Store, id string) {
 }
 
 func TestUpdateDocOptimisticConcurrency(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 
@@ -161,6 +162,7 @@ func TestUpdateDocOptimisticConcurrency(t *testing.T) {
 }
 
 func TestListDocsGroupedByService(t *testing.T) {
+	t.Parallel()
 	s := newDocTestStore(t)
 	ctx := context.Background()
 	serviceA, serviceB := mustCreateMaintenanceConnector(t, s), mustCreateMaintenanceConnector(t, s)
@@ -183,6 +185,7 @@ func TestListDocsGroupedByService(t *testing.T) {
 }
 
 func TestListAllDocsOmitsContentUnlessRequested(t *testing.T) {
+	t.Parallel()
 	s := newDocTestStore(t)
 	ctx := context.Background()
 	if err := s.CreateDoc(ctx, &DocRecord{Title: "Runbook", Kind: "lab", Content: "body"}); err != nil {
@@ -202,6 +205,7 @@ func TestListAllDocsOmitsContentUnlessRequested(t *testing.T) {
 }
 
 func TestListConnectorNames(t *testing.T) {
+	t.Parallel()
 	s := newDocTestStore(t)
 	id := mustCreateMaintenanceConnector(t, s)
 	names, err := s.ListConnectorNames(context.Background())
@@ -211,6 +215,7 @@ func TestListConnectorNames(t *testing.T) {
 }
 
 func TestTemplateVersions(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 
@@ -308,6 +313,7 @@ func TestTemplateVersions(t *testing.T) {
 }
 
 func TestTemplateVersionConstraintsAndRawJSON(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 
@@ -357,6 +363,7 @@ func TestTemplateVersionConstraintsAndRawJSON(t *testing.T) {
 }
 
 func TestUpdateTemplateConcurrentVersionBumps(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 
@@ -396,6 +403,7 @@ func TestUpdateTemplateConcurrentVersionBumps(t *testing.T) {
 }
 
 func TestTemplateVersionIndexAndCascade(t *testing.T) {
+	t.Parallel()
 	skipOnPostgres(t, "EXPLAIN QUERY PLAN and PRAGMA are SQLite-only")
 	ctx := context.Background()
 	s := newDocTestStore(t)
@@ -448,6 +456,7 @@ func TestTemplateVersionIndexAndCascade(t *testing.T) {
 }
 
 func TestDocLockConflict(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	mustCreateUser(t, s, "user-1")
@@ -475,6 +484,7 @@ func TestDocLockConflict(t *testing.T) {
 }
 
 func TestDocLockRenewalByHolder(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	mustCreateUser(t, s, "user-1")
@@ -508,6 +518,7 @@ func TestDocLockRenewalByHolder(t *testing.T) {
 }
 
 func TestDocLockAcquireAfterExpiry(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	mustCreateUser(t, s, "user-1")
@@ -537,6 +548,7 @@ func TestDocLockAcquireAfterExpiry(t *testing.T) {
 }
 
 func TestDocLockReleaseOnlyByHolder(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	mustCreateUser(t, s, "user-1")
@@ -574,6 +586,7 @@ func TestDocLockReleaseOnlyByHolder(t *testing.T) {
 }
 
 func TestListAllDocsSearchCaseInsensitiveAndEscaped(t *testing.T) {
+	t.Parallel()
 	s := newDocTestStore(t)
 	ctx := context.Background()
 	for _, title := range []string{"Runbook", "100% done", "a_b", "axb", `back\slash`} {
@@ -602,6 +615,7 @@ func TestListAllDocsSearchCaseInsensitiveAndEscaped(t *testing.T) {
 }
 
 func TestUpdateDocWithVersionRecordsRevisionAtomically(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 
@@ -640,6 +654,7 @@ func TestUpdateDocWithVersionRecordsRevisionAtomically(t *testing.T) {
 }
 
 func TestListAllDocsWithContentPagesStablyOnTimestampTies(t *testing.T) {
+	t.Parallel()
 	s := newDocTestStore(t)
 	ctx := context.Background()
 	for _, id := range []string{"a", "b", "c", "d", "e"} {

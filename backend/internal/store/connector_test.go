@@ -13,6 +13,7 @@ import (
 // map". ParseConnectorConfig must hand back a non-nil, writable map even
 // when config_data is the literal string "null".
 func TestParseConnectorConfigNullDataDoesNotPanic(t *testing.T) {
+	t.Parallel()
 	cfg, err := ParseConnectorConfig("unknown-type", "null", "")
 	if err != nil {
 		t.Fatalf("ParseConnectorConfig() error: %v", err)
@@ -27,6 +28,7 @@ func TestParseConnectorConfigNullDataDoesNotPanic(t *testing.T) {
 }
 
 func TestConnectorOwnerRoundTrip(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	c := &ConnectorRecord{Name: "svc", Category: "virtualization", Type: "proxmox", URL: "https://example.com", Owner: "Platform"}
@@ -53,6 +55,7 @@ func TestConnectorOwnerRoundTrip(t *testing.T) {
 }
 
 func TestConnectorScheduleFieldsDefaultNull(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 
@@ -83,6 +86,7 @@ func TestConnectorScheduleFieldsDefaultNull(t *testing.T) {
 }
 
 func TestConnectorScheduleFieldsRoundTrip(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 
@@ -145,6 +149,7 @@ func TestConnectorScheduleFieldsRoundTrip(t *testing.T) {
 }
 
 func TestListDueConnectors(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 
@@ -201,6 +206,7 @@ func TestListDueConnectors(t *testing.T) {
 // active maintenance window is skipped by the scheduler query even though it
 // is otherwise due, per #236.
 func TestListDueConnectorsExcludesMaintenanceWindow(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 
@@ -249,6 +255,7 @@ func TestListDueConnectorsExcludesMaintenanceWindow(t *testing.T) {
 // whose maintenance window has already ended is due again, matching
 // GetActiveMaintenanceWindow's own ends_at > now cutoff.
 func TestListDueConnectorsIncludesExpiredMaintenanceWindow(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 
@@ -286,6 +293,7 @@ func TestListDueConnectorsIncludesExpiredMaintenanceWindow(t *testing.T) {
 }
 
 func TestClaimDueConnector(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	now := time.Now().UTC()
@@ -336,6 +344,7 @@ func TestClaimDueConnector(t *testing.T) {
 }
 
 func TestConnectorManagedByAndListByName(t *testing.T) {
+	t.Parallel()
 	s := newDocTestStore(t)
 	ctx := context.Background()
 
@@ -381,6 +390,7 @@ func TestConnectorManagedByAndListByName(t *testing.T) {
 }
 
 func TestListConnectorConfigData(t *testing.T) {
+	t.Parallel()
 	s := newDocTestStore(t)
 	ctx := context.Background()
 

@@ -16,6 +16,7 @@ func mfaTestUser(t *testing.T, s *Store) *User {
 }
 
 func TestConsumeTOTPStepReplayGuard(t *testing.T) {
+	t.Parallel()
 	s := newDocTestStore(t)
 	ctx := context.Background()
 	u := mfaTestUser(t, s)
@@ -50,6 +51,7 @@ func TestConsumeTOTPStepReplayGuard(t *testing.T) {
 }
 
 func TestConfirmFactorRejectsSecondConfirmedTOTP(t *testing.T) {
+	t.Parallel()
 	s := newDocTestStore(t)
 	ctx := context.Background()
 	u := mfaTestUser(t, s)
@@ -77,6 +79,7 @@ func TestConfirmFactorRejectsSecondConfirmedTOTP(t *testing.T) {
 }
 
 func TestUserHasMFAOnlyCountsConfirmedFactors(t *testing.T) {
+	t.Parallel()
 	s := newDocTestStore(t)
 	ctx := context.Background()
 	u := mfaTestUser(t, s)
@@ -110,6 +113,7 @@ func TestUserHasMFAOnlyCountsConfirmedFactors(t *testing.T) {
 }
 
 func TestRecoveryCodesSingleUse(t *testing.T) {
+	t.Parallel()
 	s := newDocTestStore(t)
 	ctx := context.Background()
 	u := mfaTestUser(t, s)
@@ -160,6 +164,7 @@ func TestRecoveryCodesSingleUse(t *testing.T) {
 }
 
 func TestDeleteUserCascadesMFAFactorsAndRecoveryCodes(t *testing.T) {
+	t.Parallel()
 	// newDocTestStore opens SQLite without the foreign_keys pragma; use
 	// OpenDB (production's own path) so ON DELETE CASCADE actually fires.
 	db, err := OpenDB("sqlite", "file:"+migratedSQLite(t))
@@ -196,6 +201,7 @@ func TestDeleteUserCascadesMFAFactorsAndRecoveryCodes(t *testing.T) {
 }
 
 func TestGetRequire2FADefaultsToNone(t *testing.T) {
+	t.Parallel()
 	s := newDocTestStore(t)
 	ctx := context.Background()
 
@@ -219,6 +225,7 @@ func TestGetRequire2FADefaultsToNone(t *testing.T) {
 }
 
 func TestDeleteFactorLastOneAlsoLeavesRecoveryCodesForCallerToWipe(t *testing.T) {
+	t.Parallel()
 	s := newDocTestStore(t)
 	ctx := context.Background()
 	u := mfaTestUser(t, s)
@@ -243,6 +250,7 @@ func TestDeleteFactorLastOneAlsoLeavesRecoveryCodesForCallerToWipe(t *testing.T)
 }
 
 func TestDeleteUserFactorsForAdminReset(t *testing.T) {
+	t.Parallel()
 	s := newDocTestStore(t)
 	ctx := context.Background()
 	u := mfaTestUser(t, s)

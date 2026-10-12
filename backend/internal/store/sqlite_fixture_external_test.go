@@ -13,6 +13,7 @@ import (
 )
 
 func TestMigratedSQLiteCopiesAreIsolated(t *testing.T) {
+	t.Parallel()
 	for _, fixture := range []struct {
 		name string
 		copy func(testing.TB) string

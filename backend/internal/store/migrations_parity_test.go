@@ -28,6 +28,7 @@ func migrationFiles(t *testing.T, fsys fs.FS, dir string) []string {
 // TestMigrationVersionParity fails when the sqlite and postgres migration
 // trees drift: every version needs the same name plus up and down files in both.
 func TestMigrationVersionParity(t *testing.T) {
+	t.Parallel()
 	sqliteFiles := migrationFiles(t, sqliteMigrations, "migrations/sqlite")
 	postgresFiles := migrationFiles(t, postgresMigrations, "migrations/postgres")
 	if len(sqliteFiles) == 0 {
@@ -94,6 +95,7 @@ func collectColumns(t *testing.T, rows *sql.Rows, err error) []string {
 // table/column sets. Opt-in via WISELABZ_TEST_POSTGRES_DSN like the other
 // postgres tests.
 func TestMigrationSchemaParity(t *testing.T) {
+	t.Parallel()
 	dsn := os.Getenv("WISELABZ_TEST_POSTGRES_DSN")
 	if dsn == "" {
 		t.Skip("WISELABZ_TEST_POSTGRES_DSN not set; skipping schema parity test")

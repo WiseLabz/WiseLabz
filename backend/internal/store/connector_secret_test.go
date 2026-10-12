@@ -30,6 +30,7 @@ func init() {
 }
 
 func TestConnectorConfigEncryptsPasswordFieldsAtRest(t *testing.T) {
+	t.Parallel()
 	plaintext := "hunter2-super-secret"
 	data, err := MarshalConnectorConfig(secretTestConnType, map[string]any{
 		"url":     "https://example.com",
@@ -55,6 +56,7 @@ func TestConnectorConfigEncryptsPasswordFieldsAtRest(t *testing.T) {
 }
 
 func TestConnectorConfigLegacyPlaintextFallback(t *testing.T) {
+	t.Parallel()
 	plaintext := "legacy-plaintext-secret"
 	// Simulates a row saved before encryption was added: api_key is stored
 	// as plain JSON text rather than ciphertext.
@@ -88,6 +90,7 @@ func TestConnectorConfigLegacyPlaintextFallback(t *testing.T) {
 }
 
 func TestMigrateConnectorSecrets(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 

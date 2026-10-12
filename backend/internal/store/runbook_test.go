@@ -21,6 +21,7 @@ func newCascadeTestStore(t *testing.T) *Store {
 }
 
 func TestRunbookRoundTrip(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 
@@ -68,6 +69,7 @@ func TestRunbookRoundTrip(t *testing.T) {
 }
 
 func TestRunbookStepsRoundTrip(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 
@@ -154,6 +156,7 @@ func TestRunbookStepsRoundTrip(t *testing.T) {
 }
 
 func TestRunbookStepsCascadeOnRunbookDelete(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newCascadeTestStore(t)
 
@@ -182,6 +185,7 @@ func TestRunbookStepsCascadeOnRunbookDelete(t *testing.T) {
 }
 
 func TestRunbookStepsCascadeOnConnectorDelete(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newCascadeTestStore(t)
 
@@ -216,6 +220,7 @@ func TestRunbookStepsCascadeOnConnectorDelete(t *testing.T) {
 }
 
 func TestGetRunbookByTarget(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 
@@ -243,6 +248,7 @@ func TestGetRunbookByTarget(t *testing.T) {
 }
 
 func TestRunbookStepKindsRoundTrip(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	c := &ConnectorRecord{Name: "svc", Category: "virtualization", Type: "proxmox", URL: "https://example.com"}

@@ -27,6 +27,7 @@ func newTestUser(t *testing.T, s *Store, username string) *User {
 }
 
 func TestUserHasConnectorRoleDefaultDeny(t *testing.T) {
+	t.Parallel()
 	s := newDocTestStore(t)
 	ctx := context.Background()
 	u := newTestUser(t, s, "no-grant-user")
@@ -50,6 +51,7 @@ func TestUserHasConnectorRoleDefaultDeny(t *testing.T) {
 }
 
 func TestEligibleRunbookApproversRequireOperatorOnEveryDistinctConnector(t *testing.T) {
+	t.Parallel()
 	s := newDocTestStore(t)
 	ctx := context.Background()
 	connectorA := newTestConnector(t, s, "approval-connector-a")
@@ -99,6 +101,7 @@ func TestEligibleRunbookApproversRequireOperatorOnEveryDistinctConnector(t *test
 }
 
 func TestEligibleRunbookApproversManualOnlyFallback(t *testing.T) {
+	t.Parallel()
 	s := newDocTestStore(t)
 	ctx := context.Background()
 	initiator := newTestUser(t, s, "manual-approval-initiator")
@@ -144,6 +147,7 @@ func TestEligibleRunbookApproversManualOnlyFallback(t *testing.T) {
 }
 
 func TestUserHasConnectorRoleHierarchy(t *testing.T) {
+	t.Parallel()
 	s := newDocTestStore(t)
 	ctx := context.Background()
 	u := newTestUser(t, s, "hierarchy-user")
@@ -165,6 +169,7 @@ func TestUserHasConnectorRoleHierarchy(t *testing.T) {
 }
 
 func TestUserHasConnectorRoleViewerInsufficientForOperator(t *testing.T) {
+	t.Parallel()
 	s := newDocTestStore(t)
 	ctx := context.Background()
 	u := newTestUser(t, s, "viewer-only-user")
@@ -184,6 +189,7 @@ func TestUserHasConnectorRoleViewerInsufficientForOperator(t *testing.T) {
 }
 
 func TestUpsertConnectorGrantUpdatesExistingRole(t *testing.T) {
+	t.Parallel()
 	s := newDocTestStore(t)
 	ctx := context.Background()
 	u := newTestUser(t, s, "upsert-user")
@@ -214,6 +220,7 @@ func TestUpsertConnectorGrantUpdatesExistingRole(t *testing.T) {
 }
 
 func TestDeleteConnectorGrant(t *testing.T) {
+	t.Parallel()
 	s := newDocTestStore(t)
 	ctx := context.Background()
 	u := newTestUser(t, s, "delete-grant-user")
@@ -238,6 +245,7 @@ func TestDeleteConnectorGrant(t *testing.T) {
 }
 
 func TestListConnectorGrants(t *testing.T) {
+	t.Parallel()
 	s := newDocTestStore(t)
 	ctx := context.Background()
 	c := newTestConnector(t, s, "conn-f")
@@ -261,6 +269,7 @@ func TestListConnectorGrants(t *testing.T) {
 }
 
 func TestFilterConnectorIDsByGrant(t *testing.T) {
+	t.Parallel()
 	s := newDocTestStore(t)
 	ctx := context.Background()
 	u := newTestUser(t, s, "filter-user")
@@ -322,6 +331,7 @@ func TestFilterConnectorIDsByGrant(t *testing.T) {
 // operator, and deleting the manual row (the only thing DeleteConnectorGrant
 // ever touches) falls back to the surviving oidc grant, never to no access.
 func TestGetUserConnectorRoleHighestAcrossSources(t *testing.T) {
+	t.Parallel()
 	s := newDocTestStore(t)
 	ctx := context.Background()
 	u := newTestUser(t, s, "multi-source-user")
@@ -367,6 +377,7 @@ func TestGetUserConnectorRoleHighestAcrossSources(t *testing.T) {
 // "keep the manual grant API's behaviour the same" requirement: the admin
 // PUT/DELETE endpoints must never create, modify or remove an oidc-sourced row.
 func TestUpsertAndDeleteConnectorGrantNeverTouchOIDCRow(t *testing.T) {
+	t.Parallel()
 	s := newDocTestStore(t)
 	ctx := context.Background()
 	u := newTestUser(t, s, "manual-api-user")
@@ -406,6 +417,7 @@ func TestUpsertAndDeleteConnectorGrantNeverTouchOIDCRow(t *testing.T) {
 }
 
 func TestSyncOIDCConnectorGrants(t *testing.T) {
+	t.Parallel()
 	s := newDocTestStore(t)
 	ctx := context.Background()
 	u := newTestUser(t, s, "sync-user")
@@ -491,6 +503,7 @@ func TestSyncOIDCConnectorGrants(t *testing.T) {
 }
 
 func TestListConnectorIDs(t *testing.T) {
+	t.Parallel()
 	s := newDocTestStore(t)
 	ctx := context.Background()
 	c1 := newTestConnector(t, s, "conn-list-ids-1")
@@ -510,6 +523,7 @@ func TestListConnectorIDs(t *testing.T) {
 }
 
 func TestConnectorReaderIDs(t *testing.T) {
+	t.Parallel()
 	s := newDocTestStore(t)
 	ctx := context.Background()
 	c := newTestConnector(t, s, "readers-a")
@@ -557,6 +571,7 @@ func TestConnectorReaderIDs(t *testing.T) {
 }
 
 func TestSyncConfigConnectorGrants(t *testing.T) {
+	t.Parallel()
 	s := newDocTestStore(t)
 	ctx := context.Background()
 	alice := newTestUser(t, s, "config-grant-alice")
@@ -616,6 +631,7 @@ func TestSyncConfigConnectorGrants(t *testing.T) {
 }
 
 func TestListConnectorRefs(t *testing.T) {
+	t.Parallel()
 	s := newDocTestStore(t)
 	c := newTestConnector(t, s, "conn-list-refs")
 
@@ -632,6 +648,7 @@ func TestListConnectorRefs(t *testing.T) {
 }
 
 func TestUserHasAnyConnectorRole(t *testing.T) {
+	t.Parallel()
 	s := newDocTestStore(t)
 	ctx := context.Background()
 	has := func(ctx context.Context, userID, minRole string) bool {
