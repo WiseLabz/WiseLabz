@@ -37,10 +37,12 @@ runs:
       id: key
       shell: bash
       env:
+        KIND: ${{ inputs.kind }}
         SHARD: ${{ inputs.shard }}
+        GO_SUM_HASH: ${{ hashFiles('backend/go.sum') }}
       run: |
-        base="go-${{ inputs.kind }}-${RUNNER_OS}-$(go env GOVERSION)-"
-        hashed="$base${{ hashFiles('backend/go.sum') }}-"
+        base="go-$KIND-$RUNNER_OS-$(go env GOVERSION)-"
+        hashed="$base$GO_SUM_HASH-"
         {
           echo "prefix=$hashed${SHARD:+$SHARD-}"
           echo "hashed=$hashed"

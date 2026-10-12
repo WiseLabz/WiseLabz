@@ -381,14 +381,15 @@ func TestTopologyReplacementConcurrentRebuildsDoNotDuplicateSharedEdges(t *testi
 
 // Not parallel: it holds the database-wide topology advisory lock.
 func TestTopologyReplacementWaitsForPostgresAdvisoryLock(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
 	s := newDocTestStore(t)
 	if s.driver != "postgres" {
 		t.Skip("requires WISELABZ_TEST_POSTGRES_DSN")
 	}
 	ids := createTopologyTestConnectors(t, s, "a", "b")
 	a, b := ids[0], ids[1]
+	// The deadline bounds the lock wait, not the fixture's migrations.
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
 	conn, err := s.rawDB.Conn(ctx)
 	if err != nil {
 		t.Fatal(err)
