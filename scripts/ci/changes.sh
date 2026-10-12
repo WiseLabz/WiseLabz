@@ -185,9 +185,10 @@ go_package_dirs() {
 	local roots
 	mapfile -t roots < <(jq -r '[.postgres[].packages[]] | unique | .[]' "$shards")
 	cd "$repo_root/backend"
-	# -find: list the packages without resolving imports, so this needs no
-	# module outside the restored postgres cache.
-	go list -find -f 'pkg {{.Dir}}' ./...
+	# Listing the module's own packages needs none of its dependencies, but go
+	# list still fetches every module they import unless the proxy is off. The
+	# restored postgres cache only holds the closure's modules.
+	GOPROXY=off go list -find -f 'pkg {{.Dir}}' ./...
 	go list -deps -test -f '{{if not .Standard}}closure {{.Dir}}{{end}}' "${roots[@]}" ./cmd/migrate
 }
 
