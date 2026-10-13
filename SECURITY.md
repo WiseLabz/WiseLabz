@@ -54,5 +54,21 @@ already fixed.
 
 Check the [releases page][releases] for the current version.
 
+## Verifying release images
+
+Release images are published to `ghcr.io/wiselabz/wiselabz`. A release tag
+(`<version>`, `<major>.<minor>`, `latest`) is applied only after the image has
+passed a Trivy scan with no fixable CRITICAL findings. Images from releases made
+after this check was added carry a signed build provenance attestation, which records the commit and the workflow
+run that built it. To check that an image was built by this repository's
+release workflow:
+
+```sh
+gh attestation verify oci://ghcr.io/wiselabz/wiselabz:<tag> --repo WiseLabz/WiseLabz
+```
+
+The release also attaches an SBOM (`sbom.cdx.json`, CycloneDX) to the GitHub
+release.
+
 [advisories]: https://github.com/WiseLabz/WiseLabz/security/advisories
 [releases]: https://github.com/WiseLabz/WiseLabz/releases

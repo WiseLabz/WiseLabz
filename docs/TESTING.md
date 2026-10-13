@@ -333,6 +333,15 @@ also be run by hand). It catches new advisories against unchanged
 dependencies, and code changes that made a known-vulnerable function
 reachable. A red nightly run needs an owner: treat it like a failing `main`.
 
+**Image scan.** `release.yml` scans the image only when a tag is pushed. The
+`Image scan` workflow builds the image from `main` for linux/amd64 every
+Wednesday at 10:23 UTC (it can also be run by hand), scans it with Trivy, and
+uploads the CRITICAL findings to code scanning. A fixable CRITICAL finding
+fails the run, so a new one in a base image shows up before release day.
+Treat a red run like a failing `main`: bump the base image digest in the
+`Dockerfile`. The build reads the `compose-smoke` layer cache and never writes
+it (see "Actions cache quota" below).
+
 **Drafts.** On a draft PR only `changes`, the rule check and
 `Lint (Workflows)` run. `CI Status` stays green, and the summary says heavy
 jobs are deferred. Marking the PR ready for review re-runs CI on the same
@@ -504,6 +513,11 @@ run needs.
   created, and every index but the newest. The layers stay in the Actions
   cache; moving them to GHCR was the alternative and needs `packages: write`
   on `main` and a public cache package.
+
+The `Image scan` workflow also restores this cache scope, but it has no
+`cache-to`, so `Compose smoke` on `main` stays the only exporter that the
+rule above assumes. The workflow runs at a different time than the 04:17 UTC
+sweep so that it never pulls layers while they are being deleted.
 
 The selection logic is `scripts/ci/cache-prune.sh`; `cache-prune.sh check`
 runs its fixtures in `Detect changes`.
