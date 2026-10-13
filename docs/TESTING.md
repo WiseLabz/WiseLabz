@@ -472,9 +472,8 @@ Results after #401 (PR #404, median of 3 CI runs):
 
 The repository has 10 GB of Actions cache, and GitHub evicts the least
 recently used entries above that. On Oct 10 2026 it held 11.0 GB, and about 5%
-of CI runs compiled from a cold cache. These rules keep the Go caches to what
-a run needs. The BuildKit layer blobs of `Compose smoke` (2.7 GB on Oct 13)
-are not covered yet; see #722.
+of CI runs compiled from a cold cache. These rules keep the caches to what a
+run needs.
 
 - **One Go cache per kind and shard.** After saving on `main`,
   `go-cache-save` deletes every other `main` cache of that kind and shard,
@@ -498,8 +497,25 @@ are not covered yet; see #722.
   trailing hash). The release-please PR never closes and held two 450 MB
   `codeql-dependencies` caches.
 
+- **Image layers.** `Compose smoke` exports its layers from `main` with
+  `mode=max`, and every export leaves the previous commit's layers behind
+  (2.8 GB of blobs on Oct 13, 1.9 GB of them stale). The daily sweep deletes
+  the blobs last accessed more than an hour before the newest index was
+  created, and every index but the newest. The layers stay in the Actions
+  cache; moving them to GHCR was the alternative and needs `packages: write`
+  on `main` and a public cache package.
+
 The selection logic is `scripts/ci/cache-prune.sh`; `cache-prune.sh check`
 runs its fixtures in `Detect changes`.
+
+The image layer rule must never pick a blob that the newest index refers to:
+BuildKit fails the build that pulls a missing blob with `blob not found`. It
+holds because the export looks up every layer before writing the index, and a
+lookup counts as an access. In the `main` run of 0c8c24e1 the export ran from
+15:33:18 to 15:33:23, and the 20 blobs it reused or wrote, some created on
+Oct 7, were all last accessed in those six seconds. If a build does fail on a
+missing blob, delete the `index-compose-smoke-*` caches; the next build starts
+cold and `main` exports a complete set.
 
 Local measurements on go1.27.2 (8 cores, `GOFLAGS=-p=4`):
 
@@ -523,6 +539,9 @@ Local measurements on go1.27.2 (8 cores, `GOFLAGS=-p=4`):
   cache version: its first run on `main`, and PR runs before it, start cold.
 - **The module cache is not trimmed.** It has no use stamps. It starts over
   with each Go release, because the Go version is in the key prefix.
+- **Release builds are not swept.** `release.yml` writes its layers on the tag
+  ref, where only a re-run of the same tag can read them. GitHub evicts them
+  after seven idle days.
 
 ## Postgres store shards (#721)
 
