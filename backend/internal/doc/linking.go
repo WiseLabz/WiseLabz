@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/WiseLabz/wiselabz/internal/connector"
+	"github.com/WiseLabz/wiselabz/internal/logsafe"
 	"github.com/WiseLabz/wiselabz/internal/store"
 )
 
@@ -138,7 +139,7 @@ func capIPOnlyLinks(links []EntityLink, connectorID string, groups map[string][]
 	}
 	slices.Sort(capped)
 	slog.Warn("topology: same_as IP-only matches capped; entities beyond the cap get no IP-based same_as edges (strong matches are unaffected)",
-		"connector", connectorID, "cap", maxIPOnlyGroup, "ips", len(capped), "firstIP", capped[0])
+		"connector", logsafe.Sanitize(connectorID), "cap", maxIPOnlyGroup, "ips", len(capped), "firstIP", logsafe.Sanitize(capped[0]))
 
 	out := links[:0:0]
 	for _, l := range links {
