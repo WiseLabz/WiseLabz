@@ -1,10 +1,11 @@
 name: Save per-kind Go cache
 description: >
-  Saves the cache restored by go-cache-restore, on pushes to main only, and
-  deletes the older main caches with the same prefix first so the rolling
-  per-run keys don't fill the repository cache quota. PRs only restore, since
-  a PR's own caches are invisible to every other PR. The job needs
-  `actions: write` to delete caches.
+  Saves the cache restored by go-cache-restore, on pushes to main only, then
+  deletes main's older caches of the same kind and shard, whatever go.sum or
+  Go version they were keyed on, so the rolling per-run keys don't fill the
+  repository cache quota. PRs only restore, since a PR's own caches are
+  invisible to every other PR. The job needs `actions: write` to delete
+  caches, and the repository checked out for scripts/ci/cache-prune.sh.
 
 inputs:
   prefix:
@@ -17,15 +18,25 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Delete superseded Go caches
+    # main restores the previous cache and would save a superset of it on
+    # every run. Go stamps a cache entry's mtime when it uses one, unless the
+    # stamp is under an hour old, so an entry stamped longer ago than that was
+    # not needed by this job. staticcheck's cache works the same way. The
+    # module cache has no stamps and is left alone; it starts over with each
+    # Go release, which changes the key prefix.
+    - name: Drop build cache entries this job did not use
       if: github.event_name == 'push' && github.ref == 'refs/heads/main'
       shell: bash
       env:
-        GH_TOKEN: ${{ github.token }}
-        PREFIX: ${{ inputs.prefix }}
+        CACHE_PATHS: ${{ inputs.paths }}
       run: |
-        gh api --paginate "repos/$GITHUB_REPOSITORY/actions/caches?ref=refs/heads/main&key=$PREFIX&per_page=100" --jq '.actions_caches[].id' |
-          xargs -r -I{} gh api -X DELETE "repos/$GITHUB_REPOSITORY/actions/caches/{}"
+        modcache=$(go env GOMODCACHE)
+        while IFS= read -r dir; do
+          [[ -d $dir && $dir != "$modcache" ]] || continue
+          before=$(du -sm "$dir" | cut -f1)
+          find "$dir" -type f \( -name '*-a' -o -name '*-d' \) -mmin +120 -delete
+          echo "$dir: ${before} MB -> $(du -sm "$dir" | cut -f1) MB"
+        done <<<"$CACHE_PATHS"
 
     - name: Save Go cache
       if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -33,3 +44,16 @@ runs:
       with:
         path: ${{ inputs.paths }}
         key: ${{ inputs.prefix }}${{ github.run_id }}
+
+    # After the save, so a save that fails leaves the previous cache in place.
+    - name: Delete superseded Go caches
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        PREFIX: ${{ inputs.prefix }}
+        KEY: ${{ inputs.prefix }}${{ github.run_id }}
+      run: |
+        caches=$(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/caches?ref=refs/heads/main&key=go-&per_page=100" --jq '.actions_caches[] | {id, ref, key}')
+        "$GITHUB_WORKSPACE/scripts/ci/cache-prune.sh" superseded "$PREFIX" "$KEY" <<<"$caches" |
+          xargs -r -I{} gh api -X DELETE "repos/$GITHUB_REPOSITORY/actions/caches/{}"

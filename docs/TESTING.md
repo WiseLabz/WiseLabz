@@ -468,6 +468,81 @@ Results after #401 (PR #404, median of 3 CI runs):
 - **Postgres:** these shards did not change; their 137s → 178s is runner
   variance.
 
+## Actions cache quota (#722)
+
+The repository has 10 GB of Actions cache, and GitHub evicts the least
+recently used entries above that. On Oct 10 2026 it held 11.0 GB, and about 5%
+of CI runs compiled from a cold cache. These rules keep the caches to what a
+run needs.
+
+- **One Go cache per kind and shard.** After saving on `main`,
+  `go-cache-save` deletes every other `main` cache of that kind and shard,
+  whatever `go.sum` hash or Go version is in its key. It used to delete only
+  the current hash, so each dependency bump stranded a generation (2.2-3.3 GB)
+  until eviction. It deletes only once the cache list shows the new key, so a
+  failed save keeps the previous cache.
+- **Only what the job used.** `main` restores the previous cache and would
+  save a superset each run (`cover` went from 496 MB to 773 MB in one day).
+  Before saving, the action deletes build cache entries whose mtime is over
+  two hours old: Go stamps an entry when it uses it, unless the stamp is under
+  an hour old. The step logs the size before and after.
+- **CodeQL restores the `static` kind** and saves nothing. It used
+  `actions/setup-go` with `cache: true`, which kept its own 313 MB cache per
+  `go.sum` hash.
+- **staticcheck's cache** (`~/.cache/staticcheck`, 45 MB) is part of the
+  `static` kind. Without it staticcheck analysed every package on every run.
+- **PR refs.** `Cache cleanup` deletes a PR's caches when it closes. A daily
+  sweep deletes what that misses: caches on the refs of closed PRs, and on an
+  open PR all but the newest cache of each key family (the key without its
+  trailing hash). The release-please PR never closes and held two 450 MB
+  `codeql-dependencies` caches.
+
+- **Image layers.** `Compose smoke` exports its layers from `main` with
+  `mode=max`, and every export leaves the previous commit's layers behind
+  (2.8 GB of blobs on Oct 13, 1.9 GB of them stale). The daily sweep deletes
+  the blobs last accessed more than an hour before the newest index was
+  created, and every index but the newest. The layers stay in the Actions
+  cache; moving them to GHCR was the alternative and needs `packages: write`
+  on `main` and a public cache package.
+
+The selection logic is `scripts/ci/cache-prune.sh`; `cache-prune.sh check`
+runs its fixtures in `Detect changes`.
+
+The image layer rule must never pick a blob that the newest index refers to:
+BuildKit fails the build that pulls a missing blob with `blob not found`. It
+holds because the export looks up every layer before writing the index, and a
+lookup counts as an access. In the `main` run of 0c8c24e1 the export ran from
+15:33:18 to 15:33:23, and the 20 blobs it reused or wrote, some created on
+Oct 7, were all last accessed in those six seconds. If a build does fail on a
+missing blob, delete the `index-compose-smoke-*` caches; the next build starts
+cold and `main` exports a complete set.
+
+Local measurements on go1.27.2 (8 cores, `GOFLAGS=-p=4`):
+
+| Question | Result |
+|---|---|
+| Does a warm run stamp everything it needs? `go build ./cmd/server` and `go vet ./...` | 3 of 6345 files left unstamped |
+| Same, `go test -race` on four packages with every result cached | 57 of 2873 files, under 1 MB |
+| Same, staticcheck's cache | 2 of 2305 files |
+| Edit one package, then build against the full and the trimmed cache | 14 and 16 new files; no extra compiling |
+| `go build ./...` (CodeQL's build) on a `static` cache | 3s |
+| `go build ./...` on a `build` cache (`CGO_ENABLED=0`) | 28s |
+| `go build ./...` with no cache | 35s |
+| staticcheck with its cache cold, then warm | 13s, then under 1s |
+
+- **Why `static` and not `build` for CodeQL:** the `build` kind compiles with
+  `CGO_ENABLED=0`, which changes the build ID of `net` and everything above
+  it, so CodeQL's default build misses almost all of it.
+- **Not measured in CI yet.** `main` is the only writer, so the trimmed sizes
+  and the staticcheck step time (20s at the median before) show up after the
+  first `main` run. The `static` kind's path list changed, which changes the
+  cache version: its first run on `main`, and PR runs before it, start cold.
+- **The module cache is not trimmed.** It has no use stamps. It starts over
+  with each Go release, because the Go version is in the key prefix.
+- **Release builds are not swept.** `release.yml` writes its layers on the tag
+  ref, where only a re-run of the same tag can read them. GitHub evicts them
+  after seven idle days.
+
 ## Postgres store shards (#721)
 
 The three store shards split `./internal/store/...` by top-level test name.

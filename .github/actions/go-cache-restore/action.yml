@@ -49,6 +49,10 @@ runs:
           echo "base=$base"
           echo "paths<<EOF"
           go env GOMODCACHE GOCACHE
+          # staticcheck keeps its analysis results in a cache of its own.
+          if [[ $KIND == static ]]; then
+            echo "${XDG_CACHE_HOME:-$HOME/.cache}/staticcheck"
+          fi
           echo "EOF"
         } >> "$GITHUB_OUTPUT"
 

@@ -63,6 +63,9 @@ jobs:
       - name: Check CI status gate
         run: scripts/ci/status-test.sh
 
+      - name: Check cache pruning rules
+        run: scripts/ci/cache-prune.sh check
+
       - name: Classify changes
         id: classify
         env:
@@ -592,7 +595,11 @@ jobs:
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
       # Layer cache is written from main only and restored by PRs, like the Go
-      # caches, to stay within the repository cache quota.
+      # caches, to stay within the repository cache quota. Each export leaves
+      # the previous commit's layers behind; the daily Cache cleanup sweep
+      # deletes them. Its rule relies on the export looking up every layer, so
+      # do not add `ghtoken` or `repository` to cache-to
+      # (scripts/ci/cache-prune.sh).
       - name: Build app image
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
