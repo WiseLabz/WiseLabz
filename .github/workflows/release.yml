@@ -4,9 +4,9 @@ on:
   push:
     tags: ["v*.*.*"]
 
+# Each job lists what it needs: a job-level block replaces this one.
 permissions:
-  contents: write
-  packages: write
+  contents: read
 
 jobs:
   build-and-push:
@@ -17,11 +17,20 @@ jobs:
     runs-on: ${{ vars.RELEASE_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 30
 
+    permissions:
+      contents: read
+      packages: write
+      # Build provenance attestation: OIDC token for the signing certificate,
+      # and the attestations API to store it.
+      id-token: write
+      attestations: write
+
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
@@ -43,15 +52,17 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=raw,value=latest,enable=${{ !contains(github.ref, '-') }}
 
-      - name: Build and push
+      # Pushes the image by digest only, with no tag. The version, major.minor
+      # and latest tags are applied after the CRITICAL gate below has passed, so
+      # a failed gate leaves an untagged digest and no tag moves.
+      - name: Build and push (untagged)
         id: build
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           file: ./Dockerfile
           platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
+          outputs: type=image,name=ghcr.io/wiselabz/wiselabz,push-by-digest=true,name-canonical=true,push=true
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
@@ -80,12 +91,38 @@ jobs:
           output-file: sbom.cdx.json
           upload-artifact: true
           artifact-name: sbom.cdx.json
+          # The upload-sbom job attaches it to the release; this job has no
+          # contents: write.
+          upload-release-assets: false
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ghcr.io/wiselabz/wiselabz
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+
+      # Points every release tag at the scanned and attested digest without
+      # rebuilding or copying layers.
+      - name: Apply release tags
+        env:
+          TAGS: ${{ steps.meta.outputs.tags }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          tag_args=()
+          while IFS= read -r tag; do
+            [[ -n $tag ]] && tag_args+=(--tag "$tag")
+          done <<<"$TAGS"
+          docker buildx imagetools create "${tag_args[@]}" "ghcr.io/wiselabz/wiselabz@$DIGEST"
 
   upload-sbom:
     name: Upload SBOM
     runs-on: ubuntu-latest
     timeout-minutes: 5
     needs: [build-and-push]
+
+    permissions:
+      contents: write
 
     steps:
       - name: Download SBOM

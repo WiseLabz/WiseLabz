@@ -1,0 +1,81 @@
+name: Image scan
+
+# The release image is scanned when a tag is pushed (release.yml). This builds
+# the image from main every week and scans it the same way, so a new CRITICAL
+# finding in a base image shows up before release day. Findings go to code
+# scanning (Security tab), and a fixable CRITICAL one fails the run. A red run
+# needs an owner: bump the base image digest in the Dockerfile.
+#
+# Linux amd64 only. The layer cache is read from Compose smoke's scope and
+# never written: the daily Cache cleanup sweep assumes that only Compose smoke
+# on main exports image layers (see "Actions cache quota" in docs/TESTING.md).
+# It runs far from that sweep (04:17 UTC), which deletes layers a build would
+# pull.
+on:
+  schedule:
+    - cron: "23 10 * * 3"
+  workflow_dispatch:
+  # TEMPORARY: exercises this workflow from the PR. Removed before merge.
+  pull_request:
+    paths: [".github/workflows/image-scan.yml"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: image-scan
+  cancel-in-progress: false
+
+jobs:
+  scan:
+    name: Scan image (CRITICAL)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    permissions:
+      contents: read
+      security-events: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      # No cache-to: this run must not export layers. A cache miss only makes
+      # the build slower.
+      - name: Build image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64
+          load: true
+          tags: wiselabz:image-scan
+          cache-from: type=gha,scope=compose-smoke
+
+      # The report and the gate are one scan: with limit-severities-for-sarif
+      # the SARIF holds the same CRITICAL findings that set the exit code. The
+      # upload below runs even when this step fails. Trivy's own cache is off:
+      # it would save a new Actions cache every day.
+      - name: Scan image for vulnerabilities (gate on critical)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: wiselabz:image-scan
+          format: sarif
+          output: trivy-results.sarif
+          limit-severities-for-sarif: true
+          severity: "CRITICAL"
+          ignore-unfixed: true
+          exit-code: "1"
+          cache: "false"
+
+      - name: Upload results to code scanning
+        if: ${{ !cancelled() && hashFiles('trivy-results.sarif') != '' }}
+        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        with:
+          sarif_file: trivy-results.sarif
+          category: trivy-image
