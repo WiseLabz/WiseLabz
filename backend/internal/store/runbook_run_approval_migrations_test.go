@@ -24,6 +24,7 @@ func rollbackRunbookApproval(t *testing.T, db *sql.DB, driver string, logger *sl
 
 func TestRunbookRunApprovalMigrationUpDownPreservesFrozenSteps(t *testing.T) {
 	t.Parallel()
+	skipMigrationReplayUnderRace(t)
 	logger := slog.New(slog.DiscardHandler)
 	run := func(t *testing.T, s *Store) {
 		db := s.rawDB
