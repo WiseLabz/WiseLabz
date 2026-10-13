@@ -19,7 +19,7 @@ func TestSanitizeStripsControlCharacters(t *testing.T) {
 		{"a\nb\rc\r\nd", "abcd"},
 		{"esc\x1b[31mred\x1b[0m", "esc[31mred[0m"},
 		{"nul\x00byte\ttab\x7fdel\u0085nel", "nulbytetabdelnel"},
-		{"sep line para", "seplinepara"},
+		{"sep\u2028line\u2029para", "seplinepara"},
 		{"", ""},
 	}
 	for _, c := range cases {
