@@ -553,9 +553,9 @@ Local measurements on go1.27.2 (8 cores, `GOFLAGS=-p=4`):
   cache version: its first run on `main`, and PR runs before it, start cold.
 - **The module cache is not trimmed.** It has no use stamps. It starts over
   with each Go release, because the Go version is in the key prefix.
-- **Release builds are not swept.** `release.yml` writes its layers on the tag
-  ref, where only a re-run of the same tag can read them. GitHub evicts them
-  after seven idle days.
+- **Release builds write no layers.** A tag's cache cannot be read by another
+  tag, so `release.yml` exports nothing and reads the `compose-smoke` scope
+  that `main` exports (see [Repeated setup and job count](#repeated-setup-and-job-count-730)).
 
 ## Postgres store shards (#721)
 
@@ -599,6 +599,60 @@ is `Run store tests and migration parity against Postgres`.
 - **Rebalancing again:** dispatch the workflow, take the median per test,
   group by first letter (or two letters for a heavy one) and keep exactly one
   `"rest": true` shard so a new or renamed test is never dropped.
+
+## Repeated setup and job count (#730)
+
+A full run starts 24 jobs, and about 15 of them pay for `Setup Go`. None of
+that is on the longest path, so the gain is runner minutes and queueing.
+Numbers below come from step and job times in the Actions API for the
+successful CI runs of Oct 13 2026: 9 runs from the `main` run after #728
+(fae8408a) on, and 4 runs just before it for comparison.
+
+| Question | Result |
+|---|---|
+| `Setup Go` after #728 | median 14s, p90 18s, range 10-24s (101 jobs) |
+| `Setup Go` before #728 | median 15s, p90 18s, range 9-24s (45 jobs) |
+| Share of a job | 10-24s of a 38-83s job |
+
+- **`Setup Go`: nothing to change.** #728 trimmed what the caches hold, but the
+  restore time barely moved (15s to 14s at the median), because the module
+  cache is not trimmed and still has to be fetched. A cheaper restore would
+  mean smaller or fewer caches per job, which works against #722.
+- **Postgres shards: `leader` and `retention` are one job.** Both run whole
+  packages, so `leader-retention` needs no new shard syntax. On the Oct 13 runs
+  the `leader` step took 1s (every test cached) and `retention` 14s at the
+  median (29s at worst), in jobs of 38s and 50s. The merged job pays one
+  container start and one `Setup Go`: about 52s at the median and 75s at worst,
+  against 76s for `backup` and 72s for `h-re`, so it stays off the longest path.
+  One job and one `Setup Go` fewer per run (23 jobs). Not measured on the merged
+  job yet.
+- **Not merged: `leader` with `b-g`.** `b-g` is a name-pattern shard of
+  `./internal/store/...` and also runs `migrate up/verify` and saves the Go
+  cache; the shard format does not combine package sets with a pattern. Its
+  step is 2s when the store is cached and about 30s when it is not, so the
+  merged job would reach the 80s of the longest one.
+- **Not merged: `race other` into another race shard.** Its step is 19s at the
+  median, so joining `api` (job 75s) or `data` (job 83s) would make a 94-102s
+  job, 10-20s past today's longest race job, to save one runner start.
+- **Release builds read `main`'s layers.** `release.yml` used the default
+  `type=gha` scope on a tag ref, which no other tag can read, so it was always
+  cold (about 260s). It now reads `compose-smoke` and writes nothing. That scope
+  is linux/amd64 only: the frontend and `go mod download` layers run on the
+  build host, so they are shared with the arm64 build, but the arm64 compile
+  stays cold. Exporting arm64 from `main` would cost cache quota (#722), so it
+  is not done. The next tag shows the gain; it is not measured. Like `Image
+  scan`, a release can in theory pull a layer the 04:17 UTC sweep has just
+  deleted; the sweep deletes only layers the newest export did not touch.
+- **`go mod download` layer: smaller, still pulled.** The layer is the parent
+  of `godeps`, which re-runs on every source change, so BuildKit has to pull it
+  on every run: there is nothing to skip. The module zips in it are never read
+  after extraction, so the `Dockerfile` deletes them. Measured on the module
+  cache here: 2.3 GB to 1.9 GB on disk, 1017 MB to 532 MB as a gzipped tar, and
+  `go list -deps`, `go build` and `go mod verify` still pass with `GOPROXY=off`.
+  The pull time is not measured; `Compose smoke` on `main` shows it.
+- **Cache usage** is unchanged: the merge adds no cache, and the release no
+  longer writes one (a tag-ref cache was only readable by a re-run of the same
+  tag).
 
 ## CI critical path (#720)
 
