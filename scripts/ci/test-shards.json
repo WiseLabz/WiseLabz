@@ -24,14 +24,11 @@
       "packages": ["./internal/store/..."],
       "rest": true
     },
-    "leader": {
-      "packages": ["./internal/leader"]
-    },
     "backup": {
       "packages": ["./internal/backup"]
     },
-    "retention": {
-      "packages": ["./internal/retention"]
+    "leader-retention": {
+      "packages": ["./internal/leader", "./internal/retention"]
     }
   }
 }

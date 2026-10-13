@@ -33,9 +33,12 @@ RUN apk add --no-cache git ca-certificates
 WORKDIR /src
 
 # Copy module files and resolve deps first, so this layer is cached unless
-# go.mod/go.sum change.
+# go.mod/go.sum change. The module zips are deleted once extracted: builds read
+# the extracted sources, and the zips are about half of what a cache hit has to
+# pull (go refetches one if a build ever asks for it).
 COPY backend/go.mod backend/go.sum ./backend/
-RUN cd backend && go mod download
+RUN cd backend && go mod download \
+    && find "$(go env GOMODCACHE)/cache/download" -name '*.zip' -delete
 
 # =============================================================================
 # Stage 3/5: godeps — list the packages the server binary imports from outside
