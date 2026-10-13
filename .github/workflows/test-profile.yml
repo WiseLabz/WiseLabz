@@ -3,14 +3,25 @@ name: Test profile
 # On-demand backend test profile (#401): where test time goes, per package,
 # test and subtest, in the three modes CI runs. Each mode runs three times so
 # the summary can report medians; see docs/TESTING.md for how to read it.
+#
+# The suite input picks what a dispatch runs: "profile" (the default) is the
+# nine jobs above; "postgres" is only the per-test timings of the Postgres
+# store tests, the input for balancing the shards in scripts/ci/test-shards.json.
 on:
   workflow_dispatch:
+    inputs:
+      suite:
+        description: What to run
+        type: choice
+        options: [profile, postgres]
+        default: profile
 
 permissions:
   contents: read
 
 jobs:
   profile:
+    if: inputs.suite != 'postgres'
     name: Profile (${{ matrix.mode }}, run ${{ matrix.run }})
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -55,10 +66,64 @@ jobs:
           path: profile-${{ matrix.mode }}.*
           retention-days: 14
 
+  # Per-test durations of the store tests against Postgres, the same flags and
+  # service CI uses (test-backend-postgres in ci.yml). One unsharded run, so
+  # the sum of the durations is the weight to balance across the shards.
+  postgres:
+    if: inputs.suite == 'postgres'
+    name: Postgres timings (run ${{ matrix.run }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        run: [1, 2, 3]
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: wiselabz
+          POSTGRES_PASSWORD: wiselabz
+          POSTGRES_DB: wiselabz
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U wiselabz"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Go
+        uses: ./.github/actions/go-cache-restore
+        with:
+          kind: postgres
+
+      # profile reads "-flag value" as a flag and a package, so flags use =.
+      - name: Time store tests against Postgres
+        env:
+          PROFILE_TOP: "400"
+          WISELABZ_TEST_POSTGRES_DSN: postgres://wiselabz:wiselabz@localhost:5432/wiselabz?sslmode=disable
+        run: |
+          scripts/ci/test-shards.sh profile "$PWD/postgres-timings.json" -timeout=8m -p=1 ./internal/store/... | tee postgres-timings.txt
+          { echo '```'; cat postgres-timings.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload timings
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: postgres-timings-${{ matrix.run }}
+          path: postgres-timings.*
+          retention-days: 14
+
   summary:
     name: Median wall clock
     needs: profile
-    if: always()
+    if: always() && inputs.suite != 'postgres'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

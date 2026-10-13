@@ -12,13 +12,13 @@
     }
   },
   "postgres": {
-    "a-g": {
+    "b-g": {
       "packages": ["./internal/store/..."],
-      "pattern": "^Test[A-G]"
+      "pattern": "^Test[B-G]"
     },
-    "h-q": {
+    "h-re": {
       "packages": ["./internal/store/..."],
-      "pattern": "^Test[H-Q]"
+      "pattern": "^Test([H-Q]|Re)"
     },
     "rest": {
       "packages": ["./internal/store/..."],

@@ -1,6 +1,6 @@
 # Backend test performance
 
-This file records where backend Go test time went, what #401, #405–#408 and #720 changed, what they
+This file records where backend Go test time went, what #401, #405–#408, #720 and #721 changed, what they
 rejected and why, and the rules that keep the suite fast without weakening
 determinism, race detection or coverage. Read it before adding a slow test,
 a `time.Sleep`, a `t.Parallel()` or a new CI shard. [What CI runs](#what-ci-runs)
@@ -21,6 +21,18 @@ uploads the JSON, and reports the median wall clock. CI is the source of
 truth: local runs guide the work, CI medians decide what is adopted.
 `workflow_dispatch` workflows must be available on the default branch before
 they can be dispatched; then select the branch to measure when running them.
+
+Set its `suite` input to `postgres` to run only the per-test timings of the
+Postgres store tests (`./internal/store/...`, with a Postgres 16 service and the
+`-timeout=8m -p=1` flags of the CI shards), three times, instead of the nine
+profile jobs; the default, `profile`, keeps those nine. Each run uploads
+`postgres-timings-<n>` with the raw `go test -json` stream. Use the median
+per test of the three runs to balance the Postgres shards (see [Postgres store
+shards](#postgres-store-shards-721)):
+
+```bash
+gh workflow run test-profile.yml --ref <branch> -f suite=postgres
+```
 
 A change is adopted when it saves at least 5% of the affected CI job, or at
 least 10s (median of 3 runs), and does not weaken determinism, race detection
@@ -455,6 +467,49 @@ Results after #401 (PR #404, median of 3 CI runs):
   Expect the job to get faster once `main` has saved the cache.
 - **Postgres:** these shards did not change; their 137s → 178s is runner
   variance.
+
+## Postgres store shards (#721)
+
+The three store shards split `./internal/store/...` by top-level test name.
+After the store tests became parallel (#723) the old split, `a-g`, `h-q` and
+`rest`, was lopsided again. Per-test durations came from the **Test profile**
+workflow with `suite=postgres` (run 38294443110, median of 3 runs per test).
+Parallel tests overlap, so the sum of their durations is not the wall time; it
+is the weight to balance. The step time follows the weight at about 0.4s per
+second of weight.
+
+| Shard | Pattern | Tests | Weight (s) | Test step, median of 3 |
+|---|---|---|---|---|
+| `a-g` (before) | `^Test[A-G]` | 116 | 97.6 | 35s (41, 35, 34) |
+| `h-q` (before) | `^Test[H-Q]` | 69 | 42.7 | 18s (19, 18, 18) |
+| `rest` (before) | everything else | 143 | 132.3 | 48s (56, 48, 47) |
+| `b-g` | `^Test[B-G]` | 108 | 90.9 | 30s (30, 31, 28) |
+| `h-re` | `^Test([H-Q]\|Re)` | 95 | 90.2 | 38s (62, 38, 36) |
+| `rest` | everything else | 125 | 91.5 | 32s (32, 31, 33) |
+
+The before runs are 38289326962, 38292286738 and 38293492259, the after runs
+are attempts 2 to 9 of 38295450920 (a rerun of one job at a time), and the step
+is `Run store tests and migration parity against Postgres`.
+
+- **Heaviest shard:** 48s to 38s (-10s, -21%), and the heaviest job 87s to
+  70s. The first `h-re` run took 62s on a slow runner; the other two took 38s
+  and 36s.
+- **Why `Re`:** the letter `R` alone weighs 79s, and
+  `TestReconcileEntityIdentitiesOlderIdentityWinsRegardlessOfConnectorOrder`
+  takes 23-33s by itself (it creates 30 stores). No contiguous letter range
+  gets below 98s per shard, so `Re` moved from `rest` to `h-re` and `A` from
+  `a-g` to `rest`. That test is a floor of about 25s for the shard that runs
+  it.
+- **Rejected: four shards.** Each job pays about 35s of fixed cost (container
+  start, Go setup), and the slowest Postgres job is now `backup` (48s step,
+  84s job), not a store shard (70s). Another store shard would add a runner
+  without shortening the Postgres jobs. Splitting `backup` is a separate
+  change.
+- **Cache save:** the shard that verifies `migrate up` and saves the Go cache
+  in `ci.yml` is `b-g` (it was `a-g`); change both together when renaming it.
+- **Rebalancing again:** dispatch the workflow, take the median per test,
+  group by first letter (or two letters for a heavy one) and keep exactly one
+  `"rest": true` shard so a new or renamed test is never dropped.
 
 ## CI critical path (#720)
 

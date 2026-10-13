@@ -516,7 +516,7 @@ jobs:
 
       # Runs in one shard only; every shard has its own fresh Postgres service.
       - name: Verify migrate up/status/verify on Postgres
-        if: matrix.shard == 'a-g'
+        if: matrix.shard == 'b-g'
         run: |
           go run ./cmd/migrate up
           go run ./cmd/migrate verify
@@ -526,7 +526,7 @@ jobs:
           WISELABZ_DB_DSN: postgres://wiselabz:wiselabz@localhost:5432/wiselabz?sslmode=disable
 
       - name: Save Go cache
-        if: matrix.shard == 'a-g'
+        if: matrix.shard == 'b-g'
         uses: ./.github/actions/go-cache-save
         with:
           prefix: ${{ steps.go.outputs.prefix }}

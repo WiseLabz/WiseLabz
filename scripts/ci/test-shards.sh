@@ -27,7 +27,9 @@
 #
 # Re-balancing: run `timings` (with the same flags CI uses, e.g. -race), then
 # greedily assign the slowest tests to the currently lightest shard and update
-# the JSON. CI timings are roughly 1.7x local ones.
+# the JSON. CI timings are roughly 1.7x local ones. The Postgres suite needs a
+# database: dispatch the Test profile workflow with suite=postgres to get its
+# per-test timings from CI (docs/TESTING.md, "Postgres store shards").
 set -Eeuo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
