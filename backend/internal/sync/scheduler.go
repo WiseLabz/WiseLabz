@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
+	"github.com/WiseLabz/wiselabz/internal/logsafe"
 )
 
 // RunDueSyncs syncs every connector whose next_run_at has passed. Only the
@@ -38,7 +40,7 @@ loop:
 			defer wg.Done()
 			defer func() { <-sem }()
 			if _, err := e.runSyncFields(ctx, id, uuid.New().String(), nil, true); err != nil && !errors.Is(err, ErrAlreadyRunning) {
-				logger.Error("scheduled sync failed", "connector", id, "error", err)
+				logger.Error("scheduled sync failed", "connector", id, "error", logsafe.Err(err))
 			}
 		}(c.ID)
 	}

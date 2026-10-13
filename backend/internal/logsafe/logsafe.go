@@ -1,11 +1,26 @@
 // Package logsafe sanitizes user-controlled strings before they reach a logger.
 package logsafe
 
-import "strings"
+import (
+	"strings"
+	"unicode"
+)
 
-// Sanitize strips CR/LF so a value can't forge or split log lines.
+// Sanitize strips CR and LF so a value can't forge or split log lines, then
+// drops every other control character (ESC, NUL, tab, ...) and the Unicode line
+// and paragraph separators, which some log viewers also render as line breaks.
+//
+// The two ReplaceAll calls are deliberate: they are the form CodeQL's
+// go/log-injection query recognizes as a sanitizer.
 func Sanitize(s string) string {
-	return strings.NewReplacer("\r", "", "\n", "").Replace(s)
+	s = strings.ReplaceAll(s, "\r", "")
+	s = strings.ReplaceAll(s, "\n", "")
+	return strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) || r == ' ' || r == ' ' {
+			return -1
+		}
+		return r
+	}, s)
 }
 
 // Err returns err's message sanitized for logging. Error messages often wrap
