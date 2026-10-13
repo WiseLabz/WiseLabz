@@ -59,6 +59,7 @@ func TestSnapshotTimeOrderingAndRetention(t *testing.T) {
 
 func TestSnapshotUTCDataMigration(t *testing.T) {
 	t.Parallel()
+	skipMigrationReplayUnderRace(t)
 	ctx := context.Background()
 	s := newDocTestStore(t)
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))

@@ -122,6 +122,7 @@ func requireCount(t *testing.T, db *sql.DB, driver, query string, want int) {
 
 func TestRunbookStepKindsMigrationUpDown(t *testing.T) {
 	t.Parallel()
+	skipMigrationReplayUnderRace(t)
 	logger := slog.New(slog.DiscardHandler)
 	run := func(t *testing.T, s *Store) {
 		ctx := context.Background()

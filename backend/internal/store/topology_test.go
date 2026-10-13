@@ -321,11 +321,12 @@ func TestTopologySameAsHasCanonicalDirectionAndOwner(t *testing.T) {
 
 func TestTopologyReplacementConcurrentRebuildsDoNotDuplicateSharedEdges(t *testing.T) {
 	t.Parallel()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
 	s := newDocTestStore(t)
 	ids := createTopologyTestConnectors(t, s, "a", "b")
 	a, b := ids[0], ids[1]
+	// The deadline bounds the rebuilds, not the fixture's migrations.
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
 	sharedContains := TopologyEdge{
 		SrcConnectorID: b, SrcKind: "service", SrcName: "B", SrcRef: b,
 		DstConnectorID: b, DstKind: "vm", DstName: "web", DstRef: "web-id",

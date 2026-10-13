@@ -51,3 +51,8 @@ connector_id="$(curl --fail --silent --show-error \
 curl --fail --silent --show-error \
 	-H "Authorization: Bearer $access_token" \
 	"$base_url/connectors" | jq -e --arg id "$connector_id" 'any(.[]; .id == $id and .name == "Compose smoke Docker")' >/dev/null
+# The image build stamps the git revision through Go's VCS stamping, which needs
+# .git and git in the builder stage; an empty commit means the stamp broke.
+curl --fail --silent --show-error \
+	-H "Authorization: Bearer $access_token" \
+	"$base_url/system/diagnostics" | jq -e '.versions.commit | test("^[0-9a-f]{40}$")' >/dev/null

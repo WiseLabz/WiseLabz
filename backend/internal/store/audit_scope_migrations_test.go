@@ -24,6 +24,7 @@ func rollbackAuditLogConnectors(t *testing.T, db *sql.DB, driver string, logger 
 
 func TestAuditScopeMigrationsBackfillUpDownUp(t *testing.T) {
 	t.Parallel()
+	skipMigrationReplayUnderRace(t)
 	logger := slog.New(slog.DiscardHandler)
 	run := func(t *testing.T, s *Store) {
 		ctx := context.Background()

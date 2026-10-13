@@ -62,3 +62,13 @@ func buildSQLiteTemplate() ([]byte, error) {
 // MigratedSQLiteForTest lets external store_test tests share the package template.
 // This bridge exists only in test binaries.
 func MigratedSQLiteForTest(t testing.TB) string { return migratedSQLite(t) }
+
+// skipMigrationReplayUnderRace skips tests that replay the migration chain when
+// the race detector is on: they are single-goroutine SQL and take most of the
+// package's -race time. They still run in the coverage and Postgres jobs.
+func skipMigrationReplayUnderRace(t *testing.T) {
+	t.Helper()
+	if raceEnabled {
+		t.Skip("migration replay is single-goroutine SQL; skipped under -race")
+	}
+}
