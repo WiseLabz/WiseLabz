@@ -27,6 +27,7 @@ var tablesCreatedByMigrations = []string{
 
 func TestRunMigrations(t *testing.T) {
 	t.Parallel()
+	skipMigrationReplayUnderRace(t)
 	// Use file-based SQLite so golang-migrate can track schema version.
 	// :memory: won't work because golang-migrate uses a separate connection
 	// for the schema_migrations table.
@@ -192,6 +193,7 @@ func TestRunMigrationsPostgres(t *testing.T) {
 
 func TestRunMigrationsDown(t *testing.T) {
 	t.Parallel()
+	skipMigrationReplayUnderRace(t)
 	dir := t.TempDir()
 	dsn := "file:" + dir + "/test.db?cache=shared"
 
@@ -1227,6 +1229,7 @@ func TestRunMigrationsDownPostgres(t *testing.T) {
 
 func TestSessionAuthProviderMigration(t *testing.T) {
 	t.Parallel()
+	skipMigrationReplayUnderRace(t)
 	dir := t.TempDir()
 	dsn := "file:" + dir + "/test.db?cache=shared"
 
@@ -1320,6 +1323,7 @@ func TestRunMigrationsUnsupportedDriver(t *testing.T) {
 // action wiped or nulled child rows (#302).
 func TestRunMigrationsPreservesRowsWithForeignKeys(t *testing.T) {
 	t.Parallel()
+	skipMigrationReplayUnderRace(t)
 	db, err := OpenDB("sqlite", "file:"+t.TempDir()+"/upgrade.db")
 	if err != nil {
 		t.Fatalf("OpenDB: %v", err)
@@ -1388,6 +1392,7 @@ func TestRunMigrationsPreservesRowsWithForeignKeys(t *testing.T) {
 // foreign_keys=ON and checks no cascade wiped child rows, then re-applies them.
 func TestRunMigrationsDownPreservesRowsWithForeignKeys(t *testing.T) {
 	t.Parallel()
+	skipMigrationReplayUnderRace(t)
 	db, err := OpenDB("sqlite", "file:"+t.TempDir()+"/down.db")
 	if err != nil {
 		t.Fatalf("OpenDB: %v", err)
@@ -1454,6 +1459,7 @@ func TestRunMigrationsDownPreservesRowsWithForeignKeys(t *testing.T) {
 
 func TestGetMigrationStatus(t *testing.T) {
 	t.Parallel()
+	skipMigrationReplayUnderRace(t)
 	db, err := sql.Open("sqlite", "file:"+t.TempDir()+"/status.db?cache=shared")
 	if err != nil {
 		t.Fatalf("open db: %v", err)
@@ -1659,6 +1665,7 @@ func rollbackEntityIdentityOverrides(t *testing.T, db *sql.DB, driver string, lo
 
 func TestEntityIdentityOverridesMigrationUpDownUp(t *testing.T) {
 	t.Parallel()
+	skipMigrationReplayUnderRace(t)
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 	run := func(t *testing.T, db *sql.DB, driver string) {
 		if err := RunMigrations(db, driver, logger); err != nil {

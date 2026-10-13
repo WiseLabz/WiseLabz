@@ -182,11 +182,25 @@ cmd_classify() {
 # Repo-relative Go package directories, one per line, tagged "pkg" for every
 # in-module package and "closure" for the Postgres test packages' dependencies.
 go_package_dirs() {
-	local roots
+	local roots closure
 	mapfile -t roots < <(jq -r '[.postgres[].packages[]] | unique | .[]' "$shards")
 	cd "$repo_root/backend"
-	go list -f 'pkg {{.Dir}}' ./...
-	go list -deps -test -f '{{if not .Standard}}closure {{.Dir}}{{end}}' "${roots[@]}" ./cmd/migrate
+	# Only this module's own packages matter here, and they can be listed and
+	# walked without any dependency. With the proxy on, go list fetches every
+	# module they import that the restored cache lacks; a stalled download once
+	# ran the job into its timeout. So the proxy is off, and -e carries on past
+	# the modules that are missing. go list still logs "go: downloading" for
+	# those; nothing is fetched.
+	GOPROXY=off go list -find -f 'pkg {{.Dir}}' ./...
+	closure=$(GOPROXY=off go list -e -deps -test \
+		-f '{{if not .Standard}}closure {{.Dir}}{{end}}{{if .Error}}{{with .Module}}{{if .Main}}{{"\n"}}broken {{$.ImportPath}}{{end}}{{end}}{{end}}' \
+		"${roots[@]}" ./cmd/migrate)
+	# -e also hides a package of ours that fails to load, which would leave
+	# the closure short. That still counts as go list failing.
+	if grep -q '^broken ' <<<"$closure"; then
+		return 1
+	fi
+	printf '%s\n' "$closure"
 }
 
 # Reads paths on stdin, prints postgres=true|false. A path touches the closure

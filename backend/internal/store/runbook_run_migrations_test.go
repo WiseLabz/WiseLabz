@@ -35,6 +35,7 @@ func rollbackRunbookRuns(t *testing.T, db *sql.DB, driver string, logger *slog.L
 
 func TestRunbookRunsMigrationsUpDownUp(t *testing.T) {
 	t.Parallel()
+	skipMigrationReplayUnderRace(t)
 	logger := slog.New(slog.DiscardHandler)
 	run := func(t *testing.T, s *Store) {
 		ctx := context.Background()
