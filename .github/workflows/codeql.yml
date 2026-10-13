@@ -9,6 +9,7 @@ on:
       - "go.work.sum"
       - ".github/workflows/codeql.yml"
       - ".github/codeql/**"
+      - ".github/actions/go-cache-restore/**"
       # Last: a later negation excludes paths matched above.
       - "!backend/**/*.md"
   pull_request:
@@ -21,6 +22,7 @@ on:
       - "go.work.sum"
       - ".github/workflows/codeql.yml"
       - ".github/codeql/**"
+      - ".github/actions/go-cache-restore/**"
       # Last: a later negation excludes paths matched above.
       - "!backend/**/*.md"
   schedule:
@@ -51,12 +53,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      # Restores the cache that ci.yml's staticcheck job saves on main: go vet
+      # there compiles the same packages with the same flags as the build
+      # below. This job saves nothing, so it adds no cache of its own.
       - name: Setup Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        uses: ./.github/actions/go-cache-restore
         with:
-          go-version-file: backend/go.mod
-          cache: true
-          cache-dependency-path: backend/go.sum
+          kind: static
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2

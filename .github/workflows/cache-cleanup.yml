@@ -7,9 +7,16 @@ name: Cache cleanup
 #
 # pull_request_target so fork PRs get a token that can delete caches. It is
 # safe here: the job never checks out or runs PR code.
+#
+# The daily sweep covers what the closed event cannot: a PR that stays open
+# for weeks (the release-please PR) collects one dependency cache per go.sum,
+# and a cleanup run that fails leaves a closed PR's caches behind.
 on:
   pull_request_target:
     types: [closed]
+  schedule:
+    - cron: "17 4 * * *"
+  workflow_dispatch:
 
 permissions:
   actions: write
@@ -17,6 +24,7 @@ permissions:
 jobs:
   cleanup:
     name: Delete PR caches
+    if: github.event_name == 'pull_request_target'
     runs-on: ubuntu-latest
     timeout-minutes: 5
 
@@ -30,3 +38,27 @@ jobs:
             gh api --paginate "repos/$GITHUB_REPOSITORY/actions/caches?ref=$ref&per_page=100" --jq '.actions_caches[].id' |
               xargs -r -I{} gh api -X DELETE "repos/$GITHUB_REPOSITORY/actions/caches/{}"
           done
+
+  sweep:
+    name: Sweep PR ref caches
+    if: github.event_name != 'pull_request_target'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+      contents: read
+      pull-requests: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Delete caches no PR can still use
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          open=$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls?state=open&per_page=100" --jq '.[].number')
+          caches=$(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/caches?per_page=100" --jq '.actions_caches[] | {id, ref, key, created_at}')
+          mapfile -t open_prs <<<"$open"
+          scripts/ci/cache-prune.sh pr-refs "${open_prs[@]}" <<<"$caches" |
+            xargs -r -I{} gh api -X DELETE "repos/$GITHUB_REPOSITORY/actions/caches/{}"

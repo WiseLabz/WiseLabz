@@ -63,6 +63,9 @@ jobs:
       - name: Check CI status gate
         run: scripts/ci/status-test.sh
 
+      - name: Check cache pruning rules
+        run: scripts/ci/cache-prune.sh check
+
       - name: Classify changes
         id: classify
         env:
