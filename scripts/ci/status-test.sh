@@ -11,7 +11,7 @@ gate=$(awk '
 [[ -n $gate ]] || { echo "CI Status gate not found" >&2; exit 1; }
 
 base=$(jq -n '
-  ["postgres-closure", "actionlint", "lint-backend", "staticcheck", "govulncheck",
+  ["actionlint", "lint-backend", "staticcheck", "govulncheck",
    "lint-frontend", "test-frontend", "test-frontend-coverage", "test-backend",
    "test-backend-race", "test-backend-postgres", "build", "compose-smoke"]
   | map({key: ., value: {result: "skipped", outputs: {}}}) | from_entries
@@ -44,13 +44,10 @@ check "Detect changes missing" failure "$(jq 'del(.changes)' <<<"$base")"
 
 # Expected selections come from the documented job contract, independently
 # of the gate. Each selected job must succeed, including matrix aggregates.
-# The backend rows run with the closure answering "false"; the Postgres
-# shards have their own checks below.
 while read -r area jobs; do
   context=$(jq --arg area "$area" --arg jobs "$jobs" '
     .changes.outputs[$area] = "true"
     | reduce ($jobs | split(",")[]) as $job (. ; .[$job].result = "success")
-    | if $area == "backend" then .["postgres-closure"].outputs.postgres = "false" else . end
   ' <<<"$base")
   check "$area selected jobs succeed" success "$context"
   for job in ${jobs//,/ }; do
@@ -62,29 +59,14 @@ while read -r area jobs; do
       "$(jq --arg job "$job" 'del(.[$job])' <<<"$context")"
   done
 done <<'EOF'
-backend postgres-closure,lint-backend,staticcheck,test-backend,test-backend-race,build
+backend lint-backend,staticcheck,test-backend,test-backend-race,test-backend-postgres,build
 frontend lint-frontend,test-frontend,test-frontend-coverage,build
 compose compose-smoke
 workflows actionlint
 gomod govulncheck
 EOF
 
-# The Postgres shards are selected by the closure job's output. Anything but
-# an explicit "false" selects them, so a closure without an answer fails.
-backend=$(jq '.changes.outputs.backend = "true"
-  | reduce ("postgres-closure", "lint-backend", "staticcheck", "test-backend",
-      "test-backend-race", "build") as $job (. ; .[$job].result = "success")' <<<"$base")
-in_closure=$(jq '.["postgres-closure"].outputs.postgres = "true"' <<<"$backend")
-check "postgres closure selected shards succeed" success \
-  "$(jq '.["test-backend-postgres"].result = "success"' <<<"$in_closure")"
-for result in skipped failure cancelled ''; do
-  check "postgres closure selected shards $result" failure \
-    "$(jq --arg result "$result" '.["test-backend-postgres"].result = $result' <<<"$in_closure")"
-done
-check "postgres closure without an answer, shards skipped" failure "$backend"
-
 all_selected=$(jq '.changes.outputs |= map_values("true") | .changes.outputs.draft = "false"
-  | .["postgres-closure"].outputs.postgres = "true"
   | with_entries(.value.result = "success")' <<<"$base")
 check "all selected jobs succeed" success "$all_selected"
 draft=$(jq '.changes.outputs |= map_values("true") | .actionlint.result = "success"' <<<"$base")

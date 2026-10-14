@@ -68,9 +68,11 @@ jobs:
           path: profile-${{ matrix.mode }}.*
           retention-days: 14
 
-  # Per-test durations of the store tests against Postgres, the same flags and
-  # service CI uses (test-backend-postgres in ci.yml). One unsharded run, so
-  # the sum of the durations is the weight to balance across the shards.
+  # Per-test durations of the store tests against Postgres, with the same
+  # flags as test-backend-postgres in ci.yml. CI starts its container with
+  # fsync off on a tmpfs; this service keeps the defaults, so durations of
+  # write-heavy tests read high. One unsharded run, so the sum of the
+  # durations is the weight to balance across the shards.
   postgres:
     if: inputs.suite == 'postgres'
     name: Postgres timings (run ${{ matrix.run }})

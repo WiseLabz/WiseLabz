@@ -25,7 +25,7 @@ jobs:
     name: Detect changes
     runs-on: ubuntu-latest
     # No Go here: every other job waits for this one. The Postgres closure,
-    # which needs Go, is its own job (postgres-closure).
+    # which needs Go, runs inside each Postgres shard instead.
     timeout-minutes: 5
     outputs:
       backend: ${{ steps.classify.outputs.backend }}
@@ -94,43 +94,6 @@ jobs:
           for suite in race postgres; do
             echo "$suite=$(scripts/ci/test-shards.sh matrix "$suite")" >> "$GITHUB_OUTPUT"
           done
-
-  postgres-closure:
-    name: Postgres closure
-    runs-on: ubuntu-latest
-    needs: changes
-    if: needs.changes.outputs.backend == 'true' && needs.changes.outputs.draft != 'true'
-    timeout-minutes: 5
-    outputs:
-      postgres: ${{ steps.closure.outputs.postgres }}
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      # Restore-only: nothing is saved from this job. The Postgres cache holds
-      # the modules `go list -deps` needs for the closure.
-      - name: Setup Go
-        uses: ./.github/actions/go-cache-restore
-        with:
-          kind: postgres
-
-      - name: Postgres test closure
-        id: closure
-        env:
-          FILES: ${{ needs.changes.outputs.files }}
-        run: |
-          scripts/ci/changes.sh check --go
-          # A job output over 1 MB is dropped. Without the list, run the shards.
-          if [[ -z $FILES ]]; then
-            echo "::warning::changed-file list unavailable; running the Postgres shards"
-            echo "postgres=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          jq -r '.[]' <<<"$FILES" |
-            CHANGES_SUMMARY="$GITHUB_STEP_SUMMARY" scripts/ci/changes.sh go-closure >> "$GITHUB_OUTPUT"
 
   actionlint:
     name: Lint (Workflows)
@@ -495,10 +458,8 @@ jobs:
   test-backend-postgres:
     name: Test (Backend, Postgres, ${{ matrix.shard }})
     runs-on: ubuntu-latest
-    needs: [changes, postgres-closure]
-    # Only when the change touches the Go dependency closure of the Postgres
-    # test packages (scripts/ci/changes.sh go-closure).
-    if: needs.postgres-closure.outputs.postgres == 'true'
+    needs: changes
+    if: needs.changes.outputs.backend == 'true' && needs.changes.outputs.draft != 'true'
     timeout-minutes: 10
     permissions:
       contents: read
@@ -507,23 +468,23 @@ jobs:
       fail-fast: false
       matrix:
         shard: ${{ fromJSON(needs.changes.outputs.postgres_shards) }}
-
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_USER: wiselabz
-          POSTGRES_PASSWORD: wiselabz
-          POSTGRES_DB: wiselabz
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U wiselabz"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
+    env:
+      WISELABZ_TEST_POSTGRES_DSN: postgres://wiselabz:wiselabz@localhost:5432/wiselabz?sslmode=disable
 
     steps:
+      # Postgres starts here, in the background, so the pull and the boot
+      # overlap with checkout and Setup Go; a `services:` container would
+      # finish initializing before the first step. Same postgres:16 image.
+      # The data directory is a tmpfs and fsync is off: nothing here has to
+      # survive a crash, and the store tests write a lot.
+      - name: Start Postgres
+        run: |
+          setsid nohup docker run -d --name postgres --tmpfs /var/lib/postgresql/data \
+            -e POSTGRES_USER=wiselabz -e POSTGRES_PASSWORD=wiselabz -e POSTGRES_DB=wiselabz \
+            -p 5432:5432 postgres:16 \
+            -c fsync=off -c synchronous_commit=off -c full_page_writes=off \
+            >"$RUNNER_TEMP/postgres-start.log" 2>&1 &
+
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -535,15 +496,48 @@ jobs:
         with:
           kind: postgres
 
+      # Each shard decides for itself, so no job sits between Detect changes
+      # and the Postgres shards. Go is set up by now, and the container is
+      # still starting.
+      - name: Postgres test closure
+        id: closure
+        env:
+          FILES: ${{ needs.changes.outputs.files }}
+          SHARD: ${{ matrix.shard }}
+        run: |
+          [[ $SHARD != b-g ]] || scripts/ci/changes.sh check --go
+          # A job output over 1 MB is dropped. Without the list, run the shard.
+          if [[ -z $FILES ]]; then
+            echo "::warning::changed-file list unavailable; running the Postgres shard"
+            echo "postgres=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          jq -r '.[]' <<<"$FILES" |
+            CHANGES_SUMMARY="$GITHUB_STEP_SUMMARY" scripts/ci/changes.sh go-closure >> "$GITHUB_OUTPUT"
+
+      - name: Wait for Postgres
+        if: steps.closure.outputs.postgres == 'true'
+        run: |
+          for _ in $(seq 1 120); do
+            if docker exec postgres pg_isready -q -U wiselabz -d wiselabz; then
+              exit 0
+            fi
+            sleep 0.5
+          done
+          echo "::error::Postgres did not become ready in 60s"
+          cat "$RUNNER_TEMP/postgres-start.log"
+          docker logs postgres || true
+          exit 1
+
       - name: Run store tests and migration parity against Postgres
+        if: steps.closure.outputs.postgres == 'true'
         run: scripts/ci/test-shards.sh run postgres "$SHARD" -timeout 8m -p 1
         env:
           SHARD: ${{ matrix.shard }}
-          WISELABZ_TEST_POSTGRES_DSN: postgres://wiselabz:wiselabz@localhost:5432/wiselabz?sslmode=disable
 
-      # Runs in one shard only; every shard has its own fresh Postgres service.
+      # Runs in one shard only; every shard has its own fresh Postgres.
       - name: Verify migrate up/status/verify on Postgres
-        if: matrix.shard == 'b-g'
+        if: steps.closure.outputs.postgres == 'true' && matrix.shard == 'b-g'
         run: |
           go run ./cmd/migrate up
           go run ./cmd/migrate verify
@@ -553,7 +547,7 @@ jobs:
           WISELABZ_DB_DSN: postgres://wiselabz:wiselabz@localhost:5432/wiselabz?sslmode=disable
 
       - name: Save Go cache
-        if: matrix.shard == 'b-g'
+        if: steps.closure.outputs.postgres == 'true' && matrix.shard == 'b-g'
         uses: ./.github/actions/go-cache-save
         with:
           prefix: ${{ steps.go.outputs.prefix }}
@@ -647,7 +641,6 @@ jobs:
     runs-on: ubuntu-latest
     needs:
       - changes
-      - postgres-closure
       - actionlint
       - lint-backend
       - staticcheck
@@ -678,11 +671,9 @@ jobs:
                 (if $outputs.workflows == "true" then "actionlint" else empty end),
                 (if $outputs.draft != "true" then
                   (if $outputs.backend == "true" then
-                    "lint-backend", "staticcheck", "test-backend", "test-backend-race", "postgres-closure",
-                    # Anything but an explicit "false" from the closure selects the shards.
-                    (if $needs["postgres-closure"].outputs.postgres != "false" then
-                      "test-backend-postgres"
-                    else empty end)
+                    "lint-backend", "staticcheck", "test-backend", "test-backend-race",
+                    # A shard that finds nothing in the closure still succeeds.
+                    "test-backend-postgres"
                   else empty end),
                   (if $outputs.frontend == "true" then
                     "lint-frontend", "test-frontend", "test-frontend-coverage"
