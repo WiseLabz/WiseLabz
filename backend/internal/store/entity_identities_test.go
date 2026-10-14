@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strconv"
 	"sync"
 	"testing"
 )
@@ -265,40 +266,45 @@ func TestReconcileEntityIdentitiesSplitMemberDoesNotJoinMergeLoser(t *testing.T)
 func TestReconcileEntityIdentitiesOlderIdentityWinsRegardlessOfConnectorOrder(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
+	// Each run builds its own migrated store, which dominates the test on
+	// Postgres, so the runs go in parallel subtests.
 	for i := 0; i < 30; i++ {
-		s := newDocTestStore(t)
-		var ids []string
-		for _, n := range []string{"c1", "c2", "c3"} {
-			c := ConnectorRecord{Name: n, Type: "test", Category: "virtualization", URL: "https://" + n + ".test"}
-			if err := s.CreateConnector(ctx, &c); err != nil {
+		t.Run(strconv.Itoa(i), func(t *testing.T) {
+			t.Parallel()
+			s := newDocTestStore(t)
+			var ids []string
+			for _, n := range []string{"c1", "c2", "c3"} {
+				c := ConnectorRecord{Name: n, Type: "test", Category: "virtualization", URL: "https://" + n + ".test"}
+				if err := s.CreateConnector(ctx, &c); err != nil {
+					t.Fatal(err)
+				}
+				ids = append(ids, c.ID)
+			}
+			mk := func(c, ref, observed string) EntityMemberRecord {
+				return EntityMemberRecord{ConnectorID: c, Kind: "vm", Ref: ref, Name: ref, ObservedAt: observed}
+			}
+			a, m1, m2 := mk(ids[0], "a", "2021-01-01T00:00:00Z"), mk(ids[1], "m1", "2020-01-01T00:00:00Z"), mk(ids[2], "m2", "2020-01-01T00:00:00Z")
+			idOf := func(ref string) string {
+				var id string
+				if err := s.db.QueryRowContext(ctx, `SELECT entity_id FROM entity_members WHERE ref = ? AND gone_at IS NULL`, ref).Scan(&id); err != nil {
+					t.Fatal(err)
+				}
+				return id
+			}
+			if err := s.ReconcileEntityIdentities(ctx, [][]EntityMemberRecord{{m1, m2}}); err != nil {
 				t.Fatal(err)
 			}
-			ids = append(ids, c.ID)
-		}
-		mk := func(c, ref, observed string) EntityMemberRecord {
-			return EntityMemberRecord{ConnectorID: c, Kind: "vm", Ref: ref, Name: ref, ObservedAt: observed}
-		}
-		a, m1, m2 := mk(ids[0], "a", "2021-01-01T00:00:00Z"), mk(ids[1], "m1", "2020-01-01T00:00:00Z"), mk(ids[2], "m2", "2020-01-01T00:00:00Z")
-		idOf := func(ref string) string {
-			var id string
-			if err := s.db.QueryRowContext(ctx, `SELECT entity_id FROM entity_members WHERE ref = ? AND gone_at IS NULL`, ref).Scan(&id); err != nil {
+			older := idOf("m1")
+			if err := s.ReconcileEntityIdentities(ctx, [][]EntityMemberRecord{{m1, m2}, {a}}); err != nil {
 				t.Fatal(err)
 			}
-			return id
-		}
-		if err := s.ReconcileEntityIdentities(ctx, [][]EntityMemberRecord{{m1, m2}}); err != nil {
-			t.Fatal(err)
-		}
-		older := idOf("m1")
-		if err := s.ReconcileEntityIdentities(ctx, [][]EntityMemberRecord{{m1, m2}, {a}}); err != nil {
-			t.Fatal(err)
-		}
-		newer := idOf("a")
-		if err := s.ReconcileEntityIdentities(ctx, [][]EntityMemberRecord{{a, m1}, {m2}}); err != nil {
-			t.Fatal(err)
-		}
-		if idOf("a") != older || idOf("m1") != older || idOf("m2") == older || idOf("m2") == newer {
-			t.Fatalf("run %d: older=%s newer=%s got a=%s m1=%s m2=%s", i, older, newer, idOf("a"), idOf("m1"), idOf("m2"))
-		}
+			newer := idOf("a")
+			if err := s.ReconcileEntityIdentities(ctx, [][]EntityMemberRecord{{a, m1}, {m2}}); err != nil {
+				t.Fatal(err)
+			}
+			if idOf("a") != older || idOf("m1") != older || idOf("m2") == older || idOf("m2") == newer {
+				t.Fatalf("run %d: older=%s newer=%s got a=%s m1=%s m2=%s", i, older, newer, idOf("a"), idOf("m1"), idOf("m2"))
+			}
+		})
 	}
 }

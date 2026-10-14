@@ -266,7 +266,7 @@ top of `scripts/ci/changes.sh`. The first match wins.
 
 | Output | Selected by | Jobs |
 |---|---|---|
-| `backend` | `backend/**`, `go.work*`, `.golangci.yml`, `scripts/ci/**`, the Go cache actions | lint, staticcheck, unit, race (3 shards), build, `Postgres closure` |
+| `backend` | `backend/**`, `go.work*`, `.golangci.yml`, `scripts/ci/**`, the Go cache actions | lint, staticcheck, unit, race (3 shards), build |
 | `frontend` | `web/**`, `docs/openapi.yaml`, the Bun setup action | lint, test (3 shards, then `Test (Frontend, coverage)`), build |
 | `compose` | backend or frontend, plus `Dockerfile`, `.dockerignore`, `docker-compose*.yml`, `.env.example`, `scripts/compose-smoke.*` | compose-smoke |
 | `workflows` | `.github/workflows/**`, `.github/actions/**`, `.github/codeql/**` | `Lint (Workflows)` (actionlint + shellcheck) |
@@ -315,17 +315,18 @@ classifies the changes of every PR in the entry from the queue's base to its
 head. The version-only rule above does not apply there, so a release PR runs
 the frontend jobs once in the queue.
 
-**Postgres closure.** When backend changed, the `Postgres closure` job sets
-up Go and runs `changes.sh go-closure`. It is a separate job so that only the
-Postgres shards wait for Go; every other job starts as soon as `Detect changes`
-has classified the paths. It lists the dependencies of the Postgres test
+**Postgres closure.** When backend changed, each Postgres shard runs
+`changes.sh go-closure` itself, right after `Setup Go`, and skips its test
+steps when the answer is `false`. No separate job sits between `Detect
+changes` and the shards (#729). It lists the dependencies of the Postgres test
 packages (from `test-shards.json`) and `./cmd/migrate` with
 `go list -deps -test`. It then maps each changed file to its nearest enclosing
-Go package, so migrations, `testdata/` and deleted files count too. The shards
-run when that package is in the closure. They also run for Go module files,
-`scripts/ci/**`, the Go cache actions, `ci.yml`, unclassified paths, a path
-with no enclosing package, a `go list` failure, or a missing changed-file
-list. `CI Status` requires the shards unless the job answered `false`.
+Go package, so migrations, `testdata/` and deleted files count too. The shard
+runs its tests when that package is in the closure. It also runs them for Go
+module files, `scripts/ci/**`, the Go cache actions, `ci.yml`, unclassified
+paths, a path with no enclosing package, a `go list` failure, or a missing
+changed-file list. A shard that skips its tests still succeeds, and `CI
+Status` requires every shard whenever backend changed.
 
 **govulncheck.** PR CI runs it only when `gomod` is selected. The
 `Govulncheck nightly` workflow scans `main` every day at 06:17 UTC (it can
@@ -356,7 +357,7 @@ cover only on/off, languages, runner and AI findings.
 
 **Reading a run.** The `Detect changes` job summary lists the selected areas.
 It has a collapsible table of every changed path with the rule it matched.
-The `Postgres closure` job summary has the Postgres decision and its reason.
+Each `Test (Backend, Postgres, …)` job summary has the Postgres decision and its reason.
 
 **Adding or changing a rule.** Edit the table in `scripts/ci/changes.sh`
 (order matters), then add a row to `scripts/ci/changes-fixtures.txt` for the
@@ -654,6 +655,55 @@ successful CI runs of Oct 13 2026: 9 runs from the `main` run after #728
   longer writes one (a tag-ref cache was only readable by a re-run of the same
   tag).
 
+## Postgres chain (#729)
+
+With warm caches, a full run was set by the Postgres store jobs. On run
+38430129180 (24 jobs) that chain ended about 117s in; the next three chains
+(Compose smoke, race `data`, frontend shards plus coverage) ended at 97–100s.
+The chain was: `Detect changes`, then `Postgres closure` (24s, 15s of it
+`Setup Go`), then a shard whose `Initialize containers` took 14–21s before its
+first step, then the tests.
+
+What changed:
+
+- **No closure job.** Each Postgres shard runs `changes.sh go-closure` after
+  its own `Setup Go` and skips its test steps when the answer is `false`.
+  Jobs start as soon as `Detect changes` ends, and nothing waits for a Go
+  setup that only produced a boolean. The closure takes under a second with
+  an empty module and build cache (`GOPROXY=off`), so it does not need the
+  restored cache; it runs after the restore only because `Setup Go` and the
+  restore are one action. The cost is that a change outside the closure now
+  starts six shards that do almost nothing, instead of none. `CI Status`
+  requires every shard whenever backend changed.
+- **Postgres starts in the background.** A `services:` container finishes
+  initializing before the first step. The shards now `docker run` the same
+  `postgres:16` image in step one, so the pull and boot overlap with checkout,
+  `Setup Go` and the closure, and a `Wait for Postgres` step polls
+  `pg_isready` every 0.5s (it was a 5s health interval). The decision in the
+  issue to keep the exact image stands; the runner's own PostgreSQL 16 was not
+  used.
+- **tmpfs and `fsync=off`.** The server runs with `-c fsync=off -c
+  synchronous_commit=off -c full_page_writes=off` on a tmpfs data directory.
+  Every store test creates a schema and runs 69 migrations, and the 30-store
+  reconcile test and the 1001-document backup export commit thousands of
+  transactions, so commit latency is most of their time. Nothing in the suite
+  survives a server crash. The `Test profile` workflow keeps the stock service,
+  so its per-test durations read higher than CI's.
+- **Reconcile test.** `TestReconcileEntityIdentitiesOlderIdentityWinsRegardlessOfConnectorOrder`
+  builds 30 migrated stores one after another (about 1s each on Postgres). The
+  30 runs are now parallel subtests with the same assertions.
+
+Not done: splitting the `backup` shard. Its 47s is about 50 migrated stores
+plus the 1001-document export, run serially, and no per-test Postgres timing
+is on record to choose a split. After this change, dispatch `Test profile`
+with `suite=postgres` and split `backup` from those timings if it is still the
+longest shard; `test-shards.json` needs `tests` on one entry and a `rest`
+entry on the other (`test-shards.sh check`).
+
+Measurement: the baseline is run 38430129180 above. The after figure is the
+median wall time of at least five full warm runs on `main` once this merges;
+the acceptance threshold is 105s. It is not recorded yet.
+
 ## CI critical path (#720)
 
 Over 96 full runs (Oct 7–10 2026) a PR took 275s at the median and 421s at
@@ -698,7 +748,7 @@ What changed:
   Locally the merged report matched an unsharded run for every file (same
   covered and total lines and branches), and a shard took 16–19s against
   50s unsharded.
-- **`Postgres closure` is its own job** (see [What CI runs](#what-ci-runs)).
+- **`Postgres closure` was its own job** (see [What CI runs](#what-ci-runs)); #729 moved it into the shards.
 
 Rejected: a fourth race shard. One package sets each shard's wall clock
 (`internal/api/runbooks` at 69s in `api`, `internal/store` at 26s in
