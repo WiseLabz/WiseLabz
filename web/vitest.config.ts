@@ -9,10 +9,10 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       reporter: ['text', 'lcov'],
-      // ponytail: incremental baseline set just under the measured total at
-      // introduction (statements/lines 45%, functions 30%, branches 31%) —
-      // raise these as more features gain tests, never lower them.
-      thresholds: { lines: 40, statements: 40, functions: 25, branches: 25 },
+      // Floors sit a few points under the measured totals (statements 67.7%,
+      // lines 68.6%, branches 61.8%, functions 52.7%) so an unrelated refactor
+      // does not fail the gate. Raise them as coverage grows, never lower them.
+      thresholds: { lines: 65, statements: 64, functions: 49, branches: 58 },
     },
   },
 });

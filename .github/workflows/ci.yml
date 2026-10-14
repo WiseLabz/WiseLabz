@@ -68,6 +68,9 @@ jobs:
       - name: Check cache pruning rules
         run: scripts/ci/cache-prune.sh check
 
+      - name: Check changed-lines coverage rules
+        run: scripts/ci/changed-lines-coverage-test.sh
+
       - name: Classify changes
         id: classify
         env:
@@ -327,10 +330,13 @@ jobs:
     timeout-minutes: 5
 
     steps:
+      # Depth 2: on pull_request HEAD^1 is the base the changed-lines check
+      # compares against.
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 2
 
       - name: Setup Bun
         uses: ./.github/actions/bun-setup
@@ -354,6 +360,11 @@ jobs:
           bun run test:merge
         working-directory: web
 
+      # Warns, never fails: see "Changed-lines coverage" in docs/TESTING.md.
+      - name: Check changed-lines coverage
+        if: github.event_name == 'pull_request'
+        run: scripts/ci/changed-lines-coverage.sh lcov web/coverage/lcov.info HEAD^1
+
       - name: Upload coverage
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -372,10 +383,13 @@ jobs:
       actions: write
 
     steps:
+      # Depth 2: on pull_request HEAD^1 is the base the changed-lines check
+      # compares against.
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 2
 
       - name: Setup Go
         id: go
@@ -399,8 +413,13 @@ jobs:
         run: |
           total=$(go tool cover -func=coverage.out | tail -1 | grep -oE '[0-9]+\.[0-9]+')
           echo "Total coverage: ${total}%"
-          awk -v t="$total" 'BEGIN { exit (t+0 < 60) ? 1 : 0 }'
+          awk -v t="$total" 'BEGIN { exit (t+0 < 80) ? 1 : 0 }'
         working-directory: backend
+
+      # Warns, never fails: see "Changed-lines coverage" in docs/TESTING.md.
+      - name: Check changed-lines coverage
+        if: github.event_name == 'pull_request'
+        run: scripts/ci/changed-lines-coverage.sh go backend/coverage.out HEAD^1
 
       - name: Upload coverage
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

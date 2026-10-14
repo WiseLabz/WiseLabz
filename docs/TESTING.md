@@ -178,6 +178,63 @@ Before the setup fixes, B took 106s and A's shards 44-54s each. That is why
 the suite was sharded. B now matches A's slowest shard and saves a job and a
 merge step.
 
+### Coverage floors
+
+| Suite | Measured (run 38430129180) | Floor | Margin | Where it lives |
+|---|---|---|---|---|
+| Backend total | 84.2% | 80% | 4.2pp | `ci.yml` step `Enforce coverage baseline` |
+| Frontend statements | 67.7% | 64% | 3.7pp | `web/vitest.config.ts` `thresholds` |
+| Frontend lines | 68.6% | 65% | 3.6pp | `web/vitest.config.ts` `thresholds` |
+| Frontend branches | 61.8% | 58% | 3.8pp | `web/vitest.config.ts` `thresholds` |
+| Frontend functions | 52.7% | 49% | 3.7pp | `web/vitest.config.ts` `thresholds` |
+
+The margins keep an unrelated refactor from failing the gate. Raise a floor
+when coverage grows. Never lower one to get a change through.
+
+### Changed-lines coverage
+
+The floors measure the whole suite, so a PR that adds untested code can still
+pass. `scripts/ci/changed-lines-coverage.sh go|lcov <profile> <base-rev>`
+checks the lines the PR adds instead:
+
+- It takes the added lines from `git diff -U0 HEAD^1 HEAD` and joins them with
+  the coverage profile. CI checks out with `fetch-depth: 2` on `pull_request`
+  only. Only lines the profile marks executable count, so comments, blank
+  lines and files the profile does not mention are ignored. A line is covered
+  if any block containing it ran.
+- The threshold is 70% (`THRESHOLD`). The mode is `warn` by default (`MODE`).
+  Below the threshold it emits up to 10 `::warning` annotations naming the file
+  and line ranges. The step summary always lists the uncovered ranges.
+  `MODE=fail` exits 1 instead. Set it in the `ci.yml` step once the threshold
+  is proven. Both steps are warn-only today.
+- Backend (`Check changed-lines coverage` in `Test (Backend)`) excludes
+  `_test.go`, the `backend/cmd/*/main.go` wiring, the test-only helper
+  packages (`apitest`, `storetest`, `connectortest`, as in `coverpkg.sh`), and
+  Postgres-only code (`internal/store/pgdb.go`, `internal/leader/`). No
+  generated Go files exist in backend, so none are excluded. It adds one awk
+  and git pass to the existing job, not a new job.
+- Frontend (`Check changed-lines coverage` in `Test (Frontend, coverage)`) runs
+  the same check on the merged `web/coverage/lcov.info`. It excludes test and
+  spec files, `.d.ts`, `src/test/`, `src/mocks/`, `src/api/generated/` and
+  `src/api/model/`. Limitation: the vitest config has no `coverage.include`, so
+  a file no test imports is absent from lcov and is not measured.
+- Postgres jobs run without coverage, because collecting it would lengthen the
+  longest chain. Postgres-only files are excluded by the path list above
+  instead. A new Postgres-only file must be added to the `exclude` pattern in
+  the script. `scripts/ci/coverage-parity.sh` compares profiles if this is
+  revisited.
+- Run locally: after `go test -coverprofile=coverage.out ./...` in `backend/`,
+  run this from the repo root with your branch checked out:
+
+  ```bash
+  scripts/ci/changed-lines-coverage.sh go backend/coverage.out origin/main
+  ```
+
+  The script diffs the base rev against `HEAD` with a two-dot diff, so
+  update the branch from `origin/main` first.
+- `scripts/ci/changed-lines-coverage-test.sh` tests the script. The `changes`
+  job runs it as `Check changed-lines coverage rules`.
+
 ## Rules for new tests
 
 **Parallel tests** (`internal/api`, `internal/api/connectors`):
