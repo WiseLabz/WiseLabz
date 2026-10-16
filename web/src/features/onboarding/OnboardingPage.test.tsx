@@ -72,6 +72,7 @@ vi.mock('../../api/generated/connectors/connectors', () => ({
     isLoading: false,
     isError: false,
     isFetchedAfterMount: true,
+    dataUpdatedAt: Number.MAX_SAFE_INTEGER,
     refetch: vi.fn(),
   }),
   postConnectors: (...args: unknown[]) => mocks.postConnectors(...args),

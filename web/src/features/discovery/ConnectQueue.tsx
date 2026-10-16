@@ -4,7 +4,7 @@
  * stay the standard connector create/edit forms; skip advances and stop returns
  * control to the result list.
  */
-import { useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   getGetConnectorsQueryKey,
@@ -153,10 +153,22 @@ function TLSProbeStep({
   const selectedProbe = probes.find((probe) => probe.id === selectedProbeId) ?? probes[0];
   const detailQuery = useGetConnectorsConnectorId(selectedProbe?.id ?? '', {
     // A cached detail can predate a save (or an earlier scan's append), so the
-    // plan is only computed once a read made after mount has landed.
-    query: { enabled: Boolean(selectedProbe), refetchOnMount: 'always' },
+    // plan is only computed once a read made after mount has landed. staleTime 0
+    // makes switching probes refetch too, since refetchOnMount only covers mount.
+    query: { enabled: Boolean(selectedProbe), refetchOnMount: 'always', staleTime: 0 },
   });
   const detail = detailQuery.data;
+  // isFetchedAfterMount also turns true after a failed read, so a fresh success
+  // is a read that landed after this probe was selected. Once there is one, a
+  // later background failure keeps the form (and the admin's edits) mounted.
+  const probeId = selectedProbe?.id ?? '';
+  const [selectedSince, setSelectedSince] = useState({ id: '', at: 0 });
+  useEffect(() => {
+    // The selection time must come from an effect: render may not read the clock.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setSelectedSince((current) => (current.id === probeId ? current : { id: probeId, at: Date.now() }));
+  }, [probeId]);
+  const freshDetail = detailQuery.isFetchedAfterMount && selectedSince.id === probeId && detailQuery.dataUpdatedAt >= selectedSince.at;
   const plan = useMemo(
     () => targetPlan(String(detail?.config?.targets ?? ''), targets),
     [detail?.config?.targets, targets],
@@ -211,7 +223,7 @@ function TLSProbeStep({
     </label>
   );
 
-  if (selectedProbe && (!detail || !detailQuery.isFetchedAfterMount || detailQuery.isError)) {
+  if (selectedProbe && (!detail || !freshDetail)) {
     return (
       <section aria-labelledby="connect-queue-title" className="space-y-3">
         {header}

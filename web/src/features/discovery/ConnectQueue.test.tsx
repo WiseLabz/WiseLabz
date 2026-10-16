@@ -109,6 +109,7 @@ vi.mock('../../api/generated/connectors/connectors', () => ({
       isLoading: mocks.detailLoading,
       isError: mocks.detailError,
       isFetchedAfterMount: !mocks.detailLoading && !mocks.detailError,
+      dataUpdatedAt: Number.MAX_SAFE_INTEGER,
       refetch: mocks.refetchDetail,
     };
   },
@@ -560,6 +561,50 @@ describe('ConnectQueue', () => {
     await waitFor(() => expect(screen.getByLabelText('Targets')).toHaveValue('new.example:443\n10.0.0.20:443'));
     fireEvent.change(chooser, { target: { value: 'older' } });
     await waitFor(() => expect(screen.getByLabelText('Targets')).toHaveValue('old.example:443\n10.0.0.20:443'));
+  });
+
+  it('refetches on every probe switch under the app staleTime, so A to B to A never sticks on the skeleton', async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { staleTime: 30_000 } } });
+    mocks.getConnectors = [tlsProbe('a', 'Probe A', 'a.example:443'), tlsProbe('b', 'Probe B', 'b.example:443')];
+    mocks.detailFetch = vi.fn(async (id: string) => mocks.getConnectors.find((connector) => connector.id === id));
+    render(wrap(
+      <ConnectQueue candidates={[]} tlsTargets={[tlsTarget('10.0.0.20')]} onCreated={vi.fn()} onFinished={vi.fn()} onStop={vi.fn()} />,
+      client,
+    ));
+    const chooser = screen.getByRole('combobox', { name: 'TLS Probe to update' });
+    for (const [id, host] of [['a', 'a'], ['b', 'b'], ['a', 'a']]) {
+      fireEvent.change(chooser, { target: { value: id } });
+      await waitFor(() => expect(screen.getByLabelText('Targets')).toHaveValue(`${host}.example:443\n10.0.0.20:443`));
+    }
+    expect(mocks.detailFetch).toHaveBeenCalledTimes(3);
+  });
+
+  it('shows the error, not the form, when a stale cached detail is followed by a failed fresh read', async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { staleTime: 30_000, retry: false } } });
+    client.setQueryData(['/connectors', 'a'], tlsProbe('a', 'Probe A', 'old.example:443'));
+    mocks.getConnectors = [tlsProbe('a', 'Probe A', 'old.example:443')];
+    mocks.detailFetch = vi.fn(() => Promise.reject(new Error('down')));
+    render(wrap(
+      <ConnectQueue candidates={[]} tlsTargets={[tlsTarget('10.0.0.20')]} onCreated={vi.fn()} onFinished={vi.fn()} onStop={vi.fn()} />,
+      client,
+    ));
+    expect(await screen.findByText(/could not load tls probes/i)).toBeInTheDocument();
+    expect(screen.queryByLabelText('Targets')).toBeNull();
+  });
+
+  it('keeps the form mounted when a background refetch fails after a good fresh read', async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { staleTime: 30_000, retry: false } } });
+    mocks.getConnectors = [tlsProbe('a', 'Probe A', 'a.example:443')];
+    mocks.detailFetch = vi.fn(async (id: string) => mocks.getConnectors.find((connector) => connector.id === id));
+    render(wrap(
+      <ConnectQueue candidates={[]} tlsTargets={[tlsTarget('10.0.0.20')]} onCreated={vi.fn()} onFinished={vi.fn()} onStop={vi.fn()} />,
+      client,
+    ));
+    await waitFor(() => expect(screen.getByLabelText('Targets')).toHaveValue('a.example:443\n10.0.0.20:443'));
+    mocks.detailFetch = vi.fn(() => Promise.reject(new Error('down')));
+    await client.refetchQueries({ queryKey: ['/connectors', 'a'] });
+    await waitFor(() => expect(client.getQueryState(['/connectors', 'a'])?.status).toBe('error'));
+    expect(screen.getByLabelText('Targets')).toHaveValue('a.example:443\n10.0.0.20:443');
   });
 
   it('does not queue an add-on explicitly deselected in the discovery panel', async () => {

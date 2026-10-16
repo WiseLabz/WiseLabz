@@ -193,7 +193,7 @@ export function ConnectorEditForm({ connectorId: id, overrides, onSaved, onCance
   if (connector.isLoading) {
     return <Panel className="p-6"><SkeletonRows rows={5} /></Panel>;
   }
-  if (connector.isError || !connector.data) {
+  if (!connector.data) {
     return <Panel className="min-h-[30vh]"><ErrorState description={t('services.detail.notFound')} onRetry={() => connector.refetch()} /></Panel>;
   }
 
