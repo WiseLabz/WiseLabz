@@ -16,6 +16,7 @@ import {
   putConnectorsConnectorId,
   postConnectorsConnectorIdTest,
   getGetConnectorsQueryKey,
+  getGetConnectorsConnectorIdQueryKey,
 } from '../../api/generated/connectors/connectors';
 import type { Connector, ConnectorUpdate, SchemaField } from '../../api/model';
 import { Field, RecipeCategoryDisplay } from './ConnectorForm';
@@ -156,6 +157,8 @@ export function ConnectorEditForm({ connectorId: id, overrides, onSaved, onCance
       : putConnectorsConnectorId(id, body),
     onSuccess: (saved) => {
       queryClient.invalidateQueries({ queryKey: getGetConnectorsQueryKey() });
+      // Keep the detail read from serving pre-save config to the next reader.
+      queryClient.setQueryData(getGetConnectorsConnectorIdQueryKey(id), saved);
       toast.success(t('connectors.edit.saved'));
       onSaved(saved);
     },

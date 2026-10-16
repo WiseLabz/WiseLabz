@@ -152,7 +152,9 @@ function TLSProbeStep({
   // The list endpoint is newest-first, so the first probe is the default.
   const selectedProbe = probes.find((probe) => probe.id === selectedProbeId) ?? probes[0];
   const detailQuery = useGetConnectorsConnectorId(selectedProbe?.id ?? '', {
-    query: { enabled: Boolean(selectedProbe) },
+    // A cached detail can predate a save (or an earlier scan's append), so the
+    // plan is only computed once a read made after mount has landed.
+    query: { enabled: Boolean(selectedProbe), refetchOnMount: 'always' },
   });
   const detail = detailQuery.data;
   const plan = useMemo(
@@ -209,7 +211,7 @@ function TLSProbeStep({
     </label>
   );
 
-  if (selectedProbe && !detail) {
+  if (selectedProbe && (!detail || !detailQuery.isFetchedAfterMount || detailQuery.isError)) {
     return (
       <section aria-labelledby="connect-queue-title" className="space-y-3">
         {header}

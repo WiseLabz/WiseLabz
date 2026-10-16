@@ -40,7 +40,8 @@ vi.mock('../../api/generated/connectors/connectors', () => ({
   putConnectorsConnectorId: (...args: unknown[]) => putConnectorsConnectorId(...args),
   postConnectorsConnectorIdTest: vi.fn(),
   usePreviewConnectorRecipe: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
-  getGetConnectorsQueryKey: () => [],
+  getGetConnectorsQueryKey: () => ['/connectors'],
+  getGetConnectorsConnectorIdQueryKey: (id: string) => ['/connectors', id],
 }));
 
 vi.mock('../../lib/toast', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
@@ -102,6 +103,23 @@ describe('ConnectorEditForm', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /save/i }));
     await waitFor(() => expect(onSaved).toHaveBeenCalledWith(savedConnector));
+  });
+
+  it('replaces the cached detail with the saved connector so the next reader sees the saved config', async () => {
+    const onSaved = vi.fn();
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    queryClient.setQueryData(['/connectors', 'c1'], connectorData);
+    const saved = { ...savedConnector, config: { targets: 'existing.example:443\nadded.example:443' } };
+    putConnectorsConnectorId.mockResolvedValue(saved);
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ConnectorEditForm connectorId="c1" onSaved={onSaved} onCancel={vi.fn()} />
+      </QueryClientProvider>,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /save/i }));
+    await waitFor(() => expect(onSaved).toHaveBeenCalledWith(saved));
+    expect(queryClient.getQueryData(['/connectors', 'c1'])).toEqual(saved);
   });
 
   it('calls onCancel from the cancel button', () => {

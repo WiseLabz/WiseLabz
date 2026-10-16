@@ -18,6 +18,8 @@ const mocks = vi.hoisted(() => ({
   detailError: false,
   refetchConnectors: vi.fn(),
   refetchDetail: vi.fn(),
+  // When set, the detail read runs through the real query cache instead of the static fake.
+  detailFetch: null as null | ((id: string) => Promise<unknown>),
   listOptions: [] as unknown[],
   getScan: vi.fn(),
 }));
@@ -99,17 +101,23 @@ vi.mock('../../api/generated/connectors/connectors', () => ({
     };
   },
   // The detail read carries the config.
-  useGetConnectorsConnectorId: (id: string) => ({
-    data: mocks.detailLoading || mocks.detailError ? undefined : mocks.getConnectors.find((connector) => connector.id === id),
-    isLoading: mocks.detailLoading,
-    isError: mocks.detailError,
-    refetch: mocks.refetchDetail,
-  }),
+  useGetConnectorsConnectorId: (id: string, options?: { query?: object }) => {
+    // eslint-disable-next-line react-hooks/rules-of-hooks -- fixed for the whole test
+    if (mocks.detailFetch) return useQuery({ queryKey: ['/connectors', id], queryFn: () => mocks.detailFetch!(id), retry: false, ...options?.query });
+    return {
+      data: mocks.detailLoading || mocks.detailError ? undefined : mocks.getConnectors.find((connector) => connector.id === id),
+      isLoading: mocks.detailLoading,
+      isError: mocks.detailError,
+      isFetchedAfterMount: !mocks.detailLoading && !mocks.detailError,
+      refetch: mocks.refetchDetail,
+    };
+  },
   postConnectors: (...args: unknown[]) => postConnectors(...args),
   putConnectorsConnectorId: (...args: unknown[]) => mocks.putConnector(...args),
   postConnectorsConnectorIdTest: vi.fn(),
   usePreviewConnectorRecipe: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
   getGetConnectorsQueryKey: () => [],
+  getGetConnectorsConnectorIdQueryKey: (id: string) => ['/connectors', id],
 }));
 vi.mock('../../api/generated/discovery/discovery', () => ({
   useGetDiscoverySuggestions: () => ({ data: { suggestions: [] } }),
@@ -218,6 +226,7 @@ beforeEach(() => {
   mocks.connectorsError = false;
   mocks.detailLoading = false;
   mocks.detailError = false;
+  mocks.detailFetch = null;
   mocks.listOptions = [];
   mocks.refetchConnectors.mockReset();
   mocks.refetchDetail.mockReset();
@@ -406,6 +415,25 @@ describe('ConnectQueue', () => {
     expect((mocks.putConnector.mock.calls[0][1] as { config: { targets: string } }).config.targets.split('\n')).toHaveLength(99);
     expect(onTLSProbeSaved.mock.calls[0][1]).toEqual([targets[1]]);
     expect(onFinished).toHaveBeenCalledOnce();
+  });
+
+  it('plans from the fresh probe detail, never from a stale cached entry', async () => {
+    // A save leaves the cached detail with the pre-save targets for up to the cache lifetime.
+    const client = new QueryClient({ defaultOptions: { queries: { staleTime: 30_000 } } });
+    client.setQueryData(['/connectors', 'probe-1'], tlsProbe('probe-1', 'Existing probe', 'old.example:443'));
+    mocks.getConnectors = [tlsProbe('probe-1', 'Existing probe', 'old.example:443\nnewer.example:443')];
+    let answer: (value: unknown) => void = () => {};
+    mocks.detailFetch = vi.fn(() => new Promise((resolve) => { answer = resolve; }));
+    render(wrap(
+      <ConnectQueue candidates={[]} tlsTargets={[tlsTarget('10.0.0.20')]} onCreated={vi.fn()} onFinished={vi.fn()} onStop={vi.fn()} />,
+      client,
+    ));
+
+    await waitFor(() => expect(mocks.detailFetch).toHaveBeenCalledOnce());
+    // The form must not render from the stale entry while the fresh read is in flight.
+    expect(screen.queryByLabelText('Targets')).toBeNull();
+    answer(mocks.getConnectors[0]);
+    await waitFor(() => expect(screen.getByLabelText('Targets')).toHaveValue('old.example:443\nnewer.example:443\n10.0.0.20:443'));
   });
 
   it('deduplicates compressed and expanded IPv6 targets', async () => {
