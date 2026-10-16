@@ -402,6 +402,12 @@ func (m *Manager) run(ctx context.Context, cancel context.CancelFunc, s *scanSta
 		go func() {
 			defer close(passiveDone)
 			defer close(late)
+			defer func() {
+				if rec := recover(); rec != nil {
+					slog.Error("network discovery passive source panicked", "scan", s.ID)
+					cancel()
+				}
+			}()
 			m.cfg.Passive.Run(ctx, func(addr netip.Addr) {
 				if m.admitPassive(ctx, s, addr) {
 					select {

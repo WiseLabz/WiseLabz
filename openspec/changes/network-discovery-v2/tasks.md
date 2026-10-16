@@ -56,5 +56,5 @@ Groups 1 to 6 and 10 are backend and docs work; groups 7 to 9 are web work and s
 
 ## 11. Integration
 
-- [ ] 11.1 Run backend tests, web tests, lint and typecheck with the low-memory settings, `openspec validate network-discovery-v2 --strict`, then `graphify update .`; verify all pass in CI on the PR.
+- [x] 11.1 Run backend tests, web tests, lint and typecheck with the low-memory settings, `openspec validate network-discovery-v2 --strict`, then `graphify update .`; verify all pass in CI on the PR.
 - [ ] 11.2 Manually scan two ranges plus known hosts with ask-the-network on, from a host-networked instance, connect a pfSense or OPNsense candidate with its DNS Resolver add-on, append certificates to an existing TLS Probe, and trigger the budget overflow; verify the behaviour and the audit entries match the spec scenarios.

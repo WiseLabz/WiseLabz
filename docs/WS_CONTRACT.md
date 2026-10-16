@@ -488,12 +488,12 @@ interface DiscoveryCandidatePayload {
     url: string;           // connector URL to prefill
     urlField: string;      // config field the url goes in: 'url', or 'host' for Docker
     connectorId?: string;  // set when a connector of the same type already points at this address and port
-    source: 'range' | 'inventory' | 'passive'; // first source that admitted the address
-    addOns: {
+    source?: 'range' | 'inventory' | 'passive'; // first source that admitted the address; v2 servers always send it
+    addOns?: {
       type: string;       // add-on connector type (dnsresolver for pfSense/OPNsense)
       url: string;        // appliance URL to prefill, without credentials
       connectorId?: string; // existing add-on at this address and effective port
-    }[];                  // empty when the product declares no add-ons
+    }[];                  // empty when the product declares no add-ons; v2 servers always send it
   };
 }
 ```

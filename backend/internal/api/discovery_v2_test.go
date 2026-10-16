@@ -233,6 +233,46 @@ func TestDiscoveryNothingToScanAndRangesOverBudget(t *testing.T) {
 	})
 }
 
+func TestDiscoveryTooManyRangesAuditsAtMostSixteenCutEntries(t *testing.T) {
+	scanner := newScriptedScanner(false)
+	app := newDiscoveryV2App(t, scanner, discoveryhandler.Options{})
+	stepUp(app, false)
+	_, token := app.user(t, "operator")
+	cidrs := make([]string, disc.MaxRanges+1)
+	for i := range cidrs {
+		cidrs[i] = fmt.Sprintf("192.168.%d.0/24", i)
+	}
+	cidrs[0] = strings.Repeat("9", 500)
+
+	rec := postDiscovery(t, app, token, map[string]any{"ranges": cidrs})
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("start = %d, want 400; body = %s", rec.Code, rec.Body)
+	}
+	if field, _ := fieldError(t, rec); field != "ranges" {
+		t.Errorf("field = %q, want ranges", field)
+	}
+	if scanner.calls.Load() != 0 {
+		t.Errorf("scanner ran %d times", scanner.calls.Load())
+	}
+	rejects := auditEntries(t, app, disc.AuditReject)
+	if len(rejects) != 1 {
+		t.Fatalf("reject audit entries = %+v", rejects)
+	}
+	detail := detailOf(t, rejects[0])
+	if detail["reason"] != disc.ReasonTooManyRanges {
+		t.Errorf("reject reason = %v, want %s", detail["reason"], disc.ReasonTooManyRanges)
+	}
+	echoed, _ := detail["ranges"].([]any)
+	if len(echoed) != disc.MaxRanges {
+		t.Fatalf("echoed ranges = %d, want %d", len(echoed), disc.MaxRanges)
+	}
+	for i, value := range echoed {
+		if got, _ := value.(string); len(got) > 64 {
+			t.Errorf("echoed range %d has %d characters, want at most 64", i, len(got))
+		}
+	}
+}
+
 func TestDiscoveryInventoryReadFailureRejectsWithoutStarting(t *testing.T) {
 	scanner := newScriptedScanner(false)
 	opts := discoveryhandler.Options{

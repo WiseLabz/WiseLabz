@@ -4688,9 +4688,11 @@ paths:
               schema: { $ref: '#/components/schemas/DiscoveryScanResponse' }
         '400':
           description: >
-            Invalid range (code `invalid_request`, with `details` naming field
-            `cidr`), or step-up is on and no `X-Elevation-Token` was sent (code
-            `elevation_required`)
+            Invalid request (code `invalid_request`, with `details` naming the
+            field): `ranges[i]` for an invalid entry, `ranges` for too many
+            ranges, too many addresses or no targets, and `cidr` for the
+            deprecated one-range form. Also returned when step-up is on and no
+            `X-Elevation-Token` was sent (code `elevation_required`)
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
@@ -4718,6 +4720,9 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/DiscoveryRateLimited' }
+        '500':
+          description: Internal error (code `internal_error`), for example when the known hosts cannot be read
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
     delete:
       tags: [discovery]
       operationId: cancelDiscoveryScan
