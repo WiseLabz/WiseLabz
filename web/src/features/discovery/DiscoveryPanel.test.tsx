@@ -140,6 +140,7 @@ describe('DiscoveryPanel', () => {
     renderPanel();
     expect(screen.getByRole('textbox', { name: /range to scan/i })).toHaveValue('');
     expect(within(screen.getByRole('group', { name: /range to scan/i })).queryByRole('button')).toBeNull();
+    expect(screen.getByRole('button', { name: /^scan$/i })).toBeDisabled();
   });
 
   it('adds and removes typed range chips on Enter', () => {
@@ -167,6 +168,23 @@ describe('DiscoveryPanel', () => {
     expect(screen.getByRole('button', { name: /^scan$/i })).toBeDisabled();
   });
 
+  it('treats known hosts as off when there are none, so a range scan does not request them', async () => {
+    api.startDiscoveryScan.mockResolvedValue({ scan: scan({ state: 'running', endedAt: undefined }) });
+    renderPanel();
+    expect(screen.getByRole('checkbox', { name: /include known hosts \(0\)/i })).toBeDisabled();
+    expect(screen.getByRole('checkbox', { name: /include known hosts \(0\)/i })).not.toBeChecked();
+    const input = screen.getByRole('textbox', { name: /range to scan/i });
+    fireEvent.change(input, { target: { value: '10.0.1.0/24' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    fireEvent.click(screen.getByRole('button', { name: /^scan$/i }));
+    await waitFor(() => expect(api.startDiscoveryScan).toHaveBeenCalled());
+    expect(api.startDiscoveryScan.mock.calls[0][0]).toEqual({
+      ranges: ['10.0.1.0/24'],
+      includeInventory: false,
+      askNetwork: true,
+    });
+  });
+
   it('shows the range and known-host use of the 1,024-address budget', () => {
     api.knownHosts = 900;
     renderPanel();
@@ -180,6 +198,7 @@ describe('DiscoveryPanel', () => {
   });
 
   it('starts a scan and shows it running with its progress', async () => {
+    api.knownHosts = 2;
     api.suggestions.current = [{ cidr: '192.168.1.0/24', source: 'client' }];
     api.startDiscoveryScan.mockResolvedValue({
       scan: scan({ state: 'running', cidr: '192.168.1.0/24', done: 0, answered: 0, endedAt: undefined }),
@@ -203,6 +222,7 @@ describe('DiscoveryPanel', () => {
   });
 
   it('retries with an elevation token when the server asks for step-up', async () => {
+    api.knownHosts = 2;
     api.suggestions.current = [{ cidr: '192.168.1.0/24', source: 'client' }];
     api.startDiscoveryScan
       .mockRejectedValueOnce(axiosError(400, { code: 'elevation_required' }))
@@ -349,7 +369,7 @@ describe('DiscoveryPanel', () => {
     const onConnect = renderPanel();
     fireEvent.click(screen.getByRole('checkbox', { name: /pfSense/i }));
     fireEvent.click(screen.getByRole('checkbox', { name: /dns resolver.*10\.0\.0\.1:443/i }));
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Monitor 1 certificates' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Monitor 1 certificate' }));
     fireEvent.click(screen.getByRole('button', { name: /connect 2 selected/i }));
     expect(onConnect).toHaveBeenCalledWith([pfsense], [target], []);
   });
@@ -411,6 +431,12 @@ describe('DiscoveryPanel', () => {
     expect(screen.queryByText(/multicast queries need host networking/i)).toBeNull();
   });
 
+  it('uses the singular when one host answered the network query', () => {
+    useDiscovery.getState().setScan(scan({ askNetwork: true, passiveAnswered: 1 }));
+    renderPanel();
+    expect(screen.getByText('1 host answered the network query.')).toBeInTheDocument();
+  });
+
   it('shows the nothing-found state with the answered count', () => {
     useDiscovery.getState().setScan(scan({ answered: 7 }));
     renderPanel();
@@ -422,7 +448,7 @@ describe('DiscoveryPanel', () => {
   it('flags a partial result', () => {
     useDiscovery.getState().setScan(scan({ partial: true, candidates: [pve] }));
     renderPanel();
-    expect(screen.getByText(/time limit|4 minutes/i)).toBeInTheDocument();
+    expect(screen.getByText('The scan reached its time limit (up to 4 minutes), so the list may be incomplete.')).toBeInTheDocument();
   });
 
   it('uses all scanned ranges in the summary and identifies inventory-only scans', () => {
@@ -539,7 +565,7 @@ describe('DiscoveryPanel', () => {
     act(() => useDiscovery.getState().applyComplete({ scanId: 'scan-1', state: 'completed', partial: true }));
     const status = screen.getByRole('status');
     expect(within(status).getByText('Completed')).toBeInTheDocument();
-    expect(within(status).getByText(/time limit|4 minutes/i)).toBeInTheDocument();
+    expect(within(status).getByText('The scan reached its time limit (up to 4 minutes), so the list may be incomplete.')).toBeInTheDocument();
     expect(within(status).queryByText('Proxmox VE')).toBeNull();
     expect(container.querySelector('[aria-live]')).toBeNull();
   });

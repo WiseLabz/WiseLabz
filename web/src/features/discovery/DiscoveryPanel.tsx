@@ -129,9 +129,11 @@ export function DiscoveryPanel({
   const [includeInventory, setIncludeInventory] = useState(true);
   const [askNetwork, setAskNetwork] = useState(true);
   const knownHosts = suggestions.data?.knownHosts ?? 0;
+  // With no known hosts the option is disabled, which means effectively off.
+  const effectiveInventory = includeInventory && knownHosts > 0;
   const budget = useMemo(
-    () => calculateRangeBudget(selectedRanges, knownHosts, includeInventory),
-    [selectedRanges, knownHosts, includeInventory],
+    () => calculateRangeBudget(selectedRanges, knownHosts, effectiveInventory),
+    [selectedRanges, knownHosts, effectiveInventory],
   );
   const budgetProgress = Math.min(100, Math.round((budget.used / 1024) * 100));
 
@@ -258,7 +260,7 @@ export function DiscoveryPanel({
     setRanges(nextRanges);
     setRangeDraft('');
     setStartError(null);
-    start.mutate({ ranges: nextRanges, includeInventory, askNetwork });
+    start.mutate({ ranges: nextRanges, includeInventory: effectiveInventory, askNetwork });
   };
 
   const addRanges = (values: string[]) => {
@@ -273,7 +275,7 @@ export function DiscoveryPanel({
     setStartError(null);
   };
 
-  const canStart = selectedRanges.length > 0 || includeInventory;
+  const canStart = selectedRanges.length > 0 || effectiveInventory;
 
   return (
     <Panel className="p-5">
@@ -394,7 +396,7 @@ export function DiscoveryPanel({
           <label className="inline-flex items-center gap-2">
             <input
               type="checkbox"
-              checked={includeInventory}
+              checked={effectiveInventory}
               onChange={(e) => setIncludeInventory(e.target.checked)}
               disabled={running || knownHosts === 0}
               className="h-3.5 w-3.5 accent-[var(--color-accent-primary)] disabled:opacity-40"
