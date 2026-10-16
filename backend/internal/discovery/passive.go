@@ -3,6 +3,7 @@ package discovery
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net"
 	"net/netip"
 	"sync"
@@ -218,6 +219,12 @@ func (s *PassiveSource) Run(ctx context.Context, onAddress func(netip.Addr)) {
 		readers.Add(1)
 		go func(conn passivePacketConn) {
 			defer readers.Done()
+			defer func() {
+				if rec := recover(); rec != nil {
+					// The address is deliberately not logged.
+					slog.Error("network discovery passive reader panicked")
+				}
+			}()
 			if conn.SetReadDeadline(deadline) != nil {
 				return
 			}

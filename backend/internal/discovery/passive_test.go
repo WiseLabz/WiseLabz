@@ -277,6 +277,29 @@ func TestPassiveSourceCancellationClosesReaders(t *testing.T) {
 	}
 }
 
+func TestPassiveSourceCallbackPanicDoesNotEscapeRun(t *testing.T) {
+	source := &PassiveSource{
+		interfaces: fakePassiveInterfaceLister{interfaces: []passiveInterface{{
+			device:    net.Interface{Name: "eth-test", Index: 7, Flags: net.FlagUp | net.FlagMulticast},
+			addresses: []netip.Addr{netip.MustParseAddr("192.168.1.2")},
+		}}},
+		sender: &fakePassiveSender{conns: []*fakePassiveConn{
+			newFakePassiveConn(passiveRead{payload: []byte("answer"), source: udpSource(netip.MustParseAddr("192.168.1.50"))}),
+		}},
+		clock: fakePassiveClock{now: time.Now()},
+	}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		source.Run(context.Background(), func(netip.Addr) { panic("boom") })
+	}()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("Run did not return after the callback panicked")
+	}
+}
+
 func TestSystemPacketSenderLocalUDPPair(t *testing.T) {
 	interfaces, err := (systemInterfaceLister{}).List()
 	if err != nil {

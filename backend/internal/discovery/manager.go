@@ -404,8 +404,8 @@ func (m *Manager) run(ctx context.Context, cancel context.CancelFunc, s *scanSta
 			defer close(late)
 			defer func() {
 				if rec := recover(); rec != nil {
+					// Closing late (deferred above) lets the runner finish the static targets.
 					slog.Error("network discovery passive source panicked", "scan", s.ID)
-					cancel()
 				}
 			}()
 			m.cfg.Passive.Run(ctx, func(addr netip.Addr) {

@@ -142,6 +142,32 @@ func TestManagerV2PassiveGrowsTotalAndKeepsFirstSource(t *testing.T) {
 	}
 }
 
+func TestManagerV2PassivePanicStillProbesStaticTargets(t *testing.T) {
+	ranges, err := ParseRanges([]string{"10.0.0.5/32"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	passive := passiveFunc(func(context.Context, func(netip.Addr)) { panic("boom") })
+	runner := fakeRunner{run: func(ctx context.Context, targets Targets, cb Callbacks) Progress {
+		for range targets.Late {
+		}
+		if ctx.Err() != nil {
+			t.Error("scan context was cancelled by the passive panic")
+			return Progress{}
+		}
+		cb.OnCandidate(Candidate{Type: "fake", Address: "10.0.0.5", Port: 443})
+		return Progress{Done: 1, Total: 1}
+	}}
+	m := NewManager(Config{Runner: runner, Passive: passive})
+	if _, err := m.Start(StartRequest{Ranges: ranges, AskNetwork: true}, admin, nil); err != nil {
+		t.Fatal(err)
+	}
+	ended := waitEnded(t, m)
+	if ended.State != StateCompleted || ended.Partial || len(ended.Candidates) != 1 {
+		t.Fatalf("scan after a passive panic = %+v, want completed with the static candidate", ended)
+	}
+}
+
 func TestManagerV2PassiveOverflowCountsDistinctAnswers(t *testing.T) {
 	ranges, err := ParseRanges([]string{"192.168.0.0/22"})
 	if err != nil {
