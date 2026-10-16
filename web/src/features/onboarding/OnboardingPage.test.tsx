@@ -71,6 +71,7 @@ vi.mock('../../api/generated/connectors/connectors', () => ({
     data: mocks.connectors.find((connector) => connector.id === id),
     isLoading: false,
     isError: false,
+    isFetchedAfterMount: true,
     refetch: vi.fn(),
   }),
   postConnectors: (...args: unknown[]) => mocks.postConnectors(...args),
@@ -79,6 +80,7 @@ vi.mock('../../api/generated/connectors/connectors', () => ({
   usePreviewConnectorRecipe: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
   postConnectorsConnectorIdSync: (...args: unknown[]) => mocks.sync(...args),
   getGetConnectorsQueryKey: () => [],
+  getGetConnectorsConnectorIdQueryKey: (id: string) => ['/connectors', id],
 }));
 vi.mock('../../api/generated/discovery/discovery', () => ({
   useGetDiscoverySuggestions: () => ({ data: { suggestions: [] } }),
