@@ -8,31 +8,31 @@ Groups 1 to 6 and 10 are backend and docs work; groups 7 to 9 are web work and s
 
 ## 2. Address classes, ranges and the target set
 
-- [ ] 2.1 Add `discovery.Allowed` (design D2) and `discovery.ParseRanges` (D3), keeping `ParseRange` only if still used; verify table tests for every scenario under "Accepted range", /22 to /32 host counts, overlaps counted once, 16 and 17 entries, the 1,024 limit at exactly 1,024 and 1,025 addresses, `no_targets`, field names `ranges[i]` and the v1 `cidr` form.
-- [ ] 2.2 Add `discovery.TargetSet` with `Contains` and budget-checked `Admit` (D1, D5) and replace `connector.GuardedDialerForRange` with `GuardedDialerForSet`; port `guarded_dialer_range_test.go` and verify: in set, out of set, a prefix member, a single-address member, admission after creation, loopback / link-local / multicast inside the set still blocked, nil set, and that `AllowLoopbackForTest` never relaxes the set check.
+- [x] 2.1 Add `discovery.Allowed` (design D2) and `discovery.ParseRanges` (D3), keeping `ParseRange` only if still used; verify table tests for every scenario under "Accepted range", /22 to /32 host counts, overlaps counted once, 16 and 17 entries, the 1,024 limit at exactly 1,024 and 1,025 addresses, `no_targets`, field names `ranges[i]` and the v1 `cidr` form.
+- [x] 2.2 Add `discovery.TargetSet` with `Contains` and budget-checked `Admit` (D1, D5) and replace `connector.GuardedDialerForRange` with `GuardedDialerForSet`; port `guarded_dialer_range_test.go` and verify: in set, out of set, a prefix member, a single-address member, admission after creation, loopback / link-local / multicast inside the set still blocked, nil set, and that `AllowLoopbackForTest` never relaxes the set check.
 
 ## 3. Sources
 
-- [ ] 3.1 Add `store.ListIndexedAddresses` (D4) for SQLite and Postgres; verify store tests on both engines with rows from two connector types, an empty `ip`, and a deleted connector.
-- [ ] 3.2 Add `discovery.InventorySource` (D4); verify tests for the Docker/Portainer container exclusion with a Proxmox `container` kept, public and link-local addresses dropped, fd00::/8 kept and other IPv6 dropped, unparseable rows skipped, de-duplication, removal of addresses inside typed ranges, and deterministic order.
-- [ ] 3.3 Add `discovery.PassiveSource` (D6) with injectable interface listing, packet sender and clock; verify tests for the query bytes (mDNS legacy-unicast PTR question, SSDP M-SEARCH), source-address-only admission, a payload naming another address ignored, non-allowed and link-local sources ignored, the 3 s window, the read size cap, and distinct `passiveAnswered` counting; plus one loopback-free integration test that sends and receives on a local UDP socket pair without multicast.
+- [x] 3.1 Add `store.ListIndexedAddresses` (D4) for SQLite and Postgres; verify store tests on both engines with rows from two connector types, an empty `ip`, and a deleted connector.
+- [x] 3.2 Add `discovery.InventorySource` (D4); verify tests for the Docker/Portainer container exclusion with a Proxmox `container` kept, public and link-local addresses dropped, fd00::/8 kept and other IPv6 dropped, unparseable rows skipped, de-duplication, removal of addresses inside typed ranges, and deterministic order.
+- [x] 3.3 Add `discovery.PassiveSource` (D6) with injectable interface listing, packet sender and clock; verify tests for the query bytes (mDNS legacy-unicast PTR question, SSDP M-SEARCH), source-address-only admission, a payload naming another address ignored, non-allowed and link-local sources ignored, the 3 s window, the read size cap, and distinct `passiveAnswered` counting; plus one loopback-free integration test that sends and receives on a local UDP socket pair without multicast.
 
 ## 4. Scanner and manager
 
-- [ ] 4.1 Change `Runner.Run` to take `Targets` (D7): static addresses, the target set, and a late-address channel; verify scanner tests for late addresses probed after static ones, a late address rejected by the set never dialled, the closed channel ending the scan, cancellation, and every v1 scanner test still passing.
-- [ ] 4.2 Add the `OnTLSTarget` callback (D9) reported once per address and port for any HTTPS probe with a TLS leaf; verify tests for a matched product, an unmatched HTTPS server, an HTTP-only port (none) and de-duplication across probes.
-- [ ] 4.3 Extend the manager: `Start` takes the start request (ranges, inventory, passive), admits sources in D5 order, computes the deadline (D8) with `TimeoutPer256` / `MaxTimeout`, tracks `sources`, `skipped`, `passiveAnswered`, `tlsTargets` and candidate `source`; verify manager tests for every "Address budget" scenario, the deadline scenarios (256, 257, 600, 1,024 addresses; with and without passive), total growing on admission, and every v1 manager test still passing.
-- [ ] 4.4 Mark TLS targets monitored by existing TLS Probes on every read (D9), exporting `tlsprobe.ParseTargets`; verify tests for an IP literal match, a different port, a host name target (not matched), an imported target, and a stale marker cleared.
+- [x] 4.1 Change `Runner.Run` to take `Targets` (D7): static addresses, the target set, and a late-address channel; verify scanner tests for late addresses probed after static ones, a late address rejected by the set never dialled, the closed channel ending the scan, cancellation, and every v1 scanner test still passing.
+- [x] 4.2 Add the `OnTLSTarget` callback (D9) reported once per address and port for any HTTPS probe with a TLS leaf; verify tests for a matched product, an unmatched HTTPS server, an HTTP-only port (none) and de-duplication across probes.
+- [x] 4.3 Extend the manager: `Start` takes the start request (ranges, inventory, passive), admits sources in D5 order, computes the deadline (D8) with `TimeoutPer256` / `MaxTimeout`, tracks `sources`, `skipped`, `passiveAnswered`, `tlsTargets` and candidate `source`; verify manager tests for every "Address budget" scenario, the deadline scenarios (256, 257, 600, 1,024 addresses; with and without passive), total growing on admission, and every v1 manager test still passing.
+- [x] 4.4 Mark TLS targets monitored by existing TLS Probes on every read (D9), exporting `tlsprobe.ParseTargets`; verify tests for an IP literal match, a different port, a host name target (not matched), an imported target, and a stale marker cleared.
 
 ## 5. Add-ons
 
-- [ ] 5.1 Add `DiscoveryAddOn` to `DiscoveryHint` and declare the DNS Resolver add-on in `pfsense` and `opnsense` (D10); candidates carry `addOns`; mark an add-on's `connectorId` from existing `dnsresolver` connectors; verify registry tests (only those two types declare add-ons), the "OPNsense found" scenario, and the already-connected add-on.
+- [x] 5.1 Add `DiscoveryAddOn` to `DiscoveryHint` and declare the DNS Resolver add-on in `pfsense` and `opnsense` (D10); candidates carry `addOns`; mark an add-on's `connectorId` from existing `dnsresolver` connectors; verify registry tests (only those two types declare add-ons), the "OPNsense found" scenario, and the already-connected add-on.
 
 ## 6. API and audit
 
-- [ ] 6.1 Update the start handler for the D12 request (including the v1 `cidr` form and field names), the known-hosts read, and the 500 path; verify handler tests with `newTestApp` for each new "Accepted range" scenario, "Nothing to scan", "Ranges over budget", "Earlier request form", and that v1 handler tests pass.
-- [ ] 6.2 Update suggestions (D11) with inventory /24s and `knownHosts`, and 100.64.0.0/10 client/server addresses; verify the three "Range suggestions" scenarios and de-duplication against client and server suggestions.
-- [ ] 6.3 Update audit details (D14) and `docs/AUDIT.md`; verify handler and manager tests assert the new start, complete, cancel and reject details, and a test that no entry contains any range, known-host, passive or candidate host address (ranges excepted).
+- [x] 6.1 Update the start handler for the D12 request (including the v1 `cidr` form and field names), the known-hosts read, and the 500 path; verify handler tests with `newTestApp` for each new "Accepted range" scenario, "Nothing to scan", "Ranges over budget", "Earlier request form", and that v1 handler tests pass.
+- [x] 6.2 Update suggestions (D11) with inventory /24s and `knownHosts`, and 100.64.0.0/10 client/server addresses; verify the three "Range suggestions" scenarios and de-duplication against client and server suggestions.
+- [x] 6.3 Update audit details (D14) and `docs/AUDIT.md`; verify handler and manager tests assert the new start, complete, cancel and reject details, and a test that no entry contains any range, known-host, passive or candidate host address (ranges excepted).
 
 ## 7. Web: scan form and results
 
@@ -52,7 +52,7 @@ Groups 1 to 6 and 10 are backend and docs work; groups 7 to 9 are web work and s
 
 ## 10. Documentation
 
-- [ ] 10.1 Update `docs/NETWORK_DISCOVERY.md`: ranges and the budget, known hosts and the container exclusion, asking the network (what is sent, source-address-only, needs host networking, the multicast exception to the guarded dialer), mesh ranges needing the server on the mesh, the deadline formula, certificate monitoring, the DNS Resolver add-on, and the audit fields; add an `## Unreleased` entry to `CHANGELOG.md`; verify the docs link check and that every limit stated matches the spec.
+- [x] 10.1 Update `docs/NETWORK_DISCOVERY.md`: ranges and the budget, known hosts and the container exclusion, asking the network (what is sent, source-address-only, needs host networking, the multicast exception to the guarded dialer), mesh ranges needing the server on the mesh, the deadline formula, certificate monitoring, the DNS Resolver add-on, and the audit fields; add an `## Unreleased` entry to `CHANGELOG.md`; verify the docs link check and that every limit stated matches the spec.
 
 ## 11. Integration
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"reflect"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -14,10 +15,10 @@ import (
 )
 
 type fakeRunner struct {
-	run func(ctx context.Context, r Range, cb Callbacks) Progress
+	run func(ctx context.Context, r Targets, cb Callbacks) Progress
 }
 
-func (f fakeRunner) Run(ctx context.Context, r Range, cb Callbacks) Progress {
+func (f fakeRunner) Run(ctx context.Context, r Targets, cb Callbacks) Progress {
 	return f.run(ctx, r, cb)
 }
 
@@ -92,13 +93,13 @@ func newClock() *fakeClock { return &fakeClock{t: time.Date(2026, 10, 7, 12, 0, 
 
 var admin = Actor{UserID: "user-1", InstanceAdmin: true}
 
-func mustRange(t *testing.T, cidr string) Range {
+func mustRange(t *testing.T, cidr string) StartRequest {
 	t.Helper()
 	r, err := ParseRange(cidr)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return r
+	return StartRequest{Ranges: Ranges{r}}
 }
 
 func waitEnded(t *testing.T, m *Manager) Scan {
@@ -128,12 +129,12 @@ func waitFor(t *testing.T, what string, cond func() bool) {
 	t.Fatalf("timed out waiting for %s", what)
 }
 
-var proxmoxAt5 = Candidate{Type: "proxmox", Name: "Proxmox VE", Address: "10.0.0.5", Port: 8006, URL: "https://10.0.0.5:8006/api2/json", URLField: "url"}
-var haAt7 = Candidate{Type: "home_assistant", Name: "Home Assistant", Address: "10.0.0.7", Port: 8123, URL: "http://10.0.0.7:8123", URLField: "url"}
+var proxmoxAt5 = Candidate{Type: "proxmox", Name: "Proxmox VE", Address: "10.0.0.5", Port: 8006, URL: "https://10.0.0.5:8006/api2/json", URLField: "url", Source: SourceRange, AddOns: []AddOn{}}
+var haAt7 = Candidate{Type: "home_assistant", Name: "Home Assistant", Address: "10.0.0.7", Port: 8123, URL: "http://10.0.0.7:8123", URLField: "url", Source: SourceRange, AddOns: []AddOn{}}
 
 func quickRunner(cands ...Candidate) fakeRunner {
-	return fakeRunner{run: func(_ context.Context, r Range, cb Callbacks) Progress {
-		total := len(r.Hosts())
+	return fakeRunner{run: func(_ context.Context, r Targets, cb Callbacks) Progress {
+		total := len(r.Static)
 		for _, c := range cands {
 			cb.OnCandidate(c)
 		}
@@ -187,7 +188,7 @@ func TestManagerStartAndComplete(t *testing.T) {
 		t.Errorf("progress payload = %v", progress)
 	}
 	cand := events[0].payload.(map[string]any)
-	if cand["scanId"] != started.ID || cand["candidate"] != haAt7 {
+	if cand["scanId"] != started.ID || !reflect.DeepEqual(cand["candidate"], haAt7) {
 		t.Errorf("candidate payload = %v", cand)
 	}
 
@@ -200,7 +201,7 @@ func TestManagerStartAndComplete(t *testing.T) {
 	if e.action != AuditComplete || e.actor != "user-1" || !e.admin || e.targetType != AuditTargetType || e.targetID != started.ID {
 		t.Errorf("audit entry = %+v", e)
 	}
-	if e.detail["range"] != "10.0.0.0/24" || e.detail["probed"] != float64(254) || e.detail["answered"] != float64(3) || e.detail["partial"] != false {
+	if !reflect.DeepEqual(e.detail["ranges"], []any{"10.0.0.0/24"}) || e.detail["probed"] != float64(254) || e.detail["answered"] != float64(3) || e.detail["partial"] != false {
 		t.Errorf("audit detail = %v", e.detail)
 	}
 	perType := e.detail["candidates"].(map[string]any)
@@ -215,7 +216,7 @@ func TestManagerStartAndComplete(t *testing.T) {
 
 func TestManagerReadWhileRunning(t *testing.T) {
 	release := make(chan struct{})
-	m := NewManager(Config{Runner: fakeRunner{run: func(_ context.Context, _ Range, cb Callbacks) Progress {
+	m := NewManager(Config{Runner: fakeRunner{run: func(_ context.Context, _ Targets, cb Callbacks) Progress {
 		cb.OnCandidate(proxmoxAt5)
 		cb.OnProgress(Progress{Done: 10, Total: 254, Answered: 1})
 		<-release
@@ -226,7 +227,7 @@ func TestManagerReadWhileRunning(t *testing.T) {
 	}
 	waitFor(t, "candidate", func() bool { s, _ := m.Current(context.Background()); return len(s.Candidates) == 1 })
 	s, ok := m.Current(context.Background())
-	if !ok || s.State != StateRunning || s.EndedAt != nil || s.Done != 10 || s.Candidates[0] != proxmoxAt5 {
+	if !ok || s.State != StateRunning || s.EndedAt != nil || s.Done != 10 || !reflect.DeepEqual(s.Candidates[0], proxmoxAt5) {
 		t.Errorf("running scan = %+v ok=%v", s, ok)
 	}
 	close(release)
@@ -256,7 +257,7 @@ func TestManagerNoScanBeforeAnyStart(t *testing.T) {
 
 func TestManagerRefusesSecondScanWhileRunning(t *testing.T) {
 	release := make(chan struct{})
-	m := NewManager(Config{Runner: fakeRunner{run: func(_ context.Context, _ Range, _ Callbacks) Progress {
+	m := NewManager(Config{Runner: fakeRunner{run: func(_ context.Context, _ Targets, _ Callbacks) Progress {
 		<-release
 		return Progress{}
 	}}})
@@ -282,7 +283,7 @@ func TestManagerRefusesSecondScanWhileRunning(t *testing.T) {
 func TestManagerHourlyLimit(t *testing.T) {
 	clock := newClock()
 	var runs atomic.Int32
-	m := NewManager(Config{Runner: fakeRunner{run: func(_ context.Context, _ Range, _ Callbacks) Progress {
+	m := NewManager(Config{Runner: fakeRunner{run: func(_ context.Context, _ Targets, _ Callbacks) Progress {
 		runs.Add(1)
 		return Progress{}
 	}}, Now: clock.now})
@@ -320,7 +321,7 @@ func TestManagerHourlyLimit(t *testing.T) {
 func TestManagerRefusedStartsDoNotCount(t *testing.T) {
 	clock := newClock()
 	release := make(chan struct{})
-	m := NewManager(Config{Runner: fakeRunner{run: func(ctx context.Context, _ Range, _ Callbacks) Progress {
+	m := NewManager(Config{Runner: fakeRunner{run: func(ctx context.Context, _ Targets, _ Callbacks) Progress {
 		select {
 		case <-release:
 		case <-ctx.Done():
@@ -353,7 +354,7 @@ func TestManagerRefusedStartsDoNotCount(t *testing.T) {
 func TestManagerCancelKeepsCandidatesAndAddsNoMore(t *testing.T) {
 	hub, aud := &fakeHub{}, &fakeAudit{}
 	late := make(chan struct{})
-	m := NewManager(Config{Runner: fakeRunner{run: func(ctx context.Context, _ Range, cb Callbacks) Progress {
+	m := NewManager(Config{Runner: fakeRunner{run: func(ctx context.Context, _ Targets, cb Callbacks) Progress {
 		cb.OnCandidate(proxmoxAt5)
 		cb.OnCandidate(haAt7)
 		<-ctx.Done()
@@ -397,7 +398,7 @@ func TestManagerCancelKeepsCandidatesAndAddsNoMore(t *testing.T) {
 
 func TestManagerDeadlineEndsScanAsPartial(t *testing.T) {
 	aud := &fakeAudit{}
-	m := NewManager(Config{Timeout: 40 * time.Millisecond, Audit: aud, Runner: fakeRunner{run: func(ctx context.Context, _ Range, cb Callbacks) Progress {
+	m := NewManager(Config{TimeoutPer256: 40 * time.Millisecond, Audit: aud, Runner: fakeRunner{run: func(ctx context.Context, _ Targets, cb Callbacks) Progress {
 		cb.OnCandidate(proxmoxAt5)
 		<-ctx.Done()
 		return Progress{Done: 100, Total: 254, Answered: 1}
@@ -415,8 +416,8 @@ func TestManagerDeadlineEndsScanAsPartial(t *testing.T) {
 }
 
 func TestManagerFinishedScanAtDeadlineIsNotPartial(t *testing.T) {
-	m := NewManager(Config{Timeout: 40 * time.Millisecond, Runner: fakeRunner{run: func(ctx context.Context, r Range, cb Callbacks) Progress {
-		total := len(r.Hosts())
+	m := NewManager(Config{TimeoutPer256: 40 * time.Millisecond, Runner: fakeRunner{run: func(ctx context.Context, r Targets, cb Callbacks) Progress {
+		total := len(r.Static)
 		cb.OnProgress(Progress{Done: total, Total: total})
 		<-ctx.Done()
 		return Progress{Done: total, Total: total}
@@ -433,7 +434,7 @@ func TestManagerLateCandidateSkipsLookup(t *testing.T) {
 	var lookups atomic.Int32
 	m := NewManager(Config{
 		Endpoints: func(context.Context) ([]Endpoint, error) { lookups.Add(1); return nil, nil },
-		Runner: fakeRunner{run: func(ctx context.Context, _ Range, cb Callbacks) Progress {
+		Runner: fakeRunner{run: func(ctx context.Context, _ Targets, cb Callbacks) Progress {
 			<-ctx.Done()
 			cb.OnCandidate(proxmoxAt5)
 			return Progress{}
@@ -452,7 +453,7 @@ func TestManagerStartCallbackRunsBeforeTheScan(t *testing.T) {
 	var order []string
 	var mu sync.Mutex
 	note := func(what string) { mu.Lock(); order = append(order, what); mu.Unlock() }
-	m := NewManager(Config{Runner: fakeRunner{run: func(context.Context, Range, Callbacks) Progress {
+	m := NewManager(Config{Runner: fakeRunner{run: func(context.Context, Targets, Callbacks) Progress {
 		note("run")
 		return Progress{}
 	}}})
@@ -485,7 +486,7 @@ func TestManagerStartCallbackPanicStillRunsTheScan(t *testing.T) {
 
 func TestManagerConcurrentStartsAdmitOne(t *testing.T) {
 	release := make(chan struct{})
-	m := NewManager(Config{Runner: fakeRunner{run: func(context.Context, Range, Callbacks) Progress {
+	m := NewManager(Config{Runner: fakeRunner{run: func(context.Context, Targets, Callbacks) Progress {
 		<-release
 		return Progress{}
 	}}})
@@ -525,7 +526,7 @@ func TestManagerConcurrentStartsAdmitOne(t *testing.T) {
 func TestManagerShutdownCancelsRunningScan(t *testing.T) {
 	aud := &fakeAudit{}
 	running := make(chan struct{})
-	m := NewManager(Config{Audit: aud, Runner: fakeRunner{run: func(ctx context.Context, _ Range, cb Callbacks) Progress {
+	m := NewManager(Config{Audit: aud, Runner: fakeRunner{run: func(ctx context.Context, _ Targets, cb Callbacks) Progress {
 		cb.OnCandidate(proxmoxAt5)
 		close(running)
 		<-ctx.Done()
@@ -557,7 +558,7 @@ func TestManagerShutdownCancelsRunningScan(t *testing.T) {
 func TestManagerShutdownGivesUpWhenContextEnds(t *testing.T) {
 	release := make(chan struct{})
 	defer close(release)
-	m := NewManager(Config{Runner: fakeRunner{run: func(context.Context, Range, Callbacks) Progress {
+	m := NewManager(Config{Runner: fakeRunner{run: func(context.Context, Targets, Callbacks) Progress {
 		<-release // ignores cancellation
 		return Progress{}
 	}}})
@@ -623,7 +624,7 @@ func TestManagerNewScanReplacesResult(t *testing.T) {
 
 func TestManagerRecoversFromRunnerPanic(t *testing.T) {
 	aud := &fakeAudit{}
-	m := NewManager(Config{Audit: aud, Runner: fakeRunner{run: func(context.Context, Range, Callbacks) Progress { panic("boom") }}})
+	m := NewManager(Config{Audit: aud, Runner: fakeRunner{run: func(context.Context, Targets, Callbacks) Progress { panic("boom") }}})
 	if _, err := m.Start(mustRange(t, "10.0.0.0/24"), admin, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -642,7 +643,7 @@ func TestManagerRecoversFromRunnerPanic(t *testing.T) {
 
 func TestManagerThrottlesProgressEventsAndDedupesCandidates(t *testing.T) {
 	hub := &fakeHub{}
-	m := NewManager(Config{Events: hub, ProgressEvery: time.Hour, Runner: fakeRunner{run: func(_ context.Context, _ Range, cb Callbacks) Progress {
+	m := NewManager(Config{Events: hub, ProgressEvery: time.Hour, Runner: fakeRunner{run: func(_ context.Context, _ Targets, cb Callbacks) Progress {
 		cb.OnCandidate(proxmoxAt5)
 		cb.OnCandidate(proxmoxAt5)
 		for i := 1; i <= 254; i++ {
