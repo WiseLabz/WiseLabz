@@ -17,7 +17,13 @@ import {
   useGetDiscoverySuggestions,
   useGetDiscoveryScan,
 } from '../../api/generated/discovery/discovery';
-import type { DiscoveryCandidate, DiscoveryScan } from '../../api/model';
+import type {
+  DiscoveryAddOn,
+  DiscoveryCandidate,
+  DiscoveryScan,
+  DiscoveryScanRequest,
+  DiscoveryTLSTarget,
+} from '../../api/model';
 import { elevationOptions, useStepUpMutation } from '../../components/manager/useStepUpMutation';
 import { Button } from '../../components/ui/Button';
 import { Panel } from '../../components/ui/Panel';
@@ -25,9 +31,15 @@ import { ToneTag } from '../../components/ui/ToneTag';
 import { NetworkIcon, XIcon } from '../../components/icons';
 import { useDiscovery } from '../../store/discovery';
 import { useLive } from '../../store/live';
-import { byAddress, candidateKey } from './candidates';
+import { addOnKey, byAddress, candidateKey, candidateSource, compareAddresses, endpointLabel, targetKey } from './candidates';
+import { calculateRangeBudget } from './rangeBudget';
 
-type StartError = { kind: 'field' | 'conflict' | 'rateLimited' | 'other'; message?: string; retryMinutes?: number };
+type StartError = {
+  kind: 'field' | 'conflict' | 'rateLimited' | 'other';
+  message?: string;
+  rangeErrors?: Record<number, string>;
+  retryMinutes?: number;
+};
 
 function startErrorFrom(err: unknown): StartError {
   if (!isAxiosError(err)) return { kind: 'other' };
@@ -36,8 +48,18 @@ function startErrorFrom(err: unknown): StartError {
     | undefined;
   switch (err.response?.status) {
     case 400: {
-      const details = Array.isArray(data?.details) ? (data.details as { msg?: string }[]) : [];
-      return { kind: 'field', message: details[0]?.msg ?? data?.message };
+      const details = Array.isArray(data?.details) ? (data.details as { field?: string; msg?: string }[]) : [];
+      const rangeErrors: Record<number, string> = {};
+      for (const detail of details) {
+        const match = detail.field?.match(/^ranges\[(\d+)\]$/);
+        const index = match ? Number(match[1]) : detail.field === 'cidr' ? 0 : undefined;
+        if (index !== undefined && detail.msg) rangeErrors[index] = detail.msg;
+      }
+      return {
+        kind: 'field',
+        message: details.find((detail) => !detail.field?.match(/^ranges\[\d+\]$/) && detail.field !== 'cidr')?.msg ?? data?.message,
+        rangeErrors,
+      };
     }
     case 409:
       return { kind: 'conflict' };
@@ -51,12 +73,18 @@ function startErrorFrom(err: unknown): StartError {
 }
 
 const POLL_MS = 3000;
+const tlsTargetKey = (target: DiscoveryTLSTarget) => targetKey(target.address, target.port);
+type TLSSelection = { scanId?: string; seen: Set<string>; selected: Set<string> };
 
 export function DiscoveryPanel({
   onConnect,
 }: {
   /** Called with the selected, not yet connected candidates. */
-  onConnect: (selected: DiscoveryCandidate[]) => void;
+  onConnect: (
+    selected: DiscoveryCandidate[],
+    tlsTargets?: DiscoveryTLSTarget[],
+    addOns?: { candidate: DiscoveryCandidate; addOn: DiscoveryAddOn }[],
+  ) => void;
 }) {
   const { t } = useTranslation();
   const scan = useDiscovery((s) => s.scan);
@@ -92,15 +120,25 @@ export function DiscoveryPanel({
   const suggestions = useGetDiscoverySuggestions({ query: { retry: false, refetchOnWindowFocus: false } });
   const suggested = useMemo(() => suggestions.data?.suggestions ?? [], [suggestions.data]);
 
-  // Null until the admin types or picks a chip; until then the field shows their
-  // own range (empty when the server found no private one).
-  const [typed, setTyped] = useState<string | null>(null);
-  const cidr = typed ?? suggested.find((s) => s.source === 'client')?.cidr ?? '';
+  // The caller's network is the only suggestion prefilled. Other suggestions are
+  // added explicitly, and removing the prefilled chip stays removed.
+  const [ranges, setRanges] = useState<string[] | null>(null);
+  const clientSuggestion = suggested.find((s) => s.source === 'client')?.cidr;
+  const selectedRanges = useMemo(() => ranges ?? (clientSuggestion ? [clientSuggestion] : []), [ranges, clientSuggestion]);
+  const [rangeDraft, setRangeDraft] = useState('');
+  const [includeInventory, setIncludeInventory] = useState(true);
+  const [askNetwork, setAskNetwork] = useState(true);
+  const knownHosts = suggestions.data?.knownHosts ?? 0;
+  const budget = useMemo(
+    () => calculateRangeBudget(selectedRanges, knownHosts, includeInventory),
+    [selectedRanges, knownHosts, includeInventory],
+  );
+  const budgetProgress = Math.min(100, Math.round((budget.used / 1024) * 100));
 
   const [startError, setStartError] = useState<StartError | null>(null);
   const start = useStepUpMutation({
     action: 'discovery.scan',
-    mutationFn: (range: string, token) => startDiscoveryScan({ cidr: range }, elevationOptions(token)),
+    mutationFn: (request: DiscoveryScanRequest, token) => startDiscoveryScan(request, elevationOptions(token)),
     onSuccess: (res) => {
       setStartError(null);
       setScan(res.scan);
@@ -128,15 +166,43 @@ export function DiscoveryPanel({
 
   const candidates = useMemo(() => [...(scan?.candidates ?? [])].sort(byAddress), [scan?.candidates]);
   const selectable = candidates.filter((c) => !c.connectorId);
+  const tlsTargets = useMemo(
+    () => [...(scan?.tlsTargets ?? [])].sort((a, b) => compareAddresses(a.address, b.address) || a.port - b.port),
+    [scan?.tlsTargets],
+  );
 
   // Selection belongs to one scan; a new scan starts with nothing selected.
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [addOnOverrides, setAddOnOverrides] = useState<Map<string, boolean>>(new Map());
+  const [tlsQueueSelected, setTLSQueueSelected] = useState(false);
   const [selectionScan, setSelectionScan] = useState<string | undefined>(undefined);
   if (scan?.id !== selectionScan) {
     setSelectionScan(scan?.id);
     setSelected(new Set());
+    setAddOnOverrides(new Map());
+    setTLSQueueSelected(false);
+  }
+  const [tlsSelection, setTLSSelection] = useState<TLSSelection>({ seen: new Set(), selected: new Set() });
+  const currentTLSSelection = tlsSelection.scanId === scan?.id
+    ? tlsSelection
+    : { scanId: scan?.id, seen: new Set<string>(), selected: new Set<string>() };
+  const tlsSelected = new Set(currentTLSSelection.selected);
+  for (const target of tlsTargets) {
+    const key = tlsTargetKey(target);
+    if (!target.monitoredBy && !currentTLSSelection.seen.has(key)) tlsSelected.add(key);
   }
   const chosen = selectable.filter((c) => selected.has(candidateKey(c)));
+  const chosenAddOns = candidates.flatMap((candidate) =>
+    (candidate.addOns ?? [])
+      .filter((addOn) => !addOn.connectorId && (addOnOverrides.get(addOnKey(candidate, addOn)) ?? selected.has(candidateKey(candidate))))
+      .map((addOn) => ({ candidate, addOn })),
+  );
+  const availableTLSTargets = tlsTargets.filter((target) => !target.monitoredBy);
+  const chosenTLSTargets = tlsQueueSelected
+    ? availableTLSTargets.filter((target) => tlsSelected.has(tlsTargetKey(target)))
+    : [];
+  const totalSelected = chosen.length + chosenAddOns.length + (chosenTLSTargets.length > 0 ? 1 : 0);
+  const hasAddOnRows = candidates.some((candidate) => (candidate.addOns?.length ?? 0) > 0);
   const toggle = (c: DiscoveryCandidate) =>
     setSelected((prev) => {
       const next = new Set(prev);
@@ -145,11 +211,69 @@ export function DiscoveryPanel({
       else next.add(k);
       return next;
     });
+  const toggleAddOn = (candidate: DiscoveryCandidate, addOn: DiscoveryAddOn) =>
+    setAddOnOverrides((previous) => new Map(previous).set(addOnKey(candidate, addOn),
+      !(previous.get(addOnKey(candidate, addOn)) ?? selected.has(candidateKey(candidate)))));
+  const toggleTLSQueue = () => setTLSQueueSelected((previous) => !previous);
+  const toggleAllTLS = () =>
+    setTLSSelection((previous) => {
+      const state = previous.scanId === scan?.id ? previous : currentTLSSelection;
+      const selected = new Set(state.selected);
+      const seen = new Set(state.seen);
+      const allSelected = availableTLSTargets.every((target) => tlsSelected.has(tlsTargetKey(target)));
+      for (const target of availableTLSTargets) {
+        const key = tlsTargetKey(target);
+        if (allSelected) selected.delete(key);
+        else selected.add(key);
+        seen.add(key);
+      }
+      return { scanId: scan?.id, seen, selected };
+    });
+  const toggleTLS = (target: DiscoveryTLSTarget) =>
+    setTLSSelection((previous) => {
+      const state = previous.scanId === scan?.id ? previous : currentTLSSelection;
+      const selected = new Set(state.selected);
+      const seen = new Set(state.seen);
+      const key = tlsTargetKey(target);
+      if (tlsSelected.has(key)) selected.delete(key);
+      else selected.add(key);
+      seen.add(key);
+      return { scanId: scan?.id, seen, selected };
+    });
+  const connectSelected = () => {
+    if (hasAddOnRows) {
+      onConnect(chosen, chosenTLSTargets.length > 0 ? chosenTLSTargets : undefined, chosenAddOns);
+    } else if (chosenTLSTargets.length > 0) {
+      onConnect(chosen, chosenTLSTargets);
+    } else {
+      onConnect(chosen);
+    }
+  };
 
   const submit = () => {
+    const nextRanges = [...new Set([
+      ...selectedRanges,
+      ...rangeDraft.split(/[\n,]/).map((range) => range.trim()).filter(Boolean),
+    ])];
+    setRanges(nextRanges);
+    setRangeDraft('');
     setStartError(null);
-    start.mutate(cidr.trim());
+    start.mutate({ ranges: nextRanges, includeInventory, askNetwork });
   };
+
+  const addRanges = (values: string[]) => {
+    const additions = values.map((range) => range.trim()).filter(Boolean);
+    if (!additions.length) return;
+    setRanges([...new Set([...selectedRanges, ...additions])]);
+    setStartError(null);
+  };
+
+  const removeRange = (range: string) => {
+    setRanges(selectedRanges.filter((value) => value !== range));
+    setStartError(null);
+  };
+
+  const canStart = selectedRanges.length > 0 || includeInventory;
 
   return (
     <Panel className="p-5">
@@ -166,30 +290,84 @@ export function DiscoveryPanel({
         className="mt-4"
         onSubmit={(e) => {
           e.preventDefault();
-          if (!running && cidr.trim()) submit();
+          if (!running && canStart) submit();
         }}
       >
         <label className="block" htmlFor="discovery-range">
           <span className="mb-1 block text-2xs text-ink-faint">{t('discovery.rangeLabel')}</span>
         </label>
         <div className="flex gap-2">
-          <input
-            id="discovery-range"
-            value={cidr}
-            onChange={(e) => setTyped(e.target.value)}
-            placeholder="192.168.1.0/24"
-            autoComplete="off"
-            spellCheck={false}
-            disabled={running}
-            aria-invalid={startError?.kind === 'field'}
-            aria-describedby={startError?.kind === 'field' ? 'discovery-range-error' : undefined}
-            className="h-9 min-w-0 flex-1 rounded-sm border border-line bg-surface px-2.5 font-mono text-sm text-ink outline-none placeholder:text-ink-faint focus-visible:border-accent-primary-soft disabled:opacity-50"
-          />
-          <Button type="submit" variant="primary" size="md" disabled={running || !cidr.trim() || start.isPending}>
+          <div
+            className="flex min-h-9 min-w-0 flex-1 flex-wrap items-center gap-1.5 rounded-sm border border-line bg-surface px-2 py-1 focus-within:border-accent-primary-soft"
+            role="group"
+            aria-label={t('discovery.rangeLabel')}
+          >
+            {selectedRanges.map((range, index) => {
+              const error = startError?.rangeErrors?.[index];
+              const errorId = error ? `discovery-range-error-${index}` : undefined;
+              return (
+                <span
+                  key={range}
+                  className={`inline-flex items-center gap-1 rounded-sm border px-1.5 py-0.5 font-mono text-2xs ${error ? 'border-err text-err' : 'border-line-soft text-ink'}`}
+                  aria-invalid={error ? true : undefined}
+                  aria-describedby={errorId}
+                >
+                  {range}
+                  {!running && (
+                    <button
+                      type="button"
+                      aria-label={t('discovery.removeRange', { range })}
+                      onClick={() => removeRange(range)}
+                      className="rounded-sm text-ink-faint hover:text-ink"
+                    >
+                      <XIcon size={11} />
+                    </button>
+                  )}
+                </span>
+              );
+            })}
+            <input
+              id="discovery-range"
+              value={rangeDraft}
+              onChange={(e) => {
+                const value = e.target.value;
+                if (value.includes(',')) {
+                  const parts = value.split(',');
+                  addRanges(parts.slice(0, -1));
+                  setRangeDraft(parts[parts.length - 1] ?? '');
+                } else {
+                  setRangeDraft(value);
+                }
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ',') {
+                  e.preventDefault();
+                  addRanges(rangeDraft.split(/[\n,]/));
+                  setRangeDraft('');
+                }
+              }}
+              placeholder="192.168.1.0/24"
+              autoComplete="off"
+              spellCheck={false}
+              disabled={running}
+              aria-invalid={startError?.kind === 'field' && Object.keys(startError.rangeErrors ?? {}).length === 0}
+              aria-describedby={startError?.kind === 'field' && Object.keys(startError.rangeErrors ?? {}).length === 0 ? 'discovery-range-error' : undefined}
+              className="h-7 min-w-36 flex-1 bg-transparent font-mono text-sm text-ink outline-none placeholder:text-ink-faint disabled:opacity-50"
+            />
+          </div>
+          <Button type="submit" variant="primary" size="md" disabled={running || !canStart || start.isPending}>
             {scan && !running ? t('discovery.scanAgain') : t('discovery.start')}
           </Button>
         </div>
-        {startError?.kind === 'field' && (
+        {selectedRanges.map((range, index) => {
+          const message = startError?.rangeErrors?.[index];
+          return message ? (
+            <p key={range} id={`discovery-range-error-${index}`} className="mt-1 text-2xs text-err" role="alert">
+              {message}
+            </p>
+          ) : null;
+        })}
+        {startError?.kind === 'field' && Object.keys(startError.rangeErrors ?? {}).length === 0 && (
           <p id="discovery-range-error" className="mt-1 text-2xs text-err" role="alert">
             {startError.message ?? t('discovery.errors.invalidRange')}
           </p>
@@ -200,16 +378,57 @@ export function DiscoveryPanel({
               <button
                 key={s.cidr}
                 type="button"
-                onClick={() => setTyped(s.cidr)}
+                onClick={() => addRanges([s.cidr])}
                 className="rounded-sm border border-line-soft px-2 py-0.5 font-mono text-2xs text-ink-muted transition-colors hover:border-line-strong hover:text-ink"
               >
                 {s.cidr}
                 <span className="ml-1.5 text-ink-faint">
-                  {s.source === 'client' ? t('discovery.source.client') : t('discovery.source.server')}
+                  {t(`discovery.source.${s.source}`)}
                 </span>
               </button>
             ))}
           </div>
+        )}
+        <p className="mt-1 text-2xs text-ink-faint">{t('discovery.rangeHelp')}</p>
+        <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-2xs text-ink-muted">
+          <label className="inline-flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={includeInventory}
+              onChange={(e) => setIncludeInventory(e.target.checked)}
+              disabled={running || knownHosts === 0}
+              className="h-3.5 w-3.5 accent-[var(--color-accent-primary)] disabled:opacity-40"
+            />
+            {t('discovery.includeInventory', { count: knownHosts })}
+          </label>
+          <label className="inline-flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={askNetwork}
+              onChange={(e) => setAskNetwork(e.target.checked)}
+              disabled={running}
+              className="h-3.5 w-3.5 accent-[var(--color-accent-primary)] disabled:opacity-40"
+            />
+            {t('discovery.askNetwork')}
+          </label>
+        </div>
+        <p className="mt-3 text-2xs text-ink-faint">
+          <span className="mr-1">{t('discovery.budgetLabel')}:</span>
+          <span>{t('discovery.budget', { used: budget.used })}</span>
+          <span className="ml-2">{t('discovery.budgetHint')}</span>
+        </p>
+        <div
+          className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-canvas-sunken"
+          role="meter"
+          aria-label={t('discovery.budgetLabel')}
+          aria-valuenow={Math.min(1024, budget.used)}
+          aria-valuemin={0}
+          aria-valuemax={1024}
+        >
+          <div className="h-full rounded-full bg-accent-primary" style={{ width: `${budgetProgress}%` }} />
+        </div>
+        {budget.skippedInventory > 0 && (
+          <p className="mt-1 text-2xs text-warn">{t('discovery.skippedInventory', { count: budget.skippedInventory })}</p>
         )}
       </form>
 
@@ -245,15 +464,35 @@ export function DiscoveryPanel({
                     checked={selected.has(candidateKey(c))}
                     onToggle={() => toggle(c)}
                   />
+                  {(c.addOns ?? []).map((addOn) => (
+                    <AddOnRow
+                      key={addOnKey(c, addOn)}
+                      addOn={addOn}
+                      checked={addOn.connectorId ? false : (addOnOverrides.get(addOnKey(c, addOn)) ?? selected.has(candidateKey(c)))}
+                      onToggle={() => toggleAddOn(c, addOn)}
+                    />
+                  ))}
                 </li>
               ))}
             </ul>
           )}
 
-          {candidates.length > 0 && (
+          {tlsTargets.length > 0 && (
+            <CertificateTargets
+              targets={tlsTargets}
+              available={availableTLSTargets}
+              selected={tlsSelected}
+              queueSelected={tlsQueueSelected}
+              onToggleQueue={toggleTLSQueue}
+              onToggleAll={toggleAllTLS}
+              onToggle={toggleTLS}
+            />
+          )}
+
+          {(candidates.length > 0 || tlsTargets.length > 0) && (
             <div className="mt-3 flex items-center justify-end">
-              <Button variant="primary" size="md" disabled={chosen.length === 0} onClick={() => onConnect(chosen)}>
-                {t('discovery.connectSelected', { count: chosen.length })}
+              <Button variant="primary" size="md" disabled={totalSelected === 0} onClick={connectSelected}>
+                {t('discovery.connectSelected', { count: totalSelected })}
               </Button>
             </div>
           )}
@@ -284,13 +523,14 @@ function ScanStatus({
   const { t } = useTranslation();
   const percent = scan.total > 0 ? Math.min(100, Math.round((scan.done / scan.total) * 100)) : 0;
   const running = scan.state === 'running';
+  const scanLabel = (scan.ranges ?? [scan.cidr]).filter(Boolean).join(', ') || t('discovery.origin.inventory');
   return (
     <>
       {running && (
         <div>
           <div className="flex items-center justify-between gap-3">
             <p className="text-sm text-ink">
-              {t('discovery.running', { range: scan.cidr })}
+              {t('discovery.running', { range: scanLabel })}
               <span className="ml-2 text-2xs text-ink-faint">
                 {t('discovery.progress', { done: scan.done, total: scan.total })}
               </span>
@@ -320,7 +560,7 @@ function ScanStatus({
               label={t(`discovery.state.${scan.state}`)}
             />
             <span className="text-2xs text-ink-faint">
-              {t('discovery.summary', { range: scan.cidr, done: scan.done, total: scan.total, answered: scan.answered })}
+              {t('discovery.summary', { range: scanLabel, done: scan.done, total: scan.total, answered: scan.answered })}
             </span>
             {scan.partial && <span className="text-2xs text-warn">{t('discovery.partial')}</span>}
           </div>
@@ -331,6 +571,20 @@ function ScanStatus({
             <p className="mt-1 text-2xs text-ink-faint">
               {t('discovery.noResultsDetail', { answered: scan.answered, total: scan.total })}
             </p>
+          </div>
+        )}
+        {!running && (scan.skipped?.inventory ?? 0) > 0 && (
+          <p className="mt-2 text-2xs text-warn">{t('discovery.skippedInventory', { count: scan.skipped?.inventory })}</p>
+        )}
+        {!running && (scan.skipped?.passive ?? 0) > 0 && (
+          <p className="mt-1 text-2xs text-warn">{t('discovery.skippedPassive', { count: scan.skipped?.passive })}</p>
+        )}
+        {!running && scan.askNetwork && (
+          <div className="mt-2">
+            <p className="text-2xs text-ink-faint">{t('discovery.passiveAnswered', { count: scan.passiveAnswered ?? 0 })}</p>
+            {(scan.passiveAnswered ?? 0) === 0 && (
+              <p className="mt-1 text-2xs text-ink-faint">{t('discovery.hostNetworkingHint')}</p>
+            )}
           </div>
         )}
       </div>
@@ -363,7 +617,10 @@ function CandidateRow({
       <label htmlFor={id} className="min-w-0 flex-1 text-sm text-ink">
         <span className="font-medium">{candidate.name}</span>
         <span className="ml-2 font-mono text-2xs text-ink-muted">
-          {candidate.address}:{candidate.port}
+          {endpointLabel(candidate.address, candidate.port)}
+        </span>
+        <span className="ml-2 rounded-sm bg-canvas-sunken px-1.5 py-0.5 text-2xs text-ink-faint">
+          {t(`discovery.origin.${candidateSource(candidate)}`)}
         </span>
       </label>
       {connected && (
@@ -375,5 +632,125 @@ function CandidateRow({
         </span>
       )}
     </div>
+  );
+}
+
+function AddOnRow({
+  addOn,
+  checked,
+  onToggle,
+}: {
+  addOn: DiscoveryAddOn;
+  checked: boolean;
+  onToggle: () => void;
+}) {
+  const { t } = useTranslation();
+  const name = addOn.type === 'dnsresolver' ? t('discovery.dnsResolverAddon') : addOn.type;
+  return (
+    <div className="ml-7 mt-1 flex items-center gap-3 rounded-sm border border-line-soft px-3 py-1.5 text-2xs">
+      {addOn.connectorId ? (
+        <>
+          <span className="min-w-0 flex-1 text-ink-muted">{name}</span>
+          <ToneTag tone="ok" label={t('discovery.alreadyConnected')} />
+          <Link to={`/services/${addOn.connectorId}`} className="text-accent-primary hover:underline">
+            {t('discovery.viewConnector')}
+          </Link>
+        </>
+      ) : (
+        <label className="flex min-w-0 flex-1 items-center gap-2 text-ink">
+          <input
+            type="checkbox"
+            checked={checked}
+            onChange={onToggle}
+            aria-label={`${name} ${addOn.url}`}
+            className="h-3.5 w-3.5 accent-[var(--color-accent-primary)]"
+          />
+          <span>{name}</span>
+          <span className="truncate font-mono text-ink-faint">{addOn.url}</span>
+        </label>
+      )}
+    </div>
+  );
+}
+
+function CertificateTargets({
+  targets,
+  available,
+  selected,
+  queueSelected,
+  onToggleQueue,
+  onToggleAll,
+  onToggle,
+}: {
+  targets: DiscoveryTLSTarget[];
+  available: DiscoveryTLSTarget[];
+  selected: Set<string>;
+  queueSelected: boolean;
+  onToggleQueue: () => void;
+  onToggleAll: () => void;
+  onToggle: (target: DiscoveryTLSTarget) => void;
+}) {
+  const { t } = useTranslation();
+  const allSelected = available.length > 0 && available.every((target) => selected.has(tlsTargetKey(target)));
+  return (
+    <section className="mt-3 rounded-sm border border-line-soft p-3" aria-label={t('discovery.certificates')}>
+      <label className="flex items-center gap-2 text-sm font-medium text-ink">
+        <input
+          type="checkbox"
+          checked={queueSelected}
+          onChange={onToggleQueue}
+          disabled={available.length === 0}
+          className="h-4 w-4 accent-[var(--color-accent-primary)] disabled:opacity-40"
+        />
+        {t('discovery.monitorCertificates', { count: available.length })}
+      </label>
+      {available.length > 0 && (
+        <div className="mt-2 border-t border-line-soft pt-2">
+          <label className="flex items-center gap-2 text-2xs text-ink-muted">
+            <input
+              type="checkbox"
+              checked={allSelected}
+              onChange={onToggleAll}
+              className="h-3.5 w-3.5 accent-[var(--color-accent-primary)]"
+            />
+            {t('discovery.selectAllCertificates')}
+          </label>
+          <ul className="mt-1 space-y-1">
+            {available.map((target) => (
+              <li key={tlsTargetKey(target)}>
+                <label className="flex items-center gap-2 py-0.5 text-2xs text-ink-muted">
+                  <input
+                    type="checkbox"
+                    aria-label={endpointLabel(target.address, target.port)}
+                    checked={selected.has(tlsTargetKey(target))}
+                    onChange={() => onToggle(target)}
+                    className="h-3.5 w-3.5 accent-[var(--color-accent-primary)]"
+                  />
+                  <span className="font-mono">{endpointLabel(target.address, target.port)}</span>
+                </label>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {targets.some((target) => target.monitoredBy) && (
+        <ul className={`${available.length > 0 ? 'mt-2 border-t border-line-soft pt-2' : 'mt-2'} space-y-1`}>
+          {targets.filter((target) => target.monitoredBy).map((target) => (
+            <li key={tlsTargetKey(target)} className="flex items-center justify-between gap-3 text-2xs">
+              <span className="flex items-center gap-2">
+                <input type="checkbox" aria-label={endpointLabel(target.address, target.port)} checked disabled />
+                <span className="font-mono text-ink-muted">{endpointLabel(target.address, target.port)}</span>
+              </span>
+              <span className="flex items-center gap-2">
+                <ToneTag tone="ok" label={t('discovery.alreadyMonitored')} />
+                <Link to={`/services/${target.monitoredBy}`} className="text-accent-primary hover:underline">
+                  {t('discovery.viewConnector')}
+                </Link>
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }

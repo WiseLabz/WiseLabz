@@ -108,7 +108,7 @@ describe('AddConnectorPage scan action', () => {
     useDiscovery.getState().setScan(scan);
     renderPage();
     fireEvent.click(screen.getByRole('button', { name: /scan network/i }));
-    fireEvent.click(screen.getByRole('checkbox'));
+    fireEvent.click(screen.getByRole('checkbox', { name: /Proxmox VE/ }));
     fireEvent.click(screen.getByRole('button', { name: /connect 1 selected/i }));
     fireEvent.change(screen.getByLabelText(/api token secret/i), { target: { value: 's3cret' } });
     fireEvent.click(screen.getByRole('button', { name: /test & add/i }));
@@ -120,7 +120,7 @@ describe('AddConnectorPage scan action', () => {
     useDiscovery.getState().setScan(scan);
     renderPage();
     fireEvent.click(screen.getByRole('button', { name: /scan network/i }));
-    fireEvent.click(screen.getByRole('checkbox'));
+    fireEvent.click(screen.getByRole('checkbox', { name: /Proxmox VE/ }));
     fireEvent.click(screen.getByRole('button', { name: /connect 1 selected/i }));
     fireEvent.click(screen.getByRole('button', { name: /^skip$/i }));
     expect(await screen.findByText('services list')).toBeInTheDocument();

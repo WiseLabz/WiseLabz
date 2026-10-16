@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-quer
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '../../i18n';
-import type { DiscoveryCandidate, DiscoveryScan } from '../../api/model';
+import type { Connector, DiscoveryCandidate, DiscoveryScan, DiscoveryTLSTarget } from '../../api/model';
 import { useDiscovery } from '../../store/discovery';
 import { useLive } from '../../store/live';
 import { OnboardingPage } from './OnboardingPage';
@@ -11,6 +11,8 @@ import { OnboardingPage } from './OnboardingPage';
 const mocks = vi.hoisted(() => ({
   isAdmin: { current: true },
   postConnectors: vi.fn(),
+  putConnector: vi.fn(),
+  connectors: [] as { id: string; type: string; name: string; managedBy?: string; config?: Record<string, string> }[],
   sync: vi.fn(),
   getScan: vi.fn(),
 }));
@@ -43,12 +45,32 @@ const schemas = [
     isCredentialRefresher: false,
     fields: [{ name: 'host', label: 'Docker Host', kind: 'text', required: true }],
   },
+  {
+    type: 'tlsprobe',
+    category: 'monitoring',
+    displayName: 'TLS Probe',
+    isCredentialRefresher: false,
+    fields: [
+      { name: 'targets', label: 'Targets', kind: 'textarea', required: false },
+      { name: 'import_connector_id', label: 'Import hosts from Traefik connector', kind: 'text', required: false },
+      { name: 'import_port', label: 'Port for imported hosts', kind: 'number', required: false, default: '443' },
+    ],
+  },
 ];
 
 vi.mock('../../api/generated/connectors/connectors', () => ({
   useGetConnectorsSchema: () => ({ data: schemas, isLoading: false, isError: false, refetch: vi.fn() }),
-  useGetConnectors: () => ({ data: [] }),
+  useGetConnectors: () => ({ data: mocks.connectors, isLoading: false, isError: false, refetch: vi.fn() }),
+  useGetConnectorsConnectorId: (id: string) => ({
+    data: mocks.connectors.find((connector) => connector.id === id),
+    isLoading: false,
+    isError: false,
+    refetch: vi.fn(),
+  }),
   postConnectors: (...args: unknown[]) => mocks.postConnectors(...args),
+  putConnectorsConnectorId: (...args: unknown[]) => mocks.putConnector(...args),
+  postConnectorsConnectorIdTest: vi.fn(),
+  usePreviewConnectorRecipe: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
   postConnectorsConnectorIdSync: (...args: unknown[]) => mocks.sync(...args),
   getGetConnectorsQueryKey: () => [],
 }));
@@ -61,7 +83,10 @@ vi.mock('../../api/generated/discovery/discovery', () => ({
   startDiscoveryScan: vi.fn(),
   cancelDiscoveryScan: vi.fn(),
 }));
-vi.mock('../compliance/CertificateExpiryPackOffer', () => ({ CertificateExpiryPackOffer: () => null }));
+vi.mock('../compliance/CertificateExpiryPackOffer', () => ({
+  CertificateExpiryPackOffer: ({ requested, onFinished }: { requested: boolean; onFinished: () => void }) =>
+    requested ? <button onClick={onFinished}>Finish certificate offer</button> : null,
+}));
 vi.mock('../../hooks/useRole', () => ({ useIsInstanceAdmin: () => mocks.isAdmin.current }));
 
 const pve: DiscoveryCandidate = {
@@ -90,7 +115,7 @@ const docker: DiscoveryCandidate = {
   urlField: 'host',
 };
 
-const scanOf = (candidates: DiscoveryCandidate[]): DiscoveryScan => ({
+const scanOf = (candidates: DiscoveryCandidate[], tlsTargets?: DiscoveryTLSTarget[]): DiscoveryScan => ({
   id: 'scan-1',
   cidr: '10.0.0.0/24',
   state: 'completed',
@@ -101,6 +126,19 @@ const scanOf = (candidates: DiscoveryCandidate[]): DiscoveryScan => ({
   answered: candidates.length,
   partial: false,
   candidates,
+  ...(tlsTargets ? { tlsTargets } : {}),
+});
+
+const tlsProbe = (id: string, name: string, targets: string): Connector => ({
+  id,
+  name,
+  type: 'tlsprobe',
+  category: 'monitoring',
+  enabled: true,
+  status: 'unknown',
+  capabilities: { restart: false, start: false, stop: false, configPush: false, configRead: false, credentialRefresh: false },
+  actions: [],
+  config: { targets, import_connector_id: '', import_port: '443' },
 });
 
 function renderOnboarding() {
@@ -122,13 +160,32 @@ const finishSync = (id: string) =>
 const failSync = (id: string) =>
   act(() => useLive.getState().upsertJob({ jobId: `job-${id}`, serviceId: id, phase: 'error', percent: 40, message: 'boom', startedAt: Date.now() }));
 
+const selectAllCandidates = () => {
+  for (const candidate of [pve, ha, docker]) {
+    const checkbox = screen.queryByRole('checkbox', {
+      name: new RegExp(`${candidate.name}.*${candidate.address}`, 'i'),
+    });
+    if (checkbox) fireEvent.click(checkbox);
+  }
+};
+
 beforeEach(() => {
   mocks.isAdmin.current = true;
+  mocks.connectors = [];
   useDiscovery.setState({ scan: null });
   useLive.setState({ jobs: {} });
   mocks.getScan.mockImplementation(() => new Promise(() => {}));
   let n = 0;
-  mocks.postConnectors.mockImplementation(async (body: { name: string; type: string }) => ({ id: `c${++n}`, name: body.name, type: body.type }));
+  mocks.postConnectors.mockImplementation(async (body: { name: string; type: string; config?: Record<string, string> }) => ({
+    id: `c${++n}`,
+    name: body.name,
+    type: body.type,
+    config: body.config,
+  }));
+  mocks.putConnector.mockImplementation(async (id: string, body: { config?: Record<string, string> }) => {
+    const current = mocks.connectors.find((connector) => connector.id === id);
+    return { ...current, ...body, config: { ...current?.config, ...body.config } };
+  });
   mocks.sync.mockResolvedValue(undefined);
 });
 afterEach(() => vi.clearAllMocks());
@@ -171,11 +228,28 @@ describe('OnboardingPage connect step', () => {
 });
 
 describe('OnboardingPage with a network scan', () => {
+  it('includes an edited TLS Probe in the first-sync step', async () => {
+    mocks.connectors = [tlsProbe('tls-existing', 'Lab certificates', 'existing.example:443')];
+    useDiscovery.getState().setScan(scanOf([], [{ address: '10.0.0.20', port: 443, source: 'range' }]));
+    renderOnboarding();
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Monitor 1 certificates' }));
+    fireEvent.click(screen.getByRole('button', { name: /connect 1 selected/i }));
+    const targets = await screen.findByLabelText('Targets');
+    await waitFor(() => expect(targets).toHaveValue('existing.example:443\n10.0.0.20:443'));
+    fireEvent.click(screen.getByRole('button', { name: /^save$/i }));
+
+    expect(await screen.findByRole('heading', { name: /running the first sync/i })).toBeInTheDocument();
+    await waitFor(() => expect(mocks.sync).toHaveBeenCalledOnce());
+    expect(mocks.sync).toHaveBeenCalledWith('tls-existing');
+    expect(screen.getByRole('progressbar', { name: 'Lab certificates' })).toBeInTheDocument();
+  });
+
   it('syncs every connector created in the queue and shows each one’s progress', async () => {
     useDiscovery.getState().setScan(scanOf([pve, ha]));
     renderOnboarding();
 
-    screen.getAllByRole('checkbox').forEach((box) => fireEvent.click(box));
+    selectAllCandidates();
     fireEvent.click(screen.getByRole('button', { name: /connect 2 selected/i }));
     type(/api token secret/i, 's3cret');
     save();
@@ -201,7 +275,7 @@ describe('OnboardingPage with a network scan', () => {
     useDiscovery.getState().setScan(scanOf([pve, ha]));
     renderOnboarding();
 
-    screen.getAllByRole('checkbox').forEach((box) => fireEvent.click(box));
+    selectAllCandidates();
     fireEvent.click(screen.getByRole('button', { name: /connect 2 selected/i }));
     fireEvent.click(screen.getByRole('button', { name: /^skip$/i }));
     await screen.findByText('Candidate 2 of 2');
@@ -218,7 +292,7 @@ describe('OnboardingPage with a network scan', () => {
     useDiscovery.getState().setScan(scanOf([pve, ha]));
     renderOnboarding();
 
-    screen.getAllByRole('checkbox').forEach((box) => fireEvent.click(box));
+    selectAllCandidates();
     fireEvent.click(screen.getByRole('button', { name: /connect 2 selected/i }));
     type(/api token secret/i, 's3cret');
     save();
@@ -240,7 +314,7 @@ describe('OnboardingPage with a network scan', () => {
     expect(screen.getByText(/add one by hand/i)).toBeInTheDocument();
     expect(screen.getAllByRole('button', { name: 'Home Assistant' })).toHaveLength(1);
 
-    screen.getAllByRole('checkbox').forEach((box) => fireEvent.click(box));
+    selectAllCandidates();
     fireEvent.click(screen.getByRole('button', { name: /connect 2 selected/i }));
     await screen.findByText('Candidate 1 of 2');
     expect(screen.queryByText(/add one by hand/i)).toBeNull();
@@ -259,7 +333,7 @@ describe('OnboardingPage with a network scan', () => {
   it('lets Continue through when one of three syncs fails and the others finished', async () => {
     useDiscovery.getState().setScan(scanOf([pve, ha, docker]));
     renderOnboarding();
-    screen.getAllByRole('checkbox').forEach((box) => fireEvent.click(box));
+    selectAllCandidates();
     fireEvent.click(screen.getByRole('button', { name: /connect 3 selected/i }));
     // Rows are ordered by address: pve, ha, docker (10.0.0.9).
     type(/api token secret/i, 's3cret');
@@ -286,7 +360,7 @@ describe('OnboardingPage with a network scan', () => {
   it('keeps Continue disabled when every sync failed', async () => {
     useDiscovery.getState().setScan(scanOf([pve, ha]));
     renderOnboarding();
-    screen.getAllByRole('checkbox').forEach((box) => fireEvent.click(box));
+    selectAllCandidates();
     fireEvent.click(screen.getByRole('button', { name: /connect 2 selected/i }));
     type(/api token secret/i, 's3cret');
     save();

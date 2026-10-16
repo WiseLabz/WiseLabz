@@ -3,12 +3,20 @@ import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-quer
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '../../i18n';
-import type { DiscoveryCandidate, DiscoveryScan } from '../../api/model';
+import type { Connector, DiscoveryAddOn, DiscoveryCandidate, DiscoveryScan, DiscoveryTLSTarget } from '../../api/model';
 import { useDiscovery } from '../../store/discovery';
 import { ConnectQueue } from './ConnectQueue';
 import { DiscoveryFlow } from './DiscoveryFlow';
 
-const mocks = vi.hoisted(() => ({ postConnectors: vi.fn(), getScan: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  postConnectors: vi.fn(),
+  putConnector: vi.fn(),
+  getConnectors: [] as { id: string; type: string; name: string; managedBy?: string; config?: Record<string, string> }[],
+  connectorsLoading: false,
+  connectorsError: false,
+  refetchConnectors: vi.fn(),
+  getScan: vi.fn(),
+}));
 const postConnectors = mocks.postConnectors;
 
 // Field names and kinds as the backend emits them for these two types.
@@ -41,12 +49,57 @@ const schemas = [
     isCredentialRefresher: false,
     fields: [{ name: 'host', label: 'Docker Host', kind: 'text', required: true }],
   },
+  {
+    type: 'pfsense',
+    category: 'networking',
+    displayName: 'pfSense',
+    isCredentialRefresher: false,
+    fields: [
+      { name: 'url', label: 'pfSense URL', kind: 'text', required: true },
+      { name: 'api_key', label: 'API Key', kind: 'password', required: true },
+    ],
+  },
+  {
+    type: 'dnsresolver',
+    category: 'networking',
+    displayName: 'DNS Resolver',
+    isCredentialRefresher: false,
+    fields: [
+      { name: 'url', label: 'DNS Resolver URL', kind: 'text', required: true },
+      { name: 'api_key', label: 'API Key', kind: 'password', required: true },
+    ],
+  },
+  {
+    type: 'tlsprobe',
+    category: 'monitoring',
+    displayName: 'TLS Probe',
+    isCredentialRefresher: false,
+    fields: [
+      { name: 'targets', label: 'Targets', kind: 'textarea', required: false },
+      { name: 'import_connector_id', label: 'Import hosts from Traefik connector', kind: 'text', required: false },
+      { name: 'import_port', label: 'Port for imported hosts', kind: 'number', required: false, default: '443' },
+    ],
+  },
 ];
 
 vi.mock('../../api/generated/connectors/connectors', () => ({
   useGetConnectorsSchema: () => ({ data: schemas, isLoading: false, isError: false, refetch: vi.fn() }),
-  useGetConnectors: () => ({ data: [] }),
+  useGetConnectors: () => ({
+    data: mocks.getConnectors,
+    isLoading: mocks.connectorsLoading,
+    isError: mocks.connectorsError,
+    refetch: mocks.refetchConnectors,
+  }),
+  useGetConnectorsConnectorId: (id: string) => ({
+    data: mocks.getConnectors.find((connector) => connector.id === id),
+    isLoading: false,
+    isError: false,
+    refetch: vi.fn(),
+  }),
   postConnectors: (...args: unknown[]) => postConnectors(...args),
+  putConnectorsConnectorId: (...args: unknown[]) => mocks.putConnector(...args),
+  postConnectorsConnectorIdTest: vi.fn(),
+  usePreviewConnectorRecipe: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
   getGetConnectorsQueryKey: () => [],
 }));
 vi.mock('../../api/generated/discovery/discovery', () => ({
@@ -58,7 +111,10 @@ vi.mock('../../api/generated/discovery/discovery', () => ({
   startDiscoveryScan: vi.fn(),
   cancelDiscoveryScan: vi.fn(),
 }));
-vi.mock('../compliance/CertificateExpiryPackOffer', () => ({ CertificateExpiryPackOffer: () => null }));
+vi.mock('../compliance/CertificateExpiryPackOffer', () => ({
+  CertificateExpiryPackOffer: ({ requested, onFinished }: { requested: boolean; onFinished: () => void }) =>
+    requested ? <button onClick={onFinished}>Finish certificate offer</button> : null,
+}));
 vi.mock('../../hooks/useRole', () => ({ useIsInstanceAdmin: () => true }));
 
 const pve: DiscoveryCandidate = {
@@ -86,7 +142,40 @@ const docker: DiscoveryCandidate = {
   urlField: 'host',
 };
 
-const completedScan = (candidates: DiscoveryCandidate[]): DiscoveryScan => ({
+const resolverAddOn: DiscoveryAddOn = {
+  type: 'dnsresolver',
+  url: 'https://10.0.0.8:443/api/v2',
+};
+const pfsense: DiscoveryCandidate = {
+  type: 'pfsense',
+  name: 'pfSense',
+  address: '10.0.0.8',
+  port: 443,
+  url: 'https://10.0.0.8:443/api/v2',
+  urlField: 'url',
+  addOns: [resolverAddOn],
+};
+
+const tlsTarget = (address: string, port = 443): DiscoveryTLSTarget => ({
+  address,
+  port,
+  source: 'range',
+});
+
+const tlsProbe = (id: string, name: string, targets: string, managedBy?: string): Connector => ({
+  id,
+  name,
+  type: 'tlsprobe',
+  category: 'monitoring',
+  enabled: true,
+  status: 'unknown',
+  capabilities: { restart: false, start: false, stop: false, configPush: false, configRead: false, credentialRefresh: false },
+  actions: [],
+  managedBy: managedBy as Connector['managedBy'],
+  config: { targets, import_connector_id: '', import_port: '443' },
+});
+
+const completedScan = (candidates: DiscoveryCandidate[], tlsTargets?: DiscoveryTLSTarget[]): DiscoveryScan => ({
   id: 'scan-1',
   cidr: '10.0.0.0/24',
   state: 'completed',
@@ -97,6 +186,7 @@ const completedScan = (candidates: DiscoveryCandidate[]): DiscoveryScan => ({
   answered: candidates.length,
   partial: false,
   candidates,
+  ...(tlsTargets ? { tlsTargets } : {}),
 });
 
 function wrap(ui: React.ReactNode, client = new QueryClient()) {
@@ -114,8 +204,21 @@ beforeEach(() => {
   useDiscovery.setState({ scan: null });
   mocks.getScan.mockReset();
   mocks.getScan.mockImplementation(() => new Promise(() => {}));
+  mocks.getConnectors = [];
+  mocks.connectorsLoading = false;
+  mocks.connectorsError = false;
+  mocks.refetchConnectors.mockReset();
   let n = 0;
-  postConnectors.mockImplementation(async (body: { name: string; type: string }) => ({ id: `c${++n}`, name: body.name, type: body.type }));
+  postConnectors.mockImplementation(async (body: { name: string; type: string; config?: Record<string, string> }) => ({
+    id: `c${++n}`,
+    name: body.name,
+    type: body.type,
+    config: body.config,
+  }));
+  mocks.putConnector.mockImplementation(async (id: string, body: { config?: Record<string, string> }) => {
+    const current = mocks.getConnectors.find((connector) => connector.id === id);
+    return { ...current, ...body, config: { ...current?.config, ...body.config } };
+  });
 });
 afterEach(() => vi.clearAllMocks());
 
@@ -170,6 +273,230 @@ describe('ConnectQueue', () => {
     expect(onCreated).not.toHaveBeenCalled();
   });
 
+  it('offers pfSense DNS Resolver immediately after the candidate and saves it when selected by default', async () => {
+    const onCreated = vi.fn();
+    const onAddOnCreated = vi.fn();
+    const onFinished = vi.fn();
+    render(wrap(
+      <ConnectQueue
+        candidates={[pfsense]}
+        onCreated={onCreated}
+        onAddOnCreated={onAddOnCreated}
+        onFinished={onFinished}
+        onStop={vi.fn()}
+      />,
+    ));
+
+    type(/api key/i, 'pfsense-secret');
+    save();
+    expect(await screen.findByRole('heading', { name: /connect dns resolver at 10\.0\.0\.8:443/i })).toBeInTheDocument();
+    expect(onCreated).toHaveBeenCalledTimes(1);
+    expect(onAddOnCreated).not.toHaveBeenCalled();
+
+    type(/api key/i, 'resolver-secret');
+    save();
+    await waitFor(() => expect(onFinished).toHaveBeenCalledOnce());
+    expect(postConnectors.mock.calls.map(([body]) => (body as { type: string }).type)).toEqual(['pfsense', 'dnsresolver']);
+    expect(onAddOnCreated.mock.calls[0][1]).toBe(pfsense);
+    expect(onAddOnCreated.mock.calls[0][2]).toBe(resolverAddOn);
+  });
+
+  it('keeps a selected add-on after the parent candidate is skipped, and lets the add-on be skipped', async () => {
+    const onFinished = vi.fn();
+    const onAddOnCreated = vi.fn();
+    render(wrap(
+      <ConnectQueue
+        candidates={[pfsense]}
+        addOns={[{ candidate: pfsense, addOn: resolverAddOn }]}
+        onCreated={vi.fn()}
+        onAddOnCreated={onAddOnCreated}
+        onFinished={onFinished}
+        onStop={vi.fn()}
+      />,
+    ));
+
+    fireEvent.click(screen.getByRole('button', { name: /^skip$/i }));
+    expect(await screen.findByRole('heading', { name: /connect dns resolver/i })).toBeInTheDocument();
+    expect(postConnectors).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: /^skip$/i }));
+    expect(onFinished).toHaveBeenCalledOnce();
+    expect(onAddOnCreated).not.toHaveBeenCalled();
+  });
+
+  it('stops from an add-on step without finishing the queue', async () => {
+    const onStop = vi.fn();
+    const onFinished = vi.fn();
+    render(wrap(
+      <ConnectQueue
+        candidates={[pfsense]}
+        addOns={[{ candidate: pfsense, addOn: resolverAddOn }]}
+        onCreated={vi.fn()}
+        onFinished={onFinished}
+        onStop={onStop}
+      />,
+    ));
+    fireEvent.click(screen.getByRole('button', { name: /^skip$/i }));
+    await screen.findByRole('heading', { name: /connect dns resolver/i });
+    fireEvent.click(screen.getByRole('button', { name: /^stop$/i }));
+    expect(onStop).toHaveBeenCalledOnce();
+    expect(onFinished).not.toHaveBeenCalled();
+  });
+
+  it('queues an independently selected add-on even when its candidate is not selected', async () => {
+    useDiscovery.getState().setScan(completedScan([pfsense]));
+    render(wrap(<DiscoveryFlow />));
+
+    fireEvent.click(screen.getByRole('checkbox', { name: /dns resolver https:\/\/10\.0\.0\.8/i }));
+    expect(screen.getByRole('checkbox', { name: /pfsense.*10\.0\.0\.8:443/i })).not.toBeChecked();
+    fireEvent.click(screen.getByRole('button', { name: /connect 1 selected/i }));
+    expect(await screen.findByRole('heading', { name: /connect dns resolver at 10\.0\.0\.8:443/i })).toBeInTheDocument();
+    type(/api key/i, 'resolver-secret');
+    save();
+
+    await waitFor(() => expect(postConnectors).toHaveBeenCalledOnce());
+    expect(postConnectors.mock.calls[0][0]).toMatchObject({ type: 'dnsresolver' });
+  });
+
+  it('appends only two of four certificates to a 98-target probe and marks only targets still saved', async () => {
+    const existing = Array.from({ length: 98 }, (_, index) => `existing-${index}.example:443`).join('\n');
+    const probe = tlsProbe('probe-1', 'Existing probe', existing);
+    mocks.getConnectors = [probe];
+    const targets = ['10.0.0.20', '10.0.0.21', '10.0.0.22', '10.0.0.23'].map((address) => tlsTarget(address));
+    const onTLSProbeSaved = vi.fn();
+    const onFinished = vi.fn();
+    render(wrap(
+      <ConnectQueue
+        candidates={[]}
+        tlsTargets={targets}
+        onCreated={vi.fn()}
+        onTLSProbeSaved={onTLSProbeSaved}
+        onFinished={onFinished}
+        onStop={vi.fn()}
+      />,
+    ));
+
+    const field = screen.getByLabelText('Targets');
+    await waitFor(() => expect((field as HTMLTextAreaElement).value.split('\n')).toHaveLength(100));
+    const initialTargets = (field as HTMLTextAreaElement).value.split('\n');
+    expect(initialTargets).toHaveLength(100);
+    expect(initialTargets.slice(-2)).toEqual(['10.0.0.20:443', '10.0.0.21:443']);
+    expect(screen.getByText('Not added (100-target limit)')).toBeInTheDocument();
+    expect(screen.getByText('10.0.0.22:443')).toBeInTheDocument();
+    expect(screen.getByText('10.0.0.23:443')).toBeInTheDocument();
+
+    fireEvent.change(field, {
+      target: { value: initialTargets.filter((line) => line !== '10.0.0.20:443').join('\n') },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /^save$/i }));
+    await waitFor(() => expect(onTLSProbeSaved).toHaveBeenCalledOnce());
+    expect(mocks.putConnector.mock.calls[0][0]).toBe('probe-1');
+    expect((mocks.putConnector.mock.calls[0][1] as { config: { targets: string } }).config.targets.split('\n')).toHaveLength(99);
+    expect(onTLSProbeSaved.mock.calls[0][1]).toEqual([targets[1]]);
+    expect(onFinished).toHaveBeenCalledOnce();
+  });
+
+  it('deduplicates compressed and expanded IPv6 targets', async () => {
+    mocks.getConnectors = [tlsProbe('probe-v6', 'IPv6 probe', '[fd00:0:0:0:0:0:0:1]:443')];
+    render(wrap(
+      <ConnectQueue
+        candidates={[]}
+        tlsTargets={[tlsTarget('fd00::1')]}
+        onCreated={vi.fn()}
+        onFinished={vi.fn()}
+        onStop={vi.fn()}
+      />,
+    ));
+
+    await waitFor(() => expect(screen.getByLabelText('Targets')).toHaveValue('[fd00:0:0:0:0:0:0:1]:443'));
+    expect((screen.getByLabelText('Targets') as HTMLTextAreaElement).value.split('\n')).toHaveLength(1);
+  });
+
+  it('waits for the connector list before choosing create, and offers retry on read failure', () => {
+    mocks.connectorsLoading = true;
+    const props = {
+      candidates: [],
+      tlsTargets: [tlsTarget('10.0.0.20')],
+      onCreated: vi.fn(),
+      onFinished: vi.fn(),
+      onStop: vi.fn(),
+    };
+    const view = render(wrap(<ConnectQueue {...props} />));
+    expect(screen.queryByRole('button', { name: 'TLS Probe' })).toBeNull();
+
+    mocks.connectorsLoading = false;
+    mocks.connectorsError = true;
+    view.rerender(wrap(<ConnectQueue {...props} />));
+    expect(screen.getByText(/could not load tls probes/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /retry/i }));
+    expect(mocks.refetchConnectors).toHaveBeenCalledOnce();
+    expect(screen.queryByRole('button', { name: 'TLS Probe' })).toBeNull();
+  });
+
+  it('creates a TLS Probe when none exists and skips the certificate offer before continuing', async () => {
+    const target = tlsTarget('10.0.0.20');
+    const onTLSProbeSaved = vi.fn();
+    const onFinished = vi.fn();
+    render(wrap(
+      <ConnectQueue
+        candidates={[]}
+        tlsTargets={[target]}
+        onCreated={vi.fn()}
+        onTLSProbeSaved={onTLSProbeSaved}
+        onFinished={onFinished}
+        onStop={vi.fn()}
+      />,
+    ));
+
+    expect(screen.getByRole('button', { name: 'TLS Probe' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByLabelText('Targets')).toHaveValue('10.0.0.20:443');
+    save();
+    fireEvent.click(await screen.findByRole('button', { name: 'Finish certificate offer' }));
+    await waitFor(() => expect(onFinished).toHaveBeenCalledOnce());
+    expect(postConnectors.mock.calls[0][0]).toMatchObject({ type: 'tlsprobe', config: { targets: '10.0.0.20:443' } });
+    expect(onTLSProbeSaved.mock.calls[0][1]).toEqual([target]);
+  });
+
+  it('defaults to the newest TLS Probe and lets the admin choose another one', async () => {
+    mocks.getConnectors = [
+      tlsProbe('newest', 'Newest probe', 'new.example:443'),
+      tlsProbe('older', 'Older probe', 'old.example:443'),
+    ];
+    render(wrap(
+      <ConnectQueue
+        candidates={[]}
+        tlsTargets={[tlsTarget('10.0.0.20')]}
+        onCreated={vi.fn()}
+        onFinished={vi.fn()}
+        onStop={vi.fn()}
+      />,
+    ));
+
+    const chooser = screen.getByRole('combobox', { name: 'TLS Probe to update' });
+    expect(chooser).toHaveValue('newest');
+    await waitFor(() => expect(screen.getByLabelText('Targets')).toHaveValue('new.example:443\n10.0.0.20:443'));
+    fireEvent.change(chooser, { target: { value: 'older' } });
+    await waitFor(() => expect(screen.getByLabelText('Targets')).toHaveValue('old.example:443\n10.0.0.20:443'));
+  });
+
+  it('does not queue an add-on explicitly deselected in the discovery panel', async () => {
+    useDiscovery.getState().setScan(completedScan([pfsense]));
+    const onQueueFinished = vi.fn();
+    render(wrap(<DiscoveryFlow onQueueFinished={onQueueFinished} />));
+
+    fireEvent.click(screen.getByRole('checkbox', { name: /pfsense.*10\.0\.0\.8:443/i }));
+    const addonCheckbox = screen.getByRole('checkbox', { name: /dns resolver https:\/\/10\.0\.0\.8/i });
+    expect(addonCheckbox).toBeChecked();
+    fireEvent.click(addonCheckbox);
+    fireEvent.click(screen.getByRole('button', { name: /connect 1 selected/i }));
+    type(/api key/i, 'pfsense-secret');
+    save();
+
+    await waitFor(() => expect(onQueueFinished).toHaveBeenCalledOnce());
+    expect(postConnectors).toHaveBeenCalledTimes(1);
+    expect(postConnectors.mock.calls[0][0]).toMatchObject({ type: 'pfsense' });
+    expect(screen.queryByRole('heading', { name: /connect dns resolver/i })).toBeNull();
+  });
+
   it('stays on the candidate when saving fails, shows the error, and lets the admin correct it', async () => {
     postConnectors.mockRejectedValueOnce(
       Object.assign(new Error('bad'), {
@@ -198,6 +525,42 @@ describe('ConnectQueue', () => {
     render(wrap(<ConnectQueue candidates={[pve, ha]} onCreated={vi.fn()} onFinished={onFinished} onStop={onStop} />));
     fireEvent.click(screen.getByRole('button', { name: /^stop$/i }));
     expect(onStop).toHaveBeenCalledTimes(1);
+    expect(onFinished).not.toHaveBeenCalled();
+  });
+
+  it('reports a save that finishes after Stop without finishing the stopped queue', async () => {
+    let complete: ((connector: { id: string; name: string; type: string }) => void) | undefined;
+    postConnectors.mockImplementationOnce(() => new Promise((resolve) => { complete = resolve; }));
+    const onCreated = vi.fn();
+    const onFinished = vi.fn();
+    const onStop = vi.fn();
+    render(wrap(<ConnectQueue candidates={[pve]} onCreated={onCreated} onFinished={onFinished} onStop={onStop} />));
+    type(/api token secret/i, 'slow-secret');
+    save();
+    await waitFor(() => expect(postConnectors).toHaveBeenCalledOnce());
+    fireEvent.click(screen.getByRole('button', { name: /^stop$/i }));
+    complete?.({ id: 'late-candidate', name: 'late candidate', type: 'proxmox' });
+
+    await waitFor(() => expect(onCreated).toHaveBeenCalledOnce());
+    expect(onStop).toHaveBeenCalledOnce();
+    expect(onFinished).not.toHaveBeenCalled();
+  });
+
+  it('reports a save that finishes after Skip without advancing the next step twice', async () => {
+    let complete: ((connector: { id: string; name: string; type: string }) => void) | undefined;
+    postConnectors.mockImplementationOnce(() => new Promise((resolve) => { complete = resolve; }));
+    const onCreated = vi.fn();
+    const onFinished = vi.fn();
+    render(wrap(<ConnectQueue candidates={[pve, ha]} onCreated={onCreated} onFinished={onFinished} onStop={vi.fn()} />));
+    type(/api token secret/i, 'slow-secret');
+    save();
+    await waitFor(() => expect(postConnectors).toHaveBeenCalledOnce());
+    fireEvent.click(screen.getByRole('button', { name: /^skip$/i }));
+    expect(await screen.findByText('Candidate 2 of 2')).toBeInTheDocument();
+    complete?.({ id: 'late-candidate', name: 'late candidate', type: 'proxmox' });
+
+    await waitFor(() => expect(onCreated).toHaveBeenCalledOnce());
+    expect(screen.getByText('Candidate 2 of 2')).toBeInTheDocument();
     expect(onFinished).not.toHaveBeenCalled();
   });
 });

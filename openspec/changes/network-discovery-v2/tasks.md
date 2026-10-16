@@ -36,19 +36,19 @@ Groups 1 to 6 and 10 are backend and docs work; groups 7 to 9 are web work and s
 
 ## 7. Web: scan form and results
 
-- [ ] 7.1 Rework `DiscoveryPanel` for range chips, the two toggles with the known-host count, the budget meter, and the start body (D13); verify component tests for adding/removing chips, inventory suggestion chips, per-index field errors, Start disabled with no range and known hosts off, the "Budget shown" scenario, and step-up still applied.
-- [ ] 7.2 Show candidate source, skipped counts and the network-answer count with the host-networking hint; update `store/discovery.ts` for the new fields; verify store tests and component tests for each.
-- [ ] 7.3 Add the certificate row (D13): unmonitored targets selectable, monitored ones listed; verify tests for the "Certificates offered" and "Certificate already monitored" scenarios.
+- [x] 7.1 Rework `DiscoveryPanel` for range chips, the two toggles with the known-host count, the budget meter, and the start body (D13); verify component tests for adding/removing chips, inventory suggestion chips, per-index field errors, Start disabled with no range and known hosts off, the "Budget shown" scenario, and step-up still applied.
+- [x] 7.2 Show candidate source, skipped counts and the network-answer count with the host-networking hint; update `store/discovery.ts` for the new fields; verify store tests and component tests for each.
+- [x] 7.3 Add the certificate row (D13): unmonitored targets selectable, monitored ones listed; verify tests for the "Certificates offered" and "Certificate already monitored" scenarios.
 
 ## 8. Web: connect queue
 
-- [ ] 8.1 Extract `ConnectorEditForm` from `ConnectorEditPage` with `overrides`, `onSaved`, `onCancel` (D13); verify `ConnectorEditPage.test.tsx` passes unchanged and new tests cover `overrides` applied once and save/cancel callbacks.
-- [ ] 8.2 Add queue item kinds `addOn` and `tls` to `ConnectQueue` / `DiscoveryFlow`: add-on after its candidate (saved or skipped), TLS edit of an existing probe with the 100-target cap and the "not added" list, a TLS Probe select when several exist, a create form when none exists; mark them connected/monitored after save; verify tests for "pfSense with DNS Resolver", "Certificates appended to an existing probe", the create path, the select, skip and stop, and that the v1 queue tests pass.
-- [ ] 8.3 Onboarding sync step includes an edited TLS Probe; verify `OnboardingPage.test.tsx` covers it and the v1 cases pass.
+- [x] 8.1 Extract `ConnectorEditForm` from `ConnectorEditPage` with `overrides`, `onSaved`, `onCancel` (D13); verify `ConnectorEditPage.test.tsx` passes unchanged and new tests cover `overrides` applied once and save/cancel callbacks.
+- [x] 8.2 Add queue item kinds `addOn` and `tls` to `ConnectQueue` / `DiscoveryFlow`: add-on after its candidate (saved or skipped), TLS edit of an existing probe with the 100-target cap and the "not added" list, a TLS Probe select when several exist, a create form when none exists; mark them connected/monitored after save; verify tests for "pfSense with DNS Resolver", "Certificates appended to an existing probe", the create path, the select, skip and stop, and that the v1 queue tests pass.
+- [x] 8.3 Onboarding sync step includes an edited TLS Probe; verify `OnboardingPage.test.tsx` covers it and the v1 cases pass.
 
 ## 9. Web: strings and mocks
 
-- [ ] 9.1 Add en and pt-BR strings for every new element and update `mocks/curated.ts` (scan with several sources, TLS targets, an OPNsense candidate with an add-on, suggestions with `knownHosts`); verify the i18n key parity test, web lint and typecheck.
+- [x] 9.1 Add en and pt-BR strings for every new element and update `mocks/curated.ts` (scan with several sources, TLS targets, an OPNsense candidate with an add-on, suggestions with `knownHosts`); verify the i18n key parity test, web lint and typecheck.
 
 ## 10. Documentation
 

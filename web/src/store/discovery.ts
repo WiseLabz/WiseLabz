@@ -7,12 +7,20 @@
  */
 import { create } from 'zustand';
 import type {
+  DiscoveryAddOn,
   DiscoveryCandidate,
   DiscoveryCandidateEvent,
   DiscoveryCompleteEvent,
   DiscoveryProgressEvent,
   DiscoveryScan,
+  DiscoveryTLSTarget,
 } from '../api/model';
+
+export type DiscoveryConnection = { connectorId: string } & (
+  | { candidate: DiscoveryCandidate; addOn?: never; tlsTargets?: never }
+  | { addOn: DiscoveryAddOn; candidate?: never; tlsTargets?: never }
+  | { tlsTargets: DiscoveryTLSTarget[]; candidate?: never; addOn?: never }
+);
 
 interface DiscoveryState {
   /** The current or most recent scan; null when none is held on the server. */
@@ -22,8 +30,8 @@ interface DiscoveryState {
   applyProgress: (e: DiscoveryProgressEvent) => void;
   applyCandidate: (e: DiscoveryCandidateEvent) => void;
   applyComplete: (e: DiscoveryCompleteEvent) => void;
-  /** Mark candidates as already connected, e.g. after the queue created them. */
-  markConnected: (connected: { candidate: DiscoveryCandidate; connectorId: string }[]) => void;
+  /** Mark products, add-ons and certificate targets saved through the queue. */
+  markConnected: (connected: DiscoveryConnection[]) => void;
 }
 
 const sameCandidate = (a: DiscoveryCandidate, b: DiscoveryCandidate) =>
@@ -71,8 +79,23 @@ export const useDiscovery = create<DiscoveryState>((set) => ({
         scan: {
           ...s.scan,
           candidates: s.scan.candidates.map((c) => {
-            const hit = connected.find((x) => sameCandidate(x.candidate, c));
-            return hit ? { ...c, connectorId: hit.connectorId } : c;
+            const hit = connected.find((x) => x.candidate && sameCandidate(x.candidate, c));
+            return {
+              ...c,
+              ...(hit && { connectorId: hit.connectorId }),
+              ...(c.addOns && {
+                addOns: c.addOns.map((addOn) => {
+                  const match = connected.find((x) => x.addOn?.type === addOn.type && x.addOn.url === addOn.url);
+                  return match ? { ...addOn, connectorId: match.connectorId } : addOn;
+                }),
+              }),
+            };
+          }),
+          ...(s.scan.tlsTargets && {
+            tlsTargets: s.scan.tlsTargets.map((target) => {
+              const hit = connected.find((x) => x.tlsTargets?.some((t) => t.address === target.address && t.port === target.port));
+              return hit ? { ...target, monitoredBy: hit.connectorId } : target;
+            }),
           }),
         },
       };
