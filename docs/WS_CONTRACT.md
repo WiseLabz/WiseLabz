@@ -483,11 +483,17 @@ interface DiscoveryCandidatePayload {
   candidate: {
     type: string;          // connector type
     name: string;          // display name
-    address: string;       // IPv4
+    address: string;       // IP literal
     port: number;
     url: string;           // connector URL to prefill
     urlField: string;      // config field the url goes in: 'url', or 'host' for Docker
     connectorId?: string;  // set when a connector of the same type already points at this address and port
+    source: 'range' | 'inventory' | 'passive'; // first source that admitted the address
+    addOns: {
+      type: string;       // add-on connector type (dnsresolver for pfSense/OPNsense)
+      url: string;        // appliance URL to prefill, without credentials
+      connectorId?: string; // existing add-on at this address and effective port
+    }[];                  // empty when the product declares no add-ons
   };
 }
 ```
@@ -499,7 +505,8 @@ Audience: per-user. Only the admin who started the scan receives it.
   when `scanId` differs from the current scan.
 
 ### 19. `discovery.complete`
-Terminal event of a scan, sent once when it ends. It carries no candidates; those
+Terminal event of a scan, sent once when it ends. Certificate targets are read
+from `GET /api/discovery/scan` after this event or the regular poll. It carries no candidates; those
 arrived as `discovery.candidate` events.
 
 ```ts

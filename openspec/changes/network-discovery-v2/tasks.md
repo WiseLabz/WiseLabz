@@ -4,7 +4,7 @@ Groups 1 to 6 and 10 are backend and docs work; groups 7 to 9 are web work and s
 
 ## 1. Contract (first backend commit)
 
-- [ ] 1.1 Update `docs/openapi.yaml` for design D12 and D11 (request `ranges` / `includeInventory` / `askNetwork` / deprecated `cidr`; `Scan` and `Candidate` additions; `tlsTargets`; `addOns`; suggestion source `inventory` and `knownHosts`), update `docs/WS_CONTRACT.md` for the new `discovery.candidate` fields, regenerate the web client (`bun run gen:api`), and keep the web compiling with minimal type fixes in `mocks/curated.ts`; verify `TestOpenAPIMatchesRouter`, web typecheck and the existing discovery web tests pass.
+- [x] 1.1 Update `docs/openapi.yaml` for design D12 and D11 (request `ranges` / `includeInventory` / `askNetwork` / deprecated `cidr`; `Scan` and `Candidate` additions; `tlsTargets`; `addOns`; suggestion source `inventory` and `knownHosts`), update `docs/WS_CONTRACT.md` for the new `discovery.candidate` fields, regenerate the web client (`bun run gen:api`), and keep the web compiling with minimal type fixes in `mocks/curated.ts`; verify `TestOpenAPIMatchesRouter`, web typecheck and the existing discovery web tests pass.
 
 ## 2. Address classes, ranges and the target set
 

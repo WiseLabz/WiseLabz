@@ -10,6 +10,6 @@ import type { DiscoverySuggestionSource } from './discoverySuggestionSource';
 
 export interface DiscoverySuggestion {
   cidr: string;
-  /** client: the caller's address; server: a private address of the server */
+  /** client: caller network; server: server network; inventory: known-host network */
   source: DiscoverySuggestionSource;
 }

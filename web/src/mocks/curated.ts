@@ -75,9 +75,9 @@ const newSession = () => ({
 // queue's form opens for real.
 const MOCK_SCAN_MS = 3000;
 const mockFinds: DiscoveryCandidate[] = [
-  { type: 'opnsense', name: 'OPNsense', address: '192.168.1.1', port: 443, url: 'https://192.168.1.1:443', urlField: 'url' },
-  { type: 'proxmox', name: 'Proxmox VE', address: '192.168.1.10', port: 8006, url: 'https://192.168.1.10:8006/api2/json', urlField: 'url' },
-  { type: 'portainer', name: 'Portainer', address: '192.168.1.20', port: 9443, url: 'https://192.168.1.20:9443', urlField: 'url' },
+  { type: 'opnsense', name: 'OPNsense', address: '192.168.1.1', port: 443, url: 'https://192.168.1.1:443', urlField: 'url', source: 'range', addOns: [] },
+  { type: 'proxmox', name: 'Proxmox VE', address: '192.168.1.10', port: 8006, url: 'https://192.168.1.10:8006/api2/json', urlField: 'url', source: 'range', addOns: [] },
+  { type: 'portainer', name: 'Portainer', address: '192.168.1.20', port: 9443, url: 'https://192.168.1.20:9443', urlField: 'url', source: 'range', addOns: [] },
 ];
 let mockScan: DiscoveryScan | null = null;
 let mockScanTimers: ReturnType<typeof setTimeout>[] = [];
@@ -94,6 +94,13 @@ function startMockScan(cidr: string): DiscoveryScan {
   const scan: DiscoveryScan = {
     id: `scan-${Date.now().toString(36)}`,
     cidr,
+    ranges: [cidr],
+    includeInventory: false,
+    askNetwork: false,
+    sources: { range: 254, inventory: 0, passive: 0 },
+    skipped: { inventory: 0, passive: 0 },
+    passiveAnswered: 0,
+    tlsTargets: [],
     state: 'running',
     startedAt: new Date().toISOString(),
     done: 0,

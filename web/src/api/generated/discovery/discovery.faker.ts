@@ -8,6 +8,7 @@
  */
 import { faker } from '@faker-js/faker';
 
+import { DiscoverySource } from '../../model';
 import type { DiscoveryScanResponse, DiscoverySuggestions } from '../../model';
 
 export const getGetDiscoverySuggestionsResponseMock = (
@@ -16,9 +17,10 @@ export const getGetDiscoverySuggestionsResponseMock = (
   suggestions: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(
     () => ({
       cidr: faker.string.alpha({ length: { min: 10, max: 20 } }),
-      source: faker.helpers.arrayElement(['client', 'server'] as const),
+      source: faker.helpers.arrayElement(['client', 'server', 'inventory'] as const),
     })
   ),
+  knownHosts: faker.number.int(),
   ...overrideResponse,
 });
 
@@ -28,6 +30,14 @@ export const getGetDiscoveryScanResponseMock = (
   scan: {
     id: faker.string.alpha({ length: { min: 10, max: 20 } }),
     cidr: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    ranges: faker.helpers.arrayElement([
+      Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() =>
+        faker.string.alpha({ length: { min: 10, max: 20 } })
+      ),
+      undefined,
+    ]),
+    includeInventory: faker.helpers.arrayElement([faker.datatype.boolean(), undefined]),
+    askNetwork: faker.helpers.arrayElement([faker.datatype.boolean(), undefined]),
     state: faker.helpers.arrayElement(['running', 'completed', 'cancelled', 'failed'] as const),
     startedAt: faker.date.past().toISOString().slice(0, 19) + 'Z',
     endedAt: faker.helpers.arrayElement([
@@ -46,12 +56,48 @@ export const getGetDiscoveryScanResponseMock = (
         port: faker.number.int(),
         url: faker.string.alpha({ length: { min: 10, max: 20 } }),
         urlField: faker.string.alpha({ length: { min: 10, max: 20 } }),
+        source: faker.helpers.arrayElement([
+          faker.helpers.arrayElement(Object.values(DiscoverySource)),
+          undefined,
+        ]),
+        addOns: faker.helpers.arrayElement([
+          Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() => ({
+            type: faker.string.alpha({ length: { min: 10, max: 20 } }),
+            url: faker.string.alpha({ length: { min: 10, max: 20 } }),
+            connectorId: faker.helpers.arrayElement([
+              faker.string.alpha({ length: { min: 10, max: 20 } }),
+              undefined,
+            ]),
+          })),
+          undefined,
+        ]),
         connectorId: faker.helpers.arrayElement([
           faker.string.alpha({ length: { min: 10, max: 20 } }),
           undefined,
         ]),
       })
     ),
+    sources: faker.helpers.arrayElement([
+      { range: faker.number.int(), inventory: faker.number.int(), passive: faker.number.int() },
+      undefined,
+    ]),
+    skipped: faker.helpers.arrayElement([
+      { inventory: faker.number.int(), passive: faker.number.int() },
+      undefined,
+    ]),
+    passiveAnswered: faker.helpers.arrayElement([faker.number.int(), undefined]),
+    tlsTargets: faker.helpers.arrayElement([
+      Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() => ({
+        address: faker.string.alpha({ length: { min: 10, max: 20 } }),
+        port: faker.number.int(),
+        source: faker.helpers.arrayElement(Object.values(DiscoverySource)),
+        monitoredBy: faker.helpers.arrayElement([
+          faker.string.alpha({ length: { min: 10, max: 20 } }),
+          undefined,
+        ]),
+      })),
+      undefined,
+    ]),
   },
   ...overrideResponse,
 });
@@ -62,6 +108,14 @@ export const getStartDiscoveryScanResponseMock = (
   scan: {
     id: faker.string.alpha({ length: { min: 10, max: 20 } }),
     cidr: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    ranges: faker.helpers.arrayElement([
+      Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() =>
+        faker.string.alpha({ length: { min: 10, max: 20 } })
+      ),
+      undefined,
+    ]),
+    includeInventory: faker.helpers.arrayElement([faker.datatype.boolean(), undefined]),
+    askNetwork: faker.helpers.arrayElement([faker.datatype.boolean(), undefined]),
     state: faker.helpers.arrayElement(['running', 'completed', 'cancelled', 'failed'] as const),
     startedAt: faker.date.past().toISOString().slice(0, 19) + 'Z',
     endedAt: faker.helpers.arrayElement([
@@ -80,12 +134,48 @@ export const getStartDiscoveryScanResponseMock = (
         port: faker.number.int(),
         url: faker.string.alpha({ length: { min: 10, max: 20 } }),
         urlField: faker.string.alpha({ length: { min: 10, max: 20 } }),
+        source: faker.helpers.arrayElement([
+          faker.helpers.arrayElement(Object.values(DiscoverySource)),
+          undefined,
+        ]),
+        addOns: faker.helpers.arrayElement([
+          Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() => ({
+            type: faker.string.alpha({ length: { min: 10, max: 20 } }),
+            url: faker.string.alpha({ length: { min: 10, max: 20 } }),
+            connectorId: faker.helpers.arrayElement([
+              faker.string.alpha({ length: { min: 10, max: 20 } }),
+              undefined,
+            ]),
+          })),
+          undefined,
+        ]),
         connectorId: faker.helpers.arrayElement([
           faker.string.alpha({ length: { min: 10, max: 20 } }),
           undefined,
         ]),
       })
     ),
+    sources: faker.helpers.arrayElement([
+      { range: faker.number.int(), inventory: faker.number.int(), passive: faker.number.int() },
+      undefined,
+    ]),
+    skipped: faker.helpers.arrayElement([
+      { inventory: faker.number.int(), passive: faker.number.int() },
+      undefined,
+    ]),
+    passiveAnswered: faker.helpers.arrayElement([faker.number.int(), undefined]),
+    tlsTargets: faker.helpers.arrayElement([
+      Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() => ({
+        address: faker.string.alpha({ length: { min: 10, max: 20 } }),
+        port: faker.number.int(),
+        source: faker.helpers.arrayElement(Object.values(DiscoverySource)),
+        monitoredBy: faker.helpers.arrayElement([
+          faker.string.alpha({ length: { min: 10, max: 20 } }),
+          undefined,
+        ]),
+      })),
+      undefined,
+    ]),
   },
   ...overrideResponse,
 });
@@ -96,6 +186,14 @@ export const getCancelDiscoveryScanResponseMock = (
   scan: {
     id: faker.string.alpha({ length: { min: 10, max: 20 } }),
     cidr: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    ranges: faker.helpers.arrayElement([
+      Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() =>
+        faker.string.alpha({ length: { min: 10, max: 20 } })
+      ),
+      undefined,
+    ]),
+    includeInventory: faker.helpers.arrayElement([faker.datatype.boolean(), undefined]),
+    askNetwork: faker.helpers.arrayElement([faker.datatype.boolean(), undefined]),
     state: faker.helpers.arrayElement(['running', 'completed', 'cancelled', 'failed'] as const),
     startedAt: faker.date.past().toISOString().slice(0, 19) + 'Z',
     endedAt: faker.helpers.arrayElement([
@@ -114,12 +212,48 @@ export const getCancelDiscoveryScanResponseMock = (
         port: faker.number.int(),
         url: faker.string.alpha({ length: { min: 10, max: 20 } }),
         urlField: faker.string.alpha({ length: { min: 10, max: 20 } }),
+        source: faker.helpers.arrayElement([
+          faker.helpers.arrayElement(Object.values(DiscoverySource)),
+          undefined,
+        ]),
+        addOns: faker.helpers.arrayElement([
+          Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() => ({
+            type: faker.string.alpha({ length: { min: 10, max: 20 } }),
+            url: faker.string.alpha({ length: { min: 10, max: 20 } }),
+            connectorId: faker.helpers.arrayElement([
+              faker.string.alpha({ length: { min: 10, max: 20 } }),
+              undefined,
+            ]),
+          })),
+          undefined,
+        ]),
         connectorId: faker.helpers.arrayElement([
           faker.string.alpha({ length: { min: 10, max: 20 } }),
           undefined,
         ]),
       })
     ),
+    sources: faker.helpers.arrayElement([
+      { range: faker.number.int(), inventory: faker.number.int(), passive: faker.number.int() },
+      undefined,
+    ]),
+    skipped: faker.helpers.arrayElement([
+      { inventory: faker.number.int(), passive: faker.number.int() },
+      undefined,
+    ]),
+    passiveAnswered: faker.helpers.arrayElement([faker.number.int(), undefined]),
+    tlsTargets: faker.helpers.arrayElement([
+      Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(() => ({
+        address: faker.string.alpha({ length: { min: 10, max: 20 } }),
+        port: faker.number.int(),
+        source: faker.helpers.arrayElement(Object.values(DiscoverySource)),
+        monitoredBy: faker.helpers.arrayElement([
+          faker.string.alpha({ length: { min: 10, max: 20 } }),
+          undefined,
+        ]),
+      })),
+      undefined,
+    ]),
   },
   ...overrideResponse,
 });
