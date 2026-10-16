@@ -42,6 +42,7 @@ vi.mock('../../api/generated/connectors/connectors', () => ({
   putConnectorsConnectorId: (...args: unknown[]) => put(...args),
   postConnectorsConnectorIdTest: vi.fn(),
   getGetConnectorsQueryKey: () => [],
+  getGetConnectorsConnectorIdQueryKey: (id: string) => ['/connectors', id],
 }));
 vi.mock('../../hooks/useRole', () => ({
   useIsInstanceAdmin: () => true,

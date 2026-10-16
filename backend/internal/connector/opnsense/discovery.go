@@ -15,6 +15,10 @@ var discovery = &connector.DiscoveryHint{
 		{Port: 80, Scheme: "http", Path: "/", Match: matchDiscovery},
 	},
 	URLTemplate: "{scheme}://{host}:{port}",
+	AddOns: []connector.DiscoveryAddOn{{
+		Type:        "dnsresolver",
+		URLTemplate: "{scheme}://{host}:{port}",
+	}},
 }
 
 func matchDiscovery(r connector.DiscoveryResponse) bool {

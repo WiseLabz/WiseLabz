@@ -156,6 +156,7 @@ describe('locale catalogs', () => {
     }
   });
   it('keeps the network discovery keys present in both catalogs', () => {
+    expect(keys(ptBR.discovery ?? {}).sort()).toEqual(keys(en.discovery).sort());
     const paths = [
       'discovery.title',
       'discovery.lead',

@@ -3,18 +3,23 @@
 package discovery
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"math"
 	"net"
 	"net/http"
 	"net/netip"
+	"sort"
 	"strconv"
+	"strings"
 
 	"github.com/WiseLabz/wiselabz/internal/auth"
 	"github.com/WiseLabz/wiselabz/internal/connector"
+	"github.com/WiseLabz/wiselabz/internal/connector/tlsprobe"
 	disc "github.com/WiseLabz/wiselabz/internal/discovery"
 	"github.com/WiseLabz/wiselabz/internal/httputil"
 	"github.com/WiseLabz/wiselabz/internal/store"
@@ -23,8 +28,9 @@ import (
 
 // Suggestion sources.
 const (
-	SourceClient = "client"
-	SourceServer = "server"
+	SourceClient    = "client"
+	SourceServer    = "server"
+	SourceInventory = "inventory"
 )
 
 // maxAuditRange caps the submitted range echoed into a reject audit entry, so
@@ -40,6 +46,10 @@ type Options struct {
 	Manager *disc.Manager
 	// InterfaceAddrs replaces net.InterfaceAddrs for range suggestions (tests).
 	InterfaceAddrs func() ([]net.Addr, error)
+	// InventoryQuery replaces the unscoped indexed-address query (tests).
+	InventoryQuery func(context.Context) ([]store.IndexedAddress, error)
+	// Passive replaces the multicast source used by a newly built manager (tests).
+	Passive disc.PassiveRunner
 }
 
 // Handler holds dependencies for the network discovery endpoints.
@@ -48,6 +58,7 @@ type Handler struct {
 	Manager        *disc.Manager
 	TrustedProxies string
 	interfaceAddrs func() ([]net.Addr, error)
+	inventoryQuery func(context.Context) ([]store.IndexedAddress, error)
 }
 
 // NewManager builds the instance's scan manager: the network scanner (or
@@ -55,6 +66,10 @@ type Handler struct {
 // already-connected marker from s's connectors. hub may be nil, in which case
 // no live events are sent.
 func NewManager(s *store.Store, hub *ws.Hub, runner disc.Runner) *disc.Manager {
+	return newManager(s, hub, runner, disc.NewPassiveSource())
+}
+
+func newManager(s *store.Store, hub *ws.Hub, runner disc.Runner, passive disc.PassiveRunner) *disc.Manager {
 	if runner == nil {
 		runner = disc.NewScanner(connector.DiscoveryHints())
 	}
@@ -62,6 +77,7 @@ func NewManager(s *store.Store, hub *ws.Hub, runner disc.Runner) *disc.Manager {
 		Runner:    runner,
 		Audit:     s,
 		Endpoints: connectorEndpoints(s),
+		Passive:   passive,
 	}
 	if hub != nil {
 		cfg.Events = hub
@@ -74,13 +90,21 @@ func NewManager(s *store.Store, hub *ws.Hub, runner disc.Runner) *disc.Manager {
 func NewHandler(s *store.Store, hub *ws.Hub, trustedProxies string, opts Options) *Handler {
 	mgr := opts.Manager
 	if mgr == nil {
-		mgr = NewManager(s, hub, opts.Runner)
+		passive := opts.Passive
+		if passive == nil {
+			passive = disc.NewPassiveSource()
+		}
+		mgr = newManager(s, hub, opts.Runner, passive)
 	}
 	addrs := opts.InterfaceAddrs
 	if addrs == nil {
 		addrs = net.InterfaceAddrs
 	}
-	return &Handler{Store: s, Manager: mgr, TrustedProxies: trustedProxies, interfaceAddrs: addrs}
+	inventory := opts.InventoryQuery
+	if inventory == nil {
+		inventory = s.ListIndexedAddresses
+	}
+	return &Handler{Store: s, Manager: mgr, TrustedProxies: trustedProxies, interfaceAddrs: addrs, inventoryQuery: inventory}
 }
 
 // connectorEndpoints lists where the existing connectors of discoverable types
@@ -96,6 +120,8 @@ func connectorEndpoints(s *store.Store) func(ctx context.Context) ([]disc.Endpoi
 		for _, h := range connector.DiscoveryHints() {
 			urlFields[h.Type] = h.URLField
 		}
+		urlFields["dnsresolver"] = ""
+		urlFields["tlsprobe"] = ""
 		var out []disc.Endpoint
 		for _, rec := range records {
 			field, discoverable := urlFields[rec.Type]
@@ -103,7 +129,29 @@ func connectorEndpoints(s *store.Store) func(ctx context.Context) ([]disc.Endpoi
 				continue
 			}
 			value := rec.URL
-			if field != "" {
+			if rec.Type == "tlsprobe" {
+				var cfg map[string]any
+				if json.Unmarshal([]byte(rec.ConfigData), &cfg) != nil {
+					continue
+				}
+				if importID, _ := cfg["import_connector_id"].(string); strings.TrimSpace(importID) != "" {
+					related, snapshotErr := s.GetLatestSnapshot(ctx, strings.TrimSpace(importID))
+					if snapshotErr == nil {
+						var snapshot connector.ServiceSnapshot
+						if json.Unmarshal([]byte(related.Data), &snapshot) == nil {
+							cfg["_related_snapshots"] = map[string]*connector.ServiceSnapshot{strings.TrimSpace(importID): &snapshot}
+						}
+					} else if !errors.Is(snapshotErr, store.ErrNotFound) {
+						slog.Warn("load related snapshot for discovery marker", "errorType", fmt.Sprintf("%T", snapshotErr))
+					}
+				}
+				targets, _ := tlsprobe.ConfiguredTargets(cfg)
+				lines := make([]string, 0, len(targets))
+				for _, target := range targets {
+					lines = append(lines, net.JoinHostPort(target.Host, strconv.Itoa(target.Port)))
+				}
+				value = strings.Join(lines, "\n")
+			} else if field != "" {
 				var cfg map[string]any
 				if json.Unmarshal([]byte(rec.ConfigData), &cfg) != nil {
 					continue
@@ -127,8 +175,7 @@ type Suggestion struct {
 }
 
 // Suggestions handles GET /api/discovery/suggestions: the /24 around the
-// admin's own address, then around each of the server's private interface
-// addresses, without duplicates.
+// admin's own address, then the server's, then up to three known-host networks.
 func (h *Handler) Suggestions(w http.ResponseWriter, r *http.Request) {
 	out := []Suggestion{}
 	seen := map[netip.Prefix]bool{}
@@ -146,7 +193,7 @@ func (h *Handler) Suggestions(w http.ResponseWriter, r *http.Request) {
 	}
 	addrs, err := h.interfaceAddrs()
 	if err != nil {
-		slog.Warn("list interface addresses for network discovery", "error", err)
+		slog.Warn("list interface addresses for network discovery", "errorType", fmt.Sprintf("%T", err))
 	}
 	for _, a := range addrs {
 		if ipnet, ok := a.(*net.IPNet); ok {
@@ -155,16 +202,59 @@ func (h *Handler) Suggestions(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	httputil.JSON(w, http.StatusOK, map[string]any{"suggestions": out})
+	rows, err := h.inventoryQuery(r.Context())
+	if err != nil {
+		slog.Warn("list known hosts for network discovery suggestions", "errorType", fmt.Sprintf("%T", err))
+		rows = nil
+	}
+	known := disc.InventorySource(rows, nil)
+	out = append(out, inventorySuggestions(known, seen)...)
+	httputil.JSON(w, http.StatusOK, map[string]any{"suggestions": out, "knownHosts": len(known)})
 }
 
-// privateSlash24 returns the /24 containing an RFC 1918 IPv4 address.
+// privateSlash24 returns the /24 containing an allowed IPv4 address.
 func privateSlash24(addr netip.Addr) (netip.Prefix, bool) {
 	addr = addr.Unmap()
-	if !addr.Is4() || !addr.IsPrivate() {
+	if !addr.Is4() || !disc.Allowed(addr) {
 		return netip.Prefix{}, false
 	}
 	return netip.PrefixFrom(addr, 24).Masked(), true
+}
+
+func inventorySuggestions(known []netip.Addr, already map[netip.Prefix]bool) []Suggestion {
+	counts := map[netip.Prefix]int{}
+	for _, addr := range known {
+		addr = addr.Unmap()
+		if !addr.Is4() {
+			continue
+		}
+		prefix := netip.PrefixFrom(addr, 24).Masked()
+		counts[prefix]++
+	}
+	type ranked struct {
+		prefix netip.Prefix
+		count  int
+	}
+	rankedPrefixes := make([]ranked, 0, len(counts))
+	for prefix, count := range counts {
+		if !already[prefix] {
+			rankedPrefixes = append(rankedPrefixes, ranked{prefix: prefix, count: count})
+		}
+	}
+	sort.Slice(rankedPrefixes, func(i, j int) bool {
+		if rankedPrefixes[i].count != rankedPrefixes[j].count {
+			return rankedPrefixes[i].count > rankedPrefixes[j].count
+		}
+		return rankedPrefixes[i].prefix.Addr().Less(rankedPrefixes[j].prefix.Addr())
+	})
+	if len(rankedPrefixes) > 3 {
+		rankedPrefixes = rankedPrefixes[:3]
+	}
+	out := make([]Suggestion, 0, len(rankedPrefixes))
+	for _, item := range rankedPrefixes {
+		out = append(out, Suggestion{CIDR: item.prefix.String(), Source: SourceInventory})
+	}
+	return out
 }
 
 // conflictResponse is the 409 body: the standard error envelope plus the scan
@@ -184,7 +274,28 @@ type rateLimitedResponse struct {
 }
 
 type startRequest struct {
-	CIDR string `json:"cidr"`
+	Ranges           requestRanges `json:"ranges"`
+	IncludeInventory bool          `json:"includeInventory"`
+	AskNetwork       bool          `json:"askNetwork"`
+	CIDR             *string       `json:"cidr"`
+}
+
+type requestRanges struct {
+	values  []string
+	present bool
+}
+
+func (r *requestRanges) UnmarshalJSON(data []byte) error {
+	if bytes.Equal(bytes.TrimSpace(data), []byte("null")) {
+		return errors.New("ranges must be an array")
+	}
+	var values []string
+	if err := json.Unmarshal(data, &values); err != nil {
+		return err
+	}
+	r.values = values
+	r.present = true
+	return nil
 }
 
 // Start handles POST /api/discovery/scan (behind elevation when step-up is on).
@@ -194,32 +305,75 @@ func (h *Handler) Start(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rng, err := disc.ParseRange(req.CIDR)
+	rawRanges, legacy := startRanges(req)
+	ranges, err := disc.ParseRanges(rawRanges)
 	if err != nil {
 		var re *disc.RangeError
-		reason, msg := "invalid_cidr", "invalid range"
+		reason, msg, field := "invalid_cidr", "invalid range", "ranges"
 		if errors.As(err, &re) {
-			reason, msg = re.Reason, re.Message
+			reason, msg, field = re.Reason, re.Message, re.Field
 		}
-		h.reject(r, req.CIDR, reason)
-		httputil.ErrorWithDetails(w, http.StatusBadRequest, "invalid_request", msg, []httputil.FieldError{{Field: "cidr", Msg: msg}})
+		if legacy {
+			field = "cidr"
+		}
+		h.rejectRanges(r, rawRanges, legacy, reason)
+		httputil.ErrorWithDetails(w, http.StatusBadRequest, "invalid_request", msg, []httputil.FieldError{{Field: field, Msg: msg}})
 		return
+	}
+	includeInventory, askNetwork := req.IncludeInventory, req.AskNetwork
+	if legacy {
+		includeInventory, askNetwork = false, false
+	}
+	if len(ranges) == 0 && !includeInventory {
+		msg := "enter a range or include known hosts"
+		h.rejectRanges(r, rawRanges, legacy, disc.ReasonNoTargets)
+		field := "ranges"
+		if legacy {
+			field = "cidr"
+		}
+		httputil.ErrorWithDetails(w, http.StatusBadRequest, "invalid_request", msg, []httputil.FieldError{{Field: field, Msg: msg}})
+		return
+	}
+	var inventory []netip.Addr
+	if includeInventory {
+		rows, err := h.inventoryQuery(r.Context())
+		if err != nil {
+			h.rejectRanges(r, rawRanges, legacy, "internal")
+			slog.Error("read known hosts for network discovery", "errorType", fmt.Sprintf("%T", err))
+			httputil.Error(w, http.StatusInternalServerError, "internal_error", "An internal error occurred")
+			return
+		}
+		inventory = disc.InventorySource(rows, ranges)
 	}
 
 	// The start entry is written before the scan begins, so it always
 	// precedes the scan's own end entry.
 	recordStart := func(scan disc.Scan) {
-		detail := map[string]any{"range": scan.CIDR}
+		detail := map[string]any{
+			"ranges":           scan.Ranges,
+			"includeInventory": scan.IncludeInventory,
+			"askNetwork":       scan.AskNetwork,
+			"planned": map[string]int{
+				"range":     scan.Sources.Range,
+				"inventory": scan.Sources.Inventory,
+			},
+			"skipped": map[string]int{"inventory": scan.Skipped.Inventory},
+		}
 		if err := h.Store.RecordAuditFromContext(r.Context(), disc.AuditStart, disc.AuditTargetType, scan.ID, detail); err != nil {
-			slog.Error("record discovery scan start audit entry", "error", err)
+			slog.Error("record discovery scan start audit entry", "errorType", fmt.Sprintf("%T", err))
 		}
 	}
-	scan, err := h.Manager.Start(rng, actorFrom(r), recordStart)
+	scan, err := h.Manager.Start(disc.StartRequest{
+		Ranges:           ranges,
+		IncludeInventory: includeInventory,
+		AskNetwork:       askNetwork,
+		Inventory:        inventory,
+	}, actorFrom(r), recordStart)
 	var running *disc.ScanRunningError
 	var limited *disc.RateLimitError
 	switch {
 	case errors.As(err, &running):
-		h.reject(r, req.CIDR, "scan_in_progress")
+		h.rejectRanges(r, rawRanges, legacy, "scan_in_progress")
 		httputil.JSON(w, http.StatusConflict, conflictResponse{
 			Code:    "scan_in_progress",
 			Message: "A network scan is already running",
@@ -227,7 +381,7 @@ func (h *Handler) Start(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	case errors.As(err, &limited):
-		h.reject(r, req.CIDR, "rate_limited")
+		h.rejectRanges(r, rawRanges, legacy, "rate_limited")
 		seconds := int(math.Ceil(limited.RetryAfter.Seconds()))
 		w.Header().Set("Retry-After", strconv.Itoa(seconds))
 		httputil.JSON(w, http.StatusTooManyRequests, rateLimitedResponse{
@@ -237,11 +391,33 @@ func (h *Handler) Start(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	case err != nil:
-		httputil.Errorf(w, err)
+		var re *disc.RangeError
+		if errors.As(err, &re) {
+			field := re.Field
+			if legacy {
+				field = "cidr"
+			}
+			h.rejectRanges(r, rawRanges, legacy, re.Reason)
+			httputil.ErrorWithDetails(w, http.StatusBadRequest, "invalid_request", re.Message, []httputil.FieldError{{Field: field, Msg: re.Message}})
+			return
+		}
+		h.rejectRanges(r, rawRanges, legacy, "internal")
+		slog.Error("start network discovery scan", "errorType", fmt.Sprintf("%T", err))
+		httputil.Error(w, http.StatusInternalServerError, "internal_error", "An internal error occurred")
 		return
 	}
 
 	httputil.JSON(w, http.StatusAccepted, scanResponse{Scan: scan})
+}
+
+func startRanges(req startRequest) ([]string, bool) {
+	if req.Ranges.present {
+		return req.Ranges.values, false
+	}
+	if req.CIDR != nil {
+		return []string{*req.CIDR}, true
+	}
+	return []string{}, false
 }
 
 func actorFrom(r *http.Request) disc.Actor {
@@ -253,13 +429,33 @@ func actorFrom(r *http.Request) disc.Actor {
 
 // reject writes the discovery.scan.reject audit entry. The range is what the
 // admin submitted, cut to a sane length; no scanned host is involved.
-func (h *Handler) reject(r *http.Request, submitted, reason string) {
-	if len(submitted) > maxAuditRange {
-		submitted = submitted[:maxAuditRange]
+func (h *Handler) rejectRanges(r *http.Request, submitted []string, legacy bool, reason string) {
+	if legacy {
+		value := ""
+		if len(submitted) > 0 {
+			value = submitted[0]
+		}
+		if len(value) > maxAuditRange {
+			value = value[:maxAuditRange]
+		}
+		if err := h.Store.RecordAuditFromContext(r.Context(), disc.AuditReject, disc.AuditTargetType, "", map[string]any{"cidr": value, "reason": reason}); err != nil {
+			slog.Error("record discovery scan reject audit entry", "errorType", fmt.Sprintf("%T", err))
+		}
+		return
 	}
-	detail := map[string]any{"range": submitted, "reason": reason}
+	if len(submitted) > disc.MaxRanges {
+		submitted = submitted[:disc.MaxRanges]
+	}
+	ranges := make([]string, 0, len(submitted))
+	for _, value := range submitted {
+		if len(value) > maxAuditRange {
+			value = value[:maxAuditRange]
+		}
+		ranges = append(ranges, value)
+	}
+	detail := map[string]any{"ranges": ranges, "reason": reason}
 	if err := h.Store.RecordAuditFromContext(r.Context(), disc.AuditReject, disc.AuditTargetType, "", detail); err != nil {
-		slog.Error("record discovery scan reject audit entry", "error", err)
+		slog.Error("record discovery scan reject audit entry", "errorType", fmt.Sprintf("%T", err))
 	}
 }
 

@@ -8,7 +8,7 @@
  */
 
 /**
- * client: the caller's address; server: a private address of the server
+ * client: caller network; server: server network; inventory: known-host network
  */
 export type DiscoverySuggestionSource =
   (typeof DiscoverySuggestionSource)[keyof typeof DiscoverySuggestionSource];
@@ -16,4 +16,5 @@ export type DiscoverySuggestionSource =
 export const DiscoverySuggestionSource = {
   client: 'client',
   server: 'server',
+  inventory: 'inventory',
 } as const;

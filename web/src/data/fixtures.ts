@@ -589,6 +589,28 @@ export function removalImpact(connectorId: string): RemovalImpact {
 /** Per-type config schemas for the dedicated add-connector flow. */
 export const connectorSchemas: ConnectorTypeSchema[] = [
   {
+    category: 'monitoring',
+    type: 'tlsprobe',
+    displayName: 'TLS Probe',
+    capabilities: { restart: false, start: false, stop: false, configPush: false, configRead: false, credentialRefresh: false },
+    fields: [
+      { name: 'targets', label: 'Targets', kind: 'textarea', required: false, maxLength: 32768, placeholder: 'nas.lab:443\n[fd00::10]:8443' },
+      { name: 'import_connector_id', label: 'Import hosts from Traefik connector', kind: 'string', required: false },
+      { name: 'import_port', label: 'Port for imported hosts', kind: 'number', required: false },
+    ],
+  },
+  {
+    category: 'networking',
+    type: 'dnsresolver',
+    displayName: 'DNS Resolver',
+    capabilities: { restart: false, start: false, stop: false, configPush: false, configRead: false, credentialRefresh: false },
+    fields: [
+      { name: 'url', label: 'Appliance URL', kind: 'string', required: true, placeholder: 'https://192.168.1.1' },
+      { name: 'api_key', label: 'API Key', kind: 'password', required: true, secret: true },
+      { name: 'verify_tls', label: 'Verify TLS', kind: 'boolean', required: false },
+    ],
+  },
+  {
     category: 'virtualization',
     type: 'proxmox',
     displayName: 'Proxmox VE',

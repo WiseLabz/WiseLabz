@@ -11,4 +11,6 @@ import type { DiscoverySuggestion } from './discoverySuggestion';
 export interface DiscoverySuggestions {
   /** Always an array; empty when no range is suggested */
   suggestions: DiscoverySuggestion[];
+  /** Filtered and de-duplicated known-host count before subtracting typed ranges */
+  knownHosts: number;
 }

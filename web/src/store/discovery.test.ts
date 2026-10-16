@@ -37,6 +37,44 @@ const scan = () => useDiscovery.getState().scan;
 beforeEach(() => useDiscovery.setState({ scan: null }));
 
 describe('discovery store', () => {
+  it('preserves source counts, skipped hosts, query answers and TLS targets on hydration and events', () => {
+    const s = useDiscovery.getState();
+    const additions = {
+      ranges: ['10.0.0.0/24', '100.100.0.0/24'],
+      includeInventory: true,
+      askNetwork: true,
+      sources: { range: 508, inventory: 200, passive: 2 },
+      skipped: { inventory: 4, passive: 3 },
+      passiveAnswered: 5,
+      tlsTargets: [{ address: 'fd00::5', port: 443, source: 'inventory' as const }],
+    };
+    s.setScan(running({ ...additions, total: 708 }));
+    s.applyProgress({ scanId: 'scan-1', done: 100, total: 710, answered: 2 });
+    const candidate = { ...pve, source: 'passive' as const, addOns: [{ type: 'dnsresolver', url: 'https://10.0.0.5:8006' }] };
+    s.applyCandidate({ scanId: 'scan-1', candidate });
+    s.applyComplete({ scanId: 'scan-1', state: 'completed', partial: false });
+    expect(scan()).toMatchObject({ ...additions, total: 710, candidates: [candidate], state: 'completed' });
+  });
+
+  it('marks saved add-ons and only the certificate targets actually added', () => {
+    const s = useDiscovery.getState();
+    const addOn = { type: 'dnsresolver', url: 'https://10.0.0.1:443' };
+    const targets = [
+      { address: '10.0.0.1', port: 443, source: 'range' as const },
+      { address: '10.0.0.1', port: 8006, source: 'range' as const },
+      { address: 'fd00::5', port: 443, source: 'inventory' as const },
+    ];
+    const appliance = { ...pve, addOns: [addOn, { ...addOn, url: 'https://10.0.0.2:443' }] };
+    s.setScan(running({ candidates: [appliance, ha], tlsTargets: targets }));
+    s.markConnected([{ addOn, connectorId: 'dns-1' }, { tlsTargets: [targets[0], targets[2]], connectorId: 'probe-1' }]);
+    expect(scan()?.candidates[0].addOns).toEqual([{ ...addOn, connectorId: 'dns-1' }, appliance.addOns[1]]);
+    expect(scan()?.candidates[0].connectorId).toBeUndefined();
+    expect(scan()?.candidates[1]).toEqual(ha);
+    expect(scan()?.tlsTargets).toEqual([
+      { ...targets[0], monitoredBy: 'probe-1' }, targets[1], { ...targets[2], monitoredBy: 'probe-1' },
+    ]);
+  });
+
   it('hydrates from the read endpoint, including a null for "no scan"', () => {
     useDiscovery.getState().setScan(running({ done: 40, candidates: [pve] }));
     expect(scan()).toMatchObject({ id: 'scan-1', done: 40, candidates: [pve] });

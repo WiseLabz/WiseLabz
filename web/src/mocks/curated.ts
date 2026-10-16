@@ -24,7 +24,9 @@ import {
   syncRunsFor,
   user,
 } from '../data/fixtures';
-import type { DiscoveryCandidate, DiscoveryScan, QualityCheckType, QualityFindingStatus } from '../api/model';
+import type { DiscoveryCandidate, DiscoveryScan, DiscoveryScanRequest, QualityCheckType, QualityFindingStatus } from '../api/model';
+import { endpointLabel } from '../features/discovery/candidates';
+import { calculateRangeBudget, countRangeHosts } from '../features/discovery/rangeBudget';
 import { MockWebSocket } from './ws/MockWebSocket';
 
 // Small artificial latency so loading skeletons are actually exercised on first paint.
@@ -74,10 +76,11 @@ const newSession = () => ({
 // the way the real backend does. Types match connectorSchemas so the connect
 // queue's form opens for real.
 const MOCK_SCAN_MS = 3000;
+const MOCK_KNOWN_HOSTS = 12;
 const mockFinds: DiscoveryCandidate[] = [
-  { type: 'opnsense', name: 'OPNsense', address: '192.168.1.1', port: 443, url: 'https://192.168.1.1:443', urlField: 'url' },
-  { type: 'proxmox', name: 'Proxmox VE', address: '192.168.1.10', port: 8006, url: 'https://192.168.1.10:8006/api2/json', urlField: 'url' },
-  { type: 'portainer', name: 'Portainer', address: '192.168.1.20', port: 9443, url: 'https://192.168.1.20:9443', urlField: 'url' },
+  { type: 'opnsense', name: 'OPNsense', address: '192.168.1.1', port: 443, url: 'https://192.168.1.1:443', urlField: 'url', source: 'range', addOns: [{ type: 'dnsresolver', url: 'https://192.168.1.1:443' }] },
+  { type: 'proxmox', name: 'Proxmox VE', address: '10.0.20.10', port: 8006, url: 'https://10.0.20.10:8006/api2/json', urlField: 'url', source: 'inventory', addOns: [] },
+  { type: 'portainer', name: 'Portainer', address: '10.0.30.20', port: 9443, url: 'https://10.0.30.20:9443', urlField: 'url', source: 'passive', addOns: [] },
 ];
 let mockScan: DiscoveryScan | null = null;
 let mockScanTimers: ReturnType<typeof setTimeout>[] = [];
@@ -90,26 +93,85 @@ function endMockScan(state: 'completed' | 'cancelled') {
   MockWebSocket.emitEvent('discovery.complete', { scanId: mockScan.id, state, partial: false });
 }
 
-function startMockScan(cidr: string): DiscoveryScan {
+function shareableConfig(raw: unknown): Record<string, string> {
+  if (!raw || typeof raw !== 'object') return {};
+  return Object.fromEntries(Object.entries(raw).filter(([key, value]) =>
+    ['targets', 'import_connector_id', 'import_port', 'recipe'].includes(key) && typeof value === 'string',
+  )) as Record<string, string>;
+}
+
+function connectorAt(type: string, rawURL: string) {
+  const endpoint = new URL(rawURL).host;
+  return connectors.find((connector) => {
+    if (connector.type !== type || !connector.url) return false;
+    try {
+      return new URL(connector.url).host === endpoint;
+    } catch {
+      return false;
+    }
+  })?.id;
+}
+
+function currentMockScan() {
+  if (!mockScan) return null;
+  return {
+    ...mockScan,
+    candidates: mockScan.candidates.map((candidate) => ({
+      ...candidate,
+      connectorId: connectorAt(candidate.type, candidate.url),
+      addOns: candidate.addOns?.map((addOn) => ({ ...addOn, connectorId: connectorAt(addOn.type, addOn.url) })),
+    })),
+    tlsTargets: mockScan.tlsTargets?.map((target) => ({
+      ...target,
+      monitoredBy: connectors.find((connector) => connector.type === 'tlsprobe'
+        && connector.config?.targets?.split('\n').some((line) => line.trim() === endpointLabel(target.address, target.port)))?.id,
+    })),
+  };
+}
+
+function startMockScan(request: DiscoveryScanRequest): DiscoveryScan {
+  const legacy = request.ranges === undefined && request.cidr !== undefined;
+  const ranges = request.ranges ?? (request.cidr ? [request.cidr] : []);
+  const includeInventory = !legacy && (request.includeInventory ?? true);
+  const askNetwork = !legacy && (request.askNetwork ?? true);
+  const budget = calculateRangeBudget(ranges, MOCK_KNOWN_HOSTS, includeInventory);
+  const passive = askNetwork ? Math.min(2, 1024 - budget.used) : 0;
+  const finds = mockFinds.filter((candidate) => candidate.source === 'range'
+    ? ranges.length > 0
+    : candidate.source === 'inventory' ? budget.inventoryHosts > 0 : passive > 0);
   const scan: DiscoveryScan = {
     id: `scan-${Date.now().toString(36)}`,
-    cidr,
+    cidr: ranges[0] ?? '',
+    ranges,
+    includeInventory,
+    askNetwork,
+    sources: { range: budget.rangeHosts, inventory: budget.inventoryHosts, passive },
+    skipped: { inventory: budget.skippedInventory, passive: askNetwork ? 2 - passive : 0 },
+    passiveAnswered: askNetwork ? 2 : 0,
+    tlsTargets: [],
     state: 'running',
     startedAt: new Date().toISOString(),
     done: 0,
-    total: 254,
+    total: budget.used + passive,
     answered: 0,
     partial: false,
     candidates: [],
   };
   mockScan = scan;
-  [0.25, 0.5, 0.75].forEach((fraction, i) => {
+  finds.forEach((candidate, i) => {
+    const fraction = (i + 1) / (finds.length + 1);
     mockScanTimers.push(
       setTimeout(() => {
         if (!mockScan || mockScan.id !== scan.id) return;
-        mockScan = { ...mockScan, done: Math.round(254 * fraction), answered: i + 1, candidates: [...mockScan.candidates, mockFinds[i]] };
-        MockWebSocket.emitEvent('discovery.candidate', { scanId: scan.id, candidate: mockFinds[i] });
-        MockWebSocket.emitEvent('discovery.progress', { scanId: scan.id, done: mockScan.done, total: 254, answered: i + 1 });
+        mockScan = {
+          ...mockScan,
+          done: Math.round(scan.total * fraction),
+          answered: i + 1,
+          candidates: [...mockScan.candidates, candidate],
+          tlsTargets: [...(mockScan.tlsTargets ?? []), { address: candidate.address, port: candidate.port, source: candidate.source ?? 'range' }],
+        };
+        MockWebSocket.emitEvent('discovery.candidate', { scanId: scan.id, candidate });
+        MockWebSocket.emitEvent('discovery.progress', { scanId: scan.id, done: mockScan.done, total: scan.total, answered: i + 1 });
       }, MOCK_SCAN_MS * fraction),
     );
   });
@@ -248,18 +310,23 @@ export const curatedHandlers = [
   http.post('*/connectors', async ({ request }) => {
     await delay(LATENCY);
     const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
-    const created = {
+    const schema = connectorSchemas.find((item) => item.type === body.type);
+    const created: (typeof connectors)[number] = {
       id: `svc-${Date.now().toString(36)}`,
       name: String(body.name ?? 'new-connector'),
-      category: body.category,
+      category: schema?.category ?? 'monitoring',
       type: String(body.type ?? 'custom'),
       enabled: true,
       status: 'online',
       url: String(body.url ?? ''),
       verifyTls: Boolean(body.verifyTls),
+      config: shareableConfig(body.config),
+      capabilities: schema?.capabilities ?? { restart: false, start: false, stop: false, configPush: false, configRead: false, credentialRefresh: false },
+      actions: [],
+      myRole: 'operator',
       lastSyncAt: '',
     };
-    connectors.push(created as (typeof connectors)[number]);
+    connectors.unshift(created);
     return HttpResponse.json(created, { status: 201 });
   }),
 
@@ -284,7 +351,9 @@ export const curatedHandlers = [
       suggestions: [
         { cidr: '192.168.1.0/24', source: 'client' },
         { cidr: '172.18.0.0/24', source: 'server' },
+        { cidr: '10.0.20.0/24', source: 'inventory' },
       ],
+      knownHosts: MOCK_KNOWN_HOSTS,
     });
   }),
 
@@ -295,11 +364,20 @@ export const curatedHandlers = [
     if (authConfig.stepUpForDestructive && !request.headers.get('X-Elevation-Token')) {
       return HttpResponse.json({ code: 'elevation_required', message: 'Step-up required' }, { status: 400 });
     }
-    const body = (await request.json().catch(() => ({}))) as { cidr?: string };
-    const cidr = String(body.cidr ?? '');
-    if (!/^(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.)[\d.]+\/(2[4-9]|3[0-2])$/.test(cidr)) {
+    const body = (await request.json().catch(() => ({}))) as DiscoveryScanRequest;
+    const ranges = body.ranges ?? (body.cidr ? [body.cidr] : []);
+    const legacy = body.ranges === undefined && body.cidr !== undefined;
+    const details = ranges.flatMap((range, index) => countRangeHosts([range]) === 0
+      ? [{ field: legacy ? 'cidr' : `ranges[${index}]`, msg: 'Use a private or mesh IPv4 range, /22 to /32.' }]
+      : []);
+    if (ranges.length > 16) details.push({ field: 'ranges', msg: 'Use at most 16 ranges.' });
+    if (countRangeHosts(ranges) > 1024) details.push({ field: 'ranges', msg: 'A scan may cover at most 1,024 addresses.' });
+    if (ranges.length === 0 && (legacy || body.includeInventory === false)) {
+      details.push({ field: 'ranges', msg: 'Add a range or include known hosts.' });
+    }
+    if (details.length > 0) {
       return HttpResponse.json(
-        { code: 'invalid_request', message: 'only private ranges are accepted', details: [{ field: 'cidr', msg: 'only private ranges are accepted (at most a /24)' }] },
+        { code: 'invalid_request', message: 'Check the scan ranges.', details },
         { status: 400 },
       );
     }
@@ -309,13 +387,13 @@ export const curatedHandlers = [
         { status: 409 },
       );
     }
-    return HttpResponse.json({ scan: startMockScan(cidr) }, { status: 202 });
+    return HttpResponse.json({ scan: startMockScan(body) }, { status: 202 });
   }),
 
   http.get('*/discovery/scan', async () => {
     await delay(LATENCY);
     if (!mockScan) return HttpResponse.json({ code: 'not_found', message: 'No network scan' }, { status: 404 });
-    return HttpResponse.json({ scan: mockScan });
+    return HttpResponse.json({ scan: currentMockScan() });
   }),
 
   http.delete('*/discovery/scan', async () => {
@@ -438,6 +516,7 @@ export const curatedHandlers = [
     if (typeof body.url === 'string') c.url = body.url;
     if (typeof body.verifyTls === 'boolean') c.verifyTls = body.verifyTls;
     if ('scheduleSeconds' in body) c.scheduleSeconds = body.scheduleSeconds as number | null;
+    if ('config' in body) Object.assign(c, { config: { ...c.config, ...shareableConfig(body.config) } });
     return HttpResponse.json(c);
   }),
 

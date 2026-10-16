@@ -55,7 +55,7 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
 };
 
 /**
- * The /24 around the caller's address, then the /24 around each private IPv4 address of the server, without duplicates. Empty when neither is private.
+ * The /24 around the caller's private or mesh IPv4 address, then those of the server, then up to three /24s ranked by known-host count, without duplicates. Includes the filtered known-host count; suggestions may be empty.
  * @summary Ranges the caller may scan (instance admin)
  */
 export const getDiscoverySuggestions = (
@@ -292,8 +292,8 @@ export function useGetDiscoveryScan<
 }
 
 /**
- * Scans an IPv4 range in RFC 1918 space, from /24 to /32 (host bits are masked), for known products. At most one scan runs at a time; a start while one runs is refused with 409 `scan_in_progress`. At most six starts are allowed per rolling hour per instance; a start over that limit is refused with 429 `rate_limited`. A refused start does not count towards the limit. A scan stops after 60 seconds, reporting `partial` when the deadline cut it short. Progress and candidates are sent as WebSocket events to the admin who started the scan only (see docs/WS_CONTRACT.md). When `stepUpForDestructive` is enabled, requires an `X-Elevation-Token` for action `discovery.scan`.
- * @summary Start a network scan of one private range (instance admin)
+ * Scans up to 16 IPv4 ranges in RFC 1918 or 100.64.0.0/10 space, /22 to /32 (host bits masked), optionally including known hosts and source addresses answering mDNS/SSDP queries. At most 1,024 addresses are admitted, in range, known-host, network-answer order. Ranges may be empty only when includeInventory is true. The deprecated cidr shorthand scans that range alone, without known hosts or network answers; ranges takes precedence. Known IPv6 hosts must be in fd00::/8. At most one scan runs at a time; a start while one runs is refused with 409 `scan_in_progress`. At most six starts are allowed per rolling hour per instance; a start over that limit is refused with 429 `rate_limited`. A refused start does not count towards the limit. The deadline is 60 seconds per 256 initially admitted addresses (rounded up, at least one group), plus 60 seconds when asking the network with fewer than 1,024 initial addresses, capped at 240 seconds. The scan reports `partial` when its deadline cuts it short. Progress and candidates are sent as WebSocket events to the admin who started the scan only (see docs/WS_CONTRACT.md). When `stepUpForDestructive` is enabled, requires an `X-Elevation-Token` for action `discovery.scan`.
+ * @summary Start a network scan of ranges and known hosts (instance admin)
  */
 export const startDiscoveryScan = (
   discoveryScanRequest: BodyType<DiscoveryScanRequest>,
@@ -360,7 +360,7 @@ export type StartDiscoveryScanMutationError = ErrorType<
 export type StartDiscoveryScanMutationVariables = { data: BodyType<DiscoveryScanRequest> };
 
 /**
- * @summary Start a network scan of one private range (instance admin)
+ * @summary Start a network scan of ranges and known hosts (instance admin)
  */
 export const useStartDiscoveryScan = <
   TError = ErrorType<Error | ForbiddenResponse | DiscoveryScanConflict | DiscoveryRateLimited>,

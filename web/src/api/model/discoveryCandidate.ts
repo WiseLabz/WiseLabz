@@ -6,22 +6,26 @@
  *
  * OpenAPI spec version: 0.1.0
  */
+import type { DiscoveryAddOn } from './discoveryAddOn';
+import type { DiscoverySource } from './discoverySource';
 
 /**
- * A product confirmed on the scanned network.
+ * A product confirmed on an admitted scan target.
  */
 export interface DiscoveryCandidate {
   /** Connector type */
   type: string;
   /** Display name */
   name: string;
-  /** IPv4 address */
+  /** IP literal */
   address: string;
   port: number;
   /** Connector URL to prefill */
   url: string;
   /** Config field the url goes in: url, or host for Docker */
   urlField: string;
+  source?: DiscoverySource;
+  addOns?: DiscoveryAddOn[];
   /** Set when a connector of the same type already points at this address and port */
   connectorId?: string;
 }

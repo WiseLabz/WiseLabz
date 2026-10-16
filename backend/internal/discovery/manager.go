@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/netip"
 	"net/url"
 	"sort"
@@ -15,15 +16,17 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/WiseLabz/wiselabz/internal/connector/tlsprobe"
 	"github.com/WiseLabz/wiselabz/internal/ws"
 )
 
 // Defaults for Config.
 const (
-	DefaultTimeout   = 60 * time.Second
-	DefaultResultTTL = 15 * time.Minute
-	DefaultMaxStarts = 6
-	DefaultWindow    = time.Hour
+	DefaultTimeoutPer256 = 60 * time.Second
+	DefaultMaxTimeout    = 240 * time.Second
+	DefaultResultTTL     = 15 * time.Minute
+	DefaultMaxStarts     = 6
+	DefaultWindow        = time.Hour
 	// DefaultProgressEvery throttles progress events to a few per second.
 	DefaultProgressEvery = 250 * time.Millisecond
 )
@@ -72,16 +75,49 @@ func (e *RateLimitError) Error() string {
 
 // Scan is a snapshot of the current or most recent scan.
 type Scan struct {
-	ID         string      `json:"id"`
-	CIDR       string      `json:"cidr"`
-	State      State       `json:"state"`
-	StartedAt  time.Time   `json:"startedAt"`
-	EndedAt    *time.Time  `json:"endedAt,omitempty"`
-	Done       int         `json:"done"`
-	Total      int         `json:"total"`
-	Answered   int         `json:"answered"`
-	Partial    bool        `json:"partial"`
-	Candidates []Candidate `json:"candidates"`
+	ID               string        `json:"id"`
+	CIDR             string        `json:"cidr"`
+	State            State         `json:"state"`
+	StartedAt        time.Time     `json:"startedAt"`
+	EndedAt          *time.Time    `json:"endedAt,omitempty"`
+	Done             int           `json:"done"`
+	Total            int           `json:"total"`
+	Answered         int           `json:"answered"`
+	Partial          bool          `json:"partial"`
+	Candidates       []Candidate   `json:"candidates"`
+	Ranges           []string      `json:"ranges"`
+	IncludeInventory bool          `json:"includeInventory"`
+	AskNetwork       bool          `json:"askNetwork"`
+	Sources          SourceCounts  `json:"sources"`
+	Skipped          SkippedCounts `json:"skipped"`
+	PassiveAnswered  int           `json:"passiveAnswered"`
+	TLSTargets       []TLSTarget   `json:"tlsTargets"`
+}
+
+// SourceCounts counts admitted addresses by their first source.
+type SourceCounts struct {
+	Range     int `json:"range"`
+	Inventory int `json:"inventory"`
+	Passive   int `json:"passive"`
+}
+
+// SkippedCounts counts distinct allowed hosts that did not fit in the budget.
+type SkippedCounts struct {
+	Inventory int `json:"inventory"`
+	Passive   int `json:"passive"`
+}
+
+// StartRequest contains validated ranges and the filtered inventory addresses.
+type StartRequest struct {
+	Ranges           Ranges
+	IncludeInventory bool
+	AskNetwork       bool
+	Inventory        []netip.Addr
+}
+
+// PassiveRunner reports the distinct allowed addresses answering network queries.
+type PassiveRunner interface {
+	Run(context.Context, func(netip.Addr))
 }
 
 // Actor is who starts (or cancels) a scan: events go to the starter, and the
@@ -93,7 +129,7 @@ type Actor struct {
 
 // Runner runs a scan; *Scanner is the production one.
 type Runner interface {
-	Run(ctx context.Context, r Range, cb Callbacks) Progress
+	Run(ctx context.Context, targets Targets, cb Callbacks) Progress
 }
 
 // Broadcaster delivers an event to one user (satisfied by *ws.Hub).
@@ -123,7 +159,9 @@ type Config struct {
 	Audit         Auditor
 	Endpoints     func(ctx context.Context) ([]Endpoint, error)
 	Now           func() time.Time
-	Timeout       time.Duration
+	TimeoutPer256 time.Duration
+	MaxTimeout    time.Duration
+	Passive       PassiveRunner
 	ResultTTL     time.Duration
 	MaxStarts     int
 	Window        time.Duration
@@ -149,6 +187,9 @@ type scanState struct {
 	done          chan struct{} // closed once the scan has ended and been audited
 	lastProgress  time.Time
 	candidateKeys map[string]bool
+	tlsKeys       map[string]bool
+	passiveSeen   map[netip.Addr]bool
+	targets       *TargetSet
 }
 
 // NewManager returns a Manager with defaults applied.
@@ -156,8 +197,11 @@ func NewManager(cfg Config) *Manager {
 	if cfg.Now == nil {
 		cfg.Now = time.Now
 	}
-	if cfg.Timeout <= 0 {
-		cfg.Timeout = DefaultTimeout
+	if cfg.TimeoutPer256 <= 0 {
+		cfg.TimeoutPer256 = DefaultTimeoutPer256
+	}
+	if cfg.MaxTimeout <= 0 {
+		cfg.MaxTimeout = DefaultMaxTimeout
 	}
 	if cfg.ResultTTL <= 0 {
 		cfg.ResultTTL = DefaultResultTTL
@@ -174,13 +218,41 @@ func NewManager(cfg Config) *Manager {
 	return &Manager{cfg: cfg}
 }
 
-// Start begins a scan of r in the background and returns its snapshot. It
+// Start begins a scan in the background and returns its snapshot. It
 // refuses while a scan runs (*ScanRunningError) and once MaxStarts scans were
 // started inside the window (*RateLimitError); a refused call does not count
 // towards the limit. started, when not nil, is called with the new scan's
 // snapshot after the scan is registered and before it begins, so whatever it
 // records precedes anything the scan itself records.
-func (m *Manager) Start(r Range, starter Actor, started func(Scan)) (Scan, error) {
+func (m *Manager) Start(req StartRequest, starter Actor, started func(Scan)) (Scan, error) {
+	if len(req.Ranges) == 0 && !req.IncludeInventory {
+		return Scan{}, &RangeError{Reason: ReasonNoTargets, Message: "enter a range or include known hosts", Field: "ranges"}
+	}
+	static := req.Ranges.Hosts()
+	if len(static) > MaxAddresses {
+		return Scan{}, &RangeError{Reason: ReasonTooManyAddresses, Message: "a scan may cover at most 1024 addresses", Field: "ranges"}
+	}
+	targets := NewTargetSet(req.Ranges)
+	sources := SourceCounts{Range: len(static)}
+	skipped := SkippedCounts{}
+	if req.IncludeInventory {
+		inventory := append([]netip.Addr{}, req.Inventory...)
+		sort.Slice(inventory, func(i, j int) bool { return inventory[i].Unmap().Less(inventory[j].Unmap()) })
+		seen := map[netip.Addr]bool{}
+		for _, addr := range inventory {
+			addr = addr.Unmap()
+			if !Allowed(addr) || seen[addr] || insideRanges(addr, req.Ranges) {
+				continue
+			}
+			seen[addr] = true
+			if targets.Admit(addr, SourceInventory) {
+				static = append(static, addr)
+				sources.Inventory++
+			} else {
+				skipped.Inventory++
+			}
+		}
+	}
 	m.mu.Lock()
 	now := m.cfg.Now()
 	if m.scan != nil && m.scan.State == StateRunning {
@@ -196,20 +268,34 @@ func (m *Manager) Start(r Range, starter Actor, started func(Scan)) (Scan, error
 	}
 	m.starts = append(m.starts, now)
 
-	ctx, cancel := context.WithTimeout(context.Background(), m.cfg.Timeout)
+	ctx, cancel := context.WithTimeout(context.Background(), m.timeout(len(static), req.AskNetwork))
+	cidrs := req.Ranges.Strings()
+	first := ""
+	if len(cidrs) > 0 {
+		first = cidrs[0]
+	}
 	s := &scanState{
 		Scan: Scan{
-			ID:         uuid.NewString(),
-			CIDR:       r.String(),
-			State:      StateRunning,
-			StartedAt:  now,
-			Total:      len(r.Hosts()),
-			Candidates: []Candidate{},
+			ID:               uuid.NewString(),
+			CIDR:             first,
+			Ranges:           cidrs,
+			IncludeInventory: req.IncludeInventory,
+			AskNetwork:       req.AskNetwork,
+			Sources:          sources,
+			Skipped:          skipped,
+			TLSTargets:       []TLSTarget{},
+			State:            StateRunning,
+			StartedAt:        now,
+			Total:            len(static),
+			Candidates:       []Candidate{},
 		},
 		starter:       starter,
 		cancel:        cancel,
 		done:          make(chan struct{}),
 		candidateKeys: map[string]bool{},
+		tlsKeys:       map[string]bool{},
+		passiveSeen:   map[netip.Addr]bool{},
+		targets:       targets,
 	}
 	m.scan = s
 	snap := s.snapshot()
@@ -217,7 +303,7 @@ func (m *Manager) Start(r Range, starter Actor, started func(Scan)) (Scan, error
 
 	// Launched even when started panics, so the scan registered above always
 	// runs and ends instead of leaving the manager answering 409 forever.
-	defer func() { go m.run(ctx, cancel, s, r) }()
+	defer func() { go m.run(ctx, cancel, s, Targets{Set: targets, Static: static}) }()
 	if started != nil {
 		started(snap)
 	}
@@ -240,7 +326,7 @@ func (m *Manager) Current(ctx context.Context) (Scan, bool) {
 	}
 	snap := s.snapshot()
 	m.mu.Unlock()
-	m.markConnected(ctx, snap.Candidates)
+	m.markConnected(ctx, snap.Candidates, snap.TLSTargets)
 	return snap, true
 }
 
@@ -306,22 +392,54 @@ func (m *Manager) pruneStarts(now time.Time) {
 	m.starts = m.starts[i:]
 }
 
-func (m *Manager) run(ctx context.Context, cancel context.CancelFunc, s *scanState, r Range) {
+func (m *Manager) run(ctx context.Context, cancel context.CancelFunc, s *scanState, targets Targets) {
 	defer cancel()
 	defer close(s.done)
+	passiveDone := make(chan struct{})
+	if s.AskNetwork && m.cfg.Passive != nil {
+		late := make(chan netip.Addr, MaxAddresses)
+		targets.Late = late
+		go func() {
+			defer close(passiveDone)
+			defer close(late)
+			defer func() {
+				if rec := recover(); rec != nil {
+					// Closing late (deferred above) lets the runner finish the static targets.
+					slog.Error("network discovery passive source panicked", "scan", s.ID)
+				}
+			}()
+			m.cfg.Passive.Run(ctx, func(addr netip.Addr) {
+				if m.admitPassive(ctx, s, addr) {
+					select {
+					case late <- addr.Unmap():
+					case <-ctx.Done():
+					}
+				}
+			})
+		}()
+	} else {
+		close(passiveDone)
+	}
 	failed := false
 	func() {
 		defer func() {
 			if rec := recover(); rec != nil {
 				failed = true
-				slog.Error("network discovery scan panicked", "scan", s.ID, "panic", fmt.Sprint(rec))
+				slog.Error("network discovery scan panicked", "scan", s.ID)
 			}
 		}()
-		m.cfg.Runner.Run(ctx, r, Callbacks{
+		m.cfg.Runner.Run(ctx, targets, Callbacks{
 			OnProgress:  func(p Progress) { m.onProgress(s, p) },
 			OnCandidate: func(c Candidate) { m.onCandidate(ctx, s, c) },
+			OnTLSTarget: func(target TLSTarget) { m.onTLSTarget(ctx, s, target) },
 		})
 	}()
+	// A failed or test runner may finish without draining late targets. Cancel
+	// the passive source too, and wait before freezing the scan's counts.
+	if failed {
+		cancel()
+	}
+	<-passiveDone
 
 	m.mu.Lock()
 	end := m.cfg.Now()
@@ -359,7 +477,9 @@ func (m *Manager) onProgress(s *scanState, p Progress) {
 	if p.Answered > s.Answered {
 		s.Answered = p.Answered
 	}
-	s.Total = p.Total
+	if p.Total > s.Total {
+		s.Total = p.Total
+	}
 	now := m.cfg.Now()
 	emit := s.Done >= s.Total || now.Sub(s.lastProgress) >= m.cfg.ProgressEvery
 	if emit {
@@ -379,10 +499,14 @@ func (m *Manager) onCandidate(ctx context.Context, s *scanState, c Candidate) {
 	if ctx.Err() != nil {
 		return
 	}
+	if addr, err := netip.ParseAddr(c.Address); err == nil {
+		c.Source = s.targets.Source(addr)
+	}
+	c.AddOns = append([]AddOn{}, c.AddOns...)
 	one := []Candidate{c}
 	// The scan's own context may already be done; the lookup must not be.
 	lookup, cancelLookup := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
-	m.markConnected(lookup, one)
+	m.markConnected(lookup, one, nil)
 	cancelLookup()
 	c = one[0]
 
@@ -425,13 +549,17 @@ func (m *Manager) audit(starter Actor, snap Scan, duration time.Duration, cancel
 		perType[c.Type]++
 	}
 	detail := map[string]any{
-		"range":      snap.CIDR,
-		"state":      snap.State,
-		"probed":     snap.Done,
-		"answered":   snap.Answered,
-		"candidates": perType,
-		"durationMs": duration.Milliseconds(),
-		"partial":    snap.Partial,
+		"ranges":          snap.Ranges,
+		"state":           snap.State,
+		"probed":          snap.Done,
+		"answered":        snap.Answered,
+		"candidates":      perType,
+		"durationMs":      duration.Milliseconds(),
+		"partial":         snap.Partial,
+		"sources":         snap.Sources,
+		"skipped":         snap.Skipped,
+		"passiveAnswered": snap.PassiveAnswered,
+		"tlsTargets":      len(snap.TLSTargets),
 	}
 	if snap.State == StateCancelled {
 		if cancelledBy != "" {
@@ -444,23 +572,24 @@ func (m *Manager) audit(starter Actor, snap Scan, duration time.Duration, cancel
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	if err := m.cfg.Audit.RecordAuditAs(ctx, starter.UserID, starter.InstanceAdmin, action, AuditTargetType, snap.ID, detail); err != nil {
-		slog.Error("record discovery scan audit entry", "action", action, "error", err)
+		slog.Error("record discovery scan audit entry", "action", action, "errorType", fmt.Sprintf("%T", err))
 	}
 }
 
 // markConnected sets ConnectorID on candidates that match an existing
 // connector of the same type by URL host and port. Host names in connector
 // URLs are not resolved, so a connector configured by name does not match.
-func (m *Manager) markConnected(ctx context.Context, cands []Candidate) {
-	if m.cfg.Endpoints == nil || len(cands) == 0 {
+func (m *Manager) markConnected(ctx context.Context, cands []Candidate, targets []TLSTarget) {
+	if m.cfg.Endpoints == nil || (len(cands) == 0 && len(targets) == 0) {
 		return
 	}
 	endpoints, err := m.cfg.Endpoints(ctx)
 	if err != nil {
-		slog.Warn("list connectors for network discovery", "error", err)
+		slog.Warn("list connectors for network discovery", "errorType", fmt.Sprintf("%T", err))
 		return
 	}
 	MarkConnected(cands, endpoints)
+	MarkMonitored(targets, endpoints)
 }
 
 // MarkConnected sets ConnectorID on each candidate whose type, address and
@@ -485,11 +614,48 @@ func MarkConnected(cands []Candidate, endpoints []Endpoint) {
 	}
 	for i := range cands {
 		cands[i].ConnectorID = ""
-		addr, err := netip.ParseAddr(cands[i].Address)
-		if err != nil {
+		if addr, err := netip.ParseAddr(cands[i].Address); err == nil {
+			cands[i].ConnectorID = known[key{cands[i].Type, addr.Unmap(), cands[i].Port}]
+		}
+		for j := range cands[i].AddOns {
+			addOn := &cands[i].AddOns[j]
+			addOn.ConnectorID = ""
+			if host, port, ok := endpointAddr(addOn.URL); ok {
+				addOn.ConnectorID = known[key{addOn.Type, host, port}]
+			}
+		}
+	}
+}
+
+// MarkMonitored refreshes TLS monitoring markers from configured probe targets.
+// Host names are deliberately not resolved.
+func MarkMonitored(targets []TLSTarget, endpoints []Endpoint) {
+	type key struct {
+		addr netip.Addr
+		port int
+	}
+	known := map[key]string{}
+	for _, endpoint := range endpoints {
+		if endpoint.Type != "tlsprobe" {
 			continue
 		}
-		cands[i].ConnectorID = known[key{cands[i].Type, addr, cands[i].Port}]
+		parsed, _ := tlsprobe.ParseTargets(endpoint.Value)
+		for _, target := range parsed {
+			addr, err := netip.ParseAddr(target.Host)
+			if err != nil {
+				continue
+			}
+			k := key{addr.Unmap(), target.Port}
+			if _, exists := known[k]; !exists {
+				known[k] = endpoint.ID
+			}
+		}
+	}
+	for i := range targets {
+		targets[i].MonitoredBy = ""
+		if addr, err := netip.ParseAddr(targets[i].Address); err == nil {
+			targets[i].MonitoredBy = known[key{addr.Unmap(), targets[i].Port}]
+		}
 	}
 }
 
@@ -535,7 +701,20 @@ func (s *scanState) snapshot() Scan {
 		t := *s.EndedAt
 		out.EndedAt = &t
 	}
+	out.Ranges = append([]string{}, s.Ranges...)
+	out.TLSTargets = append([]TLSTarget{}, s.TLSTargets...)
+	sort.Slice(out.TLSTargets, func(i, j int) bool {
+		a, _ := netip.ParseAddr(out.TLSTargets[i].Address)
+		b, _ := netip.ParseAddr(out.TLSTargets[j].Address)
+		if a != b {
+			return a.Less(b)
+		}
+		return out.TLSTargets[i].Port < out.TLSTargets[j].Port
+	})
 	out.Candidates = append([]Candidate{}, s.Candidates...)
+	for i := range out.Candidates {
+		out.Candidates[i].AddOns = append([]AddOn{}, s.Candidates[i].AddOns...)
+	}
 	sort.SliceStable(out.Candidates, func(i, j int) bool {
 		a, _ := netip.ParseAddr(out.Candidates[i].Address)
 		b, _ := netip.ParseAddr(out.Candidates[j].Address)
@@ -548,4 +727,59 @@ func (s *scanState) snapshot() Scan {
 		return out.Candidates[i].Type < out.Candidates[j].Type
 	})
 	return out
+}
+
+func insideRanges(addr netip.Addr, ranges Ranges) bool {
+	for _, r := range ranges {
+		if r.prefix.Contains(addr) {
+			return true
+		}
+	}
+	return false
+}
+
+func (m *Manager) timeout(static int, passive bool) time.Duration {
+	groups := (max(static, 1) + 255) / 256
+	if passive && static < MaxAddresses {
+		groups++
+	}
+	return min(time.Duration(groups)*m.cfg.TimeoutPer256, m.cfg.MaxTimeout)
+}
+
+func (m *Manager) admitPassive(ctx context.Context, s *scanState, addr netip.Addr) bool {
+	addr = addr.Unmap()
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if ctx.Err() != nil || s.cancelled || s.State != StateRunning || !Allowed(addr) || s.passiveSeen[addr] {
+		return false
+	}
+	s.passiveSeen[addr] = true
+	s.PassiveAnswered++
+	if s.targets.Contains(addr) {
+		return false
+	}
+	if !s.targets.Admit(addr, SourcePassive) {
+		s.Skipped.Passive++
+		return false
+	}
+	s.Sources.Passive++
+	s.Total = s.targets.Len()
+	return true
+}
+
+func (m *Manager) onTLSTarget(ctx context.Context, s *scanState, target TLSTarget) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if ctx.Err() != nil || s.cancelled || s.State != StateRunning {
+		return
+	}
+	key := net.JoinHostPort(target.Address, strconv.Itoa(target.Port))
+	if s.tlsKeys[key] {
+		return
+	}
+	s.tlsKeys[key] = true
+	if addr, err := netip.ParseAddr(target.Address); err == nil {
+		target.Source = s.targets.Source(addr)
+	}
+	s.TLSTargets = append(s.TLSTargets, target)
 }

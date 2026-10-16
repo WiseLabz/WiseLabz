@@ -2,12 +2,15 @@ package discovery
 
 import (
 	"context"
+	"crypto/tls"
 	"crypto/x509"
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/http/httptrace"
 	"net/netip"
 	"net/url"
+	"reflect"
 	"sort"
 	"strconv"
 	"strings"
@@ -18,11 +21,25 @@ import (
 	"time"
 
 	"github.com/WiseLabz/wiselabz/internal/connector"
+	_ "github.com/WiseLabz/wiselabz/internal/connector/all"
 )
 
 func rangeOf(t *testing.T, cidr string) Range {
 	t.Helper()
 	return Range{prefix: netip.MustParsePrefix(cidr)}
+}
+
+func targetsOf(r Range) Targets {
+	return Targets{Set: NewTargetSet(Ranges{r}), Static: r.Hosts()}
+}
+
+func serverOnListener(t *testing.T, listener net.Listener, handler http.Handler) *httptest.Server {
+	t.Helper()
+	server := httptest.NewUnstartedServer(handler)
+	server.Listener = listener
+	server.Start()
+	t.Cleanup(server.Close)
+	return server
 }
 
 func portOf(t *testing.T, rawURL string) int {
@@ -57,6 +74,7 @@ type collector struct {
 	mu         sync.Mutex
 	candidates []Candidate
 	progress   []Progress
+	tlsTargets []TLSTarget
 }
 
 func (c *collector) callbacks() Callbacks {
@@ -70,6 +88,11 @@ func (c *collector) callbacks() Callbacks {
 			c.mu.Lock()
 			defer c.mu.Unlock()
 			c.progress = append(c.progress, p)
+		},
+		OnTLSTarget: func(target TLSTarget) {
+			c.mu.Lock()
+			defer c.mu.Unlock()
+			c.tlsTargets = append(c.tlsTargets, target)
 		},
 	}
 }
@@ -93,14 +116,14 @@ func TestScannerConfirmsProduct(t *testing.T) {
 
 	var c collector
 	s := NewScanner([]connector.TypeDiscovery{hint("fake_a", "http", port, "/id", bodyIs("fake-product"))})
-	p := s.Run(context.Background(), rangeOf(t, "127.0.0.1/32"), c.callbacks())
+	p := s.Run(context.Background(), targetsOf(rangeOf(t, "127.0.0.1/32")), c.callbacks())
 
 	if len(c.candidates) != 1 {
 		t.Fatalf("candidates = %+v, want 1", c.candidates)
 	}
 	got := c.candidates[0]
-	want := Candidate{Type: "fake_a", Name: "Fake fake_a", Address: "127.0.0.1", Port: port, URL: "http://127.0.0.1:" + strconv.Itoa(port) + "/api", URLField: "url"}
-	if got != want {
+	want := Candidate{Type: "fake_a", Name: "Fake fake_a", Address: "127.0.0.1", Port: port, URL: "http://127.0.0.1:" + strconv.Itoa(port) + "/api", URLField: "url", Source: SourceRange, AddOns: []AddOn{}}
+	if !reflect.DeepEqual(got, want) {
 		t.Errorf("candidate = %+v, want %+v", got, want)
 	}
 	if p != (Progress{Done: 1, Total: 1, Answered: 1}) {
@@ -112,8 +135,62 @@ func TestScannerConfirmsProduct(t *testing.T) {
 	if gotAuth.Load() != "" || gotCookie.Load() != "" {
 		t.Errorf("probe sent credentials: auth=%q cookie=%q", gotAuth.Load(), gotCookie.Load())
 	}
+	if len(c.tlsTargets) != 0 {
+		t.Errorf("HTTP probe reported TLS targets: %+v", c.tlsTargets)
+	}
 	if len(c.progress) != 1 || c.progress[0] != p {
 		t.Errorf("progress callbacks = %+v", c.progress)
+	}
+}
+
+func TestScannerCarriesOPNsenseAddOnWithoutCredentials(t *testing.T) {
+	connector.AllowLoopbackForTest(t)
+	var gotAuth, gotCookie atomic.Value
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth.Store(r.Header.Get("Authorization"))
+		gotCookie.Store(r.Header.Get("Cookie"))
+		_, _ = w.Write([]byte(`<html><head><title>Login | OPNsense</title></head><body><input name="usernamefld"></body></html>`))
+	}))
+	defer server.Close()
+	port := portOf(t, server.URL)
+
+	var opnsenseHint connector.TypeDiscovery
+	for _, h := range connector.DiscoveryHints() {
+		if h.Type == "opnsense" {
+			opnsenseHint = h
+			break
+		}
+	}
+	if opnsenseHint.Type == "" {
+		t.Fatal("OPNsense discovery hint not registered")
+	}
+	var match func(connector.DiscoveryResponse) bool
+	for _, probe := range opnsenseHint.Probes {
+		if probe.Scheme == "https" {
+			match = probe.Match
+			break
+		}
+	}
+	if match == nil {
+		t.Fatal("OPNsense discovery hint has no HTTPS probe")
+	}
+	opnsenseHint.Probes = []connector.DiscoveryProbe{{Port: port, Scheme: "https", Path: "/", Match: match}}
+
+	var results collector
+	NewScanner([]connector.TypeDiscovery{opnsenseHint}).Run(
+		context.Background(), targetsOf(rangeOf(t, "127.0.0.1/32")), results.callbacks())
+	if len(results.candidates) != 1 {
+		t.Fatalf("candidates = %+v, want one OPNsense candidate", results.candidates)
+	}
+	wantAddOn := AddOn{Type: "dnsresolver", URL: "https://127.0.0.1:" + strconv.Itoa(port)}
+	if got := results.candidates[0].AddOns; len(got) != 1 || got[0] != wantAddOn {
+		t.Errorf("candidate add-ons = %+v, want [%+v]", got, wantAddOn)
+	}
+	if results.candidates[0].Type != "opnsense" {
+		t.Errorf("candidate type = %q, want opnsense", results.candidates[0].Type)
+	}
+	if gotAuth.Load() != "" || gotCookie.Load() != "" {
+		t.Errorf("probe sent credentials: auth=%v cookie=%v", gotAuth.Load(), gotCookie.Load())
 	}
 }
 
@@ -132,7 +209,7 @@ func TestScannerTLSWithSelfSignedCertificate(t *testing.T) {
 	}
 	var c collector
 	NewScanner([]connector.TypeDiscovery{hint("fake_tls", "https", port, "/", match)}).
-		Run(context.Background(), rangeOf(t, "127.0.0.1/32"), c.callbacks())
+		Run(context.Background(), targetsOf(rangeOf(t, "127.0.0.1/32")), c.callbacks())
 	if len(c.candidates) != 1 {
 		t.Fatalf("candidates = %+v, want the self-signed server confirmed", c.candidates)
 	}
@@ -141,6 +218,194 @@ func TestScannerTLSWithSelfSignedCertificate(t *testing.T) {
 	}
 	if leaf.Load() == nil {
 		t.Error("matcher got no TLS leaf certificate")
+	}
+	if len(c.tlsTargets) != 1 || c.tlsTargets[0] != (TLSTarget{Address: "127.0.0.1", Port: port, Source: SourceRange}) {
+		t.Errorf("TLS targets = %+v, want one target for the matched product", c.tlsTargets)
+	}
+}
+
+func TestScannerReportsTLSForUnmatchedHTTPSProbe(t *testing.T) {
+	connector.AllowLoopbackForTest(t)
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("another product"))
+	}))
+	defer server.Close()
+	port := portOf(t, server.URL)
+
+	var results collector
+	progress := NewScanner([]connector.TypeDiscovery{
+		hint("fake_unmatched", "https", port, "/", func(connector.DiscoveryResponse) bool { return false }),
+	}).Run(context.Background(), targetsOf(rangeOf(t, "127.0.0.1/32")), results.callbacks())
+	if len(results.candidates) != 0 {
+		t.Fatalf("candidates = %+v, want no product match", results.candidates)
+	}
+	if progress.Answered != 1 {
+		t.Errorf("progress = %+v, want the HTTPS host counted as answered", progress)
+	}
+	if len(results.tlsTargets) != 1 || results.tlsTargets[0] != (TLSTarget{Address: "127.0.0.1", Port: port, Source: SourceRange}) {
+		t.Errorf("TLS targets = %+v, want one unmatched target", results.tlsTargets)
+	}
+}
+
+func TestScannerReportsTLSWhenHTTPFailsAfterHandshake(t *testing.T) {
+	connector.AllowLoopbackForTest(t)
+	server := httptest.NewTLSServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		panic(http.ErrAbortHandler)
+	}))
+	defer server.Close()
+	port := portOf(t, server.URL)
+
+	var results collector
+	progress := NewScanner([]connector.TypeDiscovery{
+		hint("fake_tls_abort", "https", port, "/", func(connector.DiscoveryResponse) bool { return true }),
+	}).Run(context.Background(), targetsOf(rangeOf(t, "127.0.0.1/32")), results.callbacks())
+	if len(results.candidates) != 0 {
+		t.Fatalf("candidates = %+v, want no candidate without an HTTP response", results.candidates)
+	}
+	if progress.Answered != 1 {
+		t.Errorf("progress = %+v, want the TLS host counted as answered", progress)
+	}
+	if len(results.tlsTargets) != 1 || results.tlsTargets[0] != (TLSTarget{Address: "127.0.0.1", Port: port, Source: SourceRange}) {
+		t.Errorf("TLS targets = %+v, want the completed handshake", results.tlsTargets)
+	}
+}
+
+func TestScannerDeduplicatesTLSByAddressAndPort(t *testing.T) {
+	connector.AllowLoopbackForTest(t)
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("matched"))
+	}))
+	defer server.Close()
+	port := portOf(t, server.URL)
+
+	var results collector
+	NewScanner([]connector.TypeDiscovery{
+		hint("fake_tls_a", "https", port, "/", bodyIs("matched")),
+		hint("fake_tls_b", "https", port, "/", bodyIs("matched")),
+	}).Run(context.Background(), targetsOf(rangeOf(t, "127.0.0.1/32")), results.callbacks())
+	if len(results.candidates) != 2 {
+		t.Errorf("candidates = %+v, want both matching products", results.candidates)
+	}
+	if len(results.tlsTargets) != 1 || results.tlsTargets[0] != (TLSTarget{Address: "127.0.0.1", Port: port, Source: SourceRange}) {
+		t.Errorf("TLS targets = %+v, want one address/port target", results.tlsTargets)
+	}
+}
+
+func TestScannerProbesLateTargetsAfterStaticTargets(t *testing.T) {
+	connector.AllowLoopbackForTest(t)
+	firstListener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = firstListener.Close() })
+	port := firstListener.Addr().(*net.TCPAddr).Port
+	lateListener, err := net.Listen("tcp", net.JoinHostPort("127.0.0.2", strconv.Itoa(port)))
+	if err != nil {
+		t.Skipf("cannot bind 127.0.0.2 on the static host's port: %v", err)
+	}
+	serverOnListener(t, firstListener, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("found"))
+	}))
+	serverOnListener(t, lateListener, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("found"))
+	}))
+
+	late := make(chan netip.Addr, 2)
+	late <- netip.MustParseAddr("127.0.0.2")
+	late <- netip.MustParseAddr("127.0.0.2")
+	close(late)
+	set := NewTargetSet(Ranges{rangeOf(t, "127.0.0.1/32"), rangeOf(t, "127.0.0.2/32")})
+	var results collector
+	progress := NewScanner([]connector.TypeDiscovery{hint("fake_late", "http", port, "/", bodyIs("found"))}).Run(
+		context.Background(),
+		Targets{Set: set, Static: []netip.Addr{netip.MustParseAddr("127.0.0.1")}, Late: late},
+		results.callbacks(),
+	)
+	if progress != (Progress{Done: 2, Total: 2, Answered: 2}) {
+		t.Errorf("progress = %+v, want both distinct hosts scanned", progress)
+	}
+	if len(results.candidates) != 2 || results.candidates[0].Address != "127.0.0.1" || results.candidates[1].Address != "127.0.0.2" {
+		t.Errorf("candidate order = %+v, want static then late once", results.candidates)
+	}
+}
+
+func TestScannerNeverDialsLateTargetOutsideSet(t *testing.T) {
+	connector.AllowLoopbackForTest(t)
+	lateListener, err := net.Listen("tcp", "127.0.0.2:0")
+	if err != nil {
+		t.Skipf("cannot bind 127.0.0.2: %v", err)
+	}
+	defer func() { _ = lateListener.Close() }()
+	port := lateListener.Addr().(*net.TCPAddr).Port
+
+	var lateDials atomic.Int32
+	scanner := NewScanner([]connector.TypeDiscovery{hint("fake_late", "http", port, "/", bodyIs("found"))})
+	scanner.newDialer = func(timeout time.Duration, allowed interface{ Contains(netip.Addr) bool }) *net.Dialer {
+		dialer := connector.GuardedDialerForSet(timeout, allowed)
+		control := dialer.Control
+		dialer.Control = func(network, address string, raw syscall.RawConn) error {
+			host, _, _ := net.SplitHostPort(address)
+			if host == "127.0.0.2" {
+				lateDials.Add(1)
+			}
+			return control(network, address, raw)
+		}
+		return dialer
+	}
+	late := make(chan netip.Addr, 1)
+	late <- netip.MustParseAddr("127.0.0.2")
+	close(late)
+	progress := scanner.Run(context.Background(), Targets{
+		Set:    NewTargetSet(Ranges{rangeOf(t, "127.0.0.1/32")}),
+		Static: []netip.Addr{netip.MustParseAddr("127.0.0.1")},
+		Late:   late,
+	}, Callbacks{})
+	if lateDials.Load() != 0 {
+		t.Errorf("late target had %d dial attempts, want none", lateDials.Load())
+	}
+	if progress != (Progress{Done: 1, Total: 1}) {
+		t.Errorf("progress = %+v, want only the static target", progress)
+	}
+}
+
+func TestScannerWaitsForLateChannelToClose(t *testing.T) {
+	late := make(chan netip.Addr)
+	done := make(chan Progress, 1)
+	go func() {
+		done <- NewScanner(nil).Run(context.Background(), Targets{Set: NewTargetSet(nil), Late: late}, Callbacks{})
+	}()
+	select {
+	case progress := <-done:
+		t.Fatalf("Run returned before the late channel closed: %+v", progress)
+	case <-time.After(30 * time.Millisecond):
+	}
+	close(late)
+	select {
+	case progress := <-done:
+		if progress != (Progress{}) {
+			t.Errorf("progress = %+v, want empty", progress)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Run did not return after the late channel closed")
+	}
+}
+
+func TestScannerCancellationWhileWaitingForLateTargets(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	late := make(chan netip.Addr)
+	done := make(chan Progress, 1)
+	go func() {
+		done <- NewScanner(nil).Run(ctx, Targets{Set: NewTargetSet(nil), Late: late}, Callbacks{})
+	}()
+	cancel()
+	select {
+	case progress := <-done:
+		if progress != (Progress{}) {
+			t.Errorf("progress = %+v, want empty", progress)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Run did not stop after cancellation")
 	}
 }
 
@@ -153,7 +418,7 @@ func TestScannerOpenPortOfAnotherProductIsAnsweredNotReported(t *testing.T) {
 
 	var c collector
 	p := NewScanner([]connector.TypeDiscovery{hint("fake_a", "http", portOf(t, srv.URL), "/id", bodyIs("fake-product"))}).
-		Run(context.Background(), rangeOf(t, "127.0.0.1/32"), c.callbacks())
+		Run(context.Background(), targetsOf(rangeOf(t, "127.0.0.1/32")), c.callbacks())
 	if len(c.candidates) != 0 {
 		t.Errorf("candidates = %+v, want none", c.candidates)
 	}
@@ -191,7 +456,7 @@ func TestScannerPortOutsideTheListIsNeverDialled(t *testing.T) {
 
 	var c collector
 	p := NewScanner([]connector.TypeDiscovery{hint("fake_a", "http", closedPort, "/", bodyIs("x"))}).
-		Run(context.Background(), rangeOf(t, "127.0.0.1/32"), c.callbacks())
+		Run(context.Background(), targetsOf(rangeOf(t, "127.0.0.1/32")), c.callbacks())
 	time.Sleep(50 * time.Millisecond)
 	if unlisted.Load() != 0 {
 		t.Errorf("unlisted port received %d connections", unlisted.Load())
@@ -217,7 +482,7 @@ func TestScannerTwoProductsOnOneHost(t *testing.T) {
 	p := NewScanner([]connector.TypeDiscovery{
 		hint("fake_a", "http", portOf(t, a.URL), "/", bodyIs("product-a")),
 		hint("fake_b", "http", portOf(t, b.URL), "/", bodyIs("product-b")),
-	}).Run(context.Background(), rangeOf(t, "127.0.0.1/32"), c.callbacks())
+	}).Run(context.Background(), targetsOf(rangeOf(t, "127.0.0.1/32")), c.callbacks())
 
 	var types []string
 	for _, cand := range c.candidates {
@@ -254,7 +519,7 @@ func TestScannerFirstConfirmingProbeWinsPerType(t *testing.T) {
 		URLTemplate: "{scheme}://{host}:{port}",
 	}}
 	var c collector
-	NewScanner([]connector.TypeDiscovery{h}).Run(context.Background(), rangeOf(t, "127.0.0.1/32"), c.callbacks())
+	NewScanner([]connector.TypeDiscovery{h}).Run(context.Background(), targetsOf(rangeOf(t, "127.0.0.1/32")), c.callbacks())
 	if len(c.candidates) != 1 || c.candidates[0].Port != portOf(t, first.URL) {
 		t.Errorf("candidates = %+v, want only the first confirming probe", c.candidates)
 	}
@@ -291,7 +556,7 @@ func TestScannerDoesNotFollowRedirects(t *testing.T) {
 	}
 	var c collector
 	NewScanner([]connector.TypeDiscovery{hint("fake_redirect", "http", portOf(t, src.URL), "/", match)}).
-		Run(context.Background(), rangeOf(t, "127.0.0.1/32"), c.callbacks())
+		Run(context.Background(), targetsOf(rangeOf(t, "127.0.0.1/32")), c.callbacks())
 
 	if targetHits.Load() != 0 {
 		t.Errorf("redirect target received %d requests, want 0", targetHits.Load())
@@ -326,7 +591,7 @@ func TestScannerCapsBodyAndTimesOutSlowServers(t *testing.T) {
 	})
 	s.requestTimeout = 150 * time.Millisecond
 	start := time.Now()
-	p := s.Run(context.Background(), rangeOf(t, "127.0.0.1/32"), c.callbacks())
+	p := s.Run(context.Background(), targetsOf(rangeOf(t, "127.0.0.1/32")), c.callbacks())
 
 	if bodyLen.Load() != maxBody {
 		t.Errorf("matcher saw %d body bytes, want %d", bodyLen.Load(), maxBody)
@@ -354,8 +619,8 @@ func TestScannerDialsOnlyInsideTheRange(t *testing.T) {
 	var mu sync.Mutex
 	var dialled []string
 	s := NewScanner([]connector.TypeDiscovery{hint("fake_a", "http", port, "/", bodyIs("x"))})
-	s.newDialer = func(timeout time.Duration, allowed *net.IPNet) *net.Dialer {
-		d := connector.GuardedDialerForRange(timeout, allowed)
+	s.newDialer = func(timeout time.Duration, allowed interface{ Contains(netip.Addr) bool }) *net.Dialer {
+		d := connector.GuardedDialerForSet(timeout, allowed)
 		inner := d.Control
 		d.Control = func(network, address string, c syscall.RawConn) error {
 			mu.Lock()
@@ -366,7 +631,7 @@ func TestScannerDialsOnlyInsideTheRange(t *testing.T) {
 		return d
 	}
 	r := rangeOf(t, "127.0.0.0/30")
-	p := s.Run(context.Background(), r, Callbacks{})
+	p := s.Run(context.Background(), targetsOf(r), Callbacks{})
 	if p.Total != 2 || p.Done != 2 {
 		t.Fatalf("progress = %+v, want 2 hosts (network and broadcast skipped)", p)
 	}
@@ -375,7 +640,7 @@ func TestScannerDialsOnlyInsideTheRange(t *testing.T) {
 	}
 	for _, a := range dialled {
 		host, _, _ := net.SplitHostPort(a)
-		if !r.IPNet().Contains(net.ParseIP(host)) || host == "127.0.0.0" || host == "127.0.0.3" {
+		if !r.prefix.Contains(netip.MustParseAddr(host)) || host == "127.0.0.0" || host == "127.0.0.3" {
 			t.Errorf("dialled %s outside the probe set", a)
 		}
 	}
@@ -393,8 +658,8 @@ func TestScannerCancellationStopsFurtherDials(t *testing.T) {
 	var dials atomic.Int32
 	s := NewScanner([]connector.TypeDiscovery{hint("fake_a", "http", port, "/", bodyIs("x"))})
 	s.maxConns = 1
-	s.newDialer = func(timeout time.Duration, allowed *net.IPNet) *net.Dialer {
-		d := connector.GuardedDialerForRange(timeout, allowed)
+	s.newDialer = func(timeout time.Duration, allowed interface{ Contains(netip.Addr) bool }) *net.Dialer {
+		d := connector.GuardedDialerForSet(timeout, allowed)
 		inner := d.Control
 		d.Control = func(network, address string, c syscall.RawConn) error {
 			dials.Add(1)
@@ -406,7 +671,7 @@ func TestScannerCancellationStopsFurtherDials(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	var once sync.Once
-	p := s.Run(ctx, rangeOf(t, "127.0.0.0/24"), Callbacks{OnProgress: func(Progress) { once.Do(cancel) }})
+	p := s.Run(ctx, targetsOf(rangeOf(t, "127.0.0.0/24")), Callbacks{OnProgress: func(Progress) { once.Do(cancel) }})
 
 	atReturn := dials.Load()
 	time.Sleep(100 * time.Millisecond)
@@ -422,11 +687,11 @@ func TestScannerCancellationStopsFurtherDials(t *testing.T) {
 }
 
 func TestScannerNoHintsOrNoHosts(t *testing.T) {
-	if p := NewScanner(nil).Run(context.Background(), rangeOf(t, "127.0.0.1/32"), Callbacks{}); p.Done != 0 {
+	if p := NewScanner(nil).Run(context.Background(), targetsOf(rangeOf(t, "127.0.0.1/32")), Callbacks{}); p.Done != 0 {
 		t.Errorf("no hints: progress = %+v", p)
 	}
 	h := hint("fake_a", "http", 1, "/", bodyIs("x"))
-	if p := NewScanner([]connector.TypeDiscovery{h}).Run(context.Background(), Range{}, Callbacks{}); p != (Progress{}) {
+	if p := NewScanner([]connector.TypeDiscovery{h}).Run(context.Background(), targetsOf(Range{}), Callbacks{}); p != (Progress{}) {
 		t.Errorf("zero range: progress = %+v", p)
 	}
 }
@@ -445,7 +710,7 @@ func TestScannerPanickingMatcherIsNoMatch(t *testing.T) {
 		hint("fake_nil", "http", port, "/", nil),
 		hint("fake_ok", "http", port, "/", bodyIs("fake-product")),
 	})
-	p := s.Run(context.Background(), rangeOf(t, "127.0.0.1/32"), c.callbacks())
+	p := s.Run(context.Background(), targetsOf(rangeOf(t, "127.0.0.1/32")), c.callbacks())
 
 	if len(c.candidates) != 1 || c.candidates[0].Type != "fake_ok" {
 		t.Errorf("candidates = %+v, want only the type whose matcher works", c.candidates)
@@ -479,7 +744,7 @@ func TestScannerCapsResponseHeaders(t *testing.T) {
 
 	var c collector
 	s := NewScanner([]connector.TypeDiscovery{hint("fake_a", "http", l.Addr().(*net.TCPAddr).Port, "/", func(r connector.DiscoveryResponse) bool { return r.Status == 200 })})
-	p := s.Run(context.Background(), rangeOf(t, "127.0.0.1/32"), c.callbacks())
+	p := s.Run(context.Background(), targetsOf(rangeOf(t, "127.0.0.1/32")), c.callbacks())
 
 	if len(c.candidates) != 0 {
 		t.Errorf("candidates = %+v, want a header block over the cap rejected", c.candidates)
@@ -487,4 +752,33 @@ func TestScannerCapsResponseHeaders(t *testing.T) {
 	if p != (Progress{Done: 1, Total: 1, Answered: 1}) {
 		t.Errorf("progress = %+v, want the scan finished", p)
 	}
+}
+
+type discoveryRoundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f discoveryRoundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
+
+func TestScannerTLSCaptureAllowsTraceCallbacksAfterRequestFailure(t *testing.T) {
+	finished := make(chan struct{})
+	client := &http.Client{Transport: discoveryRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+		trace := httptrace.ContextClientTrace(req.Context())
+		go func() {
+			defer close(finished)
+			state := tls.ConnectionState{PeerCertificates: []*x509.Certificate{{}}}
+			for range 10000 {
+				trace.TLSHandshakeDone(state, nil)
+			}
+		}()
+		return nil, context.Canceled
+	})}
+	s := NewScanner(nil)
+	_, ok := s.probe(context.Background(), client, netip.MustParseAddr("10.0.0.5"), connector.DiscoveryProbe{
+		Scheme: "https", Port: 443, Path: "/",
+	})
+	if ok {
+		t.Fatal("cancelled request reported a response")
+	}
+	<-finished
 }

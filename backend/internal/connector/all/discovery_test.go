@@ -79,6 +79,29 @@ func TestDiscoveryHintsAreComplete(t *testing.T) {
 	}
 }
 
+func TestDiscoveryAddOnsAreDeclaredOnlyForFirewalls(t *testing.T) {
+	want := map[string][]connector.DiscoveryAddOn{
+		"opnsense": {{Type: "dnsresolver", URLTemplate: "{scheme}://{host}:{port}"}},
+		"pfsense":  {{Type: "dnsresolver", URLTemplate: "{scheme}://{host}:{port}"}},
+	}
+	got := map[string][]connector.DiscoveryAddOn{}
+	for _, h := range connector.DiscoveryHints() {
+		if len(h.AddOns) > 0 {
+			got[h.Type] = h.AddOns
+		}
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("discovery add-ons = %#v, want %#v", got, want)
+	}
+}
+
+func TestDiscoveryHintURLBracketsIPv6Host(t *testing.T) {
+	h := connector.DiscoveryHint{URLTemplate: "{scheme}://{host}:{port}/api"}
+	if got, want := h.URL("https", "fd00::1", 443), "https://[fd00::1]:443/api"; got != want {
+		t.Errorf("IPv6 URL() = %q, want %q", got, want)
+	}
+}
+
 // TestDiscoveryMatchersDoNotCrossMatch checks that no product's identifying
 // response is mistaken for another product's on a shared port, and that every
 // discoverable type has fixtures.

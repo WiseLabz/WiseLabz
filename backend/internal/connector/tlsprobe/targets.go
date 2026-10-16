@@ -21,6 +21,13 @@ const (
 	maxQuotedLine = 64
 )
 
+// Target is one TLS target after parsing and import expansion.
+type Target struct {
+	Host     string
+	Port     int
+	Imported bool
+}
+
 // target is one host and port to handshake with.
 type target struct {
 	host     string // lower-cased name, or the canonical form of an IP literal
@@ -155,6 +162,13 @@ func parseTargets(raw string) ([]target, []error) {
 	return targets, errs
 }
 
+// ParseTargets parses newline-separated manual targets using the same rules
+// the TLS Probe connector applies to its targets setting.
+func ParseTargets(raw string) ([]Target, []error) {
+	targets, errs := parseTargets(raw)
+	return exportTargets(targets), errs
+}
+
 // importPort reads the optional import_port setting.
 func importPort(config map[string]any) (int, error) {
 	raw, ok := config["import_port"]
@@ -206,6 +220,34 @@ func listedTargets(config map[string]any) ([]target, []error) {
 		return nil, []error{errors.New("must be a string with one host:port per line")}
 	}
 	return parseTargets(text)
+}
+
+// ConfiguredTargets returns the targets a TLS Probe would currently inspect,
+// including hosts from its related Traefik snapshot. It performs no network
+// requests and returns no targets when the manual targets or import port are
+// invalid.
+func ConfiguredTargets(config map[string]any) ([]Target, []error) {
+	listed, errs := listedTargets(config)
+	if len(errs) > 0 {
+		return nil, errs
+	}
+	port, err := importPort(config)
+	if err != nil {
+		return nil, []error{err}
+	}
+	targets, _ := withImported(listed, importedHosts(config), port)
+	return exportTargets(targets), nil
+}
+
+func exportTargets(targets []target) []Target {
+	if targets == nil {
+		return nil
+	}
+	exported := make([]Target, len(targets))
+	for i, target := range targets {
+		exported[i] = Target{Host: target.host, Port: target.port, Imported: target.imported}
+	}
+	return exported
 }
 
 // checkConfig is the save-time and Validate-time check. It never dials.

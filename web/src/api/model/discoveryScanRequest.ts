@@ -8,6 +8,16 @@
  */
 
 export interface DiscoveryScanRequest {
-  /** IPv4 range in CIDR notation, RFC 1918 space, /24 to /32 */
-  cidr: string;
+  /**
+   * IPv4 RFC 1918 or 100.64.0.0/10 ranges, /22 to /32; at most 1,024 distinct usable addresses
+   * @maxItems 16
+   */
+  ranges?: string[];
+  includeInventory?: boolean;
+  askNetwork?: boolean;
+  /**
+   * One-range shorthand; ignored when ranges is present; field errors retain the name cidr
+   * @deprecated
+   */
+  cidr?: string;
 }

@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"net/netip"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -371,12 +372,10 @@ func GuardedDialer(timeout time.Duration) *net.Dialer {
 	}
 }
 
-// GuardedDialerForRange is GuardedDialer narrowed to an allowlist: on top of
-// the loopback/link-local/unspecified/multicast block, Control returns
-// BlockedAddressError for any address outside the given range. The network
-// discovery scan dials through it so a probe cannot leave the range the admin
-// submitted, whatever the caller does with host names or redirects.
-func GuardedDialerForRange(timeout time.Duration, allowed *net.IPNet) *net.Dialer {
+// GuardedDialerForSet is GuardedDialer narrowed to an exact target set: on top
+// of the loopback/link-local/unspecified/multicast block, Control returns
+// BlockedAddressError for any address the set does not contain.
+func GuardedDialerForSet(timeout time.Duration, allowed interface{ Contains(netip.Addr) bool }) *net.Dialer {
 	return &net.Dialer{
 		Timeout: timeout,
 		Control: func(_, address string, _ syscall.RawConn) error {
@@ -384,7 +383,8 @@ func GuardedDialerForRange(timeout time.Duration, allowed *net.IPNet) *net.Diale
 			if err != nil {
 				return err
 			}
-			if allowed == nil || !allowed.Contains(ip) {
+			addr, ok := netip.AddrFromSlice(ip)
+			if !ok || allowed == nil || !allowed.Contains(addr.Unmap()) {
 				return &BlockedAddressError{IP: ip}
 			}
 			return nil
@@ -393,7 +393,7 @@ func GuardedDialerForRange(timeout time.Duration, allowed *net.IPNet) *net.Diale
 }
 
 // guardedAddress parses the dialed host:port and applies the blocked-address
-// rules shared by GuardedDialer and GuardedDialerForRange, returning the IP.
+// rules shared by GuardedDialer and GuardedDialerForSet, returning the IP.
 func guardedAddress(address string) (net.IP, error) {
 	host, _, err := net.SplitHostPort(address)
 	if err != nil {

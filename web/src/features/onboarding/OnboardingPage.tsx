@@ -29,15 +29,17 @@ export function OnboardingPage() {
   const navigate = useNavigate();
   const isInstanceAdmin = useIsInstanceAdmin();
   const [step, setStep] = useState<Step>('welcome');
-  // Every connector created on the way to the sync step: one when added by hand,
-  // any number when connected from a network scan.
+  // Every connector created or edited on the way to the sync step: one when added
+  // by hand, and any number of candidate, add-on or TLS Probe saves from a scan.
   const [connectors, setConnectors] = useState<Connector[]>([]);
   // While the queue's own form is open the manual one is hidden: both would use the same field ids.
   const [queueOpen, setQueueOpen] = useState(false);
   // The queue reports a save and its end in one event, before state has flushed.
   const createdRef = useRef<Connector[]>([]);
   const addConnector = (c: Connector) => {
-    createdRef.current = [...createdRef.current, c];
+    // An edited TLS Probe is reported through the same callback as a new
+    // connector. Upsert by id so it appears in the sync step once.
+    createdRef.current = [...createdRef.current.filter((item) => item.id !== c.id), c];
     setConnectors(createdRef.current);
   };
 

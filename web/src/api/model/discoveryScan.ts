@@ -7,26 +7,38 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { DiscoveryCandidate } from './discoveryCandidate';
+import type { DiscoveryScanSkipped } from './discoveryScanSkipped';
+import type { DiscoveryScanSources } from './discoveryScanSources';
 import type { DiscoveryScanState } from './discoveryScanState';
+import type { DiscoveryTLSTarget } from './discoveryTLSTarget';
 
 /**
  * The running or most recent network scan (in memory only, see GET /discovery/scan).
  */
 export interface DiscoveryScan {
   id: string;
-  /** The scanned IPv4 range with host bits masked */
+  /** First masked range or the empty string */
   cidr: string;
+  /** Typed IPv4 ranges with host bits masked */
+  ranges?: string[];
+  includeInventory?: boolean;
+  askNetwork?: boolean;
   state: DiscoveryScanState;
   startedAt: string;
   /** Absent while the scan is running */
   endedAt?: string;
   /** Addresses finished */
   done: number;
-  /** Addresses in the range */
+  /** Admitted addresses; grows when network answers are admitted */
   total: number;
   /** Addresses where any listed port accepted a connection */
   answered: number;
-  /** True when the 60 s deadline cut the scan short */
+  /** True when the scaled deadline cut the scan short */
   partial: boolean;
   candidates: DiscoveryCandidate[];
+  sources?: DiscoveryScanSources;
+  skipped?: DiscoveryScanSkipped;
+  /** Distinct allowed hosts answering the network queries, including hosts that did not fit */
+  passiveAnswered?: number;
+  tlsTargets?: DiscoveryTLSTarget[];
 }
