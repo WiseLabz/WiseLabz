@@ -248,11 +248,14 @@ func (s *PassiveSource) Run(ctx context.Context, onAddress func(netip.Addr)) {
 				if duplicate || onAddress == nil || ctx.Err() != nil {
 					continue
 				}
-				callbackMu.Lock()
-				if ctx.Err() == nil {
-					onAddress(addr)
-				}
-				callbackMu.Unlock()
+				func() {
+					// Deferred so a panicking callback cannot leave the other readers blocked.
+					callbackMu.Lock()
+					defer callbackMu.Unlock()
+					if ctx.Err() == nil {
+						onAddress(addr)
+					}
+				}()
 			}
 		}(conn)
 	}

@@ -300,6 +300,46 @@ func TestPassiveSourceCallbackPanicDoesNotEscapeRun(t *testing.T) {
 	}
 }
 
+func TestPassiveSourceCallbackPanicDoesNotBlockOtherReaders(t *testing.T) {
+	first, second := netip.MustParseAddr("192.168.1.50"), netip.MustParseAddr("192.168.1.51")
+	source := &PassiveSource{
+		interfaces: fakePassiveInterfaceLister{interfaces: []passiveInterface{{
+			device:    net.Interface{Name: "eth-test", Index: 7, Flags: net.FlagUp | net.FlagMulticast},
+			addresses: []netip.Addr{netip.MustParseAddr("192.168.1.2")},
+		}}},
+		sender: &fakePassiveSender{conns: []*fakePassiveConn{
+			newFakePassiveConn(passiveRead{payload: []byte("answer"), source: udpSource(first)}),
+			newFakePassiveConn(passiveRead{payload: []byte("answer"), source: udpSource(second)}),
+		}},
+		clock: fakePassiveClock{now: time.Now()},
+	}
+	var mu sync.Mutex
+	var calls []netip.Addr
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		source.Run(context.Background(), func(addr netip.Addr) {
+			mu.Lock()
+			calls = append(calls, addr)
+			n := len(calls)
+			mu.Unlock()
+			if n == 1 {
+				panic("boom")
+			}
+		})
+	}()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Run hung after a callback panic")
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(calls) != 2 {
+		t.Errorf("callbacks = %v, want both addresses delivered", calls)
+	}
+}
+
 func TestSystemPacketSenderLocalUDPPair(t *testing.T) {
 	interfaces, err := (systemInterfaceLister{}).List()
 	if err != nil {
