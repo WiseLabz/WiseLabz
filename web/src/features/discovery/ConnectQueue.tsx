@@ -4,9 +4,13 @@
  * stay the standard connector create/edit forms; skip advances and stop returns
  * control to the result list.
  */
-import { useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useGetConnectors } from '../../api/generated/connectors/connectors';
+import {
+  getGetConnectorsQueryKey,
+  useGetConnectors,
+  useGetConnectorsConnectorId,
+} from '../../api/generated/connectors/connectors';
 import type { Connector, DiscoveryAddOn, DiscoveryCandidate, DiscoveryTLSTarget } from '../../api/model';
 import { Button } from '../../components/ui/Button';
 import { ErrorState, SkeletonRows } from '../../components/ui/states';
@@ -21,6 +25,8 @@ type QueueItem =
   | { kind: 'tls'; targets: DiscoveryTLSTarget[] };
 
 const TLS_TARGET_LIMIT = 100;
+// The connector list pages at 20 by default and caps at 100.
+const TLS_PROBE_LOOKUP_PAGE_SIZE = 100;
 
 function queueItems(
   candidates: DiscoveryCandidate[],
@@ -113,6 +119,160 @@ function targetsStillListed(saved: Connector, targets: DiscoveryTLSTarget[]) {
   return targets.filter((target) => savedLines.has(targetIdentity(endpointLabel(target.address, target.port))));
 }
 
+/**
+ * The certificate-monitoring step. The connector list blanks `config`, so the
+ * selected probe's stored targets come from the detail read (the same cache
+ * entry ConnectorEditForm uses) and the form opens only once they are known.
+ */
+function TLSProbeStep({
+  targets,
+  position,
+  controls,
+  onAdvance,
+  onSaved,
+}: {
+  targets: DiscoveryTLSTarget[];
+  position: string | null;
+  controls: ReactNode;
+  onAdvance: () => void;
+  onSaved?: (saved: Connector, monitoredTargets: DiscoveryTLSTarget[]) => void;
+}) {
+  const { t } = useTranslation();
+  const [selectedProbeId, setSelectedProbeId] = useState('');
+  // The list is newest-first and defaults to 20 items; ask for the maximum page
+  // under its own cache key so an older probe is not missed.
+  const connectorsQuery = useGetConnectors({
+    query: { queryKey: [...getGetConnectorsQueryKey(), { pageSize: TLS_PROBE_LOOKUP_PAGE_SIZE }] },
+    request: { params: { pageSize: TLS_PROBE_LOOKUP_PAGE_SIZE } },
+  });
+  const { data: connectors } = connectorsQuery;
+  const probes = (connectors ?? []).filter(
+    (connector) => connector.type === 'tlsprobe' && connector.managedBy !== 'config' && connector.managedBy !== 'config-orphaned',
+  );
+  // The list endpoint is newest-first, so the first probe is the default.
+  const selectedProbe = probes.find((probe) => probe.id === selectedProbeId) ?? probes[0];
+  const detailQuery = useGetConnectorsConnectorId(selectedProbe?.id ?? '', {
+    query: { enabled: Boolean(selectedProbe) },
+  });
+  const detail = detailQuery.data;
+  const plan = useMemo(
+    () => targetPlan(String(detail?.config?.targets ?? ''), targets),
+    [detail?.config?.targets, targets],
+  );
+  const overrides = useMemo(() => ({ targets: plan.targets }), [plan.targets]);
+
+  const header = (
+    <div className="flex flex-wrap items-center justify-between gap-2">
+      <div>
+        <h2 id="connect-queue-title" className="text-sm font-semibold text-ink">
+          {t('discovery.monitorCertificates', { count: targets.length })}
+        </h2>
+        {position && <p className="text-2xs text-ink-faint" aria-live="polite">{position}</p>}
+      </div>
+      {controls}
+    </div>
+  );
+
+  if (connectorsQuery.isLoading) {
+    return (
+      <section aria-labelledby="connect-queue-title" className="space-y-3">
+        {header}
+        <Panel className="p-6"><SkeletonRows rows={3} /></Panel>
+      </section>
+    );
+  }
+  if (connectorsQuery.isError) {
+    return (
+      <section aria-labelledby="connect-queue-title" className="space-y-3">
+        {header}
+        <ErrorState
+          description={t('discovery.queue.connectorsLoadError')}
+          onRetry={() => void connectorsQuery.refetch()}
+        />
+      </section>
+    );
+  }
+
+  const chooser = probes.length > 1 && (
+    <label className="block text-xs text-ink-muted">
+      {t('discovery.chooseProbe')}
+      <select
+        aria-label={t('discovery.chooseProbe')}
+        value={selectedProbe?.id ?? ''}
+        onChange={(event) => setSelectedProbeId(event.target.value)}
+        className="mt-1 block h-9 w-full rounded-sm border border-line bg-surface px-2.5 text-sm text-ink"
+      >
+        {probes.map((probe) => (
+          <option key={probe.id} value={probe.id}>{probe.name}</option>
+        ))}
+      </select>
+    </label>
+  );
+
+  if (selectedProbe && !detail) {
+    return (
+      <section aria-labelledby="connect-queue-title" className="space-y-3">
+        {header}
+        {chooser}
+        {detailQuery.isError ? (
+          <ErrorState
+            description={t('discovery.queue.connectorsLoadError')}
+            onRetry={() => void detailQuery.refetch()}
+          />
+        ) : (
+          <Panel className="p-6"><SkeletonRows rows={3} /></Panel>
+        )}
+      </section>
+    );
+  }
+
+  return (
+    <section aria-labelledby="connect-queue-title" className="space-y-3">
+      {header}
+      {chooser}
+
+      {plan.notAdded.length > 0 && (
+        <div className="rounded-sm border border-line-soft px-3 py-2 text-xs text-ink-muted">
+          <p className="font-medium">{t('discovery.notAdded')}</p>
+          <ul className="mt-1 space-y-1">
+            {plan.notAdded.map((target) => (
+              <li key={`${target.address}|${target.port}`} className="font-mono">
+                {endpointLabel(target.address, target.port)}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {selectedProbe ? (
+        <ConnectorEditForm
+          key={selectedProbe.id}
+          connectorId={selectedProbe.id}
+          overrides={overrides}
+          onCancel={onAdvance}
+          onSaved={(saved) => {
+            onSaved?.(saved, targetsStillListed(saved, targets));
+            onAdvance();
+          }}
+        />
+      ) : (
+        <ConnectorForm
+          key="tlsprobe-create"
+          initialType="tlsprobe"
+          initialValues={{
+            name: t('discovery.tlsProbe'),
+            targets: plan.targets,
+          }}
+          onCreated={(created) => {
+            onSaved?.(created, targetsStillListed(created, targets));
+            onAdvance();
+          }}
+        />
+      )}
+    </section>
+  );
+}
+
 export function ConnectQueue({
   candidates,
   addOns,
@@ -138,11 +298,8 @@ export function ConnectQueue({
 }) {
   const { t } = useTranslation();
   const [index, setIndex] = useState(0);
-  const [selectedProbeId, setSelectedProbeId] = useState('');
   const currentIndex = useRef(0);
   const stopped = useRef(false);
-  const connectorsQuery = useGetConnectors();
-  const { data: connectors } = connectorsQuery;
   const items = useMemo(() => queueItems(candidates, addOns, tlsTargets), [candidates, addOns, tlsTargets]);
   const item = items[index];
   if (!item) return null;
@@ -235,117 +392,13 @@ export function ConnectQueue({
     );
   }
 
-  const probes = (connectors ?? []).filter(
-    (connector) => connector.type === 'tlsprobe' && connector.managedBy !== 'config' && connector.managedBy !== 'config-orphaned',
-  );
-  if (connectorsQuery.isLoading) {
-    return (
-      <section aria-labelledby="connect-queue-title" className="space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <h2 id="connect-queue-title" className="text-sm font-semibold text-ink">
-              {t('discovery.monitorCertificates', { count: item.targets.length })}
-            </h2>
-            {position && <p className="text-2xs text-ink-faint" aria-live="polite">{position}</p>}
-          </div>
-          {controls}
-        </div>
-        <Panel className="p-6"><SkeletonRows rows={3} /></Panel>
-      </section>
-    );
-  }
-  if (connectorsQuery.isError) {
-    return (
-      <section aria-labelledby="connect-queue-title" className="space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <h2 id="connect-queue-title" className="text-sm font-semibold text-ink">
-              {t('discovery.monitorCertificates', { count: item.targets.length })}
-            </h2>
-            {position && <p className="text-2xs text-ink-faint" aria-live="polite">{position}</p>}
-          </div>
-          {controls}
-        </div>
-        <ErrorState
-          description={t('discovery.queue.connectorsLoadError')}
-          onRetry={() => void connectorsQuery.refetch()}
-        />
-      </section>
-    );
-  }
-  // The list endpoint is newest-first, so the first probe is the default.
-  const selectedProbe = probes.find((probe) => probe.id === selectedProbeId) ?? probes[0];
-  const plan = targetPlan(String(selectedProbe?.config?.targets ?? ''), item.targets);
   return (
-    <section aria-labelledby="connect-queue-title" className="space-y-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <h2 id="connect-queue-title" className="text-sm font-semibold text-ink">
-            {t('discovery.monitorCertificates', { count: item.targets.length })}
-          </h2>
-          {position && (
-            <p className="text-2xs text-ink-faint" aria-live="polite">
-              {position}
-            </p>
-          )}
-        </div>
-        {controls}
-      </div>
-
-      {probes.length > 1 && (
-        <label className="block text-xs text-ink-muted">
-          {t('discovery.chooseProbe')}
-          <select
-            aria-label={t('discovery.chooseProbe')}
-            value={selectedProbe?.id ?? ''}
-            onChange={(event) => setSelectedProbeId(event.target.value)}
-            className="mt-1 block h-9 w-full rounded-sm border border-line bg-surface px-2.5 text-sm text-ink"
-          >
-            {probes.map((probe) => (
-              <option key={probe.id} value={probe.id}>{probe.name}</option>
-            ))}
-          </select>
-        </label>
-      )}
-
-      {plan.notAdded.length > 0 && (
-        <div className="rounded-sm border border-line-soft px-3 py-2 text-xs text-ink-muted">
-          <p className="font-medium">{t('discovery.notAdded')}</p>
-          <ul className="mt-1 space-y-1">
-            {plan.notAdded.map((target) => (
-              <li key={`${target.address}|${target.port}`} className="font-mono">
-                {endpointLabel(target.address, target.port)}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {selectedProbe ? (
-        <ConnectorEditForm
-          key={selectedProbe.id}
-          connectorId={selectedProbe.id}
-          overrides={{ targets: plan.targets }}
-          onCancel={advance}
-          onSaved={(saved) => {
-            onTLSProbeSaved?.(saved, targetsStillListed(saved, item.targets));
-            advance();
-          }}
-        />
-      ) : (
-        <ConnectorForm
-          key="tlsprobe-create"
-          initialType="tlsprobe"
-          initialValues={{
-            name: t('discovery.tlsProbe'),
-            targets: plan.targets,
-          }}
-          onCreated={(created) => {
-            onTLSProbeSaved?.(created, targetsStillListed(created, item.targets));
-            advance();
-          }}
-        />
-      )}
-    </section>
+    <TLSProbeStep
+      targets={item.targets}
+      position={position}
+      controls={controls}
+      onAdvance={advance}
+      onSaved={onTLSProbeSaved}
+    />
   );
 }

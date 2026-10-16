@@ -14,7 +14,11 @@ const mocks = vi.hoisted(() => ({
   getConnectors: [] as { id: string; type: string; name: string; managedBy?: string; config?: Record<string, string> }[],
   connectorsLoading: false,
   connectorsError: false,
+  detailLoading: false,
+  detailError: false,
   refetchConnectors: vi.fn(),
+  refetchDetail: vi.fn(),
+  listOptions: [] as unknown[],
   getScan: vi.fn(),
 }));
 const postConnectors = mocks.postConnectors;
@@ -84,17 +88,22 @@ const schemas = [
 
 vi.mock('../../api/generated/connectors/connectors', () => ({
   useGetConnectorsSchema: () => ({ data: schemas, isLoading: false, isError: false, refetch: vi.fn() }),
-  useGetConnectors: () => ({
-    data: mocks.getConnectors,
-    isLoading: mocks.connectorsLoading,
-    isError: mocks.connectorsError,
-    refetch: mocks.refetchConnectors,
-  }),
+  // Like GET /connectors, the list never carries a connector's config.
+  useGetConnectors: (options?: unknown) => {
+    mocks.listOptions.push(options);
+    return {
+      data: mocks.getConnectors.map((connector) => Object.fromEntries(Object.entries(connector).filter(([key]) => key !== 'config'))),
+      isLoading: mocks.connectorsLoading,
+      isError: mocks.connectorsError,
+      refetch: mocks.refetchConnectors,
+    };
+  },
+  // The detail read carries the config.
   useGetConnectorsConnectorId: (id: string) => ({
-    data: mocks.getConnectors.find((connector) => connector.id === id),
-    isLoading: false,
-    isError: false,
-    refetch: vi.fn(),
+    data: mocks.detailLoading || mocks.detailError ? undefined : mocks.getConnectors.find((connector) => connector.id === id),
+    isLoading: mocks.detailLoading,
+    isError: mocks.detailError,
+    refetch: mocks.refetchDetail,
   }),
   postConnectors: (...args: unknown[]) => postConnectors(...args),
   putConnectorsConnectorId: (...args: unknown[]) => mocks.putConnector(...args),
@@ -207,7 +216,11 @@ beforeEach(() => {
   mocks.getConnectors = [];
   mocks.connectorsLoading = false;
   mocks.connectorsError = false;
+  mocks.detailLoading = false;
+  mocks.detailError = false;
+  mocks.listOptions = [];
   mocks.refetchConnectors.mockReset();
+  mocks.refetchDetail.mockReset();
   let n = 0;
   postConnectors.mockImplementation(async (body: { name: string; type: string; config?: Record<string, string> }) => ({
     id: `c${++n}`,
@@ -430,6 +443,49 @@ describe('ConnectQueue', () => {
     fireEvent.click(screen.getByRole('button', { name: /retry/i }));
     expect(mocks.refetchConnectors).toHaveBeenCalledOnce();
     expect(screen.queryByRole('button', { name: 'TLS Probe' })).toBeNull();
+  });
+
+  it('holds the form until the probe detail loads, and offers retry when the detail read fails', async () => {
+    mocks.getConnectors = [tlsProbe('probe-1', 'Existing probe', 'existing.example:443')];
+    mocks.detailLoading = true;
+    const props = {
+      candidates: [],
+      tlsTargets: [tlsTarget('10.0.0.20')],
+      onCreated: vi.fn(),
+      onFinished: vi.fn(),
+      onStop: vi.fn(),
+    };
+    const view = render(wrap(<ConnectQueue {...props} />));
+    expect(screen.queryByLabelText('Targets')).toBeNull();
+    expect(screen.queryByText('Not added (100-target limit)')).toBeNull();
+
+    mocks.detailLoading = false;
+    mocks.detailError = true;
+    view.rerender(wrap(<ConnectQueue {...props} />));
+    expect(screen.getByText(/could not load tls probes/i)).toBeInTheDocument();
+    expect(screen.queryByLabelText('Targets')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /retry/i }));
+    expect(mocks.refetchDetail).toHaveBeenCalledOnce();
+
+    mocks.detailError = false;
+    view.rerender(wrap(<ConnectQueue {...props} />));
+    await waitFor(() => expect(screen.getByLabelText('Targets')).toHaveValue('existing.example:443\n10.0.0.20:443'));
+  });
+
+  it('looks for an existing TLS Probe in the largest connector page', () => {
+    render(wrap(
+      <ConnectQueue
+        candidates={[]}
+        tlsTargets={[tlsTarget('10.0.0.20')]}
+        onCreated={vi.fn()}
+        onFinished={vi.fn()}
+        onStop={vi.fn()}
+      />,
+    ));
+    expect(mocks.listOptions).toContainEqual(expect.objectContaining({
+      request: { params: { pageSize: 100 } },
+      query: { queryKey: [{ pageSize: 100 }] },
+    }));
   });
 
   it('creates a TLS Probe when none exists and skips the certificate offer before continuing', async () => {

@@ -60,7 +60,13 @@ const schemas = [
 
 vi.mock('../../api/generated/connectors/connectors', () => ({
   useGetConnectorsSchema: () => ({ data: schemas, isLoading: false, isError: false, refetch: vi.fn() }),
-  useGetConnectors: () => ({ data: mocks.connectors, isLoading: false, isError: false, refetch: vi.fn() }),
+  // Like GET /connectors, the list never carries a connector's config; the detail read does.
+  useGetConnectors: () => ({
+    data: mocks.connectors.map((connector) => Object.fromEntries(Object.entries(connector).filter(([key]) => key !== 'config'))),
+    isLoading: false,
+    isError: false,
+    refetch: vi.fn(),
+  }),
   useGetConnectorsConnectorId: (id: string) => ({
     data: mocks.connectors.find((connector) => connector.id === id),
     isLoading: false,
@@ -233,7 +239,7 @@ describe('OnboardingPage with a network scan', () => {
     useDiscovery.getState().setScan(scanOf([], [{ address: '10.0.0.20', port: 443, source: 'range' }]));
     renderOnboarding();
 
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Monitor 1 certificates' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Monitor 1 certificate' }));
     fireEvent.click(screen.getByRole('button', { name: /connect 1 selected/i }));
     const targets = await screen.findByLabelText('Targets');
     await waitFor(() => expect(targets).toHaveValue('existing.example:443\n10.0.0.20:443'));
