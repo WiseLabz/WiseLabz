@@ -3,10 +3,12 @@ package discovery
 import (
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"io"
 	"log/slog"
 	"net"
 	"net/http"
+	"net/http/httptrace"
 	"net/netip"
 	"sort"
 	"strconv"
@@ -43,14 +45,41 @@ type Candidate struct {
 	Port    int    `json:"port"`
 	// URL is the connector URL to prefill, in the config field URLField
 	// ("url" unless the type keeps its endpoint elsewhere).
-	URL      string `json:"url"`
-	URLField string `json:"urlField"`
+	URL      string  `json:"url"`
+	URLField string  `json:"urlField"`
+	Source   Source  `json:"source"`
+	AddOns   []AddOn `json:"addOns"`
 	// ConnectorID is set when an existing connector of the same type already
 	// points at this address and port.
 	ConnectorID string `json:"connectorId,omitempty"`
 }
 
-// Scanner probes the hosts of a Range for the products its hints describe.
+// AddOn is an additional connector that can be configured against a
+// discovered appliance.
+type AddOn struct {
+	Type        string `json:"type"`
+	URL         string `json:"url"`
+	ConnectorID string `json:"connectorId,omitempty"`
+}
+
+// TLSTarget identifies a probed address and port where a TLS handshake
+// completed, whether or not the response matched a product.
+type TLSTarget struct {
+	Address     string `json:"address"`
+	Port        int    `json:"port"`
+	Source      Source `json:"source"`
+	MonitoredBy string `json:"monitoredBy,omitempty"`
+}
+
+// Targets holds the admitted static addresses and addresses that may arrive
+// while a scan is running.
+type Targets struct {
+	Set    *TargetSet
+	Static []netip.Addr
+	Late   <-chan netip.Addr
+}
+
+// Scanner probes admitted targets for the products its hints describe.
 // The zero value is not usable; build one with NewScanner.
 type Scanner struct {
 	hints []connector.TypeDiscovery
@@ -59,9 +88,9 @@ type Scanner struct {
 	connectTimeout time.Duration
 	requestTimeout time.Duration
 	maxConns       int
-	// newDialer builds the range-scoped dialer for a scan; tests wrap it to
+	// newDialer builds the target-set-scoped dialer for a scan; tests wrap it to
 	// count dials.
-	newDialer func(timeout time.Duration, allowed *net.IPNet) *net.Dialer
+	newDialer func(timeout time.Duration, allowed interface{ Contains(netip.Addr) bool }) *net.Dialer
 }
 
 // NewScanner returns a Scanner for the given hints. The ports it connects to
@@ -85,45 +114,59 @@ func NewScanner(hints []connector.TypeDiscovery) *Scanner {
 		connectTimeout: connectTimeout,
 		requestTimeout: requestTimeout,
 		maxConns:       maxConns,
-		newDialer:      connector.GuardedDialerForRange,
+		newDialer:      connector.GuardedDialerForSet,
 	}
 }
 
-// Progress reports scan progress: hosts finished out of total, and how many of
-// those had a listed port accept a connection.
+// Progress reports scan progress: hosts finished out of total, and how many
+// of those had a listed port accept a connection.
 type Progress struct {
 	Done     int
 	Total    int
 	Answered int
 }
 
-// Callbacks receive scan events. Both are optional and are called from
-// scanner goroutines, possibly concurrently, so they must be safe for that.
+// Callbacks receive scan events. They are optional and may be called from
+// scanner goroutines concurrently, so callbacks must be safe for that.
 type Callbacks struct {
 	// OnProgress is called after each host finishes.
 	OnProgress func(Progress)
 	// OnCandidate is called once for each confirmed product, as it is found.
 	OnCandidate func(Candidate)
+	// OnTLSTarget is called once per address and port after a TLS handshake.
+	OnTLSTarget func(TLSTarget)
 }
 
-// Run scans every host of r and returns the final progress. It returns early
-// when ctx ends: hosts not yet started are skipped and no further connection
-// is opened. Every connection is made through a dialer scoped to r.
-func (s *Scanner) Run(ctx context.Context, r Range, cb Callbacks) Progress {
-	hosts := r.Hosts()
-	total := len(hosts)
-	if total == 0 || len(s.ports) == 0 {
-		return Progress{Total: total}
-	}
-
-	dialer := s.newDialer(s.connectTimeout, r.IPNet())
+// Run scans static targets before consuming late targets, stopping when the
+// late channel closes or the context ends. Only addresses in Set are scheduled.
+func (s *Scanner) Run(ctx context.Context, targets Targets, cb Callbacks) Progress {
+	dialer := s.newDialer(s.connectTimeout, targets.Set)
 	client := s.httpClient(dialer)
 	sem := make(chan struct{}, s.maxConns)
 
 	var done, answered atomic.Int64
 	var warned sync.Map // matcher panics already logged this scan
+	var tlsSeen sync.Map
 	var wg sync.WaitGroup
-	for _, host := range hosts {
+	var total atomic.Int64
+	seen := make(map[netip.Addr]struct{}, len(targets.Static))
+
+	schedule := func(host netip.Addr) {
+		if !host.IsValid() || host.Zone() != "" || targets.Set == nil {
+			return
+		}
+		host = host.Unmap()
+		if !targets.Set.Contains(host) {
+			return
+		}
+		if _, exists := seen[host]; exists {
+			return
+		}
+		seen[host] = struct{}{}
+		total.Add(1)
+		if len(s.ports) == 0 {
+			return
+		}
 		wg.Add(1)
 		go func(host netip.Addr) {
 			defer wg.Done()
@@ -133,7 +176,7 @@ func (s *Scanner) Run(ctx context.Context, r Range, cb Callbacks) Progress {
 			open := s.openPorts(ctx, dialer, sem, host)
 			if len(open) > 0 {
 				answered.Add(1)
-				s.probeHost(ctx, client, sem, &warned, host, open, cb.OnCandidate)
+				s.probeHost(ctx, client, sem, &warned, &tlsSeen, targets.Set, host, open, cb.OnCandidate, cb.OnTLSTarget)
 			}
 			// A host abandoned mid-way by cancellation is not counted as done.
 			if ctx.Err() != nil {
@@ -141,12 +184,31 @@ func (s *Scanner) Run(ctx context.Context, r Range, cb Callbacks) Progress {
 			}
 			d := done.Add(1)
 			if cb.OnProgress != nil {
-				cb.OnProgress(Progress{Done: int(d), Total: total, Answered: int(answered.Load())})
+				cb.OnProgress(Progress{Done: int(d), Total: int(total.Load()), Answered: int(answered.Load())})
 			}
 		}(host)
 	}
+
+	for _, host := range targets.Static {
+		schedule(host)
+	}
 	wg.Wait()
-	return Progress{Done: int(done.Load()), Total: total, Answered: int(answered.Load())}
+
+	late := targets.Late
+	for late != nil && ctx.Err() == nil {
+		select {
+		case <-ctx.Done():
+			late = nil
+		case host, ok := <-late:
+			if !ok {
+				late = nil
+				continue
+			}
+			schedule(host)
+		}
+	}
+	wg.Wait()
+	return Progress{Done: int(done.Load()), Total: int(total.Load()), Answered: int(answered.Load())}
 }
 
 // httpClient builds the probe client. It dials only through the scoped dialer
@@ -226,7 +288,7 @@ func (s *Scanner) openPorts(ctx context.Context, dialer *net.Dialer, sem chan st
 // probeHost sends each type's probes for the open ports, in the order the
 // type declares them, and stops at the first that confirms the type, so a
 // type is reported at most once per host.
-func (s *Scanner) probeHost(ctx context.Context, client *http.Client, sem chan struct{}, warned *sync.Map, host netip.Addr, open map[int]bool, onCandidate func(Candidate)) {
+func (s *Scanner) probeHost(ctx context.Context, client *http.Client, sem chan struct{}, warned, tlsSeen *sync.Map, targets *TargetSet, host netip.Addr, open map[int]bool, onCandidate func(Candidate), onTLSTarget func(TLSTarget)) {
 	var wg sync.WaitGroup
 	for _, hint := range s.hints {
 		wg.Add(1)
@@ -241,6 +303,19 @@ func (s *Scanner) probeHost(ctx context.Context, client *http.Client, sem chan s
 				}
 				resp, ok := s.probe(ctx, client, host, p)
 				<-sem
+				if resp.TLSLeaf != nil && onTLSTarget != nil {
+					key := struct {
+						address netip.Addr
+						port    int
+					}{host, p.Port}
+					if _, duplicate := tlsSeen.LoadOrStore(key, struct{}{}); !duplicate {
+						onTLSTarget(TLSTarget{
+							Address: host.String(),
+							Port:    p.Port,
+							Source:  targets.Source(host),
+						})
+					}
+				}
 				if !ok || !safeMatch(warned, hint.Type, p, resp) {
 					continue
 				}
@@ -249,6 +324,13 @@ func (s *Scanner) probeHost(ctx context.Context, client *http.Client, sem chan s
 					if field == "" {
 						field = "url"
 					}
+					addOns := make([]AddOn, 0, len(hint.AddOns))
+					for _, addOn := range hint.AddOns {
+						addOns = append(addOns, AddOn{
+							Type: addOn.Type,
+							URL:  (connector.DiscoveryHint{URLTemplate: addOn.URLTemplate}).URL(p.Scheme, host.String(), p.Port),
+						})
+					}
 					onCandidate(Candidate{
 						Type:     hint.Type,
 						Name:     hint.Name,
@@ -256,6 +338,8 @@ func (s *Scanner) probeHost(ctx context.Context, client *http.Client, sem chan s
 						Port:     p.Port,
 						URL:      hint.URL(p.Scheme, host.String(), p.Port),
 						URLField: field,
+						Source:   targets.Source(host),
+						AddOns:   addOns,
 					})
 				}
 				return
@@ -290,18 +374,30 @@ func (s *Scanner) probe(ctx context.Context, client *http.Client, host netip.Add
 	ctx, cancel := context.WithTimeout(ctx, s.requestTimeout)
 	defer cancel()
 	target := p.Scheme + "://" + net.JoinHostPort(host.String(), strconv.Itoa(p.Port)) + p.Path
+	out := connector.DiscoveryResponse{}
+	// Trace callbacks may outlive a cancelled request.
+	var leaf atomic.Pointer[x509.Certificate]
+	trace := &httptrace.ClientTrace{TLSHandshakeDone: func(state tls.ConnectionState, err error) {
+		if err == nil && len(state.PeerCertificates) > 0 {
+			leaf.Store(state.PeerCertificates[0])
+		}
+	}}
+	ctx = httptrace.WithClientTrace(ctx, trace)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
 	if err != nil {
-		return connector.DiscoveryResponse{}, false
+		return out, false
 	}
 	req.Header.Set("User-Agent", userAgent)
 	resp, err := client.Do(req)
+	out.TLSLeaf = leaf.Load()
 	if err != nil {
-		return connector.DiscoveryResponse{}, false
+		return out, false
 	}
 	defer func() { _ = resp.Body.Close() }()
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, maxBody))
-	out := connector.DiscoveryResponse{Status: resp.StatusCode, Header: resp.Header, Body: body}
+	out.Status = resp.StatusCode
+	out.Header = resp.Header
+	out.Body = body
 	if resp.TLS != nil && len(resp.TLS.PeerCertificates) > 0 {
 		out.TLSLeaf = resp.TLS.PeerCertificates[0]
 	}

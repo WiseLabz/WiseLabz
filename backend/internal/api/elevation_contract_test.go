@@ -674,6 +674,7 @@ var knownCallbackLeaf = map[string]bool{
 	"github.com/WiseLabz/wiselabz/internal/api/runbooks.Handler.settings":            true,
 	"github.com/WiseLabz/wiselabz/internal/api/connectors.preparedLifecycleOp.apply": true,
 	"github.com/WiseLabz/wiselabz/internal/api/discovery.Handler.interfaceAddrs":     true,
+	"github.com/WiseLabz/wiselabz/internal/api/discovery.Handler.inventoryQuery":     true,
 	"github.com/WiseLabz/wiselabz/internal/auth.Service.settings":                    true,
 }
 

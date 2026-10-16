@@ -112,10 +112,10 @@ object, action-specific), and `createdAt`.
 | `compliance_rule.delete` | `DELETE /api/compliance/rules/{id}` | compliance_rule / id |
 | `compliance_rule.enable` | `PUT /api/compliance/rules/{id}` (enabled true) | compliance_rule / id |
 | `compliance_rule.disable` | `PUT /api/compliance/rules/{id}` (enabled false) | compliance_rule / id |
-| `discovery.scan.start` | `POST /api/discovery/scan` (a scan was accepted) | discovery_scan / scan ID; detail `range` (the masked CIDR) |
-| `discovery.scan.complete` | A network scan ends on its own, as `completed` or `failed` (written by the scan, attributed to the admin who started it) | discovery_scan / scan ID; detail `range`, `state`, `probed`, `answered`, `candidates`, `durationMs`, `partial` |
+| `discovery.scan.start` | `POST /api/discovery/scan` (a scan was accepted) | discovery_scan / scan ID; detail `ranges` (masked CIDRs), `includeInventory`, `askNetwork`, `planned` (`range`, `inventory`) and `skipped` (`inventory`) |
+| `discovery.scan.complete` | A network scan ends on its own, as `completed` or `failed` (written by the scan, attributed to the admin who started it) | discovery_scan / scan ID; detail `ranges`, `state`, `probed`, `answered`, `candidates`, `durationMs`, `partial`, `sources`, `skipped`, `passiveAnswered`, `tlsTargets` (count) |
 | `discovery.scan.cancel` | `DELETE /api/discovery/scan` stops a running scan, or the server shuts down while one runs (written by the scan, attributed to the admin who started it; same detail as complete, `state` `cancelled`, plus `cancelledBy` or `cancelReason`) | discovery_scan / scan ID; detail also `cancelledBy` (user ID of the admin who cancelled, which may differ from the actor) or `cancelReason` `shutdown` (no `cancelledBy`) |
-| `discovery.scan.reject` | `POST /api/discovery/scan` refused, for an invalid range or while a scan runs, or over the hourly limit | discovery_scan / (none); detail `range` (as submitted, at most 64 characters) and `reason` |
+| `discovery.scan.reject` | `POST /api/discovery/scan` refused, for invalid ranges, no target, a running scan, the hourly limit or a failed known-host read | discovery_scan / (none); detail `ranges` (at most 16 submitted entries, each cut to 64 characters), or `cidr` for the earlier request form, and `reason` |
 
 `detail` never carries secret values. `connector.update` and
 `auth.config.update` record which *fields* changed (a name list), not
@@ -148,16 +148,25 @@ valid elevation token for `connector.<verb>`. `runbook.create`/
 records `changedFields`, the list of top-level keys present in the request
 body. `runbook.delete` records the deleted runbook's `title`.
 
-`discovery.scan.*` detail carries the scanned range, the scan outcome and counts
-only: `probed` is how many addresses were probed, `answered` how many accepted a
-connection on a listed port, and `candidates` the number of products found per
-connector type. It never contains the address of a scanned or found host. A range
-of `/32` is the one address the admin chose to scan, and it appears as that
-range. A cancel entry names who cancelled in `cancelledBy` (the actor is always
-the admin who started the scan), or carries `cancelReason` `shutdown` when the
-server stopped the scan while shutting down. `discovery.scan.reject` `range` is
-the admin's own input exactly as submitted, cut to 64 characters, and `reason` is one of `invalid_cidr`, `not_ipv4`, `not_private`,
-`too_wide`, `scan_in_progress` or `rate_limited`.
+`discovery.scan.*` detail carries the typed ranges, the scan outcome and counts
+only. Start entries report the toggles and the addresses admitted at start in
+`planned.range` and `planned.inventory`, with known hosts that did not fit in
+`skipped.inventory`. End entries keep `probed` (addresses finished), `answered`
+(addresses accepting a connection on a listed port) and `candidates` (products per
+connector type), and add `sources` (`range`, `inventory`, `passive` admitted counts),
+`skipped` (`inventory`, `passive`), `passiveAnswered` (distinct allowed network
+responders, admitted or not) and `tlsTargets` (a count, never the target list).
+
+No entry contains a scanned, known, answering or found host address. A typed `/32`
+is the one address the admin chose to scan and appears as that range. A cancel
+entry names who cancelled in `cancelledBy` (the actor is always the admin who
+started the scan), or carries `cancelReason` `shutdown` when the server stopped
+the scan while shutting down. Reject entries echo only the submitted ranges,
+cut to 64 characters each and at most 16 entries, or the submitted `cidr` for an
+earlier-form request. The `reason` is one of `invalid_cidr`, `not_ipv4`,
+`not_private`, `too_wide`, `too_many_ranges`, `too_many_addresses`, `no_targets`,
+`scan_in_progress`, `rate_limited` or `internal`. A failed known-host read records
+only that `internal` rejection; it does not start or audit a scan.
 
 `entity.override.create`/`entity.override.delete` record the override's
 `action` (`detach` or `merge`), `note` and `members` (each `connectorId`,

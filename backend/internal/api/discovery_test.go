@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strconv"
 	"strings"
 	"sync"
@@ -35,9 +36,9 @@ func newScriptedScanner(hold bool, cands ...disc.Candidate) *scriptedScanner {
 	return &scriptedScanner{candidates: cands, hold: hold, release: make(chan struct{})}
 }
 
-func (s *scriptedScanner) Run(ctx context.Context, r disc.Range, cb disc.Callbacks) disc.Progress {
+func (s *scriptedScanner) Run(ctx context.Context, r disc.Targets, cb disc.Callbacks) disc.Progress {
 	s.calls.Add(1)
-	total := len(r.Hosts())
+	total := len(r.Static)
 	for _, c := range s.candidates {
 		cb.OnCandidate(c)
 	}
@@ -258,7 +259,7 @@ func TestDiscoveryRangeFieldErrors(t *testing.T) {
 	_, token := app.user(t, "operator")
 
 	tests := []struct{ cidr, wantMsg string }{
-		{"10.0.0.0/23", "at most a /24"},
+		{"10.0.0.0/21", "at most a /22"},
 		{"8.8.8.0/24", "only private ranges"},
 		{"127.0.0.0/24", "only private ranges"},
 		{"169.254.169.0/24", "only private ranges"},
@@ -370,7 +371,7 @@ func TestDiscoveryHourlyLimit(t *testing.T) {
 	var submitted bool
 	for _, e := range rejects {
 		d := detailOf(t, e)
-		submitted = submitted || (d["reason"] == "rate_limited" && d["range"] == "192.168.1.57/24")
+		submitted = submitted || (d["reason"] == "rate_limited" && d["cidr"] == "192.168.1.57/24")
 	}
 	if !submitted {
 		t.Errorf("reject entries = %+v, want the rate_limited one to hold the range as submitted", rejects)
@@ -484,7 +485,10 @@ func TestDiscoveryAuditEntries(t *testing.T) {
 	if s := starts[0]; s.ActorUserID != userID || s.ActorRole != "admin" || s.TargetType != disc.AuditTargetType || s.TargetID != started.ID {
 		t.Errorf("start entry = %+v", s)
 	}
-	if got := detailOf(t, starts[0]); got["range"] != "192.168.1.0/24" {
+	if got := detailOf(t, starts[0]); !reflect.DeepEqual(got["ranges"], []any{"192.168.1.0/24"}) ||
+		got["includeInventory"] != false || got["askNetwork"] != false ||
+		!reflect.DeepEqual(got["planned"], map[string]any{"range": float64(254), "inventory": float64(0)}) ||
+		!reflect.DeepEqual(got["skipped"], map[string]any{"inventory": float64(0)}) {
 		t.Errorf("start detail = %v", got)
 	}
 
@@ -492,7 +496,7 @@ func TestDiscoveryAuditEntries(t *testing.T) {
 	if len(rejects) != 1 {
 		t.Fatalf("reject entries = %+v", rejects)
 	}
-	if got := detailOf(t, rejects[0]); got["range"] != "8.8.8.0/24" || got["reason"] != "not_private" {
+	if got := detailOf(t, rejects[0]); got["cidr"] != "8.8.8.0/24" || got["reason"] != "not_private" {
 		t.Errorf("reject detail = %v", got)
 	}
 
@@ -506,6 +510,7 @@ func TestDiscoveryAuditEntries(t *testing.T) {
 	d := detailOf(t, completes[0])
 	counts, _ := d["candidates"].(map[string]any)
 	if d["probed"] != float64(254) || d["answered"] != float64(2) || d["partial"] != false ||
+		!reflect.DeepEqual(d["ranges"], []any{"192.168.1.0/24"}) ||
 		counts["proxmox"] != float64(1) || counts["home_assistant"] != float64(1) {
 		t.Errorf("complete detail = %v", d)
 	}
@@ -541,7 +546,7 @@ func TestDiscoveryAuditRecordsRejectedConflictAndLimitAndCancel(t *testing.T) {
 	time.Sleep(30 * time.Millisecond)
 
 	rejects := auditEntries(t, app, disc.AuditReject)
-	if len(rejects) != 1 || detailOf(t, rejects[0])["reason"] != "scan_in_progress" || detailOf(t, rejects[0])["range"] != "192.168.2.57/24" {
+	if len(rejects) != 1 || detailOf(t, rejects[0])["reason"] != "scan_in_progress" || detailOf(t, rejects[0])["cidr"] != "192.168.2.57/24" {
 		t.Errorf("reject entries = %+v", rejects)
 	}
 	cancels := auditEntries(t, app, disc.AuditCancel)
@@ -549,7 +554,7 @@ func TestDiscoveryAuditRecordsRejectedConflictAndLimitAndCancel(t *testing.T) {
 		t.Fatalf("cancel entries = %+v", cancels)
 	}
 	d := detailOf(t, cancels[0])
-	if d["state"] != "cancelled" || d["answered"] != float64(1) || d["range"] != "192.168.1.0/24" {
+	if d["state"] != "cancelled" || d["answered"] != float64(1) || !reflect.DeepEqual(d["ranges"], []any{"192.168.1.0/24"}) {
 		t.Errorf("cancel detail = %v", d)
 	}
 	if len(auditEntries(t, app, disc.AuditComplete)) != 0 {
@@ -560,7 +565,9 @@ func TestDiscoveryAuditRecordsRejectedConflictAndLimitAndCancel(t *testing.T) {
 	startScan(t, app, token, strings.Repeat("x", 500))
 	var long int
 	for _, e := range auditEntries(t, app, disc.AuditReject) {
-		if r, _ := detailOf(t, e)["range"].(string); len(r) > long {
+		detail := detailOf(t, e)
+		r, _ := detail["cidr"].(string)
+		if len(r) > long {
 			long = len(r)
 		}
 	}
@@ -610,6 +617,7 @@ func getSuggestions(t *testing.T, app *testApp, token, remote string) []map[stri
 	}
 	var body struct {
 		Suggestions []map[string]string `json:"suggestions"`
+		KnownHosts  int                 `json:"knownHosts"`
 	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
 		t.Fatal(err)

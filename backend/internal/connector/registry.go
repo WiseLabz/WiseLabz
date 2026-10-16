@@ -69,10 +69,20 @@ type DiscoveryHint struct {
 	// {port} placeholders taken from the matching probe, for example
 	// "{scheme}://{host}:{port}/api2/json".
 	URLTemplate string
+	// AddOns lists connector types that can be configured against the same
+	// appliance address when this product is discovered.
+	AddOns []DiscoveryAddOn
 	// URLField names the config field the URL prefills. Empty means the
 	// top-level url; a type whose endpoint lives in another field (Docker's
 	// host) sets it.
 	URLField string
+}
+
+// DiscoveryAddOn describes a connector that can be added alongside a
+// discovered appliance, using placeholders from the matching probe.
+type DiscoveryAddOn struct {
+	Type        string
+	URLTemplate string
 }
 
 // DiscoveryProbe is one unauthenticated GET that can identify a product.
@@ -121,6 +131,9 @@ func (r DiscoveryResponse) Title() string {
 
 // URL renders the connector URL to prefill for a probe match.
 func (h DiscoveryHint) URL(scheme, host string, port int) string {
+	if strings.Contains(host, ":") && (!strings.HasPrefix(host, "[") || !strings.HasSuffix(host, "]")) {
+		host = "[" + host + "]"
+	}
 	return strings.NewReplacer(
 		"{scheme}", scheme,
 		"{host}", host,

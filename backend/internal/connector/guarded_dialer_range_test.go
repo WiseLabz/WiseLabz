@@ -3,43 +3,69 @@ package connector
 import (
 	"errors"
 	"net"
+	"net/netip"
 	"testing"
 	"time"
 )
 
-func mustCIDR(t *testing.T, s string) *net.IPNet {
-	t.Helper()
-	_, n, err := net.ParseCIDR(s)
-	if err != nil {
-		t.Fatalf("ParseCIDR(%q): %v", s, err)
-	}
-	return n
+type dialerTargetSet struct {
+	prefixes  []netip.Prefix
+	addresses map[netip.Addr]struct{}
 }
 
-func TestGuardedDialerForRangeControl(t *testing.T) {
+func (s *dialerTargetSet) Contains(addr netip.Addr) bool {
+	addr = addr.Unmap()
+	if _, ok := s.addresses[addr]; ok {
+		return true
+	}
+	for _, prefix := range s.prefixes {
+		if prefix.Contains(addr) {
+			return true
+		}
+	}
+	return false
+}
+
+func dialerSet(prefixes []string, addresses ...string) *dialerTargetSet {
+	set := &dialerTargetSet{addresses: make(map[netip.Addr]struct{})}
+	for _, prefix := range prefixes {
+		set.prefixes = append(set.prefixes, netip.MustParsePrefix(prefix))
+	}
+	for _, address := range addresses {
+		set.addresses[netip.MustParseAddr(address)] = struct{}{}
+	}
+	return set
+}
+
+func TestGuardedDialerForSetControl(t *testing.T) {
+	set := dialerSet([]string{"192.168.1.0/24"}, "10.0.0.5")
 	tests := []struct {
 		name    string
-		allowed string
 		addr    string
 		blocked bool
 		other   bool // a non-BlockedAddressError failure
 	}{
-		{name: "in range", allowed: "192.168.1.0/24", addr: "192.168.1.5:8006"},
-		{name: "range edge", allowed: "192.168.1.0/24", addr: "192.168.1.254:80"},
-		{name: "private but out of range", allowed: "192.168.1.0/24", addr: "192.168.2.5:8006", blocked: true},
-		{name: "other private block", allowed: "192.168.1.0/24", addr: "10.0.0.5:8006", blocked: true},
-		{name: "public", allowed: "192.168.1.0/24", addr: "8.8.8.8:443", blocked: true},
-		{name: "loopback inside hypothetical range", allowed: "127.0.0.0/8", addr: "127.0.0.1:80", blocked: true},
-		{name: "link-local inside hypothetical range", allowed: "169.254.0.0/16", addr: "169.254.169.254:80", blocked: true},
-		{name: "unspecified inside hypothetical range", allowed: "0.0.0.0/8", addr: "0.0.0.0:80", blocked: true},
-		{name: "multicast inside hypothetical range", allowed: "224.0.0.0/4", addr: "224.0.0.1:80", blocked: true},
-		{name: "host name", allowed: "192.168.1.0/24", addr: "example.com:80", other: true},
-		{name: "no port", allowed: "192.168.1.0/24", addr: "192.168.1.5", other: true},
+		{name: "prefix member", addr: "192.168.1.5:8006"},
+		{name: "single address member", addr: "10.0.0.5:8006"},
+		{name: "prefix edge", addr: "192.168.1.254:80"},
+		{name: "private but outside set", addr: "192.168.2.5:8006", blocked: true},
+		{name: "other private block", addr: "172.16.0.5:8006", blocked: true},
+		{name: "public", addr: "8.8.8.8:443", blocked: true},
+		{name: "loopback in set", addr: "127.0.0.1:80", blocked: true},
+		{name: "link-local in set", addr: "169.254.169.254:80", blocked: true},
+		{name: "unspecified in set", addr: "0.0.0.0:80", blocked: true},
+		{name: "multicast in set", addr: "224.0.0.1:80", blocked: true},
+		{name: "hostname", addr: "example.com:80", other: true},
+		{name: "no port", addr: "192.168.1.5", other: true},
 	}
+	set.addresses[netip.MustParseAddr("127.0.0.1")] = struct{}{}
+	set.addresses[netip.MustParseAddr("169.254.169.254")] = struct{}{}
+	set.addresses[netip.MustParseAddr("0.0.0.0")] = struct{}{}
+	set.addresses[netip.MustParseAddr("224.0.0.1")] = struct{}{}
+
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			d := GuardedDialerForRange(time.Second, mustCIDR(t, tc.allowed))
-			err := d.Control("tcp", tc.addr, nil)
+			err := GuardedDialerForSet(time.Second, set).Control("tcp", tc.addr, nil)
 			var blocked *BlockedAddressError
 			switch {
 			case tc.blocked:
@@ -59,28 +85,39 @@ func TestGuardedDialerForRangeControl(t *testing.T) {
 	}
 }
 
-func TestGuardedDialerForRangeNilRangeBlocksEverything(t *testing.T) {
-	d := GuardedDialerForRange(time.Second, nil)
-	var blocked *BlockedAddressError
-	if err := d.Control("tcp", "192.168.1.5:80", nil); !errors.As(err, &blocked) {
-		t.Fatalf("Control with nil range = %v, want BlockedAddressError", err)
+func TestGuardedDialerForSetSeesLateAdmission(t *testing.T) {
+	set := dialerSet(nil)
+	d := GuardedDialerForSet(time.Second, set)
+	if err := d.Control("tcp", "10.0.0.5:80", nil); !isBlockedAddress(err) {
+		t.Fatalf("before admission Control = %v, want BlockedAddressError", err)
+	}
+	set.addresses[netip.MustParseAddr("10.0.0.5")] = struct{}{}
+	if err := d.Control("tcp", "10.0.0.5:80", nil); err != nil {
+		t.Fatalf("after admission Control = %v, want nil", err)
 	}
 }
 
-func TestGuardedDialerForRangeLoopbackTestAllowance(t *testing.T) {
+func TestGuardedDialerForSetNilBlocksEverything(t *testing.T) {
+	d := GuardedDialerForSet(time.Second, nil)
+	if err := d.Control("tcp", "192.168.1.5:80", nil); !isBlockedAddress(err) {
+		t.Fatalf("Control with nil set = %v, want BlockedAddressError", err)
+	}
+}
+
+func TestGuardedDialerForSetLoopbackTestAllowanceDoesNotSkipSetCheck(t *testing.T) {
 	AllowLoopbackForTest(t)
-	d := GuardedDialerForRange(time.Second, mustCIDR(t, "127.0.0.0/8"))
-	if err := d.Control("tcp", "127.0.0.1:80", nil); err != nil {
-		t.Fatalf("loopback in range with test allowance = %v, want nil", err)
+	d := GuardedDialerForSet(time.Second, dialerSet(nil))
+	if err := d.Control("tcp", "127.0.0.1:80", nil); !isBlockedAddress(err) {
+		t.Fatalf("loopback outside set with test allowance = %v, want BlockedAddressError", err)
 	}
-	// The allowance relaxes the loopback block only, never the range check.
-	var blocked *BlockedAddressError
-	if err := d.Control("tcp", "192.168.1.5:80", nil); !errors.As(err, &blocked) {
-		t.Fatalf("out-of-range with test allowance = %v, want BlockedAddressError", err)
+
+	set := dialerSet(nil, "127.0.0.1")
+	if err := GuardedDialerForSet(time.Second, set).Control("tcp", "127.0.0.1:80", nil); err != nil {
+		t.Fatalf("loopback in set with explicit test allowance = %v, want nil", err)
 	}
 }
 
-func TestGuardedDialerForRangeDialsInRange(t *testing.T) {
+func TestGuardedDialerForSetDialsInSet(t *testing.T) {
 	AllowLoopbackForTest(t)
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -88,20 +125,25 @@ func TestGuardedDialerForRangeDialsInRange(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = ln.Close() })
 	go func() {
-		if c, err := ln.Accept(); err == nil {
-			_ = c.Close()
+		if conn, err := ln.Accept(); err == nil {
+			_ = conn.Close()
 		}
 	}()
 
-	conn, err := GuardedDialerForRange(time.Second, mustCIDR(t, "127.0.0.0/24")).Dial("tcp", ln.Addr().String())
+	addr := ln.Addr().(*net.TCPAddr).IP.String()
+	conn, err := GuardedDialerForSet(time.Second, dialerSet(nil, addr)).Dial("tcp", ln.Addr().String())
 	if err != nil {
-		t.Fatalf("dial in range: %v", err)
+		t.Fatalf("dial in set: %v", err)
 	}
 	_ = conn.Close()
 
-	_, err = GuardedDialerForRange(time.Second, mustCIDR(t, "10.0.0.0/24")).Dial("tcp", ln.Addr().String())
-	var blocked *BlockedAddressError
-	if !errors.As(err, &blocked) {
-		t.Fatalf("dial out of range = %v, want BlockedAddressError", err)
+	_, err = GuardedDialerForSet(time.Second, dialerSet(nil, "127.0.0.2")).Dial("tcp", ln.Addr().String())
+	if !isBlockedAddress(err) {
+		t.Fatalf("dial out of set = %v, want BlockedAddressError", err)
 	}
+}
+
+func isBlockedAddress(err error) bool {
+	var blocked *BlockedAddressError
+	return errors.As(err, &blocked)
 }
