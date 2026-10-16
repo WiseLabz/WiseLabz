@@ -8,6 +8,15 @@ describe('range budget', () => {
     expect(countRangeHosts(['10.0.0.0/31', '10.0.0.1/32'])).toBe(2);
   });
 
+  it('counts the usable hosts at the supported prefix bounds', () => {
+    expect(countRangeHosts(['10.0.0.0/22'])).toBe(1022);
+    expect(countRangeHosts(['10.0.0.0/30'])).toBe(2);
+    expect(countRangeHosts(['10.0.0.0/31'])).toBe(2);
+    expect(countRangeHosts(['10.0.0.5/32'])).toBe(1);
+    expect(countRangeHosts(['10.0.0.0/21'])).toBe(0);
+    expect(countRangeHosts(['10.0.0.0/33'])).toBe(0);
+  });
+
   it('fills the remaining budget from known hosts', () => {
     expect(calculateRangeBudget(['192.168.1.0/24', '192.168.2.0/24'], 900, true)).toEqual({
       rangeHosts: 508,

@@ -25,7 +25,8 @@ export function countRangeHosts(ranges: readonly string[]): number {
     const ip = parseIPv4(address);
     if (ip === undefined || prefix < 22 || prefix > 32) continue;
 
-    const mask = prefix === 0 ? 0 : (0xffffffff << (32 - prefix)) >>> 0;
+    // The guard above bounds prefix to 22-32, so the shift is 0-10 bits.
+    const mask = (0xffffffff << (32 - prefix)) >>> 0;
     const network = (ip & mask) >>> 0;
     const end = (network | (~mask >>> 0)) >>> 0;
     const contained = PRIVATE_BLOCKS.some(([block, bits]) => {
