@@ -18,7 +18,7 @@
 
 * **discovery:** instance admins can scan a private /24 for Proxmox VE, Proxmox Backup Server, Home Assistant, Portainer, UniFi, AdGuard Home, Traefik, Docker, Caddy, Nginx Proxy Manager, pfSense, OPNsense, TrueNAS and Pi-hole during onboarding and from the add-connector page, and connect what is found. See [docs/NETWORK_DISCOVERY.md](docs/NETWORK_DISCOVERY.md).
 
-## 2.0.0 (2026-10-16)
+## 1.1.0 (2026-10-16)
 
 ## What's Changed
 * Add the make targets CONTRIBUTING.md already documents by @wufangyong973 in https://github.com/WiseLabz/WiseLabz/pull/551
@@ -162,7 +162,7 @@
 ## New Contributors
 * @wufangyong973 made their first contribution in https://github.com/WiseLabz/WiseLabz/pull/551
 
-**Full Changelog**: https://github.com/WiseLabz/WiseLabz/compare/v1.0.0...v2.0.0
+**Full Changelog**: https://github.com/WiseLabz/WiseLabz/compare/v1.0.0...v1.1.0
 
 ## 1.0.0 (2026-10-01)
 
