@@ -163,13 +163,23 @@ describe('Lab Book export', () => {
 
   it('removes the print frame and skips printing when cancelled while it loads', async () => {
     render(<ExportLabBook />);
+    const print = vi.fn();
+    let attached = false;
+    let frame: HTMLIFrameElement | undefined;
+    // jsdom loads srcdoc frames on its own, so cancel as soon as the frame is attached.
+    const observer = new MutationObserver(() => {
+      frame = document.querySelector('iframe') ?? undefined;
+      if (!frame || attached) return;
+      attached = true;
+      vi.spyOn(frame.contentWindow!, 'print').mockImplementation(print);
+      fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    });
+    observer.observe(document.body, { childList: true });
     start('pdf');
-    await waitFor(() => expect(document.querySelector('iframe')).not.toBeNull());
-    const frame = document.querySelector('iframe')!;
-    const print = vi.spyOn(frame.contentWindow!, 'print').mockImplementation(() => {});
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
-    expect(frame.isConnected).toBe(false);
-    fireEvent.load(frame);
+    await waitFor(() => expect(attached).toBe(true));
+    observer.disconnect();
+    expect(frame!.isConnected).toBe(false);
+    fireEvent.load(frame!);
     expect(print).not.toHaveBeenCalled();
     expect(error).not.toHaveBeenCalled();
     expect(screen.getByRole('button', { name: 'Export Lab Book' })).toBeEnabled();
