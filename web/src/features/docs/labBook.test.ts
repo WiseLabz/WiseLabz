@@ -33,6 +33,18 @@ describe('renderLabBook', () => {
       securityLevel: 'strict',
       htmlLabels: false,
       flowchart: { htmlLabels: false },
+      secure: [
+        'secure',
+        'securityLevel',
+        'startOnLoad',
+        'maxTextSize',
+        'suppressErrorRendering',
+        'maxEdges',
+        'theme',
+        'themeVariables',
+        'themeCSS',
+        'htmlLabels',
+      ],
     });
     expect(progress.mock.calls).toEqual([
       [0, 1],
@@ -56,6 +68,28 @@ describe('renderLabBook', () => {
     expect(result).toContain('filter="url( \'#local\' )"');
     expect(result).toContain("<style>.safe { filter: url( '#local' ) }</style>");
     expect(result).toContain('>ok</text>');
+  });
+
+  it('prevents source directives from changing the light theme or enabling HTML labels', async () => {
+    renderMermaid.mockImplementationOnce(async (source, config) => {
+      const { default: mermaid } = await import('mermaid');
+      mermaid.initialize(config);
+      await mermaid.parse(source);
+      const applied = mermaid.mermaidAPI.getConfig();
+      expect(applied.theme).toBe('default');
+      expect(applied.htmlLabels).toBe(false);
+      expect(applied.flowchart?.htmlLabels).toBe(false);
+      expect(applied.themeVariables?.background).not.toBe('#000');
+      return '<svg xmlns="http://www.w3.org/2000/svg"><text>safe</text></svg>';
+    });
+    const source =
+      '%%{init: {"theme":"dark","themeVariables":{"background":"#000"},"htmlLabels":true,"flowchart":{"htmlLabels":true}}}%%\ngraph LR\nA-->B';
+    const result = await renderLabBook(
+      `<pre><code class="language-mermaid">${source}</code></pre>`,
+      { signal: new AbortController().signal }
+    );
+    expect(result).toContain('lab-book-diagram');
+    expect(renderMermaid).toHaveBeenCalledOnce();
   });
 
   it('removes CSS imports that do not use url()', async () => {

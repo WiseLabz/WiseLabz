@@ -24,6 +24,19 @@ export async function renderLabBook(
         securityLevel: 'strict',
         htmlLabels: false,
         flowchart: { htmlLabels: false },
+        // Source directives must not override the export's appearance or HTML-label policy.
+        secure: [
+          'secure',
+          'securityLevel',
+          'startOnLoad',
+          'maxTextSize',
+          'suppressErrorRendering',
+          'maxEdges',
+          'theme',
+          'themeVariables',
+          'themeCSS',
+          'htmlLabels',
+        ],
       });
       signal.throwIfAborted();
       const figure = document.createElement('figure');
