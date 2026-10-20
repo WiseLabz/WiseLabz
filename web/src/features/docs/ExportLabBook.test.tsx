@@ -168,8 +168,9 @@ describe('Lab Book export', () => {
     let frame: HTMLIFrameElement | undefined;
     // jsdom loads srcdoc frames on its own, so cancel as soon as the frame is attached.
     const observer = new MutationObserver(() => {
+      if (attached) return;
       frame = document.querySelector('iframe') ?? undefined;
-      if (!frame || attached) return;
+      if (!frame) return;
       attached = true;
       vi.spyOn(frame.contentWindow!, 'print').mockImplementation(print);
       fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
