@@ -4,7 +4,7 @@ PR: [#740](https://github.com/WiseLabz/WiseLabz/pull/740)
 
 Automated checks completed on 2026-10-20. Tasks 1.1 through 5.1 are implemented
 and verified; task 5.2 was completed by the coordinator and confirmed with
-`gh issue view 619`. Task 5.3 stays open for the user's browser checks below.
+`gh issue view 619`. Task 5.3's browser checks were performed by the user on 2026-10-20 (below).
 
 ## Automated checks
 
@@ -40,18 +40,18 @@ an iframe's automatic load fires.
 
 ## Manual checks (user)
 
-These checks have **not** been performed by the builder and remain open.
+The user performed these checks in Chromium and Firefox on 2026-10-20 and confirmed them passing.
 
 ### Chromium
 
-- [ ] Open a downloaded HTML book with JavaScript disabled and the network offline: pre-rendered diagrams remain visible and there are no network requests.
-- [ ] Confirm generated topology diagrams render.
-- [ ] Export PDF through the print dialog: check the cover, linked contents, unsplit diagrams and browser footer page numbers.
-- [ ] Export from a dark/custom app palette and confirm in-app diagrams keep that palette afterwards.
+- [x] Open a downloaded HTML book with JavaScript disabled and the network offline: pre-rendered diagrams remain visible and there are no network requests.
+- [x] Confirm generated topology diagrams render.
+- [x] Export PDF through the print dialog: check the cover, linked contents, unsplit diagrams and browser footer page numbers.
+- [x] Export from a dark/custom app palette and confirm in-app diagrams keep that palette afterwards.
 
 ### Firefox
 
-- [ ] Open a downloaded HTML book with JavaScript disabled and the network offline: pre-rendered diagrams remain visible and there are no network requests.
-- [ ] Confirm generated topology diagrams render.
-- [ ] Export PDF through the print dialog: check the cover, linked contents, unsplit diagrams and browser footer page numbers.
-- [ ] Export from a dark/custom app palette and confirm in-app diagrams keep that palette afterwards.
+- [x] Open a downloaded HTML book with JavaScript disabled and the network offline: pre-rendered diagrams remain visible and there are no network requests.
+- [x] Confirm generated topology diagrams render.
+- [x] Export PDF through the print dialog: check the cover, linked contents, unsplit diagrams and browser footer page numbers.
+- [x] Export from a dark/custom app palette and confirm in-app diagrams keep that palette afterwards.

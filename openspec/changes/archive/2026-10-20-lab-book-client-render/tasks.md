@@ -22,4 +22,4 @@
 
 - [x] 5.1 Update DOC_EXPORT.md (pre-rendered diagrams, PDF via the print dialog, browser page-number footer, no server renderer needed) and REPORTS.md (report attachments keep Mermaid JS and gain the cover); verify the docs describe only shipped behaviour.
 - [x] 5.2 Retitle and rewrite issue #619 for the client-side scope with the reason server PDF was dropped; verify with `gh issue view 619`.
-- [ ] 5.3 Run the backend and web checks, then by hand in Chromium and Firefox: open a downloaded book with JavaScript disabled and the network offline (diagrams visible, no requests), confirm generated topology diagrams render, print to PDF (cover, contents, unsplit diagrams), and confirm in-app diagrams keep the palette after an export; record results in verification.md.
+- [x] 5.3 Run the backend and web checks, then by hand in Chromium and Firefox: open a downloaded book with JavaScript disabled and the network offline (diagrams visible, no requests), confirm generated topology diagrams render, print to PDF (cover, contents, unsplit diagrams), and confirm in-app diagrams keep the palette after an export; record results in verification.md.
