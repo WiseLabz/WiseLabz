@@ -5,7 +5,8 @@
  * re-reads the current --color-* values, so it re-subscribes to useTheme to
  * re-render whenever the palette changes.
  */
-import { useEffect, useId, useRef } from 'react';
+import { useEffect, useRef } from 'react';
+import { renderMermaid } from '../../lib/mermaid';
 import { useTheme } from '../../store/theme';
 
 function cssVar(name: string, fallback: string): string {
@@ -63,44 +64,40 @@ let lastThemeKey: string | null = null;
 
 export function Mermaid({ chart }: { chart: string }) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const id = useId().replace(/[^a-zA-Z0-9]/g, '');
   const mode = useTheme((s) => s.mode);
   const preset = useTheme((s) => s.preset);
   const custom = useTheme((s) => s.custom);
 
-  // Initialize mermaid once per theme change.
+  // Render with the current palette; the shared helper serializes Mermaid's
+  // global initialize/render state with export renders.
   useEffect(() => {
     const themeKey = `${mode}-${preset}-${custom}`;
     if (lastThemeKey !== themeKey) {
       lastThemeKey = themeKey;
       colorCache.clear();
-
-      import('mermaid').then(({ default: mermaid }) => {
-        mermaid.initialize({
-          startOnLoad: false,
-          theme: 'base',
-          themeVariables: {
-            background: resolveColor('--color-canvas', '#0b0c0f'),
-            primaryColor: resolveColor('--color-canvas-sunken', '#15171b'),
-            primaryTextColor: resolveColor('--color-ink', '#e8e8ea'),
-            primaryBorderColor: resolveColor('--color-line-soft', '#2a2d33'),
-            lineColor: resolveColor('--color-accent-primary', '#5b8cff'),
-            fontFamily: cssVar('--font-mono', 'ui-monospace, monospace'),
-          },
-        });
-      });
     }
   }, [mode, preset, custom]);
 
-  // Render diagram on chart change.
   useEffect(() => {
     let cancelled = false;
     const container = containerRef.current;
     if (!container) return;
 
-    import('mermaid')
-      .then(({ default: mermaid }) => mermaid.render(`mermaid-${id}`, chart))
-      .then(({ svg }) => {
+    const config = {
+      startOnLoad: false,
+      theme: 'base' as const,
+      themeVariables: {
+        background: resolveColor('--color-canvas', '#0b0c0f'),
+        primaryColor: resolveColor('--color-canvas-sunken', '#15171b'),
+        primaryTextColor: resolveColor('--color-ink', '#e8e8ea'),
+        primaryBorderColor: resolveColor('--color-line-soft', '#2a2d33'),
+        lineColor: resolveColor('--color-accent-primary', '#5b8cff'),
+        fontFamily: cssVar('--font-mono', 'ui-monospace, monospace'),
+      },
+    };
+
+    renderMermaid(chart, config)
+      .then((svg) => {
         if (!cancelled && containerRef.current) containerRef.current.innerHTML = svg;
       })
       .catch((err: unknown) => {
@@ -112,7 +109,7 @@ export function Mermaid({ chart }: { chart: string }) {
     return () => {
       cancelled = true;
     };
-  }, [chart, id]);
+  }, [chart, mode, preset, custom]);
 
   return (
     <div

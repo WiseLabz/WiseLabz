@@ -29,6 +29,18 @@ func (h *Handler) Export(w http.ResponseWriter, r *http.Request) {
 		httputil.Errorf(w, err)
 		return
 	}
+	if format == "html" {
+		user, err := h.Store.GetUserByID(r.Context(), auth.UserIDFromContext(r.Context()))
+		if err != nil {
+			httputil.Errorf(w, err)
+			return
+		}
+		book.Exporter = user.DisplayName
+		if book.Exporter == "" {
+			book.Exporter = user.Username
+		}
+		book.ExportedAt = time.Now().UTC()
+	}
 	// Stage on disk so blob/build failures still return an HTTP error before download headers.
 	f, err := os.CreateTemp("", "lab-book-*")
 	if err != nil {

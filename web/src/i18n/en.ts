@@ -1338,6 +1338,9 @@ export const en = {
       format: 'Lab Book format',
       html: 'Offline HTML',
       markdown: 'Markdown zip',
+      pdf: 'PDF (print dialog)',
+      progress: 'Rendering diagrams: {{done}} / {{total}}',
+      cancel: 'Cancel',
       error: 'Could not export Lab Book.',
     },
 

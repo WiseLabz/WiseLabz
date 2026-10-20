@@ -17,6 +17,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 	"unicode"
 
 	"github.com/WiseLabz/wiselabz/internal/blobstore"
@@ -41,6 +42,8 @@ type Book struct {
 	Attachments map[string][]store.DocAttachment
 	Connectors  map[string]string
 	OpenBlob    func(string) (io.ReadCloser, error)
+	Exporter    string
+	ExportedAt  time.Time
 }
 
 // Load resolves metadata only for the supplied docs; it never widens their scope.
@@ -287,10 +290,17 @@ func (b *Book) writeHTML(w io.Writer) error {
 	if err != nil {
 		return err
 	}
+	exportedAt := b.ExportedAt
+	if exportedAt.IsZero() {
+		exportedAt = time.Now().UTC()
+	}
 	return bookTemplate.Execute(w, struct {
-		Nodes   []*node
-		Mermaid template.JS
-	}{nodes, template.JS(strings.ReplaceAll(string(js), "</script", "<\\/script"))}) // #nosec G203 -- embedded, vendored script only.
+		Nodes      []*node
+		Mermaid    template.JS
+		Exporter   string
+		ExportedAt string
+		DocCount   int
+	}{nodes, template.JS(strings.ReplaceAll(string(js), "</script", "<\\/script")), b.Exporter, exportedAt.UTC().Format("2006-01-02 15:04:05 UTC"), len(b.Docs)}) // #nosec G203 -- embedded, vendored script only.
 }
 func (b *Book) writeZip(w io.Writer) error {
 	z := zip.NewWriter(w)

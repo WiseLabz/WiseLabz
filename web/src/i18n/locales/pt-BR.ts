@@ -376,6 +376,9 @@ export const ptBR: Catalog = {
       format: 'Formato do livro do laboratório',
       html: 'HTML offline',
       markdown: 'Arquivo zip de Markdown',
+      pdf: 'PDF (diálogo de impressão)',
+      progress: 'Renderizando diagramas: {{done}} / {{total}}',
+      cancel: 'Cancelar',
       error: 'Não foi possível exportar o livro do laboratório.',
     },
     attachments: {

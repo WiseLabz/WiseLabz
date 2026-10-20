@@ -29,5 +29,11 @@ bytes for SMTP (leaving space for base64 and MIME overhead). Above the applicabl
 limit, delivery sends the text report with a Lab Book omission note. A build
 failure also sends text with a failure note and logs the error. Existing delivery
 tracking and retries apply to text; retry attempts do not reconstruct the Lab
-Book snapshot. Browser printing of the downloaded HTML provides Save as PDF;
-server PDF/SVG rendering and Slack/webhook file uploads are separate work.
+Book snapshot.
+
+Report attachments retain embedded Mermaid JavaScript: diagrams draw locally
+when the HTML is opened, rather than being pre-rendered in a browser. The print
+cover shows `Report: <definition name>`, the UTC export time and doc count,
+followed by a linked contents page. Browser printing provides **Save as PDF**;
+page numbers come from the browser's print headers/footers. No server renderer
+is needed. Slack/webhook file uploads remain unsupported.
