@@ -91,3 +91,32 @@ func TestExportPermissionScope(t *testing.T) {
 		t.Fatalf("all scope %d %v", len(all), err)
 	}
 }
+
+func TestExportCoverExporterName(t *testing.T) {
+	h := newTestHandler(t)
+	for _, tc := range []struct {
+		name        string
+		username    string
+		displayName string
+		want        string
+	}{
+		{name: "display name", username: "book-exporter-display", displayName: "Doc Exporter", want: "Doc Exporter"},
+		{name: "username fallback", username: "book-exporter-fallback", want: "book-exporter-fallback"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			user := &store.User{Username: tc.username, DisplayName: tc.displayName}
+			if err := h.Store.CreateUser(context.Background(), user); err != nil {
+				t.Fatal(err)
+			}
+			r := asUser(httptest.NewRequest("GET", "/api/docs/export?format=html", nil), user.ID, false)
+			rr := httptest.NewRecorder()
+			h.Export(rr, r)
+			if rr.Code != 200 {
+				t.Fatalf("export %d %s", rr.Code, rr.Body.String())
+			}
+			if !strings.Contains(rr.Body.String(), "Exporter: "+tc.want) {
+				t.Fatalf("cover exporter missing %q", tc.want)
+			}
+		})
+	}
+}

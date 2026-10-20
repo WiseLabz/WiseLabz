@@ -273,6 +273,8 @@ func newReportManager(s *store.Store, jobRunner *scheduler.Runner, d *notificati
 			}
 			var buf bytes.Buffer
 			if err == nil {
+				book.Exporter = "Report: " + def.Name
+				book.ExportedAt = time.Now().UTC()
 				err = book.Write(&buf, "html")
 			}
 			if err != nil {

@@ -42,7 +42,7 @@ func TestReportLabBookDispatch(t *testing.T) {
 		}
 		defer file.Close() //nolint:errcheck
 		data, err := io.ReadAll(file)
-		if err != nil || !strings.HasPrefix(header.Filename, "lab-book-") || !strings.Contains(string(data), doc.Title) || !strings.Contains(string(data), "mermaid.initialize") {
+		if err != nil || !strings.HasPrefix(header.Filename, "lab-book-") || !strings.Contains(string(data), doc.Title) || !strings.Contains(string(data), "mermaid.initialize") || !strings.Contains(string(data), "Exporter: Report: Weekly") {
 			t.Errorf("bad report attachment %v", err)
 		}
 		uploads++

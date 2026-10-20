@@ -6,6 +6,7 @@ import (
 	"io"
 	"strings"
 	"testing"
+	"time"
 
 	"golang.org/x/net/html"
 
@@ -15,6 +16,8 @@ import (
 
 func testBook() *Book {
 	return &Book{
+		Exporter:   "Test User",
+		ExportedAt: time.Date(2026, time.July, 3, 9, 8, 7, 0, time.FixedZone("UTC-3", -3*60*60)),
 		Docs: []store.DocRecord{
 			{ID: "parent", Title: "Árvore", ServiceID: "c1", Content: "# Parent\n\n[Child](/docs/child)\n\n<!-- wl:gen x -->\nkept\n<!-- /wl:gen -->"},
 			{ID: "child", ParentID: "parent", ServiceID: "c1", Title: "Child", Content: "![image](attachment:img)\n\n[manual](attachment:pdf)\n\n```mermaid\ngraph LR\n A --> B\n```\n\n|A|B|\n|-|-|\n|1|2|"},
@@ -40,10 +43,13 @@ func TestHTMLPortableHierarchy(t *testing.T) {
 		t.Fatal(err)
 	}
 	html := out.String()
-	for _, want := range []string{"Árvore", "Server", `href="#` + anchor("child") + `"`, "data:image/png;base64,iVBORw0KGgo=", "manual.pdf", "language-mermaid", "mermaid.initialize", "@media print", "<table>"} {
+	for _, want := range []string{"Árvore", "Server", `href="#` + anchor("child") + `"`, "data:image/png;base64,iVBORw0KGgo=", "manual.pdf", "language-mermaid", "mermaid.initialize", "@media print", "<table>", `class="cover"`, "2026-07-03 12:08:07 UTC", "Exporter: Test User", "Scope: 3 docs", `break-after:page;break-before:page`, `figure.lab-book-diagram{break-inside:avoid;page-break-inside:avoid}`} {
 		if !strings.Contains(html, want) {
 			t.Errorf("missing %q", want)
 		}
+	}
+	if !strings.Contains(html, "querySelectorAll('pre > code.language-mermaid')") {
+		t.Fatal("Mermaid bootstrap must select only source blocks")
 	}
 	if !strings.Contains(html, `globalThis["mermaid"]`) || !strings.Contains(html, "default-src 'none'") {
 		t.Error("Mermaid bundle not inlined or CSP missing")
@@ -67,6 +73,9 @@ func TestHTMLUntrustedContent(t *testing.T) {
 		if strings.Contains(html, bad) {
 			t.Errorf("unsafe HTML %q", bad)
 		}
+	}
+	if !strings.Contains(html, "Scope: 1 doc</p>") {
+		t.Error("single-doc scope must be singular")
 	}
 }
 func TestMarkdownRoundTrip(t *testing.T) {

@@ -18,17 +18,30 @@ content. Doc-owned `attachment:<id>` links become relative
 ## Download an offline Lab Book
 
 The Docs page offers **Export Lab Book** to every signed-in user. Choose offline
-HTML or Markdown zip. The authenticated API is
+HTML, Markdown zip or PDF (print dialog). The authenticated API is
 `GET /api/docs/export?format=html|md.zip`; it downloads a dated
 `lab-book-YYYY-MM-DD.<format>` file containing only active docs the caller may
 view. Human lab notes are visible to all users; generated lab inventory requires
 instance admin, and connector docs require the existing viewer grant.
 
 HTML contains a hierarchy-based table of contents, GFM tables, inline images,
-CSS and Mermaid 12.0.0. Open it with the network disabled: diagrams render in the
-browser without fetching a bundle. Use the browser print command and **Save as
-PDF** for a PDF copy. PDF/text attachments are listed by filename rather than
-embedded. Remote images are omitted, and raw HTML is omitted for offline safety.
+CSS and Mermaid 12.0.0. HTML downloads draw diagrams in the signed-in browser
+before saving, using the default light theme regardless of the app palette.
+Successfully drawn diagrams are sanitized inline SVG and remain visible with
+JavaScript disabled and the network offline. Progress and **Cancel** are available
+while exporting. A diagram that cannot be drawn keeps its source for the embedded
+Mermaid script to draw on opening; if pre-rendering fails as a whole, the original
+server HTML is downloaded.
+
+Choose **PDF (print dialog)** to prepare the same book and open the browser print
+dialog, then choose **Save as PDF**. The print frame disables scripts, so diagrams
+that failed to pre-render print as source. Printing starts with a cover (title,
+UTC export time, exporter and doc count), then a linked contents page; diagrams
+avoid page breaks. Enable the browser's print headers/footers for page numbers;
+the contents does not include page numbers. No server renderer or extra service
+is needed. You can also print a downloaded HTML book from the browser.
+
+PDF/text attachments are listed by filename rather than embedded. Remote images are omitted, and raw HTML is omitted for offline safety.
 The Markdown zip stores hierarchy folders with `index.md`, title/connector front
 matter, relative doc links and attachments, and can be imported with the
 Markdown/Obsidian importer.
