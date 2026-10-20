@@ -161,6 +161,38 @@ describe('Lab Book export', () => {
     expect(frame.isConnected).toBe(false);
   });
 
+  it('removes the print frame and skips printing when cancelled while it loads', async () => {
+    render(<ExportLabBook />);
+    start('pdf');
+    await waitFor(() => expect(document.querySelector('iframe')).not.toBeNull());
+    const frame = document.querySelector('iframe')!;
+    const print = vi.spyOn(frame.contentWindow!, 'print').mockImplementation(() => {});
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(frame.isConnected).toBe(false);
+    fireEvent.load(frame);
+    expect(print).not.toHaveBeenCalled();
+    expect(error).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Export Lab Book' })).toBeEnabled();
+  });
+
+  it('hides the progress status for a book without diagrams', async () => {
+    let finish!: (html: string) => void;
+    renderLabBook.mockImplementationOnce((_html, { onProgress }) => {
+      onProgress(0, 0);
+      return new Promise<string>((resolve) => {
+        finish = resolve;
+      });
+    });
+    render(<ExportLabBook />);
+    start();
+    await waitFor(() => expect(renderLabBook).toHaveBeenCalled());
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument();
+    expect(screen.queryByRole('status')).toBeNull();
+    expect(screen.queryByText(/0 \/ 0/)).toBeNull();
+    await act(async () => finish(rendered));
+    await waitFor(() => expect(downloadBlob).toHaveBeenCalledOnce());
+  });
+
   it('removes the print frame after the fallback timeout', async () => {
     vi.useFakeTimers();
     render(<ExportLabBook />);

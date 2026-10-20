@@ -6,21 +6,32 @@ import { downloadBlob, filenameFromContentDisposition } from '../../lib/download
 import { toast } from '../../lib/toast';
 import { renderLabBook } from './labBook';
 
-function printBook(html: string): Promise<void> {
+function printBook(html: string, signal: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
+    if (signal.aborted) {
+      reject(signal.reason);
+      return;
+    }
     const frame = document.createElement('iframe');
     frame.setAttribute('sandbox', 'allow-same-origin allow-modals');
     frame.setAttribute('aria-hidden', 'true');
     frame.style.cssText = 'position:fixed;left:-10000px;top:0;width:0;height:0;border:0';
     const remove = () => {
       window.clearTimeout(timeout);
+      signal.removeEventListener('abort', onAbort);
       frame.remove();
+    };
+    const onAbort = () => {
+      remove();
+      reject(signal.reason);
     };
     const timeout = window.setTimeout(() => {
       remove();
       reject(new Error('Print frame timed out'));
     }, 60_000);
+    signal.addEventListener('abort', onAbort, { once: true });
     frame.onload = () => {
+      if (signal.aborted) return;
       try {
         const target = frame.contentWindow;
         if (!target) throw new Error('Print frame unavailable');
@@ -80,7 +91,7 @@ export function ExportLabBook() {
         }
         if (controller.signal.aborted) return;
         if (format === 'pdf') {
-          await printBook(html);
+          await printBook(html, controller.signal);
           return;
         }
         data = new Blob([html], { type: 'text/html;charset=utf-8' });
@@ -122,7 +133,7 @@ export function ExportLabBook() {
       </Button>
       {pending && (
         <>
-          {progress && <span role="status">{t('docs.export.progress', progress)}</span>}
+          {progress && progress.total > 0 && <span role="status">{t('docs.export.progress', progress)}</span>}
           <Button size="sm" variant="secondary" onClick={cancel}>
             {t('docs.export.cancel')}
           </Button>

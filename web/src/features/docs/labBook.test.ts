@@ -104,6 +104,48 @@ describe('renderLabBook', () => {
     expect(result).toContain('<text>safe</text>');
   });
 
+  it('keeps a diagram whose label contains a non-breaking space', async () => {
+    renderMermaid.mockResolvedValue(
+      '<svg xmlns="http://www.w3.org/2000/svg"><text>a\u00a0b</text></svg>'
+    );
+    const result = await renderLabBook('<pre><code class="language-mermaid">x</code></pre>', {
+      signal: new AbortController().signal,
+    });
+    const parsed = new DOMParser().parseFromString(result, 'text/html');
+    expect(parsed.querySelector('figure.lab-book-diagram svg')).not.toBeNull();
+    expect(parsed.querySelector('parsererror')).toBeNull();
+    expect(parsed.querySelector('pre')).toBeNull();
+  });
+
+  it.each(['.a { fill: u\\72l(http://evil.test/x) }', '@\\69mport "http://evil.test/s.css";'])(
+    'removes style elements hiding external references behind CSS escapes (%s)',
+    async (css) => {
+      renderMermaid.mockResolvedValue(
+        `<svg xmlns="http://www.w3.org/2000/svg"><style>${css}</style><text>safe</text></svg>`
+      );
+      const result = await renderLabBook('<pre><code class="language-mermaid">x</code></pre>', {
+        signal: new AbortController().signal,
+      });
+      expect(result).toContain('lab-book-diagram');
+      expect(result).not.toContain('evil.test');
+      expect(result).not.toContain('<style');
+      expect(result).toContain('<text>safe</text>');
+    }
+  );
+
+  it('strips style attributes that fetch through string-form functions', async () => {
+    renderMermaid.mockResolvedValue(
+      '<svg xmlns="http://www.w3.org/2000/svg"><text style=\'background: image-set("http://evil.test/x" 1x)\'>safe</text></svg>'
+    );
+    const result = await renderLabBook('<pre><code class="language-mermaid">x</code></pre>', {
+      signal: new AbortController().signal,
+    });
+    expect(result).toContain('lab-book-diagram');
+    expect(result).not.toContain('evil.test');
+    expect(result).not.toContain('image-set');
+    expect(result).toContain('>safe</text>');
+  });
+
   it('keeps source for a diagram that fails and continues with later diagrams', async () => {
     renderMermaid
       .mockRejectedValueOnce(new Error('invalid diagram'))

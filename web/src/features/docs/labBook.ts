@@ -41,7 +41,7 @@ export async function renderLabBook(
       signal.throwIfAborted();
       const figure = document.createElement('figure');
       figure.className = 'lab-book-diagram';
-      figure.innerHTML = sanitizeSvg(svg);
+      figure.append(document.importNode(sanitizeSvg(svg), true));
       code.parentElement?.replaceWith(figure);
     } catch (error) {
       if (signal.aborted) throw error;
@@ -62,16 +62,16 @@ export async function renderLabBook(
   return `${doctype}${document.documentElement.outerHTML}`;
 }
 
-function sanitizeSvg(svg: string): string {
-  const safeSvg = DOMPurify.sanitize(svg, {
+function sanitizeSvg(svg: string): DocumentFragment {
+  const fragment = DOMPurify.sanitize(svg, {
     USE_PROFILES: { svg: true, svgFilters: true },
     FORBID_TAGS: ['script', 'foreignObject'],
+    RETURN_DOM_FRAGMENT: true,
   });
-  const document = new DOMParser().parseFromString(safeSvg, 'image/svg+xml');
-  if (document.documentElement?.localName.toLowerCase() !== 'svg') {
+  if (fragment.firstElementChild?.localName.toLowerCase() !== 'svg') {
     throw new Error('Mermaid returned invalid SVG');
   }
-  for (const element of [...document.querySelectorAll('*')]) {
+  for (const element of [...fragment.querySelectorAll('*')]) {
     if (['script', 'foreignobject'].includes(element.localName.toLowerCase())) {
       element.remove();
       continue;
@@ -91,18 +91,29 @@ function sanitizeSvg(svg: string): string {
       element.remove();
     }
   }
-  return document.documentElement?.outerHTML ?? '';
+  return fragment;
 }
 
-function hasExternalUrl(value: string): boolean {
+function decodeCssEscapes(value: string): string {
+  return value
+    .replace(/\\([0-9a-fA-F]{1,6})\s?/g, (_, hex: string) => {
+      const codePoint = Number.parseInt(hex, 16);
+      return codePoint > 0 && codePoint <= 0x10ffff ? String.fromCodePoint(codePoint) : '\ufffd';
+    })
+    .replace(/\\([\s\S])/g, '$1');
+}
+
+function hasExternalUrl(raw: string): boolean {
+  const value = decodeCssEscapes(raw);
   if (/@import\b/i.test(value)) return true;
+  if (/\b(?:image-set|-webkit-image-set|src)\s*\(/i.test(value)) return true;
   const urls = [...value.matchAll(/url\(([^)]*)\)/gi)];
   if (/url\s*\(/i.test(value) && urls.length === 0) return true;
-  return urls.some(([, raw]) => {
-    const reference = raw
+  return urls.some(([, reference]) => {
+    const target = reference
       .trim()
       .replace(/^(['"])(.*)\1$/, '$2')
       .trim();
-    return !reference.startsWith('#');
+    return !target.startsWith('#');
   });
 }

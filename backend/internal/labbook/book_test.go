@@ -74,6 +74,9 @@ func TestHTMLUntrustedContent(t *testing.T) {
 			t.Errorf("unsafe HTML %q", bad)
 		}
 	}
+	if !strings.Contains(html, "Scope: 1 doc</p>") {
+		t.Error("single-doc scope must be singular")
+	}
 }
 func TestMarkdownRoundTrip(t *testing.T) {
 	b := testBook()
