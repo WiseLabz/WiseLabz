@@ -46,8 +46,12 @@ The Markdown zip stores hierarchy folders with `index.md`, title/connector front
 matter, relative doc links and attachments, and can be imported with the
 Markdown/Obsidian importer.
 
-Scheduled reports can attach an HTML Lab Book to email and Discord; see
-[REPORTS.md](REPORTS.md) for scope, channel configuration and size limits.
+Scheduled reports can attach an HTML Lab Book to SMTP, Discord, Slack and generic
+webhook deliveries. Discord and Slack upload the file, SMTP sends it as a MIME
+attachment, and generic webhooks include it as base64 in JSON. See
+[REPORTS.md](REPORTS.md) for report scope, Slack setup and channel limits, and
+[NOTIFICATIONS.md](NOTIFICATIONS.md#generic-webhook-file-payload) for the webhook
+payload and verification example.
 
 ## Configuration
 

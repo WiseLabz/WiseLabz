@@ -89,6 +89,31 @@ func TestPutSniffSizeAndHash(t *testing.T) {
 	}
 }
 
+func TestPutGeneratedPreservesDeclaredType(t *testing.T) {
+	s := New(t.TempDir(), 1024)
+	data := []byte("<!DOCTYPE html><html><body>Lab Book</body></html>")
+	blob, err := s.PutGenerated(bytes.NewReader(data), "text/html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sum := sha256.Sum256(data)
+	if blob.SHA256 != hex.EncodeToString(sum[:]) || blob.Size != int64(len(data)) || blob.ContentType != "text/html" {
+		t.Fatalf("generated blob = %+v", blob)
+	}
+	f, err := s.Open(blob.SHA256)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := io.ReadAll(f)
+	_ = f.Close()
+	if err != nil || !bytes.Equal(got, data) {
+		t.Fatalf("roundtrip %q, %v", got, err)
+	}
+	if _, err := s.Put(bytes.NewReader(data)); !errors.Is(err, ErrUnsupported) {
+		t.Fatalf("Put(html) = %v, want ErrUnsupported", err)
+	}
+}
+
 func TestSweepRetainsReferences(t *testing.T) {
 	s := New(t.TempDir(), 0)
 	keep, err := s.Put(strings.NewReader("keep"))

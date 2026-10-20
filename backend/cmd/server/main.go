@@ -108,6 +108,7 @@ func main() {
 	// notify on alert creation)
 	notifDispatcher := notifications.NewDispatcher(s, wsHub)
 	notifDispatcher.SetEncryptionKey(cfg.Encryption.Key)
+	notifDispatcher.SetBlobStore(blobstore.New(cfg.Attachments.Dir, 50<<20))
 
 	// Apply the connectors declared in config.yaml (#500) before anything
 	// that reads connectors starts.

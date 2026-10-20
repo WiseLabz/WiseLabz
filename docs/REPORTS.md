@@ -10,30 +10,42 @@ fall back to the report ID.
 
 ## Offline Lab Book attachment
 
-Enable **Attach offline Lab Book (email and Discord)** in the report form, or
+Enable **Attach offline Lab Book** in the report form, or
 set `attachLabBook: true` in a definition request (default false). The Lab Book
 contains active docs for the report's selected connectors plus lab-wide docs;
 with no connector filter it contains every active doc. Report definitions and
 runs remain instance-admin operations, so this is an administrator-selected
 scope, independent of a viewer's download permissions.
 
-Select the **email** channel to use the existing enabled **SMTP** notification
-channel and its host, port, from/to addresses and credentials. Email sends the
-report summary and a base64-encoded HTML file in multipart/mixed MIME. Discord
-sends the summary plus the HTML file in a multipart webhook upload. Slack and
-generic webhooks send the summary text only. In-app notifications retain the
-summary. No new email credentials or runtime service are required.
+The enabled **SMTP** channel sends the summary and HTML file as a multipart MIME
+attachment. Discord sends both as a signed multipart webhook upload. Slack keeps
+its incoming webhook as the text path; when configured with a bot token and
+channel ID, it uploads the file through Slack's external file upload API. On
+success, Slack posts one message containing the file and report summary; the
+incoming webhook is used only for text fallback. Generic webhooks receive the
+summary and file in one JSON request; see
+[NOTIFICATIONS.md](NOTIFICATIONS.md#generic-webhook-file-payload) for the payload
+and signature contract. Other channels, including in-app, receive the summary
+only. A Lab Book build failure sends the text report with an omission note.
 
-File limits are conservative: 8 MiB for Discord and 10 MiB of raw attachment
-bytes for SMTP (leaving space for base64 and MIME overhead). Above the applicable
-limit, delivery sends the text report with a Lab Book omission note. A build
-failure also sends text with a failure note and logs the error. Existing delivery
-tracking and retries apply to text; retry attempts do not reconstruct the Lab
-Book snapshot.
+Slack file uploads require a bot token with the `files:write` scope and a
+channel ID. Invite the bot to that channel. In **Settings → Notifications**, set
+the existing Slack incoming-webhook URL, then enter the bot token and channel
+ID together. The token is write-only: it is encrypted at rest and reads expose
+only whether it is set. Slack text continues to use the incoming webhook. If the
+file upload fails, the text report is sent through that webhook with an omission
+note; without both token and channel ID, the note explains that setup is needed.
+
+The fixed raw-file limits are 8 MiB for Discord, 10 MiB for SMTP, 10 MiB for a
+generic webhook, and 50 MiB for Slack. A file above its channel limit is omitted
+and the text report is sent with an omission note. Failed report deliveries
+retain the same Lab Book file in the blob store for retries; retries do not
+rebuild it from a later report snapshot. The stored file is released when no
+delivery retry remains.
 
 Report attachments retain embedded Mermaid JavaScript: diagrams draw locally
 when the HTML is opened, rather than being pre-rendered in a browser. The print
 cover shows `Report: <definition name>`, the UTC export time and doc count,
 followed by a linked contents page. Browser printing provides **Save as PDF**;
 page numbers come from the browser's print headers/footers. No server renderer
-is needed. Slack/webhook file uploads remain unsupported.
+is needed.

@@ -402,7 +402,8 @@ export const ptBR: Catalog = {
     },
   },
   reports: {
-    attachLabBook: 'Anexar livro do laboratório offline (email e Discord)',
+    attachLabBook: 'Anexar livro do laboratório offline',
+    attachLabBookHint: 'O livro será anexado aos relatórios por email, Discord, Slack e webhook. Envios pelo Slack exigem token de bot e ID do canal nas configurações de notificações.',
   },
   search: {
     title: 'Pesquisar no laboratório',
@@ -688,6 +689,13 @@ export const ptBR: Catalog = {
     clauseMaxReached: 'Máximo de 5 cláusulas de entidade relacionada permitido',
   },
   settings: {
+    notifications: {
+      slackChannelId: 'ID do canal do Slack',
+      slackBotToken: 'Token do bot do Slack',
+      slackBotTokenHint: 'Campo somente para gravação. Requer o escopo files:write e o bot deve ser convidado para o canal.',
+      slackTokenSet: 'Token configurado',
+      clearSlackToken: 'Limpar token do bot',
+    },
     runbooks: {
       requireApproval: 'Exigir uma segunda aprovação',
       requireApprovalHint:

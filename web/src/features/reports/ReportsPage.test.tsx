@@ -24,7 +24,8 @@ it('selects email and persists the Lab Book flag in a report definition', async 
   fireEvent.click(screen.getByRole('button', { name: 'New definition' }));
   fireEvent.change(screen.getByLabelText('name'), { target: { value: 'Weekly' } });
   fireEvent.change(screen.getByLabelText('slug'), { target: { value: 'weekly' } });
-  fireEvent.click(screen.getByLabelText('Attach offline Lab Book (email and Discord)'));
+  fireEvent.click(screen.getByLabelText('Attach offline Lab Book'));
+  expect(screen.getByText(/Slack uploads require a bot token and channel ID/)).toBeInTheDocument();
   fireEvent.click(screen.getByLabelText('email'));
   fireEvent.click(screen.getByRole('button', { name: 'Save' }));
   await waitFor(() => expect(create).toHaveBeenCalledWith(expect.objectContaining({ attachLabBook: true, channels: ['email'] })));

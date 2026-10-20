@@ -372,6 +372,9 @@ function DefinitionDialog({
           />
           {t('reports.attachLabBook')}
         </label>
+        <p className="-mt-3 text-2xs text-ink-faint sm:col-span-2">
+          {t('reports.attachLabBookHint')}
+        </p>
 
         <fieldset className="sm:col-span-2">
           <legend className="mb-1 text-xs text-ink-muted">

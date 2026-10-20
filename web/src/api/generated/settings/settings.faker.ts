@@ -194,7 +194,20 @@ export const getGetNotificationsConfigResponseMock = (
     () => ({
       type: faker.helpers.arrayElement(Object.values(NotificationChannelType)),
       enabled: faker.datatype.boolean(),
-      config: faker.helpers.arrayElement([{}, undefined]),
+      config: faker.helpers.arrayElement([
+        {
+          botToken: faker.helpers.arrayElement([
+            faker.string.alpha({ length: { min: 10, max: 20 } }),
+            undefined,
+          ]),
+          botTokenSet: faker.helpers.arrayElement([faker.datatype.boolean(), undefined]),
+          channelId: faker.helpers.arrayElement([
+            faker.string.alpha({ length: { min: 10, max: 20 } }),
+            undefined,
+          ]),
+        },
+        undefined,
+      ]),
     })
   ),
   routing: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(
@@ -226,7 +239,20 @@ export const getPutNotificationsConfigResponseMock = (
     () => ({
       type: faker.helpers.arrayElement(Object.values(NotificationChannelType)),
       enabled: faker.datatype.boolean(),
-      config: faker.helpers.arrayElement([{}, undefined]),
+      config: faker.helpers.arrayElement([
+        {
+          botToken: faker.helpers.arrayElement([
+            faker.string.alpha({ length: { min: 10, max: 20 } }),
+            undefined,
+          ]),
+          botTokenSet: faker.helpers.arrayElement([faker.datatype.boolean(), undefined]),
+          channelId: faker.helpers.arrayElement([
+            faker.string.alpha({ length: { min: 10, max: 20 } }),
+            undefined,
+          ]),
+        },
+        undefined,
+      ]),
     })
   ),
   routing: Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, (_, i) => i + 1).map(

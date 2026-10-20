@@ -46,6 +46,7 @@ func (d *Dispatcher) retryDueDeliveries(ctx context.Context, logger *slog.Logger
 		notif, err := d.store.GetNotificationByID(ctx, del.NotificationID)
 		if err != nil {
 			d.failTerminalDelivery(ctx, del, "notification unavailable: "+err.Error(), logger)
+			d.releaseNotificationFileIfDone(ctx, del.NotificationID, logger)
 			continue
 		}
 
@@ -53,6 +54,7 @@ func (d *Dispatcher) retryDueDeliveries(ctx context.Context, logger *slog.Logger
 			// in_app never fails, so it never lands in the failed+due set; anything else here
 			// is a channel type no longer supported by this build.
 			d.failTerminalDelivery(ctx, del, "unsupported channel type: "+del.Channel, logger)
+			d.releaseNotificationFileIfDone(ctx, del.NotificationID, logger)
 			continue
 		}
 		sendErr := d.retryChannel(ctx, notif, del.Channel)
@@ -61,6 +63,8 @@ func (d *Dispatcher) retryDueDeliveries(ctx context.Context, logger *slog.Logger
 		if sendErr == nil {
 			if err := d.store.UpdateDeliveryResult(ctx, del.ID, store.DeliveryStatusSent, attempts, "", ""); err != nil {
 				logger.Error("update delivery result", "error", err, "deliveryId", del.ID)
+			} else {
+				d.releaseNotificationFileIfDone(ctx, del.NotificationID, logger)
 			}
 			continue
 		}
@@ -71,6 +75,8 @@ func (d *Dispatcher) retryDueDeliveries(ctx context.Context, logger *slog.Logger
 		}
 		if err := d.store.UpdateDeliveryResult(ctx, del.ID, store.DeliveryStatusFailed, attempts, sendErr.Error(), next); err != nil {
 			logger.Error("update delivery result", "error", err, "deliveryId", del.ID)
+		} else {
+			d.releaseNotificationFileIfDone(ctx, del.NotificationID, logger)
 		}
 	}
 }
@@ -87,7 +93,32 @@ func (d *Dispatcher) retryChannel(ctx context.Context, notif *store.Notification
 	if !ok {
 		return errors.New("unsupported channel type: " + channelType)
 	}
-	return sender(ctx, cfg, d.signingSecret(cfg), notif.Title, notif.Message)
+	cfg.BotToken = d.botToken(cfg)
+	var attachment *Attachment
+	var note string
+	if attachmentLimit(channelType) > 0 {
+		attachment, note = d.retryAttachment(ctx, notif.ID)
+	}
+	if attachment != nil {
+		return sender(ctx, cfg, d.signingSecret(cfg), notif.Title, notif.Message, attachment)
+	}
+	if note != "" {
+		note = "\n\n" + note
+	}
+	return sender(ctx, cfg, d.signingSecret(cfg), notif.Title, notif.Message+note)
+}
+
+func (d *Dispatcher) releaseNotificationFileIfDone(ctx context.Context, notificationID string, logger *slog.Logger) {
+	pending, err := d.store.HasPendingDeliveryRetry(ctx, notificationID)
+	if err != nil {
+		logger.Error("check notification retries", "error", err, "notificationId", notificationID)
+		return
+	}
+	if !pending {
+		if err := d.store.DeleteNotificationFile(ctx, notificationID); err != nil {
+			logger.Error("release notification file", "error", err, "notificationId", notificationID)
+		}
+	}
 }
 
 func (d *Dispatcher) failTerminalDelivery(ctx context.Context, del store.DeliveryRecord, reason string, logger *slog.Logger) {

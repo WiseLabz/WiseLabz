@@ -3,13 +3,18 @@
 package notifications
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
+	"io"
 	"log/slog"
 	"slices"
 	"sync"
 	"time"
 
+	"github.com/WiseLabz/wiselabz/internal/blobstore"
 	"github.com/WiseLabz/wiselabz/internal/crypto"
 	"github.com/WiseLabz/wiselabz/internal/logsafe"
 	"github.com/WiseLabz/wiselabz/internal/store"
@@ -30,6 +35,7 @@ const maxConcurrentNotifications = 8
 type Dispatcher struct {
 	store     *store.Store
 	hub       *ws.Hub
+	blobs     *blobstore.Store
 	fanoutSem chan struct{}
 	encKey    []byte // decodes per-channel signing secrets; nil disables signing
 	// inflight tracks every goroutine spawned by the Notify* entry points. Nothing in
@@ -60,6 +66,9 @@ func (d *Dispatcher) SetEncryptionKey(b64 string) {
 	}
 	d.encKey = key
 }
+
+// SetBlobStore enables persistence of report attachments for delivery retries.
+func (d *Dispatcher) SetBlobStore(blobs *blobstore.Store) { d.blobs = blobs }
 
 // maxNotifyUsers bounds the single-page user fetch in NotifyAlertCreated.
 // ponytail: fine for a self-hosted ops tool's user count; paginate if that changes.
@@ -381,9 +390,10 @@ func (d *Dispatcher) fanOut(users []store.User, channels []channelCfg, routes []
 
 // channelCfg is one entry of the notification_config "channels" array.
 type channelCfg struct {
-	Type    string         `json:"type"`
-	Enabled bool           `json:"enabled"`
-	Config  map[string]any `json:"config"`
+	Type     string         `json:"type"`
+	Enabled  bool           `json:"enabled"`
+	Config   map[string]any `json:"config"`
+	BotToken string         `json:"-"`
 }
 
 // routeCfg is one entry of the notification_config "routing" array.
@@ -591,9 +601,59 @@ func (d *Dispatcher) attemptChannel(ctx context.Context, notificationID, channel
 		d.recordDelivery(ctx, notificationID, channelType, store.DeliveryStatusFailed, "unsupported channel type")
 		return
 	}
+	cfg.BotToken = d.botToken(cfg)
 	if err := sender(ctx, cfg, d.signingSecret(cfg), title, message, attachments...); err != nil {
 		d.recordDelivery(ctx, notificationID, channelType, store.DeliveryStatusFailed, err.Error())
+		if len(attachments) > 0 && attachments[0] != nil && attachmentLimit(channelType) > 0 && len(attachments[0].Data) <= attachmentLimit(channelType) {
+			d.persistNotificationFile(ctx, notificationID, attachments[0])
+		}
 		return
 	}
 	d.recordDelivery(ctx, notificationID, channelType, store.DeliveryStatusSent, "")
+}
+
+func (d *Dispatcher) persistNotificationFile(ctx context.Context, notificationID string, attachment *Attachment) {
+	if d.blobs == nil {
+		return
+	}
+	blobstore.PublicationMu.Lock()
+	defer blobstore.PublicationMu.Unlock()
+	if _, err := d.store.GetNotificationFile(ctx, notificationID); err == nil {
+		return
+	}
+	blob, err := d.blobs.PutGenerated(bytes.NewReader(attachment.Data), attachment.ContentType)
+	if err != nil {
+		slog.Warn("persist notification attachment", "error", err, "notificationId", notificationID)
+		return
+	}
+	if err := d.store.PutNotificationFile(ctx, &store.NotificationFile{
+		NotificationID: notificationID,
+		Filename:       attachment.Filename,
+		ContentType:    attachment.ContentType,
+		SHA256:         blob.SHA256,
+		Size:           blob.Size,
+	}); err != nil {
+		slog.Warn("record notification attachment", "error", err, "notificationId", notificationID)
+	}
+}
+
+func (d *Dispatcher) retryAttachment(ctx context.Context, notificationID string) (*Attachment, string) {
+	file, err := d.store.GetNotificationFile(ctx, notificationID)
+	if err != nil {
+		return nil, ""
+	}
+	if d.blobs != nil {
+		f, err := d.blobs.Open(file.SHA256)
+		if err == nil {
+			defer f.Close() //nolint:errcheck
+			data, readErr := io.ReadAll(io.LimitReader(f, (50<<20)+1))
+			if readErr == nil && int64(len(data)) == file.Size && len(data) <= 50<<20 {
+				sum := sha256.Sum256(data)
+				if hex.EncodeToString(sum[:]) == file.SHA256 {
+					return &Attachment{Filename: file.Filename, ContentType: file.ContentType, Data: data}, ""
+				}
+			}
+		}
+	}
+	return nil, "Lab Book omitted: file no longer available."
 }

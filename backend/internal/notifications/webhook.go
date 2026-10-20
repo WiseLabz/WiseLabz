@@ -77,13 +77,32 @@ func sendWebhook(ctx context.Context, rawURL, secret string, payload any) error 
 	if err != nil {
 		return err
 	}
-	headers := map[string]string{"Content-Type": "application/json"}
+	headers := signedHeaders(secret, body)
+	headers["Content-Type"] = "application/json"
+	return doHTTPRequest(ctx, rawURL, headers, body)
+}
+
+func signedHeaders(secret string, body []byte) map[string]string {
+	headers := map[string]string{}
 	if secret != "" {
 		ts := strconv.FormatInt(time.Now().Unix(), 10)
 		headers[timestampHeader] = ts
 		headers[signatureHeader] = signWebhook(secret, ts, body)
 	}
-	return doHTTPRequest(ctx, rawURL, headers, body)
+	return headers
+}
+
+func (d *Dispatcher) botToken(cfg channelCfg) string {
+	enc, _ := cfg.Config["botTokenEncrypted"].(string)
+	if enc == "" || d.encKey == nil {
+		return ""
+	}
+	token, _, err := crypto.DecryptFor(crypto.PurposeNotification, "slack-bot-token", enc, d.encKey)
+	if err != nil {
+		slog.Error("decrypt Slack bot token", "channel", cfg.Type)
+		return ""
+	}
+	return token
 }
 
 // doHTTPRequest POSTs body to rawURL with the given headers over the shared guarded webhook
