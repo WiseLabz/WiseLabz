@@ -179,7 +179,7 @@ export function NotificationsPage() {
                       variant="ghost"
                       size="sm"
                       className="mt-1"
-                      onClick={() => updateSlackConfig({ botToken: '', channelId: '' })}
+                      onClick={() => updateSlackConfig({ botToken: '', channelId: '', botTokenSet: false })}
                     >
                       {t('settings.notifications.clearSlackToken')}
                     </Button>

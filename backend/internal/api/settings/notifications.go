@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"regexp"
+	"strings"
 
 	"github.com/WiseLabz/wiselabz/internal/crypto"
 	"github.com/WiseLabz/wiselabz/internal/httputil"
@@ -94,6 +95,9 @@ func (h *Handler) applyChannelSecrets(ctx context.Context, cfg *notificationConf
 			delete(conf, field.name+"Set")
 			delete(conf, field.name+"Encrypted")
 			secret, provided := conf[field.name].(string)
+			if field.name == "botToken" {
+				secret = strings.TrimSpace(secret)
+			}
 			delete(conf, field.name)
 			switch {
 			case !provided:

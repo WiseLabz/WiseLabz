@@ -47,6 +47,7 @@ it('lets admins set and clear a write-only Slack bot token', async () => {
 
   fireEvent.click(screen.getByRole('button', { name: 'Clear bot token' }));
   expect(screen.getByLabelText('Slack channel ID')).toHaveValue('');
+  expect(screen.queryByRole('button', { name: 'Clear bot token' })).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Save routing' }));
   await waitFor(() => expect(put).toHaveBeenLastCalledWith(expect.objectContaining({
     channels: [expect.objectContaining({ config: expect.objectContaining({ botToken: '' }) })],

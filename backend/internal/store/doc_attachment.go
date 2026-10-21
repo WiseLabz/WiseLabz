@@ -99,7 +99,7 @@ func (s *Store) DeleteDocAttachment(ctx context.Context, docID, id string) error
 	return nil
 }
 
-// BlobReferenced checks references from every live or deleted doc.
+// BlobReferenced checks references from every live or deleted doc and every retained notification file.
 func (s *Store) BlobReferenced(ctx context.Context, hash string) (bool, error) {
 	var n int
 	err := s.db.QueryRowContext(ctx, `

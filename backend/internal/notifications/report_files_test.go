@@ -102,7 +102,7 @@ func TestDiscordFileSignature(t *testing.T) {
 
 func TestSlackReportUpload(t *testing.T) {
 	connector.AllowLoopbackForTest(t)
-	for _, mode := range []string{"success", "no_token", "oversize", "get_rejected", "upload_rejected", "complete_rejected"} {
+	for _, mode := range []string{"success", "no_token", "oversize", "get_rejected", "error_echoes_token", "empty_upload_url", "upload_rejected", "complete_rejected"} {
 		t.Run(mode, func(t *testing.T) {
 			calls := []string{}
 			file := &Attachment{Filename: "book.html", ContentType: "text/html", Data: []byte("<html>book</html>")}
@@ -125,6 +125,9 @@ func TestSlackReportUpload(t *testing.T) {
 					case "oversize":
 						note = "attachment exceeds this channel's file size limit."
 					}
+					if strings.Contains(string(body), "xoxb-test-token") {
+						t.Error("token in webhook body")
+					}
 					if !strings.Contains(string(body), "Lab Book omitted: "+note) {
 						t.Errorf("fallback %s", body)
 					}
@@ -143,7 +146,7 @@ func TestSlackReportUpload(t *testing.T) {
 					}
 					return
 				}
-				if r.Header.Get("Authorization") != "Bearer token" {
+				if r.Header.Get("Authorization") != "Bearer xoxb-test-token" {
 					t.Error("missing API authorization")
 				}
 				if err := r.ParseForm(); err != nil {
@@ -157,6 +160,14 @@ func TestSlackReportUpload(t *testing.T) {
 					}
 					if mode == "get_rejected" {
 						_, _ = fmt.Fprint(w, `{"ok":false,"error":"missing_scope"}`)
+						return
+					}
+					if mode == "error_echoes_token" {
+						_, _ = fmt.Fprint(w, `{"ok":false,"error":"xoxb-test-token"}`)
+						return
+					}
+					if mode == "empty_upload_url" {
+						_, _ = fmt.Fprint(w, `{"ok":true,"upload_url":"","file_id":"F123"}`)
 						return
 					}
 					_, _ = fmt.Fprintf(w, `{"ok":true,"upload_url":%q,"file_id":"F123"}`, srv.URL+"/upload")
@@ -177,7 +188,7 @@ func TestSlackReportUpload(t *testing.T) {
 			previous := slackAPIBase
 			slackAPIBase = srv.URL
 			defer func() { slackAPIBase = previous }()
-			cfg := channelCfg{BotToken: "token", Config: map[string]any{"url": srv.URL + "/hook", "channelId": "C123"}}
+			cfg := channelCfg{BotToken: "xoxb-test-token", Config: map[string]any{"url": srv.URL + "/hook", "channelId": "C123"}}
 			if mode == "no_token" {
 				cfg.BotToken = ""
 			}
@@ -191,7 +202,7 @@ func TestSlackReportUpload(t *testing.T) {
 			switch mode {
 			case "success":
 				want = "/files.getUploadURLExternal,/upload,/files.completeUploadExternal"
-			case "get_rejected":
+			case "get_rejected", "error_echoes_token", "empty_upload_url":
 				want = "/files.getUploadURLExternal,/hook"
 			case "upload_rejected":
 				want = "/files.getUploadURLExternal,/upload,/hook"

@@ -100,7 +100,13 @@ func sendGenericWebhookChannel(ctx context.Context, cfg channelCfg, secret, titl
 		"size": len(attachment.Data), "sha256": fmt.Sprintf("%x", sha256.Sum256(attachment.Data)),
 		"data": base64.StdEncoding.EncodeToString(attachment.Data),
 	}}}
-	return sendWebhook(ctx, rawURL, secret, payload)
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+	headers := signedHeaders(secret, body)
+	headers["Content-Type"] = "application/json"
+	return doFileHTTPRequest(ctx, rawURL, headers, body)
 }
 
 func sendDiscordChannel(ctx context.Context, cfg channelCfg, secret, title, message string, attachments ...*Attachment) error {
@@ -133,7 +139,7 @@ func sendDiscordChannel(ctx context.Context, cfg channelCfg, secret, title, mess
 	}
 	headers := signedHeaders(secret, body.Bytes())
 	headers["Content-Type"] = writer.FormDataContentType()
-	return doHTTPRequest(ctx, rawURL, headers, body.Bytes())
+	return doFileHTTPRequest(ctx, rawURL, headers, body.Bytes())
 }
 
 // slackAPIBase is overridden by local API tests.
@@ -208,7 +214,7 @@ func uploadSlackFile(ctx context.Context, token, channelID, title, message strin
 	if result.UploadURL == "" || result.FileID == "" {
 		return errors.New("slack: incomplete upload response")
 	}
-	if err := doHTTPRequest(ctx, result.UploadURL, map[string]string{"Content-Type": "application/octet-stream"}, attachment.Data); err != nil {
+	if err := doFileHTTPRequest(ctx, result.UploadURL, map[string]string{"Content-Type": "application/octet-stream"}, attachment.Data); err != nil {
 		return errors.New("slack: file upload failed")
 	}
 	files, err := json.Marshal([]map[string]string{{"id": result.FileID, "title": attachment.Filename}})

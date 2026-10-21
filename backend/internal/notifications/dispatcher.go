@@ -8,6 +8,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"slices"
@@ -603,13 +604,21 @@ func (d *Dispatcher) attemptChannel(ctx context.Context, notificationID, channel
 	}
 	cfg.BotToken = d.botToken(cfg)
 	if err := sender(ctx, cfg, d.signingSecret(cfg), title, message, attachments...); err != nil {
-		d.recordDelivery(ctx, notificationID, channelType, store.DeliveryStatusFailed, err.Error())
-		if len(attachments) > 0 && attachments[0] != nil && attachmentLimit(channelType) > 0 && len(attachments[0].Data) <= attachmentLimit(channelType) {
+		// Persist before recording the failure so the retrier cannot run ahead and find no file.
+		if len(attachments) > 0 && attachments[0] != nil && attachmentLimit(channelType) > 0 && len(attachments[0].Data) <= attachmentLimit(channelType) && canRetryFile(channelType, cfg) {
 			d.persistNotificationFile(ctx, notificationID, attachments[0])
 		}
+		d.recordDelivery(ctx, notificationID, channelType, store.DeliveryStatusFailed, err.Error())
 		return
 	}
 	d.recordDelivery(ctx, notificationID, channelType, store.DeliveryStatusSent, "")
+}
+
+// canRetryFile reports whether a retry of this channel can carry the Lab Book file. Slack uploads
+// need both a bot token and a channel ID, so a Slack retry without them would send text only.
+func canRetryFile(channelType string, cfg channelCfg) bool {
+	channelID, _ := cfg.Config["channelId"].(string)
+	return channelType != "slack" || (cfg.BotToken != "" && channelID != "")
 }
 
 func (d *Dispatcher) persistNotificationFile(ctx context.Context, notificationID string, attachment *Attachment) {
@@ -637,10 +646,15 @@ func (d *Dispatcher) persistNotificationFile(ctx context.Context, notificationID
 	}
 }
 
-func (d *Dispatcher) retryAttachment(ctx context.Context, notificationID string) (*Attachment, string) {
+// retryAttachment loads the retained file for a notification. A missing row means there was no file
+// to retain, while any other lookup error is returned so the delivery is rescheduled.
+func (d *Dispatcher) retryAttachment(ctx context.Context, notificationID string) (*Attachment, string, error) {
 	file, err := d.store.GetNotificationFile(ctx, notificationID)
+	if errors.Is(err, store.ErrNotFound) {
+		return nil, "", nil
+	}
 	if err != nil {
-		return nil, ""
+		return nil, "", err
 	}
 	if d.blobs != nil {
 		f, err := d.blobs.Open(file.SHA256)
@@ -650,10 +664,10 @@ func (d *Dispatcher) retryAttachment(ctx context.Context, notificationID string)
 			if readErr == nil && int64(len(data)) == file.Size && len(data) <= 50<<20 {
 				sum := sha256.Sum256(data)
 				if hex.EncodeToString(sum[:]) == file.SHA256 {
-					return &Attachment{Filename: file.Filename, ContentType: file.ContentType, Data: data}, ""
+					return &Attachment{Filename: file.Filename, ContentType: file.ContentType, Data: data}, "", nil
 				}
 			}
 		}
 	}
-	return nil, "Lab Book omitted: file no longer available."
+	return nil, "Lab Book omitted: file no longer available.", nil
 }

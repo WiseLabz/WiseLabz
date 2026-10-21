@@ -3,6 +3,7 @@ package notifications
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -97,7 +98,11 @@ func (d *Dispatcher) retryChannel(ctx context.Context, notif *store.Notification
 	var attachment *Attachment
 	var note string
 	if attachmentLimit(channelType) > 0 {
-		attachment, note = d.retryAttachment(ctx, notif.ID)
+		var err error
+		attachment, note, err = d.retryAttachment(ctx, notif.ID)
+		if err != nil {
+			return fmt.Errorf("load notification file: %w", err)
+		}
 	}
 	if attachment != nil {
 		return sender(ctx, cfg, d.signingSecret(cfg), notif.Title, notif.Message, attachment)
