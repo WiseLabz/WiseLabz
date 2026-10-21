@@ -13,7 +13,7 @@
 
 ## 3. Retries with the same file
 
-- [ ] 3.1 Add migration `000070_notification_files` for sqlite and postgres (FK to `in_app_notifications` ON DELETE CASCADE) with store methods to put, get and delete a notification file, and make `BlobReferenced` count `notification_files.sha256`; verify with store tests on both dialects including cascade delete and `BlobReferenced`.
+- [x] 3.1 Add migration `000070_notification_files` for sqlite and postgres (FK to `in_app_notifications` ON DELETE CASCADE) with store methods to put, get and delete a notification file, and make `BlobReferenced` count `notification_files.sha256`; verify with store tests on both dialects including cascade delete and `BlobReferenced`.
 - [x] 3.2 Persist the attachment once per notification when a file-carrying delivery within its channel limit fails (blob store at `attachments.dir` with a 50 MiB cap under `blobstore.PublicationMu`, wired from `cmd/server/main.go`), resend it from `retryChannel`, fall back to text with "Lab Book omitted: file no longer available." when the blob is gone, and release the row once no delivery of the notification is pending; verify with dispatcher/retry tests where a webhook fails then accepts the retry with identical bytes, the row is released after success and after exhausted retries, and a missing blob yields the note.
 - [x] 3.3 Add a regression test that alerts and digests delivered to Slack, webhook and Discord receivers carry no file, no `attachments` key and make no Slack API calls; verify the test passes.
 

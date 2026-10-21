@@ -106,9 +106,7 @@ func main() {
 
 	// Initialize notification dispatcher (must precede sync engine so it can
 	// notify on alert creation)
-	notifDispatcher := notifications.NewDispatcher(s, wsHub)
-	notifDispatcher.SetEncryptionKey(cfg.Encryption.Key)
-	notifDispatcher.SetBlobStore(blobstore.New(cfg.Attachments.Dir, 50<<20))
+	notifDispatcher := newNotificationDispatcher(s, wsHub, cfg)
 
 	// Apply the connectors declared in config.yaml (#500) before anything
 	// that reads connectors starts.
@@ -248,6 +246,13 @@ func newAIRegistries() (*ai.Registry, *ai.EmbedRegistry) {
 	ai.RegisterOllamaEmbedder(embedRegistry)
 	ai.RegisterOpenAIEmbedder(embedRegistry)
 	return aiRegistry, embedRegistry
+}
+
+func newNotificationDispatcher(s *store.Store, hub *ws.Hub, cfg *config.Config) *notifications.Dispatcher {
+	dispatcher := notifications.NewDispatcher(s, hub)
+	dispatcher.SetEncryptionKey(cfg.Encryption.Key)
+	dispatcher.SetBlobStore(blobstore.New(cfg.Attachments.Dir, 50<<20))
+	return dispatcher
 }
 
 // newReportManager builds the report manager, notifying the report's

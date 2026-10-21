@@ -11,7 +11,7 @@ schedule in `retrySchedule` (1m, 5m, 15m, 30m, 1h) up to `maxDeliveryAttempts` (
 ## Webhook signing (HMAC-SHA256)
 
 The generic `webhook` channel — and `discord`/`slack` — can be configured with a
-shared signing secret. When set, every request carries:
+shared signing secret. When set, every webhook request carries:
 
 - `X-WiseLabz-Timestamp` — Unix seconds at send time.
 - `X-WiseLabz-Signature` — `sha256=<hex>`, where the digest is
@@ -50,7 +50,7 @@ Every `config` field below lives under `NotificationChannel.config` for that cha
 All HTTP-based channels (webhook, Discord, Slack, ntfy, Telegram, Gotify, Pushover, Matrix, Apprise) share one guarded transport
 (`internal/notifications/webhook.go`): a 10s timeout, a dialer that refuses loopback/link-local/
 unspecified/multicast destinations, and no redirect following. Response bodies are read up to 64
-KiB and discarded — never stored or surfaced.
+KiB. Raw response bodies are never stored or surfaced; Slack API failures expose only a redacted error code.
 
 ## Generic webhook file payload
 
