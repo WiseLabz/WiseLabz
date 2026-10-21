@@ -6,12 +6,26 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"regexp"
+	"strings"
 
 	"github.com/WiseLabz/wiselabz/internal/crypto"
 	"github.com/WiseLabz/wiselabz/internal/httputil"
 	"github.com/WiseLabz/wiselabz/internal/logsafe"
 	"github.com/WiseLabz/wiselabz/internal/notifications"
 )
+
+var slackChannelIDPattern = regexp.MustCompile(`^[A-Z0-9]+$`)
+
+type writeOnlyChannelField struct {
+	name  string
+	label string
+}
+
+var writeOnlyChannelFields = []writeOnlyChannelField{
+	{name: "secret", label: "signing-secret"},
+	{name: "botToken", label: "slack-bot-token"},
+}
 
 // notificationConfigDoc mirrors the NotificationConfig OpenAPI schema.
 type notificationConfigDoc struct {
@@ -45,10 +59,14 @@ func (h *Handler) GetNotificationsConfig(w http.ResponseWriter, r *http.Request)
 		if conf == nil {
 			continue
 		}
-		if enc, _ := conf["secretEncrypted"].(string); enc != "" {
-			conf["secretSet"] = true
+		for _, field := range writeOnlyChannelFields {
+			enc, _ := conf[field.name+"Encrypted"].(string)
+			if enc != "" {
+				conf[field.name+"Set"] = true
+			}
+			delete(conf, field.name+"Encrypted")
+			delete(conf, field.name)
 		}
-		delete(conf, "secretEncrypted")
 	}
 	httputil.JSON(w, http.StatusOK, cfg)
 }
@@ -60,7 +78,10 @@ func (h *Handler) applyChannelSecrets(ctx context.Context, cfg *notificationConf
 	for _, ch := range h.loadNotificationConfig(ctx).Channels {
 		typ, _ := ch["type"].(string)
 		if conf, _ := ch["config"].(map[string]any); conf != nil {
-			prev[typ], _ = conf["secretEncrypted"].(string)
+			for _, field := range writeOnlyChannelFields {
+				key := typ + ":" + field.name
+				prev[key], _ = conf[field.name+"Encrypted"].(string)
+			}
 		}
 	}
 	var key []byte
@@ -70,27 +91,32 @@ func (h *Handler) applyChannelSecrets(ctx context.Context, cfg *notificationConf
 			continue
 		}
 		typ, _ := ch["type"].(string)
-		delete(conf, "secretSet")
-		delete(conf, "secretEncrypted")
-		secret, provided := conf["secret"].(string)
-		delete(conf, "secret")
-		switch {
-		case !provided:
-			if prev[typ] != "" {
-				conf["secretEncrypted"] = prev[typ]
+		for _, field := range writeOnlyChannelFields {
+			delete(conf, field.name+"Set")
+			delete(conf, field.name+"Encrypted")
+			secret, provided := conf[field.name].(string)
+			if field.name == "botToken" {
+				secret = strings.TrimSpace(secret)
 			}
-		case secret != "":
-			if key == nil {
-				var err error
-				if key, err = crypto.DecodeKey(h.Config.Encryption.Key); err != nil {
-					return fmt.Errorf("load encryption key: %w", err)
+			delete(conf, field.name)
+			switch {
+			case !provided:
+				if encrypted := prev[typ+":"+field.name]; encrypted != "" {
+					conf[field.name+"Encrypted"] = encrypted
 				}
+			case secret != "":
+				if key == nil {
+					var err error
+					if key, err = crypto.DecodeKey(h.Config.Encryption.Key); err != nil {
+						return fmt.Errorf("load encryption key: %w", err)
+					}
+				}
+				enc, err := crypto.EncryptFor(crypto.PurposeNotification, field.label, secret, key)
+				if err != nil {
+					return fmt.Errorf("encrypt %s: %w", field.name, err)
+				}
+				conf[field.name+"Encrypted"] = enc
 			}
-			enc, err := crypto.EncryptFor(crypto.PurposeNotification, "signing-secret", secret, key)
-			if err != nil {
-				return fmt.Errorf("encrypt signing secret: %w", err)
-			}
-			conf["secretEncrypted"] = enc
 		}
 	}
 	return nil
@@ -108,9 +134,12 @@ func (h *Handler) UpdateNotificationsConfig(w http.ResponseWriter, r *http.Reque
 	if cfg.Routing == nil {
 		cfg.Routing = []map[string]any{}
 	}
-
 	if err := h.applyChannelSecrets(r.Context(), &cfg); err != nil {
 		httputil.Errorf(w, err)
+		return
+	}
+	if err := validateSlackChannelConfigs(cfg.Channels); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -125,6 +154,31 @@ func (h *Handler) UpdateNotificationsConfig(w http.ResponseWriter, r *http.Reque
 	}
 
 	h.GetNotificationsConfig(w, r)
+}
+
+func validateSlackChannelConfigs(channels []map[string]any) error {
+	for _, ch := range channels {
+		typ, _ := ch["type"].(string)
+		if typ != "slack" {
+			continue
+		}
+		conf, _ := ch["config"].(map[string]any)
+		if conf == nil {
+			continue
+		}
+		botToken, _ := conf["botToken"].(string)
+		if botToken == "" {
+			botToken, _ = conf["botTokenEncrypted"].(string)
+		}
+		channelID, _ := conf["channelId"].(string)
+		if (botToken == "") != (channelID == "") {
+			return fmt.Errorf("slack bot token and channel ID must be configured together")
+		}
+		if channelID != "" && !slackChannelIDPattern.MatchString(channelID) {
+			return fmt.Errorf("slack channel ID must contain only uppercase letters and digits")
+		}
+	}
+	return nil
 }
 
 // TestNotificationsConfig handles POST /api/notifications/config/test. It sends a real test
@@ -156,6 +210,11 @@ func (h *Handler) TestNotificationsConfig(w http.ResponseWriter, r *http.Request
 	}
 
 	var secret string
+	testConfig := make(map[string]any, len(conf)+1)
+	for name, value := range conf {
+		testConfig[name] = value
+	}
+	delete(testConfig, "botToken")
 	if enc, _ := conf["secretEncrypted"].(string); enc != "" {
 		key, err := crypto.DecodeKey(h.Config.Encryption.Key)
 		if err == nil {
@@ -166,8 +225,26 @@ func (h *Handler) TestNotificationsConfig(w http.ResponseWriter, r *http.Request
 			secret = ""
 		}
 	}
+	var tokenErr error
+	if enc, _ := conf["botTokenEncrypted"].(string); enc != "" {
+		key, err := crypto.DecodeKey(h.Config.Encryption.Key)
+		if err == nil {
+			var token string
+			token, _, err = crypto.DecryptFor(crypto.PurposeNotification, "slack-bot-token", enc, key)
+			if err == nil {
+				testConfig["botToken"] = token
+			}
+		}
+		if err != nil {
+			slog.Error("settings: decrypt Slack bot token for test", "channel", logsafe.Sanitize(req.Channel), "error", logsafe.Err(err))
+			tokenErr = fmt.Errorf("could not decrypt Slack bot token")
+		}
+	}
 
-	sendErr := notifications.SendTest(r.Context(), req.Channel, conf, secret)
+	sendErr := tokenErr
+	if sendErr == nil {
+		sendErr = notifications.SendTest(r.Context(), req.Channel, testConfig, secret)
+	}
 	detail := map[string]any{"channel": req.Channel, "ok": sendErr == nil}
 	if sendErr != nil {
 		detail["error"] = sendErr.Error()

@@ -46,6 +46,12 @@ func newWebhookClient() *http.Client {
 	})
 }
 
+// fileUploadClient carries Lab Book file uploads, which can take longer than webhookClient's 10s timeout.
+var fileUploadClient = httpx.NewClient(httpx.Options{
+	Timeout:     2 * time.Minute,
+	DialContext: connector.GuardedDialer(10 * time.Second).DialContext,
+})
+
 // signWebhook returns the signature header value for the given timestamp and body.
 func signWebhook(secret, timestamp string, body []byte) string {
 	mac := hmac.New(sha256.New, []byte(secret))
@@ -77,13 +83,32 @@ func sendWebhook(ctx context.Context, rawURL, secret string, payload any) error 
 	if err != nil {
 		return err
 	}
-	headers := map[string]string{"Content-Type": "application/json"}
+	headers := signedHeaders(secret, body)
+	headers["Content-Type"] = "application/json"
+	return doHTTPRequest(ctx, rawURL, headers, body)
+}
+
+func signedHeaders(secret string, body []byte) map[string]string {
+	headers := map[string]string{}
 	if secret != "" {
 		ts := strconv.FormatInt(time.Now().Unix(), 10)
 		headers[timestampHeader] = ts
 		headers[signatureHeader] = signWebhook(secret, ts, body)
 	}
-	return doHTTPRequest(ctx, rawURL, headers, body)
+	return headers
+}
+
+func (d *Dispatcher) botToken(cfg channelCfg) string {
+	enc, _ := cfg.Config["botTokenEncrypted"].(string)
+	if enc == "" || d.encKey == nil {
+		return ""
+	}
+	token, _, err := crypto.DecryptFor(crypto.PurposeNotification, "slack-bot-token", enc, d.encKey)
+	if err != nil {
+		slog.Error("decrypt Slack bot token", "channel", cfg.Type)
+		return ""
+	}
+	return token
 }
 
 // doHTTPRequest POSTs body to rawURL with the given headers over the shared guarded webhook
@@ -97,6 +122,15 @@ func doHTTPRequest(ctx context.Context, rawURL string, headers map[string]string
 
 // doHTTPRequestMethod is doHTTPRequest with an explicit HTTP method (Matrix sends use PUT).
 func doHTTPRequestMethod(ctx context.Context, method, rawURL string, headers map[string]string, body []byte) error {
+	return doRequest(ctx, webhookClient, method, rawURL, headers, body)
+}
+
+// doFileHTTPRequest is doHTTPRequest for Lab Book file uploads, using fileUploadClient's longer timeout.
+func doFileHTTPRequest(ctx context.Context, rawURL string, headers map[string]string, body []byte) error {
+	return doRequest(ctx, fileUploadClient, http.MethodPost, rawURL, headers, body)
+}
+
+func doRequest(ctx context.Context, client *http.Client, method, rawURL string, headers map[string]string, body []byte) error {
 	req, err := http.NewRequestWithContext(ctx, method, rawURL, bytes.NewReader(body))
 	if err != nil {
 		return redactURLError(err)
@@ -104,7 +138,7 @@ func doHTTPRequestMethod(ctx context.Context, method, rawURL string, headers map
 	for k, v := range headers {
 		req.Header.Set(k, v)
 	}
-	resp, err := webhookClient.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return redactURLError(err)
 	}

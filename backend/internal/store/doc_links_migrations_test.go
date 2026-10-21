@@ -8,6 +8,7 @@ import (
 
 func rollbackDocLinks(t *testing.T, db *sql.DB, driver string, logger *slog.Logger) {
 	t.Helper()
+	rollbackNotificationFiles(t, db, driver, logger)
 	if !hasDocLinksTable(t, db, driver) {
 		return
 	}
@@ -16,6 +17,21 @@ func rollbackDocLinks(t *testing.T, db *sql.DB, driver string, logger *slog.Logg
 	}
 	if hasDocLinksTable(t, db, driver) {
 		t.Fatal("doc_links still exists after down")
+	}
+}
+
+// rollbackNotificationFiles removes migration 000070 before helpers that
+// intentionally exercise the previous latest migration, 000069_doc_links.
+func rollbackNotificationFiles(t *testing.T, db *sql.DB, driver string, logger *slog.Logger) {
+	t.Helper()
+	if !attachmentTableExists(t, db, driver, "notification_files") {
+		return
+	}
+	if err := RunMigrationsDown(db, driver, logger); err != nil {
+		t.Fatalf("rollback notification files: %v", err)
+	}
+	if attachmentTableExists(t, db, driver, "notification_files") {
+		t.Fatal("notification_files still exists after down")
 	}
 }
 

@@ -11,6 +11,9 @@ import (
 	"github.com/WiseLabz/wiselabz/internal/ai"
 	"github.com/WiseLabz/wiselabz/internal/api/apitest"
 	"github.com/WiseLabz/wiselabz/internal/config"
+	"github.com/WiseLabz/wiselabz/internal/connector"
+	"github.com/WiseLabz/wiselabz/internal/crypto"
+	"github.com/WiseLabz/wiselabz/internal/notifications"
 )
 
 func testConfig() *config.Config {
@@ -340,6 +343,131 @@ func TestNotificationsConfigSigningSecret(t *testing.T) {
 	put(`{"channels":[{"type":"webhook","enabled":true,"config":{"url":"https://x.test/h2","secret":""}}],"routing":[]}`)
 	if strings.Contains(stored(), "secretEncrypted") {
 		t.Error("empty secret should clear the stored one")
+	}
+}
+
+func TestNotificationsConfigSlackBotToken(t *testing.T) {
+	s := apitest.NewStore(t)
+	h := NewHandler(s, testConfig(), ai.NewRegistry())
+	put := func(body string) *httptest.ResponseRecorder {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodPut, "/api/notifications/config", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		rr := httptest.NewRecorder()
+		h.UpdateNotificationsConfig(rr, req)
+		return rr
+	}
+	stored := func() string {
+		t.Helper()
+		var raw string
+		if err := s.DB().QueryRow(`SELECT config_json FROM notification_config WHERE id = 1`).Scan(&raw); err != nil {
+			t.Fatal(err)
+		}
+		return raw
+	}
+
+	resp := put(`{"channels":[{"type":"slack","enabled":true,"config":{"url":"https://hooks.slack.test/x","botToken":"xoxb-private","channelId":"C123ABC"}}],"routing":[]}`)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("save status = %d; body=%s", resp.Code, resp.Body.String())
+	}
+	if strings.Contains(resp.Body.String(), "xoxb-private") || strings.Contains(resp.Body.String(), "botTokenEncrypted") || !strings.Contains(resp.Body.String(), `"botTokenSet":true`) {
+		t.Fatalf("response must redact token and ciphertext: %s", resp.Body.String())
+	}
+	raw := stored()
+	if strings.Contains(raw, "xoxb-private") || !strings.Contains(raw, "botTokenEncrypted") {
+		t.Fatalf("token must be stored encrypted: %s", raw)
+	}
+	var config struct {
+		Channels []struct {
+			Config map[string]string `json:"config"`
+		} `json:"channels"`
+	}
+	if err := json.Unmarshal([]byte(raw), &config); err != nil {
+		t.Fatal(err)
+	}
+	key, err := crypto.DecodeKey(testConfig().Encryption.Key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	plain, _, err := crypto.DecryptFor(crypto.PurposeNotification, "slack-bot-token", config.Channels[0].Config["botTokenEncrypted"], key)
+	if err != nil || plain != "xoxb-private" {
+		t.Fatalf("encrypted bot token did not decrypt: token=%q err=%v", plain, err)
+	}
+
+	resp = put(`{"channels":[{"type":"slack","enabled":true,"config":{"url":"https://hooks.slack.test/y","channelId":"C123ABC","botTokenSet":true}}],"routing":[]}`)
+	if resp.Code != http.StatusOK || !strings.Contains(stored(), "botTokenEncrypted") {
+		t.Fatalf("omitting token should preserve it: status=%d body=%s", resp.Code, resp.Body.String())
+	}
+	resp = put(`{"channels":[{"type":"slack","enabled":true,"config":{"url":"https://hooks.slack.test/y","channelId":"C123ABC","botToken":""}}],"routing":[]}`)
+	if resp.Code != http.StatusBadRequest {
+		t.Fatalf("channel without token validation status = %d", resp.Code)
+	}
+	resp = put(`{"channels":[{"type":"slack","enabled":true,"config":{"url":"https://hooks.slack.test/y","channelId":"","botToken":"xoxb-private"}}],"routing":[]}`)
+	if resp.Code != http.StatusBadRequest {
+		t.Fatalf("token without channel validation status = %d", resp.Code)
+	}
+	resp = put(`{"channels":[{"type":"slack","enabled":true,"config":{"url":"https://hooks.slack.test/y","channelId":"","botToken":""}}],"routing":[]}`)
+	if resp.Code != http.StatusOK || strings.Contains(stored(), "botTokenEncrypted") {
+		t.Fatalf("empty token should clear it: status=%d stored=%s", resp.Code, stored())
+	}
+	resp = put(`{"channels":[{"type":"slack","enabled":true,"config":{"url":"https://hooks.slack.test/y","channelId":"bad-id","botToken":"xoxb-private"}}],"routing":[]}`)
+	if resp.Code != http.StatusBadRequest {
+		t.Fatalf("malformed channel ID validation status = %d", resp.Code)
+	}
+}
+
+func TestNotificationsConfigSlackTestVerifiesSavedBotToken(t *testing.T) {
+	connector.AllowLoopbackForTest(t)
+	s := apitest.NewStore(t)
+	h := NewHandler(s, testConfig(), ai.NewRegistry())
+	invalidAuth := false
+	var apiCalls int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/auth.test" {
+			apiCalls++
+			if r.Header.Get("Authorization") != "Bearer xoxb-private" {
+				t.Errorf("Authorization = %q, want saved bot token", r.Header.Get("Authorization"))
+			}
+			if invalidAuth {
+				_, _ = w.Write([]byte(`{"ok":false,"error":"invalid_auth"}`))
+				return
+			}
+			_, _ = w.Write([]byte(`{"ok":true}`))
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+	notifications.SetSlackAPIBaseForTest(t, server.URL)
+
+	save := httptest.NewRequest(http.MethodPut, "/api/notifications/config", strings.NewReader(`{"channels":[{"type":"slack","enabled":true,"config":{"url":"`+server.URL+`/hook","botToken":"xoxb-private","channelId":"C123ABC"}}],"routing":[]}`))
+	save.Header.Set("Content-Type", "application/json")
+	saveRR := httptest.NewRecorder()
+	h.UpdateNotificationsConfig(saveRR, save)
+	if saveRR.Code != http.StatusOK {
+		t.Fatalf("save status = %d; body=%s", saveRR.Code, saveRR.Body.String())
+	}
+
+	testChannel := func() map[string]any {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodPost, "/api/notifications/config/test", strings.NewReader(`{"channel":"slack"}`))
+		rr := httptest.NewRecorder()
+		h.TestNotificationsConfig(rr, req)
+		var result map[string]any
+		if err := json.Unmarshal(rr.Body.Bytes(), &result); err != nil {
+			t.Fatalf("decode test response: %v; body=%s", err, rr.Body.String())
+		}
+		return result
+	}
+	if result := testChannel(); result["ok"] != true {
+		t.Fatalf("valid token test result = %#v", result)
+	}
+	invalidAuth = true
+	if result := testChannel(); result["ok"] != false || !strings.Contains(result["message"].(string), "invalid_auth") {
+		t.Fatalf("invalid token test result = %#v", result)
+	}
+	if apiCalls != 2 {
+		t.Fatalf("auth.test calls = %d, want 2", apiCalls)
 	}
 }
 

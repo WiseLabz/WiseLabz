@@ -2,13 +2,19 @@ package notifications
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/WiseLabz/wiselabz/internal/blobstore"
 	"github.com/WiseLabz/wiselabz/internal/store"
 )
 
@@ -157,6 +163,175 @@ func TestRetryDueDeliveries_DiscordSucceedsOnRetry(t *testing.T) {
 	}
 }
 
+func TestRetryDueDeliveries_ResendsAndReleasesReportFile(t *testing.T) {
+	s := newTestStore(t)
+	first := true
+	var firstBytes, retryBytes []byte
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Attachments []struct {
+				Data string `json:"data"`
+			} `json:"attachments"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || len(body.Attachments) != 1 {
+			t.Errorf("decode attachment payload: %v, attachments=%d", err, len(body.Attachments))
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		data, err := base64.StdEncoding.DecodeString(body.Attachments[0].Data)
+		if err != nil {
+			t.Errorf("decode attachment bytes: %v", err)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		if first {
+			firstBytes = data
+			first = false
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		retryBytes = data
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+	setWebhookConfig(t, s, srv.URL)
+	user := &store.User{ID: "report-user", Username: "report-user", DisplayName: "Report", Email: "report@example.com"}
+	if err := s.CreateUser(context.Background(), user); err != nil {
+		t.Fatal(err)
+	}
+	d := NewDispatcher(s, nil)
+	d.SetBlobStore(blobstore.New(t.TempDir(), 50<<20))
+	content := []byte("<!DOCTYPE html><html><body>Lab Book file bytes</body></html>")
+	d.NotifyReport(context.Background(), "Report", "Summary", []string{"webhook"}, &Attachment{Filename: "lab-book.html", ContentType: "text/html", Data: content})
+	waitForDispatch(t, d)
+	notifications, _, err := s.ListNotifications(context.Background(), user.ID, false, 0, 10)
+	if err != nil || len(notifications) != 1 {
+		t.Fatalf("ListNotifications() len=%d, err=%v", len(notifications), err)
+	}
+	file, err := s.GetNotificationFile(context.Background(), notifications[0].ID)
+	if err != nil || file.Size != int64(len(content)) {
+		t.Fatalf("GetNotificationFile() = %+v, %v", file, err)
+	}
+	delivery, ok := findDelivery(deliveriesFor(t, s, notifications[0].ID), "webhook")
+	if !ok || delivery.Status != store.DeliveryStatusFailed {
+		t.Fatalf("initial delivery = %+v, exists=%v", delivery, ok)
+	}
+	if _, err := s.DB().ExecContext(context.Background(), `UPDATE notification_deliveries SET next_attempt_at = ? WHERE id = ?`, "1970-01-01T00:00:00Z", delivery.ID); err != nil {
+		t.Fatal(err)
+	}
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
+	d.retryDueDeliveries(context.Background(), logger)
+	if string(firstBytes) != string(content) || string(retryBytes) != string(content) {
+		t.Fatalf("request bytes first=%q retry=%q want %q", firstBytes, retryBytes, content)
+	}
+	if _, err := s.GetNotificationFile(context.Background(), notifications[0].ID); err == nil {
+		t.Fatal("retained file still exists after successful retry")
+	}
+	referenced, err := s.BlobReferenced(context.Background(), file.SHA256)
+	if err != nil || referenced {
+		t.Fatalf("BlobReferenced() = %v, %v after release; want false", referenced, err)
+	}
+}
+
+func TestRetryDueDeliveries_MissingReportBlobAddsOmissionNote(t *testing.T) {
+	s := newTestStore(t)
+	first := true
+	var retryMessage string
+	var retryHasAttachment bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Message     string `json:"message"`
+			Attachments []any  `json:"attachments"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Errorf("decode webhook body: %v", err)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		if first {
+			first = false
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		retryMessage = body.Message
+		retryHasAttachment = len(body.Attachments) > 0
+	}))
+	defer srv.Close()
+	setWebhookConfig(t, s, srv.URL)
+	user := &store.User{ID: "report-user", Username: "report-user", DisplayName: "Report", Email: "report@example.com"}
+	if err := s.CreateUser(context.Background(), user); err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	d := NewDispatcher(s, nil)
+	d.SetBlobStore(blobstore.New(dir, 50<<20))
+	d.NotifyReport(context.Background(), "Report", "Summary", []string{"webhook"}, &Attachment{Filename: "lab-book.html", ContentType: "text/html", Data: []byte("<html>book</html>")})
+	waitForDispatch(t, d)
+	notifications, _, err := s.ListNotifications(context.Background(), user.ID, false, 0, 10)
+	if err != nil || len(notifications) != 1 {
+		t.Fatalf("ListNotifications() len=%d, err=%v", len(notifications), err)
+	}
+	file, err := s.GetNotificationFile(context.Background(), notifications[0].ID)
+	if err != nil {
+		t.Fatalf("GetNotificationFile(): %v", err)
+	}
+	if err := os.Remove(filepath.Join(dir, file.SHA256[:2], file.SHA256[2:4], file.SHA256)); err != nil {
+		t.Fatal(err)
+	}
+	delivery, ok := findDelivery(deliveriesFor(t, s, notifications[0].ID), "webhook")
+	if !ok {
+		t.Fatal("webhook delivery missing")
+	}
+	if _, err := s.DB().ExecContext(context.Background(), `UPDATE notification_deliveries SET next_attempt_at = ? WHERE id = ?`, "1970-01-01T00:00:00Z", delivery.ID); err != nil {
+		t.Fatal(err)
+	}
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
+	d.retryDueDeliveries(context.Background(), logger)
+	if retryHasAttachment || !strings.Contains(retryMessage, "Lab Book omitted: file no longer available.") {
+		t.Fatalf("retry message=%q has attachment=%v", retryMessage, retryHasAttachment)
+	}
+}
+
+func TestRetryDueDeliveries_ExhaustedReportRetriesReleaseFile(t *testing.T) {
+	s := newTestStore(t)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusInternalServerError) }))
+	defer srv.Close()
+	setWebhookConfig(t, s, srv.URL)
+	user := &store.User{ID: "report-user", Username: "report-user", DisplayName: "Report", Email: "report@example.com"}
+	if err := s.CreateUser(context.Background(), user); err != nil {
+		t.Fatal(err)
+	}
+	d := NewDispatcher(s, nil)
+	d.SetBlobStore(blobstore.New(t.TempDir(), 50<<20))
+	d.NotifyReport(context.Background(), "Report", "Summary", []string{"webhook"}, &Attachment{Filename: "lab-book.html", ContentType: "text/html", Data: []byte("<html>book</html>")})
+	waitForDispatch(t, d)
+	notifications, _, err := s.ListNotifications(context.Background(), user.ID, false, 0, 10)
+	if err != nil || len(notifications) != 1 {
+		t.Fatalf("ListNotifications() len=%d, err=%v", len(notifications), err)
+	}
+	delivery, ok := findDelivery(deliveriesFor(t, s, notifications[0].ID), "webhook")
+	if !ok {
+		t.Fatal("webhook delivery missing")
+	}
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
+	for attempt := 2; attempt <= maxDeliveryAttempts; attempt++ {
+		if _, err := s.DB().ExecContext(context.Background(), `UPDATE notification_deliveries SET next_attempt_at = ? WHERE id = ?`, "1970-01-01T00:00:00Z", delivery.ID); err != nil {
+			t.Fatal(err)
+		}
+		d.retryDueDeliveries(context.Background(), logger)
+		delivery, ok = findDelivery(deliveriesFor(t, s, notifications[0].ID), "webhook")
+		if !ok {
+			t.Fatal("webhook delivery disappeared")
+		}
+	}
+	if delivery.NextAttemptAt != "" {
+		t.Fatalf("NextAttemptAt = %q after retries exhausted", delivery.NextAttemptAt)
+	}
+	if _, err := s.GetNotificationFile(context.Background(), notifications[0].ID); err == nil {
+		t.Fatal("retained file still exists after retries exhausted")
+	}
+}
+
 // TestRetryDueDeliveries_SlackExceedsRetryBound verifies slack delivery respects the retry bound.
 func TestRetryDueDeliveries_SlackExceedsRetryBound(t *testing.T) {
 	s := newTestStore(t)
@@ -238,5 +413,78 @@ func TestRetryChannel_ChannelDisabledReturnsError(t *testing.T) {
 	err := d.retryChannel(context.Background(), notif, "webhook")
 	if err == nil {
 		t.Errorf("expected retryChannel to return error for disabled channel, got nil")
+	}
+}
+
+// dispatchReportFile sends a report with one attachment to channels and returns the notification ID.
+func dispatchReportFile(t *testing.T, s *store.Store, d *Dispatcher, channels []string, file *Attachment) string {
+	t.Helper()
+	user := &store.User{ID: "report-user", Username: "report-user", DisplayName: "Report", Email: "report@example.com"}
+	if err := s.CreateUser(context.Background(), user); err != nil {
+		t.Fatal(err)
+	}
+	d.NotifyReport(context.Background(), "Report", "Summary", channels, file)
+	waitForDispatch(t, d)
+	notifications, _, err := s.ListNotifications(context.Background(), user.ID, false, 0, 10)
+	if err != nil || len(notifications) != 1 {
+		t.Fatalf("ListNotifications() len=%d, err=%v", len(notifications), err)
+	}
+	return notifications[0].ID
+}
+
+func TestNotifyReport_SuccessfulFileDeliveryRetainsNoFile(t *testing.T) {
+	s := newTestStore(t)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+	setWebhookConfig(t, s, srv.URL)
+	d := NewDispatcher(s, nil)
+	d.SetBlobStore(blobstore.New(t.TempDir(), 50<<20))
+	notifID := dispatchReportFile(t, s, d, []string{"webhook"}, &Attachment{Filename: "lab-book.html", ContentType: "text/html", Data: []byte("<html>book</html>")})
+	delivery, ok := findDelivery(deliveriesFor(t, s, notifID), "webhook")
+	if !ok || delivery.Status != store.DeliveryStatusSent {
+		t.Fatalf("delivery = %+v, exists=%v; want sent", delivery, ok)
+	}
+	if _, err := s.GetNotificationFile(context.Background(), notifID); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("GetNotificationFile() error = %v; want ErrNotFound", err)
+	}
+}
+
+func TestNotifyReport_OversizeFileFailureRetainsNoFile(t *testing.T) {
+	s := newTestStore(t)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+	setWebhookConfig(t, s, srv.URL)
+	d := NewDispatcher(s, nil)
+	d.SetBlobStore(blobstore.New(t.TempDir(), 50<<20))
+	notifID := dispatchReportFile(t, s, d, []string{"webhook"}, &Attachment{Filename: "lab-book.html", ContentType: "text/html", Data: make([]byte, webhookAttachmentLimit+1)})
+	delivery, ok := findDelivery(deliveriesFor(t, s, notifID), "webhook")
+	if !ok || delivery.Status != store.DeliveryStatusFailed {
+		t.Fatalf("delivery = %+v, exists=%v; want failed", delivery, ok)
+	}
+	if _, err := s.GetNotificationFile(context.Background(), notifID); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("GetNotificationFile() error = %v; want ErrNotFound", err)
+	}
+}
+
+func TestNotifyReport_SlackWithoutBotTokenRetainsNoFile(t *testing.T) {
+	s := newTestStore(t)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+	setChannelConfig(t, s, "slack", srv.URL)
+	d := NewDispatcher(s, nil)
+	d.SetBlobStore(blobstore.New(t.TempDir(), 50<<20))
+	notifID := dispatchReportFile(t, s, d, []string{"slack"}, &Attachment{Filename: "lab-book.html", ContentType: "text/html", Data: []byte("<html>book</html>")})
+	delivery, ok := findDelivery(deliveriesFor(t, s, notifID), "slack")
+	if !ok || delivery.Status != store.DeliveryStatusFailed {
+		t.Fatalf("delivery = %+v, exists=%v; want failed", delivery, ok)
+	}
+	if _, err := s.GetNotificationFile(context.Background(), notifID); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("GetNotificationFile() error = %v; want ErrNotFound", err)
 	}
 }

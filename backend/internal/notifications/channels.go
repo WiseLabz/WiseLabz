@@ -3,17 +3,21 @@ package notifications
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"crypto/tls"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"log/slog"
 	"mime"
 	"mime/multipart"
 	"net"
 	"net/http"
 	"net/smtp"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -82,12 +86,27 @@ func slackPayload(title, message string) any {
 	return map[string]string{"text": fmt.Sprintf("*%s*\n%s", title, message)}
 }
 
-func sendGenericWebhookChannel(ctx context.Context, cfg channelCfg, secret, title, message string, _ ...*Attachment) error {
+func sendGenericWebhookChannel(ctx context.Context, cfg channelCfg, secret, title, message string, attachments ...*Attachment) error {
 	rawURL, _ := cfg.Config["url"].(string)
 	if rawURL == "" {
 		return errors.New("webhook url not configured")
 	}
-	return sendWebhook(ctx, rawURL, secret, webhookPayload(title, message))
+	attachment, message := attachmentForChannel("webhook", message, attachments)
+	if attachment == nil {
+		return sendWebhook(ctx, rawURL, secret, webhookPayload(title, message))
+	}
+	payload := map[string]any{"title": title, "message": message, "attachments": []map[string]any{{
+		"filename": attachment.Filename, "contentType": attachment.ContentType,
+		"size": len(attachment.Data), "sha256": fmt.Sprintf("%x", sha256.Sum256(attachment.Data)),
+		"data": base64.StdEncoding.EncodeToString(attachment.Data),
+	}}}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+	headers := signedHeaders(secret, body)
+	headers["Content-Type"] = "application/json"
+	return doFileHTTPRequest(ctx, rawURL, headers, body)
 }
 
 func sendDiscordChannel(ctx context.Context, cfg channelCfg, secret, title, message string, attachments ...*Attachment) error {
@@ -118,15 +137,94 @@ func sendDiscordChannel(ctx context.Context, cfg channelCfg, secret, title, mess
 	if err = writer.Close(); err != nil {
 		return err
 	}
-	return doHTTPRequest(ctx, rawURL, map[string]string{"Content-Type": writer.FormDataContentType()}, body.Bytes())
+	headers := signedHeaders(secret, body.Bytes())
+	headers["Content-Type"] = writer.FormDataContentType()
+	return doFileHTTPRequest(ctx, rawURL, headers, body.Bytes())
 }
 
-func sendSlackChannel(ctx context.Context, cfg channelCfg, secret, title, message string, _ ...*Attachment) error {
+// slackAPIBase is overridden by local API tests.
+var slackAPIBase = "https://slack.com/api"
+
+func sendSlackChannel(ctx context.Context, cfg channelCfg, secret, title, message string, attachments ...*Attachment) error {
 	rawURL, _ := cfg.Config["url"].(string)
 	if rawURL == "" {
 		return errors.New("slack url not configured")
 	}
+	attachment, message := attachmentForChannel("slack", message, attachments)
+	if attachment != nil {
+		channelID, _ := cfg.Config["channelId"].(string)
+		if cfg.BotToken == "" || channelID == "" {
+			message += "\n\nLab Book omitted: Slack file upload needs a bot token and channel ID."
+		} else if err := uploadSlackFile(ctx, cfg.BotToken, channelID, title, message, attachment); err != nil {
+			slog.Warn("Slack file upload failed; sending report text", "error", err)
+			message += "\n\nLab Book omitted: Slack upload failed."
+		} else {
+			return nil
+		}
+	}
 	return sendWebhook(ctx, rawURL, secret, slackPayload(title, message))
+}
+
+// Slack error codes are identifiers; reject arbitrary response text that could echo credentials.
+var slackErrorCode = regexp.MustCompile(`^[a-z_]+$`)
+
+type slackResponse struct {
+	OK        bool   `json:"ok"`
+	Error     string `json:"error"`
+	UploadURL string `json:"upload_url"`
+	FileID    string `json:"file_id"`
+}
+
+func slackAPI(ctx context.Context, token, method string, form url.Values) (slackResponse, error) {
+	var result slackResponse
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(slackAPIBase, "/")+"/"+method, strings.NewReader(form.Encode()))
+	if err != nil {
+		return result, errors.New("slack: invalid API request")
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	resp, err := webhookClient.Do(req)
+	if err != nil {
+		return result, errors.New("slack: API request failed")
+	}
+	defer resp.Body.Close() //nolint:errcheck
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return result, fmt.Errorf("slack: API returned status %d", resp.StatusCode)
+	}
+	if err := json.NewDecoder(io.LimitReader(resp.Body, maxWebhookResponseBytes)).Decode(&result); err != nil {
+		return result, errors.New("slack: invalid API response")
+	}
+	if !result.OK {
+		code := "request_failed"
+		if slackErrorCode.MatchString(result.Error) && !strings.Contains(result.Error, token) {
+			code = result.Error
+		}
+		return result, fmt.Errorf("slack: %s", code)
+	}
+	return result, nil
+}
+
+func uploadSlackFile(ctx context.Context, token, channelID, title, message string, attachment *Attachment) error {
+	result, err := slackAPI(ctx, token, "files.getUploadURLExternal", url.Values{
+		"filename": {attachment.Filename}, "length": {strconv.Itoa(len(attachment.Data))},
+	})
+	if err != nil {
+		return err
+	}
+	if result.UploadURL == "" || result.FileID == "" {
+		return errors.New("slack: incomplete upload response")
+	}
+	if err := doFileHTTPRequest(ctx, result.UploadURL, map[string]string{"Content-Type": "application/octet-stream"}, attachment.Data); err != nil {
+		return errors.New("slack: file upload failed")
+	}
+	files, err := json.Marshal([]map[string]string{{"id": result.FileID, "title": attachment.Filename}})
+	if err != nil {
+		return fmt.Errorf("slack: encode files: %w", err)
+	}
+	_, err = slackAPI(ctx, token, "files.completeUploadExternal", url.Values{
+		"files": {string(files)}, "channel_id": {channelID}, "initial_comment": {fmt.Sprintf("*%s*\n%s", title, message)},
+	})
+	return err
 }
 
 // sendNtfyChannel POSTs the message body to <server>/<topic> using ntfy's publish-by-HTTP API
@@ -412,21 +510,45 @@ func SendTest(ctx context.Context, channelType string, config map[string]any, se
 	}
 	ctx, cancel := context.WithTimeout(ctx, testSendTimeout)
 	defer cancel()
-	return sender(ctx, channelCfg{Type: channelType, Enabled: true, Config: config}, secret,
-		"WiseLabz test notification", "This is a test message from WiseLabz. If you can read it, this channel is working.")
+	if err := sender(ctx, channelCfg{Type: channelType, Enabled: true, Config: config}, secret,
+		"WiseLabz test notification", "This is a test message from WiseLabz. If you can read it, this channel is working."); err != nil {
+		return err
+	}
+	if token, _ := config["botToken"].(string); channelType == "slack" && token != "" {
+		_, err := slackAPI(ctx, token, "auth.test", url.Values{})
+		return err
+	}
+	return nil
 }
 
 // Conservative limits leave room for the multipart envelope and email base64 overhead.
 const discordAttachmentLimit = 8 << 20
 const emailAttachmentLimit = 10 << 20
+const slackAttachmentLimit = 50 << 20
+const webhookAttachmentLimit = 10 << 20
+
+func attachmentLimit(channel string) int {
+	switch channel {
+	case "smtp":
+		return emailAttachmentLimit
+	case "discord":
+		return discordAttachmentLimit
+	case "slack":
+		return slackAttachmentLimit
+	case "webhook":
+		return webhookAttachmentLimit
+	default:
+		return 0
+	}
+}
 
 func attachmentForChannel(channel, message string, attachments []*Attachment) (*Attachment, string) {
 	if len(attachments) == 0 || attachments[0] == nil {
 		return nil, message
 	}
-	limit := emailAttachmentLimit
-	if channel == "discord" {
-		limit = discordAttachmentLimit
+	limit := attachmentLimit(channel)
+	if limit == 0 {
+		return nil, message
 	}
 	if len(attachments[0].Data) > limit {
 		return nil, message + "\n\nLab Book omitted: attachment exceeds this channel's file size limit."
@@ -444,4 +566,15 @@ func mimeBase64(data []byte) string {
 	b.WriteString(encoded)
 	b.WriteString("\r\n")
 	return b.String()
+}
+
+// SetSlackAPIBaseForTest points Slack requests at a fake API until the test ends.
+func SetSlackAPIBaseForTest(t interface {
+	Helper()
+	Cleanup(func())
+}, base string) {
+	t.Helper()
+	previous := slackAPIBase
+	slackAPIBase = base
+	t.Cleanup(func() { slackAPIBase = previous })
 }

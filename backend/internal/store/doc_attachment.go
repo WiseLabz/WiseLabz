@@ -99,9 +99,12 @@ func (s *Store) DeleteDocAttachment(ctx context.Context, docID, id string) error
 	return nil
 }
 
-// BlobReferenced checks references from every live or deleted doc.
+// BlobReferenced checks references from every live or deleted doc and every retained notification file.
 func (s *Store) BlobReferenced(ctx context.Context, hash string) (bool, error) {
 	var n int
-	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM doc_attachments WHERE sha256 = ?`, hash).Scan(&n)
+	err := s.db.QueryRowContext(ctx, `
+		SELECT (SELECT COUNT(*) FROM doc_attachments WHERE sha256 = ?) +
+		       (SELECT COUNT(*) FROM notification_files WHERE sha256 = ?)
+	`, hash, hash).Scan(&n)
 	return n > 0, err
 }

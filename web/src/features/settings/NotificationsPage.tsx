@@ -138,6 +138,57 @@ export function NotificationsPage() {
             />
           ))}
         </div>
+        {draft.channels.some((channel) => channel.type === 'slack') && (
+          <div className="mt-5 grid gap-3 border-t border-line-soft pt-4 sm:grid-cols-2">
+            {(() => {
+              const slack = draft.channels.find((channel) => channel.type === 'slack')!;
+              const config = slack.config ?? {};
+              const updateSlackConfig = (patch: Record<string, unknown>) =>
+                setDraft((current) => current ? {
+                  ...current,
+                  channels: current.channels.map((channel) => channel.type === 'slack'
+                    ? { ...channel, config: { ...channel.config, ...patch } }
+                    : channel),
+                } : current);
+              const tokenSet = config.botTokenSet === true;
+              return <>
+                <label className="block">
+                  <span className="mb-1 block text-xs text-ink-muted">{t('settings.notifications.slackChannelId')}</span>
+                  <input
+                    value={typeof config.channelId === 'string' ? config.channelId : ''}
+                    onChange={(event) => updateSlackConfig({ channelId: event.target.value })}
+                    placeholder="C0123456789"
+                    className="h-9 w-full rounded-sm border border-line bg-surface px-2.5 text-sm text-ink"
+                  />
+                </label>
+                <div>
+                  <label className="block">
+                    <span className="mb-1 block text-xs text-ink-muted">{t('settings.notifications.slackBotToken')}</span>
+                    <input
+                      type="password"
+                      autoComplete="new-password"
+                      value={typeof config.botToken === 'string' ? config.botToken : ''}
+                      onChange={(event) => updateSlackConfig({ botToken: event.target.value })}
+                      placeholder={tokenSet ? t('settings.notifications.slackTokenSet') : ''}
+                      className="h-9 w-full rounded-sm border border-line bg-surface px-2.5 text-sm text-ink"
+                    />
+                  </label>
+                  <p className="mt-1 text-2xs text-ink-faint">{t('settings.notifications.slackBotTokenHint')}</p>
+                  {tokenSet && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="mt-1"
+                      onClick={() => updateSlackConfig({ botToken: '', channelId: '', botTokenSet: false })}
+                    >
+                      {t('settings.notifications.clearSlackToken')}
+                    </Button>
+                  )}
+                </div>
+              </>;
+            })()}
+          </div>
+        )}
         <div className="mt-3 flex flex-wrap gap-2">
           {draft.channels.map((c) => (
             <Button

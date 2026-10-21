@@ -10,8 +10,10 @@
 /**
  * Channel-specific, keyed by type (see docs/NOTIFICATIONS.md for the full field reference per channel):
  *   - webhook: { url, secret } — generic JSON POST, HMAC-signed when a secret is set.
- *   - discord / slack: { url, secret } — incoming-webhook URL; secret HMAC-signs the
+ *   - discord: { url, secret } — incoming-webhook URL; secret HMAC-signs the
  *     request the same way the generic webhook channel does.
+ *   - slack: { url, secret, botToken, channelId } — incoming-webhook URL; secret
+ *     HMAC-signs webhook requests, while botToken and channelId enable report file uploads.
  *   - ntfy: { url (server, default https://ntfy.sh), topic, priority, tags } — publishes
  *     via ntfy's HTTP API.
  *   - telegram: { chatId, secret } — secret is the bot token; sends via the Bot API's
@@ -23,6 +25,14 @@
  *     bearer token.
  *   - smtp: { host, port, username, secret, from, to } — secret is the SMTP password;
  *     sent with opportunistic STARTTLS.
- * "secret" is write-only: webhook/Discord/Slack sign deliveries with HMAC-SHA256 (X-WiseLabz-Timestamp and X-WiseLabz-Signature headers) when set; Telegram and SMTP reuse the same field for their own credential (bot token / password). It is stored encrypted and never returned; reads expose secretSet instead.
+ * "secret" is write-only: webhook/Discord/Slack sign deliveries with HMAC-SHA256 (X-WiseLabz-Timestamp and X-WiseLabz-Signature headers) when set; Telegram and SMTP reuse the same field for their own credential (bot token / password). It is stored encrypted and never returned; reads expose secretSet instead. Slack botToken is also write-only, stored encrypted and represented on reads by botTokenSet.
  */
-export type NotificationChannelConfig = { [key: string]: unknown };
+export type NotificationChannelConfig = {
+  /** Slack bot token; stored encrypted and never returned. */
+  botToken?: string;
+  /** True when a Slack bot token is stored. */
+  readonly botTokenSet?: boolean;
+  /** Slack channel ID for Lab Book file uploads; must be set with a bot token. */
+  channelId?: string;
+  [key: string]: unknown;
+};
