@@ -23,7 +23,7 @@ RUN bun run build
 # =============================================================================
 # Stage 2/5: gomod — Go toolchain with the module cache filled
 # =============================================================================
-FROM --platform=$BUILDPLATFORM golang:1.27-alpine@sha256:738d1cf061836894ff6bb8c33881080ac66de8cf0586615012a0c8f592649cfa AS gomod
+FROM --platform=$BUILDPLATFORM golang:1.27-alpine@sha256:f2c872bcee949b7be9c490efd02b48a8a2fbf947cdf533f1c58525ec9d8170fd AS gomod
 
 # git is required for `go build`'s automatic VCS stamping (debug.ReadBuildInfo,
 # included in the operator diagnostics bundle) — the alpine golang image ships without it.
