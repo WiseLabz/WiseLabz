@@ -20,6 +20,19 @@
 
 * **discovery:** instance admins can scan a private /24 for Proxmox VE, Proxmox Backup Server, Home Assistant, Portainer, UniFi, AdGuard Home, Traefik, Docker, Caddy, Nginx Proxy Manager, pfSense, OPNsense, TrueNAS and Pi-hole during onboarding and from the add-connector page, and connect what is found. See [docs/NETWORK_DISCOVERY.md](docs/NETWORK_DISCOVERY.md).
 
+## 1.2.0 (2026-10-30)
+
+## What's Changed
+* feat(docs): pre-rendered Lab Book diagrams and in-app print to PDF by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/740
+* docs(openspec): archive lab-book-client-render by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/742
+* feat(reports): deliver Lab Book files to Slack and generic webhooks by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/743
+* fix(deps): bump Go to 1.27.3 for GO-2026-6809 govulncheck finding by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/746
+* fix(deps): bump golang.org/x/net to v0.62.0 for govulncheck findings by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/747
+* fix(deps): bump dompurify to 3.4.17 for GHSA-6688-9rhm-gjv2 and GHSA-p98j-92pf-mc4p by @gsaraiva2109 in https://github.com/WiseLabz/WiseLabz/pull/748
+
+
+**Full Changelog**: https://github.com/WiseLabz/WiseLabz/compare/v1.1.0...v1.2.0
+
 ## 1.1.0 (2026-10-16)
 
 ## What's Changed
