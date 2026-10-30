@@ -1,5 +1,3 @@
-import { FormData as NodeFormData } from 'undici';
-import { File as NodeFile } from 'node:buffer';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { waitFor } from '@testing-library/react';
 import { EditorState } from '@codemirror/state';
@@ -9,10 +7,20 @@ import { setupServer } from 'msw/node';
 import { AXIOS_INSTANCE } from '../../api/axios-instance';
 import { attachmentUpload } from './attachmentUpload';
 
+// Keep multipart encoding and fetch on the same implementation across Node versions.
+vi.hoisted(async () => {
+  const { Blob, File } = await import('node:buffer');
+  vi.stubGlobal('Blob', Blob);
+  vi.stubGlobal('File', File);
+  const { fetch, FormData, Request, Response } = await import('undici');
+  for (const [name, value] of Object.entries({ fetch, FormData, Request, Response })) {
+    vi.stubGlobal(name, value);
+  }
+});
+
 const server = setupServer();
 let view: EditorView;
 beforeAll(() => {
-  vi.stubGlobal('FormData', NodeFormData);
   AXIOS_INSTANCE.defaults.adapter = 'fetch';
   AXIOS_INSTANCE.defaults.baseURL = 'http://localhost/api';
   server.listen({ onUnhandledRequest: 'error' });
@@ -22,7 +30,10 @@ afterEach(() => {
   document.body.replaceChildren();
   server.resetHandlers();
 });
-afterAll(() => server.close());
+afterAll(() => {
+  server.close();
+  vi.unstubAllGlobals();
+});
 
 function editor(enabled = true) {
   const complete = vi.fn();
@@ -39,7 +50,7 @@ function editor(enabled = true) {
 }
 
 function transfer(kind: 'drop' | 'paste') {
-  const file = new NodeFile(['image data'], 'photo.png', { type: 'image/png' });
+  const file = new File(['image data'], 'photo.png', { type: 'image/png' });
   const event = new Event(kind, { bubbles: true, cancelable: true });
   Object.defineProperty(event, kind === 'drop' ? 'dataTransfer' : 'clipboardData', {
     value: { files: [file], getData: () => '' },
@@ -60,7 +71,10 @@ describe('attachment drop/paste upload', () => {
       server.use(
         http.post('*/docs/doc-id/attachments', async ({ request }) => {
           const form = await request.formData();
-          expect((form.get('file') as File).name).toBe('photo.png');
+          const file = form.get('file') as File;
+          expect(file.name).toBe('photo.png');
+          expect(file.type).toBe('image/png');
+          expect(await file.text()).toBe('image data');
           await gate;
           return HttpResponse.json(
             { id: 'attachment-id', filename: 'photo.png', contentType: 'image/png' },
