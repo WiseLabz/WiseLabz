@@ -6,7 +6,7 @@
 # The builder stages run on the build host's platform ($BUILDPLATFORM) and
 # cross-compile for the target, so multi-arch builds need no QEMU emulation.
 # The SPA output is architecture-independent, so it is built once and shared.
-FROM --platform=$BUILDPLATFORM oven/bun:1-alpine@sha256:d888c0ae6c86d7866ff10c5aafdd9077b36aee6455b33dd270fb93c0dd5cef6f AS frontend
+FROM --platform=$BUILDPLATFORM oven/bun:1-alpine@sha256:4cf82f5686b196504fe119db3fcd9185b191f82ece82c40680e597228ec6070a AS frontend
 WORKDIR /repo/web
 
 # Install deps first, isolated from source changes, so `bun install` is cached.
