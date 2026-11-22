@@ -11,12 +11,12 @@ import { DashboardPage } from './DashboardPage';
 
 // Widget subcomponents make their own API calls this test doesn't care about;
 // let those pass through to MSW's default "no handler" 404 instead of failing
-// the whole suite like the stricter `onUnhandledRequest: 'error'` other pages use.
+// the whole suite like the stricter `onUnhandledFrame: 'error'` other pages use.
 const server = setupServer();
 
 const baseLayout = { widgets: DEFAULT_LAYOUT.map((w) => ({ id: w.id, type: 'service_status', x: 0, y: 0, w: w.span, h: 1, enabled: w.enabled })) };
 
-beforeAll(() => server.listen({ onUnhandledRequest: 'bypass' }));
+beforeAll(() => server.listen({ onUnhandledFrame: 'bypass' }));
 afterEach(() => {
   server.resetHandlers();
   cleanup();

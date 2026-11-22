@@ -8,7 +8,7 @@ export async function enableMocks(): Promise<void> {
   const { worker } = await import('./browser');
   await worker.start({
     // Real assets, the Vite client, etc. should pass through untouched.
-    onUnhandledRequest: 'bypass',
+    onUnhandledFrame: 'bypass',
     quiet: false,
   });
 

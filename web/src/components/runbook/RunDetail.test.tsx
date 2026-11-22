@@ -101,7 +101,7 @@ const unknownActionStep: RunbookRun['steps'][number] = {
 
 let currentRun = structuredClone(baseRun);
 
-beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
+beforeAll(() => server.listen({ onUnhandledFrame: 'error' }));
 beforeEach(() => {
   vi.mocked(toast.error).mockClear();
   vi.mocked(toast.success).mockClear();

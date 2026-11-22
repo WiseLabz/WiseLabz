@@ -5,10 +5,11 @@ import { setupServer } from 'msw/node';
 import { http, HttpResponse } from 'msw';
 import { useDashboard, useWidgetPolling, useRangeDays, DEFAULT_LAYOUT, widgetsToWire, type WidgetId } from './dashboard';
 import { WidgetPlacementType } from '../api/model';
+import * as dashboardApi from '../api/generated/dashboard/dashboard';
 
 const server = setupServer();
 
-beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
+beforeAll(() => server.listen({ onUnhandledFrame: 'error' }));
 afterEach(() => server.resetHandlers());
 afterAll(() => server.close());
 
@@ -116,8 +117,9 @@ describe('dashboard store', () => {
 });
 
 describe('useWidgetPolling', () => {
-  it('derives pollingEnabled/refetchInterval from the widget layout and toggles it', () => {
+  it('derives pollingEnabled/refetchInterval from the widget layout and toggles it', async () => {
     server.use(http.put('/api/dashboard/layout', () => HttpResponse.json({ widgets: [] })));
+    const put = vi.spyOn(dashboardApi, 'putDashboardLayout');
     const { result } = renderHook(() => useWidgetPolling('alerts'));
 
     expect(result.current.pollingEnabled).toBe(false);
@@ -127,6 +129,8 @@ describe('useWidgetPolling', () => {
 
     expect(result.current.pollingEnabled).toBe(true);
     expect(result.current.refetchInterval).toBe(30_000);
+    await put.mock.results[0].value;
+    put.mockRestore();
   });
 });
 

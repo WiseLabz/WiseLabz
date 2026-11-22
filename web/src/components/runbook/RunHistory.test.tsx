@@ -26,7 +26,7 @@ function makeRun(number: number): RunbookRun {
   };
 }
 
-beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
+beforeAll(() => server.listen({ onUnhandledFrame: 'error' }));
 beforeEach(() => {
   requestedPages = [];
   server.use(
