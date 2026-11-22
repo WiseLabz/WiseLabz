@@ -1,11 +1,12 @@
-import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { setupServer } from 'msw/node';
 import { http, HttpResponse } from 'msw';
 import '../../i18n';
 import type { AttentionPage } from '../../api/model';
+import * as alertsApi from '../../api/generated/alerts/alerts';
 import { AttentionPage as AttentionPageComponent } from './AttentionPage';
 
 const server = setupServer();
@@ -95,6 +96,7 @@ describe('AttentionPage', () => {
   });
 
   it('calls resolve mutation when resolve button is clicked for alert', async () => {
+    const resolve = vi.spyOn(alertsApi, 'postAlertsAlertIdResolve');
     const alertItem = {
       id: 'alt-1',
       kind: 'alert' as const,
@@ -113,8 +115,9 @@ describe('AttentionPage', () => {
     const resolveButton = await screen.findByRole('button', { name: /resolve/i });
     fireEvent.click(resolveButton);
 
-    // Verify the button was clicked (mutation was triggered)
-    expect(resolveButton).toBeInTheDocument();
+    await waitFor(() => expect(resolve).toHaveBeenCalledWith('alt-1'));
+    await resolve.mock.results[0].value;
+    resolve.mockRestore();
   });
 
   it('shows alert-specific buttons only for alerts', async () => {
