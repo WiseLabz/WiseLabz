@@ -23,7 +23,7 @@ let view: EditorView;
 beforeAll(() => {
   AXIOS_INSTANCE.defaults.adapter = 'fetch';
   AXIOS_INSTANCE.defaults.baseURL = 'http://localhost/api';
-  server.listen({ onUnhandledRequest: 'error' });
+  server.listen({ onUnhandledFrame: 'error' });
 });
 afterEach(() => {
   view?.destroy();
